@@ -9,8 +9,8 @@
 //!
 //! Format references:
 //! - R. Oye and M. Case, "DORADE Data Format" (NCAR/ATD, 1995; revised
-//!   2003/2010 by W.-C. Lee, NCAR/EOL): block layouts and semantics.
-//! - lrose-core `DoradeData.hh` (NCAR/EOL): authoritative struct offsets.
+//!   2003/2010 by W.-C. Lee, NCAR/EOL) — block layouts and semantics.
+//! - lrose-core `DoradeData.hh` (NCAR/EOL) — authoritative struct offsets.
 //! - HRD run-length encoding from the NOAA Hurricane Research Division as
 //!   described in the DORADE document and implemented in `soloii`/Radx.
 //!
@@ -52,7 +52,7 @@
 //!   deployments are parked, so the RADD site position applies to the whole
 //!   sweep. Airborne tail radars would need ASIB handling.
 //! - RHI sweeps decode as cuts ordered by their fixed angle (the AZIMUTH for
-//!   an RHI: `ElevationCut::elevation_deg` holds it); the RADD `scan_mode`
+//!   an RHI — `ElevationCut::elevation_deg` holds it); the RADD `scan_mode`
 //!   is surfaced as [`radar_core::ScanMode`] in the volume metadata so
 //!   displays can render a range-height panel instead of a plan view.
 
@@ -186,7 +186,7 @@ pub fn decode_dorade_sweep_volume(bytes: &[u8]) -> Result<RadarVolume> {
 ///
 /// Cuts are appended in input order and then sorted by elevation (ties keep
 /// input order, which the callers arrange to be scan time). The site
-/// position comes from the first sweep's RADD block: mobile radars move
+/// position comes from the first sweep's RADD block — mobile radars move
 /// between deployments, so the coordinates always come from the file.
 pub fn decode_dorade_volume_from_slices<S: AsRef<[u8]>>(sweeps: &[S]) -> Result<RadarVolume> {
     if sweeps.is_empty() {

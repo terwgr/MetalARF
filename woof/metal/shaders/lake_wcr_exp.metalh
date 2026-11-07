@@ -1,0 +1,184 @@
+#ifndef WOOF_LAKE_WCR_EXP_METALH
+#define WOOF_LAKE_WCR_EXP_METALH
+#include "lake_wcr_sin.metalh"
+constant ulong lw_exp2_h[64]={
+0x3ff0000000000000ul,
+0x3ff02c9a3e778061ul,
+0x3ff059b0d3158574ul,
+0x3ff0874518759bc8ul,
+0x3ff0b5586cf9890ful,
+0x3ff0e3ec32d3d1a2ul,
+0x3ff11301d0125b51ul,
+0x3ff1429aaea92de0ul,
+0x3ff172b83c7d517bul,
+0x3ff1a35beb6fcb75ul,
+0x3ff1d4873168b9aaul,
+0x3ff2063b88628cd6ul,
+0x3ff2387a6e756238ul,
+0x3ff26b4565e27cddul,
+0x3ff29e9df51fdee1ul,
+0x3ff2d285a6e4030bul,
+0x3ff306fe0a31b715ul,
+0x3ff33c08b26416fful,
+0x3ff371a7373aa9cbul,
+0x3ff3a7db34e59ff7ul,
+0x3ff3dea64c123422ul,
+0x3ff4160a21f72e2aul,
+0x3ff44e086061892dul,
+0x3ff486a2b5c13cd0ul,
+0x3ff4bfdad5362a27ul,
+0x3ff4f9b2769d2ca7ul,
+0x3ff5342b569d4f82ul,
+0x3ff56f4736b527daul,
+0x3ff5ab07dd485429ul,
+0x3ff5e76f15ad2148ul,
+0x3ff6247eb03a5585ul,
+0x3ff6623882552225ul,
+0x3ff6a09e667f3bcdul,
+0x3ff6dfb23c651a2ful,
+0x3ff71f75e8ec5f74ul,
+0x3ff75feb564267c9ul,
+0x3ff7a11473eb0187ul,
+0x3ff7e2f336cf4e62ul,
+0x3ff82589994cce13ul,
+0x3ff868d99b4492edul,
+0x3ff8ace5422aa0dbul,
+0x3ff8f1ae99157736ul,
+0x3ff93737b0cdc5e5ul,
+0x3ff97d829fde4e50ul,
+0x3ff9c49182a3f090ul,
+0x3ffa0c667b5de565ul,
+0x3ffa5503b23e255dul,
+0x3ffa9e6b5579fdbful,
+0x3ffae89f995ad3adul,
+0x3ffb33a2b84f15fbul,
+0x3ffb7f76f2fb5e47ul,
+0x3ffbcc1e904bc1d2ul,
+0x3ffc199bdd85529cul,
+0x3ffc67f12e57d14bul,
+0x3ffcb720dcef9069ul,
+0x3ffd072d4a07897cul,
+0x3ffd5818dcfba487ul,
+0x3ffda9e603db3285ul,
+0x3ffdfc97337b9b5ful,
+0x3ffe502ee78b3ff6ul,
+0x3ffea4afa2a490daul,
+0x3ffefa1bee615a27ul,
+0x3fff50765b6e4540ul,
+0x3fffa7c1819e90d8ul
+};
+constant ulong lw_exp2_l[64]={
+0x0000000000000000ul,
+0xbc719083535b085dul,
+0x3c8d73e2a475b465ul,
+0x3c6186be4bb284fful,
+0x3c98a62e4adc610bul,
+0x3c403a1727c57b53ul,
+0xbc96c51039449b3aul,
+0xbc932fbf9af1369eul,
+0xbc819041b9d78a76ul,
+0x3c8e5b4c7b4968e4ul,
+0x3c9e016e00a2643cul,
+0x3c8dc775814a8495ul,
+0x3c99b07eb6c70573ul,
+0x3c82bd339940e9d9ul,
+0x3c8612e8afad1255ul,
+0x3c90024754db41d5ul,
+0x3c86f46ad23182e4ul,
+0x3c932721843659a6ul,
+0xbc963aeabf42eae2ul,
+0xbc75e436d661f5e3ul,
+0x3c8ada0911f09ebcul,
+0xbc5ef3691c309278ul,
+0x3c489b7a04ef80d0ul,
+0x3c73c1a3b69062f0ul,
+0x3c7d4397afec42e2ul,
+0xbc94b309d25957e3ul,
+0xbc807abe1db13cadul,
+0x3c99bb2c011d93adul,
+0x3c96324c054647adul,
+0x3c9ba6f93080e65eul,
+0xbc9383c17e40b497ul,
+0xbc9bb60987591c34ul,
+0xbc9bdd3413b26456ul,
+0xbc6bbe3a683c88abul,
+0xbc816e4786887a99ul,
+0xbc90245957316dd3ul,
+0xbc841577ee04992ful,
+0x3c705d02ba15797eul,
+0xbc9d4c1dd41532d8ul,
+0xbc9fc6f89bd4f6baul,
+0x3c96e9f156864b27ul,
+0x3c85cc13a2e3976cul,
+0xbc675fc781b57ebcul,
+0xbc9d185b7c1b85d1ul,
+0x3c7c7c46b071f2beul,
+0xbc9359495d1cd533ul,
+0xbc9d2f6edb8d41e1ul,
+0x3c90fac90ef7fd31ul,
+0x3c97a1cd345dcc81ul,
+0xbc62805e3084d708ul,
+0xbc75584f7e54ac3bul,
+0x3c823dd07a2d9e84ul,
+0x3c811065895048ddul,
+0x3c92884dff483cadul,
+0x3c7503cbd1e949dbul,
+0xbc9cbc3743797a9cul,
+0x3c82ed02d75b3707ul,
+0x3c9c2300696db532ul,
+0xbc91a5cd4f184b5cul,
+0x3c839e8980a9cc8ful,
+0xbc9e9c23179c2893ul,
+0x3c9dc7f486a4b6b0ul,
+0x3c99d3e12dd8a18bul,
+0x3c874853f3a5931eul
+};
+
+static inline W lw_abs(W x){return lw_bits(x.bits & 0x7ffffffffffffffful);}
+static inline W lw_pow2(int e){return lw_bits(ulong(e+1023)<<52);}
+static inline LakeWcrDD lw_mul_d(LakeWcrDD a,W b){LakeWcrDD p=lw_prod(a.h,b);return lw_fast_sum(p.h,p.l+a.l*b);}
+static inline W lw_round(LakeWcrDD a){return a.h+a.l;}
+static inline bool lw_round_ok(LakeWcrDD v,W rel,thread W &out){W e=rel*lw_abs(v.h);W up=v.h+(v.l+e),dn=v.h+(v.l-e);out=v.h+v.l;return up==dn;}
+static inline LakeWcrDD lw_exp_core(LakeWcrDD x,thread int &k){
+ W zero=lw_bits(0ul);W kd=lw_bits(soft64_rint_bits((x.h*lw_bits(0x3ff71547652b82feul)).bits));
+ LakeWcrDD p=lw_prod(kd,lw_bits(0x3fe62e42fefa39eful));
+ LakeWcrDD r=lw_add(lw_sum(x.h,-p.h),{-p.l,zero});
+ r=lw_add(r,lw_neg(lw_prod(kd,lw_bits(0x3c7abc9e3b39803ful))));
+ r=lw_add(r,{-(kd*lw_bits(0x3907b57a079a1934ul)),zero});r=lw_add(r,{x.l,zero});
+ W scale=lw_bits(0x3f70000000000000ul);LakeWcrDD s={r.h*scale,r.l*scale},q=lw_fact(11,0);
+ for(int n=10;n>=1;--n)q=lw_add(lw_mul(q,s),lw_fact(n,0));
+ LakeWcrDD m=lw_mul(q,s);for(int i=0;i<8;++i)m=lw_mul(m,lw_add({W(2),zero},m));
+ k=soft64_to_i32_rz(kd.bits).value;return lw_add({W(1),zero},m);
+}
+static inline W lw_exp_finish(LakeWcrDD y,int k){
+ if(k>-1022){W h=lw_round(y);return k>1023?(h*lw_pow2(1023))*W(2):h*lw_pow2(k);}
+ W t=(y.h*lw_pow2(k+600))*lw_bits(0x1a70000000000000ul);
+ W d=y.h-(t*lw_bits(0x6570000000000000ul))*lw_pow2(-k-600);
+ W midpoint=lw_pow2(-1075-k),zero=W(0),unit=lw_bits(1ul);
+ if(d==midpoint && y.l>zero)t=t+unit;else if(d== -midpoint && y.l<zero)t=t-unit;return t;
+}
+static inline LakeWcrDD lw_exp_fast(LakeWcrDD x,thread int &K){
+ W kd=lw_bits(soft64_rint_bits((x.h*lw_bits(0x40571547652b82feul)).bits));
+ int kj=soft64_to_i32_rz(kd.bits).value;
+ LakeWcrDD p=lw_prod(kd,lw_bits(0x3f862e42fefa39eful));
+ W t=x.h-p.h;LakeWcrDD r=lw_sum(t,(x.l-p.l)-kd*lw_bits(0x3c1abc9e3b39803ful));W rh=r.h;
+ W q=rh*rh*(W(.5f)+rh*(lw_bits(0x3fc5555555555555ul)+rh*(lw_bits(0x3fa5555555555555ul)+rh*(lw_bits(0x3f81111111111111ul)+rh*(lw_bits(0x3f56c16c16c16c17ul)+rh*lw_bits(0x3f2a01a01a01a01aul))))))+rh*r.l;
+ LakeWcrDD em=lw_sum(rh,q);em.l=em.l+r.l;
+ LakeWcrDD T={lw_bits(lw_exp2_h[kj & 63]),lw_bits(lw_exp2_l[kj & 63])};
+ LakeWcrDD a=lw_prod(T.h,em.h),y=lw_fast_sum(T.h,a.h);
+ y=lw_fast_sum(y.h,y.l+(a.l+(T.h*em.l+(T.l*em.h+T.l))));K=kj>>6;return y;
+}
+static inline W lw_add_odd(W x,W y){LakeWcrDD s=lw_sum(x,y);ulong b=s.h.bits;
+ if(!soft64_is_zero(s.l.bits) && !(b & 1ul))b+=((s.l>W(0))==(s.h>W(0)))?1ul:~0ul;return lw_bits(b);}
+static inline W lw_rn3(W a,W b,W c){LakeWcrDD u=lw_sum(b,c),t=lw_sum(a,u.h);return t.h+lw_add_odd(t.l,u.l);}
+static inline W lw_exp_near0(W x){LakeWcrDD p=lw_fact(14,0);for(int n=13;n>=2;--n)p=lw_add(lw_mul_d(p,x),lw_fact(n,0));
+ LakeWcrDD B=lw_mul(lw_prod(x,x),p),u=lw_sum(x,B.h);W w=u.l+B.l;return lw_rn3(W(1),u.h,w);}
+static inline ulong lake_wcr_exp_bits(ulong bits){W x=lw_bits(bits),zero=W(0),one=W(1);if(soft64_is_nan(bits))return (x+x).bits;
+ if(x>W(710))return 0x7ff0000000000000ul;if(x<W(-746))return 0ul;
+ if(lw_abs(x)<lw_bits(0x3c90000000000000ul))return (one+x).bits;
+ int k;W out;LakeWcrDD y=lw_exp_fast({x,zero},k);
+ if(k> -1022 && lw_round_ok(y,lw_bits(0x3c00000000000000ul),out))return (k>1023?(out*lw_pow2(1023))*W(2):out*lw_pow2(k)).bits;
+ if(lw_abs(x)<lw_bits(0x3f70000000000000ul))return lw_exp_near0(x).bits;
+ y=lw_exp_core({x,zero},k);return lw_exp_finish(y,k).bits;
+}
+#endif

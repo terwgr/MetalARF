@@ -890,7 +890,11 @@ pub fn run_batch_render(
 ///
 /// Ordinary batch renders use half the logical processors, as the derived
 /// lane does. Live frames reserve one processor for the foreground forecast
-/// and divide the remainder between `RUSTWX_LIVE_RENDER_SLOTS` processes.
+/// and divide the remainder between the frames drawing as this one starts
+/// (`RUSTWX_LIVE_RENDER_DRAWING`, this one included), or between
+/// `RUSTWX_LIVE_RENDER_SLOTS` processes when the driver does not say.
+/// The free-memory share below stays divided by the slots: frames that may
+/// start later need their memory, not the processors this frame uses now.
 /// The existing `RUSTWX_RENDER_THREADS` variable still overrides the default;
 /// `RUSTWX_BATCH_RENDER_THREADS` narrows this loop alone, which is the
 /// knob for a memory-tight box (each concurrent product holds its own
@@ -947,7 +951,7 @@ fn product_worker_count_within(item_count: usize, available_bytes: Option<u64>) 
     }
     let live_slots = live_render_slots();
     let detected = std::thread::available_parallelism()
-        .map(|count| default_product_worker_count(count.get(), live_slots))
+        .map(|count| default_product_worker_count(count.get(), live_processor_share()))
         .unwrap_or(1);
     let affordable = match available_bytes {
         Some(bytes) => {
@@ -969,6 +973,23 @@ fn live_render_slots() -> Option<usize> {
         .ok()
         .and_then(|value| value.parse().ok())
         .filter(|value| *value > 0)
+}
+
+/// How many live frames share the processors now: the frames drawing as this
+/// one starts (`RUSTWX_LIVE_RENDER_DRAWING`, never more than the slots), else
+/// the slots. THE BREAKAGE: divided by the planned three slots, a lone live
+/// frame on an eight-processor box drew its products two at a time while
+/// five processors sat idle (2.25 km / 750 m HRRR nest, 2026-10-24:
+/// 1.4 s of a 4.6 s frame render at two cores).
+fn live_processor_share() -> Option<usize> {
+    let drawing = std::env::var("RUSTWX_LIVE_RENDER_DRAWING")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|value| *value > 0);
+    match (drawing, live_render_slots()) {
+        (Some(drawing), Some(slots)) => Some(drawing.min(slots)),
+        (drawing, slots) => drawing.or(slots),
+    }
 }
 
 fn default_product_worker_count(processors: usize, live_slots: Option<usize>) -> usize {
@@ -1009,7 +1030,7 @@ fn advise_if_memory_bound(width: usize, item_count: usize, available_bytes: Opti
         return;
     }
     let uncapped = std::thread::available_parallelism()
-        .map(|count| default_product_worker_count(count.get(), live_render_slots()))
+        .map(|count| default_product_worker_count(count.get(), live_processor_share()))
         .unwrap_or(1)
         .min(item_count);
     if width >= uncapped {
@@ -1767,26 +1788,32 @@ mod tests {
     }
 
     fn test_dir(label: &str) -> PathBuf {
+        // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+        static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let dir = std::env::temp_dir().join(format!(
-            "rusty-weather-batch-{label}-{}-{unique}",
-            std::process::id()
+            "rusty-weather-batch-{label}-{}-{unique}-{}",
+            std::process::id(),
+            NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
-    fn write_windowed_store(root: &std::path::Path, run: &str, hours: &[u16]) {
-        let shape = GridShape::new(4, 3).unwrap();
-        let grid = LatLonGrid::new(
-            shape,
+    fn batch_grid() -> LatLonGrid {
+        LatLonGrid::new(
+            GridShape::new(4, 3).unwrap(),
             (0..12).map(|cell| 35.0 + (cell / 4) as f32).collect(),
             (0..12).map(|cell| -100.0 + (cell % 4) as f32).collect(),
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    fn write_windowed_store(root: &std::path::Path, run: &str, hours: &[u16]) {
+        let grid = batch_grid();
         for &hour in hours {
             let temperature = SelectedField2D::new(
                 FieldSelector::height_agl(CanonicalField::Temperature, 2),
@@ -1966,14 +1993,7 @@ mod tests {
     /// FieldSelector nor a derived marker.  The last one used to abort
     /// `StoreFieldSource::open` for the WHOLE hour.
     fn write_mixed_store(root: &std::path::Path, run: &str) -> (String, Vec<String>) {
-        let shape = GridShape::new(4, 3).unwrap();
-        let lat = vec![
-            35.0, 35.0, 35.0, 35.0, 36.0, 36.0, 36.0, 36.0, 37.0, 37.0, 37.0, 37.0,
-        ];
-        let lon = vec![
-            -100.0, -99.0, -98.0, -97.0, -100.0, -99.0, -98.0, -97.0, -100.0, -99.0, -98.0, -97.0,
-        ];
-        let grid = LatLonGrid::new(shape, lat, lon).unwrap();
+        let grid = batch_grid();
         let temperature_selector = FieldSelector::height_agl(CanonicalField::Temperature, 2);
         let temperature_values: Vec<f32> = (0..12).map(|value| 270.0 + value as f32).collect();
         let temperature =
@@ -2119,13 +2139,7 @@ mod tests {
 
     /// One hour whose two bulk-shear planes hold `values` in `units`.
     fn write_shear_store(root: &std::path::Path, run: &str, units: &str, values: &[f32]) {
-        let shape = GridShape::new(4, 3).unwrap();
-        let grid = LatLonGrid::new(
-            shape,
-            (0..12).map(|cell| 35.0 + (cell / 4) as f32).collect(),
-            (0..12).map(|cell| -100.0 + (cell % 4) as f32).collect(),
-        )
-        .unwrap();
+        let grid = batch_grid();
         let temperature = SelectedField2D::new(
             FieldSelector::height_agl(CanonicalField::Temperature, 2),
             "K",
@@ -2427,7 +2441,7 @@ mod tests {
     #[test]
     fn the_default_width_is_capped_by_free_memory() {
         let cores = std::thread::available_parallelism()
-            .map(|count| default_product_worker_count(count.get(), live_render_slots()))
+            .map(|count| default_product_worker_count(count.get(), live_processor_share()))
             .unwrap_or(1);
         let plenty = PRODUCT_LOOP_BASE_BYTES * 8 + PRODUCT_WORKER_BYTES * 4096;
 
@@ -2461,7 +2475,7 @@ mod tests {
     #[test]
     fn a_memory_bound_width_advises_and_an_unbound_one_does_not() {
         let cores = std::thread::available_parallelism()
-            .map(|count| default_product_worker_count(count.get(), live_render_slots()))
+            .map(|count| default_product_worker_count(count.get(), live_processor_share()))
             .unwrap_or(1);
         if cores < 2 {
             return; // Nothing to be capped below.

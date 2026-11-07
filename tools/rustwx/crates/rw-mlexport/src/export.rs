@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use rayon::prelude::*;
 use rw_isobaric::InterfaceStencil;
 use serde_json::{json, Value};
 use wrf_core::WrfFile;
@@ -23,6 +24,50 @@ use crate::zarr::{self, Dtype};
 
 /// Largest uncompressed chunk before a level variable's levels are split.
 pub const CHUNK_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+
+/// Planes with more cells than this are split into horizontal tiles by
+/// default (1024 x 1024 cells, a 4 MiB float32 plane).
+pub const AUTO_TILE_MIN_CELLS: usize = 1024 * 1024;
+
+/// The default tile edge, in cells, for planes above `AUTO_TILE_MIN_CELLS`.
+pub const AUTO_TILE_EDGE: usize = 512;
+
+/// The horizontal chunk shape `(y, x)` for an `ny` x `nx` output plane.
+///
+/// Breakage the default prevents: a 1 km CONUS plane (about 5,000 x 3,000
+/// cells, 60 MB per float32 level) was one chunk, so a training loader
+/// reading a 256 x 256 patch decompressed the whole plane for every level
+/// of every sample.  Planes up to `AUTO_TILE_MIN_CELLS` keep one chunk, so
+/// small domains are written exactly as before.
+pub fn spatial_chunks(requested: Option<[usize; 2]>, ny: usize, nx: usize) -> Result<(usize, usize)> {
+    match requested {
+        None if ny * nx > AUTO_TILE_MIN_CELLS => Ok((AUTO_TILE_EDGE.min(ny), AUTO_TILE_EDGE.min(nx))),
+        None | Some([0, 0]) => Ok((ny, nx)),
+        Some([y, x]) if y == 0 || x == 0 => Err(refuse(format!(
+            "chunk shape {y} x {x} has a zero edge; give two positive cell counts, or 0,0 for whole planes"
+        ))),
+        Some([y, x]) => Ok((y.min(ny), x.min(nx))),
+    }
+}
+
+/// Copy tile (`iy`, `ix`) of a `ny` x `nx` plane into a `ty` x `tx` chunk,
+/// padding the part past the grid's edge with `fill` (Zarr chunks are
+/// always full-size; readers drop the padding).
+#[allow(clippy::too_many_arguments)]
+fn tile_of<T: Copy>(plane: &[T], ny: usize, nx: usize, ty: usize, tx: usize, iy: usize, ix: usize, fill: T, out: &mut Vec<T>) {
+    let (y0, x0) = (iy * ty, ix * tx);
+    let w = tx.min(nx - x0);
+    for row in 0..ty {
+        let y = y0 + row;
+        if y < ny {
+            let start = y * nx + x0;
+            out.extend_from_slice(&plane[start..start + w]);
+            out.extend(std::iter::repeat(fill).take(tx - w));
+        } else {
+            out.extend(std::iter::repeat(fill).take(tx));
+        }
+    }
+}
 
 /// Accumulators may fall by this much between frames (float rounding of
 /// the stored values) before the drop is a refusal.
@@ -52,6 +97,7 @@ fn options_digest(request: &Request) -> String {
         "layout": request.layout,
         "skip_unavailable": request.skip_unavailable,
         "spacings_deg": request.spacings_deg,
+        "chunk_yx": request.chunk_yx,
         "engine": request.provenance.engine,
         "exporter_version": request.provenance.exporter_version,
         "config_sha256": request.provenance.config_sha256,
@@ -65,7 +111,7 @@ fn options_digest(request: &Request) -> String {
 /// The export folder's own artifacts; anything else in it is somebody
 /// else's and is never deleted.
 fn is_ours(name: &str) -> bool {
-    matches!(name, "README.txt" | "ml-export-receipt.json" | ".zgroup" | ".zattrs" | ".zmetadata")
+    matches!(name, "README.txt" | "ml-export-receipt.json" | "zarr.json" | ".zgroup" | ".zattrs" | ".zmetadata")
         || name == STATE_DIR
         || name.ends_with(".zarr")
 }
@@ -536,10 +582,37 @@ fn level_chunking(levels: usize, plane_bytes: usize) -> usize {
 fn time_index(layout: Layout, t: usize) -> Vec<usize> {
     match layout {
         Layout::Analysis => vec![t],
-        Layout::Forecast => vec![0, t],
+        Layout::Forecast | Layout::Earth2 => vec![0, t],
     }
 }
 
+/// The output plane and its chunk shape.
+#[derive(Clone, Copy)]
+struct Tiling {
+    ny: usize,
+    nx: usize,
+    ty: usize,
+    tx: usize,
+    face_size: Option<usize>,
+}
+
+impl Tiling {
+    fn of(domain: &DomainState) -> Tiling {
+        let (ty, tx) = domain.chunk_yx();
+        Tiling { ny: domain.out_ny, nx: domain.out_nx, ty, tx, face_size: None }
+    }
+
+    fn whole(&self) -> bool {
+        self.ty >= self.ny && self.tx >= self.nx
+    }
+
+    fn tiles(&self) -> impl Iterator<Item = (usize, usize)> {
+        let (cy, cx) = (self.ny.div_ceil(self.ty), self.nx.div_ceil(self.tx));
+        (0..cy).flat_map(move |iy| (0..cx).map(move |ix| (iy, ix)))
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn write_level_chunks<T: Copy>(
     store: &Path,
     name: &str,
@@ -549,30 +622,57 @@ fn write_level_chunks<T: Copy>(
     dtype: Dtype,
     layout: Layout,
     t: usize,
-    out_cells: usize,
+    tiling: Tiling,
     per_chunk: usize,
 ) -> Result<u64> {
+    let out_cells = tiling.ny * tiling.nx;
     let levels = data.len() / out_cells;
     let mut written = 0;
     let mut chunk_index = 0;
     let mut start = 0;
     while start < levels {
         let end = (start + per_chunk).min(levels);
-        let mut values = data[start * out_cells..end * out_cells].to_vec();
-        values.resize(per_chunk * out_cells, fill);
-        let mut index = time_index(layout, t);
-        index.extend([chunk_index, 0, 0]);
-        written += zarr::write_chunk(store, name, &index, &to_bytes(&values), dtype)?;
+        if tiling.whole() {
+            let mut values = data[start * out_cells..end * out_cells].to_vec();
+            values.resize(per_chunk * out_cells, fill);
+            let mut index = time_index(layout, t);
+            index.extend([chunk_index, 0, 0]);
+            written += zarr::write_chunk(store, name, &index, &to_bytes(&values), dtype)?;
+        } else {
+            let tile_cells = tiling.ty * tiling.tx;
+            for (iy, ix) in tiling.tiles() {
+                let mut values = Vec::with_capacity(per_chunk * tile_cells);
+                for level in start..end {
+                    let plane = &data[level * out_cells..(level + 1) * out_cells];
+                    tile_of(plane, tiling.ny, tiling.nx, tiling.ty, tiling.tx, iy, ix, fill, &mut values);
+                }
+                values.resize(per_chunk * tile_cells, fill);
+                let mut index = time_index(layout, t);
+                index.extend([chunk_index, iy, ix]);
+                written += zarr::write_chunk(store, name, &index, &to_bytes(&values), dtype)?;
+            }
+        }
         chunk_index += 1;
         start = end;
     }
     Ok(written)
 }
 
-fn write_surface_chunk(store: &Path, name: &str, plane: &[f32], layout: Layout, t: usize) -> Result<u64> {
-    let mut index = time_index(layout, t);
-    index.extend([0, 0]);
-    zarr::write_chunk(store, name, &index, &zarr::f32_bytes(plane), Dtype::F32)
+fn write_surface_chunk(store: &Path, name: &str, plane: &[f32], layout: Layout, t: usize, tiling: Tiling) -> Result<u64> {
+    if tiling.whole() {
+        let mut index = time_index(layout, t);
+        index.extend([0, 0]);
+        return zarr::write_chunk(store, name, &index, &zarr::f32_bytes(plane), Dtype::F32);
+    }
+    let mut written = 0;
+    for (iy, ix) in tiling.tiles() {
+        let mut values = Vec::with_capacity(tiling.ty * tiling.tx);
+        tile_of(plane, tiling.ny, tiling.nx, tiling.ty, tiling.tx, iy, ix, f32::NAN, &mut values);
+        let mut index = time_index(layout, t);
+        if tiling.face_size.is_some() { index.extend([iy, 0, ix]); } else { index.extend([iy, ix]); }
+        written += zarr::write_chunk(store, name, &index, &zarr::f32_bytes(&values), Dtype::F32)?;
+    }
+    Ok(written)
 }
 
 /// Check each selected row against the first frame's file; returns the
@@ -649,10 +749,17 @@ pub const CONFIG_ATTRIBUTE_KIND: &str = "wrfout-config-attributes-v2";
 fn config_attribute_digest(file: &WrfFile, meta: &FileMeta) -> String {
     let mut lines: Vec<String> = Vec::new();
     for name in CONFIG_ATTRIBUTES {
+        // Numbers first, through f64: the classic reader spells a float
+        // attribute's string as its f64 widening, the NetCDF-4 reader as
+        // its f32, so reading text first gave a compressed (NetCDF-4) frame
+        // a different digest from the classic frame of the same run (V6000
+        // A/B, 2026-10-28). Through f64 both containers spell it the way
+        // the classic frame always did, so no existing digest moves.
         let text = file
-            .global_attr_str(name)
+            .global_attr_f64(name)
             .ok()
-            .or_else(|| file.global_attr_f64(name).ok().map(|v| format!("{v}")));
+            .map(|v| format!("{v}"))
+            .or_else(|| file.global_attr_str(name).ok());
         if let Some(text) = text {
             lines.push(format!("{name}={}", text.trim_end_matches(char::from(0)).trim()));
         }
@@ -684,6 +791,7 @@ fn init_domain(request: &Request, file: &WrfFile, meta: &FileMeta, t: usize, val
             request.grid.deg,
             request.grid.method,
             &request.spacings_deg,
+            request.grid.target.as_ref(),
         )?),
     };
     let (out_ny, out_nx) = match (&regrid, &native.regular) {
@@ -752,7 +860,8 @@ fn init_domain(request: &Request, file: &WrfFile, meta: &FileMeta, t: usize, val
         LevelKind::Pressure => kept.len(),
         LevelKind::Model => model_levels.len(),
     };
-    let levels_per_chunk = level_chunking(levels, out_ny * out_nx * 4);
+    let (chunk_ny, chunk_nx) = spatial_chunks(request.chunk_yx, out_ny, out_nx)?;
+    let levels_per_chunk = level_chunking(levels, chunk_ny * chunk_nx * 4);
     state::save_plane(out, &format!("{}-xlat-0.f64", meta.domain), &xlat)?;
     state::save_plane(out, &format!("{}-xlong-0.f64", meta.domain), &xlong)?;
     let init_time = meta.simulation_start.unwrap_or(valid);
@@ -784,6 +893,8 @@ fn init_domain(request: &Request, file: &WrfFile, meta: &FileMeta, t: usize, val
         lid_stated,
         geopotential_between_interfaces,
         levels_per_chunk,
+        chunk_ny,
+        chunk_nx,
         variables,
         latlon_version: Vec::new(),
         latlon_versions: 1,
@@ -885,6 +996,7 @@ fn export_frame(
                 request.grid.deg,
                 request.grid.method,
                 &request.spacings_deg,
+            request.grid.target.as_ref(),
             )?)
         }
         None => None,
@@ -897,6 +1009,8 @@ fn export_frame(
     let layout = request.layout;
     let regular = domain.native.regular.clone();
     let levels_per_chunk = domain.levels_per_chunk;
+    let mut tiling = Tiling::of(domain);
+    tiling.face_size = crate::earth2::nside(request);
     let model_levels = domain.model_levels.clone();
     let levels_kept = domain.levels_kept.clone();
     let lid = if domain.lid_stated { Lid::PTop(domain.lid_pa) } else { Lid::TopMassLevel };
@@ -991,11 +1105,14 @@ fn export_frame(
         None
     };
 
-    let mut written = 0u64;
-    let mut partners: Vec<(String, bool)> = Vec::new();
-    for var in &variables {
+    // Channel work is independent after the frame's common fields and
+    // accumulation are available. Keep single-level consumers parallel,
+    // including reads, diagnostics, regridding, compression and writes.
+    let outputs = variables.par_iter().map(|var| -> Result<(u64, Vec<(String, bool)>)> {
+        let mut written = 0u64;
+        let mut partners = Vec::new();
         if var.omitted.is_some() {
-            continue;
+            return Ok((written, partners));
         }
         let row = row_of(request, &var.id);
         let op = Op::parse(&row.op)?;
@@ -1010,9 +1127,11 @@ fn export_frame(
         }
         match row.kind {
             VariableKind::Level => {
+                let single_plan = row.pressure_hpa.and_then(|p| columns.as_ref().map(|cols| Plan::new(&[p],cols)));
+                let plan = single_plan.as_ref().or(plan.as_ref());
                 let field = ops::level_field(file, t, &op, scale)?;
                 let stencil = base.as_ref().and_then(|b| b.stencil.as_ref().map(|s| (b, s)));
-                let stack: Vec<f32> = match (&plan, &columns, &op, stencil) {
+                let stack: Vec<f32> = match (plan, &columns, &op, stencil) {
                     (Some(plan), Some(cols), Op::Geopotential, Some((b, stencil))) => plan
                         .apply_geopotential_between_interfaces(
                             &b.phi_stag,
@@ -1025,6 +1144,13 @@ fn export_frame(
                     _ => vertical::select_model_levels(&field, cells, &model_levels),
                 };
                 drop(field);
+                if let Some(pressure) = row.pressure_hpa {
+                    if !levels_kept.contains(&pressure) { return Err(refuse(format!("requested channel {} is above the model lid",var.name))); }
+                    let k = 0;
+                    let plane = transform.plane(&stack[k * cells..(k + 1) * cells]);
+                    written += write_surface_chunk(&store, &var.name, &plane, layout, t_pos, tiling)?;
+                    return Ok((written, partners));
+                }
                 let stack = transform.stack(&stack, cells);
                 written += write_level_chunks(
                     &store,
@@ -1035,7 +1161,7 @@ fn export_frame(
                     Dtype::F32,
                     layout,
                     t_pos,
-                    out_cells,
+                    tiling,
                     levels_per_chunk,
                 )?;
             }
@@ -1071,16 +1197,12 @@ fn export_frame(
                         match earlier {
                             None => vec![f64::NAN; cells],
                             Some(earlier) => {
-                                let mut worst = 0.0f64;
-                                let diff: Vec<f64> = now
-                                    .iter()
-                                    .zip(&earlier)
-                                    .map(|(a, b)| {
-                                        let d = a - b;
-                                        worst = worst.min(d);
+                                let worst = now.par_iter().zip(&earlier)
+                                    .map(|(a,b)| a-b).reduce(|| 0.0, f64::min);
+                                let diff: Vec<f64> = now.par_iter().zip(&earlier)
+                                    .map(|(a,b)| { let d=a-b;
                                         if d.is_finite() { d.max(0.0) / 1000.0 * scale } else { f64::NAN }
-                                    })
-                                    .collect();
+                                    }).collect();
                                 if worst < -ACCUMULATION_TOLERANCE_MM {
                                     return Err(refuse(format!(
                                         "accumulated precipitation in domain {} falls by {:.3} mm between {} and {}; a bucket reset or restart the file does not describe would publish negative rain",
@@ -1096,22 +1218,26 @@ fn export_frame(
                     }
                     _ => ops::surface_field(file, t, &op, scale, p_top_stated)?,
                 };
-                let plane32: Vec<f32> = plane.iter().map(|&v| v as f32).collect();
-                written += write_surface_chunk(&store, &var.name, &transform.plane(&plane32), layout, t_pos)?;
+                let plane32: Vec<f32> = plane.par_iter().map(|&v| v as f32).collect();
+                written += write_surface_chunk(&store, &var.name, &transform.plane(&plane32), layout, t_pos, tiling)?;
             }
             VariableKind::Static => {
                 // A moving nest samples different terrain at every time.
                 // Keep every frame until finalize knows whether the grid
                 // moved; stationary exports collapse to the first plane.
                 let plane = ops::surface_field(file, t, &op, scale, None)?;
-                let plane32: Vec<f32> = plane.iter().map(|&v| v as f32).collect();
-                written += write_surface_chunk(&store, &var.name, &transform.plane(&plane32), layout, t_pos)?;
+                let plane32: Vec<f32> = plane.par_iter().map(|&v| v as f32).collect();
+                written += write_surface_chunk(&store, &var.name, &transform.plane(&plane32), layout, t_pos, tiling)?;
             }
         }
-    }
+        Ok((written, partners))
+    }).collect::<Result<Vec<_>>>()?;
+    let mut written = outputs.iter().map(|(bytes, _)| bytes).sum::<u64>();
+    let partners: Vec<(String, bool)> = outputs.into_iter().flat_map(|(_, partners)| partners).collect();
 
     // The below-ground mask.
     if let (Some(plan), Some(base)) = (&plan, &base) {
+      if layout != Layout::Earth2 {
         let mask = match &regrid {
             Some(r) => {
                 let psfc32: Vec<f32> = base.psfc.iter().map(|&v| v as f32).collect();
@@ -1139,9 +1265,11 @@ fn export_frame(
             Dtype::U8,
             layout,
             t_pos,
-            out_cells,
+            tiling,
             levels_per_chunk,
         )?;
+    }
+
     }
 
     // Keep only the accumulations the longest period still needs.
@@ -1187,6 +1315,51 @@ mod tests {
         assert_eq!(level_chunking(29, plane), 15);
         // A plane over the limit is never split.
         assert_eq!(level_chunking(5, CHUNK_LIMIT_BYTES + 1), 1);
+    }
+
+    #[test]
+    fn large_planes_tile_by_default_and_small_planes_do_not() {
+        // 1 km CONUS-sized plane: 512 x 512 tiles.
+        assert_eq!(spatial_chunks(None, 3200, 5000).unwrap(), (512, 512));
+        // A 3 km HRRR-sized plane (1059 x 1799) is above 1024 x 1024 cells.
+        assert_eq!(spatial_chunks(None, 1059, 1799).unwrap(), (512, 512));
+        // Small domains keep one chunk per plane, exactly as before.
+        assert_eq!(spatial_chunks(None, 300, 400).unwrap(), (300, 400));
+        assert_eq!(spatial_chunks(None, 1024, 1024).unwrap(), (1024, 1024));
+        // Explicit shapes, the whole-plane opt-out, and a zero edge.
+        assert_eq!(spatial_chunks(Some([256, 128]), 3200, 5000).unwrap(), (256, 128));
+        assert_eq!(spatial_chunks(Some([4096, 4096]), 300, 400).unwrap(), (300, 400));
+        assert_eq!(spatial_chunks(Some([0, 0]), 3200, 5000).unwrap(), (3200, 5000));
+        assert!(spatial_chunks(Some([0, 64]), 3200, 5000).is_err());
+    }
+
+    #[test]
+    fn tiles_cover_the_plane_and_pad_only_past_the_edge() {
+        // A 5 x 7 plane in 2 x 3 tiles: 3 x 3 tiles, the last row and column padded.
+        let (ny, nx, ty, tx) = (5usize, 7usize, 2usize, 3usize);
+        let plane: Vec<i32> = (0..(ny * nx) as i32).collect();
+        let tiling = Tiling { ny, nx, ty, tx, face_size: None };
+        let mut rebuilt = vec![-1i32; ny * nx];
+        let mut tiles = 0;
+        for (iy, ix) in tiling.tiles() {
+            let mut out = Vec::new();
+            tile_of(&plane, ny, nx, ty, tx, iy, ix, -9, &mut out);
+            assert_eq!(out.len(), ty * tx);
+            for r in 0..ty {
+                for c in 0..tx {
+                    let (y, x) = (iy * ty + r, ix * tx + c);
+                    let v = out[r * tx + c];
+                    if y < ny && x < nx {
+                        rebuilt[y * nx + x] = v;
+                    } else {
+                        assert_eq!(v, -9);
+                    }
+                }
+            }
+            tiles += 1;
+        }
+        assert_eq!(tiles, 9);
+        assert_eq!(rebuilt, plane);
     }
 
     #[test]

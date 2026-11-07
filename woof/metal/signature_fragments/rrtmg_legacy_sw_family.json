@@ -1,7 +1,7 @@
 {
   "kernels": [
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_inatm_layers_b",
       "layout_version": 1,
@@ -25,7 +25,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_cldprmc_b",
       "layout_version": 1,
@@ -54,7 +54,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_setcoef_b",
       "layout_version": 1,
@@ -96,7 +96,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_laysolfr_b",
       "layout_version": 1,
@@ -115,7 +115,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_taumol_b",
       "layout_version": 1,
@@ -153,7 +153,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_sfluxzen_b",
       "layout_version": 1,
@@ -184,7 +184,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_spcvmc_gpt_b",
       "layout_version": 1,
@@ -223,7 +223,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_spc_accum_b",
       "layout_version": 1,
@@ -259,7 +259,7 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": ["default"],
+      "arithmetic_policies": ["default", "wrf-exact"],
       "cuda_source": "woof/core/kernels/rrtmg_sw.cu",
       "cuda_symbol": "rsw_post_b",
       "layout_version": 1,

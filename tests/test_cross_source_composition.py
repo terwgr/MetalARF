@@ -358,6 +358,56 @@ def test_analysis_broadcast_binds_the_donor_analysis_to_every_primary_time():
         assert injected.source_cycle == start
 
 
+def test_declared_stride_borrows_exact_nodes_and_records_every_index(tmp_path):
+    """Whole-prep regression: 1.5 degree nodes on the 0.25 degree donor."""
+    raw = _composition_raw()
+    raw["field_sources"]["physical_analysis_surface"]["grid_alignment"] = (
+        "exact_coordinate_strided_subset")
+    load_composition(_write(tmp_path, "strided.json", raw), MAPPING)
+    start = datetime(2026, 8, 17)
+    primary = _primary((start, start + timedelta(hours=12)),
+                       latitude=np.arange(31.5, 22.0, -1.5),
+                       longitude=np.arange(268.5, 278.0, 1.5))
+    donor = _donor((start,), latitude=np.arange(32.75, 21.0, -0.25),
+                   longitude=np.arange(-93.0, -80.75, 0.25))
+    with pytest.raises(ValueError, match="not a contiguous"):
+        _compose_bound_fields(primary, donor, binding_name="donor", binding=_BINDING)
+    binding = dict(_BINDING, grid_alignment="exact_coordinate_strided_subset")
+    combined, receipt = _compose_bound_fields(
+        primary, donor, binding_name="donor", binding=binding)
+    yi, xi = np.arange(5, 42, 6), np.arange(6, 43, 6)
+    expected = donor.direct[(start, None, "terrain_height")].values[np.ix_(yi, xi)]
+    for time in (start, start + timedelta(hours=12)):
+        np.testing.assert_array_equal(
+            combined.direct[(time, None, "terrain_height")].values, expected)
+    assert receipt["coordinate_match"] == "exact_equivalent_regular_strided_subset"
+    assert receipt["latitude_indices"] == yi.tolist()
+    assert receipt["longitude_indices"] == xi.tolist()
+    assert receipt["latitude_index_stride"] == receipt["longitude_index_stride"] == 6
+
+
+def test_declared_stride_wraps_once_but_rejects_irregular_or_approximate_nodes():
+    from woof.mapped_composition import _exact_subset_indices, _regular_index_stride
+    donor = np.arange(0.0, 360.0, 30.0)
+    for primary, expected, stride in (
+        ([300.0, 0.0, 60.0], [10, 0, 2], 2),
+        ([60.0, 0.0, 300.0], [2, 0, 10], -2),
+        ([240.0, 180.0, 120.0], [8, 6, 4], -2),
+    ):
+        indices = _exact_subset_indices(donor, np.asarray(primary), "longitude",
+                                        cyclic_degrees=True, allow_strided=True)
+        np.testing.assert_array_equal(indices, expected)
+        assert _regular_index_stride(indices, donor.size, True) == stride
+    for primary in ([0.0, 60.0, 150.0], [0.0, 120.0, 240.0, 0.0],
+                    [0.0, 150.0, 300.0, 90.0], [0.0, 60.00000000001]):
+        with pytest.raises(ValueError):
+            _exact_subset_indices(donor, np.asarray(primary), "longitude",
+                                  cyclic_degrees=True, allow_strided=True)
+    with pytest.raises(ValueError, match="exact matches"):
+        _exact_subset_indices(np.array([0.0, 360.0]), np.array([0.0]), "longitude",
+                              cyclic_degrees=True, allow_strided=True)
+
+
 def test_analysis_broadcast_refuses_a_cycle_mismatched_donor():
     start = datetime(2026, 8, 17)
     primary = _primary((start, start + timedelta(hours=6)))
@@ -501,3 +551,71 @@ def test_a_vertical_bearing_borrow_requires_the_same_ladder():
         _compose_bound_fields(
             primary, donor, binding_name="donor", binding=binding,
         )
+
+
+def _lagged_primary(cycle, times):
+    fields = {
+        (time, None, "surface_pressure"): _direct(
+            "surface_pressure", time, np.full((2, 2), 100000.0), cycle=cycle)
+        for time in times
+    }
+    return _collection((51.5, 51.75), (260.0, 260.25), fields)
+
+
+def _lagged_donor(cycle, times):
+    base = np.arange(9, dtype=np.float64).reshape(3, 3)
+    fields = {(time, None, "terrain_height"): _direct("terrain_height", time, base, cycle=cycle)
+              for time in times}
+    return _collection((52.0, 51.75, 51.5), (-100.0, -99.75, -99.5), fields)
+
+
+def test_window_start_broadcast_takes_the_run_s_own_record_at_the_first_time():
+    """A time-lagged member's soil is its own run's state at its start.
+
+    Breakage it prevents: the HRRR 07Z run started at f03 (a 10Z DA
+    member) borrowed the 07Z analysis soil, three to seventeen hours
+    stale. For a forecast from its own cycle the record taken is the
+    analysis, exactly as the analysis broadcast takes it.
+    """
+    binding = dict(_BINDING, time_alignment="source_cycle_window_start_broadcast")
+    cycle = datetime(2023, 7, 10, 7)
+    first, later = cycle + timedelta(hours=3), cycle + timedelta(hours=4)
+    combined, receipt = _compose_bound_fields(
+        _lagged_primary(cycle, (first, later)), _lagged_donor(cycle, (first,)),
+        binding_name="donor", binding=binding)
+    assert receipt["status"] == "PASS"
+    assert receipt["donor_valid_times"] == [first.isoformat()]
+    assert receipt["broadcast_primary_valid_times"] == [later.isoformat()]
+    for time in (first, later):
+        assert combined.direct[(time, None, "terrain_height")].source_cycle == cycle
+    # A later forcing pass (its first primary time one lead after the run's
+    # start) carries the same start record. Breakage it prevents: the HRRR
+    # 08Z member of a 10Z start refused in "Initialize remaining forcing
+    # states" because the pass's first time was 11Z. Which lead the record
+    # is (the start, not the stale analysis) is the fetch's job:
+    # test_fetch_route_donor_table asks the donor for the start lead only.
+    after = later + timedelta(hours=1)
+    combined, receipt = _compose_bound_fields(
+        _lagged_primary(cycle, (later, after)), _lagged_donor(cycle, (first,)),
+        binding_name="donor", binding=binding)
+    assert receipt["donor_valid_times"] == [first.isoformat()]
+    # A record valid after the pass's first time cannot be its start.
+    with pytest.raises(ValueError, match="first primary time"):
+        _compose_bound_fields(
+            _lagged_primary(cycle, (first, later)), _lagged_donor(cycle, (later,)),
+            binding_name="donor", binding=binding)
+    # Nor can another run's record valid at the right time.
+    with pytest.raises(ValueError, match="first primary time"):
+        _compose_bound_fields(
+            _lagged_primary(cycle, (first, later)),
+            _lagged_donor(cycle + timedelta(hours=3), (first,)),
+            binding_name="donor", binding=binding)
+    # From its own cycle, the same analysis record the analysis broadcast takes.
+    own_window, own = _compose_bound_fields(
+        _primary((first, later)), _donor((first,)), binding_name="donor", binding=binding)
+    analysis_window, analysis = _compose_bound_fields(
+        _primary((first, later)), _donor((first,)), binding_name="donor", binding=_BINDING)
+    for time in (first, later):
+        np.testing.assert_array_equal(
+            own_window.direct[(time, None, "terrain_height")].values,
+            analysis_window.direct[(time, None, "terrain_height")].values)

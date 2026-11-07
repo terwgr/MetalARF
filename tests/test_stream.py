@@ -1625,6 +1625,7 @@ def test_a_work_root_without_hard_links_streams_every_hour(
         {(cycle, 0): 1, (cycle, 1): 1, (cycle, 2): 1})
 
 
+@pytest.mark.usefixtures("classic_history_frames")
 def test_node_budget_accepts_enforced_source_envelope_and_refuses_below_bound(
         tmp_path):
     # The accepted Node B deployment geometry: d01 72x70x49 hourly history,
@@ -1659,8 +1660,8 @@ def test_node_budget_accepts_enforced_source_envelope_and_refuses_below_bound(
     # of the blanket 2x factor, which still doubles the retained
     # preparation/checkpoint reservation. Reprice the fixed proof geometry
     # independently from the stream controller: four retained preparations
-    # and their 14/44 history frames per cycle, with four activation frames
-    # lacking output-due reflectivity.
+    # and their 14/44 history frames per cycle. Each tick-zero frame writes
+    # the initial reflectivity array too.
     from woof import disk_budget
     from woof.io.history_selection import resolve
 
@@ -1671,19 +1672,17 @@ def test_node_budget_accepts_enforced_source_envelope_and_refuses_below_bound(
     for domain, frames in zip(plan.experiment.domains, (14, 44), strict=True):
         selection = resolve(plan.experiment.output, domain.output)
         mature = disk_budget.history_frame_bytes(domain.run, selection)
-        activation = disk_budget.history_frame_bytes(
-            domain.run, selection, include_reflectivity=False)
-        history += frames * mature - 4 * (mature - activation)
+        history += frames * mature
     expected_generation = 2 * (4 * 2 * preparation + history)
 
     assert receipt["status"] == "PASS"
     assert receipt["free_bytes_observed"] == node_free
     assert receipt["projected_source_output_bytes"] == 85_899_345_920
     assert receipt["projected_cache_copy_bytes"] == 85_899_345_920
-    assert receipt["projected_generation_bytes"] == expected_generation == 9_492_086_896
+    assert receipt["projected_generation_bytes"] == expected_generation
     assert receipt["fixed_margin_bytes"] == 2_147_483_648
-    assert required == 183_438_262_384
-    assert receipt["free_bytes_after_requirement"] == 62_678_155_152
+    assert required == 2 * 85_899_345_920 + expected_generation + 2_147_483_648
+    assert receipt["free_bytes_after_requirement"] == node_free - required
     assert receipt["volume_layout"]["kind"] == \
         "shared-work-cache-volume"
     assert receipt["work_volume"]["required_bytes"] == required

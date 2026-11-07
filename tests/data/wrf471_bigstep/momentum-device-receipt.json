@@ -5,7 +5,7 @@
   "driver": 13030,
   "kernel_source_sha256": {
     "dycore": "433ab4ba2ae49a20dc1c3abcf83753fd6d831f6267639bc1c9bbf812977fbdaf",
-    "coriolis_map": "505e5ce3a03a28482fc4d520dd60b82682e290885c1ffeb1920b87b1b18fb67e"
+    "coriolis_map": "30a7c0778f9df73efee7e8014d9fdce650bd7e4c3b955ef70ccbd0b9b53d5b1b"
   },
   "launch_paths": [
     "gpuwm.core.dycore._launch_slow_pgf",

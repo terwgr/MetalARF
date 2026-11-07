@@ -84,7 +84,6 @@ the device section of ``tests/test_rrtmg_mcica.py``.  Kernels live in
 """
 
 from __future__ import annotations
-from woof.core.cuda_numerics import require_cuda_numerics
 
 from woof.core.device_cache import cuda_cache
 
@@ -106,7 +105,7 @@ __all__ = [
     "LW_PERMUTESEED", "SW_PERMUTESEED",
     "generate_lw_subcolumns", "generate_sw_subcolumns",
     "MCICA_DEVICE_ICLD", "MCICA_DEVICE_COLUMN_CHUNK",
-    "MCICA_GPU_KERNEL_NAMES",
+    "MCICA_GPU_KERNEL_NAMES", "mcica_gpu_preflight",
     "mcica_gpu_local_frame_bytes", "mcica_device_vram_bytes",
     "gpu_generate_lw_subcolumns", "gpu_generate_sw_subcolumns",
 ]
@@ -335,7 +334,8 @@ def generate_lw_subcolumns(iplon, ncol, nlay, icld, permuteseed, irng,
     iscloudy = _generate_stochastic_clouds(
         ncol, nlay, NGPTLW, icld, irng, pmid, cldf, hgt, decorr,
         permuteseed)
-    return _fill_outputs_lw(iscloudy, ciwp, clwp, cswp, rei, rel, res, tauc)
+    return _fill_outputs(iscloudy, ciwp, clwp, cswp, rei, rel, res,
+                         _LW_NGB - 1, (("taucmcl", tauc, _F32_ZERO),))
 
 
 def generate_sw_subcolumns(iplon, ncol, nlay, icld, permuteseed, irng,
@@ -366,12 +366,19 @@ def generate_sw_subcolumns(iplon, ncol, nlay, icld, permuteseed, irng,
         ncol, nlay, NGPTSW, icld, irng, pmid, cldf, hgt, decorr,
         permuteseed)
 
+    return _fill_outputs(
+        iscloudy, ciwp, clwp, cswp, rei, rel, res, _SW_NGB - _SW_NGB[0],
+        (("taucmcl", band_arrays["tauc"], _F32_ZERO),
+         ("ssacmcl", band_arrays["ssac"], _F32_ONE),
+         ("asmcmcl", band_arrays["asmc"], _F32_ZERO),
+         ("fsfcmcl", band_arrays["fsfc"], _F32_ZERO)))
+
+
+def _fill_outputs(iscloudy, ciwp, clwp, cswp, rei, rel, res, band_index, bands):
     ciwp = np.asarray(ciwp, dtype=np.float32)
     clwp = np.asarray(clwp, dtype=np.float32)
     cswp = np.asarray(cswp, dtype=np.float32)
     cloudy = iscloudy
-    # n = ngb(isubcol) - (ngb(1) - 1): 1-based SW band index per g-point.
-    band_index = _SW_NGB - (_SW_NGB[0] - 1)             # 1..14
     out = {
         "cldfmcl": np.where(cloudy, _F32_ONE, _F32_ZERO).astype(np.float32),
         "ciwpmcl": np.where(cloudy, ciwp[None, :, :], _F32_ZERO).astype(
@@ -380,41 +387,15 @@ def generate_sw_subcolumns(iplon, ncol, nlay, icld, permuteseed, irng,
             np.float32),
         "cswpmcl": np.where(cloudy, cswp[None, :, :], _F32_ZERO).astype(
             np.float32),
-        "taucmcl": np.where(cloudy, band_arrays["tauc"][band_index - 1],
-                            _F32_ZERO).astype(np.float32),
-        "ssacmcl": np.where(cloudy, band_arrays["ssac"][band_index - 1],
-                            _F32_ONE).astype(np.float32),
-        "asmcmcl": np.where(cloudy, band_arrays["asmc"][band_index - 1],
-                            _F32_ZERO).astype(np.float32),
-        "fsfcmcl": np.where(cloudy, band_arrays["fsfc"][band_index - 1],
-                            _F32_ZERO).astype(np.float32),
+    }
+    for name, array, clear in bands:
+        out[name] = np.where(cloudy, array[band_index], clear).astype(np.float32)
+    out.update({
         "reicmcl": np.asarray(rei, dtype=np.float32).copy(),
         "relqmcl": np.asarray(rel, dtype=np.float32).copy(),
         "resnmcl": np.asarray(res, dtype=np.float32).copy(),
-    }
+    })
     return out
-
-
-def _fill_outputs_lw(iscloudy, ciwp, clwp, cswp, rei, rel, res, tauc):
-    ciwp = np.asarray(ciwp, dtype=np.float32)
-    clwp = np.asarray(clwp, dtype=np.float32)
-    cswp = np.asarray(cswp, dtype=np.float32)
-    cloudy = iscloudy
-    return {
-        "cldfmcl": np.where(cloudy, _F32_ONE, _F32_ZERO).astype(np.float32),
-        "ciwpmcl": np.where(cloudy, ciwp[None, :, :], _F32_ZERO).astype(
-            np.float32),
-        "clwpmcl": np.where(cloudy, clwp[None, :, :], _F32_ZERO).astype(
-            np.float32),
-        "cswpmcl": np.where(cloudy, cswp[None, :, :], _F32_ZERO).astype(
-            np.float32),
-        # n = ngb(isubcol): 1-based LW band index per g-point.
-        "taucmcl": np.where(cloudy, tauc[_LW_NGB - 1], _F32_ZERO).astype(
-            np.float32),
-        "reicmcl": np.asarray(rei, dtype=np.float32).copy(),
-        "relqmcl": np.asarray(rel, dtype=np.float32).copy(),
-        "resnmcl": np.asarray(res, dtype=np.float32).copy(),
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +405,7 @@ def _fill_outputs_lw(iscloudy, ciwp, clwp, cswp, rei, rel, res, tauc):
 # same direct-NVRTC pattern as rrtmg_lw.py Section 10 (cupy.RawModule
 # cannot be used: CuPy appends '-ftz=true' AFTER user options, so
 # compile_using_nvrtc + cuda.function.Module keeps --ftz=false
-# effective, and CUDA numerical admission proves subnormal survival plus the
+# effective, and mcica_gpu_preflight proves subnormal survival plus the
 # seed/kissvec chain on the live device every process).  cupy is
 # imported lazily; everything above stays importable without a GPU.
 #
@@ -461,7 +442,11 @@ MCICA_DEVICE_COLUMN_CHUNK = 16384
 
 #: Every kernel in the McICA device module (local-frame audit surface).
 MCICA_GPU_KERNEL_NAMES = ("rmcw_probe", "rmcw_fill_cdf",
-                          "rmcw_walk_mask", "rmcw_fill_outputs", "rmcw_fill_outputs_column")
+                          "rmcw_walk_mask", "rmcw_fill_outputs", "rmcw_fill_outputs_column",
+                          "rmcw_subcol_states", "rmcw_walk_fill_column")
+
+#: Bytes of one recorded kissvec state (four uint32 words, one uint4).
+_MCICA_STATE_BYTES = 16
 
 # Output source kinds -- FROZEN, mirrored by rrtmg_mcica_wrf.cu.
 _MCICA_SRC_CONST1 = 0
@@ -471,6 +456,7 @@ _MCICA_SRC_BAND = 2
 _MCICA_GPU_THREADS = 128
 _MCICA_GPU_MODULE = {}
 _MCICA_GPU_KERNELS = {}
+_MCICA_GPU_PREFLIGHTED = set()
 
 
 @cuda_cache(maxsize=None)
@@ -512,6 +498,35 @@ def _mcica_gpu_kernel(name):
     return _MCICA_GPU_KERNELS[key]
 
 
+def mcica_gpu_preflight(force=False):
+    """Prove, on the live device, that FP32 subnormals survive our
+    compile options and that the seed-derivation + kissvec chain equals
+    the certified NumPy port bitwise on a probe column."""
+    import cupy as cp
+    device = int(cp.cuda.Device().id)
+    if device in _MCICA_GPU_PREFLIGHTED and not force:
+        return
+    import cupy as cp
+    probe_play = np.array([1013.2478, 991.7534, 962.4989, 927.0031],
+                          dtype=np.float32)
+    x = cp.asarray(np.concatenate(
+        [np.array([1.0e-30, 1.0e-10], dtype=np.float32), probe_play]))
+    out = cp.zeros(3, dtype=cp.float32)
+    _mcica_gpu_kernel("rmcw_probe")((1,), (32,), (x, out))
+    got = cp.asnumpy(out)
+    pmid = (probe_play * _PMID_SCALE).astype(np.float32)[None, :]
+    seeds = _make_seeds(pmid, 0)
+    want = np.array([np.float32(1.0e-30) * np.float32(1.0e-10),
+                     _kissvec(seeds)[0], _kissvec(seeds)[0]],
+                    dtype=np.float32)
+    if got.view(np.uint32).tolist() != want.view(np.uint32).tolist():
+        raise RuntimeError(
+            "rrtmg_mcica GPU preflight failed: got %r want %r "
+            "(subnormal flush or seed/kissvec divergence on this "
+            "toolchain)" % (got, want))
+    _MCICA_GPU_PREFLIGHTED.add(device)
+
+
 def mcica_gpu_local_frame_bytes():
     """CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES for every McICA kernel.
 
@@ -532,22 +547,33 @@ def _mcica_r512(nbytes):
     return (int(nbytes) + 511) & ~511
 
 
-def mcica_device_vram_bytes(ncol_chunk, nlay, ngpt):
+def mcica_device_vram_bytes(ncol_chunk, nlay, ngpt, *, layout="gpoint"):
     """Peak transient device bytes of ONE internal chunk of the device
-    generators: the raw (ngpt, nlay, ncol_chunk) float32 CDF slab, the
-    (ngpt, ncol_chunk, nlay) uint8 iscloudy mask and the descriptor
-    tables, rounded to CuPy's 512-byte pool quantum.
+    generators, rounded to CuPy's 512-byte pool quantum.
+
+    ``layout="gpoint"`` (the staged path): the raw (ngpt, nlay,
+    ncol_chunk) float32 CDF slab, the (ngpt, ncol_chunk, nlay) uint8
+    iscloudy mask and the descriptor tables.  ``layout="column"`` (the
+    fused path, rmcw_subcol_states + rmcw_walk_fill_column): one recorded
+    16-byte stream state per (column, subcolumn) and the descriptor
+    tables -- no per-cell transient at all.
 
     Inputs and the returned output slabs are priced by the caller --
     they scale with the full ncol request, not the chunk (each
     (ngpt, ncol, nlay) float32 output slab costs ngpt*nlay*4 bytes per
     column: 41,440 B/col at the LW width for nlay=74)."""
+    if layout not in ("gpoint", "column"):
+        raise ValueError("layout must be gpoint or column")
+    tables = (_mcica_r512(int(ngpt) * 4)       # bandoff table
+              + 2 * _mcica_r512(8 * 8)         # outptrs / srcptrs
+              + 2 * _mcica_r512(8 * 4))        # srckind / clearval
+    if layout == "column":
+        return (_mcica_r512(int(ngpt) * int(ncol_chunk) * _MCICA_STATE_BYTES)
+                + tables)
     cells = int(ngpt) * int(nlay) * int(ncol_chunk)
     return (_mcica_r512(cells * 4)             # CDF slab (f32)
             + _mcica_r512(cells)               # iscloudy mask (u8)
-            + _mcica_r512(int(ngpt) * 4)       # bandoff table
-            + 2 * _mcica_r512(8 * 8)           # outptrs / srcptrs
-            + 2 * _mcica_r512(8 * 4))          # srckind / clearval
+            + tables)
 
 
 def _mcica_dev_f32(cp, arr, shape, name):
@@ -567,11 +593,54 @@ def _mcica_dev_f32(cp, arr, shape, name):
     return out
 
 
+def _window_tables(cp, optrs, sptrs, kinds, clears, band_offsets):
+    """The five small kernel tables of one McICA window, in ONE upload.
+
+    THE BREAKAGE THIS PREVENTS (radiation-ranks, V61 8 x RTX 5090 nsys,
+    2026-10-21): five ``cp.asarray(numpy)`` uploads per window were 1,045 of
+    the 1,208 host-to-device copies of one legacy radiation call per rank.
+    Each went through CuPy's pinned staging, which creates, records, queries
+    and destroys a CUDA event; with eight rank threads the event destroys
+    contended on the driver's write lock (0.34 s of one rank's 3.8 s
+    radiation span) and the host fell behind the card.  One pageable
+    ``set`` into one device buffer carries the same bytes with no event.
+    The kernels read the same values; only the number of copies changes.
+    """
+    nout = len(optrs)
+    ngpt = len(band_offsets)
+    host = np.empty(24 * nout + 4 * ngpt, dtype=np.uint8)
+    host[0:8 * nout].view(np.uint64)[...] = np.asarray(optrs, dtype=np.uint64)
+    host[8 * nout:16 * nout].view(np.uint64)[...] = np.asarray(sptrs, dtype=np.uint64)
+    host[16 * nout:20 * nout].view(np.int32)[...] = np.asarray(kinds, dtype=np.int32)
+    host[20 * nout:24 * nout].view(np.float32)[...] = np.asarray(clears, dtype=np.float32)
+    host[24 * nout:].view(np.int32)[...] = np.asarray(band_offsets, dtype=np.int32)
+    dev = cp.empty(host.size, dtype=cp.uint8)
+    dev.set(host)
+    return (dev[0:8 * nout].view(cp.uint64), dev[8 * nout:16 * nout].view(cp.uint64),
+            dev[16 * nout:20 * nout].view(cp.int32),
+            dev[20 * nout:24 * nout].view(cp.float32),
+            dev[24 * nout:].view(cp.int32))
+
+
 def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
                              play, cldfrac, hgt, percol_srcs, band_srcs,
                              nbnd, band_offsets, out_specs, passthrough,
-                             ncol_chunk, layout="gpoint"):
-    """Shared device driver for both generator sides (see wrappers)."""
+                             ncol_chunk, stage_probe=None, layout="gpoint",
+                             fused=None, states=None):
+    """Shared device driver for both generator sides (see wrappers).
+
+    ``fused`` selects the kernel route of the column layout: the fused
+    rmcw_subcol_states + rmcw_walk_fill_column pair (default for
+    ``layout="column"``) or the staged rmcw_fill_cdf + rmcw_walk_mask +
+    rmcw_fill_outputs_column trio it replaced (``fused=False``, kept as
+    the in-suite reference the fused pair is gated against).  Both give
+    the same bits; the gpoint layout always runs the staged trio.
+
+    ``states`` (fused route only): this batch's per-subcolumn stream states,
+    from :func:`gpu_subcolumn_states` over the same ``play`` rows, so the
+    states kernel is not run again for a window of a larger batch.  A
+    column's states depend only on its own play and the permute seed, so a
+    row slice of a whole-batch states array is that window's states."""
     # Fail closed BEFORE any cupy import, upload or launch.
     if int(icld) != MCICA_DEVICE_ICLD:
         raise NotImplementedError(
@@ -585,6 +654,12 @@ def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
             "(irng = 0) is ported")
     if layout not in ("gpoint", "column"):
         raise ValueError("layout must be gpoint or column")
+    if fused is None:
+        fused = layout == "column"
+    if fused and layout != "column":
+        raise ValueError("the fused McICA kernels write the column layout only")
+    if states is not None and not fused:
+        raise ValueError("precomputed stream states feed the fused route only")
     ncol = int(ncol)
     nlay = int(nlay)
     if nlay < 4:
@@ -595,7 +670,7 @@ def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
         raise ValueError("ncol_chunk must be >= 1")
 
     import cupy as cp
-    require_cuda_numerics("mcica")
+    mcica_gpu_preflight()
     play_d = _mcica_dev_f32(cp, play, (ncol, nlay), "play")
     cldf_d = _mcica_dev_f32(cp, cldfrac, (ncol, nlay), "cldfrac")
     # hgt cannot influence icld=2 output; validate the shape only.
@@ -608,10 +683,14 @@ def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
     # (generate_stochastic_clouds lines 2424-2427 / _make_seeds).
     pm0 = play_d[:, 0] * _PMID_SCALE
     pm1 = play_d[:, 1] * _PMID_SCALE
-    if bool((pm0 < pm1).any()):
-        raise ValueError(
-            "MCICA_SUBCOL: KISSVEC SEED GENERATOR REQUIRES PMID FROM "
-            "BOTTOM FOUR LAYERS.")
+    def _seed_verdict(bad):
+        if bool(bad):
+            raise ValueError(
+                "MCICA_SUBCOL: KISSVEC SEED GENERATOR REQUIRES PMID FROM "
+                "BOTTOM FOUR LAYERS.")
+    # Read now, or once per radiation call (deferred_device_checks).
+    from woof.core.deferred_device_checks import check
+    check((pm0 < pm1).any(), _seed_verdict)
     del pm0, pm1
 
     srcs = {}
@@ -631,19 +710,48 @@ def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
         kinds.append(kind)
         clears.append(clear)
     nout = len(out_specs)
-    outptrs_d = cp.asarray(np.asarray(optrs, dtype=np.uint64))
-    srcptrs_d = cp.asarray(np.asarray(sptrs, dtype=np.uint64))
-    kinds_d = cp.asarray(np.asarray(kinds, dtype=np.int32))
-    clears_d = cp.asarray(np.asarray(clears, dtype=np.float32))
-    bandoff_d = cp.asarray(np.ascontiguousarray(
-        np.asarray(band_offsets, dtype=np.int32)))
+    outptrs_d, srcptrs_d, kinds_d, clears_d, bandoff_d = _window_tables(
+        cp, optrs, sptrs, kinds, clears, band_offsets)
 
+    tb = _MCICA_GPU_THREADS
+    if fused:
+        states_k = _mcica_gpu_kernel("rmcw_subcol_states")
+        walk_fill = _mcica_gpu_kernel("rmcw_walk_fill_column")
+        if states is not None:
+            if (not isinstance(states, cp.ndarray) or states.dtype != cp.uint32
+                    or states.shape != (ncol, ngpt * 4)
+                    or not states.flags.c_contiguous):
+                raise ValueError(
+                    f"states must be a C-contiguous uint32 device array "
+                    f"({ncol}, {ngpt * 4}); got {getattr(states, 'dtype', None)} "
+                    f"{getattr(states, 'shape', None)}")
+        for col0 in range(0, ncol, chunk):
+            nc = min(chunk, ncol - col0)
+            if states is not None:
+                states_d = states[col0:col0 + nc]
+            else:
+                # (nc, ngpt) uint4 stream states; every entry is written by
+                # rmcw_subcol_states before rmcw_walk_fill_column reads it.
+                states_d = cp.empty(nc * ngpt * 4, dtype=cp.uint32)
+                states_k(((nc + tb - 1) // tb,), (tb,),
+                         (np.int32(col0), np.int32(nc), np.int32(nlay),
+                          np.int32(ngpt), np.int32(int(permuteseed)), play_d,
+                          states_d))
+            pairs = ngpt * nc
+            walk_fill(((pairs + tb - 1) // tb,), (tb,),
+                      (np.int32(ncol), np.int32(col0), np.int32(nc),
+                       np.int32(nlay), np.int32(ngpt), states_d, cldf_d,
+                       np.int32(nout), outptrs_d, srcptrs_d, kinds_d,
+                       clears_d, bandoff_d))
+            if stage_probe is not None:
+                cp.cuda.runtime.deviceSynchronize()
+                stage_probe(col0, nc)
+            del states_d
     fill_cdf = _mcica_gpu_kernel("rmcw_fill_cdf")
     walk = _mcica_gpu_kernel("rmcw_walk_mask")
     fill_out = _mcica_gpu_kernel("rmcw_fill_outputs" if layout == "gpoint"
                                  else "rmcw_fill_outputs_column")
-    tb = _MCICA_GPU_THREADS
-    for col0 in range(0, ncol, chunk):
+    for col0 in range(0, 0 if fused else ncol, chunk):
         nc = min(chunk, ncol - col0)
         cdf_d = cp.empty(ngpt * nlay * nc, dtype=cp.float32)
         mask_d = cp.empty(ngpt * nc * nlay, dtype=cp.uint8)
@@ -661,6 +769,9 @@ def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
                   np.int32(nlay), np.int32(ngpt), mask_d,
                   np.int32(nout), outptrs_d, srcptrs_d, kinds_d,
                   clears_d, bandoff_d))
+        if stage_probe is not None:
+            cp.cuda.runtime.deviceSynchronize()
+            stage_probe(col0, nc)
         del cdf_d, mask_d
 
     for name, arr in passthrough.items():
@@ -674,8 +785,8 @@ def _gpu_generate_subcolumns(ncol, nlay, ngpt, icld, permuteseed, irng,
 def gpu_generate_lw_subcolumns(iplon, ncol, nlay, icld, permuteseed,
                                irng, play, cldfrac, ciwp, clwp, cswp,
                                rei, rel, res, tauc, hgt, idcor, juldat,
-                               lat, ncol_chunk=None, *,
-                               layout="gpoint"):
+                               lat, ncol_chunk=None, _stage_probe=None, *,
+                               layout="gpoint", fused=None, states=None):
     """Device twin of :func:`generate_lw_subcolumns` (icld=2 only).
 
     Same logical arguments (numpy or cupy float32; ``iplon`` unused like
@@ -684,7 +795,9 @@ def gpu_generate_lw_subcolumns(iplon, ncol, nlay, icld, permuteseed,
     invisible).  Returns cupy arrays in the frozen shapes.  ``idcor``,
     ``juldat`` and ``lat`` are accepted for signature parity; they
     cannot influence icld=2 output. ``layout="column"`` returns the five
-    g-point slabs as (ncol, nlay, NGPTLW); the default stays unchanged."""
+    g-point slabs as (ncol, nlay, NGPTLW) through the fused kernel pair
+    (``fused=False`` selects the staged trio, same bits); the default
+    stays unchanged."""
     del iplon, idcor, juldat, lat
     out_specs = (
         ("cldfmcl", _MCICA_SRC_CONST1, None, np.float32(0.0)),
@@ -698,20 +811,22 @@ def gpu_generate_lw_subcolumns(iplon, ncol, nlay, icld, permuteseed,
         {"ciwp": ciwp, "clwp": clwp, "cswp": cswp}, {"tauc": tauc},
         NBNDLW, _LW_NGB - 1, out_specs,
         {"reicmcl": rei, "relqmcl": rel, "resnmcl": res},
-        ncol_chunk, layout)
+        ncol_chunk, _stage_probe, layout, fused, states)
 
 
 def gpu_generate_sw_subcolumns(iplon, ncol, nlay, icld, permuteseed,
                                irng, play, cldfrac, ciwp, clwp, cswp,
                                rei, rel, res, tauc, ssac, asmc, fsfc,
                                hgt, idcor, juldat, lat, ncol_chunk=None,
-                               layout="gpoint"):
+                               _stage_probe=None, layout="gpoint", fused=None,
+                               states=None):
     """Device twin of :func:`generate_sw_subcolumns` (icld=2 only).
 
     See :func:`gpu_generate_lw_subcolumns`; the SW roster adds the
     ``ssac``/``asmc``/``fsfc`` band inputs, with ``ssacmcl``'s clear-sky
     value 1.0 exactly like the NumPy entry. ``layout="column"`` returns
-    the eight slabs as (ncol, nlay, NGPTSW)."""
+    the eight slabs as (ncol, nlay, NGPTSW) through the fused kernel pair
+    (``fused=False`` selects the staged trio, same bits)."""
     del iplon, idcor, juldat, lat
     out_specs = (
         ("cldfmcl", _MCICA_SRC_CONST1, None, np.float32(0.0)),
@@ -730,4 +845,29 @@ def gpu_generate_sw_subcolumns(iplon, ncol, nlay, icld, permuteseed,
         {"tauc": tauc, "ssac": ssac, "asmc": asmc, "fsfc": fsfc},
         NBNDSW, _SW_NGB - _SW_NGB[0], out_specs,
         {"reicmcl": rei, "relqmcl": rel, "resnmcl": res},
-        ncol_chunk, layout)
+        ncol_chunk, _stage_probe, layout, fused, states)
+
+
+def gpu_subcolumn_states(ncol, nlay, ngpt, permuteseed, play):
+    """Per-subcolumn kissvec stream states of a batch, (ncol, ngpt * 4)
+    uint32 on the device (one uint4 per column and subcolumn, the state
+    before that subcolumn's first draw), from rmcw_subcol_states.  Feed row
+    slices to the fused generators' ``states=`` for windows of the batch."""
+    import cupy as cp
+    ncol, nlay, ngpt = int(ncol), int(nlay), int(ngpt)
+    if nlay < 4:
+        raise ValueError("kissvec seeding requires at least four layers")
+    mcica_gpu_preflight()
+    play_d = _mcica_dev_f32(cp, play, (ncol, nlay), "play")
+    states = cp.empty((ncol, ngpt * 4), dtype=cp.uint32)
+    tb = _MCICA_GPU_THREADS
+    _mcica_gpu_kernel("rmcw_subcol_states")(
+        ((ncol + tb - 1) // tb,), (tb,),
+        (np.int32(0), np.int32(ncol), np.int32(nlay), np.int32(ngpt),
+         np.int32(int(permuteseed)), play_d, states))
+    return states
+
+
+#: The device generators as defined here (not as later rebound on the
+#: module): the callers that hand them precomputed states check against these.
+DEVICE_GENERATORS = (gpu_generate_lw_subcolumns, gpu_generate_sw_subcolumns)

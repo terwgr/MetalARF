@@ -21,7 +21,7 @@
     "stub_wrf_sha256": "edb9fdd90b672032a1be874b0f1a8ea8cde44475e53f318f547e62cec5fff890"
   },
   "fixture": {
-    "path": "gpuwm/data/nssl2/oracle/qvexcess.csv",
+    "path": "woof/data/nssl2/oracle/qvexcess.csv",
     "rows": 128,
     "sha256": "fbbcb323d356f10fe47d147c22c2a901f738fe22cf48427c2ad077abcef17661",
     "targets_percent": [0.0, 0.4, 90.0, 250.0],
@@ -30,9 +30,9 @@
     "trace_final_bit_gate": "All 128 literal-trace qvex results are bitwise equal to official QVEXCESS results before fixture emission."
   },
   "implementation": {
-    "gpuwm/core/nssl2_qvexcess.py": "d96653541745438bb22a2626f4e6687b4881580f4e903d91bd2adeefda530ddb",
-    "gpuwm/core/kernels/nssl2_qvexcess.cu": "6906dcd9f8822d73d87ff3cb6e545a1b1ddef567c16c658435d4f669f1f369dc",
-    "tests/test_nssl2_qvexcess.py": "e52a4bbab1ff6c62d412c41306f08f30437028bde391dc1157f6272e246f99bc"
+    "woof/core/nssl2_qvexcess.py": "0545889ab980beaaa8a01af13c787d72bfdf47e7ff132ea6ad1a55bc95af06bd",
+    "woof/core/kernels/nssl2_qvexcess.cu": "6906dcd9f8822d73d87ff3cb6e545a1b1ddef567c16c658435d4f669f1f369dc",
+    "tests/test_nssl2_qvexcess.py": "4a344804b7fcea21bae2d0dffe86bb1de369af94c07735e2a96e17d6c1317f8a"
   },
   "contracts": {
     "pure_api": "Reads direct FP32 workspace concentration views and writes only caller-owned qvex output; qv, qc, theta, number, and CCN inputs are immutable.",
@@ -57,10 +57,10 @@
     }
   },
   "frozen_integration_seams": {
-    "gpuwm/core/nssl2.py": "3bd1f16e1973ee41f0eaf07dc6db359f63932b8862c5ee1274ab91ad93910347",
-    "gpuwm/core/kernels/nssl2.cu": "67873ac07b4b17b77d5a4f58fb0f103129f3db99e3543d67b39d0a937ac13520",
-    "gpuwm/core/nssl2_driver_support.py": "d425c440ef1c1f46c8d71eee5f5eb3d2f2382239e3356d6e6bc465aa40284e5b",
-    "gpuwm/core/kernels/nssl2_driver_support.cu": "8e8b01cc0ca43d48ce6d4a200174ff0be6f5c268d57714fe755fd43ee635934d",
+    "woof/core/nssl2.py": "3bd1f16e1973ee41f0eaf07dc6db359f63932b8862c5ee1274ab91ad93910347",
+    "woof/core/kernels/nssl2.cu": "67873ac07b4b17b77d5a4f58fb0f103129f3db99e3543d67b39d0a937ac13520",
+    "woof/core/nssl2_driver_support.py": "d425c440ef1c1f46c8d71eee5f5eb3d2f2382239e3356d6e6bc465aa40284e5b",
+    "woof/core/kernels/nssl2_driver_support.cu": "8e8b01cc0ca43d48ce6d4a200174ff0be6f5c268d57714fe755fd43ee635934d",
     "hash_scope": "base_commit_git_blob",
     "base_commit_must_be_ancestor": true,
     "checkout_policy": "Current checkout bytes may differ in legitimate descendants; the base blobs remain immutable evidence."

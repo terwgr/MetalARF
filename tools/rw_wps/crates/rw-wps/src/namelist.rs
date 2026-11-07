@@ -67,13 +67,23 @@ pub const NAMELIST_SUPPORT_SCHEMA: &str = "rw-wps.namelist-support.v1";
 ///     on it.  It rules now.
 ///
 /// A refusal survives here only for an id the paired engine inventories and
-/// this frontend has no evidenced Registry contract for; there is none
-/// today, and a new engine package arrives as a new id here plus whatever
-/// its members' shapes require, never as a silently narrowed export.
+/// this frontend has no evidenced Registry contract for, and one does:
+///
+///   * mp=30, FAST_SBM (registry.sbm:318).  Its package carries 142 spectral
+///     bin members and six number moments as scalars, with mixed units
+///     (the ff8 aerosol bins per kg, the hydrometeor bins kg/kg), and stock
+///     real.exe writes them all as zero.  This frontend has no evidenced
+///     contract for that member list, so certifying it would export a bin
+///     state nobody checked.  The engine fills the bins from the analysis'
+///     bulk condensate at the first step instead
+///     (gpuwm/core/fast_sbm_bulk_start.py).
+///
+/// A new engine package arrives as a new id here plus whatever its members'
+/// shapes require, never as a silently narrowed export.
 ///
 /// Public so `tests/engine_stock_inventory.rs` can hold it to the engine's
 /// own inventory (gpuwm/physics_consumer_export_v1.json).
-pub const STOCK_WRF_INVENTORIED_MP_PHYSICS: &[u16] = &[6, 8, 10, 18, 28, 50];
+pub const STOCK_WRF_INVENTORIED_MP_PHYSICS: &[u16] = &[2, 4, 5, 6, 8, 10, 18, 24, 28, 50, 106];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamelistSupportRequest {
@@ -317,8 +327,8 @@ pub fn validate_namelist_support_report(report: &NamelistSupportReport) -> Resul
             )));
         }
     }
-    if let Some(vertical) = &report.vertical {
-        if vertical.e_vert != vertical.mass_levels + 1
+    if let Some(vertical) = &report.vertical
+        && (vertical.e_vert != vertical.mass_levels + 1
             || vertical.eta_levels.len() != vertical.e_vert
             || vertical.eta_levels.first() != Some(&1.0)
             || vertical.eta_levels.last() != Some(&0.0)
@@ -327,13 +337,12 @@ pub fn validate_namelist_support_report(report: &NamelistSupportReport) -> Resul
                 .windows(2)
                 .all(|pair| pair[0].is_finite() && pair[0] > pair[1])
             || !vertical.p_top_requested_pa.is_finite()
-            || vertical.p_top_requested_pa <= 0.0
+            || vertical.p_top_requested_pa <= 0.0)
         {
             return Err(RwWpsError::Engine(
                 "invalid explicit vertical grid in namelist support report".to_owned(),
             ));
         }
-    }
     if passed
         && report.required_state.stock_wrf_export.domains.len() != report.geometry.domain_count
     {

@@ -1,6 +1,10 @@
 # RELEASE-EXCLUDE: internal campaign material that must NOT enter the
 # public release snapshot.
 #
+# Withdrawn WRF-Hydro product door. Original NextGen products use the normal
+# renderer and remain in exports; this legacy exclusion does not apply to them.
+woof/hydro_products.py
+#
 # These paths are development-campaign records -- lead/controller
 # handoffs, phase plans, machine-specific runbooks -- several of which
 # bake a per-user home directory into a shipped file, contradicting the
@@ -37,14 +41,29 @@ MP28_HANDOFF.md
 # "ftz" would otherwise put nine thousand hash lines into the FTZ claim census.
 tools/noah_mosaic_wrf471_oracle/receipts/*
 
+# The SFIRE oracle and coupled-ideal run receipts (lane/283-sfire, ported on
+# lane/ec-sfire): GPU replay censuses and source manifests recorded at the
+# source names of their day, development evidence behind the fire tools'
+# READMEs.  The harness sources and fixtures ship; these do not.
+tools/sfire_wrf471_oracle/receipts/**
+tools/sfire_coupled_ideal/moisture_driver/receipts/**
+tools/sfire_coupled_ideal/rhs_ph_open/receipts/**
+tools/sfire_coupled_ideal/initializer_atmos/receipts/**
+tools/sfire_coupled_ideal/geographic_units/receipts/**
+
 # The project's binding agent instructions.  Tracked so every worktree and
 # agent reads one law file, but it is a development-process document -- it
 # names this machine's Downloads directory and program ledger -- and means
 # nothing to a release reader.
-CLAUDE.md
+the project rules
 AGENTS.md
+final.md
+READY.txt
+NEXTGEN-BRIEF.md
+tools/native_nextgen_reference/**
 
 # Campaign handoffs and internal project history (developer paths inside).
+final.md
 docs/gpuwm-controller-handoff.md
 docs/lead-handoff-2026-07-26.md
 docs/gpuwm-project-history.md
@@ -70,6 +89,10 @@ docs/ports/wrf-rrtm-dudhia-status.md
 handoffs/**
 evidence/**
 work/**
+
+# Ian trailer's machine-specific measured receipts and input inventories.
+# The reproducible case and public launcher remain distributed.
+cases/ian-20220928/evidence/**
 
 # Detailed research-catalog campaign audit. Its raw measurements are retained
 # under work/** and are not part of the public snapshot. Keep the original
@@ -118,27 +141,6 @@ cpu_suite.log
 gpu_tier.log
 gpu_retry.log
 gpu_failed_ids.txt
-
-# Ensemble-sweep node drivers.  These are the shell harness that runs the
-# ensemble-size ladder on the project's rented Linux nodes: they hard-code
-# that layout as defaults (a sweep root, a tree root and a geography root,
-# all under the node's root account), drive each other through status files
-# in the same home directory, and are unrunnable anywhere else.  Spelling
-# those defaults out here would put the very paths this file exists to keep
-# out of the release into the release.  The Python beside them is NOT
-# excluded --
-# score_free_forecast.py is the scorer of record for the published FSS
-# numbers, and decompose_skill.py, score_resolution.py and
-# summarize_sweep.py read committed composites -- so the analysis half of
-# the directory ships and only the machine-shaped driver half does not.
-tools/ens_sweep/build_obs.sh
-tools/ens_sweep/ceiling_probe.sh
-tools/ens_sweep/chain.sh
-tools/ens_sweep/chain2.sh
-tools/ens_sweep/pool_limit_probe.sh
-tools/ens_sweep/prepare_case.sh
-tools/ens_sweep/resolution_cost_probe.sh
-tools/ens_sweep/run_sweep.sh
 
 # Grell-Freitas dual-run byte-comparison harness.  A Windows Task Scheduler
 # job (task.xml) plus the PowerShell queue it launches, both written around
@@ -192,9 +194,8 @@ tilestream/rescued-tools/**
 
 # Campaign runbook shells: each cds into a rented node's own case tree and
 # drives a measurement that needs that node's staged inputs, on the
-# tools/ens_sweep precedent above -- the analysis Python beside them is not
-# excluded and ships.
-tilestream/rrtmgp_runall.sh
+# same rule as other machine-specific campaign drivers; the analysis
+# Python beside them is not excluded and ships.
 tools/harvest_case_imagery.sh
 tools/les1m_costfinal.sh
 tools/les1m_queue.sh
@@ -227,6 +228,25 @@ configs/superoutbreak_20110427_smoke.namelist.wps
 # pyproject packages configs/ recursively.  It is also case-named, which
 # nothing in configs/ should be.
 configs/real74_morrison_d03_pressure_fix_1h.toml
+
+# The recent-convection DA deck's per-machine authorings.  tools.da_recent_case
+# writes every plan path absolute by design (the finalizer resolves the
+# authority directory strictly, and prepare_argv names the authoring
+# interpreter), and the authority receipt records its config paths the same
+# way, so each case-plan.json and authority-receipt.json here names the
+# author's Windows profile, and the two Linux pricing receipts name a node
+# scratch directory.  The deck cannot run off its author's disk: a reader
+# re-authors the case on the execution box, as the deck README says, which
+# writes fresh local copies of all three.  The observation case, model object
+# requests, configs and README beside them carry no machine path and ship.
+configs/da_rerun_286/recent/active-241/case-plan.json
+configs/da_rerun_286/recent/active-241/authority/authority-receipt.json
+configs/da_rerun_286/recent/large-601-center32p2/case-plan.json
+configs/da_rerun_286/recent/large-601-center32p2/authority/authority-receipt.json
+configs/da_rerun_286/recent/requested-601-center31/case-plan.json
+configs/da_rerun_286/recent/requested-601-center31/authority/authority-receipt.json
+configs/da_rerun_286/recent/native-linux-pricing.json
+configs/da_rerun_286/recent/native-linux-pricing-241.json
 # DA-campaign drivers and a node runbook from the 2.6.1 fold wave: each
 # bakes a per-user scratch root or a rented node's home path -- exactly
 # the machine-specific runbook class this manifest exists for.  Their
@@ -237,7 +257,6 @@ tools/cycle_demo_b.py
 tools/cycle_demo_c.py
 tools/da_real_leg.py
 tools/da_real_series.py
-tools/ens_sweep/release_card.sh
 
 # A lane's proof directory: the receipts a defect fix is reported on --
 # the reproduction read off the sealed cut, the node's build and test
@@ -258,6 +277,10 @@ proof/**
 # half of what it relies on ships: woof.bridge_assets.native_input_difference
 # and the pin and verifier tools that re-prove a reused binary.
 tools/release/cut/**
+tools/release/chain/**
+# The daily release rehearsal drives the cut, the hosts and the card owner
+# protocol, and its scanner carries the internal-token list it reads for.
+tools/release/always_ready/**
 docs/dev/RELEASE-CUT.md
 
 # The branch-dispositions ledger and its gate: internal branch bookkeeping
@@ -281,3 +304,260 @@ tools/albsol_score/receipts/full-build-first.log
 tools/albsol_score/receipts/tests.log
 tools/albsol_score/receipts/full-dependencies.json
 tools/albsol_score/receipts/source-packet.json
+
+# The nowcast radar-heating evaluation's box drivers.  They bootstrap and run
+# one rented box: root-owned work and card-lease paths, a dead-man
+# timer that ends the instance, and a card mutex stand-in.  They are bench
+# machinery for that box, not anything a reader runs.  The Python beside them
+# (tables, overlays, scoring, sheets, the decision) is NOT excluded.
+# Literal paths only: tools/release_exclusions.py reads a literal path or a
+# trailing /** subtree, so a *.sh glob here matched nothing and shipped them.
+tools/heat_eval/bootstrap.sh
+tools/heat_eval/box_chain.sh
+tools/heat_eval/case_steps.sh
+tools/heat_eval/deadman.sh
+tools/heat_eval/fetch_case.sh
+tools/heat_eval/gpu_mutex_run.sh
+tools/heat_eval/lib.sh
+tools/heat_eval/make_kit.sh
+tools/heat_eval/run_arm.sh
+tools/heat_eval/dryrun/**
+
+# The MPAS hex source tree the RRFS v2 hex TEMPO preset runs (tree/, the
+# source-only woof hex baseline the rrfs-hex-tempo-preset lane carries).  The
+# hex code ships through woof hex with its own register; its campaign
+# drivers name the boxes they ran on, and its FTZ claims are that project's.
+tree/**
+
+# The speed-lane benchmark harness merged for 2.8.9: sealed sprint-box case
+# pins, queue and lane-root wrappers, and identity tooling that names the
+# rented boxes it ran on. It measures the product; it is not the product.
+# Retained benchmark and qualification drivers remain private. The engine
+# has no bench imports; the native obs test uses woof.obs.replay_target_grid.
+tools/bench/**
+# Internal speed2 shape receipts, site manifests and profiling adapters.
+tools/speed2_bench/**
+tests/test_regional_packing_bench.py
+tests/test_timeline_qualification.py
+
+# The same speed lanes' global statics bake and image staging, merged for
+# 2.8.9 beside tools/bench and missed when that harness was dropped above.
+# The sealed replay drivers qualify.py, warm_pair.py and stage_replay.py
+# were removed. The remaining check.py imports the hosted site worker's
+# own modules, which this tree does not carry; image_context.py, layers.toml
+# and the README write and document
+# that site image's settings, whose variable names carry the hosting
+# company's prefix.  Nothing in the tree imports or links any of it, and no
+# test reads it.  The row table it produced, woof/authorities/
+# global-statics.v1.json, and the rw-globe-pack bridge it stages are
+# product files and still ship.
+tools/global_statics/**
+
+# The native MPAS-A static and GWD reference harness that came with the
+# rw-mpas i2/f2/i3 landing (2.9.0 lane A2): the scripts drive the MPAS pool's
+# strict native builds through its card and build queues and read that pool's
+# reference cases on the hosts that hold them, and the README is the lanes'
+# running log of those replays.  Nothing compiled reads native_gwd/.  In
+# native_static/ the word and case files and the Fortran and C drivers that
+# regenerate them ship, because the public cargo tests read the words
+# (static_native_parity.rs, static_collections.rs, the static_builder,
+# static_geog and static_operators unit tests); the scripts are the
+# measurement's own run records, not the product.
+tools/rustwx/crates/rw-mpas/tests/native_gwd/**
+# (Each script is listed: this file's rules are exact paths or a directory's /**.)
+tools/rustwx/crates/rw-mpas/tests/native_static/README.md
+tools/rustwx/crates/rw-mpas/tests/native_static/approved_residue.py
+tools/rustwx/crates/rw-mpas/tests/native_static/artifact_driver.py
+tools/rustwx/crates/rw-mpas/tests/native_static/assess_native_forecast.py
+tools/rustwx/crates/rw-mpas/tests/native_static/attempt_acceptance.py
+tools/rustwx/crates/rw-mpas/tests/native_static/audit_driver_coverage.py
+tools/rustwx/crates/rw-mpas/tests/native_static/bespoke_tile_matrix.py
+tools/rustwx/crates/rw-mpas/tests/native_static/check_citations.py
+tools/rustwx/crates/rw-mpas/tests/native_static/collect_coverage.py
+tools/rustwx/crates/rw-mpas/tests/native_static/compact_forecast.py
+tools/rustwx/crates/rw-mpas/tests/native_static/compile_collections.py
+tools/rustwx/crates/rw-mpas/tests/native_static/compile_diagnostics.py
+tools/rustwx/crates/rw-mpas/tests/native_static/consumer_driver.py
+tools/rustwx/crates/rw-mpas/tests/native_static/coverage_driver.py
+tools/rustwx/crates/rw-mpas/tests/native_static/coverage_union.py
+tools/rustwx/crates/rw-mpas/tests/native_static/error_coverage.py
+tools/rustwx/crates/rw-mpas/tests/native_static/forecast_attempt.py
+tools/rustwx/crates/rw-mpas/tests/native_static/forecast_difference.py
+tools/rustwx/crates/rw-mpas/tests/native_static/forecast_pair.py
+tools/rustwx/crates/rw-mpas/tests/native_static/forecast_restore.py
+tools/rustwx/crates/rw-mpas/tests/native_static/forecast_summary.py
+tools/rustwx/crates/rw-mpas/tests/native_static/fread_witness.py
+tools/rustwx/crates/rw-mpas/tests/native_static/full_driver.py
+tools/rustwx/crates/rw-mpas/tests/native_static/geoindex_defaults_plan.py
+tools/rustwx/crates/rw-mpas/tests/native_static/geoindex_encoding_plan.py
+tools/rustwx/crates/rw-mpas/tests/native_static/geoindex_error_plan.py
+tools/rustwx/crates/rw-mpas/tests/native_static/heap_witness.py
+tools/rustwx/crates/rw-mpas/tests/native_static/initialization_driver.py
+tools/rustwx/crates/rw-mpas/tests/native_static/landed_forecast_pair.py
+tools/rustwx/crates/rw-mpas/tests/native_static/longitude_matrix.py
+tools/rustwx/crates/rw-mpas/tests/native_static/parallel_artifacts.py
+tools/rustwx/crates/rw-mpas/tests/native_static/partial_replay.py
+tools/rustwx/crates/rw-mpas/tests/native_static/preflight_forecast.py
+tools/rustwx/crates/rw-mpas/tests/native_static/priority_static.py
+tools/rustwx/crates/rw-mpas/tests/native_static/proof_inputs.py
+tools/rustwx/crates/rw-mpas/tests/native_static/proof_inputs_replay.py
+tools/rustwx/crates/rw-mpas/tests/native_static/regenerate.py
+tools/rustwx/crates/rw-mpas/tests/native_static/regenerated_proof.py
+tools/rustwx/crates/rw-mpas/tests/native_static/reject_driver.py
+tools/rustwx/crates/rw-mpas/tests/native_static/replay_diagnostics.py
+tools/rustwx/crates/rw-mpas/tests/native_static/replay_errors.py
+tools/rustwx/crates/rw-mpas/tests/native_static/replay_regenerated_proof.py
+tools/rustwx/crates/rw-mpas/tests/native_static/reproduce-residue.sh
+tools/rustwx/crates/rw-mpas/tests/native_static/reproduce.py
+tools/rustwx/crates/rw-mpas/tests/native_static/reproduce.sh
+tools/rustwx/crates/rw-mpas/tests/native_static/reproduce_diagnostic_forecast.sh
+tools/rustwx/crates/rw-mpas/tests/native_static/residue_negative.py
+tools/rustwx/crates/rw-mpas/tests/native_static/v35_forecast_pair.py
+
+# Three rw-mpas proof examples link the system netCDF C library at build time
+# (#[link(name = "netcdf")]). They are instruments of the native-static
+# harness above, which the export already drops; the product reads netCDF
+# through rw_mpas_static's run-time loader instead. Breakage: in the public
+# tree ci.yml's native job runs `cargo test -p rw-mpas`, which builds every
+# example, and the GitHub ubuntu-24.04 and windows-2025 runners carry no
+# libnetcdf, so 2.9.0's first public ci (run 38684507300) failed both native
+# jobs at link time ("unable to find library -lnetcdf"; LNK1181 netcdf.lib).
+# tests/test_cargo_gate_manifest.py refuses any such target in the export.
+tools/rustwx/crates/rw-mpas/examples/static_grid_longitudes.rs
+tools/rustwx/crates/rw-mpas/examples/static_grid_metadata.rs
+tools/rustwx/crates/rw-mpas/examples/static_netcdf_compact.rs
+
+# rw-mpas harnesses landed with the hex lanes Rust side (2.9.1, hexeng/hex040-fix-lbc-case9):
+# the case-9 LBC, init case-7 and surface-update replays drive the MPAS pool and the lane
+# hosts by their own paths. No Rust target reads them (the cargo tests cite them only in
+# doc comments); the 2.9.1 Stage 1 machine-path and cargo-gate scans refused them.
+tools/rustwx/crates/rw-mpas/tests/lbc_v842/**
+tools/rustwx/crates/rw-mpas/tests/native_case7/**
+tools/rustwx/crates/rw-mpas/tests/surface_oracle/**
+
+# The private data-assimilation side (owner rulings 2026-10-14 and 2026-10-16:
+# the JCSDA-framework DA, its rows and cases, its observation pipelines and the
+# box tooling stay in the private DA repository; the engine's local DA and the
+# plain observation readers stay public). These shipped in 2.9.0's export and
+# are copied to the private DA repository (branch da/from-292); they stay in
+# this tree, which is not exported. The stock JCSDA application build recipe
+# (the CPU referee), and three rented-box DA kits that run DA rows on box paths
+# behind the GPU mutex (nothing in the tree reads any of them).
+# tools/release_exclusions.py's DA rule refuses the same content anywhere else.
+tools/jedi_clone/**
+tools/da_deck/**
+tools/da_lane7/**
+tools/radar_tten_proof/lane6/**
+# Private owner-packet integration instrumentation.
+tools/nextgen_noah_publication.py
+
+# Private native Noah replay preparation and fault diagnostics.
+tools/noahowp_replay/**
+
+# Internal hydro-world proof receipts include private reference-fabric identifiers.
+# One literal rule per tree: tools/release_exclusions.py matches a literal path or a
+# trailing /** only, so a wildcard rule excluded nothing (2.9.3 R3: 2,267 hits).
+receipts/hydro-world-calibration/**
+receipts/hydro-world-calibration-2/**
+receipts/hydro-world-dem-hydrography/**
+receipts/hydro-world-fabric/**
+receipts/hydro-world-fix-calibration-2026-10-18/**
+receipts/hydro-world-gauges/**
+receipts/hydro-world-init/**
+receipts/hydro-world-licences/**
+receipts/hydro-world-params/**
+receipts/hydro-world-proof-rhine/**
+receipts/hydro-world-shipped-rhine/**
+receipts/door-decisions.json
+# Native CFE referee is a development check, not a user runtime dependency.
+tools/hydro_world_init/referee/**
+
+# Hydro-world lane tooling bound to the lab boxes (box run scripts, calibration
+# and proof stages, lane configs with machine paths) and the receipts they wrote.
+# The builder crate (tools/hydro_world), the door and the product code ship.
+receipts/case-b-coupled-run-blocker.json
+receipts/cpu-tests.json
+receipts/node4-cost-meter.json
+tools/hydro_world/proof/**
+tools/hydro_world_calibration/**
+tools/hydro_world_calibration_2/**
+tools/hydro_world_params/configs/**
+tools/hydro_world_params/proof/**
+tools/hydro_world_proof/**
+tools/hydro_world_shipped_rhine/**
+tools/hydro_world_door/node4_run.py
+# STEP/SHAPE owner replay bound to a rented box's scratch tree.
+tools/jax_shape/owner_replay.py
+
+# Internal STEP/SHAPE measurements: local node/card launch wrappers and the
+# whole-run engineering report retain their original machine bindings.
+# The portable native-step library, build tools and Python drivers ship.
+tools/jax_shape/local-env.sh
+tools/jax_shape/run-local.sh
+tools/jax_shape/run-profile.sh
+tools/native_step/WHOLE_FORECAST_RESULTS.md
+tools/native_step/profile_acoustic.sh
+tools/native_step/profile_radiation_transport.sh
+tools/native_step/profile_trajectory.sh
+tools/native_step/profile_vegetation.sh
+tools/native_step/profile_whole_trajectory.sh
+tools/native_step/run_acoustic.sh
+tools/native_step/run_boundary_trajectory.sh
+tools/native_step/run_clocked_stability.sh
+tools/native_step/run_complete_period.sh
+tools/native_step/run_complete_period_audit.sh
+tools/native_step/run_deferred.sh
+tools/native_step/run_deferred_radiation_audit.sh
+tools/native_step/run_domain_step.sh
+tools/native_step/run_forecast_trajectory.sh
+tools/native_step/run_health_consumers.sh
+tools/native_step/run_host_argument.sh
+tools/native_step/run_host_audit.sh
+tools/native_step/run_host_contracts.sh
+tools/native_step/run_native_ozone.sh
+tools/native_step/run_phase_trajectory.sh
+tools/native_step/run_private_events.sh
+tools/native_step/run_radiation_audit.sh
+tools/native_step/run_radiation_live.sh
+tools/native_step/run_radiation_replay.sh
+tools/native_step/run_radiation_trajectory.sh
+tools/native_step/run_radiation_trajectory_crash.sh
+tools/native_step/run_radiation_transport.sh
+tools/native_step/run_slice_job.py
+tools/native_step/run_solar_transport.sh
+tools/native_step/run_stability_consumer.sh
+tools/native_step/run_time_advance.sh
+tools/native_step/run_trajectory.sh
+tools/native_step/run_trajectory_wall.sh
+tools/native_step/run_validator.sh
+tools/native_step/run_vegetation.sh
+tools/native_step/run_whole_period.sh
+tools/native_step/run_whole_period_audit.sh
+tools/native_step/run_whole_trajectory.sh
+tools/native_step/run_whole_trajectory_wall.sh
+
+# NextGen forcing referee lane notes: native provider/PET replay runbooks bound
+# to the lab boxes (scratch roots, the node pool lease and the private card-slot
+# runner).  tools/nextgen_forcing/README.md already names NATIVE-CHAIN-SPEED.md as
+# an internal note outside the public tree; the port, its tests and README ship.
+tools/nextgen_forcing/NATIVE-CHAIN-SPEED.md
+tools/nextgen_forcing/NATIVE-REPLAY.md
+tools/nextgen_forcing/PET-REFEREE.md
+tools/nextgen_mass_launcher.patch
+# Local Hugging Face card/sample draft tools: absolute lab paths in their sample lists (2.9.3 R3).
+tools/hf_drafts/**
+# Hugging Face drafts (cards, sample Space): the owner publishes them by hand; their sample lists name a lab machine.
+drafts/**
+
+# Box queue tooling (lane kit card-lease v2.8 and its tests): internal box infrastructure, versioned here
+# because the kit source is not under version control. Not part of the product.
+tools/gpu_mutex_kit/**
+# Internal replay orchestration: captured commands name the lab checkout.
+# The source-extension proof and its numerical measurements still ship.
+tests/data/assembled_legacy_proofs/loader-fold-source-replay.json
+
+# rw-mpas RRFS init port (2.9.10 EB4, fix/rrfs-init-44c0849): the native capture, replay and witness harness.
+# Its scripts and plans bind the capture hosts' absolute paths and lane tools, and three of its Rust programs
+# link the system netCDF C library at build time. Development evidence for the module replays, not product
+# (2.9.10 pass 1 R3 and R4). The crate's own tests ship.
+tools/rustwx/crates/rw-mpas/tests/rrfs_native/**

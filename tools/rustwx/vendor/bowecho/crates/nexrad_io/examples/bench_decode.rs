@@ -179,7 +179,7 @@ fn elapsed_ms(duration: Duration) -> f64 {
 fn should_preview_block_bzip_loads_for_threads(_threads: usize) -> bool {
     // Mirrors app_ui's policy: the block-bzip preview shares the full
     // decode's pipeline (engine fast-path), so it's effectively free and
-    // enabled on every machine. Keep this in sync with app_ui/src/main.rs:
+    // enabled on every machine. Keep this in sync with app_ui/src/main.rs —
     // a stale gate here makes the bench measure a path the app never takes.
     true
 }

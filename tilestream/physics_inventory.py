@@ -152,6 +152,7 @@ __all__ = [
     "carrier_manifest",
     "carrier_scalars",
     "checkpointed_carriers",
+    "is_absent_tolerant",
     "is_checkpointed",
     "default_builder",
     "field_digests",
@@ -274,6 +275,11 @@ def carrier_manifest(state) -> dict[str, object]:
     manifest.update(restart.state_manifest(state))
     manifest.update(restart._scratch_manifest(state))
     manifest.update(restart.carried_scratch_manifest(state))
+    # A fixed-frame nest archive is restart state but is not a tile field.
+    # Sweeping it would both crop its Earth coordinates and copy it per step.
+    from woof.core.nest_accumulation import is_archive_slot
+    manifest = {k: v for k, v in manifest.items()
+                if not (k.startswith('scratch/') and is_archive_slot(k[8:]))}
     driver = getattr(state, "physics", None)
     if driver is not None:
         manifest.update(restart._driver_manifest(driver))
@@ -329,7 +335,7 @@ def carrier_inventory(obj, names=None) -> dict[str, object]:
 #: it and the post-step hook that clears each tile's one-frame stash -- and
 #: this package re-exports its name rather than typing the string again.
 #: Audit R-052 found the string typed out in two more modules of this
-#: package (``case_hrrr``, ``case_wrfout``) beside the one that owns it, and
+#: package beside the one that owns it, and
 #: a store built by one of them while the sweep was configured by another is
 #: how a computed field came to be thrown away.
 REFL_KEY = _streaming.REFL_STORE_KEY
@@ -382,11 +388,41 @@ def is_checkpointed(key: str) -> bool:
     zeroed and ``restore_restart`` never writes them.
     """
     head, _, rest = key.partition("/")
+    if head == 'diag':
+        # The driver's checkpoint-only carriers (restart.
+        # DRIVER_CHECKPOINT_ONLY_ATTRS: OLR, CLDFRA, the history_extension
+        # stack with its AC* accumulations, ...) are in every resident
+        # checkpoint under diag/<attr>; a streamed one writes them too, or a
+        # resumed streamed run restarts the accumulations from zero.  Every
+        # other diag/ member is a scattered output-only row, never saved.
+        return is_absent_tolerant(key)
+    if head == 'transport':
+        from tilestream.sfire_smoke import OLD_MU_KEY
+        from woof.state_serialization_contract import CHEM_TIME_PREFIX
+        if key == OLD_MU_KEY or key.startswith('transport/sfire_smoke/' + CHEM_TIME_PREFIX):
+            return False
+        raise ValueError('unknown transport operand cannot be silently dropped from a checkpoint')
     if head != "scratch":
         return True
     from woof.io import restart
 
     return restart.classify_scratch_slot(rest) == "serialize"
+
+
+def is_absent_tolerant(key: str) -> bool:
+    """A checkpointed member a restart file may lack or carry unasked.
+
+    The streamed mirror of the resident reader's rule for
+    ``restart.DRIVER_CHECKPOINT_ONLY_ATTRS`` (tolerant in both directions):
+    a checkpoint written before the member existed restores the store's own
+    value, and a member the store has no slot for is not restored.
+    """
+    head, _, rest = key.partition("/")
+    if head != "diag":
+        return False
+    from woof.io import restart
+
+    return rest in restart.DRIVER_CHECKPOINT_ONLY_ATTRS
 
 
 def checkpointed_carriers(arrays: Mapping) -> dict:
@@ -446,7 +482,8 @@ def carried_only_carriers(arrays: Mapping) -> dict:
 #: same conclusion by three routes -- so it is derived rather than restated,
 #: for the reason the alias above gives.
 STREAMING_ONLY_SLOTS: tuple[str, ...] = tuple(
-    sorted(_restart_module().CARRIED_SCRATCH_SLOTS))
+    sorted(_restart_module().CARRIED_SCRATCH_SLOTS
+           - _restart_module().CHECKPOINTED_CARRIED_SCRATCH_SLOTS))
 
 
 def streaming_only_members(state=None) -> tuple[str, ...]:
@@ -460,6 +497,10 @@ def streaming_only_members(state=None) -> tuple[str, ...]:
     keys = tuple(f"scratch/{slot}" for slot in STREAMING_ONLY_SLOTS)
     if state is None:
         return keys
+    # 2.9.1 (a9fe8de9f, follower windows through streamed lifecycle transport):
+    # the carried scratch manifest, which names each declared follower's own
+    # window (scratch/uh_follow_window.dNN); the fixed slot list does not.  The
+    # exact-chain merge had taken the chain line's older body here.
     return tuple(sorted(_restart_module().carried_scratch_manifest(state)))
 
 
@@ -472,7 +513,11 @@ def streaming_manifest(state) -> dict[str, object]:
     :meth:`woof.core.streaming.StreamedDomain.publish` and its gate name it
     and because the name says which of the two questions is being asked.
     """
-    return carrier_manifest(state)
+    result = carrier_manifest(state)
+    if getattr(state, 'chem', None) is not None:
+        from tilestream.sfire_smoke import transport_fields
+        result.update(transport_fields(state))
+    return result
 
 
 def streaming_inventory(obj, names=None) -> dict[str, object]:
@@ -514,6 +559,14 @@ def carrier_scalars(state) -> dict[str, object]:
         out["call_counts"] = dict(driver.call_counts)
         out["ysu_nan_guard_fires"] = int(driver.ysu_nan_guard_fires)
         out["microphysics_updates"] = int(driver.microphysics_updates)
+        out["pbl_raw_available"] = getattr(driver, "pbl_raw_rates", {}) is not None
+        out["swdd_from_scheme"] = bool(getattr(driver, "_swdd_from_scheme", False))
+        fire = getattr(driver, "fire", None)
+        if fire is not None:
+            from tilestream.sfire import clock_values
+            out["fire_clocks"] = clock_values(fire)
+            from tilestream.sfire import header_values
+            out["fire_header"] = header_values(driver)
         contract = getattr(driver, "carriers", None)
         if contract is not None:
             out["carriers"] = contract.state()
@@ -595,6 +648,28 @@ def set_carrier_scalars(state, values) -> None:
         driver.call_counts.update(values["call_counts"])
         driver.ysu_nan_guard_fires = int(values["ysu_nan_guard_fires"])
         driver.microphysics_updates = int(values["microphysics_updates"])
+        if "swdd_from_scheme" in values:
+            driver._swdd_from_scheme = values["swdd_from_scheme"]
+        available = values.get("pbl_raw_available")
+        rates = getattr(driver, "pbl_raw_rates", {})
+        if available is False and rates is not None:
+            driver._streamed_pbl_raw_rates = rates
+            driver.pbl_raw_rates = None
+        elif available is True and rates is None:
+            saved = getattr(driver, "_streamed_pbl_raw_rates", None)
+            if saved is None:
+                raise ValueError("streamed PBL raw-rate storage is unavailable")
+            driver.pbl_raw_rates = saved
+        if "fire_clocks" in values:
+            from tilestream.sfire import restore_clocks
+            restore_clocks(driver.fire, values["fire_clocks"])
+            if "fire_header" in values:
+                import copy
+                from tilestream.sfire import GRID_DIAGNOSTICS
+                driver.fire._streamed_header = copy.deepcopy(values["fire_header"])
+                record = values["fire_header"]["fire"]["grid"]
+                for key in GRID_DIAGNOSTICS:
+                    setattr(driver.fire.grid, key, tuple(record[key]) if key == "last_ignited_counts" else record[key])
         contract = getattr(driver, "carriers", None)
         stored = values.get("carriers")
         if contract is not None and stored is not None:
@@ -629,7 +704,12 @@ def set_carrier_scalars(state, values) -> None:
 #: under ``output_only`` so that is a stated consequence rather than a
 #: surprise.
 OUTPUT_ONLY_DRIVER_ATTRS: tuple[str, ...] = (
-    "olr", "hmix_k_diag", "sase_flux_diag", "last_sase_ledger",
+    "olr", "cldfra", "hmix_k_diag", "sase_flux_diag", "last_sase_ledger",
+    # The exact chain's RTHRATEN rows (restart.DRIVER_CHECKPOINT_ONLY_ATTRS):
+    # the output-only total, and the strict coupled producer that exists
+    # only under GPUWM_WRF_EXACT=1.  Swept so each tile's window reaches
+    # the store and a checkpoint's diag/ member has a slot to restore into.
+    "rthraten", "_wrf_rthraten",
 )
 
 

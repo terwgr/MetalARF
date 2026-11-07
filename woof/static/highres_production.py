@@ -127,6 +127,9 @@ _TERRAIN_SOURCE_CHOICES = ("auto",) + tuple(sorted(TERRAIN_SOURCES))
 #: ``landcover_source`` choices: "auto" is
 #: :data:`~woof.static.highres_fetch.DEFAULT_LANDCOVER_SOURCE` everywhere.
 _LANDCOVER_SOURCE_CHOICES = ("auto",) + tuple(sorted(LANDCOVER_SOURCES))
+_SOIL_SOURCE_CHOICES = ("soilgrids", "wps-geog")
+#: ``lcz_pervious`` choices (woof.static.highres.LCZ_PERVIOUS_CHOICES).
+_LCZ_PERVIOUS_CHOICES = ("urban", "split")
 
 #: Fields each mode replaces.
 _REPLACED_FIELDS_TERRAIN = ("HGT_M",)
@@ -212,6 +215,12 @@ class HighresStaticConfig:
     #: The published static file this configuration takes its geography
     #: from ([static] source; woof.static.external_source), or None.
     static_source: object = None
+    #: SoilGrids overlay, or selected WPS geography below terrain/land cover.
+    soil_source: str = "soilgrids"
+    #: What the unpaved part of a built LCZ pixel becomes with no urban
+    #: canopy: "urban" (WRF's whole-pixel ISURBAN) or "split" (FRC_URB to
+    #: ISURBAN, the rest to NATURAL; woof.static.highres.lcz_pervious_split).
+    lcz_pervious: str = "urban"
 
     def smoothing_for(self, domain_id):
         """This carrier's terrain smoothing for one domain."""
@@ -228,12 +237,22 @@ class HighresStaticConfig:
         }
         if self.max_dx_m is not None:
             echoed["max_dx_m"] = float(self.max_dx_m)
+        if self.soil_source != "soilgrids":
+            echoed["soil_source"] = self.soil_source
+        if self.lcz_pervious != "urban":
+            echoed["lcz_pervious"] = self.lcz_pervious
         if self.terrain_smoothing:
             echoed["terrain_smoothing"] = [list(row)
                                            for row in self.terrain_smoothing]
         if self.sf_urban_physics > 0:
             echoed["urban_legend"] = "urban"
             echoed["use_wudapt_lcz"] = self.use_wudapt_lcz
+        if self.sf_urban_physics == 1 and self.fields != "terrain":
+            from .urban_fraction import (NLCD_FRACTION_ALGORITHM,
+                                         URBAN_FRACTION_ALGORITHM)
+            echoed["urban_fraction"] = (
+                NLCD_FRACTION_ALGORITHM if self.landcover_source == "annual-nlcd"
+                else URBAN_FRACTION_ALGORITHM)
         if self.static_source is not None:
             echoed["static_source"] = self.static_source.echo()
         return echoed
@@ -449,15 +468,18 @@ def parse_static_table(raw, *, source: str, base_dir
     if not isinstance(raw, dict):
         raise ValueError(
             f"[static] of {source} must be a table, got {raw!r}.")
-    known_keys = ("highres", "source", "source_fields")
+    known_keys = ("highres", "source", "source_fields", "geog_root")
     unknown = sorted(set(raw) - set(known_keys))
     if unknown:
         named = ", ".join(
             f"{key!r}{did_you_mean(key, known_keys)}" for key in unknown)
         raise ValueError(
             f"[static] of {source} does not have a key or table {named}; "
-            "known: the sub-table [static.highres] and the keys source and "
-            "source_fields.")
+            "known: the sub-table [static.highres] and the keys source, "
+            "source_fields and geog_root.")
+    if "geog_root" in raw:
+        from woof.geog_assets import geog_root_from_tables
+        geog_root_from_tables({"static": raw}, base_dir=Path(base_dir))
     from .external_source import parse_static_source
     static_source = parse_static_source(raw, source=source)
     table = raw.get("highres")
@@ -468,6 +490,8 @@ def parse_static_table(raw, *, source: str, base_dir
             enabled=False, cache_root=default_highres_cache_root(),
             static_source=static_source)
     if table is None:
+        if "geog_root" in raw:
+            return None
         raise ValueError(
             f"[static] of {source} declares nothing; declare "
             "[static.highres] or [static] source, or remove the table.")
@@ -476,7 +500,8 @@ def parse_static_table(raw, *, source: str, base_dir
             f"[static.highres] of {source} must be a table, got {table!r}.")
 
     known = ("enabled", "cache_root", "on_refuse", "terrain_source",
-             "fields", "landcover_source", "max_dx_m")
+             "fields", "landcover_source", "soil_source", "max_dx_m",
+             "lcz_pervious")
     unknown = sorted(set(table) - set(known))
     if unknown:
         named = ", ".join(
@@ -546,6 +571,26 @@ def parse_static_table(raw, *, source: str, base_dir
             "United States collection for the year nearest the case and "
             "refuses a domain wholly outside the United States.")
 
+    soil_source = table.get("soil_source", "soilgrids")
+    if soil_source not in _SOIL_SOURCE_CHOICES:
+        raise ValueError(
+            f"soil_source in [static.highres] of {source} must be one of "
+            f"{list(_SOIL_SOURCE_CHOICES)}, got {soil_source!r}. 'wps-geog' "
+            "keeps the selected WPS soil maps beneath high-resolution "
+            "terrain and land cover, with soil water categories reconciled "
+            "to the resulting land mask in Rust.")
+
+    lcz_pervious = table.get("lcz_pervious", "urban")
+    if lcz_pervious not in _LCZ_PERVIOUS_CHOICES:
+        raise ValueError(
+            f"lcz_pervious in [static.highres] of {source} must be one of "
+            f"{list(_LCZ_PERVIOUS_CHOICES)}, got {lcz_pervious!r}.  'urban' "
+            "makes every built Local Climate Zone pixel urban, as WRF does; "
+            "'split' gives each one's unpaved share (1 - FRC_URB of "
+            "URBPARM_LCZ.TBL) to the natural land-use class, so with no "
+            "urban canopy that share evaporates (its own tile under the "
+            "Noah mosaic).")
+
     max_dx_m = table.get("max_dx_m")
     if max_dx_m is not None:
         if (isinstance(max_dx_m, bool)
@@ -563,8 +608,10 @@ def parse_static_table(raw, *, source: str, base_dir
                                terrain_source=str(terrain_source),
                                fields=str(fields),
                                landcover_source=str(landcover),
+                               soil_source=str(soil_source),
                                max_dx_m=max_dx_m,
-                               static_source=static_source)
+                               static_source=static_source,
+                               lcz_pervious=str(lcz_pervious))
 
 
 # ---------------------------------------------------------------------------
@@ -770,7 +817,8 @@ def _fetch_terrain(bbox: FootprintBBox, cache_root: Path, coverage, *,
 
 def _fetch_and_bind(bbox: FootprintBBox, cache_root: Path, case_date: date,
                     *, coverage, grid=None, baseline=None, urlopen=None,
-                    landcover_source: LandcoverSource | None = None):
+                    landcover_source: LandcoverSource | None = None,
+                    soil_source: str = "soilgrids"):
     """Fetch/cache everything one footprint needs; return bound sources.
 
     ``landcover_source`` is the selected row of
@@ -805,7 +853,8 @@ def _fetch_and_bind(bbox: FootprintBBox, cache_root: Path, case_date: date,
             nominal_resolution=source.coverage.nominal_resolution,
             reference_year=year, nodata_override=source.nodata)
 
-    soil_fetched = fetch_soilgrids(bbox, cache_root, urlopen=urlopen)
+    soil_fetched = (fetch_soilgrids(bbox, cache_root, urlopen=urlopen)
+                    if soil_source == "soilgrids" else {})
     soil_sources = {
         key: _bound(
             item, source_id="soilgrids-v2",
@@ -826,9 +875,8 @@ def _fetch_and_bind(bbox: FootprintBBox, cache_root: Path, case_date: date,
         "landcover_window_audit": window_audit,
         "landcover_window_outside_raster": landcover_outside,
         "soilgrids_windows": {
-            f"{component}_{depth}": soil_fetched[(component, depth)].receipt()
-            for component in SOILGRIDS_COMPONENTS
-            for depth in SOILGRIDS_DEPTHS
+            f"{component}_{depth}": item.receipt()
+            for (component, depth), item in soil_fetched.items()
         },
         "bytes_fetched": (
             terrain_manifest["terrain_bytes_fetched"]
@@ -870,6 +918,20 @@ def _any_cell_covered(coverage) -> bool:
         int(fields[key]["cells_outside_coverage"])
         < int(fields[key]["cell_count"])
         for key in ("terrain", "land_use") if key in fields)
+
+
+def _footprint_is_all_water(baseline) -> bool:
+    """Whether the 30-arc-second baseline calls every cell of the domain water.
+
+    Over open water the high-resolution terrain is sea level, exactly what
+    the baseline already holds, so an overlay that changes nothing there is
+    the right answer, not a broken overlay.  A storm-following nest starts
+    over open ocean in most cycles (TC phase 1, helene-2024092400-1km: the
+    zero-cells refusal stopped its preparation) and reaches land only
+    through its move corridor.
+    """
+    landmask = baseline.get("LANDMASK")
+    return landmask is not None and not bool(np.any(np.asarray(landmask) > 0.5))
 
 
 def _anchor_is_given(grid) -> bool:
@@ -1049,7 +1111,7 @@ def _refusal_remedy(config) -> str:
 
 
 def apply_highres_statics(baseline, grid, *, config, domain_id: int,
-                          case_date: date, landuse_attrs, urlopen=None):
+                          case_date: date, landuse_attrs, urlopen=None, run=None):
     """Replace one domain's static fields from high-resolution sources.
 
     Returns ``(fields, receipt)``.  ``config`` absent or disabled is the
@@ -1074,6 +1136,7 @@ def apply_highres_statics(baseline, grid, *, config, domain_id: int,
         landcover_legend(_select_landcover(config).source_id,
                          sf_urban_physics=urban,
                          use_wudapt_lcz=int(getattr(config, "use_wudapt_lcz", 0)))
+    require_lcz_pervious(config)
     require_geography_stack()
 
     from .highres import static_compute_workaround
@@ -1103,6 +1166,9 @@ def apply_highres_statics(baseline, grid, *, config, domain_id: int,
                                 case_date=case_date,
                                 landuse_attrs=landuse_attrs,
                                 urlopen=urlopen, **smoothing_kw)
+        from .terrain_autosmooth import prepare_fields, bind_receipt
+        fields = prepare_fields(fields, grid, domain_id=domain_id, run=run)
+        detail = bind_receipt(fields, detail)
         receipt.update(detail)
         receipt["status"] = "APPLIED"
         path = _write_receipt(config, receipt)
@@ -1112,7 +1178,8 @@ def apply_highres_statics(baseline, grid, *, config, domain_id: int,
         else:
             scope = (f"terrain {terrain_id}, land use "
                      f"{detail['landcover']['source_id']}, soil "
-                     "soilgrids-v2")
+                     + ("soilgrids-v2" if config.soil_source == "soilgrids"
+                        else "selected WPS geography"))
         print(f"[static.highres] d{int(domain_id):02d}: APPLIED "
               f"({scope}; cells replaced: "
               f"{detail['cells_replaced']['total']} of "
@@ -1248,7 +1315,8 @@ def _apply_terrain_only(baseline, grid, *, config: HighresStaticConfig,
     cell_count = int(np.asarray(baseline["HGT_M"]).size)
     total_changed = counts["HGT_M"]
     field_coverage = source_audit.pop("coverage")
-    if total_changed == 0 and _any_cell_covered(field_coverage):
+    all_water = total_changed == 0 and _footprint_is_all_water(baseline)
+    if total_changed == 0 and _any_cell_covered(field_coverage) and not all_water:
         raise HighresRefusal(
             "zero-cells-replaced",
             f"the enabled high-resolution terrain overlay "
@@ -1284,6 +1352,10 @@ def _apply_terrain_only(baseline, grid, *, config: HighresStaticConfig,
         "attribution": coverage.attribution,
         "tmn": "recomputed from baseline SOILTEMP over the new HGT_M",
     }
+    if all_water:
+        detail["unchanged_reason"] = (
+            "all-water footprint: the baseline calls every cell water, where "
+            "the high-resolution terrain is sea level too, so no cell changed")
     return merged, detail
 
 
@@ -1363,11 +1435,13 @@ def _apply(baseline, grid, *, config: HighresStaticConfig,
                                    urlopen=urlopen, landcover=landcover_row,
                                    **smoothing_kw)
 
+    soil_kw = ({} if config.soil_source == "soilgrids"
+               else {"soil_source": config.soil_source})
     try:
         terrain, landcover, soil_sources, fetch_manifest = _fetch_and_bind(
             bbox, config.cache_root, case_date, coverage=coverage, grid=grid,
             baseline=baseline, urlopen=urlopen,
-            landcover_source=landcover_row)
+            landcover_source=landcover_row, **soil_kw)
     except CoverageError as error:
         raise HighresRefusal("missing-source-coverage", str(error)) \
             from error
@@ -1380,6 +1454,8 @@ def _apply(baseline, grid, *, config: HighresStaticConfig,
     # mask from the same function.  The whole baseline goes too: every
     # cell a source does not cover takes it.
     from .highres import landcover_legend, expand_landuse_baseline
+    split_kw = ({} if getattr(config, "lcz_pervious", "urban") == "urban"
+                else {"lcz_pervious": config.lcz_pervious})
     mapping, category_count = landcover_legend(
         landcover_row.source_id, sf_urban_physics=config.sf_urban_physics,
         use_wudapt_lcz=config.use_wudapt_lcz)
@@ -1391,7 +1467,7 @@ def _apply(baseline, grid, *, config: HighresStaticConfig,
         landcover_mapping=mapping, category_count=category_count,
         baseline_ocean=baseline_ocean, halo=HALO, baseline=baseline,
         landcover_water=landcover_row.water,
-        terrain_smoothing=terrain_smoothing)
+        terrain_smoothing=terrain_smoothing, **soil_kw, **split_kw)
     merged, merge_audit = merge_highres_overrides(baseline, overrides)
     field_coverage = source_audit.pop("coverage")
 
@@ -1406,7 +1482,8 @@ def _apply(baseline, grid, *, config: HighresStaticConfig,
             changed = changed.any(axis=0)
         changed_any |= changed
     total_changed = int(np.count_nonzero(changed_any))
-    if total_changed == 0 and _any_cell_covered(field_coverage):
+    all_water = total_changed == 0 and _footprint_is_all_water(baseline)
+    if total_changed == 0 and _any_cell_covered(field_coverage) and not all_water:
         raise HighresRefusal(
             "zero-cells-replaced",
             "the enabled high-resolution overlay produced fields identical "
@@ -1452,8 +1529,20 @@ def _apply(baseline, grid, *, config: HighresStaticConfig,
         },
         "tmn": "recomputed from merged SOILTEMP/HGT_M over the new mask",
     }
+    if config.soil_source == "wps-geog":
+        detail["soil_source"] = "selected WPS geography"
+        detail["scope_statement"] = (
+            "Terrain and land use replaced from high-resolution sources; "
+            "soil fractions use the selected WPS geography, with water "
+            "categories reconciled to the resulting land mask in Rust. "
+            "Unchanged land cells retain the selected soil fractions exactly.")
+        detail["attributions"]["soil"] = "selected WPS geography"
     if "anachronism" in landcover_record:
         detail["anachronism"] = landcover_record["anachronism"]
+    if all_water:
+        detail["unchanged_reason"] = (
+            "all-water footprint: the baseline calls every cell water, and "
+            "the high-resolution sources agree, so no cell changed")
     return merged, detail
 
 
@@ -1515,6 +1604,34 @@ def _mentions_urban(node) -> bool:
     if isinstance(node, list):
         return any(_mentions_urban(value) for value in node)
     return False
+
+
+def require_lcz_pervious(config) -> None:
+    """Refuse ``lcz_pervious = "split"`` where it would be wrong or inert.
+
+    With an urban canopy the Noah driver already runs each city cell's
+    unpaved share (1 - FRC_URB2D) as NATURAL, so splitting the land use as
+    well counts that share twice.  A land-cover source with no Local
+    Climate Zone classes (Annual NLCD) has nothing to split, so the run
+    would carry "split" in its identity and change nothing.
+    """
+    if getattr(config, "lcz_pervious", "urban") != "split":
+        return
+    if config.fields == "terrain":
+        raise ValueError(
+            "lcz_pervious = \"split\" with fields = \"terrain\" changes "
+            "nothing: no land cover is replaced, so no LCZ pixel is split")
+    if int(getattr(config, "sf_urban_physics", 0) or 0) > 0:
+        raise ValueError(
+            "lcz_pervious = \"split\" with an urban canopy "
+            "(sf_urban_physics > 0) counts the unpaved share twice: the "
+            "canopy's FRC_URB2D already runs it as the natural class")
+    source_id = _select_landcover(config).source_id
+    if source_id != "cglc-modis-lcz":
+        raise ValueError(
+            f"lcz_pervious = \"split\" needs the CGLC-MODIS-LCZ land cover; "
+            f"{source_id!r} has no Local Climate Zone classes, so nothing "
+            "would be split")
 
 
 def static_highres_identity(config):
@@ -1654,6 +1771,7 @@ def parse_sealed_static_highres(echo, *, source: str, base_dir,
     table = dict(echo)
     rows = table.pop("terrain_smoothing", None)
     source_echo = table.pop("static_source", None)
+    fraction_algorithm = table.pop("urban_fraction", None)
     table.pop("urban_legend", None)
     table.pop("use_wudapt_lcz", None)
     config = parse_static_table({"highres": table}, source=source,
@@ -1670,6 +1788,12 @@ def parse_sealed_static_highres(echo, *, source: str, base_dir,
                                or 0))
     elif urban:
         config = replace(config, sf_urban_physics=1, use_wudapt_lcz=lcz)
+    if fraction_algorithm is not None and (
+            fraction_algorithm != config.echo().get("urban_fraction")):
+        raise ValueError(
+            f"the urban fraction algorithm of {source} is {fraction_algorithm!r}, "
+            f"but this source rebuilds with {config.echo().get('urban_fraction')!r}: "
+            "rebuilding would replace the sealed built area with a different estimate")
     if source_echo is not None:
         from .external_source import setting_from_echo
         config = replace(config, static_source=setting_from_echo(
@@ -1718,7 +1842,7 @@ def require_prepared_highres(receipt, grid, *, config, domain_id, case_date):
 
 
 def apply_prepared_highres(baseline, grid, *, config, domain_id, case_date,
-                           landuse_attrs, baseline_receipt=None):
+                           landuse_attrs, baseline_receipt=None, run=None):
     """Apply the shared overlay before preparation, retaining both receipts.
 
     A previously sealed overlay can be reused only when its request, date,
@@ -1729,8 +1853,10 @@ def apply_prepared_highres(baseline, grid, *, config, domain_id, case_date,
     require_root_smoothing(config, domain_id, baseline_receipt)
     from .external_source import require_root_static_source
     require_root_static_source(config, domain_id, baseline_receipt, grid=grid)
+    from .terrain_autosmooth import prepare_fields, bind_receipt
     if not overlay_active(config, grid):
-        return baseline, baseline_receipt
+        fields = prepare_fields(baseline, grid, domain_id=domain_id, run=run)
+        return fields, bind_receipt(fields, baseline_receipt)
     previous = (baseline_receipt.get("highres")
                 if isinstance(baseline_receipt, dict) else None)
     if (isinstance(previous, dict) and previous.get("status") == "APPLIED"
@@ -1738,11 +1864,14 @@ def apply_prepared_highres(baseline, grid, *, config, domain_id, case_date,
             and previous.get("case_date") == case_date.isoformat()
             and not _grid_identity_drift(previous.get("grid"), grid,
                                          domain_id)):
-        return baseline, baseline_receipt
+        fields = prepare_fields(baseline, grid, domain_id=domain_id, run=run)
+        return fields, bind_receipt(fields, baseline_receipt)
     fields, receipt = apply_highres_statics(
         baseline, grid, config=config, domain_id=domain_id,
-        case_date=case_date, landuse_attrs=landuse_attrs)
-    return fields, {"baseline": baseline_receipt, "highres": receipt}
+        case_date=case_date, landuse_attrs=landuse_attrs, run=run)
+    fields = prepare_fields(fields, grid, domain_id=domain_id, run=run)
+    return fields, bind_receipt(
+        fields, {"baseline": baseline_receipt, "highres": receipt})
 
 
 __all__ = [

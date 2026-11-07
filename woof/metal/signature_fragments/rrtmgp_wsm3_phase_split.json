@@ -1,0 +1,112 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_wsm3_phase_split",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "RRTMGPRadiation.__call__",
+      "resources": [
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "cloud",
+          "float",
+          "read"
+        ],
+        [
+          "precipitation",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cloud": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "precipitation": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qc": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qr": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qi": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qs": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "float32_ordered",
+        "wrf-exact"
+      ]
+    }
+  ]
+}

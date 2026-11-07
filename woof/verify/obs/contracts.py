@@ -41,6 +41,11 @@ from typing import Mapping, Protocol, Sequence, runtime_checkable
 
 import numpy as np
 
+# The air-quality station variables (AirNow and OpenAQ rows of the neutral
+# observation table): units and gross bounds live once, in the Python
+# mirror of rw-obs's table.rs, and join the seam's declarations below.
+from woof.obs.aq_table import VARIABLE_TABLE as _AQ_VARIABLES
+
 #: Schema id for the seam.  Bump when a field changes meaning, never in place.
 CONTRACT_SCHEMA = "gpuwm.obs-battery-contract/v1"
 
@@ -54,7 +59,11 @@ SURFACE_UNITS: Mapping[str, str] = {
     "temperature_2m": "K",
     "dewpoint_2m": "K",
     "wind_speed_10m": "m s-1",
+    "wind_gust_10m": "m s-1",
+    "precipitation_1h": "mm",
     "mslp": "Pa",
+    "visibility": "m",
+    **{name: row[0] for name, row in _AQ_VARIABLES.items()},
 }
 
 #: The surface variables that carry a score.  Order is the published order.
@@ -63,6 +72,7 @@ SCORED_SURFACE_VARIABLES: tuple[str, ...] = (
 
 #: Gridded observation quantities the scorer understands, with pinned units.
 GRID_UNITS: Mapping[str, str] = {
+    "maximum_estimated_hail_size": "mm",
     "composite_reflectivity": "dBZ",
     "precipitation_accumulation": "mm",
 }
@@ -76,9 +86,14 @@ SEAM_BOUNDS: Mapping[str, tuple[float, float]] = {
     "temperature_2m": (150.0, 350.0),
     "dewpoint_2m": (150.0, 350.0),
     "wind_speed_10m": (0.0, 150.0),
+    "wind_gust_10m": (0.0, 150.0),
+    "precipitation_1h": (0.0, 2000.0),
     "mslp": (80000.0, 115000.0),
+    "visibility": (0.0, 90000.0),
+    "maximum_estimated_hail_size": (0.0, 1000.0),
     "composite_reflectivity": (-40.0, 100.0),
     "precipitation_accumulation": (0.0, 2000.0),
+    **{name: (row[1], row[2]) for name, row in _AQ_VARIABLES.items()},
 }
 
 _TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"

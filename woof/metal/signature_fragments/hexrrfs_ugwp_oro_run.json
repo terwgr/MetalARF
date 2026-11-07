@@ -1,0 +1,151 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ugwp_oro",
+      "source": "woof/metal/shaders/hexrrfs_ugwp_oro.metal",
+      "cuda_source": "woof/hex/mpasphys/ugwp_oro_v842.py",
+      "threads_per_group": 64,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ugwp_oro_run",
+      "cuda_symbol": "ugwp_oro_run",
+      "resources": [
+        [
+          "layers",
+          "float",
+          "read"
+        ],
+        [
+          "prsi0",
+          "float",
+          "read"
+        ],
+        [
+          "surface",
+          "float",
+          "read"
+        ],
+        [
+          "kpbl0",
+          "int32",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "sout",
+          "float",
+          "read_write"
+        ],
+        [
+          "status",
+          "int32",
+          "read_write"
+        ],
+        [
+          "workspace",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "layers": [
+          [
+            "10",
+            "nz",
+            "nc"
+          ]
+        ],
+        "prsi0": [
+          [
+            "nz+1",
+            "nc"
+          ]
+        ],
+        "surface": [
+          [
+            "26",
+            "nc"
+          ]
+        ],
+        "kpbl0": [
+          [
+            "nc"
+          ]
+        ],
+        "out": [
+          [
+            "12",
+            "nz",
+            "nc"
+          ]
+        ],
+        "sout": [
+          [
+            "10",
+            "nc"
+          ]
+        ],
+        "status": [
+          [
+            "1"
+          ]
+        ],
+        "workspace": [
+          [
+            "nc",
+            "16",
+            "nz+2"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "g",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "fv",
+          "float32"
+        ],
+        [
+          "pi_c",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "diags",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

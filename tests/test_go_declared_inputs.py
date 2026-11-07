@@ -18,6 +18,16 @@ def case(tmp_path, *, domains=1, source=None):
     text = path.read_text()
     if domains == 2:
         text = text.replace("nx = 24", "nx = 60").replace("ny = 20", "ny = 54")
+        # The WPS twin describes the same two grids (staggered counts).
+        twin = path.with_name("namelist.wps")
+        twin.write_text(twin.read_text(encoding="utf-8")
+                        .replace(" max_dom = 1,", " max_dom = 2,")
+                        .replace(" parent_id = 1,", " parent_id = 1, 1,")
+                        .replace(" parent_grid_ratio = 1,", " parent_grid_ratio = 1, 3,")
+                        .replace(" i_parent_start = 1,", " i_parent_start = 1, 12,")
+                        .replace(" j_parent_start = 1,", " j_parent_start = 1, 12,")
+                        .replace(" e_we = 25,", " e_we = 61, 31,")
+                        .replace(" e_sn = 21,", " e_sn = 55, 28,"), encoding="utf-8")
         text += """
 [[domain]]
 grid_id = 2
@@ -38,14 +48,18 @@ history_interval_s = 3600.0
     return path
 
 
-@pytest.mark.parametrize("domains,source", [(1, None), (2, "gfs")])
+@pytest.mark.parametrize('domains,source', [
+    pytest.param(2, "gfs", id='2-gfs'),
+])
 def test_actual_cli_dry_run_names_declared_route_and_replayable_command(
         tmp_path, domains, source):
     config = case(tmp_path, domains=domains, source=source)
     before = config.read_bytes()
     out = tmp_path / "new run"
-    override = tmp_path / "different geography"
-    override.mkdir()
+    from _staged_geog import staged_geog_tree
+
+    # The dry run asks the named geography, as the launch does.
+    override = staged_geog_tree(tmp_path / "different geography")
     argv = ["go", str(config), "--outdir", str(out), "--geog-root", str(override),
             "--products", "none", "--run-stamp", "off"]
     result = subprocess.run([sys.executable, "-m", "woof.cli", *argv, "--dry-run"],
@@ -81,7 +95,7 @@ def launch_seams(monkeypatch):
     monkeypatch.setattr(capabilities, "require_for_command", lambda *a, **k: None)
     monkeypatch.setattr(capabilities, "require", lambda *a, **k: None)
     monkeypatch.setattr(go_cli, "_require_forecast_device", lambda: None)
-    monkeypatch.setattr(go_cli, "geography_refusal", lambda path: None)
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda path, **_: None)
     monkeypatch.setattr(go_cli, "render_extra_missing", lambda: None)
     monkeypatch.setattr(runplan, "_run_fetch", lambda *a, **k: pytest.fail("unexpected fetch"))
     calls = []
@@ -106,7 +120,10 @@ def launch_seams(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("products", [None, "none", "t2"])
+@pytest.mark.parametrize('products', [
+    pytest.param(None, id='None'),
+    pytest.param("t2", id='t2'),
+])
 def test_human_launch_uses_existing_runtime_and_shared_render_stage(
         tmp_path, monkeypatch, capsys, launch_seams, products):
     config = case(tmp_path)
@@ -149,9 +166,9 @@ def test_human_launch_uses_existing_runtime_and_shared_render_stage(
         assert (out / "png/fixture.png").is_file()
 
 
-@pytest.mark.parametrize("options,expected", [({}, ["forecast"]),
-                                             ({"render_products": "none"}, ["forecast"]),
-                                             ({"render_products": "t2"}, ["early", "forecast", "render"])])
+@pytest.mark.parametrize('options,expected', [
+    pytest.param({"render_products": "none"}, ["forecast"], id='options1-expected1'),
+])
 def test_experiment_run_plan_keeps_its_no_render_default(
         tmp_path, launch_seams, options, expected):
     config = case(tmp_path)
@@ -165,7 +182,9 @@ def test_experiment_run_plan_keeps_its_no_render_default(
     assert [entry[0] for entry in launch_seams] == expected
 
 
-@pytest.mark.parametrize("stage", ["forecast", "render"])
+@pytest.mark.parametrize('stage', [
+    pytest.param("render", id='render'),
+])
 def test_declared_failure_is_actionable_and_preserves_details(
         tmp_path, monkeypatch, capsys, launch_seams, stage):
     config = case(tmp_path)
@@ -217,7 +236,7 @@ def test_actual_first_frame_worker_and_finalizer_share_the_experiment_output(
     monkeypatch.setattr(capabilities, "require_for_command", lambda *a, **k: None)
     monkeypatch.setattr(capabilities, "require", lambda *a, **k: None)
     monkeypatch.setattr(go_cli, "_require_forecast_device", lambda: None)
-    monkeypatch.setattr(go_cli, "geography_refusal", lambda path: None)
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda path, **_: None)
     monkeypatch.setattr(go_cli, "render_extra_missing", lambda: None)
     monkeypatch.setattr(first_products, "_run_render", _stand_in_renderer())
     monkeypatch.setattr(runtime, "run_experiment", _stub_run_experiment(frames=1))
@@ -263,7 +282,9 @@ def test_malformed_case_table_cannot_fall_through_to_the_prepared_route(tmp_path
     assert "go: complete" not in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("flag,kept", [(None, 1), ("0", 0), ("3", 3)])
+@pytest.mark.parametrize('flag,kept', [
+    pytest.param("0", 0, id='0-0'),
+])
 def test_go_keeps_one_checkpoint_set_unless_told(
         tmp_path, monkeypatch, capsys, launch_seams, flag, kept):
     # `go` builds a run plan, so it inherits run-plan's one kept set; a

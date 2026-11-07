@@ -1,0 +1,150 @@
+{
+  "kernels": [
+    {
+      "module": "solar_geometry",
+      "source": "woof/metal/shaders/solar_geometry.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_solar.cu",
+      "layout_version": 1,
+      "threads_per_group": 128,
+      "arithmetic_policies": [
+        "default",
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-2.43-solar-trig"
+      ],
+      "name": "solar_radconst",
+      "cuda_symbol": "rls_radconst",
+      "resources": [
+        [
+          "declin_solcon",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "declin_solcon": [
+          [
+            "2"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "julian",
+          "int32"
+        ],
+        [
+          "degrad",
+          "int32"
+        ],
+        [
+          "dpd",
+          "int32"
+        ],
+        [
+          "override_declin",
+          "int32"
+        ],
+        [
+          "declin",
+          "int32"
+        ]
+      ]
+    },
+    {
+      "module": "solar_geometry",
+      "source": "woof/metal/shaders/solar_geometry.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_solar.cu",
+      "layout_version": 1,
+      "threads_per_group": 128,
+      "arithmetic_policies": [
+        "default",
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-2.43-solar-trig"
+      ],
+      "name": "solar_coszen_hrang",
+      "cuda_symbol": "rls_calc_coszen_hrang",
+      "resources": [
+        [
+          "latitude",
+          "uint32",
+          "read"
+        ],
+        [
+          "longitude",
+          "uint32",
+          "read"
+        ],
+        [
+          "declin_solcon",
+          "uint32",
+          "read"
+        ],
+        [
+          "coszen",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "hrang",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "latitude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "longitude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "declin_solcon": [
+          [
+            "2"
+          ]
+        ],
+        "coszen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hrang": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "julian",
+          "int32"
+        ],
+        [
+          "xtime",
+          "int32"
+        ],
+        [
+          "gmt",
+          "int32"
+        ],
+        [
+          "degrad",
+          "int32"
+        ],
+        [
+          "solar_480",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

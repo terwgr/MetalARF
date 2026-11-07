@@ -25,7 +25,7 @@ def _same_context(named):
     return context
 
 
-def submit_cal_cldfra1(qv, qc, qi, qs, tlay, play, *, f_qi, f_qs):
+def submit_cal_cldfra1(qv, qc, qi, qs, tlay, play, *, f_qi, f_qs, mp_physics=None):
     """Write WRF's selected Xu-Randall cloud-fraction arm on Metal."""
     arrays = {"qv": qv, "qc": qc, "qi": qi, "qs": qs,
               "tlay": tlay, "play": play}
@@ -36,21 +36,45 @@ def submit_cal_cldfra1(qv, qc, qi, qs, tlay, play, *, f_qi, f_qs):
         _f32(value, shape, name)
     context = _same_context(arrays)
     if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal RRTMGP cloud fraction does not implement WRF exact-D math")
+        for name, value in arrays.items():
+            if not np.isfinite(value.to_numpy()).all():
+                raise ValueError(f"strict cloud fraction requires finite {name}")
     ncell = qv.size
     output = MetalArray(context.buffer(max(ncell * 4, 4)), shape, np.float32)
+    parameters = {"ncell": ncell, "ncol": shape[0], "nlay": shape[1],
+                  "f_qi": int(bool(f_qi)), "f_qs": int(bool(f_qs)),
+                  "ferrier": int(mp_physics is not None and int(mp_physics) in (5, 15))}
     context.submit_kernel(
-        "rrtmgp_cal_cldfra1",
+        "wrf_exact_cldfra1" if WRF_EXACT else "rrtmgp_cal_cldfra1",
+        {**arrays, "cldfra": output},
+        parameters, exact_policy=WRF_EXACT, grid_size=ncell, threads_per_group=128)
+    if WRF_EXACT and not np.isfinite(output.to_numpy()).all():
+        raise ValueError("strict cloud fraction produced a nonfinite result")
+    return output
+
+
+def submit_cal_cldfra2(qc, qi, *, f_qc, f_qi):
+    """Write WRF's binary cloud fraction on Metal."""
+    arrays = {"qc": qc, "qi": qi}
+    shape = qc.shape
+    if len(shape) != 2 or min(shape) < 1:
+        raise ValueError("RRTMGP cloud-fraction shape must be nonempty (ncol,nlay)")
+    for name, value in arrays.items():
+        _f32(value, shape, name)
+    context = _same_context(arrays)
+    ncell = qc.size
+    output = MetalArray(context.buffer(max(ncell * 4, 4)), shape, np.float32)
+    context.submit_kernel(
+        "rrtmgp_cal_cldfra2",
         {**arrays, "cldfra": output},
         {"ncell": ncell, "ncol": shape[0], "nlay": shape[1],
-         "f_qi": int(bool(f_qi)),
-         "f_qs": int(bool(f_qs))},
+         "f_qc": int(bool(f_qc)), "f_qi": int(bool(f_qi))},
         exact_policy=False, grid_size=ncell, threads_per_group=128)
     return output
 
 
-def submit_mynn_cloud_supplied(qc, qi, qc_bl, qi_bl, cldfra_bl):
+def submit_mynn_cloud_supplied(qc, qi, qc_bl, qi_bl, cldfra_bl, *,
+                               bl_mynn_version="wrf_461", temperature=None):
     """Write the two logical MYNN cloud-supplied masks as uint32 words."""
     arrays = {"qc": qc, "qi": qi, "qc_bl": qc_bl, "qi_bl": qi_bl,
               "cldfra_bl": cldfra_bl}
@@ -59,6 +83,10 @@ def submit_mynn_cloud_supplied(qc, qi, qc_bl, qi_bl, cldfra_bl):
         raise ValueError("MYNN radiation clouds need nonempty (ncol,nlay) fields")
     for name, value in arrays.items():
         _f32(value, shape, name)
+    gsd41 = bl_mynn_version == "gsd_41"
+    if gsd41:
+        _f32(temperature, shape, "temperature")
+    arrays["temperature"] = temperature if gsd41 else qc
     context = _same_context(arrays)
     ncell = qc.size
     liquid = MetalArray(context.buffer(max(ncell * 4, 4)), shape, np.uint32)
@@ -66,8 +94,9 @@ def submit_mynn_cloud_supplied(qc, qi, qc_bl, qi_bl, cldfra_bl):
     context.submit_kernel(
         "rrtmgp_mynn_cloud_supplied",
         {**arrays, "liquid_supplied": liquid, "ice_supplied": ice},
-        {"ncell": ncell, "ncol": shape[0], "nlay": shape[1]},
-        exact_policy=False, grid_size=ncell,
+        {"ncell": ncell, "ncol": shape[0], "nlay": shape[1],
+         "gsd41": int(gsd41)},
+        exact_policy=WRF_EXACT, grid_size=ncell,
         threads_per_group=128)
     return liquid, ice
 
@@ -92,11 +121,11 @@ def submit_mynn_cloud_merge(qc, qi, cldfra, *, qc_bl, qi_bl, cldfra_bl,
         arrays["cldfra"] = qc
     context = _same_context(arrays)
     context.submit_kernel(
-        "rrtmgp_mynn_cloud_merge", arrays,
+        "wrf_exact_rrtmgp_mynn_cloud_merge" if WRF_EXACT else "rrtmgp_mynn_cloud_merge", arrays,
         {"ncell": qc.size, "ncol": shape[0], "nlay": shape[1],
          "has_cldfra": int(has_cldfra),
          "replace_cldfra": int(bool(replace_cldfra))},
-        exact_policy=False, grid_size=qc.size, threads_per_group=128)
+        exact_policy=WRF_EXACT, grid_size=qc.size, threads_per_group=128)
 
 
 def submit_mynn_cloud_merge_gsd41(qc, qi, cldfra, *, qc_bl, cldfra_bl, tlay,
@@ -116,10 +145,10 @@ def submit_mynn_cloud_merge_gsd41(qc, qi, cldfra, *, qc_bl, cldfra_bl, tlay,
     arrays["cldfra"] = cldfra if has_cldfra else qc
     context = _same_context(arrays)
     context.submit_kernel(
-        "rrtmgp_mynn_cloud_merge_gsd41", arrays,
+        "wrf_exact_rrtmgp_mynn_cloud_merge_gsd41" if WRF_EXACT else "rrtmgp_mynn_cloud_merge_gsd41", arrays,
         {"ncell": qc.size, "ncol": shape[0], "nlay": shape[1],
          "has_cldfra": int(has_cldfra), "first_step": int(bool(first_step))},
-        exact_policy=False, grid_size=qc.size, threads_per_group=128)
+        exact_policy=WRF_EXACT, grid_size=qc.size, threads_per_group=128)
 
 
 _RRTMGP_RETAB = {}
@@ -202,8 +231,8 @@ def submit_cloudy_background_radii(effc, effi, cldfra, tlay, xland, *,
          "ntable": table.size,
          "has_supplied_liquid": int(has_liquid),
          "has_supplied_ice": int(has_ice),
-         "is_p3": int(scheme == "p3")},
-        exact_policy=False, grid_size=ncell, threads_per_group=128)
+         "is_p3": int(scheme == "p3"), "strict": int(WRF_EXACT)},
+        exact_policy=WRF_EXACT, grid_size=ncell, threads_per_group=128)
     return effc_out, effi_out
 
 
@@ -239,12 +268,31 @@ def submit_surface_emissivity_bands(value, tables, ny, nx, *, validate=True):
     return output
 
 
+def submit_wsm3_phase_split(tlay, cloud, precipitation):
+    """Separate the WSM3 two-carrier cloud and precipitation by phase."""
+    inputs = {"tlay": tlay, "cloud": cloud, "precipitation": precipitation}
+    shape = cloud.shape
+    if len(shape) != 2 or min(shape) < 1:
+        raise ValueError("WSM3 phase split requires nonempty column profiles")
+    for name, value in inputs.items():
+        _f32(value, shape, name)
+    context = _same_context(inputs)
+    outputs = {name: MetalArray(context.buffer(cloud.nbytes), shape, np.float32)
+               for name in ("qc", "qr", "qi", "qs")}
+    context.submit_kernel(
+        "rrtmgp_wsm3_phase_split", {**inputs, **outputs},
+        {"ncol": shape[0], "nlay": shape[1], "ncell": cloud.size},
+        exact_policy=WRF_EXACT, grid_size=cloud.size, threads_per_group=128)
+    return tuple(outputs.values())
+
+
 def submit_hydrometeor_paths(
         plev, qc, qr=None, qi=None, qs=None, *, microphysics="kessler",
         play=None, tlay=None, nc=None, nr=None, ni=None, ns=None,
         effc=None, effr=None, effi=None, effs=None, cldfra=None,
-        snow_treatment="full-snow-mass-into-ice", validate=True):
-    """Produce all seven supported microphysics cloud-optics path variants."""
+        snow_treatment="full-snow-mass-into-ice", radii_written=None,
+        validate=True):
+    """Produce the cloud-optics water paths and radii for the scheme."""
     from woof.core.rrtmgp import SNOW_TREATMENTS
 
     if snow_treatment not in SNOW_TREATMENTS:
@@ -252,12 +300,14 @@ def submit_hydrometeor_paths(
             f"snow_treatment must be one of {SNOW_TREATMENTS}, got "
             f"{snow_treatment!r}")
     scheme = str(microphysics).lower()
-    scheme_ids = {"kessler": 0, "wsm6": 1, "thompson": 1, "nssl": 1,
-                  "p3": 2, "milbrandt2": 3, "morrison": 4}
+    scheme_ids = {"kessler": 0, "ferrier": 0, "wsm3": 1, "wsm6": 1,
+                  "thompson": 1, "nssl": 1, "p3": 2, "milbrandt2": 3,
+                  "morrison": 4}
     if scheme not in scheme_ids:
-        raise ValueError(
-            "microphysics must be 'kessler', 'wsm6', 'thompson', 'nssl', "
-            "'p3', 'milbrandt2', or 'morrison'")
+        raise ValueError(f"microphysics must be one of {tuple(scheme_ids)}")
+    if WRF_EXACT and scheme in ("milbrandt2", "morrison"):
+        raise NotImplementedError(
+            f"strict Metal hydrometeor paths do not support {scheme}")
     if (not isinstance(qc, MetalArray) or qc.ndim != 2
             or qc.dtype != np.dtype(np.float32) or not qc.flags.c_contiguous):
         raise TypeError("qc must be a contiguous rank-two float32 MetalArray")
@@ -272,7 +322,7 @@ def submit_hydrometeor_paths(
         _f32(value, (ncol, nlay), name)
         return value
 
-    if scheme in ("wsm6", "thompson", "nssl"):
+    if scheme in ("wsm3", "wsm6", "thompson", "nssl"):
         if any(value is None for value in (effc, effi, effs)):
             raise ValueError(f"{scheme} radii require effc, effi, and effs")
     elif scheme == "p3":
@@ -300,6 +350,15 @@ def submit_hydrometeor_paths(
             "device dispatch")
 
     context = qc.buffer.context
+    use_effective = scheme == "morrison" and effc is not None
+    has_written_mask = use_effective and radii_written is not None
+    if has_written_mask:
+        if (not isinstance(radii_written, MetalArray)
+                or radii_written.dtype != np.dtype(np.uint32)
+                or radii_written.shape != (ncol,)
+                or not radii_written.flags.c_contiguous
+                or radii_written.buffer.context is not context):
+            raise TypeError("radii_written must be a contiguous uint32 Metal column mask")
     values = {"plev": plev, "qc": qc,
               "qi": optional(qi, "qi"), "qs": optional(qs, "qs"),
               "play": optional(play, "play"), "tlay": optional(tlay, "tlay"),
@@ -310,6 +369,9 @@ def submit_hydrometeor_paths(
               "effi": optional(effi, "effi"),
               "effs": optional(effs, "effs"),
               "cldfra": optional(cldfra, "cldfra")}
+    if not WRF_EXACT:
+        values["radii_written"] = (radii_written if has_written_mask
+                                   else qc.view((ncol,), dtype=np.uint32))
     if any(value.buffer.context is not context for value in values.values()):
         raise ValueError("hydrometeor path inputs must share one Metal context")
 
@@ -318,7 +380,6 @@ def submit_hydrometeor_paths(
         MetalArray(context.buffer(max(qc.nbytes, 4)), qc.shape, np.float32)
         for _ in range(4))
     clwp, ciwp, reliq, dgice = outputs
-    use_effective = (scheme == "morrison" and effc is not None)
     constants = {
         "my2_icexc9": float(my2["icexc9"]),
         "my2_icexi9": float(my2["icexi9"]),
@@ -344,11 +405,14 @@ def submit_hydrometeor_paths(
         "morrison_use_effective": int(use_effective),
         **constants,
     }
+    if not WRF_EXACT:
+        parameters["morrison_has_written_mask"] = int(has_written_mask)
     context.submit_kernel(
+        "wrf_exact_rrtmgp_hydrometeor_paths" if WRF_EXACT else
         "rrtmgp_hydrometeor_paths",
         {**values, "clwp": clwp, "ciwp": ciwp,
          "reliq": reliq, "dgice": dgice},
-        parameters, exact_policy=False, grid_size=qc.size,
+        parameters, exact_policy=WRF_EXACT, grid_size=qc.size,
         threads_per_group=128)
     return outputs
 

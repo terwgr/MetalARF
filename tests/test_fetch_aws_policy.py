@@ -35,7 +35,12 @@ def test_an_ordinary_install_still_walks_nomads_first(monkeypatch):
     assert fetch_endpoints.serving_ladder("hrrr", cycle=cycle, now=cycle)[0].name == "nomads"
     assert go_cli.pinned_transport({"source": "hrrr"}) == (None, None)
     assert fetch_pool.host_worker_cap("nomads.ncep.noaa.gov", 6) == 2
-    assert "--mode full-file" in fetch.transport_refusal("gfs", "s3")
+    # Since the GFS archive lane (32dea003f45, lane/cap-gfs-archive) the S3
+    # host declares dated layouts, and pinning a layout host makes the fetch
+    # take whole objects itself (fetch._fetch_main), so the pin is admitted;
+    # the crop host, which has no whole-object layout, is still refused.
+    assert fetch.transport_refusal("gfs", "s3") is None
+    assert "archive host" in fetch.transport_refusal("gfs", "nomads")
 
 
 def test_aws_policy_pins_each_source_but_preserves_a_nomads_only_primary(aws_policy):
@@ -65,7 +70,7 @@ def test_latest_hrrr_keeps_the_newest_start_when_later_soil_is_missing(aws_polic
     assert missing not in seen
     assert all("noaa-hrrr-bdp-pds.s3.amazonaws.com" in url for url in seen)
     accepted = {fetch.hrrr_object_url(selected, lead, product, transport="s3")
-                for lead in (0, 1) for product in ("wrfnat", "wrfprs")}
+                for lead in (0, 1) for product in fetch.hrrr_lead_products()}
     assert accepted <= set(seen)
 
 
@@ -96,7 +101,14 @@ def test_latest_aifs_includes_step_zero_surface_for_a_later_start(aws_policy):
     selected = fetch.resolve_latest_cycle("aifs", 18, start_hour=12, now=now, probe=probe)
     assert selected == newest - timedelta(hours=6)
     assert missing in seen
-    assert all("ecmwf-forecasts.s3.eu-central-1.amazonaws.com" in url for url in seen)
+    # fix/ecmwf-seaice-aifs-ens (a2f2a6a4f1): the aifs route takes its sea ice
+    # from the same cycle's GFS analysis, so the latest-cycle probe also asks
+    # AWS for that donor's f000 and for nothing else outside ECMWF's bucket.
+    donor = [url for url in seen
+             if "ecmwf-forecasts.s3.eu-central-1.amazonaws.com" not in url]
+    assert donor and all(
+        url.startswith("https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.")
+        and url.endswith(".pgrb2.0p25.f000") for url in donor)
 
 
 @pytest.mark.parametrize("source", ["aigfs", "aigefs"])
@@ -118,21 +130,21 @@ def test_latest_hybrid_requires_its_own_aws_donor(source, aws_policy):
     assert donor_urls and all("noaa-gfs-bdp-pds.s3.amazonaws.com" in url for url in donor_urls)
 
 
-def test_go_and_run_plan_select_the_certified_gfs_full_file_path(tmp_path, aws_policy):
+def test_go_and_run_plan_select_the_gfs_archive_records_path(tmp_path, aws_policy):
     config = Path(__file__).resolve().parents[1] / "configs/gfs_12km_quickstart.toml"
     plan = go_cli.plan_from_config(config, outdir=tmp_path / "run", as_posted=True)
     assert plan["transport"] == "s3"
     assert plan["transport_from"] == fetch_endpoints.FETCH_POLICY_ENV
     assert plan["as_posted"] is True
     command = go_cli.fetch_command(plan)
-    assert command[command.index("--mode") + 1] == "full-file"
+    assert command[command.index("--mode") + 1] == fetch.GFS_RECORDS_MODE == "idx-subset"
     assert command[command.index("--transport") + 1] == "s3"
     assert "--whole-cycle" not in command
     hints = runplan._pinned_fetch_hints(
         SimpleNamespace(run_options={}), {"source": "gfs", "as_posted": True, "late_after_minutes": 10})
     assert hints == {"source": "gfs", "transport": "s3", "as_posted": True, "late_after_minutes": 10}
     arguments = runplan._fetch_arguments_from_hints(hints, out=tmp_path / "data")
-    assert arguments[arguments.index("--mode") + 1] == "full-file"
+    assert arguments[arguments.index("--mode") + 1] == "idx-subset"
     assert fetch.transport_refusal("gfs", "s3") is None
 
 
@@ -237,8 +249,10 @@ def _replay_route(monkeypatch, clock, probe, downloads):
     monkeypatch.setattr(fetch_as_posted, "now_utc", clock.now)
     monkeypatch.setattr(fetch_as_posted, "pause", clock.sleep)
     real = fetch_routes.run_plan
+    # The replay's fixture transport replaces whatever downloader the fetch
+    # chose (the Rust stream door on a GRIB2 route).
     monkeypatch.setattr(fetch_routes, "run_plan", lambda plan, **kw: real(
-        plan, downloader=_fixture_downloader(downloads, clock), probe=probe, **kw))
+        plan, **{**kw, "downloader": _fixture_downloader(downloads, clock), "probe": probe}))
 
 
 @pytest.mark.parametrize("missing_lead", [24, 48])
@@ -396,7 +410,9 @@ def test_latest_selects_early_aws_start_before_prediction_and_ignores_later_lead
     assert seen and not any("wrfprsf24." in url or "wrfprsf48." in url for url in seen)
 
 
-@pytest.mark.parametrize("missing_product,suffix", [("wrfnat", ""), ("wrfprs", ""), ("wrfprs", ".idx")])
+@pytest.mark.parametrize("missing_product,suffix", [
+    ("wrfnat", ""), ("wrfprs", ""), ("wrfprs", ".idx"),
+    ("wrfsfc", ""), ("wrfsfc", ".idx")])
 def test_latest_backs_off_only_when_first_inputs_are_missing(aws_policy, missing_product, suffix):
     now = datetime(2026, 10, 1, 23, 59)
     cycle = datetime(2026, 10, 1, 23)
@@ -561,3 +577,51 @@ def test_native_aws_fetch_starts_its_prefix_before_the_final_hour(
     assert prefixes[0] == ((0, 3) if source == "gfs" else tuple(range(6)), started)
     assert prefixes[-1][0][-1] == 6 and prefixes[-1][1] >= reveal
     assert all("amazonaws.com" in url for url in queried)
+
+
+def test_a_throttling_aws_pin_keeps_the_other_mirrors_behind_it(aws_policy):
+    """WOOF run_19793057ff2979e3 (2026-10-29): ECMWF's AWS mirror answered
+    HEAD 200 and GET 503 SlowDown while Google and data.ecmwf.int served the
+    same keys; the AWS-only ladder ended every IFS 9 km run at fetch (75)."""
+    cycle = datetime(2026, 10, 28, 18)
+    now = cycle + timedelta(hours=14)
+    for source, rungs in (("ecmwf-open-data-0p1", ["aws", "google", "ecmwf"]),
+                          ("ecmwf-ens", ["aws", "google", "ecmwf"]),
+                          ("ecmwf-open-data", ["aws", "ecmwf"]),
+                          ("aifs", ["aws", "ecmwf"])):
+        assert [r.name for r in fetch_endpoints.serving_ladder(
+            source, cycle=cycle, now=now, throttle_fallthrough=True)] == rungs, source
+        # Cycle and readiness questions stay on the pinned mirror.
+        assert [r.name for r in fetch_endpoints.serving_ladder(
+            source, cycle=cycle, now=now)] == ["aws"], source
+    # NOAA's buckets declare no throttle row: still AWS alone, never NOMADS.
+    for source, host in (("hrrr", "s3"), ("rap", "aws"), ("gefs", "aws")):
+        assert [r.name for r in fetch_endpoints.serving_ladder(
+            source, cycle=cycle, now=now, throttle_fallthrough=True)] == [host], source
+
+
+def test_a_slowdown_on_the_aws_mirror_is_served_by_the_next_mirror(tmp_path, aws_policy):
+    import io
+    cycle = datetime(2026, 10, 28, 18)
+    plan = fetch_routes.resolve_request(
+        "ecmwf-open-data-0p1", cycle=cycle, hours=0,
+        now=cycle + timedelta(hours=14))
+    assert [r.name for r in plan.ladder] == ["aws", "google", "ecmwf"]
+    seen = []
+
+    def download(url, dest, **kwargs):
+        seen.append(url)
+        if "amazonaws.com" in url:
+            raise HTTPError(url, 503, "Slow Down", {}, io.BytesIO(
+                b"<Error><Code>SlowDown</Code><Message>Please reduce your "
+                b"request rate.</Message></Error>"))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"GRIB" + bytes(60) + b"7777")
+        return {"name": dest.name, "bytes": dest.stat().st_size,
+                "sha256": "x", "url": url}
+
+    fetch_routes.run_plan(plan, out=tmp_path, progress=lambda *_: None,
+                          downloader=download, probe=lambda *_: False)
+    assert any("amazonaws.com" in url for url in seen)
+    assert any("storage.googleapis.com" in url for url in seen)
+    assert not any("data.ecmwf.int" in url for url in seen)

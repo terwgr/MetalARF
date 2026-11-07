@@ -184,6 +184,32 @@ def launch_aerosol_entry_snapshot(temperature, pressure, qv, nwfa, nifa,
              np.int32(size)))
 
 
+def launch_aa_entry_warm_mask(temperature, warm_mask) -> None:
+    """The warm network's entry mask with WRF's melting level, :1971-2013.
+
+    Writes, per level of the ENTRY temperature, 0.0 below 273.15 K (the cold
+    network owns the level), 1.0 at or above it where WRF re-forms the
+    wet-bulb ``twet`` (``k <= k_melting``), and 2.0 at or above it where WRF
+    keeps ``twet = temp`` (a level at exactly 273.15 K with no warmer level
+    at or above it).
+    """
+    shape, _ = validate_fields({"temperature": temperature,
+                                "warm_mask": warm_mask})
+    if len(shape) != 3:
+        raise ValueError(f"fields must be (nz, ny, nx), got {shape}")
+    from woof.metal.array import MetalArray
+    if isinstance(temperature, MetalArray):
+        from woof.metal.thompson_aerosol_wrf39_sed_family import (
+            submit_aa_entry_warm_mask)
+        submit_aa_entry_warm_mask(temperature, warm_mask)
+        return
+    nz = shape[0]
+    ncol = int(shape[1] * shape[2])
+    grid, block = launch_grid(ncol)
+    _kernel("thompson_aa_entry_warm_mask")(
+        grid, block, (temperature, warm_mask, np.int32(nz), np.int32(ncol)))
+
+
 def launch_aerosol_micro_columns(qc, qi, qr, qs, qg, temperature, pressure,
                                  qv, micro_columns) -> None:
     """WRF's per-column ``no_micro`` decision, :1646, :1827-1990, :2020.
@@ -275,6 +301,22 @@ def launch_aerosol_entry_cloud_number(qc, nc, rho, rc_out, nc_entry_m3,
 # ---------------------------------------------------------------------------
 # 2.  Working refresh.
 # ---------------------------------------------------------------------------
+
+def launch_aerosol_exner(pressure, pii_out) -> None:
+    """``pii = (p/p1000mb)**rcp`` as WRF's phy_prep forms ``pi_phy``.
+
+    A REAL(4) power is the C library's powf in the gfortran WRF, which is
+    not CUDA's powf; the kernel evaluates it with WOOF's own float32 word
+    (woof/core/kernels/thompson_aerosol_libm.cuh).
+    """
+    from woof.metal.array import MetalArray
+    if isinstance(pressure, MetalArray):
+        from woof.metal.thompson_aerosol_exner import submit_aerosol_exner
+        submit_aerosol_exner(pressure, pii_out)
+        return
+    _, size = validate_fields({"pressure": pressure, "pii_out": pii_out})
+    _launch("thompson_aa_exner", size, (pressure, pii_out, np.int32(size)))
+
 
 def launch_tau1_density(temperature, pressure, qv, rho_out) -> None:
     """TAU+1 density, :3189-3193.
@@ -472,9 +514,49 @@ def launch_aerosol_state_finalize(qc, nc, nwfa, nifa, ncten, nwfaten,
              np.int32(ncol), np.int32(size)))
 
 
+def launch_terminal_rain_ice(qr, nr, qi, ni, qrten, nrten, qiten, niten,
+                             rho, micro_columns, dt) -> None:
+    """Apply WRF's rain and ice accumulators once, :4023-4053.
+
+    The v4.6.1 accumulator path's terminal apply: ``qi``/``ni``/``qr``/``nr``
+    are the entry state, read-only until here, and leave as
+    ``X1d + Xten*DT`` with WRF's floors and size bounds, which WRF puts after
+    the phase cleanup's :3956 freeze.  ``rho`` is the terminal density
+    :func:`launch_aerosol_state_finalize` takes; a column
+    :func:`launch_aerosol_micro_columns` marked 0 keeps its entry state.
+    """
+    shape, size = validate_fields({
+        "qr": qr, "nr": nr, "qi": qi, "ni": ni, "qrten": qrten,
+        "nrten": nrten, "qiten": qiten, "niten": niten, "rho": rho,
+    })
+    if len(shape) != 3 or micro_columns.shape != shape[1:]:
+        raise ValueError(f"micro_columns must have shape {shape[1:]}, "
+                         f"got {micro_columns.shape}")
+    _, ncol = validate_fields({"micro_columns": micro_columns})
+    from woof.metal.array import MetalArray
+    if isinstance(qr, MetalArray):
+        from woof.metal.thompson_aerosol_wrf39_sed_family import (
+            submit_aa_terminal_rain_ice)
+        submit_aa_terminal_rain_ice(qr, nr, qi, ni, qrten, nrten, qiten,
+                                    niten, rho, micro_columns, dt=dt)
+        return
+    _launch("thompson_aa_terminal_rain_ice", size,
+            (qr, nr, qi, ni, qrten, nrten, qiten, niten, rho, micro_columns,
+             DTYPE(dt), np.int32(ncol), np.int32(size)))
+
+
 # ---------------------------------------------------------------------------
 # 4.  Surface emission.
 # ---------------------------------------------------------------------------
+
+def launch_aerosol_vapour_fill(qv) -> None:
+    """mp_gt_driver's negative-vapour fill (:1436-1445) on the post-call
+    vapour, after the reflectivity and effective radii (which WRF forms from
+    the unfilled qv1d) and before moist_physics_finish
+    (woof.core.microphysics.thompson_negative_vapour_fill)."""
+    from woof.core.microphysics import thompson_negative_vapour_fill
+    thompson_negative_vapour_fill(qv)
+
 
 def launch_aerosol_surface_emission(nwfa, nifa, nwfa2d, nifa2d, dt) -> None:
     """Fake surface aerosol source, mp_gt_driver:1310-1327.
@@ -738,6 +820,106 @@ def launch_aerosol_surface_rain_fraction(rainncv, snowncv, graupelncv,
     )
     submit_aerosol_surface_rain_fraction(
         rainncv, snowncv, graupelncv, sr)
+# ---------------------------------------------------------------------------
+# The classic graupel number and the 10 cm reflectivity, WRF v4.6.1.
+# ---------------------------------------------------------------------------
+
+def launch_aa_graupel_number_init(qg, temperature, pressure, qv,
+                                  graupel_number) -> None:
+    """mp_gt_driver :1266-1281: the call's private ng1d (per kilogram).
+
+    Diagnosed from the entry graupel on the driver's density (the raw
+    vapour, no floor); zero where the graupel is at or below R1.
+    """
+    from woof.metal.array import MetalArray
+    if isinstance(qg, MetalArray):
+        from woof.metal.thompson_aerosol_graupel_init import submit_graupel_number_init
+        submit_graupel_number_init(qg, temperature, pressure, qv, graupel_number)
+        return
+    _, size = validate_fields({
+        "qg": qg, "temperature": temperature, "pressure": pressure,
+        "qv": qv, "graupel_number": graupel_number,
+    })
+    _launch("thompson_aa_graupel_number_init", size,
+            (qg, temperature, pressure, qv, graupel_number, np.int32(size)))
+
+
+def launch_aa_graupel_number_finalize(qg, graupel_number,
+                                      terminal_density) -> None:
+    """:4058-4077: the private ng1d's terminal bound, and the graupel at or
+    below R1 zeroed with its number, on rho(k) as the terminal apply finds
+    it (``terminal_density``)."""
+    _, size = validate_fields({
+        "qg": qg, "graupel_number": graupel_number,
+        "terminal_density": terminal_density,
+    })
+    from woof.metal.array import MetalArray
+    if isinstance(qg, MetalArray):
+        from woof.metal.thompson_aerosol_wrf39_sed_family import (
+            submit_aa_graupel_number_finalize)
+        submit_aa_graupel_number_finalize(qg, graupel_number,
+                                          terminal_density)
+        return
+    _launch("thompson_aa_graupel_number_finalize", size,
+            (qg, graupel_number, terminal_density, np.int32(size)))
+
+
+#: Column-kernel launch width for the reflectivity.
+_REFL_TPB = 32
+
+
+def launch_aa_refl10cm(qv, qr, nr, qs, qg, graupel_number, temperature,
+                       pressure, refl, *, melting: bool = True) -> None:
+    """calc_refl10cm (:5710-6028) and mp_gt_driver's MAX(-35., dBZ).
+
+    ``melting=False`` leaves out the melting-snow (Blahak) term, as
+    :func:`woof.core.refl.refl_melting_for` asks for the MPAS column seam.
+
+    ``graupel_number`` is the call's private ng1d after
+    :func:`launch_aa_graupel_number_finalize`; the size bins, their widths
+    and the Simpson weights are woof.core.refl's device table, which
+    carries WRF's radar_init values bit for bit.
+    """
+    from woof.core.refl import _device_tables
+
+    shape, _ = validate_fields({
+        "qv": qv, "qr": qr, "nr": nr, "qs": qs, "qg": qg,
+        "graupel_number": graupel_number, "temperature": temperature,
+        "pressure": pressure, "refl": refl,
+    })
+    if len(shape) != 3:
+        raise ValueError(f"reflectivity fields must be 3-D, got {shape}")
+    nz, ny, nx = shape
+    from woof.metal.array import MetalArray
+    if isinstance(refl, MetalArray):
+        from woof.metal.thompson_aerosol_refl_family import submit_refl10cm
+        submit_refl10cm(qv, qr, nr, qs, qg, graupel_number, temperature,
+                        pressure, refl, melting=melting)
+        return
+    blocks = (ny * nx + _REFL_TPB - 1) // _REFL_TPB
+    _kernel("thompson_aa_refl10cm")(
+        (blocks,), (_REFL_TPB,),
+        (qv, qr, nr, qs, qg, graupel_number, temperature, pressure,
+         _device_tables(), refl, np.int32(1 if melting else 0),
+         np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def launch_wrf39_refl10cm(qv, qr, nr, qs, qg, graupel_number, temperature,
+                           pressure, refl, *, melting=True):
+    """The generic CUDA reflector selected by the MP28 fork caller.
+
+    Its slopes, snow moments and radar constants are the original refl.cu
+    expressions. The v4.6.1 aerosol reflector has its own arithmetic.
+    """
+    from woof.metal.array import MetalArray
+    if isinstance(refl, MetalArray):
+        from woof.metal.thompson_aerosol_refl_family import submit_wrf39_refl10cm
+        submit_wrf39_refl10cm(qv, qr, nr, qs, qg, graupel_number,
+                              temperature, pressure, refl, melting=melting)
+        return
+    from woof.core.refl import launch_refl10cm_thompson
+    launch_refl10cm_thompson(qv, qr, nr, qs, qg, graupel_number,
+                             temperature, pressure, refl, melting=melting)
 
 
 __all__ = [
@@ -754,17 +936,24 @@ __all__ = [
     "PROFILE_FILL_EPS",
     "R1",
     "aerosol_profile_needs_fill",
+    "launch_aa_graupel_number_finalize",
+    "launch_aa_graupel_number_init",
+    "launch_aa_refl10cm",
+    "launch_wrf39_refl10cm",
     "launch_aerosol_effective_radius",
     "launch_aerosol_surface_rain_fraction",
     "launch_aerosol_entry_cloud_number",
+    "launch_aerosol_exner",
     "launch_aerosol_entry_snapshot",
     "launch_aerosol_init_profile",
+    "launch_aa_entry_warm_mask",
     "launch_aerosol_micro_columns",
     "launch_aerosol_state_finalize",
     "launch_aerosol_surface_emission",
     "launch_aerosol_working_cloud",
     "launch_aerosol_working_number",
     "launch_tau1_density",
+    "launch_terminal_rain_ice",
     "zero_aerosol_accumulators",
 ]
 

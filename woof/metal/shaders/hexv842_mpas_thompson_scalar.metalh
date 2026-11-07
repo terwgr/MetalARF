@@ -1,0 +1,18 @@
+#ifndef WOOF_MPAS_THOMPSON_SCALAR_METALH
+#define WOOF_MPAS_THOMPSON_SCALAR_METALH
+#include "thompson_aerosol_exner_libm.metalh"
+static inline float native_tc_add(float a,float b) {return as_type<float>(soft32_add(as_type<uint>(a),as_type<uint>(b)));}
+static inline float native_tc_sub(float a,float b) {return as_type<float>(soft32_sub(as_type<uint>(a),as_type<uint>(b)));}
+static inline float native_tc_mul(float a,float b) {return as_type<float>(soft32_mul(as_type<uint>(a),as_type<uint>(b)));}
+static inline float native_tc_div(float a,float b) {return as_type<float>(soft32_div(as_type<uint>(a),as_type<uint>(b)));}
+static inline float native_tc_powf(float a,float b) {return as_type<float>(thompson_exner_powf_bits(as_type<uint>(a),as_type<uint>(b)));}
+static inline bool tc_nan(float a) {return (as_type<uint>(a)&0x7fffffffU)>0x7f800000U;}
+static inline float tc_quiet(float a) {return as_type<float>(as_type<uint>(a)|0x00400000U);}
+static inline float tc_add(float a,float b) {if(tc_nan(a))return tc_quiet(a);if(tc_nan(b))return tc_quiet(b);float r=native_tc_add(a,b);return tc_nan(r)?as_type<float>(0xffc00000U):r;}
+static inline float tc_sub(float a,float b) {if(tc_nan(a))return tc_quiet(a);if(tc_nan(b))return tc_quiet(b);float r=native_tc_sub(a,b);return tc_nan(r)?as_type<float>(0xffc00000U):r;}
+static inline float tc_mul(float a,float b) {if(tc_nan(a))return tc_quiet(a);if(tc_nan(b))return tc_quiet(b);float r=native_tc_mul(a,b);return tc_nan(r)?as_type<float>(0xffc00000U):r;}
+static inline float tc_div(float a,float b) {if(tc_nan(a))return tc_quiet(a);if(tc_nan(b))return tc_quiet(b);float r=native_tc_div(a,b);return tc_nan(r)?as_type<float>(0xffc00000U):r;}
+static inline float tc_pow(float a,float b) {float r=native_tc_powf(a,b);if(!tc_nan(r))return r;if(tc_nan(a))return tc_quiet(a);if(tc_nan(b))return tc_quiet(b);return as_type<float>(0xffc00000U);}
+static inline int tc_add(int a,int b) {return a+b;}
+static inline float tc_max(float a,float b) {return soft32_less(as_type<uint>(b),as_type<uint>(a))?a:b;}
+#endif

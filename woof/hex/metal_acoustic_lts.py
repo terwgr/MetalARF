@@ -28,7 +28,11 @@ def launch(context: Any, name: str, count: int, arrays: Any, params: Any) -> Non
 
     if int(count) <= 0:
         return
-    _launch(context, f"hexv841_{name}", int(count), arrays, params)
+    # Regional shader resources use flat indexing, just like the regional
+    # caller; retain the shaped public objects and lend contiguous views.
+    resources = ({key: value.view((value.size,)) for key, value in arrays.items()}
+                 if "_regional_lts" in name else arrays)
+    _launch(context, f"hexv841_{name}", int(count), resources, params)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +71,8 @@ def build_device_classing(
     *,
     n_vert_levels: int,
     arrays: Any,
+    padded_cells: int = 0,
+    padded_edges: int = 0,
 ) -> MetalRateClassing:
     """Move a :class:`~woof.hex.lts_v841.LocalTimestepClassing` to the device."""
 
@@ -77,6 +83,12 @@ def build_device_classing(
 
     cell_rate = np.asarray(classing.cell_rate, dtype=np.int32)
     edge_rate = np.asarray(classing.edge_rate, dtype=np.int32)
+    if padded_cells not in (0, 1) or padded_edges not in (0, 1):
+        raise ValueError("regional classing permits one garbage cell and edge")
+    if padded_cells:
+        cell_rate = np.append(cell_rate, np.ones(padded_cells, dtype=np.int32))
+    if padded_edges:
+        edge_rate = np.append(edge_rate, np.ones(padded_edges, dtype=np.int32))
     n_cells = int(cell_rate.size)
     n_edges = int(edge_rate.size)
     if cells_on_edge.shape != (n_edges, 2):

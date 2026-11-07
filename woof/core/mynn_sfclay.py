@@ -23,16 +23,11 @@ from woof.core.kernels import get_kernel, get_kernel_int_defines
 from woof.core.mynn_surface import (
     ISFTCFLX_DEFINED,
     MYNN_SFCLAY_DEFAULT,
+    _INPUT_NAMES as MYNN_SURFACE_INPUTS,
     mynn_sfclay_variant_form,
 )
 from woof.core.state import DTYPE
 
-
-MYNN_SURFACE_INPUTS = (
-    "u1", "v1", "t1", "qv1", "p1", "rho1", "dz1",
-    "u2", "v2", "dz2", "psfc", "tsk", "pblh", "mavail",
-    "hfx", "qfx", "znt", "qsfc", "ust", "xland", "snowh",
-)
 
 from woof.core.physics_inventory import MYNN_SURFACE_OUTPUTS  # noqa: F401  (one home; re-exported here)
 
@@ -112,13 +107,13 @@ MYNN_SFCLAY_DEFINES = {
 }
 
 
-def mynn_surface_kernel(variant: str = MYNN_SFCLAY_DEFAULT):
+def mynn_surface_kernel(variant: str = MYNN_SFCLAY_DEFAULT, shape=()):
     """The deterministic MYNN surface kernel for one variant."""
     defines = MYNN_SFCLAY_DEFINES[mynn_sfclay_variant_form(variant)]
     if not defines:
-        return get_kernel("mynn_surface", "mynn_surface_column")
+        return get_kernel("mynn_surface", "mynn_surface_column", shape)
     return get_kernel_int_defines(
-        "mynn_surface", "mynn_surface_column", defines)
+        "mynn_surface", "mynn_surface_column", defines, shape)
 
 
 def seed_mynn_surface_first_step(
@@ -153,12 +148,17 @@ def seed_mynn_surface_first_step(
                 f"seed_mynn_surface_first_step requires same-shape float32 "
                 f"surface arrays; {name} is {array.shape}/{array.dtype}"
             )
-    ust[...] = cp.maximum(
-        DTYPE(0.04) * cp.sqrt(u1 * u1 + v1 * v1), DTYPE(0.001)
-    )
-    mol[...] = DTYPE(0.0)
-    qsfc[...] = qv1 / (DTYPE(1.0) + qv1)
-    qstar[...] = DTYPE(0.0)
+    # Raw CuPy division flushes QV1 before QSFC is handed to the column.
+    # Seed through the same no-FTZ translation unit as the surface layer.
+    inputs = [cp.ascontiguousarray(a) for a in (u1, v1, qv1)]
+    outputs = [cp.ascontiguousarray(a) for a in (ust, mol, qsfc, qstar)]
+    n = u1.size
+    from woof.core.kernels import get_kernel
+    get_kernel("mynn_surface", "mynn_surface_seed")(
+        ((n + 127) // 128,), (128,), (*inputs, *outputs, np.int32(n)))
+    for target, output in zip((ust, mol, qsfc, qstar), outputs):
+        if output is not target:
+            target[...] = output
 
 
 def _validate_options(
@@ -221,6 +221,7 @@ def launch_mynn_surface_layer(
     spp_pbl: int = 0,
     pattern_spp_pbl=None,
     variant: str = MYNN_SFCLAY_DEFAULT,
+    ocean_z0=None,
 ) -> None:
     """Launch the MYNN surface kernel into preallocated outputs."""
 
@@ -252,6 +253,14 @@ def launch_mynn_surface_layer(
                 "launch_mynn_surface_layer requires same-shape contiguous "
                 "float32 surface arrays"
             )
+    ocean_args = ()
+    defines = MYNN_SFCLAY_DEFINES[variant]
+    if ocean_z0 is not None:
+        if ocean_z0.shape != shape or ocean_z0.dtype != DTYPE or not ocean_z0.flags.c_contiguous:
+            raise ValueError("wave roughness requires contiguous FP32 on the surface grid")
+        ocean_args = (ocean_z0,)
+        defines += (("OCEAN_WAVE_ROUGHNESS", 1),)
+        if stochastic:defines += (("OCEAN_SPP_SURFACE", 1),)
     n = int(np.prod(shape))
     blocks = (n + _TPB - 1) // _TPB
     if stochastic:
@@ -265,14 +274,17 @@ def launch_mynn_surface_layer(
             raise ValueError("MYNN surface SPP pattern must be finite")
         from woof.core.spp_kernel_sources import load_spp_module
         kernel = load_spp_module(
-            "mynn_surface", defines=MYNN_SFCLAY_DEFINES[variant],
+            "mynn_surface", defines=defines,
         ).get_function("mynn_surface_column")
+    elif ocean_z0 is not None:
+        from woof.core.kernels import get_kernel_int_defines
+        kernel = get_kernel_int_defines("mynn_surface", "mynn_surface_column", defines, (1, 1, n))
     else:
-        kernel = mynn_surface_kernel(variant)
+        kernel = mynn_surface_kernel(variant, (1, 1, n))
     kernel(
         (blocks,),
         (_TPB,),
-        arrays + (
+        arrays + ocean_args + (
             DTYPE(dx), np.int32(itimestep), np.int32(isfflx),
             np.int32(isftcflx), np.int32(n),
         ) + ((pattern_spp_pbl,) if stochastic else ()),

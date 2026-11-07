@@ -115,8 +115,12 @@ from .. import shipped_sources
 #: arithmetic, and the rows' own prose lives in it, so hashing it would make
 #: every edit to a basis sentence invalidate the evidence that sentence names.
 REGIONAL_KERNEL_SOURCES: tuple[str, ...] = (
+    "src/hexcore/cuda_column_order_v841.py",
+    "src/hexcore/cuda_acoustic_fusion_v841.py",
+    "src/hexcore/cuda_upper_damping_v841.py",
     "src/hexcore/cuda_acoustic_v841.py",
     "src/hexcore/cuda_backend/containers.py",
+    "src/hexcore/cuda_backend/aot.py",
     "src/hexcore/cuda_backend/runtime.py",
     "src/hexcore/cuda_driver.py",
     "src/hexcore/cuda_dynamics_v841.py",
@@ -509,8 +513,272 @@ class RegionalContract:
 #: deck at the merged text and the per-kernel replay against the integrated
 #: tree's translation units are the evidence that the merged text computes
 #: the minted bits.
+#: Integration, 2026-10-04: approved device selection and rank constructor
+#: dispatch change two host source files. All twelve arithmetic source files
+#: remain byte-identical to e6feb2f. The former source set was
+#: 8a716f28862a3a89006b017397ad004cb05699a539ac74c9d9b283ba86657818.
+#: verification/hex-next/native-point.json records eight matched native operator decks,
+#: twenty-two kernels, identical dual runs and effective mutation controls on
+#: the current source set. This is a point contract proof. Other class records
+#: are carried, not newly measured; forecast and regional rank gates remain
+#: separate from this dry contract.
+#: Startup lane, 2026-10-05: ``cuda_driver.py`` gained the host-preparation
+#: cache (woof.hex.prep_cache) on its two host validations, which run before
+#: any CUDA interaction.  No CUDA source string, launch or arithmetic line
+#: moved; the former source set was
+#: 6e92b86e418fb748931f0469eb0e0a7007cc72c381b5e1128ec2f95a7e3b3394.  The
+#: conus12km same-card before/after pair in
+#: evidence/hex-startup-20261005/ compares every step's execution boundary
+#: and both history files byte for byte.  Class records are carried, not
+#: newly minted.
+#: Certificate-gate retirement, 2026-10-10 (branch hex/retire-cert-gates):
+#: this digest moved twice that day and the first move carried no note.
+#: (1) ``cuda_driver.py`` and ``cuda_regional_forecast_v841.py`` stopped
+#: refusing for a missing certificate (scalar_advection off,
+#: positive_definite, apvm=0, an unregistered regional class) and record the
+#: match instead; the former source set was
+#: 6a38fdc7a60e94fb61595d25dd80a9777c2dce62213103d0cf7952f623b92d10, then
+#: 31598b50e5618979b10243489b92127de71b61dd1aa6a6962b6903ae8ac2c159.
+#: (2) The regional scalar path in ``cuda_driver.py`` takes the limited
+#: routine under config_monotonic OR config_positive_definite, as native and
+#: the global path do.  That is an ARITHMETIC change for a regional run with
+#: positive_definite on and monotonic off, and for no other configuration:
+#: with monotonic on, or both off, the same kernels launch with the same
+#: arguments.  NO REGIONAL MINT RE-RAN for either move.  Every class record
+#: below is carried from the source set it was measured on, and since
+#: 2026-10-10 a class record is evidence the driver reports, not a
+#: condition of running.
+#: (3) 2026-10-11: ``cuda_transport_v841.py`` releases the limiter's work
+#: arrays early (`del` only; no launch or arithmetic line moved); the former
+#: source set was
+#: 94388a96d39ab23367c06fe51079be3f9eae4d39048400bbbfb07b9197d09998.
+#: Integration, 2026-10-11: forward merges retain the certificate retirement,
+#: ops changes and the one-card ordering fix. The one-card ordering branch
+#: also moved this digest without a regional measurement. This value is the
+#: combined source set, not a new regional mint. No regional proof has been
+#: rerun for this integration. Existing class records keep their old scope.
+#: Forecast batch, 2026-10-13 (branch hex/gpu-forecast-batch):
+#: ``cuda_driver._validate_v841_host_mesh`` evaluates its row laws over whole
+#: tables instead of row loops (host validation before any CUDA interaction;
+#: tests/test_mesh_rows_vectorized.py keeps the loops and proves the same
+#: verdict and message).  No CUDA source string, launch or arithmetic line
+#: moved; the former source set was
+#: af121cffb085e14bd90c5fea0526529ff18351659c9c9b9e4c6d82d2600aec79.  Class
+#: records are carried, not newly minted.
+#: SG2 lagged microphysics heating, 2026-10-13 (branch correct/storm-growth;
+#: moved by 0c3a9624 and again by its repair): ``cuda_driver.py`` gained
+#: MPAS-A's rt_diabatic_tend consumer (add_lagged_diabatic_theta_v842_f32 in
+#: every RK stage, mpas_atm_time_integration.F:6937), its removal at the final
+#: recovery inside recover_cells_f32 (F:4436-4437) and, in the repair, the
+#: specified-zone zero (zero_speczone_lagged_diabatic_theta_v842_f32, F:7949).
+#: This is an ARITHMETIC change for every run WITH physics, regional runs
+#: included: the ArWen and suite backends carry the heating from the second
+#: step on.  With physics off nothing produces a carry, neither new kernel
+#: launches and recover_cells_f32 runs with has_diabatic = 0; the dry derecho
+#: fixed-step and active-LTS final states are byte-identical before and after,
+#: every word (the correct/storm-growth report).  NO REGIONAL MINT RE-RAN.
+#: The former source set was
+#: 77b7ce2c24fc7d6dc5f98df4e1a358ea3b871c50d3f35f7fd048482289fff387, then
+#: 92e658ffd812e7e8c81db0287a31d9b7ac13d4342f30c00fc3c99b5caa87acd9 at
+#: 0c3a9624 (before the specified-zone zero).  Class records are carried,
+#: not newly minted; re-minting the regional classes with physics is a named
+#: follow-up of that report.
+#: (4) 2026-10-14 (hex 0.4.0 release, lane H7): the MPAS v8.4.2 port's LAM
+#: identity landing (d4-lam-identity: the native lateral-boundary module,
+#: native regional acoustic rounding, gradual underflow, native LBC scalar
+#: storage) and the golden 0.4.0 merge moved the regional source set from
+#: af121cffb085e14bd90c5fea0526529ff18351659c9c9b9e4c6d82d2600aec79.  Regional
+#: runs moved to native MPAS behaviour by design and are proven bitwise
+#: against native by that unit's replay and the G1/G2 regional decks.  The
+#: value below is the combined source set re-derived by
+#: tools/repin_source_tables.py, not a new regional mint; the class records
+#: keep their old scope (evidence the driver reports, not a condition of
+#: running).
+#: (5) 2026-10-14 (hex 0.4.0 release, H1 merged onto the H7 merge): the
+#: forecast-batch and SG2 moves noted above, the LAM identity move of (4)
+#: and the 0.4.0 release scrub's comment and docstring lines meet in one
+#: source set.  The two lines carried
+#: d3ef6d459251862710b4e4542b42750366dda586c27262ed1c8e4190d169d552 (H7) and
+#: b215702d1f4d1c620cc9c190ebe3f5328145baa6af2cfc5f0dbc304a8299d62b (H1).
+#: The value below is the combined source set re-derived by
+#: tools/repin_source_tables.py, not a new regional mint; no regional proof
+#: re-ran for this merge, and the class records keep their old scope.
+#: (6) 2026-10-15 (hex 0.4.0, CUDA 12 support): ``cuda_backend/runtime.py``
+#: moved and nothing else in the set.  ``require_cuda``'s default
+#: ``min_runtime_version`` went from 13000 to 12000 and its docstring gained
+#: one paragraph saying why: HOST Python, no CUDA source string, launch or
+#: arithmetic line moved.  The former source set was
+#: 7ce8d4c44a2fca15742c79e823f3d07d7426c19b1e343dae596829cad93b3822.  The
+#: value below is re-derived by tools/repin_source_tables.py, not a new
+#: regional mint; the class records keep their old scope.
+#: (7) 2026-10-15 (hex 0.4.0 fix, LES on the MPAS route): cuda_driver.py and
+#: config_v841.py moved to wire MPAS-A v8.4.2's LES dissipation into the RK
+#: step. With LES off the launches are unchanged (the moist w Euler kernel
+#: takes a has_mixing flag, 0 on that path, and subtracts from 0.0f as
+#: before). The value below is re-derived by tools/repin_source_tables.py on
+#: the composed tree (CUDA 12 support plus LES), not a new regional mint; no
+#: regional proof re-ran, and the class records keep their old scope.
+#: (8) 2026-10-16 (hex memory census cuts, branch hex/mem-census-cuts):
+#: cuda_driver.py (mem/state-levels: read-only time levels bound, not copied;
+#: regional keeps its private images), cuda_transport.py, containers.py and
+#: recovery.py (mem/mesh: device mesh tables at the stride the mesh uses) and
+#: cuda_transport_v841.py and partition_executor_v841.py (scalar transport a
+#: species per pass, round E split into one part per pass on ranks;
+#: regional included: the same kernels on per-species slices)
+#: moved.  No kernel source or arithmetic line moved for the regional lane.
+#: The value below is re-derived by tools/repin_source_tables.py on the
+#: composed tree, not a new regional mint; no regional proof re-ran, and the
+#: class records keep their old scope.
+#: (9) 2026-10-16 (hex/speed-1): corrected theta finish reuses the same
+#: cell stencil across four levels. The two sums retain their original
+#: operand and helper order. Direct old/new uint32 tests cover 1/4/5/55
+#: levels and 0/5/6/10/11 neighbors; the 60 km six-hour forecast matches
+#: all 78 published field hashes. G1/G2, including hl-3, are the landing
+#: proof for this source set (see the lane's REVIEW-speed-1.md). This is
+#: a source-table refresh by tools/repin_source_tables.py, not a new mint
+#: of the archived regional classes; their original scope is unchanged.
+#: (10) 2026-10-16 (hex/global-defects, carried by hex/speed-2): aot.py
+#: now loads the source-bound prebuilt kernel pack, with the existing NVRTC
+#: fallback. It is the only changed member of this 18-file set since (7);
+#: no CUDA source string in this set changed. The value below is re-derived
+#: by tools/repin_source_tables.py. This is NOT a new regional class mint:
+#: archived receipts and their original scope remain unchanged. The speed-2
+#: landing decks are separate current-tree evidence, not replacement mints.
+#: (11) 2026-10-16 (hex/speed-3): cuda_driver.py hashes stable host arrays
+#: through byte views and bounded parallel SHA-256 calls. No CUDA source or
+#: arithmetic changed. This current-source refresh is not a regional mint;
+#: archived receipts retain their original scope, with separate landing proof.
+#: (12) 2026-10-16 (hex 0.4.1 landing batch): the composed tree of (8)-(11)
+#: together. The value below is re-derived by tools/repin_source_tables.py
+#: on that tree; not a new regional mint, archived scope unchanged.
+#: (13) 2026-10-16 (hex/fast-numerics, owner ruling: fast numerics is the
+#: default, strict the opt-in): cuda_regional_v841.py and runtime.py take
+#: their compile options from woof.hex.numerics. Under --numerics strict the
+#: options are the unit's original tuple, unchanged; no CUDA source string
+#: changed. Re-derived by tools/repin_source_tables.py; not a new regional
+#: mint, archived scope unchanged (the mints are strict-numerics statements).
+#: (14) 2026-10-17 (hex land-1017 batch): the LES-with-ArWen-physics change
+#: (cuda_driver.py keeps dpdz alive for the LES w-tendency read; species row
+#: from arwen_les.model_row) and the routeb-door merge, composed. No CUDA
+#: source string changed. Re-derived by tools/repin_source_tables.py; not a
+#: new regional mint, archived scope unchanged.
+#: (15) 2026-10-17 (hex/fix-startup-onecore): containers.py constructs
+#: edge signs on the device; host validation and compaction use bounded
+#: exact array blocks. Direct CUDA sign tests preserve active signs and
+#: inactive +0 words. This refresh is not a new regional forecast mint.
+#: (16) 2026-10-19: refresh current sources after f65ab11c specializes
+#: immutable dimensions in six kernels. Generated CUDA source and cache keys
+#: now include shape. Archived mints keep their recorded scope; this source
+#: refresh is not a new regional forecast or installed device proof.
+#: (17) 2026-10-19: refresh lookup identities after the LTS hook repair.
+#: Generic keys and the specialized acoustic tap now agree; CUDA source
+#: arithmetic is unchanged. This is not a new forecast mint.
+#: (18) 2026-10-20: the AOT loader resolves pinned on-demand assets instead
+#: of package-data packs. Compiler checks, cubin checks, CUDA source and
+#: arithmetic are unchanged. This source-table refresh is not a new regional
+#: forecast mint; archived evidence retains its recorded scope.
+#: (19) 2026-10-20 (capabilities campaign landing, lane/hexcap-base):
+#: cuda_dynamics_v841.py keys unspecialized kernels by (cache, name) so the
+#: moving-LTS interface taps (b6ebb526) replace the same entry the step
+#: launches. A host-side cache key only; no CUDA source string or
+#: arithmetic changed. Re-derived by tools/repin_source_tables.py; not a
+#: new regional forecast mint, archived scope unchanged.
+#: (20) 2026-10-24 (hex 0.4.5 landing batch): host-side changes only in
+#: this set since (19): aot.py accepts pack banners through
+#: compile_contract.build_id_accepted (865a117); runtime.py memoises kernel
+#: resolution and records shape origins (U-MPASPHYS-1, 5a270ec);
+#: cuda_driver.py loads every moist species on a limited-area MPAS-suite run
+#: (47f7459; the regional qv-only path is unchanged for the dycore's own
+#: runs); cuda_horizontal_v841.py adds solve_vorticity, which launches the
+#: existing vertex_diagnostics_v841_f32 kernel unchanged (G1);
+#: cuda_transport_v841.py a comment. No CUDA source string or arithmetic
+#: changed. Re-derived by tools/repin_source_tables.py; not a new regional
+#: forecast mint, archived scope unchanged.
+#: (21) 2026-10-27 (hex 0.4.9 all-fixes batch): runtime.py makes the host
+#: wait on the card with blocking sync instead of CUDA's spin (c151b3e9; the
+#: main thread held one core at 100 %). The only changed member of this set
+#: since (20); no CUDA source string or arithmetic changed. Re-derived by
+#: tools/repin_source_tables.py; not a new regional forecast mint, archived
+#: scope unchanged.
+#: (22) 2026-10-27 (hex 0.4.9 fold-everything batch): cuda_transport_v841.py
+#: tells an exchanger that declares begin_species_pass which species each
+#: limiter pass carries, and an exchanger declaring fct_scale_parts None takes
+#: the route default (fix/lts-share-0.4.9 7b2ac42a, the one-card active LTS
+#: class exchanger). Regional exchangers declare neither, so their passes are
+#: unchanged. The only changed member of this set since (21); no CUDA source
+#: string or arithmetic changed. Re-derived by tools/repin_source_tables.py;
+#: not a new regional forecast mint, archived scope unchanged.
+#: (23) 2026-10-28 (HEX-LTS-REGRESSION, fix/lts-zoom-speed): cuda_driver.py
+#: lets the one-card full-step LTS executor read a class step's four-byte
+#: validation flag at the macro boundary (deferred_validation_v841, a list
+#: only that executor sets; flush_deferred_validation_v841). A regional
+#: driver never carries the list, so its step reads the flag in the step as
+#: before. The only changed member of this set since (22); no CUDA source
+#: string or arithmetic changed. Re-derived by tools/repin_source_tables.py;
+#: not a new regional forecast mint, archived scope unchanged.
+#: (24) 2026-10-28: bounded transport batches and repeated-zero result reuse.
+#: CUDA arithmetic source strings and boundary kernels are unchanged. Host
+#: launch checks compare every output word against the one-species path,
+#: including regional masks; halo round schedules retain their declared parts.
+#: This is a current-source repin, not a new regional forecast mint. The
+#: archived scope is unchanged; release still requires the device bitwise
+#: transport gate and same-card timing receipt (docs/transport-batching.md).
+#: (25) 2026-10-28: integer zero classification reduces cells per level,
+#: then levels per species. Floating-point CUDA source is unchanged; fast
+#: and strict transport checks pass. This updates current source identity,
+#: not the archived regional forecast scope or its recorded hashes.
+#: (26) 2026-10-28 (rel/hex-0.4.10 fold): (23) and (24)-(25) landed on separate lines; the merged
+#: tree's digest is re-derived by tools/repin_source_tables.py, not a new mint.
+#: (27) 2026-10-28 (rel/hex-0.4.10 fold): guide/l11-regional-iau lets open_regional_forecast_v841 take the
+#: IAU stage-density driver type on the one-card plain MPAS-A regional dycore; host construction only, no CUDA
+#: source string or arithmetic changed. Re-derived by tools/repin_source_tables.py; not a new mint.
+#: (28) 2026-10-29 (rel/hex-0.4.10 fold HB7): fix/hex-mc-validate-once validates the device mesh and context once
+#: per mesh (containers.py, cuda_regional_forecast_v841.py host checks); no CUDA source or arithmetic changed.
+#: Re-derived by tools/repin_source_tables.py; not a new mint.
+#: (29) 2026-10-29 (rel/hex-0.4.10 fold HB9): rrfs/speed3-dycore d38acc4 runs validate_recovered_v841_f32 and
+#: reconstruct_winds_v841_f32 one lane per (level, cell/edge) instead of a per-cell level loop (same checks, same
+#: per-element arithmetic and order; hl-3 BITWISE, strict RRFS 0 of 29,644,818), and the 44c0849 re-pin
+#: (guide/repin-fold-0410) adds NOAA-only host paths to cuda_driver.py (config_lbc_w nearest, scalar eddy mix)
+#: and forms regional rthdynten from the boundary-adjusted density tendency, as native MPAS-A v8.4.2 and 44c0849
+#: both do (a physics-input diagnostic; the dry mint's prognostic arithmetic is unchanged). Re-derived by
+#: tools/repin_source_tables.py; not a new mint.
+#: (30) 2026-10-29 (rel/hex-0.4.10 fold HB10): fix/c3-4card-vram-gated (rrfs/c3-4card-vram 0e6fcb7) holds the
+#: limited-area driving pool on the boundary rings plus three neighbour rings and scatters full-extent arrays from
+#: it (cuda_regional_forecast_v841.py, host CuPy indexing; zeros elsewhere, the same words at every element a
+#: boundary kernel reads; c3s 1 h 0 of 322,061,158 words vs its base); no CUDA source or arithmetic changed.
+#: Re-derived by tools/repin_source_tables.py; not a new mint.
+#: (31) 2026-10-29 (rel/hex-0.4.10 fold HB11, rrfs/one-tree-fast 39a1af5b): cuda_driver._shares_start_levels lets
+#: the limited-area lane bind its step-start and subcycle-start levels by reference, as the global lane already
+#: does (WOOF_HEX_MEM_STATE_LEVELS_REGIONAL=0 restores the private images); host-side array lifetimes only, no
+#: CUDA source string or arithmetic changed. The only changed member of this set since (30). Re-derived by
+#: tools/repin_source_tables.py; not a new mint.
+#: (32) 2026-10-29 (rel/hex-0.4.10 fold HB12, fix/rrfs-c3km-startup 1535cae8): cuda_backend/aot.py computes the
+#: kernel pack digest and the compile-platform binding once per process instead of once per kernel cache; host
+#: caching only, no CUDA source string or arithmetic changed (every prepared rank input identical base vs fix, 23,817
+#: entries). The only changed member of this set since (31). Re-derived by tools/repin_source_tables.py; not a new
+#: mint.
+#: (33) 2026-10-29 (rel/hex-0.4.10 fold HB15, fix/c3-4card-ring-hb12b 1c8210c8): cuda_regional_forecast_v841.py runs
+#: the limited-area boundary scalars and the LBC admission on the boundary support (host CuPy indexing, a4cd216e and
+#: 3476a320) and launches the regional scalar-transport kernels per tracer group of <= 2^28 edge values instead of all
+#: tracers at once (1c8210c8: the 4-rank conus3km int grid-stride overflow); every tracer is computed on its own, no
+#: CUDA source string or arithmetic changed (mv3km 1 h 0 of 683,465,844 words vs 236be507's paths). The only changed
+#: member of this set since (32). Re-derived by tools/repin_source_tables.py; not a new mint.
+#: (34) 2026-10-29 (fix/hex-nvrtc-parallel): cuda_backend/aot.py moves the raw NVRTC compile into one function
+#: (raw_nvrtc) the kernel plan's pool workers also run, and raw_image first takes an image the pool already
+#: compiled; the same createProgram/compileProgram/getCUBIN call, no CUDA source string or arithmetic changed.
+#: The only changed member of this set since (33). Re-derived by tools/repin_source_tables.py; not a new mint.
+#: (35) 2026-10-29 (fix/rrfs-shared-dycore-8card): cuda_driver._step_device_v841 hands the step's four-byte
+#: validation flag to deferred_checks_v842 when an MPAS-physics forecast loop collects (read at most one step
+#: later, before any output), as cuda_driver_rrfs has since cb2ae586; elsewhere it is read at once as before. Host
+#: read timing only, no CUDA source string or arithmetic changed. The only changed member of this set since (34).
+#: Re-derived by tools/repin_source_tables.py; not a new mint.
+#: (36) 2026-10-30 (woof hex 0.4.11 fold HB2, feat/hex-moving-resident 78111207): cuda_driver.py's from-host
+#: constructor passes an optional upload_cache through to the advection-coefficient upload (None keeps the old call),
+#: and cuda_backend/runtime.py + containers.py reuse unstepped predicted-class arrays with exact incremental uploads;
+#: host upload bookkeeping only, no CUDA source string or arithmetic changed (the row's whole run: 0 of 1,240,994,505
+#: words vs A2). Re-derived by tools/repin_source_tables.py; not a new mint.
 MINTED_KERNEL_SET_SHA256 = (
-    "0dd0dd948ed953888f03475849ce7eaed78495c0c77b8551c1407687b1bbaf1d"
+    "52270f7233996893bbd8358ae24d445b96ab9df87a3e3356c86c8d684f4ac21a"
 )
 
 _DRY_MINT_CAVEAT = (
@@ -675,6 +943,37 @@ ADMITTED_CLASSES: Mapping[str, RegionalClass] = MappingProxyType(
                 "superseded 2026-08-26 pair was taken at kernel set "
                 "bdcfe014... on an RTX 5070 Ti and its receipts remain in the "
                 "tree as the record of that run.  " + _DRY_MINT_CAVEAT
+            ),
+        ),
+        "graded-824m-dt5-z7": RegionalClass(
+            class_id="graded-824m-dt5-z7",
+            key=RegionalClassKey(
+                boundary_zone_width=7,
+                n_vert_levels=55,
+                finest_edge_mm=824_453,
+                dt_ms=5_000,
+                kernel_set_sha256=MINTED_KERNEL_SET_SHA256,
+            ),
+            parent="generated graded 937.5 m core on a 120 km background",
+            card="NVIDIA RTX PRO 6000 Blackwell Server Edition (sm_120)",
+            admitted_on="2026-10-08",
+            mint_receipts=(
+                "docs/proofs/regional-class-824/mint-run1/forecast.json",
+                "docs/proofs/regional-class-824/mint-run2/forecast.json",
+            ),
+            minted_on_geometries=("q0.9375.120.43642.n47.50w111.30",),
+            basis=(
+                "Exact millimetre class, with no finest-edge band. Two independent "
+                "processes ran 2,160 dry regional steps at 5 s on the measured "
+                "43,642-cell, 55-level cull. The initial and three-hour endpoint "
+                "frames agree in masked file hashes and every published field "
+                "hash; the exact Rust reader also compared every NetCDF variable "
+                "word, including character clock bytes. Whole files have distinct "
+                "file ids. Both runs used the same fourteen source hashes and "
+                "configuration hash. The cull's independent contract passed eight "
+                "decks, twenty-two kernels, dual identity and mutation controls. "
+                "docs/proofs/regional-class-824/identity.json records the complete "
+                "endpoint comparison. " + _DRY_MINT_CAVEAT
             ),
         ),
         "graded-869m-dt5-z7": RegionalClass(
@@ -1206,14 +1505,20 @@ def contract_summary() -> str:
 def admitted_class(class_id: str | None) -> RegionalClass | None:
     if not class_id:
         return None
-    return ADMITTED_CLASSES.get(str(class_id))
+    held = ADMITTED_CLASSES.get(str(class_id))
+    if held is not None:
+        return held
+    from woof.hex.regional_mint import presented_classes
+    return next((row for row in presented_classes() if row.class_id == str(class_id)), None)
 
 
 def admitted_class_for_key(key: RegionalClassKey) -> RegionalClass | None:
     # Exact matches first, then the banded ones, so a class that names a
     # measured edge to the millimetre is never out-ranked by a band around
     # a neighbour.
-    for row in ADMITTED_CLASSES.values():
+    from woof.hex.regional_mint import presented_classes
+    rows = tuple(ADMITTED_CLASSES.values()) + tuple(presented_classes())
+    for row in rows:
         if row.key.matches(key):
             return row
     for row in ADMITTED_CLASSES.values():
@@ -1488,6 +1793,13 @@ def require_regional_anchor(
             dt_seconds=float(dt_seconds),  # type: ignore[arg-type]
             kernel_set=resolved_kernel_set,
         )
+
+    if contract is None:
+        from woof.hex.speculative_contract import pending_contract
+        contract = pending_contract(digest=digest, cells=n_cells, kernel_set=resolved_kernel_set,
+                                    measured_key=measured_key, mesh_row=mesh_row)
+        if contract is not None:
+            route = "speculative"
 
     if contract is None:
         class_id = (

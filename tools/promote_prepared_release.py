@@ -487,10 +487,13 @@ def expected_python_files(repo: Path, project: str = "woof") -> set[str]:
     finder = config["tool"]["setuptools"]["packages"]["find"]
     require(finder.get("where", ["."]) == ["."], "unsupported package source root")
     filters = {}
+    declaration_only: tuple[str, ...] = ()
     if project == "woof":
         for node in ast.parse((root / "setup.py").read_text(encoding="utf-8")).body:
             if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "DEVELOPMENT_MODULE_GLOBS":
                 filters = ast.literal_eval(node.value)
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "DECLARATION_ONLY_DATA_PACKAGES":
+                declaration_only = tuple(ast.literal_eval(node.value))
     packages = find_namespace_packages(str(root), include=finder.get("include", ["*"]), exclude=finder.get("exclude", []))
     data = config["tool"]["setuptools"].get("package-data", {})
     excluded = config["tool"]["setuptools"].get("exclude-package-data", {})
@@ -520,8 +523,19 @@ def expected_python_files(repo: Path, project: str = "woof") -> set[str]:
             if content and (".py" in content or content.split()[0] in {"graft", "prune"}):
                 selected.process_template_line(content)
         roots = tuple(package.replace(".", "/") + "/" for package in packages)
+        # setup.py's build_py hands no manifest member to a declaration-only
+        # package (the wheel's `docs` payload is its package-data, the sdist
+        # keeps its pages and examples), so for those packages the census is
+        # the declaration alone.  Measured on the 2.9.2 cut: the packet
+        # verifier expected docs/integration-kit/examples/*.py from
+        # MANIFEST.in's recursive-include while the wheel, built by that
+        # build_py, carried docs/mpas-seam.md only.
+        declared = {name for name in result
+                    if name.startswith(tuple(package + "/" for package in declaration_only))}
         result = {Path(name).as_posix() for name in selected.files
-                  if name.endswith(".py") and Path(name).as_posix().startswith(roots)}
+                  if name.endswith(".py") and Path(name).as_posix().startswith(roots)
+                  and not Path(name).as_posix().startswith(
+                      tuple(package + "/" for package in declaration_only))} | declared
     require(bool(result), "declared wheel Python inventory is empty")
     return result
 
@@ -533,7 +547,31 @@ def check_python_inventory(path: Path, repo: Path, project: str) -> None:
             f"wheel Python inventory differs from tagged source: missing={sorted(expected - set(sources))}, extra={sorted(set(sources) - expected)}")
 
 
-def check_embedded_natives(path: Path, pins: dict, platform: str | None) -> dict:
+def on_demand_artifacts(repo: Path) -> set[str]:
+    """Names the tagged woof/bridge_assets.py declares ``on_demand=True``.
+
+    They are in each platform bundle and its pins and are not in the platform
+    wheel; the first door that needs one stages it from the bundle. Read from
+    the tagged source rather than from the wheel under test, so a wheel cannot
+    excuse its own missing file.
+    """
+    path = repo / "woof/bridge_assets.py"
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        target = getattr(node, "target", None)
+        if not (isinstance(node, ast.AnnAssign) and getattr(target, "id", None) == "BUNDLED_ARTIFACTS"):
+            continue
+        calls = getattr(node.value, "elts", [])
+        require(bool(calls) and all(isinstance(call, ast.Call) and getattr(call.func, "id", None) == "BundledArtifact"
+                                    and call.args and isinstance(getattr(call.args[0], "value", None), str)
+                                    for call in calls), "BUNDLED_ARTIFACTS is not a literal roster of declarations")
+        return {call.args[0].value for call in calls
+                if any(keyword.arg == "on_demand" and getattr(keyword.value, "value", None) is True
+                       for keyword in call.keywords)}
+    raise PublicationError(f"no BUNDLED_ARTIFACTS declaration in {path}")
+
+
+def check_embedded_natives(path: Path, pins: dict, platform: str | None, on_demand: set[str]) -> dict:
+    """The platform wheel embeds the pinned bundle's binaries less the on-demand ones, byte for byte."""
     prefix = "woof/libexec/bridges/"
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
@@ -542,9 +580,14 @@ def check_embedded_natives(path: Path, pins: dict, platform: str | None) -> dict
         if platform is None:
             require(not held, "pure wheel contains embedded native artifacts")
             return {"platform": None, "artifacts": 0}
-        rows = pins["platforms"][platform]["binaries"]
+        pinned = pins["platforms"][platform]["binaries"]
+        _rows(pinned, "native bundle pins")
+        require(on_demand <= {row.get("artifact") for row in pinned},
+                "an on-demand native artifact is not pinned in the bundle, so no install can stage it")
+        rows = [row for row in pinned if row.get("artifact") not in on_demand]
         expected = _rows(rows, "native bundle pins")
-        require(held == set(expected) | {"BUNDLE.json"}, "embedded native inventory differs from the proven bundle")
+        require(held == set(expected) | {"BUNDLE.json"},
+                "embedded native inventory differs from the wheel-carried part of the proven bundle")
         document = json_bytes(archive.read(prefix + "BUNDLE.json"))
         require(document.get("schema") == "gpuwm-wheel-bridge-bundle-v1" and document.get("platform") == platform, "embedded native manifest has the wrong platform/schema")
         declared = _rows(document.get("artifacts"), "embedded native manifest")
@@ -634,7 +677,8 @@ def verify(args) -> None:
                 check_python_inventory(assets / row["filename"], repo, project)
                 if project == "woof":
                     platform = "win-x86_64" if row["filename"].endswith("-win_amd64.whl") else "linux-x86_64" if row["filename"].endswith("-manylinux_2_28_x86_64.whl") else None
-                    check_embedded_natives(assets / row["filename"], read_json(pins), platform)
+                    check_embedded_natives(assets / row["filename"], read_json(pins), platform,
+                                           on_demand_artifacts(repo))
     files = [assets / row["filename"] for project in PROJECTS for row in plan["pypi"][project]]
     checked_run([sys.executable, "-m", "twine", "check", "--strict", *map(str, files)], log=args.out / "twine-check.log")
     for row in plan["pypi"]["woof"]:
@@ -787,6 +831,19 @@ CI_WORKFLOW = "ci.yml"
 #: These events check out head_sha itself. A pull-request run checks out a
 #: synthetic merge commit, so its success cannot qualify the release commit.
 CI_CHECKOUT_EVENTS = frozenset({"push", "workflow_dispatch"})
+#: The ci.yml jobs that gate publication, by job name prefix and the number of
+#: matrix legs each must show (Project ruling, 2026-10-20: "if we have to wait more than
+#: 10 minutes then ... every update is days long"). These finish in about four
+#: minutes on hosted runners (run 39451218267: syntax 1 min, imports 1-3 min,
+#: static qualification 2-4 min) and keep Windows in the gate: the imports leg
+#: and the exact static qualification run on windows-2025. The cpu batteries
+#: (72 and 112 min), native (32 and 57 min) and oracles (28 and 53 min) keep
+#: running on every push and nightly but do not gate: the same batteries run
+#: locally before every push (Stage 1 on a Linux host, the local ci emulation
+#: with the Windows cpu job on the desktop, the win_amd64 wheel smoke), so
+#: GitHub's repeat of them gated nothing new and made each release wait hours.
+#: A red there is a defect for the next release.
+CI_GATE_JOBS = {"syntax": 1, "imports (": 2, "Static qualification (": 2}
 
 
 def _release_ci_runs(runs: list[dict], commit: str) -> list[dict]:
@@ -835,11 +892,38 @@ def judge_ci_runs(runs: list[dict], commit: str) -> tuple[str, str]:
     # check. The API returns the current attempt of each run id.
     latest = max(runs, key=_ci_attempt_order)
     identity = f"{CI_WORKFLOW} run {latest['id']} on {commit}"
+    if latest.get("status") == "completed" and latest.get("conclusion") == "success":
+        return "passed", f"{identity} succeeded"
+    jobs = latest.get("jobs")
+    if isinstance(jobs, list):
+        return _judge_gate_jobs(jobs, identity, latest.get("status") == "completed")
     if latest.get("status") != "completed":
         return "pending", f"{identity} has not finished"
-    if latest.get("conclusion") != "success":
-        return "refused", f"{identity} did not pass: {latest['id']}={latest.get('conclusion')}"
-    return "passed", f"{identity} succeeded"
+    return "refused", f"{identity} did not pass: {latest['id']}={latest.get('conclusion')}"
+
+
+def _judge_gate_jobs(jobs: list[dict], identity: str, completed: bool) -> tuple[str, str]:
+    """Judge one run attempt on its CI_GATE_JOBS alone; the other jobs report but do not gate.
+
+    A finished run that lacks a gate leg can never supply it, so it is refused, not waited on.
+    """
+    failed, waiting, missing = [], [], []
+    for prefix, legs in CI_GATE_JOBS.items():
+        rows = [job for job in jobs if isinstance(job, dict) and str(job.get("name", "")).startswith(prefix)]
+        if len(rows) < legs:
+            missing.append(f"{prefix.strip(' (')} ({len(rows)} of {legs} legs)")
+        for job in rows:
+            if job.get("status") != "completed":
+                waiting.append(str(job.get("name")))
+            elif job.get("conclusion") != "success":
+                failed.append(f"{job.get('name')}={job.get('conclusion')}")
+    if failed:
+        return "refused", f"{identity}: gate jobs did not pass: {', '.join(failed)}"
+    if missing and completed:
+        return "refused", f"{identity} finished without gate jobs: {', '.join(missing)}"
+    if waiting or missing:
+        return "pending", f"{identity}: gate jobs not finished: {', '.join(waiting + missing)}"
+    return "passed", f"{identity}: every gate job passed ({', '.join(CI_GATE_JOBS)}); other jobs do not gate"
 
 
 def _ci_workflow_runs(client: GitHub, commit: str) -> list[dict]:
@@ -851,12 +935,26 @@ def _ci_workflow_runs(client: GitHub, commit: str) -> list[dict]:
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows),
                 "GitHub workflow runs response has no valid run list")
         result.extend(rows)
-        if len(rows) < 100:
-            return result
         total = payload.get("total_count")
-        if type(total) is int and total <= len(result):
-            return result
+        if len(rows) < 100 or (type(total) is int and total <= len(result)):
+            return _with_gate_jobs(client, result, commit)
     raise PublicationError("CI run inventory exceeds the bounded pagination limit; cannot prove its latest release check")
+
+
+def _with_gate_jobs(client: GitHub, runs: list[dict], commit: str) -> list[dict]:
+    """Attach the latest release run's current-attempt jobs, so it can be judged on CI_GATE_JOBS before it ends."""
+    selected = _release_ci_runs(runs, commit)
+    if not selected:
+        return runs
+    latest = max(selected, key=_ci_attempt_order)
+    if latest.get("status") == "completed" and latest.get("conclusion") == "success":
+        return runs
+    payload = client.json(f"/actions/runs/{latest['id']}/attempts/{latest['run_attempt']}/jobs?per_page=100")
+    jobs = payload.get("jobs") if isinstance(payload, dict) else None
+    require(isinstance(jobs, list) and all(isinstance(job, dict) for job in jobs),
+            "GitHub jobs response for the latest CI run has no valid job list")
+    latest["jobs"] = jobs
+    return runs
 
 
 def ci_passed(args, *, sleep: Callable[[float], None] = time.sleep,

@@ -205,7 +205,7 @@ def main() -> int:
         print(json.dumps({"checked": len(generated), "status": "current"}))
         return 0
     paths = generate()
-    print(json.dumps([str(path.relative_to(ROOT)) for path in paths]))
+    print(json.dumps({"generated": len(paths)}))
     return 0
 
 

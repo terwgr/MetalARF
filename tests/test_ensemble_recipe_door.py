@@ -35,6 +35,12 @@ MEMBERS = "gefs_member_mesoscale_demo"       # gefs 2026-08-20T00, twelve hours
 RECIPE_FLAGS = ["--recipe", "time-lagged", "--members", "2"]
 
 
+def _prepared_in_roster_order(stages):
+    # Workers finish independently; receipts retain run and member order.
+    return sorted(stages.prepared,
+                  key=lambda row: (row["config"].parents[3].name, row["member"]))
+
+
 def experiment(domains=1, hours=1):
     return SimpleNamespace(start_time=START, run_seconds=3600.0 * hours, domains=(object(),) * domains,
                            vertical=SimpleNamespace(p_top=5000.0))
@@ -158,15 +164,31 @@ def stages(monkeypatch):
     """
     from woof import prepared_single_domain_forecast, regional_preparation, stage_cli
     from woof.ensemble import door as door_module
+    from woof.ensemble import canary
+    # Paid GPU launch is replaced in this CPU door fixture, like the
+    # forecast runner below. The artifact canary has separate GPU proofs.
+    class _Canaries:
+        def __init__(self, *unused, **kwargs):
+            self.bindings = {}
+        def watch(self, *unused, **kwargs):
+            return (lambda: None), (lambda: None)
+        def submit(self, binding):
+            self.bindings.setdefault(binding["source"], binding)
+            record.canaries.append(binding)
+        def close(self, **unused):
+            pass
+    monkeypatch.setattr(canary, "HeadCanaries", _Canaries)
 
-    record = SimpleNamespace(prepared=[], admitted=[], forecast=[], fail={},
+    record = SimpleNamespace(prepared=[], admitted=[], forecast=[], fail={}, canaries=[],
                              forecast_result=0, session=None, sim=[])
 
     def owner(plan, *, config_path, exp, observer, run_dir, prepare_only):
+        from woof.mapped_composition import _SHARED_COMPOSITION
         index = int(Path(run_dir).parent.name.rsplit("-", 1)[1])
         record.prepared.append({
             "member": index, "config": Path(config_path), "prepare_only": prepare_only,
             "run_options": dict(plan.run_options),
+            "composition_binding": _SHARED_COMPOSITION.get(),
             "fetch": tomllib.loads(Path(config_path).read_text(encoding="utf-8"))["fetch"]})
         if index in record.fail:
             raise record.fail[index]
@@ -591,15 +613,15 @@ def test_a_whole_recipe_run_records_every_member_and_completes(tmp_path, door, s
     assert [member["cycle"][:13] for member in receipt["members"]] == ["2026-08-20T00", "2026-08-19T23"]
     assert receipt["products"] == {"frames": 1}
     # Each member was prepared, prepare-only, from its own config in the run folder.
-    assert [row["member"] for row in stages.prepared] == [0, 1]
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 1]
     assert all(row["prepare_only"] for row in stages.prepared)
     # Compared by their parts: on Windows a deep output folder is handed to
     # the chain in its extended spelling.
-    assert [row["config"].parts[-5:] for row in stages.prepared] == [
+    assert [row["config"].parts[-5:] for row in _prepared_in_roster_order(stages)] == [
         (run.name, "members", f"member-{index:03d}", "source", "experiment.toml") for index in (0, 1)]
-    assert [row["fetch"]["cycle"] for row in stages.prepared] == ["2026-08-20T00", "2026-08-19T23"]
+    assert [row["fetch"]["cycle"] for row in _prepared_in_roster_order(stages)] == ["2026-08-20T00", "2026-08-19T23"]
     # One download cache per member's request, under the case folder.
-    caches = [Path(row["run_options"]["data_dir"]) for row in stages.prepared]
+    caches = [Path(row["run_options"]["data_dir"]) for row in _prepared_in_roster_order(stages)]
     assert len(set(caches)) == 2
     assert all(cache.parts[-3:-1] == ("out", "downloads") for cache in caches)
     # The gates were asked once, of both members, before the first preparation.
@@ -629,7 +651,7 @@ def test_nested_recipe_prepares_every_members_complete_tree_and_uses_tree_runner
     assert result.code == 0, result.text
     _run, receipt = _receipt(out)
     assert receipt["status"] == "complete"
-    assert [row["fetch"]["cycle"] for row in stages.prepared] == [
+    assert [row["fetch"]["cycle"] for row in _prepared_in_roster_order(stages)] == [
         "2026-08-20T00", "2026-08-19T23"]
     for row in stages.prepared:
         member = tomllib.loads(row["config"].read_text(encoding="utf-8"))
@@ -672,7 +694,7 @@ def test_surface_recipe_shares_one_unchanged_preparation_for_all_seeded_members(
     result = door("ensemble", config, "--outdir", tmp_path / "out", "--products", "none")
     assert result.code == 0, result.text
     _run, receipt = _receipt(tmp_path / "out")
-    assert [row["member"] for row in stages.prepared] == [0]
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0]
     assert len(receipt["members"]) == 4
     assert len({row["seed"] for row in receipt["members"]}) == 4
     assert len({row["prepared_root"] for row in receipt["members"]}) == 1
@@ -730,7 +752,7 @@ def test_surface_recipe_post_preparation_binds_inputs_before_real_session_constr
     assert result.code == 0, result.text
     _run, receipt = _receipt(tmp_path / "out")
     assert observed == [0, 1]
-    assert [row["member"] for row in stages.prepared] == [0]
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0]
     assert len({row["prepared_root"] for row in receipt["members"]}) == 1
     assert len({row["seed"] for row in receipt["members"]}) == 2
     assert receipt["members"][1]["preparation_reused_from_member"] == 0
@@ -757,6 +779,30 @@ def test_named_roster_binds_actual_two_domain_four_and_six_layer_configurations(
         assert plan.variant_name == recipe.member_variants[plan.member.index]["name"]
 
 
+def test_named_physics_roster_plans_original_suites_on_every_domain(tmp_path):
+    from woof.ensemble.door import request_for_config
+    config = _roster_case(tmp_path, variants=[{"name": "control"},
+        {"name": "other", "physics": {"mp_physics": 8, "bl_pbl_physics": 1,
+            "sf_sfclay_physics": 1, "sf_surface_physics": 2, "num_soil_layers": 4,
+            "ra_physics": 0, "ra_lw_physics": 1, "ra_sw_physics": 1,
+            "wrf_rrtmg_compatibility": "none"}}])
+    recipe, plans = _reviewed(config, request_for_config(config), tmp_path / "review")
+    assert len(plans) == 2
+    assert plans[0].preparation_key != plans[1].preparation_key
+    assert plans[0].source_key == plans[1].source_key
+    for domain in plans[1].experiment.domains:
+        assert (domain.run.mp_physics, domain.run.bl_pbl_physics,
+                domain.run.sf_surface_physics, domain.run.ra_lw_physics) == (8, 1, 2, 1)
+
+
+def test_named_physics_roster_retains_single_run_invalid_selector_refusal(tmp_path):
+    from woof.ensemble.door import request_for_config
+    config = _roster_case(tmp_path, variants=[{"name": "control"},
+        {"name": "invalid", "physics": {"mp_physics": 999}}])
+    with pytest.raises(ValueError, match="mp_physics"):
+        _reviewed(config, request_for_config(config), tmp_path / "review")
+
+
 def test_named_roster_prepares_two_banks_and_shares_one_source_acquisition(
         tmp_path, door, stages, monkeypatch):
     from woof import prepared_domain_tree_forecast, stage_cli
@@ -768,11 +814,17 @@ def test_named_roster_prepares_two_banks_and_shares_one_source_acquisition(
     result = door("ensemble", config, "--outdir", tmp_path / "out", "--products", "none")
     assert result.code == 0, result.text
     _run, receipt = _receipt(tmp_path / "out")
-    assert [row["member"] for row in stages.prepared] == [0, 6]
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 6]
     assert len({row["run_options"]["data_dir"] for row in stages.prepared}) == 1
     assert len({row["prepared_root"] for row in receipt["members"][:6]}) == 1
     assert len({row["prepared_root"] for row in receipt["members"][6:]}) == 1
     assert receipt["members"][0]["prepared_root"] != receipt["members"][6]["prepared_root"]
+    assert receipt["members"][0]["source_binding_sha256"] == receipt["members"][6]["source_binding_sha256"]
+    assert receipt["members"][0]["physics_tail_sha256"] != receipt["members"][6]["physics_tail_sha256"]
+    assert stages.prepared[0]["composition_binding"] == stages.prepared[1]["composition_binding"]
+    source_key, bank_root = stages.prepared[0]["composition_binding"]
+    assert source_key == receipt["members"][0]["source_binding_sha256"]
+    assert not bank_root.exists()
     assert [row["variant"]["name"] for row in receipt["members"]] == [
         item["name"] for item in receipt["request"]["member_variants"]]
     assert stages.session.request.member_device_ids == (0, 1, 2, 3)
@@ -783,6 +835,35 @@ def test_named_roster_prepares_two_banks_and_shares_one_source_acquisition(
     assert provider(shared_inputs=shared, member_id=2, request=stages.session.request) is shared
     assert provider(shared_inputs=shared, member_id=8, request=stages.session.request) == "noah"
     assert bound[0]["prepared_root"] == receipt["members"][6]["prepared_root"]
+
+
+def test_shared_composition_admission_prices_retained_source_once_per_source(tmp_path, monkeypatch):
+    from woof import disk_budget
+    from woof.ensemble.door import request_for_config
+
+    gib = 2 ** 30
+    config = _roster_case(tmp_path)
+    request = request_for_config(config)
+    _recipe, plans = _reviewed(config, request, tmp_path / "review")
+    seen = []
+    monkeypatch.setattr(disk_budget, "projected_run_bytes", lambda *a, **k: {
+        "download_bytes": 10 * gib, "preparation_bytes": gib, "history_bytes": 0,
+        "compose_scratch_bytes": 3 * gib, "compose_scratch_min_bytes": 3 * gib,
+        "compose_scratch": {}, "download": {"basis": "fixture"}})
+    monkeypatch.setattr(disk_budget, "free_bytes", lambda *a: 2 ** 60)
+    monkeypatch.setattr(disk_budget, "disk_refusal", lambda projection, *a, **k: seen.append(projection))
+    assert recipe_door.disk_refusal(plans, case_root=tmp_path / "out", request=request) is None
+    assert seen[0]["preparation_bytes"] == 5 * gib  # Two prepared tails plus one retained stream.
+    assert seen[0]["download_bytes"] == 10 * gib
+
+
+def test_single_tail_sources_do_not_retain_roster_frame_banks(tmp_path, door, stages):
+    result = door("ensemble", _case(tmp_path), *RECIPE_FLAGS, "--outdir", tmp_path / "out")
+    assert result.code == 0, result.text
+    assert len(stages.prepared) == 2
+    bindings = [row["composition_binding"] for row in _prepared_in_roster_order(stages)]
+    assert all(binding[1] is None for binding in bindings)
+    assert bindings[0][0] != bindings[1][0]
 
 
 def test_named_roster_refuses_effectively_identical_loaded_member_states_before_fetch(
@@ -824,7 +905,11 @@ def test_named_roster_post_preparation_binds_every_input_before_real_session_con
         session = current_session()
         assert isinstance(session, production.PreparedEnsembleSession)
         assert callable(session.input_provider)
-        shared = SimpleNamespace(experiment=load_experiment(stages.prepared[0]["config"]),
+        # Member 0 is the base the runner preflighted.  stages.prepared is in
+        # worker completion order: under load member 6's worker records first,
+        # and its Noah config became the RUC members' shared inputs.
+        base = next(row for row in stages.prepared if row["member"] == 0)
+        shared = SimpleNamespace(experiment=load_experiment(base["config"]),
                                  authority={"prepared_root": "ordinary-base"})
         for member in range(8):
             inputs = session.input_provider(shared_inputs=shared, member_id=member, request=session.request)
@@ -840,7 +925,7 @@ def test_named_roster_post_preparation_binds_every_input_before_real_session_con
     monkeypatch.setattr(production.PreparedEnsembleSession, "completed_products", lambda self: {"frames": 1})
     result = door(command, config, "--outdir", tmp_path / "out")
     assert result.code == 0, result.text
-    assert [row["member"] for row in stages.prepared] == [0, 6]
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 6]
     assert len({row["run_options"]["data_dir"] for row in stages.prepared}) == 1
     assert [member for member, _ in member_rows] == list(range(8))
     assert all(inputs is member_rows[0][1] for _, inputs in member_rows[:6])
@@ -929,7 +1014,7 @@ def test_cycle_flag_retimes_the_roster_the_door_plans(tmp_path, door, stages):
     # The real run prepares the re-timed members, not the config's own.
     result = door("ensemble", config, *RECIPE_FLAGS, "--cycle", "2026-08-21T06", "--outdir", out)
     assert result.code == 0, result.text
-    assert [row["fetch"]["cycle"] for row in stages.prepared] == ["2026-08-21T06", "2026-08-21T05"]
+    assert [row["fetch"]["cycle"] for row in _prepared_in_roster_order(stages)] == ["2026-08-21T06", "2026-08-21T05"]
     refused = door("ensemble", config, *RECIPE_FLAGS, "--cycle", "not-a-cycle", "--dry-run")
     assert refused.code == 2 and "not-a-cycle" in refused.err
 
@@ -947,7 +1032,7 @@ def test_posting_and_host_flags_reach_every_members_fetch(tmp_path, door, stages
     stages.prepared.clear()
     result = door("go", config, *RECIPE_FLAGS, "--outdir", tmp_path / "out2", "--late-after-minutes", "7")
     assert result.code == 0, result.text
-    assert [row["run_options"].get("late_after_minutes") for row in stages.prepared] == [7.0, 7.0]
+    assert [row["run_options"].get("late_after_minutes") for row in _prepared_in_roster_order(stages)] == [7.0, 7.0]
     assert all("transport" not in row["run_options"] and "as_posted" not in row["run_options"]
                for row in stages.prepared)
 
@@ -983,21 +1068,47 @@ def test_no_probe_still_belongs_to_readiness_on_the_recipe_route(tmp_path, door,
     assert result.code == 2 and "--no-probe belongs to --readiness" in result.err
 
 
-def test_recipe_consumes_checkpoint_retention_for_its_original_member_writers(tmp_path, door, stages, monkeypatch):
+@pytest.mark.parametrize("inherited, flags, expected", [
+    (None, [], "1"), ("7", [], "7"),
+    ("7", ["--keep-checkpoints", "2"], "2"),
+    (None, ["--keep-checkpoints", "0"], "0"),
+])
+def test_recipe_consumes_checkpoint_retention_for_its_original_member_writers(
+        tmp_path, door, stages, monkeypatch, inherited, flags, expected):
     import os
     from woof.ensemble import recipe_door
     from woof.resume import KEEP_CHECKPOINTS_ENV
     original, seen = recipe_door.run_recipe_ensemble, []
-    monkeypatch.setenv(KEEP_CHECKPOINTS_ENV, "7")
+    if inherited is None:
+        monkeypatch.delenv(KEEP_CHECKPOINTS_ENV, raising=False)
+    else:
+        monkeypatch.setenv(KEEP_CHECKPOINTS_ENV, inherited)
     def record(*args, **kwargs):
         seen.append(os.environ[KEEP_CHECKPOINTS_ENV])
         return original(*args, **kwargs)
     monkeypatch.setattr(recipe_door, "run_recipe_ensemble", record)
     result = door("go", _case(tmp_path), *RECIPE_FLAGS, "--outdir", tmp_path / "out",
-                  "--products", "none", "--keep-checkpoints", "2")
+                  "--products", "none", *flags)
     assert result.code == 0, result.text
-    assert seen == ["2"]
-    assert os.environ[KEEP_CHECKPOINTS_ENV] == "7"
+    assert seen == [expected]
+    assert os.environ.get(KEEP_CHECKPOINTS_ENV) == inherited
+
+
+def test_resumed_recipe_inherits_the_same_default_checkpoint_retention(
+        tmp_path, door, stages, monkeypatch):
+    from woof.ensemble import restart_roster
+    from woof.resume import KEEP_CHECKPOINTS_ENV
+    monkeypatch.delenv(KEEP_CHECKPOINTS_ENV, raising=False)
+    seen = []
+    def resume(*args, **kwargs):
+        seen.append(os.environ.get(KEEP_CHECKPOINTS_ENV))
+        return 0
+    monkeypatch.setattr(restart_roster, "resume_prepared_roster", resume)
+    result = door("go", _case(tmp_path), *RECIPE_FLAGS,
+                  "--restart-roster", tmp_path / "ensemble-restart.json")
+    assert result.code == 0, result.text
+    assert seen == ["1"]
+    assert KEEP_CHECKPOINTS_ENV not in os.environ
 
 
 # ---- woof run: unsupervised, and its supervision flags ---------------------------
@@ -1127,6 +1238,62 @@ def test_a_forecast_failure_is_one_line_and_a_failed_receipt(outcome, code, tmp_
 
 
 # ---- forecast failures over the real ensemble session ------------------------------
+
+@pytest.mark.parametrize("outcome", [2, RuntimeError("forecast failed"), SystemExit(130)])
+def test_forecast_failure_reuses_prepared_members_on_relaunch(tmp_path, door, stages, outcome):
+    config = _case(tmp_path)
+    out = tmp_path / "out"
+    stages.forecast_result = outcome
+    if isinstance(outcome, SystemExit):
+        with pytest.raises(SystemExit):
+            door("go", config, *RECIPE_FLAGS, "--outdir", out, "--products", "none")
+    else:
+        first = door("go", config, *RECIPE_FLAGS, "--outdir", out, "--products", "none")
+        assert first.code != 0
+    run, receipt = _receipt(out)
+    assert receipt["preparation_status"] == "ready"
+    assert receipt["failure"]["stage"] == "forecast"
+    stages.forecast_result = 0
+    second = door("go", config, *RECIPE_FLAGS, "--outdir", out, "--products", "none")
+    assert second.code == 0, second.text
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 1]
+    runs = sorted(out.glob("run-*"))
+    assert len(runs) == 2
+    relaunched = json.loads((runs[-1] / recipe_door.RECEIPT_NAME).read_text())
+    assert relaunched["status"] == "complete"
+    assert [row["preparation_reused_from_run"] for row in relaunched["members"]] == [str(run)] * 2
+    # An ordinary request retains its clock. The fixed-clock source-head
+    # diagnostic is supplied only by a qualified orchestration caller.
+    assert not stages.canaries
+
+
+def test_relaunch_does_not_reuse_changed_preparation_context(tmp_path, door, stages, monkeypatch):
+    config = _case(tmp_path)
+    out = tmp_path / "out"
+    stages.forecast_result = 2
+    first = door("go", config, *RECIPE_FLAGS, "--outdir", out)
+    assert first.code == 2
+    monkeypatch.setattr(recipe_door, "_preparation_context_sha256", lambda *args: "changed-code-or-inputs")
+    stages.forecast_result = 0
+    second = door("go", config, *RECIPE_FLAGS, "--outdir", out)
+    assert second.code == 0, second.text
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 1, 0, 1]
+
+
+def test_relaunch_into_explicit_failed_run_uses_new_forecast_directory(tmp_path, door, stages):
+    config = _case(tmp_path)
+    out = tmp_path / "out"
+    stages.forecast_result = 2
+    assert door("go", config, *RECIPE_FLAGS, "--outdir", out).code == 2
+    run, _ = _receipt(out)
+    (run / "run").mkdir()
+    (run / "run" / "ensemble-run.json").write_text('{"status":"failed"}')
+    stages.forecast_result = 0
+    second = door("go", config, *RECIPE_FLAGS, "--outdir", run)
+    assert second.code == 0, second.text
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 1]
+    assert stages.sim[-1]["outdir"] == run / "forecast-attempts" / "run-001"
+    assert (run / "run" / "ensemble-run.json").read_text() == '{"status":"failed"}'
 
 class _Collector:
     """The aggregate product owner, without a renderer: these runs never finish."""
@@ -1323,7 +1490,7 @@ def _admit_arguments(tmp_path, monkeypatch, *, members=2, free=None):
     monkeypatch.setattr(go_cli, "memory_gate", lambda plan, experiment=None: asked.append(
         ("memory", plan["source"], Path(plan["config"]).is_file())) or {
             "verdict": "fits", "refuse": False, "warn": False})
-    monkeypatch.setattr(go_cli, "geography_refusal", lambda root: asked.append(("geography", root)))
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda root, **kw: asked.append(("geography", root, kw.get("config"))))
     monkeypatch.setattr(rustwx, "find_renderer", lambda: asked.append(("renderer",)) or Path("rw_wrfbatch"))
     monkeypatch.setattr(go_cli, "admit_render_products",
                         lambda spec, section=None: asked.append(("products", spec)))
@@ -1337,11 +1504,12 @@ def _admit_arguments(tmp_path, monkeypatch, *, members=2, free=None):
 def test_the_gates_are_asked_in_the_ordinary_doors_order(tmp_path, monkeypatch):
     plans, arguments, asked = _admit_arguments(tmp_path, monkeypatch)
     recipe_door.admit(plans, **arguments)
-    assert [row[0] for row in asked] == ["install", "device", "memory", "geography", "renderer", "products"]
+    assert [row[0] for row in asked] == ["install", "device", "memory", "geography", "geography", "renderer", "products"]
     assert asked[0] == ("install", "woof ensemble")
     # The memory gate is asked once per source, of that member's own reviewed config.
     assert asked[2] == ("memory", "hrrr", True)
-    assert asked[3] == ("geography", tmp_path / "GEOG") and asked[5] == ("products", "refl")
+    assert asked[3:5] == [("geography", tmp_path / "GEOG", plan.config) for plan in plans]
+    assert asked[6] == ("products", "refl")
     assert not (tmp_path / "out").exists()
     asked.clear()
     recipe_door.admit(plans, **{**arguments, "options": {"no_memory_gate": True}})
@@ -1366,7 +1534,7 @@ def test_each_gate_refuses_before_the_run_folder_is_claimed(gate, words, tmp_pat
         "device": (go_cli, "_require_forecast_device", lambda: None),
         "memory": (go_cli, "memory_gate", lambda plan, experiment=None: {
             "verdict": "fits", "refuse": False, "warn": False}),
-        "geography": (go_cli, "geography_refusal", lambda root: None),
+        "geography": (go_cli, "geography_refusal", lambda root, **_: None),
         "renderer": (rustwx, "find_renderer", lambda: Path("rw_wrfbatch")),
         "products": (go_cli, "admit_render_products", lambda spec, section=None: None),
         "disk": (disk_budget, "free_bytes", lambda path: 2 ** 60)}
@@ -1375,7 +1543,7 @@ def test_each_gate_refuses_before_the_run_folder_is_claimed(gate, words, tmp_pat
             f"{door}: this command needs cupy", requirement=capabilities.GPU_RUNTIME, command=door)),
         "device": lambda: (_ for _ in ()).throw(go_cli.GoRefusal("GPU readiness is missing: no card")),
         "memory": lambda plan, experiment=None: {"verdict": "over", "refuse": True, "warn": False},
-        "geography": lambda root: "the staged WPS_GEOG tree is not usable",
+        "geography": lambda root, **_: "the staged WPS_GEOG tree is not usable",
         "renderer": lambda: None,
         "products": lambda spec, section=None: (_ for _ in ()).throw(go_cli.GoRefusal(
             "--products names 'bogus', which the renderer's catalog does not carry")),
@@ -1564,10 +1732,9 @@ def test_recipes_pass_the_calibration_check_on_every_door(table, tmp_path):
 
 @pytest.mark.parametrize("table", ['[ensemble]\nmembers=2\nrecipe="time-lagged"\n', MULTI_TOML],
                          ids=["time-lagged", "multi-model"])
-def test_a_recipe_does_not_admit_random_perturbations(table):
-    with pytest.raises(ValueError) as caught:
-        request_for_payload((table + "[ensemble.stochastic]\nsppt=true\n").encode())
-    assert str(caught.value) == UNCALIBRATED_SPREAD_REASON
+def test_a_recipe_can_add_connected_stochastic_physics(table):
+    request = request_for_payload((table + "[ensemble.stochastic]\nsppt=true\n").encode())
+    assert request.stochastic == {"sppt": True}
 
 
 def _guarded(argv):
@@ -1600,13 +1767,12 @@ def test_real_entry_point_admits_a_recipe_past_the_calibration_check(command, re
 
 
 @pytest.mark.parametrize("command", ["ensemble", "go", "run"])
-def test_real_entry_point_still_refuses_random_spread_beside_a_recipe(command, tmp_path):
+def test_real_entry_point_admits_connected_random_spread_beside_a_recipe(command, tmp_path):
     config = tmp_path / "case.toml"
     config.write_text('[ensemble]\nmembers=2\nrecipe="time-lagged"\n[ensemble.stochastic]\nsppt=true\n')
     argv = [command, str(config)] + (["--outdir", str(tmp_path / "out")] if command == "run" else [])
     result = _guarded(argv)
-    assert "GUARD_EVENTS=[]" in result.stdout, result.stdout + result.stderr
-    assert result.returncode == 2 and UNCALIBRATED_SPREAD_REASON in result.stderr
+    assert 'GUARD_EVENTS=["process spawn"]' in result.stdout, result.stdout + result.stderr
 
 
 def test_planning_command_takes_the_multi_model_list(tmp_path, capsys):
@@ -1659,3 +1825,104 @@ def test_native_hrrr_preparation_binds_every_name_it_calls():
               if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
     assert "supplement_bindings" in called
     assert sorted(called - local - module_names) == []
+
+
+def test_prepare_only_prepares_every_member_and_the_forecast_launch_reuses_them(tmp_path, door, stages, monkeypatch):
+    """``go --prepare-only`` on the recipe route prepares the whole roster, no forecast.
+
+    Breakage it prevents: the flag went to the single-trajectory prepare-only
+    launch, which prepared member 0 alone and exited 0, so the roster's cards
+    idled through every member's preparation inside the forecast hold.
+    """
+    config = _case(tmp_path)
+    out = tmp_path / "out"
+    from woof import go_cli
+    single = []
+    monkeypatch.setattr(go_cli, "_prepare_only_launch", lambda *a, **k: single.append(True) or 0)
+    result = door("go", config, *RECIPE_FLAGS, "--outdir", out, "--prepare-only")
+    assert result.code == 0, result.text
+    assert single == [], "roster prepare-only bypassed the member route"
+    run, receipt = _receipt(out)
+    assert receipt["status"] == "prepared"
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 1]
+    assert stages.forecast == []
+    assert receipt["preparation_status"] == "ready"
+    assert len(receipt["members"]) == 2
+    # The forecast launch into the same run folder prepares nothing again.
+    result = door("go", config, *RECIPE_FLAGS, "--outdir", run, "--products", "none")
+    assert result.code == 0, result.text
+    assert [row["member"] for row in _prepared_in_roster_order(stages)] == [0, 1]
+    assert len(stages.forecast) == 1
+    assert "reuses its ready preparation" in result.text
+    _, receipt = _receipt(out)
+    assert receipt["status"] == "complete"
+
+
+def test_prepare_only_admission_needs_geography_and_disk_but_no_forecast_device(tmp_path, monkeypatch):
+    from woof import capabilities, go_cli, rustwx
+    def forecast_gate(*a, **k):
+        pytest.fail("prepare-only reached a forecast GPU or renderer gate")
+    monkeypatch.setattr(capabilities, "require", forecast_gate)
+    monkeypatch.setattr(go_cli, "_require_forecast_device", forecast_gate)
+    monkeypatch.setattr(go_cli, "memory_gate", forecast_gate)
+    monkeypatch.setattr(rustwx, "find_renderer", forecast_gate)
+    geography = []
+    disk = []
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda root, **_: geography.append(root))
+    monkeypatch.setattr(recipe_door, "disk_refusal", lambda *a, **k: disk.append(k))
+    recipe_door.admit([], config=tmp_path / "case.toml", geog_root=tmp_path,
+                      case_root=tmp_path, request=None, options={"prepare_only": True})
+    assert geography == [tmp_path] and len(disk) == 1
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda root, **_: "geography is missing")
+    with pytest.raises(recipe_door.RecipeRefusal, match="geography is missing"):
+        recipe_door.admit([], config=tmp_path / "case.toml", geog_root=tmp_path,
+                          case_root=tmp_path, request=None, options={"prepare_only": True})
+
+
+def test_member_preparations_overlap_with_independent_source_authorities(tmp_path, door, stages, monkeypatch):
+    from threading import Barrier
+    barrier = Barrier(2)
+    original = recipe_door.prepare_member
+    def prepare(*args, **kwargs):
+        barrier.wait(timeout=5)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(recipe_door, "prepare_member", prepare)
+    monkeypatch.setattr(os, "sched_getaffinity", lambda _: {0, 1}, raising=False)
+    # Two cores and ample host memory: a 16 GB CI runner admits one member
+    # preparation at a time by memory, which is the admission working, not
+    # the overlap this test is about.
+    from woof.ingest import preparation_workers
+    monkeypatch.setattr(preparation_workers, "host_available_bytes", lambda *a, **k: 1 << 40)
+    out = tmp_path / "out"
+    result = door("ensemble", _case(tmp_path), *RECIPE_FLAGS, "--outdir", out, "--prepare-only")
+    assert result.code == 0, result.text
+    _, receipt = _receipt(out)
+    assert receipt["preparation_execution"]["workers"] == 2
+    assert len({row["prepared_root"] for row in receipt["members"]}) == 2
+    assert [row["member_id"] for row in receipt["members"]] == [0, 1]
+
+
+def test_disk_admission_prices_the_hydro_preparation_before_building_it(tmp_path, monkeypatch):
+    """The default-on hydro preparation is priced into the members' disk admission and
+    built only after it passes. Breakage it prevents: the 4-member WoFS ensemble on a 16 GB card
+    spent 369 s on hydro sources and 276 s on initial water, then this admission refused
+    the run and said nothing was spent."""
+    from woof import disk_budget
+    from woof.hydro import runtime
+
+    gib = 2 ** 30
+    monkeypatch.setattr(disk_budget, "projected_run_bytes", lambda *args, **kwargs: {
+        "download_bytes": 10 * gib, "preparation_bytes": gib, "history_bytes": 2 * gib,
+        "compose_scratch_bytes": 0, "compose_scratch_min_bytes": 0, "compose_scratch": {},
+        "download": {"basis": "measured"}})
+    config = _case(tmp_path)
+    request = EnsembleRequest(2, recipe="time-lagged")
+    _recipe, plans = _reviewed(config, request, tmp_path / "scratch")
+    monkeypatch.setattr(disk_budget, "free_bytes", lambda path: 24 * gib)
+    monkeypatch.setattr(runtime, "hydro_disk_estimate", lambda config, args=None: (0, None))
+    assert recipe_door.disk_refusal(plans, case_root=tmp_path / "out", request=request) is None
+    monkeypatch.setattr(runtime, "hydro_disk_estimate", lambda config, args=None: (
+        5 * gib, "hydro preparation about 5.0 GiB over 65 square degrees"))
+    refusal = recipe_door.disk_refusal(plans, case_root=tmp_path / "out", request=request)
+    assert refusal is not None and "hydro preparation about 5.0 GiB" in refusal
+    assert "Refused before the first download and before the hydro preparation" in refusal

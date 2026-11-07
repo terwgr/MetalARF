@@ -48,8 +48,15 @@ def _vector(dataset, name: str, path: Path) -> np.ndarray:
     return value
 
 
-def read_wrfinput_identity(path) -> WrfinputIdentity:
-    """Read and check dimensions, representation, record time and vertical grid."""
+def read_wrfinput_identity(path, *, restart: bool = False) -> WrfinputIdentity:
+    """Read and check dimensions, representation, record time and vertical grid.
+
+    ``restart`` reads a WRF-written restart file (``FLAG_RESTART = 1``):
+    its ``Times`` record is the restart instant, which lies after the
+    ``START_DATE`` of the simulation it continues, so the record must not
+    precede that start rather than equal it.  ``start_time`` is then the
+    restart instant.
+    """
     path = Path(path)
     with netcdf_bridge.open_dataset(path) as dataset:
         dimensions = {name: len(dim) for name, dim in dataset.dimensions.items()}
@@ -92,10 +99,33 @@ def read_wrfinput_identity(path) -> WrfinputIdentity:
             start = datetime.strptime(record, "%Y-%m-%d_%H:%M:%S")
         except ValueError:
             raise ValueError(f"{path}: invalid Times record {record!r}") from None
-        if record != str(attributes["START_DATE"]):
+        if restart:
+            try:
+                simulation_start = datetime.strptime(
+                    str(attributes["START_DATE"]).strip(), "%Y-%m-%d_%H:%M:%S")
+            except ValueError:
+                raise ValueError(
+                    f"{path}: invalid START_DATE {attributes['START_DATE']!r}") from None
+            if start < simulation_start:
+                raise ValueError(
+                    f"{path}: restart Times {record} precedes the simulation "
+                    f"START_DATE {attributes['START_DATE']}")
+        elif record != str(attributes["START_DATE"]):
             raise ValueError(f"{path}: Times {record} differs from START_DATE {attributes['START_DATE']}")
     return WrfinputIdentity(path, MappingProxyType(dimensions),
                             MappingProxyType(attributes), tuple(eta), float(top[0]), start)
+
+
+def written_etac(vertical) -> float:
+    """The ETAC header WRF writes for this vertical coordinate.
+
+    WRF's output header writes ``etac = 0.`` whenever ``hybrid_opt = 0``
+    (share/output_wrf.F:214-217), whatever the namelist's etac, because the
+    terrain-following coordinate never reads it.  Comparing the namelist's
+    0.2 with that 0. refused every hybrid_opt = 0 real.exe pair (37 runs of
+    the 2026-10-07 combo sweep).
+    """
+    return 0.0 if int(vertical.hybrid_opt) == 0 else float(vertical.etac)
 
 
 def check_wrfinput_identity(identity: WrfinputIdentity, *, domain, vertical,
@@ -122,7 +152,7 @@ def check_wrfinput_identity(identity: WrfinputIdentity, *, domain, vertical,
                    for name, found, wanted in pairs if found != wanted]
     for name, found, wanted, tolerance in (
             ("P_TOP", identity.p_top, vertical.p_top, 1e-3),
-            ("ETAC", attributes["ETAC"], vertical.etac, 1e-7),
+            ("ETAC", attributes["ETAC"], written_etac(vertical), 1e-7),
             ("DX", attributes["DX"], cfg.dx, 1e-3),
             ("DY", attributes["DY"], cfg.dy, 1e-3)):
         if not np.isfinite(float(found)) or not np.isclose(

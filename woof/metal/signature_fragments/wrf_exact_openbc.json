@@ -1,0 +1,562 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/openbc.cu",
+      "cuda_symbol": "open_u_radiative",
+      "layout_version": 1,
+      "module": "wrf_exact_openbc",
+      "name": "wrf_exact_open_u_radiative",
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "cb",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "ru_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ru_t": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_openbc.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/openbc.cu",
+      "cuda_symbol": "open_v_radiative",
+      "layout_version": 1,
+      "module": "wrf_exact_openbc",
+      "name": "wrf_exact_open_v_radiative",
+      "parameters": [
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "cb",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "rv_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rv_t": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_openbc.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "layout_version": 1,
+      "module": "wrf_exact_openbc",
+      "name": "wrf_exact_open_zero_gradient_x",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_openbc.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "layout_version": 1,
+      "module": "wrf_exact_openbc",
+      "name": "wrf_exact_open_zero_gradient_y",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_openbc.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "layout_version": 1,
+      "module": "wrf_exact_openbc",
+      "name": "wrf_exact_open_zero_gradient_scalar_x",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_openbc.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "layout_version": 1,
+      "module": "wrf_exact_openbc",
+      "name": "wrf_exact_open_zero_gradient_scalar_y",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_openbc.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -1,13 +1,12 @@
 #ifndef WOOF_SOFT_GFK_POW_METALH
 #define WOOF_SOFT_GFK_POW_METALH
 
-// Dependency-blocked source proposal for glibc 2.39 e_powf.c.
+// Source-ordered translation of glibc 2.39 e_powf.c.
 //
 // This header deliberately implements no native float/double arithmetic.
 // Binary64 operands and results are IEEE bit patterns in ulong, operated on
-// by the integer-bit soft64 primitives. It is not production-consumable yet:
-// its soft32, soft64, and exp-owned dependencies are present but unverified,
-// as is this source translation.
+// by the integer-bit soft64 primitives. Consumer-specific comparisons are
+// required; bounded verification does not establish exhaustive parity.
 //
 // External interfaces are supplied by soft_binary32.metalh,
 // soft_binary64.metalh, and soft_gfk_exp.metalh. The exp2 interface remains

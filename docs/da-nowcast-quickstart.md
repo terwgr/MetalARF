@@ -36,7 +36,7 @@ CPU input preparation is described in [CPU preparation](public/CPU-PREPARATION.m
 
 Python 3.11 or newer, network access for public data, and enough device and
 host memory for the selected case. CUDA runs need the matching CUDA/CuPy extra;
-Metal runs use the platform wheel without CuPy. See [Backends](public/BACKENDS.md)
+Metal runs use the MetalARF clone install, without CuPy. See [Backends](public/BACKENDS.md)
 for the install commands and feature limits.
 
 ### Install

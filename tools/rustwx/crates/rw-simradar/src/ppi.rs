@@ -6,6 +6,7 @@ use rw_wrfbatch::{
     panel::{PanelRequest, render_panel},
     scales,
 };
+use rayon::prelude::*;
 use std::path::Path;
 
 const EARTH_M: f64 = 6_371_000.0;
@@ -206,27 +207,46 @@ pub fn render_labeled(
     label: &str,
     range_limit_m: Option<f64>,
 ) -> Result<Vec<Image>, String> {
+    render_labeled_with_scales(root,domain,generation,volume,tilt_count,width,height,label,range_limit_m,&[])
+}
+
+/// Evidence panels may share an expanded scale when finite C/X values exceed
+/// the ordinary display range. Empty overrides preserve product image bytes.
+pub fn render_labeled_with_scales(
+    root: &Path, domain: &str, generation: &str, volume: &RadarVolume,
+    tilt_count: usize, width: u32, height: u32, label: &str,
+    range_limit_m: Option<f64>, overrides: &[(&str,f64,f64)],
+) -> Result<Vec<Image>, String> {
     let lat = f64::from(volume.site.latitude_deg.ok_or("radar lacks latitude")?);
     let lon = f64::from(volume.site.longitude_deg.ok_or("radar lacks longitude")?);
     let stem = volume.volume_time.format("%Y%m%dT%H%M%SZ").to_string();
-    let mut images = Vec::new();
     let mut tilts: Vec<f32> = volume.cuts.iter().map(|c| c.elevation_deg).collect();
     tilts.sort_by(f32::total_cmp);
     tilts.dedup_by(|a, b| (*a - *b).abs() < 0.01);
     tilts.truncate(tilt_count);
     // Display resolution changes only the image, never the volume gate data.
     let n = width.max(height).clamp(256, 1000) as usize;
-    for (tilt_index, &elevation) in tilts.iter().enumerate() {
-        for &field in PPI_FIELDS {
+    // Every (tilt, field) image is sampled and drawn at once; the images
+    // keep the serial order (tilt, then PPI_FIELDS order).
+    let jobs: Vec<(usize, f32, &str)> = tilts
+        .iter()
+        .enumerate()
+        .flat_map(|(tilt_index, &elevation)| {
+            PPI_FIELDS.iter().map(move |&field| (tilt_index, elevation, field))
+        })
+        .collect();
+    let drawn_images = jobs
+        .into_par_iter()
+        .map(|(tilt_index, elevation, field)| -> Result<Option<Image>, String> {
             let drawn = drawn_field(field);
             let (moment, units) = (drawn.moment, drawn.units);
             let Some((sweep_index, cut)) = volume.cuts.iter().enumerate().find(|(_, c)| {
                 (c.elevation_deg - elevation).abs() < 0.01 && c.moments.contains_key(&moment)
             }) else {
-                continue;
+                return Ok(None);
             };
             let Some(sampled) = Sampled::new(cut, &moment) else {
-                continue;
+                return Ok(None);
             };
             let grid = sampled.grid;
             // A dual-pol moment with no reflectivity in its cut has no echo
@@ -234,7 +254,7 @@ pub fn render_labeled(
             let echo = if drawn.echo_masked {
                 match Sampled::new(cut, &MomentType::Reflectivity) {
                     Some(echo) => Some(echo),
-                    None => continue,
+                    None => return Ok(None),
                 }
             } else {
                 None
@@ -244,30 +264,35 @@ pub fn render_labeled(
                 + f64::from(grid.gate_range.gate_spacing_m)
                     * (grid.gate_range.gate_count - 1) as f64;
             let range = range_limit_m.map(|limit| range.min(limit)).unwrap_or(range);
-            let mut lats = Vec::with_capacity(n * n);
-            let mut lons = Vec::with_capacity(n * n);
-            let mut values = Vec::with_capacity(n * n);
-            for j in 0..n {
-                for i in 0..n {
-                    let east = (2.0 * i as f64 / (n - 1) as f64 - 1.0) * range;
-                    let north = (2.0 * j as f64 / (n - 1) as f64 - 1.0) * range;
-                    let ground = east.hypot(north);
-                    let az = east.atan2(north);
-                    let (y, x) = destination(lat, lon, az, ground);
-                    lats.push(y);
-                    lons.push(x);
-                    let earth = EARTH_M * (4.0 / 3.0);
-                    let arc = ground / earth;
-                    let slant = earth * arc.sin() / (f64::from(elevation).to_radians() + arc).cos();
-                    values.push(pixel_value(
-                        &sampled,
-                        echo.as_ref(),
-                        floor_dbz,
-                        az.to_degrees().rem_euclid(360.0),
-                        slant,
-                    ));
-                }
-            }
+            let mut lats = vec![0.0f32; n * n];
+            let mut lons = vec![0.0f32; n * n];
+            let mut values = vec![0.0f32; n * n];
+            lats.par_chunks_mut(n)
+                .zip(lons.par_chunks_mut(n))
+                .zip(values.par_chunks_mut(n))
+                .enumerate()
+                .for_each(|(j, ((lat_row, lon_row), value_row))| {
+                    for i in 0..n {
+                        let east = (2.0 * i as f64 / (n - 1) as f64 - 1.0) * range;
+                        let north = (2.0 * j as f64 / (n - 1) as f64 - 1.0) * range;
+                        let ground = east.hypot(north);
+                        let az = east.atan2(north);
+                        let (y, x) = destination(lat, lon, az, ground);
+                        lat_row[i] = y;
+                        lon_row[i] = x;
+                        let earth = EARTH_M * (4.0 / 3.0);
+                        let arc = ground / earth;
+                        let slant =
+                            earth * arc.sin() / (f64::from(elevation).to_radians() + arc).cos();
+                        value_row[i] = pixel_value(
+                            &sampled,
+                            echo.as_ref(),
+                            floor_dbz,
+                            az.to_degrees().rem_euclid(360.0),
+                            slant,
+                        );
+                    }
+                });
             let path = root
                 .join("radar")
                 .join(domain)
@@ -276,8 +301,18 @@ pub fn render_labeled(
                 .join("ppi")
                 .join(field)
                 .join(format!("{stem}_tilt-{tilt_index:02}.png"));
-            let scale = scales::radar_scale_named(field, VELOCITY_HALF_RANGE_M_S)
+            let mut scale = scales::radar_scale_named(field, VELOCITY_HALF_RANGE_M_S)
                 .ok_or_else(|| format!("no colour scale for radar field {field}"))?;
+            if let Some(&(_,lo,hi))=overrides.iter().find(|v|v.0==field) {
+                if !lo.is_finite() || !hi.is_finite() || hi<=lo {
+                    return Err("evidence colour limits must be finite and increasing".into());
+                }
+                let mut discrete=scale.resolved_discrete();
+                let first=discrete.levels[0];
+                let span=discrete.levels[discrete.levels.len()-1]-first;
+                for value in &mut discrete.levels {*value=lo+(*value-first)/span*(hi-lo);}
+                scale=rustwx_render::ColorScale::Discrete(discrete);
+            }
             render_panel(PanelRequest {
                 lat_deg: &lats,
                 lon_deg: &lons,
@@ -315,16 +350,16 @@ pub fn render_labeled(
                 annotations: None,
                 out_path: path.clone(),
             })?;
-            images.push(Image {
+            Ok(Some(Image {
                 artifact: manifest::artifact(root, &path, "png")?,
                 field: field.into(),
                 tilt_index,
                 sweep_index,
                 elevation_deg: elevation,
-            });
-        }
-    }
-    Ok(images)
+            }))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(drawn_images.into_iter().flatten().collect())
 }
 
 #[cfg(test)]

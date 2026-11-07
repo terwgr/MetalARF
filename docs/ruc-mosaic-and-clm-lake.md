@@ -37,6 +37,18 @@ replaces lake skin temperature, surface fluxes, albedo and 2 m diagnostics
 before the PBL consumes them. RUC bypasses a lake column only while the
 lake model is selected. With the lake model off, RUC uses its water arm.
 
+The lake's double precision `exp`, `log`, `log10`, `sin`, `atan` and `pow`
+are correctly rounded, the same on the CPU and the GPU
+(`woof/core/kernels/f64cr.cuh`). CUDA's own double precision functions
+are accurate to 1 or 2 units in the last place but not correctly rounded,
+and with them the lake's sensible and ground heat fluxes drifted from WRF
+in about 1 word in 2,000. With correctly rounded functions the GPU lake
+matches native WRF linked to correctly rounded functions in every word.
+Against WRF linked to the host C library (glibc 2.39), whose `exp`, `log`,
+`atan` and `pow` are not correctly rounded for roughly 1 argument in 1,300,
+the persisted lake state still matches in every word and 14 of 2.5 million
+flux output words differ by 1 or 2 units in the last place.
+
 The source-pinned Fortran harnesses and CUDA comparisons are in
 `tools/ruc_mosaic_wrf461_oracle`, `tools/lake_wrf461_oracle`,
 `tests/test_ruc_mosaic.py`, `tests/test_ruc_mosaic_gpu.py` and the lake
@@ -82,6 +94,22 @@ skin-temperature trigger; the RUC fractions follow the same classification.
 The separate stochastic RUC inputs and `flag_sm_adj` remain outside this
 runtime change. WRF's existing defined-value treatment for uninitialized
 thin-snow `ilnb` is unchanged.
+
+**Declared divergence from the operational WRF 3.9 fork (HRRR v4.1.21):**
+the lake column keeps WRF v4.6.1's open-water scalar roughness,
+`z0hg = z0qg = z0mg`, on every route, including HRRR configurations.
+The fork replaces it with a COARE form
+(`sorc/hrrr_wrfarw.fd/WRFV3.9/phys/module_sf_lake.F`, lines 984-997,
+sha256 7cf098f3...): `Ren = MAX(ustar(p)*z0mg(p)/visc, 0.1)` and
+`z0hg = 5.5e-5 * Ren**(-0.60)`, clamped to 2e-9..1e-4 m, with
+`z0qg = z0hg`. At line 991 `ustar` is a local array that
+`FrictionVelocity` has not yet assigned for this call, so the fork's value
+depends on whatever the memory held and cannot be reproduced; any value
+this port chose in its place would be invented, not ported. The ruling
+(2026-10-05) is to keep the defined WRF v4.6.1 form and record the fork
+difference here. Lake heat and moisture fluxes at HRRR lake points can
+therefore differ from HRRR's own; the referee for them is observations,
+not the fork.
 
 WRF and WPS source attribution and notices are in `NOTICE`,
 `licenses/LICENSE-WRF-public-domain.txt`, and beside the oracle sources.

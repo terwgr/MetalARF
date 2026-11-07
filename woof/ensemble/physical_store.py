@@ -18,6 +18,8 @@ from woof.ensemble.physical_fields import (
     FIELD_SCHEMA, canonical_grid_sha256, field_contract_sha256,
     native_field_attributes, validate_field_contract, validate_field_inventory,
 )
+from woof.ensemble.physical_fields import sha256_of_file as digest_file
+from woof.ensemble.physical_fields import _digest as _valid_digest
 
 LEGACY_SCHEMA = "gpuwm-ensemble-physical-store.v1"
 SCHEMA = "gpuwm-ensemble-physical-store.v2"
@@ -53,14 +55,6 @@ def _plain(value):
 
 def _canonical(value):
     return json.dumps(_plain(value), sort_keys=True, separators=(",", ":"), allow_nan=False)
-
-
-def digest_file(path):
-    value = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024*1024), b""):
-            value.update(block)
-    return value.hexdigest()
 
 
 def _host(value):
@@ -123,10 +117,6 @@ def physical_static_identity(static, attrs=None):
     return {"schema": STATIC_SCHEMA, "fields": fields, "attributes": attributes}
 
 
-def _valid_digest(value):
-    return isinstance(value,str) and len(value) == 64 and not set(value) - set("0123456789abcdef")
-
-
 def _validate_static_identity(identity):
     if (not isinstance(identity,dict) or set(identity) != {"schema","fields","attributes"}
             or identity["schema"] != STATIC_SCHEMA or not isinstance(identity["fields"],dict)
@@ -147,8 +137,12 @@ def _validate_static_identity(identity):
 def _semantic_source_identity(source):
     if not isinstance(source,dict) or not source:
         raise ValueError("physical input needs its ordinary prepared source authority")
+    # lake_ice (2.9.1) is the observed lake-ice analysis the GFS route laid
+    # over its start-time surface after the store's frames were bound; it is
+    # a surface overlay of that one preparation, not the forcing source the
+    # store carries, and is recorded in the preparation's own receipt.
     excluded = _IMPLEMENTATION_SOURCE_KEYS | {"input_manifest_sha256", "static_identity", "ensemble_physical_input",
-                                             "ensemble_posted_physical_input"}
+                                             "ensemble_posted_physical_input", "lake_ice"}
     return {key:value for key,value in source.items() if key not in excluded}
 
 

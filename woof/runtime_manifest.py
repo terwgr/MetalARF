@@ -62,16 +62,6 @@ MANIFEST_ENV = "WOOF_NATIVE_DISTRIBUTION_MANIFEST"
 #: :func:`woof.native_wrf_distribution.distribution_contract` writes.
 KNOWN_BACKENDS = ("cpu", "cuda")
 
-#: The identity paths :func:`provenance` can report, in the order it
-#: tries them.
-IDENTITY_SOURCES = (
-    "gpuwm-native-distribution-manifest",
-    "git",
-    "installed-editable-source",
-    "installed-source-content",
-    "installed-wheel-record",
-)
-
 #: Distributions that may publish the ``woof`` package.  ``rw-wps`` is
 #: the preprocessing-only wheel; it ships the same package directory
 #: under a different distribution name, so the identity lookup has to
@@ -607,6 +597,9 @@ def _editable_provenance(identity: dict[str, object]) -> dict[str, object]:
 
 def _content_cache_path(root: Path) -> Path:
     key = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:32]
+    requested = os.environ.get("XDG_CACHE_HOME")
+    if requested and Path(requested).is_absolute():
+        return Path(requested) / "woof" / "source-content" / f"{key}.json"
     return Path.home() / ".woof" / "cache" / "source-content" / f"{key}.json"
 
 
@@ -659,7 +652,8 @@ def source_content_identity(root: Path) -> dict[str, object] | None:
 
     Reading 3,000 files costs seconds, so each digest is remembered
     against the file's size, modification time, change time and inode in
-    ``~/.woof/cache/source-content``.  A later call re-reads only files
+    ``~/.woof/cache/source-content`` or an absolute ``XDG_CACHE_HOME``
+    under ``woof/source-content``. A later call re-reads only files
     whose stat moved, which is how git keeps ``git status`` cheap, and a
     file written within :data:`_CONTENT_RACY_NS` of its read is never
     remembered.  Returns ``None`` when ``root`` is a checkout (git
@@ -842,7 +836,7 @@ def provenance(root: Path, *,
 
 
 __all__ = [
-    "IDENTITY_SOURCES", "IdentityError", "KNOWN_BACKENDS", "MANIFEST_ENV",
+    "IdentityError", "KNOWN_BACKENDS", "MANIFEST_ENV",
     "ManifestError", "RUNTIME_SCHEMA", "git_checkout_root",
     "child_python_env", "installed_distribution", "load_manifest", "manifest_defects",
     "manifest_from_environment", "provenance", "serving_import_root",

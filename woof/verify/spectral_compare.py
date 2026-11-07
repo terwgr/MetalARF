@@ -27,12 +27,14 @@ pinned arithmetic.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import hashlib
 import json
 import math
 from typing import Iterable, Mapping, Sequence
 
 import numpy as np
+
+from woof.verify.spectral import (_canonical_hash,
+                                   detrend_plane as _detrend_plane)
 
 COMPARISON_SCHEMA = "gpuwm.spectral-comparison/v2"
 IMPLEMENTATION_PINS_SCHEMA = "gpuwm.spectral-comparison-pins/v2"
@@ -74,7 +76,7 @@ VARIANCE_FLOOR_RELATIVE_POWER = 1e-22
 #: The tolerance under which two boxes scoring the same input bytes with the
 #: same code agree.  MEASURED 2026-08-20 on sha256-identical input and module
 #: bytes: the Windows desktop (Python 3.13.7, numpy 2.2.6, UCRT) against
-#: a development machine (Python 3.14.4, numpy 2.3.5, glibc 2.43), over two
+#: test host A (Python 3.14.4, numpy 2.3.5, glibc 2.43), over two
 #: independent pairs -- a 192x192 scalar+vector probe with displaced and
 #: rescaled fields, and a 128x128 pair scored through the real
 #: ``woof spectral run`` door with the candidate a PURE rescaling of the
@@ -186,7 +188,7 @@ CROSS_BOX_RULE: dict[str, object] = {
         "module bytes -- a 192x192 scalar+vector probe and a 128x128 pair "
         "scored through the real `woof spectral run` door with the "
         "candidate a pure rescaling of the reference: Windows desktop "
-        "(Python 3.13.7, numpy 2.2.6, UCRT) against a development machine "
+        "(Python 3.13.7, numpy 2.2.6, UCRT) against a Linux test host "
         "(Python 3.14.4, numpy 2.3.5, glibc 2.43)"),
     "measured_bit_identical_values": 169,
     "measured_values_compared": 489,
@@ -292,13 +294,6 @@ IMPLEMENTATION_PINS: dict[str, object] = {
 }
 
 
-def _canonical_hash(value: object) -> str:
-    payload = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
-        allow_nan=False).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
 IMPLEMENTATION_PINS_SHA256 = _canonical_hash(IMPLEMENTATION_PINS)
 
 
@@ -380,22 +375,7 @@ def crop_plane(plane: np.ndarray, crop_cells: int) -> np.ndarray:
 def detrend_plane(plane: np.ndarray) -> np.ndarray:
     """Remove the least-squares plane ``a + b*x + c*y`` in float64."""
 
-    values = _as_finite_plane(plane, label="detrend input")
-    ny, nx = values.shape
-    y = np.arange(ny, dtype=np.float64) - 0.5 * (ny - 1)
-    x = np.arange(nx, dtype=np.float64) - 0.5 * (nx - 1)
-    result = values - float(np.mean(values, dtype=np.float64))
-    yy = float(np.sum(y * y, dtype=np.float64)) * nx
-    xx = float(np.sum(x * x, dtype=np.float64)) * ny
-    if yy > 0.0:
-        result = result - (
-            float(np.sum(result * y[:, None], dtype=np.float64)) / yy
-        ) * y[:, None]
-    if xx > 0.0:
-        result = result - (
-            float(np.sum(result * x[None, :], dtype=np.float64)) / xx
-        ) * x[None, :]
-    return result
+    return _detrend_plane(_as_finite_plane(plane, label="detrend input"))
 
 
 def hann_window(ny: int, nx: int) -> np.ndarray:

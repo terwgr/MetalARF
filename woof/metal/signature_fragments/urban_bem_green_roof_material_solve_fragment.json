@@ -171,6 +171,21 @@
           "error",
           "int32",
           "read_write"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "hfgroof",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
@@ -399,6 +414,23 @@
           [
             "nitem"
           ]
+        ],
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "class_float": [
+          [
+            1320
+          ]
+        ],
+        "hfgroof": [
+          [
+            "ncol",
+            18,
+            2
+          ]
         ]
       },
       "parameters": [
@@ -413,6 +445,10 @@
         [
           "dt",
           "float32"
+        ],
+        [
+          "green_roof",
+          "int32"
         ]
       ],
       "threads_per_group": 64,

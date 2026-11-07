@@ -5,7 +5,7 @@ its whole file at collection when the package is absent, and
 ``tools/battery/no_silent_deselection.py`` can only report that as SILENT
 DESELECTION or be told to excuse the file by name.  The local-DA leg shipped
 with one: ``tests/test_local_da_observations.py`` took
-``importorskip('woof.globe.obs_table')`` at module scope, so on every
+``importorskip('arwen_global.obs_table')`` at module scope, so on every
 installation without the shared observation package the file's fifteen
 adapter contracts reported nothing at all, including the two that need no
 such package.

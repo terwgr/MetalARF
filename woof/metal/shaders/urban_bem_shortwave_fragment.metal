@@ -51,7 +51,7 @@ kernel void urban_bem_shortwave_fragment(
     device const int *utype = r.utype;
     device const int *class_int = r.class_int;
     device const float *class_float = r.class_float;
-    device const int *nzu_class = r.nzu_class;
+    device const int *nzurban = r.nzurban;
     device const float *fwg = r.fwg;
     device const float *fww = r.fww;
     device const float *fgw = r.fgw;
@@ -66,17 +66,18 @@ kernel void urban_bem_shortwave_fragment(
     if (item >= uint(ncol * 2)) return;
     const int col = int(item) / 2, dir = int(item) % 2;
     error[item] = 0;
+    if (r.active_cols[col] == 0) return;
     const int type = utype[col];
     if (nurbm < 1 || nurbm > 11 || type < 1 || type > nurbm) { error[item] = 3604; return; }
-    const int nz_u = nzu_class[uint(type - 1)];
+    const int nz_u = nzurban[col];
     const int nd = class_int[uint(type)];
     if (nz_u < 1 || nz_u > 18 || nd < 1 || nd > 2) { error[item] = 3604; return; }
     if (dir >= nd) return;
-    const float pwin = class_float[1084u + uint(type - 1)];
-    const float albwin = class_float[1051u + uint(type - 1)];
+    const float pwin = class_float[1085u + uint(type - 1)];
+    const float albwin = class_float[1052u + uint(type - 1)];
     const float albw = ubmsw_add(ubmsw_mul(pwin, albwin),
-        ubmsw_mul(ubmsw_sub(1.0f, pwin), class_float[76u + uint(type - 1)]));
-    const float albg = class_float[65u + uint(type - 1)];
+        ubmsw_mul(ubmsw_sub(1.0f, pwin), class_float[77u + uint(type - 1)]));
+    const float albg = class_float[66u + uint(type - 1)];
     const ulong pbase = ulong(col) * 19ul;
     const ulong vbase = (ulong(col) * 2ul + uint(dir)) * 18ul;
     const ulong wbase = ulong(col) * 72ul + uint(dir * 2) * 18ul;
@@ -88,7 +89,7 @@ kernel void urban_bem_shortwave_fragment(
         a[i * 37 + i] = 1.0f;
         for (int j = 0; j < nz_u; ++j)
             a[i * 37 + nz_u + j] = ubmsw_mul(ubmsw_mul(-albw,
-                fww[ffbase + ulong(j) * 18ul + uint(i)]), pb[pbase + uint(j + 1)]);
+                fww[ffbase + ulong(i) * 18ul + uint(j)]), pb[pbase + uint(j + 1)]);
         a[i * 37 + ground] = ubmsw_mul(-albg, fgw[vbase + uint(i)]);
         b[i] = ubmsw_add(rsw[wbase + uint(i)], ubmsw_mul(fsw[vbase + uint(i)], rsdif[col]));
     }
@@ -96,7 +97,7 @@ kernel void urban_bem_shortwave_fragment(
         const int row = nz_u + i;
         for (int j = 0; j < nz_u; ++j)
             a[row * 37 + j] = ubmsw_mul(ubmsw_mul(-albw,
-                fww[ffbase + ulong(j) * 18ul + uint(i)]), pb[pbase + uint(j + 1)]);
+                fww[ffbase + ulong(i) * 18ul + uint(j)]), pb[pbase + uint(j + 1)]);
         a[row * 37 + row] = 1.0f;
         a[row * 37 + ground] = ubmsw_mul(-albg, fgw[vbase + uint(i)]);
         b[row] = ubmsw_add(rsw[wbase + 18ul + uint(i)], ubmsw_mul(fsw[vbase + uint(i)], rsdif[col]));
@@ -115,4 +116,5 @@ kernel void urban_bem_shortwave_fragment(
     }
     rsg[ulong(col) * 2ul + uint(dir)] = b[ground];
     error[item] = 0;
+    if (r.active_cols[col] == 0) return;
 }

@@ -30,8 +30,8 @@ kernel void urban_bem_room_balance_inputs_fragment(
     if(item>=uint(p.nitem))return;
     const uint lev=item%18u,b=(item/18u)%15u,col=item/(18u*15u);error[item]=0;
     if(col>=uint(p.ncol)||active[col]==0||nlev[ulong(col)*15ul+b]<=int(lev)){
-        cpint[item]=1004.0f;rhoint[item]=0.0f;vollev[item]=1.0f;tlev[item]=273.15f;tout[item]=273.15f;
-        latent[item]=2.45e6f;humout[item]=0.0f;rhoout[item]=1.0f;humlev[item]=0.0f;beta[item]=0.0f;
+        cpint[item]=1004.0f;rhoint[item]=0.0f;vollev[item]=1.0f;tlev[item]=tlev_src[item];tout[item]=273.15f;
+        latent[item]=2.45e6f;humout[item]=0.0f;rhoout[item]=1.0f;humlev[item]=hum_src[item];beta[item]=0.0f;
         qb[item]=1.0f;hsroo[item]=0.0f;volroo[item]=1.0f;hlroo[item]=0.0f;shumroo[item]=0.0f;
         cop[item]=1.0f;timeon[item]=0.0f;timeoff[item]=0.0f;targtemp[item]=0.0f;gaptemp[item]=0.0f;
         targhum[item]=0.0f;gaphum[item]=0.0f;swcond[item]=0;return;

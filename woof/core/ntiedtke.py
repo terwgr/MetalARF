@@ -41,6 +41,36 @@ from dataclasses import dataclass
 #: the model's working precision reaches the scheme.
 from woof.core.state import DTYPE
 
+#: cu_ntiedtke.F90:230 -- ``dxref``, the spacing below which the scheme's
+#: scale-dependency factor leaves the coarse-mesh formula.  Mirrors
+#: ``NT_DXREF`` in ntiedtke.cu, which is the value the kernels execute.
+NT_DXREF_M = 15000.0
+
+
+def nt_scale_factors_host(dx_m):
+    """Host mirror of ``nt_scale_factors`` (cu_ntiedtke.F90:230-238).
+
+    Returns ``(scale_fac, scale_fac2)`` as float32 arrays for a spacing in
+    metres.  ``scale_fac`` multiplies the deep closure's adjustment time
+    (:676) and ``scale_fac2`` divides the shallow cloud-base mass flux
+    (:715).  For receipts and tests: the device kernel is the arithmetic of
+    record and its logarithm is CUDA's, so the two agree to rounding, not
+    bit for bit.
+    """
+    import numpy as np
+
+    dx = np.asarray(dx_m, dtype=np.float32)
+    fine = dx < np.float32(NT_DXREF_M)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        base = np.float32(1.06133) + np.log(
+            np.float32(NT_DXREF_M) / dx, dtype=np.float32)
+    sf = np.where(fine, base * base * base,
+                  np.float32(1.0) + np.float32(1.33e-5) * dx).astype(np.float32)
+    sf2 = np.where(fine, np.sqrt(sf, dtype=np.float32),
+                   np.float32(1.0)).astype(np.float32)
+    return sf, sf2
+
+
 #: Threads per block for every New Tiedtke stage.
 #:
 #: CORRECTED.  This was documented as "the workspace's lane count, not a
@@ -594,7 +624,8 @@ def nt_resolve(name: str, universe=NT_SLOT_NAMES) -> str:
         seen.append(nxt)
 
 
-def nt_tile_columns(ncol: int, multiprocessor_count: int) -> int:
+def nt_tile_columns(ncol: int, multiprocessor_count: int,
+                    columns_per_sm: int = NT_TILE_COLUMNS_PER_SM) -> int:
     """The chunk width: the fewest chunks under the cap, split evenly.
 
     512 columns per SM keeps the cap proportional to the card.  A domain
@@ -606,7 +637,7 @@ def nt_tile_columns(ncol: int, multiprocessor_count: int) -> int:
     launch.  The per-column layout does not depend on the width.
     """
     ncol = int(ncol)
-    cap = int(multiprocessor_count) * NT_TILE_COLUMNS_PER_SM
+    cap = int(multiprocessor_count) * int(columns_per_sm)
     if ncol <= cap:
         return ncol
     chunks = -(-ncol // cap)
@@ -873,7 +904,7 @@ NT_STAGE_SIGNATURE = {
         "pmfdq", "pdmfdp", "pmfdde_rate", "zheat", "zcape", "zcape1",
         "zcape2", "ztauc", "ztaubl", "ztau_o", "upbl", "zmfub1",
         "tiedtke_closure", "ncol",
-        "nz", "dt", "cp", "rd", "rv", "xlv", "xlf", "grav", "llo3_mask", "expect_tpb",
+        "nz", "ztmst", "cp", "rd", "rv", "xlv", "xlf", "grav", "llo3_mask", "expect_tpb",
         "expect_nblocks", "geom_report", "order_report", "ticket"
     ),
     "ntiedtke_cloud_depth": (
@@ -961,7 +992,7 @@ NT_STAGE_SIGNATURE = {
         "ptte", "pqte", "paph", "puen", "pven", "ptu", "pqu", "plu",
         "ztenh", "zqenh", "ktype", "kcbot", "lndj", "ldcum", "zdhpbl",
         "upbl", "zmfub", "tiedtke_closure",
-        "ncol", "nz", "dt", "cp", "rd", "rv", "xlv", "xlf",
+        "ncol", "nz", "ztmst", "cp", "rd", "rv", "xlv", "xlf",
         "grav", "llo3_mask", "expect_tpb", "expect_nblocks", "geom_report",
         "order_report", "ticket"
     ),
@@ -1075,6 +1106,8 @@ class NtPipeline:
         import numpy as np
 
         self.w = NtWorkspace(ncol=ncol, nz=nz)
+        #: Correct-mode WB4; the adapter sets it per call from the RunConfig.
+        self.dry_mass_coupling = False
         self.geometry = NtLaunchGeometry(ncol=ncol, nz=nz)
         self.stages = NtStages(self.geometry)
         self._base = dict(NT_LEVEL_BASE if base is None else base)
@@ -1200,6 +1233,57 @@ class NtPipeline:
         self.w.bind("ztenu", 1)[...] = self.w.bind("pvom", 1)
         self.w.bind("ztenv", 1)[...] = self.w.bind("pvol", 1)
 
+    # -- correct mode, finding WB4 (RunConfig.ntiedtke_dry_mass_coupling) --
+    #
+    # THE CONTRACT.  cu_ntiedtke works in specific humidity on its own frame
+    # mass M = dp/g per layer (zdp = g/dp in cudtdqn, cu_ntiedtke.F90:
+    # 3101-3142), and its budget closes in that frame:
+    #     sum_k M_k (dq_v + dq_c + dq_i)_k + P = 0.
+    # The host (MPAS-A, hex, woof's column batch) advances mixing ratios on
+    # FIXED dry mass m_d, and builds the very pressure it hands the scheme
+    # from rho_d*(1+qv) (mpas_atmphys_interface.F:342-343, 530-534; hex
+    # pres2_hyd_p), so M_k = m_d,k (1 + qv_k).  The matched arithmetic adds
+    # condensate in specific units straight onto mixing ratios
+    # (cu_ntiedtke.F90:296-305) and converts vapour as q/(1-q) of the
+    # UPDATED q (:308-314), which implicitly lets the dry mass change: about
+    # 1% of the convective precipitation is not removed from the column
+    # (audit 2026-10-13 09:31:51Z).  Correct mode maps every water increment
+    # through the frame factor (1 + qv_old):  dr_x = dq_x (1 + qv_old), so
+    #     sum_k m_d,k (dr_v + dr_c + dr_i)_k + P = 0
+    # holds to roundoff.  Heating and momentum are not touched.
+    def correct_forcing(self) -> None:
+        """WB4: hand the scheme dq/dt, not dr/dt, as its vapour forcing.
+
+        ``ntiedtke_convert`` copies the driver's mixing-ratio tendency into
+        pqte (cu_ntiedtke.F90:273) while converting the state itself to
+        specific humidity; the derivative of q = r/(1+r) is 1/(1+r)^2.
+        Runs between ``ntiedtke_convert`` and :meth:`snapshot_forcing`, so
+        zqq snapshots the converted forcing and the convective increment
+        (pqte - zqq) is unchanged in meaning.
+        """
+        nz = self.w.nz
+        q = self.w.bind("qvf", 0)[:nz]         # scheme order, input vapour
+        forcing = self.w.bind("pqte", 0)[:nz]  # scheme order
+        frame = q + 1.0
+        forcing[...] = forcing / (frame * frame)
+
+    def correct_water_tendencies(self) -> None:
+        """WB4: replace post_run's water tendencies with dry-mass ones.
+
+        WRF order (k = 1 the surface) as post_run writes them; the scheme's
+        increments are scheme order (k = 1 the top), flipped exactly as
+        post_run flips them (zz = klev + 1 - jk).
+        """
+        nz = self.w.nz
+        frame = self.w.bind("qv3d", 0)[:nz] + 1.0   # 1 + qv_old, WRF order
+        dq = (self.w.bind("pqte", 0)[:nz][::-1]
+              - self.w.bind("zqq", 0)[:nz][::-1])
+        self.w.bind("rqvcuten", 0)[:nz] = dq * frame
+        rqc = self.w.bind("rqccuten", 0)[:nz]
+        rqc[...] = rqc * frame
+        rqi = self.w.bind("rqicuten", 0)[:nz]
+        rqi[...] = rqi * frame
+
     def begin_llo3_batch(self) -> None:
         """Defer validation until the private chunk outputs are complete."""
         self._llo3_pending = []
@@ -1320,6 +1404,8 @@ def _nt_walk(pipeline) -> None:
     pipeline.zero_run_head()
     pipeline.run_stage("ntiedtke_prep")
     pipeline.run_stage("ntiedtke_convert")
+    if getattr(pipeline, "dry_mass_coupling", False):
+        pipeline.correct_forcing()
     pipeline.snapshot_forcing()
     for stage in NT_CALL_ORDER:
         if stage in ("ntiedtke_prep", "ntiedtke_convert"):
@@ -1329,6 +1415,8 @@ def _nt_walk(pipeline) -> None:
         if stage == "ntiedtke_cududvn":
             pipeline.snapshot_momentum()
         pipeline.run_stage(stage)
+    if getattr(pipeline, "dry_mass_coupling", False):
+        pipeline.correct_water_tendencies()
 
 
 def _nt_fused_walk(pipeline) -> None:
@@ -1343,6 +1431,8 @@ def _nt_fused_walk(pipeline) -> None:
     pipeline.zero_run_head()
     pipeline.run_stage("ntiedtke_prep")
     pipeline.run_stage("ntiedtke_convert")
+    if getattr(pipeline, "dry_mass_coupling", False):
+        pipeline.correct_forcing()
     pipeline.snapshot_forcing()
     for stage in NT_CALL_ORDER[2:]:
         if stage == group[0]:
@@ -1354,6 +1444,8 @@ def _nt_fused_walk(pipeline) -> None:
             if stage == "ntiedtke_cududvn":
                 pipeline.snapshot_momentum()
             pipeline.run_stage(stage)
+    if getattr(pipeline, "dry_mass_coupling", False):
+        pipeline.correct_water_tendencies()
 
 
 # ===========================================================================
@@ -1363,6 +1455,14 @@ def _nt_fused_walk(pipeline) -> None:
 
 class NewTiedtke:
     """Stateless ``cu_physics = 16`` callable for :class:`PhysicsDriver`.
+
+    ``tile_columns_per_sm`` is the chunk cap per multiprocessor this adapter
+    walks the domain with (:func:`nt_tile_columns`).  The workspace is held at
+    the chunk width for the adapter's life, so the cap is its memory price.
+    A caller that needs the memory more than the widest single wave (the
+    woof hex New Tiedtke seam, which holds the workspace on every global
+    mesh) narrows it on its own instance; every other caller keeps
+    :data:`NT_TILE_COLUMNS_PER_SM`.
 
     No ``nca_seconds``: New Tiedtke carries no NCA hold, so the Task-1
     attachment contract applies -- the rates replace the held cumulus
@@ -1396,6 +1496,42 @@ class NewTiedtke:
         self._driver = None
         self._pipeline = None
         self._metal_pipeline = None
+        #: False holds every column finer than ``NT_DXREF_M`` at
+        #: ``NT_DXREF_M``, so the sub-15 km reduction of cu_ntiedtke.F90:
+        #: 232-234 never applies.  A sensitivity control; the scheme as
+        #: MPAS-A and WRF run it is True.
+        self.scale_aware = True
+
+    def _column_dx(self, cfg, ny: int, nx: int):
+        """The spacing the scheme sees: per column, or None for ``cfg.dx``.
+
+        MPAS-A hands cu_ntiedtke one dx PER CELL,
+        ``len_disp / meshDensity**0.25`` (mpas_atmphys_driver_convection.F:
+        840 at v8.4.1), and the scale-dependency factors are built from it
+        column by column (cu_ntiedtke.F90:230-238).  A column seam carries
+        that vector on the driver as ``gf_dx_column`` -- the same carrier
+        Grell-Freitas reads -- so a variable-resolution mesh gets each
+        cell's own factor.  A lat-lon ARW driver carries none and the
+        scheme sees ``cfg.dx``, as module_cu_ntiedtke.F hands it.
+        """
+        import cupy as cp
+
+        dx_column = (None if self._driver is None
+                     else getattr(self._driver, "gf_dx_column", None))
+        if dx_column is None:
+            if self.scale_aware:
+                return None
+            return cp.full(ny * nx, max(float(cfg.dx), NT_DXREF_M),
+                           dtype=DTYPE)
+        if dx_column.shape != (ny, nx):
+            raise ValueError(
+                f"driver gf_dx_column must be [ny, nx]={ny, nx}, "
+                f"got {dx_column.shape}")
+        dx = cp.ascontiguousarray(
+            cp.asarray(dx_column, dtype=DTYPE)).reshape(ny * nx)
+        if not self.scale_aware:
+            dx = cp.maximum(dx, DTYPE(NT_DXREF_M))
+        return dx
 
     def bind_driver(self, driver) -> None:
         """Driver hook: gives the adapter the held radiation and PBL rates.
@@ -1506,6 +1642,7 @@ class NewTiedtke:
                 state=state, cfg=cfg)
 
         import cupy as cp
+        import numpy as np
 
         from woof.core.physics import CumulusResult
 
@@ -1576,10 +1713,27 @@ class NewTiedtke:
         # a question about arithmetic on degenerate input rather than a
         # property of the reduction.  Both measure bitwise identical here;
         # only one of them is an argument.
-        width = nt_tile_columns(ncol, _nt_multiprocessor_count())
+        width = nt_tile_columns(ncol, _nt_multiprocessor_count(),
+                                getattr(self, "tile_columns_per_sm",
+                                        NT_TILE_COLUMNS_PER_SM))
         p = self._for(width, nz, cfg)
-        # The spacing is constant across chunks, including the padded tail.
-        p.w.bind("dx", 1).fill(DTYPE(cfg.dx))
+        p.dry_mass_coupling = bool(
+            getattr(cfg, "ntiedtke_dry_mass_coupling", False))
+        # WRF's ITIMESTEP for this call.  cu_ntiedtke_pre_run zeroes the
+        # forcing pair on the domain's first step (module_cu_ntiedtke.F:
+        # 451-457, `if(itimestep == 1)`), and the prep kernel carries that
+        # branch, but the pipeline used to be built with itimestep = 2 and
+        # never told otherwise -- so the first cumulus call of every run fed
+        # the folded radiation and boundary-layer lanes into a closure WRF
+        # runs without them.  Found by the column oracle
+        # (tools/ntiedtke_column_oracle), graded there at itimestep = 1.
+        p.scalars["itimestep"] = np.int32(_nt_itimestep(state, cfg))
+        # One spacing per column where the driver carries it (a column
+        # seam on an MPAS mesh); otherwise cfg.dx, constant across chunks
+        # including the padded tail.
+        dx_flat = self._column_dx(cfg, ny, nx)
+        if dx_flat is None:
+            p.w.bind("dx", 1).fill(DTYPE(cfg.dx))
         p.begin_llo3_batch()
         for lo in range(0, ncol, width):
             # A previous invalid chunk must not suppress the next producers.
@@ -1601,6 +1755,11 @@ class NewTiedtke:
                 buf[:n] = a[lo:hi]
                 if n < width:
                     buf[n:] = a[lo]
+            if dx_flat is not None:
+                buf = p.w.bind("dx", 1)
+                buf[:n] = dx_flat[lo:hi]
+                if n < width:
+                    buf[n:] = dx_flat[lo]
             p.run_chunk()
             for name, dest in out_lev.items():
                 dest[:, lo:hi] = p.w.bind(name, 0)[:nz, :n]
@@ -1608,15 +1767,37 @@ class NewTiedtke:
                 dest[lo:hi] = p.w.bind(name, 1)[:n]
         p.end_llo3_batch()
 
+        from woof.wrf_exact import ENABLED as wrf_exact
+        if not wrf_exact:
+            bound_donor_depletion(
+                out_lev, out_sfc,
+                {"rqvcuten": flat_lev["qv3d"], "rqccuten": flat_lev["qc3d"],
+                 "rqicuten": flat_lev["qi3d"]},
+                float(_nt_model_dt(cfg)))
+
         def grid(a):
             return cp.ascontiguousarray(a.reshape(nz, ny, nx))
+
+        # WRF's F_QC / F_QI gate, cu_ntiedtke_driver
+        # (module_cu_ntiedtke.F:253-271): RQCCUTEN and RQICUTEN are stored
+        # only where the run carries that species, and phy_cu_ten adds them
+        # only where P_QC / P_QI is allocated.  With a microphysics that
+        # carries no ice (Kessler, mp_physics = 1) the scheme's detrained
+        # ice is therefore dropped, as WRF drops it; the scheme itself read
+        # qi = 0 (the zero ice the atmosphere seam hands it, WRF's unused
+        # moist slot).  Handing the ice tendency up crashed every such run
+        # in the driver's frozen-category check (combo A028, Kessler with
+        # New Tiedtke, 2026-10-07 combo sweep round 2).  Declared: the
+        # dropped tendency is condensate WRF's driver discards, so those
+        # runs do not conserve the detrained ice's water.
+        carries_qc = getattr(state, "qc", None) is not None
+        carries_qi = getattr(state, "qi", None) is not None
 
         return CumulusResult(
             rthcuten=grid(out_lev["rthcuten"]),
             rqvcuten=grid(out_lev["rqvcuten"]),
-            rqccuten=grid(out_lev["rqccuten"]),
-            rqicuten=(grid(out_lev["rqicuten"])
-                      if getattr(state, "qi", None) is not None else None),
+            rqccuten=grid(out_lev["rqccuten"]) if carries_qc else None,
+            rqicuten=grid(out_lev["rqicuten"]) if carries_qi else None,
             rucuten=grid(out_lev["rucuten"]),
             rvcuten=grid(out_lev["rvcuten"]),
             # RAINCV is rn/stepcu, mm per call, consumed once.
@@ -1654,6 +1835,48 @@ class NewTiedtke:
             rainc=out_sfc["raincv"].reshape(ny, nx))
 
 
+def bound_donor_depletion(out_lev, out_sfc, donors, dt: float) -> None:
+    """Scale a column's cumulus rates so no layer loses more water than it holds over the step.
+
+    The scheme's tendencies are explicit and are applied over the whole model step.  At a long
+    step (600 s on the 120 km globe) a thin layer under a shallow cloud can be asked to give up
+    more vapour than it has.  Measured on x1.40962, GFS 2026-10-11 12Z, +18 h, cell 398 (31.4 N,
+    86.6 E, terrain 4982 m): rqvcuten * dt = -4.44 g/kg on a layer holding 2.18 g/kg, with
+    +3.82 g/kg and +2.6 K put into the layer above.  The donor goes negative (and is clipped to
+    zero), the receiving layer overshoots its donors, condenses the surplus and becomes a single
+    hot layer (+7.9 K over both neighbours): the same class of defect as YSU's explicit PBL-top
+    entrainment, and the one hot layer left on that run once YSU's was bounded.
+
+    The bound: per column, alpha = min(1, min over layers losing water of held / (dt * loss)) for
+    vapour, cloud water and ice, and every rate of that column (theta, the species, momentum and
+    the rain) is multiplied by alpha.  One factor per column keeps the scheme's own heat, water
+    and momentum budgets in proportion, so its rain shrinks with its drying.  alpha is exactly 1
+    in every column the scheme already leaves non-negative, and those words do not move.  Strict
+    reproduction (GPUWM_WRF_EXACT=1) keeps WRF's upstream behaviour.
+    """
+    try:  # the array module of the inputs: CuPy in a forecast, NumPy in a CPU control
+        import cupy
+        cp = cupy.get_array_module(out_sfc["raincv"])
+    except ImportError:
+        import numpy as cp
+    alpha = cp.ones(out_sfc["raincv"].shape, dtype=DTYPE)
+    step = DTYPE(dt)
+    for rate, held in donors.items():
+        loss = -out_lev[rate] * step
+        have = cp.maximum(held, DTYPE(0.0))
+        over = loss > have
+        ratio = cp.where(over, have / cp.where(over, loss, DTYPE(1.0)), DTYPE(1.0))
+        alpha = cp.minimum(alpha, ratio.min(axis=0))
+    bound = alpha < DTYPE(1.0)
+    if not bool(bound.any()):
+        return
+    for name in out_lev:
+        out_lev[name][...] = cp.where(bound[None, :], out_lev[name] * alpha[None, :],
+                                      out_lev[name])
+    for name in out_sfc:
+        out_sfc[name][...] = cp.where(bound, out_sfc[name] * alpha, out_sfc[name])
+
+
 def _nt_multiprocessor_count() -> int:
     """SMs on the live device, or the profile's count when there is none."""
     try:
@@ -1664,6 +1887,21 @@ def _nt_multiprocessor_count() -> int:
         from woof.core.preflight import MEASURED_LOCAL_MEMORY_PROFILE
 
         return int(MEASURED_LOCAL_MEMORY_PROFILE.multiprocessor_count)
+
+
+def _nt_itimestep(state, cfg) -> int:
+    """WRF's one-based ITIMESTEP at this call, counted the way the physics
+    driver counts it (woof.core.physics, the radiation and surface calls):
+    from this domain's own start, so a nest that activates late also sees
+    1 on its first step, as a WRF nest does.  On a restart the elapsed time
+    continues, so the first step after it is not 1 -- again as in WRF,
+    which restores ITIMESTEP from the restart file.
+    """
+    import math
+
+    epoch = float(getattr(state, "domain_start_offset", 0.0) or 0.0)
+    elapsed = float(state.elapsed_seconds) - epoch
+    return int(math.floor(elapsed / float(cfg.dt) + 0.5)) + 1
 
 
 def _nt_model_dt(cfg) -> float:

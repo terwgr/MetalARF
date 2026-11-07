@@ -18,7 +18,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from types import MappingProxyType
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
+
+if TYPE_CHECKING:
+    # The "Path" return annotations below; pathlib itself is imported
+    # where a path is built.
+    from pathlib import Path
 
 from woof.explain import layered, warn
 #: Re-exported, not redefined.  The class lives in
@@ -181,7 +186,6 @@ _RRTMG_LEGACY_ASSETS = (
     "data/wrf_radiation/rrtmg_lw_statics.npz",
     "core/kernels/rrtmg_lw.cu",
     "core/kernels/rrtmg_lw_chain.cu",
-    "core/kernels/rrtmg_lw_chain_coalesced.cu",
     "core/kernels/rrtmg_lw_zbatched.cu",
     "core/kernels/rrtmg_lw_taugb02_10_11_12.cu",
     "core/kernels/rrtmg_lw_taugb03_05.cu",
@@ -218,9 +222,13 @@ def require_rrtmg_legacy_ready() -> None:
         except Exception as exc:  # noqa: BLE001 - receipt, then raise
             missing.append(f"module {name}: {exc}")
     package_dir = Path(__file__).resolve().parent
+    from woof.tables import _manifest, table_path
+    pins = {"data/" + row["relative"]: row["family"] for row in _manifest()}
     for relative in _RRTMG_LEGACY_ASSETS:
-        if not (package_dir / relative).is_file():
-            missing.append(f"asset gpuwm/{relative}: file not found")
+        if relative in pins:
+            table_path(pins[relative], package_dir / relative)
+        elif not (package_dir / relative).is_file():
+            missing.append(f"asset woof/{relative}: file not found")
     if missing:
         raise NotImplementedError(
             "ra_rrtmg_variant='rrtmg_legacy' (exact port of WRF v4.6.1's "
@@ -235,7 +243,7 @@ def require_rrtmg_legacy_ready() -> None:
 #: lanes were still landing.  It now performs the readiness check.
 require_rrtmg_legacy_executable = require_rrtmg_legacy_ready
 
-# Thompson 8 completed the audited A development machine CUDA/WRF-oracle forecast lane and
+# Thompson 8 completed the audited test host C CUDA/WRF-oracle forecast lane and
 # the matched four-domain verification rerun of 2026-07-28
 # (docs/thompson-rematch-20260728.md), and the canonical WRF v4.6.1 classic
 # tables now ship as package data (woof_data/data/thompson/tables, in the
@@ -395,12 +403,14 @@ THOMPSON_FORK_TABLE_ROOT_ENV = "WOOF_THOMPSON_FORK_TABLE_ROOT"
 def thompson_fork_table_root() -> str:
     """Where the WRF 3.9 fork's Thompson tables live.
 
-    The override first, then ``~/.woof/tables/thompson-wrf39-noaa``.  The
-    set is generated from the fork's own ``thompson_init`` by
-    ``tools/thompson_fork_oracle/build.sh`` (gfortran on any Linux CPU, about
-    two minutes) and is pinned by size and SHA-256 in
-    :data:`woof.core.thompson_contract.FORK_TABLE_ASSETS`, so a root with
-    other bytes fails closed exactly as the v4.6.1 root does.  The fork's
+    The override first, then ``~/.woof/tables/thompson-wrf39-noaa``, the
+    root ``woof fetch-tables --thompson-fork`` stages and a run that
+    selects the fork fills on first use from the release assets
+    (:mod:`woof.thompson_fork_assets`).  The set is generated from the
+    fork's own ``thompson_init`` by ``tools/thompson_fork_oracle/build.sh``
+    (gfortran on any Linux CPU, about two minutes) and is pinned by size and
+    SHA-256 in :data:`woof.core.thompson_contract.FORK_TABLE_ASSETS`, so a
+    root with other bytes fails closed exactly as the v4.6.1 root does.  The fork's
     CCN activation table is byte-identical to the v4.6.1 one and is read
     from :func:`thompson_table_root`.
     """
@@ -727,7 +737,12 @@ CONSTANT_K_PROFILE_ID = (
 #: six when its cold-start arm landed (audit R-044): the prepared
 #: single-domain runner builds its initialization like any other suite's,
 #: with nwfa/nifa from the WIF monthly climatology.
+NSAS_PROFILE_ID = "wsm6-ysu-mm5-noah-nsas-rrtmg-legacy-v1"
+CCPP_TKE_EDMF_PROFILE_ID = "ccpp-tke-edmf-thompson-mm5-noah-gf-rte-v1"
+
 COMPOSITION_SUITE_PROFILE_IDS = (
+    NSAS_PROFILE_ID,
+    CCPP_TKE_EDMF_PROFILE_ID,
     MILBRANDT2MOM_NTIEDTKE_PROFILE_ID,
     WDM6_GRELL_FREITAS_PROFILE_ID,
     THOMPSON_AEROSOL_MYJ_PROFILE_ID,
@@ -2507,11 +2522,13 @@ def validate_single_domain_physics_profile(
                     "checks. Profile evidence and throughput advisories "
                     "do not change which physics can execute.")
 
-    selectors = {
-        key: _selection_value(selected_settings, key)
-        for component in registry["components"].values()
-        for key in component.get("selector_keys", ())
-    }
+    # The selectors as the engine reads them (the one spelling): a run
+    # that chose its radiation through ra_physics = 4 reported its two
+    # streams as -1/-1 here, beside a resolved profile saying 4/4 legacy
+    # RRTMG (rolling tests, HRRR recipe preparation report).
+    selector_names = [key for component in registry["components"].values()
+                      for key in component.get("selector_keys", ())]
+    selectors = selection_values_one_spelling(selected_settings, selector_names)
     used, provenance = _acknowledgement_receipt(
         acknowledged, set(required_acknowledgements),
         acknowledgement_provenance)
@@ -2583,6 +2600,8 @@ def _experimental_reason(option) -> str | None:
     """
     counterpart = option.get(_NO_WRF_COUNTERPART)
     if isinstance(counterpart, Mapping) and counterpart.get("exists") is False:
+        if counterpart.get("implementation_origin") == "upstream-port":
+            return "experimental, upstream port with no WRF counterpart"
         return "experimental, WOOF-original with no WRF counterpart"
     if option.get("maturity") == _EXPERIMENTAL_MATURITY:
         return "experimental, not WRF-verified"
@@ -2947,10 +2966,10 @@ def multi_domain_physics_selection(
             "components": components,
             "registry_blocker": blocker,
             "governance": governance,
-            "selectors": {
-                key: _selection_value(settings, key)
-                for key in selector_keys
-            },
+            # Read as the engine reads them (the one spelling), so a
+            # ra_physics = 4 run reports its streams as 4/4, not -1/-1.
+            "selectors": selection_values_one_spelling(
+                settings, sorted(selector_keys)),
         }
     if profile is not None:
         # The root carries the named profile exactly as the single-domain
@@ -3600,8 +3619,9 @@ def pending_wrf_physics_components(
     # Byte validation of the resolved table root still fails closed at
     # setup, which is the guard that was ever essential at run time.
     # Namelist preview invokes this readiness layer before its documented
-    # WRF-to-ArWen selector mappings (for example ISHMAEL 55 -> Morrison
-    # 10).  Shin-Hong 11 is no longer such a mapping: it imports natively
+    # WRF-to-ArWen selector mappings (ISHMAEL 55 -> Morrison 10 was one
+    # until it became a named refusal, woof.config._MP_UNPORTED_SCHEMES).
+    # Shin-Hong 11 is no longer such a mapping either: it imports natively
     # since the Shin-Hong port, so bl_pbl_physics=11 is inside PBL_OPTIONS
     # and its four (11, sfclay) cells get their verdict from the WRF matrix
     # below exactly like 0/1/5.  The matrix governs the ported selector set

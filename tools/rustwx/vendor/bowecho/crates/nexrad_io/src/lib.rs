@@ -140,7 +140,7 @@ pub fn decode_volume_from_bytes(bytes: &[u8]) -> Result<RadarVolume> {
 /// in magic-byte sniff precedence order.
 ///
 /// The variants and their order are the one shared routing contract used by
-/// local file open, URL polling, and international providers: keep
+/// local file open, URL polling, and international providers — keep
 /// [`sniff_supported_volume_format`] and [`decode_supported_volume_bytes`]
 /// in lockstep with it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -167,7 +167,7 @@ pub enum SupportedVolumeFormat {
 /// Most magic signatures live in the first 8 bytes, but the JMA tar check
 /// reads the first 512-byte tar header block (ustar magic at byte 257), and
 /// the DORADE check also validates the first descriptor block length against
-/// the buffer length: pass the full buffer when you have it; a short head
+/// the buffer length — pass the full buffer when you have it; a short head
 /// prefix may sniff DORADE or a JMA tar as Level II. Anything unrecognized
 /// falls through to [`SupportedVolumeFormat::NexradLevel2`] so the error
 /// surfaces from the Archive II decoder, matching the historical routing
@@ -192,7 +192,7 @@ pub fn sniff_supported_volume_format(head: &[u8]) -> SupportedVolumeFormat {
 ///
 /// This is the one shared router for bytes of unknown provenance (local
 /// file open, custom URL polling, international feed downloads). Errors are
-/// the dispatched decoder's message, stringified: callers add their own
+/// the dispatched decoder's message, stringified — callers add their own
 /// source context (file name, URL). Never panics on malformed input.
 ///
 /// JMA tars are multi-station archives (one GRIB2 member per radar of the
@@ -394,7 +394,7 @@ pub fn decode_bzip_block_preview_from_bytes(
 ///
 /// For block-bzip Level II files, parsing streams behind the parallel block
 /// decompression, so the preview is emitted as soon as the first displayable
-/// cut completes, without decompressing or parsing anything twice. Other
+/// cut completes — without decompressing or parsing anything twice. Other
 /// compression formats fall back to a normal full decode.
 pub fn decode_volume_from_bytes_with_bzip_preview<F>(
     raw: &[u8],
@@ -737,7 +737,7 @@ pub fn decode_normalized_volume_bytes(
     let mut cursor = VOLUME_HEADER_LEN;
     let mut record_index = 0usize;
     // GR2-style ".msg31" exports keep the AR2V header but carry only a few
-    // metadata records before variable-framed message 31s: well before the
+    // metadata records before variable-framed message 31s — well before the
     // standard 134 fixed records. Detected once at the first early message
     // 31 and latched for the rest of the file.
     let mut early_variable_msg31 = false;
@@ -1163,7 +1163,7 @@ impl<'a> BlockSlots<'a> {
     ///
     /// The caller participates in decompression while it waits (claims advance
     /// in parse order), so the pipeline makes progress even when no rayon
-    /// worker ever runs, e.g. on a single-threaded pool.
+    /// worker ever runs — e.g. on a single-threaded pool.
     fn wait_block(&self, index: usize) -> Result<&[u8]> {
         loop {
             match self.states[index].load(Ordering::Acquire) {

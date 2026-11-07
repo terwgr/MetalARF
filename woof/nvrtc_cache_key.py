@@ -3,7 +3,7 @@
 THE BREAKAGE THIS PREVENTS.  With a GPU visible, NVRTC 13.4 answers a
 compile for sm_120 from NVIDIA's ComputeCache (``~/.nv/ComputeCache``, or
 ``CUDA_CACHE_PATH``) under a key that does not include ``-ftz``.  Measured
-on a development machine's RTX 5070 Ti (NVRTC 13.4.92, driver 13.2) with a kernel that
+on test host D's RTX 5070 Ti (NVRTC 13.4.92, driver 13.2) with a kernel that
 divides every float in [1, 2) by the literal 3, one program name, one
 source: compiled
 with ``-ftz=true`` in one process and then with ``--ftz=false`` in a fresh
@@ -74,14 +74,17 @@ def keyed_source(source: str, options) -> str:
 
 
 def compile_program(source: str, options, *, name: str = "unit.cu",
-                    target: str = "ptx") -> bytes:
+                    target: str = "ptx", nvrtc=None) -> bytes:
     """Compile ``source`` with NVRTC under ``options`` and return the PTX
     (``target="ptx"``) or cubin (``target="cubin"``) bytes.  The source is
     :func:`keyed_source`'s, so the ComputeCache cannot answer it with an
-    entry compiled under other options."""
+    entry compiled under other options.  ``nvrtc`` is the backend module
+    (``cupy.cuda.nvrtc`` when omitted): a caller that resolved its own, or
+    a test standing one in, compiles through the same keyed route."""
     if target not in ("ptx", "cubin"):
         raise ValueError(f"target must be 'ptx' or 'cubin', not {target!r}")
-    from cupy.cuda import nvrtc
+    if nvrtc is None:
+        from cupy.cuda import nvrtc
 
     options = [str(option) for option in tuple(options or ())]
     program = nvrtc.createProgram(keyed_source(source, options), name, [], [])

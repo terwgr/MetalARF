@@ -1,18 +1,18 @@
-//! Tropical cyclone data: a unified model plus parsers for the two free,
+//! Tropical cyclone data — a unified model plus parsers for the two free,
 //! keyless sources BowEcho aggregates:
 //!
-//! - **NHC** `CurrentStorms.json`: official for the Atlantic and East/Central
+//! - **NHC** `CurrentStorms.json` — official for the Atlantic and East/Central
 //!   Pacific; carries max wind (kt), min pressure (mb), and motion directly.
-//! - **GDACS** `geteventlist/EVENTS4APP?eventtypes=TC`: a global aggregator
+//! - **GDACS** `geteventlist/EVENTS4APP?eventtypes=TC` — a global aggregator
 //!   (JTWC/JMA/etc.) that covers every other basin, including the West Pacific.
-//!   Its `getgeometry` endpoint returns the track, cone, and impact polygons,
+//!   Its `getgeometry` endpoint returns the track, cone, and impact polygons —
 //!   but NO honest per-point forecast wind (it repeats the storm's *current*
 //!   severity on every point).
-//! - **JTWC** (Joint Typhoon Warning Center) Tropical Cyclone Warning text:
+//! - **JTWC** (Joint Typhoon Warning Center) Tropical Cyclone Warning text —
 //!   the official U.S. forecast authority for the basins NHC does not cover
 //!   (West Pacific, Indian Ocean, Southern Hemisphere). Its fixed-format
 //!   `wpNNyyweb.txt` bulletin carries a per-point forecast track WITH max
-//!   sustained wind (kt) at 12/24/36/48/72/96/120 h: the West-Pacific analogue
+//!   sustained wind (kt) at 12/24/36/48/72/96/120 h — the West-Pacific analogue
 //!   of NHC's TCM. Active warnings are discovered from the JTWC RSS feed, then
 //!   matched to a GDACS storm by name to enrich its forecast dots with real
 //!   Saffir–Simpson intensity (the cone/track still come from GDACS). The
@@ -24,7 +24,7 @@
 //!
 //! The two feed a single [`TropicalCyclone`] so the UI never cares which
 //! center issued a storm. Fields are intentionally comprehensive (wind, gusts,
-//! pressure, motion, category), each source fills what it has, and richer
+//! pressure, motion, category) — each source fills what it has, and richer
 //! intensity sources (ATCF, CIMSS ADT) can enrich the same record later.
 //!
 //! Scales/definitions: Saffir–Simpson by 1-min max sustained wind (kt); the
@@ -56,7 +56,7 @@ pub enum Basin {
 }
 
 impl Basin {
-    /// Approximate basin from position: the fallback when a source does not
+    /// Approximate basin from position — the fallback when a source does not
     /// name one (GDACS). Boundaries follow the WMO/agency areas of
     /// responsibility closely enough for labeling.
     pub fn from_lon_lat(lon: f32, lat: f32) -> Self {
@@ -124,7 +124,7 @@ impl Source {
     }
 }
 
-/// Which official center's bulletin a [`WarningInfo`] came from: drives the
+/// Which official center's bulletin a [`WarningInfo`] came from — drives the
 /// product noun on the storm card ("JTWC Warning #25" vs "NHC Advisory #15").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WarningAgency {
@@ -146,10 +146,10 @@ impl WarningAgency {
 /// bulletin behind a storm's forecast (a JTWC Tropical Cyclone Warning or an
 /// NHC Forecast/Advisory). Two jobs:
 ///
-/// 1. **Visible timing**: the card shows WHICH bulletin the numbers came from
+/// 1. **Visible timing** — the card shows WHICH bulletin the numbers came from
 ///    and how old it is (`JTWC Warning #25 · issued 07/0300Z (4 h ago) ·
 ///    position 07/0000Z`), so stale data is never silent.
-/// 2. **Official vitals**, for JTWC-covered storms the analysis wind/gusts/
+/// 2. **Official vitals** — for JTWC-covered storms the analysis wind/gusts/
 ///    pressure/position/motion replace the GDACS aggregate, which repeats a
 ///    storm's last-processed severity for many hours after JTWC has already
 ///    issued newer warnings (see [`sync_storm_with_geometry`]).
@@ -185,7 +185,7 @@ impl WarningInfo {
     }
 
     /// The storm-card timing line: product identity, issue time (with its age
-    /// relative to `now`), and analysis-position time, every part the
+    /// relative to `now`), and analysis-position time — every part the
     /// bulletin carried, e.g.
     /// `JTWC Warning #25 · issued 07/0300Z (4 h ago) · position 07/0000Z`.
     pub fn identity_summary(&self, now: DateTime<Utc>) -> String {
@@ -357,7 +357,7 @@ pub fn destination_point(origin: GeoPoint, bearing_deg: f32, distance_km: f32) -
 
 /// Build the closed geographic outline of one wind-radii threshold about
 /// `center`: four quarter-circle arcs (NE/SE/SW/NW), each at its own quadrant
-/// radius, joined by the short radial steps at the cardinal bearings, the
+/// radius, joined by the short radial steps at the cardinal bearings — the
 /// classic ATCF/JTWC "wind rose". `steps_per_quadrant` samples each arc (≥1);
 /// the returned ring is closed (last point repeats the first). Empty when every
 /// quadrant radius is zero. Pure geographic points (NM → km great-circle
@@ -449,12 +449,12 @@ const ENVELOPE_SAMPLE_KM: f32 = 30.0;
 /// single-circle case. 10° keeps the chord sagitta under 0.4 % of the radius.
 const ENVELOPE_ARC_STEP_DEG: f32 = 10.0;
 /// A boundary candidate sunk deeper than this (km) into one of the corridor's
-/// own capsules is pruned, it belongs to a stretch of offset curve that a
+/// own capsules is pruned — it belongs to a stretch of offset curve that a
 /// neighboring, bigger/closer circle has swallowed (the inner-bend
 /// "offsets cross" case). True boundary points sit at depth ≈ 0.
 const ENVELOPE_PRUNE_KM: f32 = 1.0;
 /// Consecutive track points closer than this (km) are merged before any
-/// bearing is taken, a near-duplicate forecast position would otherwise
+/// bearing is taken — a near-duplicate forecast position would otherwise
 /// orient an offset from pure position noise.
 const ENVELOPE_MIN_SEG_KM: f32 = 5.0;
 
@@ -470,7 +470,7 @@ fn haversine_km(a: GeoPoint, b: GeoPoint) -> f32 {
 }
 
 /// Initial great-circle bearing (degrees, 0° = true N, clockwise) from `a`
-/// toward `b`: the standard forward-azimuth formula, the exact inverse of
+/// toward `b` — the standard forward-azimuth formula, the exact inverse of
 /// [`destination_point`] (following that bearing for their haversine distance
 /// lands on `b`).
 fn initial_bearing_deg(a: GeoPoint, b: GeoPoint) -> f32 {
@@ -495,7 +495,7 @@ fn wrap_deg_180(deg: f32) -> f32 {
 
 /// Signed distance (km, negative inside) from `x` to the tapered capsule swept
 /// from the circle (`a`, `ra_km`) to the circle `len_km` away along bearing
-/// `theta_ab_deg` with radius `rb_km`, i.e. the union of the linearly
+/// `theta_ab_deg` with radius `rb_km` — i.e. the union of the linearly
 /// interpolated circles, which equals the convex hull of the two end circles.
 /// Exact on the sphere: `x` is put into cross-track / along-track coordinates
 /// about the segment geodesic and the 1-D convex minimum
@@ -552,24 +552,24 @@ fn arc_interior_points(
         .collect()
 }
 
-/// The envelope of per-point circles laid along a (curved) track, the
+/// The envelope of per-point circles laid along a (curved) track — the
 /// tropical-cyclone "cone" construction: a tapered buffer of the polyline
 /// `(P_i, r_i)` (radii in NM) whose boundary follows every bend of the track
 /// instead of straight-lining from the first circle to the last the way a
 /// convex hull does.
 ///
-/// Geometry, per segment: the exact external tangent to the two end circles,
+/// Geometry, per segment: the exact external tangent to the two end circles —
 /// the offset bearing leans `asin((r_b − r_a)/d)` back from the perpendicular,
 /// so a strong taper still yields true straight tangent edges (a plain
 /// perpendicular offset would sit `r·(1 − cos tilt)` inside the hull at the
 /// small end). At each interior vertex the outer side of the bend walks the
 /// vertex circle's arc between the two tangent contacts; on the inner side the
 /// tangent edges cross, and since both are tangent to the vertex circle their
-/// intersection (the miter) sits on the contact bisector at `r/cos(Δ/2)`:
+/// intersection (the miter) sits on the contact bisector at `r/cos(Δ/2)` —
 /// that corner is emitted instead of a concave arc, and both adjoining edges
 /// are trimmed back to it (`r·tan(Δ/2)` from their contacts) so no sample is
 /// ever left past the crossing. Edge stretches that sink into a NON-adjacent
-/// capsule (segments much shorter than the radii: the JTWC West-Pacific
+/// capsule (segments much shorter than the radii — the JTWC West-Pacific
 /// regime, where 6–12-h track steps are ~150 NM under 260-NM gale radii) are
 /// pruned by an exact point-in-tapered-capsule test; together the trim and
 /// the prune keep the inner side of a sharp bend from self-looping. Round
@@ -658,7 +658,7 @@ pub fn track_circle_envelope(points_nm: &[(GeoPoint, f32)]) -> Vec<GeoPoint> {
         .collect();
     // Tangent contact bearing at a segment's endpoints: perpendicular to the
     // travel bearing, leaned back by the taper tilt (side −1 = left, +1 =
-    // right of travel). Both ends of a segment share it: the radius to an
+    // right of travel). Both ends of a segment share it — the radius to an
     // external tangent's contact point is parallel at both circles.
     let offset_bearing = |seg: &Seg, side: f32| seg.theta + side * (90.0 + seg.tilt_deg);
 
@@ -669,7 +669,7 @@ pub fn track_circle_envelope(points_nm: &[(GeoPoint, f32)]) -> Vec<GeoPoint> {
         };
         // On an inner join the tangent edges cross at the miter, so the runs
         // on both sides must be TRIMMED back to it: the contact-to-miter
-        // distance along each edge is r·tan(Δ/2). 25 % slack: over-trimming
+        // distance along each edge is r·tan(Δ/2). 25 % slack — over-trimming
         // is free (the bridged stretch is collinear with the tangent edge and
         // the emitted miter), while any sample left past the miter would sit
         // a sub-prune sliver inside the neighboring capsule and micro-loop
@@ -692,7 +692,7 @@ pub fn track_circle_envelope(points_nm: &[(GeoPoint, f32)]) -> Vec<GeoPoint> {
                 let (center, r_km) = discs[i];
                 if side * delta <= 0.0 {
                     // Outer side of the bend: the vertex circle bulges out
-                    // between the two tangent edges, walk its arc.
+                    // between the two tangent edges — walk its arc.
                     chain.extend(arc_interior_points(center, r_km, ob_prev, delta));
                 } else if r_km > 0.0 {
                     // Inner side: the tangent edges cross. Both are tangent to
@@ -801,8 +801,8 @@ pub fn track_circle_envelope(points_nm: &[(GeoPoint, f32)]) -> Vec<GeoPoint> {
 /// track. Each point contributes a circle at its LARGEST 34-kt quadrant radius
 /// (which contains the whole rose), and the ring is the tapered envelope of
 /// those circles laid along the forecast polyline ([`track_circle_envelope`]),
-/// so it follows a curved track. The previous construction (a convex hull of
-/// the sampled roses) straight-lined from the small first circle to the big
+/// so it follows a curved track. The previous construction — a convex hull of
+/// the sampled roses — straight-lined from the small first circle to the big
 /// last one, so on a recurving track (live report: Typhoon Bavi warning #25)
 /// the sides cut the inside of the bend and the whole front of the cone drew
 /// visibly too fat. Empty when no point carries a nonzero 34-kt radius. Pure
@@ -828,7 +828,7 @@ pub struct StormGeometry {
     pub centroid: Option<GeoPoint>,
     /// Track polylines (past + forecast). GDACS delivers the track as many
     /// short, independently-oriented segments, so these are kept SEPARATE (not
-    /// concatenated): flattening them into one polyline zigzags and draws
+    /// concatenated) — flattening them into one polyline zigzags and draws
     /// spurious connecting lines. Each inner Vec is one drawable segment.
     pub track: Vec<Vec<GeoPoint>>,
     /// Cone-of-uncertainty outer ring.
@@ -1037,7 +1037,7 @@ struct NhcStorm {
     last_update: Option<String>,
     #[serde(default)]
     public_advisory: Option<NhcProduct>,
-    /// The Tropical Cyclone Forecast/Advisory (TCM) product, the machine-
+    /// The Tropical Cyclone Forecast/Advisory (TCM) product — the machine-
     /// readable forecast track WITH per-point max wind. Its `url` is a stable
     /// "latest" bulletin, e.g. `.../text/MIATCMAT1.shtml`.
     #[serde(default)]
@@ -1129,7 +1129,7 @@ fn nhc_classification_label(code: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// NHC Tropical Cyclone Forecast/Advisory (TCM), per-point forecast + intensity
+// NHC Tropical Cyclone Forecast/Advisory (TCM) — per-point forecast + intensity
 // ---------------------------------------------------------------------------
 
 /// Parse the official forecast track from an NHC Tropical Cyclone
@@ -1138,7 +1138,7 @@ fn nhc_classification_label(code: &str) -> String {
 /// (`DD/HHMMZ  LATn  LONw`) followed by a `MAX WIND nnn KT` line and the
 /// `34/50/64 KT... nnNE nnSE nnSW nnNW.` quadrant wind-radii lines, so NHC
 /// carries per-point **valid time, position, max sustained wind (kt), and
-/// 34/50/64-kt quadrant wind radii**: everything the Saffir–Simpson color
+/// 34/50/64-kt quadrant wind radii** — everything the Saffir–Simpson color
 /// ramp and the wind-rose / 34-kt danger-area rendering need.
 ///
 /// This is NHC's machine-readable forecast product (linked from
@@ -1197,7 +1197,7 @@ fn nhc_block_after<'a>(lines: &'a [&'a str], i: usize) -> &'a [&'a str] {
     &lines[i + 1..end]
 }
 
-/// Parse the current-position (analysis) wind radii from an NHC TCM: the
+/// Parse the current-position (analysis) wind radii from an NHC TCM — the
 /// `34/50/64 KT` quadrant lines directly under `MAX SUSTAINED WINDS`, valid at
 /// the advisory's `CENTER LOCATED NEAR` position. Empty when the storm carries
 /// no radii (below 34 kt). The block is bounded at the first blank line, and
@@ -1255,7 +1255,7 @@ pub fn parse_nhc_warning_info(text: &str) -> Option<WarningInfo> {
         None => (None, None),
     };
 
-    // "MAX SUSTAINED WINDS 145 KT WITH GUSTS TO 175 KT.": the first such
+    // "MAX SUSTAINED WINDS 145 KT WITH GUSTS TO 175 KT." — the first such
     // line that carries a number (guards against digit-less headers, as in
     // the JTWC parser).
     let vitals = text
@@ -1302,10 +1302,10 @@ fn parse_nhc_center_rest(
 
 /// Parse one TCM quadrant wind-radii line, e.g. `64 KT....... 25NE  25SE  25SW
 /// 25NW.` (analysis block) or `34 KT...100NE 100SE  80SW 120NW.` (forecast
-/// block: note the dots can abut the first radius with no space). Radii are
+/// block — note the dots can abut the first radius with no space). Radii are
 /// nautical miles; a `0` radius means no reach in that quadrant. None unless
 /// the threshold is one of the ATCF 34/50/64-kt set AND all four quadrants are
-/// present, which also rejects `MAX WIND 145 KT...` and `12 FT SEAS..` lines.
+/// present — which also rejects `MAX WIND 145 KT...` and `12 FT SEAS..` lines.
 fn parse_nhc_radii_line(line: &str) -> Option<WindRadii> {
     let (kt_tok, rest) = line.trim().split_once(char::is_whitespace)?;
     let kt = kt_tok.parse::<u16>().ok()?;
@@ -1344,7 +1344,7 @@ fn parse_nhc_radii_line(line: &str) -> Option<WindRadii> {
 }
 
 /// Pull `(HHMM, year, month, day)` from the TCM datestamp line, e.g.
-/// `2100 UTC TUE OCT 08 2024`: the advisory's issuance instant.
+/// `2100 UTC TUE OCT 08 2024` — the advisory's issuance instant.
 fn nhc_issuance_stamp(text: &str) -> Option<(u32, i32, u32, u32)> {
     for line in text.lines() {
         let toks: Vec<&str> = line.split_whitespace().collect();
@@ -1461,7 +1461,7 @@ fn parse_nhc_max_wind(line: &str) -> Option<f32> {
 }
 
 // ---------------------------------------------------------------------------
-// JTWC: RSS discovery + Tropical Cyclone Warning (per-point forecast + wind)
+// JTWC — RSS discovery + Tropical Cyclone Warning (per-point forecast + wind)
 // ---------------------------------------------------------------------------
 
 /// The JTWC public RSS feed listing active Tropical Cyclone Warnings and the
@@ -1472,7 +1472,7 @@ pub const JTWC_RSS_URL: &str = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss?tc"
 /// One active JTWC warning discovered from the RSS feed: its designation
 /// (e.g. `09W`), storm name (e.g. `Bavi`), the Tropical Cyclone Warning
 /// text URL (`wpNNyyweb.txt`) carrying the per-point forecast + intensity, and
-/// the warning sequence number the feed advertises (`Warning #25`), the
+/// the warning sequence number the feed advertises (`Warning #25`) — the
 /// freshness signal that tells the geometry cache a re-issued warning exists.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JtwcWarningRef {
@@ -1533,7 +1533,7 @@ fn is_jtwc_warning_url(url: &str) -> bool {
 }
 
 /// The last `NNX (Name)` designation+name in `before` (the text preceding a
-/// warning URL) (the header of the storm that URL belongs to) plus the
+/// warning URL) — the header of the storm that URL belongs to — plus the
 /// `Warning #NN` sequence number that follows the name in the same header.
 /// `NNX` is two digits and one or more letters (`09W`, `01B`, `02S`); the name
 /// is in the following parentheses. Rejects non-storm parentheticals like
@@ -1562,7 +1562,7 @@ fn last_jtwc_designation(before: &str) -> Option<(String, String, Option<u32>)> 
     found
 }
 
-/// The `#NN` warning number directly after a storm header's name, e.g.
+/// The `#NN` warning number directly after a storm header's name — e.g.
 /// `... 09W (Bavi) Warning #25 </b>` → 25. Bounded to the next few characters
 /// so an unrelated `#` further down the feed is never picked up.
 fn warning_number_after(text: &str) -> Option<u32> {
@@ -1575,7 +1575,7 @@ fn warning_number_after(text: &str) -> Option<u32> {
     digits.parse().ok()
 }
 
-/// `09W`, `01B`, `02S`: two ASCII digits followed by one or more letters.
+/// `09W`, `01B`, `02S` — two ASCII digits followed by one or more letters.
 fn is_jtwc_designation(tok: &str) -> bool {
     let bytes = tok.as_bytes();
     bytes.len() >= 3
@@ -1585,7 +1585,7 @@ fn is_jtwc_designation(tok: &str) -> bool {
 
 /// Set `forecast_url` (and the RSS-advertised warning number) on each GDACS
 /// storm whose name matches an active JTWC warning, so the geometry pipeline
-/// can enrich it with per-point intensity, and refetch it when the warning
+/// can enrich it with per-point intensity — and refetch it when the warning
 /// number advances. (NHC storms already carry per-point wind in their own TCM.)
 pub fn attach_jtwc_forecast_urls(storms: &mut [TropicalCyclone], refs: &[JtwcWarningRef]) {
     for storm in storms.iter_mut() {
@@ -1603,11 +1603,11 @@ pub fn attach_jtwc_forecast_urls(storms: &mut [TropicalCyclone], refs: &[JtwcWar
 }
 
 /// Parse the official forecast track from a JTWC Tropical Cyclone Warning
-/// (`wpNNyyweb.txt`): the West-Pacific/Indian-Ocean analogue of NHC's TCM.
+/// (`wpNNyyweb.txt`) — the West-Pacific/Indian-Ocean analogue of NHC's TCM.
 /// Under `FORECASTS:` (and its `EXTENDED`/`LONG RANGE OUTLOOK` continuations)
 /// each point is a `NN HRS, VALID AT:` header, then a `DDHHMMZ --- LATn LONe`
 /// position line, a `MAX SUSTAINED WINDS - nnn KT` line, then the `RADIUS OF
-/// 034/050/064 KT WINDS - ...` quadrant wind-radii blocks: carrying per-point
+/// 034/050/064 KT WINDS - ...` quadrant wind-radii blocks — carrying per-point
 /// **valid time, position, max sustained wind (kt), and 34/50/64-kt quadrant
 /// wind radii**, exactly what the Saffir–Simpson color ramp and the JTWC
 /// wind-rose / danger-area rendering need. The current `WARNING POSITION`
@@ -1622,7 +1622,7 @@ pub fn parse_jtwc_forecast_warning(text: &str) -> Vec<ForecastPoint> {
     // Each forecast point is a block that opens with a "NN HRS, VALID AT:"
     // header and runs until the next such header (or the trailing REMARKS
     // narrative). Slicing on the headers keeps every block's position, wind and
-    // wind radii self-contained: one block never reads the next block's radii.
+    // wind radii self-contained — one block never reads the next block's radii.
     let headers: Vec<usize> = lines
         .iter()
         .enumerate()
@@ -1669,7 +1669,7 @@ pub fn parse_jtwc_forecast_warning(text: &str) -> Vec<ForecastPoint> {
 }
 
 /// Parse the current-position (analysis) wind radii from a JTWC warning's
-/// `PRESENT WIND DISTRIBUTION` block: the 34/50/64-kt radii valid at the
+/// `PRESENT WIND DISTRIBUTION` block — the 34/50/64-kt radii valid at the
 /// `WARNING POSITION`. Empty when the block is absent (below 34 kt, or an older
 /// bulletin without it). Bounded to the analysis block (up to `FORECASTS:` /
 /// the first forecast header) so the forecast blocks' radii are not folded in.
@@ -1860,7 +1860,7 @@ fn parse_jtwc_movement(line: &str) -> Option<(f32, f32)> {
     Some((dir, speed))
 }
 
-/// The `MINIMUM CENTRAL PRESSURE AT 070000Z IS 934 MB` figure: the number
+/// The `MINIMUM CENTRAL PRESSURE AT 070000Z IS 934 MB` figure — the number
 /// immediately before the `MB` token (so the DTG is never mistaken for it),
 /// scanned across line wraps (live JTWC REMARKS wrap mid-sentence).
 fn parse_min_pressure(text: &str) -> Option<f32> {
@@ -1878,7 +1878,7 @@ fn parse_min_pressure(text: &str) -> Option<f32> {
 /// DTG (`WTPN31 PGTW 070300`), the `WARNING POSITION` analysis time/position,
 /// the `PRESENT WIND DISTRIBUTION` current max wind + gusts, the six-hour
 /// movement, and the REMARKS minimum central pressure. This is the piece the
-/// storm card shows, and the piece that replaces a lagging GDACS severity
+/// storm card shows — and the piece that replaces a lagging GDACS severity
 /// (see [`sync_storm_with_geometry`]); the per-forecast-time track stays in
 /// [`parse_jtwc_forecast_warning`]. `None` when the text carries none of it
 /// (not a warning bulletin).
@@ -1915,7 +1915,7 @@ pub fn parse_jtwc_warning_info(text: &str) -> Option<WarningInfo> {
         )
     });
 
-    // The analysis section runs up to FORECASTS:/the first forecast header:
+    // The analysis section runs up to FORECASTS:/the first forecast header —
     // its position line and MAX SUSTAINED WINDS are the CURRENT state.
     let analysis_end = lines
         .iter()
@@ -1941,7 +1941,7 @@ pub fn parse_jtwc_warning_info(text: &str) -> Option<WarningInfo> {
         None => (None, None),
     };
 
-    // The first MAX SUSTAINED WINDS line that carries a number: skipping the
+    // The first MAX SUSTAINED WINDS line that carries a number — skipping the
     // digit-less "MAX SUSTAINED WINDS BASED ON ONE-MINUTE AVERAGE" disclaimer
     // that precedes it in every bulletin.
     let vitals = analysis
@@ -2016,7 +2016,7 @@ struct GdacsProps {
     /// On `getgeometry` forecast points: `MMDDHHMM` valid-time stamp (no year).
     #[serde(default)]
     key: Option<String>,
-    /// On `getgeometry` forecast points: the analysis ("current") time,
+    /// On `getgeometry` forecast points: the analysis ("current") time —
     /// identical across a storm's points, so it is the past/forecast pivot.
     #[serde(default)]
     todate: Option<String>,
@@ -2119,12 +2119,12 @@ fn gdacs_to_cyclone(feature: GdacsFeature) -> Option<TropicalCyclone> {
 /// forecast points. Track segments are `Line_Line_<n>`; the cone is
 /// `Poly_Cones`; the current center is `Point_Centroid`.
 ///
-/// The forecast track is delivered as `Point_Polygon_Point_<n>` features: one
+/// The forecast track is delivered as `Point_Polygon_Point_<n>` features — one
 /// per 6/12-hourly track point (past AND future), each a small wind-radii circle
 /// whose center is the track position, with a `key` (`MMDDHHMM`) valid-time
 /// stamp and a `todate` analysis time. GDACS repeats only the storm's *current*
 /// severity on every point (not a per-point forecast), so forecast points get
-/// `max_wind_kt = None` and are colored by the storm's current category, unless
+/// `max_wind_kt = None` and are colored by the storm's current category — unless
 /// [`fetch_storm_geometry`] later replaces them with the JTWC warning's honest
 /// per-point intensity. We keep the points strictly AFTER the analysis time (the
 /// forecast; earlier points are the observed past already drawn as `Line_Line`
@@ -2217,7 +2217,7 @@ fn gdacs_forecast_points(
 
 /// `MMDDHHMM` + the analysis time -> a UTC instant. The stamp carries no year;
 /// every point sits within a few days of the analysis time, so we pick the year
-/// (prev/this/next) that lands the point closest to it: correct on either side
+/// (prev/this/next) that lands the point closest to it — correct on either side
 /// of a New-Year boundary.
 fn gdacs_key_time(key: &str, reference: DateTime<Utc>) -> Option<DateTime<Utc>> {
     if key.len() != 8 {
@@ -2305,7 +2305,7 @@ pub const GDACS_TC_LIST_URL: &str =
 /// Two source records whose positions sit within this great-circle distance
 /// (km) describe the SAME storm. GDACS positions can lag NHC's by several
 /// hours (a 15-kt storm covers ~330 km in 12 h), while two DISTINCT active
-/// cyclones essentially never get this close: direct interaction (the
+/// cyclones essentially never get this close — direct interaction (the
 /// Fujiwhara regime) already begins near ~1300 km separation.
 const DUPLICATE_STORM_KM: f32 = 500.0;
 
@@ -2332,10 +2332,10 @@ fn duplicates_nhc_storm(gdacs: &TropicalCyclone, nhc: &[TropicalCyclone]) -> boo
 }
 
 /// Combine NHC and GDACS into one deduplicated list. NHC is authoritative for
-/// the basins it covers (Atlantic, East/Central Pacific: it carries wind AND
+/// the basins it covers (Atlantic, East/Central Pacific — it carries wind AND
 /// pressure), so a GDACS record of the SAME storm (matched per storm by name
 /// or position proximity) is dropped in favor of NHC's. Every other GDACS
-/// storm is kept, including one in an NHC basin with no NHC counterpart:
+/// storm is kept — including one in an NHC basin with no NHC counterpart:
 /// GDACS supplies the West Pacific/Indian Ocean/Southern Hemisphere, and it is
 /// also the only witness to an Atlantic/E-Pac storm while NHC is down or has
 /// not initiated advisories (the old per-BASIN filter threw those away and
@@ -2351,7 +2351,7 @@ pub fn merge_sources(
         .collect();
     let mut merged = nhc;
     merged.extend(kept_gdacs);
-    // Strongest first, that is the ordering the storm list wants.
+    // Strongest first — that is the ordering the storm list wants.
     merged.sort_by(|a, b| {
         b.max_wind_kt
             .unwrap_or(0.0)
@@ -2363,7 +2363,7 @@ pub fn merge_sources(
 /// Fetch and merge every active tropical cyclone worldwide. Resilient: if one
 /// source fails, the other's storms are still returned; only a total failure
 /// is an error. As a best-effort last step, active JTWC warnings are matched to
-/// the GDACS storms so each carries a `forecast_url` for per-point intensity:
+/// the GDACS storms so each carries a `forecast_url` for per-point intensity —
 /// a JTWC outage silently leaves the honest GDACS-only fallback in place.
 pub fn fetch_active_cyclones(
     client: &reqwest::blocking::Client,
@@ -2384,12 +2384,12 @@ pub fn fetch_active_cyclones(
 
 /// Combine the two per-source fetch results into one storm list. A partial
 /// failure must NOT masquerade as "no active cyclones": a single surviving
-/// source is trusted only when it actually reports storms, when it is EMPTY
+/// source is trusted only when it actually reports storms — when it is EMPTY
 /// we cannot distinguish "genuinely quiet" from "the source that carried the
 /// storms is down" (GDACS is the only feed for the West Pacific, NHC covers
 /// just the Atlantic/E-Pac), so the failure is surfaced and the caller keeps
 /// retrying instead of showing a false all-clear. When NHC is DOWN, EVERY
-/// GDACS storm is kept, including those in NHC's own basins (there is no NHC
+/// GDACS storm is kept — including those in NHC's own basins (there is no NHC
 /// record to dedupe against; the old per-basin filter silently discarded a
 /// GDACS-tracked Atlantic hurricane during an NHC outage, producing exactly
 /// the false "Quiet across every basin" this failover exists to prevent).
@@ -2411,7 +2411,7 @@ pub fn combine_source_results(
             "NHC unavailable (GDACS reports no storms): {nhc_err}"
         )),
         (Err(nhc_err), Err(gdacs_err)) => Err(format!(
-            "both sources failed, NHC: {nhc_err}; GDACS: {gdacs_err}"
+            "both sources failed — NHC: {nhc_err}; GDACS: {gdacs_err}"
         )),
     }
 }
@@ -2449,7 +2449,7 @@ pub fn fetch_storm_geometry(
 }
 
 /// Apply a fetched JTWC Tropical Cyclone Warning bulletin to a GDACS storm's
-/// geometry: the pure core of [`fetch_storm_geometry`]'s enrichment, split
+/// geometry — the pure core of [`fetch_storm_geometry`]'s enrichment, split
 /// out so a warning-N → warning-N+1 replacement is provable without a
 /// network. The warning's per-point forecast REPLACES the intensity-less
 /// GDACS points, the analysis-point 34/50/64-kt radii anchor the wind-rose /
@@ -2467,7 +2467,7 @@ pub fn apply_jtwc_warning(geometry: &mut StormGeometry, warning_text: &str) {
     }
 }
 
-/// Mirror a fetched [`StormGeometry`] onto its storm record: the re-attach
+/// Mirror a fetched [`StormGeometry`] onto its storm record — the re-attach
 /// the UI runs every frame (a fresh storms list arrives with empty
 /// forecast/radii/warning, and the geometry map is the transport).
 ///
@@ -2478,7 +2478,7 @@ pub fn apply_jtwc_warning(geometry: &mut StormGeometry, warning_text: &str) {
 /// the official analysis wind/gusts/pressure/position/motion win and the
 /// category + classification are recomputed from the official wind. NHC
 /// storms keep their `CurrentStorms.json` vitals (refreshed with every public
-/// advisory, at least as fresh as the TCM), only the advisory identity is
+/// advisory, at least as fresh as the TCM) — only the advisory identity is
 /// attached for display.
 pub fn sync_storm_with_geometry(storm: &mut TropicalCyclone, geometry: &StormGeometry) {
     if storm.forecast != geometry.forecast {
@@ -2558,7 +2558,7 @@ mod tests {
     //  - Hurricane Milton's actual Forecast/Advisory (TCM) #15 (AL142024).
     const GDACS_FCST: &str =
         include_str!("../tests/fixtures/tropical/gdacs_bavi_forecast_geometry.json");
-    // BAVI-26's live `getgeometry` with the (large) impact polygons trimmed,
+    // BAVI-26's live `getgeometry` with the (large) impact polygons trimmed —
     // its real 218-vertex cone spans ~27° of longitude (Guam → Philippine Sea),
     // the wide, partly-off-screen cone the app_ui overlay must still draw.
     const GDACS_WIDE_CONE: &str =
@@ -2570,7 +2570,7 @@ mod tests {
     const JTWC_RSS: &str = include_str!("../tests/fixtures/tropical/jtwc_rss.xml");
     const JTWC_WARNING: &str = include_str!("../tests/fixtures/tropical/jtwc_bavi_warning.txt");
     // The SAME storm one day later (captured live 2026-07-07): Warning #25,
-    // downgraded to 125 kt, the newer-warning-replaces-older proof, and the
+    // downgraded to 125 kt — the newer-warning-replaces-older proof, and the
     // wrapped-REMARKS pressure form.
     const JTWC_WARNING_25: &str =
         include_str!("../tests/fixtures/tropical/jtwc_bavi_warning_25.txt");
@@ -2724,7 +2724,7 @@ MAX WIND 50 KT...GUSTS 65 KT.
             r.warning_url,
             "https://www.metoc.navy.mil/jtwc/products/wp0926web.txt"
         );
-        // The advertised sequence number, the geometry cache's refetch signal.
+        // The advertised sequence number — the geometry cache's refetch signal.
         assert_eq!(r.warning_nr, Some(21));
         // The filename gate distinguishes storm warnings from basin outlooks.
         assert!(is_jtwc_warning_url(
@@ -2933,7 +2933,7 @@ REMARKS:
                 .map(|dt| dt.and_utc())
         );
         // GDACS repeats only the current severity, so there is no honest
-        // per-point forecast wind: left None (dot inherits current category).
+        // per-point forecast wind — left None (dot inherits current category).
         assert!(geom.forecast.iter().all(|p| p.max_wind_kt.is_none()));
 
         let last = geom.forecast.last().unwrap();
@@ -3040,7 +3040,7 @@ REMARKS:
     fn merge_dedupes_per_storm_not_per_basin() {
         // Audit #1: a legitimate GDACS-tracked Atlantic system with NO NHC
         // counterpart (NHC hasn't initiated advisories) must survive the
-        // merge, the old per-basin filter silently discarded it.
+        // merge — the old per-basin filter silently discarded it.
         let nhc = parse_nhc_current_storms(NHC).unwrap(); // Alberto, 24.5N 88.9W
         let oscar = synthetic_storm("gdacs:900001:3", "Oscar", Source::Gdacs, -60.0, 30.0, 90.0);
         let mut gdacs = parse_gdacs_event_list(GDACS_LIST).unwrap();
@@ -3058,7 +3058,7 @@ REMARKS:
     #[test]
     fn merge_drops_gdacs_duplicate_by_name() {
         // GDACS's record of the SAME hurricane, position drifted well past the
-        // proximity gate: the (case-insensitive) name still identifies it.
+        // proximity gate — the (case-insensitive) name still identifies it.
         let nhc = parse_nhc_current_storms(NHC).unwrap();
         let dup = synthetic_storm(
             "gdacs:900002:1",
@@ -3105,7 +3105,7 @@ REMARKS:
     fn combine_keeps_all_gdacs_storms_when_nhc_is_down() {
         // Audit #1 regression: during an NHC outage, GDACS's record of an
         // Atlantic hurricane is the only witness. The old code ran the
-        // per-basin filter anyway and returned Ok(vec![]): a false
+        // per-basin filter anyway and returned Ok(vec![]) — a false
         // "Quiet across every basin" that also reset the aggressive retry.
         let atlantic = synthetic_storm(
             "gdacs:900005:2",
@@ -3266,7 +3266,7 @@ REMARKS:
     fn jtwc_current_radii_parses_analysis_block() {
         // PRESENT WIND DISTRIBUTION at WARNING POSITION 060000Z --- 14.3N 145.0E.
         let radii = parse_jtwc_current_radii(JTWC_WARNING);
-        // Exactly the three thresholds: the "POSITION ACCURATE TO WITHIN 020
+        // Exactly the three thresholds — the "POSITION ACCURATE TO WITHIN 020
         // NM" line (which precedes the PRESENT WIND DISTRIBUTION block, before
         // any RADIUS OF header) is NOT mistaken for a fourth wind radius.
         assert_eq!(
@@ -3288,7 +3288,7 @@ REMARKS:
     #[test]
     fn wind_radii_single_radius_form_is_symmetric() {
         // Synthetic edge check: the ATCF single-radius form (no quadrant word)
-        // means all four quadrants equal, no live BAVI point exercises it.
+        // means all four quadrants equal — no live BAVI point exercises it.
         let lines = ["RADIUS OF 034 KT WINDS - 100 NM"];
         let radii = parse_wind_radii_lines(&lines);
         assert_eq!(radii.len(), 1);
@@ -3370,7 +3370,7 @@ REMARKS:
 
     #[test]
     fn danger_area_envelopes_the_whole_34kt_track() {
-        // Build the 34-kt danger area from BAVI's analysis + forecast radii:
+        // Build the 34-kt danger area from BAVI's analysis + forecast radii —
         // the same inputs the overlay feeds it. It must fan NW from Guam
         // (~145°E) toward Taiwan/the Philippine Sea (~122°E), enclosing every
         // 34-kt gale field along the way.
@@ -3406,7 +3406,7 @@ REMARKS:
 
     // --- cone-envelope geometry helpers (tests only) -----------------------
 
-    /// Distance (km) from `x` to the nearest point of an open polyline:
+    /// Distance (km) from `x` to the nearest point of an open polyline —
     /// [`capsule_signed_distance_km`] with zero radii is exactly the spherical
     /// point-to-geodesic-segment distance.
     fn dist_to_polyline_km(x: GeoPoint, line: &[GeoPoint]) -> f32 {
@@ -3424,7 +3424,7 @@ REMARKS:
     }
 
     /// Max over `boundary`'s edges (sampled every ~10 km) of the distance to
-    /// `to`, with `to` a closed ring this is the one-sided Hausdorff
+    /// `to` — with `to` a closed ring this is the one-sided Hausdorff
     /// deviation between two boundaries; with `to` a track polyline it is the
     /// "how far does the cone stray from the track" measure. Edge INTERIORS
     /// matter: a convex hull's vertices all lie on uncertainty circles, only
@@ -3486,7 +3486,7 @@ REMARKS:
     }
 
     /// The pre-fix danger-area construction (convex hull of the sampled 34-kt
-    /// roses): kept here as the comparator the new envelope is judged
+    /// roses) — kept here as the comparator the new envelope is judged
     /// against.
     fn legacy_hull_34kt<'a>(
         points: impl Iterator<Item = (GeoPoint, &'a [WindRadii])>,
@@ -3506,7 +3506,7 @@ REMARKS:
     /// On a straight track the tapered envelope IS the old hull shape (tangent
     /// trapezoids + end arcs): the fix must not move straight-track cones
     /// beyond arc discretization. Radii taper hard (100→200 NM over ~3°), so
-    /// this also pins the true external-tangent tilt: a perpendicular-offset
+    /// this also pins the true external-tangent tilt — a perpendicular-offset
     /// approximation would sit ~7 km inside the hull at the small end and fail
     /// the 5-km bound.
     #[test]
@@ -3552,9 +3552,9 @@ REMARKS:
 
     /// The owner-reported v0.29.2 bug, on the real recurving Bavi warning #25:
     /// the convex-hull cone straight-lined across the bend (inner side cut,
-    /// front fat), while the tapered envelope must hug the curved track,
+    /// front fat), while the tapered envelope must hug the curved track —
     /// every boundary point within the largest gale radius (+ miter slack) of
-    /// the forecast polyline, while still containing every per-point circle,
+    /// the forecast polyline — while still containing every per-point circle,
     /// without self-intersecting.
     #[test]
     fn curved_bavi25_envelope_hugs_the_recurving_track() {
@@ -3596,7 +3596,7 @@ REMARKS:
             dev <= max_r * 1.01 + 2.0,
             "envelope hugs the recurve: {dev} km vs max radius {max_r} km"
         );
-        // ... which the legacy hull genuinely violated: its inner-bend chord
+        // ... which the legacy hull genuinely violated — its inner-bend chord
         // ran ~150 km outside any circle. This is the regression the fix
         // removes; if it ever fails the fixture stopped recurving.
         let hull = legacy_hull_34kt(track_points.iter().copied());
@@ -3849,7 +3849,7 @@ REMARKS:
     #[test]
     fn nhc_current_radii_parses_analysis_block_and_skips_seas() {
         let radii = parse_nhc_current_radii(NHC_TCM);
-        // Exactly the three wind thresholds: the `12 FT SEAS..` line (same
+        // Exactly the three wind thresholds — the `12 FT SEAS..` line (same
         // columnar layout, different quantity) must NOT be read as wind radii.
         assert_eq!(
             radii.iter().map(|r| r.kt).collect::<Vec<_>>(),
@@ -4071,7 +4071,7 @@ REMARKS:
     #[test]
     fn warning_identity_summary_shows_number_issue_age_and_position_time() {
         use chrono::TimeZone;
-        // The exact card strings: the user must always see how old the
+        // The exact card strings — the user must always see how old the
         // intensity is.
         let jtwc = parse_jtwc_warning_info(JTWC_WARNING_25).unwrap();
         let now = Utc.with_ymd_and_hms(2026, 7, 7, 7, 0, 0).unwrap();
@@ -4089,7 +4089,7 @@ REMARKS:
     }
 
     /// THE staleness proof (owner report, 2026-07-06): warning N then N+1
-    /// through the exact pipeline two geometry refetches run, the stored
+    /// through the exact pipeline two geometry refetches run — the stored
     /// storm state must reflect N+1, not the old peak.
     #[test]
     fn newer_jtwc_warning_replaces_stored_vitals() {
@@ -4109,7 +4109,7 @@ REMARKS:
         assert_eq!(storm.classification, "Super Typhoon");
 
         // Refetch under Warning #25 (live 2026-07-07 product, downgraded):
-        // EVERYTHING follows, intensity, category/label, gusts, pressure,
+        // EVERYTHING follows — intensity, category/label, gusts, pressure,
         // motion, analysis position, forecast dots, and the identity line.
         apply_jtwc_warning(&mut geometry, JTWC_WARNING_25);
         sync_storm_with_geometry(&mut storm, &geometry);
@@ -4146,7 +4146,7 @@ REMARKS:
     #[test]
     fn sync_attaches_nhc_advisory_identity_without_overriding_vitals() {
         // NHC vitals come from CurrentStorms.json (refreshed every public
-        // advisory, at least as fresh as the 6-hourly TCM): the TCM identity
+        // advisory, at least as fresh as the 6-hourly TCM) — the TCM identity
         // is attached for display but must NOT clobber them.
         let mut storm = parse_nhc_current_storms(NHC).unwrap().pop().unwrap(); // Alberto
         let geometry = nhc_geometry_from_forecast_advisory(NHC_TCM);

@@ -54,7 +54,7 @@ beats a refusal that never asked.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import errno
 import functools
@@ -162,6 +162,18 @@ def document() -> Mapping[str, object]:
     return json.loads(_table_path().read_text(encoding="utf-8"))
 
 
+@functools.lru_cache(maxsize=1)
+def archive_document() -> Mapping[str, object]:
+    """Dated archive object grammars, shared with the Rust downloader."""
+    path = _table_path().with_name("rw-wps-archive-layouts.v1.json")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def archive_rows(source_id: str):
+    return tuple(row for row in archive_document()["layouts"]
+                 if row["source_id"] == source_id)
+
+
 # --------------------------------------------------------------------------
 # Rows
 # --------------------------------------------------------------------------
@@ -186,6 +198,11 @@ class Endpoint:
     retention_hours: float | None
     why: str
     transfer_rank: int = 0
+    layouts: tuple = field(default=(), hash=False)
+    #: An archive that takes a cycle some hours after it runs (its layout row's ``available_after_hours``): it does
+    #: not cover a younger cycle.  THE BREAKAGE THIS PREVENTS (WOOF production run_6452d3110cf0705f, 2026-10-26):
+    #: GFS 06Z asked for at 07:29Z, before it posted, ended on NCAR GDEX's 404, an archive about two days behind.
+    available_after_hours: float | None = None
 
     @property
     def host(self) -> str:
@@ -200,6 +217,8 @@ class Endpoint:
     def covers(self, age_hours: float) -> bool:
         """Does this endpoint still serve a cycle ``age_hours`` old?"""
 
+        if self.available_after_hours is not None and age_hours < self.available_after_hours:
+            return False
         if self.retention_hours is None:
             return True
         return age_hours <= float(self.retention_hours)
@@ -207,17 +226,58 @@ class Endpoint:
     def url(self, key: str) -> str:
         """The absolute URL for one rendered object key."""
 
+        if self.layouts:
+            match = re.fullmatch(self.layouts[0]["key_pattern"], key)
+            if match is None:
+                raise ValueError(f"{self.name}: object key does not match its declared archive grammar: {key}")
+            tokens = {k: v or "" for k, v in match.groupdict().items()}
+            stamp = f'{tokens["YYYY"]}-{tokens["MM"]}-{tokens["DD"]}T{tokens["HH"]}'
+            for row in self.layouts:
+                if (stamp >= row["record_start"]
+                        and (not row.get("cycle_until") or stamp < row["cycle_until"])):
+                    lead = int(tokens["FFF"])
+                    segments = row.get("lead_segments", ())
+                    if segments and not any(
+                            lead <= seg["through"] and lead % seg["step"] == 0
+                            and (i == 0 or lead > segments[i-1]["through"])
+                            for i, seg in enumerate(segments)):
+                        raise ValueError(f"{self.name}: lead {lead} is outside the archive's declared forecast ladder")
+                    return row["base"] + "/" + row["path_template"].format(**tokens) + tokens.get("SUFFIX", "")
+            raise ValueError(f"{self.name}: no declared archive layout for {stamp}")
         return f"{self.base}/{key.lstrip('/')}"
+
+    def supports_cycle(self, cycle: datetime) -> bool:
+        stamp = cycle.strftime("%Y-%m-%dT%H")
+        return not self.layouts or any(
+            stamp >= row["record_start"] and
+            (not row.get("cycle_until") or stamp < row["cycle_until"])
+            for row in self.layouts)
+
+    @property
+    def rust_source(self) -> str:
+        return self.layouts[0]["rust_source"] if self.layouts else {"s3": "aws"}.get(self.name, self.name)
+
+    @property
+    def product(self) -> str:
+        return self.layouts[0]["product"] if self.layouts else "pgrb2.0p25"
+
+    @property
+    def idx_available(self) -> bool:
+        return not self.layouts or bool(self.layouts[0]["idx_available"])
 
 
 def _endpoint(raw: Mapping[str, object], position: int) -> Endpoint:
     retention = raw.get("retention_hours")
     rank = raw.get("transfer_rank")
+    after = [float(row["available_after_hours"]) for row in raw.get("layouts", ())
+             if row.get("available_after_hours") is not None]
     return Endpoint(
+        available_after_hours=max(after) if after else None,
         name=str(raw["name"]),
         base=str(raw["base"]),
         retention_hours=(None if retention is None else float(retention)),
         why=str(raw.get("why", "")),
+        layouts=tuple(raw.get("layouts", ())),
         # No declared rank means "transfer in ladder order", which is
         # what every source outside the NCEP family does: the ladder
         # and the transfer order are then the same tuple, and nothing
@@ -228,13 +288,19 @@ def _endpoint(raw: Mapping[str, object], position: int) -> Endpoint:
 
 def _rows(source_id: str) -> tuple[Mapping[str, object], ...]:
     routes = dict(document().get("routes", {}))
-    if source_id in routes:
-        return tuple(dict(routes[source_id])["hosts"])
     legacy = dict(document().get("legacy_ladders", {}))
-    raw = legacy.get(source_id)
-    if isinstance(raw, list):
-        return tuple(raw)
-    return ()
+    raw = (dict(routes[source_id])["hosts"] if source_id in routes
+           else legacy.get(source_id, ()))
+    hosts = [dict(row) for row in raw] if isinstance(raw, (list, tuple)) else []
+    for row in archive_rows(source_id):
+        if row.get("append_host", True) and not any(h["name"] == row["transport"] for h in hosts):
+            hosts.append({"name": row["transport"], "base": row["base"],
+                          "retention_hours": None, "transfer_rank": row["transfer_rank"],
+                          "why": row["why"]})
+    for host in hosts:
+        host["layouts"] = tuple(row for row in archive_rows(source_id)
+                                if row["transport"] == host["name"])
+    return tuple(hosts)
 
 
 @functools.lru_cache(maxsize=None)
@@ -288,7 +354,8 @@ def cycle_age_hours(cycle: datetime, now: datetime | None = None) -> float:
 
 def serving_ladder(source_id: str, *, cycle: datetime,
                    now: datetime | None = None,
-                   pinned: str | None = None) -> tuple[Endpoint, ...]:
+                   pinned: str | None = None,
+                   throttle_fallthrough: bool = False) -> tuple[Endpoint, ...]:
     """The endpoints this cycle will actually be asked for, in order.
 
     A typed ``--transport`` is a DECISION, not a preference: it yields
@@ -297,17 +364,38 @@ def serving_ladder(source_id: str, *, cycle: datetime,
     to the endpoints whose retention covers the cycle's age -- and, when
     that filter would empty it, kept whole (see the module note:
     retention is an optimisation, never a bar).
+
+    ``throttle_fallthrough`` is the TRANSFER ladder's question (asked by
+    :func:`woof.fetch_routes.endpoint_ladder`): under the hosted AWS
+    policy, a pinned mirror whose ``host_policy`` row declares a
+    ``throttle`` keeps the cycle's other rungs behind it, so a file it
+    answers "slow down" for is moved from the next rung.  Cycle and
+    readiness questions leave it off and stay on the pinned mirror.
     """
 
     pinned = policy_transport(source_id, pinned)
     rungs = ladder(source_id)
     if not rungs:
         return ()
-    if pinned is not None:
-        return (endpoint_named(source_id, pinned),)
     age = cycle_age_hours(cycle, now)
-    covering = tuple(entry for entry in rungs if entry.covers(age))
-    return covering or rungs
+    dated = tuple(entry for entry in rungs if entry.supports_cycle(cycle))
+    covering = tuple(entry for entry in dated if entry.covers(age))
+    if pinned is not None:
+        head = endpoint_named(source_id, pinned)
+        if (throttle_fallthrough and policy_uses_aws(source_id)
+                and throttle_policy(head.host) is not None):
+            # The hosted policy's AWS pin is kept at the head, but a mirror
+            # whose host_policy row says it answers "slow down" keeps the
+            # cycle's other rungs behind it.  Named breakage: ECMWF's AWS
+            # mirror answered HEAD 200 and GET 503 SlowDown to ~90% of asks
+            # on 2026-10-29 while Google and data.ecmwf.int served the same
+            # keys, and the AWS-only ladder ended every IFS 9 km run on WOOF
+            # at fetch (exit 75).  NOAA's AWS buckets declare no throttle
+            # row, so they stay pinned alone and never fall through to NOMADS.
+            return (head,) + tuple(
+                entry for entry in (covering or dated) if entry is not head)
+        return (head,)
+    return covering or dated
 
 
 # --------------------------------------------------------------------------
@@ -704,15 +792,45 @@ def answer_code(error: BaseException) -> str | None:
     return code
 
 
-def throttled(endpoint: Endpoint, error: BaseException) -> Throttle | None:
-    """The throttle row this answer from ``endpoint`` falls under, or None."""
+_BACKBONE_STATUS = re.compile(r"\bhttp status:?\s*(\d{3})\b", re.IGNORECASE)
 
-    if not isinstance(error, HTTPError):
+
+def answer_status(error: BaseException) -> int | None:
+    """The HTTP status a failed transfer answered with, or None.
+
+    Python's own transfers raise :class:`HTTPError`; the Rust backbone's
+    raise a transient error whose reason ends ``http status: NNN`` and
+    carries no answer body.
+    """
+
+    if isinstance(error, HTTPError):
+        return int(error.code)
+    if getattr(error, "transient", False) is True:
+        match = _BACKBONE_STATUS.search(str(getattr(error, "reason", error)))
+        if match is not None:
+            return int(match.group(1))
+    return None
+
+
+def throttled(endpoint: Endpoint, error: BaseException) -> Throttle | None:
+    """The throttle row this answer from ``endpoint`` falls under, or None.
+
+    The Rust backbone's answer has no body, so a row's ``codes`` cannot be
+    read from it and its status alone counts.  The breakage this prevents
+    (WOOF 2026-10-29, run_19793057ff2979e3): every IFS 0.1-degree file
+    moves through the backbone, so ECMWF's AWS mirror's 503 SlowDown was
+    asked 5 times in 30 s and refused instead of being waited out on the
+    host's own row.
+    """
+
+    status = answer_status(error)
+    if status is None:
         return None
     policy = throttle_policy(endpoint.host)
-    if policy is None or int(error.code) not in policy.statuses:
+    if policy is None or status not in policy.statuses:
         return None
-    if policy.codes and answer_code(error) not in policy.codes:
+    if (isinstance(error, HTTPError) and policy.codes
+            and answer_code(error) not in policy.codes):
         return None
     return policy
 
@@ -994,7 +1112,7 @@ def ask_along_ladder(ladder: Sequence[Endpoint], transfer, *, label: str,
                     raise
                 if policy is not None:
                     code = answer_code(error)
-                    reason = (f"HTTP {error.code}{f' {code}' if code else ''} -- "
+                    reason = (f"HTTP {answer_status(error)}{f' {code}' if code else ''} -- "
                               "the host is throttling this client")
                 last_error = error
                 tried.append((endpoint, reason))
@@ -1061,7 +1179,7 @@ __all__ = [
     "serving_ladder",
     "SETTLE_BACKOFF_S", "SETTLE_PACE_BUDGET_S", "settled_object_answer",
     "TRANSIENT_ATTEMPTS", "TRANSIENT_WAIT_LIMIT_S", "Throttle", "TransferRefusal",
-    "answer_code", "throttle_policy", "throttled",
+    "answer_code", "answer_status", "throttle_policy", "throttled",
     "ask_along_ladder", "transfer_ladder", "transfer_order",
     "transfer_probes", "transfer_reason",
 ]

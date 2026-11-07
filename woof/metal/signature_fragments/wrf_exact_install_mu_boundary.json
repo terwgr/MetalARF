@@ -1,0 +1,167 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/lbc_state.cu",
+      "cuda_symbol": "install_mu_boundary",
+      "layout_version": 1,
+      "module": "lbc_state",
+      "name": "wrf_exact_install_mu_boundary",
+      "parameters": [
+        [
+          "dtbc",
+          "float32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "spec_zone",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "frame_count",
+          "int32"
+        ],
+        [
+          "one",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "mup",
+          "float",
+          "read_write"
+        ],
+        [
+          "old_mup_frame",
+          "float",
+          "read_write"
+        ],
+        [
+          "west",
+          "float",
+          "read"
+        ],
+        [
+          "west_t",
+          "float",
+          "read"
+        ],
+        [
+          "east",
+          "float",
+          "read"
+        ],
+        [
+          "east_t",
+          "float",
+          "read"
+        ],
+        [
+          "south",
+          "float",
+          "read"
+        ],
+        [
+          "south_t",
+          "float",
+          "read"
+        ],
+        [
+          "north",
+          "float",
+          "read"
+        ],
+        [
+          "north_t",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "east": [
+          [
+            "one",
+            "ny",
+            "width"
+          ]
+        ],
+        "east_t": [
+          [
+            "one",
+            "ny",
+            "width"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "north": [
+          [
+            "one",
+            "width",
+            "nx"
+          ]
+        ],
+        "north_t": [
+          [
+            "one",
+            "width",
+            "nx"
+          ]
+        ],
+        "old_mup_frame": [
+          [
+            "frame_count"
+          ]
+        ],
+        "south": [
+          [
+            "one",
+            "width",
+            "nx"
+          ]
+        ],
+        "south_t": [
+          [
+            "one",
+            "width",
+            "nx"
+          ]
+        ],
+        "west": [
+          [
+            "one",
+            "ny",
+            "width"
+          ]
+        ],
+        "west_t": [
+          [
+            "one",
+            "ny",
+            "width"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_install_mu_boundary.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

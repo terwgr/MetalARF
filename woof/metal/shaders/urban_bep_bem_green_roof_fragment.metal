@@ -1,9 +1,14 @@
 #include <metal_stdlib>
 #include "urban_bep_bem_green_roof_fragment_bindings.metalh"
+#include "urban_bep_bem_green_roof_flux_pack_fragment_bindings.metalh"
+#include "urban_bep_bem_green_roof_flux_merge_fragment_bindings.metalh"
+#include "urban_bep_bem_green_roof_pv_map_fragment_bindings.metalh"
+#include "urban_bep_bem_green_roof_tendency_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
 #include "soft_gfk_exp.metalh"
 #include "soft_gfk_log.metalh"
 #include "soft_gfk_pow.metalh"
+#include "soft_libm64.metalh"
 using namespace metal;
 #pragma clang fp contract(off)
 
@@ -22,7 +27,11 @@ static inline float gr_sub(float a, float b) { return as_type<float>(soft32_sub(
 static inline float gr_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
 static inline float gr_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
 static inline float gr_pow(float a, float b) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(a), as_type<uint>(b))); }
-static inline float gr_log(float a) { return as_type<float>(soft_gfk_log(as_type<uint>(a))); }
+static inline float gr_log10(float x) {
+    return as_type<float>(soft64_to_f32_bits(soft64_div(
+        soft64_plm_log(soft64_from_f32_bits(as_type<uint>(x))), 0x40026bb1bbb55516ul)));
+}
+static inline float gr_powi4(float a) { const float h = gr_mul(a, a); return gr_mul(h, h); }
 static inline float gr_exp(float a) { return as_type<float>(soft_gfk_exp(as_type<uint>(a))); }
 static inline float gr_abs(float a) { return as_type<float>(as_type<uint>(a) & 0x7fffffffu); }
 static inline float gr_min(float a, float b) { return a < b ? a : b; }
@@ -73,7 +82,7 @@ kernel void urban_bep_bem_green_roof_fragment(
     const float cw = 4.295e6f, em = gr_type == 1 ? 0.95f : 0.83f;
     const float alb = gr_type == 1 ? 0.3f : 0.154f;
     constexpr float latent = 2.45e6f, rcp_u = 287.0f / 1004.0f;
-    constexpr float sigma = 5.67e-8f, ln10 = 2.30258509299404568402f;
+    constexpr float sigma = 5.67e-8f;
 
     for (int iz = 1; iz < nzu && iz < int(GR_NZUM); ++iz) {
         const ulong z = ulong(iz), level = (c * GR_NZUM + z) * GR_NDM;
@@ -100,7 +109,7 @@ kernel void urban_bep_bem_green_roof_fragment(
                     suction[g] = gr_mul(smax[g], gr_pow(gr_div(qrmax[g], qr_m), b[g]));
                     conductivity[g] = gr_mul(kmax[g], gr_pow(gr_div(qr_m, qrmax[g]), gr_add(gr_mul(2.0f, b[g]), 3.0f)));
                     hydraulic_d[g] = gr_div(gr_mul(gr_mul(gr_mul(-b[g], kmax[g]), smax[g]), gr_pow(gr_div(qr_m, qrmax[g]), gr_add(b[g], 3.0f))), qr_m);
-                    const float log_s = gr_div(gr_log(gr_abs(suction[g])), ln10);
+                    const float log_s = gr_log10(gr_abs(suction[g]));
                     diffusivity[g] = log_s <= 5.1f ? gr_div(gr_mul(gr_exp(-gr_add(log_s, 2.7f)), 418.6f), cs[g]) : gr_div(gr_mul(0.00041f, 418.6f), cs[g]);
                 }
             }
@@ -110,13 +119,13 @@ kernel void urban_bep_bem_green_roof_fragment(
             const float tpv = r.tpv[out];
             float rl_eff, rs_eff;
             if (pv_fraction > 0.0f) {
-                rl_eff = gr_add(gr_mul(gr_mul(1.0f - pv_fraction, em), rl), gr_mul(gr_mul(gr_mul(em, sigma), gr_pow(tpv, 4.0f)), pv_fraction));
+                rl_eff = gr_add(gr_mul(gr_mul(1.0f - pv_fraction, em), rl), gr_mul(gr_mul(gr_mul(em, sigma), gr_powi4(tpv)), pv_fraction));
                 rs_eff = gr_mul(1.0f - pv_fraction, rs);
             } else { rl_eff = gr_mul(em, rl); rs_eff = rs; }
             const float tsig = temp[GR_NGR - 1u];
             const float surface_sensible = r.sfrv[out];
             const float surface_latent = r.lfrv[out];
-            const float alpha = gr_add(gr_sub(gr_add(gr_mul(1.0f - alb, rs_eff), rl_eff), gr_mul(gr_mul(em, sigma), gr_pow(tsig, 4.0f))), gr_add(surface_sensible, surface_latent));
+            const float alpha = gr_add(gr_add(gr_sub(gr_add(gr_mul(1.0f - alb, rs_eff), rl_eff), gr_mul(gr_mul(em, sigma), gr_powi4(tsig))), surface_sensible), surface_latent);
             float cddz[GR_NGR + 1u] = {};
             cddz[0] = gr_div(diffusivity[0], dz[0]);
             for (uint g = 1; g < GR_NGR; ++g) cddz[g] = gr_div(gr_mul(2.0f, diffusivity[g]), gr_add(dz[g], dz[g - 1u]));
@@ -229,35 +238,13 @@ kernel void urban_bep_bem_green_roof_pv_map_fragment(
     if (r.active_cols[col] == 0) return;
     const int class_id = r.utype[col] - 1;
     if (class_id < 0 || class_id >= 11) return;
-    const ulong c = ulong(col), class_row = ulong(class_id);
-    const float pv_fraction = r.class_float[GR_PV_FRACTION + class_row];
-    const float green_fraction = r.class_float[GR_GREEN_FRACTION + class_row];
-    float sum_hspv[GR_NZUM] = {};
-    float last_hspv[GR_NZUM] = {};
-    bool written[GR_NZUM] = {};
+    const ulong c = ulong(col);
     for (uint building = 0; building < 15u; ++building) {
         const ulong slot = c * 15u + building;
         const int level = r.building_nlev[slot];
         if (level <= 0 || level >= int(GR_NZUM)) continue;
-        const float hspv = r.pv_hspv[slot];
-        sum_hspv[uint(level)] = gr_add(sum_hspv[uint(level)], hspv);
-        last_hspv[uint(level)] = hspv;
-        written[uint(level)] = true;
-    }
-    const ulong interp_base = c * GR_INTERP_FIELDS * GR_NZUM;
-    for (uint z = 1; z < GR_NZUM; ++z) {
-        if (!written[z]) continue;
-        const float da = r.interp[interp_base + 5ul * GR_NZUM + z];
-        const float weight = gr_div(gr_mul(gr_mul(1.0f - green_fraction,
-                                                   pv_fraction), 1.0f),
-                                    gr_mul(da, p.cp_u));
-        for (uint d = 0; d < GR_NDM; ++d) {
-            const ulong profile = (c * GR_NZUM + z) * GR_NDM + d;
-            const ulong flat = (c * GR_NDM + d) * GR_NZUM + z;
-            r.sfrpv[profile] = -last_hspv[z];
-            r.flat_thb[flat] = gr_add(r.flat_thb[flat],
-                gr_mul(gr_sub(last_hspv[z], sum_hspv[z]), weight));
-        }
+        for (uint d = 0; d < GR_NDM; ++d)
+            r.sfrpv[(c * GR_NZUM + uint(level)) * GR_NDM + d] = -r.pv_hspv[slot];
     }
 }
 
@@ -272,24 +259,32 @@ kernel void urban_bep_bem_green_roof_tendency_fragment(
     const uint col = item / (GR_NZUM * GR_NDM);
     const uint rem = item % (GR_NZUM * GR_NDM);
     const uint z = rem / GR_NDM, d = rem % GR_NDM;
-    if (col >= uint(p.ncol) || r.active_cols[col] == 0 || p.green_roof != 1 || z == 0u) return;
+    if (col >= uint(p.ncol) || r.active_cols[col] == 0 || z == 0u) return;
     const int class_id = r.utype[col] - 1;
     if (class_id < 0 || class_id >= 11) return;
     const float green_fraction = r.class_float[GR_GREEN_FRACTION + ulong(class_id)];
-    if (!(green_fraction > 0.0f)) return;
+    const float pv_fraction = r.class_float[GR_PV_FRACTION + ulong(class_id)];
+    const bool green_branch = p.green_roof == 1 && green_fraction > 0.0f;
+    if (!green_branch && !(pv_fraction > 0.0f)) return;
     if (!(r.ss[ulong(col) * (GR_NZUM + 1u) + ulong(z)] > 0.0f)) return;
     const ulong c = ulong(col), profile = (c * GR_NZUM + z) * GR_NDM + d;
     const ulong flat = (c * GR_NDM + d) * GR_NZUM + z;
     const ulong interp_base = c * GR_INTERP_FIELDS * GR_NZUM;
     const float da = r.interp[interp_base + 5ul * GR_NZUM + ulong(z)];
-    const float pv_fraction = r.class_float[GR_PV_FRACTION + ulong(class_id)];
-    const float pv_correction = gr_div(gr_mul(gr_mul(
-        gr_sub(1.0f, green_fraction), pv_fraction), -r.sfrpv[profile]), gr_mul(da, p.cp_u));
-    const float flat_base = gr_sub(r.flat_thb[flat], pv_correction);
-    r.thb[flat] = gr_sub(gr_add(gr_mul(gr_sub(1.0f, green_fraction), flat_base), pv_correction),
-                          gr_div(gr_mul(green_fraction, r.sfrv[profile]), gr_mul(da, p.cp_u)));
-    r.qhb_flat[flat] = gr_sub(gr_mul(gr_sub(1.0f, green_fraction), r.flat_qhb[flat]),
-                               gr_div(gr_mul(green_fraction, r.lfrv[profile]), gr_mul(da, p.latent)));
+    const float pv_sf = gr_mul(pv_fraction, r.sfrpv[profile]);
+    const float sfr_total = gr_add(r.sfr[profile], pv_sf);
+    const float cp_da = gr_mul(da, p.cp_u);
+    if (!green_branch) {
+        r.sfr[profile] = sfr_total;
+        r.thb[flat] = gr_div(-sfr_total, cp_da);
+        return;
+    }
+    r.thb[flat] = gr_div(-gr_add(gr_mul(gr_sub(1.0f, green_fraction), sfr_total),
+                                 gr_mul(green_fraction, r.sfrv[profile])), cp_da);
+    r.qhb_flat[flat] = gr_div(-gr_add(gr_mul(green_fraction, r.lfrv[profile]),
+                                      gr_mul(gr_sub(1.0f, green_fraction), r.flat_lf[flat])),
+                              gr_mul(da, p.latent));
+    r.sfr[profile] = gr_sub(sfr_total, pv_sf);
     const ulong roof = ulong(item);
     r.uhb[flat] = gr_add(gr_mul(gr_sub(1.0f, green_fraction), r.flat_uhb[flat]), gr_mul(green_fraction, r.roof_uhb[roof]));
     r.vhb[flat] = gr_add(gr_mul(gr_sub(1.0f, green_fraction), r.flat_vhb[flat]), gr_mul(green_fraction, r.roof_vhb[roof]));

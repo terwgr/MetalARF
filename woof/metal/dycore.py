@@ -5,19 +5,15 @@ from __future__ import annotations
 import numpy as np
 
 from woof.core import constants as c
-from woof.wrf_exact import ENABLED as WRF_EXACT
+from woof.wrf_exact import ENABLED as WRF_EXACT, DIAGNOSTICS_ENABLED, BIGSTEP_ENABLED
 
 
 def submit_slow_pgf(state, cfg, *, cq=None):
     """Submit ``slow_pgf`` for a Metal state without enabling ``dycore.step``.
 
     Moist runs may pass the stage's already-prepared ``(cqu, cqv, cqw,
-    use_cq)`` tuple. Building those fields itself still belongs to the
-    unsupported Metal acoustic/scratch path.
+    use_cq)`` tuple. The exact caller can prepare them when absent.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal slow_pgf currently supports ordinary non-exact arithmetic")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal slow_pgf requires a Metal DomainState")
     nz, ny, nx = state.p.shape
@@ -25,6 +21,9 @@ def submit_slow_pgf(state, cfg, *, cq=None):
         raise NotImplementedError(
             "Metal slow_pgf requires nz >= 3 for WRF's surface pressure stencil")
 
+    if cq is None and WRF_EXACT:
+        from woof.core.acoustic import prepare_moist_cq
+        cq = prepare_moist_cq(state, cfg)
     if cq is None:
         use_cq = bool(getattr(cfg, "moist_cq", True)
                       and getattr(state, "qv", None) is not None)
@@ -36,11 +35,13 @@ def submit_slow_pgf(state, cfg, *, cq=None):
         cqu = cqv = state.p
     else:
         cqu, cqv, _cqw, use_cq = cq
+    if WRF_EXACT and not use_cq:
+        cqu, cqv = state.ru_t, state.rv_t
 
     rdx = np.float32(1.0 / cfg.dx)
     rdy = np.float32(1.0 / cfg.dy)
-    half_rdx = np.float32(0.5 / cfg.dx)
-    half_rdy = np.float32(0.5 / cfg.dy)
+    half_rdx = np.float32(0.5 * (1.0 / cfg.dx) if WRF_EXACT else 0.5 / cfg.dx)
+    half_rdy = np.float32(0.5 * (1.0 / cfg.dy) if WRF_EXACT else 0.5 / cfg.dy)
     parameters = {
         "cf1": float(state.cf1), "cf2": float(state.cf2),
         "cf3": float(state.cf3), "cfn": float(state.cfn),
@@ -57,7 +58,7 @@ def submit_slow_pgf(state, cfg, *, cq=None):
     }
     arrays = {
         "ru_t": state.ru_t, "rv_t": state.rv_t,
-        "p": state.p, "pb": state.pb,
+        "p": state.p_perturbation if DIAGNOSTICS_ENABLED else state.p, "pb": state.pb,
         "al": state.al, "alt": state.alt,
         "php": state.php, "phb": state.phb,
         "mup": state.mup, "mub2d": state.mub2d,
@@ -65,8 +66,11 @@ def submit_slow_pgf(state, cfg, *, cq=None):
         "rdnw": state.rdnw, "fnm": state.fnm, "fnp": state.fnp,
         "cqu": cqu, "cqv": cqv,
     }
+    if WRF_EXACT:
+        parameters.update(diagnostics=int(DIAGNOSTICS_ENABLED), bigstep=int(BIGSTEP_ENABLED))
     return state._array_module.context.submit_kernel(
-        "slow_pgf", arrays, parameters, exact_policy=False,
+        "wrf_exact_slow_pgf" if WRF_EXACT else "slow_pgf",
+        arrays, parameters, exact_policy=WRF_EXACT,
         grid_size=nz * (ny + 1) * (nx + 1))
 
 
@@ -77,11 +81,11 @@ def submit_total_theta(state):
     nz, ny, nx = state.thp.shape
     out = state.scratch(state.thp.shape, "rk_total_theta")
     state._array_module.context.submit_kernel(
-        "rk_total_theta",
+        "wrf_exact_total_theta" if WRF_EXACT else "rk_total_theta",
         {"thb": state.thb, "thp": state.thp, "out": out},
         {"base3d": int(state.thb.ndim == 3),
          "nz": nz, "ny": ny, "nx": nx},
-        exact_policy=False, grid_size=nz * ny * nx)
+        exact_policy=WRF_EXACT, grid_size=nz * ny * nx)
     return out
 
 
@@ -93,31 +97,29 @@ def submit_total_mu(state, *, perturbation=None, scratch_slot="rk_total_mu"):
     ny, nx = perturbation.shape
     out = state.scratch((ny, nx), scratch_slot)
     state._array_module.context.submit_kernel(
-        "rk_total_mu",
+        "wrf_exact_rk_total_mu" if WRF_EXACT else "rk_total_mu",
         {"mub2d": state.mub2d, "mup": perturbation, "out": out},
         {"ny": ny, "nx": nx},
-        exact_policy=False, grid_size=ny * nx)
+        exact_policy=WRF_EXACT, grid_size=ny * nx)
     return out
 
 
 def submit_slow_buoyancy(state, cfg, *, p=None):
-    """Submit the ordinary fused vertical pressure-gradient/buoyancy term.
+    """Submit the fused vertical pressure-gradient/buoyancy term.
 
     This caller intentionally remains independent of ``dycore.step``.  The
     kernel supports the pinned CUDA caller's dry, warm-rain, mixed-phase, and
     hail species-sum modes; absent optional species are masked so their
     source-equivalent zero addends do not require Metal scratch allocation.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal slow_buoyancy currently supports ordinary non-exact arithmetic")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal slow_buoyancy requires a Metal DomainState")
     nz, ny, nx = state.p.shape
     if nz < 2:
         raise NotImplementedError(
             "Metal slow_buoyancy requires nz >= 2 for the top moist average")
-    p = state.p if p is None else p
+    if p is None:
+        p = state.p_perturbation if DIAGNOSTICS_ENABLED else state.p
     dummy = state.p
     qv = getattr(state, "qv", None)
     if qv is None:
@@ -144,10 +146,6 @@ def submit_slow_buoyancy(state, cfg, *, p=None):
         qi = qi_state if qi_state is not None else dummy
         qs_state = getattr(state, "qs", None)
         qg_state = getattr(state, "qg", None)
-        if (qs_state is None) != (qg_state is None):
-            raise NotImplementedError(
-                "Metal slow_buoyancy requires qs and qg together when "
-                "either field is present")
         qs = qs_state if qs_state is not None else dummy
         qg = qg_state if qg_state is not None else dummy
         qh = qh_state if qh_state is not None else dummy
@@ -176,8 +174,11 @@ def submit_slow_buoyancy(state, cfg, *, p=None):
         "base3d": int(state.phb.ndim == 3),
         "nz": nz, "ny": ny, "nx": nx,
     }
+    if WRF_EXACT:
+        parameters["diagnostics"] = int(DIAGNOSTICS_ENABLED)
     return state._array_module.context.submit_kernel(
-        "slow_buoyancy", arrays, parameters, exact_policy=False,
+        "wrf_exact_slow_buoyancy" if WRF_EXACT else "slow_buoyancy",
+        arrays, parameters, exact_policy=WRF_EXACT,
         grid_size=nz * ny * nx)
 
 
@@ -187,11 +188,8 @@ def submit_slow_geopotential(state, cfg, *, ww=None, mux=None, muy=None,
 
     ``mode`` selects the fused face-mass reconstruction, supplied-mass
     compatibility caller, or the vertical-only partial-state failure path.
-    The WRF exact profiles have distinct expression trees and remain refused.
+    Exact execution preserves the distinct source expression trees.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal slow_geopotential supports ordinary non-exact arithmetic")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal slow_geopotential requires a Metal DomainState")
     if mode not in ("fused", "faces", "vertical"):
@@ -207,9 +205,14 @@ def submit_slow_geopotential(state, cfg, *, ww=None, mux=None, muy=None,
             if nx < 7 or ny < 7:
                 raise ValueError(
                     f"h_sca_adv_order=5 needs nx, ny >= 7, got {nx} x {ny}")
-    dummy = state.p
+    if WRF_EXACT and (mode == "vertical" or add_vertical) and ww is None:
+        raise ValueError("vertical geopotential requires ww")
+    if WRF_EXACT and mode == "faces" and (mux is None or muy is None):
+        raise ValueError("face geopotential requires mux and muy")
+    if WRF_EXACT and mode != "vertical" and nz < 2:
+        raise ValueError("horizontal geopotential requires nz >= 2")
     if ww is None:
-        ww = dummy
+        ww = state.w if WRF_EXACT else state.p
     if mux is None:
         mux = state.msfu
     if muy is None:
@@ -226,8 +229,9 @@ def submit_slow_geopotential(state, cfg, *, ww=None, mux=None, muy=None,
                               or getattr(cfg, "nested", False)))
         specified = int(bool(getattr(cfg, "specified", False)
                              or getattr(cfg, "nested", False)))
-        quarter_rdx = 0.25 / cfg.dx
-        quarter_rdy = 0.25 / cfg.dy
+        is_open = (cfg.open_x or cfg.open_y) and not specified
+        quarter_rdx = 0.25 / cfg.dx if is_open or not WRF_EXACT else 0.25 * (1.0 / cfg.dx)
+        quarter_rdy = 0.25 / cfg.dy if is_open or not WRF_EXACT else 0.25 * (1.0 / cfg.dy)
         cfn, cfn1 = float(state.cfn), float(state.cfn1)
     arrays = {
         "rph_t": state.rph_t, "ww": ww, "w": state.w,
@@ -249,16 +253,16 @@ def submit_slow_geopotential(state, cfg, *, ww=None, mux=None, muy=None,
         "quarter_rdx": quarter_rdx, "quarter_rdy": quarter_rdy,
         "cfn": cfn, "cfn1": cfn1,
     }
+    if WRF_EXACT:
+        parameters["bigstep"] = int(BIGSTEP_ENABLED)
     return state._array_module.context.submit_kernel(
-        "slow_geopotential", arrays, parameters, exact_policy=False,
+        "wrf_exact_slow_geopotential" if WRF_EXACT else "slow_geopotential",
+        arrays, parameters, exact_policy=WRF_EXACT,
         grid_size=nz * ny * nx)
 
 
 def submit_surface_w(state, cfg):
-    """Submit the kinematic lower-boundary update for an ordinary state."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal surface-w currently supports ordinary arithmetic only")
+    """Submit the kinematic lower-boundary update."""
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal surface-w requires a Metal DomainState")
     ny, nx = state.ht.shape
@@ -278,15 +282,13 @@ def submit_surface_w(state, cfg):
     arrays = {"u": state.u, "v": state.v, "ht": state.ht,
               "msft": state.msft, "w": state.w}
     return state._array_module.context.submit_kernel(
-        "set_surface_w", arrays, parameters, exact_policy=False,
+        "wrf_exact_set_surface_w" if WRF_EXACT else "set_surface_w",
+        arrays, parameters, exact_policy=WRF_EXACT,
         grid_size=ny * nx)
 
 
-def submit_small_step_init(state, cfg):
+def submit_small_step_init(state, cfg, rk_step=1):
     """Initialize dry WRF acoustic perturbations for one RK stage."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal small-step initialization supports ordinary arithmetic only")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal small-step initialization requires Metal state")
     nz, ny, nx = state.p.shape
@@ -297,7 +299,7 @@ def submit_small_step_init(state, cfg):
         "u0": state.u0, "v0": state.v0, "u": state.u, "v": state.v,
         "mup0": state.mup0, "mup": state.mup, "mub2d": state.mub2d,
         "c1h": state.c1h, "c2h": state.c2h,
-        "msfu": state.msfu, "msfv": state.msfv,
+        "msfu": state.msfu, "msfv": state.msfv_inv if WRF_EXACT else state.msfv,
     }
     uv_params = {
         "has_msf": int(bool(state.has_msf)),
@@ -307,8 +309,10 @@ def submit_small_step_init(state, cfg):
                                 or getattr(cfg, "nested", False))),
         **common,
     }
-    context.submit_kernel("small_step_init_uv", uv_arrays, uv_params,
-                          exact_policy=False,
+    if WRF_EXACT:
+        uv_params["rk_step"] = int(rk_step)
+    context.submit_kernel("wrf_exact_small_step_init_uv" if WRF_EXACT else "small_step_init_uv",
+                          uv_arrays, uv_params, exact_policy=WRF_EXACT,
                           grid_size=nz*(ny+1)*(nx+1))
     column_arrays = {
         "w_pp": state.w_pp, "th_pp": state.th_pp, "ph_pp": state.ph_pp,
@@ -329,16 +333,13 @@ def submit_small_step_init(state, cfg):
         "gamma": float(np.float32(c.GAMMA)),
         **common,
     }
-    context.submit_kernel("small_step_init_column", column_arrays,
-                          column_params, exact_policy=False,
+    context.submit_kernel("wrf_exact_small_step_init_column" if WRF_EXACT else "small_step_init_column",
+                          column_arrays, column_params, exact_policy=WRF_EXACT,
                           grid_size=ny*nx)
 
 
 def submit_small_step_finish(state, cfg, hdiab_dt=0.0):
     """Fold dry WRF acoustic perturbations back into the RK stage fields."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal small-step finalization supports ordinary arithmetic only")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal small-step finalization requires Metal state")
     nz, ny, nx = state.p.shape
@@ -359,8 +360,14 @@ def submit_small_step_finish(state, cfg, hdiab_dt=0.0):
                                 or getattr(cfg, "nested", False))),
         **common,
     }
-    context.submit_kernel("small_step_finish_uv", uv_arrays, uv_params,
-                          exact_policy=False,
+    if WRF_EXACT:
+        from woof.core.acoustic import WRF_ACOUSTIC_MUTS_SLOT
+        muts = state.existing_scratch(WRF_ACOUSTIC_MUTS_SLOT)
+        if muts is None or not getattr(state, "_wrf_acoustic_muts_initialized", False):
+            raise NotImplementedError("strict small-step finish needs carried acoustic MUTS")
+        uv_arrays["muts_wrf"] = muts
+    context.submit_kernel("wrf_exact_small_step_finish_uv" if WRF_EXACT else "small_step_finish_uv",
+                          uv_arrays, uv_params, exact_policy=WRF_EXACT,
                           grid_size=nz*(ny+1)*(nx+1))
     h_diabatic = (state.h_diabatic if hdiab_dt
                   else state.p)
@@ -380,8 +387,10 @@ def submit_small_step_finish(state, cfg, hdiab_dt=0.0):
         "base3d": int(state.thb.ndim == 3),
         **common,
     }
-    context.submit_kernel("small_step_finish_column", column_arrays,
-                          column_params, exact_policy=False,
+    if WRF_EXACT:
+        column_arrays["muts_wrf"] = muts
+    context.submit_kernel("wrf_exact_small_step_finish_column" if WRF_EXACT else "small_step_finish_column",
+                          column_arrays, column_params, exact_policy=WRF_EXACT,
                           grid_size=ny*nx)
 
 
@@ -394,9 +403,6 @@ def submit_apply_emdiv(state, cfg, mudf, mu_prev=None):
 
 def prepare_apply_emdiv_call(state, cfg, mudf, mu_prev=None):
     """Freeze the external-mode filter dispatch without submitting it."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal emdiv currently supports ordinary arithmetic only")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal emdiv requires a Metal DomainState")
     nz, ny, nx = state.p.shape
@@ -407,8 +413,8 @@ def prepare_apply_emdiv_call(state, cfg, mudf, mu_prev=None):
         "c1h": state.c1h, "msfu": state.msfu, "msfv": state.msfv,
     }
     params = {
-        "xscale": float(np.float32(-cfg.emdiv * cfg.dx)),
-        "yscale": float(np.float32(-cfg.emdiv * cfg.dy)),
+        "xscale": 0.0 if WRF_EXACT else float(np.float32(-cfg.emdiv * cfg.dx)),
+        "yscale": 0.0 if WRF_EXACT else float(np.float32(-cfg.emdiv * cfg.dy)),
         "has_msf": int(bool(state.has_msf)),
         "boundary_x": int(bool(cfg.open_x or getattr(cfg, "specified", False)
                                 or getattr(cfg, "nested", False))),
@@ -420,15 +426,13 @@ def prepare_apply_emdiv_call(state, cfg, mudf, mu_prev=None):
         "save_mu": int(save_mu), "nz": nz, "ny": ny, "nx": nx,
     }
     return state._array_module.context.prepare_kernel_call(
-        "apply_emdiv", arrays, params, exact_policy=False,
+        "wrf_exact_apply_emdiv" if WRF_EXACT else "apply_emdiv",
+        arrays, params, exact_policy=WRF_EXACT,
         grid_size=nz*(ny+1)*(nx+1))
 
 
 def submit_update_mudf(state, cfg, mudf, mu_prev, dtau):
-    """Apply the ordinary external-mode ``mudf`` recurrence and edge mask."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal mudf recurrence currently supports ordinary arithmetic only")
+    """Apply the external-mode ``mudf`` recurrence and edge mask."""
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal mudf recurrence requires a Metal DomainState")
     ny, nx = state.mup.shape
@@ -442,5 +446,6 @@ def submit_update_mudf(state, cfg, mudf, mu_prev, dtau):
     }
     arrays = {"mudf": mudf, "mu_pp": state.mu_pp, "mu_prev": mu_prev}
     return state._array_module.context.submit_kernel(
-        "update_mudf", arrays, params, exact_policy=False,
+        "wrf_exact_update_mudf" if WRF_EXACT else "update_mudf",
+        arrays, params, exact_policy=WRF_EXACT,
         grid_size=ny*nx)

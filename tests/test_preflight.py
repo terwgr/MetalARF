@@ -51,6 +51,22 @@ CONFIG_D01 = ROOT / "configs" / "real74_d01.toml"
 # together; the idiom is tests/test_case_data.py's.
 from woof.case_data import case_data_root  # noqa: E402
 
+# Consumer expectations come from the independent generated declarations.
+from woof.physics_registry import implemented_selector_values as _intake_selectors
+from woof.physics_registry import consumer_rows_by_selector as _intake_rows
+_INTAKE_MP = tuple(sorted(_intake_selectors("microphysics")))
+_INTAKE_REFL = tuple(mp for mp in _INTAKE_MP if mp)
+_INTAKE_PRODUCERS = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "reflectivity_input_species").items()
+    if row is not None))
+_INTAKE_NATIVE = tuple(sorted(set(_INTAKE_REFL) - set(_INTAKE_PRODUCERS)))
+_INTAKE_SNOW = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qs" in (row or {}).get("state_fields", ())))
+_INTAKE_SIX = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qg" in (row or {}).get("state_fields", ())))
+
 BUNDLE = case_data_root() / "WRF_1974_MP55_reference_bundle"
 _BUNDLE_INPUTS = (BUNDLE / "met_em" / "met_em.d01.1974-04-03_12_00_00.nc",
                   BUNDLE / "era5_grib" / "era5_19740403.grb")
@@ -105,7 +121,7 @@ def test_state_manifest_matches_restart_classification(d01_cfg):
     attribute dropped from the restart manifest is a field that silently
     vanishes across a checkpoint.
     """
-    from woof.config import SASE_PBL_SCHEME
+    from woof.config import CCPP_TKE_EDMF_PBL_SCHEME, SASE_PBL_SCHEME
 
     nssl_cfg = dataclasses.replace(d01_cfg, mp_physics=18)
     # km_opt=2 is the only configuration that allocates the prognostic-TKE
@@ -136,13 +152,29 @@ def test_state_manifest_matches_restart_classification(d01_cfg):
     # is gated by tests/test_mp_accepted_builds.py.
     my2_cfg = dataclasses.replace(d01_cfg, mp_physics=9)
     wdm6_cfg = dataclasses.replace(d01_cfg, mp_physics=16)
+    # FAST_SBM owns the 142 spectral bins, six number moments and their
+    # time-t copies (woof/core/state.py mp==30 arm), classified in the
+    # restart manifest, so it joins the union.
+    fsbm_cfg = dataclasses.replace(d01_cfg, mp_physics=30)
     # Grell-Freitas owns the two names in
     # woof.config.CUMULUS_ADVECTIVE_FORCING_SCHEMES' allocation -- the
     # dycore's exported advective forcing pair (WRF RTHFTEN/RQVFTEN) --
     # and no other configuration allocates them, so the arm joins for the
     # same reason NSSL, P3, MY2 and WDM6 do.
     gf_cfg = dataclasses.replace(d01_cfg, cu_physics=3)
+    # TEMPO (a named scheme) owns the graupel volume pair (volg/volg0) no
+    # ported WRF scheme allocates, so its arm joins the union too.
+    tempo_cfg = dataclasses.replace(d01_cfg, mp_physics=900)
+    # MYNN with bl_mynn_tkeadvect owns the advected TKE carrier (WRF's
+    # qke_adv scalar) and its RK time-t copy; no other configuration
+    # allocates them, so the arm joins the union (2.9.0).
+    tkeadv_cfg = dataclasses.replace(d01_cfg, bl_pbl_physics=5,
+                                     sf_sfclay_physics=5,
+                                     bl_mynn_tkeadvect=True)
+    # The carried CCPP energy and its time-t copy belong to this full union.
+    ccpp_cfg = dataclasses.replace(d01_cfg, bl_pbl_physics=CCPP_TKE_EDMF_PBL_SCHEME)
     names = (set(pf.state_array_shapes(d01_cfg))
+             | set(pf.state_array_shapes(tkeadv_cfg))
              | set(pf.state_array_shapes(nssl_cfg))
              | set(pf.state_array_shapes(les_cfg))
              | set(pf.state_array_shapes(aerosol_cfg))
@@ -150,7 +182,34 @@ def test_state_manifest_matches_restart_classification(d01_cfg):
              | set(pf.state_array_shapes(p3_cfg))
              | set(pf.state_array_shapes(my2_cfg))
              | set(pf.state_array_shapes(wdm6_cfg))
-             | set(pf.state_array_shapes(gf_cfg)))
+             | set(pf.state_array_shapes(fsbm_cfg))
+             | set(pf.state_array_shapes(gf_cfg))
+             | set(pf.state_array_shapes(tempo_cfg))
+             | set(pf.state_array_shapes(ccpp_cfg)))
+    # Strict WRF arithmetic attaches its own carriers at first write, outside
+    # DomainState's allocation list (c501f4d34, lane/wrf-exact-start); they
+    # are classified, so they join the union by name.
+    assert restart.STRICT_LAZY_STATE_ATTRS <= restart.STATE_REBUILT_ATTRS
+    names |= set(restart.STRICT_LAZY_STATE_ATTRS)
+    # aer_opt = 1 (golden/ports-rad) attaches the monthly aerosol climatology
+    # ``aerodm`` at its first radiation call, outside DomainState's allocation
+    # list: it is classified as derived setup (rebuilt, never in a checkpoint)
+    # and priced among the radiation arrays, so it joins the union by name
+    # once that pricing is shown.
+    aer1_cfg = dataclasses.replace(d01_cfg, aer_opt=1)
+    assert "radiation/aerodm" in pf.physics_array_shapes(aer1_cfg)
+    assert "radiation/aerodm" not in pf.physics_array_shapes(d01_cfg)
+    names.add("aerodm")
+    # Analysis nudging (labs/nudging, 2.9.11) attaches its held FDDA
+    # tendencies at setup (woof.spectral_nudging.prepared
+    # .allocate_held_tendencies), outside DomainState's allocation list, and
+    # serializes them so a resume keeps them: they join the union by name.
+    names |= {"nudging_tendency_u", "nudging_tendency_v",
+              "nudging_tendency_temperature", "nudging_tendency_geopotential",
+              "nudging_tendency_qv"}
+    # Added packages join the allocation census; old configurations remain.
+    for mp in (5,):
+        names |= set(pf.state_array_shapes(dataclasses.replace(d01_cfg, mp_physics=mp)))
     classified = (set(restart.STATE_SERIALIZED_ATTRS)
                   | set(restart.STATE_REBUILT_ATTRS)
                   | set(restart.CHECKPOINT_ONLY_STATE)
@@ -169,6 +228,9 @@ def test_state_manifest_matches_restart_classification(d01_cfg):
     # the equality hold again by deleting them from BOTH sides.
     for name in ("nwfa", "nifa", "nwfa2d", "nifa2d"):
         assert name in restart.STATE_SERIALIZED_ATTRS
+    # The advected TKE carrier is cross-step state; its time-t copy is not.
+    assert "qke_adv" in restart.STATE_SERIALIZED_ATTRS
+    assert "qke_adv0" in restart.STATE_REBUILT_ATTRS
     for name in ("nc0", "nwfa0", "nifa0"):
         assert name in restart.STATE_REBUILT_ATTRS
     # Same guard for P3: the rime pair and the supersaturation carriers are
@@ -213,12 +275,24 @@ def test_state_shape_formulas_staggering():
 
 @requires_4dom_inputs
 def test_shared_dycore_state_symbols_are_restart_rebuilt_source(exp4):
-    """The sharing registry is exactly the restart REBUILT authority."""
-    assert pf.shared_dycore_state_symbols() == restart.STATE_REBUILT_ATTRS
+    """The sharing registry is the restart REBUILT authority, less the one
+    rebuilt symbol a live strict run carries between steps."""
+    assert pf.shared_dycore_state_symbols() == (
+        restart.STATE_REBUILT_ATTRS - {"p_perturbation"})
     active = set().union(*(
         pf.state_array_shapes(dc.run).keys() for dc in exp4.domains))
     assert set(pf.shared_dycore_state_workspace_shapes(exp4.domains)) == (
-        set(restart.STATE_REBUILT_ATTRS) & active)
+        (set(restart.STATE_REBUILT_ATTRS) - {"p_perturbation"}) & active)
+
+
+def test_strict_pressure_perturbation_is_never_shared_between_domains():
+    """Strict rk_step 1 and every history P read the previous step's
+    p_perturbation (core/dycore.py:_wrf_reuse_diagnostics).  Shared, a
+    two-domain strict run read the other domain's pressure: a 9 km/3 km pair's
+    d01 history P differed from wrf.exe 4.6.1 in 527,901 of 528,000 words
+    at 45 s."""
+    assert "p_perturbation" in restart.STATE_REBUILT_ATTRS
+    assert "p_perturbation" not in pf.shared_dycore_state_symbols()
 
 
 def test_shared_dycore_state_workspace_binds_contiguous_prefixes(monkeypatch):
@@ -356,7 +430,9 @@ def test_physics_manifest_groups_cover_restart_driver_attrs(d01_cfg):
     # Conditional raw-rate owners need a representative positive-cadence
     # GF configuration as well as the default every-step KF configuration.
     groups = {name.split("/")[0]
-              for cfg in (d01_cfg, dataclasses.replace(d01_cfg, cu_physics=3, bldt=2.))
+              for cfg in (d01_cfg, dataclasses.replace(d01_cfg, cu_physics=3, bldt=2.),
+                          # SFIRE's coupler and its held tendencies.
+                          dataclasses.replace(d01_cfg, ifire=2, sr_x=4, sr_y=4, moist=True))
               for name in pf.physics_array_shapes(cfg)}
     scalar_attrs = {"microphysics_updates", "call_counts",
                     "ysu_nan_guard_fires",
@@ -369,7 +445,14 @@ def test_physics_manifest_groups_cover_restart_driver_attrs(d01_cfg):
     ozone = pf.physics_array_shapes(d01_cfg, cam_ozone=True)
     assert ozone["radiation/o33d_grid"] == (d01_cfg.nz, d01_cfg.ny, d01_cfg.nx)
     groups.add("o3rad")  # direct owner retains the historical radiation/o33d_grid key
-    assert set(restart.DRIVER_SERIALIZED_ATTRS) - scalar_attrs <= groups
+    # Hydro's network-sized backing roster cannot be inferred from RunConfig.
+    # It is priced by the table-selected provider in the forecast envelope,
+    # including checkpoint work. The functional nonzero allocation and actual
+    # restart-array cross-checks live in test_hydro_memory_contract.
+    dynamic_attrs = {"hydro"}
+    assert dynamic_attrs <= set(restart.DRIVER_SERIALIZED_ATTRS)
+    assert "hydro_memory" in {f.name for f in dataclasses.fields(pf.ExperimentMemoryEstimate)}
+    assert set(restart.DRIVER_SERIALIZED_ATTRS) - scalar_attrs - dynamic_attrs <= groups
     assert "last_ysu" not in {name.split("/")[0]
                                for name in pf.physics_array_shapes(d01_cfg)}
     assert "last_ysu" in restart.DRIVER_REBUILT_ATTRS
@@ -464,6 +547,7 @@ def test_scratch_registry_feature_matrix(d01_cfg):
     assert d01["integration_health_flags"] == (1024,)
     assert d01["integration_health_planes"] == (1024,)
     assert d01["integration_health_status_bits"] == (2048,)
+    assert d01["integration_health_rim"] == (1024, 3)
     assert d01["integration_health_validation"] == (4,)
     assert d01["physics_validation_status"] == (1,)
     assert d01["lbc_old_mup_frame_1"] == (
@@ -477,7 +561,13 @@ def test_scratch_registry_feature_matrix(d01_cfg):
     assert kessler["mp_kessler_sr"] == (6, 8)
     assert kessler["openbc_upp_faces"] == (4, 6, 2)
     assert kessler["openbc_vpp_faces"] == (4, 2, 8)
-    assert kessler["diff_u"] == (4, 6, 9)
+    # km_opt = 1 with khdif/kvdif runs WRF's diff_opt = 2 package, so its
+    # slots are priced (the retired constant-K operator's diff_* were
+    # priced in their place, and the package's were missing).
+    assert "diff_u" not in kessler
+    assert kessler["smag_km"] == kessler["smag_kmv"] == (4, 6, 8)
+    assert kessler["smag_ru"] == (4, 6, 9) and kessler["smag_rqv"] == (4, 6, 8)
+    assert kessler["diff6_x"] == (4, 6, 9) and kessler["diff6_y"] == (4, 7, 8)
     assert kessler["physics_validation_status"] == (1,)
     # Open boundaries: PD final stage disabled -> no pd_* slots; not
     # specified -> no LBC residents.
@@ -737,6 +827,95 @@ def test_diff6_tendencies_alias_lifetime_safe_backings(monkeypatch):
     assert old_bytes - new_bytes == 141_237_600
 
 
+#: Strict WRF mode's own scratch: slot -> shape on the _TINY grid (nz=4,
+#: ny=6, nx=8).  The two mass planes live on state.mup's (ny, nx) plane.
+_STRICT_SLOTS = {
+    "acoustic_wrf_muts": (6, 8),
+    "wrf_exact_muts": (6, 8),
+    "wrf_exact_mu_halo": (6, 8),
+    "rk_ww_ru": (4, 6, 9),
+    "rk_ww_rv": (4, 7, 8),
+    "moist_sc_t": (4, 6, 8),
+}
+
+
+def test_strict_mode_scratch_is_priced_and_builds_a_multi_domain_arena(
+        monkeypatch):
+    """Strict WRF mode's scratch has lifetime rows and is priced per domain.
+
+    The breakage this prevents: scratch_slot_registry registered
+    ``acoustic_wrf_muts`` under GPUWM_WRF_EXACT=1 (9190ec5f2) with no
+    SCRATCH_SLOT_LIFETIME_AUDIT row, so every MULTI-domain strict run raised
+    ``KeyError: scratch slot 'acoustic_wrf_muts' has no lifetime audit row``
+    while woof/core/model.py priced and built its shared scratch arena
+    (a single-domain run builds no arena, which is why the identity proofs
+    never met it).  The five other strict allocations -- the step-carried
+    mass planes, calc_ww_cp's face fluxes and the held species source --
+    were priced nowhere, so a strict estimate under-read every domain.
+    """
+    import types
+
+    # Price strict shapes without importing a launcher under the temporary
+    # flag: acoustic captures ENABLED at import and outlives monkeypatch.
+    import woof.core.acoustic  # noqa: F401
+    import woof.core.state as state_mod
+    import woof.wrf_exact as wrf_exact
+
+    monkeypatch.setattr(state_mod, "cp", np)
+    monkeypatch.setattr(wrf_exact, "ENABLED", True)
+    root_cfg = RunConfig(**_TINY, moist=True, mp_physics=8, specified=True)
+    child_cfg = RunConfig(**_TINY, moist=True, mp_physics=8, nested=True)
+    registry = pf.scratch_slot_registry(root_cfg, n_lbc_intervals=2)
+    assert {slot: tuple(registry[slot]) for slot in _STRICT_SLOTS} == \
+        _STRICT_SLOTS
+    for slot in _STRICT_SLOTS:
+        assert pf.scratch_slot_lifetime(slot) is not None, slot
+        assert not pf.scratch_slot_uses_arena(slot), slot
+    dry = pf.scratch_slot_registry(RunConfig(**_TINY), n_lbc_intervals=2)
+    assert "moist_sc_t" not in dry and "rk_ww_ru" in dry
+
+    tree = (types.SimpleNamespace(grid_id=1, parent_id=0, run=root_cfg),
+            types.SimpleNamespace(grid_id=2, parent_id=1, run=child_cfg))
+    arena = state_mod.build_shared_scratch_arena(tree)
+    assert arena.nbytes == pf.shared_scratch_arena_bytes(tree)
+    assert not set(_STRICT_SLOTS) & set(arena.slot_shapes)
+
+    # The flagship tree, inputs not required: the strict estimate prices
+    # exactly the six slots on every domain, and nothing else moves in
+    # residency.
+    raw = tomllib.loads(CONFIG_4DOM.read_text(encoding="utf-8"))
+    raw.pop("case_data")
+    flagship = build_experiment(raw, source=str(CONFIG_4DOM))
+    strict = pf.estimate_experiment(flagship)
+    monkeypatch.setattr(wrf_exact, "ENABLED", False)
+    default = pf.estimate_experiment(flagship)
+    for dc, s_dom, d_dom in zip(flagship.domains, strict.domains,
+                                default.domains):
+        nz, ny, nx = dc.run.nz, dc.run.ny, dc.run.nx
+        expected = 4 * (3 * ny * nx + nz * ny * (nx + 1)
+                        + nz * (ny + 1) * nx + nz * ny * nx)
+        # A strict process also carries WRF's 3-D PBL and cumulus tendency
+        # history rows (2.9.1, physics_inventory.history_tendency_rows); a
+        # default process does not.  Each is one (nz, ny, nx) FP32 plane.
+        from woof.core.physics_inventory import (CUMULUS_HISTORY_RATES,
+                                                  PBL_HISTORY_RATES)
+        tendency_names = set(PBL_HISTORY_RATES) | {"rqiblten"} | set(CUMULUS_HISTORY_RATES)
+        extra = {it.name for it in s_dom.items} - {it.name for it in d_dom.items}
+        tendency = {name for name in extra
+                    if name.split("/", 1)[-1] in tendency_names}
+        assert tendency, "a strict process carries the tendency rows"
+        expected += 4 * nz * ny * nx * len(tendency)
+        # The six 0-d SCM forcing scalars are strict-only too
+        # (physics_inventory.scm_forcing_fields): 4 B each.
+        from woof.core.physics_inventory import SCM_SURFACE_FORCING_FIELDS
+        scm = {name for name in extra
+               if name.split("/", 1)[-1] in SCM_SURFACE_FORCING_FIELDS}
+        assert len(scm) == len(SCM_SURFACE_FORCING_FIELDS)
+        expected += 4 * len(scm)
+        assert s_dom.resident_bytes - d_dom.resident_bytes == expected
+        assert extra - tendency - scm == set(_STRICT_SLOTS)
+
+
 def test_smag_coefficients_alias_acoustic_backings(monkeypatch):
     """Pre-RK K_m/K_h retire before acoustic alpha/gamma are prepared."""
     import types
@@ -773,6 +952,61 @@ def test_smag_coefficients_alias_acoustic_backings(monkeypatch):
     assert removed == 141_120_000
 
 
+@pytest.mark.parametrize("strict", [False, True])
+def test_strict_nest_larger_than_its_parent_gets_its_own_relaxation_backing(
+        monkeypatch, strict):
+    """A two-domain strict case (2026-10-28): d01 120x100, d02 210x150,
+    44 levels.  Strict mode folds a nest's lateral relaxation through the
+    lbc_relax_* slots too (dycore._wrf_relaxation_fold), so the shared
+    arena must size them by the nest; sized by the specified parent alone,
+    the first nest step raised "scratch slot 'lbc_relax_u' arena capacity is
+    532400 values ((44, 100, 121)), requested 1392600 values
+    ((44, 150, 211))"."""
+    import types
+    import woof.core.state as state_mod
+    monkeypatch.setattr(state_mod, "cp", np)
+    monkeypatch.setattr(pf, "WRF_EXACT", strict)
+    base = {**_TINY, "nz": 44}
+    parent = RunConfig(**{**base, "nx": 120, "ny": 100}, specified=True)
+    nest = RunConfig(**{**base, "nx": 210, "ny": 150}, nested=True)
+    domains = (types.SimpleNamespace(grid_id=1, parent_id=0, run=parent),
+               types.SimpleNamespace(grid_id=2, parent_id=1, run=nest))
+    shapes = pf.shared_scratch_arena_shapes(domains)
+    arena = state_mod.build_shared_scratch_arena(domains)
+    nest_rows = {"lbc_relax_u": (44, 150, 211), "lbc_relax_v": (44, 151, 210),
+                 "lbc_relax_theta": (44, 150, 210),
+                 "lbc_relax_phi": (45, 150, 210), "lbc_relax_w": (45, 150, 210)}
+    if strict:
+        for slot, shape in nest_rows.items():
+            assert shapes[slot] == shape
+            arena.view(shape, slot)[...] = np.float32(1)
+    else:
+        # The default route recomputes a nest's held increments in
+        # lbc_nested_relax and never asks a nest for these slots.
+        assert shapes["lbc_relax_u"] == (44, 100, 121)
+        assert "lbc_relax_w" not in shapes
+
+
+@pytest.mark.parametrize("strict,diff_opt,shared", [(True,1,False),(False,1,True),(True,2,True)])
+def test_coordinate_scalar_coefficient_survives_the_acoustic_loop(monkeypatch,strict,diff_opt,shared):
+    """Acoustic gamma must not overwrite the deferred coordinate Kh."""
+    import types
+    import woof.core.state as state_mod
+    monkeypatch.setattr(state_mod,"cp",np)
+    monkeypatch.setattr(pf,"WRF_EXACT",strict)
+    cfg=RunConfig(**{**_TINY,"nx":12,"ny":10,"nz":8},
+                  moist=True,mp_physics=10,km_opt=4,diff_opt=diff_opt)
+    domains=(types.SimpleNamespace(run=cfg),)
+    shapes=pf.shared_scratch_arena_shapes(domains)
+    arena=state_mod.build_shared_scratch_arena(domains)
+    kh=arena.view(shapes["smag_kh"],"smag_kh")
+    gamma=arena.view(shapes["acoustic_gamma"],"acoustic_gamma")
+    kh[...] = np.float32(.125)
+    gamma[...] = np.float32(9)
+    assert np.shares_memory(kh,gamma) == shared
+    np.testing.assert_array_equal(kh,np.float32(9 if shared else .125))
+
+
 def _scan_scratch_tree(tree, rel):
     """(kind, payload, file, function) for every scratch(...) call site.
 
@@ -787,6 +1021,32 @@ def _scan_scratch_tree(tree, rel):
     sites = []
     call_func_ids = {id(node.func) for node in ast.walk(tree)
                      if isinstance(node, ast.Call)}
+    parents = {id(child): node for node in ast.walk(tree)
+               for child in ast.iter_child_nodes(node)}
+
+    def data_use(node):
+        """Record concrete data operations separately from callable aliases."""
+        parent = parents.get(id(node))
+        if (isinstance(parent, ast.Subscript) and parent.value is node
+                and id(parent) not in call_func_ids):
+            return "indexed"
+        if (isinstance(parent, ast.BinOp) and isinstance(parent.op, ast.Div)
+                and parent.left is node):
+            return "path"
+        if (isinstance(parent, ast.BoolOp) and isinstance(parent.op, ast.Or)
+                and len(parent.values) == 2 and parent.values[0] is node
+                and isinstance(parent.values[1], ast.Dict)
+                and not parent.values[1].keys):
+            consumer = parents.get(id(parent))
+            if (isinstance(consumer, ast.Call)
+                    and isinstance(consumer.func, ast.Name)
+                    and consumer.func.id == "dict"):
+                return "mapping"
+            if (isinstance(consumer, ast.Attribute)
+                    and consumer.attr in ("get", "values")
+                    and id(consumer) in call_func_ids):
+                return "mapping"
+        return None
 
     def slot_node(call):
         """(slot_node_or_None, is_scratch_call)."""
@@ -837,11 +1097,13 @@ def _scan_scratch_tree(tree, rel):
                         and child.args[1].value == "scratch"):
                     sites.append(("getattr", None, rel, func))
             if (isinstance(child, ast.Attribute) and child.attr == "scratch"
+                    and isinstance(child.ctx, ast.Load)
                     and id(child) not in call_func_ids):
                 # `sc = state.scratch` style method alias: the later
                 # calls are invisible to the scanner, so the alias itself
                 # is the violation.
-                sites.append(("alias", None, rel, func))
+                usage = data_use(child)
+                sites.append(("data" if usage else "alias", usage, rel, func))
             visit(child, name)
 
     visit(tree, "<module>")
@@ -857,12 +1119,19 @@ def _scratch_call_sites():
 
 
 @requires_4dom_inputs
-def test_every_scratch_call_site_is_classified(d01_cfg):
+def test_every_scratch_call_site_is_classified(d01_cfg, monkeypatch):
     """The plan's completeness gate: every ``scratch(...)`` call site in
     gpuwm/ resolves against the static registry -- literal slots must be
     registry names (or F4 manifest names for ``nest_*``), dynamic slots
     must use a registered prefix family, and variable-slot sites are
-    pinned to an explicit allowlist.  An unclassified slot is an error."""
+    pinned to an explicit allowlist.  An unclassified slot is an error.
+
+    This cell skips on every machine without the 1974 bundle, so the
+    2.9.0 scheme ports, lightning and strict WRF mode landed without arms
+    here; it was red from at least 2.8.9 (cd336e62d) to the 2.9.0 lane tip
+    and green at 8e170fd66.  The arms below cover them, and every
+    generated-name site added with them is checked against the registry by
+    the names it actually generates, not only allowlisted."""
     known: set[str] = set()
     for cfg in (d01_cfg,
                 RunConfig(**_TINY, moist=True, moist_cq=True, mp_physics=1,
@@ -909,12 +1178,48 @@ def test_every_scratch_call_site_is_classified(d01_cfg):
                 # invisible to this completeness gate.
                 RunConfig(**_TINY, diff_6th_opt=2, specified=True,
                           diff_6th_form="noaa_wrf39", diff_6th_slopeopt=1),
+                RunConfig(**_TINY, moist=True, mp_physics=1,
+                          zadvect_implicit=1),
                 # The UW moist-turbulence PBL owns its zero plane
                 # (uwpbl_zero); without this arm its call site in
                 # _run_uwpbl is invisible to this completeness gate.
                 RunConfig(**_TINY, moist=True, mp_physics=8,
-                          bl_pbl_physics=9, sf_sfclay_physics=1)):
+                          bl_pbl_physics=9, sf_sfclay_physics=1),
+                # The 2.9.0 microphysics ports: Purdue Lin, WSM3, the WSM5
+                # column scheme, Ferrier-Aligo, WSM7, fast SBM, WSM6R and
+                # TEMPO each own preparation, precipitation and reflectivity
+                # slots no other arm reaches.
+                RunConfig(**_TINY, moist=True, mp_physics=2),
+                RunConfig(**_TINY, moist=True, mp_physics=3),
+                RunConfig(**_TINY, moist=True, mp_physics=4),
+                RunConfig(**_TINY, moist=True, mp_physics=5),
+                RunConfig(**_TINY, moist=True, mp_physics=24),
+                RunConfig(**_TINY, moist=True, mp_physics=30),
+                RunConfig(**_TINY, moist=True, mp_physics=106),
+                RunConfig(**_TINY, moist=True, mp_physics=900),
+                # The NOAA WRFV3.9 Thompson fork's aerosol arm holds the
+                # entry ice number (mp_thompson_aero_ni_entry).
+                RunConfig(**_TINY, moist=True, mp_physics=28,
+                          specified=True, aer_init_opt=1, wif_input_opt=1,
+                          thompson_version="wrf_39_noaa"),
+                # Lightning: the flash family, its clock and calendar, and
+                # option 11's cumulus cloud-top plane (ltng_ktop_deep).
+                RunConfig(**_TINY, moist=True, mp_physics=8, cu_physics=5,
+                          lightning_option=11),
+                RunConfig(**_TINY, moist=True, mp_physics=8,
+                          lightning_option=3)):
         known |= set(pf.scratch_slot_registry(cfg, n_lbc_intervals=2))
+    # Strict WRF mode (GPUWM_WRF_EXACT=1, read once at import) owns the
+    # step-carried mass planes, calc_ww_cp's face fluxes and the held
+    # species source; without this arm they are invisible to this gate.
+    import woof.wrf_exact as wrf_exact
+    with monkeypatch.context() as strict:
+        strict.setattr(wrf_exact, "ENABLED", True)
+        for cfg in (RunConfig(**_TINY, moist=True, mp_physics=8,
+                              specified=True, diff_6th_opt=2),
+                    RunConfig(**_TINY, moist=True, mp_physics=8,
+                              nested=True, km_opt=1, diff_opt=2)):
+            known |= set(pf.scratch_slot_registry(cfg, n_lbc_intervals=2))
     exp = load_experiment_case(CONFIG_4DOM)[0]
     for dc in exp.domains:
         known |= set(pf.scratch_slot_registry(dc.run, n_lbc_intervals=2))
@@ -939,7 +1244,6 @@ def test_every_scratch_call_site_is_classified(d01_cfg):
         ("woof/core/dycore.py", "_couple_dry_mixing_map_factor"),
         ("woof/core/dycore.py", "add_fixed_dry_tendencies"),
         ("woof/core/dycore.py", "apply_diff6"),
-        ("woof/core/diffusion.py", "add_diffusion_tendencies"),
         ("woof/core/physics.py", "__init__"),
         ("woof/io/restart.py", "_apply_validated_restart"),
         ("woof/io/restart.py", "_restore_driver"),
@@ -1021,6 +1325,96 @@ def test_every_scratch_call_site_is_classified(d01_cfg):
         # below executes this source's slot producer and allocation loop,
         # pinning the entire requested set, shapes, and restart classes.
         ("woof/prepared_domain_tree_forecast.py", "physics"),
+        # Chemistry uses declared row slots and the fixed MONO slot tuple.
+        # test_chem_variable_requests_match_priced_shapes below checks their
+        # actual allocation requests against the registry with NumPy storage.
+        ("woof/core/chem_transport.py", "chem_fixed_tendencies"),
+        ("woof/core/chem_transport.py", "advance_chem_stage"),
+        # The same fixed-tendency specs used by diff_opt=2 feed coordinate
+        # mixing; test_diff_opt1 prices its additional theta pair separately.
+        ("woof/core/dycore.py", "_compute_coordinate_tendencies"),
+        # The birth helper only requests existing STRIP_ACCUMULATORS; the
+        # relocation continuation test executes that retained-buffer path.
+        ("woof/core/physics_continuation.py", "seed_birth_accumulations"),
+        # These wrappers forward to BatchDomainState's admitted scratch
+        # registry, which refuses new names/shapes before allocation. The
+        # batch-state test checks real independent NumPy member backings.
+        ("woof/ensemble/batch_acoustic.py", "scratch"),
+        ("woof/ensemble/batch_boundaries.py", "scratch"),
+        ("woof/ensemble/batch_moist.py", "prepare_scalars_stage"),
+        # PackedThompsonState.scratch cannot allocate: its complete plan is
+        # validated before launching, with wrong name/shape/dtype refusals
+        # pinned by test_packed_thompson_scratch_cannot_grow below.
+        ("woof/ensemble/batch_physics.py", "prepare_thompson_column_batch"),
+        # The packed MYNN binder borrows exactly the original owner's priced
+        # chunk slots, then rechecks their pointers only during its all-member
+        # rendezvous. The witness below executes both source loops and proves
+        # name/shape/dtype equality, separate member rates, exact plan bytes,
+        # stable backings and refusal outside that ownership interval.
+        ("woof/ensemble/batch_mynn.py", "prepare_mynn_pbl_column_batch"),
+        ("woof/ensemble/batch_mynn.py", "launch"),
+        # CHEM_BOUNDARY_SLOTS is the priced fixed eight-table family.
+        # test_chem_cams_boundary exercises its actual packed NumPy tables.
+        ("woof/ingest/lateral_bc.py", "chem_boundary_rows"),
+        # --- Sites that landed while this cell skipped (see the docstring).
+        # Every name each one generates is checked against the registry
+        # after the scan, so these entries admit no unpriced slot.
+        # Strict WRF mode names its slots by module constant
+        # (acoustic.WRF_ACOUSTIC_MUTS_SLOT, dycore.WRF_MUTS_SLOT and
+        # dycore.WRF_MU_HALO_SLOT).
+        ("woof/core/acoustic.py", "wrf_acoustic_muts"),
+        ("woof/core/dycore.py", "_capture_wrf_muts"),
+        ("woof/core/dycore.py", "_wrf_step_epilogue"),
+        # Strict mode's WRF-order folds walk the same fixed-tendency specs
+        # rows as prepare_fixed_tendencies above (the registered smag_r
+        # family), and fold_lateral_relaxation walks _FOLD_ROWS' held dry
+        # slots.
+        ("woof/core/dycore.py", "_compute_wrf_constant_k_tendencies"),
+        ("woof/core/dycore.py", "_fold_physics_wrf"),
+        ("woof/core/dycore.py", "_accumulate_diff6_wrf_order"),
+        ("woof/core/dycore.py", "fold_lateral_relaxation"),
+        # Scheme adapters that take their names from their own tables:
+        # fast SBM's surface map, the column-scheme row's surface tuple, the
+        # MPAS column suite's microphysics_scratch_slots, the generated
+        # Thompson column's literal preparation tuple, WSM6R's prefix and
+        # the WSM family row's name.
+        ("woof/core/fast_sbm_runtime.py", "apply"),
+        ("woof/core/microphysics.py", "_apply_column_scheme"),
+        ("woof/core/mpas_column_suite.py", "accumulated_precipitation"),
+        ("woof/core/thompson_column.py", "apply_generated"),
+        ("woof/core/wsm6.py", "_wsm6_prepare"),
+        ("woof/core/wsm_family.py", "apply"),
+        # Correct mode's Thompson cloud booking (WB1, 2.9.0 c4a312f04) names
+        # its two surface totals by module constant
+        # (thompson_cloud_booking.CLOUDNC_SLOT / CLOUDNCV_SLOT).
+        ("woof/core/thompson_cloud_booking.py", "book_settled_cloud"),
+    }
+    # A dynamic prefix one adapter generates from its own table, pinned BY
+    # SITE rather than added to known_prefixes, so it admits nothing
+    # anywhere else (``mp_`` and ``physics_`` are far too wide to admit
+    # globally).  The generated names are checked after the scan.
+    allowed_prefix_sites = {
+        ("woof/core/lightning.py", "initialize_lightning", "ltng_"),
+        ("woof/core/lightning.py", "update_lightning", "ltng_"),
+        ("woof/core/fast_sbm_runtime.py", "apply", "fsbm_frame_"),
+        ("woof/core/mpas_column_suite.py", "run_phase1", "physics_"),
+        ("woof/core/wsm_family.py", "apply", "mp_"),
+    }
+    # The one sanctioned hand-off of the bound allocator: fast_sbm_runtime
+    # .apply passes state.scratch to fast_sbm_cuda.launch, whose own literal
+    # scratch(...) calls this scanner sees and classifies (asserted after
+    # the scan), so no call escapes the gate.
+    allowed_alias_sites = {("woof/core/fast_sbm_runtime.py", "apply")}
+    # Data named scratch is still inventoried, but is not a bound allocator
+    # method. These exact uses are tied to concrete tuple, prepared mapping,
+    # and Path owners; a new data use or a callable alias still fails closed.
+    known_data_sites = {
+        ("woof/core/chem_advect_mono.py", "launch_mono_renorm_apply", "indexed"),
+        ("woof/ensemble/batch_state.py", "_validate_prepared", "mapping"),
+        ("woof/ensemble/batch_state.py", "from_prepared", "mapping"),
+        ("woof/ensemble/prepared_batch.py", "nbytes", "mapping"),
+        ("woof/ensemble/prepared_batch.py", "prepare_native_member_batch", "mapping"),
+        ("woof/gfs_direct.py", "_decode_batch", "path"),
     }
     # The one sanctioned getattr(state, "scratch") lookup: lateral_bc's
     # duck-type guard, whose resulting Name call the scanner classifies.
@@ -1032,6 +1426,9 @@ def test_every_scratch_call_site_is_classified(d01_cfg):
     assert sites, "AST scan found no scratch call sites -- scanner broken"
     problems = []
     seen_variable_sites = set()
+    seen_data_sites = set()
+    seen_prefix_sites = set()
+    seen_alias_sites = set()
     for kind, payload, rel, func in sites:
         if kind == "literal":
             if payload.startswith("nest_"):
@@ -1042,9 +1439,13 @@ def test_every_scratch_call_site_is_classified(d01_cfg):
                 problems.append(f"{rel}::{func}: slot {payload!r} is not in "
                                 "the scratch registry")
         elif kind == "prefix":
-            if payload not in known_prefixes:
+            if (rel, func, payload) in allowed_prefix_sites:
+                seen_prefix_sites.add((rel, func, payload))
+            elif payload not in known_prefixes:
                 problems.append(f"{rel}::{func}: dynamic slot prefix "
                                 f"{payload!r} is not a registered family")
+        elif kind == "alias" and (rel, func) in allowed_alias_sites:
+            seen_alias_sites.add((rel, func))
         elif kind == "variable":
             seen_variable_sites.add((rel, func))
             if (rel, func) not in allowed_variable_sites:
@@ -1054,12 +1455,76 @@ def test_every_scratch_call_site_is_classified(d01_cfg):
             if (rel, func) not in allowed_getattr_sites:
                 problems.append(f"{rel}::{func}: getattr(..., 'scratch') "
                                 "lookup escapes the completeness gate")
+        elif kind == "data":
+            seen_data_sites.add((rel, func, payload))
+            if (rel, func, payload) not in known_data_sites:
+                problems.append(f"{rel}::{func}: {payload} scratch data "
+                                "has no recorded owner")
         else:  # "alias" / "no_slot": never legitimate
             problems.append(f"{rel}::{func}: {kind} scratch usage escapes "
                             "the completeness gate")
     assert not problems, "\n".join(problems)
     # The allowlist may not silently rot either.
     assert seen_variable_sites == allowed_variable_sites
+    assert seen_data_sites == known_data_sites
+    assert seen_prefix_sites == allowed_prefix_sites
+    assert seen_alias_sites == allowed_alias_sites
+    # The callee the fast-SBM hand-off reaches is itself scanned: its six
+    # literal slots were classified above.
+    assert {payload for kind, payload, rel, func in sites
+            if (kind, rel, func) == ("literal", "woof/core/fast_sbm_cuda.py",
+                                     "launch")} == {
+        "fsbm_dims", "fsbm_pointers", "fsbm_work", "fsbm_cloud_base",
+        "fsbm_tally", "fsbm_status"}
+
+    # Every name the sites admitted above by site actually generate, from
+    # the same tables the sites read, is a registry slot.
+    from woof.core import wsm_family
+    from woof.core.acoustic import WRF_ACOUSTIC_MUTS_SLOT
+    from woof.core.column_schemes import COLUMN_SCHEMES
+    from woof.core.fast_sbm_contract import STATE_FIELDS as FSBM_FIELDS
+    from woof.core.fast_sbm_runtime import _SURFACE_SLOTS
+    from woof.core.physics_inventory import microphysics_scratch_slots
+    from woof.core.thompson_cloud_booking import CLOUDNC_SLOT, CLOUDNCV_SLOT
+    from woof.lightning_contract import LIGHTNING_OPTIONS
+
+    # woof.core.dycore imports CuPy at module scope, which would turn this
+    # CPU gate into a skip; its three constants are read from the source.
+    dycore_constants = {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in ast.parse((ROOT / "woof/core/dycore.py").read_text(
+            encoding="utf-8")).body
+        if isinstance(node, ast.Assign) and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in ("WRF_MUTS_SLOT", "WRF_MU_HALO_SLOT",
+                                   "_FOLD_ROWS")}
+    generated = {WRF_ACOUSTIC_MUTS_SLOT, dycore_constants["WRF_MUTS_SLOT"],
+                 dycore_constants["WRF_MU_HALO_SLOT"]}
+    generated |= {slot for slot, _msf in
+                  dycore_constants["_FOLD_ROWS"].values()}
+    for mp in wsm_family.family_selectors():
+        generated |= set(wsm_family.preparation_slots(mp))
+        generated |= {f"mp_{cls}{suffix}"
+                      for cls in wsm_family.row(mp).precip
+                      for suffix in ("nc", "ncv")}
+    generated |= {f"wsm6r_{field}"
+                  for field in ("theta", "rho", "pii", "dz", "z8w")}
+    for row in COLUMN_SCHEMES.values():
+        generated |= set(row.surface)
+    generated |= {"fsbm_frame_" + name for name in FSBM_FIELDS}
+    generated |= set(_SURFACE_SLOTS.values())
+    generated |= {"ltng_" + name for option in LIGHTNING_OPTIONS.values()
+                  for name in option["fields"]}
+    generated |= {"ltng_" + name for name in
+                  ("iccg_in_num", "iccg_in_den", "lat", "lon")}
+    generated |= {"physics_qi", "physics_qs"}
+    generated |= {CLOUDNC_SLOT, CLOUDNCV_SLOT}
+    generated |= {"mp_th", "mp_pii", "mp_thompson_temperature", "mp_dz8w"}
+    for mp in _INTAKE_MP:
+        if mp:
+            generated |= {slot for _component, slot in
+                          microphysics_scratch_slots(mp)}
+    assert generated <= known, sorted(generated - known)
 
 
 def test_prepared_store_follower_slots_match_declared_registry():
@@ -1146,6 +1611,57 @@ def test_experimental_thompson_scratch_registry_is_complete():
             "mp_thompson_graupel_number_shadow",
             "mp_thompson_micro_columns"):
         assert pf.scratch_slot_uses_arena(slot)
+
+
+
+def test_strict_classic_thompson_scratch_registry_is_complete(monkeypatch):
+    """Under GPUWM_WRF_EXACT=1, mp=8's priced scratch is exactly what
+    apply_classic draws (a default process prices 2.9.1's adapter, above).
+
+    Breakage prevented: a slot the adapter draws that the registry does not
+    price is memory the fit gate never charged; a slot priced but not drawn
+    reserves memory the run never uses.  The classic unit's working set is
+    plane-stacked (planes*levels, ny, nx): eleven tendencies and eighteen
+    working fields per level, eleven column profiles per interface level.
+    """
+    from woof.core import thompson_classic as tcl
+    monkeypatch.setattr(pf, "WRF_EXACT", True)
+    cfg = RunConfig(**_TINY, moist=True, mp_physics=8)
+    slots = pf.scratch_slot_registry(cfg)
+    mass = (cfg.nz, cfg.ny, cfg.nx)
+    surface = (cfg.ny, cfg.nx)
+    expected = {
+        "mp_th": mass,
+        "mp_pii": mass,
+        "mp_dz8w": mass,
+        "mp_thompson_temperature": mass,
+        "mp_thompson_saved_theta": mass,
+        "mp_thompson_graupel_number_shadow": mass,
+        "mp_thompson_classic_ten": (tcl.NTEN * cfg.nz, cfg.ny, cfg.nx),
+        "mp_thompson_classic_work": (tcl.NWORK * cfg.nz, cfg.ny, cfg.nx),
+        "mp_thompson_classic_colbuf": (tcl.NCOLPLANES * (cfg.nz + 1),
+                                       cfg.ny, cfg.nx),
+        "mp_thompson_classic_flags": mass,
+        "mp_thompson_classic_micro": surface,
+        "mp_thompson_classic_kmelt": surface,
+        "mp_rainnc": surface,
+        "mp_rainncv": surface,
+        "mp_snownc": surface,
+        "mp_snowncv": surface,
+        "mp_graupelnc": surface,
+        "mp_graupelncv": surface,
+        "mp_sr": surface,
+        "refl_10cm": mass,
+    }
+    assert expected.items() <= slots.items()
+    # the old adapter's slots are gone from mp=8's price
+    for gone in ("mp_z8w", "refl_t", "mp_thompson_micro_columns",
+                 "mp_thompson_frozen_reference_density",
+                 "mp_thompson_snow_velocity_boost"):
+        assert gone not in slots, gone
+    for slot in expected:
+        if slot.startswith("mp_thompson_"):
+            assert pf.scratch_slot_uses_arena(slot), slot
 
 
 # ---------------------------------------------------------------------------
@@ -1282,11 +1798,20 @@ def test_mp28_scratch_registry_is_complete():
         "mp_thompson_aero_entry_density",
         "mp_thompson_aero_tau1_density",
         "mp_thompson_aero_nwfa_work_m3",
-        "mp_thompson_aero_qc_entry",
-        "mp_thompson_aero_ni_entry",
+        "mp_thompson_aero_qcten",
+        "mp_thompson_aero_qrten",
+        "mp_thompson_aero_nrten",
+        "mp_thompson_aero_qiten",
+        "mp_thompson_aero_niten",
+        "mp_thompson_aero_qvten",
+        "mp_thompson_aero_tten",
         "mp_thompson_aero_condensation_rate",
     )}
     assert aerosol.items() <= slots.items()
+    # The v4.6.1 generation carries no entry-ice copy; the fork, which keeps
+    # its rain and ice in place, carries that copy and no rain or ice
+    # accumulator.
+    assert "mp_thompson_aero_ni_entry" not in slots
     # All fifteen are arena-eligible, and the audit row that says so is a
     # write_before_read row with real evidence.
     for slot in aerosol:
@@ -1352,7 +1877,7 @@ def test_mp50_smag_held_tendencies_are_exactly_p3s_species():
     """The held-tendency row for the one scheme with qi and NO qs/qg.
 
     The ice-mass admission tuple in ``scratch_slot_registry`` (the
-    ``(6, 8, 9, 10, 16, 18, 28)`` arm) prices ``smag_rqi``/``rqs``/``rqg``
+    ``(6, 8, 9, 10, 16, 18, 24, 28)`` arm) prices ``smag_rqi``/``rqs``/``rqg``
     together, because until P3 every scheme with cloud ice also had snow
     and graupel.  mp=50 is deliberately absent from it and takes its own
     arm instead: Registry.EM_COMMON:3038 declares P3's package as
@@ -1540,11 +2065,15 @@ def test_p3_is_out_of_the_reflectivity_rail_by_a_named_decision():
 
     big = dict(nx=200, ny=200, nz=50, dx=3000.0, dy=3000.0, ztop=20000.0,
                dt=15.0, run_seconds=3600.0)
+    # 97e9a3ca061 (cap-hail): automatic HAILCAST at this 3-km spacing loads
+    # the 7,392-B hail frame, wider than refl's 5,184 B, which would hide
+    # the rail's cost behind it; the consequence is measured with HAILCAST
+    # off, where refl is the widest frame the docstring names.
     cfg = RunConfig(**big, moist=True, mp_physics=50,
-                    output_interval_s=900.0)
+                    output_interval_s=900.0, hailcast_opt=0)
     exp = experiment_from_run_config(cfg, _dt(1974, 4, 3, 12))
     modules = pf.physics_kernel_modules(exp)
-    assert "p3_composed" in modules
+    assert "p3_composed" in modules and "hail" not in modules
     assert "refl" not in modules and "wdm6_refl" not in modules
     priced = pf.kernel_local_memory_bytes(exp)
 
@@ -1855,7 +2384,7 @@ def test_mp50_is_deliberately_out_of_the_six_mass_shape_package():
     m = (_TINY["nz"], _TINY["ny"], _TINY["nx"])
     six_mass = ("qi", "qs", "qg", "qi0", "qs0", "qg0",
                 "effc", "effi", "effs")
-    members = (6, 8, 9, 10, 16, 18, 28)
+    members = (6, 8, 9, 10, 16, 18, 24, 28)
 
     p3 = pf.state_array_shapes(RunConfig(**_TINY, moist=True,
                                          mp_physics=50))
@@ -1911,11 +2440,33 @@ def test_mp50_is_deliberately_out_of_the_six_mass_shape_package():
         "the six-mass arm is no longer chained to the mp==50 arm; an "
         "unchained sibling lets a widened tuple price qs/qg/effs on top "
         "of P3's own package")
+    # Lin has its own six-mass arm without effective-radius fields.
+    lin_arm = orelse[0]
+    assert isinstance(lin_arm.test, ast.Compare)
+    assert isinstance(lin_arm.test.ops[0], ast.Eq)
+    assert lin_arm.test.comparators[0].value == 2
+    lin_shapes = pf.state_array_shapes(RunConfig(**_TINY, moist=True, mp_physics=2))
+    assert {"qi", "qs", "qg", "qi0", "qs0", "qg0"} <= set(lin_shapes)
+    assert not {"effc", "effi", "effs"} & set(lin_shapes)
+    assert not priced(2)
+    assert len(lin_arm.orelse) == 1
+    wsm3_arm = lin_arm.orelse[0]
+    assert isinstance(wsm3_arm.test.ops[0], ast.Eq)
+    assert wsm3_arm.test.comparators[0].value == 3
+    assert len(wsm3_arm.orelse) == 1 and isinstance(wsm3_arm.orelse[0], ast.If)
+    orelse = wsm3_arm.orelse
+    # Column metadata may own an intervening mass-package arm.
+    while (isinstance(orelse[0].test, ast.Compare)
+           and isinstance(orelse[0].test.comparators[0], ast.Name)
+           and orelse[0].test.comparators[0].id == "COLUMN_SCHEMES"):
+        from woof.core.column_schemes import COLUMN_SCHEMES
+        assert 50 not in COLUMN_SCHEMES
+        orelse = orelse[0].orelse
+        assert len(orelse) == 1 and isinstance(orelse[0], ast.If)
     chained = orelse[0].test
     assert isinstance(chained, ast.Compare)
     assert isinstance(chained.ops[0], ast.In)
-    assert [element.value for element in chained.comparators[0].elts] == [
-        6, 8, 9, 10, 16, 18, 28], (
+    assert list(eval(compile(ast.Expression(chained.comparators[0]), "<six-mass-membership>", "eval"), pf.__dict__)) == [6, 8, 9, 10, 16, 18, 24, 28, 106], (  # Lin (2) and FAST_SBM (30) own arms; TEMPO is a named row
         "the six-mass membership tuple moved; see Registry.EM_COMMON "
         ":3021/:3024/:3025/:3026/:3031/:3033/:3036 for its members and "
         ":3038 for why 50 is not one of them")
@@ -2442,6 +2993,235 @@ def test_scratch_scanner_catches_the_review_bypasses():
     # Ordinary calls stay classified exactly as before.
     assert kinds("state.scratch((1,), 'rk_ww')") == [("literal", "rk_ww")]
     assert kinds("state.scratch(f.shape, slotvar)") == [("variable", None)]
+    assert kinds("value = work.scratch[2]") == [("data", "indexed")]
+    assert kinds("dict(member.scratch or {})") == [("data", "mapping")]
+    assert kinds("(member.scratch or {}).values()") == [("data", "mapping")]
+    assert kinds("path = self.scratch / 'batch.tsv'") == [("data", "path")]
+    # Installing an allocator is a STORE, not a method alias LOAD. Its
+    # later calls must still be classified, and callable fallbacks and
+    # immediately called indexed values must not become data exemptions.
+    assert kinds("state.scratch = allocate\nstate.scratch((1,), 'rk_ww')") == [
+        ("literal", "rk_ww")]
+    assert ("alias", None) in kinds("fn = state.scratch or fallback")
+    assert ("alias", None) in kinds("state.scratch[0]((1,), 'x')")
+
+
+def test_chem_variable_requests_match_priced_shapes(monkeypatch):
+    """Execute row and MONO allocation loops through a checked real owner."""
+    from woof.core import chem_advect_mono, chem_transport
+    from woof.core.chem_context import MONO_IMPLICIT_SLOT, MONO_SCRATCH_SLOTS
+    from woof.core.state import DomainState
+
+    cfg = RunConfig(**_TINY, moist=True, mp_physics=1, km_opt=4,
+                    chem_sets="tracer_test", chem_adv_opt=2)
+    state = DomainState(cfg, array_module=np)
+    registry = pf.scratch_slot_registry(cfg)
+    requested = {}
+    allocate = state.scratch
+
+    def checked(shape, slot):
+        assert tuple(shape) == registry[slot], slot
+        value = allocate(shape, slot)
+        assert value.nbytes == 4 * math.prod(registry[slot]), slot
+        requested[slot] = value
+        return value
+
+    state.scratch = checked
+    held = chem_transport.chem_fixed_tendencies(state, cfg)
+    held_names = {chem_transport.chem_fixed_slot(row)
+                  for row in state.chem.transported}
+    assert set(requested) == held_names
+    assert set(held) == {row.state_attr for row in state.chem.transported}
+    # Launches are outside this CPU allocation witness; the real stage still
+    # executes every allocation, source fold and row-routing decision.
+    monkeypatch.setattr(chem_advect_mono, "launch_mono_fluxes", lambda *a, **k: None)
+    monkeypatch.setattr(chem_advect_mono, "launch_mono_renorm_apply", lambda *a, **k: None)
+    monkeypatch.setattr(chem_transport, "_pd_fold_sources", lambda *a, **k: a[3])
+    monkeypatch.setattr(chem_transport, "_update_scalar_in_place", lambda *a, **k: None)
+    shape = (cfg.nz, cfg.ny, cfg.nx)
+    chem_transport.advance_chem_stage(
+        state, cfg, np.zeros((cfg.nz, cfg.ny, cfg.nx + 1), np.float32),
+        np.zeros((cfg.nz, cfg.ny + 1, cfg.nx), np.float32),
+        np.zeros((cfg.nz + 1, cfg.ny, cfg.nx), np.float32), 1.0,
+        final=True, fixed_tendencies=held)
+    expected = {*held_names, *MONO_SCRATCH_SLOTS, MONO_IMPLICIT_SLOT,
+                "moist_rq_t", "pd_fxl", "pd_fxc", "pd_fyl", "pd_fyc",
+                "pd_fzl", "pd_fzc"}
+    assert set(requested) == expected
+    assert all(requested[slot].shape == shape for slot in MONO_SCRATCH_SLOTS)
+    assert all(pf.scratch_slot_lifetime(slot) is not None for slot in expected)
+
+
+def test_packed_thompson_scratch_cannot_grow():
+    from woof.ensemble.batch_physics import (
+        PackedThompsonState, thompson_column_scratch_fields)
+
+    cfg = RunConfig(**_TINY, moist=True, mp_physics=8)
+    registry = pf.scratch_slot_registry(cfg)
+    fields = thompson_column_scratch_fields(nz=cfg.nz, ny=cfg.ny, nx=cfg.nx)
+    buffers = {field.name: np.empty(field.shape, np.float32) for field in fields}
+    owner = PackedThompsonState({}, buffers)
+    for field in fields:
+        assert field.shape == registry[field.name], field.name
+        value = owner.scratch(field.shape, field.name)
+        assert value is buffers[field.name]
+        assert value.nbytes == 4 * math.prod(registry[field.name])
+    with pytest.raises(ValueError, match="not admitted"):
+        owner.scratch((1,), "new_unpriced_field")
+    for shape, dtype in (((1,), None), (fields[0].shape, np.float64)):
+        with pytest.raises(ValueError, match="shape/dtype"):
+            owner.scratch(shape, fields[0].name, dtype)
+
+
+@pytest.mark.parametrize("version", ["wrf_461", "gsd_41"])
+@pytest.mark.parametrize("nz,ny,nx,chunk", [(5, 2, 3, 5), (9, 3, 5, 15)])
+def test_packed_mynn_variable_scratch_matches_priced_owner(version, nz, ny, nx, chunk):
+    """Execute the actual bind/recheck loops with CPU allocator backings.
+
+    This checks allocation and rendezvous ownership, not CUDA arithmetic.
+    The six member rates remain live beside the borrowed workspace; the
+    workspace is reused sequentially by column pieces, never per member.
+    """
+    from types import SimpleNamespace
+    from woof.core.state import DomainState
+    from woof.core.mynn_pbl_scratch import (
+        MYNN_PBL_CONSTANT_ZERO_SLOTS, MYNN_PBL_TENDENCY_FIELDS,
+        mynn_pbl_scratch_shapes, mynn_pbl_index_shapes, mynn_pbl_flag_shapes,
+        mynn_pricing_rank_chunk, bind_mynn_rank_chunk)
+    from woof.ensemble.batch_mynn import (
+        _DeclaredScratchState, mynn_pbl_output_plan, mynn_pbl_transient_bytes)
+    from woof.ensemble.batch_storage import BatchStorage
+    from woof.ensemble.packed_production_physics import OriginalWorkspaceReuseScope
+
+    path = ROOT / "woof/ensemble/batch_mynn.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    prepare = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                   and node.name == "prepare_mynn_pbl_column_batch")
+    launch = next(node for node in prepare.body if isinstance(node, ast.FunctionDef)
+                  and node.name == "launch")
+    assignments = {node.targets[0].id: node for node in prepare.body
+                   if isinstance(node, ast.Assign) and len(node.targets) == 1
+                   and isinstance(node.targets[0], ast.Name)}
+    loops = [node for node in prepare.body if isinstance(node, ast.For)
+             and isinstance(node.iter, ast.Call)
+             and isinstance(node.iter.func, ast.Attribute)
+             and isinstance(node.iter.func.value, ast.Name)
+             and node.iter.func.value.id == "shapes" and node.iter.func.attr == "items"]
+    rechecks = [node for node in launch.body if isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name) and node.test.id == "borrowed"]
+    assert len(loops) == len(rechecks) == 1
+    sites = _scan_scratch_tree(ast.Module(body=[prepare], type_ignores=[]),
+                              path.relative_to(ROOT).as_posix())
+    assert sites == [("variable", None, "woof/ensemble/batch_mynn.py", name)
+                     for name in ("prepare_mynn_pbl_column_batch", "launch")]
+    bind = compile(ast.Module(body=[assignments["shapes"], assignments["buffers"],
+                   loops[0], assignments["identities"]], type_ignores=[]), str(path), "exec")
+    recheck = compile(ast.Module(body=rechecks, type_ignores=[]), str(path), "exec")
+
+    cfg = RunConfig(**{**_TINY, "nz": nz, "ny": ny, "nx": nx}, moist=True,
+                    bl_pbl_physics=5, bl_mynn_version=version)
+    with mynn_pricing_rank_chunk(chunk):
+        registry = pf.mynn_pbl_scratch_slots(cfg, tile_buffer=True)
+    outputs = {f"mynn_pbl_out_{name}" for name in MYNN_PBL_TENDENCY_FIELDS}
+    expected = {slot: shape for slot, shape in registry.items() if slot not in outputs}
+    scratch_owner = DomainState(cfg, array_module=np)
+    assert bind_mynn_rank_chunk(scratch_owner, cfg, chunk) == chunk
+    allocate = scratch_owner.scratch
+    requests = []
+
+    def checked(shape, slot, dtype=np.float32):
+        assert tuple(shape) == expected[slot], slot
+        value = allocate(shape, slot, dtype=dtype)
+        assert value.nbytes == 4 * math.prod(expected[slot])
+        requests.append(slot)
+        return value
+
+    def resident(array, *, shape, dtype, **unused):
+        assert array.shape == shape and array.dtype == np.dtype(dtype)
+        assert array.flags.c_contiguous
+
+    def pointer(array):
+        return int(array.__array_interface__["data"][0]), array.nbytes
+
+    scratch_owner.scratch = checked
+    owner = SimpleNamespace(_closed=False, _active=True,
+                            drivers=[SimpleNamespace(state=scratch_owner)])
+    scope = OriginalWorkspaceReuseScope(owner)
+    scope.kind = "pbl"
+    env = dict(np=np, chunk=chunk, nz=nz, options={"bl_mynn_version": version},
+               borrowed=True, scratch_owner=scratch_owner, reuse_scope=scope,
+               mynn_pbl_scratch_shapes=mynn_pbl_scratch_shapes,
+               mynn_pbl_index_shapes=mynn_pbl_index_shapes,
+               mynn_pbl_flag_shapes=mynn_pbl_flag_shapes,
+               _resident=resident, _pointer=pointer, device=0, array_module=np)
+    exec(bind, env)
+    assert set(requests) == set(env["buffers"]) == set(expected)
+    assert len(requests) == len(expected)
+    assert {slot: value.shape for slot, value in env["buffers"].items()} == expected
+    assert len({pointer(value)[0] for value in env["buffers"].values()}) == len(expected)
+    for slot, value in env["buffers"].items():
+        row = pf.scratch_slot_lifetime(slot)
+        assert row is not None and row.evidence and row.rationale
+        assert row.kind == ("excluded_unproven" if slot in MYNN_PBL_CONSTANT_ZERO_SLOTS
+                            or value.dtype == np.dtype("int32") else "write_before_read")
+
+    plans = {borrow: mynn_pbl_output_plan(nz=nz, ny=ny, nx=nx, members=2,
+             column_chunk=chunk, bl_mynn_version=version, borrow_scratch=borrow)
+             for borrow in (False, True)}
+    full = BatchStorage(plans[False], 2, array_module=np, available_bytes=1 << 28)
+    borrowed = BatchStorage(plans[True], 2, array_module=np, available_bytes=1 << 28)
+    assert {name.removeprefix("mynn_pbl:") for name in full.arrays
+            if not name.startswith("mynn_pbl:out_")} == set(expected)
+    assert set(borrowed.arrays) == {f"mynn_pbl:out_{name}" for name in MYNN_PBL_TENDENCY_FIELDS}
+    workspace_payload = sum(value.nbytes for value in env["buffers"].values())
+    assert full.payload_bytes == borrowed.payload_bytes + workspace_payload
+    assert borrowed.payload_bytes == 6 * 2 * nz * ny * nx * 4
+    workspace_blocks = sum(((value.nbytes + 511) // 512) * 512
+                           for value in env["buffers"].values())
+    assert plans[False].required_bytes(2) - plans[True].required_bytes(2) == workspace_blocks
+    assert plans[True].reserved_bytes == mynn_pbl_transient_bytes(
+        nz=nz, column_chunk=chunk, bl_mynn_version=version)
+    rates = list(borrowed.arrays.values())
+    assert all(not np.shares_memory(left, right) for i, left in enumerate(rates)
+               for right in rates[i + 1:] + list(env["buffers"].values()))
+    assert all(not np.shares_memory(value[0], value[1]) for value in rates)
+
+    exec(recheck, env)
+    assert requests == list(expected) * 2
+    assert {slot: pointer(value) for slot, value in env["buffers"].items()} == env["identities"]
+    fixed = _DeclaredScratchState(env["buffers"])
+    first = next(iter(expected))
+    for shape, slot, dtype in (((1,), "unpriced", np.float32),
+                               ((1,), first, np.float32),
+                               (expected[first], first, np.float64)):
+        with pytest.raises(ValueError, match="absent from its allocation plan"):
+            fixed.scratch(shape, slot, dtype=dtype)
+    before = len(requests)
+    owner._active = False
+    with pytest.raises(RuntimeError, match="complete active member leaf rendezvous"):
+        exec(recheck, env)
+    assert len(requests) == before
+    owner._active = True
+    scratch_owner._scratch[first] = np.zeros_like(scratch_owner._scratch[first])
+    with pytest.raises(ValueError, match="original scratch owner changed"):
+        exec(recheck, env)
+
+
+def test_atmosphere_density_transient_has_actual_independent_storage(monkeypatch):
+    from woof.core import physics, state as state_module
+
+    cfg = RunConfig(**_TINY, moist=True, mp_physics=18, bl_pbl_physics=1,
+                    sf_sfclay_physics=1)
+    monkeypatch.setattr(state_module, "cp", np)
+    monkeypatch.setattr(physics, "cp", np)
+    state = state_module.DomainState(cfg, array_module=np)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        atmosphere = physics._prepare_atmosphere(state)
+    rho = atmosphere["rho"]
+    assert rho.shape == pf.atmosphere_transient_shapes(cfg)["atmosphere/rho"]
+    assert rho.dtype == np.dtype("float32")
+    assert rho.nbytes == 4 * cfg.nz * cfg.ny * cfg.nx
+    assert not np.shares_memory(rho, state.alt)
 
 
 # ---------------------------------------------------------------------------
@@ -2507,7 +3287,7 @@ def test_p3_nest_forcing_excludes_snow_and_graupel(exp4):
     # The block itself is unchanged: exactly the schemes whose Registry
     # moist package carries all three ice masses (Registry.EM_COMMON:
     # 3021, 3024-3026, 3031, 3033, 3036).
-    for mp in (6, 8, 9, 10, 16, 18, 28):
+    for mp in (6, 8, 9, 10, 16, 18, 24, 28):
         block = pf.nest_field_kinds(
             RunConfig(**_TINY, moist=True, mp_physics=mp))
         assert {"qi", "qs", "qg"} <= set(block), mp
@@ -2930,25 +3710,38 @@ def test_estimate_domain_itemization_pins(exp1):
     # float64-differenced coefficient drops dc3f/dc4f a further
     # 2 * 4 * 49 = 392 B: 9,800,392 B on top of the previous
     # 563,557,756-B state pin.
-    assert by_cat == {
-        "state": 573358148,
-        "physics": 276106760,
-        # KF hold + expiry mask + ring-guard saves, plus the v1.1
-        # co-located vertical-CFL reduction field: one extra FP32 word in
-        # each of the 256 `integration_health_partial` blocks and in the
-        # single `health_final` block, 4 * (256 + 1) = 1,028 B.  Batched YSU
-        # validation adds one four-byte scratch status word.
-        "scratch": 596974580,
-        "lbc": 67091504,
-        "nest": 0,
-        # _prepare_atmosphere also allocates rho: 4*49*200*250 bytes.
-        "transient": 451062500,
-    }
+    # RULINGS 1 (history CLDFRA, 2.8.7): physics holds the radiation cloud
+    # fraction the history publishes, one (nz, ny, nx) FP32 buffer,
+    # 4*49*200*250 = 9,800,000 B on top of the previous 276,106,760-B pin.
+    # 2.9.1: the exact chain's 3-D PBL and cumulus tendency history rows are
+    # strict-only (physics_inventory.history_tendency_rows): thirteen
+    # 4*49*200*250 planes, 127,400,000 B, leave the default pin.
+    # The six 0-d SCM forcing scalars (24 B) are strict-only too (scm_forcing_fields).
+    # 2.9.2 (rrtmgp-rows): the default RTE+RRTMGP radiation carries WRF's
+    # top/bottom fluxes, 16 instantaneous + 16 AC* planes, and COSZEN: 33
+    # 4*200*250 planes, 6,600,000 B of physics.  Its call transients add the
+    # (16, ncol) flux stack 3,200,000 B and one chunk's clear-sky solve:
+    # three (3125, 50) flux outputs 1,875,000 B, the (3125, 256) LW incident
+    # plane 3,200,000 B and the (3125, 49, 16) zero band cloud 9,800,000 B,
+    # 18,075,000 B of transient.
+    # Held-zero backing sharing removes 2*u + 2*mass = 39,278,400 B
+    # (radiation's three extra backings plus KF's smaller momentum face).
+    # 04e65faa5ff (cap-solar): the default radiation split history carries
+    # SWDDIR, SWDDNI and SWDDIF, three 4*200*250 FP32 physics planes,
+    # 600,000 B on top of the previous 274,428,360-B physics pin.
+    # paper/conus-suite-exact (2.9.11): the stored MF_VX_INV state plane msfv_inv,
+    # 4*(ny+1)*nx = 201,000 B on this 250x200 grid.
+    assert by_cat == {'state': 573559148,
+ 'physics': 275028360,
+ 'scratch': 597187064,
+ 'lbc': 67091504,
+ 'nest': 0,
+ 'transient': 469137500}
     assert d01.resident_bytes == sum(
         v for c, v in by_cat.items() if c != "transient")
-    assert d01.resident_bytes == 1513530992
+    assert d01.resident_bytes == 1512866076
     assert est.resident_bytes == d01.resident_bytes + est.k_tables_bytes
-    assert d01.transient_bytes == 451062500
+    assert d01.transient_bytes == 469137500
 
 
 @requires_4dom_inputs
@@ -3012,8 +3805,18 @@ def test_estimate_4dom_golden_pins(exp4, est4):
     # 4*((nz+1)*ny*nx + 2*nz), totaling 172,201,768 B. Actual state
     # allocation shapes are independently checked against NumPy-backed
     # DomainState, and USTM is in the surface producer's inventory.
-    assert per_domain == {1: 1513530992, 2: 5443919384,
-                          3: 6850817292, 4: 9802340360}
+    # Two later additions, re-pinned here only in 2.9.0 because these cells
+    # skip on every machine without the 1974 bundle (the single-domain pins
+    # took both when they landed): the CLDFRA publication buffer
+    # (cf1b03b17), one resident (nz, ny, nx) FP32 physics persistent per
+    # domain -- 9,800,000 / 39,200,000 / 49,196,196 / 70,560,000 B -- and the
+    # strict health rim table (a677ad4e1), integration_health_rim
+    # (1024, 3) FP32 = 12,288 B per domain.  An item-by-item diff of the
+    # estimate at 8e170fd66 (these pins, green) and at the 2.9.0 lane tip
+    # shows exactly those two items and nothing else; the sum is
+    # 168,805,348 B.
+    assert per_domain == {1: 1523343280, 2: 5483131672,
+                          3: 6900025776, 4: 9872912648}
     nest = {d.grid_id: d.category_bytes("nest") for d in est4.domains}
     assert nest == {1: 0, 2: 103165552, 3: 149390256, 4: 193084928}
     # The post-CQ request includes both simultaneously live nested-force
@@ -3044,7 +3847,8 @@ def test_estimate_4dom_golden_pins(exp4, est4):
     # g-point CSR the gas tables now upload (see
     # test_estimate_experiment_shared_counting).  Nothing else in residency
     # moved -- the optimisation is a workspace and kernel change.
-    assert est4.resident_bytes == 14708970520
+    # +168,805,348 B: CLDFRA (cf1b03b17) and the rim table (a677ad4e1).
+    assert est4.resident_bytes == 14708970520 + 168_805_348 == 14877775868
     # The case configures column_chunk = 6250 (byte-identical to 3125,
     # 33% faster per radiation call); the 3125 numbers stay pinned in the
     # ladder below, so the trade this bought is on the record both ways.
@@ -3056,13 +3860,23 @@ def test_estimate_4dom_golden_pins(exp4, est4):
     # the finalized optics cubes are gone too, and lw_OPTICS at 115,144
     # B/column is what the workspace is now sized to.
     assert est4.workspace_bytes == 719650000
-    assert est4.transient_peak_bytes == 3182840000
+    # _prepare_atmosphere's independent rho allocation is one full-volume
+    # FP32 plane on the peak domain. The CPU storage witness above checks
+    # the real producer; the single-domain pin already included this plane.
+    rho_bytes = max(4 * dc.run.nz * dc.run.ny * dc.run.nx
+                    for dc in exp4.domains)
+    assert rho_bytes == 70_560_000
+    assert est4.transient_peak_bytes == 3182840000 + rho_bytes == 3253400000
     # +3,444,004 B: the four-domain OLR publication total.
     # -1,331,736,416 B against the pre-optimisation pin: the 1,331,750,000 B
     # of workspace the phase change removed, less the 13,584 B of CSR.
-    assert est4.subtotal_bytes == 18611460520
+    # +168,805,348 B: CLDFRA (cf1b03b17) and the rim table (a677ad4e1).
+    assert est4.subtotal_bytes == (
+        18611460520 + rho_bytes + 168_805_348) == 18850825868
+    assert est4.headroom == pf.forecast_pool_headroom(
+        dc.run for dc in exp4.domains) == 1.13
     assert est4.alloc_estimate_bytes == math.ceil(
-        1.15 * est4.subtotal_bytes) == 21403179598
+        est4.headroom * est4.subtotal_bytes) == 21301433231
     # Chunk ladder after arena sharing and physics-persistent reclamation.
     # The 1024-descriptor health-slot registration adds 49,168 B/domain to
     # the audited scratch; the pins below are computed on the merged tree.
@@ -3073,10 +3887,12 @@ def test_estimate_4dom_golden_pins(exp4, est4):
     # 27,388,032 B on top of the ports-branch ladder.
     # Every rung also carries ceil(1.15 x 3,444,004) of OLR.
     # The ladder FLATTENED with the workspace: the whole rung-to-rung spread
-    # is 1.15 x the workspace difference, and the workspace is now 2.85x
+    # is 1.13 x the workspace difference, and the workspace is now 2.85x
     # smaller, so 6250 -> 256 buys 824 MB where it used to buy 2,293 MB.
-    assert ladder == {6250: 21403179598, 3125: 20973395848,
-                      1562: 20758435208, 256: 20578819983}
+    # Every rung also carries ceil(1.13 x 168,805,348) = 190,750,043 B of
+    # CLDFRA (cf1b03b17) and rim table (a677ad4e1), measured per rung.
+    assert ladder == {6250: 21301433231, 3125: 20879123981,
+                      1562: 20667901787, 256: 20491410305}
 
 
 def test_d01_calibration_bounds_measured_fixture(exp1):
@@ -3092,10 +3908,18 @@ def test_d01_calibration_bounds_measured_fixture(exp1):
     assert est.alloc_estimate_bytes >= measured
     # Current residency includes the EOS residual/coefficient arrays and
     # USTM and the three default-on CQ faces: 1,513,530,992 B, about 96%
-    # of the historical 1.47-GiB peak.
+    # of the historical 1.47-GiB peak; the held CLDFRA buffer (RULINGS 1,
+    # 2.8.7) adds 9,800,000 B, 1,523,330,992 B or 96.5 %.
     # This comparison does not turn that old run into a new measurement.
-    ratio = est.domains[0].resident_bytes / measured
-    assert 0.95 <= ratio <= 0.96
+    # The six 0-d SCM forcing scalars (24 B) are strict-only too (scm_forcing_fields).
+    # The cap-solar SWDDIR/SWDDNI/SWDDIF history planes add 600,000 B.
+    # paper/conus-suite-exact (2.9.11): the stored MF_VX_INV state plane msfv_inv,
+    # 4*(ny+1)*nx = 201,000 B on this 250x200 grid.
+    assert est.domains[0].resident_bytes == 1512866076
+    # Compare the recorded pre-intake residency to its historical measurement.
+    # New history carriers are separately priced above; this is no new pool measurement.
+    ratio = 1523343280 / measured
+    assert 0.95 <= ratio <= 0.97
 
 
 def test_calibration_constants_pin_the_measurement_record():
@@ -3196,11 +4020,15 @@ def test_n0_probe_projection_flags_stale_calibration_after_exact_aliases(
         exp4, est4):
     """Project retained bytes explicitly; never relabel them a fresh probe.
 
-    The old receipt predates the EOS residual/coefficient arrays and USTM.
-    Its algebra must add their physical allocation once, whereas the
-    estimator adds their 1.15 headroom multiple. The resulting margin is
-    53,728,004 B. PROBE_POOL_USED_PEAK_BYTES remains the original record;
-    this constructed projection cannot certify a live measured-bound gate.
+    The old receipt predates the EOS residual/coefficient arrays and USTM,
+    and also the CLDFRA publication buffer (cf1b03b17) and the strict health
+    rim table (a677ad4e1). Its algebra must add their physical allocation
+    once, whereas the estimator applies the current measured forecast
+    margin, 1.13. The rho array was already physically allocated by that
+    probe and is now priced too, so it is not added twice to the receipt.
+    The resulting margin is 316,805,219 B. PROBE_POOL_USED_PEAK_BYTES
+    remains the original record; this constructed projection cannot certify
+    a live measured-bound gate.
     """
     # ``PROBE_POOL_USED_PEAK_BYTES`` is a receipt taken at the LIBRARY default
     # chunk, so it must be projected against the default-chunk estimate.
@@ -3213,11 +4041,17 @@ def test_n0_probe_projection_flags_stale_calibration_after_exact_aliases(
         4 * ((dc.run.nz + 1) * dc.run.ny * dc.run.nx + 2 * dc.run.nz)
         for dc in exp4.domains)
     assert added_persistents == 172_201_768
+    # CLDFRA (nz, ny, nx) FP32 plus the (1024, 3) FP32 rim table, per domain.
+    later_persistents = sum(
+        4 * dc.run.nz * dc.run.ny * dc.run.nx + 4 * 1024 * 3
+        for dc in exp4.domains)
+    assert later_persistents == 168_805_348
+    added_persistents += later_persistents
     projected_used = (pf.PROBE_POOL_USED_PEAK_BYTES + added_persistents
                       - est.dycore_state_saved_bytes
                       - (3035550000 - est.workspace_bytes)
                       - diff6_alias_saved - 141_120_000)
-    assert projected_used - est.alloc_estimate_bytes == 53_728_004
+    assert projected_used - est.alloc_estimate_bytes == 316_805_219
     legs = pf.evaluate_alloc_gates(
         measured_used_bytes=projected_used,
         estimate_bytes=est.alloc_estimate_bytes,
@@ -3328,7 +4162,12 @@ def test_check_cli_estimator_json(capsys):
     # -1,531,496,879 B on the RRTMGP optimisation: 1.15 x the
     # 1,331,750,000 B of chunk workspace the phase change removed at this
     # case's 6250 chunk, less 1.15 x the 13,584 B of gas-table CSR it added.
-    assert payload["alloc_estimate_bytes"] == 21403179598
+    # Current subtotal includes rho and uses the measured forecast margin.
+    # +168,805,348 B of subtotal: the CLDFRA publication buffer (cf1b03b17)
+    # and the strict health rim table (a677ad4e1) on all four domains; see
+    # test_estimate_4dom_golden_pins.
+    assert payload["alloc_estimate_bytes"] == math.ceil(
+        1.13 * (18682020520 + 168805348)) == 21301433231
     # All requested moist-CQ slots are represented; the shared arena aliases
     # their lifetimes without changing the exact physical backing.
     assert payload["scratch_arena_saved_bytes"] == 6156502304
@@ -3382,26 +4221,37 @@ def test_check_cli_estimator_json(capsys):
     # re-read compiles it to 3,600 B, so the widest frame this
     # configuration launches is Morrison's 5,120 B and the backing store
     # is (5,120 - 1,024) x 1,536 x 170 = 1,069,547,520 B.
-    # Difference of the two rounded 3% retention terms, not a rounded delta.
-    assert payload["reserve_bytes"] == 3804903826 + (
-        math.ceil(0.03 * 21403179598) - math.ceil(0.03 * 21287949368))
+    # 2.9.0, +125,141,381 B, re-pinned only now because this cell skips on
+    # every machine without the 1974 bundle: the WRF 4.6.1 line-for-line KF
+    # port (26779da4e) keeps 66 column arrays in the workspace, not 52, so
+    # KF's in-flight term is 170 x 256 x 66 x 49 x 4 = 562,974,720 B
+    # (+119,418,880 B), and the 3% retention term follows the alloc
+    # estimate's CLDFRA and rim-table growth (+5,722,501 B).
     reference = pf.card_local_memory_profile(None)
+    assert payload["reserve_bytes"] == (
+        math.ceil(0.03 * 21301433231) + reference.cuda_context_bytes
+        + 1069547520 + 562974720 + 313344000 + 512 * (1 << 20)
+    ) == 3924727221
     exp_4dom = load_experiment_case(CONFIG_4DOM)[0]
     assert payload["reserve_components"]["device_overhead_bytes"] == (
         reference.cuda_context_bytes + 1069547520
-        + 443555840 + 313344000)
+        + 562974720 + 313344000)
     assert payload["kernel_local_memory_bytes"] == 1069547520
     frames_4dom = pf.kernel_local_frame_bytes(exp_4dom)
     assert frames_4dom["rrtmgp_rte"] == 3600
     assert frames_4dom["morrison"] == max(frames_4dom.values()) == 5120
     assert "kf" in payload["kernel_modules"]
     assert frames_4dom["kf"] == 512
+    from woof.core.kf import KFWS_SLOTS
+    assert KFWS_SLOTS == 66
     assert pf.kf_column_workspace_bytes(
-        exp_4dom, profile=reference) == 443555840
+        exp_4dom, profile=reference) == 170 * 256 * 66 * 49 * 4 == 562974720
     # Same +349,962,240 B context shift as ``reserve_bytes`` above, the
     # same -308,469,760 B net from the two workspaces and the same
-    # -8,355,840 B from the re-read `rrtmgp_rte` frame.
-    assert payload["run_time_reserve_bytes"] == 6098604658
+    # -8,355,840 B from the re-read `rrtmgp_rte` frame.  +119,418,880 B in
+    # 2.9.0: the KF port's 66-array workspace (26779da4e); this leg's
+    # residual is the pinned fixture basis, so the 3% term does not move it.
+    assert payload["run_time_reserve_bytes"] == 6218023538
     assert payload["reserve_components"]["retention_residual_bytes"] == (
         math.ceil(0.03 * payload["alloc_estimate_bytes"]))
 
@@ -3419,10 +4269,9 @@ def test_check_cli_over_budget_fails_and_names_the_lever(capsys):
     assert (pf.gate_display_name("alloc_estimate_le_wddm_budget")
             + ": FAIL") in out
     assert "OVER BUDGET" in out
-    # Per-domain acoustic ownership costs another115,230,230 B including
-    # headroom.3125 is now20,973,395,848 B, above the20,937,965,568 B budget;
-    #1562 is20,758,435,208 B and is the largest halving that fits.
-    assert "--column-chunk 1562" in out
+    # The measured 1.13 margin and fully priced rho put 6250 above this
+    # budget.3125 is20,688,373,938 B and is the first halving that fits.
+    assert "--column-chunk 3125" in out
 
 
 @requires_grib1_bridge
@@ -3771,8 +4620,18 @@ def test_check_cli_legacy_config_wraps(capsys):
     # saves 3,010,560 B to the pre-assembly pin, the OLR publication buffer
     # a further 200,000 B, and the EOS base-thickness correction plus the
     # coefficient drops 9,800,392 B (itemization-pin derivation). The
-    # default-on CQ faces add 29,688,200 B.
-    assert payload["domains"]["d01"]["resident_bytes"] == 1513530992
+    # default-on CQ faces add 29,688,200 B, and the held CLDFRA buffer
+    # 9,800,000 B (RULINGS 1). The strict health rim table (a677ad4e1) adds
+    # 12,288 B.
+    # The six 0-d SCM forcing scalars (24 B) are strict-only too (scm_forcing_fields).
+    # 22aa4243869: check prices the forcing slots a chained `woof go` holds (one
+    # streamed lateral slot for a one-domain, one-card config), not the whole
+    # schedule: 8,899,840 B of boundary tables leave the d01 resident pin.
+    # 04e65faa5ff (cap-solar): the SWDDIR/SWDDNI/SWDDIF split history
+    # planes add 600,000 B.
+    # paper/conus-suite-exact (2.9.11): the stored MF_VX_INV state plane msfv_inv,
+    # 4*(ny+1)*nx = 201,000 B on this 250x200 grid.
+    assert payload["domains"]["d01"]["resident_bytes"] == 1503966236
 
 
 def test_check_cli_fails_closed_when_nothing_is_evaluable(capsys,
@@ -4191,6 +5050,9 @@ def test_legacy_rrtmg_variant_prices_the_lw_chain_local_frame():
     # "noah_mosaic" joined the same way (2026-09-30): the Noah mosaic column
     # launches only as woof/core/noah_mosaic.py's own -fmad=false unit,
     # priced as noah_mosaic_unit.
+    # "thompson_fork" joined 2026-10-07 the same way: the fork Thompson
+    # column launches only as woof/core/thompson_fork.py's own unit,
+    # priced as thompson_fork_unit.
     covered = frozenset().union(
         *(tu.covers for tu in pf.CHAINED_TRANSLATION_UNIT_FRAMES.values()))
     assert covered == {
@@ -4198,7 +5060,8 @@ def test_legacy_rrtmg_variant_prices_the_lw_chain_local_frame():
         "rrtmg_lw_taugb03_05", "rrtmg_lw_taugb06_09",
         "rrtmg_lw_taugb13_16", "p3", "urban_bep_bem",
         "terrain_drag",
-        "rrtmg_lw_chain_coalesced", "rrtmg_lw_zbatched", "noah_mosaic"}
+        "rrtmg_lw_chain_coalesced", "rrtmg_lw_zbatched", "noah_mosaic",
+        "thompson_fork"}
     assert covered <= pf.UNMEASURED_KERNEL_MODULES
     assert not modules & pf.UNMEASURED_KERNEL_MODULES
 
@@ -4664,12 +5527,18 @@ def test_the_six_tornado_les_configs_are_the_ones_this_moves():
                for _, wsm6, widest in frames), frames
 
     # WSM6 widest: the total moves by the frame's whole reservation delta.
+    # 97e9a3ca061 (cap-hail): HAILCAST is automatic at dx <= 4 km and its
+    # 7,392-B frame is wider than WSM6's 64-tier 7,216 B, so on a default
+    # domain the 64 rung is hail-priced and the WSM6 tier step is hidden.
+    # The tier is measured on hailcast_opt = 0 domains; the six shipped
+    # configurations above keep HAILCAST on and are still WSM6-widest.
     start = datetime(2021, 12, 10, 3)
     totals = {}
     for nz in (64, 72):
         cfg = RunConfig(nx=400, ny=400, nz=nz, dx=100.0, dy=100.0,
                         ztop=18000.0, dt=0.5, run_seconds=60.0,
-                        moist=True, moist_cq=True, mp_physics=6)
+                        moist=True, moist_cq=True, mp_physics=6,
+                        hailcast_opt=0)
         exp = experiment_from_run_config(cfg, start)
         assert max(pf.kernel_local_frame_bytes(exp),
                    key=pf.kernel_local_frame_bytes(exp).get) == "wsm6"
@@ -5033,7 +5902,7 @@ def test_the_recorded_local_frames_match_the_driver():
     from woof.certify import compile_platform
 
     cp = pytest.importorskip("cupy")
-    from woof.core.kernels import load_module
+    from woof.core.kernels import load_module, kernel_local_size_bytes
 
     kdir = ROOT / "woof" / "core" / "kernels"
     symbol = re.compile(
@@ -5051,11 +5920,24 @@ def test_the_recorded_local_frames_match_the_driver():
 
     observed = {}
     uncompilable = set()
+    from woof.core.kernels import _DEFAULT_SOURCE_MODULES
     for path in sorted(kdir.glob("*.cu")):
-        if path.stem == "noah_mosaic":
+        if path.stem in {f"{m}_default" for m in _DEFAULT_SOURCE_MODULES}:
+            # A default process's text of <module>, compiled and priced
+            # under <module>'s own name (kernels._unit_text).
+            continue
+        if path.stem in pf.PRODUCTION_LOADED_KERNEL_UNITS:
+            # Compiled only through its own loader; measured below
+            # through that loader (preflight.load_production_kernel_unit).
+            continue
+        if path.stem in ("noah_mosaic", "thompson_fork"):
             # Both mosaic launchers have dedicated --fmad=false composed
             # loaders and measured chained rows. The generic C++17 image
             # compiles, but no driver launches it and it has no frame row.
+            # The fork Thompson unit is the same shape: it launches only
+            # through woof/core/thompson_fork.py's own compile, priced as
+            # the chained unit thompson_fork_unit and re-read by
+            # tests/test_thompson_fork_column_gpu.py.
             uncompilable.add(path.stem)
             continue
         try:
@@ -5066,11 +5948,38 @@ def test_the_recorded_local_frames_match_the_driver():
         widest = 0
         for name in sorted(set(symbol.findall(path.read_text()))):
             try:
-                attributes = module.get_function(name).attributes
+                local_bytes = kernel_local_size_bytes(module.get_function(name))
             except Exception:  # noqa: BLE001
                 continue
-            widest = max(widest, int(attributes["local_size_bytes"]))
+            widest = max(widest, local_bytes)
         observed[path.stem] = widest
+    # Logical modules with no committed .cu of their own since slimming wave 3 (lanes 11-13), the same three
+    # tests/test_kernel_frame_recordings.py adds to its source set: ysu and mynn_dmp_sibling compile retained
+    # files under their own names (kernels._unit_text), so they are measured here like any unit;
+    # rrtmg_lw._lw_coalesced_source generates rrtmg_lw_chain_coalesced inside the composed longwave unit, so it
+    # cannot compile alone and stays declared unmeasured.
+    from woof.core.kernels import module_source
+    for logical in ("ysu", "mynn_dmp_sibling"):
+        module = load_module(logical)
+        widest = 0
+        for name in sorted(set(symbol.findall(module_source(logical)))):
+            try:
+                local_bytes = kernel_local_size_bytes(module.get_function(name))
+            except Exception:  # noqa: BLE001
+                continue
+            widest = max(widest, local_bytes)
+        observed[logical] = widest
+    uncompilable.add("rrtmg_lw_chain_coalesced")
+    for unit in sorted(pf.PRODUCTION_LOADED_KERNEL_UNITS):
+        module, source = pf.load_production_kernel_unit(unit)
+        widest = 0
+        for name in sorted(set(symbol.findall(source))):
+            try:
+                local_bytes = kernel_local_size_bytes(module.get_function(name))
+            except Exception:  # noqa: BLE001
+                continue
+            widest = max(widest, local_bytes)
+        observed[unit] = widest
     assert uncompilable == set(pf.UNMEASURED_KERNEL_MODULES)
 
     # The shipped table must know about every module that compiled, and
@@ -5976,15 +6885,8 @@ _HOST_MEMORY_CASES = json.loads(
      / "host_memory_cgroup_cases.json").read_text(encoding="utf-8"))["cases"]
 
 
-@pytest.mark.parametrize("case", _HOST_MEMORY_CASES,
-                         ids=[case["name"] for case in _HOST_MEMORY_CASES])
-def test_host_available_bytes_is_capped_by_the_memory_cgroup_it_runs_in(
-        tmp_path, monkeypatch, case):
-    """THE BREAKAGE: MemAvailable inside a container is the host's, and the
-    cap read only the mount root's limit, never what the process had used
-    under it nor a limit on its own scope or slice.  A render planned
-    against that figure ran past the limit and was killed.  The renderer's
-    reader answers the same table (cargo test -p rusty-weather)."""
+def _host_memory_case(tmp_path, monkeypatch, case):
+    """Stage one shared host-memory table row for either reader."""
     import sys
 
     from tilestream import autoplan
@@ -6004,8 +6906,23 @@ def test_host_available_bytes_is_capped_by_the_memory_cgroup_it_runs_in(
     monkeypatch.setattr(autoplan, "_CGROUP_ROOT", str(root))
     monkeypatch.setattr(autoplan, "_PROC_SELF_CGROUP", str(membership))
     monkeypatch.setattr(autoplan, "_PROC_MEMINFO", str(meminfo))
-    # The procfs route, which is the one a container has.
+    # Exercise the procfs route used inside a container.
     monkeypatch.setattr(sys, "platform", "linux")
+
+
+@pytest.mark.parametrize("case", _HOST_MEMORY_CASES,
+                         ids=[case["name"] for case in _HOST_MEMORY_CASES])
+def test_host_available_bytes_is_capped_by_the_memory_cgroup_it_runs_in(
+        tmp_path, monkeypatch, case):
+    """THE BREAKAGE: MemAvailable inside a container is the host's, and the
+    cap read only the mount root's limit, never what the process had used
+    under it nor a limit on its own scope or slice.  A render planned
+    against that figure ran past the limit and was killed.  The renderer's
+    reader answers the same table (cargo test -p rusty-weather)."""
+
+    from tilestream import autoplan
+
+    _host_memory_case(tmp_path, monkeypatch, case)
 
     assert autoplan._cgroup_memory_headroom() == case["headroom"]
     assert pf.host_available_bytes() == case["available"]
@@ -6024,28 +6941,12 @@ def test_the_host_total_is_the_smallest_limit_on_the_process_cgroup_path(
     the mount, the table the renderer's and the MPAS builder's readers
     answer (cargo test -p rw-host-memory, -p rw-mpas)."""
     import re
-    import sys
 
     from woof.core import streaming
     from tilestream import autoplan
 
     assert "limit" in case, "the shared table's case names no limit"
-    root = tmp_path / "cgroup"
-    root.mkdir()
-    for relative, text in case["cgroup"].items():
-        path = root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(text.encode("ascii"))
-    meminfo = tmp_path / "meminfo"
-    if case["meminfo"] is not None:
-        meminfo.write_bytes(case["meminfo"].encode("ascii"))
-    membership = tmp_path / "proc-self-cgroup"
-    if case["proc_self_cgroup"] is not None:
-        membership.write_bytes(case["proc_self_cgroup"].encode("ascii"))
-    monkeypatch.setattr(autoplan, "_CGROUP_ROOT", str(root))
-    monkeypatch.setattr(autoplan, "_PROC_SELF_CGROUP", str(membership))
-    monkeypatch.setattr(autoplan, "_PROC_MEMINFO", str(meminfo))
-    monkeypatch.setattr(sys, "platform", "linux")
+    _host_memory_case(tmp_path, monkeypatch, case)
 
     assert autoplan._cgroup_memory_limit() == case["limit"]
     memtotal = int(re.search(r"^MemTotal:\s+(\d+) kB$", case["meminfo"],

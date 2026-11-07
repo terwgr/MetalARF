@@ -1,0 +1,3 @@
+# The bundled C++ dependency must not add a Visual C++ redistributable step.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

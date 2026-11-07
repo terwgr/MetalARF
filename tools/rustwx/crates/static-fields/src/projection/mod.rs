@@ -61,17 +61,6 @@ pub enum ProjectionKind {
 }
 
 impl ProjectionKind {
-    pub fn wrf_code(self) -> i32 {
-        match self {
-            ProjectionKind::Lambert => 1,
-            ProjectionKind::Polar => 2,
-            ProjectionKind::Mercator => 3,
-            // No WRF map projection describes explicit rows; 0 is WRF's
-            // "no projection" header value.
-            ProjectionKind::Rows => 0,
-        }
-    }
-
     fn python_class_name(self) -> &'static str {
         match self {
             ProjectionKind::Lambert => "LambertGrid",
@@ -186,10 +175,6 @@ impl ProjectedGrid {
         grid.cen_lat = cen_lat;
         grid.cen_lon = cen_lon;
         Ok(grid)
-    }
-
-    pub(crate) fn state(&self) -> &State {
-        &self.state
     }
 
     pub fn sampling_ij_to_latlon(&self, x: f64, y: f64) -> (f64, f64) {
@@ -374,6 +359,27 @@ impl ProjectedGrid {
                 *cv = c;
             });
         (sin, cos)
+    }
+
+    /// Requested derived fields in kind order, sharing one coordinate pass.
+    /// Each scalar expression is the same as the separate array methods.
+    pub fn derived_arrays(&self, stagger: Stagger, kinds: u32) -> Vec<Grid2> {
+        let (lat, lon) = self.latlon(stagger);
+        (0..=6).filter(|kind| kinds & (1 << kind) != 0).map(|kind| {
+            let mut out = Grid2::filled(lat.ny, lat.nx, 0.0);
+            out.data.par_iter_mut().enumerate().for_each(|(i, value)| {
+                *value = match kind {
+                    0 => lat.data[i],
+                    1 => lon.data[i],
+                    2 => self.map_factor(lat.data[i]),
+                    3 => 2.0 * OMEGA_E * (lat.data[i] * RAD_PER_DEG).sin(),
+                    4 => 2.0 * OMEGA_E * (lat.data[i] * RAD_PER_DEG).cos(),
+                    5 => self.rotation(lon.data[i]).0,
+                    _ => self.rotation(lon.data[i]).1,
+                };
+            });
+            out
+        }).collect()
     }
 
     /// WPS parent_start/ratio nest arithmetic (`ProjectedGrid.nest`):

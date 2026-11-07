@@ -1,0 +1,106 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_mfub",
+      "module": "hexv842_nt",
+      "source": "woof/metal/shaders/hexv842_nt_mfub.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_mfub",
+      "resources": [
+        [
+          "inputs",
+          "float32",
+          "read"
+        ],
+        [
+          "surf_i",
+          "int32",
+          "read"
+        ],
+        [
+          "out_i",
+          "int32",
+          "read_write"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "inputs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surf_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "tiedtke_closure",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

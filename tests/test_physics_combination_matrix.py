@@ -83,6 +83,7 @@ from woof.physics_registry import (
 )
 
 REGISTRY = physics_registry()
+REGISTRY_SHA256 = registry_sha256(REGISTRY)
 COMPONENTS: tuple[str, ...] = tuple(sorted(REGISTRY["components"]))
 
 #: Deterministic sample: a failure names its tuple and reproduces.
@@ -244,7 +245,7 @@ def plan_for(route_id: str, route: dict, source_id: str,
     plan: dict = {
         "schema": PLAN_SCHEMA,
         "plan_id": "physics-combination-matrix-v1",
-        "registry_sha256": registry_sha256(REGISTRY),
+        "registry_sha256": REGISTRY_SHA256,
         "context": {"source_id": source_id, "runner_id": route_id,
                     "topology_id": route["topology_ids"][0]},
         "domains": [domain("d01", True)] + ([domain("d02", False)] if nested else []),
@@ -518,19 +519,31 @@ def test_a_radiation_override_on_an_rrtmg_template_resolves_the_receipt_token():
     route_id = "tools.prepared_domain_tree_forecast"
     route = REGISTRY["runner_routes"][route_id]
     choice = anchor_components()
+    overridden = []
     for radiation in implemented_options()["radiation"]:
         if radiation == choice["radiation"]:
             continue
         probe = dict(choice, radiation=radiation)
         plan = plan_for(route_id, route, "era5", probe)
+        # Exercise an override on the original template even when a named
+        # sibling already matches this tuple and plan_for selects it.
+        for domain in plan["domains"]:
+            domain["template_id"] = DEFAULT_TEMPLATE_ID
+            domain["components"] = dict(probe)
         assert plan["domains"][0]["template_id"] == DEFAULT_TEMPLATE_ID
         report = validate_physics_plan(plan)
         settings = report["resolved_domains"][0]["settings"]
+        # Since ca920cb60 a template that carries this radiation itself (the
+        # Dudhia daytime suite) is reachable on this route and plan_for may
+        # pick it; the plan is pinned back to the RRTMG template above, so
+        # every option here is a real override of it.
+        overridden.append(radiation)
         if REGISTRY["components"]["radiation"]["options"][radiation]["selectors"] != {
                 "ra_lw_physics": 4, "ra_sw_physics": 4}:
             assert settings.get("wrf_rrtmg_compatibility") == "none", radiation
         if report["launchable"]:
             assert run_door(settings, nested=False) is None, radiation
+    assert overridden, "no radiation option overrode the RRTMG template"
 
 
 # ---------------------------------------------------------------------------

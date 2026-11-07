@@ -1,0 +1,1913 @@
+// Generated from woof/core/kernels/thompson_aerosol_warm.cu (WRF 4.6.1) by tools/mp28_metal/generate.py; do not edit.
+#pragma clang fp contract(off)
+namespace aa461 {
+constant Soft8 GFK_LOGF_INVC [ 16 ] = {
+SD8(0x3ff661ec79f8f3beul) , SD8(0x3ff571ed4aaf883dul) , SD8(0x3ff49539f0f010b0ul) , SD8(0x3ff3c995b0b80385ul) , SD8(0x3ff30d190c8864a5ul) , SD8(0x3ff25e227b0b8ea0ul) , SD8(0x3ff1bb4a4a1a343ful) , SD8(0x3ff12358f08ae5baul) , SD8(0x3ff0953f419900a7ul) , SD8(0x3ff0000000000000ul) , SD8(0x3fee608cfd9a47acul) , SD8(0x3feca4b31f026aa0ul) , SD8(0x3feb2036576afce6ul) , SD8(0x3fe9c2d163a1aa2dul) , SD8(0x3fe886e6037841edul) , SD8(0x3fe767dcf5534862ul) }
+;
+
+constant Soft8 GFK_LOGF_LOGC [ 16 ] = {
+- SD8(0x3fd57bf7808caadeul) , - SD8(0x3fd2bef0a7c06ddbul) , - SD8(0x3fd01eae7f513a67ul) , - SD8(0x3fcb31d8a68224e9ul) , - SD8(0x3fc6574f0ac07758ul) , - SD8(0x3fc1aa2bc79c8100ul) , - SD8(0x3fba4e76ce8c0e5eul) , - SD8(0x3fb1973c5a611cccul) , - SD8(0x3fa252f438e10c1eul) , SD8(0x0000000000000000ul) , SD8(0x3faaa5aa5df25984ul) , SD8(0x3fbc5e53aa362eb4ul) , SD8(0x3fc526e57720db08ul) , SD8(0x3fcbc2860d224770ul) , SD8(0x3fd1058bc8a07ee1ul) , SD8(0x3fd4043057b6ee09ul) }
+;
+
+constant ulong GFK_EXP2F_TAB [ 32 ] = {
+0x3ff0000000000000ul , 0x3fefd9b0d3158574ul , 0x3fefb5586cf9890ful , 0x3fef9301d0125b51ul , 0x3fef72b83c7d517bul , 0x3fef54873168b9aaul , 0x3fef387a6e756238ul , 0x3fef1e9df51fdee1ul , 0x3fef06fe0a31b715ul , 0x3feef1a7373aa9cbul , 0x3feedea64c123422ul , 0x3feece086061892dul , 0x3feebfdad5362a27ul , 0x3feeb42b569d4f82ul , 0x3feeab07dd485429ul , 0x3feea47eb03a5585ul , 0x3feea09e667f3bcdul , 0x3fee9f75e8ec5f74ul , 0x3feea11473eb0187ul , 0x3feea589994cce13ul , 0x3feeace5422aa0dbul , 0x3feeb737b0cdc5e5ul , 0x3feec49182a3f090ul , 0x3feed503b23e255dul , 0x3feee89f995ad3adul , 0x3feeff76f2fb5e47ul , 0x3fef199bdd85529cul , 0x3fef3720dcef9069ul , 0x3fef5818dcfba487ul , 0x3fef7c97337b9b5ful , 0x3fefa4afa2a490daul , 0x3fefd0765b6e4540ul }
+;
+
+constant Soft8 GFK_POWF_INVC [ 16 ] = {
+SD8(0x3ff661ec79f8f3beul) , SD8(0x3ff571ed4aaf883dul) , SD8(0x3ff49539f0f010b0ul) , SD8(0x3ff3c995b0b80385ul) , SD8(0x3ff30d190c8864a5ul) , SD8(0x3ff25e227b0b8ea0ul) , SD8(0x3ff1bb4a4a1a343ful) , SD8(0x3ff12358f08ae5baul) , SD8(0x3ff0953f419900a7ul) , SD8(0x3ff0000000000000ul) , SD8(0x3fee608cfd9a47acul) , SD8(0x3feca4b31f026aa0ul) , SD8(0x3feb2036576afce6ul) , SD8(0x3fe9c2d163a1aa2dul) , SD8(0x3fe886e6037841edul) , SD8(0x3fe767dcf5534862ul) }
+;
+
+constant Soft8 GFK_POWF_LOGC [ 16 ] = {
+- SD8(0x3fdefec65b963019ul) , - SD8(0x3fdb0b6832d4fca4ul) , - SD8(0x3fd7418b0a1fb77bul) , - SD8(0x3fd39de91a6dcf7bul) , - SD8(0x3fd01d9bf3f2b631ul) , - SD8(0x3fc97c1d1b3b7af0ul) , - SD8(0x3fc2f9e393af3c9ful) , - SD8(0x3fb960cbbf788d5cul) , - SD8(0x3faa6f9db6475fceul) , SD8(0x0000000000000000ul) , SD8(0x3fb338ca9f24f53dul) , SD8(0x3fc476a9543891baul) , SD8(0x3fce840b4ac4e4d2ul) , SD8(0x3fd40645f0c6651cul) , SD8(0x3fd88e9c2c1b9ff8ul) , SD8(0x3fdce0a44eb17bccul) }
+;
+
+constant Soft8 GFK_POWF_A [ 5 ] = {
+SD8(0x3fd27616c9496e0bul) , - SD8(0x3fd71969a075c67aul) , SD8(0x3fdec70a6ca7baddul) , - SD8(0x3fe7154748bef6c8ul) , SD8(0x3ff71547652ab82bul) }
+;
+
+static inline float gfk_log ( float x ) {
+uint ix = __float_as_uint ( x ) ;
+if ( ix == 0x3f800000u ) return 0.0f ;
+if ( ix - 0x00800000u >= 0x7f800000u - 0x00800000u ) {
+if ( ix * 2u == 0u ) return __int_as_float ( 0xff800000 ) ;
+if ( ix == 0x7f800000u ) return x ;
+if ( ( ix & 0x80000000u ) || ix * 2u >= 0xff000000u ) return __int_as_float ( 0x7fc00000 ) ;
+ix = __float_as_uint ( __fmul_rn ( ( x ) , ( 8388608.0f ) ) ) ;
+ix -= 23u << 23 ;
+}
+uint tmp = ix - 0x3f330000u ;
+int i = ( int ) ( ( tmp >> 19 ) & 15u ) ;
+int k = ( int ) tmp >> 23 ;
+uint iz = ix - ( tmp & 0xff800000u ) ;
+Soft8 z = ( Soft8 ) __uint_as_float ( iz ) ;
+Soft8 r = __dsub_rn ( ( __dmul_rn ( ( z ) , ( GFK_LOGF_INVC [ i ] ) ) ) , ( SD8 ( 0x3ff0000000000000ul ) ) ) ;
+Soft8 y0 = __dadd_rn ( ( GFK_LOGF_LOGC [ i ] ) , ( __dmul_rn ( ( ( Soft8 ) k ) , ( SD8 ( 0x3fe62e42fefa39eful ) ) ) ) ) ;
+Soft8 r2 = __dmul_rn ( ( r ) , ( r ) ) ;
+Soft8 y = __dadd_rn ( ( __dmul_rn ( ( ( SD8 ( 0x3fd5575b0be00b6aul ) ) ) , ( r ) ) ) , ( ( - SD8 ( 0x3fdffffef20a4123ul ) ) ) ) ;
+y = __dadd_rn ( ( __dmul_rn ( ( ( - SD8 ( 0x3fd00ea348b88334ul ) ) ) , ( r2 ) ) ) , ( y ) ) ;
+y = __dadd_rn ( ( __dmul_rn ( ( y ) , ( r2 ) ) ) , ( __dadd_rn ( ( y0 ) , ( r ) ) ) ) ;
+return __double2float_rn ( y ) ;
+}
+
+static inline float gfk_d2f_rn ( Soft8 y ) {
+Soft8 a = fabs ( y ) ;
+if ( a > SD8 ( 0x0000000000000000ul ) && a < SD8 ( 0x3810000000000000ul ) ) {
+Soft8 scaled = rint ( a * SD8 ( 0x4940000000000000ul ) ) ;
+uint m = ( uint ) scaled ;
+uint s = ( __double_as_longlong ( y ) < 0l ) ? 0x80000000u : 0u ;
+return __uint_as_float ( s | m ) ;
+}
+return __double2float_rn ( y ) ;
+}
+
+static inline int gfk_checkint ( uint iy ) {
+int e = ( int ) ( iy >> 23 & 0xffu ) ;
+if ( e < 0x7f ) return 0 ;
+if ( e > 0x7f + 23 ) return 2 ;
+if ( iy & ( ( 1u << ( 0x7f + 23 - e ) ) - 1u ) ) return 0 ;
+if ( iy & ( 1u << ( 0x7f + 23 - e ) ) ) return 1 ;
+return 2 ;
+}
+
+static inline bool gfk_zeroinfnan ( uint ix ) {
+return 2u * ix - 1u >= 2u * 0x7f800000u - 1u ;
+}
+
+static inline float thompson_aa_d2f ( Soft8 y ) {
+return gfk_d2f_rn ( y ) ;
+}
+
+static inline float thompson_aa_expf ( float x ) {
+const uint abstop = ( __float_as_uint ( x ) >> 20 ) & 0x7ffu ;
+if ( abstop >= ( ( __float_as_uint ( 88.0f ) ) >> 20 ) ) {
+if ( __float_as_uint ( x ) == 0xff800000u ) return 0.0f ;
+if ( abstop >= ( 0x7f800000u >> 20 ) ) return __fadd_rn ( x , x ) ;
+if ( x > __int_as_float ( 0x42b17218 ) ) return __int_as_float ( 0x7f800000 ) ;
+if ( x < - __int_as_float ( 0x42cff1b4 ) ) return 0.0f ;
+}
+const Soft8 xd = ( Soft8 ) x ;
+const Soft8 inv = SD8 ( 0x3ff71547652b82feul ) * SD8 ( 0x4040000000000000ul ) ;
+Soft8 kd = __fma_rn ( inv , xd , SD8 ( 0x4338000000000000ul ) ) ;
+const ulong ki = ( ulong ) __double_as_longlong ( kd ) ;
+kd = __dsub_rn ( kd , SD8 ( 0x4338000000000000ul ) ) ;
+const Soft8 r = __fma_rn ( inv , xd , - kd ) ;
+ulong t = GFK_EXP2F_TAB [ ki & 31ul ] ;
+t += ki << ( 52 - 5 ) ;
+const Soft8 s = __longlong_as_double ( ( long ) t ) ;
+const Soft8 z = __fma_rn ( aa_div ( aa_div ( aa_div ( SD8 ( 0x3fac6af84b912394ul ) , SD8 ( 0x4040000000000000ul ) ) , SD8 ( 0x4040000000000000ul ) ) , SD8 ( 0x4040000000000000ul ) ) , r , aa_div ( aa_div ( SD8 ( 0x3fcebfce50fac4f3ul ) , SD8 ( 0x4040000000000000ul ) ) , SD8 ( 0x4040000000000000ul ) ) ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+Soft8 y = __fma_rn ( aa_div ( SD8 ( 0x3fe62e42ff0c52d6ul ) , SD8 ( 0x4040000000000000ul ) ) , r , SD8 ( 0x3ff0000000000000ul ) ) ;
+y = __fma_rn ( z , r2 , y ) ;
+return thompson_aa_d2f ( __dmul_rn ( y , s ) ) ;
+}
+
+static inline float thompson_aa_logf ( float x ) {
+return gfk_log ( x ) ;
+}
+
+static inline Soft8 thompson_aa_powf_log2 ( uint ix ) {
+const uint tmp = ix - 0x3f330000u ;
+const int i = ( int ) ( ( tmp >> 19 ) & 15u ) ;
+const uint top = tmp & 0xff800000u ;
+const uint iz = ix - top ;
+const int k = ( int ) top >> 23 ;
+const Soft8 z = ( Soft8 ) __uint_as_float ( iz ) ;
+const Soft8 r = __fma_rn ( z , GFK_POWF_INVC [ i ] , - SD8 ( 0x3ff0000000000000ul ) ) ;
+const Soft8 y0 = __dadd_rn ( GFK_POWF_LOGC [ i ] , ( Soft8 ) k ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+const Soft8 y = __fma_rn ( GFK_POWF_A [ 0 ] , r , GFK_POWF_A [ 1 ] ) ;
+const Soft8 p = __fma_rn ( GFK_POWF_A [ 2 ] , r , GFK_POWF_A [ 3 ] ) ;
+const Soft8 r4 = __dmul_rn ( r2 , r2 ) ;
+Soft8 q = __fma_rn ( GFK_POWF_A [ 4 ] , r , y0 ) ;
+q = __fma_rn ( p , r2 , q ) ;
+return __fma_rn ( y , r4 , q ) ;
+}
+
+static inline Soft8 thompson_aa_powf_exp2 ( Soft8 xd , ulong sign_bias ) {
+Soft8 kd = __dadd_rn ( xd , ( aa_div ( SD8 ( 0x4338000000000000ul ) , SD8 ( 0x4040000000000000ul ) ) ) ) ;
+const ulong ki = ( ulong ) __double_as_longlong ( kd ) ;
+kd = __dsub_rn ( kd , ( aa_div ( SD8 ( 0x4338000000000000ul ) , SD8 ( 0x4040000000000000ul ) ) ) ) ;
+const Soft8 r = __dsub_rn ( xd , kd ) ;
+ulong t = GFK_EXP2F_TAB [ ki & 31ul ] ;
+t += ( ki + sign_bias ) << ( 52 - 5 ) ;
+const Soft8 s = __longlong_as_double ( ( long ) t ) ;
+const Soft8 z = __fma_rn ( SD8 ( 0x3fac6af84b912394ul ) , r , SD8 ( 0x3fcebfce50fac4f3ul ) ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+Soft8 y = __fma_rn ( SD8 ( 0x3fe62e42ff0c52d6ul ) , r , SD8 ( 0x3ff0000000000000ul ) ) ;
+y = __fma_rn ( z , r2 , y ) ;
+return __dmul_rn ( y , s ) ;
+}
+
+static inline float thompson_aa_powf ( float x , float y ) {
+uint sign_bias = 0u ;
+uint ix = __float_as_uint ( x ) ;
+const uint iy = __float_as_uint ( y ) ;
+if ( ix - 0x00800000u >= 0x7f800000u - 0x00800000u || gfk_zeroinfnan ( iy ) ) {
+if ( gfk_zeroinfnan ( iy ) ) {
+if ( 2u * iy == 0u ) return 1.0f ;
+if ( ix == 0x3f800000u ) return 1.0f ;
+if ( 2u * ix > 2u * 0x7f800000u || 2u * iy > 2u * 0x7f800000u ) return __fadd_rn ( x , y ) ;
+if ( 2u * ix == 2u * 0x3f800000u ) return 1.0f ;
+if ( ( 2u * ix < 2u * 0x3f800000u ) == ! ( iy & 0x80000000u ) ) return 0.0f ;
+return __fmul_rn ( y , y ) ;
+}
+if ( gfk_zeroinfnan ( ix ) ) {
+float x2 = __fmul_rn ( x , x ) ;
+if ( ( ix & 0x80000000u ) && gfk_checkint ( iy ) == 1 ) x2 = - x2 ;
+return ( iy & 0x80000000u ) ? __fdiv_rn ( 1.0f , x2 ) : x2 ;
+}
+if ( ix & 0x80000000u ) {
+const int yint = gfk_checkint ( iy ) ;
+if ( yint == 0 ) return __int_as_float ( 0x7fc00000 ) ;
+if ( yint == 1 ) sign_bias = 1u << ( 5 + 11 ) ;
+ix &= 0x7fffffffu ;
+}
+if ( ix < 0x00800000u ) {
+ix = __float_as_uint ( __fmul_rn ( x , 8388608.0f ) ) & 0x7fffffffu ;
+ix -= 23u << 23 ;
+}
+}
+const Soft8 logx = thompson_aa_powf_log2 ( ix ) ;
+const Soft8 ylogx = __dmul_rn ( ( Soft8 ) y , logx ) ;
+const uint hi = ( uint ) ( ( ( ulong ) __double_as_longlong ( ylogx ) >> 47 ) & 0xfffful ) ;
+if ( hi >= ( uint ) ( ( ( ulong ) __double_as_longlong ( SD8 ( 0x405f800000000000ul ) ) >> 47 ) & 0xfffful ) ) {
+if ( ylogx > SD8 ( 0x405fffffffd1d571ul ) ) return sign_bias ? __int_as_float ( 0xff800000 ) : __int_as_float ( 0x7f800000 ) ;
+if ( ylogx <= - SD8 ( 0x4062c00000000000ul ) ) return sign_bias ? - 0.0f : 0.0f ;
+}
+return thompson_aa_d2f ( thompson_aa_powf_exp2 ( ylogx , ( ulong ) sign_bias ) ) ;
+}
+
+static inline float thompson_aa_log10f ( float x ) {
+uint hx = __float_as_uint ( x ) ;
+int k = 0 ;
+if ( hx < 0x00800000u || ( hx & 0x80000000u ) ) {
+if ( ( hx & 0x7fffffffu ) == 0u ) return __int_as_float ( 0xff800000 ) ;
+if ( hx & 0x80000000u ) return __int_as_float ( 0x7fc00000 ) ;
+k -= 25 ;
+hx = __float_as_uint ( __fmul_rn ( x , 33554432.0f ) ) ;
+}
+if ( hx > 0x7f7fffffu ) return __fadd_rn ( x , x ) ;
+k += ( int ) ( hx >> 23 ) - 127 ;
+const int i = ( int ) ( ( ( uint ) k & 0x80000000u ) >> 31 ) ;
+hx = ( hx & 0x007fffffu ) | ( ( uint ) ( 0x7f - i ) << 23 ) ;
+const float y = ( float ) ( k + i ) ;
+const float z = __fadd_rn ( __fmul_rn ( __uint_as_float ( 0x3ede5bd9u ) , thompson_aa_logf ( __uint_as_float ( hx ) ) ) , __fmul_rn ( y , __uint_as_float ( 0x355427dbu ) ) ) ;
+return __fadd_rn ( z , __fmul_rn ( y , __uint_as_float ( 0x3e9a2080u ) ) ) ;
+}
+
+static inline Soft8 thompson_aa_exp ( Soft8 x ) {
+return glibc_exp ( x ) ;
+}
+
+static inline Soft8 thompson_aa_log ( Soft8 x ) {
+return glibc_log ( x ) ;
+}
+
+static inline Soft8 thompson_aa_pow ( Soft8 x , Soft8 y ) {
+return glibc_pow ( x , y ) ;
+}
+
+static inline Soft8 thompson_aa_log10 ( Soft8 x ) {
+ulong hx = ( ulong ) __double_as_longlong ( x ) ;
+long k ;
+if ( hx <= 0x000ffffffffffffful || ( hx >> 63 ) ) {
+if ( ( hx & 0x7ffffffffffffffful ) == 0ul ) return __longlong_as_double ( ( long ) 0xfff0000000000000ul ) ;
+if ( hx >> 63 ) return __longlong_as_double ( ( long ) 0x7ff8000000000000ul ) ;
+k = - 1023 - 54 ;
+hx = ( ulong ) __double_as_longlong ( __dmul_rn ( x , SD8 ( 0x4350000000000000ul ) ) ) ;
+}
+else {
+k = - 1023 ;
+}
+if ( hx > 0x7feffffffffffffful ) return __dadd_rn ( x , x ) ;
+k += ( long ) ( hx >> 52 ) ;
+const long i = ( long ) ( ( ( ulong ) k ) >> 63 ) ;
+k += i ;
+hx = ( hx & 0x000ffffffffffffful ) | ( ( ulong ) ( 0x3ff - i ) << 52 ) ;
+const Soft8 y = ( Soft8 ) k ;
+const Soft8 z = __dadd_rn ( __dmul_rn ( SD8 ( 0x3fdbcb7b1526e50eul ) , thompson_aa_log ( __longlong_as_double ( ( long ) hx ) ) ) , __dmul_rn ( y , SD8 ( 0x3d59fef311f12b36ul ) ) ) ;
+return __dadd_rn ( z , __dmul_rn ( y , SD8 ( 0x3fd34413509f6000ul ) ) ) ;
+}
+
+constant float THOMPSON_AA_CCE2 [ 16 ] = {
+0.000000000e+00f , 5.000000000e+00f , 6.000000000e+00f , 7.000000000e+00f , 8.000000000e+00f , 9.000000000e+00f , 1.000000000e+01f , 1.100000000e+01f , 1.200000000e+01f , 1.300000000e+01f , 1.400000000e+01f , 1.500000000e+01f , 1.600000000e+01f , 1.700000000e+01f , 1.800000000e+01f , 1.900000000e+01f }
+;
+
+constant float THOMPSON_AA_CCG1 [ 16 ] = {
+0.000000000e+00f , 1.000000000e+00f , 2.000000000e+00f , 6.000000000e+00f , 2.400000000e+01f , 1.200000076e+02f , 7.200000610e+02f , 5.040001953e+03f , 4.031999609e+04f , 3.628799688e+05f , 3.628801750e+06f , 3.991680000e+07f , 4.790018560e+08f , 6.227022336e+09f , 8.717829734e+10f , 1.307673887e+12f }
+;
+
+constant float THOMPSON_AA_CCG2 [ 16 ] = {
+0.000000000e+00f , 2.400000000e+01f , 1.200000076e+02f , 7.200000610e+02f , 5.040001953e+03f , 4.031999609e+04f , 3.628799688e+05f , 3.628801750e+06f , 3.991680000e+07f , 4.790018560e+08f , 6.227022336e+09f , 8.717829734e+10f , 1.307673887e+12f , 2.092278219e+13f , 3.556874482e+14f , 6.402383731e+15f }
+;
+
+constant float THOMPSON_AA_CCG3 [ 16 ] = {
+0.000000000e+00f , 5.040001953e+03f , 4.031999609e+04f , 3.628799688e+05f , 3.628801750e+06f , 3.991680000e+07f , 4.790018560e+08f , 6.227022336e+09f , 8.717829734e+10f , 1.307673887e+12f , 2.092278219e+13f , 3.556874482e+14f , 6.402383731e+15f , 1.216452850e+17f , 2.432903398e+18f , 5.109091445e+19f }
+;
+
+constant float THOMPSON_AA_OCG1 [ 16 ] = {
+0.000000000e+00f , 1.000000000e+00f , 5.000000000e-01f , 1.666666716e-01f , 4.166666791e-02f , 8.333332837e-03f , 1.388888806e-03f , 1.984126284e-04f , 2.480158946e-05f , 2.755732112e-06f , 2.755730577e-07f , 2.505210794e-08f , 2.087674478e-09f , 1.605904021e-10f , 1.147074449e-11f , 7.647166320e-13f }
+;
+
+constant float THOMPSON_AA_OCG2 [ 16 ] = {
+0.000000000e+00f , 4.166666791e-02f , 8.333332837e-03f , 1.388888806e-03f , 1.984126284e-04f , 2.480158946e-05f , 2.755732112e-06f , 2.755730577e-07f , 2.505210794e-08f , 2.087674478e-09f , 1.605904021e-10f , 1.147074449e-11f , 7.647166320e-13f , 4.779478950e-14f , 2.811457147e-15f , 1.561918299e-16f }
+;
+
+constant float THOMPSON_AA_SA [ 10 ] = {
+5.065339f , - 0.062659f , - 3.032362f , 0.029469f , - 0.000285f , 0.31255f , 0.000204f , 0.003199f , 0.0f , - 0.015952f }
+;
+
+constant float THOMPSON_AA_SB [ 10 ] = {
+0.476221f , - 0.015896f , 0.165977f , 0.007468f , - 0.000141f , 0.060366f , 0.000079f , 0.000594f , 0.0f , - 0.003577f }
+;
+
+static inline float thompson_aa_add ( float a , float b ) {
+return __fadd_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_sub ( float a , float b ) {
+return __fsub_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_mul ( float a , float b ) {
+return __fmul_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_div ( float a , float b ) {
+return __fdiv_rn ( a , b ) ;
+}
+
+template < typename P_a , typename P_b > static inline void thompson_aa_reenforce_pair ( P_a a , P_b b ) {
+const float ratio = ( float ) fmin ( fabs ( * a ) , fabs ( * b ) ) ;
+* a = ( Soft8 ) thompson_aa_mul ( ratio , copysign ( 1.0f , ( float ) * a ) ) ;
+* b = - * a ;
+}
+
+static inline float thompson_aa_clamp_nc ( float nc_m3 ) {
+return aa_fmaxf ( 2.0f , aa_fminf ( nc_m3 , 1999.0e6f ) ) ;
+}
+
+static inline float thompson_aa_clamp_nwfa ( float nwfa_m3 ) {
+return aa_fmaxf ( 11.1e6f , aa_fminf ( 9999.0e6f , nwfa_m3 ) ) ;
+}
+
+static inline float thompson_aa_clamp_nifa ( float nifa_m3 ) {
+return aa_fmaxf ( 5.0e3f , aa_fminf ( 9999.0e6f , nifa_m3 ) ) ;
+}
+
+static inline int thompson_aa_nu_c ( float nc_m3 ) {
+return min ( 15 , ( int ) floor ( aa_div ( 1000.0e6f , nc_m3 ) + 0.5f ) + 2 ) ;
+}
+
+static inline int thompson_aa_nu_c_working ( float nc_m3_after_rediagnosis ) {
+return thompson_aa_nu_c ( nc_m3_after_rediagnosis ) ;
+}
+
+static inline int thompson_aa_decade_index ( float value , int first_exponent , int table_size ) {
+const int center = ( int ) round ( thompson_aa_log10f ( value ) ) ;
+int exponent = center ;
+for ( int candidate = center - 1 ;
+candidate <= center + 1 ;
+++ candidate ) {
+const float scale = thompson_aa_powf ( 10.0f , ( float ) candidate ) ;
+const float mantissa = aa_div ( value , scale ) ;
+if ( mantissa >= 1.0f && mantissa < 10.0f ) {
+exponent = candidate ;
+break ;
+}
+}
+const float scale = thompson_aa_powf ( 10.0f , ( float ) exponent ) ;
+const int digit = ( int ) ( aa_div ( value , scale ) ) ;
+const int one_based = digit + 9 * ( exponent - first_exponent ) ;
+return max ( 0 , min ( one_based - 1 , table_size - 1 ) ) ;
+}
+
+static inline int thompson_aa_decade_index_double ( Soft8 value , int first_exponent , int table_size ) {
+const int center = ( int ) round ( thompson_aa_log10 ( value ) ) ;
+int exponent = center ;
+for ( int candidate = center - 1 ;
+candidate <= center + 1 ;
+++ candidate ) {
+const float scale = thompson_aa_powf ( 10.0f , ( float ) candidate ) ;
+const Soft8 mantissa = aa_div ( value , ( Soft8 ) scale ) ;
+if ( mantissa >= SD8 ( 0x3ff0000000000000ul ) && mantissa < SD8 ( 0x4024000000000000ul ) ) {
+exponent = candidate ;
+break ;
+}
+}
+const float scale = thompson_aa_powf ( 10.0f , ( float ) exponent ) ;
+const int digit = ( int ) ( aa_div ( value , ( Soft8 ) scale ) ) ;
+const int one_based = digit + 9 * ( exponent - first_exponent ) ;
+return max ( 0 , min ( one_based - 1 , table_size - 1 ) ) ;
+}
+
+static inline float thompson_rslf ( float pressure , float temp ) {
+const float c0 = 0.611583699e3f ;
+const float c1 = 0.444606896e2f ;
+const float c2 = 0.143177157e1f ;
+const float c3 = 0.264224321e-1f ;
+const float c4 = 0.299291081e-3f ;
+const float c5 = 0.203154182e-5f ;
+const float c6 = 0.702620698e-8f ;
+const float c7 = 0.379534310e-11f ;
+const float c8 = - 0.321582393e-13f ;
+const float x = aa_fmaxf ( - 80.0f , temp - 273.16f ) ;
+float esl = thompson_aa_add ( c0 , thompson_aa_mul ( x , thompson_aa_add ( c1 , thompson_aa_mul ( x , thompson_aa_add ( c2 , thompson_aa_mul ( x , thompson_aa_add ( c3 , thompson_aa_mul ( x , thompson_aa_add ( c4 , thompson_aa_mul ( x , thompson_aa_add ( c5 , thompson_aa_mul ( x , thompson_aa_add ( c6 , thompson_aa_mul ( x , thompson_aa_add ( c7 , thompson_aa_mul ( x , c8 ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ;
+esl = aa_fminf ( esl , pressure * 0.15f ) ;
+return aa_div ( 0.622f * esl , ( pressure - esl ) ) ;
+}
+
+static inline float thompson_rsif ( float pressure , float temp ) {
+const float c0 = 0.609868993e3f ;
+const float c1 = 0.499320233e2f ;
+const float c2 = 0.184672631e1f ;
+const float c3 = 0.402737184e-1f ;
+const float c4 = 0.565392987e-3f ;
+const float c5 = 0.521693933e-5f ;
+const float c6 = 0.307839583e-7f ;
+const float c7 = 0.105785160e-9f ;
+const float c8 = 0.161444444e-12f ;
+const float x = aa_fmaxf ( - 80.0f , temp - 273.16f ) ;
+float esi = thompson_aa_add ( c0 , thompson_aa_mul ( x , thompson_aa_add ( c1 , thompson_aa_mul ( x , thompson_aa_add ( c2 , thompson_aa_mul ( x , thompson_aa_add ( c3 , thompson_aa_mul ( x , thompson_aa_add ( c4 , thompson_aa_mul ( x , thompson_aa_add ( c5 , thompson_aa_mul ( x , thompson_aa_add ( c6 , thompson_aa_mul ( x , thompson_aa_add ( c7 , thompson_aa_mul ( x , c8 ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ;
+esi = aa_fminf ( esi , pressure * 0.15f ) ;
+return aa_div ( 0.622f * esi , aa_fmaxf ( 1.0e-4f , pressure - esi ) ) ;
+}
+
+static inline float thompson_aa_field_loga ( float tc0 , float mom ) {
+float v = THOMPSON_AA_SA [ 0 ] ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SA [ 1 ] , tc0 ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SA [ 2 ] , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 3 ] , tc0 ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 4 ] , tc0 ) , tc0 ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 5 ] , mom ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 6 ] , tc0 ) , tc0 ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 7 ] , tc0 ) , mom ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 8 ] , tc0 ) , tc0 ) , tc0 ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 9 ] , mom ) , mom ) , mom ) ) ;
+return v ;
+}
+
+static inline float thompson_field_a ( float tc , float moment ) {
+return thompson_aa_powf ( 10.0f , thompson_aa_field_loga ( tc , moment ) ) ;
+}
+
+static inline float thompson_field_b ( float tc , float moment ) {
+float v = THOMPSON_AA_SB [ 0 ] ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SB [ 1 ] , tc ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SB [ 2 ] , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 3 ] , tc ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 4 ] , tc ) , tc ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 5 ] , moment ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 6 ] , tc ) , tc ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 7 ] , tc ) , moment ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 8 ] , tc ) , tc ) , tc ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 9 ] , moment ) , moment ) , moment ) ) ;
+return v ;
+}
+
+static inline float thompson_ice_demott ( float tempc , float rho , float nifa_m3 ) {
+const float nifa_cc = aa_fmaxf ( 0.5f , thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( nifa_m3 , 1.292283773e+00f ) , 1.0e-6f ) , rho ) ) ;
+const float exponent = thompson_aa_add ( thompson_aa_mul ( - 0.0264f , tempc ) , 0.0033f ) ;
+float xni = thompson_aa_mul ( thompson_aa_mul ( 5.94e-5f , thompson_aa_powf ( - tempc , 3.33f ) ) , thompson_aa_powf ( nifa_cc , exponent ) ) ;
+xni = thompson_aa_mul ( thompson_aa_div ( thompson_aa_mul ( xni , rho ) , 1.292283773e+00f ) , 1000.0f ) ;
+return aa_fmaxf ( 0.0f , xni ) ;
+}
+
+static inline float thompson_ice_koop ( float temp , float qv , float qvs , float naero , float dt ) {
+const float satw = thompson_aa_div ( qv , qvs ) ;
+float mu_diff = thompson_aa_add ( 210368.0f , thompson_aa_mul ( 131.438f , temp ) ) ;
+mu_diff = thompson_aa_sub ( mu_diff , thompson_aa_div ( 3.32373e6f , temp ) ) ;
+mu_diff = thompson_aa_sub ( mu_diff , thompson_aa_mul ( 41729.1f , thompson_aa_logf ( temp ) ) ) ;
+const float a_w_i = thompson_aa_expf ( thompson_aa_div ( mu_diff , thompson_aa_mul ( 8.314f , temp ) ) ) ;
+const float d = thompson_aa_sub ( satw , a_w_i ) ;
+float log_J_rate = thompson_aa_add ( - 906.7f , thompson_aa_mul ( 8502.0f , d ) ) ;
+log_J_rate = thompson_aa_sub ( log_J_rate , thompson_aa_mul ( thompson_aa_mul ( 26924.0f , d ) , d ) ) ;
+log_J_rate = thompson_aa_add ( log_J_rate , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 29180.0f , d ) , d ) , d ) ) ;
+log_J_rate = aa_fminf ( 20.0f , log_J_rate ) ;
+const float J_rate = thompson_aa_powf ( 10.0f , log_J_rate ) ;
+const float koop_arg = thompson_aa_mul ( thompson_aa_mul ( - J_rate , 6.544983879e-17f ) , dt ) ;
+const float prob_h = aa_fminf ( thompson_aa_sub ( 1.0f , thompson_aa_expf ( koop_arg ) ) , 1.0f ) ;
+float xni = 0.0f ;
+if ( prob_h > 0.0f ) {
+xni = aa_fminf ( thompson_aa_mul ( prob_h , naero ) , 1000.0e3f ) ;
+}
+return aa_fmaxf ( 0.0f , xni ) ;
+}
+
+static inline float thompson_eff_aero ( float D , float Da , float visc , float rhoa , float Temp , int species ) {
+const float boltzman = 1.3806503e-23f ;
+const float meanPath = 0.0256e-6f ;
+float vt = 1.0f ;
+if ( species == 0 ) {
+vt = thompson_aa_add ( - 0.1021f , thompson_aa_mul ( 4.932e3f , D ) ) ;
+vt = thompson_aa_sub ( vt , thompson_aa_mul ( thompson_aa_mul ( 0.9551e6f , D ) , D ) ) ;
+vt = thompson_aa_add ( vt , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 0.07934e9f , D ) , D ) , D ) ) ;
+vt = thompson_aa_sub ( vt , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 0.002362e12f , D ) , D ) , D ) , D ) ) ;
+}
+else if ( species == 1 ) {
+vt = thompson_aa_mul ( 40.0f , thompson_aa_powf ( D , 0.55f ) ) ;
+}
+else if ( species == 2 ) {
+vt = thompson_aa_mul ( 442.0f , thompson_aa_powf ( D , 0.89f ) ) ;
+}
+const float slip = thompson_aa_add ( 1.257f , thompson_aa_mul ( 0.4f , thompson_aa_expf ( thompson_aa_div ( thompson_aa_mul ( - 0.55f , Da ) , meanPath ) ) ) ) ;
+const float Cc = thompson_aa_add ( 1.0f , thompson_aa_mul ( thompson_aa_div ( thompson_aa_mul ( 2.0f , meanPath ) , Da ) , slip ) ) ;
+const float diff = thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( boltzman , Temp ) , Cc ) , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 3.0f , 3.1415926536f ) , visc ) , Da ) ) ;
+const float Re = thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 0.5f , rhoa ) , D ) , vt ) , visc ) ;
+const float Sc = thompson_aa_div ( visc , thompson_aa_mul ( rhoa , diff ) ) ;
+const float St = thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( Da , Da ) , vt ) , 1000.0f ) , thompson_aa_mul ( thompson_aa_mul ( 9.0f , visc ) , D ) ) ;
+const float aval = thompson_aa_add ( 1.0f , thompson_aa_logf ( thompson_aa_add ( 1.0f , Re ) ) ) ;
+const float St2 = thompson_aa_div ( thompson_aa_add ( 1.2f , thompson_aa_mul ( aa_div ( 1.0f , 12.0f ) , aval ) ) , thompson_aa_add ( 1.0f , aval ) ) ;
+const float sqrt_re = aa_sqrtf ( Re ) ;
+float brownian = thompson_aa_add ( 1.0f , thompson_aa_mul ( thompson_aa_mul ( 0.4f , sqrt_re ) , thompson_aa_powf ( Sc , 0.3333f ) ) ) ;
+brownian = thompson_aa_add ( brownian , thompson_aa_mul ( thompson_aa_mul ( 0.16f , sqrt_re ) , aa_sqrtf ( Sc ) ) ) ;
+const float term1 = thompson_aa_mul ( thompson_aa_div ( 4.0f , thompson_aa_mul ( Re , Sc ) ) , brownian ) ;
+const float ratio = thompson_aa_div ( Da , D ) ;
+const float term2 = thompson_aa_mul ( thompson_aa_div ( thompson_aa_mul ( 4.0f , Da ) , D ) , thompson_aa_add ( 0.02f , thompson_aa_mul ( ratio , thompson_aa_add ( 1.0f , thompson_aa_mul ( 2.0f , sqrt_re ) ) ) ) ) ;
+float Eff = thompson_aa_add ( term1 , term2 ) ;
+if ( St > St2 ) {
+const float excess = thompson_aa_sub ( St , St2 ) ;
+Eff = thompson_aa_add ( Eff , thompson_aa_powf ( thompson_aa_div ( excess , thompson_aa_add ( excess , 0.666667f ) ) , 1.5f ) ) ;
+}
+return aa_fmaxf ( 1.0e-5f , aa_fminf ( Eff , 1.0f ) ) ;
+}
+
+static inline float thompson_aa_eff_aero ( float D , float Da , float visc , float rhoa , float Temp , int species ) {
+return thompson_eff_aero ( D , Da , visc , rhoa , Temp , species ) ;
+}
+
+static inline float thompson_aa_snow_number ( float smob , float smoc ) {
+const float M0 = thompson_aa_div ( smob , smoc ) ;
+const float Mrat = thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( smob , M0 ) , M0 ) , M0 ) ;
+const float slam1 = thompson_aa_mul ( M0 , 20.78f ) ;
+const float slam2 = thompson_aa_mul ( M0 , 3.29f ) ;
+const float first = thompson_aa_div ( thompson_aa_mul ( Mrat , 490.6f ) , slam1 ) ;
+const float second = thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( Mrat , 17.46f ) , thompson_aa_powf ( M0 , 0.6357f ) ) , 8.980315328e-01f ) , thompson_aa_powf ( slam2 , 1.635699987e+00f ) ) ;
+return thompson_aa_add ( first , second ) ;
+}
+
+template < typename P_nu_c_entry_out , typename P_lamc_entry_out > static inline float thompson_aa_cloud_dist ( float rc , float nc_per_kg , float rho , P_nu_c_entry_out nu_c_entry_out , P_lamc_entry_out lamc_entry_out ) {
+float nc = thompson_aa_clamp_nc ( thompson_aa_mul ( nc_per_kg , rho ) ) ;
+const int nu_c = thompson_aa_nu_c ( nc ) ;
+Soft8 lamc = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( nc , 5.235988159e+02f ) , THOMPSON_AA_CCG2 [ nu_c ] ) , THOMPSON_AA_OCG1 [ nu_c ] ) , rc ) , 3.333333433e-01f ) ;
+const float xDc = ( float ) ( aa_div ( ( Soft8 ) thompson_aa_add ( thompson_aa_add ( 3.0f , ( float ) nu_c ) , 1.0f ) , lamc ) ) ;
+if ( xDc < 1.0e-6f ) {
+lamc = ( Soft8 ) thompson_aa_div ( THOMPSON_AA_CCE2 [ nu_c ] , 1.0e-6f ) ;
+}
+else if ( xDc > 50.0e-6f * 2.0f ) {
+lamc = ( Soft8 ) thompson_aa_div ( THOMPSON_AA_CCE2 [ nu_c ] , 50.0e-6f * 2.0f ) ;
+}
+nc = ( float ) fmin ( ( Soft8 ) 1999.0e6f , ( Soft8 ) thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_CCG1 [ nu_c ] , THOMPSON_AA_OCG2 [ nu_c ] ) , rc ) , 5.235988159e+02f ) * thompson_aa_pow ( lamc , ( Soft8 ) 3.0f ) ) ;
+if ( nu_c_entry_out != nullptr ) * nu_c_entry_out = nu_c ;
+if ( lamc_entry_out != nullptr ) * lamc_entry_out = lamc ;
+return nc ;
+}
+
+template < typename P_rain_number_per_kg > static inline void thompson_aa_bound_rain_number ( float rain_mass , float density , P_rain_number_per_kg rain_number_per_kg ) {
+if ( rain_mass <= 1.0e-12f ) {
+* rain_number_per_kg = 0.0f ;
+return ;
+}
+const float am_r = 5.235988159e+02f ;
+float rain_number = aa_fmaxf ( 1.0e-6f , * rain_number_per_kg * density ) ;
+float lambda = thompson_aa_powf ( aa_div ( am_r * 6.0f * rain_number , rain_mass ) , aa_div ( 1.0f , 3.0f ) ) ;
+float mvd = aa_div ( 3.672f , lambda ) ;
+if ( mvd > 2.5e-3f ) {
+mvd = 2.5e-3f ;
+}
+else if ( mvd < 37.5e-6f ) {
+mvd = 37.5e-6f ;
+}
+else {
+return ;
+}
+lambda = aa_div ( 3.672f , mvd ) ;
+rain_number = __fdiv_rn ( ( aa_div ( 1.0f , 6.0f ) ) * rain_mass , am_r ) * lambda * lambda * lambda ;
+* rain_number_per_kg = aa_div ( rain_number , density ) ;
+}
+
+template < typename P_qrten , typename P_nrten > static inline void thompson_aa_rain_balance_tendency ( float qr1d , float nr1d , P_qrten qrten , P_nrten nrten , float rho , float orho , float odts , float dt ) {
+const float xrr = aa_fmaxf ( 1.0e-12f , thompson_aa_mul ( thompson_aa_add ( qr1d , thompson_aa_mul ( * qrten , dt ) ) , rho ) ) ;
+const float xnr = aa_fmaxf ( 1.0e-6f , thompson_aa_mul ( thompson_aa_add ( nr1d , thompson_aa_mul ( * nrten , dt ) ) , rho ) ) ;
+if ( xrr > 1.0e-12f ) {
+Soft8 lamr = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 5.235988159e+02f , 6.0f ) , 1.0f ) , xnr ) , xrr ) , 3.333333433e-01f ) ;
+const float mvd_num = thompson_aa_add ( thompson_aa_add ( 3.0f , 0.0f ) , 0.672f ) ;
+float mvd_r = ( float ) ( aa_div ( ( Soft8 ) mvd_num , lamr ) ) ;
+const float d0r_low = thompson_aa_mul ( 50.0e-6f , 0.75f ) ;
+bool bounded = false ;
+if ( mvd_r > 2.5e-3f ) {
+mvd_r = 2.5e-3f ;
+bounded = true ;
+}
+else if ( mvd_r < d0r_low ) {
+mvd_r = d0r_low ;
+bounded = true ;
+}
+if ( bounded ) {
+lamr = ( Soft8 ) thompson_aa_div ( mvd_num , mvd_r ) ;
+const float xnr_bounded = ( float ) ( aa_div ( ( Soft8 ) thompson_aa_mul ( thompson_aa_mul ( 1.0f , aa_div ( 1.0f , 6.0f ) ) , xrr ) * thompson_aa_pow ( lamr , SD8 ( 0x4008000000000000ul ) ) , ( Soft8 ) 5.235988159e+02f ) ) ;
+* nrten = thompson_aa_mul ( thompson_aa_mul ( thompson_aa_sub ( xnr_bounded , thompson_aa_mul ( nr1d , rho ) ) , odts ) , orho ) ;
+}
+}
+else {
+* qrten = thompson_aa_mul ( - qr1d , odts ) ;
+* nrten = thompson_aa_mul ( - nr1d , odts ) ;
+}
+}
+
+template < typename P_rain_number , typename P_rain_lambda , typename P_rain_mvd , typename P_rain_intercept_n0 > static inline bool thompson_aa_entry_rain_distribution ( float rain_per_kg , float rain_number_per_kg , float density , P_rain_number rain_number , P_rain_lambda rain_lambda , P_rain_mvd rain_mvd , P_rain_intercept_n0 rain_intercept_n0 ) {
+const float am_r = 5.235988159e+02f ;
+const float obmr = 3.333333433e-01f ;
+const float mvd_num = thompson_aa_add ( thompson_aa_add ( 3.0f , 0.0f ) , 0.672f ) ;
+const float crg2_org3 = thompson_aa_mul ( 1.0f , aa_div ( 1.0f , 6.0f ) ) ;
+float rr ;
+float nr ;
+bool active ;
+if ( rain_per_kg > 1.0e-12f ) {
+active = true ;
+rr = thompson_aa_mul ( rain_per_kg , density ) ;
+nr = aa_fmaxf ( 1.0e-6f , thompson_aa_mul ( rain_number_per_kg , density ) ) ;
+if ( nr <= 1.0e-6f ) {
+const Soft8 lam = ( Soft8 ) thompson_aa_div ( mvd_num , 1.0e-3f ) ;
+nr = ( float ) ( aa_div ( ( Soft8 ) thompson_aa_mul ( crg2_org3 , rr ) * thompson_aa_pow ( lam , SD8 ( 0x4008000000000000ul ) ) , ( Soft8 ) am_r ) ) ;
+}
+Soft8 lamr = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( am_r , 6.0f ) , 1.0f ) , nr ) , rr ) , obmr ) ;
+float mvd = ( float ) ( aa_div ( ( Soft8 ) mvd_num , lamr ) ) ;
+const float d0r_low = thompson_aa_mul ( 50.0e-6f , 0.75f ) ;
+if ( mvd > 2.5e-3f ) {
+mvd = 2.5e-3f ;
+lamr = ( Soft8 ) thompson_aa_div ( mvd_num , mvd ) ;
+nr = ( float ) ( aa_div ( ( Soft8 ) thompson_aa_mul ( crg2_org3 , rr ) * thompson_aa_pow ( lamr , SD8 ( 0x4008000000000000ul ) ) , ( Soft8 ) am_r ) ) ;
+}
+else if ( mvd < d0r_low ) {
+mvd = d0r_low ;
+lamr = ( Soft8 ) thompson_aa_div ( mvd_num , mvd ) ;
+nr = ( float ) ( aa_div ( ( Soft8 ) thompson_aa_mul ( crg2_org3 , rr ) * thompson_aa_pow ( lamr , SD8 ( 0x4008000000000000ul ) ) , ( Soft8 ) am_r ) ) ;
+}
+}
+else {
+active = false ;
+rr = 1.0e-12f ;
+nr = 1.0e-6f ;
+}
+const Soft8 lamr = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( am_r , 6.0f ) , 1.0f ) , nr ) , rr ) , obmr ) ;
+* rain_number = nr ;
+* rain_lambda = lamr ;
+* rain_mvd = ( float ) ( aa_div ( ( Soft8 ) mvd_num , lamr ) ) ;
+* rain_intercept_n0 = ( Soft8 ) thompson_aa_mul ( nr , 1.0f ) * lamr ;
+return active ;
+}
+
+static inline Soft8 thompson_aa_rain_lambda_reformed ( Soft8 rain_lambda ) {
+const Soft8 ilamr = aa_div ( SD8 ( 0x3ff0000000000000ul ) , rain_lambda ) ;
+return aa_div ( SD8 ( 0x3ff0000000000000ul ) , ilamr ) ;
+}
+
+static inline float aaf_fm ( float a , float b ) {
+return __fmul_rn ( a , b ) ;
+}
+
+static inline float aaf_fa ( float a , float b ) {
+return __fadd_rn ( a , b ) ;
+}
+
+static inline float aaf_fs ( float a , float b ) {
+return __fsub_rn ( a , b ) ;
+}
+
+static inline float aaf_fd ( float a , float b ) {
+return __fdiv_rn ( a , b ) ;
+}
+
+static inline Soft8 aaf_dm ( Soft8 a , Soft8 b ) {
+return __dmul_rn ( a , b ) ;
+}
+
+static inline Soft8 aaf_da ( Soft8 a , Soft8 b ) {
+return __dadd_rn ( a , b ) ;
+}
+
+static inline Soft8 aaf_ds ( Soft8 a , Soft8 b ) {
+return __dsub_rn ( a , b ) ;
+}
+
+static inline Soft8 aaf_dd ( Soft8 a , Soft8 b ) {
+return __ddiv_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_powi_f ( float x , int m ) {
+uint n = m < 0 ? 0u - ( uint ) m : ( uint ) m ;
+float y = ( n % 2u ) ? x : 1.0f ;
+while ( n >>= 1 ) {
+x = aaf_fm ( x , x ) ;
+if ( n % 2u ) y = aaf_fm ( y , x ) ;
+}
+return m < 0 ? aaf_fd ( 1.0f , y ) : y ;
+}
+
+static inline int thompson_aa_wrf_table_index ( float v , int n2 , int ntb ) {
+const int nic = ( int ) round ( thompson_aa_log10f ( v ) ) ;
+int n = nic + 1 ;
+for ( int nn = nic - 1 ;
+nn <= nic + 1 ;
+++ nn ) {
+const float m = aaf_fd ( v , thompson_aa_powi_f ( 10.0f , nn ) ) ;
+if ( m >= 1.0f && m < 10.0f ) {
+n = nn ;
+break ;
+}
+}
+const int idx = ( int ) aaf_fd ( v , thompson_aa_powi_f ( 10.0f , n ) ) + 10 * ( n - n2 ) - ( n - n2 ) ;
+return max ( 1 , min ( idx , ntb ) ) ;
+}
+
+static inline int thompson_aa_wrf_table_index_d ( Soft8 v , int n2 , int ntb ) {
+const int nic = ( int ) round ( thompson_aa_log10 ( v ) ) ;
+int n = nic + 1 ;
+for ( int nn = nic - 1 ;
+nn <= nic + 1 ;
+++ nn ) {
+const Soft8 m = aaf_dd ( v , ( Soft8 ) thompson_aa_powi_f ( 10.0f , nn ) ) ;
+if ( m >= SD8 ( 0x3ff0000000000000ul ) && m < SD8 ( 0x4024000000000000ul ) ) {
+n = nn ;
+break ;
+}
+}
+const int idx = ( int ) aaf_dd ( v , ( Soft8 ) thompson_aa_powi_f ( 10.0f , n ) ) + 10 * ( n - n2 ) - ( n - n2 ) ;
+return max ( 1 , min ( idx , ntb ) ) ;
+}
+
+struct ThompsonAaLevel {
+float temp , qv , pres , rho , nwfa , nifa ;
+float rc , nc , ri , ni , rr , nr , rs , rg , ng ;
+bool L_qc , L_qi , L_qr , L_qs , L_qg ;
+float tempc , rhof , rhof2 , qvs , qvsi , delQvs , satw , sati , ssatw , ssati ;
+float diffu , visco , ocp , vsc2 , lvap , tcond , twet ;
+float smob , smo0 , smo1 , smoc , smoe , smof , ns ;
+Soft8 ilamg , N0_g , ilamr , N0_r ;
+float mvd_r , mvd_c ;
+int nu_c ;
+float orho , xDs , rvs , rvs_p , rvs_pp , gamsc , alphsc , t1_subl , rate_max ;
+float xni , xnc , xDi , xmi , oxmi , C_snow , tf , r_frac , g_frac , vts ;
+float const_Ri , rime_dens , vtg , stoke_g , xDg , Ef_sw , Ef_gw , vts_boost ;
+Soft8 lami , ilami ;
+int idx_tc , idx_t , idx_c , idx_n , idx_i , idx_i1 , idx_r , idx_r1 , idx_s ;
+int idx_g , idx_g1 , idx_IN ;
+Soft8 pnc_wau , pnc_rcw , pnc_scw , pnc_gcw ;
+Soft8 pna_rca , pna_sca , pna_gca , pnd_rcd , pnd_scd , pnd_gcd ;
+Soft8 prr_wau , prr_rcw , prr_rcs , prr_rcg , prr_sml , prr_gml , prr_rci ;
+Soft8 pnr_wau , pnr_rcs , pnr_rcg , pnr_rci , pnr_sml , pnr_gml , pnr_rcr , pnr_rfz ;
+Soft8 pri_inu , pni_inu , pri_ihm , pni_ihm , pri_wfz , pni_wfz , pri_rfz , pni_rfz , pri_ide , pni_ide , pri_rci , pni_rci , pni_sci , pni_iau , pri_iha , pni_iha ;
+Soft8 prs_iau , prs_sci , prs_rcs , prs_scw , prs_sde , prs_ihm , prs_ide ;
+Soft8 prg_scw , prg_rfz , prg_gde , prg_gcw , prg_rci , prg_rcs , prg_rcg , prg_ihm ;
+Soft8 png_rcs , png_rcg , png_scw , png_gde ;
+}
+;
+
+template < typename P_L > static inline void thompson_aa_wrf_entry ( P_L L , float t1d , float p1d , float qv1d , float qc1d , float nc1d , float qi1d , float ni1d , float qr1d , float nr1d , float qs1d , float qg1d , float ng1d , float nwfa1d , float nifa1d ) {
+L -> temp = t1d ;
+L -> qv = aa_fmaxf ( 1.0e-10f , qv1d ) ;
+L -> pres = p1d ;
+L -> rho = aaf_fd ( aaf_fm ( 0.622f , p1d ) , aaf_fm ( aaf_fm ( 287.04f , t1d ) , aaf_fa ( L -> qv , 0.622f ) ) ) ;
+L -> nwfa = aa_fmaxf ( 11.1e6f , aa_fminf ( 9999.0e6f , aaf_fm ( nwfa1d , L -> rho ) ) ) ;
+L -> nifa = aa_fmaxf ( 0.5e6f * 0.01f , aa_fminf ( 9999.0e6f , aaf_fm ( nifa1d , L -> rho ) ) ) ;
+if ( qc1d > 1.0e-12f ) {
+L -> rc = aaf_fm ( qc1d , L -> rho ) ;
+L -> nc = thompson_aa_cloud_dist ( L -> rc , nc1d , L -> rho , ( thread int * ) nullptr , ( thread Soft8 * ) nullptr ) ;
+L -> L_qc = true ;
+}
+else {
+L -> rc = 1.0e-12f ;
+L -> nc = 2.0f ;
+L -> L_qc = false ;
+}
+if ( qi1d > 1.0e-12f ) {
+L -> ri = aaf_fm ( qi1d , L -> rho ) ;
+L -> ni = aa_fmaxf ( 1.0e-6f , aaf_fm ( ni1d , L -> rho ) ) ;
+const float pre = aaf_fd ( aaf_fm ( aaf_fm ( 1.0f , 0.1666666716337204f ) , L -> ri ) , ( aa_div ( 3.1415926536f * 890.0f , 6.0f ) ) ) ;
+if ( L -> ni <= 1.0e-6f ) {
+const Soft8 lami = ( Soft8 ) aaf_fd ( 4.0f , 5.0e-6f ) ;
+L -> ni = ( float ) fmin ( SD8 ( 0x412e7cb000000000ul ) , aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lami , SD8 ( 0x4008000000000000ul ) ) ) ) ;
+}
+L -> L_qi = true ;
+Soft8 lami = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 890.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , L -> ni ) , L -> ri ) , 0.3333333432674408f ) ;
+const Soft8 ilami = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , lami ) ;
+const float xDi = ( float ) aaf_dm ( SD8 ( 0x4010000000000000ul ) , ilami ) ;
+if ( xDi < 5.0e-6f ) {
+lami = ( Soft8 ) aaf_fd ( 4.0f , 5.0e-6f ) ;
+L -> ni = ( float ) fmin ( SD8 ( 0x412e7cb000000000ul ) , aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lami , SD8 ( 0x4008000000000000ul ) ) ) ) ;
+}
+else if ( xDi > 300.0e-6f ) {
+lami = ( Soft8 ) aaf_fd ( 4.0f , 300.0e-6f ) ;
+L -> ni = ( float ) aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lami , SD8 ( 0x4008000000000000ul ) ) ) ;
+}
+}
+else {
+L -> ri = 1.0e-12f ;
+L -> ni = 1.0e-6f ;
+L -> L_qi = false ;
+}
+if ( qr1d > 1.0e-12f ) {
+L -> rr = aaf_fm ( qr1d , L -> rho ) ;
+L -> nr = aa_fmaxf ( 1.0e-6f , aaf_fm ( nr1d , L -> rho ) ) ;
+const float pre = aaf_fm ( aaf_fm ( 1.0f , 0.1666666716337204f ) , L -> rr ) ;
+if ( L -> nr <= 1.0e-6f ) {
+const Soft8 lamr = ( Soft8 ) aaf_fd ( ( ( 3.0f + 0.0f ) + 0.672f ) , 1.0e-3f ) ;
+L -> nr = ( float ) aaf_dd ( aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lamr , SD8 ( 0x4008000000000000ul ) ) ) , ( Soft8 ) ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) ) ;
+}
+L -> L_qr = true ;
+const Soft8 lamr = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , L -> nr ) , L -> rr ) , 0.3333333432674408f ) ;
+const float mvd_r = ( float ) aaf_dd ( ( Soft8 ) ( ( 3.0f + 0.0f ) + 0.672f ) , lamr ) ;
+float bound = 0.0f ;
+if ( mvd_r > 2.5e-3f ) {
+bound = 2.5e-3f ;
+}
+else if ( mvd_r < 50.0e-6f * 0.75f ) {
+bound = 50.0e-6f * 0.75f ;
+}
+if ( bound != 0.0f ) {
+const Soft8 lb = ( Soft8 ) aaf_fd ( ( ( 3.0f + 0.0f ) + 0.672f ) , bound ) ;
+L -> nr = ( float ) aaf_dd ( aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lb , SD8 ( 0x4008000000000000ul ) ) ) , ( Soft8 ) ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) ) ;
+}
+}
+else {
+L -> rr = 1.0e-12f ;
+L -> nr = 1.0e-6f ;
+L -> L_qr = false ;
+}
+if ( qs1d > 1.0e-12f ) {
+L -> rs = aaf_fm ( qs1d , L -> rho ) ;
+L -> L_qs = true ;
+}
+else {
+L -> rs = 1.0e-12f ;
+L -> L_qs = false ;
+}
+if ( qg1d > 1.0e-12f ) {
+L -> L_qg = true ;
+L -> rg = aaf_fm ( qg1d , L -> rho ) ;
+L -> ng = aa_fmaxf ( 1.0e-6f , aaf_fm ( ng1d , L -> rho ) ) ;
+const float pre = aaf_fm ( aaf_fm ( 1.0f , 0.1666666716337204f ) , L -> rg ) ;
+if ( L -> ng <= 1.0e-6f ) {
+const Soft8 lamg = ( Soft8 ) aaf_fd ( ( ( 3.0f + 0.0f ) + 0.672f ) , 1.5e-3f ) ;
+L -> ng = ( float ) aaf_dd ( aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lamg , SD8 ( 0x4008000000000000ul ) ) ) , ( Soft8 ) ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) ) ;
+}
+const Soft8 lamg = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , L -> ng ) , L -> rg ) , 0.3333333432674408f ) ;
+const float mvd_g = ( float ) aaf_dd ( ( Soft8 ) ( ( 3.0f + 0.0f ) + 0.672f ) , lamg ) ;
+float bound = 0.0f ;
+if ( mvd_g > 25.4e-3f ) {
+bound = 25.4e-3f ;
+}
+else if ( mvd_g < 50.0e-6f ) {
+bound = 50.0e-6f ;
+}
+if ( bound != 0.0f ) {
+const Soft8 lb = ( Soft8 ) aaf_fd ( ( ( 3.0f + 0.0f ) + 0.672f ) , bound ) ;
+L -> ng = ( float ) aaf_dd ( aaf_dm ( ( Soft8 ) pre , thompson_aa_pow ( lb , SD8 ( 0x4008000000000000ul ) ) ) , ( Soft8 ) ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) ) ;
+}
+}
+else {
+L -> rg = 1.0e-12f ;
+L -> ng = 1.0e-6f ;
+L -> L_qg = false ;
+}
+}
+
+template < typename P_L > static inline void thompson_aa_wrf_level_state ( P_L L , float twet ) {
+const float tempc = aaf_fs ( L -> temp , 273.15f ) ;
+L -> tempc = tempc ;
+L -> rhof = aa_sqrtf ( aaf_fd ( ( aa_div ( 101325.0f , ( 287.05f * 298.0f ) ) ) , L -> rho ) ) ;
+L -> rhof2 = aa_sqrtf ( L -> rhof ) ;
+L -> qvs = thompson_rslf ( L -> pres , L -> temp ) ;
+L -> delQvs = aa_fmaxf ( 0.0f , aaf_fs ( thompson_rslf ( L -> pres , 273.15f ) , L -> qv ) ) ;
+L -> qvsi = tempc <= 0.0f ? thompson_rsif ( L -> pres , L -> temp ) : L -> qvs ;
+L -> satw = aaf_fd ( L -> qv , L -> qvs ) ;
+L -> sati = aaf_fd ( L -> qv , L -> qvsi ) ;
+L -> ssatw = aaf_fs ( L -> satw , 1.0f ) ;
+L -> ssati = aaf_fs ( L -> sati , 1.0f ) ;
+if ( fabs ( L -> ssatw ) < 1.0e-15f ) L -> ssatw = 0.0f ;
+if ( fabs ( L -> ssati ) < 1.0e-15f ) L -> ssati = 0.0f ;
+L -> diffu = aaf_fm ( aaf_fm ( 2.11e-5f , thompson_aa_powf ( aaf_fd ( L -> temp , 273.15f ) , 1.94f ) ) , aaf_fd ( 101325.0f , L -> pres ) ) ;
+if ( tempc >= 0.0f ) {
+L -> visco = aaf_fm ( aaf_fa ( 1.718f , aaf_fm ( 0.0049f , tempc ) ) , 1.0e-5f ) ;
+}
+else {
+L -> visco = aaf_fm ( aaf_fs ( aaf_fa ( 1.718f , aaf_fm ( 0.0049f , tempc ) ) , aaf_fm ( aaf_fm ( 1.2e-5f , tempc ) , tempc ) ) , 1.0e-5f ) ;
+}
+L -> ocp = aaf_fd ( 1.0f , aaf_fm ( 1004.0f , aaf_fa ( 1.0f , aaf_fm ( 0.887f , L -> qv ) ) ) ) ;
+L -> vsc2 = aa_sqrtf ( aaf_fd ( L -> rho , L -> visco ) ) ;
+L -> lvap = aaf_fa ( 2.5e6f , aaf_fm ( 2106.0f - 4218.0f , tempc ) ) ;
+L -> tcond = aaf_fm ( aaf_fm ( aaf_fa ( 5.69f , aaf_fm ( 0.0168f , tempc ) ) , 1.0e-5f ) , 418.936f ) ;
+L -> twet = twet ;
+L -> smob = L -> smo0 = L -> smo1 = L -> smoc = L -> smoe = L -> smof = 0.0f ;
+L -> ns = 0.0f ;
+if ( L -> L_qs ) {
+const float tc0 = aa_fminf ( - 0.1f , tempc ) ;
+L -> smob = aaf_fm ( L -> rs , 14.492753982543945f ) ;
+L -> smo0 = aaf_fm ( thompson_field_a ( tc0 , 0.0f ) , thompson_aa_powf ( L -> smob , thompson_field_b ( tc0 , 0.0f ) ) ) ;
+L -> smo1 = aaf_fm ( thompson_field_a ( tc0 , 1.0f ) , thompson_aa_powf ( L -> smob , thompson_field_b ( tc0 , 1.0f ) ) ) ;
+L -> smoc = aaf_fm ( thompson_field_a ( tc0 , 3.0f ) , thompson_aa_powf ( L -> smob , thompson_field_b ( tc0 , 3.0f ) ) ) ;
+L -> ns = thompson_aa_snow_number ( L -> smob , L -> smoc ) ;
+L -> smoe = aaf_fm ( thompson_field_a ( tc0 , 2.549999952316284f ) , thompson_aa_powf ( L -> smob , thompson_field_b ( tc0 , 2.549999952316284f ) ) ) ;
+L -> smof = aaf_fm ( thompson_field_a ( tc0 , 1.774999976158142f ) , thompson_aa_powf ( L -> smob , thompson_field_b ( tc0 , 1.774999976158142f ) ) ) ;
+}
+{
+const Soft8 lamg = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , L -> ng ) , L -> rg ) , 0.3333333432674408f ) ;
+L -> ilamg = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , lamg ) ;
+L -> N0_g = aaf_dm ( ( Soft8 ) aaf_fm ( L -> ng , 1.0f ) , lamg ) ;
+}
+{
+const Soft8 lamr = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , L -> nr ) , L -> rr ) , 0.3333333432674408f ) ;
+L -> ilamr = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , lamr ) ;
+L -> mvd_r = ( float ) aaf_dd ( ( Soft8 ) ( ( 3.0f + 0.0f ) + 0.672f ) , lamr ) ;
+L -> N0_r = aaf_dm ( ( Soft8 ) aaf_fm ( L -> nr , 1.0f ) , lamr ) ;
+}
+}
+
+template < typename P_L > static inline void thompson_aa_wrf_zero_rates ( P_L L ) {
+L -> pnc_wau = L -> pnc_rcw = L -> pnc_scw = L -> pnc_gcw = SD8 ( 0x0000000000000000ul ) ;
+L -> pna_rca = L -> pna_sca = L -> pna_gca = SD8 ( 0x0000000000000000ul ) ;
+L -> pnd_rcd = L -> pnd_scd = L -> pnd_gcd = SD8 ( 0x0000000000000000ul ) ;
+L -> prr_wau = L -> prr_rcw = L -> prr_rcs = L -> prr_rcg = L -> prr_sml = SD8 ( 0x0000000000000000ul ) ;
+L -> prr_gml = L -> prr_rci = SD8 ( 0x0000000000000000ul ) ;
+L -> pnr_wau = L -> pnr_rcs = L -> pnr_rcg = L -> pnr_rci = L -> pnr_sml = SD8 ( 0x0000000000000000ul ) ;
+L -> pnr_gml = L -> pnr_rcr = L -> pnr_rfz = SD8 ( 0x0000000000000000ul ) ;
+L -> pri_inu = L -> pni_inu = L -> pri_ihm = L -> pni_ihm = L -> pri_wfz = SD8 ( 0x0000000000000000ul ) ;
+L -> pni_wfz = L -> pri_rfz = L -> pni_rfz = L -> pri_ide = L -> pni_ide = SD8 ( 0x0000000000000000ul ) ;
+L -> pri_rci = L -> pni_rci = L -> pni_sci = L -> pni_iau = L -> pri_iha = SD8 ( 0x0000000000000000ul ) ;
+L -> pni_iha = SD8 ( 0x0000000000000000ul ) ;
+L -> prs_iau = L -> prs_sci = L -> prs_rcs = L -> prs_scw = L -> prs_sde = SD8 ( 0x0000000000000000ul ) ;
+L -> prs_ihm = L -> prs_ide = SD8 ( 0x0000000000000000ul ) ;
+L -> prg_scw = L -> prg_rfz = L -> prg_gde = L -> prg_gcw = L -> prg_rci = SD8 ( 0x0000000000000000ul ) ;
+L -> prg_rcs = L -> prg_rcg = L -> prg_ihm = SD8 ( 0x0000000000000000ul ) ;
+L -> png_rcs = L -> png_rcg = L -> png_scw = L -> png_gde = SD8 ( 0x0000000000000000ul ) ;
+L -> vts_boost = 1.0f ;
+L -> xDi = L -> xmi = L -> oxmi = L -> C_snow = L -> tf = L -> r_frac = 0.0f ;
+L -> g_frac = L -> vts = L -> const_Ri = L -> rime_dens = L -> vtg = 0.0f ;
+L -> stoke_g = L -> xDg = L -> Ef_sw = L -> Ef_gw = L -> xni = L -> xnc = 0.0f ;
+L -> rate_max = 0.0f ;
+L -> lami = L -> ilami = SD8 ( 0x0000000000000000ul ) ;
+L -> idx_IN = 0 ;
+}
+
+static inline Soft8 aaf_rain_kernel ( Soft8 ilamr , Soft8 expo ) {
+return thompson_aa_pow ( aaf_da ( aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , ilamr ) , SD8 ( 0x4068600000000000ul ) ) , expo ) ;
+}
+
+template < typename P_L , typename P_t_Efrw > static inline void thompson_aa_wrf_warm_loop ( P_L L , float odts , P_t_Efrw t_Efrw ) {
+if ( L -> L_qr && L -> mvd_r > 50.0e-6f ) {
+const float Ef_rr = aaf_fs ( 1.0f , thompson_aa_expf ( aaf_fm ( 2300.0f , aaf_fs ( L -> mvd_r , 1950.0e-6f ) ) ) ) ;
+L -> pnr_rcr = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( Ef_rr , 2.0f ) , L -> nr ) , L -> rr ) ;
+}
+L -> mvd_c = 1.0e-6f ;
+float xDc = 0.0f ;
+Soft8 lamc = SD8 ( 0x0000000000000000ul ) ;
+int nu_c = 0 ;
+if ( L -> L_qc ) {
+nu_c = min ( 15 , ( int ) round ( aaf_fd ( 1000.0e6f , L -> nc ) ) + 2 ) ;
+xDc = aa_fmaxf ( 1.0e-6f * 1.0e6f , aaf_fm ( thompson_aa_powf ( aaf_fd ( L -> rc , aaf_fm ( ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) , L -> nc ) ) , 0.3333333432674408f ) , 1.0e6f ) ) ;
+lamc = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( L -> nc , ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) ) , THOMPSON_AA_CCG2 [ nu_c ] ) , THOMPSON_AA_OCG1 [ nu_c ] ) , L -> rc ) , 0.3333333432674408f ) ;
+const float num = aaf_fa ( aaf_fa ( 3.0f , ( float ) nu_c ) , 0.672f ) ;
+L -> mvd_c = ( float ) aaf_dd ( ( Soft8 ) num , lamc ) ;
+L -> mvd_c = aa_fmaxf ( 1.0e-6f , aa_fminf ( L -> mvd_c , 50.0e-6f ) ) ;
+}
+L -> nu_c = nu_c ;
+if ( L -> rc > 0.01e-3f ) {
+const float Dc_g = ( float ) aaf_dm ( aaf_dd ( ( Soft8 ) thompson_aa_powf ( aaf_fm ( THOMPSON_AA_CCG3 [ nu_c ] , THOMPSON_AA_OCG2 [ nu_c ] ) , 0.3333333432674408f ) , lamc ) , SD8 ( 0x412e848000000000ul ) ) ;
+const float x3 = aaf_fm ( aaf_fm ( xDc , xDc ) , xDc ) ;
+const float arg = aaf_fs ( aaf_fm ( aaf_fm ( aaf_fm ( x3 , Dc_g ) , Dc_g ) , Dc_g ) , aaf_fm ( aaf_fm ( aaf_fm ( x3 , xDc ) , xDc ) , xDc ) ) ;
+const float Dc_b = thompson_aa_powf ( aa_fmaxf ( 0.0f , arg ) , aa_div ( 1.0f , 6.0f ) ) ;
+const float z = aaf_fs ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 6.25e-6f , xDc ) , Dc_b ) , Dc_b ) , Dc_b ) , 0.4f ) ;
+const float zeta1 = aaf_fm ( 0.5f , aaf_fa ( z , fabs ( z ) ) ) ;
+const float zeta = aaf_fm ( aaf_fm ( 0.027f , L -> rc ) , zeta1 ) ;
+const float td = aaf_fs ( aaf_fm ( 0.5f , Dc_b ) , 7.5f ) ;
+const float taud = aaf_fa ( aaf_fm ( 0.5f , aaf_fa ( td , fabs ( td ) ) ) , 1.0e-12f ) ;
+const float tau = aaf_fd ( 3.72f , aaf_fm ( L -> rc , taud ) ) ;
+L -> prr_wau = ( Soft8 ) aaf_fd ( zeta , tau ) ;
+L -> prr_wau = fmin ( ( Soft8 ) aaf_fm ( L -> rc , odts ) , L -> prr_wau ) ;
+L -> pnr_wau = aaf_dd ( L -> prr_wau , ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) , ( float ) nu_c ) , 10.0f ) , 50.0e-6f ) , 50.0e-6f ) , 50.0e-6f ) ) ;
+L -> pnc_wau = fmin ( ( Soft8 ) aaf_fm ( L -> nc , odts ) , aaf_dd ( L -> prr_wau , ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) , L -> mvd_c ) , L -> mvd_c ) , L -> mvd_c ) ) ) ;
+}
+if ( L -> L_qr && L -> mvd_r > 50.0e-6f && L -> mvd_c > 1.0e-6f ) {
+int idx = 1 + ( int ) aaf_dd ( aaf_dm ( SD8 ( 0x4059000000000000ul ) , thompson_aa_log ( aaf_dd ( ( Soft8 ) L -> mvd_r , SD8 ( 0x3f0ad333ee243328ul ) ) ) ) , thompson_aa_log ( aaf_dd ( SD8 ( 0x3f74038998500e4ful ) , SD8 ( 0x3f0ad333ee243328ul ) ) ) ) ;
+idx = min ( idx , 100 ) ;
+const int jdx = ( int ) aaf_fm ( L -> mvd_c , 1.0e6f ) ;
+const float Ef_rw = ( float ) t_Efrw [ ( idx - 1 ) + 100 * ( jdx - 1 ) ] ;
+const Soft8 kern = aaf_rain_kernel ( L -> ilamr , - SD8 ( 0x4010000000000000ul ) ) ;
+L -> prr_rcw = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 22873.9375f ) , Ef_rw ) , L -> rc ) , L -> N0_r ) , kern ) ;
+L -> prr_rcw = fmin ( ( Soft8 ) aaf_fm ( L -> rc , odts ) , L -> prr_rcw ) ;
+L -> pnc_rcw = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 22873.9375f ) , Ef_rw ) , L -> nc ) , L -> N0_r ) , kern ) ;
+L -> pnc_rcw = fmin ( ( Soft8 ) aaf_fm ( L -> nc , odts ) , L -> pnc_rcw ) ;
+}
+if ( L -> L_qr && L -> mvd_r > 50.0e-6f ) {
+const Soft8 kern = aaf_rain_kernel ( L -> ilamr , - SD8 ( 0x4010000000000000ul ) ) ;
+float Ef_ra = thompson_eff_aero ( L -> mvd_r , 0.04e-6f , L -> visco , L -> rho , L -> temp , 0 ) ;
+L -> pna_rca = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 22873.9375f ) , Ef_ra ) , L -> nwfa ) , L -> N0_r ) , kern ) ;
+L -> pna_rca = fmin ( ( Soft8 ) aaf_fm ( L -> nwfa , odts ) , L -> pna_rca ) ;
+Ef_ra = thompson_eff_aero ( L -> mvd_r , 0.8e-6f , L -> visco , L -> rho , L -> temp , 0 ) ;
+L -> pnd_rcd = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 22873.9375f ) , Ef_ra ) , L -> nifa ) , L -> N0_r ) , kern ) ;
+L -> pnd_rcd = fmin ( ( Soft8 ) aaf_fm ( L -> nifa , odts ) , L -> pnd_rcd ) ;
+}
+}
+
+template < typename P_L > static inline void aaf_ice_size ( P_L L ) {
+L -> lami = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 890.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , L -> ni ) , L -> ri ) , 0.3333333432674408f ) ;
+L -> ilami = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , L -> lami ) ;
+L -> xDi = ( float ) fmax ( ( Soft8 ) 1.289843385166023e-05f , aaf_dm ( SD8 ( 0x4010000000000000ul ) , L -> ilami ) ) ;
+L -> xmi = aaf_fm ( ( aa_div ( 3.1415926536f * 890.0f , 6.0f ) ) , thompson_aa_powf ( L -> xDi , 3.0f ) ) ;
+L -> oxmi = aaf_fd ( 1.0f , L -> xmi ) ;
+}
+
+struct ThompsonAaFrozenTables {
+device const Soft8 * tpi_ide ;
+device const Soft8 * tps_iaus ;
+device const Soft8 * tni_iaus ;
+device const Soft8 * tcs_racs1 ;
+device const Soft8 * tmr_racs1 ;
+device const Soft8 * tcs_racs2 ;
+device const Soft8 * tmr_racs2 ;
+device const Soft8 * tcr_sacr1 ;
+device const Soft8 * tms_sacr1 ;
+device const Soft8 * tcr_sacr2 ;
+device const Soft8 * tms_sacr2 ;
+device const Soft8 * tnr_racs1 ;
+device const Soft8 * tnr_racs2 ;
+device const Soft8 * tnr_sacr1 ;
+device const Soft8 * tnr_sacr2 ;
+device const Soft8 * tcg_racg ;
+device const Soft8 * tmr_racg ;
+device const Soft8 * tcr_gacr ;
+device const Soft8 * tnr_racg ;
+device const Soft8 * tnr_gacr ;
+device const Soft8 * tpi_qrfz ;
+device const Soft8 * tni_qrfz ;
+device const Soft8 * tpg_qrfz ;
+device const Soft8 * tnr_qrfz ;
+device const Soft8 * tpi_qcfz ;
+device const Soft8 * tni_qcfz ;
+device const Soft8 * t_Efsw ;
+}
+;
+
+static inline ulong aaf_racg_index ( int idx_g1 , int idx_g , int idx_r1 , int idx_r ) {
+return ( ulong ) ( idx_g1 - 1 ) + ( ulong ) 37 * ( ( ulong ) ( idx_g - 1 ) + ( ulong ) 37 * ( ( ulong ) ( idx_r1 - 1 ) + ( ulong ) 37 * ( ulong ) ( idx_r - 1 ) ) ) ;
+}
+
+template < typename P_L , typename P_T > static inline void thompson_aa_wrf_frozen_block ( P_L L , float dt , float odts , P_T T ) {
+const float tempc = L -> tempc ;
+L -> vts_boost = 1.0f ;
+L -> orho = aaf_fd ( 1.0f , L -> rho ) ;
+L -> xDs = L -> L_qs ? aaf_fd ( L -> smoc , L -> smob ) : 0.0f ;
+L -> idx_tc = max ( 1 , min ( ( int ) round ( - tempc ) , 45 ) ) ;
+int idx_t = ( int ) aaf_fd ( aaf_fs ( tempc , 2.5f ) , 5.0f ) - 1 ;
+idx_t = max ( 1 , - idx_t ) ;
+L -> idx_t = min ( idx_t , 9 ) ;
+L -> idx_c = L -> rc > 1.0e-6f ? thompson_aa_wrf_table_index ( L -> rc , - 6 , 37 ) : 1 ;
+{
+const Soft8 raw = aaf_da ( SD8 ( 0x3ff0000000000000ul ) , aaf_dd ( aaf_dm ( SD8 ( 0x4059000000000000ul ) , thompson_aa_log ( aaf_dd ( ( Soft8 ) L -> nc , SD8 ( 0x412fc397d2e29693ul ) ) ) ) , SD8 ( 0x401c000000000000ul ) ) ) ;
+L -> idx_n = max ( 1 , min ( ( int ) round ( raw ) , 100 ) ) ;
+}
+L -> idx_i = L -> ri > 1.0e-10f ? thompson_aa_wrf_table_index ( L -> ri , - 10 , 64 ) : 1 ;
+L -> idx_i1 = L -> ni > 1.0f ? thompson_aa_wrf_table_index ( L -> ni , 0 , 55 ) : 1 ;
+if ( L -> rr > 1.0e-6f ) {
+L -> idx_r = thompson_aa_wrf_table_index ( L -> rr , - 6 , 37 ) ;
+const Soft8 lamr = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , L -> ilamr ) ;
+const Soft8 lam_exp = aaf_dm ( lamr , ( Soft8 ) thompson_aa_powf ( aaf_fm ( aaf_fm ( 6.0f , 1.0f ) , 0.1666666716337204f ) , 3.0f ) ) ;
+const Soft8 N0_exp = aaf_dm ( ( Soft8 ) aaf_fd ( aaf_fm ( 0.1666666716337204f , L -> rr ) , ( aa_div ( 3.1415926536f * 1000.0f , 6.0f ) ) ) , thompson_aa_pow ( lam_exp , SD8 ( 0x4010000000000000ul ) ) ) ;
+L -> idx_r1 = thompson_aa_wrf_table_index_d ( N0_exp , 6 , 37 ) ;
+}
+else {
+L -> idx_r = 1 ;
+L -> idx_r1 = 37 ;
+}
+L -> idx_s = L -> rs > 1.0e-6f ? thompson_aa_wrf_table_index ( L -> rs , - 6 , 37 ) : 1 ;
+if ( L -> rg > 1.0e-6f ) {
+L -> idx_g = thompson_aa_wrf_table_index ( L -> rg , - 6 , 37 ) ;
+const Soft8 lamg = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , L -> ilamg ) ;
+const Soft8 lam_exp = aaf_dm ( lamg , ( Soft8 ) thompson_aa_powf ( aaf_fm ( aaf_fm ( 6.0f , 1.0f ) , 0.1666666716337204f ) , 3.0f ) ) ;
+const Soft8 N0_exp = aaf_dm ( ( Soft8 ) aaf_fd ( aaf_fm ( 0.1666666716337204f , L -> rg ) , ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) ) , thompson_aa_pow ( lam_exp , SD8 ( 0x4010000000000000ul ) ) ) ;
+L -> idx_g1 = thompson_aa_wrf_table_index_d ( N0_exp , 2 , 37 ) ;
+}
+else {
+L -> idx_g = 1 ;
+L -> idx_g1 = 37 ;
+}
+const float otemp = aaf_fd ( 1.0f , L -> temp ) ;
+L -> rvs = aaf_fm ( L -> rho , L -> qvsi ) ;
+const float X = aaf_fs ( aaf_fm ( aaf_fm ( 2.834e6f , otemp ) , ( aa_div ( 1.0f , 461.5f ) ) ) , 1.0f ) ;
+L -> rvs_p = aaf_fm ( aaf_fm ( L -> rvs , otemp ) , X ) ;
+L -> rvs_pp = aaf_fm ( L -> rvs , aaf_fa ( aaf_fa ( aaf_fm ( aaf_fm ( aaf_fm ( otemp , X ) , otemp ) , X ) , - aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 2.0f * 2.834e6f , otemp ) , otemp ) , otemp ) , ( aa_div ( 1.0f , 461.5f ) ) ) ) , aaf_fm ( otemp , otemp ) ) ) ;
+L -> gamsc = aaf_fm ( aaf_fd ( aaf_fm ( 2.834e6f , L -> diffu ) , L -> tcond ) , L -> rvs_p ) ;
+{
+const float g1 = aaf_fd ( L -> gamsc , aaf_fa ( 1.0f , L -> gamsc ) ) ;
+L -> alphsc = aaf_fd ( aaf_fm ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( 0.5f , g1 ) , g1 ) , L -> rvs_pp ) , L -> rvs_p ) , L -> rvs ) , L -> rvs_p ) ;
+}
+L -> alphsc = aa_fmaxf ( 1.0e-9f , L -> alphsc ) ;
+float xsat = L -> ssati ;
+if ( fabs ( xsat ) < 1.0e-9f ) xsat = 0.0f ;
+{
+const float a = L -> alphsc ;
+float p = aaf_fs ( 1.0f , aaf_fm ( a , xsat ) ) ;
+p = aaf_fa ( p , aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 2.0f , a ) , a ) , xsat ) , xsat ) ) ;
+p = aaf_fs ( p , aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 5.0f , a ) , a ) , a ) , xsat ) , xsat ) , xsat ) ) ;
+L -> t1_subl = aaf_fd ( aaf_fm ( 4.0f * 3.1415926536f , p ) , aaf_fa ( 1.0f , L -> gamsc ) ) ;
+}
+const float t1_qg_qc = aaf_fm ( aaf_fm ( 3.1415926536f * 0.25f , 442.0f ) , 5.234762668609619f ) ;
+if ( L -> L_qc && L -> mvd_c > 1.0e-6f ) {
+if ( L -> xDs > 300.0e-6f ) {
+int idx = 1 + ( int ) aaf_dd ( aaf_dm ( SD8 ( 0x4059000000000000ul ) , thompson_aa_log ( aaf_dd ( ( Soft8 ) L -> xDs , SD8 ( 0x3f3413f8b7497e14ul ) ) ) ) , thompson_aa_log ( aaf_dd ( SD8 ( 0x3f940def627fd4f8ul ) , SD8 ( 0x3f3413f8b7497e14ul ) ) ) ) ;
+idx = min ( idx , 100 ) ;
+const int jdx = ( int ) aaf_fm ( L -> mvd_c , 1.0e6f ) ;
+L -> Ef_sw = ( float ) T -> t_Efsw [ ( idx - 1 ) + 100 * ( jdx - 1 ) ] ;
+L -> prs_scw = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 31.41592788696289f ) , L -> Ef_sw ) , L -> rc ) , L -> smoe ) ;
+L -> prs_scw = fmin ( ( Soft8 ) aaf_fm ( L -> rc , odts ) , L -> prs_scw ) ;
+L -> pnc_scw = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 31.41592788696289f ) , L -> Ef_sw ) , L -> nc ) , L -> smoe ) ;
+L -> pnc_scw = fmin ( ( Soft8 ) aaf_fm ( L -> nc , odts ) , L -> pnc_scw ) ;
+}
+if ( L -> rg >= 1.0e-6f && L -> mvd_c > 1.0e-6f ) {
+L -> xDg = ( float ) aaf_dm ( SD8 ( 0x4010000000000000ul ) , L -> ilamg ) ;
+L -> vtg = ( float ) aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 442.0f ) , 20.36322784423828f ) , 0.1666666716337204f ) , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 0.8899999856948853f ) ) ;
+L -> stoke_g = aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( L -> mvd_c , L -> mvd_c ) , L -> vtg ) , 1000.0f ) , aaf_fm ( aaf_fm ( 9.0f , L -> visco ) , L -> xDg ) ) ;
+float Ef_gw = 0.0f ;
+if ( L -> stoke_g >= 0.4f && L -> stoke_g <= 10.0f ) {
+Ef_gw = aaf_fm ( 0.55f , thompson_aa_log10f ( aaf_fm ( 2.51f , L -> stoke_g ) ) ) ;
+}
+else if ( L -> stoke_g > 10.0f ) {
+Ef_gw = 0.77f ;
+}
+if ( L -> twet > 273.15f ) Ef_gw = aaf_fm ( Ef_gw , 0.1f ) ;
+L -> Ef_gw = Ef_gw ;
+const Soft8 kern = thompson_aa_pow ( L -> ilamg , ( Soft8 ) 3.8899998664855957f ) ;
+L -> prg_gcw = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , t1_qg_qc ) , Ef_gw ) , L -> rc ) , L -> N0_g ) , kern ) ;
+L -> pnc_gcw = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , t1_qg_qc ) , Ef_gw ) , L -> nc ) , L -> N0_g ) , kern ) ;
+L -> pnc_gcw = fmin ( ( Soft8 ) aaf_fm ( L -> nc , odts ) , L -> pnc_gcw ) ;
+}
+}
+if ( L -> rs > 1.0e-6f ) {
+float Ef_sa = thompson_eff_aero ( L -> xDs , 0.04e-6f , L -> visco , L -> rho , L -> temp , 1 ) ;
+L -> pna_sca = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 31.41592788696289f ) , Ef_sa ) , L -> nwfa ) , L -> smoe ) ;
+L -> pna_sca = fmin ( ( Soft8 ) aaf_fm ( L -> nwfa , odts ) , L -> pna_sca ) ;
+Ef_sa = thompson_eff_aero ( L -> xDs , 0.8e-6f , L -> visco , L -> rho , L -> temp , 1 ) ;
+L -> pnd_scd = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 31.41592788696289f ) , Ef_sa ) , L -> nifa ) , L -> smoe ) ;
+L -> pnd_scd = fmin ( ( Soft8 ) aaf_fm ( L -> nifa , odts ) , L -> pnd_scd ) ;
+}
+if ( L -> rg > 1.0e-6f ) {
+L -> xDg = ( float ) aaf_dm ( SD8 ( 0x4010000000000000ul ) , L -> ilamg ) ;
+float Ef_ga = thompson_eff_aero ( L -> xDg , 0.04e-6f , L -> visco , L -> rho , L -> temp , 2 ) ;
+const Soft8 kern = thompson_aa_pow ( L -> ilamg , ( Soft8 ) 3.8899998664855957f ) ;
+L -> pna_gca = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , t1_qg_qc ) , Ef_ga ) , L -> nwfa ) , L -> N0_g ) , kern ) ;
+L -> pna_gca = fmin ( ( Soft8 ) aaf_fm ( L -> nwfa , odts ) , L -> pna_gca ) ;
+Ef_ga = thompson_eff_aero ( L -> xDg , 0.8e-6f , L -> visco , L -> rho , L -> temp , 2 ) ;
+L -> pnd_gcd = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , t1_qg_qc ) , Ef_ga ) , L -> nifa ) , L -> N0_g ) , kern ) ;
+L -> pnd_gcd = fmin ( ( Soft8 ) aaf_fm ( L -> nifa , odts ) , L -> pnd_gcd ) ;
+}
+if ( L -> rr >= 1.0e-6f ) {
+if ( L -> rs >= 1.0e-6f ) {
+const ulong i = ( ulong ) ( L -> idx_s - 1 ) + ( ulong ) 37 * ( ( ulong ) ( L -> idx_t - 1 ) + ( ulong ) 9 * ( ( ulong ) ( L -> idx_r1 - 1 ) + ( ulong ) 37 * ( ulong ) ( L -> idx_r - 1 ) ) ) ;
+if ( L -> twet < 273.15f ) {
+L -> prr_rcs = - ( T -> tmr_racs2 [ i ] + T -> tcr_sacr2 [ i ] + T -> tmr_racs1 [ i ] + T -> tcr_sacr1 [ i ] ) ;
+L -> prs_rcs = T -> tmr_racs2 [ i ] + T -> tcr_sacr2 [ i ] - T -> tcs_racs1 [ i ] - T -> tms_sacr1 [ i ] ;
+L -> prg_rcs = T -> tmr_racs1 [ i ] + T -> tcr_sacr1 [ i ] + T -> tcs_racs1 [ i ] + T -> tms_sacr1 [ i ] ;
+L -> prr_rcs = fmax ( ( Soft8 ) aaf_fm ( - L -> rr , odts ) , L -> prr_rcs ) ;
+L -> prs_rcs = fmax ( ( Soft8 ) aaf_fm ( - L -> rs , odts ) , L -> prs_rcs ) ;
+L -> prg_rcs = fmin ( ( Soft8 ) aaf_fm ( aaf_fa ( L -> rr , L -> rs ) , odts ) , L -> prg_rcs ) ;
+L -> pnr_rcs = T -> tnr_racs1 [ i ] + T -> tnr_racs2 [ i ] + T -> tnr_sacr1 [ i ] + T -> tnr_sacr2 [ i ] ;
+L -> pnr_rcs = fmin ( ( Soft8 ) aaf_fm ( L -> nr , odts ) , L -> pnr_rcs ) ;
+L -> png_rcs = L -> pnr_rcs ;
+}
+else {
+L -> prs_rcs = - T -> tcs_racs1 [ i ] - T -> tms_sacr1 [ i ] + T -> tmr_racs2 [ i ] + T -> tcr_sacr2 [ i ] ;
+L -> prs_rcs = fmax ( ( Soft8 ) aaf_fm ( - L -> rs , odts ) , L -> prs_rcs ) ;
+L -> prr_rcs = - L -> prs_rcs ;
+}
+}
+if ( L -> rg >= 1.0e-6f ) {
+const ulong i = aaf_racg_index ( L -> idx_g1 , L -> idx_g , L -> idx_r1 , L -> idx_r ) ;
+if ( L -> twet < 273.15f ) {
+L -> prg_rcg = T -> tmr_racg [ i ] + T -> tcr_gacr [ i ] ;
+L -> prg_rcg = fmin ( ( Soft8 ) aaf_fm ( L -> rr , odts ) , L -> prg_rcg ) ;
+L -> prr_rcg = - L -> prg_rcg ;
+L -> pnr_rcg = T -> tnr_racg [ i ] + T -> tnr_gacr [ i ] ;
+L -> pnr_rcg = fmin ( ( Soft8 ) aaf_fm ( L -> nr , odts ) , L -> pnr_rcg ) ;
+}
+else {
+L -> prr_rcg = T -> tcg_racg [ i ] ;
+L -> prr_rcg = fmin ( ( Soft8 ) aaf_fm ( L -> rg , odts ) , L -> prr_rcg ) ;
+L -> prg_rcg = - L -> prr_rcg ;
+L -> png_rcg = T -> tnr_racg [ i ] ;
+L -> png_rcg = fmin ( ( Soft8 ) aaf_fm ( L -> ng , odts ) , L -> png_rcg ) ;
+L -> pnr_rcg = - SD8 ( 0x3ff8000000000000ul ) * T -> tnr_gacr [ i ] ;
+}
+}
+}
+if ( L -> temp < 273.15f ) {
+L -> vts_boost = 1.0f ;
+L -> rate_max = aaf_fm ( aaf_fm ( aaf_fm ( aaf_fs ( L -> qv , L -> qvsi ) , L -> rho ) , odts ) , 0.999f ) ;
+L -> xni = thompson_ice_demott ( tempc , L -> rho , L -> nifa ) ;
+L -> idx_IN = L -> xni > 1.0f ? thompson_aa_wrf_table_index ( L -> xni , 0 , 55 ) : 1 ;
+{
+const ulong i = ( ulong ) ( L -> idx_r - 1 ) + ( ulong ) 37 * ( ( ulong ) ( L -> idx_r1 - 1 ) + ( ulong ) 37 * ( ( ulong ) ( L -> idx_tc - 1 ) + ( ulong ) 45 * ( ulong ) ( L -> idx_IN - 1 ) ) ) ;
+if ( L -> rr > 1.0e-6f ) {
+L -> prg_rfz = aaf_dm ( T -> tpg_qrfz [ i ] , ( Soft8 ) odts ) ;
+L -> pri_rfz = aaf_dm ( T -> tpi_qrfz [ i ] , ( Soft8 ) odts ) ;
+L -> pni_rfz = aaf_dm ( T -> tni_qrfz [ i ] , ( Soft8 ) odts ) ;
+L -> pnr_rfz = aaf_dm ( T -> tnr_qrfz [ i ] , ( Soft8 ) odts ) ;
+L -> pnr_rfz = fmin ( ( Soft8 ) aaf_fm ( L -> nr , odts ) , L -> pnr_rfz ) ;
+}
+else if ( L -> rr > 1.0e-12f && L -> temp < 235.16f ) {
+L -> pri_rfz = ( Soft8 ) aaf_fm ( L -> rr , odts ) ;
+L -> pni_rfz = ( Soft8 ) aaf_fm ( L -> nr , odts ) ;
+}
+}
+{
+const ulong i = ( ulong ) ( L -> idx_c - 1 ) + ( ulong ) 37 * ( ( ulong ) ( L -> idx_n - 1 ) + ( ulong ) 100 * ( ( ulong ) ( L -> idx_tc - 1 ) + ( ulong ) 45 * ( ulong ) ( L -> idx_IN - 1 ) ) ) ;
+if ( L -> rc > 1.0e-6f ) {
+L -> pri_wfz = aaf_dm ( T -> tpi_qcfz [ i ] , ( Soft8 ) odts ) ;
+L -> pri_wfz = fmin ( ( Soft8 ) aaf_fm ( L -> rc , odts ) , L -> pri_wfz ) ;
+L -> pni_wfz = aaf_dm ( T -> tni_qcfz [ i ] , ( Soft8 ) odts ) ;
+L -> pni_wfz = fmin ( fmin ( ( Soft8 ) aaf_fm ( L -> nc , odts ) , aaf_dd ( L -> pri_wfz , ( Soft8 ) ( 2.0f * 1.0e-12f ) ) ) , L -> pni_wfz ) ;
+}
+else if ( L -> rc > 1.0e-12f && L -> temp < 235.16f ) {
+L -> pri_wfz = ( Soft8 ) aaf_fm ( L -> rc , odts ) ;
+L -> pni_wfz = ( Soft8 ) aaf_fm ( L -> nc , odts ) ;
+}
+}
+if ( L -> ssati >= 0.25f || ( L -> ssatw > 1.0e-15f && L -> temp < 253.15f ) ) {
+L -> xnc = thompson_ice_demott ( tempc , L -> rho , L -> nifa ) ;
+L -> xni = ( float ) aaf_da ( ( Soft8 ) L -> ni , aaf_dm ( aaf_da ( L -> pni_rfz , L -> pni_wfz ) , ( Soft8 ) dt ) ) ;
+const float d = aaf_fs ( L -> xnc , L -> xni ) ;
+L -> pni_inu = ( Soft8 ) aaf_fm ( aaf_fm ( 0.5f , aaf_fa ( d , fabs ( d ) ) ) , odts ) ;
+L -> pri_inu = fmin ( ( Soft8 ) L -> rate_max , aaf_dm ( ( Soft8 ) 1.0e-12f , L -> pni_inu ) ) ;
+L -> pni_inu = aaf_dd ( L -> pri_inu , ( Soft8 ) 1.0e-12f ) ;
+}
+L -> xni = ( float ) aaf_da ( ( Soft8 ) aaf_fa ( L -> ns , L -> ni ) , aaf_dm ( aaf_da ( aaf_da ( L -> pni_rfz , L -> pni_wfz ) , L -> pni_inu ) , ( Soft8 ) dt ) ) ;
+if ( L -> xni <= 999.0e3f && L -> temp < 238.0f && L -> ssati >= 0.4f ) {
+L -> xnc = thompson_ice_koop ( L -> temp , L -> qv , L -> qvs , L -> nwfa , dt ) ;
+L -> pni_iha = ( Soft8 ) aaf_fm ( L -> xnc , odts ) ;
+L -> pri_iha = fmin ( ( Soft8 ) L -> rate_max , aaf_dm ( ( Soft8 ) ( 1.0e-12f * 0.1f ) , L -> pni_iha ) ) ;
+L -> pni_iha = aaf_dd ( L -> pri_iha , ( Soft8 ) ( 1.0e-12f * 0.1f ) ) ;
+}
+if ( L -> L_qi ) {
+aaf_ice_size ( L ) ;
+L -> pri_ide = aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 0.5f , L -> t1_subl ) , L -> diffu ) , L -> ssati ) , L -> rvs ) , 1.0f ) , 1.0f ) , L -> ni ) , L -> ilami ) ;
+if ( L -> pri_ide < SD8 ( 0x0000000000000000ul ) ) {
+L -> pri_ide = fmax ( fmax ( ( Soft8 ) aaf_fm ( - L -> ri , odts ) , L -> pri_ide ) , ( Soft8 ) L -> rate_max ) ;
+L -> pni_ide = aaf_dm ( L -> pri_ide , ( Soft8 ) L -> oxmi ) ;
+L -> pni_ide = fmax ( ( Soft8 ) aaf_fm ( - L -> ni , odts ) , L -> pni_ide ) ;
+}
+else {
+L -> pri_ide = fmin ( L -> pri_ide , ( Soft8 ) L -> rate_max ) ;
+const Soft8 t = T -> tpi_ide [ ( L -> idx_i - 1 ) + 64 * ( L -> idx_i1 - 1 ) ] ;
+L -> prs_ide = aaf_dm ( aaf_ds ( SD8 ( 0x3ff0000000000000ul ) , t ) , L -> pri_ide ) ;
+L -> pri_ide = aaf_dm ( t , L -> pri_ide ) ;
+}
+if ( L -> idx_i == 64 || L -> xDi > 5.0f * 300.0e-6f ) {
+L -> prs_iau = ( Soft8 ) aaf_fm ( aaf_fm ( L -> ri , 0.99f ) , odts ) ;
+L -> pni_iau = ( Soft8 ) aaf_fm ( aaf_fm ( L -> ni , 0.95f ) , odts ) ;
+}
+else if ( L -> xDi < 0.1f * 300.0e-6f ) {
+L -> prs_iau = SD8 ( 0x0000000000000000ul ) ;
+L -> pni_iau = SD8 ( 0x0000000000000000ul ) ;
+}
+else {
+const ulong i = ( ulong ) ( L -> idx_i - 1 ) + ( ulong ) 64 * ( ulong ) ( L -> idx_i1 - 1 ) ;
+L -> prs_iau = aaf_dm ( T -> tps_iaus [ i ] , ( Soft8 ) odts ) ;
+L -> prs_iau = fmin ( ( Soft8 ) aaf_fm ( aaf_fm ( L -> ri , 0.99f ) , odts ) , L -> prs_iau ) ;
+L -> pni_iau = aaf_dm ( T -> tni_iaus [ i ] , ( Soft8 ) odts ) ;
+L -> pni_iau = fmin ( ( Soft8 ) aaf_fm ( aaf_fm ( L -> ni , 0.95f ) , odts ) , L -> pni_iau ) ;
+}
+}
+if ( L -> L_qs ) {
+L -> C_snow = aaf_fa ( 0.15f , aaf_fd ( aaf_fm ( aaf_fa ( tempc , 1.5f ) , 0.5f - 0.15f ) , - 30.0f + 1.5f ) ) ;
+L -> C_snow = aa_fmaxf ( 0.15f , aa_fminf ( L -> C_snow , 0.5f ) ) ;
+L -> prs_sde = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( L -> C_snow , L -> t1_subl ) , L -> diffu ) , L -> ssati ) , L -> rvs ) , aaf_fa ( aaf_fm ( 0.86f , L -> smo1 ) , aaf_fm ( aaf_fm ( aaf_fm ( 1.5197088718414307f , L -> rhof2 ) , L -> vsc2 ) , L -> smof ) ) ) ;
+if ( L -> prs_sde < SD8 ( 0x0000000000000000ul ) ) {
+L -> prs_sde = fmax ( fmax ( ( Soft8 ) aaf_fm ( - L -> rs , odts ) , L -> prs_sde ) , ( Soft8 ) L -> rate_max ) ;
+}
+else {
+L -> prs_sde = fmin ( L -> prs_sde , ( Soft8 ) L -> rate_max ) ;
+}
+}
+if ( L -> L_qg && L -> ssati < - 1.0e-15f ) {
+const float t2_qg_sd = aaf_fm ( aaf_fm ( aaf_fm ( 0.28f , 0.8581680655479431f ) , aa_sqrtf ( 442.0f ) ) , 1.9021706581115723f ) ;
+L -> prg_gde = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 0.5f , L -> t1_subl ) , L -> diffu ) , L -> ssati ) , L -> rvs ) , L -> N0_g ) , aaf_da ( aaf_dm ( ( Soft8 ) 0.86f , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 2.0f ) ) , aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( t2_qg_sd , L -> vsc2 ) , L -> rhof2 ) , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 2.944999933242798f ) ) ) ) ;
+if ( L -> prg_gde < SD8 ( 0x0000000000000000ul ) ) {
+L -> prg_gde = fmax ( fmax ( ( Soft8 ) aaf_fm ( - L -> rg , odts ) , L -> prg_gde ) , ( Soft8 ) L -> rate_max ) ;
+L -> png_gde = aaf_dd ( aaf_dm ( L -> prg_gde , ( Soft8 ) L -> ng ) , ( Soft8 ) L -> rg ) ;
+}
+else {
+L -> prg_gde = fmin ( L -> prg_gde , ( Soft8 ) L -> rate_max ) ;
+}
+}
+if ( L -> L_qi ) {
+aaf_ice_size ( L ) ;
+if ( L -> rs >= 1.0e-6f ) {
+L -> prs_sci = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 31.41592788696289f , L -> rhof ) , 0.05f ) , L -> ri ) , L -> smoe ) ;
+L -> pni_sci = aaf_dm ( L -> prs_sci , ( Soft8 ) L -> oxmi ) ;
+}
+if ( L -> rr >= 1.0e-6f && L -> mvd_r > aaf_fm ( 4.0f , L -> xDi ) ) {
+const Soft8 k4 = aaf_rain_kernel ( L -> ilamr , - SD8 ( 0x4010000000000000ul ) ) ;
+L -> pri_rci = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 22873.9375f ) , 0.95f ) , L -> ri ) , L -> N0_r ) , k4 ) ;
+L -> pnr_rci = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 22873.9375f ) , 0.95f ) , L -> ni ) , L -> N0_r ) , k4 ) ;
+L -> pnr_rci = fmin ( ( Soft8 ) aaf_fm ( L -> nr , odts ) , L -> pnr_rci ) ;
+L -> pni_rci = aaf_dm ( L -> pri_rci , ( Soft8 ) L -> oxmi ) ;
+L -> prr_rci = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( L -> rhof , 1437212032.0f ) , 0.95f ) , L -> ni ) , L -> N0_r ) , aaf_rain_kernel ( L -> ilamr , - SD8 ( 0x401c000000000000ul ) ) ) ;
+L -> prr_rci = fmin ( ( Soft8 ) aaf_fm ( L -> rr , odts ) , L -> prr_rci ) ;
+L -> prg_rci = aaf_da ( L -> pri_rci , L -> prr_rci ) ;
+}
+}
+if ( L -> prg_gcw > ( Soft8 ) 1.0e-15f && tempc > - 8.0f ) {
+float tf = 0.0f ;
+if ( tempc >= - 5.0f && tempc < - 3.0f ) {
+tf = aaf_fm ( 0.5f , aaf_fs ( - 3.0f , tempc ) ) ;
+}
+else if ( tempc > - 8.0f && tempc < - 5.0f ) {
+tf = aaf_fm ( 0.33333333f , aaf_fa ( 8.0f , tempc ) ) ;
+}
+L -> tf = tf ;
+L -> pni_ihm = aaf_dm ( ( Soft8 ) aaf_fm ( 3.5e8f , tf ) , L -> prg_gcw ) ;
+L -> pri_ihm = aaf_dm ( ( Soft8 ) 1.0e-12f , L -> pni_ihm ) ;
+L -> prs_ihm = aaf_dm ( aaf_dd ( L -> prs_scw , aaf_da ( L -> prs_scw , L -> prg_gcw ) ) , L -> pri_ihm ) ;
+L -> prg_ihm = aaf_dm ( aaf_dd ( L -> prg_gcw , aaf_da ( L -> prs_scw , L -> prg_gcw ) ) , L -> pri_ihm ) ;
+}
+if ( L -> prs_scw > aaf_dm ( SD8 ( 0x4000000000000000ul ) , L -> prs_sde ) && L -> prs_sde > ( Soft8 ) 1.0e-15f ) {
+L -> r_frac = ( float ) fmin ( SD8 ( 0x403e000000000000ul ) , aaf_dd ( L -> prs_scw , L -> prs_sde ) ) ;
+float g_frac = aa_fminf ( 0.95f , aaf_fa ( 0.15f , aaf_fm ( aaf_fs ( L -> r_frac , 2.0f ) , 0.028f ) ) ) ;
+L -> vts_boost = aa_fminf ( 1.5f , aaf_fa ( 1.1f , aaf_fm ( aaf_fs ( L -> r_frac , 2.0f ) , 0.014f ) ) ) ;
+L -> prg_scw = aaf_dm ( ( Soft8 ) g_frac , L -> prs_scw ) ;
+L -> png_scw = aaf_dd ( aaf_dm ( L -> prg_scw , ( Soft8 ) L -> smo0 ) , ( Soft8 ) L -> rs ) ;
+L -> vts = aaf_fm ( aaf_fm ( 40.0f , thompson_aa_powf ( L -> xDs , 0.55f ) ) , thompson_aa_expf ( - aaf_fm ( 100.0f , L -> xDs ) ) ) ;
+float cri = - aaf_fd ( aaf_fm ( aaf_fm ( 1.0f , aaf_fm ( L -> mvd_c , 0.5e6f ) ) , L -> vts ) , aa_fminf ( - 0.1f , tempc ) ) ;
+cri = aa_fmaxf ( 0.1f , aa_fminf ( cri , 10.0f ) ) ;
+L -> const_Ri = cri ;
+L -> rime_dens = aaf_fm ( aaf_fs ( aaf_fa ( 0.051f , aaf_fm ( 0.114f , cri ) ) , aaf_fm ( aaf_fm ( 0.0055f , cri ) , cri ) ) , 1000.0f ) ;
+if ( L -> rime_dens < 150.0f ) {
+g_frac = 0.0f ;
+L -> prg_scw = SD8 ( 0x0000000000000000ul ) ;
+L -> png_scw = SD8 ( 0x0000000000000000ul ) ;
+}
+L -> g_frac = g_frac ;
+L -> prs_scw = aaf_dm ( ( Soft8 ) aaf_fs ( 1.0f , g_frac ) , L -> prs_scw ) ;
+}
+}
+else {
+if ( L -> L_qs ) {
+L -> prr_sml = ( Soft8 ) aaf_fm ( aaf_fs ( aaf_fm ( tempc , L -> tcond ) , aaf_fm ( aaf_fm ( 2.5e6f , L -> diffu ) , L -> delQvs ) ) , aaf_fa ( aaf_fm ( 4.853478912991704e-06f , L -> smo1 ) , aaf_fm ( aaf_fm ( aaf_fm ( 8.576598702347837e-06f , L -> rhof2 ) , L -> vsc2 ) , L -> smof ) ) ) ;
+if ( L -> prr_sml > SD8 ( 0x0000000000000000ul ) ) {
+L -> prr_sml = aaf_da ( L -> prr_sml , aaf_dm ( ( Soft8 ) aaf_fm ( 4218.0f * ( aa_div ( 1.0f , ( 2.834e6f - 2.5e6f ) ) ) , aaf_fs ( L -> twet , 273.15f ) ) , aaf_da ( L -> prr_rcs , L -> prs_scw ) ) ) ;
+}
+L -> prr_sml = fmin ( ( Soft8 ) aaf_fm ( L -> rs , odts ) , fmax ( SD8 ( 0x0000000000000000ul ) , L -> prr_sml ) ) ;
+if ( L -> prr_sml > SD8 ( 0x0000000000000000ul ) ) {
+L -> pnr_sml = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fd ( L -> smo0 , L -> rs ) , L -> prr_sml ) , ( Soft8 ) thompson_aa_powf ( 10.0f , aaf_fm ( - 0.25f , aaf_fs ( L -> twet , 273.15f ) ) ) ) ;
+}
+else if ( L -> ssati < 0.0f ) {
+L -> prs_sde = ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 0.15f , L -> t1_subl ) , L -> diffu ) , L -> ssati ) , L -> rvs ) , aaf_fa ( aaf_fm ( 0.86f , L -> smo1 ) , aaf_fm ( aaf_fm ( aaf_fm ( 1.5197088718414307f , L -> rhof2 ) , L -> vsc2 ) , L -> smof ) ) ) ;
+L -> prs_sde = fmax ( ( Soft8 ) aaf_fm ( - L -> rs , odts ) , L -> prs_sde ) ;
+}
+}
+if ( L -> L_qg ) {
+Soft8 N0_melt = L -> N0_g ;
+if ( aaf_fm ( L -> rg , L -> ng ) < 1.0e-4f ) {
+const Soft8 lamg = aaf_dd ( SD8 ( 0x3ff0000000000000ul ) , L -> ilamg ) ;
+N0_melt = aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fd ( 1.0e-4f , L -> rg ) , 1.0f ) , thompson_aa_pow ( lamg , SD8 ( 0x3ff0000000000000ul ) ) ) ;
+}
+const float t2_qg_me = aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 3.1415926536f , 4.0f ) , 0.5f ) , ( aa_div ( 1.0f , ( 2.834e6f - 2.5e6f ) ) ) ) , 0.28f ) , 0.8581680655479431f ) , aa_sqrtf ( 442.0f ) ) , 1.9021706581115723f ) ;
+L -> prr_gml = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fs ( aaf_fm ( tempc , L -> tcond ) , aaf_fm ( aaf_fm ( 2.5e6f , L -> diffu ) , L -> delQvs ) ) , N0_melt ) , aaf_da ( aaf_dm ( ( Soft8 ) 1.6178260921151377e-05f , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 2.0f ) ) , aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( t2_qg_me , L -> rhof2 ) , L -> vsc2 ) , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 2.944999933242798f ) ) ) ) ;
+L -> prr_gml = fmin ( ( Soft8 ) aaf_fm ( L -> rg , odts ) , fmax ( SD8 ( 0x0000000000000000ul ) , L -> prr_gml ) ) ;
+if ( L -> prr_gml > SD8 ( 0x0000000000000000ul ) ) {
+L -> pnr_gml = aaf_dm ( aaf_dd ( aaf_dm ( L -> prr_gml , ( Soft8 ) L -> ng ) , ( Soft8 ) L -> rg ) , ( Soft8 ) thompson_aa_powf ( 10.0f , aaf_fm ( - 0.33f , aaf_fs ( L -> twet , 273.15f ) ) ) ) ;
+}
+else if ( L -> ssati < 0.0f ) {
+const float t2_qg_sd = aaf_fm ( aaf_fm ( aaf_fm ( 0.28f , 0.8581680655479431f ) , aa_sqrtf ( 442.0f ) ) , 1.9021706581115723f ) ;
+L -> prg_gde = aaf_dm ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( aaf_fm ( aaf_fm ( 0.5f , L -> t1_subl ) , L -> diffu ) , L -> ssati ) , L -> rvs ) , L -> N0_g ) , aaf_da ( aaf_dm ( ( Soft8 ) 0.86f , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 2.0f ) ) , aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( t2_qg_sd , L -> vsc2 ) , L -> rhof2 ) , thompson_aa_pow ( L -> ilamg , ( Soft8 ) 2.944999933242798f ) ) ) ) ;
+L -> prg_gde = fmax ( ( Soft8 ) aaf_fm ( - L -> rg , odts ) , L -> prg_gde ) ;
+L -> png_gde = aaf_dd ( aaf_dm ( L -> prg_gde , ( Soft8 ) L -> ng ) , ( Soft8 ) L -> rg ) ;
+}
+}
+if ( dt > 120.0f ) {
+L -> prr_rcw = aaf_da ( aaf_da ( L -> prr_rcw , L -> prs_scw ) , L -> prg_gcw ) ;
+L -> prs_scw = SD8 ( 0x0000000000000000ul ) ;
+L -> prg_gcw = SD8 ( 0x0000000000000000ul ) ;
+}
+}
+}
+
+template < typename P_L > static inline void thompson_aa_wrf_conserve ( P_L L , float odts ) {
+float sump , rate_max , ratio ;
+sump = ( float ) aaf_da ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( L -> pri_inu , L -> pri_ide ) , L -> prs_ide ) , L -> prs_sde ) , L -> prg_gde ) , L -> pri_iha ) ;
+rate_max = aaf_fm ( aaf_fm ( aaf_fm ( aaf_fs ( L -> qv , L -> qvsi ) , L -> rho ) , odts ) , 0.999f ) ;
+if ( ( sump > 1.0e-15f && sump > rate_max ) || ( sump < - 1.0e-15f && sump < rate_max ) ) {
+ratio = aaf_fd ( rate_max , sump ) ;
+L -> pri_inu = aaf_dm ( L -> pri_inu , ( Soft8 ) ratio ) ;
+L -> pri_ide = aaf_dm ( L -> pri_ide , ( Soft8 ) ratio ) ;
+L -> pni_ide = aaf_dm ( L -> pni_ide , ( Soft8 ) ratio ) ;
+L -> prs_ide = aaf_dm ( L -> prs_ide , ( Soft8 ) ratio ) ;
+L -> prs_sde = aaf_dm ( L -> prs_sde , ( Soft8 ) ratio ) ;
+L -> prg_gde = aaf_dm ( L -> prg_gde , ( Soft8 ) ratio ) ;
+L -> pri_iha = aaf_dm ( L -> pri_iha , ( Soft8 ) ratio ) ;
+}
+sump = ( float ) aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( - L -> prr_wau , L -> pri_wfz ) , L -> prr_rcw ) , L -> prs_scw ) , L -> prg_scw ) , L -> prg_gcw ) ;
+rate_max = aaf_fm ( - L -> rc , odts ) ;
+if ( sump < rate_max && L -> L_qc ) {
+ratio = aaf_fd ( rate_max , sump ) ;
+L -> prr_wau = aaf_dm ( L -> prr_wau , ( Soft8 ) ratio ) ;
+L -> pri_wfz = aaf_dm ( L -> pri_wfz , ( Soft8 ) ratio ) ;
+L -> prr_rcw = aaf_dm ( L -> prr_rcw , ( Soft8 ) ratio ) ;
+L -> prs_scw = aaf_dm ( L -> prs_scw , ( Soft8 ) ratio ) ;
+L -> prg_scw = aaf_dm ( L -> prg_scw , ( Soft8 ) ratio ) ;
+L -> prg_gcw = aaf_dm ( L -> prg_gcw , ( Soft8 ) ratio ) ;
+}
+sump = ( float ) aaf_ds ( aaf_ds ( aaf_ds ( L -> pri_ide , L -> prs_iau ) , L -> prs_sci ) , L -> pri_rci ) ;
+rate_max = aaf_fm ( - L -> ri , odts ) ;
+if ( sump < rate_max && L -> L_qi ) {
+ratio = aaf_fd ( rate_max , sump ) ;
+L -> pri_ide = aaf_dm ( L -> pri_ide , ( Soft8 ) ratio ) ;
+L -> prs_iau = aaf_dm ( L -> prs_iau , ( Soft8 ) ratio ) ;
+L -> prs_sci = aaf_dm ( L -> prs_sci , ( Soft8 ) ratio ) ;
+L -> pri_rci = aaf_dm ( L -> pri_rci , ( Soft8 ) ratio ) ;
+}
+sump = ( float ) aaf_da ( aaf_da ( aaf_ds ( aaf_ds ( - L -> prg_rfz , L -> pri_rfz ) , L -> prr_rci ) , L -> prr_rcs ) , L -> prr_rcg ) ;
+rate_max = aaf_fm ( - L -> rr , odts ) ;
+if ( sump < rate_max && L -> L_qr ) {
+ratio = aaf_fd ( rate_max , sump ) ;
+L -> prg_rfz = aaf_dm ( L -> prg_rfz , ( Soft8 ) ratio ) ;
+L -> pri_rfz = aaf_dm ( L -> pri_rfz , ( Soft8 ) ratio ) ;
+L -> prr_rci = aaf_dm ( L -> prr_rci , ( Soft8 ) ratio ) ;
+L -> prr_rcs = aaf_dm ( L -> prr_rcs , ( Soft8 ) ratio ) ;
+L -> prr_rcg = aaf_dm ( L -> prr_rcg , ( Soft8 ) ratio ) ;
+}
+sump = ( float ) aaf_da ( aaf_ds ( aaf_ds ( L -> prs_sde , L -> prs_ihm ) , L -> prr_sml ) , L -> prs_rcs ) ;
+rate_max = aaf_fm ( - L -> rs , odts ) ;
+if ( sump < rate_max && L -> L_qs ) {
+ratio = aaf_fd ( rate_max , sump ) ;
+L -> prs_sde = aaf_dm ( L -> prs_sde , ( Soft8 ) ratio ) ;
+L -> prs_ihm = aaf_dm ( L -> prs_ihm , ( Soft8 ) ratio ) ;
+L -> prr_sml = aaf_dm ( L -> prr_sml , ( Soft8 ) ratio ) ;
+L -> prs_rcs = aaf_dm ( L -> prs_rcs , ( Soft8 ) ratio ) ;
+}
+sump = ( float ) aaf_da ( aaf_ds ( aaf_ds ( L -> prg_gde , L -> prg_ihm ) , L -> prr_gml ) , L -> prg_rcg ) ;
+rate_max = aaf_fm ( - L -> rg , odts ) ;
+if ( sump < rate_max && L -> L_qg ) {
+ratio = aaf_fd ( rate_max , sump ) ;
+L -> prg_gde = aaf_dm ( L -> prg_gde , ( Soft8 ) ratio ) ;
+L -> prg_ihm = aaf_dm ( L -> prg_ihm , ( Soft8 ) ratio ) ;
+L -> prr_gml = aaf_dm ( L -> prr_gml , ( Soft8 ) ratio ) ;
+L -> prg_rcg = aaf_dm ( L -> prg_rcg , ( Soft8 ) ratio ) ;
+}
+L -> pri_ihm = aaf_da ( L -> prs_ihm , L -> prg_ihm ) ;
+ratio = ( float ) fmin ( fabs ( L -> prr_rcg ) , fabs ( L -> prg_rcg ) ) ;
+L -> prr_rcg = ( Soft8 ) aaf_fm ( ratio , copysign ( 1.0f , ( float ) L -> prr_rcg ) ) ;
+L -> prg_rcg = - L -> prr_rcg ;
+if ( L -> twet > 273.15f ) {
+ratio = ( float ) fmin ( fabs ( L -> prr_rcs ) , fabs ( L -> prs_rcs ) ) ;
+L -> prr_rcs = ( Soft8 ) aaf_fm ( ratio , copysign ( 1.0f , ( float ) L -> prr_rcs ) ) ;
+L -> prs_rcs = - L -> prr_rcs ;
+}
+}
+
+template < typename P_qv , typename P_temperature , typename P_qvten , typename P_tten > static inline void thompson_aa_wrf_apply_vapor_heat ( int idx , float t1d , P_qv qv , P_temperature temperature , P_qvten qvten , P_tten tten , Soft8 qv_rate , Soft8 t_rate , float dt ) {
+if ( tten != nullptr ) {
+qvten [ idx ] = ( float ) aaf_da ( ( Soft8 ) qvten [ idx ] , qv_rate ) ;
+tten [ idx ] = ( float ) aaf_da ( ( Soft8 ) tten [ idx ] , t_rate ) ;
+temperature [ idx ] = aaf_fa ( t1d , aaf_fm ( dt , tten [ idx ] ) ) ;
+}
+else {
+temperature [ idx ] = aaf_fa ( t1d , aaf_fm ( dt , ( float ) t_rate ) ) ;
+qv [ idx ] = aaf_fa ( qv [ idx ] , aaf_fm ( dt , ( float ) qv_rate ) ) ;
+}
+}
+
+static inline float aaf_theta_e ( float pp , float tt , float w , float tlc ) {
+const float rr = aaf_fa ( w , 1.0e-8f ) ;
+const float power = aaf_fm ( 0.2854f , aaf_fs ( 1.0f , aaf_fm ( 0.28f , rr ) ) ) ;
+const float xx = aaf_fm ( tt , thompson_aa_powf ( aaf_fd ( 100000.0f , pp ) , power ) ) ;
+const float p1 = aaf_fs ( aaf_fd ( 3.376f , tlc ) , 0.00254f ) ;
+const float p2 = aaf_fm ( aaf_fm ( rr , 1000.0f ) , aaf_fa ( 1.0f , aaf_fm ( 0.81f , rr ) ) ) ;
+return aaf_fm ( xx , thompson_aa_expf ( aaf_fm ( p1 , p2 ) ) ) ;
+}
+
+static inline float aaf_t_lcl ( float tt , float tttd ) {
+const float denom = aaf_fa ( aaf_fd ( 1.0f , aaf_fs ( tttd , 56.0f ) ) , aaf_fd ( thompson_aa_logf ( aaf_fd ( tt , tttd ) ) , 800.0f ) ) ;
+return aaf_fa ( aaf_fd ( 1.0f , denom ) , 56.0f ) ;
+}
+
+static inline float aaf_t_dew ( float p , float w ) {
+const float rr = aaf_fa ( w , 1.0e-8f ) ;
+const float es = aaf_fd ( aaf_fm ( p , rr ) , aaf_fa ( 0.622f , rr ) ) ;
+const float esln = thompson_aa_logf ( es ) ;
+return aaf_fd ( aaf_fs ( aaf_fm ( 35.86f , esln ) , 4947.2325f ) , aaf_fs ( esln , 23.6837f ) ) ;
+}
+
+static inline float aaf_theta_wetb ( float thetae ) {
+const Soft8 c [ 7 ] = {
+( Soft8 ) - 1.00922292e-10f , ( Soft8 ) - 1.47945344e-8f , ( Soft8 ) - 1.7303757e-6f , ( Soft8 ) - 0.00012709f , ( Soft8 ) 1.15849867e-6f , ( Soft8 ) - 3.518296861e-9f , ( Soft8 ) 3.5741522e-12f }
+;
+const Soft8 d [ 7 ] = {
+( Soft8 ) 0.0f , ( Soft8 ) - 3.5223513e-10f , ( Soft8 ) - 5.7250807e-8f , ( Soft8 ) - 5.83975422e-6f , ( Soft8 ) 4.72445163e-8f , ( Soft8 ) - 1.13402845e-10f , ( Soft8 ) 8.729580402e-14f }
+;
+const float x = aa_fminf ( 475.0f , thetae ) ;
+thread const Soft8 * k = x <= 335.5f ? c : d ;
+const Soft8 xd = ( Soft8 ) x ;
+const Soft8 a = aaf_da ( k [ 0 ] , aaf_dm ( xd , aaf_da ( k [ 1 ] , aaf_dm ( xd , aaf_da ( k [ 2 ] , aaf_dm ( xd , aaf_da ( k [ 3 ] , aaf_dm ( xd , aaf_da ( k [ 4 ] , aaf_dm ( xd , aaf_da ( k [ 5 ] , aaf_dm ( xd , k [ 6 ] ) ) ) ) ) ) ) ) ) ) ) ) ;
+return aaf_fa ( ( float ) a , 273.15f ) ;
+}
+
+static inline float aaf_compT_fr_The ( float thelcl , float pres ) {
+float guess = aaf_fm ( aaf_fs ( thelcl , aaf_fm ( 0.5f , thompson_aa_powf ( aa_fmaxf ( aaf_fs ( thelcl , 270.0f ) , 0.0f ) , 1.05f ) ) ) , thompson_aa_powf ( aaf_fd ( pres , 100000.0f ) , 0.2f ) ) ;
+for ( int iter = 1 ;
+iter <= 100 ;
+++ iter ) {
+const float w1 = thompson_rslf ( pres , guess ) ;
+const float w2 = thompson_rslf ( pres , aaf_fa ( guess , 1.0f ) ) ;
+const float tenu = aaf_theta_e ( pres , guess , w1 , guess ) ;
+const float tenup = aaf_theta_e ( pres , aaf_fa ( guess , 1.0f ) , w2 , aaf_fa ( guess , 1.0f ) ) ;
+const float den = aaf_fs ( tenup , tenu ) ;
+if ( den == 0.0f ) break ;
+const float cor = aaf_fd ( aaf_fs ( thelcl , tenu ) , den ) ;
+guess = aaf_fa ( guess , cor ) ;
+if ( cor < 0.01f && - cor < 0.01f ) return guess ;
+}
+return aaf_fm ( aaf_theta_wetb ( thelcl ) , thompson_aa_powf ( aaf_fd ( pres , 100000.0f ) , 0.286f ) ) ;
+}
+
+static inline float thompson_aa_wrf_twet ( float pres , float temp , float qv ) {
+const float satw = aaf_fd ( qv , thompson_rslf ( pres , temp ) ) ;
+if ( ! ( satw < 0.999f ) ) return temp ;
+const float dew_t = aa_fminf ( aaf_fs ( temp , 0.001f ) , aaf_t_dew ( pres , qv ) ) ;
+const float Tlcl = aaf_t_lcl ( temp , dew_t ) ;
+const float The = aaf_theta_e ( pres , temp , qv , Tlcl ) ;
+return aa_fminf ( temp , aaf_compT_fr_The ( The , pres ) ) ;
+}
+
+static inline float thompson_aa_theta_e ( float pressure , float temperature , float mixing_ratio , float tlcl ) {
+const float rr = mixing_ratio + 1.0e-8f ;
+const float power = 0.2854f * ( 1.0f - 0.28f * rr ) ;
+const float dry_theta = temperature * thompson_aa_powf ( aa_div ( 100000.0f , pressure ) , power ) ;
+const float p1 = aa_div ( 3.376f , tlcl ) - 0.00254f ;
+const float p2 = rr * 1000.0f * ( 1.0f + 0.81f * rr ) ;
+return dry_theta * thompson_aa_expf ( p1 * p2 ) ;
+}
+
+static inline float thompson_aa_t_dew ( float pressure , float mixing_ratio ) {
+const float rr = mixing_ratio + 1.0e-8f ;
+const float esln = thompson_aa_logf ( aa_div ( pressure * rr , ( 0.622f + rr ) ) ) ;
+return aa_div ( ( 35.86f * esln - 4947.2325f ) , ( esln - 23.6837f ) ) ;
+}
+
+static inline float thompson_aa_t_lcl ( float temperature , float dewpoint ) {
+const float denominator = aa_div ( 1.0f , ( dewpoint - 56.0f ) ) + __fdiv_rn ( thompson_aa_logf ( aa_div ( temperature , dewpoint ) ) , 800.0f ) ;
+return aa_div ( 1.0f , denominator ) + 56.0f ;
+}
+
+static inline float thompson_aa_theta_wetb ( float theta_e ) {
+const Soft8 c [ 7 ] = {
+- SD8 ( 0x3ddbbdc662f6cbbcul ) , - SD8 ( 0x3e4fc5619ce33efdul ) , - SD8 ( 0x3ebd07e833dbb204ul ) , - SD8 ( 0x3f20a86ec98c5086ul ) , SD8 ( 0x3eb36fb6c22856e6ul ) , - SD8 ( 0x3e2e38d10dd467c4ul ) , SD8 ( 0x3d8f7046774fa371ul ) }
+;
+const Soft8 d [ 7 ] = {
+SD8 ( 0x0000000000000000ul ) , - SD8 ( 0x3df83496000e13b7ul ) , - SD8 ( 0x3e6ebc7db224cadcul ) , - SD8 ( 0x3ed87e636ac48256ul ) , SD8 ( 0x3e695d3ca4020994ul ) , - SD8 ( 0x3ddf2c040abc83f0ul ) , SD8 ( 0x3d3892535affcbeaul ) }
+;
+const float x = aa_fminf ( 475.0f , theta_e ) ;
+thread const Soft8 * coefficients = x <= 335.5f ? c : d ;
+const Soft8 xd = ( Soft8 ) x ;
+const Soft8 answer = coefficients [ 0 ] + xd * ( coefficients [ 1 ] + xd * ( coefficients [ 2 ] + xd * ( coefficients [ 3 ] + xd * ( coefficients [ 4 ] + xd * ( coefficients [ 5 ] + xd * coefficients [ 6 ] ) ) ) ) ) ;
+return ( float ) ( answer + SD8 ( 0x4071126666666666ul ) ) ;
+}
+
+static inline float thompson_aa_temperature_from_theta_e ( float theta_e_lcl , float pressure ) {
+float guess = ( theta_e_lcl - 0.5f * thompson_aa_powf ( aa_fmaxf ( theta_e_lcl - 270.0f , 0.0f ) , 1.05f ) ) * thompson_aa_powf ( __fdiv_rn ( pressure , 100000.0f ) , 0.2f ) ;
+for ( int iteration = 0 ;
+iteration < 100 ;
+++ iteration ) {
+const float w1 = thompson_rslf ( pressure , guess ) ;
+const float w2 = thompson_rslf ( pressure , guess + 1.0f ) ;
+const float tenu = thompson_aa_theta_e ( pressure , guess , w1 , guess ) ;
+const float tenup = thompson_aa_theta_e ( pressure , guess + 1.0f , w2 , guess + 1.0f ) ;
+const float denominator = tenup - tenu ;
+if ( fabs ( denominator ) < 1.0e-12f ) break ;
+const float correction = aa_div ( ( theta_e_lcl - tenu ) , denominator ) ;
+guess += correction ;
+if ( fabs ( correction ) < 0.01f ) return guess ;
+}
+return thompson_aa_theta_wetb ( theta_e_lcl ) * thompson_aa_powf ( __fdiv_rn ( pressure , 100000.0f ) , 0.286f ) ;
+}
+
+static inline float thompson_aa_wet_bulb_temperature ( float pressure , float temperature , float mixing_ratio ) {
+if ( aa_div ( mixing_ratio , thompson_rslf ( pressure , temperature ) ) >= 0.999f ) {
+return temperature ;
+}
+const float dewpoint = aa_fminf ( temperature - 0.001f , thompson_aa_t_dew ( pressure , mixing_ratio ) ) ;
+const float tlcl = thompson_aa_t_lcl ( temperature , dewpoint ) ;
+const float theta_e_lcl = thompson_aa_theta_e ( pressure , temperature , mixing_ratio , tlcl ) ;
+return aa_fminf ( temperature , thompson_aa_temperature_from_theta_e ( theta_e_lcl , pressure ) ) ;
+}
+
+struct ThompsonAaWarmRain {
+bool l_qc ;
+bool rain_active ;
+int nu_c ;
+float nc_m3 ;
+float mvd_c ;
+float xdc ;
+float nwfa_m3 ;
+float nifa_m3 ;
+float nr_m3 ;
+float mvd_r ;
+Soft8 lamc ;
+Soft8 lamr ;
+Soft8 n0_r ;
+Soft8 prr_wau ;
+Soft8 pnr_wau ;
+Soft8 pnc_wau ;
+Soft8 prr_rcw ;
+Soft8 pnc_rcw ;
+Soft8 pnr_rcr ;
+Soft8 pna_rca ;
+Soft8 pnd_rcd ;
+}
+;
+
+template < typename P_t_efrw , typename P_out > static inline void thompson_aa_warm_rain_rates ( float qc_v , float nc_entry_v , float qr_v , float nr_entry_v , float nwfa_entry_v , float nifa_entry_v , float rho , float temp_k , float rho_factor , float inverse_dt , P_t_efrw t_efrw , P_out out ) {
+const float pi = 3.1415926536f ;
+const float am_r = 5.235988159e+02f ;
+const float tempc = temp_k - 273.15f ;
+const float cloud_mass = aa_fmaxf ( 0.0f , qc_v * rho ) ;
+const float rain_mass = aa_fmaxf ( 0.0f , qr_v * rho ) ;
+out -> l_qc = qc_v > 1.0e-12f ;
+out -> nu_c = 0 ;
+out -> lamc = SD8 ( 0x0000000000000000ul ) ;
+out -> xdc = 0.0f ;
+out -> mvd_c = 1.0e-6f ;
+out -> nc_m3 = 2.0f ;
+out -> prr_wau = SD8 ( 0x0000000000000000ul ) ;
+out -> pnr_wau = SD8 ( 0x0000000000000000ul ) ;
+out -> pnc_wau = SD8 ( 0x0000000000000000ul ) ;
+out -> prr_rcw = SD8 ( 0x0000000000000000ul ) ;
+out -> pnc_rcw = SD8 ( 0x0000000000000000ul ) ;
+out -> pnr_rcr = SD8 ( 0x0000000000000000ul ) ;
+out -> pna_rca = SD8 ( 0x0000000000000000ul ) ;
+out -> pnd_rcd = SD8 ( 0x0000000000000000ul ) ;
+out -> nwfa_m3 = thompson_aa_clamp_nwfa ( nwfa_entry_v * rho ) ;
+out -> nifa_m3 = thompson_aa_clamp_nifa ( nifa_entry_v * rho ) ;
+if ( out -> l_qc ) {
+int entry_nu_c = 0 ;
+Soft8 entry_lamc = SD8 ( 0x0000000000000000ul ) ;
+out -> nc_m3 = thompson_aa_cloud_dist ( cloud_mass , nc_entry_v , rho , & entry_nu_c , & entry_lamc ) ;
+( void ) entry_nu_c ;
+( void ) entry_lamc ;
+out -> nu_c = thompson_aa_nu_c_working ( out -> nc_m3 ) ;
+out -> xdc = aa_fmaxf ( 1.0e-6f * 1.0e6f , thompson_aa_mul ( thompson_aa_powf ( thompson_aa_div ( cloud_mass , thompson_aa_mul ( am_r , out -> nc_m3 ) ) , 3.333333433e-01f ) , 1.0e6f ) ) ;
+out -> lamc = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( out -> nc_m3 , am_r ) , THOMPSON_AA_CCG2 [ out -> nu_c ] ) , THOMPSON_AA_OCG1 [ out -> nu_c ] ) , cloud_mass ) , 3.333333433e-01f ) ;
+float mvd_c = ( float ) ( aa_div ( ( Soft8 ) ( ( 3.0f + ( float ) out -> nu_c ) + 0.672f ) , out -> lamc ) ) ;
+out -> mvd_c = aa_fmaxf ( 1.0e-6f , aa_fminf ( mvd_c , 50.0e-6f ) ) ;
+}
+float rain_number ;
+Soft8 rain_lambda ;
+float rain_mvd ;
+Soft8 rain_n0 ;
+out -> rain_active = thompson_aa_entry_rain_distribution ( qr_v , nr_entry_v , rho , & rain_number , & rain_lambda , & rain_mvd , & rain_n0 ) ;
+out -> nr_m3 = rain_number ;
+out -> lamr = rain_lambda ;
+out -> mvd_r = rain_mvd ;
+out -> n0_r = rain_n0 ;
+if ( cloud_mass > 0.01e-3f ) {
+const int nu_c = out -> nu_c ;
+const float xdc = out -> xdc ;
+const float dcg = ( float ) ( aa_div ( ( Soft8 ) thompson_aa_powf ( thompson_aa_mul ( THOMPSON_AA_CCG3 [ nu_c ] , THOMPSON_AA_OCG2 [ nu_c ] ) , 3.333333433e-01f ) , out -> lamc ) * SD8 ( 0x412e848000000000ul ) ) ;
+const float xdc3 = thompson_aa_mul ( thompson_aa_mul ( xdc , xdc ) , xdc ) ;
+const float dcb_arg = thompson_aa_sub ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( xdc3 , dcg ) , dcg ) , dcg ) , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( xdc3 , xdc ) , xdc ) , xdc ) ) ;
+const float dcb = thompson_aa_powf ( aa_fmaxf ( 0.0f , dcb_arg ) , aa_div ( 1.0f , 6.0f ) ) ;
+const float zeta_term = thompson_aa_sub ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 6.25e-6f , xdc ) , dcb ) , dcb ) , dcb ) , 0.4f ) ;
+const float zeta1 = thompson_aa_mul ( 0.5f , thompson_aa_add ( zeta_term , fabs ( zeta_term ) ) ) ;
+const float zeta = thompson_aa_mul ( thompson_aa_mul ( 0.027f , cloud_mass ) , zeta1 ) ;
+const float tau_diameter = thompson_aa_sub ( thompson_aa_mul ( 0.5f , dcb ) , 7.5f ) ;
+const float taud = thompson_aa_add ( thompson_aa_mul ( 0.5f , thompson_aa_add ( tau_diameter , fabs ( tau_diameter ) ) ) , 1.0e-12f ) ;
+const float tau = thompson_aa_div ( 3.72f , thompson_aa_mul ( cloud_mass , taud ) ) ;
+out -> prr_wau = fmin ( ( Soft8 ) ( cloud_mass * inverse_dt ) , ( Soft8 ) thompson_aa_div ( zeta , tau ) ) ;
+out -> pnr_wau = aa_div ( out -> prr_wau , ( Soft8 ) thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( am_r , ( float ) nu_c ) , 10.0f ) , 50.0e-6f ) , 50.0e-6f ) , 50.0e-6f ) ) ;
+out -> pnc_wau = fmin ( ( Soft8 ) ( out -> nc_m3 * inverse_dt ) , aa_div ( out -> prr_wau , ( Soft8 ) thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( am_r , out -> mvd_c ) , out -> mvd_c ) , out -> mvd_c ) ) ) ;
+}
+if ( ! out -> rain_active ) return ;
+if ( rain_mvd > 50.0e-6f ) {
+const float efficiency = 1.0f - thompson_aa_expf ( 2300.0f * ( rain_mvd - 1950.0e-6f ) ) ;
+out -> pnr_rcr = ( Soft8 ) ( efficiency * 2.0f * rain_number * rain_mass ) ;
+}
+if ( ! ( rain_mvd > 50.0e-6f ) ) return ;
+const Soft8 fall_kernel = thompson_aa_pow ( thompson_aa_rain_lambda_reformed ( rain_lambda ) + SD8 ( 0x4068600000000000ul ) , - SD8 ( 0x4010000000000000ul ) ) ;
+const float t1_qr_qc = pi * 0.25f * 4854.0f * 6.0f ;
+if ( out -> l_qc && out -> mvd_c > 1.0e-6f ) {
+const Soft8 first = SD8 ( 0x3f0ad333f9742941ul ) ;
+const Soft8 last = SD8 ( 0x3f740389985ae9dbul ) ;
+int rain_bin = 1 + ( int ) ( aa_div ( SD8 ( 0x4059000000000000ul ) * thompson_aa_log ( aa_div ( ( Soft8 ) rain_mvd , first ) ) , thompson_aa_log ( aa_div ( last , first ) ) ) ) ;
+rain_bin = min ( rain_bin , 100 ) ;
+const int cloud_bin = ( int ) ( out -> mvd_c * 1.0e6f ) ;
+const float efficiency = ( float ) t_efrw [ ( rain_bin - 1 ) + 100 * ( cloud_bin - 1 ) ] ;
+out -> prr_rcw = fmin ( ( Soft8 ) ( cloud_mass * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qr_qc * efficiency * cloud_mass ) * rain_n0 * fall_kernel ) ;
+out -> pnc_rcw = fmin ( ( Soft8 ) ( out -> nc_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qr_qc * efficiency * out -> nc_m3 ) * rain_n0 * fall_kernel ) ;
+}
+const float visco = ( tempc >= 0.0f ) ? ( 1.718f + 0.0049f * tempc ) * 1.0e-5f : ( 1.718f + 0.0049f * tempc - 1.2e-5f * tempc * tempc ) * 1.0e-5f ;
+const float ef_ccn = thompson_aa_eff_aero ( rain_mvd , 0.04e-6f , visco , rho , temp_k , 0 ) ;
+out -> pna_rca = fmin ( ( Soft8 ) ( out -> nwfa_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qr_qc * ef_ccn * out -> nwfa_m3 ) * rain_n0 * fall_kernel ) ;
+const float ef_in = thompson_aa_eff_aero ( rain_mvd , 0.8e-6f , visco , rho , temp_k , 0 ) ;
+out -> pnd_rcd = fmin ( ( Soft8 ) ( out -> nifa_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qr_qc * ef_in * out -> nifa_m3 ) * rain_n0 * fall_kernel ) ;
+}
+
+static inline float thompson_aa_log10f_cr ( float x ) {
+return thompson_aa_log10f ( x ) ;
+}
+
+static inline float thompson_aa_graupel_number_from_lambda ( float graupel_mass , Soft8 lamg , float am_g ) {
+return ( float ) ( aa_div ( ( Soft8 ) thompson_aa_mul ( ( aa_div ( 1.0f , 6.0f ) ) , graupel_mass ) * thompson_aa_pow ( lamg , SD8 ( 0x4008000000000000ul ) ) , ( Soft8 ) am_g ) ) ;
+}
+
+struct ThompsonAaFrozen {
+bool l_qs ;
+bool l_qg ;
+float rs ;
+float rg ;
+float smob ;
+float smo0 ;
+float smo1 ;
+float smoc ;
+float smoe ;
+float smof ;
+float xds ;
+float ng_m3 ;
+float mvd_g ;
+float xdg ;
+float vtg ;
+float stoke_g ;
+float ef_sw ;
+float ef_gw ;
+Soft8 lamg ;
+Soft8 ilamg ;
+Soft8 n0_g ;
+Soft8 prs_scw ;
+Soft8 pnc_scw ;
+Soft8 prg_gcw ;
+Soft8 pnc_gcw ;
+Soft8 pna_sca ;
+Soft8 pnd_scd ;
+Soft8 pna_gca ;
+Soft8 pnd_gcd ;
+}
+;
+
+template < typename P_snow_cloud_efficiency , typename P_out > static inline void thompson_aa_frozen_collect_rates ( float qs_v , float qg_v , float graupel_number_per_kg_v , bool l_qc , float cloud_mass , float cloud_number , float cloud_mvd , float nwfa_m3 , float nifa_m3 , float rho , float temp_k , float wet_bulb , float rho_factor , float inverse_dt , P_snow_cloud_efficiency snow_cloud_efficiency , P_out out ) {
+const float pi = 3.1415926536f ;
+const float am_g = aa_div ( pi * 400.0f , 6.0f ) ;
+const float tempc = temp_k - 273.15f ;
+const float t1_qs_qc = pi * 0.25f * 40.0f ;
+const float t1_qg_qc = pi * 0.25f * 442.0f * 5.23476267f ;
+out -> l_qs = qs_v > 1.0e-12f ;
+out -> l_qg = qg_v > 1.0e-12f ;
+const float snow_mass = out -> l_qs ? aa_fmaxf ( 0.0f , qs_v * rho ) : 1.0e-12f ;
+const float graupel_mass = out -> l_qg ? aa_fmaxf ( 0.0f , qg_v * rho ) : 1.0e-12f ;
+out -> rs = snow_mass ;
+out -> rg = graupel_mass ;
+out -> smob = 0.0f ;
+out -> smo0 = 0.0f ;
+out -> smo1 = 0.0f ;
+out -> smoc = 0.0f ;
+out -> smoe = 0.0f ;
+out -> smof = 0.0f ;
+out -> xds = 0.0f ;
+out -> ng_m3 = 0.0f ;
+out -> mvd_g = 0.0f ;
+out -> xdg = 0.0f ;
+out -> vtg = 0.0f ;
+out -> stoke_g = 0.0f ;
+out -> ef_sw = 0.0f ;
+out -> ef_gw = 0.0f ;
+out -> lamg = SD8 ( 0x3ff0000000000000ul ) ;
+out -> ilamg = SD8 ( 0x3ff0000000000000ul ) ;
+out -> n0_g = SD8 ( 0x0000000000000000ul ) ;
+out -> prs_scw = SD8 ( 0x0000000000000000ul ) ;
+out -> pnc_scw = SD8 ( 0x0000000000000000ul ) ;
+out -> prg_gcw = SD8 ( 0x0000000000000000ul ) ;
+out -> pnc_gcw = SD8 ( 0x0000000000000000ul ) ;
+out -> pna_sca = SD8 ( 0x0000000000000000ul ) ;
+out -> pnd_scd = SD8 ( 0x0000000000000000ul ) ;
+out -> pna_gca = SD8 ( 0x0000000000000000ul ) ;
+out -> pnd_gcd = SD8 ( 0x0000000000000000ul ) ;
+if ( out -> l_qs ) {
+const float tc0 = aa_fminf ( - 0.1f , tempc ) ;
+out -> smob = snow_mass * ( aa_div ( 1.0f , 0.069f ) ) ;
+out -> smo0 = thompson_field_a ( tc0 , 0.0f ) * thompson_aa_powf ( out -> smob , thompson_field_b ( tc0 , 0.0f ) ) ;
+out -> smo1 = thompson_field_a ( tc0 , 1.0f ) * thompson_aa_powf ( out -> smob , thompson_field_b ( tc0 , 1.0f ) ) ;
+out -> smof = thompson_field_a ( tc0 , 1.775f ) * thompson_aa_powf ( out -> smob , thompson_field_b ( tc0 , 1.775f ) ) ;
+out -> smoc = thompson_field_a ( tc0 , 3.0f ) * thompson_aa_powf ( out -> smob , thompson_field_b ( tc0 , 3.0f ) ) ;
+out -> smoe = thompson_field_a ( tc0 , 2.55f ) * thompson_aa_powf ( out -> smob , thompson_field_b ( tc0 , 2.55f ) ) ;
+out -> xds = aa_div ( out -> smoc , out -> smob ) ;
+}
+float ng = 1.0e-6f ;
+if ( out -> l_qg ) {
+ng = aa_fmaxf ( 1.0e-6f , graupel_number_per_kg_v * rho ) ;
+Soft8 lamg ;
+if ( ng <= 1.0e-6f ) {
+out -> mvd_g = 1.5e-3f ;
+lamg = ( Soft8 ) ( aa_div ( ( ( 3.0f + 0.0f ) + 0.672f ) , out -> mvd_g ) ) ;
+ng = thompson_aa_graupel_number_from_lambda ( graupel_mass , lamg , am_g ) ;
+}
+lamg = ( Soft8 ) thompson_aa_powf ( aa_div ( am_g * 6.0f * ng , graupel_mass ) , aa_div ( 1.0f , 3.0f ) ) ;
+out -> mvd_g = ( float ) ( aa_div ( ( ( Soft8 ) ( ( 3.0f + 0.0f ) + 0.672f ) ) , lamg ) ) ;
+if ( out -> mvd_g > 25.4e-3f ) {
+out -> mvd_g = 25.4e-3f ;
+lamg = ( Soft8 ) ( aa_div ( ( ( 3.0f + 0.0f ) + 0.672f ) , out -> mvd_g ) ) ;
+ng = thompson_aa_graupel_number_from_lambda ( graupel_mass , lamg , am_g ) ;
+}
+else if ( out -> mvd_g < 50.0e-6f ) {
+out -> mvd_g = 50.0e-6f ;
+lamg = ( Soft8 ) ( aa_div ( ( ( 3.0f + 0.0f ) + 0.672f ) , out -> mvd_g ) ) ;
+ng = thompson_aa_graupel_number_from_lambda ( graupel_mass , lamg , am_g ) ;
+}
+}
+out -> ng_m3 = ng ;
+{
+const Soft8 lamg_final = ( Soft8 ) thompson_aa_powf ( aa_div ( am_g * 6.0f * ng , graupel_mass ) , aa_div ( 1.0f , 3.0f ) ) ;
+out -> lamg = lamg_final ;
+out -> ilamg = aa_div ( SD8 ( 0x3ff0000000000000ul ) , lamg_final ) ;
+out -> n0_g = ( Soft8 ) ng * lamg_final ;
+}
+const float viscosity_aero = ( tempc >= 0.0f ) ? ( 1.718f + 0.0049f * tempc ) * 1.0e-5f : ( 1.718f + 0.0049f * tempc - 1.2e-5f * tempc * tempc ) * 1.0e-5f ;
+const float snow_d0 = 300.0e-6f ;
+const Soft8 snow_d0_d = SD8 ( 0x3f33a92a30553261ul ) ;
+const float frozen_first = 1.0e-6f ;
+if ( l_qc && cloud_mvd > 1.0e-6f ) {
+if ( out -> xds > snow_d0 ) {
+const Soft8 diameter_ratio = aa_div ( SD8 ( 0x3f947ae147ae147bul ) , snow_d0_d ) ;
+const Soft8 log_ratio = thompson_aa_log ( diameter_ratio ) ;
+const Soft8 first = snow_d0_d * thompson_aa_exp ( aa_div ( SD8 ( 0x3fe0000000000000ul ) , SD8 ( 0x4059000000000000ul ) ) * log_ratio ) ;
+const Soft8 last = snow_d0_d * thompson_aa_exp ( aa_div ( SD8 ( 0x4058e00000000000ul ) , SD8 ( 0x4059000000000000ul ) ) * log_ratio ) ;
+int snow_bin = 1 + ( int ) ( aa_div ( SD8 ( 0x4059000000000000ul ) * thompson_aa_log ( aa_div ( ( Soft8 ) out -> xds , first ) ) , thompson_aa_log ( aa_div ( last , first ) ) ) ) ;
+snow_bin = max ( 1 , min ( snow_bin , 100 ) ) ;
+const int cloud_bin = max ( 1 , min ( ( int ) ( cloud_mvd * 1.0e6f ) , 100 ) ) ;
+out -> ef_sw = ( float ) snow_cloud_efficiency [ ( snow_bin - 1 ) + 100 * ( cloud_bin - 1 ) ] ;
+out -> prs_scw = fmin ( ( Soft8 ) ( cloud_mass * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qs_qc * out -> ef_sw * cloud_mass * out -> smoe ) ) ;
+out -> pnc_scw = fmin ( ( Soft8 ) ( cloud_number * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qs_qc * out -> ef_sw * cloud_number * out -> smoe ) ) ;
+}
+if ( graupel_mass >= frozen_first ) {
+out -> xdg = ( float ) ( SD8 ( 0x4010000000000000ul ) * out -> ilamg ) ;
+out -> vtg = ( float ) ( ( Soft8 ) ( rho_factor * 442.0f * 20.3632278f * ( aa_div ( 1.0f , 6.0f ) ) ) * thompson_aa_pow ( out -> ilamg , ( ( Soft8 ) ( 0.0f + 0.89f ) ) ) ) ;
+out -> stoke_g = aa_div ( cloud_mvd * cloud_mvd * out -> vtg * 1000.0f , ( 9.0f * viscosity_aero * out -> xdg ) ) ;
+float efficiency = 0.0f ;
+if ( out -> stoke_g >= 0.4f && out -> stoke_g <= 10.0f ) {
+efficiency = thompson_aa_mul ( 0.55f , thompson_aa_log10f_cr ( thompson_aa_mul ( 2.51f , out -> stoke_g ) ) ) ;
+}
+else if ( out -> stoke_g > 10.0f ) {
+efficiency = 0.77f ;
+}
+if ( wet_bulb > 273.15f ) efficiency *= 0.1f ;
+out -> ef_gw = efficiency ;
+const Soft8 fall_kernel = thompson_aa_pow ( out -> ilamg , ( ( Soft8 ) ( ( 0.0f + 0.89f ) + 3.0f ) ) ) ;
+out -> prg_gcw = ( Soft8 ) ( rho_factor * t1_qg_qc * efficiency * cloud_mass ) * out -> n0_g * fall_kernel ;
+out -> pnc_gcw = fmin ( ( Soft8 ) ( cloud_number * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qg_qc * efficiency * cloud_number ) * out -> n0_g * fall_kernel ) ;
+}
+}
+if ( snow_mass > frozen_first ) {
+const float ef_ccn = thompson_aa_eff_aero ( out -> xds , 0.04e-6f , viscosity_aero , rho , temp_k , 1 ) ;
+out -> pna_sca = fmin ( ( Soft8 ) ( nwfa_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qs_qc * ef_ccn * nwfa_m3 * out -> smoe ) ) ;
+const float ef_in = thompson_aa_eff_aero ( out -> xds , 0.8e-6f , viscosity_aero , rho , temp_k , 1 ) ;
+out -> pnd_scd = fmin ( ( Soft8 ) ( nifa_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qs_qc * ef_in * nifa_m3 * out -> smoe ) ) ;
+}
+if ( graupel_mass > frozen_first ) {
+out -> xdg = ( float ) ( SD8 ( 0x4010000000000000ul ) * out -> ilamg ) ;
+const Soft8 fall_kernel = thompson_aa_pow ( out -> ilamg , ( ( Soft8 ) ( ( 0.0f + 0.89f ) + 3.0f ) ) ) ;
+const float ef_ccn = thompson_aa_eff_aero ( out -> xdg , 0.04e-6f , viscosity_aero , rho , temp_k , 2 ) ;
+out -> pna_gca = fmin ( ( Soft8 ) ( nwfa_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qg_qc * ef_ccn * nwfa_m3 ) * out -> n0_g * fall_kernel ) ;
+const float ef_in = thompson_aa_eff_aero ( out -> xdg , 0.8e-6f , viscosity_aero , rho , temp_k , 2 ) ;
+out -> pnd_gcd = fmin ( ( Soft8 ) ( nifa_m3 * inverse_dt ) , ( Soft8 ) ( rho_factor * t1_qg_qc * ef_in * nifa_m3 ) * out -> n0_g * fall_kernel ) ;
+}
+}
+
+template < typename P_qc , typename P_qr , typename P_nr , typename P_qs , typename P_qg , typename P_graupel_number_per_kg , typename P_graupel_melt_marker , typename P_snow_melt_marker , typename P_temperature , typename P_pressure , typename P_qv , typename P_nc_entry , typename P_nwfa_entry , typename P_nifa_entry , typename P_ncten , typename P_nwfaten , typename P_nifaten , typename P_t_Efrw , typename P_T , typename P_qcten , typename P_qrten , typename P_nrten , typename P_qvten_acc , typename P_tten_acc , typename P_qsten_acc , typename P_qgten_acc , typename P_ngten_acc > static inline void thompson_aa_warm_level_wrf461 ( int idx , P_qc qc , P_qr qr , P_nr nr , P_qs qs , P_qg qg , P_graupel_number_per_kg graupel_number_per_kg , P_graupel_melt_marker graupel_melt_marker , P_snow_melt_marker snow_melt_marker , P_temperature temperature , P_pressure pressure , P_qv qv , P_nc_entry nc_entry , P_nwfa_entry nwfa_entry , P_nifa_entry nifa_entry , P_ncten ncten , P_nwfaten nwfaten , P_nifaten nifaten , P_t_Efrw t_Efrw , P_T T , P_qcten qcten , P_qrten qrten , P_nrten nrten , P_qvten_acc qvten_acc , P_tten_acc tten_acc , P_qsten_acc qsten_acc , P_qgten_acc qgten_acc , P_ngten_acc ngten_acc , bool twet_reformed , float dt ) {
+const float odts = aaf_fd ( 1.0f , dt ) ;
+const float qc1d = qc [ idx ] > 1.0e-12f ? qc [ idx ] : 0.0f ;
+const float qr1d = qr [ idx ] > 1.0e-12f ? qr [ idx ] : 0.0f ;
+const float nr1d = qr [ idx ] > 1.0e-12f ? nr [ idx ] : 0.0f ;
+const float qs1d = qs [ idx ] > 1.0e-12f ? qs [ idx ] : 0.0f ;
+const float qg1d = qg [ idx ] > 1.0e-12f ? qg [ idx ] : 0.0f ;
+const float ng1d = qg [ idx ] > 1.0e-12f ? graupel_number_per_kg [ idx ] : 0.0f ;
+ThompsonAaLevel L ;
+thompson_aa_wrf_zero_rates ( & L ) ;
+thompson_aa_wrf_entry ( & L , temperature [ idx ] , pressure [ idx ] , qv [ idx ] , qc [ idx ] , nc_entry [ idx ] , 0.0f , 0.0f , qr [ idx ] , nr [ idx ] , qs [ idx ] , qg [ idx ] , graupel_number_per_kg [ idx ] , nwfa_entry [ idx ] , nifa_entry [ idx ] ) ;
+thompson_aa_wrf_level_state ( & L , twet_reformed ? thompson_aa_wrf_twet ( L . pres , L . temp , L . qv ) : L . temp ) ;
+thompson_aa_wrf_warm_loop ( & L , odts , t_Efrw ) ;
+thompson_aa_wrf_frozen_block ( & L , dt , odts , T ) ;
+thompson_aa_wrf_conserve ( & L , odts ) ;
+snow_melt_marker [ idx ] = L . prr_sml > SD8 ( 0x0000000000000000ul ) ? 1.0f : 0.0f ;
+graupel_melt_marker [ idx ] = L . prr_gml > SD8 ( 0x0000000000000000ul ) ? 1.0f : 0.0f ;
+const float orho = L . orho ;
+const Soft8 dorho = ( Soft8 ) orho ;
+nwfaten [ idx ] = ( float ) aaf_ds ( ( Soft8 ) nwfaten [ idx ] , aaf_dm ( aaf_da ( aaf_da ( aaf_da ( L . pna_rca , L . pna_sca ) , L . pna_gca ) , L . pni_iha ) , dorho ) ) ;
+nifaten [ idx ] = ( float ) aaf_ds ( ( Soft8 ) nifaten [ idx ] , aaf_dm ( aaf_da ( aaf_da ( L . pnd_rcd , L . pnd_scd ) , L . pnd_gcd ) , dorho ) ) ;
+nifaten [ idx ] = ( float ) aaf_ds ( ( Soft8 ) nifaten [ idx ] , aaf_dm ( L . pni_inu , dorho ) ) ;
+const Soft8 qv_rate = aaf_dm ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( - L . pri_inu , L . pri_iha ) , L . pri_ide ) , L . prs_ide ) , L . prs_sde ) , L . prg_gde ) , dorho ) ;
+const Soft8 qc_rate = aaf_dm ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( - L . prr_wau , L . pri_wfz ) , L . prr_rcw ) , L . prs_scw ) , L . prg_scw ) , L . prg_gcw ) , dorho ) ;
+if ( qcten != nullptr ) {
+qcten [ idx ] = ( float ) aaf_da ( ( Soft8 ) qcten [ idx ] , qc_rate ) ;
+}
+else {
+qc [ idx ] = aa_fmaxf ( 0.0f , aaf_fa ( qc1d , aaf_fm ( ( float ) qc_rate , dt ) ) ) ;
+}
+ncten [ idx ] = ( float ) aaf_da ( ( Soft8 ) ncten [ idx ] , aaf_dm ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_ds ( - L . pnc_wau , L . pnc_rcw ) , L . pni_wfz ) , L . pnc_scw ) , L . pnc_gcw ) , dorho ) ) ;
+const Soft8 qr_rate = aaf_dm ( aaf_ds ( aaf_ds ( aaf_ds ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( L . prr_wau , L . prr_rcw ) , L . prr_sml ) , L . prr_gml ) , L . prr_rcs ) , L . prr_rcg ) , L . prg_rfz ) , L . pri_rfz ) , L . prr_rci ) , dorho ) ;
+const Soft8 nr_rate = aaf_dm ( aaf_ds ( aaf_da ( aaf_da ( L . pnr_wau , L . pnr_sml ) , L . pnr_gml ) , aaf_da ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( L . pnr_rfz , L . pnr_rcr ) , L . pnr_rcg ) , L . pnr_rcs ) , L . pnr_rci ) , L . pni_rfz ) ) , dorho ) ;
+if ( nrten != nullptr ) {
+qrten [ idx ] = ( float ) aaf_da ( ( Soft8 ) qrten [ idx ] , qr_rate ) ;
+nrten [ idx ] = ( float ) aaf_da ( ( Soft8 ) nrten [ idx ] , nr_rate ) ;
+float rain_mass_tendency = qrten [ idx ] ;
+float rain_number_tendency = nrten [ idx ] ;
+thompson_aa_rain_balance_tendency ( qr1d , nr1d , & rain_mass_tendency , & rain_number_tendency , L . rho , orho , odts , dt ) ;
+qrten [ idx ] = rain_mass_tendency ;
+nrten [ idx ] = rain_number_tendency ;
+}
+else {
+float qrten_l = ( float ) qr_rate ;
+float nrten_l = ( float ) nr_rate ;
+thompson_aa_rain_balance_tendency ( qr1d , nr1d , & qrten_l , & nrten_l , L . rho , orho , odts , dt ) ;
+qr [ idx ] = aa_fmaxf ( 0.0f , aaf_fa ( qr1d , aaf_fm ( qrten_l , dt ) ) ) ;
+nr [ idx ] = aa_fmaxf ( 0.0f , aaf_fa ( nr1d , aaf_fm ( nrten_l , dt ) ) ) ;
+}
+const bool accumulate_frozen = qsten_acc != nullptr ;
+const float qsten = ( float ) aaf_da ( ( Soft8 ) ( accumulate_frozen ? qsten_acc [ idx ] : 0.0f ) , aaf_dm ( aaf_ds ( aaf_ds ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( L . prs_iau , L . prs_sde ) , L . prs_sci ) , L . prs_scw ) , L . prs_rcs ) , L . prs_ide ) , L . prs_ihm ) , L . prr_sml ) , dorho ) ) ;
+float qgten = ( float ) aaf_da ( ( Soft8 ) ( accumulate_frozen ? qgten_acc [ idx ] : 0.0f ) , aaf_dm ( aaf_ds ( aaf_ds ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( aaf_da ( L . prg_scw , L . prg_rfz ) , L . prg_gde ) , L . prg_rcg ) , L . prg_gcw ) , L . prg_rci ) , L . prg_rcs ) , L . prg_ihm ) , L . prr_gml ) , dorho ) ) ;
+float ngten = ( float ) aaf_da ( ( Soft8 ) ( accumulate_frozen ? ngten_acc [ idx ] : 0.0f ) , aaf_dm ( aaf_ds ( aaf_da ( aaf_da ( aaf_da ( aaf_ds ( aaf_da ( L . png_scw , L . pnr_rfz ) , L . png_rcg ) , L . pnr_rci ) , L . png_rcs ) , L . png_gde ) , L . pnr_gml ) , dorho ) ) ;
+{
+const float xrg = aa_fmaxf ( 1.0e-12f , aaf_fm ( aaf_fa ( qg1d , aaf_fm ( qgten , dt ) ) , L . rho ) ) ;
+const float xng = aa_fmaxf ( 1.0e-6f , aaf_fm ( aaf_fa ( ng1d , aaf_fm ( ngten , dt ) ) , L . rho ) ) ;
+if ( xrg > 1.0e-12f ) {
+const Soft8 lamg = ( Soft8 ) thompson_aa_powf ( aaf_fd ( aaf_fm ( aaf_fm ( aaf_fm ( ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) , 6.0f ) , 1.0f ) , xng ) , xrg ) , 0.3333333432674408f ) ;
+const float mvd_g = ( float ) aaf_dd ( ( Soft8 ) ( ( 3.0f + 0.0f ) + 0.672f ) , lamg ) ;
+float bound = 0.0f ;
+if ( mvd_g > 25.4e-3f ) {
+bound = 25.4e-3f ;
+}
+else if ( mvd_g < 50.0e-6f ) {
+bound = 50.0e-6f ;
+}
+if ( bound != 0.0f ) {
+const Soft8 lb = ( Soft8 ) aaf_fd ( ( ( 3.0f + 0.0f ) + 0.672f ) , bound ) ;
+const float xng_b = ( float ) aaf_dd ( aaf_dm ( ( Soft8 ) aaf_fm ( aaf_fm ( 1.0f , 0.1666666716337204f ) , xrg ) , thompson_aa_pow ( lb , SD8 ( 0x4008000000000000ul ) ) ) , ( Soft8 ) ( aa_div ( 3.1415926536f * 400.0f , 6.0f ) ) ) ;
+ngten = aaf_fm ( aaf_fm ( aaf_fs ( xng_b , aaf_fm ( ng1d , L . rho ) ) , odts ) , orho ) ;
+}
+}
+else {
+qgten = aaf_fm ( - qg1d , odts ) ;
+ngten = aaf_fm ( - ng1d , odts ) ;
+}
+}
+if ( accumulate_frozen ) {
+qsten_acc [ idx ] = qsten ;
+qgten_acc [ idx ] = qgten ;
+ngten_acc [ idx ] = ngten ;
+}
+else {
+qs [ idx ] = aaf_fa ( qs1d , aaf_fm ( qsten , dt ) ) ;
+qg [ idx ] = aaf_fa ( qg1d , aaf_fm ( qgten , dt ) ) ;
+graupel_number_per_kg [ idx ] = aaf_fa ( ng1d , aaf_fm ( ngten , dt ) ) ;
+}
+const Soft8 t_rate = aaf_dm ( aaf_dm ( aaf_da ( aaf_dm ( ( Soft8 ) aaf_fm ( 334000.0f , L . ocp ) , aaf_ds ( aaf_ds ( aaf_ds ( - L . prr_sml , L . prr_gml ) , L . prr_rcg ) , L . prr_rcs ) ) , aaf_dm ( ( Soft8 ) aaf_fm ( 2.834e6f , L . ocp ) , aaf_da ( L . prs_sde , L . prg_gde ) ) ) , dorho ) , SD8 ( 0x3ff0000000000000ul ) ) ;
+thompson_aa_wrf_apply_vapor_heat ( idx , L . temp , qv , temperature , qvten_acc , tten_acc , qv_rate , t_rate , dt ) ;
+}
+
+}

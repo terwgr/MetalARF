@@ -112,9 +112,12 @@ def verify_geog_source_evidence(receipt: dict[str, object]) -> None:
             ci0, cj0 = math.floor(window[0]), math.floor(window[1])
             cni = math.ceil(window[0] + target.nx - 1) - ci0 + 1
             cnj = math.ceil(window[1] + target.ny - 1) - cj0 + 1
+            methods = {name: row.sampling_map[value] for name, value in fields.items()}
             expected_sampling = {
                 "mode": "fractional-same-spacing",
-                "methods": {name: row.sampling_map[value] for name, value in fields.items()},
+                "methods": methods,
+                **({"mask": row.sampling_mask}
+                   if "bilinear-masked" in methods.values() else {}),
                 "source_coordinate_window": {"i0": ci0, "j0": cj0, "ni": cni, "nj": cnj},
             }
             if applied.get("sampling") != expected_sampling:
@@ -125,6 +128,12 @@ def verify_geog_source_evidence(receipt: dict[str, object]) -> None:
     geog_fields = tuple(name for name in (*_GEOG_FIELDS, *(
         ("lake_depth",) if "LAKE_DEPTH" in receipt.get("array_sha256", {}) else ()))
         if not _SOURCE_OUTPUTS[name] <= taken)
+    # Terrain-drag statistics (gwd_opt, topo_wind) carry one coverage record
+    # each, keyed "orographic:<geo_em name>" by woof.static.orographic.
+    from woof.static.orographic import OROGRAPHIC_ROWS
+    geog_fields += tuple(
+        f"orographic:{name}" for name in OROGRAPHIC_ROWS
+        if name in receipt.get("array_sha256", {}) and name not in taken)
     if set(coverage) - {"static_source"} != set(geog_fields):
         raise ValueError(
             "root static GEOG source-coverage fields mismatch: expected "
@@ -138,7 +147,7 @@ def verify_geog_source_evidence(receipt: dict[str, object]) -> None:
                 f"root static GEOG coverage for {field!r} is not a mapping")
         if (evidence.get("schema") != "gpuwm-geog-source-coverage-v1"
                 or evidence.get("status") != "PASS"
-                or evidence.get("field") != field):
+                or evidence.get("field") != field.removeprefix("orographic:")):
             raise ValueError(
                 f"root static GEOG coverage for {field!r} is not PASS")
         required = evidence.get("required_cells")
@@ -400,7 +409,7 @@ def verified_static_catalog(
                 observed.add(index)
                 files.append(SimpleNamespace(role="geog_index", path=index))
         selections[f"d{int(grid_id):02d}"] = selected
-    catalog = SimpleNamespace(files=tuple(files))
+    catalog = SimpleNamespace(files=tuple(files), geog_root=geog_root)
     receipt = {
         "schema": "gpuwm-native-hrrr-static-catalog-v1",
         "status": "PASS",

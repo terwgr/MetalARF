@@ -80,6 +80,7 @@ from woof.mapped_source import (_array_sha256, _decode_mapped_source_python,
                                  libm_dependent_fields)
 from woof.source_frame import (PORTABLE_HEADER_RULE,
                                 portable_frame_header_sha256)
+from _reserved_drives import gauntlet_staging_root
 
 
 ROOT = Path(__file__).parents[1]
@@ -87,10 +88,9 @@ AUTHORITIES = ROOT / "woof" / "authorities"
 CONFIGS = ROOT / "configs"
 FIXTURES = ROOT / "tests" / "fixtures"
 GOLDENS = ROOT / "tests" / "data" / "mapped_engine_goldens"
-STAGING = Path(os.environ.get(
-    "GPUWM_MODEL_GAUNTLET_STAGING",
-    str(Path.home() / "gpuwm-model-gauntlet-staging"),
-))
+#: The staging root, never one on or linked onto a reserved drive
+#: (tests/_reserved_drives.py names the breakage).
+STAGING = gauntlet_staging_root()
 #: The 1974 reference bundle (ERA5 GRIB1 + the CDO NetCDF oracle), the
 #: same environment contract the rest of the suite uses for it.
 BUNDLE = Path(os.environ.get(
@@ -1099,6 +1099,11 @@ COMPOSED_SOURCES: dict[str, dict[str, object]] = {
         "primary": _files("ifs", "20260816000000-0h-oper-fc.grib2",
                           "20260816000000-3h-oper-fc.grib2"),
         "supplement": _SUPPLEMENT_EVERY,
+        # The sea-ice binding's donor: the same cycle's GFS analysis (ECMWF
+        # open data publishes sea-ice thickness only), from the AWS archive.
+        "field_source_files": {
+            "seaice_data": _files("crosssource", "gfs.20260816.t00z.pgrb2.0p25.f000"),
+        },
     },
     # An AI model whose DECODE refuses: its land mask and terrain ride
     # the step-0 object alone, so compose binds both from the cycle's
@@ -1110,6 +1115,11 @@ COMPOSED_SOURCES: dict[str, dict[str, object]] = {
                           "20260817000000-6h-oper-fc.grib2"),
         "supplement": _SUPPLEMENT_DONOR,
         "donor_files": _files("aifs", "20260817000000-0h-oper-fc.grib2"),
+        # The sea-ice binding's donor: the same cycle's GFS analysis (AIFS
+        # publishes no sea-ice field), from the AWS archive.
+        "field_source_files": {
+            "seaice_data": _files("crosssource", "gfs.20260817.t00z.pgrb2.0p25.f000"),
+        },
     },
     # A 0.15-degree global grid published one field per file, terrain in
     # its own invariant object.
@@ -1251,7 +1261,8 @@ def composed_recipe(source: str) -> dict[str, object]:
     from woof.source_adapters import get_source_adapter
     from woof.source_authorities import (packaged_authorities,
                                           packaged_contributing_mappings,
-                                          packaged_profile)
+                                          packaged_profile,
+                                          packaged_provenance_files)
 
     adapter = get_source_adapter(source)
     assert adapter.runner == "mapped_composition_v1", source
@@ -1259,15 +1270,21 @@ def composed_recipe(source: str) -> dict[str, object]:
     profile = packaged_profile(name)
     authorities = packaged_authorities(name)
     primary, supplement = _composed_files(source)
+    # A binding whose donor is not the profile's own supplement role (the
+    # ecmwf-open-data sea-ice donor beside its in-band terrain) names its
+    # files by data role; every provenance role takes its packaged document.
+    supplements = {str(profile["data_role"]): supplement}
+    supplements.update({str(role): tuple(files) for role, files in
+                        COMPOSED_SOURCES[source].get("field_source_files", {}).items()})
     return {
         "source": source,
         "format": str(profile["source_format"]),
         "mapping": Path(authorities["mapping"]),
         "composition": Path(authorities["composition"]),
         "primary": primary,
-        "supplements": {str(profile["data_role"]): supplement},
-        "provenance": {str(profile["provenance_role"]):
-                       Path(authorities["provenance"])},
+        "supplements": supplements,
+        "provenance": {str(role): Path(path) for role, path
+                       in packaged_provenance_files(name).items()},
         "contributing": {str(role): Path(path) for role, path
                          in packaged_contributing_mappings(name).items()},
     }
@@ -2567,6 +2584,14 @@ def test_the_compose_registry_covers_every_registered_composition_source():
         # be permanently skipped rather than covered.  It is reported by
         # `--kind compose --list` the moment the bytes appear.
         "20crv3-cf": "no staged NetCDF-CF corpus",
+        # Historical GEFS products have distinct member/surface archives.
+        # This battery's current GEFS corpus contains operational products,
+        # not these retained historical pairs. Route tests cover their
+        # metadata; no dual-engine historical-array comparison is claimed.
+        "gefs-reforecast": "no staged GEFSv12 reforecast member/surface pair",
+        "gefs-reforecast-weekly": "no staged extended-lead GEFSv12 reforecast pair",
+        "gefs-v11": "no staged GEFSv11 historical member/surface pair",
+        "gefs-v11-flat": "no staged flattened GEFSv11 member/surface pair",
         # One perturbed member, cut out of ECMWF's enfo-ef object by its
         # JSON index ranges.  The staging tree holds the oper product only
         # (ifs/*-oper-fc.grib2): no member has been cut and staged on any
@@ -2574,6 +2599,11 @@ def test_the_compose_registry_covers_every_registered_composition_source():
         # skipped rather than covered.  A row belongs here the moment a
         # member's two steps are staged.
         "ecmwf-ens": "no staged ENS member bytes",
+        # The 0.1-degree pl+sfc pair decodes through the ecmwf-open-data
+        # row's own packaged profile (composed above on the 0.25-degree
+        # bytes); no 0.1-degree pair is staged on any box this battery has
+        # run on, so a row of its own would be permanently skipped.
+        "ecmwf-open-data-0p1": "same packaged profile as ecmwf-open-data; no staged 0.1-degree pair",
         # The one source whose compose inputs are not published bytes: a
         # GDT-101 mesh reaches compose only through the normalization
         # stage, so this row's primary files would be the 350 regional
@@ -2587,7 +2617,25 @@ def test_the_compose_registry_covers_every_registered_composition_source():
         # The same GDT-101 normalization, on DWD's regional mesh.
         "icon-d2": "compose inputs are produced by the normalization "
                    "stage, not published",
+        # One RRFS ensemble member composed with its declared companion
+        # (the same cycle's deterministic prslev+2dfld pair).  No member or
+        # companion bytes are retained in the gauntlet corpus, and
+        # the row recipe above hands ONE supplement role, while this
+        # composition binds two (the member's terrain and the companion's
+        # data), so a row would be permanently skipped rather than covered.
+        # Its archived dual-engine evidence is the 2026-10-05 12Z m001 prep on
+        # both engines (lane pi-c11b): every composed array identical except
+        # the declared libm-dependent 2 m humidity.
+        "rrfs-ens": "no staged member+companion bytes; the row recipe "
+                    "hands one supplement role and this composition binds "
+                    "two",
     }
+    # Inference products are generated with a same-cycle donor, rather than
+    # published objects in this battery's agency staging corpus. Whole-job
+    # receipts cover their composition; no agency golden is claimed here.
+    exempt.update({adapter.source_id: "no staged generated forecast and donor corpus"
+                   for adapter in source_adapters() if adapter.acquisition_owner})
+    exempt["hex-global"] = "no staged exported global forecast history corpus"
     registered = {
         adapter.source_id for adapter in source_adapters()
         if adapter.runner == "mapped_composition_v1" and adapter.runnable

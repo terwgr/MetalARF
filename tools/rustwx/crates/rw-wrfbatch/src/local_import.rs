@@ -23,7 +23,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::fmt::Write as _;
-use std::io::{BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, channel};
@@ -68,7 +68,7 @@ const SOURCE_ID_READ_BUFFER_BYTES: usize = 1_024 * 1_024;
 /// Bump whenever a scientific formula, unit normalization, grid convention,
 /// or field-selection meaning changes. It is embedded in every imported run
 /// identity so old and new science can never be mixed under one directory.
-pub(crate) const IMPORT_SCIENCE_SCHEMA_VERSION: &str = "science_v1";
+pub(crate) const IMPORT_SCIENCE_SCHEMA_VERSION: &str = "science_v3_vpd_2m";
 const STAGING_DIR_NAME: &str = ".rw-staging";
 const STAGING_WORK_DIR_NAME: &str = "work";
 const STAGING_BACKUP_DIR_NAME: &str = "previous-run";
@@ -1518,9 +1518,19 @@ impl ForecastHourTimeline {
 
         // Without a real model initialization timestamp, even an apparently
         // whole-hour cadence is not proof that ordinal labels are forecast
-        // hours. Persist the known valid times explicitly instead.
-        let exact_time_axis =
-            !has_authoritative_reference || flat.iter().any(|item| item.lead_seconds % 3_600 != 0);
+        // hours. Long integrations also need v2: their elapsed hours do not
+        // fit the legacy u16 slot, but exact metadata can retain their true
+        // origin and lead without truncating or relabelling a reanalysis.
+        // An origin off the whole hour needs v2 too. WHAT BREAKAGE THIS
+        // PREVENTS (gate law): the legacy axis keeps only the cycle HOUR, so
+        // the +3 h frame of a forecast from a 10:15 analysis was drawn as
+        // "Init 10Z | F003 | Valid 13Z" when it is valid at 13:15 (and its
+        // +0 frame as "Valid 10Z"), while its +30 min frame, already on the
+        // exact axis, said 10:45 (DA environment panels, 2026-10-29).
+        let exact_time_axis = !has_authoritative_reference
+            || origin_unix.rem_euclid(3_600) != 0
+            || flat.iter().any(|item|
+                item.lead_seconds % 3_600 != 0 || item.lead_seconds / 3_600 > u64::from(u16::MAX));
         let mut planned = vec![Vec::<PlannedSourceTime>::new(); sources.len()];
         for (ordinal, item) in flat.into_iter().enumerate() {
             let (storage_slot, exact_time) = if exact_time_axis {
@@ -1709,6 +1719,17 @@ struct SourceFileRevision {
 pub(crate) struct SourceIdentitySnapshot {
     pub(crate) identity: String,
     files: Vec<(PathBuf, SourceFileRevision)>,
+    /// History files the identity may lose (snowfall dependencies).
+    history: Vec<PathBuf>,
+    /// History files already gone when the identity was taken.
+    gone: Vec<PathBuf>,
+}
+
+impl SourceIdentitySnapshot {
+    /// The history files that were already gone when the identity was taken.
+    pub(crate) fn gone(&self) -> &[PathBuf] {
+        &self.gone
+    }
 }
 
 fn inspect_source_file_revision(path: &Path) -> Result<SourceFileRevision, String> {
@@ -1740,6 +1761,66 @@ fn inspect_source_file_revision(path: &Path) -> Result<SourceFileRevision, Strin
     })
 }
 
+/// The piece size of a source file's fingerprint.  Part of the identity
+/// (it is hashed into it), so changing it renames every store run.
+const SOURCE_ID_CHUNK_BYTES: u64 = 64 * 1_024 * 1_024;
+
+/// Read exactly `buffer.len()` bytes at `offset`, without moving a shared
+/// file cursor, so every piece of one file is read at once.
+fn read_exact_at(file: &std::fs::File, buffer: &mut [u8], mut offset: u64) -> std::io::Result<()> {
+    let mut filled = 0usize;
+    while filled < buffer.len() {
+        #[cfg(unix)]
+        let read = std::os::unix::fs::FileExt::read_at(file, &mut buffer[filled..], offset)?;
+        #[cfg(windows)]
+        let read = std::os::windows::fs::FileExt::seek_read(file, &mut buffer[filled..], offset)?;
+        if read == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "file ended before its recorded length",
+            ));
+        }
+        filled += read;
+        offset += read as u64;
+    }
+    Ok(())
+}
+
+/// `rw-source-file-v3`: SHA-256 over the name, the length, the piece size
+/// and the SHA-256 of each SOURCE_ID_CHUNK_BYTES piece in file order.  The
+/// pieces are hashed in parallel; the result depends only on the bytes.
+fn chunked_file_digest(file: &std::fs::File, name: &str, length: u64) -> std::io::Result<[u8; 32]> {
+    use rayon::prelude::*;
+    let pieces = length.div_ceil(SOURCE_ID_CHUNK_BYTES).max(1);
+    let digests = (0..pieces)
+        .into_par_iter()
+        .map(|piece| -> std::io::Result<[u8; 32]> {
+            let start = piece * SOURCE_ID_CHUNK_BYTES;
+            let end = (start + SOURCE_ID_CHUNK_BYTES).min(length);
+            let mut hasher = Sha256::new();
+            let mut buffer = vec![0u8; SOURCE_ID_READ_BUFFER_BYTES];
+            let mut offset = start;
+            while offset < end {
+                let take = ((end - offset) as usize).min(buffer.len());
+                read_exact_at(file, &mut buffer[..take], offset)?;
+                hasher.update(&buffer[..take]);
+                offset += take as u64;
+            }
+            Ok(hasher.finalize().into())
+        })
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"rw-source-file-v3\0");
+    hasher.update((name.len() as u64).to_le_bytes());
+    hasher.update(name.as_bytes());
+    hasher.update(length.to_le_bytes());
+    hasher.update(SOURCE_ID_CHUNK_BYTES.to_le_bytes());
+    for digest in digests {
+        hasher.update(digest);
+    }
+    Ok(hasher.finalize().into())
+}
+
 fn source_file_fingerprint(path: &Path) -> Result<([u8; 32], SourceFileRevision), String> {
     let before = inspect_source_file_revision(path)?;
     let file = std::fs::File::open(&before.canonical_path).map_err(|err| {
@@ -1754,36 +1835,40 @@ fn source_file_fingerprint(path: &Path) -> Result<([u8; 32], SourceFileRevision)
         .and_then(|value| value.to_str())
         .ok_or_else(|| format!("source path '{}' has no UTF-8 filename", path.display()))?;
 
-    let mut hasher = Sha256::new();
-    hasher.update(b"rw-source-file-v2\0");
-    hasher.update((name.len() as u64).to_le_bytes());
-    hasher.update(name.as_bytes());
-    hasher.update(length.to_le_bytes());
-
-    // A bounded first/last sample can alias two same-name, same-size model
-    // files whose interior differs. That silently reuses the same rw-store
-    // run and lets a later import overwrite forecast hours from a different
-    // simulation. Stream the complete file through SHA-256 instead. The
-    // fixed buffer bounds memory while the digest makes the identity depend
-    // on every byte of every selected source file.
-    let mut reader = BufReader::with_capacity(SOURCE_ID_READ_BUFFER_BYTES, file);
-    let mut buffer = vec![0u8; SOURCE_ID_READ_BUFFER_BYTES];
-    loop {
-        let read = reader
-            .read(&mut buffer)
-            .map_err(|err| format!("cannot hash source file '{}': {err}", path.display()))?;
-        if read == 0 {
-            break;
+    // The same unchanged file hashed by an earlier render (the frame's own
+    // live render, every later frame's snowfall dependencies, the windowed
+    // pass) is not read again: see `crate::source_memo` for the breakage
+    // and for what "unchanged" is proven by.
+    let stamp = crate::source_memo::file_stamp(&before.canonical_path);
+    if stamp.is_some() {
+        if let Some(digest) = crate::source_memo::recall_fingerprint(&before.canonical_path, name) {
+            let after = inspect_source_file_revision(path)?;
+            if before == after {
+                return Ok((digest, after));
+            }
         }
-        hasher.update(&buffer[..read]);
     }
-    let digest = hasher.finalize().into();
+
+    // Every byte of the file still enters the digest, but in fixed
+    // SOURCE_ID_CHUNK_BYTES pieces hashed at once across the pool and
+    // then hashed in order, so a frame's identity costs its read rather
+    // than one core's SHA-256.  THE BREAKAGE: one SHA-256 stream over a
+    // 16 GB 1799x1059x50 history frame held each live render on ONE core
+    // for ~12 s before anything else could start (an 8x5090 host, 2.9.3).
+    // A bounded first/last sample would alias two same-name, same-size
+    // files whose interior differs, so the pieces cover the whole file.
+    let digest = chunked_file_digest(&file, name, length).map_err(|err| {
+        format!("cannot hash source file '{}': {err}", path.display())
+    })?;
     let after = inspect_source_file_revision(path)?;
     if before != after {
         return Err(format!(
             "source file '{}' changed while its identity was hashed; import an immutable snapshot",
             path.display()
         ));
+    }
+    if let Some(stamp) = &stamp {
+        crate::source_memo::remember_fingerprint(&before.canonical_path, name, stamp, &digest);
     }
     Ok((digest, after))
 }
@@ -1811,24 +1896,74 @@ pub(crate) fn source_set_identity(paths: &[PathBuf]) -> Result<String, String> {
 pub(crate) fn capture_source_set_identity(
     paths: &[PathBuf],
 ) -> Result<SourceIdentitySnapshot, String> {
-    if paths.is_empty() {
+    capture_source_set_identity_with_history(paths, &[])
+}
+
+/// The identity of `required` (every one must be there) and of the history
+/// files in `history` that are still there.
+///
+/// WHAT BREAKAGE THIS PREVENTS: a frame's snowfall windows name every
+/// earlier history file of its domain, and a host that removes old history
+/// to save disk (an 8x5090 host, 2026-10-21: an operator script deleting each frame
+/// once its own pictures were out) failed EVERY later frame whole: each
+/// render exited 1 with no picture ("cannot resolve source file
+/// ...wrfout_d01_2026-10-21_00_00_00").  A history file that is gone before
+/// it is read leaves the identity, and one that goes during the import is
+/// let go at the end; the snowfall windows that needed it say by name that
+/// they are not drawn, and every other product of the frame is.  A history
+/// file that is still there but CHANGED is refused as before.
+pub(crate) fn capture_source_set_identity_with_history(
+    required: &[PathBuf],
+    history: &[PathBuf],
+) -> Result<SourceIdentitySnapshot, String> {
+    if required.is_empty() && history.is_empty() {
         return Err("cannot identify an empty source set".to_string());
     }
+    let history: Vec<PathBuf> = history
+        .iter()
+        .filter(|path| !required.contains(path))
+        .cloned()
+        .collect();
+    // Every file streams through its own SHA-256 at once; the first
+    // failure in path order is the one reported.
+    use rayon::prelude::*;
+    let paths: Vec<&PathBuf> = required.iter().chain(history.iter()).collect();
+    let hashed = paths
+        .par_iter()
+        .map(|path| source_file_fingerprint(path))
+        .collect::<Vec<_>>();
     let mut fingerprints = Vec::with_capacity(paths.len());
     let mut files = Vec::with_capacity(paths.len());
-    for path in paths {
-        let (fingerprint, revision) = source_file_fingerprint(path)?;
-        fingerprints.push(fingerprint);
-        files.push((path.clone(), revision));
+    let mut gone = Vec::new();
+    for (index, (path, hashed)) in paths.iter().zip(hashed).enumerate() {
+        let optional = index >= required.len();
+        match hashed {
+            Ok((fingerprint, revision)) => {
+                fingerprints.push(fingerprint);
+                files.push(((*path).clone(), revision));
+            }
+            Err(_) if optional && !path.exists() => gone.push((*path).clone()),
+            Err(error) => return Err(error),
+        }
+    }
+    if fingerprints.is_empty() {
+        return Err("cannot identify an empty source set".to_string());
     }
     Ok(SourceIdentitySnapshot {
         identity: sha256_hex(&combine_source_fingerprints(fingerprints)),
         files,
+        history,
+        gone,
     })
 }
 
 pub(crate) fn verify_source_set_unchanged(snapshot: &SourceIdentitySnapshot) -> Result<(), String> {
     for (path, expected) in &snapshot.files {
+        if snapshot.history.contains(path) && !path.exists() {
+            // A history file removed during the import: whatever read it
+            // read it whole, and whatever needed it after says so by name.
+            continue;
+        }
         let current = inspect_source_file_revision(path)?;
         if &current != expected {
             return Err(format!(
@@ -4051,13 +4186,26 @@ fn derive_relative_humidity_percent(
         .collect())
 }
 
+/// Vapour pressure (Pa) from a water-vapour MIXING RATIO `w` (kg per kg of
+/// dry air) and pressure (Pa): `e = w p / (0.622 + w)`.
+///
+/// WRF's `Q2` and `QVAPOR` are mixing ratios, so every wrfout humidity
+/// diagnostic in this import goes through this one helper. The 2 m dewpoint
+/// and RH used to apply the specific-humidity form `q p / (0.622 + 0.378 q)`
+/// to `Q2`, which read Td2 about 0.1 K moist over dry land and up to 0.25 K
+/// over the warm Gulf (lane/dewpoint-mixing-ratio). A specific humidity `q`
+/// (GRIB SPFH) must be converted with `w = q / (1 - q)` before it gets here.
+fn vapour_pressure_pa_from_mixing_ratio(w: f64, p_pa: f64) -> f64 {
+    w * p_pa / (0.622 + w)
+}
+
 fn dewpoint_from_q_psfc(q: f32, p_pa: f32) -> f32 {
     if !q.is_finite() || !p_pa.is_finite() || q <= 0.0 || p_pa <= 0.0 {
         return f32::NAN;
     }
     let q = q as f64;
     let p = p_pa as f64;
-    let e = (q * p / (0.622 + 0.378 * q)).max(1.0);
+    let e = vapour_pressure_pa_from_mixing_ratio(q, p).max(1.0);
     let ln = (e / 611.2).ln();
     let td_c = 243.5 * ln / (17.67 - ln);
     (td_c + 273.15) as f32
@@ -4067,10 +4215,115 @@ fn relative_humidity_from_t_q_psfc(t_k: f32, q: f32, p_pa: f32) -> f32 {
     if !t_k.is_finite() || !q.is_finite() || !p_pa.is_finite() || t_k <= 0.0 {
         return f32::NAN;
     }
-    let e = q as f64 * p_pa as f64 / (0.622 + 0.378 * q as f64);
+    let e = vapour_pressure_pa_from_mixing_ratio(q as f64, p_pa as f64);
     let t_c = t_k as f64 - 273.15;
     let es = 611.2 * (17.67 * t_c / (t_c + 243.5)).exp();
     (100.0 * e / es).clamp(0.0, 100.0) as f32
+}
+
+#[cfg(test)]
+mod mixing_ratio_humidity_tests {
+    use super::*;
+
+    fn bolton_dewpoint_k(e_pa: f64) -> f64 {
+        let ln = (e_pa / 611.2).ln();
+        243.5 * ln / (17.67 - ln) + 273.15
+    }
+
+    /// Specific-humidity vapour pressure, the form HRRR's own DPT is
+    /// consistent with when fed its 2 m SPFH.
+    fn vapour_pressure_pa_from_specific_humidity(q: f64, p_pa: f64) -> f64 {
+        q * p_pa / (0.622 + 0.378 * q)
+    }
+
+    /// (specific humidity, pressure Pa, dewpoint K) worked independently
+    /// (Python, Bolton over water, e from q p / (0.622 + 0.378 q)).
+    const SPECIFIC_CASES: [(f64, f64, f64); 3] = [
+        (0.0150, 100_000.0, 293.5113271127926),
+        (0.0040, 85_000.0, 271.58785978403705),
+        (0.0200, 101_500.0, 298.449408723055),
+    ];
+
+    #[test]
+    fn specific_humidity_and_its_mixing_ratio_give_one_dewpoint() {
+        for (q, p, td_ref) in SPECIFIC_CASES {
+            let td_sh = bolton_dewpoint_k(vapour_pressure_pa_from_specific_humidity(q, p));
+            assert!((td_sh - td_ref).abs() < 0.02, "SPFH path {td_sh} vs {td_ref}");
+            // The same air as a mixing ratio, through the import's helper.
+            let w = q / (1.0 - q);
+            let td_w = bolton_dewpoint_k(vapour_pressure_pa_from_mixing_ratio(w, p));
+            assert!((td_w - td_sh).abs() < 1e-9, "f64 mixing-ratio path {td_w} vs {td_sh}");
+            // And through the f32 Q2/PSFC product function (f32 in and out).
+            let td_product = dewpoint_from_q_psfc(w as f32, p as f32) as f64;
+            assert!((td_product - td_ref).abs() < 1e-3, "Td2 product {td_product} vs {td_ref}");
+        }
+    }
+
+    /// Real HRRR rows (hrrr.20260802 t18z wrfsfcf01, six random CONUS
+    /// cells): 2 m SPFH (kg/kg), surface PRES (Pa), 2 m DPT (K), exactly as
+    /// decoded. HRRR packs DPT in steps of 1/16 K and SPFH in steps of 1e-5,
+    /// so a single cell can only agree to within one DPT packing step; over
+    /// the whole grid Bolton on the specific-humidity form reproduces DPT to
+    /// a mean of -0.010 K (the mixing-ratio form on SPFH: -0.20 K).
+    const HRRR_ROWS: [(f64, f64, f64); 6] = [
+        (0.02012, 101_770.0, 298.63739013671875),
+        (0.01919, 101_930.0, 297.82489013671875),
+        (0.0046, 72_630.0, 271.32489013671875),
+        (0.00869, 102_830.0, 285.44989013671875),
+        (0.01471, 94_890.0, 292.38739013671875),
+        (0.01902, 99_860.0, 297.38739013671875),
+    ];
+
+    #[test]
+    fn hrrr_spfh_reproduces_hrrr_dpt_and_q2_path_agrees() {
+        let mut signed = 0.0;
+        for (q, p, dpt) in HRRR_ROWS {
+            let td_sh = bolton_dewpoint_k(vapour_pressure_pa_from_specific_humidity(q, p));
+            assert!((td_sh - dpt).abs() < 1.0 / 16.0, "HRRR SPFH {q} -> {td_sh} vs DPT {dpt}");
+            signed += td_sh - dpt;
+            // The same air handed over as a WRF Q2 (mixing ratio) gives the
+            // same dewpoint through the product function.
+            let w = q / (1.0 - q);
+            let td_q2 = dewpoint_from_q_psfc(w as f32, p as f32) as f64;
+            assert!((td_q2 - td_sh).abs() < 1e-3, "Q2 path {td_q2} vs SPFH path {td_sh}");
+        }
+        let mean = signed / HRRR_ROWS.len() as f64;
+        assert!(mean.abs() < 0.02, "mean HRRR SPFH->DPT error {mean}");
+    }
+
+    #[test]
+    fn specific_humidity_form_on_q2_reads_measurably_moist() {
+        // The defect this lane fixes: Q2 = 0.015 kg/kg at 1000 hPa.
+        let (w, p) = (0.015_f64, 100_000.0_f64);
+        let old = bolton_dewpoint_k(vapour_pressure_pa_from_specific_humidity(w, p));
+        let new = dewpoint_from_q_psfc(w as f32, p as f32) as f64;
+        assert!(old - new > 0.2, "old {old} new {new}");
+        assert!((new - bolton_dewpoint_k(w * p / (0.622 + w))).abs() < 1e-3);
+    }
+
+    #[test]
+    fn relative_humidity_uses_the_mixing_ratio_vapour_pressure() {
+        let (t_k, w, p) = (303.15_f32, 0.015_f32, 100_000.0_f32);
+        let e = (w as f64) * (p as f64) / (0.622 + w as f64);
+        let t_c = t_k as f64 - 273.15;
+        let es = 611.2 * (17.67 * t_c / (t_c + 243.5)).exp();
+        let expected = (100.0 * e / es) as f32;
+        assert_eq!(relative_humidity_from_t_q_psfc(t_k, w, p), expected);
+        let old = (100.0 * vapour_pressure_pa_from_specific_humidity(w as f64, p as f64) / es) as f32;
+        assert!(old - expected > 0.5, "old {old} new {expected}");
+    }
+
+    #[test]
+    fn three_d_dewpoint_shares_the_helper_bit_for_bit() {
+        for (q, p) in [(0.012_f64, 92_000.0_f64), (1.0e-5, 20_000.0)] {
+            let direct = {
+                let e = (q * p / (0.622 + q)).max(1.0);
+                let ln = (e / 611.2).ln();
+                243.5 * ln / (17.67 - ln) + 273.15
+            };
+            assert_eq!(dewpoint_k_from_q_p(q, p).to_bits(), direct.to_bits());
+        }
+    }
 }
 
 fn ensure_same_grid(a: &Plane2D, b: &Plane2D) -> Result<(), ImportError> {
@@ -4221,7 +4474,7 @@ fn writer_build() -> &'static str {
     concat!(
         "rusty-weather-wrf-local-import-",
         env!("CARGO_PKG_VERSION"),
-        "-science_v1"
+        "-science_v3_vpd_2m"
     )
 }
 
@@ -5119,7 +5372,7 @@ fn dewpoint_k_from_q_p(q: f64, p_pa: f64) -> f64 {
     if !q.is_finite() || !p_pa.is_finite() || q <= 0.0 || p_pa <= 0.0 {
         return f64::NAN;
     }
-    let e = (q * p_pa / (0.622 + q)).max(1.0);
+    let e = vapour_pressure_pa_from_mixing_ratio(q, p_pa).max(1.0);
     let ln = (e / 611.2).ln();
     let td_c = 243.5 * ln / (17.67 - ln);
     td_c + 273.15
@@ -5718,7 +5971,9 @@ mod tests {
 
     #[test]
     fn forecast_timeline_uses_exact_elapsed_hours_not_ordinals() {
-        let origin = 1_700_000_000;
+        // A whole-hour origin (2023-11-14 22:00:00Z): only those keep the
+        // legacy forecast-hour slots (see the off-hour test below).
+        let origin = 1_699_999_200;
         let sources = vec![(
             PathBuf::from("wrfout.nc"),
             test_time_axis(Some(origin), &[0, 3 * 3_600, 9 * 3_600]),
@@ -5735,7 +5990,7 @@ mod tests {
         assert!(planned.iter().all(|record| record.exact_time.is_none()));
         assert_eq!(
             timeline.run_name("0123456789abcdef", "light"),
-            "local_20231114221320_0123456789abcdef_light_science_v1"
+            format!("local_20231114220000_0123456789abcdef_light_{IMPORT_SCIENCE_SCHEMA_VERSION}")
         );
         assert_ne!(
             timeline.run_name("0123456789abcdef", "light"),
@@ -5745,6 +6000,46 @@ mod tests {
             timeline.run_name("0123456789abcdef", "light"),
             timeline.run_name("0123456789abcdef", "full_deadbeef")
         );
+    }
+
+    #[test]
+    fn forecast_timeline_retains_long_integration_origin_in_exact_slots() {
+        let origin = 1_699_999_200; // whole hour, so the boundary case below stays legacy
+        let last_legacy = i64::from(u16::MAX) * 3_600;
+        let sources = vec![(PathBuf::from("long_integration.nc"),
+            test_time_axis(Some(origin), &[last_legacy, last_legacy + 3_600]))];
+        let timeline = ForecastHourTimeline::plan_all(&sources).unwrap();
+        assert!(timeline.is_exact_time_axis());
+        assert_eq!(timeline.origin_unix, origin);
+        let records = timeline.records_for_source(0).unwrap();
+        for (ordinal, row) in records.iter().enumerate() {
+            let lead = last_legacy as u64 + ordinal as u64 * 3_600;
+            assert_eq!(row.storage_slot, ordinal as u16);
+            assert_eq!(row.valid_unix, origin + lead as i64);
+            assert_eq!(row.exact_time.unwrap().lead_seconds, lead);
+        }
+        let boundary = vec![(PathBuf::from("legacy_boundary.nc"),
+            test_time_axis(Some(origin), &[last_legacy]))];
+        let legacy = ForecastHourTimeline::plan_all(&boundary).unwrap();
+        assert!(!legacy.is_exact_time_axis());
+        assert_eq!(legacy.records_for_source(0).unwrap()[0].storage_slot, u16::MAX);
+    }
+
+    #[test]
+    fn off_hour_origin_with_whole_hour_leads_keeps_exact_times() {
+        // A forecast from a 10:15Z analysis (2023-07-10), frames at +0 and +3 h:
+        // the legacy axis would label the +3 h frame "Init 10Z | F003 | Valid 13Z".
+        let origin = 1_688_984_100;
+        let sources = vec![(
+            PathBuf::from("wrfout_d01_2023-07-10_13_15_00"),
+            test_time_axis(Some(origin), &[0, 3 * 3_600]),
+        )];
+        let timeline = ForecastHourTimeline::plan_all(&sources).unwrap();
+        assert!(timeline.is_exact_time_axis());
+        let records = timeline.records_for_source(0).unwrap();
+        assert_eq!(records[1].exact_time.unwrap().lead_seconds, 10_800);
+        assert_eq!(records[1].valid_unix, origin + 10_800);
+        assert!(timeline.run_name("id", "light").starts_with("local_20230710101500_"));
     }
 
     #[test]
@@ -5788,6 +6083,52 @@ mod tests {
         std::fs::write(&path, &bytes).unwrap();
         let after = source_set_identity(std::slice::from_ref(&path)).unwrap();
         assert_ne!(before, after);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    // The breakage: a host removing earlier history frames to save disk
+    // failed every later frame whole ("cannot resolve source file"), because
+    // the snowfall history was part of the source identity.
+    #[test]
+    fn a_removed_history_file_leaves_the_identity_instead_of_failing_it() {
+        let dir = temp_dir("source-id-history");
+        std::fs::create_dir_all(&dir).unwrap();
+        let frame = dir.join("wrfout_d01_2026-01-01_02_00_00");
+        let earlier = dir.join("wrfout_d01_2026-01-01_01_00_00");
+        let removed = dir.join("wrfout_d01_2026-01-01_00_00_00");
+        std::fs::write(&frame, b"frame").unwrap();
+        std::fs::write(&earlier, b"earlier").unwrap();
+
+        // Gone before the identity is taken: left out, and named.
+        let history = vec![removed.clone(), earlier.clone(), frame.clone()];
+        let snapshot =
+            capture_source_set_identity_with_history(std::slice::from_ref(&frame), &history)
+                .unwrap();
+        assert_eq!(snapshot.gone(), std::slice::from_ref(&removed));
+        assert_eq!(
+            snapshot.identity,
+            source_set_identity(&[frame.clone(), earlier.clone()]).unwrap()
+        );
+
+        // Gone during the import: let go at the end.
+        std::fs::remove_file(&earlier).unwrap();
+        verify_source_set_unchanged(&snapshot).unwrap();
+
+        // A history file still there but rewritten is refused as before.
+        std::fs::write(&earlier, b"earlier").unwrap();
+        let snapshot =
+            capture_source_set_identity_with_history(std::slice::from_ref(&frame), &history)
+                .unwrap();
+        std::fs::write(&earlier, b"rewritten earlier").unwrap();
+        assert!(verify_source_set_unchanged(&snapshot).is_err());
+
+        // The frame itself is never optional.
+        std::fs::remove_file(&frame).unwrap();
+        assert!(capture_source_set_identity_with_history(
+            std::slice::from_ref(&frame),
+            &history
+        )
+        .is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -6549,11 +6890,11 @@ mod tests {
         assert!(RunStagingPublisher::new(&root, "../wrf", &run).is_err());
         assert!(RunStagingPublisher::new(&root, "wrf", "../science_v1").is_err());
         assert!(RunStagingPublisher::new(&root, "wrf", "local_notscience_v1ish").is_err());
-        assert!(has_exact_science_schema_token("science_v1"));
-        assert!(has_exact_science_schema_token("local_science_v1"));
-        assert!(has_exact_science_schema_token("era20c_science_v1_deadbeef"));
-        assert!(!has_exact_science_schema_token("local_notscience_v1"));
-        assert!(!has_exact_science_schema_token("local_science_v10"));
+        assert!(has_exact_science_schema_token(IMPORT_SCIENCE_SCHEMA_VERSION));
+        assert!(has_exact_science_schema_token(&format!("local_{IMPORT_SCIENCE_SCHEMA_VERSION}")));
+        assert!(has_exact_science_schema_token(&format!("archive_{IMPORT_SCIENCE_SCHEMA_VERSION}_deadbeef")));
+        assert!(!has_exact_science_schema_token(&format!("local_not{IMPORT_SCIENCE_SCHEMA_VERSION}")));
+        assert!(!has_exact_science_schema_token(&format!("local_{IMPORT_SCIENCE_SCHEMA_VERSION}0")));
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -6693,8 +7034,13 @@ mod tests {
     }
 
     fn temp_dir(name: &str) -> PathBuf {
+        // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+        static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        // The process id too: this module's tests compile into BOTH the lib and the rw_wrfbatch bin test binaries, which
+        // the cargo gate runs at once, and the two counters repeat (2.9.4 R7b route A, Linux container, 2026-10-21: the
+        // other binary's fixture wrote old.marker into this test's freshly published run directory).
         let unique = now_unix();
-        std::env::temp_dir().join(format!("rw-local-import-{name}-{unique}"))
+        std::env::temp_dir().join(format!("rw-local-import-{name}-{}-{unique}-{}", std::process::id(), NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed)))
     }
 
     fn write_valid_test_run(store_root: &Path, model: &str, run: &str, value: f32) {
@@ -7612,10 +7958,13 @@ mod source_time_fixture_tests {
     /// A copy of `source` under `file_name` in a fresh folder, because the
     /// file name is what these tests are about.
     fn named_copy(source: &str, tag: &str, file_name: &str) -> (PathBuf, PathBuf) {
+        // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+        static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let folder = std::env::temp_dir().join(format!(
-            "rw-time-axis-{tag}-{}-{}",
+            "rw-time-axis-{tag}-{}-{}-{}",
             std::process::id(),
-            now_unix()
+            now_unix(),
+            NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ));
         std::fs::create_dir_all(&folder).unwrap();
         let path = folder.join(file_name);
@@ -7754,10 +8103,13 @@ mod delayed_nest_time_tests {
     const FRAMES: [&str; 2] = ["2026-09-29_13:00:00", "2026-09-29_14:00:00"];
 
     fn write_nest(start_date: &str, tag: &str) -> (PathBuf, PathBuf) {
+        // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+        static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let folder = std::env::temp_dir().join(format!(
-            "rw-delayed-nest-{tag}-{}-{}",
+            "rw-delayed-nest-{tag}-{}-{}-{}",
             std::process::id(),
-            now_unix()
+            now_unix(),
+            NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ));
         std::fs::create_dir_all(&folder).unwrap();
         let path = folder.join(format!("wrfout_d03_{}", FRAMES[0].replace(':', "_")));
@@ -7927,10 +8279,13 @@ mod model_label_reader_tests {
 
     /// `engine` stamps the attribute every WOOF history file carries.
     fn write_frame_from(label: Option<&str>, engine: bool, tag: &str) -> (PathBuf, PathBuf) {
+        // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+        static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let folder = std::env::temp_dir().join(format!(
-            "rw-model-label-{tag}-{}-{}",
+            "rw-model-label-{tag}-{}-{}-{}",
             std::process::id(),
-            now_unix()
+            now_unix(),
+            NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ));
         std::fs::create_dir_all(&folder).unwrap();
         let path = folder.join(format!("wrfout_d01_{}", FRAME.replace(':', "_")));

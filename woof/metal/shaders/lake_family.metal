@@ -1,6 +1,8 @@
 #include <metal_stdlib>
 #include "../generated/lake_init_columns_bindings.metalh"
 #include "../generated/lake_step_columns_bindings.metalh"
+#include "../generated/lake_bind_source_columns_bindings.metalh"
+#include "soft_gfk_pow.metalh"
 #include "lake_support.metalh"
 #include "lake_wrf_fragment.metalh"
 using namespace metal;
@@ -877,4 +879,38 @@ r.th2[col]=th2.data[0];
 r.q2[col]=q2.data[0];
 r.albedo[col]=albedo.data[0];
 }
+}
+
+// Canonical observed/reanalysis fields to CLM restart layers, one thread per
+// grid cell (lake_bind_source_columns in woof/core/kernels/lake.cu); powf is
+// glibc's float32 word.
+kernel void lake_bind_source_columns(constant LakeBindSourceColumnsResources& r [[buffer(0)]], constant LakeBindSourceColumnsParams& p [[buffer(1)]], uint gid [[thread_position_in_grid]]) {
+const int n = p.n;
+const uint q = gid; if (q >= uint(n) || r.lakemask[q] != 1.0f) return;
+device float* columns = r.lake_columns; device const float* statics = r.lake_static;
+float water=r.src[q], bottom=r.src[n+q], mixed=r.src[2*n+q], shape=r.src[3*n+q];
+float ice=r.src[4*n+q], fraction=r.src[5*n+q], ice_t=r.src[6*n+q];
+bool has_water=isfinite(water)&&water>=270.f&&water<=330.f;
+bool profile=has_water&&isfinite(bottom)&&bottom>=270.f&&bottom<=330.f
+    &&isfinite(mixed)&&mixed>=0.f&&isfinite(shape)&&shape>0.f&&shape<1.f;
+float depth=statics[q];
+bool has_fraction=isfinite(fraction)&&fraction>=0.f&&fraction<=1.f;
+bool has_ice=has_fraction&&isfinite(ice)&&ice>=0.f;
+float remaining=has_ice?ice*fraction:0.f;
+for(int k=0;k<10;k++) {
+    float t=columns[(5+k)*n+q];
+    float z=statics[(1+k)*n+q],dz=statics[(11+k)*n+q];
+    if(profile) {
+        float rr=fmin(1.f,fmax(0.f,(z-mixed)/fmax(depth-mixed,1.e-6f)));
+        t=water+(bottom-water)*as_type<float>(soft_gfk_pow_bits(as_type<uint>(rr),as_type<uint>(1.f/shape-1.f)));
+    } else if(has_water&&k==0) t=water;
+    if(has_ice) {
+        float volume=fmin(fmax(remaining,0.f),dz);
+        columns[(15+k)*n+q]=volume/dz;
+        remaining-=volume;
+        if(volume>0.f) t=isfinite(ice_t)?fmin(ice_t,273.15f):273.15f;
+    } else if(has_fraction&&fraction==0.f) columns[(15+k)*n+q]=0.f;
+    columns[(5+k)*n+q]=t;
+}
+columns[4*n+q]=has_fraction&&fraction>0.f&&isfinite(ice_t)?fmin(ice_t,273.15f):columns[5*n+q];
 }

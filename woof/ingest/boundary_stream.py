@@ -54,6 +54,21 @@ from typing import Callable, Mapping
 import numpy as np
 
 
+#: True inside a forcing-time build that runs beside others
+#: (:meth:`PreparedTreeWriter.stream_forcing_times` with workers > 1).
+_CONCURRENT_FORCING_BUILD = contextvars.ContextVar("concurrent_forcing_build", default=False)
+
+
+def concurrent_forcing_build() -> bool:
+    """Whether this forcing-time build runs beside others on the writer's pool.
+
+    Alone, a route's build reads its source through a shared one-deep cache;
+    beside others it packs its own copy (woof.mapped_direct), so the packs
+    run side by side too instead of one at a time under a lock.
+    """
+    return _CONCURRENT_FORCING_BUILD.get()
+
+
 STREAM_DIRNAME = "boundary-stream"
 HEAD_NAME = "head.json"
 SEGMENTS_DIRNAME = "segments"
@@ -409,6 +424,27 @@ def chained_enabled(environ: Mapping[str, str] | None = None) -> bool:
     return str(value).strip().lower() not in {"0", "off", "false", "no"}
 
 
+def chained_resident_forcing_slots(exp, environ: Mapping[str, str] | None = None) -> int | None:
+    """Forcing intervals a chained ``woof go`` forecast holds on the card.
+
+    A one-domain, one-card forecast started on a chained preparation's head
+    streams its root's lateral intervals through one device slot
+    (:func:`woof.ingest.lateral_bc.attach_streaming_lateral_boundaries`),
+    so it holds 1.  ``None`` means the whole schedule: chaining off
+    (``WOOF_CHAINED_PREP=0``, a sealed restore), a nested tree, or a split
+    across cards.  The go gate and ``woof check`` both read this, so the two
+    never disagree about one card: the check priced all 19 hourly hrrr-prs
+    intervals of an 18 h full-grid HRRR (8.24 GiB of boundary tables) and
+    refused it on a 96 GB card by 0.5 GiB while ``woof go`` prices one slot.
+    """
+    if not chained_enabled(environ) or len(exp.domains) != 1:
+        return None
+    devices = getattr(exp, "devices", None)
+    if getattr(devices, "enabled", False):
+        return None
+    return 1
+
+
 #: What a chained head needs on the machine that writes it: the forecast's
 #: memory admission (:func:`chained_admission` reads it from
 #: ``woof.core.preflight``) and a forecast executor to bind the head.  The
@@ -520,8 +556,10 @@ def _read_json(path: Path):
 #: The waits between reads of a file another process keeps replacing: the
 #: writer's own permission-error backoff
 #: (:func:`woof.filesystem_paths.replace_file_with_retry`), so a read
-#: outlasts one replace however the two interleave.
-_REPLACED_READ_BACKOFF_SECONDS = (0.01, 0.02, 0.04, 0.08, 0.16, 0.19)
+#: outlasts one replace however the two interleave.  About 2 s in all: the
+#: hosted Windows CI of the 2.9.2 publish showed a polling reader and a
+#: replacing writer colliding for longer than half a second.
+_REPLACED_READ_BACKOFF_SECONDS = (0.01, 0.02, 0.04, 0.08, 0.16, 0.19, 0.25, 0.25, 0.5, 0.5)
 
 
 def read_replaced_json(path, *, sleep: Callable[[float], None] = time.sleep):
@@ -538,10 +576,15 @@ def read_replaced_json(path, *, sleep: Callable[[float], None] = time.sleep):
     is still said by name.
     """
 
+    # Opened with delete sharing (filesystem_paths.open_shared_read): on
+    # Windows a plain open would hold the name against the writer's replace,
+    # and a reader that polls would starve it (2.9.2 publish, hosted CI).
+    from woof.filesystem_paths import read_shared_bytes
+
     path = Path(path)
     for delay in (*_REPLACED_READ_BACKOFF_SECONDS, None):
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            return json.loads(read_shared_bytes(path).decode("utf-8"))
         except (OSError, ValueError):
             if delay is None:
                 raise
@@ -1533,12 +1576,11 @@ def run_chained(*, prepared_root, prepare: Callable[[], object],
 
     A producer that fails reaches the waiting forecast through
     ``failed.json`` and, in this process, through the worker thread
-    having ended.  A forecast that fails leaves the producer running to
-    its seal and waits for it, so a retry reuses the complete preparation
-    instead of building every forcing time again; while it waits, the
-    run's heartbeat says ``waiting:preparation`` through ``observer``'s
-    ``waiting``/``waited`` hooks (:func:`_hold_for_seal`).  A stop asks the
-    producer to stop (``stop.json``), waits for it to exit and re-raises:
+    having ended.  A forecast that fails is said at once and stops its
+    producer (:func:`_stop_for_failed_forecast`), so the run ends with the
+    forecast's error instead of after every later forcing time is built.
+    A stop asks the producer to stop (``stop.json``), waits for it to exit
+    and re-raises:
     ``KeyboardInterrupt``, ``SystemExit``, and every exception
     :func:`woof.runplan._is_interrupt` reads as the user's stop, which
     is how a Ctrl-C reaches this thread from ``woof go``
@@ -1597,11 +1639,7 @@ def run_chained(*, prepared_root, prepare: Callable[[], object],
             result = forecast(str(head["head_sha256"]))
         except BaseException as error:
             if isinstance(error, Exception) and not _is_stop(error):
-                if worker.is_alive():
-                    _say("prepare: the forecast failed; the preparation "
-                         "continues to its seal so a retry reuses it")
-                    _hold_for_seal(root, worker, observer)
-                worker.join()
+                _stop_for_failed_forecast(root, worker, error)
                 raise
             request_stop(root, f"the forecast ended: "
                                f"{type(error).__name__}: {error}")
@@ -1617,47 +1655,29 @@ def run_chained(*, prepared_root, prepare: Callable[[], object],
                 del _LOCAL_PRODUCERS[key]
 
 
-def _hold_for_seal(root, worker: threading.Thread, observer, *,
-                   report_seconds: float = WAIT_REPORT_SECONDS) -> None:
-    """Wait for this run's preparation after its forecast failed, said so.
+def _stop_for_failed_forecast(root, worker: threading.Thread,
+                              error: BaseException) -> None:
+    """Say a failed forecast at once, stop its producer, and let it raise.
 
-    The run reports the forecast's failure only once the preparation has
-    ended.  Until then the heartbeat says ``waiting:preparation``,
-    refreshed every ``report_seconds`` while the producer is alive, then
-    ``waited`` hands back the status the wait interrupted.  A producer in
-    another process that has gone silent past its limit stops the
-    refresh, so a watchdog still ends a hold on a hung producer by the
-    ``waiting:preparation`` bound.  The breakage this prevents: through
-    the hold the heartbeat kept the failed forecast's last phase with
-    nothing said, so a reader saw a stalled forecast and a supervisor
-    timing that phase stopped the run, and with it the preparation the
-    retry would reuse.
+    The failure is said the moment the forecast raises, the producer is
+    asked to stop (``stop.json``) and is waited for, so the run ends with
+    the forecast's own error, its cards released, instead of building every
+    later forcing time first.
+
+    Named breakage: a forecast that failed 25 s after its preflight (V59
+    run 2a and V60 r1b/r1d, 2026-10-21, a store refusal) left its producer
+    building all 48 remaining boundary times for 19-24 min while the run
+    said waiting:preparation with every card idle, and only then raised;
+    the wait read as a streaming regression.  A retry rebuilds the stopped
+    preparation's later times, which is minutes; hiding a failure is not.
     """
 
-    waiting = getattr(observer, "waiting", None)
-    waited = getattr(observer, "waited", None)
-    if not callable(waiting):
-        return
-    since = _utc_now()
-    said = False
-    try:
-        while worker.is_alive():
-            beat = _read_json(stream_dir(root) / PRODUCER_NAME)
-            age = None if _same_process(beat) else _heartbeat_age(beat)
-            if age is None or age <= _silence_limit(beat):
-                try:
-                    waiting("preparation", since_utc=since, lead=None,
-                            expected_at=None, late_at=None)
-                except Exception:  # noqa: BLE001 - the forecast's failure is the one reported
-                    return
-                said = True
-            worker.join(report_seconds)
-    finally:
-        if said and callable(waited):
-            try:
-                waited()
-            except Exception:  # noqa: BLE001 - as above
-                pass
+    _say(f"prepare: the forecast failed ({type(error).__name__}: {error}); "
+         "stopping the preparation")
+    if worker.is_alive():
+        request_stop(root, f"the forecast failed: "
+                           f"{type(error).__name__}: {error}")
+    worker.join()
 
 
 def _is_stop(error: BaseException) -> bool:
@@ -2272,6 +2292,7 @@ class PreparedTreeWriter:
             heartbeat = _Heartbeat(self.stream_path, self)
             self._publish_tree(self.staging, self.output_root)
             self.published = True
+            self._record_source_head_publication()
             self._cache.move(self.cache_path)
             heartbeat.path = self.stream_path
             self._heartbeat = heartbeat
@@ -2280,6 +2301,15 @@ class PreparedTreeWriter:
                  "forecast may start while the remaining boundary "
                  "intervals are built")
         return self.head_sha256
+
+    def _record_source_head_publication(self) -> None:
+        # Observe the existing atomic publication; no stream or array changes.
+        from woof.mapped_composition import _SHARED_COMPOSITION
+        binding = _SHARED_COMPOSITION.get()
+        if binding is not None:
+            from woof.timeline.ledger import emit
+            emit("prep.head.publish", attrs={"source_key": binding[0],
+                "head_sha256": self.head_sha256, "path": str(self.output_root)}, product="ensemble")
 
     def note_build_seconds(self, seconds: float) -> None:
         """Record one forcing time's build wall (sizes the silence limit)."""
@@ -2489,6 +2519,7 @@ class PreparedTreeWriter:
                              build_forcing_time: Callable[[int], tuple],
                              forcing, times: Sequence,
                              release: Callable[[], None] | None = None,
+                             workers: int = 1,
                              ) -> None:
         """Build forcing times 1..count-1 and write each interval as it closes.
 
@@ -2504,10 +2535,27 @@ class PreparedTreeWriter:
         back after each time.  A domain tree's seal reads the root's whole
         boundary set back from the sealed cache (:class:`TreeStartStates`),
         so no interval is held here after it is written.
+
+        ``workers`` greater than 1 builds that many forcing times at once on
+        threads (each with a copy of the caller's context), while the
+        intervals are still added, written and released here in index order.
+        Each time's build is the same call on the same inputs, so the
+        written bytes are those of the serial loop; at most ``workers`` + 1
+        times are held.  Named breakage: a GEFS member preparation on a
+        rented RTX PRO 6000 spent 42 s of its 70 s here on one core, nine
+        independent forcing times in a row, with the card at 39 % and 17 of
+        30 cores idle (KCCX 2026-10-16).
         """
 
         from woof.progress import prep_progress
 
+        workers = max(1, min(int(workers), int(count) - 1))
+        if workers > 1:
+            self._stream_forcing_times_concurrently(
+                count=int(count), build_forcing_time=build_forcing_time,
+                forcing=forcing, times=times, release=release,
+                workers=workers)
+            return
         for index in range(1, int(count)):
             built = time.perf_counter()
             met, initialized = build_forcing_time(index)
@@ -2525,6 +2573,54 @@ class PreparedTreeWriter:
             # it, so "boundary times 3 of 16 ready" is what a watcher needs.
             prep_progress("root_boundaries", label="Boundary times",
                           done=index, count=int(count) - 1)
+
+    def _stream_forcing_times_concurrently(self, *, count, build_forcing_time,
+                                           forcing, times, release, workers):
+        """The serial loop's adds, writes and releases, in its order; builds in parallel."""
+
+        from concurrent.futures import ThreadPoolExecutor
+        from woof.progress import prep_progress
+
+        def timed(index):
+            started = time.perf_counter()
+            built = build_forcing_time(index)
+            return built, time.perf_counter() - started
+
+        pending = {}
+        following = 1
+        with ThreadPoolExecutor(max_workers=workers,
+                                thread_name_prefix="forcing-time") as pool:
+            def submit_next():
+                nonlocal following
+                if following < count:
+                    # A fresh copy per task: the preparation's math scope,
+                    # setup owners and posted context are context variables.
+                    context = contextvars.copy_context()
+                    context.run(_CONCURRENT_FORCING_BUILD.set, True)
+                    pending[following] = pool.submit(context.run, timed, following)
+                    following += 1
+
+            try:
+                while len(pending) < workers and following < count:
+                    submit_next()
+                for index in range(1, count):
+                    (met, initialized), seconds = pending.pop(index).result()
+                    submit_next()
+                    forcing.add_state(initialized.state, index=index)
+                    del met, initialized
+                    if release is not None:
+                        release()
+                    self.note_build_seconds(seconds)
+                    interval = forcing.interval(index - 1, times)
+                    self.write_segment(index - 1, interval)
+                    del interval
+                    forcing.release(index - 1)
+                    prep_progress("root_boundaries", label="Boundary times",
+                                  done=index, count=count - 1)
+            except BaseException:
+                for future in pending.values():
+                    future.cancel()
+                raise
 
     def write_intervals(self, intervals) -> None:
         """Write intervals a route already holds: a source already complete."""
@@ -2658,6 +2754,7 @@ class PreparedTreeWriter:
         if not self.published:
             self._publish_tree(self.staging, self.output_root)
             self.published = True
+            self._record_source_head_publication()
         self._stop_heartbeat(final="sealed")
         return proof
 
@@ -3343,10 +3440,6 @@ class SeamWaits:
             self._open = None
             self._hook("waited")
 
-    @property
-    def open_record(self) -> dict | None:
-        return None if self._open is None else dict(self._open)
-
     # -- records ---------------------------------------------------------
 
     def _report(self, waiting: Mapping[str, object]) -> None:
@@ -3602,6 +3695,8 @@ class StreamedIntervals(Sequence):
             physical_boundary.validate_head(physical, lbc["schedule"])
             self._physical_seen[0] = physical["initial_receipt"]
         self._lock = threading.RLock()
+        #: Intervals loading on a background thread: index -> (box, done).
+        self._prefetching: dict[int, tuple[dict, threading.Event]] = {}
         #: One entry per wait the run actually took: (index, seconds).
         self.waits: list[tuple[int, float]] = []
 
@@ -3622,10 +3717,60 @@ class StreamedIntervals(Sequence):
             cached = self._loaded.get(k)
             if cached is not None:
                 return cached
+            pending = getattr(self, "_prefetching", {}).get(k)
+        if pending is not None:
+            # Loaded (read, hash-checked, validated) on the prefetch thread;
+            # a failure there is this call's failure, raised here.
+            box, done = pending
+            done.wait()
+            with self._lock:
+                self._prefetching.pop(k, None)
+                if "error" in box:
+                    raise box["error"]
+                return self._loaded.setdefault(k, box["interval"])
+        with self._lock:
+            cached = self._loaded.get(k)
+            if cached is not None:
+                return cached
             marker = self.require(k)
             interval = self._load(k, marker)
             self._loaded[k] = interval
             return interval
+
+    def prefetch(self, index: int) -> bool:
+        """Load interval ``index`` on a background thread if it is posted.
+
+        The same load ``self[index]`` performs (marker, arrays read and
+        hash-checked, layout and clock validated), started early so the
+        stepping thread finds it done.  Only an interval whose marker is
+        already posted, and one at a time; ``self[index]`` joins it and
+        raises its failure.  Breakage this prevents: every hourly interval
+        was read, hashed, copied and validated on the stepping thread at
+        the hour boundary, a stall of every card at every forecast hour
+        (V59, 8 x RTX 5090, 2026-10-21).  Returns whether a load started.
+        """
+        k = int(index)
+        if not 0 <= k < len(self):
+            return False
+        with self._lock:
+            if (k in self._loaded or self._prefetching
+                    or not self.is_ready(k)):
+                return False
+            box: dict = {}
+            done = threading.Event()
+            self._prefetching[k] = (box, done)
+
+        def load():
+            try:
+                box["interval"] = self._load(k, self.require(k))
+            except BaseException as error:  # noqa: BLE001 - raised by self[k]
+                box["error"] = error
+            finally:
+                done.set()
+
+        threading.Thread(target=load, name=f"lbc-prefetch-{k}",
+                         daemon=True).start()
+        return True
 
     def __iter__(self):
         for k in range(len(self)):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
 import hashlib
 import json
@@ -11,12 +12,14 @@ from pathlib import Path
 import re
 import shutil
 import sys
+import threading
 import time
 from types import SimpleNamespace
 from typing import Mapping, Sequence
 import uuid
 
 import numpy as np
+from woof.ingest.preparation_evidence import scientific_preprocessing
 
 from woof.boundary_fields import mapping_boundary_species
 from woof.config import soil_layer_count
@@ -28,7 +31,8 @@ from woof.vertical_adaptation import (
 )
 from woof.experiment import load_experiment, validate_boundary_timing
 from woof.fortran_namelist import parse_namelist
-from woof.ingest.horiz import declared_grid_pairing, interpolate_era5_to_lambert
+from woof.ingest.horiz import (
+    declared_grid_pairing, interpolate_era5_to_lambert, with_inland_air_temperature)
 from woof.ingest.soil_downscale import (
     declared_soil_texture_downscale, soil_mesh_plan_from_case)
 from woof.ingest.lateral_bc import (
@@ -57,11 +61,13 @@ from woof.ingest.preparation_price import (
 from woof.ingest.preprocess_backend import (
     preprocess_math_call,
     admit_preparation,
+    move_start_result_to_host,
+    start_time_backend,
     preprocess_identity,
     release_backend_memory,
     resolve_preprocess_backend,
 )
-from woof.ingest.real import initialize_real
+from woof.ingest.real import aerosol_donor_snapshot, initialize_real
 from woof.ingest.soil import (
     door_reconciled_soil_category, soil_temperature_repair_proof)
 from woof.ingest.source_coverage import (
@@ -72,6 +78,7 @@ from woof.ingest.source_coverage import (
     existing_output_root_refusal,
     owns_source_coverage_refusal,
 )
+from woof.ingest.land_state import land_state_context
 from woof.ingest.ruc_soil import preprocess_land_surface_soil
 from woof.ingest.water_temperature import WaterTemperatureStatics
 from woof.mapped_composition import (
@@ -182,6 +189,68 @@ def _forcing_valid_times(snapshots) -> tuple:
     return tuple(snapshot.valid_time for snapshot in snapshots)
 
 
+def _posted_window_leads(posted_source, times) -> tuple:
+    """The posted leads of the run's own forcing window, in its order.
+
+    The fetch can schedule more leads than the run reads: ``[fetch] hours``
+    is forcing coverage, and the packaged HRRR recipe fetches 3 h for a 2 h
+    run.  ``_within_run_window`` keeps only the window's times, so the
+    boundary schedule has one interval per pair of those times.  Naming
+    every scheduled lead in the as-posted head refused the run at "an
+    as-posted head names 4 forcing leads for 2 boundary intervals" (full
+    CONUS HRRR from HRRR f00 + RAP f03-f06, 2026-10-21).  The
+    head binds exactly the window's leads; a later scheduled lead is not
+    forcing for this run.
+    """
+
+    valid = tuple(posted_source.valid_times)
+    try:
+        positions = [valid.index(value) for value in times]
+    except ValueError:
+        raise ValueError(
+            f"the run's forcing times {[str(value) for value in times]} are "
+            f"not all scheduled leads of the as-posted fetch "
+            f"({[str(value) for value in valid]})") from None
+    if positions != list(range(positions[0], positions[0] + len(positions))):
+        raise ValueError(
+            "the run's forcing times are not consecutive scheduled leads of "
+            "the as-posted fetch")
+    return tuple(posted_source.leads[index] for index in positions)
+
+
+def _within_run_window(snapshots, start, run_seconds):
+    """Keep the run's forcing window through its final bracketing time.
+
+    One source file can hold a whole forecast: Earth2Studio writes every
+    lead of a run into one NetCDF (lead 0 to 96 h, or four months of a
+    seasonal run), and a domain starts at any lead of it.  The leads
+    before the start and beyond its final boundary are not forcing for this run;
+    leaving them in refused the file with "mapped forcing must begin at
+    START, got [lead 0]".  The window's own times still have to be there,
+    uniformly spaced, which the checks after this one keep refusing.
+    """
+
+    from datetime import timedelta
+
+    end = start + timedelta(seconds=float(run_seconds))
+    times = _forcing_valid_times(snapshots)
+    keep = [index for index, time in enumerate(times) if start <= time <= end]
+    # A run shorter than the source's step (1 h from a 6-hourly Earth-2 run) still needs the first
+    # forcing time at or after its end: without it only the start survived and prep refused
+    # "mapped forecast preparation requires at least two forcing times" (2.9.3 Earth-2 door leg).
+    if keep and times[keep[-1]] < end:
+        later = [index for index, time in enumerate(times) if time > end]
+        if later:
+            keep.append(min(later, key=lambda index: times[index]))
+    keep = tuple(keep)
+    if len(keep) == len(times) or not keep:
+        return snapshots
+    select = getattr(snapshots, "select", None)
+    if select is not None:
+        return select(keep)
+    return tuple(snapshots[index] for index in keep)
+
+
 def _source_top_pressure_pa(snapshots, count: int | None = None, *,
                             mapping_contract=None) -> float:
     """The highest source level the whole forcing series reaches, in Pa.
@@ -216,6 +285,23 @@ def _source_top_pressure_pa(snapshots, count: int | None = None, *,
     if not np.isfinite(model_top) or model_top <= 0.0 or model_top > mass_top:
         raise ValueError("native model-top interface must be positive and above its decoded mass levels")
     return model_top
+
+
+def _soil_floor_receipts(soil) -> dict[str, object]:
+    """The root soil's conditional receipts, for the proof AND the cache.
+
+    ``soil_moisture_floor`` (real.exe's RUC layer-source
+    ``SMOIS = MAX(SMOIS, 0.005)``, :class:`woof.ingest.ruc_soil.RucSoilState`)
+    is present only when the floor raised a value.  The front door binds
+    every :data:`woof.ingest.prepared_cache.CONDITIONAL_PREPARATION_RECEIPTS`
+    key from the proof and compares the cache's user metadata EXACTLY, so
+    the one dict this returns goes into both: a receipt in the proof and
+    not in the header made every RUC run whose floor fired refuse its own
+    preparation (2.8.8 acceptance D-02).
+    """
+
+    floor = getattr(soil, "soil_moisture_floor", None)
+    return {"soil_moisture_floor": dict(floor)} if floor else {}
 
 
 def _file_receipt(path: Path) -> dict[str, object]:
@@ -650,6 +736,12 @@ def _naive_time(value):
     return moment
 
 
+#: The most leads one as-posted batch decodes when its caller names no bound
+#: (:meth:`_PostedMappedSource.through`): six hourly leads is one decode
+#: child per six forcing hours, decoded ahead of the builds that read them.
+POSTED_BATCH_LEADS = 6
+
+
 class _PostedMappedSource:
     """A composed source decoded lead batch by lead batch as its leads post.
 
@@ -748,10 +840,15 @@ class _PostedMappedSource:
         self.decode_memory_budget_bytes: int | None = None
         self._where: dict[int, tuple] = {}
         self._physical_evidence: dict[int, dict] = {}
+        import threading
+        self._decode_lock = threading.RLock()
         self._next = 0
         self._scratch = self.output_root.parent / (
             f".posted-{uuid.uuid4().hex[:8]}")
-        self.frames = PostedFrames(self.valid_times, self._locate)
+        self.frames = PostedFrames(self.valid_times, self._locate,
+                                   prefetch=self.prefetch_through,
+                                   decoded=lambda: self._next,
+                                   posted=self.posted_count)
 
     # -- reading ---------------------------------------------------------
 
@@ -828,26 +925,124 @@ class _PostedMappedSource:
             raise ValueError(
                 f"the as-posted preparation's inputs {missing} are neither "
                 "planned by the route nor present")
-        self.through(0)
+        # The first batch is what the first step needs: the start time and
+        # the forcing time after it.  Every later lead is decoded when it is
+        # asked for (prefetch_through), or beside the forecast by the
+        # remaining-forcing stage (prepare_independent_times).
+        self.through(0, until=min(1, len(self.leads) - 1))
         return self.batches[0]
 
-    def through(self, position: int) -> None:
-        """Decode every lead through ``leads[position]``, waiting as they post."""
+    def prefetch_through(self, position: int) -> None:
+        """Decode every lead through ``leads[position]`` in one batch, and no further.
 
-        while self._next <= position:
-            lead = self.leads[self._next]
-            if lead not in self.markers:
-                self._read_marker(lead, self.posted.wait(lead))
-            end = self._next
-            while end + 1 < len(self.leads):
-                later = self.leads[end + 1]
-                record = self.posted.marker(later)
-                if record is None:
-                    break
-                self._read_marker(later, record)
-                end += 1
-            self._decode_batch(self._next, end)
-            self._next = end + 1
+        For a reader about to ask for several times at once (the inland
+        water's daily-mean 2 m air temperature reads the first 24 h): one
+        batch through the last of them, where reads arriving side by side
+        would each extend the batch to every posted lead.
+        """
+
+        self.through(int(position), until=int(position))
+
+    def through(self, position: int, *, until: int | None = None) -> None:
+        """Decode every lead through ``leads[position]``, waiting as they post.
+
+        A batch also takes later leads already posted: up to
+        ``leads[until]`` when ``until`` is given, otherwise at most
+        :data:`POSTED_BATCH_LEADS` leads in all, so a window that posted
+        long ago is still decoded a few leads at a time, ahead of the
+        forcing times that read them.
+
+        Named breakages the bound prevents (V59/V60, 2026-10-21): with every
+        posted lead in one batch, the start state's inland-water mean asked
+        for f013 and the root stage composed all 36 boundary frames of a
+        48 h RAP window before the first step, which needs two; and once
+        those leads moved after the head, the remaining-forcing stage
+        composed all of them in one budgeted child before its first
+        boundary time, so the forecast waited ~24 min with every card idle.
+        """
+
+        with self._decode_lock:
+            while self._next <= position:
+                lead = self.leads[self._next]
+                if lead not in self.markers:
+                    self._read_marker(lead, self.posted.wait(lead))
+                end = self._next
+                # A NetCDF decode holds its whole batch at once (it is priced
+                # per batch, not per time), so its later batches are one lead:
+                # each then fits the cap the first decode's price set.
+                batch = 1 if self.source_format == "netcdf" else POSTED_BATCH_LEADS
+                last = (max(int(until), position) if until is not None
+                        else self._next + batch - 1)
+                last = min(last, len(self.leads) - 1)
+                while end + 1 <= last:
+                    later = self.leads[end + 1]
+                    record = self.posted.marker(later)
+                    if record is None:
+                        break
+                    self._read_marker(later, record)
+                    end += 1
+                self._decode_batch(self._next, end)
+                self._next = end + 1
+
+    def posted_count(self, now=None) -> int:
+        """How many of the window's leads, from the first, the source has posted now.
+
+        What a start-time reader may take without holding the head for a
+        lead the source has not published yet (the inland water's daily
+        mean, woof.ingest.horiz).  Read from the posting schedule the fetch
+        published before its first lead: a lead counts once its
+        ``expected_at`` (the source's publication rule) has passed, whether
+        or not this fetch has moved it, and the reader then waits for its
+        marker (:meth:`through`), so a lead that never comes ends the wait
+        loudly (``failed.json``) instead of leaving the mean short.  A row
+        with no readable ``expected_at`` counts as posted, so it is waited
+        for.  ``now`` is naive UTC (default: the clock).
+
+        Breakage it prevents: counted from this fetch's own markers, an
+        archived cycle's daily mean averaged the leads the download had
+        finished when the start state was built -- 1 of 3 from a cold cache,
+        all 3 from a warm one (HRRR native 2025-03-14 12Z, 2026-10-30) -- so
+        one case prepared lake temperatures up to 2.17 K apart on its 14
+        inland-water cells and forecast differently by cache state.
+        """
+
+        if now is None:
+            from datetime import datetime, timezone
+
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+        count = 0
+        for row in self.schedule.get("leads") or ():
+            due = row.get("expected_at")
+            try:
+                due = None if due is None else _naive_time(due)
+            except ValueError:
+                due = None
+            if due is not None and due > now:
+                break
+            count += 1
+        return count
+
+    def prepare_independent_times(self) -> bool:
+        """Whether an already posted window may build its times in parallel.
+
+        A live window stays ordered while any lead still needs a wait.
+        Otherwise every lead's marker is read here, on the caller's thread,
+        before workers are priced, so the segment markers are fixed; the
+        leads themselves are decoded by the builds that read them, a
+        bounded batch at a time under the decode lock (:meth:`through`),
+        so the first boundary time is ready after one batch rather than
+        after the whole window.  Snapshot packing still uses the
+        preparation's snapshot_lock.
+        """
+
+        records = {lead: self.posted.marker(lead) for lead in self.leads[self._next:]}
+        if any(record is None for record in records.values()):
+            return False
+        with self._decode_lock:
+            for lead, record in records.items():
+                if lead not in self.markers:
+                    self._read_marker(lead, record)
+        return True
 
     def _needs_first_lead(self, leads) -> bool:
         """Whether a batch without the window's first lead decodes it again.
@@ -1291,6 +1486,52 @@ def _seal_posted_mapped(posted_source, *, writer, plan, mapping_contract,
 
 
 @preprocess_math_call
+class _EarlyInitialDecode:
+    """The separate initial analysis, decoded beside the boundary source.
+
+    ``decode_initial_analysis`` reads only the declared analysis files, the
+    packaged authorities, the grids and the start time, none of which the
+    boundary source's decode or its start time's build touches.  On the
+    literal HRRR start it took 45.6 s of the 234 s root stage, one after the
+    other with the 137 s boundary decode while the card sat idle.  It now
+    starts as soon as the grids are known, in its own engine process, and the
+    root stage enters the same context it would have entered, so every array
+    and receipt it hands on is the one the serial decode produced.
+    """
+
+    def __init__(self, request, **arguments):
+        from contextlib import ExitStack
+        self._stack = ExitStack()
+        self._analysis = None
+        self._error = None
+        self._thread = threading.Thread(
+            target=self._run, args=(request, arguments),
+            name="initial-analysis-decode", daemon=True)
+        self._thread.start()
+
+    def _run(self, request, arguments):
+        from woof.initial_source import decode_initial_analysis
+        try:
+            self._analysis = self._stack.enter_context(
+                decode_initial_analysis(request, **arguments))
+        except BaseException as error:  # re-raised on the root stage's thread
+            self._error = error
+
+    def close(self):
+        self._thread.join()
+        self._stack.close()
+
+    @contextlib.contextmanager
+    def analysis(self):
+        self._thread.join()
+        try:
+            if self._error is not None:
+                raise self._error
+            yield self._analysis
+        finally:
+            self._stack.close()
+
+
 def prepare_mapped_wrf(
     *,
     composition: str | Path,
@@ -1327,6 +1568,7 @@ def prepare_mapped_wrf(
     physical_output_store: str | Path | None = None,
     physical_input_provider=None,
     physical_member_index: int | None = None,
+    inland_air_mean_hours: float | None = None,
 ) -> dict[str, object]:
     """Build native WRF inputs from one complete mapped-source composition.
 
@@ -1391,6 +1633,14 @@ def prepare_mapped_wrf(
     if stock_wrf_export not in STOCK_WRF_EXPORT_MODES:
         raise ValueError(f"stock_wrf_export must be one of {STOCK_WRF_EXPORT_MODES}")
     started = time.perf_counter()
+    try:
+        from woof.boundary_prestage import current_boundary_prestage
+    except ImportError:
+        # The standalone preparation package carries no standby door, so no
+        # prestage can be current there (tools/build_rw_wps_release.py).
+        boundary_prestage = None
+    else:
+        boundary_prestage = current_boundary_prestage()
     composition = Path(composition).resolve()
     mapping = Path(mapping).resolve()
     primary = tuple(Path(path).resolve() for path in primary_files)
@@ -1625,21 +1875,38 @@ def prepare_mapped_wrf(
     water_overlay, water_overlay_binding = load_bound_water_overlay(
         None if case_data is None else case_data.water_temperature_overlay)
     from woof.experiment import (
-        deferred_initial_perturbation, refuse_unrouted_spawn,
+        deferred_initial_perturbation, dormant_domain_ids,
     )
-    refuse_unrouted_spawn(exp, "mapped-adapter prepared-cache")
+    # A dormant (spawn-declared) nest is prepared at its declared placeholder
+    # like any t = 0 child -- that prices it and gives the prepared tree its
+    # bundle -- and the corridor reaches the whole parent frame for it
+    # (woof.static.corridor.corridor_reach), which is the ground the
+    # prepared tree route crops a newborn from.  A single-domain bundle has
+    # no tree route to spawn on, so a dormant slot there still refuses.
+    if dormant_domain_ids(exp) and len(exp.domains) < 2:
+        from woof.experiment import refuse_unrouted_spawn
+        refuse_unrouted_spawn(exp, "mapped-adapter single-domain prepared-cache")
     initial_perturbation = deferred_initial_perturbation(
         exp, "mapped-adapter prepared-cache")
     hierarchy = len(exp.domains) > 1
     initial_request = None
-    if initial_inputs is not None:
+    if initial_inputs is not None or boundary_prestage is not None:
         # The independent start must be applied to every child before a tree
         # can use it. Refuse a tree here instead of silently starting children
         # from the boundary product while their parent uses the analysis.
-        if hierarchy or as_posted is not None:
+        if hierarchy:
             raise ValueError("separate initial inputs currently require a complete "
                              "single-domain forcing window; a tree needs the "
                              "analysis propagated into each child's initial state")
+        if as_posted is not None:
+            # Named breakage (2.9.4 rolling, HRRR recipe with --initial-inputs on
+            # the rap-native route): this refusal used to name a tree that was
+            # not there.  The as-posted head binds forcing leads as they post,
+            # so the window the separate start is checked against is not whole.
+            raise ValueError("separate initial inputs need the complete forcing window "
+                             "before the start, and this run fetches its forcing as it "
+                             "posts; run with --whole-cycle to fetch the whole window "
+                             "first")
         if physical_input_store is not None or physical_input_provider is not None:
             # A physical member store replaces every knot's interpolated
             # state, the start included, so the separate analysis would be
@@ -1648,7 +1915,11 @@ def prepare_mapped_wrf(
                              "physical member input; the member store already "
                              "carries the initial state")
         from woof.initial_source import read_initial_inputs
-        initial_request = read_initial_inputs(initial_inputs)
+        initial_request = (boundary_prestage if boundary_prestage is not None
+                           else read_initial_inputs(initial_inputs))
+        if boundary_prestage is not None and physical_output_store is not None:
+            raise ValueError("resident boundary prestage cannot capture a physical "
+                             "member store while suspending its initial analysis")
     # A domain tree is published through staging deeper than its
     # output root; refused here, the first point this door knows it
     # prepares a tree, before any source is decoded.  A single-domain
@@ -1743,6 +2014,14 @@ def prepare_mapped_wrf(
     )
 
     posted_source = None
+    early_initial = None
+    if initial_request is not None and boundary_prestage is None:
+        early_initial = _EarlyInitialDecode(
+            initial_request, output_parent=output_root.parent, grids=grids,
+            valid_time=exp.start_time, workers=preprocess_workers,
+            decoders=decoders)
+        import atexit
+        atexit.register(early_initial.close)
     with prep_stage("root_initialize" if physical_provider is not None else "source_decode",
                     label=("Initialize member from shared source" if physical_provider is not None
                            else "Decode and compose source"),
@@ -1840,6 +2119,7 @@ def prepare_mapped_wrf(
     for_grids = getattr(snapshots, "for_grids", None)
     if for_grids is not None:
         snapshots = for_grids(grids)
+    snapshots = _within_run_window(snapshots, exp.start_time, exp.run_seconds)
     # The backend resolves later; an explicit --preprocess-workers is the
     # count every host step takes, and without one the automatic count.
     snapshots = overlay_snapshot_sequence(snapshots, water_overlay,
@@ -1926,7 +2206,7 @@ def prepare_mapped_wrf(
             case_date=exp.start_time.date(),
             landuse_attrs=(selection.landuse_global_attrs()
                            if static_highres is not None and static_highres.enabled else None),
-            baseline_receipt=root_static_receipt)
+            baseline_receipt=root_static_receipt, run=cfg)
     static_seconds = time.perf_counter() - static_started
 
     # THE COORDINATE, BEFORE ANYTHING IS BUILT ON IT.  The same call the
@@ -1936,7 +2216,8 @@ def prepare_mapped_wrf(
         exp, grids, root_terrain=static["HGT_M"],
         static_catalog=_survey_static_catalog(
             exp, wps_namelist, geog_root, static_highres),
-        static_highres=static_highres, announce=_announce_adaptation)
+        static_highres=static_highres, announce=_announce_adaptation,
+        statics_corridor=statics_corridor)
     cfg = exp.root.run
 
     # Priced from the decoded composition, before the first device
@@ -1951,6 +2232,10 @@ def prepare_mapped_wrf(
             "mapped", exp, snapshots,
             boundary_species=mapping_boundary_species(mapping_contract)),
         workers=preprocess_workers)
+    # The start time is built before the head exists, so no forecast sits
+    # beside it: it takes the whole card when the build fits there, and
+    # its result moves to the host before the head (start_time_backend).
+    start_preprocess = start_time_backend(preprocess)
     preprocess_receipt = preprocess.receipt()
     posted_plan = (None if posted_source is None else _posted_input_plan(
         posted_source, mapping=mapping, composition=composition,
@@ -1965,11 +2250,19 @@ def prepare_mapped_wrf(
     # later forcing time is built on the card with nothing under it, as in
     # the start-last order the unchained tree keeps.
     chain_tree = hierarchy and (posted_source is not None or chained_enabled())
+    if getattr(exp, 'nudging', None) is not None:
+        if posted_source is not None:
+            raise ValueError('NUDGING_UNSEALED_ANALYSIS_IDENTITY: an as-posted input plan changes its source digest at seal; prepare the complete source window before nudging')
+        chain_tree = False  # selected nests need analyses from the complete hierarchy join
     # The same declared policy reaches the root and every child catalog.
     water_statics = WaterTemperatureStatics.for_route(
         route=_WATER_ROUTE, policy=case_policy["water_temperature_policy"],
         landmask=static["LANDMASK"], lu_index=static["LU_INDEX"],
         landuse_attrs=selection.landuse_global_attrs())
+    # Inland water the source does not resolve takes the forcing's
+    # daily-mean 2 m air temperature (WRF use_tavg_for_tsk).
+    water_statics = with_inland_air_temperature(
+        water_statics, snapshots, hours=inland_air_mean_hours)
     with prep_stage("root_initialize", label="Initialize root forcing states",
                     backend=str(preprocess_receipt["backend"]),
                     count=(len(snapshots) if hierarchy and not chain_tree
@@ -2056,15 +2349,39 @@ def prepare_mapped_wrf(
                 raise ValueError("physical input valid times differ from the full initial/boundary window")
             require_mapped_physical_field_contract(physical_input, expected_physical_fields)
         forcing_timings = []
+        # Forcing times may be built on several threads (stream_forcing_times
+        # workers); the lazy snapshot sequence keeps a one-deep cache and its
+        # frames read engine scratch, so a time's source is packed one at a
+        # time and only the interpolation and initialization run side by side.
+        snapshot_lock = threading.Lock()
+        nudging_writer = None
+        if getattr(exp, "nudging", None) is not None:
+            from woof.spectral_nudging.prepared import analysis_writer
+            nudging_writer = analysis_writer(output_root, exp, times, source_manifest_sha256)
 
-        def build_forcing_time(index, *, source_override=None, aerosol_snapshot=None):
+        def build_forcing_time(index, *, source_override=None, aerosol_snapshot=None,
+                               backend=None):
             nonlocal physical_output
+            backend = preprocess if backend is None else backend
             # One forcing time's build, unchanged: interpolate, initialize,
             # attach the map factors.  The single-domain route calls it start
             # first (woof.ingest.boundary_stream), as does a chained
             # hierarchy; an unchained hierarchy keeps the start time last.
             build_started = time.perf_counter()
-            source = snapshots[index] if source_override is None else source_override
+            if source_override is None:
+                from woof.ingest.boundary_stream import concurrent_forcing_build
+                pack = getattr(snapshots, "pack_uncached", None)
+                if pack is not None and concurrent_forcing_build():
+                    # Beside other builds each packs its own copy, the same
+                    # snapshot the cached read returns. Named breakage: 17
+                    # forcing-time workers ran at ~3 cores, every one waiting
+                    # here for the next time's pack (Oklahoma City, 2026-10-23).
+                    source = pack(index)
+                else:
+                    with snapshot_lock:
+                        source = snapshots[index]
+            else:
+                source = source_override
             timing = {"forcing_index": index, "valid_time": str(source.valid_time)}
             horizontal_started = time.perf_counter()
             # Metgrid classifies masked-field TARGET cells by the model
@@ -2072,7 +2389,7 @@ def prepare_mapped_wrf(
             # lanes so soil, skin, snow, and physics share one surface.
             if physical_input is None:
                 met = interpolate_era5_to_lambert(
-                    source, grid, backend=preprocess,
+                    source, grid, backend=backend,
                     target_landmask=np.asarray(static["LANDMASK"]) >= 0.5,
                     water_temperature_statics=water_statics)
             else:
@@ -2088,9 +2405,10 @@ def prepare_mapped_wrf(
                 met.fields.get("SOURCE_OROGRAPHY"))
             if physical_output_store is not None:
                 from woof.ensemble.physical_store import physical_static_identity
-                from woof.native_wrf_contract import NATIVE_LANDUSE_IDENTITY
+                from woof.native_wrf_contract import native_landuse_identity
                 actual_static = physical_static_identity(
-                    native_static_export_fields(static, grid), NATIVE_LANDUSE_IDENTITY)
+                    native_static_export_fields(static, grid),
+                    native_landuse_identity(static))
             if physical_output_store is not None and posted_source is not None:
                 from datetime import timezone
                 from woof.ensemble.posted_physical import PostedPhysicalStream, posted_source_identity
@@ -2108,9 +2426,10 @@ def prepare_mapped_wrf(
             elif physical_output is not None:
                 if index == 0:
                     from woof.ensemble.physical_store import physical_static_identity
-                    from woof.native_wrf_contract import NATIVE_LANDUSE_IDENTITY
+                    from woof.native_wrf_contract import native_landuse_identity
                     physical_output.document["source"]["static_identity"] = physical_static_identity(
-                        native_static_export_fields(static, grid), NATIVE_LANDUSE_IDENTITY)
+                        native_static_export_fields(static, grid),
+                    native_landuse_identity(static))
                 physical_output.write(met)
             from woof.ensemble.posted_preparation import (
                 current_posted_preparation, replace_current_native_snapshot)
@@ -2133,7 +2452,7 @@ def prepare_mapped_wrf(
                 met, cfg, coord, static["HGT_M"], grid=grid,
                 landmask=static["LANDMASK"],
                 p_top=exp.vertical.p_top, sfcp_to_sfcp=case_policy["sfcp_to_sfcp"],
-                preprocess_backend=preprocess,
+                preprocess_backend=backend,
                 state_backend="preprocess",
                 # Only the start time's result is kept below; every later
                 # time contributes its state to the boundaries.
@@ -2178,6 +2497,8 @@ def prepare_mapped_wrf(
             timing["column_stages_seconds"] = column_timing
             timing["total_seconds"] = time.perf_counter() - build_started
             forcing_timings.append(timing)
+            if nudging_writer is not None:
+                nudging_writer.write(index, initialized)
             return met, initialized
 
         if hierarchy and not chain_tree:
@@ -2197,21 +2518,58 @@ def prepare_mapped_wrf(
             # static fields, receipts); the later times are built after it is
             # published, one resident at a time, and each interval is written
             # as soon as its two times exist.
-            initial_met, initial_result = build_forcing_time(0)
+            if initial_request is None and start_preprocess is not preprocess:
+                initial_met, initial_result = build_forcing_time(
+                    0, backend=start_preprocess)
+                moved = move_start_result_to_host(initial_met, initial_result)
+                release_backend_memory(start_preprocess)
+                preprocess.selection["chunking"]["start_time"]["moved_to_host_bytes"] = moved
+            else:
+                initial_met, initial_result = build_forcing_time(0)
+            start_preprocess = None
             forcing.add_state(initial_result.state, index=0)
             if initial_request is not None:
                 from woof.initial_source import decode_initial_analysis
                 boundary_head_backend = preprocess
                 boundary_head_preprocessing = copy.deepcopy(preprocess.receipt())
-                aerosol_met = (initial_met if cfg.use_rap_aero_icbc else None)
+                # Only the donor's aerosol and its coordinate stay held for
+                # the initial analysis' build; the rest of the boundary
+                # analysis is released here.
+                aerosol_met = (aerosol_donor_snapshot(initial_met)
+                               if cfg.use_rap_aero_icbc else None)
                 initial_met = None
                 del initial_result
                 release_backend_memory(preprocess)
+                if boundary_prestage is not None:
+                    from woof.ingest.preparation_workers import forcing_time_workers
+                    prestage_workers = forcing_time_workers(
+                        len(snapshots) - 1,
+                        cpu_workers=worker_policy.get("effective_workers"),
+                        backend=str(preprocess_receipt["backend"]),
+                        selection=preprocess_receipt.get("selection"))
+                    worker_policy["forcing_time_workers"] = prestage_workers
+                    boundary_prestage.receipt["stages"].extend([
+                        {"name": "decode_and_compose", "wall_seconds": decode_seconds,
+                         "parallelism": "Rust worker pool"},
+                        {"name": "static", "wall_seconds": static_seconds,
+                         "parallelism": str(preprocess_receipt["backend"])},
+                    ])
+                    initial_request = boundary_prestage.prepare_independent(
+                        forcing=forcing, times=times, build=build_forcing_time,
+                        release=lambda: release_backend_memory(preprocess),
+                        workers=prestage_workers["workers"], output_root=output_root)
                 try:
-                    with decode_initial_analysis(
+                    analysis_started = time.perf_counter()
+                    with (early_initial.analysis() if early_initial is not None
+                          else decode_initial_analysis(
                             initial_request, output_parent=output_root.parent,
                             grids=grids, valid_time=exp.start_time,
-                            workers=preprocess_workers, decoders=decoders) as analysis:
+                            workers=preprocess_workers, decoders=decoders)) as analysis:
+                        if boundary_prestage is not None:
+                            boundary_prestage.receipt["stages"].append({
+                                "name": "initial_analysis_decode",
+                                "wall_seconds": time.perf_counter() - analysis_started,
+                                "parallelism": "Rust worker pool"})
                         _require_source_top(
                             exp, cfg, _source_top_pressure_pa(
                                 (analysis.snapshot,), mapping_contract=analysis.mapping),
@@ -2228,6 +2586,16 @@ def prepare_mapped_wrf(
                         initial_met, initial_result = build_forcing_time(
                             0, source_override=analysis.snapshot,
                             aerosol_snapshot=aerosol_met)
+                        # The first boundary record is the start state's
+                        # own coupling, its tendency running to the next
+                        # boundary-source record: WRFDA da_update_bc's rule,
+                        # which operational HRRR runs after GSI.  It was the
+                        # boundary source's atmosphere at the start time.
+                        forcing.replace_start_state(
+                            initial_result.state, index=0)
+                        if boundary_prestage is not None:
+                            boundary_prestage.complete(forcing, times)
+                            boundary_prestage.receipt["forcing_stage_timings"] = forcing_timings
                         initial_soil_contract = analysis.soil_layer_contract
                         initial_soil_mesh = soil_mesh_plan_from_case(
                             analysis.snapshot, grid, experiment_config)
@@ -2242,9 +2610,16 @@ def prepare_mapped_wrf(
                     aerosol_met = None
                     release_backend_memory(boundary_head_backend)
             boundaries = None
+        # The chem processes' preparation-time arrays (dust statics, sulfur
+        # lat/lon), before the head is published; nothing on a chem-off
+        # state (woof/core/chem_statics.py).
+        from woof.core.chem_statics import attach_chem_statics
+        attach_chem_statics(initial_result.state, grid, geog_root, selection)
         # No lake skin override: the masked=both SKINTEMP chain with
         # static-landmask targets already yields water-source skin at lakes,
-        # matching real.exe's no-TAVGSFC behavior.  The static landmask drives
+        # matching real.exe's no-TAVGSFC behavior, except inland water with no
+        # source water within INLAND_WATER_SOURCE_REACH_M, which takes the
+        # daily-mean 2 m air temperature (use_tavg_for_tsk).  The static landmask drives
         # WRF's process_soil_real land/water branches, and terrain plus the
         # composition's canonical source orography enable adjust_soil_temp_new's
         # elevation lapse on skin and soil temperature inputs.  The router
@@ -2255,7 +2630,8 @@ def prepare_mapped_wrf(
         # SCT_DOM let a land column carry the water soil category into RUC
         # (ENG-009).
         from woof.core.landuse import (
-            ruc_fractional_seaice as _ruc_fractional_seaice)
+            ruc_fractional_seaice as _ruc_fractional_seaice,
+            seaice_threshold_of as _seaice_threshold_of)
         soil = preprocess_land_surface_soil(
             initial_met.fields,
             # real.exe's adjust_for_seaice_pre/post keep the fraction under
@@ -2263,6 +2639,7 @@ def prepare_mapped_wrf(
             # otherwise (module_soil_pre.F:216-219, :337-343, :392-393 of the HRRR
             # v4.1.21 fork).
             fractional_seaice=_ruc_fractional_seaice(cfg),
+            seaice_threshold=_seaice_threshold_of(cfg),
             sf_surface_physics=int(cfg.sf_surface_physics),
             # Resolved, not defaulted: see woof/ingest/hrrr_physics.py.
             num_soil_layers=soil_layer_count(cfg),
@@ -2287,6 +2664,9 @@ def prepare_mapped_wrf(
             soil_mesh=(initial_soil_mesh if initial_request is not None
                        else soil_mesh_plan_from_case(
                            snapshots[0], grid, experiment_config)),
+            # Where and when, for a same-model soil donor (woof/ingest/
+            # land_state.py: HRRR's RUC soil for a RUC run over CONUS).
+            land_state=land_state_context(grid, times[0]),
             route=_WATER_ROUTE,
         )
         soil_temperature_repair = soil_temperature_repair_proof(soil, grid)
@@ -2389,6 +2769,9 @@ def prepare_mapped_wrf(
         )
         geometry_receipt = write_native_geometry_receipt(
             geometry_path, grid, cfg, static_path,
+            **({"terrain_autosmooth": root_static_receipt["terrain_autosmooth"]}
+               if root_static_receipt and "terrain_autosmooth" in root_static_receipt
+               else {}),
         )
         source_identity = {
             "adapter": _source_adapter,
@@ -2411,12 +2794,13 @@ def prepare_mapped_wrf(
         }
         if physical_input is not None:
             from woof.ensemble.physical_store import physical_input_binding, physical_static_identity
-            from woof.native_wrf_contract import NATIVE_LANDUSE_IDENTITY
+            from woof.native_wrf_contract import native_landuse_identity
             source_identity["ensemble_physical_input"] = physical_input_binding(
                 physical_input, grid, cfg, source_identity,
                 input_manifest_sha256=published_manifest_sha256,
                 static_identity=physical_static_identity(
-                    native_static_export_fields(static, grid), NATIVE_LANDUSE_IDENTITY))
+                    native_static_export_fields(static, grid),
+                    native_landuse_identity(static)))
         from woof.ensemble.posted_preparation import bind_current_source_identity
         source_identity = bind_current_source_identity(source_identity,
             domain_id=exp.root.grid_id)
@@ -2461,6 +2845,12 @@ def prepare_mapped_wrf(
                 initial_perturbation=initial_perturbation,
                 mapping_contract=mapping_contract,
                 posted_source=posted_source, posted_plan=posted_plan,
+                worker_policy=worker_policy,
+                # Physical stores need the later times in order, as on the
+                # single-domain route; anything else builds them side by side.
+                forcing_times_independent=(physical_input is None
+                                           and physical_output is None
+                                           and physical_output_store is None),
             )
             # The chained tree owns the start state from here and releases
             # it at its head; these names would keep it resident.
@@ -2474,6 +2864,8 @@ def prepare_mapped_wrf(
                 )
             hierarchy_started = time.perf_counter()
             hierarchy_result = initialize_and_export_regular_source_hierarchy(
+                nudging_context=((output_root, build_forcing_time)
+                    if getattr(exp, 'nudging', None) is not None else None),
                 exp=exp,
                 grids=grids,
                 snapshots=snapshots,
@@ -2506,13 +2898,14 @@ def prepare_mapped_wrf(
                 root_metadata={
                     "composition_receipt_sha256": receipt_identity_sha256,
                     "mapped_target_contract": target_contract,
+                    **_soil_floor_receipts(soil),
                 },
                 input_provenance={
                     "mapping_sha256": bundle.mapping_sha256,
                     "composition_sha256": bundle.composition_sha256,
                     "input_manifest_sha256": published_manifest_sha256,
                     "decoder_sha256": dict(bundle.decoder_sha256),
-                    "preprocessing": preprocess_receipt,
+                    "preprocessing": scientific_preprocessing(preprocess_receipt),
                     "mapped_target_contract": target_contract,
                 },
                 artifact_manifest_reference=(
@@ -2553,6 +2946,7 @@ def prepare_mapped_wrf(
                 # Present only when a soil temperature rebuild (real.exe's
                 # band, or the snow-covered rule beside it) touched a land
                 # column of the root.
+                **_soil_floor_receipts(soil),
                 **({"soil_temperature_repair": soil_temperature_repair}
                    if soil_temperature_repair is not None else {}),
                 forcing_key: list(forcing_axis),
@@ -2578,7 +2972,7 @@ def prepare_mapped_wrf(
                 # the single-domain proof.
                 **({"source_vertical_ladder": vertical_ladder}
                    if vertical_ladder is not None else {}),
-                "preprocessing": preprocess_receipt,
+                "preprocessing": scientific_preprocessing(preprocess_receipt),
                 "hierarchy_workers": selected_workers,
                 "root_static": static_output_receipt,
                 "root_geometry": geometry_receipt,
@@ -2629,6 +3023,9 @@ def prepare_mapped_wrf(
                     "total": time.perf_counter() - started,
                 },
             }
+            from woof.ingest.preparation_evidence import write_runtime_preparation
+            write_runtime_preparation(staging, preprocessing=preprocess_receipt,
+                parallelism={"hierarchy_workers": selected_workers})
             proof["proof_content_sha256"] = hashlib.sha256(
                 _canonical(proof).encode("utf-8")
             ).hexdigest()
@@ -2675,6 +3072,7 @@ def prepare_mapped_wrf(
             # Present only when a soil temperature rebuild (real.exe's
             # band, or the snow-covered rule beside it) touched a land
             # column, so a healthy proof is unchanged.
+            **_soil_floor_receipts(soil),
             **({"soil_temperature_repair": soil_temperature_repair}
                if soil_temperature_repair is not None else {}),
             forcing_key: list(forcing_axis),
@@ -2707,7 +3105,7 @@ def prepare_mapped_wrf(
             # full-ladder preparation's receipt is unchanged.
             **({"source_vertical_ladder": vertical_ladder}
                if vertical_ladder is not None else {}),
-            "preprocessing": preprocess.receipt(),
+            "preprocessing": scientific_preprocessing(preprocess.receipt()),
             # WHETHER THIS INITIALIZATION MODIFIED VAPOUR ON THE WAY IN.
             # Unconditional, and stated even when no floor fired.
             **moisture_floor_proof_entry(
@@ -2750,7 +3148,7 @@ def prepare_mapped_wrf(
                 "input_plan": posted_plan["plan"],
                 # The markers of every lead the head's own decode read.
                 "start_markers": dict(posted_source.markers),
-                "forcing_leads": posted_source.leads,
+                "forcing_leads": _posted_window_leads(posted_source, times),
                 "seal_authored_proof_keys": _AS_POSTED_SEAL_KEYS,
                 "manifest_path": "source-evidence/input-manifest.json",
                 "lead_role_prefix": "",
@@ -2771,6 +3169,7 @@ def prepare_mapped_wrf(
                     forcing_key: list(forcing_axis),
                     "boundary_interval_seconds": boundary_interval_seconds,
                     "composition_receipt_sha256": receipt_identity_sha256,
+                    **_soil_floor_receipts(soil),
                 },
                 lbc={
                     "spec_bdy_width": cfg.spec_bdy_width,
@@ -2788,8 +3187,7 @@ def prepare_mapped_wrf(
                 as_posted=as_posted_head,
             )
             if posted_source is not None:
-                # From here on the build of forcing time k waits for lead
-                # k (the heartbeat says waiting_for_source), and each
+                # A missing lead keeps its build waiting_for_source; each
                 # segment binds the markers of the leads it spans.
                 posted_source.posted.writer = writer
                 writer.bind_posted_leads(posted_source.markers)
@@ -2807,12 +3205,40 @@ def prepare_mapped_wrf(
                         backend=str(preprocess_receipt["backend"]),
                         count=len(snapshots) - 1):
             boundaries_started = time.perf_counter()
-            writer.stream_forcing_times(
-                count=len(snapshots), build_forcing_time=build_forcing_time,
-                forcing=forcing, times=times,
-                release=lambda: release_backend_memory(preprocess))
+            from woof.ensemble.posted_preparation import current_posted_preparation
+            from woof.ingest.preparation_workers import forcing_time_workers
+            # Physical stores and member replacement still need time order.
+            # A posted window with no missing lead is independent too: finish
+            # its decode before workers start, so no build advances batches or
+            # changes the markers the ordered segment writer binds.
+            independent_times = (physical_input is None and physical_output is None
+                                 and current_posted_preparation() is None)
+            if independent_times and posted_source is not None:
+                independent_times = posted_source.prepare_independent_times()
+            forcing_workers = forcing_time_workers(
+                len(snapshots) - 1,
+                cpu_workers=worker_policy.get("effective_workers"),
+                backend=str(preprocess_receipt["backend"]),
+                selection=preprocess_receipt.get("selection"),
+            ) if independent_times else {"workers": 1, "basis": "ordered physical source or pending posted lead"}
+            worker_policy["forcing_time_workers"] = forcing_workers
+            if boundary_prestage is not None:
+                writer.write_intervals(boundary_prestage.boundaries.intervals)
+                forcing.release(0)
+                forcing.release(1)
+            else:
+                writer.stream_forcing_times(
+                    count=len(snapshots), build_forcing_time=build_forcing_time,
+                    forcing=forcing, times=times,
+                    release=lambda: release_backend_memory(preprocess),
+                    workers=forcing_workers["workers"])
         initialize_seconds += time.perf_counter() - boundaries_started
+        forcing_timings.sort(key=lambda entry: entry["forcing_index"])
         posted_proof = {}
+        # Every deferred full re-read of the inputs has matched before the
+        # cache seals (woof.authority_digests): a changed input never seals.
+        from woof import authority_digests
+        authority_digests.join()
         with prep_stage("prepared_cache", label="Seal prepared cache"):
             cache_started = time.perf_counter()
             if posted_source is None:
@@ -2876,8 +3302,6 @@ def prepare_mapped_wrf(
             raise ValueError("mapped run-control bytes changed during preparation")
         proof = {
             **proof_head,
-            "preparation_parallelism": worker_policy,
-            "forcing_stage_timings": forcing_timings,
             # As posted, the leads the preparation waited for (DESIGN A136
             # 2.4 item 6); a preparation of a complete window has none.
             **({"posting": posted_proof.get("posting")}
@@ -2894,6 +3318,12 @@ def prepare_mapped_wrf(
                 "total": time.perf_counter() - started,
             },
         }
+        # Runtime headroom and inherited thread defaults vary between identical
+        # preparations. Keep the existing scientific preprocessing identity in
+        # proof/head and retain all measurements in the adjacent runtime receipt.
+        from woof.ingest.preparation_evidence import write_runtime_preparation
+        write_runtime_preparation(writer.root, preprocessing=preprocess.receipt(),
+                                  parallelism=worker_policy, forcing_stage_timings=forcing_timings)
         # The seal-authored receipt keys, from every lead batch as one
         # decode (the head left them out).
         proof.update({key: posted_proof[key] for key in _AS_POSTED_SEAL_KEYS
@@ -2902,6 +3332,8 @@ def prepare_mapped_wrf(
             _canonical(proof).encode("utf-8")
         ).hexdigest()
         writer.publish(proof)
+        if boundary_prestage is not None:
+            boundary_prestage.cache_content_sha256 = cache_receipt["content_sha256"]
         if physical_output is not None:
             physical_output.seal()
         # The composed frame stream is spent: every valid time has been
@@ -2969,13 +3401,14 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
     # Exactly the three the unchained tree hands its hierarchy call.
     tree_identity = {**c.source_identity, "target_contract": c.target_contract}
     root_metadata = {"composition_receipt_sha256": receipt_sha256,
-                     "mapped_target_contract": c.target_contract}
+                     "mapped_target_contract": c.target_contract,
+                     **_soil_floor_receipts(c.soil)}
     input_provenance = {
         "mapping_sha256": bundle.mapping_sha256,
         "composition_sha256": bundle.composition_sha256,
         "input_manifest_sha256": manifest_sha256,
         "decoder_sha256": dict(bundle.decoder_sha256),
-        "preprocessing": c.preprocess_receipt,
+        "preprocessing": scientific_preprocessing(c.preprocess_receipt),
         "mapped_target_contract": c.target_contract,
     }
     writer = None
@@ -3056,6 +3489,7 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
             # Present only when a soil temperature rebuild (real.exe's
             # band, or the snow-covered rule beside it) touched a land
             # column of the root.
+            **_soil_floor_receipts(c.soil),
             **({"soil_temperature_repair": c.soil_temperature_repair}
                if c.soil_temperature_repair is not None else {}),
             forcing_key: list(forcing_axis),
@@ -3081,7 +3515,7 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
             # unchained tree.
             **({"source_vertical_ladder": c.vertical_ladder}
                if c.vertical_ladder is not None else {}),
-            "preprocessing": c.preprocess_receipt,
+            "preprocessing": scientific_preprocessing(c.preprocess_receipt),
             "hierarchy_workers": selected_workers,
             "root_static": c.static_output_receipt,
             "root_geometry": c.geometry_receipt,
@@ -3105,7 +3539,7 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
             as_posted_head = {
                 "input_plan": c.posted_plan["plan"],
                 "start_markers": dict(posted.markers),
-                "forcing_leads": posted.leads,
+                "forcing_leads": _posted_window_leads(posted, c.times),
                 "seal_authored_proof_keys": _AS_POSTED_SEAL_KEYS,
                 "manifest_path": "source-evidence/input-manifest.json",
                 "lead_role_prefix": "",
@@ -3184,15 +3618,41 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
                         label="Initialize remaining forcing states",
                         backend=backend, count=len(c.snapshots) - 1):
             boundaries_started = time.perf_counter()
+            # The later root times side by side, as the single-domain route
+            # builds them (forcing_time_workers; written in index order, so
+            # the bytes are the serial loop's). Named breakage: a domain tree
+            # built them one at a time -- the WOOF Oklahoma City nest pair
+            # spent 82-112 s here at about 3 of 32 cores (2026-10-23).
+            from woof.ensemble.posted_preparation import current_posted_preparation
+            from woof.ingest.preparation_workers import forcing_time_workers
+            independent_times = (c.forcing_times_independent
+                                 and current_posted_preparation() is None)
+            if independent_times and posted is not None:
+                independent_times = posted.prepare_independent_times()
+            forcing_workers = forcing_time_workers(
+                len(c.snapshots) - 1,
+                cpu_workers=c.worker_policy.get("effective_workers"),
+                backend=backend,
+                selection=c.preprocess_receipt.get("selection"),
+            ) if independent_times else {
+                "workers": 1, "basis": "ordered physical source or pending posted lead"}
+            c.worker_policy["forcing_time_workers"] = forcing_workers
+            print(f"preparation workers: forcing times {forcing_workers['workers']} "
+                  f"({forcing_workers.get('caps', forcing_workers['basis'])})", file=sys.stderr, flush=True)
             writer.stream_forcing_times(
                 count=len(c.snapshots),
                 build_forcing_time=c.build_forcing_time,
                 forcing=c.forcing, times=c.times,
-                release=lambda: release_backend_memory(c.preprocess))
+                release=lambda: release_backend_memory(c.preprocess),
+                workers=forcing_workers["workers"])
         initialize_seconds += time.perf_counter() - boundaries_started
         root_identity = binding.identity
         posted_proof = {}
         decode_seconds = c.decode_seconds
+        # Every deferred full re-read of the inputs has matched before the
+        # cache seals (woof.authority_digests): a changed input never seals.
+        from woof import authority_digests
+        authority_digests.join()
         with prep_stage("prepared_cache", label="Seal prepared cache"):
             if posted is None:
                 root_content_sha256 = str(writer.seal_cache()["content_sha256"])
@@ -3208,7 +3668,8 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
                         valid_time=exp.start_time,
                         root_metadata={"composition_receipt_sha256":
                             source["composition_receipt_sha256"],
-                            "mapped_target_contract": c.target_contract}).identity
+                            "mapped_target_contract": c.target_contract,
+                            **_soil_floor_receipts(c.soil)}).identity
                 sealed = _seal_posted_mapped(posted, writer=writer,
                     plan=c.posted_plan, mapping_contract=c.mapping_contract,
                     snapshots=c.snapshots, exp=exp, cfg=cfg,
@@ -3222,7 +3683,8 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
                 tree_identity = sealed["source_identity"]
                 root_metadata = {"composition_receipt_sha256":
                     tree_identity["composition_receipt_sha256"],
-                    "mapped_target_contract": c.target_contract}
+                    "mapped_target_contract": c.target_contract,
+                    **_soil_floor_receipts(c.soil)}
                 input_provenance = {**input_provenance,
                     "input_manifest_sha256": manifest_sha256}
                 root_identity = sealed["identity"]
@@ -3258,6 +3720,7 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
             ),
             stock_wrf_export=c.stock_wrf_export,
             head_artifacts=writer.root / HIERARCHY_HEAD_DIRNAME,
+            snapshots=c.snapshots,
         )
         hierarchy_seconds = (head_hierarchy_seconds
                              + time.perf_counter() - hierarchy_seal_started)
@@ -3315,6 +3778,9 @@ def _prepare_chained_mapped_tree(c) -> dict[str, object]:
         proof["proof_content_sha256"] = hashlib.sha256(
             _canonical(proof).encode("utf-8")
         ).hexdigest()
+        from woof.ingest.preparation_evidence import write_runtime_preparation
+        write_runtime_preparation(writer.root, preprocessing=c.preprocess_receipt,
+            parallelism={"hierarchy_workers": selected_workers})
         writer.publish(proof)
     except BaseException as error:
         if writer is not None:
@@ -3410,6 +3876,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-manifest", type=Path, required=True)
     parser.add_argument("--initial-inputs", type=Path)
     parser.add_argument("--input-manifest-sha256")
+    parser.add_argument(
+        "--inland-air-mean-hours", type=float, default=None, metavar="HOURS",
+        help="hours of source 2 m air temperature that inland water beyond "
+             "the source reach averages (the source row's "
+             "inland_air_mean_hours; 0 = the start time's own; default 24)")
     parser.add_argument(
         "--as-posted", type=Path, default=None, metavar="POSTING_DIR",
         help=("an as-posted fetch's posting/ folder: prepare as the leads "
@@ -3550,6 +4021,19 @@ def _next_command_lines(args, proof: Mapping[str, object]) -> list[str]:
 
 @owns_source_coverage_refusal
 def main(argv: Sequence[str] | None = None) -> int:
+    """The mapped preparation, inside its input-digest scope.
+
+    This process decodes the inputs the fetch recorded, so its snapshots
+    take those digests and the full re-reads run beside the decode
+    (:mod:`woof.authority_digests`); the cache seals only after they match.
+    """
+    from woof import authority_digests
+
+    with authority_digests.deferred_checks():
+        return _main(argv)
+
+
+def _main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     if args.mapped_engine is not None:
@@ -3714,6 +4198,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             hierarchy_workers=args.hierarchy_workers,
             stock_wrf_export=args.stock_wrf_export,
             statics_corridor=statics_corridor,
+            **({"inland_air_mean_hours": args.inland_air_mean_hours}
+               if args.inland_air_mean_hours is not None else {}),
         )
     except InitializationMemoryRefused as error:
         # A preparation the card cannot hold under an explicit

@@ -76,7 +76,7 @@ def glibc_math(source):
     header=(_KDIR/"glibc_flt32.cuh").read_text()
     for cuda,host in (("powf(","gfk_pow("),("logf(","gfk_log("),("expf(","gfk_exp(")):
         source=source.replace(cuda,host)
-    return source.replace("// woof/core/kernels/smag2d.cu",header+"\n// woof/core/kernels/smag2d.cu",1)
+    return source.replace("// gpuwm/core/kernels/smag2d.cu",header+"\n// gpuwm/core/kernels/smag2d.cu",1)
 
 
 def wrf_tke_staging(source):

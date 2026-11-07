@@ -1,0 +1,2965 @@
+// WRF 4.8 urban statements retain their source operation boundaries.
+// Binary64 solver intermediates use integer software arithmetic.
+#include "soft_binary64.metalh"
+#include "soft_urban_trig.metalh"
+struct UcmR8 {
+    ulong bits;
+    UcmR8(): bits(0ul) {}
+    UcmR8(float x): bits(soft64_from_f32_bits(as_type<uint>(x))) {}
+    UcmR8(int x): bits(soft64_from_i32(x)) {}
+    static UcmR8 from_bits(ulong b) {UcmR8 x; x.bits=b; return x;}
+    operator float() const {return as_type<float>(soft64_to_f32_bits(bits));}
+};
+static inline UcmR8 operator-(UcmR8 x) {return UcmR8::from_bits(soft64_negate_bits(x.bits));}
+static inline UcmR8 ucm_dadd(UcmR8 a,UcmR8 b) {return UcmR8::from_bits(soft64_add(a.bits,b.bits));}
+static inline UcmR8 ucm_dsub(UcmR8 a,UcmR8 b) {return UcmR8::from_bits(soft64_sub(a.bits,b.bits));}
+static inline UcmR8 ucm_dmul(UcmR8 a,UcmR8 b) {return UcmR8::from_bits(soft64_mul(a.bits,b.bits));}
+static inline UcmR8 ucm_ddiv(UcmR8 a,UcmR8 b) {return UcmR8::from_bits(soft64_div(a.bits,b.bits));}
+static inline bool operator<(UcmR8 a,UcmR8 b) {return soft64_less(a.bits,b.bits);}
+static inline bool operator>(UcmR8 a,UcmR8 b) {return soft64_greater(a.bits,b.bits);}
+static inline bool operator<(UcmR8 a,float b) {return a<UcmR8(b);}
+static inline UcmR8 ucm_abs(UcmR8 x) {return UcmR8::from_bits(soft64_abs_bits(x.bits));}
+static inline float ucm_abs(float x) {return as_type<float>(as_type<uint>(x)&0x7fffffffu);}
+static inline UcmR8 ucm_copysign(UcmR8 a,UcmR8 b) {return UcmR8::from_bits((a.bits&0x7ffffffffffffffful)|(b.bits&0x8000000000000000ul));}
+static inline float u480_real(int x) {return float(x);}
+static inline int u480_int(float x) {return int(x);}
+static inline int u480_nint(float x) {return int(round(x));}
+static inline int u480_mod(int x,int y) {return x%y;}
+static inline float u480_sign(float x,float y) {return as_type<float>((as_type<uint>(x)&0x7fffffffu)|(as_type<uint>(y)&0x80000000u));}
+static inline float u480_sub(float a,float b) {return FSUB(a,b);}
+static inline float ucm480_sin(float x) {return as_type<float>(soft_glibc_solar_sinf(as_type<uint>(x)));}
+static inline float ucm480_cos(float x) {return as_type<float>(soft_glibc_solar_cosf(as_type<uint>(x)));}
+static inline float ucm480_asin(float x) {return as_type<float>(soft_glibc_solar_asinf(as_type<uint>(x)));}
+static inline float ucm480_acos(float x) {return as_type<float>(soft_urban_acosf(as_type<uint>(x)));}
+static inline float ucm480_atan(float x) {return as_type<float>(soft_urban_atanf(as_type<uint>(x)));}
+static inline float ucm480_tan(float x) {return as_type<float>(soft_urban_tanf(as_type<uint>(x)));}
+static inline float pslmu(float zz) {return FMUL(as_type<float>(0xbf75c28fu),gfk_log(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40900000u),zz))));}
+static inline float pslms(float zz) {return u480_sub(FDIV(zz,as_type<float>(0x3e439581u)),FMUL(as_type<float>(0x4004dd2fu),u480_sub(as_type<float>(0x3f800000u),FDIV(as_type<float>(0x3f800000u),FADD(zz,as_type<float>(0x3f800000u))))));}
+static inline float pslhu(float zz) {return FMUL(as_type<float>(0xbf75c28fu),gfk_log(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40900000u),zz))));}
+static inline float pslhs(float zz) {return u480_sub(FMUL(zz,as_type<float>(0x40c8a703u)),FMUL(as_type<float>(0x4004dd2fu),u480_sub(as_type<float>(0x3f800000u),gfk_exp(FMUL(as_type<float>(0xbf99999au),zz)))));}
+static inline float pspmu(float xx) {return u480_sub(FADD(u480_sub(FMUL(as_type<float>(0xc0000000u),gfk_log(FMUL(FADD(xx,as_type<float>(0x3f800000u)),as_type<float>(0x3f000000u)))),gfk_log(FMUL(FADD(FMUL(xx,xx),as_type<float>(0x3f800000u)),as_type<float>(0x3f000000u)))),FMUL(as_type<float>(0x40000000u),ucm480_atan(xx))),as_type<float>(0x3fc90fdbu));}
+static inline float pspms(float yy) {return FMUL(as_type<float>(0x40a00000u),yy);}
+static inline float psphu(float xx) {return FMUL(as_type<float>(0xc0000000u),gfk_log(FMUL(FADD(FMUL(xx,xx),as_type<float>(0x3f800000u)),as_type<float>(0x3f000000u))));}
+static inline float psphs(float yy) {return FMUL(as_type<float>(0x40a00000u),yy);}
+// Generated from the pinned WRF v4.8 numerical statements.
+struct U480Env {thread const float* tab; thread const float* glob; thread const int* sw;};
+static inline UcmR8 u480_mind(UcmR8 a,UcmR8 b) {return a<b?a:b;}
+static inline UcmR8 u480_maxd(UcmR8 a,UcmR8 b) {return a>b?a:b;}
+static inline UcmR8 u480_powi64(UcmR8 x,int n) {unsigned int m=n<0?0u-(unsigned int)n:(unsigned int)n;UcmR8 y=m&1?x:UcmR8(1);while(m>>=1) {x=ucm_dmul(x,x);if(m&1)y=ucm_dmul(y,x);}return n<0?ucm_ddiv(UcmR8(1),y):y;}
+static inline void u480_urban(thread const bool& lsolar,thread const int& num_roof_layers,thread const int& num_wall_layers,thread const int& num_road_layers,thread const float* dzr,thread const float* dzb,thread const float* dzg,thread const int& utype,thread const float& ta,thread const float& qa,thread const float& ua,thread const float& u1,thread const float& v1,thread const float& ssg,thread float& ssgd,thread float& ssgq,thread const float& llg,thread const float& rain,thread const float& rhoo,thread const float& za,thread const float& declin,thread const float& cosz,thread const float& omg,thread const float& xlat,thread const float& delt,thread float& znt,thread float& chs,thread float& chs2,thread float& tr,thread float& tb,thread float& tg,thread float& tc,thread float& qc,thread float& uc,thread float* trl,thread float* tbl,thread float* tgl,thread float& xxxr,thread float& xxxb,thread float& xxxg,thread float& xxxc,thread float& ts,thread float& qs,thread float& sh,thread float& lh,thread float& lh_kinematic,thread float& sw,thread float& alb,thread float& lw,thread float& g,thread float& rn,thread float& psim,thread float& psih,thread float& gz1oz0,thread float& cmr_urb,thread float& chr_urb,thread float& cmc_urb,thread float& chc_urb,thread float& u10,thread float& v10,thread float& th2,thread float& q2,thread float& ust,thread float& mh_urb,thread float& stdh_urb,thread float* lf_urb,thread float& lp_urb,thread float& hgt_urb,thread float& frc_urb,thread float& lb_urb,thread float& zo_check,thread float& cmcr,thread float& tgr,thread float* tgrl,thread float* smr,thread float& cmgr_urb,thread float& chgr_urb,thread const int& jmonth,thread float& drelr,thread float& drelb,thread float& drelg,thread float& flxhumr,thread float& flxhumb,thread float& flxhumg,thread float& tvg,thread float& tt,thread float& xxxvg,thread float* tvgl,thread float* smg,thread float& cmcg,thread float& flxhumvg,thread float& flxhumt,thread const float& lf_urb_s,thread const float& z0_urb,thread const float& vegfrac_in,thread const U480Env& env,thread int& status);
+static inline void u480_mos(thread float& xxx,thread float& alpha,thread float& cd,thread const float& b1,thread float& rib,thread const float& z,thread const float& z0,thread const float& ua,thread const float& ta,thread const float& tsf,thread const float& rho,thread const U480Env& env,thread int& status);
+static inline void u480_multi_layer(thread const int& km,thread const int& bound,thread const float& g0,thread const float& cap,thread const float& aks,thread float* tsl,thread const float* dz,thread const float& delt,thread const float& tslend,thread const U480Env& env,thread int& status);
+static inline void u480_force_restore(thread const float& cap,thread const float& aks,thread const float& delt,thread const float& s,thread const float& r,thread const float& h,thread const float& le,thread const float& tslend,thread const float& tsp,thread float& ts,thread const U480Env& env,thread int& status);
+static inline void u480_sfcdif_urb(thread const float& zlm,thread const float& z0,thread const float& thz0,thread const float& thlm,thread const float& sfcspd,thread const float& akanda,thread float& akms,thread float& akhs,thread float& rlmo,thread float& cd,thread float& zt_out,thread const float& vegfrac,bool optional_present,thread const U480Env& env,thread int& status);
+static inline void u480_direvap(thread float& edir,thread const float& etp,thread const float& smc,thread const float& shdfac,thread const float& smcmax,thread const float& smcdry,thread const float& fxexp,thread const U480Env& env,thread int& status);
+static inline void u480_transp(thread float& ett,thread float* et,thread float& ec,thread const float& shdfac,thread const float& etp1,thread const float& cmc,thread const float& cfactr,thread const float& cmcmax,thread const float& lai,thread const float& rsmin,thread const float& rsmax,thread const float& rgl,thread const float& sx,thread const float& ts,thread const float& ta,thread const float& qa,thread const float* smc,thread const float& smcwlt,thread const float& smcref,thread const float& cpp,thread const float& ps,thread const float& ch,thread const float& epsv,thread const float& delt,thread const int& nroot,thread const int& nsoil,thread const float* dzvr,thread const float* zsoil,thread const float& hs,thread const U480Env& env,thread int& status);
+static inline void u480_smflx(thread const float* smcp,thread float* smc,thread const int& nsoil,thread const float& cmcp,thread float& cmc,thread const float& dt,thread const float& prcp1,thread const float* zsoil,thread const float& smcmax,thread const float& bexp,thread const float& smcwlt,thread const float* sroot,thread const float& dksat,thread const float& dwsat,thread const float& shdfac,thread const float& cmcmax,thread float& runoff1,thread float& runoff2,thread float& runoff3,thread const float& edir,thread const float& ec,thread const float* et,thread float& drip,thread const U480Env& env,thread int& status);
+static inline void u480_srt(thread float* rhstt,thread const float& edir,thread const float* et,thread const float* smcp,thread const int& nsoil,thread const float& pcpdrp,thread const float* zsoil,thread const float& dwsat,thread const float& dksat,thread const float& smcmax,thread const float& bexp,thread float& runoff1,thread float& runoff2,thread const float& dt,thread const float& smcwlt,thread const float* sroot,thread float* ai,thread float* bi,thread float* ci,thread const U480Env& env,thread int& status);
+static inline void u480_sstep(thread const float* smcp,thread float* smc,thread const float& cmcp,thread float& cmc,thread float* rhstt,thread const float& rhsct,thread const float& dt,thread const int& nsoil,thread const float& smcmax,thread const float& cmcmax,thread float& runoff3,thread const float* zsoil,thread float* ai,thread float* bi,thread float* ci,thread const U480Env& env,thread int& status);
+static inline void u480_wdfcnd(thread float& wdf,thread float& wcnd,thread const float& smc,thread const float& smcmax,thread const float& bexp,thread const float& dksat,thread const float& dwsat,thread const U480Env& env,thread int& status);
+static inline void u480_rosr12(thread float* p,thread const float* a,thread const float* b,thread float* c,thread const float* d,thread float* delta,thread const int& nsoil,thread const U480Env& env,thread int& status);
+static inline void u480_shflx(thread float& ssoil,thread float* stc,thread const float* smc,thread const float& smcmax,thread const int& nsoil,thread float& t1,thread const float& dt,thread const float& yy,thread const float& zz1,thread const float* zsoil,thread const float& tbot,thread const float& zbot,thread const float& smcwlt,thread const float& df1,thread const float& quartz,thread const float& csoil,thread const float& capr,thread const U480Env& env,thread int& status);
+static inline void u480_hrt(thread float* rhsts,thread const float* stc,thread const float* smc,thread const float& smcmax,thread const int& nsoil,thread const float* zsoil,thread const float& yy,thread const float& zz1,thread const float& tbot,thread const float& zbot,thread const float& dt,thread const float& df1,thread float* ai,thread float* bi,thread float* ci,thread const float& quartz,thread const float& csoil,thread const float& capr,thread const U480Env& env,thread int& status);
+static inline void u480_hstep(thread float* stcout,thread const float* stcin,thread float* rhsts,thread const float& dt,thread const int& nsoil,thread float* ai,thread float* bi,thread float* ci,thread const U480Env& env,thread int& status);
+static inline void u480_tbnd(thread const float& tu,thread const float& tb,thread const float* zsoil,thread const float& zbot,thread const int& k,thread const int& nsoil,thread float& tbnd1,thread const U480Env& env,thread int& status);
+static inline void u480_tdfcnd(thread float& df,thread const float& smc,thread const float& qz,thread const float& smcmax,thread const U480Env& env,thread int& status);
+static inline void u480_shadow_tree(thread const float& xi,thread const float& h,thread const float& w,thread const float& htree,thread const float& rtree,thread const float& dtree,thread float& chi_shaded,thread float& eta_shaded,thread float& chi_shaded_tree,thread float& eta_shaded_tree,thread const U480Env& env,thread int& status);
+static inline void u480_stomatal(thread float& rs,thread const float& rsmin,thread const float& sd_facet,thread const float& lai,thread const float& w2,thread const float& wr,thread const float& ws,thread const float& ta,thread const float& ts,thread const float& qa,thread const float& qsat,thread const U480Env& env,thread int& status);
+static inline void u480_leleaf(thread float& le,thread const float& sw,thread const float& lw,thread const float& ra_leaf,thread const float& rs_leaf,thread const float& ra,thread const float& ta,thread const float& qa,thread const float& qsat,thread const U480Env& env,thread int& status);
+static inline void u480_force_restore_tree(thread const float& delt,thread const float& s,thread const float& r,thread const float& h,thread const float& le,thread const float& lai,thread const float& tsp,thread float& ts,thread const U480Env& env,thread int& status);
+static inline void u480_root_uptake(thread float* sroot,thread const int& nlayer,thread const float* smc,thread const float& smcmax,thread const float& smcdry,thread const float& rtree,thread const float& lai_tree,thread const float* dzg,thread const float* zsoil,thread const float& ele,thread const float& fvg,thread const float& rw,thread const U480Env& env,thread int& status);
+static inline float u480_cdf2d_vf(thread const float& theta,thread const U480Env& env,thread int& status);
+static inline void u480_vf_tree_analytical(thread const float& w,thread const float& h,thread const float& ht,thread const float& rt,thread const float& trans,thread float& fgs,thread float& fgw,thread float& fgt,thread float& fws,thread float& fwg,thread float& fww,thread float& fwt,thread float& fts,thread float& ftg,thread float& ftw,thread const U480Env& env,thread int& status);
+
+static inline void u480_urban(thread const bool& lsolar,thread const int& num_roof_layers,thread const int& num_wall_layers,thread const int& num_road_layers,thread const float* dzr,thread const float* dzb,thread const float* dzg,thread const int& utype,thread const float& ta,thread const float& qa,thread const float& ua,thread const float& u1,thread const float& v1,thread const float& ssg,thread float& ssgd,thread float& ssgq,thread const float& llg,thread const float& rain,thread const float& rhoo,thread const float& za,thread const float& declin,thread const float& cosz,thread const float& omg,thread const float& xlat,thread const float& delt,thread float& znt,thread float& chs,thread float& chs2,thread float& tr,thread float& tb,thread float& tg,thread float& tc,thread float& qc,thread float& uc,thread float* trl,thread float* tbl,thread float* tgl,thread float& xxxr,thread float& xxxb,thread float& xxxg,thread float& xxxc,thread float& ts,thread float& qs,thread float& sh,thread float& lh,thread float& lh_kinematic,thread float& sw,thread float& alb,thread float& lw,thread float& g,thread float& rn,thread float& psim,thread float& psih,thread float& gz1oz0,thread float& cmr_urb,thread float& chr_urb,thread float& cmc_urb,thread float& chc_urb,thread float& u10,thread float& v10,thread float& th2,thread float& q2,thread float& ust,thread float& mh_urb,thread float& stdh_urb,thread float* lf_urb,thread float& lp_urb,thread float& hgt_urb,thread float& frc_urb,thread float& lb_urb,thread float& zo_check,thread float& cmcr,thread float& tgr,thread float* tgrl,thread float* smr,thread float& cmgr_urb,thread float& chgr_urb,thread const int& jmonth,thread float& drelr,thread float& drelb,thread float& drelg,thread float& flxhumr,thread float& flxhumb,thread float& flxhumg,thread float& tvg,thread float& tt,thread float& xxxvg,thread float* tvgl,thread float* smg,thread float& cmcg,thread float& flxhumvg,thread float& flxhumt,thread const float& lf_urb_s,thread const float& z0_urb,thread const float& vegfrac_in,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  const float cp=as_type<float>(0x3e75c28fu);
+  const float el=as_type<float>(0x4411c000u);
+  const float sig=as_type<float>(0x2eb3a903u);
+  const float sig_si=as_type<float>(0x3373864fu);
+  const float ak=as_type<float>(0x3ecccccdu);
+  const float pi=as_type<float>(0x40490fd0u);
+  const float tetena=as_type<float>(0x40f00000u);
+  const float tetenb=as_type<float>(0x436d4ccdu);
+  const float sratio=as_type<float>(0x3f400000u);
+  const float ell=as_type<float>(0x4a150c40u);
+  const float xka=as_type<float>(0x37c9539cu);
+  float tvgp={};
+  float ttp={};
+  float albge={};
+  float xi={};
+  float angle={};
+  float tan1={};
+  float tan2={};
+  float sdt={};
+  float sdg={};
+  float sdb={};
+  float tau={};
+  float svg={};
+  float svg1={};
+  float svg2={};
+  float st={};
+  float st1={};
+  float st2={};
+  float sleaf={};
+  float chi_shaded={};
+  float chi_shaded_tree={};
+  float eta_shaded={};
+  float eta_shaded_tree={};
+  float vfws_tree={};
+  float vfww_tree={};
+  float vfts_tree={};
+  float vfwt_tree={};
+  float vfgs_tree={};
+  float vfwg_tree={};
+  float vfgw_tree={};
+  float vfgt_tree={};
+  float vftw_tree={};
+  float vftg_tree={};
+  float bhvg={};
+  float ribvg={};
+  float alphavg={};
+  float chvg={};
+  float cdvg={};
+  float srun1={};
+  float srun2={};
+  float srun3={};
+  float zsoilg[4]={};
+  float smgp[4]={};
+  float etg[4]={};
+  float dzvg[4]={};
+  float qs0vg={};
+  float dqs0vgdtvg={};
+  float qs0t={};
+  float dqs0tdtt={};
+  float epvg={};
+  float edirg={};
+  float ettg={};
+  float ecg={};
+  float etag={};
+  float dripg={};
+  float betvg={};
+  float vfac={};
+  float emitw={};
+  float emitg={};
+  float emitt={};
+  float epsge={};
+  float rvg1={};
+  float rvg2={};
+  float rvg={};
+  float rt1={};
+  float rt2={};
+  float rt={};
+  float rleaf={};
+  UcmR8 drbdtvg1={};
+  UcmR8 drbdtvg2={};
+  UcmR8 drbdtt1={};
+  UcmR8 drbdtt2={};
+  UcmR8 drgdtvg1={};
+  UcmR8 drgdtvg2={};
+  UcmR8 drgdtt1={};
+  UcmR8 drgdtt2={};
+  UcmR8 drvgdtb1={};
+  UcmR8 drvgdtb2={};
+  UcmR8 drvgdtvg1={};
+  UcmR8 drvgdtvg2={};
+  UcmR8 drvgdtg1={};
+  UcmR8 drvgdtg2={};
+  UcmR8 drvgdtt1={};
+  UcmR8 drvgdtt2={};
+  UcmR8 drtdtb1={};
+  UcmR8 drtdtb2={};
+  UcmR8 drtdtg1={};
+  UcmR8 drtdtg2={};
+  UcmR8 drtdtvg1={};
+  UcmR8 drtdtvg2={};
+  UcmR8 drtdtt1={};
+  UcmR8 drtdtt2={};
+  UcmR8 drbdtvg={};
+  UcmR8 drbdtt={};
+  UcmR8 drgdtvg={};
+  UcmR8 drgdtt={};
+  UcmR8 drvgdtb={};
+  UcmR8 drvgdtg={};
+  UcmR8 drvgdtvg={};
+  UcmR8 drvgdtt={};
+  UcmR8 drtdtb={};
+  UcmR8 drtdtg={};
+  UcmR8 drtdtvg={};
+  UcmR8 drtdtt={};
+  UcmR8 dhbdtvg={};
+  UcmR8 dhbdtt={};
+  UcmR8 dhgdtvg={};
+  UcmR8 dhgdtt={};
+  UcmR8 dhvgdtb={};
+  UcmR8 dhvgdtg={};
+  UcmR8 dhvgdtvg={};
+  UcmR8 dhvgdtt={};
+  UcmR8 dhtdtb={};
+  UcmR8 dhtdtg={};
+  UcmR8 dhtdtvg={};
+  UcmR8 dhtdtt={};
+  float hvg={};
+  float ht={};
+  float ra_leaf={};
+  float alphat={};
+  float w2={};
+  float rs_leaf={};
+  float elet={};
+  float available_water_sum={};
+  float potential_elet={};
+  float qs0c={};
+  float sroot[4]={};
+  float srootp[4]={};
+  float des={};
+  float mix={};
+  float dmix={};
+  float qsat={};
+  float dqsat={};
+  float esat={};
+  float desat={};
+  float delebdtvg={};
+  float delebdtt={};
+  float delegdtvg={};
+  float delegdtt={};
+  float delevgdtb={};
+  float delevgdtg={};
+  UcmR8 drs_leaf={};
+  UcmR8 m={};
+  UcmR8 d={};
+  UcmR8 dd={};
+  UcmR8 fe={};
+  UcmR8 dfe={};
+  UcmR8 s={};
+  UcmR8 dm={};
+  UcmR8 kk={};
+  UcmR8 l={};
+  UcmR8 n={};
+  UcmR8 delevgdtvg={};
+  UcmR8 delevgdtt={};
+  UcmR8 deletdtb={};
+  UcmR8 deletdtg={};
+  UcmR8 deletdtvg={};
+  UcmR8 deletdtt={};
+  UcmR8 dtcdtvg={};
+  UcmR8 dtcdtt={};
+  float dqcdtvg={};
+  float dqcdtt={};
+  float elevg={};
+  float kvg={};
+  float g0vg={};
+  float dg0bdtvg={};
+  float dg0bdtt={};
+  float dg0gdtvg={};
+  float dg0gdtt={};
+  float dg0vgdtb={};
+  float dg0vgdtg={};
+  float dg0vgdtvg={};
+  float dg0vgdtt={};
+  UcmR8 wf={};
+  UcmR8 a={};
+  UcmR8 b={};
+  UcmR8 c={};
+  UcmR8 e={};
+  UcmR8 ff={};
+  UcmR8 gg={};
+  UcmR8 h={};
+  UcmR8 vgf={};
+  UcmR8 i={};
+  UcmR8 j={};
+  UcmR8 o={};
+  UcmR8 p={};
+  UcmR8 chara={};
+  UcmR8 det={};
+  UcmR8 det_tol={};
+  UcmR8 det_scale={};
+  UcmR8 a_use={};
+  UcmR8 ff_use={};
+  UcmR8 kk_use={};
+  UcmR8 f_lambda={};
+  UcmR8 relax={};
+  UcmR8 w2_num={};
+  UcmR8 w2_den={};
+  UcmR8 den_qc={};
+  float max_step={};
+  float ssoilg={};
+  float tge={};
+  float tgep={};
+  float qs0ge={};
+  float alphage={};
+  float flxthvg={};
+  float flxtht={};
+  float cmcgp={};
+  const int nvg=4;
+  const float cpp=as_type<float>(0x447b2000u);
+  const float dleaf=as_type<float>(0x3dcccccdu);
+  const float tref=as_type<float>(0x43950000u);
+  const float eref=as_type<float>(0x4545f000u);
+  float fvg={};
+  float z0vg={};
+  float z0hvg={};
+  float capvg={};
+  float epsvg={};
+  float epst={};
+  float rtree={};
+  float rtree_m={};
+  float rw_m={};
+  float dtree={};
+  float htree={};
+  float albt={};
+  float albvg={};
+  float lai_tree={};
+  float lai_veg={};
+  float zr={};
+  float z0c={};
+  float z0hc={};
+  float zdc={};
+  float svf={};
+  float r={};
+  float rw={};
+  float hgt={};
+  float ah={};
+  float alh={};
+  float sigma_zed={};
+  float capr={};
+  float capb={};
+  float capg={};
+  float aksr={};
+  float aksb={};
+  float aksg={};
+  float albr={};
+  float albb={};
+  float albg={};
+  float epsr={};
+  float epsb={};
+  float epsg={};
+  float z0r={};
+  float z0b={};
+  float z0g={};
+  float z0hb={};
+  float z0hg={};
+  float trlend={};
+  float tblend={};
+  float tglend={};
+  float t1vr={};
+  float t1vc={};
+  float th2v={};
+  float rlmo_urb={};
+  float akanda_urban={};
+  float th2x={};
+  int boundr={};
+  int boundb={};
+  int boundg={};
+  int ch_scheme={};
+  int ts_scheme={};
+  bool shadow={};
+  int numdir={};
+  float street_direction[3]={};
+  float street_width[3]={};
+  float building_width[3]={};
+  int numhgt={};
+  float height_bin[50]={};
+  float hpercent_bin[50]={};
+  float betr={};
+  float betb={};
+  float betg={};
+  float sx={};
+  float sd={};
+  float sq={};
+  float rx={};
+  float ur={};
+  float zc={};
+  float xlb={};
+  float bb={};
+  float z={};
+  float ribb={};
+  float ribg={};
+  float ribc={};
+  float bhr={};
+  float bhb={};
+  float bhg={};
+  float bhc={};
+  float tsc={};
+  float lnet={};
+  float snet={};
+  float flxuv={};
+  float thg={};
+  float flxth={};
+  float flxhum={};
+  float flxg={};
+  float w={};
+  float vfgs={};
+  float vfgw={};
+  float vfwg={};
+  float vfws={};
+  float vfww={};
+  float houi1={};
+  float houi2={};
+  float houi3={};
+  float houi4={};
+  float houi5={};
+  float houi6={};
+  float houi7={};
+  float houi8={};
+  float slx={};
+  float slx1={};
+  float slx2={};
+  float slx3={};
+  float slx4={};
+  float slx5={};
+  float slx6={};
+  float slx7={};
+  float slx8={};
+  float flxthr={};
+  float flxthb={};
+  float flxthg={};
+  float sr={};
+  float sb={};
+  float sg={};
+  float rr={};
+  float rb={};
+  float rg={};
+  float sr1={};
+  float sr2={};
+  float sb1={};
+  float sb2={};
+  float sg1={};
+  float sg2={};
+  float rr1={};
+  float rr2={};
+  float rb1={};
+  float rb2={};
+  float rg1={};
+  float rg2={};
+  float hr={};
+  float hb={};
+  float hg={};
+  float eler={};
+  float eleb={};
+  float eleg={};
+  float g0r={};
+  float g0b={};
+  float g0g={};
+  float alphac={};
+  float alphar={};
+  float alphab={};
+  float alphag={};
+  float chc={};
+  float chr={};
+  float chb={};
+  float chg={};
+  float cdc={};
+  float cdr={};
+  float cdb={};
+  float cdg={};
+  float cdgr={};
+  float c1r={};
+  float c1b={};
+  float c1g={};
+  float te={};
+  float tc1={};
+  float tc2={};
+  float qc1={};
+  float qc2={};
+  float qs0r={};
+  float qs0b={};
+  float qs0g={};
+  float rho={};
+  float es={};
+  float desdt={};
+  float f={};
+  float dqs0rdtr={};
+  float drrdtr={};
+  float dhrdtr={};
+  float delerdtr={};
+  float dg0rdtr={};
+  float dtr={};
+  float dfdt={};
+  float fx={};
+  float fy={};
+  float gf={};
+  float gx={};
+  float gy={};
+  float dtcdtb={};
+  float dtcdtg={};
+  float dqcdtb={};
+  float dqcdtg={};
+  float drbdtb1={};
+  float drbdtg1={};
+  float drbdtb2={};
+  float drbdtg2={};
+  float drgdtb1={};
+  float drgdtg1={};
+  float drgdtb2={};
+  float drgdtg2={};
+  float drbdtb={};
+  float drbdtg={};
+  float drgdtb={};
+  float drgdtg={};
+  float dhbdtb={};
+  float dhbdtg={};
+  float dhgdtb={};
+  float dhgdtg={};
+  float delebdtb={};
+  float delebdtg={};
+  float delegdtg={};
+  float delegdtb={};
+  float dg0bdtb={};
+  float dg0bdtg={};
+  float dg0gdtg={};
+  float dg0gdtb={};
+  float dqs0bdtb={};
+  float dqs0gdtg={};
+  float dtb={};
+  float dtg={};
+  float dtc={};
+  float dtvg={};
+  float dtt={};
+  float theataz={};
+  float theatas={};
+  float fai={};
+  float cnt={};
+  float snt={};
+  float ps={};
+  float tav={};
+  float xxx={};
+  float x={};
+  float z0={};
+  float z0h={};
+  float cd={};
+  float ch={};
+  float xxx2={};
+  float psim2={};
+  float psih2={};
+  float xxx10={};
+  float psim10={};
+  float psih10={};
+  float psix={};
+  float psit={};
+  float psix2={};
+  float psit2={};
+  float psix10={};
+  float psit10={};
+  float trp={};
+  float tbp={};
+  float tgp={};
+  float tcp={};
+  float qcp={};
+  float tst={};
+  float qst={};
+  float tsp={};
+  float chs_local={};
+  float chs2_local={};
+  float wdr={};
+  float hgt2={};
+  float bw={};
+  float dhgt={};
+  const float vonk=as_type<float>(0x3ecccccdu);
+  float lambda_f={};
+  float alpha_macd={};
+  float beta_macd={};
+  float lambda_fr={};
+  float lambda_p={};
+  float vegfrac={};
+  int iteration={};
+  int k={};
+  int nudapt={};
+  int tloc={};
+  int tloc2={};
+  int kalh={};
+  float flxhumrp={};
+  float flxhumbp={};
+  float flxhumgp={};
+  float drelrp={};
+  float drelbp={};
+  float drelgp={};
+  float tgrp={};
+  float cmcrp={};
+  float zsoilr[4]={};
+  float etr[4]={};
+  float smrp[4]={};
+  int kz={};
+  float runoff1={};
+  float runoff2={};
+  float runoff3={};
+  float sgr={};
+  float sgr1={};
+  float t1vgr={};
+  float chgr={};
+  float alphagr={};
+  float flxthgr={};
+  float flxhumgr={};
+  float hgr={};
+  float elegr={};
+  float g0gr={};
+  float qs0gr={};
+  float epgr={};
+  float edir={};
+  float ettr={};
+  float fv={};
+  float dtgr={};
+  float drip={};
+  float dqs0grdtgr={};
+  float ecr={};
+  float rain1={};
+  float raindr={};
+  float dew={};
+  float etar={};
+  float betgr={};
+  float df1={};
+  float rgr={};
+  float rgrr={};
+  float rch={};
+  float yy={};
+  float zz1={};
+  float ssoilr={};
+  float rvgt={};
+  float drrdtgr={};
+  float dhrdtgr={};
+  float delerdtgr={};
+  float dg0rdtgr={};
+  float dfdvt={};
+  const float shdfac=as_type<float>(0x3f4ccccdu);
+  const float albv=as_type<float>(0x3e4ccccdu);
+  const float epsv=as_type<float>(0x3f6e147bu);
+  const float lai=as_type<float>(0x3fc00000u);
+  const float cmcmax=as_type<float>(0x3a03126fu);
+  const float smcref=as_type<float>(0x3ea872b0u);
+  const float smcdry=as_type<float>(0x3d872b02u);
+  const float smcwlt=as_type<float>(0x3dac0831u);
+  const float smcmax=as_type<float>(0x3ee0c49cu);
+  const float rsmax=as_type<float>(0x459c4000u);
+  const float rsmin=as_type<float>(0x42c80000u);
+  const float rgl=as_type<float>(0x42c80000u);
+  const float cfactr=as_type<float>(0x3f000000u);
+  const float dwsat=as_type<float>(0x376fea08u);
+  const float dksat=as_type<float>(0x3662d3f5u);
+  const float bexp=as_type<float>(0x40a80000u);
+  const float fxexp=as_type<float>(0x40000000u);
+  const float zbot=as_type<float>(0xc0000000u);
+  const float quartz=as_type<float>(0x3ecccccdu);
+  const float csoil=as_type<float>(0x49f42400u);
+  const float hs=as_type<float>(0x42100000u);
+  const int nroot=2;
+  const int ngr=4;
+  const int impr=1;
+  const int impb=2;
+  const int impg=3;
+  thread const float* dzgr=env.glob+12;
+  thread const float* porimp=env.glob+16;
+  thread const float* dengimp=env.glob+19;
+  thread const float* ahdiuprf=env.glob+22;
+  thread const float* alhseason=env.glob+46;
+  thread const float* alhdiuprf=env.glob+50;
+  const float fgr=env.glob[98];
+  const int ahoption=env.sw[5],alhoption=env.sw[6],imp_scheme=env.sw[7],iri_scheme=env.sw[8],groption=env.sw[9];
+  const int treeoption=env.sw[11],ttscheme=env.sw[12];
+  const bool distributed_aerodynamics_option=false;
+  float optional_zt=0.0f,optional_veg=0.0f;
+  if(mh_urb>0.0f) {status=2;return;}
+  if(utype<1 || utype>env.sw[10]) {status=3;return;}
+  {
+  }
+  if ((((ahoption==1)) || ((iri_scheme==1)))) {
+  tloc=u480_mod(u480_int(FADD(FADD(FDIV(FMUL(FDIV(omg,as_type<float>(0x40490fd0u)),as_type<float>(0x43340000u)),as_type<float>(0x41700000u)),as_type<float>(0x41400000u)),as_type<float>(0x3f000000u))),24);
+  if (((tloc<0))) {
+  tloc=(tloc+24);
+  }
+  if (((tloc==0))) {
+  tloc=24;
+  }
+  }
+  if (((alhoption==1))) {
+  tloc2=u480_mod(u480_int(FADD(FMUL(FADD(FDIV(FMUL(FDIV(omg,as_type<float>(0x40490fd0u)),as_type<float>(0x43340000u)),as_type<float>(0x41700000u)),as_type<float>(0x41400000u)),as_type<float>(0x40000000u)),as_type<float>(0x3f000000u))),48);
+  if (((tloc2<0))) {
+  tloc2=(tloc2+48);
+  }
+  if (((tloc2==0))) {
+  tloc2=48;
+  }
+  }
+  zr=env.tab[(utype-1)*49+0];
+  z0c=env.tab[(utype-1)*49+1];
+  z0hc=env.tab[(utype-1)*49+2];
+  zdc=env.tab[(utype-1)*49+3];
+  svf=env.tab[(utype-1)*49+4];
+  r=env.tab[(utype-1)*49+5];
+  rw=env.tab[(utype-1)*49+6];
+  hgt=env.tab[(utype-1)*49+7];
+  ah=env.tab[(utype-1)*49+8];
+  alh=env.tab[(utype-1)*49+9];
+  betr=env.tab[(utype-1)*49+10];
+  betb=env.tab[(utype-1)*49+11];
+  betg=env.tab[(utype-1)*49+12];
+  capr=env.tab[(utype-1)*49+13];
+  capb=env.tab[(utype-1)*49+14];
+  capg=env.tab[(utype-1)*49+15];
+  aksr=env.tab[(utype-1)*49+16];
+  aksb=env.tab[(utype-1)*49+17];
+  aksg=env.tab[(utype-1)*49+18];
+  albr=env.tab[(utype-1)*49+19];
+  albb=env.tab[(utype-1)*49+20];
+  albg=env.tab[(utype-1)*49+21];
+  epsr=env.tab[(utype-1)*49+22];
+  epsb=env.tab[(utype-1)*49+23];
+  epsg=env.tab[(utype-1)*49+24];
+  z0r=env.tab[(utype-1)*49+25];
+  z0b=env.tab[(utype-1)*49+26];
+  z0g=env.tab[(utype-1)*49+27];
+  z0hb=env.tab[(utype-1)*49+28];
+  z0hg=env.tab[(utype-1)*49+29];
+  trlend=env.tab[(utype-1)*49+30];
+  tblend=env.tab[(utype-1)*49+31];
+  tglend=env.tab[(utype-1)*49+32];
+  akanda_urban=env.tab[(utype-1)*49+33];
+  albvg=env.tab[(utype-1)*49+34];
+  albt=env.tab[(utype-1)*49+35];
+  fvg=env.tab[(utype-1)*49+36];
+  rtree=env.tab[(utype-1)*49+37];
+  rtree_m=env.tab[(utype-1)*49+38];
+  rw_m=env.tab[(utype-1)*49+39];
+  htree=env.tab[(utype-1)*49+40];
+  dtree=env.tab[(utype-1)*49+41];
+  lai_tree=env.tab[(utype-1)*49+42];
+  lai_veg=env.tab[(utype-1)*49+43];
+  z0vg=env.tab[(utype-1)*49+44];
+  z0hvg=env.tab[(utype-1)*49+45];
+  capvg=env.tab[(utype-1)*49+46];
+  epsvg=env.tab[(utype-1)*49+47];
+  epst=env.tab[(utype-1)*49+48];
+  boundr=env.sw[0];boundb=env.sw[1];boundg=env.sw[2];ch_scheme=env.sw[3];ts_scheme=env.sw[4];
+  {
+  }
+  if (((ahoption==1))) {
+  ah=FMUL(ah,ahdiuprf[(tloc)-1]);
+  }
+  kalh=0;
+  if (((alhoption==1))) {
+  if ((((jmonth==3)) || ((jmonth==4)) || ((jmonth==5)))) {
+  kalh=1;
+  }
+  if ((((jmonth==6)) || ((jmonth==7)) || ((jmonth==8)))) {
+  kalh=2;
+  }
+  if ((((jmonth==9)) || ((jmonth==10)) || ((jmonth==11)))) {
+  kalh=3;
+  }
+  if ((((jmonth==12)) || ((jmonth==1)) || ((jmonth==2)))) {
+  kalh=4;
+  }
+  }
+  if (((alhoption==1))) {
+  alh=FMUL(FMUL(alh,alhdiuprf[(tloc2)-1]),alhseason[(kalh)-1]);
+  }
+  {
+  }
+  if (((FADD(FADD(zdc,z0c),as_type<float>(0x40000000u))>=za))) {
+  status=1; return;
+  }
+  if ((!lsolar)) {
+  ssgd=FMUL(as_type<float>(0x3f400000u),ssg);
+  ssgq=u480_sub(ssg,ssgd);
+  }
+  ssgd=FMUL(as_type<float>(0x3f400000u),ssg);
+  ssgq=u480_sub(ssg,ssgd);
+  w=FMUL(as_type<float>(0x40000000u),hgt);
+  vfgs=svf;
+  vfgw=u480_sub(as_type<float>(0x3f800000u),svf);
+  vfwg=FDIV(FMUL(u480_sub(as_type<float>(0x3f800000u),svf),u480_sub(as_type<float>(0x3f800000u),r)),w);
+  vfws=vfwg;
+  vfww=u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfwg));
+  sx=FDIV(FDIV(FADD(ssgd,ssgq),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  sd=FDIV(FDIV(ssgd,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  sq=FDIV(FDIV(ssgq,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  rx=FDIV(FDIV(llg,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  rho=FMUL(rhoo,as_type<float>(0x3a83126fu));
+  trp=tr;
+  tbp=tb;
+  tgp=tg;
+  tcp=tc;
+  qcp=qc;
+  tsp=FDIV(FADD(FADD(FMUL(tr,r),FMUL(tb,w)),FMUL(tg,rw)),FADD(FADD(r,rw),w));
+  flxhumrp=flxhumr;
+  flxhumbp=flxhumb;
+  flxhumgp=flxhumg;
+  drelrp=drelr;
+  drelbp=drelb;
+  drelgp=drelg;
+  tgrp=tgr;
+  cmcrp=cmcr;
+  for(int vi=0;vi<4;++vi) smrp[vi]=smr[vi];
+  if (((iri_scheme==1))) {
+  if ((((tloc==21)) || ((tloc==22)))) {
+  if ((((jmonth==5)) || ((jmonth==6)) || ((jmonth==7)) || ((jmonth==8)) || ((jmonth==9)))) {
+  for (kz=1;kz<=2;kz+=1) {
+  smrp[(kz)-1]=as_type<float>(0x3ea872b0u);
+  }
+  }
+  }
+  }
+  tav=FMUL(ta,FADD(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x3f1c28f6u),qa)));
+  ps=FDIV(FMUL(FMUL(rhoo,as_type<float>(0x438f8000u)),tav),as_type<float>(0x42c80000u));
+  for(int vi=0;vi<4;++vi) sroot[vi]=as_type<float>(0x00000000u);
+  for(int vi=0;vi<4;++vi) etr[vi]=as_type<float>(0x00000000u);
+  for(int vi=0;vi<4;++vi) etg[vi]=as_type<float>(0x00000000u);
+  tge=FADD(FMUL(u480_sub(as_type<float>(0x3f800000u),fvg),tg),FMUL(fvg,tvg));
+  hvg=as_type<float>(0x00000000u);
+  elevg=as_type<float>(0x00000000u);
+  ht=as_type<float>(0x00000000u);
+  elet=as_type<float>(0x00000000u);
+  sleaf=as_type<float>(0x00000000u);
+  svg1=as_type<float>(0x00000000u);
+  svg2=as_type<float>(0x00000000u);
+  tvgp=tvg;
+  tgep=tge;
+  cmcgp=cmcg;
+  for(int vi=0;vi<4;++vi) smgp[vi]=smg[vi];
+  ttp=tt;
+  for(int vi=0;vi<4;++vi) srootp[vi]=sroot[vi];
+  if (((FADD(zr,as_type<float>(0x40000000u))<za))) {
+  ur=FDIV(FMUL(ua,gfk_log(FDIV(u480_sub(zr,zdc),z0c))),gfk_log(FDIV(u480_sub(za,zdc),z0c)));
+  zc=FMUL(as_type<float>(0x3f333333u),zr);
+  xlb=FMUL(as_type<float>(0x3ecccccdu),u480_sub(zr,zdc));
+  bb=FDIV(FMUL(as_type<float>(0x3ecccccdu),zr),FMUL(xlb,gfk_log(FDIV(u480_sub(zr,zdc),z0c))));
+  uc=FMUL(ur,gfk_exp(FMUL((-bb),u480_sub(as_type<float>(0x3f800000u),FDIV(zc,zr)))));
+  } else {
+  zc=FDIV(za,as_type<float>(0x40000000u));
+  uc=FDIV(ua,as_type<float>(0x40000000u));
+  }
+  shadow=true;
+  tau=gfk_exp(FMUL(as_type<float>(0xbf1c28f6u),lai_tree));
+  if (((treeoption==1))) {
+  u480_vf_tree_analytical(rw,hgt,htree,rtree,tau,vfgs_tree,vfgw_tree,vfgt_tree,vfws_tree,vfwg_tree,vfww_tree,vfwt_tree,vfts_tree,vftg_tree,vftw_tree,env,status);
+  }
+  if (((ssg>as_type<float>(0x00000000u)))) {
+  if (shadow) {
+  fai=FDIV(FMUL(xlat,as_type<float>(0x40490fd0u)),as_type<float>(0x43340000u));
+  theatas=ucm_abs(ucm480_asin(cosz));
+  theataz=ucm_abs(ucm480_acos(cosz));
+  snt=FDIV(FMUL(ucm480_cos(declin),ucm480_sin(omg)),ucm480_cos(theatas));
+  cnt=FDIV(FDIV(u480_sub(FMUL(cosz,ucm480_sin(fai)),ucm480_sin(declin)),ucm480_cos(theatas)),ucm480_cos(fai));
+  houi1=u480_sub(FMUL(snt,as_type<float>(0x3f6c8361u)),FMUL(cnt,as_type<float>(0x3ec3ef0bu)));
+  houi2=u480_sub(FMUL(snt,as_type<float>(0x3f3504fbu)),FMUL(cnt,as_type<float>(0x3f3504ecu)));
+  houi3=u480_sub(FMUL(snt,as_type<float>(0x3ec3ef33u)),FMUL(cnt,as_type<float>(0x3f6c8358u)));
+  houi4=u480_sub(FMUL(snt,as_type<float>(0x35aa2217u)),FMUL(cnt,as_type<float>(0x3f800000u)));
+  houi5=u480_sub(FMUL(snt,as_type<float>(0xbec3eee4u)),FMUL(cnt,as_type<float>(0x3f6c8369u)));
+  houi6=u480_sub(FMUL(snt,as_type<float>(0xbf3504ddu)),FMUL(cnt,as_type<float>(0x3f35050au)));
+  houi7=u480_sub(FMUL(snt,as_type<float>(0xbf6c8350u)),FMUL(cnt,as_type<float>(0x3ec3ef5au)));
+  houi8=u480_sub(FMUL(snt,as_type<float>(0xbf800000u)),FMUL(cnt,as_type<float>(0x362a2217u)));
+  slx1=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi1));
+  slx2=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi2));
+  slx3=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi3));
+  slx4=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi4));
+  slx5=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi5));
+  slx6=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi6));
+  slx7=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi7));
+  slx8=FMUL(FMUL(hgt,ucm_abs(ucm480_tan(theataz))),ucm_abs(houi8));
+  if (((slx1>rw))) {
+  slx1=rw;
+  }
+  if (((slx2>rw))) {
+  slx2=rw;
+  }
+  if (((slx3>rw))) {
+  slx3=rw;
+  }
+  if (((slx4>rw))) {
+  slx4=rw;
+  }
+  if (((slx5>rw))) {
+  slx5=rw;
+  }
+  if (((slx6>rw))) {
+  slx6=rw;
+  }
+  if (((slx7>rw))) {
+  slx7=rw;
+  }
+  if (((slx8>rw))) {
+  slx8=rw;
+  }
+  slx=FDIV(FADD(FADD(FADD(FADD(FADD(FADD(FADD(slx1,slx2),slx3),slx4),slx5),slx6),slx7),slx8),as_type<float>(0x41000000u));
+  }
+  if ((!shadow)) {
+  sr1=FMUL(sx,u480_sub(as_type<float>(0x3f800000u),albr));
+  sgr1=FMUL(sx,as_type<float>(0x3f4ccccdu));
+  sg1=FMUL(FMUL(sx,vfgs),u480_sub(as_type<float>(0x3f800000u),albg));
+  sb1=FMUL(FMUL(sx,vfws),u480_sub(as_type<float>(0x3f800000u),albb));
+  sg2=FMUL(FMUL(FDIV(FMUL(sb1,albb),u480_sub(as_type<float>(0x3f800000u),albb)),vfgw),u480_sub(as_type<float>(0x3f800000u),albg));
+  sb2=FADD(FMUL(FMUL(FDIV(FMUL(sg1,albg),u480_sub(as_type<float>(0x3f800000u),albg)),vfwg),u480_sub(as_type<float>(0x3f800000u),albb)),FMUL(FMUL(sb1,albb),vfww));
+  } else if (((treeoption!=1))) {
+  sr1=FADD(FMUL(sd,u480_sub(as_type<float>(0x3f800000u),albr)),FMUL(sq,u480_sub(as_type<float>(0x3f800000u),albr)));
+  sgr1=FADD(FMUL(sd,as_type<float>(0x3f4ccccdu)),FMUL(sq,as_type<float>(0x3f4ccccdu)));
+  sg1=FADD(FMUL(FDIV(FMUL(sd,u480_sub(rw,slx)),rw),u480_sub(as_type<float>(0x3f800000u),albg)),FMUL(FMUL(sq,vfgs),u480_sub(as_type<float>(0x3f800000u),albg)));
+  sb1=FADD(FMUL(FDIV(FMUL(sd,slx),w),u480_sub(as_type<float>(0x3f800000u),albb)),FMUL(FMUL(sq,vfws),u480_sub(as_type<float>(0x3f800000u),albb)));
+  sg2=FMUL(FMUL(FDIV(FMUL(sb1,albb),u480_sub(as_type<float>(0x3f800000u),albb)),vfgw),u480_sub(as_type<float>(0x3f800000u),albg));
+  sb2=FADD(FMUL(FMUL(FDIV(FMUL(sg1,albg),u480_sub(as_type<float>(0x3f800000u),albg)),vfwg),u480_sub(as_type<float>(0x3f800000u),albb)),FMUL(FMUL(sb1,albb),vfww));
+  } else {
+  if (((FADD(htree,rtree)>zr))) {
+  status=1; return;
+  }
+  albge=FADD(FMUL(u480_sub(as_type<float>(0x3f800000u),fvg),albg),FMUL(fvg,albvg));
+  xi=FDIV(slx,hgt);
+  angle=u480_sub(FADD(gfk_pow(dtree,as_type<float>(0x40000000u)),gfk_pow(u480_sub(hgt,htree),as_type<float>(0x40000000u))),gfk_pow(rtree,as_type<float>(0x40000000u)));
+  tan1=FDIV(FADD(FMUL(rtree,u480_sub(hgt,htree)),FMUL(dtree,FSQRT(angle))),u480_sub(FMUL(u480_sub(hgt,htree),FSQRT(angle)),FMUL(rtree,dtree)));
+  tan2=FDIV(FADD(FMUL((-rtree),u480_sub(hgt,htree)),FMUL(dtree,FSQRT(angle))),FADD(FMUL(u480_sub(hgt,htree),FSQRT(angle)),FMUL(rtree,dtree)));
+  if (((theataz>as_type<float>(0x3fc90fd0u)))) {
+  sdt=0;
+  sdg=0;
+  sdb=0;
+  } else if (((xi>=tan1))) {
+  sdt=0;
+  } else if ((((xi>=tan2)) && ((xi<tan1)))) {
+  sdt=FDIV(FMUL(sd,u480_sub(FADD(FMUL(rtree,FSQRT(FADD(1,gfk_pow(xi,as_type<float>(0x40000000u))))),dtree),FMUL(u480_sub(hgt,htree),xi))),FMUL(as_type<float>(0x40c90fd0u),rtree));
+  } else {
+  sdt=FDIV(FMUL(sd,FMUL(FMUL(as_type<float>(0x40000000u),rtree),FSQRT(FADD(as_type<float>(0x3f800000u),gfk_pow(xi,as_type<float>(0x40000000u)))))),FMUL(as_type<float>(0x40c90fd0u),rtree));
+  }
+  u480_shadow_tree(xi,hgt,rw,htree,rtree,dtree,chi_shaded,eta_shaded,chi_shaded_tree,eta_shaded_tree,env,status);
+  sdg=FDIV(FMUL(sd,FADD(u480_sub(rw,chi_shaded),FMUL(chi_shaded_tree,tau))),rw);
+  sdb=FDIV(FMUL(FMUL(sd,xi),FADD(u480_sub(hgt,eta_shaded),FMUL(eta_shaded_tree,tau))),w);
+  sr1=FADD(FMUL(sd,u480_sub(as_type<float>(0x3f800000u),albr)),FMUL(sq,u480_sub(as_type<float>(0x3f800000u),albr)));
+  sgr1=FADD(FMUL(sd,as_type<float>(0x3f4ccccdu)),FMUL(sq,as_type<float>(0x3f4ccccdu)));
+  sb1=FMUL(FADD(sdb,FMUL(sq,vfws_tree)),u480_sub(as_type<float>(0x3f800000u),albb));
+  sb2=FADD(FADD(FMUL(FMUL(FMUL(FADD(sdb,FMUL(sq,vfws_tree)),albb),vfww_tree),u480_sub(1,albb)),FMUL(FMUL(FMUL(FADD(sdt,FMUL(sq,vfts_tree)),albt),vfwt_tree),u480_sub(1,albb))),FMUL(FMUL(FMUL(FADD(sdg,FMUL(sq,vfgs_tree)),albge),vfwg_tree),u480_sub(1,albb)));
+  sg1=FMUL(FADD(sdg,FMUL(sq,vfgs_tree)),u480_sub(1,albg));
+  sg2=FADD(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40000000u),FADD(sdb,FMUL(sq,vfws_tree))),albb),vfgw_tree),u480_sub(1,albg)),FMUL(FMUL(FMUL(FADD(sdt,FMUL(sq,vfts_tree)),albt),vfgt_tree),u480_sub(1,albg)));
+  svg1=FMUL(FADD(sdg,FMUL(sq,vfgs_tree)),u480_sub(1,albvg));
+  svg2=FADD(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40000000u),FADD(sdb,FMUL(sq,vfws_tree))),albb),vfgw_tree),u480_sub(1,albvg)),FMUL(FMUL(FMUL(FADD(sdt,FMUL(sq,vfts_tree)),albt),vfgt_tree),u480_sub(1,albvg)));
+  st1=FMUL(FADD(sdt,FMUL(sq,vfts_tree)),u480_sub(1,albt));
+  st2=FADD(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40000000u),FADD(sdb,FMUL(sq,vfws_tree))),albb),vftw_tree),u480_sub(1,albt)),FMUL(FMUL(FMUL(FADD(sdg,FMUL(sq,vfgs_tree)),albg),vftg_tree),u480_sub(1,albt)));
+  }
+  sr=sr1;
+  sgr=sgr1;
+  sg=FADD(sg1,sg2);
+  svg=FADD(svg1,svg2);
+  sb=FADD(sb1,sb2);
+  if (((treeoption==1))) {
+  st=FMUL(FMUL(FMUL(FMUL(FADD(st1,st2),as_type<float>(0x40000000u)),as_type<float>(0x40490fd0u)),rtree),u480_sub(1,tau));
+  sleaf=FMUL(FMUL(FDIV(st,FMUL(FMUL(as_type<float>(0x40000000u),rtree),lai_tree)),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  } else {
+  st=0;
+  }
+  if ((((groption==1)) && ((treeoption!=1)))) {
+  snet=FADD(FADD(FADD(FADD(FMUL(FMUL(r,fgr),sgr),FMUL(FMUL(r,u480_sub(as_type<float>(0x3f800000u),fgr)),sr)),FMUL(w,sb)),FMUL(rw,sg)),st);
+  } else if ((((treeoption==1)) && ((groption!=1)))) {
+  snet=FADD(FADD(FADD(FADD(FMUL(r,sr),FMUL(w,sb)),FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fvg),rw),sg)),FMUL(FMUL(fvg,rw),svg)),st);
+  } else if ((((treeoption==1)) && ((groption==1)))) {
+  snet=FADD(FADD(FADD(FADD(FADD(FMUL(FMUL(r,fgr),sgr),FMUL(FMUL(r,u480_sub(as_type<float>(0x3f800000u),fgr)),sr)),FMUL(w,sb)),FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fvg),rw),sg)),FMUL(FMUL(fvg,rw),svg)),st);
+  } else {
+  snet=FADD(FADD(FADD(FMUL(r,sr),FMUL(w,sb)),FMUL(rw,sg)),st);
+  }
+  } else {
+  sr=as_type<float>(0x00000000u);
+  sg=as_type<float>(0x00000000u);
+  sgr=as_type<float>(0x00000000u);
+  svg=as_type<float>(0x00000000u);
+  sb=as_type<float>(0x00000000u);
+  st=as_type<float>(0x00000000u);
+  snet=as_type<float>(0x00000000u);
+  }
+  t1vr=FMUL(trp,FADD(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x3f1c28f6u),qa)));
+  th2v=FMUL(FADD(ta,FMUL(as_type<float>(0x3c20902eu),za)),FADD(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x3f1c28f6u),qa)));
+  rlmo_urb=as_type<float>(0x00000000u);
+  {
+  u480_sfcdif_urb(za,z0r,t1vr,th2v,ua,akanda_urban,cmr_urb,chr_urb,rlmo_urb,cdr,optional_zt,optional_veg,false,env,status);
+  alphar=FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chr_urb);
+  chr=FDIV(FDIV(FDIV(alphar,rho),as_type<float>(0x3e75c28fu)),ua);
+  }
+  rain1=FDIV(FMUL(rain,as_type<float>(0x3a83126fu)),3600);
+  if (((imp_scheme==1))) {
+  if (((rain>as_type<float>(0x3f800000u)))) {
+  betr=as_type<float>(0x3f333333u);
+  }
+  }
+  if (((imp_scheme==2))) {
+  if (((flxhumrp<=as_type<float>(0x00000000u)))) {
+  flxhumrp=as_type<float>(0x00000000u);
+  }
+  drelr=FADD(drelrp,FDIV(FMUL(u480_sub(rain1,FDIV(FMUL(flxhumrp,rhoo),as_type<float>(0x447a0000u))),delt),porimp[(1)-1]));
+  if(env.sw[13]==0 && rain>0.0f && drelr<drelrp) drelr=drelrp;
+  if (((drelr<=as_type<float>(0x00000000u)))) {
+  drelr=as_type<float>(0x00000000u);
+  betr=as_type<float>(0x00000000u);
+  } else if (((drelr<=dengimp[(1)-1]))) {
+  betr=FMUL(FDIV(drelr,dengimp[(1)-1]),porimp[(1)-1]);
+  } else {
+  drelr=dengimp[(1)-1];
+  betr=porimp[(1)-1];
+  }
+  if (((betr<as_type<float>(0x3727c5acu)))) {
+  betr=as_type<float>(0x00000000u);
+  }
+  }
+  if (((ts_scheme==1))) {
+  for (iteration=1;iteration<=20;iteration+=1) {
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(trp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),trp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),gfk_pow(trp,as_type<float>(0x40000000u)));
+  qs0r=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0rdtr=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),gfk_pow(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),as_type<float>(0x40000000u)));
+  rr=FMUL(epsr,u480_sub(rx,FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(trp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  hr=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chr),ua),u480_sub(trp,ta)),as_type<float>(0x42c80000u));
+  eler=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chr),ua),betr),u480_sub(qs0r,qa)),as_type<float>(0x42c80000u));
+  g0r=FDIV(FMUL(aksr,u480_sub(trp,trl[(1)-1])),FDIV(dzr[(1)-1],as_type<float>(0x40000000u)));
+  f=u480_sub(u480_sub(u480_sub(FADD(sr,rr),hr),eler),g0r);
+  drrdtr=FDIV(FMUL(FMUL(FMUL(as_type<float>(0xc0800000u),epsr),as_type<float>(0x2eb3a903u)),gfk_pow(trp,as_type<float>(0x40400000u))),as_type<float>(0x42700000u));
+  dhrdtr=FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chr),ua),as_type<float>(0x42c80000u));
+  delerdtr=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chr),ua),betr),dqs0rdtr),as_type<float>(0x42c80000u));
+  dg0rdtr=FDIV(FMUL(as_type<float>(0x40000000u),aksr),dzr[(1)-1]);
+  dfdt=u480_sub(u480_sub(u480_sub(drrdtr,dhrdtr),delerdtr),dg0rdtr);
+  dtr=FDIV(f,dfdt);
+  tr=u480_sub(trp,dtr);
+  trp=tr;
+  if ((((ucm_abs(f)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtr)<as_type<float>(0x358637bdu))))) {
+  break;
+  }
+  }
+  u480_multi_layer(num_roof_layers,boundr,g0r,capr,aksr,trl,dzr,delt,trlend,env,status);
+  } else {
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(trp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),trp))));
+  qs0r=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  rr=FMUL(epsr,u480_sub(rx,FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(trp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  hr=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chr),ua),u480_sub(trp,ta)),as_type<float>(0x42c80000u));
+  eler=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chr),ua),betr),u480_sub(qs0r,qa)),as_type<float>(0x42c80000u));
+  g0r=u480_sub(u480_sub(FADD(sr,rr),hr),eler);
+  u480_force_restore(capr,aksr,delt,sr,rr,hr,eler,trlend,trp,tr,env,status);
+  trp=tr;
+  }
+  flxthr=FDIV(FDIV(FDIV(hr,rho),as_type<float>(0x3e75c28fu)),as_type<float>(0x42c80000u));
+  flxhumr=FDIV(FDIV(FDIV(eler,rho),as_type<float>(0x4411c000u)),as_type<float>(0x42c80000u));
+  if (((groption==1))) {
+  t1vgr=FMUL(tgrp,FADD(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x3f1c28f6u),qa)));
+  rlmo_urb=as_type<float>(0x00000000u);
+  u480_sfcdif_urb(za,z0r,t1vgr,th2v,ua,akanda_urban,cmgr_urb,chgr_urb,rlmo_urb,cdgr,optional_zt,optional_veg,false,env,status);
+  alphagr=FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chgr_urb);
+  chgr=FDIV(FDIV(FDIV(alphagr,rho),as_type<float>(0x3e75c28fu)),ua);
+  runoff1=as_type<float>(0x00000000u);
+  runoff2=as_type<float>(0x00000000u);
+  runoff3=as_type<float>(0x00000000u);
+  for(int vi=0;vi<4;++vi) sroot[vi]=as_type<float>(0x00000000u);
+  kz=1;
+  zsoilr[(kz)-1]=(-dzgr[(kz)-1]);
+  for (kz=2;kz<=4;kz+=1) {
+  zsoilr[(kz)-1]=FADD((-dzgr[(kz)-1]),zsoilr[((kz-1))-1]);
+  }
+  for (iteration=1;iteration<=100;iteration+=1) {
+  kz=1;
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tgrp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tgrp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),gfk_pow(tgrp,as_type<float>(0x40000000u)));
+  qs0gr=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0grdtgr=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),gfk_pow(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),as_type<float>(0x40000000u)));
+  epgr=FMUL(FMUL(FMUL(rhoo,chgr),ua),u480_sub(qs0gr,qa));
+  if (((epgr>as_type<float>(0x00000000u)))) {
+  u480_direvap(edir,epgr,smrp[(kz)-1],as_type<float>(0x3f4ccccdu),as_type<float>(0x3ee0c49cu),as_type<float>(0x3d872b02u),as_type<float>(0x40000000u),env,status);
+  u480_transp(ettr,etr,ecr,as_type<float>(0x3f4ccccdu),epgr,cmcrp,as_type<float>(0x3f000000u),as_type<float>(0x3a03126fu),as_type<float>(0x3fc00000u),as_type<float>(0x42c80000u),as_type<float>(0x459c4000u),as_type<float>(0x42c80000u),sx,tgrp,ta,qa,smrp,as_type<float>(0x3dac0831u),as_type<float>(0x3ea872b0u),as_type<float>(0x447b2000u),ps,chgr,as_type<float>(0x3f6e147bu),delt,2,4,dzgr,zsoilr,as_type<float>(0x42100000u),env,status);
+  u480_smflx(smrp,smr,4,cmcrp,cmcr,delt,rain,zsoilr,as_type<float>(0x3ee0c49cu),as_type<float>(0x40a80000u),as_type<float>(0x3dac0831u),sroot,as_type<float>(0x3662d3f5u),as_type<float>(0x376fea08u),as_type<float>(0x3f4ccccdu),as_type<float>(0x3a03126fu),runoff1,runoff2,runoff3,edir,ecr,etr,drip,env,status);
+  } else {
+  dew=(-epgr);
+  raindr=FADD(rain,FMUL(dew,as_type<float>(0x45610000u)));
+  edir=as_type<float>(0x00000000u);
+  ecr=as_type<float>(0x00000000u);
+  ettr=as_type<float>(0x00000000u);
+  u480_smflx(smrp,smr,4,cmcrp,cmcr,delt,raindr,zsoilr,as_type<float>(0x3ee0c49cu),as_type<float>(0x40a80000u),as_type<float>(0x3dac0831u),sroot,as_type<float>(0x3662d3f5u),as_type<float>(0x376fea08u),as_type<float>(0x3f4ccccdu),as_type<float>(0x3a03126fu),runoff1,runoff2,runoff3,edir,ecr,etr,drip,env,status);
+  }
+  edir=FMUL(edir,as_type<float>(0x447a0000u));
+  ettr=FMUL(ettr,as_type<float>(0x447a0000u));
+  ecr=FMUL(ecr,as_type<float>(0x447a0000u));
+  etar=FADD(FADD(edir,ettr),ecr);
+  if (((etar<as_type<float>(0x1e3ce508u)))) {
+  etar=as_type<float>(0x00000000u);
+  }
+  if (((epgr<=as_type<float>(0x00000000u)))) {
+  betgr=as_type<float>(0x00000000u);
+  } else {
+  betgr=FDIV(etar,epgr);
+  }
+  elegr=FMUL(FDIV(FMUL(FMUL(etar,rho),as_type<float>(0x4411c000u)),rhoo),100);
+  u480_tdfcnd(df1,smr[(kz)-1],as_type<float>(0x3ecccccdu),as_type<float>(0x3ee0c49cu),env,status);
+  df1=FMUL(df1,as_type<float>(0x3e4ebdf6u));
+  rgr=FMUL(as_type<float>(0x3f6e147bu),u480_sub(rx,FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tgrp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rgrr=FMUL(FMUL(FADD(sgr,rgr),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  rch=FMUL(FMUL(rhoo,as_type<float>(0x447b2000u)),chgr);
+  rr1=FADD(FDIV(FMUL(FMUL(as_type<float>(0x3f6e147bu),u_powi(ta,4)),as_type<float>(0x338b282du)),FMUL(ps,chgr)),as_type<float>(0x3f800000u));
+  if (((rain>as_type<float>(0x00000000u)))) {
+  rr2=FADD(rr1,FDIV(FMUL(FDIV(rain,3600),as_type<float>(0x4583d000u)),rch));
+  } else {
+  rr2=rr1;
+  }
+  yy=FADD(ta,FDIV(u480_sub(FDIV(rgrr,rch),FDIV(FMUL(FMUL(betgr,epgr),as_type<float>(0x4a150c40u)),rch)),rr2));
+  zz1=FADD(FDIV(df1,FMUL(FMUL(FMUL(as_type<float>(0xbf000000u),zsoilr[(kz)-1]),rch),rr2)),as_type<float>(0x3f800000u));
+  hgr=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chgr),ua),u480_sub(tgrp,ta)),as_type<float>(0x42c80000u));
+  runoff3=FDIV(runoff3,delt);
+  runoff2=FADD(runoff2,runoff3);
+  g0gr=FDIV(FDIV(FDIV(FMUL(df1,u480_sub(tgrp,tgrl[(1)-1])),FDIV(dzgr[(1)-1],as_type<float>(0x40000000u))),as_type<float>(0x442e6ccdu)),60);
+  fv=u480_sub(u480_sub(u480_sub(FADD(sgr,rgr),hgr),elegr),g0gr);
+  drrdtgr=FDIV(FMUL(as_type<float>(0xafa71580u),gfk_pow(tgrp,as_type<float>(0x40400000u))),as_type<float>(0x42700000u));
+  dhrdtgr=FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chgr),ua),as_type<float>(0x42c80000u));
+  delerdtgr=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chgr),ua),betgr),dqs0grdtgr),as_type<float>(0x42c80000u));
+  dg0rdtgr=FMUL(FMUL(FDIV(FMUL(as_type<float>(0x40000000u),df1),dzgr[(kz)-1]),as_type<float>(0x3e749405u)),as_type<float>(0x38d1b717u));
+  dfdvt=u480_sub(u480_sub(u480_sub(drrdtgr,dhrdtgr),delerdtgr),dg0rdtgr);
+  dtgr=FDIV(FDIV(fv,dfdvt),6);
+  tgr=u480_sub(tgrp,dtgr);
+  tgrp=tgr;
+  if ((((ucm_abs(fv)<as_type<float>(0x38d1b717u))) && ((ucm_abs(dtgr)<as_type<float>(0x3a83126fu))))) {
+  break;
+  }
+  }
+  u480_shflx(ssoilr,tgrl,smr,as_type<float>(0x3ee0c49cu),4,tgrp,delt,yy,zz1,zsoilr,trlend,as_type<float>(0xc0000000u),as_type<float>(0x3dac0831u),df1,as_type<float>(0x3ecccccdu),as_type<float>(0x49f42400u),capr,env,status);
+  flxthgr=FDIV(FDIV(FDIV(hgr,rho),as_type<float>(0x3e75c28fu)),as_type<float>(0x42c80000u));
+  flxhumgr=FDIV(FDIV(FDIV(elegr,rho),as_type<float>(0x4411c000u)),as_type<float>(0x42c80000u));
+  } else {
+  flxthgr=as_type<float>(0x00000000u);
+  flxhumgr=as_type<float>(0x00000000u);
+  }
+  if ((!distributed_aerodynamics_option)) {
+  t1vc=FMUL(tcp,FADD(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x3f1c28f6u),qa)));
+  rlmo_urb=as_type<float>(0x00000000u);
+  u480_sfcdif_urb(za,z0c,t1vc,th2v,ua,akanda_urban,cmc_urb,chc_urb,rlmo_urb,cdc,optional_zt,optional_veg,false,env,status);
+  alphac=FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chc_urb);
+  if (((ch_scheme==1))) {
+  z=zdc;
+  bhb=FDIV(gfk_log(FDIV(z0b,z0hb)),as_type<float>(0x3ecccccdu));
+  bhg=FDIV(gfk_log(FDIV(z0g,z0hg)),as_type<float>(0x3ecccccdu));
+  ribb=FDIV(FMUL(FMUL(FDIV(as_type<float>(0x419ccccdu),FADD(tcp,tbp)),u480_sub(tcp,tbp)),FADD(z,z0b)),FMUL(uc,uc));
+  ribg=FDIV(FMUL(FMUL(FDIV(as_type<float>(0x419ccccdu),FADD(tcp,tgp)),u480_sub(tcp,tgp)),FADD(z,z0g)),FMUL(uc,uc));
+  u480_mos(xxxb,alphab,cdb,bhb,ribb,z,z0b,uc,tcp,tbp,rho,env,status);
+  u480_mos(xxxg,alphag,cdg,bhg,ribg,z,z0g,uc,tcp,tgp,rho,env,status);
+  } else {
+  alphab=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),FADD(as_type<float>(0x40c4cccdu),FMUL(as_type<float>(0x4085c28fu),uc))),as_type<float>(0x44960000u));
+  if (((uc>as_type<float>(0x40a00000u)))) {
+  alphab=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),FMUL(as_type<float>(0x40f051ecu),gfk_pow(uc,as_type<float>(0x3f47ae14u)))),as_type<float>(0x44960000u));
+  }
+  alphag=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),FADD(as_type<float>(0x40c4cccdu),FMUL(as_type<float>(0x4085c28fu),uc))),as_type<float>(0x44960000u));
+  if (((uc>as_type<float>(0x40a00000u)))) {
+  alphag=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),FMUL(as_type<float>(0x40f051ecu),gfk_pow(uc,as_type<float>(0x3f47ae14u)))),as_type<float>(0x44960000u));
+  }
+  }
+  chc=FDIV(FDIV(FDIV(alphac,rho),as_type<float>(0x3e75c28fu)),ua);
+  chb=FDIV(FDIV(FDIV(alphab,rho),as_type<float>(0x3e75c28fu)),uc);
+  chg=FDIV(FDIV(FDIV(alphag,rho),as_type<float>(0x3e75c28fu)),uc);
+  }
+  if (((imp_scheme==1))) {
+  betb=as_type<float>(0x00000000u);
+  if (((rain>as_type<float>(0x3f800000u)))) {
+  betg=as_type<float>(0x3f333333u);
+  }
+  }
+  if (((imp_scheme==2))) {
+  if (((flxhumbp<=as_type<float>(0x00000000u)))) {
+  flxhumbp=as_type<float>(0x00000000u);
+  }
+  if (((flxhumgp<=as_type<float>(0x00000000u)))) {
+  flxhumgp=as_type<float>(0x00000000u);
+  }
+  drelb=FADD(drelbp,FDIV(FMUL(u480_sub(rain1,FDIV(FMUL(flxhumbp,rhoo),as_type<float>(0x447a0000u))),delt),porimp[(2)-1]));
+  if(env.sw[13]==0 && rain>0.0f && drelb<drelbp) drelb=drelbp;
+  drelg=FADD(drelgp,FDIV(FMUL(u480_sub(rain1,FDIV(FMUL(flxhumgp,rhoo),as_type<float>(0x447a0000u))),delt),porimp[(3)-1]));
+  if(env.sw[13]==0 && rain>0.0f && drelg<drelgp) drelg=drelgp;
+  if (((drelb<=as_type<float>(0x00000000u)))) {
+  drelb=as_type<float>(0x00000000u);
+  betb=as_type<float>(0x00000000u);
+  } else if (((drelb<=dengimp[(2)-1]))) {
+  betb=FMUL(FDIV(drelb,dengimp[(2)-1]),porimp[(2)-1]);
+  } else {
+  drelb=dengimp[(2)-1];
+  betb=porimp[(2)-1];
+  }
+  if (((drelg<=as_type<float>(0x00000000u)))) {
+  drelg=as_type<float>(0x00000000u);
+  betg=as_type<float>(0x00000000u);
+  } else if (((drelg<=dengimp[(3)-1]))) {
+  betg=FMUL(FDIV(drelg,dengimp[(3)-1]),porimp[(3)-1]);
+  } else {
+  drelg=dengimp[(3)-1];
+  betg=porimp[(3)-1];
+  }
+  if (((betg<as_type<float>(0x3727c5acu)))) {
+  betg=as_type<float>(0x00000000u);
+  }
+  if (((betb<as_type<float>(0x3727c5acu)))) {
+  betb=as_type<float>(0x00000000u);
+  }
+  }
+  if (((treeoption!=1))) {
+  if (((ts_scheme==1))) {
+  for (iteration=1;iteration<=20;iteration+=1) {
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tbp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tbp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),gfk_pow(tbp,as_type<float>(0x40000000u)));
+  qs0b=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0bdtb=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),gfk_pow(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),as_type<float>(0x40000000u)));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tgp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tgp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),gfk_pow(tgp,as_type<float>(0x40000000u)));
+  qs0g=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0gdtg=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),gfk_pow(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),as_type<float>(0x40000000u)));
+  rg1=FMUL(epsg,u480_sub(FADD(FMUL(rx,vfgs),FDIV(FMUL(FMUL(FMUL(epsb,vfgw),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rb1=FMUL(epsb,u480_sub(FADD(FADD(FMUL(rx,vfws),FDIV(FMUL(FMUL(FMUL(epsg,vfwg),as_type<float>(0x2eb3a903u)),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(FMUL(FMUL(epsb,vfww),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rg2=FMUL(epsg,FADD(FADD(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),u480_sub(as_type<float>(0x3f800000u),svf)),vfws),rx),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),u480_sub(as_type<float>(0x3f800000u),svf)),vfwg),epsg),as_type<float>(0x2eb3a903u)),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(epsb,u480_sub(as_type<float>(0x3f800000u),epsb)),u480_sub(as_type<float>(0x3f800000u),svf)),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rb2=FMUL(epsb,FADD(FADD(FADD(FADD(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsg),vfwg),vfgs),rx),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsg),epsb),vfgw),vfwg),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),vfws),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),rx)),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),vfwg),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),as_type<float>(0x2eb3a903u)),epsg),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(epsb,u480_sub(as_type<float>(0x3f800000u),epsb)),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rg=FADD(rg1,rg2);
+  rb=FADD(rb1,rb2);
+  drbdtb1=FDIV(FMUL(epsb,u480_sub(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),epsb),as_type<float>(0x2eb3a903u)),gfk_pow(tb,as_type<float>(0x40400000u))),vfww),FMUL(as_type<float>(0x2fb3a903u),gfk_pow(tb,as_type<float>(0x40400000u))))),as_type<float>(0x42700000u));
+  drbdtg1=FDIV(FMUL(epsb,FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),epsg),as_type<float>(0x2eb3a903u)),gfk_pow(tg,as_type<float>(0x40400000u))),vfwg)),as_type<float>(0x42700000u));
+  drbdtb2=FDIV(FMUL(epsb,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),u480_sub(as_type<float>(0x3f800000u),epsg)),epsb),as_type<float>(0x2eb3a903u)),gfk_pow(tb,as_type<float>(0x40400000u))),vfgw),vfwg),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),epsb),u480_sub(as_type<float>(0x3f800000u),epsb)),as_type<float>(0x2eb3a903u)),gfk_pow(tb,as_type<float>(0x40400000u))),vfww),vfww))),as_type<float>(0x42700000u));
+  drbdtg2=FDIV(FMUL(epsb,FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),u480_sub(as_type<float>(0x3f800000u),epsb)),epsg),as_type<float>(0x2eb3a903u)),gfk_pow(tg,as_type<float>(0x40400000u))),vfwg),vfww)),as_type<float>(0x42700000u));
+  drgdtb1=FDIV(FMUL(epsg,FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),epsb),as_type<float>(0x2eb3a903u)),gfk_pow(tb,as_type<float>(0x40400000u))),vfgw)),as_type<float>(0x42700000u));
+  drgdtg1=FDIV(FMUL(epsg,FMUL(as_type<float>(0xafb3a903u),gfk_pow(tg,as_type<float>(0x40400000u)))),as_type<float>(0x42700000u));
+  drgdtb2=FDIV(FMUL(epsg,FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),epsb),u480_sub(as_type<float>(0x3f800000u),epsb)),as_type<float>(0x2eb3a903u)),gfk_pow(tb,as_type<float>(0x40400000u))),vfww),vfgw)),as_type<float>(0x42700000u));
+  drgdtg2=FDIV(FMUL(epsg,FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),u480_sub(as_type<float>(0x3f800000u),epsb)),epsg),as_type<float>(0x2eb3a903u)),gfk_pow(tg,as_type<float>(0x40400000u))),vfwg),vfgw)),as_type<float>(0x42700000u));
+  drbdtb=FADD(drbdtb1,drbdtb2);
+  drbdtg=FADD(drbdtg1,drbdtg2);
+  drgdtb=FADD(drgdtb1,drgdtb2);
+  drgdtg=FADD(drgdtg1,drgdtg2);
+  {
+  hb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(tbp,tcp)),as_type<float>(0x42c80000u));
+  hg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(tgp,tcp)),as_type<float>(0x42c80000u));
+  dtcdtb=FDIV(FMUL(w,alphab),FADD(FADD(FMUL(rw,alphac),FMUL(rw,alphag)),FMUL(w,alphab)));
+  dtcdtg=FDIV(FMUL(rw,alphag),FADD(FADD(FMUL(rw,alphac),FMUL(rw,alphag)),FMUL(w,alphab)));
+  dhbdtb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(as_type<float>(0x3f800000u),dtcdtb)),as_type<float>(0x42c80000u));
+  dhbdtg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(as_type<float>(0x00000000u),dtcdtg)),as_type<float>(0x42c80000u));
+  dhgdtg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(as_type<float>(0x3f800000u),dtcdtg)),as_type<float>(0x42c80000u));
+  dhgdtb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(as_type<float>(0x00000000u),dtcdtb)),as_type<float>(0x42c80000u));
+  eleb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(qs0b,qcp)),as_type<float>(0x42c80000u));
+  eleg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(qs0g,qcp)),as_type<float>(0x42c80000u));
+  dqcdtb=FDIV(FMUL(FMUL(FMUL(w,alphab),betb),dqs0bdtb),FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,alphag),betg)),FMUL(FMUL(w,alphab),betb)));
+  dqcdtg=FDIV(FMUL(FMUL(FMUL(rw,alphag),betg),dqs0gdtg),FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,alphag),betg)),FMUL(FMUL(w,alphab),betb)));
+  delebdtb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(dqs0bdtb,dqcdtb)),as_type<float>(0x42c80000u));
+  delebdtg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(as_type<float>(0x00000000u),dqcdtg)),as_type<float>(0x42c80000u));
+  delegdtg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(dqs0gdtg,dqcdtg)),as_type<float>(0x42c80000u));
+  delegdtb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(as_type<float>(0x00000000u),dqcdtb)),as_type<float>(0x42c80000u));
+  }
+  g0b=FDIV(FMUL(aksb,u480_sub(tbp,tbl[(1)-1])),FDIV(dzb[(1)-1],as_type<float>(0x40000000u)));
+  g0g=FDIV(FMUL(aksg,u480_sub(tgp,tgl[(1)-1])),FDIV(dzg[(1)-1],as_type<float>(0x40000000u)));
+  dg0bdtb=FDIV(FMUL(as_type<float>(0x40000000u),aksb),dzb[(1)-1]);
+  dg0bdtg=as_type<float>(0x00000000u);
+  dg0gdtg=FDIV(FMUL(as_type<float>(0x40000000u),aksg),dzg[(1)-1]);
+  dg0gdtb=as_type<float>(0x00000000u);
+  f=u480_sub(u480_sub(u480_sub(FADD(sb,rb),hb),eleb),g0b);
+  fx=u480_sub(u480_sub(u480_sub(drbdtb,dhbdtb),delebdtb),dg0bdtb);
+  fy=u480_sub(u480_sub(u480_sub(drbdtg,dhbdtg),delebdtg),dg0bdtg);
+  gf=u480_sub(u480_sub(u480_sub(FADD(sg,rg),hg),eleg),g0g);
+  gx=u480_sub(u480_sub(u480_sub(drgdtb,dhgdtb),delegdtb),dg0gdtb);
+  gy=u480_sub(u480_sub(u480_sub(drgdtg,dhgdtg),delegdtg),dg0gdtg);
+  dtb=FDIV(u480_sub(FMUL(gf,fy),FMUL(f,gy)),u480_sub(FMUL(fx,gy),FMUL(gx,fy)));
+  dtg=FDIV((-FADD(gf,FMUL(gx,dtb))),gy);
+  tb=FADD(tbp,dtb);
+  tg=FADD(tgp,dtg);
+  tbp=tb;
+  tgp=tg;
+  {
+  tc1=FADD(FADD(FMUL(rw,alphac),FMUL(rw,alphag)),FMUL(w,alphab));
+  tc2=FADD(FADD(FMUL(FMUL(rw,alphac),ta),FMUL(FMUL(rw,alphag),tgp)),FMUL(FMUL(w,alphab),tbp));
+  tc=FDIV(tc2,tc1);
+  qc1=FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,alphag),betg)),FMUL(FMUL(w,alphab),betb));
+  qc2=FADD(FADD(FMUL(FMUL(rw,alphac),qa),FMUL(FMUL(FMUL(rw,alphag),betg),qs0g)),FMUL(FMUL(FMUL(w,alphab),betb),qs0b));
+  qc=FDIV(qc2,qc1);
+  dtc=u480_sub(tcp,tc);
+  tcp=tc;
+  qcp=qc;
+  }
+  if ((((ucm_abs(f)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtb)<as_type<float>(0x358637bdu))) && ((ucm_abs(gf)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtg)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtc)<as_type<float>(0x358637bdu))))) {
+  break;
+  }
+  }
+  u480_multi_layer(num_wall_layers,boundb,g0b,capb,aksb,tbl,dzb,delt,tblend,env,status);
+  u480_multi_layer(num_road_layers,boundg,g0g,capg,aksg,tgl,dzg,delt,tglend,env,status);
+  } else {
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tbp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tbp))));
+  qs0b=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tgp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tgp))));
+  qs0g=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  rg1=FMUL(epsg,u480_sub(FADD(FMUL(rx,vfgs),FDIV(FMUL(FMUL(FMUL(epsb,vfgw),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rb1=FMUL(epsb,u480_sub(FADD(FADD(FMUL(rx,vfws),FDIV(FMUL(FMUL(FMUL(epsg,vfwg),as_type<float>(0x2eb3a903u)),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(FMUL(FMUL(epsb,vfww),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rg2=FMUL(epsg,FADD(FADD(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),u480_sub(as_type<float>(0x3f800000u),svf)),vfws),rx),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),u480_sub(as_type<float>(0x3f800000u),svf)),vfwg),epsg),as_type<float>(0x2eb3a903u)),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(epsb,u480_sub(as_type<float>(0x3f800000u),epsb)),u480_sub(as_type<float>(0x3f800000u),svf)),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rb2=FMUL(epsb,FADD(FADD(FADD(FADD(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsg),vfwg),vfgs),rx),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsg),epsb),vfgw),vfwg),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),vfws),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),rx)),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),epsb),vfwg),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),as_type<float>(0x2eb3a903u)),epsg),gfk_pow(tgp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))),FDIV(FMUL(FMUL(FMUL(FMUL(FMUL(epsb,u480_sub(as_type<float>(0x3f800000u),epsb)),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x40000000u),vfws))),as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),as_type<float>(0x42700000u))));
+  rg=FADD(rg1,rg2);
+  rb=FADD(rb1,rb2);
+  hb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(tbp,tcp)),as_type<float>(0x42c80000u));
+  eleb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(qs0b,qcp)),as_type<float>(0x42c80000u));
+  g0b=u480_sub(u480_sub(FADD(sb,rb),hb),eleb);
+  hg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(tgp,tcp)),as_type<float>(0x42c80000u));
+  eleg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(qs0g,qcp)),as_type<float>(0x42c80000u));
+  g0g=u480_sub(u480_sub(FADD(sg,rg),hg),eleg);
+  u480_force_restore(capb,aksb,delt,sb,rb,hb,eleb,tblend,tbp,tb,env,status);
+  u480_force_restore(capg,aksg,delt,sg,rg,hg,eleg,tglend,tgp,tg,env,status);
+  tbp=tb;
+  tgp=tg;
+  tc1=FADD(FADD(FMUL(rw,alphac),FMUL(rw,alphag)),FMUL(w,alphab));
+  tc2=FADD(FADD(FMUL(FMUL(rw,alphac),ta),FMUL(FMUL(rw,alphag),tgp)),FMUL(FMUL(w,alphab),tbp));
+  tc=FDIV(tc2,tc1);
+  qc1=FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,alphag),betg)),FMUL(FMUL(w,alphab),betb));
+  qc2=FADD(FADD(FMUL(FMUL(rw,alphac),qa),FMUL(FMUL(FMUL(rw,alphag),betg),qs0g)),FMUL(FMUL(FMUL(w,alphab),betb),qs0b));
+  qc=FDIV(qc2,qc1);
+  tcp=tc;
+  qcp=qc;
+  }
+  } else {
+  if (((ts_scheme==1))) {
+  if (((ch_scheme==1))) {
+  z=zdc;
+  bhvg=FDIV(gfk_log(FDIV(z0vg,z0hvg)),as_type<float>(0x3ecccccdu));
+  ribvg=FDIV(FMUL(FMUL(FDIV(as_type<float>(0x419ccccdu),FADD(tcp,tvgp)),u480_sub(tcp,tvgp)),FADD(z,z0vg)),FMUL(uc,uc));
+  u480_mos(xxxvg,alphavg,cdvg,bhvg,ribvg,z,z0vg,uc,tcp,tvgp,rho,env,status);
+  } else {
+  alphavg=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),FADD(as_type<float>(0x40c4cccdu),FMUL(as_type<float>(0x4085c28fu),uc))),1200);
+  if (((uc>5))) {
+  alphavg=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),FMUL(as_type<float>(0x40f051ecu),gfk_pow(uc,as_type<float>(0x3f47ae14u)))),1200);
+  }
+  }
+  chvg=FDIV(FDIV(FDIV(alphavg,rho),as_type<float>(0x3e75c28fu)),uc);
+  srun1=as_type<float>(0x00000000u);
+  srun2=as_type<float>(0x00000000u);
+  srun3=as_type<float>(0x00000000u);
+  for(int vi=0;vi<4;++vi) dzvg[vi]=dzgr[vi];
+  kz=1;
+  zsoilg[(kz)-1]=(-dzvg[(kz)-1]);
+  for (kz=2;kz<=4;kz+=1) {
+  zsoilg[(kz)-1]=FADD((-dzvg[(kz)-1]),zsoilg[((kz-1))-1]);
+  }
+  if (((ttscheme==0))) {
+  ttp=tcp;
+  } else if (((ttscheme==1))) {
+  ttp=tt;
+  }
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(ttp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),ttp))));
+  qs0t=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  ra_leaf=FMUL(FMUL(58,gfk_pow(lai_tree,as_type<float>(0x3f0f5c29u))),FSQRT(FDIV(as_type<float>(0x3dcccccdu),uc)));
+  w2_num=as_type<float>(0x00000000u);
+  w2_den=as_type<float>(0x00000000u);
+  for (k=1;k<=3;k+=1) {
+  w2_num=ucm_dadd(w2_num,FMUL(smg[(k)-1],dzvg[(k)-1]));
+  w2_den=ucm_dadd(w2_den,dzvg[(k)-1]);
+  }
+  w2=ucm_ddiv(w2_num,w2_den);
+  u480_stomatal(rs_leaf,as_type<float>(0x42c80000u),sleaf,lai_tree,w2,as_type<float>(0x3dac0831u),as_type<float>(0x3ee0c49cu),tcp,ttp,qcp,qs0t,env,status);
+  for (iteration=1;iteration<=100;iteration+=1) {
+  tbp=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tbp));
+  tgp=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tgp));
+  tvgp=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tvgp));
+  kz=1;
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tvgp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tvgp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),u_powi(tvgp,2));
+  qs0vg=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0vgdtvg=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),u_powi(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),2));
+  epvg=FMUL(FMUL(FMUL(rhoo,chvg),uc),u480_sub(qs0vg,qcp));
+  for(int vi=0;vi<4;++vi) smgp[vi]=u_max(smgp[vi],as_type<float>(0x3dac0831u));
+  for(int vi=0;vi<4;++vi) smgp[vi]=u_min(smgp[vi],as_type<float>(0x3ee0c49cu));
+  vfac=u480_sub(as_type<float>(0x3f800000u),gfk_exp(FMUL(as_type<float>(0xbf051eb8u),lai_veg)));
+  if (((epvg>as_type<float>(0x00000000u)))) {
+  u480_direvap(edirg,epvg,smgp[(kz)-1],vfac,as_type<float>(0x3ee0c49cu),as_type<float>(0x3d872b02u),as_type<float>(0x40000000u),env,status);
+  u480_transp(ettg,etg,ecg,vfac,epvg,cmcgp,as_type<float>(0x3f000000u),as_type<float>(0x3a03126fu),lai_veg,as_type<float>(0x42c80000u),as_type<float>(0x459c4000u),as_type<float>(0x42c80000u),sx,tvgp,tcp,qcp,smgp,as_type<float>(0x3dac0831u),as_type<float>(0x3ea872b0u),as_type<float>(0x447b2000u),ps,chvg,epsvg,delt,2,4,dzvg,zsoilg,as_type<float>(0x42100000u),env,status);
+  u480_smflx(smgp,smg,4,cmcgp,cmcg,delt,rain,zsoilg,as_type<float>(0x3ee0c49cu),as_type<float>(0x40a80000u),as_type<float>(0x3dac0831u),srootp,as_type<float>(0x3662d3f5u),as_type<float>(0x376fea08u),vfac,as_type<float>(0x3a03126fu),srun1,srun2,srun3,edirg,ecg,etg,dripg,env,status);
+  } else {
+  dew=(-epvg);
+  raindr=FADD(rain,FMUL(dew,3600));
+  edirg=as_type<float>(0x00000000u);
+  ecg=as_type<float>(0x00000000u);
+  ettg=as_type<float>(0x00000000u);
+  u480_smflx(smgp,smg,4,cmcgp,cmcg,delt,raindr,zsoilg,as_type<float>(0x3ee0c49cu),as_type<float>(0x40a80000u),as_type<float>(0x3dac0831u),srootp,as_type<float>(0x3662d3f5u),as_type<float>(0x376fea08u),vfac,as_type<float>(0x3a03126fu),srun1,srun2,srun3,edirg,ecg,etg,dripg,env,status);
+  }
+  for(int vi=0;vi<4;++vi) smg[vi]=u_max(smg[vi],as_type<float>(0x3dac0831u));
+  for(int vi=0;vi<4;++vi) smg[vi]=u_min(smg[vi],as_type<float>(0x3ee0c49cu));
+  edirg=FMUL(edirg,1000);
+  ettg=FMUL(ettg,1000);
+  ecg=FMUL(ecg,1000);
+  etag=FADD(FADD(edirg,ettg),ecg);
+  if (((etag<as_type<float>(0x1e3ce508u)))) {
+  etag=0;
+  }
+  if (((epvg<=0))) {
+  betvg=0;
+  } else {
+  betvg=FDIV(etag,epvg);
+  }
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tbp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tbp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),u_powi(tbp,2));
+  qs0b=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0bdtb=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),u_powi(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),2));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tgp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tgp))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),u_powi(tgp,2));
+  qs0g=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  dqs0gdtg=FDIV(FMUL(FMUL(desdt,as_type<float>(0x3f1f3b64u)),ps),u_powi(u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)),2));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(ttp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),ttp))));
+  qs0t=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  epsge=FADD(FMUL(u480_sub(1,fvg),epsg),FMUL(fvg,epsvg));
+  emitw=FDIV(FMUL(FMUL(epsb,as_type<float>(0x2eb3a903u)),gfk_pow(tbp,as_type<float>(0x40800000u))),60);
+  emitg=FDIV(FMUL(FMUL(epsge,as_type<float>(0x2eb3a903u)),gfk_pow(tgep,as_type<float>(0x40800000u))),60);
+  emitt=FDIV(FMUL(FMUL(epst,as_type<float>(0x2eb3a903u)),gfk_pow(ttp,as_type<float>(0x40800000u))),60);
+  rg1=FMUL(epsg,u480_sub(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tgp,as_type<float>(0x40800000u))),60)));
+  rvg1=FMUL(epsvg,u480_sub(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tvgp,as_type<float>(0x40800000u))),60)));
+  rb1=FMUL(epsb,u480_sub(FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree)),FDIV(FMUL(as_type<float>(0x2eb3a903u),gfk_pow(tbp,as_type<float>(0x40800000u))),60)));
+  rg2=FMUL(epsg,FADD(FMUL(FMUL(FMUL(2,FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree))),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree)),u480_sub(1,epst)),vfgt_tree)));
+  rvg2=FMUL(epsvg,FADD(FMUL(FMUL(FMUL(2,FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree))),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree)),u480_sub(1,epst)),vfgt_tree)));
+  rb2=FMUL(epsb,FADD(FADD(FMUL(FMUL(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),u480_sub(1,epsge)),vfwg_tree),FMUL(FMUL(FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree)),u480_sub(1,epsb)),vfww_tree)),FMUL(FMUL(FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree)),u480_sub(1,epst)),vfwt_tree)));
+  rt1=u480_sub(FMUL(epst,FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree))),emitt);
+  rt2=FMUL(epst,FADD(FMUL(FMUL(FMUL(2,FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree))),u480_sub(1,epsb)),vftw_tree),FMUL(FMUL(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),u480_sub(1,epsge)),vftg_tree)));
+  rg=FADD(rg1,rg2);
+  rb=FADD(rb1,rb2);
+  rvg=FADD(rvg1,rvg2);
+  rt=FADD(rt1,rt2);
+  rleaf=FMUL(FMUL(FDIV(FMUL(rt,FMUL(FMUL(as_type<float>(0x40c90fd0u),rtree),u480_sub(1,tau))),FMUL(FMUL(2,rtree),lai_tree)),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  drbdtb1=FDIV(FMUL(epsb,u480_sub(FMUL(FMUL(FMUL(FMUL(4,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfww_tree),FMUL(as_type<float>(0x2fb3a903u),u_powi(tb,3)))),60);
+  drbdtg1=FDIV(FMUL(epsb,FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),vfwg_tree),u480_sub(1,fvg))),60);
+  drbdtvg1=FDIV(FMUL(epsb,FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),vfwg_tree),fvg)),60);
+  drbdtb2=FDIV(FMUL(epsb,FADD(FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfgw_tree),u480_sub(1,epsge)),vfwg_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfww_tree),u480_sub(1,epsb)),vfww_tree)),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vftw_tree),u480_sub(1,epst)),vfwt_tree))),60);
+  drbdtg2=FDIV(FMUL(epsb,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),vfwg_tree),u480_sub(1,fvg)),u480_sub(1,epsb)),vfww_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),vftg_tree),u480_sub(1,fvg)),u480_sub(1,epst)),vfwt_tree))),60);
+  drbdtvg2=FDIV(FMUL(epsb,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),vfwg_tree),fvg),u480_sub(1,epsb)),vfww_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),vftg_tree),fvg),u480_sub(1,epst)),vfwt_tree))),60);
+  drgdtb1=FDIV(FMUL(epsg,FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfgw_tree)),60);
+  drgdtg1=FDIV(FMUL(epsg,FMUL(as_type<float>(0xafb3a903u),u_powi(tg,3))),60);
+  drgdtvg1=0;
+  drgdtb2=FDIV(FMUL(epsg,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfww_tree),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vftw_tree),u480_sub(1,epst)),vfgt_tree))),60);
+  drgdtg2=FDIV(FMUL(epsg,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),u480_sub(1,fvg)),vfwg_tree),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),u480_sub(1,fvg)),vftg_tree),u480_sub(1,epst)),vfgt_tree))),60);
+  drgdtvg2=FDIV(FMUL(epsg,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),fvg),vfwg_tree),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),fvg),vftg_tree),u480_sub(1,epst)),vfgt_tree))),60);
+  drvgdtb1=FDIV(FMUL(epsvg,FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfgw_tree)),60);
+  drvgdtg1=0;
+  drvgdtvg1=FDIV(FMUL(epsvg,FMUL(as_type<float>(0xafb3a903u),u_powi(tvg,3))),60);
+  drvgdtb2=FDIV(FMUL(epsvg,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vfww_tree),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsb),as_type<float>(0x2eb3a903u)),u_powi(tb,3)),vftw_tree),u480_sub(1,epst)),vfgt_tree))),60);
+  drvgdtg2=FDIV(FMUL(epsvg,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),u480_sub(1,fvg)),vfwg_tree),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),u480_sub(1,fvg)),vftg_tree),u480_sub(1,epst)),vfgt_tree))),60);
+  drvgdtvg2=FDIV(FMUL(epsvg,FADD(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(8,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),fvg),vfwg_tree),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(4,epsge),as_type<float>(0x2eb3a903u)),u_powi(tge,3)),fvg),vftg_tree),u480_sub(1,epst)),vfgt_tree))),60);
+  drbdtb=FADD(drbdtb1,drbdtb2);
+  drbdtg=FADD(drbdtg1,drbdtg2);
+  drbdtvg=ucm_dadd(drbdtvg1,drbdtvg2);
+  drgdtb=FADD(drgdtb1,drgdtb2);
+  drgdtg=FADD(drgdtg1,drgdtg2);
+  drgdtvg=ucm_dadd(drgdtvg1,drgdtvg2);
+  drvgdtb=ucm_dadd(drvgdtb1,drvgdtb2);
+  drvgdtg=ucm_dadd(drvgdtg1,drvgdtg2);
+  drvgdtvg=ucm_dadd(drvgdtvg1,drvgdtvg2);
+  hb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(tbp,tcp)),100);
+  hg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(tgp,tcp)),100);
+  hvg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chvg),uc),u480_sub(tvgp,tcp)),100);
+  eleb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(qs0b,qcp)),100);
+  eleg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(qs0g,qcp)),100);
+  u480_leleaf(elet,sleaf,rleaf,ra_leaf,rs_leaf,rhoo,tcp,qcp,qs0t,env,status);
+  available_water_sum=as_type<float>(0x00000000u);
+  for (k=1;k<=3;k+=1) {
+  available_water_sum=FADD(available_water_sum,FMUL(u480_sub(smg[(k)-1],as_type<float>(0x3dac0831u)),dzvg[(k)-1]));
+  }
+  if ((((rtree>as_type<float>(0x00000000u))) && ((lai_tree>as_type<float>(0x00000000u))))) {
+  potential_elet=FDIV(FDIV(FMUL(FMUL(FMUL(as_type<float>(0x4f118df6u),available_water_sum),fvg),rw),delt),FMUL(FMUL(as_type<float>(0x40000000u),rtree),lai_tree));
+  } else {
+  potential_elet=as_type<float>(0x00000000u);
+  }
+  elet=u_min(potential_elet,elet);
+  u480_root_uptake(sroot,4,smg,as_type<float>(0x3ee0c49cu),as_type<float>(0x3d872b02u),rtree_m,lai_tree,dzvg,zsoilg,elet,fvg,rw_m,env,status);
+  for(int vi=0;vi<4;++vi) srootp[vi]=sroot[vi];
+  if (((ttscheme==0))) {
+  ht=FMUL(u480_sub(u480_sub(FADD(sleaf,rleaf),elet),FMUL(FDIV(u480_sub(tt,ttp),delt),640)),as_type<float>(0x37c8631eu));
+  } else if (((ttscheme==1))) {
+  alphat=FDIV(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),100),FMUL(as_type<float>(0x3fa3126fu),ra_leaf));
+  ht=FMUL(alphat,u480_sub(ttp,tcp));
+  }
+  dtcdtb=FDIV(FMUL(w,alphab),FADD(FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,fvg),alphavg)),FMUL(FMUL(rw,u480_sub(1,fvg)),alphag)),FMUL(w,alphab)));
+  dtcdtg=FDIV(FMUL(FMUL(rw,alphag),u480_sub(1,fvg)),FADD(FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,fvg),alphavg)),FMUL(FMUL(rw,u480_sub(1,fvg)),alphag)),FMUL(w,alphab)));
+  dtcdtvg=FDIV(FMUL(FMUL(rw,alphavg),fvg),FADD(FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,fvg),alphavg)),FMUL(FMUL(rw,u480_sub(1,fvg)),alphag)),FMUL(w,alphab)));
+  dhbdtb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(1,dtcdtb)),100);
+  dhbdtg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(0,dtcdtg)),100);
+  dhbdtvg=ucm_dmul(ucm_dmul(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),ucm_dsub(0,dtcdtvg)),100);
+  dhgdtb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(0,dtcdtb)),100);
+  dhgdtg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(1,dtcdtg)),100);
+  dhgdtvg=ucm_dmul(ucm_dmul(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),ucm_dsub(0,dtcdtvg)),100);
+  dhvgdtb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chvg),uc),u480_sub(0,dtcdtb)),100);
+  dhvgdtg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chvg),uc),u480_sub(0,dtcdtg)),100);
+  dhvgdtvg=ucm_dmul(ucm_dmul(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chvg),uc),ucm_dsub(1,dtcdtvg)),100);
+  den_qc=FADD(FADD(FADD(FMUL(FMUL(w,alphab),betb),FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),betg)),FMUL(FMUL(FMUL(rw,fvg),alphavg),betvg)),FMUL(rw,alphac));
+  dqcdtb=ucm_ddiv(FMUL(FMUL(FMUL(w,alphab),betb),dqs0bdtb),den_qc);
+  dqcdtg=ucm_ddiv(FMUL(FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),betg),dqs0gdtg),den_qc);
+  dqcdtvg=ucm_ddiv(FMUL(FMUL(FMUL(FMUL(rw,fvg),alphavg),betvg),dqs0vgdtvg),den_qc);
+  delebdtb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(dqs0bdtb,dqcdtb)),100);
+  delebdtg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(0,dqcdtg)),100);
+  delebdtvg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(0,dqcdtvg)),100);
+  delegdtb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(0,dqcdtb)),100);
+  delegdtg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(dqs0gdtg,dqcdtg)),100);
+  delegdtvg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(0,dqcdtvg)),100);
+  delevgdtb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chvg),uc),betvg),u480_sub(0,dqcdtb)),100);
+  delevgdtg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chvg),uc),betvg),u480_sub(0,dqcdtg)),100);
+  delevgdtvg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chvg),uc),betvg),u480_sub(dqs0vgdtvg,dqcdtvg)),100);
+  elevg=FMUL(FMUL(etag,as_type<float>(0x4411c000u)),as_type<float>(0x3dcccccdu));
+  g0b=FDIV(FMUL(aksb,u480_sub(tbp,tbl[(1)-1])),FDIV(dzb[(1)-1],2));
+  g0g=FDIV(FMUL(aksg,u480_sub(tgp,tgl[(1)-1])),FDIV(dzg[(1)-1],2));
+  u480_tdfcnd(kvg,smg[(kz)-1],as_type<float>(0x3ecccccdu),as_type<float>(0x3ee0c49cu),env,status);
+  g0vg=FDIV(FDIV(FDIV(FMUL(kvg,u480_sub(tvgp,tvgl[(1)-1])),FDIV(dzvg[(1)-1],as_type<float>(0x40000000u))),as_type<float>(0x442e6ccdu)),60);
+  dg0bdtb=FDIV(FMUL(2,aksb),dzb[(1)-1]);
+  dg0bdtg=0;
+  dg0bdtvg=0;
+  dg0gdtb=0;
+  dg0gdtg=FDIV(FMUL(2,aksg),dzg[(1)-1]);
+  dg0gdtvg=0;
+  dg0vgdtb=0;
+  dg0vgdtg=0;
+  dg0vgdtvg=FDIV(FDIV(FDIV(FMUL(2,kvg),dzvg[(1)-1]),as_type<float>(0x442e6ccdu)),60);
+  wf=u480_sub(u480_sub(u480_sub(FADD(sb,rb),hb),eleb),g0b);
+  a=u480_sub(u480_sub(u480_sub(drbdtb,dhbdtb),delebdtb),dg0bdtb);
+  b=u480_sub(u480_sub(u480_sub(drbdtg,dhbdtg),delebdtg),dg0bdtg);
+  c=ucm_dsub(ucm_dsub(ucm_dsub(drbdtvg,dhbdtvg),delebdtvg),dg0bdtvg);
+  gf=u480_sub(u480_sub(u480_sub(FADD(sg,rg),hg),eleg),g0g);
+  e=u480_sub(u480_sub(u480_sub(drgdtb,dhgdtb),delegdtb),dg0gdtb);
+  ff=u480_sub(u480_sub(u480_sub(drgdtg,dhgdtg),delegdtg),dg0gdtg);
+  gg=ucm_dsub(ucm_dsub(ucm_dsub(drgdtvg,dhgdtvg),delegdtvg),dg0gdtvg);
+  vgf=u480_sub(u480_sub(u480_sub(FADD(svg,rvg),hvg),elevg),g0vg);
+  i=ucm_dsub(ucm_dsub(ucm_dsub(drvgdtb,dhvgdtb),delevgdtb),dg0vgdtb);
+  j=ucm_dsub(ucm_dsub(ucm_dsub(drvgdtg,dhvgdtg),delevgdtg),dg0vgdtg);
+  kk=ucm_dsub(ucm_dsub(ucm_dsub(drvgdtvg,dhvgdtvg),delevgdtvg),dg0vgdtvg);
+  det_scale=u480_maxd(u480_maxd(u480_maxd(u480_maxd(u480_maxd(u480_maxd(u480_maxd(u480_maxd(u480_maxd(UcmR8::from_bits(0x3ff0000000000000ul),ucm_abs(a)),ucm_abs(b)),ucm_abs(c)),ucm_abs(e)),ucm_abs(ff)),ucm_abs(gg)),ucm_abs(i)),ucm_abs(j)),ucm_abs(kk));
+  det_tol=ucm_dmul(UcmR8::from_bits(0x3d719799812dea11ul),u480_powi64(det_scale,3));
+  det=ucm_dadd(ucm_dsub(ucm_dmul(a,ucm_dsub(ucm_dmul(ff,kk),ucm_dmul(gg,j))),ucm_dmul(b,ucm_dsub(ucm_dmul(e,kk),ucm_dmul(gg,i)))),ucm_dmul(c,ucm_dsub(ucm_dmul(e,j),ucm_dmul(ff,i))));
+  a_use=a;
+  ff_use=ff;
+  kk_use=kk;
+  relax=UcmR8::from_bits(0x3ff0000000000000ul);
+  max_step=as_type<float>(0x40a00000u);
+  if (((ucm_abs(det)<det_tol))) {
+  f_lambda=ucm_dmul(UcmR8::from_bits(0x3eb0c6f7a0b5ed8dul),det_scale);
+  a_use=ucm_dadd(a,f_lambda);
+  ff_use=ucm_dadd(ff,f_lambda);
+  kk_use=ucm_dadd(kk,f_lambda);
+  det=ucm_dadd(ucm_dsub(ucm_dmul(a_use,ucm_dsub(ucm_dmul(ff_use,kk_use),ucm_dmul(gg,j))),ucm_dmul(b,ucm_dsub(ucm_dmul(e,kk_use),ucm_dmul(gg,i)))),ucm_dmul(c,ucm_dsub(ucm_dmul(e,j),ucm_dmul(ff_use,i))));
+  relax=UcmR8::from_bits(0x3fe0000000000000ul);
+  if (((ucm_abs(det)<det_tol))) {
+  det=ucm_copysign(det_tol,det);
+  }
+  }
+  chara=ucm_ddiv(UcmR8::from_bits(0x3ff0000000000000ul),det);
+  dtb=ucm_dmul((-chara),ucm_dadd(ucm_dadd(ucm_dmul(wf,ucm_dsub(ucm_dmul(ff_use,kk_use),ucm_dmul(gg,j))),ucm_dmul(gf,ucm_dsub(ucm_dmul(c,j),ucm_dmul(b,kk_use)))),ucm_dmul(vgf,ucm_dsub(ucm_dmul(b,gg),ucm_dmul(c,ff_use)))));
+  dtg=ucm_dmul((-chara),ucm_dadd(ucm_dadd(ucm_dmul(wf,ucm_dsub(ucm_dmul(gg,i),ucm_dmul(e,kk_use))),ucm_dmul(gf,ucm_dsub(ucm_dmul(a_use,kk_use),ucm_dmul(c,i)))),ucm_dmul(vgf,ucm_dsub(ucm_dmul(c,e),ucm_dmul(a_use,gg)))));
+  dtvg=ucm_dmul((-chara),ucm_dadd(ucm_dadd(ucm_dmul(wf,ucm_dsub(ucm_dmul(e,j),ucm_dmul(ff_use,i))),ucm_dmul(gf,ucm_dsub(ucm_dmul(b,i),ucm_dmul(a_use,j)))),ucm_dmul(vgf,ucm_dsub(ucm_dmul(a_use,ff_use),ucm_dmul(b,e)))));
+  dtb=ucm_dmul(dtb,relax);
+  dtg=ucm_dmul(dtg,relax);
+  dtvg=ucm_dmul(dtvg,relax);
+  dtb=u480_sign(u_min(ucm_abs(dtb),max_step),dtb);
+  dtg=u480_sign(u_min(ucm_abs(dtg),max_step),dtg);
+  dtvg=u480_sign(u_min(ucm_abs(dtvg),max_step),dtvg);
+  tb=FADD(tbp,dtb);
+  tg=FADD(tgp,dtg);
+  tvg=FADD(tvgp,dtvg);
+  tge=FADD(FMUL(u480_sub(1,fvg),tg),FMUL(fvg,tvg));
+  tbp=tb;
+  tgp=tg;
+  tvgp=tvg;
+  tgep=tge;
+  tbp=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tbp));
+  tgp=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tgp));
+  tvgp=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tvgp));
+  tc1=FADD(FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,fvg),alphavg)),FMUL(FMUL(rw,u480_sub(1,fvg)),alphag)),FMUL(w,alphab));
+  tc2=FADD(FADD(FADD(FADD(FMUL(FMUL(rw,alphac),ta),FMUL(FMUL(FMUL(rw,fvg),alphavg),tvgp)),FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),tgp)),FMUL(FMUL(w,alphab),tbp)),FMUL(FMUL(FMUL(2,rtree),lai_tree),FDIV(ht,100)));
+  tc=FDIV(tc2,tc1);
+  tc=u_max(as_type<float>(0x435f2666u),u_min(as_type<float>(0x43b09333u),tc));
+  tcp=tc;
+  qc1=FADD(FADD(FMUL(FMUL(w,alphab),betb),FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),betg)),FMUL(rw,alphac));
+  qc2=FADD(FADD(FADD(FADD(FMUL(FMUL(FMUL(w,alphab),betb),qs0b),FMUL(FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),betg),qs0g)),FDIV(FMUL(FMUL(FMUL(rw,fvg),etag),as_type<float>(0x3e75c28fu)),1000)),FMUL(FMUL(rw,alphac),qa)),FDIV(FDIV(FMUL(FMUL(FMUL(FMUL(2,rtree),lai_tree),as_type<float>(0x3e75c28fu)),FDIV(FDIV(elet,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u))),100),as_type<float>(0x4411c000u)));
+  qc=FDIV(qc2,qc1);
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tc,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tc))));
+  desdt=FDIV(FMUL(as_type<float>(0x45a94801u),es),u_powi(tc,2));
+  qs0c=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  qc=u_min(qc,qs0c);
+  qc=u_max(qc,as_type<float>(0x00000000u));
+  if ((((qc<=as_type<float>(0x3089705fu))) && ((qcp>as_type<float>(0x3089705fu))))) {
+  qc=qcp;
+  } else if ((((qc<=as_type<float>(0x3089705fu))) && ((qcp<=as_type<float>(0x3089705fu))))) {
+  }
+  if (((ttscheme==0))) {
+  tt=tc;
+  } else if (((ttscheme==1))) {
+  tt=FADD(ttp,FMUL(as_type<float>(0x3dcccccdu),u480_sub(tc,ttp)));
+  }
+  dtc=u480_sub(tcp,tc);
+  qcp=qc;
+  rvgt=FMUL(FMUL(FADD(svg,rvg),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  rch=FMUL(FMUL(rhoo,as_type<float>(0x447b2000u)),chvg);
+  rr1=FADD(FDIV(FMUL(FMUL(epsvg,u_powi(tvgp,4)),as_type<float>(0x338b282du)),FMUL(ps,chvg)),as_type<float>(0x3f800000u));
+  if (((rain>as_type<float>(0x00000000u)))) {
+  rr2=FADD(rr1,FDIV(FMUL(FDIV(rain,3600),as_type<float>(0x4583d000u)),rch));
+  } else {
+  rr2=rr1;
+  }
+  yy=FADD(tvg,FDIV(u480_sub(FDIV(rvgt,rch),FDIV(FMUL(FMUL(betvg,epvg),as_type<float>(0x4a150c40u)),rch)),rr2));
+  zz1=FADD(FDIV(kvg,FMUL(FMUL(FMUL(as_type<float>(0xbf000000u),zsoilg[(kz)-1]),rch),rr2)),as_type<float>(0x3f800000u));
+  srun3=FDIV(srun3,delt);
+  srun2=FADD(srun2,srun3);
+  if ((((ucm_abs(wf)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtb)<as_type<float>(0x358637bdu))) && ((ucm_abs(gf)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtg)<as_type<float>(0x358637bdu))) && ((ucm_abs(vgf)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtvg)<as_type<float>(0x358637bdu))) && ((ucm_abs(dtc)<as_type<float>(0x358637bdu))))) {
+  break;
+  }
+  }
+  u480_multi_layer(num_wall_layers,boundb,g0b,capb,aksb,tbl,dzb,delt,tblend,env,status);
+  u480_multi_layer(num_road_layers,boundg,g0g,capg,aksg,tgl,dzg,delt,tglend,env,status);
+  u480_shflx(ssoilg,tvgl,smg,as_type<float>(0x3ee0c49cu),4,tvgp,delt,yy,zz1,zsoilg,tglend,as_type<float>(0xc0000000u),as_type<float>(0x3dac0831u),kvg,as_type<float>(0x3ecccccdu),as_type<float>(0x49f42400u),capvg,env,status);
+  } else {
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tbp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tbp))));
+  qs0b=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tgp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tgp))));
+  qs0g=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(ttp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),ttp))));
+  qs0t=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  es=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(tvgp,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),tvgp))));
+  qs0vg=FDIV(FMUL(as_type<float>(0x3f1f3b64u),es),u480_sub(ps,FMUL(as_type<float>(0x3ec18937u),es)));
+  epsge=FADD(FMUL(u480_sub(1,fvg),epsg),FMUL(fvg,epsvg));
+  tgep=FADD(FMUL(u480_sub(1,fvg),tgp),FMUL(fvg,tvgp));
+  qs0ge=FADD(FMUL(u480_sub(1,fvg),qs0g),FMUL(fvg,qs0vg));
+  alphage=FADD(FMUL(u480_sub(1,fvg),alphag),FMUL(fvg,alphavg));
+  emitw=FDIV(FMUL(FMUL(epsb,as_type<float>(0x2eb3a903u)),u_powi(tbp,4)),60);
+  emitg=FDIV(FMUL(FMUL(epsge,as_type<float>(0x2eb3a903u)),u_powi(tgep,4)),60);
+  emitt=FDIV(FMUL(FMUL(epst,as_type<float>(0x2eb3a903u)),u_powi(ttp,4)),60);
+  rg1=FMUL(epsg,u480_sub(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),FDIV(FMUL(as_type<float>(0x2eb3a903u),u_powi(tgp,4)),60)));
+  rvg1=FMUL(epsvg,u480_sub(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),FDIV(FMUL(as_type<float>(0x2eb3a903u),u_powi(tvgp,4)),60)));
+  rb1=FMUL(epsb,u480_sub(FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree)),FDIV(FMUL(as_type<float>(0x2eb3a903u),u_powi(tbp,4)),60)));
+  rg2=FMUL(epsg,FADD(FMUL(FMUL(FMUL(2,FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree))),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree)),u480_sub(1,epst)),vfgt_tree)));
+  rvg2=FMUL(epsvg,FADD(FMUL(FMUL(FMUL(2,FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree))),u480_sub(1,epsb)),vfgw_tree),FMUL(FMUL(FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree)),u480_sub(1,epst)),vfgt_tree)));
+  rb2=FMUL(epsb,FADD(FADD(FMUL(FMUL(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),u480_sub(1,epsge)),vfwg_tree),FMUL(FMUL(FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree)),u480_sub(1,epsb)),vfww_tree)),FMUL(FMUL(FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree)),u480_sub(1,epst)),vfwt_tree)));
+  rt1=u480_sub(FMUL(epst,FADD(FADD(FMUL(rx,vfts_tree),FMUL(FMUL(2,emitw),vftw_tree)),FMUL(emitg,vftg_tree))),emitt);
+  rt2=FMUL(epst,FADD(FMUL(FMUL(FMUL(2,FADD(FADD(FADD(FMUL(rx,vfws_tree),FMUL(emitw,vfww_tree)),FMUL(emitg,vfwg_tree)),FMUL(emitt,vfwt_tree))),u480_sub(1,epsb)),vftw_tree),FMUL(FMUL(FADD(FADD(FMUL(rx,vfgs_tree),FMUL(FMUL(2,emitw),vfgw_tree)),FMUL(emitt,vfgt_tree)),u480_sub(1,epsge)),vftg_tree)));
+  rg=FADD(rg1,rg2);
+  rb=FADD(rb1,rb2);
+  rvg=FADD(rvg1,rvg2);
+  rt=FADD(rt1,rt2);
+  hb=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chb),uc),u480_sub(tbp,tcp)),100);
+  eleb=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chb),uc),betb),u480_sub(qs0b,qcp)),100);
+  g0b=u480_sub(u480_sub(FADD(sb,rb),hb),eleb);
+  hg=FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),chg),uc),u480_sub(tgp,tcp)),100);
+  eleg=FMUL(FMUL(FMUL(FMUL(FMUL(FMUL(rho,as_type<float>(0x4411c000u)),chg),uc),betg),u480_sub(qs0g,qcp)),100);
+  g0g=u480_sub(u480_sub(FADD(sg,rg),hg),eleg);
+  ra_leaf=FMUL(FMUL(58,gfk_pow(lai_tree,as_type<float>(0x3f0f5c29u))),FSQRT(FDIV(as_type<float>(0x3dcccccdu),uc)));
+  ht=FDIV(FDIV(u480_sub(u480_sub(FADD(sleaf,rleaf),elet),FMUL(FDIV(u480_sub(tt,ttp),delt),640)),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  w2=FMUL(as_type<float>(0x3f000000u),FADD(smgp[(1)-1],smgp[(2)-1]));
+  u480_stomatal(rs_leaf,as_type<float>(0x42c80000u),sleaf,lai_tree,w2,as_type<float>(0x3ea872b0u),as_type<float>(0x3ee0c49cu),tc,tt,qc,qs0t,env,status);
+  u480_leleaf(elet,sleaf,rleaf,ra_leaf,rs_leaf,rhoo,tc,qc,qs0t,env,status);
+  u480_force_restore(capb,aksb,delt,sb,rb,hb,eleb,tblend,tbp,tb,env,status);
+  u480_force_restore(capg,aksg,delt,sg,rg,hg,eleg,tglend,tgp,tg,env,status);
+  u480_force_restore_tree(delt,st,rt,ht,FDIV(elet,as_type<float>(0x47238600u)),lai_tree,ttp,tt,env,status);
+  tbp=tb;
+  tgp=tg;
+  ttp=tt;
+  tc1=FADD(FADD(FADD(FMUL(rw,alphac),FMUL(FMUL(rw,fvg),alphavg)),FMUL(FMUL(rw,u480_sub(1,fvg)),alphag)),FMUL(w,alphab));
+  tc2=FADD(FADD(FADD(FADD(FMUL(FMUL(rw,alphac),ta),FMUL(FMUL(FMUL(rw,fvg),alphavg),tvgp)),FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),tgp)),FMUL(FMUL(w,alphab),tbp)),FMUL(FMUL(FMUL(2,rtree),lai_tree),FDIV(ht,100)));
+  tc=FDIV(tc2,tc1);
+  qc1=FADD(FADD(FMUL(FMUL(w,alphab),betb),FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),betg)),FMUL(rw,alphac));
+  qc2=FADD(FADD(FADD(FADD(FMUL(FMUL(FMUL(w,alphab),betb),qs0b),FMUL(FMUL(FMUL(FMUL(rw,u480_sub(1,fvg)),alphag),betg),qs0g)),FDIV(FMUL(FMUL(FMUL(rw,fvg),etag),as_type<float>(0x3e75c28fu)),1000)),FMUL(FMUL(rw,alphac),qa)),FDIV(FDIV(FMUL(FMUL(FMUL(FMUL(2,rtree),lai_tree),as_type<float>(0x3e75c28fu)),FDIV(FDIV(elet,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u))),100),as_type<float>(0x4411c000u)));
+  qc=FDIV(qc2,qc1);
+  tcp=tc;
+  qcp=qc;
+  }
+  }
+  flxthb=FDIV(FDIV(FDIV(hb,rho),as_type<float>(0x3e75c28fu)),as_type<float>(0x42c80000u));
+  flxhumb=FDIV(FDIV(FDIV(eleb,rho),as_type<float>(0x4411c000u)),as_type<float>(0x42c80000u));
+  flxthg=FDIV(FDIV(FDIV(hg,rho),as_type<float>(0x3e75c28fu)),as_type<float>(0x42c80000u));
+  flxhumg=FDIV(FDIV(FDIV(eleg,rho),as_type<float>(0x4411c000u)),as_type<float>(0x42c80000u));
+  flxthvg=FDIV(FDIV(FDIV(hvg,rho),as_type<float>(0x3e75c28fu)),as_type<float>(0x42c80000u));
+  flxhumvg=FDIV(FDIV(FDIV(elevg,rho),as_type<float>(0x4411c000u)),as_type<float>(0x42c80000u));
+  flxtht=FDIV(FDIV(FDIV(ht,rho),as_type<float>(0x3e75c28fu)),as_type<float>(0x42c80000u));
+  flxhumt=FDIV(FDIV(FDIV(FMUL(elet,as_type<float>(0x37c8631eu)),rho),as_type<float>(0x4411c000u)),as_type<float>(0x42c80000u));
+  if ((((groption==1)) && ((treeoption!=1)))) {
+  if (((ahoption==1))) {
+  flxth=FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),flxthr),FMUL(FMUL(fgr,r),flxthgr)),FMUL(w,flxthb)),FMUL(rw,flxthg)),FDIV(FDIV(ah,rhoo),as_type<float>(0x447b2000u)));
+  } else {
+  flxth=FADD(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),flxthr),FMUL(FMUL(fgr,r),flxthgr)),FMUL(w,flxthb)),FMUL(rw,flxthg));
+  }
+  if (((alhoption==1))) {
+  flxhum=FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),flxhumr),FMUL(FMUL(fgr,r),flxhumgr)),FMUL(w,flxhumb)),FMUL(rw,flxhumg)),FDIV(FDIV(alh,rhoo),as_type<float>(0x4a150c40u)));
+  } else {
+  flxhum=FADD(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),flxhumr),FMUL(FMUL(fgr,r),flxhumgr)),FMUL(w,flxhumb)),FMUL(rw,flxhumg));
+  }
+  flxuv=FMUL(FMUL(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),cdr),FMUL(FMUL(fgr,r),cdgr)),FMUL(rw,cdc)),ua),ua);
+  flxg=FADD(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),g0r),FMUL(FMUL(fgr,r),g0gr)),FMUL(w,g0b)),FMUL(rw,g0g));
+  lnet=FADD(FADD(FADD(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),fgr),r),rr),FMUL(FMUL(fgr,r),rgr)),FMUL(w,rb)),FMUL(rw,rg));
+  } else if ((((groption!=1)) && ((treeoption==1)))) {
+  if (((ahoption==1))) {
+  flxth=FADD(FADD(FADD(FADD(FADD(FMUL(r,flxthr),FMUL(w,flxthb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxthg)),FMUL(FMUL(fvg,rw),flxthvg)),FDIV(FDIV(ah,rhoo),as_type<float>(0x447b2000u))),FMUL(FMUL(FMUL(flxtht,lai_tree),2),rtree));
+  } else {
+  flxth=FADD(FADD(FADD(FADD(FMUL(r,flxthr),FMUL(w,flxthb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxthg)),FMUL(FMUL(fvg,rw),flxthvg)),FMUL(FMUL(FMUL(flxtht,lai_tree),2),rtree));
+  }
+  if (((alhoption==1))) {
+  flxhum=FADD(FADD(FADD(FADD(FADD(FMUL(r,flxhumr),FMUL(w,flxhumb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxhumg)),FMUL(FMUL(fvg,rw),flxhumvg)),FDIV(FDIV(alh,rhoo),as_type<float>(0x4a150c40u))),FMUL(FMUL(FMUL(flxhumt,lai_tree),2),rtree));
+  } else {
+  flxhum=FADD(FADD(FADD(FADD(FMUL(r,flxhumr),FMUL(w,flxhumb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxhumg)),FMUL(FMUL(fvg,rw),flxhumvg)),FMUL(FMUL(FMUL(flxhumt,lai_tree),2),rtree));
+  }
+  {
+  flxuv=FMUL(FMUL(FADD(FMUL(r,cdr),FMUL(rw,cdc)),ua),ua);
+  }
+  flxg=FADD(FADD(FADD(FMUL(r,g0r),FMUL(w,g0b)),FMUL(FMUL(u480_sub(1,fvg),rw),g0g)),FMUL(FMUL(fvg,rw),g0vg));
+  lnet=FADD(FADD(FADD(FADD(FMUL(r,rr),FMUL(w,rb)),FMUL(FMUL(u480_sub(1,fvg),rw),rg)),FMUL(FMUL(fvg,rw),rvg)),FMUL(FMUL(FMUL(FMUL(rt,2),as_type<float>(0x40490fd0u)),rtree),u480_sub(1,tau)));
+  } else if ((((groption==1)) && ((treeoption==1)))) {
+  if (((ahoption==1))) {
+  flxth=FADD(FADD(FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),flxthr),FMUL(FMUL(fgr,r),flxthgr)),FMUL(w,flxthb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxthg)),FMUL(FMUL(fvg,rw),flxthvg)),FDIV(FDIV(ah,rhoo),as_type<float>(0x447b2000u))),FMUL(FMUL(FMUL(flxtht,lai_tree),2),rtree));
+  } else {
+  flxth=FADD(FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),flxthr),FMUL(FMUL(fgr,r),flxthgr)),FMUL(w,flxthb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxthg)),FMUL(FMUL(fvg,rw),flxthvg)),FMUL(FMUL(FMUL(flxtht,lai_tree),2),rtree));
+  }
+  if (((alhoption==1))) {
+  flxhum=FADD(FADD(FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),flxhumr),FMUL(FMUL(fgr,r),flxhumgr)),FMUL(w,flxhumb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxhumg)),FMUL(FMUL(fvg,rw),flxhumvg)),FDIV(FDIV(alh,rhoo),as_type<float>(0x4a150c40u))),FMUL(FMUL(FMUL(flxhumt,lai_tree),2),rtree));
+  } else {
+  flxhum=FADD(FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),flxhumr),FMUL(FMUL(fgr,r),flxhumgr)),FMUL(w,flxhumb)),FMUL(FMUL(u480_sub(1,fvg),rw),flxhumg)),FMUL(FMUL(fvg,rw),flxhumvg)),FMUL(FMUL(FMUL(flxhumt,lai_tree),2),rtree));
+  }
+  flxuv=FMUL(FMUL(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),cdr),FMUL(FMUL(fgr,r),cdgr)),FMUL(rw,cdc)),ua),ua);
+  flxg=FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),g0r),FMUL(FMUL(fgr,r),g0gr)),FMUL(w,g0b)),FMUL(FMUL(u480_sub(1,fvg),rw),g0g)),FMUL(FMUL(fvg,rw),g0vg));
+  lnet=FADD(FADD(FADD(FADD(FADD(FMUL(FMUL(u480_sub(1,fgr),r),rr),FMUL(FMUL(fgr,r),rgr)),FMUL(w,rb)),FMUL(FMUL(u480_sub(1,fvg),rw),rg)),FMUL(FMUL(fvg,rw),rvg)),FMUL(FMUL(FMUL(FMUL(rt,2),as_type<float>(0x40490fd0u)),rtree),u480_sub(1,tau)));
+  } else {
+  if (((ahoption==1))) {
+  flxth=FADD(FADD(FADD(FMUL(r,flxthr),FMUL(w,flxthb)),FMUL(rw,flxthg)),FDIV(FDIV(ah,rhoo),as_type<float>(0x447b2000u)));
+  flxhum=FADD(FADD(FADD(FMUL(r,flxhumr),FMUL(w,flxhumb)),FMUL(rw,flxhumg)),FDIV(FDIV(alh,rhoo),as_type<float>(0x4a150c40u)));
+  } else {
+  flxth=FADD(FADD(FMUL(r,flxthr),FMUL(w,flxthb)),FMUL(rw,flxthg));
+  flxhum=FADD(FADD(FMUL(r,flxhumr),FMUL(w,flxhumb)),FMUL(rw,flxhumg));
+  }
+  {
+  flxuv=FMUL(FMUL(FADD(FMUL(r,cdr),FMUL(rw,cdc)),ua),ua);
+  }
+  flxg=FADD(FADD(FMUL(r,g0r),FMUL(w,g0b)),FMUL(rw,g0g));
+  lnet=FADD(FADD(FMUL(r,rr),FMUL(w,rb)),FMUL(rw,rg));
+  }
+  sh=FMUL(FMUL(flxth,rhoo),as_type<float>(0x447b2000u));
+  lh=FMUL(FMUL(flxhum,rhoo),as_type<float>(0x4a150c40u));
+  lh_kinematic=FMUL(flxhum,rhoo);
+  lw=u480_sub(llg,FMUL(FMUL(lnet,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u)));
+  sw=u480_sub(ssg,FMUL(FMUL(snet,as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u)));
+  alb=as_type<float>(0x00000000u);
+  if (((ucm_abs(ssg)>as_type<float>(0x38d1b717u)))) {
+  alb=FDIV(sw,ssg);
+  }
+  g=FMUL(FMUL((-flxg),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  rn=FMUL(FMUL(FADD(snet,lnet),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u));
+  ust=FSQRT(flxuv);
+  tst=FDIV((-flxth),ust);
+  qst=FDIV((-flxhum),ust);
+  z0=z0c;
+  z0h=z0hc;
+  z=u480_sub(za,zdc);
+  znt=z0;
+  xxx=FDIV(FDIV(FDIV(FMUL(FMUL(as_type<float>(0x407b22d2u),z),tst),ta),ust),ust);
+  if (((xxx>=as_type<float>(0x3f800000u)))) {
+  xxx=as_type<float>(0x3f800000u);
+  }
+  if (((xxx<=as_type<float>(0xc0a00000u)))) {
+  xxx=as_type<float>(0xc0a00000u);
+  }
+  if (((xxx>0))) {
+  psim=FMUL(as_type<float>(0xc0a00000u),xxx);
+  psih=FMUL(as_type<float>(0xc0a00000u),xxx);
+  } else {
+  x=gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx)),as_type<float>(0x3e800000u));
+  psim=FADD(u480_sub(FADD(FMUL(as_type<float>(0x40000000u),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),x),as_type<float>(0x40000000u)))),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),FMUL(x,x)),as_type<float>(0x40000000u)))),FMUL(as_type<float>(0x40000000u),ucm480_atan(x))),as_type<float>(0x3fc90fd0u));
+  psih=FMUL(as_type<float>(0x40000000u),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),FMUL(x,x)),as_type<float>(0x40000000u))));
+  }
+  gz1oz0=gfk_log(FDIV(z,z0));
+  cd=FDIV(as_type<float>(0x3e23d70bu),gfk_pow(u480_sub(gfk_log(FDIV(z,z0)),psim),as_type<float>(0x40000000u)));
+  chs_local=FDIV(FMUL(as_type<float>(0x3ecccccdu),ust),u480_sub(gfk_log(FDIV(z,z0h)),psih));
+  ts=FADD(ta,FDIV(flxth,chs));
+  qs=FADD(qa,FDIV(flxhum,chs));
+  xxx2=FMUL(FDIV(as_type<float>(0x40000000u),z),xxx);
+  if (((xxx2>=as_type<float>(0x3f800000u)))) {
+  xxx2=as_type<float>(0x3f800000u);
+  }
+  if (((xxx2<=as_type<float>(0xc0a00000u)))) {
+  xxx2=as_type<float>(0xc0a00000u);
+  }
+  if (((xxx2>0))) {
+  psim2=FMUL(as_type<float>(0xc0a00000u),xxx2);
+  psih2=FMUL(as_type<float>(0xc0a00000u),xxx2);
+  } else {
+  x=gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx2)),as_type<float>(0x3e800000u));
+  psim2=FADD(u480_sub(FADD(FMUL(as_type<float>(0x40000000u),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),x),as_type<float>(0x40000000u)))),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),FMUL(x,x)),as_type<float>(0x40000000u)))),FMUL(as_type<float>(0x40000000u),ucm480_atan(x))),as_type<float>(0x3fc90fdbu));
+  psih2=FMUL(as_type<float>(0x40000000u),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),FMUL(x,x)),as_type<float>(0x40000000u))));
+  }
+  xxx10=FMUL(FDIV(as_type<float>(0x41200000u),z),xxx);
+  if (((xxx10>=as_type<float>(0x3f800000u)))) {
+  xxx10=as_type<float>(0x3f800000u);
+  }
+  if (((xxx10<=as_type<float>(0xc0a00000u)))) {
+  xxx10=as_type<float>(0xc0a00000u);
+  }
+  if (((xxx10>0))) {
+  psim10=FMUL(as_type<float>(0xc0a00000u),xxx10);
+  psih10=FMUL(as_type<float>(0xc0a00000u),xxx10);
+  } else {
+  x=gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx10)),as_type<float>(0x3e800000u));
+  psim10=FADD(u480_sub(FADD(FMUL(as_type<float>(0x40000000u),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),x),as_type<float>(0x40000000u)))),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),FMUL(x,x)),as_type<float>(0x40000000u)))),FMUL(as_type<float>(0x40000000u),ucm480_atan(x))),as_type<float>(0x3fc90fdbu));
+  psih10=FMUL(as_type<float>(0x40000000u),gfk_log(FDIV(FADD(as_type<float>(0x3f800000u),FMUL(x,x)),as_type<float>(0x40000000u))));
+  }
+  psix=u480_sub(gfk_log(FDIV(z,z0)),psim);
+  psit=u480_sub(gfk_log(FDIV(z,z0h)),psih);
+  psix2=u480_sub(gfk_log(FDIV(as_type<float>(0x40000000u),z0)),psim2);
+  psit2=u480_sub(gfk_log(FDIV(as_type<float>(0x40000000u),z0h)),psih2);
+  psix10=u480_sub(gfk_log(FDIV(as_type<float>(0x41200000u),z0)),psim10);
+  psit10=u480_sub(gfk_log(FDIV(as_type<float>(0x41200000u),z0h)),psih10);
+  u10=FMUL(u1,FDIV(psix10,psix));
+  v10=FMUL(v1,FDIV(psix10,psix));
+  {
+  th2=FADD(ts,FMUL(u480_sub(ta,ts),FDIV(chs,chs2)));
+  q2=FADD(qs,FMUL(u480_sub(qa,qs),FDIV(psit2,psit)));
+  }
+}
+
+static inline void u480_mos(thread float& xxx,thread float& alpha,thread float& cd,thread const float& b1,thread float& rib,thread const float& z,thread const float& z0,thread const float& ua,thread const float& ta,thread const float& tsf,thread const float& rho,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  const float cp=as_type<float>(0x3e75c28fu);
+  float xxx0={};
+  float x={};
+  float x0={};
+  float faih={};
+  float dpsim={};
+  float dpsih={};
+  float f={};
+  float df={};
+  float xxxp={};
+  float us={};
+  float ts={};
+  float al={};
+  float xkb={};
+  float dd={};
+  float psim={};
+  float psih={};
+  int newt={};
+  const int newt_end=10;
+  if (((rib<=as_type<float>(0xc1700000u)))) {
+  rib=as_type<float>(0xc1700000u);
+  }
+  if (((rib<as_type<float>(0x00000000u)))) {
+  for (newt=1;newt<=10;newt+=1) {
+  if (((xxx>=as_type<float>(0x00000000u)))) {
+  xxx=as_type<float>(0xba83126fu);
+  }
+  xxx0=FDIV(FMUL(xxx,z0),FADD(z,z0));
+  x=gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx)),as_type<float>(0x3e800000u));
+  x0=gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx0)),as_type<float>(0x3e800000u));
+  psim=u480_sub(FADD(FADD(u480_sub(gfk_log(FDIV(FADD(z,z0),z0)),gfk_log(FMUL(gfk_pow(FADD(x,as_type<float>(0x3f800000u)),as_type<float>(0x40000000u)),FADD(gfk_pow(x,as_type<float>(0x40000000u)),as_type<float>(0x3f800000u))))),FMUL(as_type<float>(0x40000000u),ucm480_atan(x))),gfk_log(FMUL(gfk_pow(FADD(x0,as_type<float>(0x3f800000u)),as_type<float>(0x40000000u)),FADD(gfk_pow(x0,as_type<float>(0x40000000u)),as_type<float>(0x3f800000u))))),FMUL(as_type<float>(0x40000000u),ucm480_atan(x0)));
+  faih=FDIV(as_type<float>(0x3f800000u),FSQRT(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx))));
+  psih=FADD(u480_sub(FADD(gfk_log(FDIV(FADD(z,z0),z0)),FMUL(as_type<float>(0x3ecccccdu),b1)),FMUL(as_type<float>(0x40000000u),gfk_log(FADD(FSQRT(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx))),as_type<float>(0x3f800000u))))),FMUL(as_type<float>(0x40000000u),gfk_log(FADD(FSQRT(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx0))),as_type<float>(0x3f800000u)))));
+  dpsim=u480_sub(FDIV(gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx)),as_type<float>(0xbe800000u)),xxx),FDIV(gfk_pow(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx0)),as_type<float>(0xbe800000u)),xxx));
+  dpsih=u480_sub(FDIV(FDIV(as_type<float>(0x3f800000u),FSQRT(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx)))),xxx),FDIV(FDIV(as_type<float>(0x3f800000u),FSQRT(u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),xxx0)))),xxx));
+  f=u480_sub(FDIV(FMUL(rib,gfk_pow(psim,as_type<float>(0x40000000u))),psih),xxx);
+  df=u480_sub(FDIV(FMUL(rib,u480_sub(FMUL(FMUL(FMUL(as_type<float>(0x40000000u),dpsim),psim),psih),FMUL(dpsih,gfk_pow(psim,as_type<float>(0x40000000u))))),gfk_pow(psih,as_type<float>(0x40000000u))),as_type<float>(0x3f800000u));
+  xxxp=xxx;
+  xxx=u480_sub(xxxp,FDIV(f,df));
+  if (((xxx<=as_type<float>(0xc1200000u)))) {
+  xxx=as_type<float>(0xc1200000u);
+  }
+  }
+  } else if (((rib>=as_type<float>(0x3e12491bu)))) {
+  xxx=as_type<float>(0x3f36c8b4u);
+  psim=FADD(gfk_log(FDIV(FADD(z,z0),z0)),FMUL(as_type<float>(0x40e00000u),xxx));
+  psih=FADD(psim,FMUL(as_type<float>(0x3ecccccdu),b1));
+  } else {
+  al=gfk_log(FDIV(FADD(z,z0),z0));
+  xkb=FMUL(as_type<float>(0x3ecccccdu),b1);
+  dd=FADD(FMUL(FMUL(FMUL(FMUL(as_type<float>(0xc0800000u),rib),as_type<float>(0x40e00000u)),xkb),al),gfk_pow(FADD(al,xkb),as_type<float>(0x40000000u)));
+  if (((dd<=as_type<float>(0x00000000u)))) {
+  dd=as_type<float>(0x00000000u);
+  }
+  xxx=FDIV(u480_sub(u480_sub(FADD(al,xkb),FMUL(FMUL(FMUL(as_type<float>(0x40000000u),rib),as_type<float>(0x40e00000u)),al)),FSQRT(dd)),FMUL(as_type<float>(0x40000000u),u480_sub(FMUL(rib,as_type<float>(0x42440000u)),as_type<float>(0x40e00000u))));
+  psim=FADD(gfk_log(FDIV(FADD(z,z0),z0)),FMUL(as_type<float>(0x40e00000u),u_min(xxx,as_type<float>(0x3f36c8b4u))));
+  psih=FADD(psim,FMUL(as_type<float>(0x3ecccccdu),b1));
+  }
+  us=FDIV(FMUL(as_type<float>(0x3ecccccdu),ua),psim);
+  if (((us<=as_type<float>(0x3c23d70au)))) {
+  us=as_type<float>(0x3c23d70au);
+  }
+  ts=FDIV(FMUL(as_type<float>(0x3ecccccdu),u480_sub(ta,tsf)),psih);
+  cd=FDIV(FMUL(us,us),gfk_pow(ua,as_type<float>(0x40000000u)));
+  alpha=FDIV(FMUL(FMUL(FMUL(rho,as_type<float>(0x3e75c28fu)),as_type<float>(0x3ecccccdu)),us),psih);
+  return;
+}
+
+static inline void u480_multi_layer(thread const int& km,thread const int& bound,thread const float& g0,thread const float& cap,thread const float& aks,thread float* tsl,thread const float* dz,thread const float& delt,thread const float& tslend,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float a[4]={};
+  float b[4]={};
+  float c[4]={};
+  float d[4]={};
+  float x[4]={};
+  float p[4]={};
+  float q[4]={};
+  float dzend={};
+  int k={};
+  dzend=dz[(km)-1];
+  a[(1)-1]=as_type<float>(0x00000000u);
+  b[(1)-1]=FADD(FDIV(FMUL(cap,dz[(1)-1]),delt),FDIV(FMUL(as_type<float>(0x40000000u),aks),FADD(dz[(1)-1],dz[(2)-1])));
+  c[(1)-1]=FDIV(FMUL(as_type<float>(0xc0000000u),aks),FADD(dz[(1)-1],dz[(2)-1]));
+  d[(1)-1]=FADD(FMUL(FDIV(FMUL(cap,dz[(1)-1]),delt),tsl[(1)-1]),g0);
+  for (k=2;k<=(km-1);k+=1) {
+  a[(k)-1]=FDIV(FMUL(as_type<float>(0xc0000000u),aks),FADD(dz[((k-1))-1],dz[(k)-1]));
+  b[(k)-1]=FADD(FADD(FDIV(FMUL(cap,dz[(k)-1]),delt),FDIV(FMUL(as_type<float>(0x40000000u),aks),FADD(dz[((k-1))-1],dz[(k)-1]))),FDIV(FMUL(as_type<float>(0x40000000u),aks),FADD(dz[(k)-1],dz[((k+1))-1])));
+  c[(k)-1]=FDIV(FMUL(as_type<float>(0xc0000000u),aks),FADD(dz[(k)-1],dz[((k+1))-1]));
+  d[(k)-1]=FMUL(FDIV(FMUL(cap,dz[(k)-1]),delt),tsl[(k)-1]);
+  }
+  if (((bound==1))) {
+  a[(km)-1]=FDIV(FMUL(as_type<float>(0xc0000000u),aks),FADD(dz[((km-1))-1],dz[(km)-1]));
+  b[(km)-1]=FADD(FDIV(FMUL(cap,dz[(km)-1]),delt),FDIV(FMUL(as_type<float>(0x40000000u),aks),FADD(dz[((km-1))-1],dz[(km)-1])));
+  c[(km)-1]=as_type<float>(0x00000000u);
+  d[(km)-1]=FMUL(FDIV(FMUL(cap,dz[(km)-1]),delt),tsl[(km)-1]);
+  } else {
+  a[(km)-1]=FDIV(FMUL(as_type<float>(0xc0000000u),aks),FADD(dz[((km-1))-1],dz[(km)-1]));
+  b[(km)-1]=FADD(FADD(FDIV(FMUL(cap,dz[(km)-1]),delt),FDIV(FMUL(as_type<float>(0x40000000u),aks),FADD(dz[((km-1))-1],dz[(km)-1]))),FDIV(FMUL(as_type<float>(0x40000000u),aks),FADD(dz[(km)-1],dzend)));
+  c[(km)-1]=as_type<float>(0x00000000u);
+  d[(km)-1]=FADD(FMUL(FDIV(FMUL(cap,dz[(km)-1]),delt),tsl[(km)-1]),FDIV(FMUL(FMUL(as_type<float>(0x40000000u),aks),tslend),FADD(dz[(km)-1],dzend)));
+  }
+  p[(1)-1]=FDIV((-c[(1)-1]),b[(1)-1]);
+  q[(1)-1]=FDIV(d[(1)-1],b[(1)-1]);
+  for (k=2;k<=km;k+=1) {
+  p[(k)-1]=FDIV((-c[(k)-1]),FADD(FMUL(a[(k)-1],p[((k-1))-1]),b[(k)-1]));
+  q[(k)-1]=FDIV(FADD(FMUL((-a[(k)-1]),q[((k-1))-1]),d[(k)-1]),FADD(FMUL(a[(k)-1],p[((k-1))-1]),b[(k)-1]));
+  }
+  x[(km)-1]=q[(km)-1];
+  for (k=(km-1);k>=1;k+=-1) {
+  x[(k)-1]=FADD(FMUL(p[(k)-1],x[((k+1))-1]),q[(k)-1]);
+  }
+  for (k=1;k<=km;k+=1) {
+  tsl[(k)-1]=x[(k)-1];
+  }
+  return;
+}
+
+static inline void u480_force_restore(thread const float& cap,thread const float& aks,thread const float& delt,thread const float& s,thread const float& r,thread const float& h,thread const float& le,thread const float& tslend,thread const float& tsp,thread float& ts,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float c1={};
+  float c2={};
+  c2=as_type<float>(0x4656dbfeu);
+  c1=FSQRT(FMUL(FMUL(FMUL(as_type<float>(0x3f000000u),c2),cap),aks));
+  ts=FADD(tsp,FMUL(delt,u480_sub(FDIV(u480_sub(u480_sub(FADD(s,r),h),le),c1),FDIV(u480_sub(tsp,tslend),c2))));
+}
+
+static inline void u480_sfcdif_urb(thread const float& zlm,thread const float& z0,thread const float& thz0,thread const float& thlm,thread const float& sfcspd,thread const float& akanda,thread float& akms,thread float& akhs,thread float& rlmo,thread float& cd,thread float& zt_out,thread const float& vegfrac,bool optional_present,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  const float wwst=as_type<float>(0x3f99999au);
+  const float wwst2=as_type<float>(0x3fb851ecu);
+  const float g=as_type<float>(0x411ccccdu);
+  const float vkrm=as_type<float>(0x3ecccccdu);
+  const float excm=as_type<float>(0x3a83126fu);
+  const float beta=as_type<float>(0x3b72b9d6u);
+  const float btg=as_type<float>(0x3d14ab6du);
+  const float elfc=as_type<float>(0x3c6ddf15u);
+  const float wold=as_type<float>(0x3e19999au);
+  const float wnew=as_type<float>(0x3f59999au);
+  const float pihf=as_type<float>(0x3fc90fdbu);
+  const float epsu2=as_type<float>(0x38d1b717u);
+  const float epsust=as_type<float>(0x3d8f5c29u);
+  const float epsit=as_type<float>(0x38d1b717u);
+  const float epsa=as_type<float>(0x322bcc77u);
+  const float ztmin=as_type<float>(0xc0a00000u);
+  const float ztmax=as_type<float>(0x3f800000u);
+  const float hpbl=as_type<float>(0x447a0000u);
+  const float sqvisc=as_type<float>(0x4381199au);
+  const float ric=as_type<float>(0x3e3b645au);
+  const float rric=as_type<float>(0x40aedd07u);
+  const float fhneu=as_type<float>(0x3f4ccccdu);
+  const float rfc=as_type<float>(0x3e439581u);
+  const float rlmo_thr=as_type<float>(0x3a83126fu);
+  const float rfac=as_type<float>(0x40c8a703u);
+  float zz={};
+  float xx={};
+  float yy={};
+  float zu={};
+  float zt={};
+  float rdz={};
+  float cxch={};
+  float dthv={};
+  float du2={};
+  float btgh={};
+  float wstar2={};
+  float ustar={};
+  float zslu={};
+  float zslt={};
+  float rlogu={};
+  float rlogt={};
+  float zetalt={};
+  float zetalu={};
+  float zetau={};
+  float zetat={};
+  float xlu4={};
+  float xlt4={};
+  float xu4={};
+  float xt4={};
+  float xlu={};
+  float xlt={};
+  float xu={};
+  float xt={};
+  float psmz={};
+  float simm={};
+  float pshz={};
+  float simh={};
+  float ustark={};
+  float rlmn={};
+  float rlma={};
+  const int itrmx=5;
+  int ilech={};
+  int itr={};
+  ilech=0;
+  zu=z0;
+  rdz=FDIV(as_type<float>(0x3f800000u),zlm);
+  cxch=FMUL(as_type<float>(0x3a83126fu),rdz);
+  dthv=u480_sub(thlm,thz0);
+  du2=u_max(FMUL(sfcspd,sfcspd),as_type<float>(0x38d1b717u));
+  btgh=as_type<float>(0x42112f68u);
+  if (((FMUL(FMUL(btgh,akhs),dthv)!=as_type<float>(0x00000000u)))) {
+  wstar2=FMUL(as_type<float>(0x3fb851ecu),gfk_pow(ucm_abs(FMUL(FMUL(btgh,akhs),dthv)),as_type<float>(0x3f2aaaabu)));
+  } else {
+  wstar2=as_type<float>(0x00000000u);
+  }
+  ustar=u_max(FSQRT(FMUL(akms,FSQRT(FADD(du2,wstar2)))),as_type<float>(0x3d8f5c29u));
+  if (optional_present) {
+  zt=FMUL(gfk_exp(u480_sub(as_type<float>(0x40000000u),FMUL(u480_sub(akanda,FMUL(as_type<float>(0x3f666666u),gfk_pow(vegfrac,as_type<float>(0x3e947ae1u)))),gfk_pow(FMUL(FMUL(as_type<float>(0x478235a0u),ustar),z0),as_type<float>(0x3e800000u))))),z0);
+  } else {
+  zt=FMUL(gfk_exp(u480_sub(as_type<float>(0x40000000u),FMUL(akanda,gfk_pow(FMUL(FMUL(as_type<float>(0x478235a0u),ustar),z0),as_type<float>(0x3e800000u))))),z0);
+  }
+  zslu=FADD(zlm,zu);
+  zslt=FADD(zlm,zt);
+  rlogu=gfk_log(FDIV(zslu,zu));
+  rlogt=gfk_log(FDIV(zslt,zt));
+  rlmo=FDIV(FMUL(FMUL(as_type<float>(0x3c6ddf15u),akhs),dthv),u_powi(ustar,3));
+  for (itr=1;itr<=5;itr+=1) {
+  zetalt=u_max(FMUL(zslt,rlmo),as_type<float>(0xc0a00000u));
+  rlmo=FDIV(zetalt,zslt);
+  zetalu=FMUL(zslu,rlmo);
+  zetau=FMUL(zu,rlmo);
+  zetat=FMUL(zt,rlmo);
+  if (((ilech==0))) {
+  if (((rlmo<as_type<float>(0x00000000u)))) {
+  xlu4=u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),zetalu));
+  xlt4=u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),zetalt));
+  xu4=u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),zetau));
+  xt4=u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x41800000u),zetat));
+  xlu=FSQRT(FSQRT(xlu4));
+  xlt=FSQRT(FSQRT(xlt4));
+  xu=FSQRT(FSQRT(xu4));
+  xt=FSQRT(FSQRT(xt4));
+  psmz=pspmu(xu);
+  simm=FADD(u480_sub(pspmu(xlu),psmz),rlogu);
+  pshz=psphu(xt);
+  simh=FADD(u480_sub(psphu(xlt),pshz),rlogt);
+  } else {
+  zetalu=u_min(zetalu,as_type<float>(0x3f800000u));
+  zetalt=u_min(zetalt,as_type<float>(0x3f800000u));
+  psmz=pspms(zetau);
+  simm=FADD(u480_sub(pspms(zetalu),psmz),rlogu);
+  pshz=psphs(zetat);
+  simh=FADD(u480_sub(psphs(zetalt),pshz),rlogt);
+  }
+  } else {
+  if (((rlmo<as_type<float>(0x00000000u)))) {
+  psmz=pslmu(zetau);
+  simm=FADD(u480_sub(pslmu(zetalu),psmz),rlogu);
+  pshz=pslhu(zetat);
+  simh=FADD(u480_sub(pslhu(zetalt),pshz),rlogt);
+  } else {
+  zetalu=u_min(zetalu,as_type<float>(0x3f800000u));
+  zetalt=u_min(zetalt,as_type<float>(0x3f800000u));
+  psmz=pslms(zetau);
+  simm=FADD(u480_sub(pslms(zetalu),psmz),rlogu);
+  pshz=pslhs(zetat);
+  simh=FADD(u480_sub(pslhs(zetalt),pshz),rlogt);
+  }
+  }
+  ustar=u_max(FSQRT(FMUL(akms,FSQRT(FADD(du2,wstar2)))),as_type<float>(0x3d8f5c29u));
+  if (optional_present) {
+  zt=FMUL(gfk_exp(u480_sub(as_type<float>(0x40000000u),FMUL(u480_sub(akanda,FMUL(as_type<float>(0x3f666666u),gfk_pow(vegfrac,as_type<float>(0x3e947ae1u)))),gfk_pow(FMUL(FMUL(as_type<float>(0x478235a0u),ustar),z0),as_type<float>(0x3e800000u))))),z0);
+  } else {
+  zt=FMUL(gfk_exp(u480_sub(as_type<float>(0x40000000u),FMUL(akanda,gfk_pow(FMUL(FMUL(as_type<float>(0x478235a0u),ustar),z0),as_type<float>(0x3e800000u))))),z0);
+  }
+  zslt=FADD(zlm,zt);
+  rlogt=gfk_log(FDIV(zslt,zt));
+  ustark=FMUL(ustar,as_type<float>(0x3ecccccdu));
+  akms=u_max(FDIV(ustark,simm),cxch);
+  akhs=u_max(FDIV(ustark,simh),cxch);
+  if (((FMUL(FMUL(btgh,akhs),dthv)!=as_type<float>(0x00000000u)))) {
+  wstar2=FMUL(as_type<float>(0x3fb851ecu),gfk_pow(ucm_abs(FMUL(FMUL(btgh,akhs),dthv)),as_type<float>(0x3f2aaaabu)));
+  } else {
+  wstar2=as_type<float>(0x00000000u);
+  }
+  rlmn=FDIV(FMUL(FMUL(as_type<float>(0x3c6ddf15u),akhs),dthv),u_powi(ustar,3));
+  rlma=FADD(FMUL(rlmo,as_type<float>(0x3e19999au)),FMUL(rlmn,as_type<float>(0x3f59999au)));
+  rlmo=rlma;
+  }
+  cd=FDIV(FMUL(ustar,ustar),u_powi(sfcspd,2));
+  if (optional_present) {
+  zt_out=zt;
+  }
+}
+
+static inline void u480_direvap(thread float& edir,thread const float& etp,thread const float& smc,thread const float& shdfac,thread const float& smcmax,thread const float& smcdry,thread const float& fxexp,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float fx={};
+  float sratio={};
+  sratio=FDIV(u480_sub(smc,smcdry),u480_sub(smcmax,smcdry));
+  if (((sratio>as_type<float>(0x00000000u)))) {
+  fx=gfk_pow(sratio,fxexp);
+  fx=u_max(u_min(fx,as_type<float>(0x3f800000u)),as_type<float>(0x00000000u));
+  } else {
+  fx=as_type<float>(0x00000000u);
+  }
+  edir=FMUL(FMUL(FMUL(fx,u480_sub(as_type<float>(0x3f800000u),shdfac)),etp),as_type<float>(0x3a83126fu));
+}
+
+static inline void u480_transp(thread float& ett,thread float* et,thread float& ec,thread const float& shdfac,thread const float& etp1,thread const float& cmc,thread const float& cfactr,thread const float& cmcmax,thread const float& lai,thread const float& rsmin,thread const float& rsmax,thread const float& rgl,thread const float& sx,thread const float& ts,thread const float& ta,thread const float& qa,thread const float* smc,thread const float& smcwlt,thread const float& smcref,thread const float& cpp,thread const float& ps,thread const float& ch,thread const float& epsv,thread const float& delt,thread const int& nroot,thread const int& nsoil,thread const float* dzvr,thread const float* zsoil,thread const float& hs,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float rc={};
+  float rcs={};
+  float rct={};
+  float rcq={};
+  float rcsoil={};
+  float ff={};
+  float ws={};
+  float slv={};
+  float desdt={};
+  float sigma={};
+  float pc={};
+  float cmc2ms={};
+  float sgx={};
+  float denom={};
+  float rtx={};
+  float ett1={};
+  int k={};
+  float part[4]={};
+  float gx[4]={};
+  float delta={};
+  float ea={};
+  float rr={};
+  slv=as_type<float>(0x4a18a620u);
+  sigma=as_type<float>(0x3373864fu);
+  ett=as_type<float>(0x00000000u);
+  for (k=1;k<=nsoil;k+=1) {
+  et[(k)-1]=as_type<float>(0x00000000u);
+  }
+  rcs=as_type<float>(0x00000000u);
+  rct=as_type<float>(0x00000000u);
+  rcq=as_type<float>(0x00000000u);
+  rcsoil=as_type<float>(0x00000000u);
+  ff=FDIV(FMUL(FMUL(FMUL(as_type<float>(0x3f8ccccdu),sx),as_type<float>(0x442e6ccdu)),as_type<float>(0x42700000u)),FMUL(rgl,lai));
+  rcs=FDIV(FADD(ff,FDIV(rsmin,rsmax)),FADD(as_type<float>(0x3f800000u),ff));
+  rcs=u_max(rcs,as_type<float>(0x38d1b717u));
+  rct=u480_sub(as_type<float>(0x3f800000u),FMUL(as_type<float>(0x3ad1b717u),gfk_pow(u480_sub(298,ta),as_type<float>(0x40000000u))));
+  rct=u_max(rct,as_type<float>(0x38d1b717u));
+  ea=FMUL(as_type<float>(0x40c3851fu),gfk_exp(FDIV(FMUL(as_type<float>(0x45a94801u),u480_sub(ta,as_type<float>(0x43889333u))),FMUL(as_type<float>(0x43889333u),ta))));
+  ws=FDIV(FMUL(as_type<float>(0x3f1f3b64u),ea),1013);
+  rcq=FDIV(as_type<float>(0x3f800000u),FADD(as_type<float>(0x3f800000u),FMUL(hs,u480_sub(ws,qa))));
+  rcq=u_max(rcq,as_type<float>(0x3c23d70au));
+  for (k=1;k<=nroot;k+=1) {
+  gx[(k)-1]=FDIV(u480_sub(smc[(k)-1],smcwlt),u480_sub(smcref,smcwlt));
+  if (((gx[(k)-1]>as_type<float>(0x3f800000u)))) {
+  gx[(k)-1]=as_type<float>(0x3f800000u);
+  }
+  if (((gx[(k)-1]<as_type<float>(0x00000000u)))) {
+  gx[(k)-1]=as_type<float>(0x00000000u);
+  }
+  part[(k)-1]=FMUL(FDIV((-dzvr[(k)-1]),zsoil[(3)-1]),gx[(k)-1]);
+  }
+  sgx=as_type<float>(0x00000000u);
+  for (k=1;k<=nroot;k+=1) {
+  sgx=FADD(sgx,gx[(k)-1]);
+  rcsoil=FADD(rcsoil,part[(k)-1]);
+  }
+  sgx=FDIV(sgx,nroot);
+  rcsoil=u_max(rcsoil,as_type<float>(0x38d1b717u));
+  rc=FDIV(rsmin,FMUL(FMUL(FMUL(FMUL(lai,rcs),rct),rcq),rcsoil));
+  desdt=FDIV(FDIV(FDIV(FDIV(FMUL(FMUL(as_type<float>(0x3f1f3b64u),slv),ea),as_type<float>(0x43e6c148u)),ta),ta),1013);
+  delta=FMUL(FDIV(slv,cpp),desdt);
+  rr=FADD(FDIV(FMUL(FDIV(FMUL(FMUL(FMUL(as_type<float>(0x40800000u),epsv),sigma),as_type<float>(0x438f851fu)),cpp),gfk_pow(ta,as_type<float>(0x40800000u))),FMUL(ts,ch)),as_type<float>(0x3f800000u));
+  pc=FDIV(FADD(rr,delta),FADD(FMUL(rr,FADD(as_type<float>(0x3f800000u),FMUL(rc,ch))),delta));
+  if (((cmc!=as_type<float>(0x00000000u)))) {
+  ett1=FMUL(FMUL(FMUL(FMUL(shdfac,pc),etp1),u480_sub(as_type<float>(0x3f800000u),gfk_pow(FDIV(cmc,cmcmax),cfactr))),as_type<float>(0x3a83126fu));
+  } else {
+  ett1=FMUL(FMUL(FMUL(shdfac,pc),etp1),as_type<float>(0x3a83126fu));
+  }
+  denom=as_type<float>(0x00000000u);
+  for (k=1;k<=nroot;k+=1) {
+  rtx=u480_sub(FADD(FDIV((-dzvr[(k)-1]),zsoil[(3)-1]),gx[(k)-1]),sgx);
+  gx[(k)-1]=FMUL(gx[(k)-1],u_max(rtx,as_type<float>(0x00000000u)));
+  denom=FADD(denom,gx[(k)-1]);
+  }
+  if (((denom<=as_type<float>(0x00000000u)))) {
+  denom=as_type<float>(0x3f800000u);
+  }
+  for (k=1;k<=nroot;k+=1) {
+  et[(k)-1]=FDIV(FMUL(ett1,gx[(k)-1]),denom);
+  ett=FADD(ett,et[(k)-1]);
+  }
+  if (((cmc>as_type<float>(0x00000000u)))) {
+  ec=FMUL(FMUL(FMUL(shdfac,gfk_pow(FDIV(cmc,cmcmax),cfactr)),etp1),as_type<float>(0x3a83126fu));
+  } else {
+  ec=as_type<float>(0x00000000u);
+  }
+  cmc2ms=FDIV(cmc,delt);
+  ec=u_min(cmc2ms,ec);
+}
+
+static inline void u480_smflx(thread const float* smcp,thread float* smc,thread const int& nsoil,thread const float& cmcp,thread float& cmc,thread const float& dt,thread const float& prcp1,thread const float* zsoil,thread const float& smcmax,thread const float& bexp,thread const float& smcwlt,thread const float* sroot,thread const float& dksat,thread const float& dwsat,thread const float& shdfac,thread const float& cmcmax,thread float& runoff1,thread float& runoff2,thread float& runoff3,thread const float& edir,thread const float& ec,thread const float* et,thread float& drip,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  int i={};
+  int k={};
+  float ai[4]={};
+  float bi[4]={};
+  float ci[4]={};
+  float stcf[4]={};
+  float rhsts[4]={};
+  float rhstt[4]={};
+  float excess={};
+  float pcpdrp={};
+  float rhsct={};
+  float trhsct={};
+  rhsct=u480_sub(FDIV(FMUL(FMUL(shdfac,prcp1),as_type<float>(0x3a83126fu)),as_type<float>(0x45610000u)),ec);
+  drip=as_type<float>(0x00000000u);
+  trhsct=FMUL(dt,rhsct);
+  excess=FADD(cmcp,trhsct);
+  if (((excess>cmcmax))) {
+  drip=u480_sub(excess,cmcmax);
+  }
+  pcpdrp=FADD(FDIV(FMUL(FMUL(u480_sub(as_type<float>(0x3f800000u),shdfac),prcp1),as_type<float>(0x3a83126fu)),as_type<float>(0x45610000u)),FDIV(drip,dt));
+  u480_srt(rhstt,edir,et,smcp,nsoil,pcpdrp,zsoil,dwsat,dksat,smcmax,bexp,runoff1,runoff2,dt,smcwlt,sroot,ai,bi,ci,env,status);
+  u480_sstep(smcp,smc,cmcp,cmc,rhstt,rhsct,dt,nsoil,smcmax,cmcmax,runoff3,zsoil,ai,bi,ci,env,status);
+}
+
+static inline void u480_srt(thread float* rhstt,thread const float& edir,thread const float* et,thread const float* smcp,thread const int& nsoil,thread const float& pcpdrp,thread const float* zsoil,thread const float& dwsat,thread const float& dksat,thread const float& smcmax,thread const float& bexp,thread float& runoff1,thread float& runoff2,thread const float& dt,thread const float& smcwlt,thread const float* sroot,thread float* ai,thread float* bi,thread float* ci,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  int k={};
+  int ks={};
+  float ddmax[4]={};
+  float dd={};
+  float ddt={};
+  float ddz={};
+  float ddz2={};
+  float denom={};
+  float denom2={};
+  float dsmdz={};
+  float dsmdz2={};
+  float dt1={};
+  float infmax={};
+  float mxsmc={};
+  float mxsmc2={};
+  float numer={};
+  float pddum={};
+  float px={};
+  float smcav={};
+  float sstt={};
+  float par={};
+  float val={};
+  float wcnd={};
+  float wcnd2={};
+  float wdf={};
+  float wdf2={};
+  float kdt={};
+  pddum=pcpdrp;
+  runoff1=as_type<float>(0x00000000u);
+  par=as_type<float>(0x360637bdu);
+  if (((pcpdrp!=as_type<float>(0x00000000u)))) {
+  smcav=u480_sub(smcmax,smcwlt);
+  ddmax[(1)-1]=FMUL((-zsoil[(1)-1]),smcav);
+  ddmax[(1)-1]=FMUL(ddmax[(1)-1],u480_sub(as_type<float>(0x3f800000u),FDIV(u480_sub(smcp[(1)-1],smcwlt),smcav)));
+  ddmax[(2)-1]=FMUL(u480_sub(zsoil[(1)-1],zsoil[(2)-1]),smcav);
+  ddmax[(2)-1]=FMUL(ddmax[(2)-1],u480_sub(as_type<float>(0x3f800000u),FDIV(u480_sub(smcp[(2)-1],smcwlt),smcav)));
+  ddmax[(3)-1]=FMUL(u480_sub(zsoil[(2)-1],zsoil[(3)-1]),smcav);
+  ddmax[(3)-1]=FMUL(ddmax[(3)-1],u480_sub(as_type<float>(0x3f800000u),FDIV(u480_sub(smcp[(3)-1],smcwlt),smcav)));
+  dd=FADD(FADD(ddmax[(1)-1],ddmax[(2)-1]),ddmax[(3)-1]);
+  dt1=FDIV(dt,86400);
+  kdt=FDIV(FMUL(as_type<float>(0x40400000u),dksat),par);
+  val=u480_sub(as_type<float>(0x3f800000u),gfk_exp(FMUL((-kdt),dt1)));
+  ddt=FMUL(dd,val);
+  px=FMUL(pcpdrp,dt);
+  if (((px<as_type<float>(0x00000000u)))) {
+  px=as_type<float>(0x00000000u);
+  }
+  infmax=FDIV(FMUL(px,FDIV(ddt,FADD(px,ddt))),dt);
+  mxsmc=smcp[(1)-1];
+  u480_wdfcnd(wdf,wcnd,mxsmc,smcmax,bexp,dksat,dwsat,env,status);
+  infmax=u_max(infmax,wcnd);
+  infmax=u_min(infmax,FDIV(px,dt));
+  if (((pcpdrp>infmax))) {
+  runoff1=u480_sub(pcpdrp,infmax);
+  pddum=infmax;
+  }
+  }
+  u480_wdfcnd(wdf,wcnd,smcp[(1)-1],smcmax,bexp,dksat,dwsat,env,status);
+  ddz=FDIV(as_type<float>(0x3f800000u),FMUL(as_type<float>(0xbf000000u),zsoil[(2)-1]));
+  ai[(1)-1]=as_type<float>(0x00000000u);
+  bi[(1)-1]=FDIV(FMUL(wdf,ddz),(-zsoil[(1)-1]));
+  ci[(1)-1]=(-bi[(1)-1]);
+  dsmdz=FDIV(u480_sub(smcp[(1)-1],smcp[(2)-1]),FMUL(as_type<float>(0xbf000000u),zsoil[(2)-1]));
+  rhstt[(1)-1]=FDIV(FADD(FADD(FADD(u480_sub(FADD(FMUL(wdf,dsmdz),wcnd),pddum),edir),et[(1)-1]),sroot[(1)-1]),zsoil[(1)-1]);
+  sstt=FADD(FADD(FADD(FMUL(wdf,dsmdz),wcnd),edir),et[(1)-1]);
+  ddz2=as_type<float>(0x00000000u);
+  for (k=2;k<=(nsoil-1);k+=1) {
+  denom2=u480_sub(zsoil[((k-1))-1],zsoil[(k)-1]);
+  if (((k!=(nsoil-1)))) {
+  mxsmc2=smcp[(k)-1];
+  u480_wdfcnd(wdf2,wcnd2,mxsmc2,smcmax,bexp,dksat,dwsat,env,status);
+  denom=u480_sub(zsoil[((k-1))-1],zsoil[((k+1))-1]);
+  dsmdz2=FDIV(u480_sub(smcp[(k)-1],smcp[((k+1))-1]),FMUL(denom,as_type<float>(0x3f000000u)));
+  ddz2=FDIV(as_type<float>(0x40000000u),denom);
+  ci[(k)-1]=FDIV(FMUL((-wdf2),ddz2),denom2);
+  } else {
+  u480_wdfcnd(wdf2,wcnd2,smcp[((nsoil-1))-1],smcmax,bexp,dksat,dwsat,env,status);
+  dsmdz2=as_type<float>(0x00000000u);
+  ci[(k)-1]=as_type<float>(0x00000000u);
+  }
+  numer=FADD(FADD(u480_sub(u480_sub(FMUL(wdf2,dsmdz2),FMUL(wdf,dsmdz)),wcnd),et[(k)-1]),sroot[(k)-1]);
+  rhstt[(k)-1]=FDIV(numer,(-denom2));
+  ai[(k)-1]=FDIV(FMUL((-wdf),ddz),denom2);
+  bi[(k)-1]=(-FADD(ai[(k)-1],ci[(k)-1]));
+  if (((k==(nsoil-1)))) {
+  runoff2=as_type<float>(0x00000000u);
+  }
+  if (((k!=(nsoil-1)))) {
+  wdf=wdf2;
+  wcnd=wcnd2;
+  dsmdz=dsmdz2;
+  ddz=ddz2;
+  }
+  }
+}
+
+static inline void u480_sstep(thread const float* smcp,thread float* smc,thread const float& cmcp,thread float& cmc,thread float* rhstt,thread const float& rhsct,thread const float& dt,thread const int& nsoil,thread const float& smcmax,thread const float& cmcmax,thread float& runoff3,thread const float* zsoil,thread float* ai,thread float* bi,thread float* ci,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  int i={};
+  int k={};
+  int kk11={};
+  float rhsttin[4]={};
+  float smcout[4]={};
+  float smcin[4]={};
+  float ciin[4]={};
+  float ddz={};
+  float wplus={};
+  float stot={};
+  for (k=1;k<=(nsoil-1);k+=1) {
+  rhstt[(k)-1]=FMUL(rhstt[(k)-1],dt);
+  ai[(k)-1]=FMUL(ai[(k)-1],dt);
+  bi[(k)-1]=FADD(as_type<float>(0x3f800000u),FMUL(bi[(k)-1],dt));
+  ci[(k)-1]=FMUL(ci[(k)-1],dt);
+  }
+  for (k=1;k<=(nsoil-1);k+=1) {
+  rhsttin[(k)-1]=rhstt[(k)-1];
+  }
+  for (k=1;k<=(nsoil-1);k+=1) {
+  ciin[(k)-1]=ci[(k)-1];
+  }
+  u480_rosr12(ci,ai,bi,ciin,rhsttin,rhstt,(nsoil-1),env,status);
+  smc[(nsoil)-1]=smcp[(nsoil)-1];
+  wplus=as_type<float>(0x00000000u);
+  runoff3=as_type<float>(0x00000000u);
+  ddz=(-zsoil[(1)-1]);
+  for (k=1;k<=(nsoil-1);k+=1) {
+  if (((k!=1))) {
+  ddz=u480_sub(zsoil[((k-1))-1],zsoil[(k)-1]);
+  }
+  smcout[(k)-1]=FADD(FADD(smcp[(k)-1],ci[(k)-1]),FDIV(wplus,ddz));
+  stot=smcout[(k)-1];
+  if (((stot>smcmax))) {
+  if (((k==1))) {
+  ddz=(-zsoil[(1)-1]);
+  } else {
+  kk11=(k-1);
+  ddz=FADD((-zsoil[(k)-1]),zsoil[(kk11)-1]);
+  }
+  wplus=FMUL(u480_sub(stot,smcmax),ddz);
+  } else {
+  smc[(nsoil)-1]=smcp[(nsoil)-1];
+  wplus=as_type<float>(0x00000000u);
+  }
+  smc[(k)-1]=u_max(u_min(stot,smcmax),as_type<float>(0x3d8f5c29u));
+  }
+  runoff3=wplus;
+  cmc=FADD(cmcp,FMUL(dt,rhsct));
+  if (((cmc<as_type<float>(0x1e3ce508u)))) {
+  cmc=as_type<float>(0x00000000u);
+  }
+  cmc=u_min(cmc,cmcmax);
+}
+
+static inline void u480_wdfcnd(thread float& wdf,thread float& wcnd,thread const float& smc,thread const float& smcmax,thread const float& bexp,thread const float& dksat,thread const float& dwsat,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float expon={};
+  float factr1={};
+  float factr2={};
+  factr1=FDIV(as_type<float>(0x3d4ccccdu),smcmax);
+  factr2=FDIV(smc,smcmax);
+  factr1=u_min(factr1,factr2);
+  expon=FADD(bexp,as_type<float>(0x40000000u));
+  wdf=FMUL(dwsat,gfk_pow(factr2,expon));
+  expon=FADD(FMUL(as_type<float>(0x40000000u),bexp),as_type<float>(0x40400000u));
+  wcnd=FMUL(dksat,gfk_pow(factr2,expon));
+}
+
+static inline void u480_rosr12(thread float* p,thread const float* a,thread const float* b,thread float* c,thread const float* d,thread float* delta,thread const int& nsoil,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  int k={};
+  int kk={};
+  c[(nsoil)-1]=as_type<float>(0x00000000u);
+  p[(1)-1]=FDIV((-c[(1)-1]),b[(1)-1]);
+  delta[(1)-1]=FDIV(d[(1)-1],b[(1)-1]);
+  for (k=2;k<=nsoil;k+=1) {
+  p[(k)-1]=FMUL((-c[(k)-1]),FDIV(as_type<float>(0x3f800000u),FADD(b[(k)-1],FMUL(a[(k)-1],p[((k-1))-1]))));
+  delta[(k)-1]=FMUL(u480_sub(d[(k)-1],FMUL(a[(k)-1],delta[((k-1))-1])),FDIV(as_type<float>(0x3f800000u),FADD(b[(k)-1],FMUL(a[(k)-1],p[((k-1))-1]))));
+  }
+  p[(nsoil)-1]=delta[(nsoil)-1];
+  for (k=2;k<=nsoil;k+=1) {
+  kk=((nsoil-k)+1);
+  p[(kk)-1]=FADD(FMUL(p[(kk)-1],p[((kk+1))-1]),delta[(kk)-1]);
+  }
+}
+
+static inline void u480_shflx(thread float& ssoil,thread float* stc,thread const float* smc,thread const float& smcmax,thread const int& nsoil,thread float& t1,thread const float& dt,thread const float& yy,thread const float& zz1,thread const float* zsoil,thread const float& tbot,thread const float& zbot,thread const float& smcwlt,thread const float& df1,thread const float& quartz,thread const float& csoil,thread const float& capr,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  int i={};
+  float ai[4]={};
+  float bi[4]={};
+  float ci[4]={};
+  float stcf[4]={};
+  float rhsts[4]={};
+  u480_hrt(rhsts,stc,smc,smcmax,nsoil,zsoil,yy,zz1,tbot,zbot,dt,df1,ai,bi,ci,quartz,csoil,capr,env,status);
+  u480_hstep(stcf,stc,rhsts,dt,nsoil,ai,bi,ci,env,status);
+  for (i=1;i<=nsoil;i+=1) {
+  stc[(i)-1]=stcf[(i)-1];
+  }
+  t1=FDIV(FADD(yy,FMUL(u480_sub(zz1,as_type<float>(0x3f800000u)),stc[(1)-1])),zz1);
+  ssoil=FDIV(FMUL(df1,u480_sub(stc[(1)-1],t1)),FMUL(as_type<float>(0x3f000000u),zsoil[(1)-1]));
+}
+
+static inline void u480_hrt(thread float* rhsts,thread const float* stc,thread const float* smc,thread const float& smcmax,thread const int& nsoil,thread const float* zsoil,thread const float& yy,thread const float& zz1,thread const float& tbot,thread const float& zbot,thread const float& dt,thread const float& df1,thread float* ai,thread float* bi,thread float* ci,thread const float& quartz,thread const float& csoil,thread const float& capr,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  bool itavg={};
+  int i={};
+  int k={};
+  float ddz={};
+  float ddz2={};
+  float denom={};
+  float df1k={};
+  float dtsdz={};
+  float df1n={};
+  float dtsdz2={};
+  float hcpct={};
+  float qtot={};
+  float ssoil={};
+  float sice={};
+  float tavg={};
+  float tbk={};
+  float tbk1={};
+  float tsnsr={};
+  float tsurf={};
+  const float cair=as_type<float>(0x447b0000u);
+  const float ch2o=as_type<float>(0x4a802c80u);
+  itavg=true;
+  hcpct=FADD(FADD(FMUL(smc[(1)-1],as_type<float>(0x4a802c80u)),FMUL(u480_sub(as_type<float>(0x3f800000u),smcmax),csoil)),FMUL(u480_sub(smcmax,smc[(1)-1]),as_type<float>(0x447b0000u)));
+  ddz=FDIV(as_type<float>(0x3f800000u),FMUL(as_type<float>(0xbf000000u),zsoil[(2)-1]));
+  ai[(1)-1]=as_type<float>(0x00000000u);
+  ci[(1)-1]=FDIV(FMUL(df1,ddz),FMUL(zsoil[(1)-1],hcpct));
+  bi[(1)-1]=FADD((-ci[(1)-1]),FDIV(df1,FMUL(FMUL(FMUL(FMUL(as_type<float>(0x3f000000u),zsoil[(1)-1]),zsoil[(1)-1]),hcpct),zz1)));
+  dtsdz=FDIV(u480_sub(stc[(1)-1],stc[(2)-1]),FMUL(as_type<float>(0xbf000000u),zsoil[(2)-1]));
+  ssoil=FDIV(FMUL(df1,u480_sub(stc[(1)-1],yy)),FMUL(FMUL(as_type<float>(0x3f000000u),zsoil[(1)-1]),zz1));
+  denom=FMUL(zsoil[(1)-1],hcpct);
+  rhsts[(1)-1]=FDIV(u480_sub(FMUL(df1,dtsdz),ssoil),denom);
+  qtot=FMUL(FMUL(as_type<float>(0xbf800000u),rhsts[(1)-1]),denom);
+  if (itavg) {
+  tsurf=FDIV(FADD(yy,FMUL(u480_sub(zz1,1),stc[(1)-1])),zz1);
+  u480_tbnd(stc[(1)-1],stc[(2)-1],zsoil,zbot,1,nsoil,tbk,env,status);
+  }
+  ddz2=as_type<float>(0x00000000u);
+  df1n=df1;
+  for (k=2;k<=nsoil;k+=1) {
+  if (((k<(nsoil-1)))) {
+  hcpct=FADD(FADD(FMUL(smc[(k)-1],as_type<float>(0x4a802c80u)),FMUL(u480_sub(as_type<float>(0x3f800000u),smcmax),csoil)),FMUL(u480_sub(smcmax,smc[(k)-1]),as_type<float>(0x447b0000u)));
+  u480_tdfcnd(df1k,smc[(k)-1],quartz,smcmax,env,status);
+  denom=FMUL(as_type<float>(0x3f000000u),u480_sub(zsoil[((k-1))-1],zsoil[((k+1))-1]));
+  dtsdz2=FDIV(u480_sub(stc[(k)-1],stc[((k+1))-1]),denom);
+  ddz2=FDIV(as_type<float>(0x40000000u),u480_sub(zsoil[((k-1))-1],zsoil[((k+1))-1]));
+  ci[(k)-1]=FDIV(FMUL((-df1k),ddz2),FMUL(u480_sub(zsoil[((k-1))-1],zsoil[(k)-1]),hcpct));
+  if (itavg) {
+  u480_tbnd(stc[(k)-1],stc[((k+1))-1],zsoil,zbot,k,nsoil,tbk1,env,status);
+  }
+  } else if (((k==(nsoil-1)))) {
+  hcpct=FADD(FADD(FMUL(smc[(k)-1],as_type<float>(0x4a802c80u)),FMUL(u480_sub(as_type<float>(0x3f800000u),smcmax),csoil)),FMUL(u480_sub(smcmax,smc[(k)-1]),as_type<float>(0x447b0000u)));
+  u480_tdfcnd(df1k,smc[(k)-1],quartz,smcmax,env,status);
+  denom=FMUL(as_type<float>(0x3f000000u),u480_sub(zsoil[((k-1))-1],zsoil[((k+1))-1]));
+  dtsdz2=FDIV(u480_sub(stc[(k)-1],stc[((k+1))-1]),denom);
+  ddz2=FDIV(as_type<float>(0x40000000u),u480_sub(zsoil[((k-1))-1],zsoil[((k+1))-1]));
+  ci[(k)-1]=FDIV(FMUL((-df1k),ddz2),FMUL(u480_sub(zsoil[((k-1))-1],zsoil[(k)-1]),hcpct));
+  if (itavg) {
+  u480_tbnd(stc[(k)-1],tbot,zsoil,zbot,k,nsoil,tbk1,env,status);
+  }
+  } else {
+  hcpct=FMUL(FMUL(capr,as_type<float>(0x4085fa44u)),as_type<float>(0x49742400u));
+  df1k=as_type<float>(0x404f5c29u);
+  denom=u480_sub(FMUL(as_type<float>(0x3f000000u),FADD(zsoil[((k-1))-1],zsoil[(k)-1])),zbot);
+  dtsdz2=FDIV(u480_sub(stc[(k)-1],tbot),denom);
+  ci[(k)-1]=as_type<float>(0x00000000u);
+  if (itavg) {
+  u480_tbnd(stc[(k)-1],tbot,zsoil,zbot,k,nsoil,tbk1,env,status);
+  }
+  }
+  denom=FMUL(u480_sub(zsoil[(k)-1],zsoil[((k-1))-1]),hcpct);
+  rhsts[(k)-1]=FDIV(u480_sub(FMUL(df1k,dtsdz2),FMUL(df1n,dtsdz)),denom);
+  qtot=FMUL(FMUL(as_type<float>(0xbf800000u),denom),rhsts[(k)-1]);
+  ai[(k)-1]=FDIV(FMUL((-df1n),ddz),FMUL(u480_sub(zsoil[((k-1))-1],zsoil[(k)-1]),hcpct));
+  bi[(k)-1]=(-FADD(ai[(k)-1],ci[(k)-1]));
+  tbk=tbk1;
+  df1n=df1k;
+  dtsdz=dtsdz2;
+  ddz=ddz2;
+  }
+}
+
+static inline void u480_hstep(thread float* stcout,thread const float* stcin,thread float* rhsts,thread const float& dt,thread const int& nsoil,thread float* ai,thread float* bi,thread float* ci,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  int k={};
+  float rhstsin[4]={};
+  float ciin[4]={};
+  for (k=1;k<=nsoil;k+=1) {
+  rhsts[(k)-1]=FMUL(rhsts[(k)-1],dt);
+  ai[(k)-1]=FMUL(ai[(k)-1],dt);
+  bi[(k)-1]=FADD(as_type<float>(0x3f800000u),FMUL(bi[(k)-1],dt));
+  ci[(k)-1]=FMUL(ci[(k)-1],dt);
+  }
+  for (k=1;k<=nsoil;k+=1) {
+  rhstsin[(k)-1]=rhsts[(k)-1];
+  }
+  for (k=1;k<=nsoil;k+=1) {
+  ciin[(k)-1]=ci[(k)-1];
+  }
+  u480_rosr12(ci,ai,bi,ciin,rhstsin,rhsts,nsoil,env,status);
+  for (k=1;k<=nsoil;k+=1) {
+  stcout[(k)-1]=FADD(stcin[(k)-1],ci[(k)-1]);
+  }
+}
+
+static inline void u480_tbnd(thread const float& tu,thread const float& tb,thread const float* zsoil,thread const float& zbot,thread const int& k,thread const int& nsoil,thread float& tbnd1,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float zb={};
+  float zup={};
+  if (((k==1))) {
+  zup=as_type<float>(0x00000000u);
+  } else {
+  zup=zsoil[((k-1))-1];
+  }
+  if (((k==nsoil))) {
+  zb=u480_sub(FMUL(as_type<float>(0x40000000u),zbot),zsoil[(k)-1]);
+  } else {
+  zb=zsoil[((k+1))-1];
+  }
+  tbnd1=FADD(tu,FDIV(FMUL(u480_sub(tb,tu),u480_sub(zup,zsoil[(k)-1])),u480_sub(zup,zb)));
+}
+
+static inline void u480_tdfcnd(thread float& df,thread const float& smc,thread const float& qz,thread const float& smcmax,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float ake={};
+  float gammd={};
+  float thkdry={};
+  float thko={};
+  float thkqtz={};
+  float thksat={};
+  float thks={};
+  float thkw={};
+  float satratio={};
+  satratio=FDIV(smc,smcmax);
+  thkw=as_type<float>(0x3f11eb85u);
+  thko=as_type<float>(0x40000000u);
+  thkqtz=as_type<float>(0x40f66666u);
+  thks=FMUL(gfk_pow(thkqtz,qz),gfk_pow(thko,u480_sub(as_type<float>(0x3f800000u),qz)));
+  thksat=FMUL(gfk_pow(thks,u480_sub(as_type<float>(0x3f800000u),smcmax)),gfk_pow(thkw,smcmax));
+  gammd=FMUL(u480_sub(as_type<float>(0x3f800000u),smcmax),as_type<float>(0x4528c000u));
+  thkdry=FDIV(FADD(FMUL(as_type<float>(0x3e0a3d71u),gammd),as_type<float>(0x42816666u)),u480_sub(as_type<float>(0x4528c000u),FMUL(as_type<float>(0x3f726e98u),gammd)));
+  if (((satratio>as_type<float>(0x3dcccccdu)))) {
+  ake=FADD(u_log10(satratio),as_type<float>(0x3f800000u));
+  } else {
+  ake=as_type<float>(0x00000000u);
+  }
+  df=FADD(FMUL(ake,u480_sub(thksat,thkdry)),thkdry);
+}
+
+static inline void u480_shadow_tree(thread const float& xi,thread const float& h,thread const float& w,thread const float& htree,thread const float& rtree,thread const float& dtree,thread float& chi_shaded,thread float& eta_shaded,thread float& chi_shaded_tree,thread float& eta_shaded_tree,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float xi_a={};
+  float xi_b={};
+  float x0={};
+  float y0={};
+  float x1={};
+  float x2={};
+  float y1={};
+  float y2={};
+  float chi_tree={};
+  float eta_tree={};
+  xi_a=FSQRT(FADD(1,u_powi(xi,2)));
+  xi_b=FSQRT(FADD(1,u_powi(xi,-2)));
+  x0=u_max(as_type<float>(0x00000000u),u480_sub(w,FMUL(h,xi)));
+  y0=u_max(as_type<float>(0x00000000u),u480_sub(h,FDIV(w,xi)));
+  x1=u_max(as_type<float>(0x00000000u),u480_sub(u480_sub(dtree,FMUL(htree,xi)),FMUL(rtree,xi_a)));
+  x2=u_max(as_type<float>(0x00000000u),FADD(u480_sub(dtree,FMUL(htree,xi)),FMUL(rtree,xi_a)));
+  y1=u_max(as_type<float>(0x00000000u),u480_sub(u480_sub(htree,FDIV(dtree,xi)),FMUL(rtree,xi_b)));
+  y2=u_max(as_type<float>(0x00000000u),FADD(u480_sub(htree,FDIV(dtree,xi)),FMUL(rtree,xi_b)));
+  chi_tree=u480_sub(x2,x1);
+  eta_tree=u480_sub(y2,y1);
+  if (((x2<=x0))) {
+  chi_shaded=FADD(u480_sub(w,x0),chi_tree);
+  chi_shaded_tree=chi_tree;
+  } else if ((((x1<=x0)) && ((x0<x2)))) {
+  chi_shaded=u480_sub(FADD(u480_sub(w,x0),chi_tree),u480_sub(x2,x0));
+  chi_shaded_tree=u480_sub(chi_tree,u480_sub(x2,x0));
+  } else {
+  chi_shaded=u480_sub(w,x0);
+  chi_shaded_tree=0;
+  }
+  if (((y2<=y0))) {
+  eta_shaded=y0;
+  eta_shaded_tree=0;
+  } else if ((((y1<=y0)) && ((y0<y2)))) {
+  eta_shaded=y2;
+  eta_shaded_tree=u480_sub(y2,y0);
+  } else {
+  eta_shaded=FADD(y0,eta_tree);
+  eta_shaded_tree=eta_tree;
+  }
+}
+
+static inline void u480_stomatal(thread float& rs,thread const float& rsmin,thread const float& sd_facet,thread const float& lai,thread const float& w2,thread const float& wr,thread const float& ws,thread const float& ta,thread const float& ts,thread const float& qa,thread const float& qsat,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float f={};
+  float fsr={};
+  float f_theta={};
+  float tsc={};
+  float fe={};
+  float ft={};
+  float lai_eff={};
+  const float sd_lim=as_type<float>(0x41f00000u);
+  const float rsmax=as_type<float>(0x459c4000u);
+  const float hs=as_type<float>(0x425a1eb8u);
+  lai_eff=lai;
+  if (((lai_eff<as_type<float>(0x3c23d70au)))) {
+  lai_eff=as_type<float>(0x3c23d70au);
+  }
+  f=FDIV(FMUL(FMUL(as_type<float>(0x3f0ccccdu),FDIV(sd_facet,as_type<float>(0x41f00000u))),2),lai_eff);
+  fsr=FDIV(FADD(f,FDIV(rsmin,as_type<float>(0x459c4000u))),FADD(1,f));
+  fsr=u_max(fsr,as_type<float>(0x38d1b717u));
+  if (((w2>FMUL(as_type<float>(0x3f400000u),ws)))) {
+  f_theta=1;
+  } else if ((((w2>=wr)) && ((w2<=FMUL(as_type<float>(0x3f400000u),ws))))) {
+  f_theta=FDIV(u480_sub(w2,wr),u480_sub(FMUL(as_type<float>(0x3f400000u),ws),wr));
+  } else if (((w2<wr))) {
+  f_theta=0;
+  }
+  f_theta=u_max(f_theta,as_type<float>(0x38d1b717u));
+  tsc=u480_sub(ts,as_type<float>(0x43889333u));
+  fe=FDIV(1,FADD(1,FMUL(as_type<float>(0x425a1eb8u),u480_sub(qsat,qa))));
+  fe=u_max(fe,as_type<float>(0x3c23d70au));
+  ft=u480_sub(1,FMUL(as_type<float>(0x3ad1b717u),u_powi(u480_sub(298,ta),2)));
+  ft=u_max(ft,as_type<float>(0x38d1b717u));
+  rs=FDIV(FDIV(FDIV(FDIV(FDIV(rsmin,lai),fsr),f_theta),fe),ft);
+}
+
+static inline void u480_leleaf(thread float& le,thread const float& sw,thread const float& lw,thread const float& ra_leaf,thread const float& rs_leaf,thread const float& ra,thread const float& ta,thread const float& qa,thread const float& qsat,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float rn={};
+  float tc={};
+  float s={};
+  float esat={};
+  float rh={};
+  float ea={};
+  float d={};
+  const float gamma=as_type<float>(0x42843333u);
+  const float cp=as_type<float>(0x447b4000u);
+  rn=FADD(sw,lw);
+  tc=u480_sub(ta,as_type<float>(0x43889333u));
+  s=FMUL(FDIV(FDIV(as_type<float>(0x4a191830u),FADD(tc,as_type<float>(0x436d4ccdu))),FADD(tc,as_type<float>(0x436d4ccdu))),gfk_exp(FDIV(FMUL(as_type<float>(0x418a6666u),tc),FADD(tc,as_type<float>(0x436d4ccdu)))));
+  esat=FMUL(611,gfk_exp(FDIV(FMUL(as_type<float>(0x418a6666u),tc),FADD(tc,as_type<float>(0x436d4ccdu)))));
+  rh=FDIV(qa,qsat);
+  ea=FMUL(esat,rh);
+  d=u480_sub(esat,ea);
+  le=FDIV(FADD(FMUL(s,rn),FDIV(FMUL(FMUL(FMUL(as_type<float>(0x3f6e147bu),ra),as_type<float>(0x447b4000u)),d),ra_leaf)),FADD(s,FMUL(as_type<float>(0x4275e45au),FADD(2,FDIV(rs_leaf,ra_leaf)))));
+}
+
+static inline void u480_force_restore_tree(thread const float& delt,thread const float& s,thread const float& r,thread const float& h,thread const float& le,thread const float& lai,thread const float& tsp,thread float& ts,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float c={};
+  c=640;
+  ts=FADD(tsp,FDIV(FMUL(delt,u480_sub(u480_sub(FADD(s,r),h),le)),c));
+}
+
+static inline void u480_root_uptake(thread float* sroot,thread const int& nlayer,thread const float* smc,thread const float& smcmax,thread const float& smcdry,thread const float& rtree,thread const float& lai_tree,thread const float* dzg,thread const float* zsoil,thread const float& ele,thread const float& fvg,thread const float& rw,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float normq[4]={};
+  float alphai[4]={};
+  float root[4]={};
+  float part2[4]={};
+  float alphabar={};
+  float part1={};
+  const float qc1=as_type<float>(0x3f19999au);
+  const float qc2=as_type<float>(0x3f800000u);
+  const float lv=as_type<float>(0x4a09f080u);
+  const float rwd=as_type<float>(0x447a0000u);
+  int k={};
+  if ((((fvg<=as_type<float>(0x00000000u))) || ((rw<=as_type<float>(0x00000000u))) || ((rtree<=as_type<float>(0x00000000u))) || ((lai_tree<=as_type<float>(0x00000000u))))) {
+  for(int vi=0;vi<4;++vi) sroot[vi]=as_type<float>(0x00000000u);
+  return;
+  }
+  for (k=1;k<=nlayer;k+=1) {
+  normq[(k)-1]=FDIV(u480_sub(smc[(k)-1],smcdry),u480_sub(smcmax,smcdry));
+  if (((normq[(k)-1]>as_type<float>(0x3f800000u)))) {
+  alphai[(k)-1]=as_type<float>(0x3f800000u);
+  } else if ((((normq[(k)-1]>=as_type<float>(0x3f19999au))) && ((normq[(k)-1]<=as_type<float>(0x3f800000u))))) {
+  alphai[(k)-1]=as_type<float>(0x3f800000u);
+  } else if ((((normq[(k)-1]<as_type<float>(0x3f19999au))) && ((normq[(k)-1]>=0)))) {
+  alphai[(k)-1]=FDIV(normq[(k)-1],as_type<float>(0x3f19999au));
+  } else {
+  alphai[(k)-1]=as_type<float>(0x00000000u);
+  }
+  }
+  for (k=1;k<=nlayer;k+=1) {
+  root[(k)-1]=FDIV(dzg[(k)-1],(-zsoil[(nlayer)-1]));
+  }
+  alphabar=0;
+  for (k=1;k<=nlayer;k+=1) {
+  alphabar=FADD(alphabar,FMUL(root[(k)-1],alphai[(k)-1]));
+  }
+  if (((alphabar<=as_type<float>(0x2b8cbcccu)))) {
+  for(int vi=0;vi<4;++vi) sroot[vi]=as_type<float>(0x00000000u);
+  return;
+  }
+  for (k=1;k<=nlayer;k+=1) {
+  part1=FDIV(FMUL(FMUL(FMUL(2,rtree),lai_tree),FDIV(ele,as_type<float>(0x4a09f080u))),as_type<float>(0x447a0000u));
+  part2[(k)-1]=FDIV(FMUL(root[(k)-1],alphai[(k)-1]),alphabar);
+  sroot[(k)-1]=FDIV(FMUL(part1,part2[(k)-1]),FMUL(fvg,rw));
+  }
+}
+
+static inline float u480_cdf2d_vf(thread const float& theta,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float anglecdf={};
+  anglecdf=FMUL(as_type<float>(0x3f000000u),u480_sub(as_type<float>(0x3f800000u),ucm480_cos(theta)));
+  return anglecdf;
+}
+
+static inline void u480_vf_tree_analytical(thread const float& w,thread const float& h,thread const float& ht,thread const float& rt,thread const float& trans,thread float& fgs,thread float& fgw,thread float& fgt,thread float& fws,thread float& fwg,thread float& fww,thread float& fwt,thread float& fts,thread float& ftg,thread float& ftw,thread const U480Env& env,thread int& status) {
+  const float piconst=as_type<float>(0x40490fdbu);
+  const int maxdirs=3;
+  const int maxhgts=50;
+  float dx={};
+  float dy={};
+  float tau={};
+  float fww_emp={};
+  float fwg_emp={};
+  float fws_emp={};
+  float fsg_emp={};
+  float fsw_emp={};
+  float fgs_emp={};
+  float fgw_emp={};
+  float fsw={};
+  float fsg={};
+  float fst={};
+  float fww_cf1={};
+  float fws_cf1={};
+  float fwg_cf1={};
+  float fww_cf2={};
+  float fws_cf2={};
+  float fwg_cf2={};
+  float fgs_cf1={};
+  float fgw_cf1={};
+  float fgs_cf2={};
+  float fgw_cf2={};
+  float fsw_cf1={};
+  float fsg_cf1={};
+  float fsw_cf2={};
+  float fsg_cf2={};
+  float y={};
+  float d1={};
+  float theta_blocked_ww={};
+  float theta_range_ww={};
+  float theta_blocked_ws={};
+  float theta_range_ws={};
+  float theta_blocked_wg={};
+  float theta_range_wg={};
+  float x={};
+  float d2={};
+  float theta_blocked_gs={};
+  float theta_range_gs={};
+  float theta_blocked_gw={};
+  float theta_range_gw={};
+  float theta_blocked_sw={};
+  float theta_range_sw={};
+  float theta_blocked_sg={};
+  float theta_range_sg={};
+  float a_s={};
+  float a_g={};
+  float a_w={};
+  float a_t={};
+  float sum_t={};
+  float resid_t={};
+  float a_sum_t={};
+  float sum_w={};
+  float resid_w={};
+  float a_sum_w={};
+  float sum_g={};
+  float resid_g={};
+  float a_sum_g={};
+  float sum_s={};
+  float resid_s={};
+  float a_sum_s={};
+  const float pi=as_type<float>(0x40490fdbu);
+  int i={};
+  if ((((FMUL(as_type<float>(0x40000000u),rt)>w)) || ((FADD(ht,rt)>h)))) {
+  status=1; return;
+  }
+  dx=FDIV(w,as_type<float>(0x41a00000u));
+  dy=FDIV(h,as_type<float>(0x41a00000u));
+  tau=trans;
+  fww_emp=u480_sub(FSQRT(FADD(as_type<float>(0x3f800000u),u_powi(FDIV(w,h),2))),FDIV(w,h));
+  fwg_emp=FDIV(u480_sub(as_type<float>(0x3f800000u),fww_emp),as_type<float>(0x40000000u));
+  fws_emp=fwg_emp;
+  fsg_emp=u480_sub(FSQRT(FADD(as_type<float>(0x3f800000u),u_powi(FDIV(h,w),2))),FDIV(h,w));
+  fsw_emp=FDIV(u480_sub(as_type<float>(0x3f800000u),fsg_emp),as_type<float>(0x40000000u));
+  fgs_emp=fsg_emp;
+  fgw_emp=FDIV(u480_sub(as_type<float>(0x3f800000u),fgs_emp),as_type<float>(0x40000000u));
+  ftw=FMUL(as_type<float>(0x3ea2f983u),ucm480_atan(FDIV(h,w)));
+  fts=FMUL(as_type<float>(0x3ea2f983u),ucm480_atan(FDIV(w,FMUL(as_type<float>(0x40000000u),u480_sub(h,ht)))));
+  ftg=FMUL(as_type<float>(0x3ea2f983u),ucm480_atan(FDIV(w,FMUL(as_type<float>(0x40000000u),ht))));
+  fwt=FMUL(FDIV(FMUL(as_type<float>(0x40000000u),rt),h),ucm480_atan(FDIV(h,w)));
+  fgt=FMUL(FDIV(FMUL(as_type<float>(0x40000000u),rt),w),ucm480_atan(FDIV(w,FMUL(as_type<float>(0x40000000u),ht))));
+  fst=FMUL(FDIV(FMUL(as_type<float>(0x40000000u),rt),w),ucm480_atan(FDIV(w,FMUL(as_type<float>(0x40000000u),u480_sub(h,ht)))));
+  fwt=FMUL(fwt,u480_sub(as_type<float>(0x3f800000u),tau));
+  fst=FMUL(fst,u480_sub(as_type<float>(0x3f800000u),tau));
+  fgt=FMUL(fgt,u480_sub(as_type<float>(0x3f800000u),tau));
+  fww_cf1=as_type<float>(0x00000000u);
+  fws_cf1=as_type<float>(0x00000000u);
+  fwg_cf1=as_type<float>(0x00000000u);
+  fww_cf2=as_type<float>(0x00000000u);
+  fws_cf2=as_type<float>(0x00000000u);
+  fwg_cf2=as_type<float>(0x00000000u);
+  for (i=1;i<=u480_nint(FDIV(h,dy));i+=1) {
+  y=u480_sub(FMUL(dy,i),FDIV(dy,as_type<float>(0x40000000u)));
+  d1=FSQRT(FADD(u_powi(FDIV(w,as_type<float>(0x40000000u)),2),u_powi(u480_sub(y,ht),2)));
+  theta_blocked_ww=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(ht,y),FDIV(w,as_type<float>(0x40000000u))))),ucm480_asin(FDIV(rt,d1))),FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(h,y),w)))),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(ht,y),FDIV(w,as_type<float>(0x40000000u))))),ucm480_asin(FDIV(rt,d1))),ucm480_atan(FDIV(w,y))),env,status)));
+  theta_range_ww=u480_sub(u480_cdf2d_vf(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(h,y),w))),env,status),u480_cdf2d_vf(ucm480_atan(FDIV(w,y)),env,status));
+  theta_blocked_ww=FMUL(theta_blocked_ww,u480_sub(as_type<float>(0x3f800000u),tau));
+  fww_cf1=FADD(fww_cf1,FMUL(dy,u480_sub(theta_range_ww,theta_blocked_ww)));
+  fww_cf2=FADD(fww_cf2,FMUL(dy,theta_range_ww));
+  theta_blocked_ws=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(ht,y),FDIV(w,as_type<float>(0x40000000u))))),ucm480_asin(FDIV(rt,d1))),as_type<float>(0x40490fdbu)),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(ht,y),FDIV(w,as_type<float>(0x40000000u))))),ucm480_asin(FDIV(rt,d1))),FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(h,y),w)))),env,status)));
+  theta_range_ws=u480_sub(u480_cdf2d_vf(as_type<float>(0x40490fdbu),env,status),u480_cdf2d_vf(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(h,y),w))),env,status));
+  theta_blocked_ws=FMUL(theta_blocked_ws,u480_sub(as_type<float>(0x3f800000u),tau));
+  fws_cf1=FADD(fws_cf1,FMUL(dy,u480_sub(theta_range_ws,theta_blocked_ws)));
+  fws_cf2=FADD(fws_cf2,FMUL(dy,theta_range_ws));
+  theta_blocked_wg=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(ht,y),FDIV(w,as_type<float>(0x40000000u))))),ucm480_asin(FDIV(rt,d1))),ucm480_atan(FDIV(w,y))),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(ht,y),FDIV(w,as_type<float>(0x40000000u))))),ucm480_asin(FDIV(rt,d1))),as_type<float>(0x00000000u)),env,status)));
+  theta_range_wg=u480_sub(u480_cdf2d_vf(ucm480_atan(FDIV(w,y)),env,status),u480_cdf2d_vf(as_type<float>(0x00000000u),env,status));
+  theta_blocked_wg=FMUL(theta_blocked_wg,u480_sub(as_type<float>(0x3f800000u),tau));
+  fwg_cf1=FADD(fwg_cf1,FMUL(dy,u480_sub(theta_range_wg,theta_blocked_wg)));
+  fwg_cf2=FADD(fwg_cf2,FMUL(dy,theta_range_wg));
+  }
+  if (((fww_cf2>as_type<float>(0x00000000u)))) {
+  fww=FDIV(FMUL(fww_emp,fww_cf1),fww_cf2);
+  }
+  if (((fws_cf2>as_type<float>(0x00000000u)))) {
+  fws=FDIV(FMUL(fws_emp,fws_cf1),fws_cf2);
+  }
+  if (((fwg_cf2>as_type<float>(0x00000000u)))) {
+  fwg=FDIV(FMUL(fwg_emp,fwg_cf1),fwg_cf2);
+  }
+  fgs_cf1=as_type<float>(0x00000000u);
+  fgw_cf1=as_type<float>(0x00000000u);
+  fgs_cf2=as_type<float>(0x00000000u);
+  fgw_cf2=as_type<float>(0x00000000u);
+  for (i=1;i<=u480_nint(FDIV(w,dx));i+=1) {
+  x=u480_sub(FMUL(dx,i),FDIV(dx,as_type<float>(0x40000000u)));
+  d2=FSQRT(FADD(u_powi(u480_sub(FDIV(w,as_type<float>(0x40000000u)),x),2),u_powi(ht,2)));
+  theta_blocked_gs=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),ht))),ucm480_asin(FDIV(rt,d2))),FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(x,h)))),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),ht))),ucm480_asin(FDIV(rt,d2))),ucm480_atan(FDIV(h,u480_sub(w,x)))),env,status)));
+  theta_range_gs=u480_sub(u480_cdf2d_vf(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(x,h))),env,status),u480_cdf2d_vf(ucm480_atan(FDIV(h,u480_sub(w,x))),env,status));
+  theta_blocked_gs=FMUL(theta_blocked_gs,u480_sub(as_type<float>(0x3f800000u),tau));
+  fgs_cf1=FADD(fgs_cf1,FMUL(dx,u480_sub(theta_range_gs,theta_blocked_gs)));
+  fgs_cf2=FADD(fgs_cf2,FMUL(dx,theta_range_gs));
+  theta_blocked_gw=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),ht))),ucm480_asin(FDIV(rt,d2))),ucm480_atan(FDIV(h,u480_sub(w,x)))),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),ht))),ucm480_asin(FDIV(rt,d2))),as_type<float>(0x00000000u)),env,status)));
+  theta_range_gw=u480_sub(u480_cdf2d_vf(ucm480_atan(FDIV(h,u480_sub(w,x))),env,status),u480_cdf2d_vf(as_type<float>(0x00000000u),env,status));
+  theta_blocked_gw=FMUL(theta_blocked_gw,u480_sub(as_type<float>(0x3f800000u),tau));
+  fgw_cf1=FADD(fgw_cf1,FMUL(dx,u480_sub(theta_range_gw,theta_blocked_gw)));
+  fgw_cf2=FADD(fgw_cf2,FMUL(dx,theta_range_gw));
+  }
+  if (((fgw_cf2>as_type<float>(0x00000000u)))) {
+  fgw=FDIV(FMUL(fgw_emp,fgw_cf1),fgw_cf2);
+  }
+  if (((fgs_cf2>as_type<float>(0x00000000u)))) {
+  fgs=FDIV(FMUL(fgs_emp,fgs_cf1),fgs_cf2);
+  }
+  fsw_cf1=as_type<float>(0x00000000u);
+  fsg_cf1=as_type<float>(0x00000000u);
+  fsw_cf2=as_type<float>(0x00000000u);
+  fsg_cf2=as_type<float>(0x00000000u);
+  for (i=1;i<=u480_nint(FDIV(w,dx));i+=1) {
+  x=u480_sub(FMUL(dx,i),FDIV(dx,as_type<float>(0x40000000u)));
+  d2=FSQRT(FADD(u_powi(u480_sub(FDIV(w,as_type<float>(0x40000000u)),x),2),u_powi(u480_sub(h,ht),2)));
+  theta_blocked_sw=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),u480_sub(h,ht)))),ucm480_asin(FDIV(rt,d2))),ucm480_atan(FDIV(h,u480_sub(w,x)))),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),u480_sub(h,ht)))),ucm480_asin(FDIV(rt,d2))),as_type<float>(0x00000000u)),env,status)));
+  theta_range_sw=u480_sub(u480_cdf2d_vf(ucm480_atan(FDIV(h,u480_sub(w,x))),env,status),u480_cdf2d_vf(as_type<float>(0x00000000u),env,status));
+  theta_blocked_sw=FMUL(theta_blocked_sw,u480_sub(as_type<float>(0x3f800000u),tau));
+  fsw_cf1=FADD(fsw_cf1,FMUL(dx,u480_sub(theta_range_sw,theta_blocked_sw)));
+  fsw_cf2=FADD(fsw_cf2,FMUL(dx,theta_range_sw));
+  theta_blocked_sg=u_max(as_type<float>(0x00000000u),u480_sub(u480_cdf2d_vf(u_min(FADD(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),u480_sub(h,ht)))),ucm480_asin(FDIV(rt,d2))),FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(x,h)))),env,status),u480_cdf2d_vf(u_max(u480_sub(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(u480_sub(x,FDIV(w,as_type<float>(0x40000000u))),u480_sub(h,ht)))),ucm480_asin(FDIV(rt,d2))),ucm480_atan(FDIV(h,u480_sub(w,x)))),env,status)));
+  theta_range_sg=u480_sub(u480_cdf2d_vf(FADD(as_type<float>(0x3fc90fdbu),ucm480_atan(FDIV(x,h))),env,status),u480_cdf2d_vf(ucm480_atan(FDIV(h,u480_sub(w,x))),env,status));
+  theta_blocked_sg=FMUL(theta_blocked_sg,u480_sub(as_type<float>(0x3f800000u),tau));
+  fsg_cf1=FADD(fsg_cf1,FMUL(dx,u480_sub(theta_range_sg,theta_blocked_sg)));
+  fsg_cf2=FADD(fsg_cf2,FMUL(dx,theta_range_sg));
+  }
+  if (((fsw_cf2>as_type<float>(0x00000000u)))) {
+  fsw=FDIV(FMUL(fsw_emp,fsw_cf1),fsw_cf2);
+  }
+  if (((fsg_cf2>as_type<float>(0x00000000u)))) {
+  fsg=FDIV(FMUL(fsg_emp,fsg_cf1),fsg_cf2);
+  }
+  a_s=w;
+  a_g=w;
+  a_w=h;
+  a_t=FMUL(as_type<float>(0x40c90fdbu),rt);
+  sum_t=FADD(FADD(fts,ftg),FMUL(as_type<float>(0x40000000u),ftw));
+  resid_t=u480_sub(as_type<float>(0x3f800000u),sum_t);
+  a_sum_t=FADD(FADD(a_s,a_g),FMUL(as_type<float>(0x40000000u),a_w));
+  fts=FADD(fts,FMUL(resid_t,FDIV(a_s,a_sum_t)));
+  ftg=FADD(ftg,FMUL(resid_t,FDIV(a_g,a_sum_t)));
+  ftw=FADD(ftw,FMUL(resid_t,FDIV(a_w,a_sum_t)));
+  sum_w=FADD(FADD(FADD(fws,fwg),fww),fwt);
+  resid_w=u480_sub(as_type<float>(0x3f800000u),sum_w);
+  a_sum_w=FADD(FADD(FADD(a_s,a_g),a_w),a_t);
+  fws=FADD(fws,FMUL(resid_w,FDIV(a_s,a_sum_w)));
+  fwg=FADD(fwg,FMUL(resid_w,FDIV(a_g,a_sum_w)));
+  fww=FADD(fww,FMUL(resid_w,FDIV(a_w,a_sum_w)));
+  fwt=FADD(fwt,FMUL(resid_w,FDIV(a_t,a_sum_w)));
+  sum_g=FADD(FADD(fgs,FMUL(as_type<float>(0x40000000u),fgw)),fgt);
+  resid_g=u480_sub(as_type<float>(0x3f800000u),sum_g);
+  a_sum_g=FADD(FADD(a_s,FMUL(as_type<float>(0x40000000u),a_w)),a_t);
+  fgs=FADD(fgs,FMUL(resid_g,FDIV(a_s,a_sum_g)));
+  fgw=FADD(fgw,FMUL(resid_g,FDIV(a_w,a_sum_g)));
+  fgt=FADD(fgt,FMUL(resid_g,FDIV(a_t,a_sum_g)));
+  sum_s=FADD(FADD(FMUL(as_type<float>(0x40000000u),fsw),fsg),fst);
+  resid_s=u480_sub(as_type<float>(0x3f800000u),sum_s);
+  a_sum_s=FADD(FADD(FMUL(as_type<float>(0x40000000u),a_w),a_g),a_t);
+  fsw=FADD(fsw,FMUL(resid_s,FDIV(a_w,a_sum_s)));
+  fsg=FADD(fsg,FMUL(resid_s,FDIV(a_g,a_sum_s)));
+  fst=FADD(fst,FMUL(resid_s,FDIV(a_t,a_sum_s)));
+}

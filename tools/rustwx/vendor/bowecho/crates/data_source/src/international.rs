@@ -19,7 +19,7 @@
 //! 1. [`IntlProvider::list_sites`] populates the site picker.
 //! 2. On each poll tick, [`IntlProvider::latest`] returns a [`FramePlan`].
 //! 3. If [`FramePlan::identity`] equals the identity of the frame already
-//!    installed, the poller does nothing: no part is downloaded.
+//!    installed, the poller does nothing — no part is downloaded.
 //! 4. Otherwise every [`PlanPart::url`] is fetched with
 //!    [`crate::fetch_volume_bytes`] and decoded with
 //!    `nexrad_io::decode_supported_volume_bytes`; multi-part plans with
@@ -27,8 +27,8 @@
 //!    `radar_core::merge_radar_volumes`.
 //!
 //! Providers therefore never download data themselves: `latest` does the
-//! (cheap) catalog probe, via [`crate::fetch_text`] or an equivalent
-//! listing helper, and describes the download; the shared poller owns
+//! (cheap) catalog probe — via [`crate::fetch_text`] or an equivalent
+//! listing helper — and describes the download; the shared poller owns
 //! bytes, retries, decode, and merge.
 //!
 //! One provider-specific decode exception: JMA tars are multi-station
@@ -113,7 +113,7 @@ pub struct FramePlan {
     /// identity comes back.
     ///
     /// Stability contract: the identity must be a pure function of the
-    /// upstream frame, same upstream data, same identity, across repeated
+    /// upstream frame — same upstream data, same identity, across repeated
     /// `latest` calls and across process restarts. It must change whenever
     /// new frame data is available (a new timestamp, but also e.g. a new
     /// part appearing for the same timestamp on a split feed). Never embed
@@ -125,7 +125,7 @@ pub struct FramePlan {
     ///
     /// Ordering contract when [`Self::merge`] is set: parts are decoded and
     /// passed to `radar_core::merge_radar_volumes` in vector order, and the
-    /// FIRST part is the merge base, it supplies the site record, VCP, and
+    /// FIRST part is the merge base — it supplies the site record, VCP, and
     /// metadata, and wins moment-type collisions. Providers must put the
     /// most authoritative part first (conventionally the reflectivity
     /// volume). Later parts contribute their moments to elevation-matched
@@ -146,7 +146,7 @@ pub struct FramePlan {
 /// [`IntlProvider::supports_recent`] capability.
 pub trait RecentFrames {
     /// Same contract as [`IntlProvider::recent`]: up to `count` frames,
-    /// OLDEST FIRST, catalog probes only, never volume downloads.
+    /// OLDEST FIRST, catalog probes only — never volume downloads.
     fn recent_frames(&self, site_id: &str, count: usize) -> Result<Vec<FramePlan>, String>;
 }
 
@@ -173,13 +173,13 @@ pub struct ArchiveListProgress {
 /// Historical archive lookup, for providers whose upstream exposes dated
 /// holdings beyond the rolling live window. Implemented on the provider
 /// type and handed back through [`IntlProvider::archive_source`], which is
-/// what drives the derived [`IntlProvider::supports_archive`] capability:
+/// what drives the derived [`IntlProvider::supports_archive`] capability —
 /// the exact mirror of the proven [`RecentFrames`]/
 /// [`IntlProvider::recent_source`] pattern.
 pub trait ArchiveFrames {
     /// All frames anchored on the UTC calendar date `date_utc` for
     /// `site_id`, OLDEST FIRST. Same cheapness contract as
-    /// [`IntlProvider::recent`]: catalog probes only, never volume
+    /// [`IntlProvider::recent`]: catalog probes only — never volume
     /// downloads.
     fn day_plans(&self, site_id: &str, date_utc: NaiveDate) -> Result<Vec<FramePlan>, String>;
 
@@ -224,11 +224,11 @@ pub trait ArchiveFrames {
     }
 
     /// Frames inside `[start, end]`, OLDEST FIRST, capped to the NEWEST
-    /// `max` (the frames nearest the window's end anchor: the
+    /// `max` (the frames nearest the window's end anchor — the
     /// loop-ending-at-scan shape). Provided: folds [`Self::day_plans`]
     /// over every UTC date the window touches. [`FramePlan`]s carry no
     /// timestamp, so the default trims at day granularity plus the count
-    /// cap: boundary-date frames outside the window ride along;
+    /// cap — boundary-date frames outside the window ride along;
     /// hour-granular listers (ORD) override for tight windows. Days that
     /// error are skipped and the first error is reported only when the
     /// whole window yields nothing (a partial archive loop beats none).
@@ -281,7 +281,7 @@ pub trait ArchiveFrames {
 /// UI and poller threads (`Send + Sync`, interior state behind sync
 /// primitives if any). Methods are called on poller threads: they may block
 /// on catalog HTTP (through [`crate::fetch_text`]-style helpers) but must
-/// never panic on malformed upstream data, return a descriptive `Err`
+/// never panic on malformed upstream data — return a descriptive `Err`
 /// instead, and never `unwrap()` network-derived values.
 pub trait IntlProvider: Send + Sync {
     /// Stable machine id for settings/persistence (e.g. `"smhi"`). Must
@@ -301,16 +301,16 @@ pub trait IntlProvider: Send + Sync {
 
     /// Describe the newest frame for `site_id` (a [`IntlSite::site_id`]
     /// this provider returned). This is the per-poll-tick catalog probe:
-    /// keep it cheap, list/inspect, don't download volume bytes. Returns
+    /// keep it cheap — list/inspect, don't download volume bytes. Returns
     /// `Err` with a descriptive message when the site is unknown or the
     /// upstream catalog is unreachable/malformed.
     fn latest(&self, site_id: &str) -> Result<FramePlan, String>;
 
     /// Describe up to `count` recent frames for `site_id`, OLDEST FIRST
-    /// (install order: the newest frame is last, and its identity is what
+    /// (install order — the newest frame is last, and its identity is what
     /// the live poll dedupes against). Same cheapness contract as
     /// [`Self::latest`]: list/inspect the catalog, never download volume
-    /// bytes. Provided, never override: providers whose catalogs only
+    /// bytes. Provided — never override: providers whose catalogs only
     /// expose the newest frame inherit a one-frame "loop", and providers
     /// with a rolling archive implement [`RecentFrames`] and hand it back
     /// from [`Self::recent_source`] so the app's Load Loop works on
@@ -334,7 +334,7 @@ pub trait IntlProvider: Send + Sync {
     }
 
     /// Whether [`Self::recent`] returns a real multi-frame window. Derived
-    /// from [`Self::recent_source`], never override.
+    /// from [`Self::recent_source`] — never override.
     fn supports_recent(&self) -> bool {
         self.recent_source().is_some()
     }
@@ -351,7 +351,7 @@ pub trait IntlProvider: Send + Sync {
     }
 
     /// Whether this provider offers historical archive lookup. Derived
-    /// from [`Self::archive_source`], never override.
+    /// from [`Self::archive_source`] — never override.
     fn supports_archive(&self) -> bool {
         self.archive_source().is_some()
     }
@@ -359,7 +359,7 @@ pub trait IntlProvider: Send + Sync {
     /// The provider's EMBEDDED site catalog: every currently operational
     /// site with its static coordinates, straight from the provider's
     /// compiled-in table. Never touches the network, so it is safe on the
-    /// UI thread: this is what map markers draw from before any poll or
+    /// UI thread — this is what map markers draw from before any poll or
     /// catalog fetch has happened. May lag reality (a brand-new radar
     /// appears here only after a table refresh), so pickers wanting
     /// freshness still call [`Self::list_sites`]. Contract: every returned
@@ -427,14 +427,14 @@ pub struct IntlProviderCapability {
     pub country: &'static str,
     pub visible_sites: usize,
     pub live: bool,
-    /// Derived from [`IntlProvider::supports_recent`], `true` iff the
+    /// Derived from [`IntlProvider::supports_recent`] — `true` iff the
     /// provider implements a real multi-frame [`IntlProvider::recent`]
     /// (never hand-maintained, so it cannot go stale against the code).
     pub recent_loop: bool,
-    /// Derived from [`IntlProvider::supports_archive`], `true` iff the
+    /// Derived from [`IntlProvider::supports_archive`] — `true` iff the
     /// provider hands back a real [`ArchiveFrames`] from
     /// [`IntlProvider::archive_source`] (never hand-maintained; the
-    /// parity audit caught the hand-kept flag lying in both directions,
+    /// parity audit caught the hand-kept flag lying in both directions —
     /// SMHI false above its own working day loader, NCI true without a
     /// dated lookup).
     pub archive_lookup: bool,
@@ -592,7 +592,7 @@ impl SiteCache {
     }
 }
 
-/// One parsed S3-style `ListObjectsV2` page: real AWS S3 (FMI's
+/// One parsed S3-style `ListObjectsV2` page — real AWS S3 (FMI's
 /// `fmi-opendata-radar-volume-hdf5` bucket) or an S3-compatible store
 /// (GeoSphere Austria's `public.hub.geosphere.at/datahub`).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -714,7 +714,7 @@ const JMA_LOOKBACK_MINUTES: i64 = 40;
 /// newest tar that exists.
 ///
 /// Decode contract: the plan's first part is the N5 (reflectivity) tar
-/// containing ALL stations, the poll consumer must decode JMA parts with
+/// containing ALL stations — the poll consumer must decode JMA parts with
 /// `nexrad_io::jma::decode_jma_tar_volumes(bytes, Some(site_id))`; the
 /// generic `decode_supported_volume_bytes` router would return the tar's
 /// first station regardless of the selection. When the `_N6_` sibling exists
@@ -726,7 +726,7 @@ pub struct JmaProvider;
 ///
 /// Decoded from the live N5 reflectivity tar
 /// `Z__C_RJTD_20260612083000_RDR_JMAGPV_N5_grib2.tar` (NICT mirror, fetched
-/// 2026-06-12) via `nexrad_io::jma::jma_tar_station_headers`: the same
+/// 2026-06-12) via `nexrad_io::jma::jma_tar_station_headers` — the same
 /// per-station GRIB2 product-section headers (JMA GRIB2 template 4.51022
 /// per the JMA technical format documentation) that the live catalog path
 /// reads, so the static table and a live listing agree on ids and
@@ -973,7 +973,7 @@ mod tests {
     }
 
     /// A provider with a rolling window: implements [`RecentFrames`] and
-    /// hands it back from `recent_source`, the one act that must both
+    /// hands it back from `recent_source` — the one act that must both
     /// route `recent()` and flip `supports_recent()`.
     struct FakeLoopProvider;
 
@@ -1022,7 +1022,7 @@ mod tests {
     }
 
     /// A provider with a dated archive: implements [`ArchiveFrames`] and
-    /// hands it back from `archive_source`, the one act that must both
+    /// hands it back from `archive_source` — the one act that must both
     /// route archive lookups and flip `supports_archive()`.
     struct FakeArchiveProvider;
 
@@ -1163,8 +1163,8 @@ mod tests {
         assert!(
             nci.current_window.contains("~3 days delayed")
                 && nci.bowecho_status.contains("~3 days behind real time"),
-            "the card must keep saying NCI data runs ~3 days late BY DESIGN: \
-             the archive works, the delay is the upstream's honesty story"
+            "the card must keep saying NCI data runs ~3 days late BY DESIGN \
+             — the archive works, the delay is the upstream's honesty story"
         );
     }
 
@@ -1236,7 +1236,7 @@ mod tests {
     }
 
     /// With a `recent_source`, `recent()` routes to the rolling window and
-    /// `supports_recent()` flips true: one override point, two effects.
+    /// `supports_recent()` flips true — one override point, two effects.
     #[test]
     fn recent_source_routes_recent_and_flips_supports_recent_together() {
         let provider = FakeLoopProvider;
@@ -1257,7 +1257,7 @@ mod tests {
     }
 
     /// With an `archive_source`, day lookups route to the dated archive
-    /// and `supports_archive()` flips true: one override point, two
+    /// and `supports_archive()` flips true — one override point, two
     /// effects (the [`RecentFrames`] pattern, mirrored).
     #[test]
     fn archive_source_routes_day_plans_and_flips_supports_archive_together() {
@@ -1399,7 +1399,7 @@ mod tests {
             archive_ids,
             BTreeSet::from(["australia-nci", "ord", "smhi"]),
             "FMI bucket walks, DMI STAC, and JMA dated tars are later pure \
-             adapter work, each flips its card by landing a real \
+             adapter work — each flips its card by landing a real \
              ArchiveFrames impl, and shows up here deliberately"
         );
     }
@@ -1408,7 +1408,7 @@ mod tests {
     /// site has finite coordinates inside a generous national bounding box
     /// (radars sit on national territory; a swapped lat/lon, a missing
     /// minus sign, or a degrees/radians slip all land far outside).
-    /// `(lat_min, lat_max, lon_min, lon_max)` for each SITE country: the
+    /// `(lat_min, lat_max, lon_min, lon_max)` for each SITE country — the
     /// multi-country ORD provider spans 15 of them, so the lookup keys off
     /// [`IntlSite::country`] rather than the provider's own label.
     fn national_bounding_box(country: &str) -> Option<(f32, f32, f32, f32)> {
@@ -1513,7 +1513,7 @@ mod tests {
     /// and paste the printed rows (and the printed tar URL into the table's
     /// doc comment) when the JMA network changes.
     #[test]
-    #[ignore = "live NICT endpoint probe, run manually with --ignored"]
+    #[ignore = "live NICT endpoint probe — run manually with --ignored"]
     fn jma_regenerate_static_station_table() {
         let stamp = jma_newest_stamp().expect("newest JMA stamp");
         let url = jma_tar_url(JMA_REFLECTIVITY_PRODUCT, stamp);
@@ -1535,7 +1535,7 @@ mod tests {
     /// numbers, and coordinates to table precision). Network test; run with
     /// `cargo test -p data_source jma_static_table -- --ignored --nocapture`
     #[test]
-    #[ignore = "live NICT endpoint probe: run manually with --ignored"]
+    #[ignore = "live NICT endpoint probe — run manually with --ignored"]
     fn jma_static_table_matches_live_tar_headers() {
         let stamp = jma_newest_stamp().expect("newest JMA stamp");
         let url = jma_tar_url(JMA_REFLECTIVITY_PRODUCT, stamp);
@@ -1682,7 +1682,7 @@ mod tests {
     /// Network test; run with:
     /// `cargo test -p data_source jma_live -- --ignored --nocapture`
     #[test]
-    #[ignore = "live NICT endpoint probe, run manually with --ignored"]
+    #[ignore = "live NICT endpoint probe — run manually with --ignored"]
     fn jma_live_roundtrip_lists_plans_downloads_and_decodes() {
         let provider = JmaProvider;
         let sites = provider.list_sites().expect("live JMA site list");

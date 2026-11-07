@@ -1,12 +1,12 @@
 //! Dump a decoded radar volume (any supported local format) as comparable
-//! text: the validation harness for real-file golden checks.
+//! text — the validation harness for real-file golden checks.
 //!
 //! Mirrors the app's file-open routing (`sniff_local_radar_kind` in app_ui):
 //! magic bytes pick the decoder (zip / DORADE / HDF5-ODIM / netCDF3-CfRadial
 //! / Archive II), then the volume prints site, per-cut geometry, and a fixed
 //! set of sampled gate values per moment. An independent Python reader
 //! (h5py / netCDF4) emits the same sample positions so the two outputs can
-//! be diffed mechanically: the golden-fixture discipline used for DORADE.
+//! be diffed mechanically — the golden-fixture discipline used for DORADE.
 //!
 //! Usage: cargo run -p nexrad_io --example dump_radar -- <file>
 

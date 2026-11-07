@@ -34,6 +34,12 @@ changes the table rather than passing anyway.  Two coverage holes are
 DECLARED there rather than papered over: stubbing ``_vdifq`` breaks
 nothing in this file, and neutering the similarity-table lookup leaves
 every surface bar green.
+
+The Eta surface layer's WRF oracle lives in its own file:
+tests/test_myjsfc_wrf461_parity.py grades the CUDA kernel and the host
+similarity tables word for word against the byte-unmodified
+phys/module_sf_myjsfc.F (tools/myjsfc_wrf461_oracle).  Nothing in THIS file
+depends on it.
 """
 
 from __future__ import annotations
@@ -443,6 +449,12 @@ def test_the_cold_start_seed_is_wrfs_epsq2_and_it_decides_the_first_step_pbl():
 def test_the_dropped_terrain_height_cancels_in_float32():
     """The DECLARED divergence, measured instead of asserted.
 
+    Since the MYJPBL oracle campaign it is a divergence of the SURFACE
+    LAYER only: the PBL kernel seeds ZINT(KTE+1)=HT as WRF does and is
+    graded bit-identical (tests/test_myjpbl_wrf461_parity.py).  This test
+    still drives both CPU-authority halves, so it keeps measuring how far
+    the ground-relative column moves the words.
+
     WRF seeds the interface-height column with the terrain height
     (``ZINT(KTE+1)=HT``, module_bl_myjpbl.F:312, module_sf_myjsfc.F:162);
     woof seeds 0 and carries heights above ground
@@ -752,22 +764,25 @@ def test_a_dry_pbl_config_is_admitted_by_both_config_doors():
     because ``initialize_physics`` carried a blanket dry refusal of its
     own.  Both are needed; neither substitutes for the other.
 
-    The property here is symmetry: whatever the PBL slot admits dry, it
-    admits for every scheme in it, so a future scheme cannot quietly
-    acquire a moisture gate of its own.
+    The property here is symmetry for the existing dry-capable PBL slot.
+    CCPP requires moist buoyancy inputs, so its admission gate is outside
+    this dry capability claim.
     """
-    from woof.config import PBL_SCHEMES, validate_run_config
+    from woof.config import (CCPP_TKE_EDMF_PBL_SCHEME, PBL_SCHEMES,
+                              validate_run_config)
 
     validate_myj_pairing(_cfg(sf_sfclay_physics=2, bl_pbl_physics=2,
                               moist=False))
     for pbl in PBL_SCHEMES:
-        if pbl == 900:
+        # Preserve the existing SASE exclusion and the CCPP moist-input gate.
+        if pbl in (900, CCPP_TKE_EDMF_PBL_SCHEME):
             continue
         sfclay = 2 if pbl == 2 else 1
         validate_run_config(_cfg(sf_sfclay_physics=sfclay,
                                  bl_pbl_physics=pbl, moist=False))
     assert {pbl for pbl, _ in _DRY_PBL_SLOT} == {
-        pbl for pbl in PBL_SCHEMES if pbl not in (0, 900)}, (
+        pbl for pbl in PBL_SCHEMES
+        if pbl not in (0, 900, CCPP_TKE_EDMF_PBL_SCHEME)}, (
         "a scheme joined the PBL slot without joining the dry run below")
 
 
@@ -833,6 +848,34 @@ def test_a_dry_pbl_run_reaches_the_driver_and_mixes(pbl, sfclay):
     assert np.all(np.isfinite(cp.asnumpy(state.thp)))
 
 
+@requires_gpu
+def test_myj_cold_start_writes_wrfs_initial_ust():
+    """MYJSFCINIT sets USTAR = 0.1 at every point on a cold start, so
+    wrf.exe's t=0 history frame writes UST = 0.1; 2.9.0 wrote the MM5 cold
+    start 1e-4 there (every UST word of NCAR's CONUS benchmark differed from
+    WRF at t=0)."""
+    import cupy as cp
+
+    from woof.core.grid import make_base_state, make_vertical_coord
+    from woof.core.physics import (
+        DECLARED_CONSTANT_GLW_WM2, initialize_physics)
+    from woof.core.state import init_at_rest
+
+    cfg = _cfg(nx=6, ny=5, nz=24, dt=6.0, run_seconds=60.0, moist=False,
+               sf_sfclay_physics=2, bl_pbl_physics=2,
+               sf_surface_physics=2, num_soil_layers=4, bldt=0.0, radt=0.0,
+               cu_physics=0, mp_physics=0, km_opt=4, c_s=0.25)
+    coord = make_vertical_coord(cfg.nz)
+    base = make_base_state(
+        coord, lambda z: 300.0 + 0.003 * np.asarray(z, np.float64),
+        p_surf=cfg.p_surf, ztop=cfg.ztop)
+    state = init_at_rest(cfg, coord, base)
+    driver = initialize_physics(state, cfg, landmask=1.0, tsk=290.0,
+                                glw=DECLARED_CONSTANT_GLW_WM2, swdown=0.0)
+    ust = cp.asnumpy(driver.fields["ust"])
+    assert np.all(ust == np.float32(0.1)), np.unique(ust)
+
+
 def test_the_matched_pair_is_admitted():
     validate_myj_pairing(_cfg(sf_sfclay_physics=2, bl_pbl_physics=2,
                               moist=True))
@@ -883,11 +926,21 @@ def test_the_registry_rows_are_accurate_about_the_evidence():
         assert option["reachability"] == {"state": "template"}
         assert option["selectors"] == {selector: value}
         assert option["scientific_evidence"] == "none"
-        joined = " ".join(option["warnings"])
-        # The evidence string must SAY there is no oracle.  A maturity label
-        # alone has been read as "probably fine" before.
-        assert "NO ORACLE COMPARISON AGAINST THE WRF FORTRAN" in joined
-        assert "tests/test_myj_port.py" in joined
+    # The PBL's evidence string must name the oracle that grades it bitwise,
+    # and must no longer carry the ground-relative divergence it retired.
+    myj_text = " ".join(myj["warnings"])
+    assert "BIT-IDENTICAL" in myj_text
+    assert "tests/test_myjpbl_wrf461_parity.py" in myj_text
+    assert "tools/myjpbl_wrf461_oracle" in myj_text
+    assert "NO ORACLE COMPARISON" not in myj_text
+    assert "GROUND-relative" not in myj_text
+    # So must the surface layer's.
+    eta_text = " ".join(eta["warnings"])
+    assert "BIT-IDENTICAL" in eta_text
+    assert "tests/test_myjsfc_wrf461_parity.py" in eta_text
+    assert "tools/myjsfc_wrf461_oracle" in eta_text
+    assert "NO ORACLE COMPARISON" not in eta_text
+    assert "GROUND-relative" not in eta_text
     # Audit R-067 gave the pair its first named suite, so reachability is
     # 'template' now and the old "no template may select either half" is
     # retired with it.  What survives is the property that actually
@@ -1010,9 +1063,12 @@ def test_the_surface_kernels_pblh_accumulator_is_column_local():
         "utf-8")
     code = [ln.split("//")[0].strip() for ln in source.splitlines()]
     assert [ln for ln in code if "dz_a[" in ln] == [
-        "real zcum = dz_a[col];",
-        "zcum += dz_a[(size_t)iz * st + col];",
-        "real zsl = dz_a[col] * 0.5f;",
+        "real zlow = zground + dz_a[col];",
+        "zcum = zcum + dz_a[(size_t)iz * st + col];",
+    ]
+    # ZINT(KTE+1)=HT (module_sf_myjsfc.F:165) is this thread's own HT too.
+    assert [ln for ln in code if "ht_a[" in ln] == [
+        "real zground = ht_a[col];",
     ]
 
 
@@ -1047,13 +1103,18 @@ def _to_device(cp, array):
 @pytest.mark.parametrize("xland,tsk,tag", [(1.0, 305.0, "land"),
                                            (2.0, 295.0, "water")])
 def test_the_surface_kernel_agrees_with_the_cpu_authority(xland, tsk, tag):
-    """CPU-vs-CUDA, on the same column, within a STATED tolerance.
+    """CPU-vs-CUDA, on the same column, word for word.
 
-    This is a conformance check between two halves of one port, not a
-    measurement against WRF.  The tolerance is loose on purpose: neither
-    half pins its libm, so logf/expf/powf differ between glibc and CUDA,
-    and the five-pass flux iteration amplifies a last-place difference.
-    The bar that matters is that the two halves describe the same physics.
+    This used to be a tolerance check (rel 2e-4, abs 1e-6) because neither
+    half pinned its libm.  Both are now graded bit-identical to WRF v4.6.1's
+    MYJSFC on the column oracle (tests/test_myjsfc_wrf461_parity.py: the
+    kernel on GPU, the CPU authority on CPU), and the tolerance had become
+    the wrong instrument: on the water column below, a cold-start QZ0 that
+    equals QLOW to within one ULP makes QFX and LH a pure rounding residue
+    (WRF writes LH = -1.7143344e-05 W m-2, the kernel the same word, and
+    the CPU authority wrote -0.0 while it still used NumPy's log/exp/pow,
+    one ULP off on QZ0).  With both halves pinned the residue is the same
+    word on both sides, so the bar is bitwise.
     """
     import cupy as cp
 
@@ -1081,6 +1142,7 @@ def test_the_surface_kernel_agrees_with_the_cpu_authority(xland, tsk, tag):
         "xland": _to_device(cp, np.full(shape, xland)),
         "mavail": _to_device(cp, np.ones(shape)),
         "z0base": _to_device(cp, np.full(shape, 0.1)),
+        "ht": _to_device(cp, np.zeros(shape)),
     }
     seed = {"ust": 0.1, "znt": 0.1, "thz0": 300.0, "qz0": 0.012,
             "uz0": 0.0, "vz0": 0.0, "qsfc": 0.012, "akhs": 0.01,
@@ -1095,7 +1157,8 @@ def test_the_surface_kernel_agrees_with_the_cpu_authority(xland, tsk, tag):
         device = float(cp.asnumpy(source[name]).ravel()[0])
         host = float(reference[name])
         assert np.isfinite(device), f"{tag}: {name} non-finite on device"
-        assert device == pytest.approx(host, rel=2.0e-4, abs=1.0e-6), (
+        assert (np.float32(device).tobytes()
+                == np.float32(host).tobytes()), (
             f"{tag}: {name} CPU {host!r} vs CUDA {device!r}")
 
 
@@ -1138,7 +1201,8 @@ def test_the_surface_kernel_pblh_uses_each_columns_own_dz():
                 ("t1", thick["t"][0]), ("th1", thick["th"][0]),
                 ("qv1", thick["qv"][0]), ("qc1", thick["qc"][0]),
                 ("p1", thick["p"][0]), ("psfc", 1.0e5), ("tsk", tsk),
-                ("xland", xland), ("mavail", 1.0), ("z0base", 0.1))}
+                ("xland", xland), ("mavail", 1.0), ("z0base", 0.1),
+                ("ht", 0.0))}
     seed = {"ust": 0.1, "znt": 0.1, "thz0": 300.0, "qz0": 0.012,
             "uz0": 0.0, "vz0": 0.0, "qsfc": 0.012, "akhs": 0.01,
             "akms": 0.01}
@@ -1195,6 +1259,8 @@ def test_the_pbl_kernel_agrees_with_the_cpu_authority(xland, tsk, tag):
         "elflx": _to_device(cp, np.full(shape, 50.0)),
         "uz0": _to_device(cp, np.full(shape, float(sfc["uz0"]))),
         "vz0": _to_device(cp, np.full(shape, float(sfc["vz0"]))),
+        # ZINT(KTE+1)=HT; the CPU authority below runs its default ht=0.
+        "ht": _to_device(cp, np.zeros(shape)),
     }
     seed = {"thz0": float(sfc["thz0"]), "qz0": float(sfc["qz0"]),
             "qsfc": float(sfc["qsfc"]), "ct": float(sfc["ct"])}
@@ -1288,7 +1354,7 @@ def test_a_myj_forecast_advances_through_the_shipped_seams():
 
     # The scheme's own fields exist under its own selectors, and nothing
     # else's do.
-    for name in ("thz0", "qz0", "uz0", "vz0", "akhs", "akms", "z0base",
+    for name in ("thz0", "qz0", "uz0", "vz0", "akhs", "akms",
                  "tshltr", "qshltr", "pshltr", "u10e", "v10e", "mixht"):
         assert name in driver.fields, name
     assert driver.fields["tke_myj"].shape == (cfg.nz, cfg.ny, cfg.nx)

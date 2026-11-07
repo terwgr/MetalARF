@@ -26,11 +26,15 @@ use rw_wps::namelist::STOCK_WRF_INVENTORIED_MP_PHYSICS;
 /// admits a member by its DECLARED rank.  A row here again means the engine
 /// inventories a package this frontend has no evidenced Registry contract
 /// for; the test below still requires that every such row name its breakage.
-const CITED_ABSENCES: &[(u16, &str)] = &[];
+const CITED_ABSENCES: &[(u16, &str)] = &[(
+    30,
+    "FAST_SBM's 142 spectral bin members and six number moments have no evidenced \
+     frontend contract; the engine fills the bins from bulk condensate at the first step",
+)];
 
 fn export() -> serde_json::Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../gpuwm/physics_consumer_export_v1.json");
+        .join("../../../../woof/physics_consumer_export_v1.json");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
             "{} is the engine's consumer export and this test cannot run without it: {error}",

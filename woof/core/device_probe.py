@@ -23,6 +23,49 @@ import json
 import sys
 
 
+def pool_lease_budget_bytes(device: int = 0) -> int | None:
+    """This process's per-card pool-v3 reservation, never another owner's.
+
+    The helper exports GPU_MUTEX_CARDS (physical indices in CUDA order),
+    and records the budget in OWNER-N.json. Match a live ancestor's PID
+    AND birth tick, just as the helper does, to avoid stale/reused PIDs.
+    Exclusive leases have no declared budget and keep measured sizing.
+    """
+    import os
+    from pathlib import Path
+
+    cards = os.environ.get("GPU_MUTEX_CARDS", "").split(",")
+    if device < 0 or device >= len(cards) or not cards[device].isdigit():
+        return None
+    try:
+        ledger = json.loads((Path(os.environ["GPU_MUTEX_DIR"])
+                             / f"OWNER-{cards[device]}.json").read_text())
+        if ledger.get("schema") != "gpu-mutex.owner.v1":
+            return None
+        pid = os.getpid()
+        while pid > 1:
+            fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+            for owner in ledger["owners"]:
+                budget = owner.get("budget_bytes")
+                if (owner.get("pid") == pid and owner.get("birth") == fields[19]
+                        and owner.get("mode") == "pool"
+                        and type(budget) is int and budget > 0):
+                    return budget
+            pid = int(fields[1])
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        pass
+    return None
+
+
+def sizing_free_memory(free_bytes: int, *, device: int = 0) -> tuple[int, str | None]:
+    """Sizing availability under a lease, keeping telemetry itself intact."""
+    budget = pool_lease_budget_bytes(device)
+    if budget is None:
+        return int(free_bytes), None
+    return budget, (f"sizing against the pool lease budget {budget / 2**20:g} MiB, "
+                    f"not the card's {free_bytes / 2**30:.2f} GiB free")
+
+
 def cuda_device_identity(device: int) -> dict | None:
     """A physical card identity independent of CUDA visibility ordering.
 
@@ -218,12 +261,30 @@ try:
     try:
         import re as _re
         from cupy_backends.cuda.libs import nvrtc as _nvrtc
-        _program = _nvrtc.createProgram("", "compile_platform_probe.cu", [], [])
-        try:
-            _nvrtc.compileProgram(_program, [])
-            _ptx = _nvrtc.getPTX(_program)
-        finally:
-            _nvrtc.destroyProgram(_program)
+        _ptx = None
+        # Load the two stdlib-only helpers by file. Importing the model package
+        # here would make a bare runtime probe depend on that package's import.
+        if len(sys.argv) > 2:
+            try:
+                import runpy as _runpy
+                from pathlib import Path as _Path
+                _root = _Path(sys.argv[2])
+                _metadata = _runpy.run_path(str(_root / "compiler_metadata.py"))
+                _platform_helpers = _runpy.run_path(str(_root / "certify" / "compile_platform.py"))
+                _nvrtc.getVersion()
+                _ptx = _metadata["nvrtc_banner"](_nvrtc, _platform_helpers["nvrtc_library"]())
+            except Exception:
+                # A standalone preparation kit can lack forecast provenance
+                # helpers. It still measures the platform through the original
+                # probe; never turn an unavailable cache into a missing card.
+                _ptx = None
+        if _ptx is None:
+            _program = _nvrtc.createProgram("", "compile_platform_probe.cu", [], [])
+            try:
+                _nvrtc.compileProgram(_program, [])
+                _ptx = _nvrtc.getPTX(_program)
+            finally:
+                _nvrtc.destroyProgram(_program)
         if isinstance(_ptx, bytes):
             _ptx = _ptx.decode("ascii", "replace")
         _build = _re.search(
@@ -372,10 +433,12 @@ def _device_memory_probe(*, run=None, device=0, report_failure=False
     if no_local_gpu():
         return None, (f"{NO_LOCAL_GPU_ENV} is set, so the local card was "
                       "not read")
+    from pathlib import Path
+    helper_root = str(Path(__file__).resolve().parents[1])
     runner = subprocess.run if run is None else run
     try:
         completed = runner(
-            [sys.executable, "-c", _DEVICE_MEMORY_PROBE_SOURCE, str(device)],
+            [sys.executable, "-c", _DEVICE_MEMORY_PROBE_SOURCE, str(device), helper_root],
             capture_output=True, text=True,
             timeout=DEVICE_MEMORY_PROBE_TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError) as error:

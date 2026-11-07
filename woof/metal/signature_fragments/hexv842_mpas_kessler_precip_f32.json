@@ -1,0 +1,126 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_kessler_precip_f32",
+      "module": "hexv842_mpas_kessler_precip_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_kessler_precip_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/kessler_v842.py",
+      "cuda_symbol": "kessler_precip_to_mpas",
+      "resources": [
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvp",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ],
+        [
+          "rain_local",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "precipw",
+          "float",
+          "read_write"
+        ],
+        [
+          "i_rainnc",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rain_local": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "precipw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "i_rainnc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "bucket",
+          "float32"
+        ],
+        [
+          "accumulate",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "correct_wb3",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ugwp_oro",
+      "source": "woof/metal/shaders/hexrrfs_ugwp_oro.metal",
+      "cuda_source": "woof/hex/mpasphys/ugwp_oro_v842.py",
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ugwp_oro_diff",
+      "cuda_symbol": "ugwp_oro_diff",
+      "resources": [
+        [
+          "before",
+          "float",
+          "read"
+        ],
+        [
+          "after",
+          "float",
+          "read"
+        ],
+        [
+          "diff",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "before": [
+          [
+            "n"
+          ]
+        ],
+        "after": [
+          [
+            "n"
+          ]
+        ],
+        "diff": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

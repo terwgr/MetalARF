@@ -35,6 +35,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use wx_core::download::{
     byte_ranges, find_entries, parse_idx, CacheDedup, DownloadClient, DownloadConfig,
@@ -96,6 +97,7 @@ impl From<wx_core::RustmetError> for TransferFault {
 pub struct Fetcher {
     client: DownloadClient,
     progress: Arc<TransferProgress>,
+    streams_used: AtomicUsize,
 }
 
 /// What one successful `.idx` read produced.
@@ -107,6 +109,138 @@ pub struct IdxPayload {
 }
 
 impl Fetcher {
+    /// Consume bounded range batches while the next batch is downloading.
+    /// wx-core still owns retries, length checks, cache and host pacing.
+    pub fn stream_ranges(&self, url: &str, ranges: &[(u64, u64)], path: &Path)
+        -> Result<crate::stream::Receipt, TransferFault> {
+        self.stream_ranges_kind(url, ranges, path, None)
+    }
+
+    fn stream_ranges_kind(&self, url: &str, ranges: &[(u64, u64)], path: &Path,
+        pin: Option<(u64, &str)>) -> Result<crate::stream::Receipt, TransferFault> {
+        // A fresh TCP/TLS connection for every 16 MiB chunk repeatedly
+        // pays connection setup and slow start when idle pooling is off.
+        // Use long disjoint parts, at most one per stream for a whole
+        // object, while retaining wx-core retries and range validation.
+        let width = self.client.streams_for(url).max(1);
+        let total = ranges.iter().filter(|(_, end)| *end != u64::MAX)
+            .fold(0u64, |total, &(start, end)| total.saturating_add(end - start + 1));
+        let chunk_bytes = total.div_ceil(width as u64).max(16 * 1024 * 1024);
+        let mut chunks = Vec::new();
+        for &(start, end) in ranges {
+            if end == u64::MAX {
+                chunks.push((start, end));
+                continue;
+            }
+            let mut offset = start;
+            while offset <= end {
+                let last = offset.saturating_add(chunk_bytes - 1).min(end);
+                chunks.push((offset, last));
+                offset = last + 1;
+            }
+        }
+        self.streams_used.fetch_max(width.min(chunks.len()).max(1), Ordering::Relaxed);
+        let transfer = |publisher: &mut crate::stream::Publisher| {
+            std::thread::scope(|scope| {
+                let (send, receive) = std::sync::mpsc::sync_channel(1);
+                scope.spawn(move || {
+                    for batch in chunks.chunks(width) {
+                        let result = self.client.get_ranges(url, batch).map_err(TransferFault::from);
+                        let failed = result.is_err();
+                        if send.send((result, crate::stream::unix_now())).is_err() || failed { break; }
+                    }
+                });
+                let mut last = 0.0_f64;
+                for (result, landed) in receive {
+                    let bytes = result?;
+                    last = last.max(landed);
+                    publisher.push(&bytes).map_err(TransferFault::Refused)?;
+                }
+                Ok(last)
+            })
+        };
+        match pin {
+            Some((bytes, sha256)) => crate::stream::publish_pinned_with(path, bytes, sha256, transfer),
+            None => crate::stream::publish_with(path, transfer),
+        }
+    }
+
+    /// Static objects have exact pins, never a GRIB envelope or an unpinned fallback.
+    pub fn stream_pinned_file(&self, url: &str, path: &Path, bytes: u64, sha256: &str)
+        -> Result<crate::stream::Receipt, TransferFault> {
+        if bytes == 0 { return Err(TransferFault::Refused("a static object pin cannot be empty".into())); }
+        let length = self.client.object_length(url)?.ok_or_else(|| TransferFault::Refused(
+            format!("{url}: object length is unavailable; the size pin cannot exclude appended or truncated static bytes")))?;
+        if bytes != length {
+            return Err(TransferFault::Refused(format!("{url}: pin refused: object has {length} bytes, expected {bytes}; appended or truncated static bytes must not be published")));
+        }
+        self.progress.set_total(bytes);
+        self.stream_ranges_kind(url, &[(0, bytes - 1)], path, Some((bytes, sha256)))
+    }
+
+    /// A compressed transport is checked against the raw pin after native decode.
+    pub fn stream_encoded_file(&self, url: &str, path: &Path)
+        -> Result<crate::stream::Receipt, TransferFault> {
+        let bytes = self.client.object_length(url)?.ok_or_else(|| TransferFault::Refused(
+            "encoded static object has no proven byte length; ranged transfer cannot detect truncation".into()))?;
+        self.stream_pinned_file(url, path, bytes, "")
+    }
+
+    pub fn stream_full_file(&self, url: &str, path: &Path)
+        -> Result<crate::stream::Receipt, TransferFault> {
+        if let Some(length) = self.client.object_length(url)? {
+            self.progress.set_total(length);
+            let receipt = self.stream_ranges(url, &[(0, length.saturating_sub(1))], path)?;
+            if receipt.bytes != length {
+                return Err(TransferFault::Refused(format!("{}: expected {length} bytes, received {}", path.display(), receipt.bytes)));
+            }
+            Ok(receipt)
+        } else {
+            // An origin without range totals keeps the client's full-body fallback.
+            crate::stream::publish_with(path, |publisher| {
+                let bytes = self.client.get_bytes(url)?;
+                let last = crate::stream::unix_now();
+                for chunk in bytes.chunks(4 * 1024 * 1024) {
+                    publisher.push(chunk).map_err(TransferFault::Refused)?;
+                }
+                Ok(last)
+            })
+        }
+    }
+
+    pub fn stream_idx_subset(&self, url: &str, payload: &IdxPayload,
+        selection: &[usize], path: &Path)
+        -> Result<(crate::stream::Receipt, Vec<RangeRecord>), TransferFault> {
+        let entries = parse_idx(&payload.text);
+        let chosen: Vec<_> = selection.iter().map(|index| &entries[*index]).collect();
+        let merged = coalesce_ranges(&byte_ranges(&entries, &chosen));
+        let ranges = if merged.iter().any(|(_, end)| *end == u64::MAX) {
+            let total = self.client.object_length(url)?;
+            merged.iter().map(|&(start, end)| (start,
+                if end == u64::MAX { total.map(|n| n - 1).unwrap_or(end) } else { end }))
+                .collect::<Vec<_>>()
+        } else { merged.clone() };
+        self.progress.reset();
+        if ranges.iter().all(|(_, end)| *end != u64::MAX) {
+            self.progress.set_total(ranges.iter().map(|(start, end)| end - start + 1).sum());
+        }
+        let receipt = self.stream_ranges(url, &ranges, path)?;
+        let finite: u64 = merged.iter().filter(|(_, end)| *end != u64::MAX)
+            .map(|(start, end)| end - start + 1).sum();
+        let records = merged.iter().map(|&(start, end)| {
+            let rows: Vec<_> = payload.rows.iter().filter(|row| row.offset >= start
+                && (end == u64::MAX || row.offset <= end)).collect();
+            let length = if end == u64::MAX { receipt.bytes.saturating_sub(finite) } else { end - start + 1 };
+            RangeRecord { start, end: start + length.saturating_sub(1), bytes: length,
+                first_index_row: rows.first().map(|r| r.sequence).unwrap_or_default(),
+                last_index_row: rows.last().map(|r| r.sequence).unwrap_or_default() }
+        }).collect::<Vec<_>>();
+        if records.iter().map(|r| r.bytes).sum::<u64>() != receipt.bytes {
+            return Err(TransferFault::Refused(format!("{}: range byte accounting does not add up", path.display())));
+        }
+        Ok((receipt, records))
+    }
+
     pub fn new(cache_dir: Option<&Path>) -> Result<Self, String> {
         let client = match cache_dir {
             Some(dir) => DownloadClient::new_with_cache(Some(
@@ -122,7 +256,7 @@ impl Fetcher {
     fn around(mut client: DownloadClient) -> Self {
         let progress = TransferProgress::new();
         client.set_progress(progress.clone());
-        Self { client, progress }
+        Self { client, progress, streams_used: AtomicUsize::new(1) }
     }
 
     /// A fetcher on a client with a short stall window and one retry,
@@ -140,6 +274,11 @@ impl Fetcher {
         })
         .expect("download client");
         Self::around(client)
+    }
+
+    /// Maximum selected range width, after object size and host policy.
+    pub fn streams_used(&self) -> usize {
+        self.streams_used.load(Ordering::Relaxed)
     }
 
     /// The body bytes the client has received for the current object.
@@ -193,16 +332,24 @@ impl Fetcher {
 
     /// Gather every fact [`crate::plan::decide`] needs about one object.
     ///
-    /// The coverage proof is the interesting part.  Rather than trust a
-    /// declared object size, this reads the last indexed message's own
-    /// Section 0 to learn its length, then asks for exactly one byte
-    /// **more** than that message occupies.  If the origin returns the
-    /// message and nothing else, the index provably ends where the
-    /// object ends.  If it returns one extra byte, the object carries
-    /// records the index never mentions -- a mid-publish `.idx`, and
-    /// the case the project rule exists for.  Both answers cost one bounded
-    /// range GET whose bytes the cache keeps for the transfer that
-    /// follows.
+    /// The coverage proof is the interesting part.  It reads the last
+    /// indexed message's own Section 0 to learn its length, and compares
+    /// where that message ends with the object's total length, which the
+    /// origin states in the `Content-Range` of a one-byte range answer
+    /// (`bytes 0-0/TOTAL`).  Equal: the index provably ends where the
+    /// object ends.  Short: the object carries records the index never
+    /// mentions -- a mid-publish `.idx`, and the case the project rule
+    /// exists for.
+    ///
+    /// The proof used to ask for one byte past the last message instead.
+    /// An origin answers that request clipped at the object's end
+    /// (`bytes A-(END-1)/TOTAL`), which the strict range reader rightly
+    /// refuses as a foreign span, so every complete index read as
+    /// unproven and `--mode idx-subset` refused every HRRR object on S3
+    /// ("index coverage could not be proven") while the Python transport,
+    /// which compares against the object length, subset the same files.
+    /// That one-byte probe remains only for an origin that states no
+    /// total.
     pub fn probe_object(
         &self,
         grib_url: &str,
@@ -269,7 +416,21 @@ impl Fetcher {
         let Some(message_bytes) = grib2_message_length(&head) else {
             return (None, None, None);
         };
-        // One byte past the message: present => the index is short.
+        let indexed_end = last_offset + message_bytes;
+        if let Ok(Some(total)) = self.client.object_length(grib_url) {
+            return if indexed_end == total {
+                (Some(message_bytes), Some(true), Some(total))
+            } else if indexed_end < total {
+                // The object carries bytes past the last indexed message.
+                (Some(message_bytes), Some(false), Some(total))
+            } else {
+                // The last indexed message claims bytes the object does
+                // not have: no coverage statement is possible.
+                (Some(message_bytes), None, Some(total))
+            };
+        }
+        // No stated total.  One byte past the message: present => the
+        // index is short.
         let tail = match self
             .client
             .get_range(grib_url, last_offset, last_offset + message_bytes)
@@ -297,64 +458,6 @@ impl Fetcher {
         Ok(self.client.get_bytes_parallel_whole(grib_url)?)
     }
 
-    /// Pull only the selected messages, as coalesced range GETs.
-    pub fn get_idx_subset(
-        &self,
-        grib_url: &str,
-        payload: &IdxPayload,
-        selection: &[usize],
-    ) -> Result<(Vec<u8>, Vec<RangeRecord>), TransferFault> {
-        // Range algebra stays upstream's: parse_idx -> byte_ranges,
-        // then coalesced so a 561-record selection becomes a handful of
-        // GETs instead of 561.
-        let entries = parse_idx(&payload.text);
-        let chosen: Vec<_> = selection.iter().map(|index| &entries[*index]).collect();
-        let raw = byte_ranges(&entries, &chosen);
-        let merged = coalesce_ranges(&raw);
-
-        let bytes = self.client.get_ranges(grib_url, &merged)?;
-
-        // Attribute each merged range back to the index rows it spans,
-        // so the Python side can author the per-range receipt.  The
-        // last selected message has no successor offset, so upstream's
-        // `byte_ranges` gives it an open end (`u64::MAX`); its true
-        // length is whatever is left over once the finite ranges are
-        // accounted for.
-        let finite: u64 = merged
-            .iter()
-            .filter(|(_, end)| *end != u64::MAX)
-            .map(|(start, end)| end - start + 1)
-            .sum();
-        let total = bytes.len() as u64;
-        let mut records = Vec::with_capacity(merged.len());
-        for (start, end) in &merged {
-            let spanned: Vec<u32> = payload
-                .rows
-                .iter()
-                .filter(|row| row.offset >= *start && (*end == u64::MAX || row.offset <= *end))
-                .map(|row| row.sequence)
-                .collect();
-            let length = if *end == u64::MAX {
-                total.saturating_sub(finite)
-            } else {
-                end - start + 1
-            };
-            records.push(RangeRecord {
-                start: *start,
-                end: start + length.saturating_sub(1),
-                bytes: length,
-                first_index_row: spanned.first().copied().unwrap_or_default(),
-                last_index_row: spanned.last().copied().unwrap_or_default(),
-            });
-        }
-        if records.iter().map(|record| record.bytes).sum::<u64>() != total {
-            return Err(TransferFault::Refused(format!(
-                "range accounting does not add up: {} range bytes vs {total} received",
-                records.iter().map(|record| record.bytes).sum::<u64>()
-            )));
-        }
-        Ok((bytes, records))
-    }
 }
 
 /// Select index rows by exact `VAR:LEVEL` patterns.

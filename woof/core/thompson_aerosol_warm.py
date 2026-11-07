@@ -9,6 +9,7 @@ from woof.core.state import DTYPE
 from woof.core.thompson_aerosol_launch import (
     WARM_MODULE,
     launch_grid,
+    add_optional_fields,
     validate_fields,
     validate_fp64_fortran_table,
 )
@@ -117,7 +118,9 @@ def launch_aerosol_warm_source_network(
         nc_entry, nwfa_entry, nifa_entry,
         ncten, nwfaten, nifaten,
         rain_cloud_efficiency, snow_cloud_efficiency,
-        rain_snow_tables, rain_graupel_tables, dt: float) -> None:
+        rain_snow_tables, rain_graupel_tables, dt: float, *,
+        qcten=None, qrten=None, nrten=None, qvten=None,
+        tten=None, qsten=None, qgten=None, ngten=None) -> None:
     """Apply WRF-ordered warm-level sources with a prognostic droplet number.
 
     ``nc_entry``/``nwfa_entry``/``nifa_entry`` are the FROZEN per-kilogram
@@ -136,6 +139,17 @@ def launch_aerosol_warm_source_network(
     This launcher does NOT run the ncten balance limiter.  Call
     :func:`launch_ncten_balance` once, after this and after the cold
     network, and before the saturation adjustment.
+
+    ``qcten`` (keyword, optional) is WRF's per-kilogram-per-second cloud
+    water accumulator.  Given, ``qc`` is the read-only entry cloud and the
+    stage's cloud tendency is ADDED to ``qcten``, to be applied once with
+    every other cloud tendency (:3975); the production adapter passes it.
+    Left ``None``, the tendency is applied to ``qc`` in place.
+
+    ``qvten``/``tten`` (keywords, both or neither) are WRF's vapour and
+    temperature accumulators.  Given, the sources are added to them in
+    WRF's form (:2982, :3174-3179), ``qv`` stays the entry vapour and
+    ``temperature`` becomes ``t1d + DT*tten``.
     """
     from woof.metal.array import MetalArray
     if isinstance(qc, MetalArray):
@@ -153,9 +167,11 @@ def launch_aerosol_warm_source_network(
             ncten, nwfaten, nifaten,
             rain_cloud_efficiency, snow_cloud_efficiency,
             *rain_snow_values, *rain_graupel_values, dt, qc.size,
-            wrf39=active_thompson_version() == "wrf_39_noaa")
+            wrf39=active_thompson_version() == "wrf_39_noaa",
+            qcten=qcten, qrten=qrten, nrten=nrten, qvten=qvten, tten=tten,
+            qsten=qsten, qgten=qgten, ngten=ngten)
         return
-    _, size = validate_fields({
+    fields = {
         "qc": qc,
         "qr": qr,
         "nr": nr,
@@ -173,7 +189,16 @@ def launch_aerosol_warm_source_network(
         "ncten": ncten,
         "nwfaten": nwfaten,
         "nifaten": nifaten,
-    })
+    }
+    if qcten is not None:
+        fields["qcten"] = qcten
+    add_optional_fields(fields, qrten=qrten, nrten=nrten)
+    add_optional_fields(fields, qvten=qvten, tten=tten)
+    add_optional_fields(fields, qsten=qsten, qgten=qgten, ngten=ngten)
+    _, size = validate_fields(fields)
+    if qcten is not None and _arrays_overlap(qc, qcten):
+        raise ValueError("qcten must not alias qc; the entry cloud is "
+                         "read-only while the accumulator carries it")
     if _arrays_overlap(graupel_melt_marker, snow_melt_marker):
         raise ValueError(
             "snow_melt_marker must not alias graupel_melt_marker")
@@ -216,6 +241,7 @@ def launch_aerosol_warm_source_network(
          ncten, nwfaten, nifaten,
          rain_cloud_efficiency, snow_cloud_efficiency,
          *rain_snow_values, *rain_graupel_values,
+         qcten, qrten, nrten, qvten, tten, qsten, qgten, ngten,
          DTYPE(dt), np.int32(size)))
 
 
@@ -225,7 +251,9 @@ def launch_aerosol_warm_source_network_from_owner(
         temperature, pressure, qv,
         nc_entry, nwfa_entry, nifa_entry,
         ncten, nwfaten, nifaten,
-        table_owner, dt: float) -> None:
+        table_owner, dt: float, *, qcten=None, qrten=None,
+        nrten=None, qvten=None, tten=None, qsten=None, qgten=None,
+        ngten=None) -> None:
     """Launch the warm network from one verified classic table owner.
 
     mp=28 reuses the four classic Thompson caches unchanged; only
@@ -245,7 +273,9 @@ def launch_aerosol_warm_source_network_from_owner(
         nc_entry, nwfa_entry, nifa_entry,
         ncten, nwfaten, nifaten,
         tables.rain_cloud_efficiency, table_owner.t_Efsw,
-        tables.rain_snow_tables, tables.rain_graupel_tables, dt)
+        tables.rain_snow_tables, tables.rain_graupel_tables, dt,
+        qcten=qcten, qrten=qrten, nrten=nrten, qvten=qvten, tten=tten,
+        qsten=qsten, qgten=qgten, ngten=ngten)
 
 
 def launch_ncten_balance(

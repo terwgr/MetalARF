@@ -246,6 +246,116 @@ def version_identity_refusal(prov: Provenance | None = None) -> str | None:
     return layered(f"REFUSING: version identity is ambiguous -- {action}", why)
 
 
+#: Top-level packages the woof distribution ships beside ``woof`` whose
+#: code runs inside its forecasts.  They must come from the same release.
+COMPANION_PACKAGES = ("tilestream",)
+
+_PYPROJECT_FIELD = r"""^\s*{field}\s*=\s*["']([^"']+)["']"""
+
+
+def _companion_root(name: str) -> Path | None:
+    """The directory holding the ``name`` package as this process resolves it."""
+
+    import importlib.util
+
+    module = sys.modules.get(name)
+    origin = getattr(module, "__file__", None) if module is not None else None
+    if origin is None:
+        try:
+            spec = importlib.util.find_spec(name)
+        except (ImportError, ValueError):
+            return None
+        origin = getattr(spec, "origin", None) if spec is not None else None
+    if not origin or origin in ("namespace", "built-in", "frozen"):
+        return None
+    try:
+        return Path(origin).resolve().parent.parent
+    except OSError:
+        return None
+
+
+def _release_at(root: Path, package: str) -> str | None:
+    """The woof release that ``root`` holds ``package`` for, or None.
+
+    A source tree: the ``[project].version`` of its ``pyproject.toml`` when
+    that names woof.  An installed root (``site-packages``): the
+    ``recast_woof-*.dist-info`` whose RECORD lists ``<package>/__init__.py``.
+    Anything else cannot be answered, and an unanswerable question is
+    silent here like every gate in this module.
+    """
+
+    import re
+
+    try:
+        text = (root / "pyproject.toml").read_text(encoding="utf-8",
+                                                   errors="replace")
+    except OSError:
+        text = None
+    if text is not None:
+        name = re.search(_PYPROJECT_FIELD.format(field="name"), text, re.M)
+        version = re.search(_PYPROJECT_FIELD.format(field="version"), text,
+                            re.M)
+        if name and name.group(1).strip().lower() == "recast-woof" and version:
+            return version.group(1).strip()
+        return None
+    wanted = f"{package}/__init__.py"
+    try:
+        records = sorted(root.glob("recast_woof-*.dist-info"))
+    except OSError:
+        return None
+    for info in records:
+        try:
+            record = (info / "RECORD").read_text(encoding="utf-8",
+                                                 errors="replace")
+        except OSError:
+            continue
+        if any(line.split(",", 1)[0] == wanted
+               for line in record.splitlines()):
+            return info.name[len("recast_woof-"):-len(".dist-info")]
+    return None
+
+
+def companion_identity_refusal(prov: Provenance | None = None) -> str | None:
+    """Why a companion package of another release would run, or None.
+
+    Breakage it prevents (2026-10-05): a box lane venv layered over a base
+    venv that held the 2.8.5 wheel ran woof from the 2.8.6 source but
+    imported ``tilestream`` from the base ``site-packages``.  The run
+    refused a two-rank swint split that 2.8.6 tilestream handles (it
+    gathers the swint grids per rank), and the refusal was reported as an
+    engine defect.  Silent when both come from one root, when the other
+    root's release cannot be read, or when the two releases agree.
+    """
+
+    prov = resolve() if prov is None else prov
+    ours = executing_version(prov)
+    if ours == UNKNOWN_VERSION:
+        return None
+    gpuwm_root = _companion_root("woof")
+    for name in COMPANION_PACKAGES:
+        root = _companion_root(name)
+        if root is None or gpuwm_root is None or root == gpuwm_root:
+            continue
+        theirs = _release_at(root, name)
+        if theirs is None or theirs == ours:
+            continue
+        action = (
+            f"woof {ours!r} is running from {gpuwm_root}, but `import "
+            f"{name}` resolves to woof {theirs!r} in {root}.  Put this "
+            f"tree first (PYTHONPATH={gpuwm_root}) or remove the other "
+            f"install from this environment.")
+        why = (
+            f"{name} ships inside the woof distribution and runs inside "
+            f"its forecasts (tiling, multi-card ranks, streamed state).  A "
+            f"venv layered over a base venv that holds an older woof "
+            f"wheel finds the base copy on sys.path ahead of an editable "
+            f"finder, so the product runs one release's {name} under "
+            f"another release's woof and reports that release's "
+            f"refusals and results as this one's.")
+        return layered(f"REFUSING: mixed releases -- {action}", why)
+    return None
+
+
 def require_consistent_version(command: str,
                                prov: Provenance | None = None) -> None:
     """Raise the version refusal, unless ``command`` is a diagnostic.
@@ -259,6 +369,8 @@ def require_consistent_version(command: str,
     if command in DIAGNOSTIC_COMMANDS:
         return
     refusal = version_identity_refusal(prov)
+    if refusal is None:
+        refusal = companion_identity_refusal(prov)
     if refusal is not None:
         raise ValueError(refusal)
 
@@ -553,6 +665,56 @@ def bridge_tree_match(bridge, *, env_var: str,
         revisions[0] if revisions else None, detail)
 
 
+#: The line a stamped bridge prints after its ``--abi`` contract line
+#: (``rw_ensbatch`` does since 356c94560): the source revision it was
+#: built from, the same ``GPUWM_BRIDGE_SOURCE_REV`` stamp its bytes carry.
+ABI_SOURCE_REV_PREFIX = "GPUWM_BRIDGE_SOURCE_REV="
+
+
+def split_abi_answer(stdout: str | None) -> tuple[str, str | None]:
+    """``(contract, revision)`` of one ``--abi`` answer.
+
+    The contract is what a probe compares exactly; the revision is not
+    part of it.  Comparing the whole answer as one string refused this
+    checkout's own ``rw_ensbatch`` as "a build from another checkout"
+    once the binary printed its stamp, so ``woof enprod --engine rust``
+    refused to draw.  Only a LAST line carrying the prefix, and only
+    one such line, is split off; any other extra line stays in the
+    contract text and fails the exact comparison as before.
+    """
+
+    lines = [line.strip() for line in (stdout or "").strip().splitlines()]
+    stamped = [line.startswith(ABI_SOURCE_REV_PREFIX) for line in lines]
+    if len(lines) >= 2 and stamped[-1] and not any(stamped[:-1]):
+        return ("\n".join(lines[:-1]).strip(),
+                lines[-1][len(ABI_SOURCE_REV_PREFIX):])
+    return (stdout or "").strip(), None
+
+
+def abi_revision_refusal(bridge, revision: str, *, env_var: str,
+                         prov: Provenance | None = None) -> str | None:
+    """Why a bridge whose ``--abi`` printed ``revision`` is not this tree's.
+
+    ``None`` when it is.  Decided by :func:`bridge_tree_match`, the one
+    stamp check the renderer gate and ``woof doctor`` already use, so a
+    lane probe cannot judge provenance differently from them: a binary
+    inside this source root or this wheel, one named through ``env_var``,
+    or one stamped with this checkout's HEAD passes; a binary found
+    elsewhere and built from another revision is refused, naming both
+    revisions.  The breakage it prevents is the one the exact ``--abi``
+    comparison was there for: a build from another checkout drawing
+    this tree's ensemble panels with its own catalog.
+    """
+
+    match = bridge_tree_match(bridge, env_var=env_var, prov=prov)
+    if match.matched or match.verdict == "absent":
+        return None
+    head = match.engine_commit or "an unknown commit"
+    return (f"its --abi names source revision {revision or 'nothing'} "
+            f"while this checkout is at {head} ({match.basis}) -- it is a "
+            f"build from another checkout")
+
+
 def renderer_bridge_refusal(bridge, *, env_var: str | None = None,
                             prov: Provenance | None = None,
                             match: BridgeMatch | None = None) -> str | None:
@@ -710,12 +872,14 @@ def announce_for_main(command: str, *, explain: bool = False,
 
 
 __all__ = [
+    "ABI_SOURCE_REV_PREFIX",
     "BANNER_ENV", "BRIDGE_VERDICTS", "BridgeMatch", "DIAGNOSTIC_COMMANDS",
-    "RECEIPT_SCHEMA", "announce", "announce_for_main", "banner_enabled",
+    "RECEIPT_SCHEMA", "abi_revision_refusal", "announce",
+    "announce_for_main", "banner_enabled",
     "borrowed_version_origin", "bridge_tree_match",
     "executing_version", "receipt_block", "renderer_bridge_refusal",
     "require_consistent_version", "require_matched_renderer",
     "require_version_identity",
-    "reset_announcement", "version_identity_refusal",
+    "reset_announcement", "split_abi_answer", "version_identity_refusal",
     "warn_borrowed_version",
 ]

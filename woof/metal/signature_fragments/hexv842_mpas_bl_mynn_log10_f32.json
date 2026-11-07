@@ -1,0 +1,46 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_log10_f32",
+      "module": "hexv842_mpas_bl_mynn_log10_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_log10_f32.metal",
+      "cuda_source": "woof/hex/data/mpasphys-maths/core-math/log10f.c",
+      "cuda_symbol": "cr_log10f",
+      "resources": [
+        [
+          "input",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "input": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

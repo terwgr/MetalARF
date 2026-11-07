@@ -1,0 +1,112 @@
+#ifndef RRFS_RUC_LAND_SUPPORT_MSL
+#define RRFS_RUC_LAND_SUPPORT_MSL
+#include <metal_stdlib>
+using namespace metal;
+#include "hexv842_mpas_thompson_column_math.metalh"
+#include "soft_glibc_solar_trig.metalh"
+using namespace ntc;
+struct RRange{int lo,hi;};
+template<class T> struct FArray{
+ device T* p;int lo1,lo2,lo3,s1,s2,s3,n1,n2,n3;
+ device T& operator()(int i)const{return p[(i-lo1)*s1];}
+ device T& operator()(int i,int j)const{return p[(i-lo1)*s1+(j-lo2)*s2];}
+ device T& operator()(int i,int j,int k)const{return p[(i-lo1)*s1+(j-lo2)*s2+(k-lo3)*s3];}
+ FArray operator()(RRange r)const{int lo=r.lo?r.lo:lo1,hi=r.hi?r.hi:lo1+n1-1;return {p+(lo-lo1)*s1,1,1,1,s1,0,0,hi-lo+1,1,1};}
+ FArray operator()(int i,RRange r,int k)const{int lo=r.lo?r.lo:lo2,hi=r.hi?r.hi:lo2+n2-1;return {p+(i-lo1)*s1+(lo-lo2)*s2+(k-lo3)*s3,1,1,1,s2,0,0,hi-lo+1,1,1};}
+};
+template<class T,class U> inline void ruc_assign(FArray<T> a,U v){for(int k=0;k<a.n3;++k)for(int j=0;j<a.n2;++j)for(int i=0;i<a.n1;++i)a.p[i*a.s1+j*a.s2+k*a.s3]=v;}
+template<class T> inline void ruc_assign(FArray<T> a,FArray<T> v){for(int k=0;k<a.n3;++k)for(int j=0;j<a.n2;++j)for(int i=0;i<a.n1;++i)a.p[i*a.s1+j*a.s2+k*a.s3]=v.p[i*v.s1+j*v.s2+k*v.s3];}
+struct Tables {FArray<F> bb; F cfactr_data; int crop; FArray<F> drysmc; FArray<F> hc; FArray<int> ifortbl; FArray<F> laitbl; FArray<F> lemitbl; FArray<F> maxsmc; int natural; FArray<F> pctbl; FArray<F> qtz; FArray<F> refsmc; FArray<F> rgltbl; F rsmax_data; FArray<F> rstbl; FArray<F> satdk; FArray<F> satpsi; int targetcell; int urban; FArray<F> wltsmc; FArray<F> z0tbl;};
+inline Tables load_land_tables(device float* p){Tables t;
+ t.bb={reinterpret_cast<device F*>(p+612),1,1,1,1,0,0,30,1,1};
+ t.cfactr_data=f32_word(as_type<uint>(p[608]));
+ t.crop=reinterpret_cast<device const int*>(p)[3];
+ t.drysmc={reinterpret_cast<device F*>(p+642),1,1,1,1,0,0,30,1,1};
+ t.hc={reinterpret_cast<device F*>(p+672),1,1,1,1,0,0,30,1,1};
+ t.ifortbl={reinterpret_cast<device int*>(p+6),1,1,1,1,0,0,50,1,1};
+ t.laitbl={reinterpret_cast<device F*>(p+256),1,1,1,1,0,0,50,1,1};
+ t.lemitbl={reinterpret_cast<device F*>(p+406),1,1,1,1,0,0,50,1,1};
+ t.maxsmc={reinterpret_cast<device F*>(p+702),1,1,1,1,0,0,30,1,1};
+ t.natural=reinterpret_cast<device const int*>(p)[2];
+ t.pctbl={reinterpret_cast<device F*>(p+456),1,1,1,1,0,0,50,1,1};
+ t.qtz={reinterpret_cast<device F*>(p+882),1,1,1,1,0,0,30,1,1};
+ t.refsmc={reinterpret_cast<device F*>(p+732),1,1,1,1,0,0,30,1,1};
+ t.rgltbl={reinterpret_cast<device F*>(p+156),1,1,1,1,0,0,50,1,1};
+ t.rsmax_data=f32_word(as_type<uint>(p[609]));
+ t.rstbl={reinterpret_cast<device F*>(p+106),1,1,1,1,0,0,50,1,1};
+ t.satdk={reinterpret_cast<device F*>(p+792),1,1,1,1,0,0,30,1,1};
+ t.satpsi={reinterpret_cast<device F*>(p+762),1,1,1,1,0,0,30,1,1};
+ t.targetcell=reinterpret_cast<device const int*>(p)[954];
+ t.urban=reinterpret_cast<device const int*>(p)[4];
+ t.wltsmc={reinterpret_cast<device F*>(p+852),1,1,1,1,0,0,30,1,1};
+ t.z0tbl={reinterpret_cast<device F*>(p+356),1,1,1,1,0,0,50,1,1};
+ return t;}
+struct Arena{
+ device F* p;int used,stride;device atomic_int* error;bool preparation_only;device const int* entry_ilnb;device int* snowtemp_calls;device F* tbq;
+ template<class T> FArray<T> alloc(int lo,int hi,int lo2=1,int hi2=1,int lo3=1,int hi3=1){device T* v=reinterpret_cast<device T*>(p+used*stride);int n1=hi-lo+1,n2=hi2-lo2+1;used+=n1*n2*(hi3-lo3+1);return {v,lo,lo2,lo3,stride,n1*stride,n1*n2*stride,n1,n2,hi3-lo3+1};}
+};
+struct ArenaScope{thread Arena& a;int mark;ArenaScope(thread Arena& v,int m):a(v),mark(m){} ~ArenaScope(){a.used=mark;}};
+template<class T> inline T ruc_max(T a,T b){return a>b?a:b;}
+template<class T> inline T ruc_min(T a,T b){return a<b?a:b;}
+inline int to_i32(F x){return int(as_type<float>(x.bits));}
+inline void atomicOr(device atomic_int* p,int value){atomic_fetch_or_explicit(p,value,memory_order_relaxed);}
+constant F g=F(9.80616f),rhowater=F(1000.f),piconst=F(3.141592653589793f),ep_1=F(.6083624362945557f),ep_2=F(.6217504332755633f),r_d=F(287.f),r_v=F(461.6f),cp=F(1004.5f),xlv=F(2.50e6f),xls=F(2.85e6f),xlf=F(3.50e5f),t00=F(273.15f),p1000mb=F(100000.f);
+inline F rrfs_exp_fma(F x){return tc_exp(x);}
+inline F rrfs_gfk_pow(F x,F y){return f32_word(soft_gfk_pow_bits(x.bits,y.bits));}
+inline F rrfs_copysign(F a,F b){return f32_word((a.bits&0x7fffffffu)|(b.bits&0x80000000u));}
+inline F rrfs_fma(F a,F b,F c){
+ const ulong A=soft64_from_f32_bits(a.bits),B=soft64_from_f32_bits(b.bits),C=soft64_from_f32_bits(c.bits);
+ bool finite=soft32_is_finite(a.bits)&&soft32_is_finite(b.bits)&&soft32_is_finite(c.bits);
+ ulong P=soft64_mul(A,B),S=soft64_add(P,C);
+ if(!finite||soft64_is_zero(S)||!soft64_is_finite(S))return f32_word(soft64_to_f32_bits(soft64_fma(A,B,C)));
+ ulong bb=soft64_sub(S,P),err=soft64_add(soft64_sub(P,soft64_sub(S,bb)),soft64_sub(C,bb));
+ if(!soft64_is_zero(err)&&(S&1ul)==0ul){bool grow=soft64_sign(err)==soft64_sign(S);S=grow?S+1ul:S-1ul;}
+ return f32_word(soft64_to_f32_bits(S));
+}
+// CORE-MATH tanhf: see licenses/LICENSE-CORE-MATH-MIT.txt.
+inline F rrfs_tanhf(F x){
+Soft8 z = ( Soft8 ) x ;
+uint ux = __float_as_uint ( x ) ;
+int e = ( ux >> 23 ) & 0xff ;
+if ( e == 0xff ) {
+if ( ux << 9 ) return x + x ;
+return ux >> 31 ? - f32_word(0x3f800000u) : f32_word(0x3f800000u) ;
+}
+if ( e < 115 ) {
+if ( e < 102 ) {
+if ( ( ux << 1 ) == 0 ) return x ;
+return rrfs_fma ( - x , fabs ( x ) , x ) ;
+}
+F x2 = x * x ;
+return rrfs_fma ( x , - f32_word(0x3eaaaaabu) * x2 , x ) ;
+}
+if ( ( ux << 1 ) > ( 0x41102cb3u << 1 ) ) return rrfs_copysign ( f32_word(0x3f800000u) , x ) - rrfs_copysign ( f32_word(0x33000000u) , x ) ;
+Soft8 z2 = z * z , z4 = z2 * z2 , z8 = z4 * z4 ;
+const Soft8 cn [ ] = {
+SD8(0x3ff0000000000000ul) , SD8(0x3fc30877b8b72d33ul) , SD8(0x3f7694aa09ae9e5eul) , SD8(0x3f14101377abb729ul) , SD8(0x3e9e0392b1db0018ul) , SD8(0x3e12533756e546f7ul) , SD8(0x3d6d62e5abe6ae8aul) , SD8(0x3c9b06be534182deul) }
+;
+const Soft8 cd [ ] = {
+SD8(0x3ff0000000000000ul) , SD8(0x3fded99131b0ebeaul) , SD8(0x3fa0d27ed6c95a69ul) , SD8(0x3f47cbdaca0e9fccul) , SD8(0x3edb4e60b892578eul) , SD8(0x3e5a6f707c5c71abul) , SD8(0x3dc35a8b6e2cd94cul) , SD8(0x3d0ca8230677aa01ul) }
+;
+Soft8 n0 = cn [ 0 ] + z2 * cn [ 1 ] , n2 = cn [ 2 ] + z2 * cn [ 3 ] ;
+Soft8 n4 = cn [ 4 ] + z2 * cn [ 5 ] , n6 = cn [ 6 ] + z2 * cn [ 7 ] ;
+n0 = n0 + z4 * n2 ;
+n4 = n4 + z4 * n6 ;
+n0 = n0 + z8 * n4 ;
+Soft8 d0 = cd [ 0 ] + z2 * cd [ 1 ] , d2 = cd [ 2 ] + z2 * cd [ 3 ] ;
+Soft8 d4 = cd [ 4 ] + z2 * cd [ 5 ] , d6 = cd [ 6 ] + z2 * cd [ 7 ] ;
+d0 = d0 + z4 * d2 ;
+d4 = d4 + z4 * d6 ;
+d0 = d0 + z8 * d4 ;
+return F ( __ddiv_rn ( z * n0 , d0 ) ) ;
+
+}
+constant int irrig_opt = 0;
+constant int isncond_opt = 2;
+constant int isncovr_opt = 2;
+constant float sncovfac_values[] = {0.030f, 0.030f, 0.030f, 0.030f, 0.030f, 0.016f, 0.016f, 0.020f, 0.020f, 0.020f, 0.020f, 0.014f, 0.042f, 0.026f, 0.030f, 0.016f, 0.030f, 0.030f, 0.030f, 0.030f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f, 0.000f};
+inline F sncovfac(int i){return F(sncovfac_values[i-1]);}
+inline F rrfs_gfk_log(F x){return f32_word(soft_gfk_log(x.bits));}
+inline F ruc_log10f_rn(F x){return f32_word(native_thompson_log10_bits(x.bits));}
+inline F glibc_cosf(F x){return f32_word(soft_glibc_solar_cosf(x.bits));}
+#endif

@@ -1,0 +1,154 @@
+{
+  "schema": "measured-legacy-source-extension-v1",
+  "baseline": "cd336e62d6e6b6312c9636e0fdfff84801909b6a",
+  "measured_tip": "5428796cb07a5ae063b25a06baa4e4db1867a677",
+  "sources": {
+    "woof/core/acoustic.py": {
+      "before": {
+        "bytes": 34602,
+        "sha256": "2552a40bdf24715e611f5500786a4636a7fb77daac45a6e2bc4b04d6f6ca3384"
+      },
+      "after": {
+        "bytes": 43548,
+        "sha256": "1cd7142e8eb7490bddb9f761d5d8487ce103b31f373415edd617c0376d39f04a"
+      }
+    },
+    "woof/core/constants.py": {
+      "before": {
+        "bytes": 2979,
+        "sha256": "76c8c11d1a75d17fd54d0a80646cec9dde04f649247ec2347d3d32e6c0500e9e"
+      },
+      "after": {
+        "bytes": 5308,
+        "sha256": "5f1878bc3bb2b13f458814d7dc43a0062ac7e6c16363397ebda29169481d2c35"
+      }
+    },
+    "woof/core/dycore.py": {
+      "before": {
+        "bytes": 247314,
+        "sha256": "d4cc20c6a23c94f169228d19937724bb678b51b4e597495af09a1672ce8c263b"
+      },
+      "after": {
+        "bytes": 256481,
+        "sha256": "c91bac69332941a1f979490a07c2228dacd4b46cba7b0d3c8c3b0b747760bb9e"
+      }
+    },
+    "woof/core/kernels/__init__.py": {
+      "before": {
+        "bytes": 28570,
+        "sha256": "e44a76e72880e6cbacee4a3cf299ab7e1a0b418e737355b3b64bfd60358b67cc"
+      },
+      "after": {
+        "bytes": 56255,
+        "sha256": "9db2f8d40bbad8fde2d4707051842f3ae94ebcee0b79153d04c1d1c2891a5183"
+      }
+    },
+    "woof/wrf_exact.py": {
+      "before": {
+        "bytes": 5198,
+        "sha256": "46a2451b5ac0408d8c1fb63ea801debd99c05a66bf110cb509f372020b1c3c57"
+      },
+      "after": {
+        "bytes": 6709,
+        "sha256": "8b548be36a242f45416c0eda78771e6f09628d65f5726538f71aa51bdb59abcc"
+      }
+    },
+    "woof/nvrtc_ptx_cache.py": {
+      "before": {
+        "bytes": 10626,
+        "sha256": "78c42865a01763a13d0349321699913de51ba2465508900bbfc4c64794e61134"
+      },
+      "after": {
+        "bytes": 14060,
+        "sha256": "6070bc5dae66835f55d7017708d685cae9acdab4c24e5c7130f4d506b968470f"
+      }
+    },
+    "woof/verify/smallstep_vertical_oracle.py": {
+      "before": {
+        "sha256": "825964e10ab08632e9e89d13e6ed77edca0708a02accadce857ba47f18de61cc",
+        "bytes": 30394
+      },
+      "after": {
+        "bytes": 30520,
+        "sha256": "e4ceef690dd5c802230d9b2822a49510439197917411eef9879404dda997a2c7"
+      }
+    },
+    "woof/core/kernels/acoustic.cu": {
+      "before": {
+        "bytes": 107777,
+        "sha256": "89af01f989f6a61a697fba00f1effcfe393d74016a52a5cd100a184701adbc25"
+      },
+      "after": {
+        "bytes": 107767,
+        "sha256": "14f8d637ecfa54b7b8c19d80fc2bbf5ad5566f6fdc57b9671d0cfa8566f4331b"
+      }
+    }
+  },
+  "measurements": {
+    "coordinate": {
+      "arrays": 272,
+      "words": 178128,
+      "changed_arrays": 0,
+      "different_words": 0,
+      "changes": {}
+    },
+    "drivers": {
+      "arrays": 2618,
+      "words": 31686592,
+      "changed_arrays": 0,
+      "different_words": 0,
+      "changes": {}
+    },
+    "acoustic": {
+      "arrays": 132,
+      "words": 305632,
+      "changed_arrays": 0,
+      "different_words": 0,
+      "changes": {}
+    }
+  },
+  "scope": "Fresh base versus tip output hashes on one card. Where the older frozen coordinate and driver captures differ at both trees, no equality with those outputs is claimed.",
+  "numerics": "strict",
+  "numerics_note": "Replayed with GPUWM_NUMERICS=strict so the modules' declared --fmad=false is honoured (fast numerics, the default since 421046140ee, drops it); the frozen word proofs are strict-numerics claims.",
+  "device": "b'NVIDIA GeForce RTX 5090'",
+  "nvrtc_version": [
+    13,
+    4
+  ],
+  "cupy_version": "14.2.0",
+  "fast_numerics_measured": {
+    "decision": "2.9.3 (lead-arwen, 2026-10-19): fast stays the default; WRF exactness is claimed in strict mode only; module_options() is the declared tuple and numerics.effective_options() is what compiles and what the image caches and receipts record.",
+    "effective_options_fast": "the declared DIFFUSION_OPTIONS tuple without the no-contraction option; every other declared option is kept",
+    "horizontal_driver_arrays_differing_tip_vs_base": [
+      120,
+      364
+    ],
+    "vertical_driver_arrays_differing_tip_vs_base": [
+      241,
+      1764
+    ],
+    "coordinate_words_off_native_wrf": [
+      1123,
+      178128
+    ],
+    "strict_differing_words": 0,
+    "source": "replays on an RTX 5090 by lane/opus-tests 3f3246aaa41 (fast and strict, base 2.8.9 vs tip)"
+  },
+  "loader_fold_replay": {
+    "receipt": "loader-fold-source-replay.json",
+    "sha256": "8e5d6a3a9b5f53d9f30542fc446e641c202d31a9bfcc4d4419cb251dc306af97",
+    "base": "89107bdeb2d0b74e4fd42c79a1cb72d1af67ac74",
+    "scope": "Maintained coordinate, driver and published acoustic captures only. Every measured candidate array equals the BASE array byte for byte; whole-forecast and NSSL-2 compiled-image identity were not measured."
+  },
+  "loader_slimming_replay": {
+    "receipt": "slimming-loader-source-replay.json",
+    "sha256": "fd9158e239390160e764081df3e8470f5c1e17b7cf0c6d9f6913aab9d6ab5c60"
+  },
+  "module_sources": {
+    "acoustic": {
+      "before": "22704608360351a64d84bbf90ed1574e8e62edb5b06f5deea85376d93fca5cf8",
+      "after": "5c7205005dfa7457f8e27bc1f636a751a297f78710b03bfd5920256de3d2d57c",
+      "source": "woof/core/kernels/acoustic.cu"
+    }
+  }
+}

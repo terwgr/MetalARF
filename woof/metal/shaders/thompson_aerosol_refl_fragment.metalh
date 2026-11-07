@@ -1,0 +1,679 @@
+// Generated from woof/core/kernels/thompson_aerosol_state.cu
+// by tools/mp28_metal/generate_reflectivity.py; do not edit.
+#pragma clang fp contract(off)
+namespace aa_refl {
+constant ulong GFK_EXP2F_TAB [ 32 ] = {
+0x3ff0000000000000ul , 0x3fefd9b0d3158574ul , 0x3fefb5586cf9890ful , 0x3fef9301d0125b51ul , 0x3fef72b83c7d517bul , 0x3fef54873168b9aaul , 0x3fef387a6e756238ul , 0x3fef1e9df51fdee1ul , 0x3fef06fe0a31b715ul , 0x3feef1a7373aa9cbul , 0x3feedea64c123422ul , 0x3feece086061892dul , 0x3feebfdad5362a27ul , 0x3feeb42b569d4f82ul , 0x3feeab07dd485429ul , 0x3feea47eb03a5585ul , 0x3feea09e667f3bcdul , 0x3fee9f75e8ec5f74ul , 0x3feea11473eb0187ul , 0x3feea589994cce13ul , 0x3feeace5422aa0dbul , 0x3feeb737b0cdc5e5ul , 0x3feec49182a3f090ul , 0x3feed503b23e255dul , 0x3feee89f995ad3adul , 0x3feeff76f2fb5e47ul , 0x3fef199bdd85529cul , 0x3fef3720dcef9069ul , 0x3fef5818dcfba487ul , 0x3fef7c97337b9b5ful , 0x3fefa4afa2a490daul , 0x3fefd0765b6e4540ul }
+;
+
+constant Soft8 GFK_POWF_INVC [ 16 ] = {
+SD8(0x3ff661ec79f8f3beul) , SD8(0x3ff571ed4aaf883dul) , SD8(0x3ff49539f0f010b0ul) , SD8(0x3ff3c995b0b80385ul) , SD8(0x3ff30d190c8864a5ul) , SD8(0x3ff25e227b0b8ea0ul) , SD8(0x3ff1bb4a4a1a343ful) , SD8(0x3ff12358f08ae5baul) , SD8(0x3ff0953f419900a7ul) , SD8(0x3ff0000000000000ul) , SD8(0x3fee608cfd9a47acul) , SD8(0x3feca4b31f026aa0ul) , SD8(0x3feb2036576afce6ul) , SD8(0x3fe9c2d163a1aa2dul) , SD8(0x3fe886e6037841edul) , SD8(0x3fe767dcf5534862ul) }
+;
+
+constant Soft8 GFK_POWF_LOGC [ 16 ] = {
+- SD8(0x3fdefec65b963019ul) , - SD8(0x3fdb0b6832d4fca4ul) , - SD8(0x3fd7418b0a1fb77bul) , - SD8(0x3fd39de91a6dcf7bul) , - SD8(0x3fd01d9bf3f2b631ul) , - SD8(0x3fc97c1d1b3b7af0ul) , - SD8(0x3fc2f9e393af3c9ful) , - SD8(0x3fb960cbbf788d5cul) , - SD8(0x3faa6f9db6475fceul) , SD8(0x0000000000000000ul) , SD8(0x3fb338ca9f24f53dul) , SD8(0x3fc476a9543891baul) , SD8(0x3fce840b4ac4e4d2ul) , SD8(0x3fd40645f0c6651cul) , SD8(0x3fd88e9c2c1b9ff8ul) , SD8(0x3fdce0a44eb17bccul) }
+;
+
+constant Soft8 GFK_POWF_A [ 5 ] = {
+SD8(0x3fd27616c9496e0bul) , - SD8(0x3fd71969a075c67aul) , SD8(0x3fdec70a6ca7baddul) , - SD8(0x3fe7154748bef6c8ul) , SD8(0x3ff71547652ab82bul) }
+;
+
+static inline float gfk_d2f_rn ( Soft8 y ) {
+Soft8 a = fabs ( y ) ;
+if ( a > SD8 ( 0x0000000000000000ul ) && a < SD8 ( 0x3810000000000000ul ) ) {
+Soft8 scaled = rint ( a * SD8 ( 0x4940000000000000ul ) ) ;
+uint m = ( uint ) scaled ;
+uint s = ( __double_as_longlong ( y ) < 0l ) ? 0x80000000u : 0u ;
+return __uint_as_float ( s | m ) ;
+}
+return __double2float_rn ( y ) ;
+}
+
+static inline int gfk_checkint ( uint iy ) {
+int e = ( int ) ( iy >> 23 & 0xffu ) ;
+if ( e < 0x7f ) return 0 ;
+if ( e > 0x7f + 23 ) return 2 ;
+if ( iy & ( ( 1u << ( 0x7f + 23 - e ) ) - 1u ) ) return 0 ;
+if ( iy & ( 1u << ( 0x7f + 23 - e ) ) ) return 1 ;
+return 2 ;
+}
+
+static inline bool gfk_zeroinfnan ( uint ix ) {
+return 2u * ix - 1u >= 2u * 0x7f800000u - 1u ;
+}
+
+static inline float thompson_aa_d2f ( Soft8 y ) {
+return gfk_d2f_rn ( y ) ;
+}
+
+static inline Soft8 thompson_aa_powf_log2 ( uint ix ) {
+const uint tmp = ix - 0x3f330000u ;
+const int i = ( int ) ( ( tmp >> 19 ) & 15u ) ;
+const uint top = tmp & 0xff800000u ;
+const uint iz = ix - top ;
+const int k = ( int ) top >> 23 ;
+const Soft8 z = ( Soft8 ) __uint_as_float ( iz ) ;
+const Soft8 r = __fma_rn ( z , GFK_POWF_INVC [ i ] , - SD8 ( 0x3ff0000000000000ul ) ) ;
+const Soft8 y0 = __dadd_rn ( GFK_POWF_LOGC [ i ] , ( Soft8 ) k ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+const Soft8 y = __fma_rn ( GFK_POWF_A [ 0 ] , r , GFK_POWF_A [ 1 ] ) ;
+const Soft8 p = __fma_rn ( GFK_POWF_A [ 2 ] , r , GFK_POWF_A [ 3 ] ) ;
+const Soft8 r4 = __dmul_rn ( r2 , r2 ) ;
+Soft8 q = __fma_rn ( GFK_POWF_A [ 4 ] , r , y0 ) ;
+q = __fma_rn ( p , r2 , q ) ;
+return __fma_rn ( y , r4 , q ) ;
+}
+
+static inline Soft8 thompson_aa_powf_exp2 ( Soft8 xd , ulong sign_bias ) {
+Soft8 kd = __dadd_rn ( xd , ( aa_div ( SD8 ( 0x4338000000000000ul ) , SD8 ( 0x4040000000000000ul ) ) ) ) ;
+const ulong ki = ( ulong ) __double_as_longlong ( kd ) ;
+kd = __dsub_rn ( kd , ( aa_div ( SD8 ( 0x4338000000000000ul ) , SD8 ( 0x4040000000000000ul ) ) ) ) ;
+const Soft8 r = __dsub_rn ( xd , kd ) ;
+ulong t = GFK_EXP2F_TAB [ ki & 31ul ] ;
+t += ( ki + sign_bias ) << ( 52 - 5 ) ;
+const Soft8 s = __longlong_as_double ( ( long ) t ) ;
+const Soft8 z = __fma_rn ( SD8 ( 0x3fac6af84b912394ul ) , r , SD8 ( 0x3fcebfce50fac4f3ul ) ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+Soft8 y = __fma_rn ( SD8 ( 0x3fe62e42ff0c52d6ul ) , r , SD8 ( 0x3ff0000000000000ul ) ) ;
+y = __fma_rn ( z , r2 , y ) ;
+return __dmul_rn ( y , s ) ;
+}
+
+static inline float thompson_aa_powf ( float x , float y ) {
+uint sign_bias = 0u ;
+uint ix = __float_as_uint ( x ) ;
+const uint iy = __float_as_uint ( y ) ;
+if ( ix - 0x00800000u >= 0x7f800000u - 0x00800000u || gfk_zeroinfnan ( iy ) ) {
+if ( gfk_zeroinfnan ( iy ) ) {
+if ( 2u * iy == 0u ) return 1.0f ;
+if ( ix == 0x3f800000u ) return 1.0f ;
+if ( 2u * ix > 2u * 0x7f800000u || 2u * iy > 2u * 0x7f800000u ) return __fadd_rn ( x , y ) ;
+if ( 2u * ix == 2u * 0x3f800000u ) return 1.0f ;
+if ( ( 2u * ix < 2u * 0x3f800000u ) == ! ( iy & 0x80000000u ) ) return 0.0f ;
+return __fmul_rn ( y , y ) ;
+}
+if ( gfk_zeroinfnan ( ix ) ) {
+float x2 = __fmul_rn ( x , x ) ;
+if ( ( ix & 0x80000000u ) && gfk_checkint ( iy ) == 1 ) x2 = - x2 ;
+return ( iy & 0x80000000u ) ? __fdiv_rn ( 1.0f , x2 ) : x2 ;
+}
+if ( ix & 0x80000000u ) {
+const int yint = gfk_checkint ( iy ) ;
+if ( yint == 0 ) return __int_as_float ( 0x7fc00000 ) ;
+if ( yint == 1 ) sign_bias = 1u << ( 5 + 11 ) ;
+ix &= 0x7fffffffu ;
+}
+if ( ix < 0x00800000u ) {
+ix = __float_as_uint ( __fmul_rn ( x , 8388608.0f ) ) & 0x7fffffffu ;
+ix -= 23u << 23 ;
+}
+}
+const Soft8 logx = thompson_aa_powf_log2 ( ix ) ;
+const Soft8 ylogx = __dmul_rn ( ( Soft8 ) y , logx ) ;
+const uint hi = ( uint ) ( ( ( ulong ) __double_as_longlong ( ylogx ) >> 47 ) & 0xfffful ) ;
+if ( hi >= ( uint ) ( ( ( ulong ) __double_as_longlong ( SD8 ( 0x405f800000000000ul ) ) >> 47 ) & 0xfffful ) ) {
+if ( ylogx > SD8 ( 0x405fffffffd1d571ul ) ) return sign_bias ? __int_as_float ( 0xff800000 ) : __int_as_float ( 0x7f800000 ) ;
+if ( ylogx <= - SD8 ( 0x4062c00000000000ul ) ) return sign_bias ? - 0.0f : 0.0f ;
+}
+return thompson_aa_d2f ( thompson_aa_powf_exp2 ( ylogx , ( ulong ) sign_bias ) ) ;
+}
+
+static inline Soft8 thompson_aa_exp ( Soft8 x ) {
+return glibc_exp ( x ) ;
+}
+
+static inline Soft8 thompson_aa_log ( Soft8 x ) {
+return glibc_log ( x ) ;
+}
+
+static inline Soft8 thompson_aa_pow ( Soft8 x , Soft8 y ) {
+return glibc_pow ( x , y ) ;
+}
+
+static inline Soft8 thompson_aa_log10 ( Soft8 x ) {
+ulong hx = ( ulong ) __double_as_longlong ( x ) ;
+long k ;
+if ( hx <= 0x000ffffffffffffful || ( hx >> 63 ) ) {
+if ( ( hx & 0x7ffffffffffffffful ) == 0ul ) return __longlong_as_double ( ( long ) 0xfff0000000000000ul ) ;
+if ( hx >> 63 ) return __longlong_as_double ( ( long ) 0x7ff8000000000000ul ) ;
+k = - 1023 - 54 ;
+hx = ( ulong ) __double_as_longlong ( __dmul_rn ( x , SD8 ( 0x4350000000000000ul ) ) ) ;
+}
+else {
+k = - 1023 ;
+}
+if ( hx > 0x7feffffffffffffful ) return __dadd_rn ( x , x ) ;
+k += ( long ) ( hx >> 52 ) ;
+const long i = ( long ) ( ( ( ulong ) k ) >> 63 ) ;
+k += i ;
+hx = ( hx & 0x000ffffffffffffful ) | ( ( ulong ) ( 0x3ff - i ) << 52 ) ;
+const Soft8 y = ( Soft8 ) k ;
+const Soft8 z = __dadd_rn ( __dmul_rn ( SD8 ( 0x3fdbcb7b1526e50eul ) , thompson_aa_log ( __longlong_as_double ( ( long ) hx ) ) ) , __dmul_rn ( y , SD8 ( 0x3d59fef311f12b36ul ) ) ) ;
+return __dadd_rn ( z , __dmul_rn ( y , SD8 ( 0x3fd34413509f6000ul ) ) ) ;
+}
+
+static inline Soft8 thompson_aa_hypot ( Soft8 x , Soft8 y ) {
+const Soft8 fx = fabs ( x ) , fy = fabs ( y ) ;
+const Soft8 ax = fx < fy ? fy : fx ;
+const Soft8 ay = fx < fy ? fx : fy ;
+if ( ! ( ax < SD8 ( 0x7fe1ccf385ebc8a0ul ) ) || ax == SD8 ( 0x0000000000000000ul ) ) return __dadd_rn ( ax , ay ) ;
+if ( ay <= __dmul_rn ( ax , SD8 ( 0x3c90000000000000ul ) ) ) return __dadd_rn ( ax , ay ) ;
+const Soft8 h = __dsqrt_rn ( __dadd_rn ( __dmul_rn ( ax , ax ) , __dmul_rn ( ay , ay ) ) ) ;
+Soft8 t1 , t2 ;
+if ( h <= __dmul_rn ( SD8 ( 0x4000000000000000ul ) , ay ) ) {
+const Soft8 delta = __dsub_rn ( h , ay ) ;
+t1 = __dmul_rn ( ax , __dsub_rn ( __dmul_rn ( SD8 ( 0x4000000000000000ul ) , delta ) , ax ) ) ;
+t2 = __dmul_rn ( __dsub_rn ( delta , __dmul_rn ( SD8 ( 0x4000000000000000ul ) , __dsub_rn ( ax , ay ) ) ) , delta ) ;
+}
+else {
+const Soft8 delta = __dsub_rn ( h , ax ) ;
+t1 = __dmul_rn ( __dmul_rn ( SD8 ( 0x4000000000000000ul ) , delta ) , __dsub_rn ( ax , __dmul_rn ( SD8 ( 0x4000000000000000ul ) , ay ) ) ) ;
+t2 = __dadd_rn ( __dmul_rn ( __dsub_rn ( __dmul_rn ( SD8 ( 0x4010000000000000ul ) , delta ) , ay ) , ay ) , __dmul_rn ( delta , delta ) ) ;
+}
+return __dsub_rn ( h , __ddiv_rn ( __dadd_rn ( t1 , t2 ) , __dmul_rn ( SD8 ( 0x4000000000000000ul ) , h ) ) ) ;
+}
+
+static inline Soft8 thompson_aa_log1p ( Soft8 x ) {
+const Soft8 ln2_hi = SD8 ( 0x3fe62e42fee00000ul ) ;
+const Soft8 ln2_lo = SD8 ( 0x3dea39ef35793c76ul ) ;
+const Soft8 lp1 = SD8 ( 0x3fe5555555555593ul ) ;
+const Soft8 lp2 = SD8 ( 0x3fd999999997fa04ul ) ;
+const Soft8 lp3 = SD8 ( 0x3fd2492494229359ul ) ;
+const Soft8 lp4 = SD8 ( 0x3fcc71c51d8e78aful ) ;
+const Soft8 lp5 = SD8 ( 0x3fc7466496cb03deul ) ;
+const Soft8 lp6 = SD8 ( 0x3fc39a09d078c69ful ) ;
+const Soft8 lp7 = SD8 ( 0x3fc2f112df3e5244ul ) ;
+const int hx = ( int ) ( ( ulong ) __double_as_longlong ( x ) >> 32 ) ;
+const int ax = hx & 0x7fffffff ;
+int k = 1 , hu = 0 ;
+Soft8 f = SD8 ( 0x0000000000000000ul ) , c = SD8 ( 0x0000000000000000ul ) ;
+if ( hx < 0x3FDA827A ) {
+if ( ax >= 0x3ff00000 ) {
+if ( x == - SD8 ( 0x3ff0000000000000ul ) ) return __longlong_as_double ( ( long ) 0xfff0000000000000ul ) ;
+return __longlong_as_double ( ( long ) 0x7ff8000000000000ul ) ;
+}
+if ( ax < 0x3e200000 ) {
+if ( ax < 0x3c900000 ) return x ;
+return __fma_rn ( - __dmul_rn ( x , x ) , SD8 ( 0x3fe0000000000000ul ) , x ) ;
+}
+if ( hx > 0 || hx <= ( int ) 0xbfd2bec4 ) {
+k = 0 ;
+f = x ;
+hu = 1 ;
+}
+}
+else if ( hx >= 0x7ff00000 ) {
+return __dadd_rn ( x , x ) ;
+}
+if ( k != 0 ) {
+Soft8 u ;
+if ( hx < 0x43400000 ) {
+u = __dadd_rn ( SD8 ( 0x3ff0000000000000ul ) , x ) ;
+hu = ( int ) ( ( ulong ) __double_as_longlong ( u ) >> 32 ) ;
+k = ( hu >> 20 ) - 1023 ;
+c = k > 0 ? __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , __dsub_rn ( u , x ) ) : __dsub_rn ( x , __dsub_rn ( u , SD8 ( 0x3ff0000000000000ul ) ) ) ;
+c = __ddiv_rn ( c , u ) ;
+}
+else {
+u = x ;
+hu = ( int ) ( ( ulong ) __double_as_longlong ( u ) >> 32 ) ;
+k = ( hu >> 20 ) - 1023 ;
+c = SD8 ( 0x0000000000000000ul ) ;
+}
+hu &= 0x000fffff ;
+const ulong low = ( ulong ) __double_as_longlong ( u ) & 0xfffffffful ;
+if ( hu < 0x6a09e ) {
+u = __longlong_as_double ( ( long ) ( ( ( ulong ) ( hu | 0x3ff00000 ) << 32 ) | low ) ) ;
+}
+else {
+k += 1 ;
+u = __longlong_as_double ( ( long ) ( ( ( ulong ) ( hu | 0x3fe00000 ) << 32 ) | low ) ) ;
+hu = ( 0x00100000 - hu ) >> 2 ;
+}
+f = __dsub_rn ( u , SD8 ( 0x3ff0000000000000ul ) ) ;
+}
+const Soft8 dk = ( Soft8 ) k ;
+const Soft8 hfsq = __dmul_rn ( __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , f ) , f ) ;
+if ( hu == 0 ) {
+if ( f == SD8 ( 0x0000000000000000ul ) ) {
+if ( k == 0 ) return SD8 ( 0x0000000000000000ul ) ;
+return __fma_rn ( dk , ln2_hi , __fma_rn ( dk , ln2_lo , c ) ) ;
+}
+const Soft8 r = __dmul_rn ( __fma_rn ( - SD8 ( 0x3fe5555555555555ul ) , f , SD8 ( 0x3ff0000000000000ul ) ) , hfsq ) ;
+if ( k == 0 ) return __dsub_rn ( f , r ) ;
+return __fma_rn ( dk , ln2_hi , - __dsub_rn ( __dsub_rn ( r , __fma_rn ( dk , ln2_lo , c ) ) , f ) ) ;
+}
+const Soft8 s = __ddiv_rn ( f , __dadd_rn ( SD8 ( 0x4000000000000000ul ) , f ) ) ;
+const Soft8 z = __dmul_rn ( s , s ) ;
+const Soft8 r2 = __fma_rn ( z , lp3 , lp2 ) ;
+const Soft8 r3 = __fma_rn ( z , lp5 , lp4 ) ;
+const Soft8 r4 = __fma_rn ( z , lp7 , lp6 ) ;
+const Soft8 z2 = __dmul_rn ( z , z ) ;
+const Soft8 z4 = __dmul_rn ( z2 , z2 ) ;
+const Soft8 z6 = __dmul_rn ( z4 , z2 ) ;
+Soft8 r = __fma_rn ( z , lp1 , __dmul_rn ( z2 , r2 ) ) ;
+r = __fma_rn ( z4 , r3 , r ) ;
+r = __fma_rn ( z6 , r4 , r ) ;
+const Soft8 t = __dmul_rn ( __dadd_rn ( hfsq , r ) , s ) ;
+if ( k == 0 ) return __dsub_rn ( f , __dsub_rn ( hfsq , t ) ) ;
+return __fma_rn ( dk , ln2_hi , - __dsub_rn ( __dsub_rn ( hfsq , __dadd_rn ( __fma_rn ( dk , ln2_lo , c ) , t ) ) , f ) ) ;
+}
+
+static inline Soft8 thompson_aa_atan_reduced ( Soft8 x ) {
+const Soft8 at0 = SD8 ( 0x3fd555555555550dul ) ;
+const Soft8 at1 = - SD8 ( 0x3fc999999998ebc4ul ) ;
+const Soft8 at2 = SD8 ( 0x3fc24924920083fful ) ;
+const Soft8 at3 = - SD8 ( 0x3fbc71c6fe231671ul ) ;
+const Soft8 at4 = SD8 ( 0x3fb745cdc54c206eul ) ;
+const Soft8 at5 = - SD8 ( 0x3fb3b0f2af749a6dul ) ;
+const Soft8 at6 = SD8 ( 0x3fb10d66a0d03d51ul ) ;
+const Soft8 at7 = - SD8 ( 0x3fadde2d52defd9aul ) ;
+const Soft8 at8 = SD8 ( 0x3fa97b4b24760debul ) ;
+const Soft8 at9 = - SD8 ( 0x3fa2b4442c6a6c2ful ) ;
+const Soft8 at10 = SD8 ( 0x3f90ad3ae322da11ul ) ;
+const Soft8 hi0 = SD8 ( 0x3fddac670561bb4ful ) ;
+const Soft8 hi1 = SD8 ( 0x3fe921fb54442d18ul ) ;
+const Soft8 hi2 = SD8 ( 0x3fef730bd281f69bul ) ;
+const Soft8 hi3 = SD8 ( 0x3ff921fb54442d18ul ) ;
+const Soft8 lo0 = SD8 ( 0x3c7a2b7f222f65e2ul ) ;
+const Soft8 lo1 = SD8 ( 0x3c81a62633145c07ul ) ;
+const Soft8 lo2 = SD8 ( 0x3c7007887af0cbbdul ) ;
+const Soft8 lo3 = SD8 ( 0x3c91a62633145c07ul ) ;
+const int hx = ( int ) ( ( ulong ) __double_as_longlong ( x ) >> 32 ) ;
+const int ix = hx & 0x7fffffff ;
+Soft8 hi = SD8 ( 0x0000000000000000ul ) , lo = SD8 ( 0x0000000000000000ul ) ;
+bool reduced = true ;
+if ( ix >= 0x44100000 ) {
+const Soft8 r = __dadd_rn ( hi3 , lo3 ) ;
+return hx > 0 ? r : - r ;
+}
+if ( ix < 0x3fdc0000 ) {
+if ( ix < 0x3e400000 ) return x ;
+reduced = false ;
+}
+else {
+x = fabs ( x ) ;
+if ( ix < 0x3ff30000 ) {
+if ( ix < 0x3fe60000 ) {
+hi = hi0 ;
+lo = lo0 ;
+x = __ddiv_rn ( __dsub_rn ( __dmul_rn ( SD8 ( 0x4000000000000000ul ) , x ) , SD8 ( 0x3ff0000000000000ul ) ) , __dadd_rn ( SD8 ( 0x4000000000000000ul ) , x ) ) ;
+}
+else {
+hi = hi1 ;
+lo = lo1 ;
+x = __ddiv_rn ( __dsub_rn ( x , SD8 ( 0x3ff0000000000000ul ) ) , __dadd_rn ( x , SD8 ( 0x3ff0000000000000ul ) ) ) ;
+}
+}
+else if ( ix < 0x40038000 ) {
+hi = hi2 ;
+lo = lo2 ;
+x = __ddiv_rn ( __dsub_rn ( x , SD8 ( 0x3ff8000000000000ul ) ) , __dadd_rn ( SD8 ( 0x3ff0000000000000ul ) , __dmul_rn ( SD8 ( 0x3ff8000000000000ul ) , x ) ) ) ;
+}
+else {
+hi = hi3 ;
+lo = lo3 ;
+x = __ddiv_rn ( - SD8 ( 0x3ff0000000000000ul ) , x ) ;
+}
+}
+const Soft8 z = __dmul_rn ( x , x ) ;
+const Soft8 w = __dmul_rn ( z , z ) ;
+const Soft8 s1 = __dmul_rn ( z , __dadd_rn ( at0 , __dmul_rn ( w , __dadd_rn ( at2 , __dmul_rn ( w , __dadd_rn ( at4 , __dmul_rn ( w , __dadd_rn ( at6 , __dmul_rn ( w , __dadd_rn ( at8 , __dmul_rn ( w , at10 ) ) ) ) ) ) ) ) ) ) ) ;
+const Soft8 s2 = __dmul_rn ( w , __dadd_rn ( at1 , __dmul_rn ( w , __dadd_rn ( at3 , __dmul_rn ( w , __dadd_rn ( at5 , __dmul_rn ( w , __dadd_rn ( at7 , __dmul_rn ( w , at9 ) ) ) ) ) ) ) ) ) ;
+const Soft8 xs = __dmul_rn ( x , __dadd_rn ( s1 , s2 ) ) ;
+if ( ! reduced ) return __dsub_rn ( x , xs ) ;
+const Soft8 r = __dsub_rn ( hi , __dsub_rn ( __dsub_rn ( xs , lo ) , x ) ) ;
+return hx < 0 ? - r : r ;
+}
+
+static inline Soft8 thompson_aa_atan2 ( Soft8 y , Soft8 x ) {
+const Soft8 pi_o_2 = SD8 ( 0x3ff921fb54442d18ul ) ;
+const Soft8 pi = SD8 ( 0x400921fb54442d18ul ) ;
+const Soft8 pi_lo = SD8 ( 0x3ca1a62633145c07ul ) ;
+if ( isnan ( x ) || isnan ( y ) ) return __dadd_rn ( x , y ) ;
+const ulong ux = ( ulong ) __double_as_longlong ( x ) ;
+const ulong uy = ( ulong ) __double_as_longlong ( y ) ;
+if ( x == SD8 ( 0x3ff0000000000000ul ) ) return thompson_aa_atan_reduced ( y ) ;
+const int m = ( int ) ( ( uy >> 63 ) & 1ul ) | ( int ) ( ( ( ux >> 63 ) & 1ul ) << 1 ) ;
+if ( y == SD8 ( 0x0000000000000000ul ) ) {
+if ( m < 2 ) return y ;
+return m == 2 ? pi : - pi ;
+}
+if ( x == SD8 ( 0x0000000000000000ul ) ) return ( uy >> 63 ) ? - pi_o_2 : pi_o_2 ;
+if ( isinf ( y ) ) return ( uy >> 63 ) ? - pi_o_2 : pi_o_2 ;
+if ( isinf ( x ) ) {
+if ( m == 0 ) return SD8 ( 0x0000000000000000ul ) ;
+if ( m == 1 ) return - SD8 ( 0x0000000000000000ul ) ;
+return m == 2 ? pi : - pi ;
+}
+const int ix = ( int ) ( ( ux >> 52 ) & 0x7fful ) ;
+const int iy = ( int ) ( ( uy >> 52 ) & 0x7fful ) ;
+const int k = iy - ix ;
+Soft8 z ;
+int mm = m ;
+if ( k > 60 ) {
+z = __dadd_rn ( pi_o_2 , __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , pi_lo ) ) ;
+mm = m & 1 ;
+}
+else if ( ( ux >> 63 ) && k < - 60 ) {
+z = SD8 ( 0x0000000000000000ul ) ;
+}
+else {
+z = thompson_aa_atan_reduced ( fabs ( __ddiv_rn ( y , x ) ) ) ;
+}
+switch ( mm ) {
+case 0 : return z ;
+case 1 : return - z ;
+case 2 : return __dsub_rn ( pi , __dsub_rn ( z , pi_lo ) ) ;
+default : return __dsub_rn ( __dsub_rn ( z , pi_lo ) , pi ) ;
+}
+}
+
+constant float THOMPSON_AA_SA [ 10 ] = {
+5.065339f , - 0.062659f , - 3.032362f , 0.029469f , - 0.000285f , 0.31255f , 0.000204f , 0.003199f , 0.0f , - 0.015952f }
+;
+
+constant float THOMPSON_AA_SB [ 10 ] = {
+0.476221f , - 0.015896f , 0.165977f , 0.007468f , - 0.000141f , 0.060366f , 0.000079f , 0.000594f , 0.0f , - 0.003577f }
+;
+
+static inline float thompson_aa_add ( float a , float b ) {
+return __fadd_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_sub ( float a , float b ) {
+return __fsub_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_mul ( float a , float b ) {
+return __fmul_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_div ( float a , float b ) {
+return __fdiv_rn ( a , b ) ;
+}
+
+static inline float thompson_aa_field_loga ( float tc0 , float mom ) {
+float v = THOMPSON_AA_SA [ 0 ] ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SA [ 1 ] , tc0 ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SA [ 2 ] , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 3 ] , tc0 ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 4 ] , tc0 ) , tc0 ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 5 ] , mom ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 6 ] , tc0 ) , tc0 ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 7 ] , tc0 ) , mom ) , mom ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 8 ] , tc0 ) , tc0 ) , tc0 ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SA [ 9 ] , mom ) , mom ) , mom ) ) ;
+return v ;
+}
+
+static inline float thompson_field_a ( float tc , float moment ) {
+return thompson_aa_powf ( 10.0f , thompson_aa_field_loga ( tc , moment ) ) ;
+}
+
+static inline float thompson_field_b ( float tc , float moment ) {
+float v = THOMPSON_AA_SB [ 0 ] ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SB [ 1 ] , tc ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( THOMPSON_AA_SB [ 2 ] , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 3 ] , tc ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 4 ] , tc ) , tc ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 5 ] , moment ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 6 ] , tc ) , tc ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 7 ] , tc ) , moment ) , moment ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 8 ] , tc ) , tc ) , tc ) ) ;
+v = thompson_aa_add ( v , thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( THOMPSON_AA_SB [ 9 ] , moment ) , moment ) , moment ) ) ;
+return v ;
+}
+
+static inline float thompson_aa_air_density ( float pressure , float temperature , float qv ) {
+return thompson_aa_div ( thompson_aa_mul ( 0.622f , pressure ) , thompson_aa_mul ( thompson_aa_mul ( 287.04f , temperature ) , thompson_aa_add ( qv , 0.622f ) ) ) ;
+}
+
+struct thompson_aa_complex {
+Soft8 re , im ;
+}
+;
+
+static inline thompson_aa_complex thompson_aa_cmake ( Soft8 re , Soft8 im ) {
+thompson_aa_complex z ;
+z . re = re ;
+z . im = im ;
+return z ;
+}
+
+static inline thompson_aa_complex thompson_aa_cmul ( thompson_aa_complex a , thompson_aa_complex b ) {
+return thompson_aa_cmake ( __dsub_rn ( __dmul_rn ( a . re , b . re ) , __dmul_rn ( a . im , b . im ) ) , __dadd_rn ( __dmul_rn ( a . re , b . im ) , __dmul_rn ( a . im , b . re ) ) ) ;
+}
+
+static inline thompson_aa_complex thompson_aa_cscale ( Soft8 s , thompson_aa_complex a ) {
+return thompson_aa_cmake ( __dmul_rn ( s , a . re ) , __dmul_rn ( s , a . im ) ) ;
+}
+
+static inline thompson_aa_complex thompson_aa_csub ( thompson_aa_complex a , thompson_aa_complex b ) {
+return thompson_aa_cmake ( __dsub_rn ( a . re , b . re ) , __dsub_rn ( a . im , b . im ) ) ;
+}
+
+static inline thompson_aa_complex thompson_aa_cadd ( thompson_aa_complex a , thompson_aa_complex b ) {
+return thompson_aa_cmake ( __dadd_rn ( a . re , b . re ) , __dadd_rn ( a . im , b . im ) ) ;
+}
+
+static inline thompson_aa_complex thompson_aa_cdiv ( thompson_aa_complex a , thompson_aa_complex b ) {
+if ( fabs ( b . re ) < fabs ( b . im ) ) {
+const Soft8 ratio = __ddiv_rn ( b . re , b . im ) ;
+const Soft8 div = __dadd_rn ( __dmul_rn ( b . re , ratio ) , b . im ) ;
+const Soft8 tr = __dadd_rn ( __dmul_rn ( a . re , ratio ) , a . im ) ;
+const Soft8 ti = __dsub_rn ( __dmul_rn ( a . im , ratio ) , a . re ) ;
+return thompson_aa_cmake ( __ddiv_rn ( tr , div ) , __ddiv_rn ( ti , div ) ) ;
+}
+const Soft8 ratio = __ddiv_rn ( b . im , b . re ) ;
+const Soft8 div = __dadd_rn ( __dmul_rn ( b . im , ratio ) , b . re ) ;
+const Soft8 tr = __dadd_rn ( __dmul_rn ( a . im , ratio ) , a . re ) ;
+const Soft8 ti = __dsub_rn ( a . im , __dmul_rn ( a . re , ratio ) ) ;
+return thompson_aa_cmake ( __ddiv_rn ( tr , div ) , __ddiv_rn ( ti , div ) ) ;
+}
+
+static inline Soft8 thompson_aa_cabs ( thompson_aa_complex z ) {
+return thompson_aa_hypot ( z . re , z . im ) ;
+}
+
+static inline thompson_aa_complex thompson_aa_csqrt ( thompson_aa_complex z ) {
+if ( z . im == SD8 ( 0x0000000000000000ul ) ) {
+if ( z . re < SD8 ( 0x0000000000000000ul ) ) {
+return thompson_aa_cmake ( SD8 ( 0x0000000000000000ul ) , copysign ( __dsqrt_rn ( - z . re ) , z . im ) ) ;
+}
+return thompson_aa_cmake ( fabs ( __dsqrt_rn ( z . re ) ) , copysign ( SD8 ( 0x0000000000000000ul ) , z . im ) ) ;
+}
+if ( z . re == SD8 ( 0x0000000000000000ul ) ) {
+const Soft8 r = __dsqrt_rn ( __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , fabs ( z . im ) ) ) ;
+return thompson_aa_cmake ( r , copysign ( r , z . im ) ) ;
+}
+const Soft8 d = thompson_aa_hypot ( z . re , z . im ) ;
+Soft8 r , s ;
+if ( z . re > SD8 ( 0x0000000000000000ul ) ) {
+r = __dsqrt_rn ( __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , __dadd_rn ( d , z . re ) ) ) ;
+s = __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , __ddiv_rn ( z . im , r ) ) ;
+}
+else {
+s = __dsqrt_rn ( __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , __dsub_rn ( d , z . re ) ) ) ;
+r = fabs ( __dmul_rn ( SD8 ( 0x3fe0000000000000ul ) , __ddiv_rn ( z . im , s ) ) ) ;
+}
+return thompson_aa_cmake ( r , copysign ( s , z . im ) ) ;
+}
+
+static inline Soft8 thompson_aa_x2y2m1 ( Soft8 x , Soft8 y ) {
+Soft8 v [ 5 ] ;
+v [ 1 ] = __dmul_rn ( x , x ) ;
+v [ 0 ] = __fma_rn ( x , x , - v [ 1 ] ) ;
+v [ 3 ] = __dmul_rn ( y , y ) ;
+v [ 2 ] = __fma_rn ( y , y , - v [ 3 ] ) ;
+v [ 4 ] = - SD8 ( 0x3ff0000000000000ul ) ;
+for ( int a = 1 ;
+a < 5 ;
+++ a ) {
+const Soft8 t = v [ a ] ;
+int b = a - 1 ;
+while ( b >= 0 && fabs ( v [ b ] ) > fabs ( t ) ) {
+v [ b + 1 ] = v [ b ] ;
+-- b ;
+}
+v [ b + 1 ] = t ;
+}
+for ( int n = 0 ;
+n <= 3 ;
+++ n ) {
+const Soft8 hi = __dadd_rn ( v [ n + 1 ] , v [ n ] ) ;
+const Soft8 lo = __dadd_rn ( __dsub_rn ( v [ n + 1 ] , hi ) , v [ n ] ) ;
+v [ n + 1 ] = hi ;
+v [ n ] = lo ;
+for ( int a = n + 2 ;
+a < 5 ;
+++ a ) {
+const Soft8 t = v [ a ] ;
+int b = a - 1 ;
+while ( b >= n + 1 && fabs ( v [ b ] ) > fabs ( t ) ) {
+v [ b + 1 ] = v [ b ] ;
+-- b ;
+}
+v [ b + 1 ] = t ;
+}
+}
+return __dadd_rn ( __dadd_rn ( __dadd_rn ( __dadd_rn ( v [ 4 ] , v [ 3 ] ) , v [ 2 ] ) , v [ 1 ] ) , v [ 0 ] ) ;
+}
+
+static inline thompson_aa_complex thompson_aa_clog ( thompson_aa_complex z ) {
+Soft8 absx = fabs ( z . re ) , absy = fabs ( z . im ) ;
+if ( absx < absy ) {
+const Soft8 t = absx ;
+absx = absy ;
+absy = t ;
+}
+const Soft8 eps = SD8 ( 0x3cb0000000000000ul ) ;
+Soft8 real ;
+if ( absx == SD8 ( 0x3ff0000000000000ul ) ) {
+real = __dmul_rn ( thompson_aa_log1p ( __dmul_rn ( absy , absy ) ) , SD8 ( 0x3fe0000000000000ul ) ) ;
+}
+else if ( absx > SD8 ( 0x3ff0000000000000ul ) && absx < SD8 ( 0x4000000000000000ul ) && absy < SD8 ( 0x3ff0000000000000ul ) ) {
+Soft8 d2m1 = __dmul_rn ( __dsub_rn ( absx , SD8 ( 0x3ff0000000000000ul ) ) , __dadd_rn ( absx , SD8 ( 0x3ff0000000000000ul ) ) ) ;
+if ( absy >= eps ) d2m1 = __dadd_rn ( d2m1 , __dmul_rn ( absy , absy ) ) ;
+real = __dmul_rn ( thompson_aa_log1p ( d2m1 ) , SD8 ( 0x3fe0000000000000ul ) ) ;
+}
+else if ( absx < SD8 ( 0x3ff0000000000000ul ) && absx >= SD8 ( 0x3fe0000000000000ul ) && absy < __dmul_rn ( eps , SD8 ( 0x3fe0000000000000ul ) ) ) {
+const Soft8 d2m1 = __dmul_rn ( __dsub_rn ( absx , SD8 ( 0x3ff0000000000000ul ) ) , __dadd_rn ( absx , SD8 ( 0x3ff0000000000000ul ) ) ) ;
+real = __dmul_rn ( thompson_aa_log1p ( d2m1 ) , SD8 ( 0x3fe0000000000000ul ) ) ;
+}
+else if ( absx < SD8 ( 0x3ff0000000000000ul ) && absx >= SD8 ( 0x3fe0000000000000ul ) && __dadd_rn ( __dmul_rn ( absx , absx ) , __dmul_rn ( absy , absy ) ) >= SD8 ( 0x3fe0000000000000ul ) ) {
+real = __dmul_rn ( thompson_aa_log1p ( thompson_aa_x2y2m1 ( absx , absy ) ) , SD8 ( 0x3fe0000000000000ul ) ) ;
+}
+else {
+real = thompson_aa_log ( thompson_aa_hypot ( absx , absy ) ) ;
+}
+return thompson_aa_cmake ( real , thompson_aa_atan2 ( z . im , z . re ) ) ;
+}
+
+template < typename P_error > static inline thompson_aa_complex thompson_aa_maxwellgarnett ( Soft8 vol1 , Soft8 vol2 , Soft8 vol3 , thompson_aa_complex m1 , thompson_aa_complex m2 , thompson_aa_complex m3 , P_error error ) {
+if ( fabs ( __dsub_rn ( __dadd_rn ( __dadd_rn ( vol1 , vol2 ) , vol3 ) , SD8 ( 0x3ff0000000000000ul ) ) ) > SD8 ( 0x3eb0c6f7a0b5ed8dul ) ) {
+* error = 1 ;
+return thompson_aa_cmake ( - SD8 ( 0x408f3feb851eb852ul ) , - SD8 ( 0x408f3feb851eb852ul ) ) ;
+}
+const thompson_aa_complex one = thompson_aa_cmake ( SD8 ( 0x3ff0000000000000ul ) , SD8 ( 0x0000000000000000ul ) ) ;
+const thompson_aa_complex m1t = thompson_aa_cmul ( m1 , m1 ) ;
+const thompson_aa_complex m2t = thompson_aa_cmul ( m2 , m2 ) ;
+const thompson_aa_complex m3t = thompson_aa_cmul ( m3 , m3 ) ;
+const thompson_aa_complex d2 = thompson_aa_csub ( m2t , m1t ) ;
+const thompson_aa_complex d3 = thompson_aa_csub ( m3t , m1t ) ;
+const thompson_aa_complex beta2 = thompson_aa_cmul ( thompson_aa_cdiv ( thompson_aa_cscale ( SD8 ( 0x4000000000000000ul ) , m1t ) , d2 ) , thompson_aa_csub ( thompson_aa_cmul ( thompson_aa_cdiv ( m2t , d2 ) , thompson_aa_clog ( thompson_aa_cdiv ( m2t , m1t ) ) ) , one ) ) ;
+const thompson_aa_complex beta3 = thompson_aa_cmul ( thompson_aa_cdiv ( thompson_aa_cscale ( SD8 ( 0x4000000000000000ul ) , m1t ) , d3 ) , thompson_aa_csub ( thompson_aa_cmul ( thompson_aa_cdiv ( m3t , d3 ) , thompson_aa_clog ( thompson_aa_cdiv ( m3t , m1t ) ) ) , one ) ) ;
+const Soft8 host = __dsub_rn ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , vol2 ) , vol3 ) ;
+const thompson_aa_complex numerator = thompson_aa_cadd ( thompson_aa_cadd ( thompson_aa_cscale ( host , m1t ) , thompson_aa_cmul ( thompson_aa_cscale ( vol2 , beta2 ) , m2t ) ) , thompson_aa_cmul ( thompson_aa_cscale ( vol3 , beta3 ) , m3t ) ) ;
+const thompson_aa_complex vb2 = thompson_aa_cscale ( vol2 , beta2 ) ;
+const thompson_aa_complex vb3 = thompson_aa_cscale ( vol3 , beta3 ) ;
+const thompson_aa_complex denominator = thompson_aa_cadd ( thompson_aa_cmake ( __dadd_rn ( host , vb2 . re ) , vb2 . im ) , vb3 ) ;
+return thompson_aa_csqrt ( thompson_aa_cdiv ( numerator , denominator ) ) ;
+}
+
+static inline Soft8 thompson_aa_rayleigh_soak_wetsnow ( Soft8 x_g , Soft8 fmelt ) {
+const Soft8 a_geo = ( Soft8 ) 3.80693507f ;
+const Soft8 b_geo = ( Soft8 ) 0.5f ;
+const thompson_aa_complex m_w = thompson_aa_cmake ( SD8 ( 0x402213d1a0000000ul ) , ( - SD8 ( 0x3ff634d6c0000000ul ) ) ) ;
+const thompson_aa_complex m_i = thompson_aa_cmake ( SD8 ( 0x3ffc91dae74d3b24ul ) , ( - SD8 ( 0x3f21acb622ae704dul ) ) ) ;
+const thompson_aa_complex m_air = thompson_aa_cmake ( SD8 ( 0x3ff0000000000000ul ) , SD8 ( 0x0000000000000000ul ) ) ;
+const Soft8 fm = fmax ( fmin ( fmelt , SD8 ( 0x3ff0000000000000ul ) ) , SD8 ( 0x0000000000000000ul ) ) ;
+Soft8 mra = fmax ( fmin ( SD8 ( 0x3feccccccccccccdul ) , SD8 ( 0x3ff0000000000000ul ) ) , SD8 ( 0x0000000000000000ul ) ) ;
+mra = __dadd_rn ( mra , __dmul_rn ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , mra ) , fm ) ) ;
+const Soft8 x_w = __dmul_rn ( x_g , fm ) ;
+const Soft8 d_g = __dmul_rn ( a_geo , thompson_aa_pow ( x_g , b_geo ) ) ;
+if ( ! ( d_g >= SD8 ( 0x3d719799812dea11ul ) ) ) return SD8 ( 0x0000000000000000ul ) ;
+Soft8 vg = __dmul_rn ( aa_div ( SD8 ( 0x400921fb54442d18ul ) , SD8 ( 0x4018000000000000ul ) ) , __dmul_rn ( __dmul_rn ( d_g , d_g ) , d_g ) ) ;
+const Soft8 rhog = fmax ( fmin ( __ddiv_rn ( x_g , vg ) , SD8 ( 0x408c200000000000ul ) ) , SD8 ( 0x4024000000000000ul ) ) ;
+vg = __ddiv_rn ( x_g , rhog ) ;
+const Soft8 grenz = __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , __ddiv_rn ( rhog , SD8 ( 0x408f400000000000ul ) ) ) ;
+Soft8 volg ;
+if ( mra <= grenz ) {
+volg = __dmul_rn ( vg , __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , __dmul_rn ( mra , fm ) ) ) ;
+}
+else {
+const Soft8 fmgrenz = __ddiv_rn ( __dsub_rn ( SD8 ( 0x408c200000000000ul ) , rhog ) , __dadd_rn ( __dsub_rn ( __dmul_rn ( mra , SD8 ( 0x408c200000000000ul ) ) , rhog ) , __ddiv_rn ( __dmul_rn ( SD8 ( 0x408c200000000000ul ) , rhog ) , SD8 ( 0x408f400000000000ul ) ) ) ) ;
+if ( fm <= fmgrenz ) {
+volg = __dmul_rn ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , __dmul_rn ( mra , fm ) ) , vg ) ;
+}
+else {
+volg = __dadd_rn ( __ddiv_rn ( __dsub_rn ( x_g , x_w ) , SD8 ( 0x408c200000000000ul ) ) , __ddiv_rn ( x_w , SD8 ( 0x408f400000000000ul ) ) ) ;
+}
+}
+const Soft8 d_large = thompson_aa_pow ( __dmul_rn ( aa_div ( SD8 ( 0x4018000000000000ul ) , SD8 ( 0x400921fb54442d18ul ) ) , volg ) , ( Soft8 ) ( aa_div ( 1.0f , 3.0f ) ) ) ;
+const Soft8 volice = __ddiv_rn ( __dsub_rn ( x_g , x_w ) , __dmul_rn ( volg , SD8 ( 0x408c200000000000ul ) ) ) ;
+const Soft8 volwater = __ddiv_rn ( x_w , __dmul_rn ( SD8 ( 0x408f400000000000ul ) , volg ) ) ;
+const Soft8 volair = __dsub_rn ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , volice ) , volwater ) ;
+int error = 0 ;
+const Soft8 vol1 = __ddiv_rn ( volice , fmax ( __dadd_rn ( volice , volwater ) , SD8 ( 0x3ddb7cdfd9d7bdbbul ) ) ) ;
+const Soft8 vol2 = __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , vol1 ) ;
+const thompson_aa_complex mtmp = thompson_aa_maxwellgarnett ( vol2 , SD8 ( 0x0000000000000000ul ) , vol1 , m_w , m_air , m_i , & error ) ;
+const thompson_aa_complex m_core = thompson_aa_maxwellgarnett ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , volair ) , volair , SD8 ( 0x0000000000000000ul ) , mtmp , m_air , thompson_aa_cscale ( SD8 ( 0x4000000000000000ul ) , m_air ) , & error ) ;
+if ( error != 0 ) return SD8 ( 0x0000000000000000ul ) ;
+const thompson_aa_complex m2 = thompson_aa_cmul ( m_core , m_core ) ;
+const Soft8 kfac = thompson_aa_cabs ( thompson_aa_cdiv ( thompson_aa_cmake ( __dsub_rn ( m2 . re , SD8 ( 0x3ff0000000000000ul ) ) , m2 . im ) , thompson_aa_cmake ( __dadd_rn ( m2 . re , SD8 ( 0x4000000000000000ul ) ) , m2 . im ) ) ) ;
+const Soft8 d3 = __dmul_rn ( __dmul_rn ( d_large , d_large ) , d_large ) ;
+return __ddiv_rn ( __dmul_rn ( __dmul_rn ( __dmul_rn ( kfac , kfac ) , SD8 ( 0x4073204ba0000000ul ) ) , __dmul_rn ( d3 , d3 ) ) , SD8 ( 0x3f1a36e305532621ul ) ) ;
+}
+
+template < typename P_rs , typename P_smob , typename P_smoc , typename P_ze_rain , typename P_ze_snow , typename P_ze_graupel , typename P_l_qr , typename P_l_qs , typename P_l_qg > static inline void thompson_aa_refl_level ( float qv , float qr , float nr , float qs , float qg , float ng , float t , float p , P_rs rs , P_smob smob , P_smoc smoc , P_ze_rain ze_rain , P_ze_snow ze_snow , P_ze_graupel ze_graupel , P_l_qr l_qr , P_l_qs l_qs , P_l_qg l_qg ) {
+const float rho = thompson_aa_air_density ( p , t , aa_fmaxf ( 1.0e-10f , qv ) ) ;
+* l_qr = qr > 1.0e-12f ;
+* l_qs = qs > 1.0e-6f ;
+* l_qg = qg > 1.0e-6f ;
+* ze_rain = 1.0e-22f ;
+* ze_snow = 1.0e-22f ;
+* ze_graupel = 1.0e-22f ;
+* rs = 1.0e-12f ;
+* smob = 0.0f ;
+* smoc = 0.0f ;
+if ( * l_qr ) {
+const float rr = thompson_aa_mul ( qr , rho ) ;
+const float nr_m3 = aa_fmaxf ( 1.0e-6f , thompson_aa_mul ( nr , rho ) ) ;
+const Soft8 lamr = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 5.235988159e+02f , 6.0f ) , 1.0f ) , nr_m3 ) , rr ) , 3.333333433e-01f ) ;
+const Soft8 ilamr = __ddiv_rn ( SD8 ( 0x3ff0000000000000ul ) , lamr ) ;
+const Soft8 n0_r = __dmul_rn ( ( Soft8 ) thompson_aa_mul ( nr_m3 , 1.0f ) , thompson_aa_pow ( lamr , ( Soft8 ) 1.0f ) ) ;
+* ze_rain = ( float ) __dmul_rn ( __dmul_rn ( n0_r , ( Soft8 ) 720.000061f ) , thompson_aa_pow ( ilamr , ( Soft8 ) 7.0f ) ) ;
+}
+if ( * l_qs ) {
+* rs = thompson_aa_mul ( qs , rho ) ;
+const float tc0 = aa_fminf ( - 0.1f , thompson_aa_sub ( t , 273.15f ) ) ;
+* smob = thompson_aa_mul ( * rs , 1.449275398e+01f ) ;
+* smoc = thompson_aa_mul ( thompson_field_a ( tc0 , 3.0f ) , thompson_aa_powf ( * smob , thompson_field_b ( tc0 , 3.0f ) ) ) ;
+const float smoz = thompson_aa_mul ( thompson_field_a ( tc0 , 4.0f ) , thompson_aa_powf ( * smob , thompson_field_b ( tc0 , 4.0f ) ) ) ;
+const float prefix = thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_div ( 0.176f , 0.93f ) , thompson_aa_div ( 6.0f , 3.1415926536f ) ) , thompson_aa_div ( 6.0f , 3.1415926536f ) ) , thompson_aa_div ( 0.069f , 900.0f ) ) , thompson_aa_div ( 0.069f , 900.0f ) ) ;
+* ze_snow = thompson_aa_mul ( prefix , smoz ) ;
+}
+if ( * l_qg ) {
+const float rg = thompson_aa_mul ( qg , rho ) ;
+const float ng_m3 = aa_fmaxf ( 1.0e-6f , thompson_aa_mul ( ng , rho ) ) ;
+const Soft8 lamg = ( Soft8 ) thompson_aa_powf ( thompson_aa_div ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( 209.439514f , 6.0f ) , 1.0f ) , ng_m3 ) , rg ) , 0.333333343f ) ;
+const Soft8 ilamg = __ddiv_rn ( SD8 ( 0x3ff0000000000000ul ) , lamg ) ;
+const Soft8 n0_g = __dmul_rn ( ( Soft8 ) thompson_aa_mul ( ng_m3 , 1.0f ) , thompson_aa_pow ( lamg , ( Soft8 ) 1.0f ) ) ;
+const float am_g_900 = thompson_aa_div ( 209.439514f , 900.0f ) ;
+const float prefix = thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_mul ( thompson_aa_div ( 0.176f , 0.93f ) , thompson_aa_div ( 6.0f , 3.1415926536f ) ) , thompson_aa_div ( 6.0f , 3.1415926536f ) ) , am_g_900 ) , am_g_900 ) ;
+* ze_graupel = ( float ) __dmul_rn ( __dmul_rn ( __dmul_rn ( ( Soft8 ) prefix , n0_g ) , ( Soft8 ) 720.000061f ) , thompson_aa_pow ( ilamg , ( Soft8 ) 7.0f ) ) ;
+}
+}
+
+}

@@ -541,6 +541,23 @@ impl<'g> DomainSampler<'g> {
             xs.push(x);
             ys.push(y);
         }
+        // A polar footprint can cover every longitude. Unwrapping each
+        // half of that ring toward the other half drops required donors.
+        // Keep one complete period plus interpolation halos in that case.
+        let polar_cap = self.grid.is_some_and(|grid| {
+            if !matches!(grid.spec.kind, ProjectionKind::Polar) { return false; }
+            let pole_lat = if grid.spec.truelat1 < 0.0 { -90.0 } else { 90.0 };
+            let (i, j) = grid.sampling_latlon_to_ij(pole_lat, grid.spec.stand_lon);
+            i >= 0.5 - self.halo as f64 && i <= self.nx as f64 + 0.5 + self.halo as f64
+                && j >= 0.5 - self.halo as f64 && j <= self.ny as f64 + 0.5 + self.halo as f64
+        });
+        if ds.wraps_x && polar_cap {
+            let ymin = ys.iter().cloned().fold(f64::INFINITY, f64::min);
+            let ymax = ys.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            return (1 - margin, ds.nx_global + margin,
+                (ymin.floor() as i64 - margin).max(1),
+                (ymax.ceil() as i64 + margin).min(ds.ny_global));
+        }
         if ds.wraps_x {
             let xmin = xs.iter().cloned().fold(f64::INFINITY, f64::min);
             let xmax = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -994,22 +1011,34 @@ impl<'g> DomainSampler<'g> {
         for (t, &o) in origin.iter().enumerate() {
             groups.entry(o).or_default().push(t);
         }
+        // One source plane per tile (a twelve-month tile decoded whole for
+        // each month was most of the albedo build), and the tiles on every
+        // core.  Each point belongs to exactly one tile group, so the
+        // scatter below writes what the serial loop wrote, and the first
+        // failing tile in key order is still the error returned.
+        let groups: Vec<((i64, i64), Vec<usize>)> = groups.into_iter().collect();
+        let sampled: Vec<Result<Option<Vec<f64>>>> = groups
+            .par_iter()
+            .map(|&((xs, ys), ref picks)| {
+                let Some(tile) = ds.read_tile_window_plane(xs, ys, z)? else {
+                    return Ok(None);
+                };
+                let vals = tile.values(z);
+                let view = WindowView {
+                    ny: tile.ny,
+                    nx: tile.nx,
+                    vals: &vals,
+                    x0: tile.x0 as f64,
+                    y0: tile.y0 as f64,
+                };
+                let px: Vec<f64> = picks.iter().map(|&t| xx[t]).collect();
+                let py: Vec<f64> = picks.iter().map(|&t| yy[t]).collect();
+                interp_seq(seq, &view, &px, &py).map(Some)
+            })
+            .collect();
         let mut out = vec![f64::NAN; todo.len()];
-        for ((xs, ys), picks) in groups {
-            let Some(tile) = ds.read_tile_window(xs, ys)? else {
-                continue;
-            };
-            let vals = tile.values(z);
-            let view = WindowView {
-                ny: tile.ny,
-                nx: tile.nx,
-                vals: &vals,
-                x0: tile.x0 as f64,
-                y0: tile.y0 as f64,
-            };
-            let px: Vec<f64> = picks.iter().map(|&t| xx[t]).collect();
-            let py: Vec<f64> = picks.iter().map(|&t| yy[t]).collect();
-            let got = interp_seq(seq, &view, &px, &py)?;
+        for ((_, picks), got) in groups.iter().zip(sampled) {
+            let Some(got) = got? else { continue };
             for (&t, v) in picks.iter().zip(got) {
                 out[t] = v;
             }
@@ -1297,6 +1326,26 @@ struct CoverageReceipt {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn polar_cap_window_keeps_every_longitude_with_donor_halos() {
+        use crate::projection::{GridSpec, ProjectedGrid, ProjectionKind};
+        use crate::geog::GeogDataset;
+        let ds = GeogDataset::open(&super::tests::golden_dir().join("synthetic/syn_wrap"), None).unwrap();
+        for hemi in [1.0, -1.0] {
+            let grid = ProjectedGrid::new(GridSpec {
+                kind: ProjectionKind::Polar, ref_lat: 90.0 * hemi, ref_lon: 0.0,
+                truelat1: 70.0 * hemi, truelat2: 70.0 * hemi, stand_lon: 0.0,
+                dx: 12000.0, dy: 12000.0, e_we: 101, e_sn: 101,
+                known_x: 50.5, known_y: 50.5,
+                moad_cen_lat: 90.0 * hemi, moad_cen_lon: 0.0,
+                lat_deg: vec![], lon0_deg: 0.0, dlon_deg: 0.0,
+            }).unwrap();
+            let dom = super::DomainSampler::new(&grid, 3).unwrap();
+            let (x0, x1, _, _) = dom.window_bounds(&ds, 3);
+            assert_eq!(x0, -2);
+            assert_eq!(x1, ds.nx_global + 3);
+        }
+    }
     #[test]
     fn lake_gcell_ratio_one_matches_unmodified_wps_projection_and_mean() {
         use crate::projection::{GridSpec,ProjectedGrid,ProjectionKind};

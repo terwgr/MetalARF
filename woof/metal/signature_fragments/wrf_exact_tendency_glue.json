@@ -1,0 +1,315 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/bandwidth_glue.cu",
+      "cuda_symbol": "glue_capture_theta_forcing",
+      "layout_version": 1,
+      "module": "wrf_exact_tendency_glue",
+      "name": "wrf_exact_capture_theta_forcing",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "mapped",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "rth",
+          "float",
+          "read"
+        ],
+        [
+          "mub",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "c1": [
+          [
+            "nz"
+          ]
+        ],
+        "c2": [
+          [
+            "nz"
+          ]
+        ],
+        "dst": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rth": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_tendency_glue.metal",
+      "threads_per_group": 128
+    },
+    {
+      "name": "wrf_exact_accumulate_scaled",
+      "module": "wrf_exact_tendency_glue",
+      "source": "woof/metal/shaders/wrf_exact_tendency_glue.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "PhysicsDriver.accumulate_surface_energy",
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "n"
+          ]
+        ],
+        "dst": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "scale",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "wrf_exact_map_copy",
+      "module": "wrf_exact_tendency_glue",
+      "source": "woof/metal/shaders/wrf_exact_tendency_glue.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "capture_advective_theta_forcing",
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "map",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "map": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "wrf_exact_map_add",
+      "module": "wrf_exact_tendency_glue",
+      "source": "woof/metal/shaders/wrf_exact_tendency_glue.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "fold_lateral_relaxation",
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "map",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "map": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

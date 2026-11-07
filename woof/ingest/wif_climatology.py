@@ -55,7 +55,7 @@ and the pre-existing ``gpuwm_wrf_vert_interp_f32``, reached through
 The NumPy implementations in this module are RETAINED, and they are not
 a shipped fallback: they are the ORACLE-OF-RECORD for the equivalence
 gate.  These are the exact expressions that were measured against
-WRF-4.7.1 real.exe on a development machine (commit 94260bf44: QNWFA maxabs
+WRF-4.7.1 real.exe on test host D (commit 94260bf44: QNWFA maxabs
 1.484800e+04 on a field maxing 4.003303e+09, QNIFA maxabs 1.781250e+00
 on 5.978444e+05, QNWFA2D bit-exact from metgrid's own horizontal
 output), so they are the only thing that can say the Rust engine still
@@ -77,7 +77,10 @@ are now closed for all of them.  The third entry is reused unchanged.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import struct
+import threading
 from dataclasses import dataclass, field as _field
 
 import numpy as np
@@ -295,14 +298,69 @@ def read_wps_intermediate_rust(path):
         raise WifClimatologyError("WPS intermediate file holds no records")
     return records, axes[0], axes[1], corner
 
+#: Decoded climatologies and their horizontal interpolations, per process.
+#: THE BREAKAGE: a GFS preparation decoded the same monthly WIF file and
+#: interpolated all 12 months of it onto the same grid once PER FORCING
+#: TIME (13 times for a 36 h 3-hourly window: about 12 s of a 50 s
+#: preparation, measured 2026-10-27).  The file and the grid do not
+#: change between forcing times; only the date weights and the vertical
+#: interpolation do.  The cached arrays are read-only, so a consumer that
+#: tried to write one fails loudly instead of changing a later time.
+_DECODED: dict = {}
+_HORIZONTAL: dict = {}
+_CACHE_ENTRIES = 2
+
+
+_CACHE_LOCK = threading.Lock()
+
+
+def _remember(cache: dict, key, value):
+    with _CACHE_LOCK:
+        cache.pop(key, None)
+        cache[key] = value
+        while len(cache) > _CACHE_ENTRIES:
+            cache.pop(next(iter(cache)))
+    return value
+
+
+def _frozen(array):
+    array = np.asarray(array)
+    array.setflags(write=False)
+    return array
+
+
 def load_wif_climatology(path, *, backend="rust") -> WifClimatology:
     """Assemble the (12, nlev, nlat, nlon) monthly stacks by field suffix.
 
     ``backend`` selects the DECODER only; the stacking below is metadata
     work on whatever the decoder returned and is identical either way.
+
+    Decoded once per process per file (path, size, mtime) and decoder
+    (:data:`_DECODED`); the arrays returned are read-only.
     """
 
-    if _resolve_backend(backend) == "rust":
+    engine = _resolve_backend(backend)
+    try:
+        stat = os.stat(path)
+        key = (os.path.realpath(path), stat.st_size, stat.st_mtime_ns, engine)
+    except (OSError, TypeError, ValueError):
+        key = None
+    if key is not None and key in _DECODED:
+        return _remember(_DECODED, key, _DECODED[key])
+    decoded = _decode_wif_climatology(path, engine)
+    climatology = WifClimatology(
+        qnwfa=_frozen(decoded.qnwfa), qnifa=_frozen(decoded.qnifa),
+        pressure=_frozen(decoded.pressure),
+        latitude=_frozen(decoded.latitude),
+        longitude=_frozen(decoded.longitude),
+        source_path=decoded.source_path, grid_corner=decoded.grid_corner)
+    if key is not None:
+        _remember(_DECODED, key, climatology)
+    return climatology
+
+
+def _decode_wif_climatology(path, engine) -> WifClimatology:
+    if engine == "rust":
         records, latitude, longitude, corner = read_wps_intermediate_rust(path)
     else:
         records, latitude, longitude = read_wps_intermediate(path)
@@ -630,25 +688,41 @@ def wif_fields_for_grid(climatology: WifClimatology, target_lat, target_lon,
     stages and their authorities.
     """
     engine = _resolve_backend(backend)
-    if engine == "rust":
+    # The 12 monthly levels interpolated onto this grid do not depend on the
+    # date: one climatology object on one grid is interpolated once
+    # (:data:`_HORIZONTAL`), keyed by the object and the grid's bytes.
+    target_lat_host = np.ascontiguousarray(target_lat)
+    target_lon_host = np.ascontiguousarray(target_lon)
+    horizontal_key = (
+        id(climatology), engine,
+        target_lat_host.dtype.str, target_lat_host.shape,
+        hashlib.sha256(target_lat_host.tobytes()).hexdigest(),
+        target_lon_host.dtype.str, target_lon_host.shape,
+        hashlib.sha256(target_lon_host.tobytes()).hexdigest())
+    held = _HORIZONTAL.get(horizontal_key)
+    if held is not None and held[0] is climatology:
+        horiz = _remember(_HORIZONTAL, horizontal_key, held)[1]
+    elif engine == "rust":
         startlat, deltalat, startlon, deltalon = \
             climatology.axis_parameters()
         horiz = {
-            name: four_pt_bilinear_rust(
+            name: _frozen(four_pt_bilinear_rust(
                 getattr(climatology, name), startlat, deltalat,
-                startlon, deltalon, target_lat, target_lon)
+                startlon, deltalon, target_lat, target_lon))
             for name in ("qnwfa", "qnifa", "pressure")
         }
-        vertical = vert_interp_wif_column_grid_rust
+        _remember(_HORIZONTAL, horizontal_key, (climatology, horiz))
     else:
         horiz = {
-            name: four_pt_bilinear(getattr(climatology, name),
-                                   climatology.latitude,
-                                   climatology.longitude,
-                                   target_lat, target_lon)
+            name: _frozen(four_pt_bilinear(getattr(climatology, name),
+                                           climatology.latitude,
+                                           climatology.longitude,
+                                           target_lat, target_lon))
             for name in ("qnwfa", "qnifa", "pressure")
         }
-        vertical = vert_interp_wif_column_grid
+        _remember(_HORIZONTAL, horizontal_key, (climatology, horiz))
+    vertical = (vert_interp_wif_column_grid_rust if engine == "rust"
+                else vert_interp_wif_column_grid)
     now = {name: monthly_interp_to_date(horiz[name], date_str)
            for name in horiz}
     p_now, (w_now, i_now) = orient_bottom_up(
@@ -815,6 +889,7 @@ def is_wif_intermediate_file(path) -> bool:
 # there.  An unset default that finds nothing is not this error; it is a
 # fallback, and it returns a :class:`WifSourceResolution` that says so.
 from woof.ingest.wif_dataset import (      # noqa: E402
+    WIF_DATASET_ROOT_ENV,
     MissingWifClimatologyDataset,
     resolve_wif_data_root,
 )
@@ -828,12 +903,18 @@ class WifSourceResolution:
     ``origin`` names the rule that decided, and ``fallback_reason`` is the
     sentence a receipt prints when ``path`` is ``None`` -- populated on
     exactly the ``None`` case, so a consumer cannot forget to say why.
+
+    ``portable_reason`` is the same sentence with each searched location
+    named by its rule rather than by this process's absolute path (the
+    working directory, the home directory).  It is what a preparation
+    receipt binds; see :func:`portable_wif_statement`.
     """
 
     path: object              # pathlib.Path | None
     origin: str
     candidates: tuple
     fallback_reason: object = None   # str | None
+    portable_reason: object = None   # str | None
 
     @property
     def resolved(self) -> bool:
@@ -933,12 +1014,96 @@ def resolve_wif_climatology(path=None, *, env=None, cwd=None,
             + WIF_CLIMATOLOGY_FILE + ")",
             tuple(tried))
 
-    reason = (
+    reason = _not_found_sentence(str(staged), str(probe))
+    if explicit_required:
+        raise MissingWifClimatologyDataset(
+            (requested_by or "mp28_aerosol_source='climatology'")
+            + " requires the dataset and " + reason)
+    # The portable spelling names the two default locations by rule.  The
+    # absolute spelling above is this process's cwd and home, and the
+    # namelist import used to write it into the WRF-input door's
+    # preparation receipt: a --restart launched from another directory
+    # then hashed a different receipt and was refused as "written for a
+    # different run" (5 km radar DA, 2026-10-23), though nothing about the
+    # run differed.
+    portable = _not_found_sentence(
+        "$" + WIF_DATASET_ROOT_ENV + ", default ~/.woof/wif",
+        "./" + WIF_CLIMATOLOGY_FILE)
+    return WifSourceResolution(None, "unresolved", tuple(tried), reason,
+                               portable)
+
+
+def _download_wif_dataset(root) -> int:
+    """`woof fetch-tables --wif` into ``root``: 0 staged, 2 refused."""
+    from woof.table_assets import stage_wif_dataset
+
+    return stage_wif_dataset(None, root)
+
+
+def acquire_wif_climatology(path=None, *, env=None, cwd=None,
+                            requested_by=None):
+    """Locate the dataset, download it when it is not here, or refuse by name.
+
+    What a run that COMMITS to the climatology calls (``mp28_aerosol_source``
+    'auto' or 'climatology' on a real-data mp=28 preparation).  Named
+    breakage (a real-data mp=28 run, 2026-10-23
+    12:58Z): with no copy on the machine, 'auto' used to fall back to
+    thompson_init's synthetic CCN/IN profile with only a warning, so a run
+    on a box missing one 225 MB file was a different forecast from the same
+    run on a box that had it, and nothing failed.  Now the search below is
+    followed by the pinned download `woof fetch-tables --wif` performs
+    (exact size and SHA-256 before the atomic install into
+    ``$WOOF_WIF_DATA_ROOT``, default ~/.woof/wif), and when that fails too
+    the run is refused with the ways out.  The synthetic profile is reached
+    only by naming it (``mp28_aerosol_source='synthetic'``).
+
+    A path a human chose that is not the dataset raises exactly as
+    :func:`resolve_wif_climatology` does; it is never replaced by a download.
+    """
+
+    resolution = resolve_wif_climatology(path, env=env, cwd=cwd,
+                                         requested_by=requested_by)
+    if resolution.resolved:
+        return resolution
+    import os
+    import sys
+    from pathlib import Path
+
+    environ = os.environ if env is None else env
+    root = resolve_wif_data_root(None, env=environ)
+    print(f"mp_physics=28 aerosol: {WIF_CLIMATOLOGY_FILE} is not on this "
+          f"machine; downloading the pinned copy into {root}", file=sys.stderr)
+    if _download_wif_dataset(root) == 0:
+        resolution = resolve_wif_climatology(path, env=env, cwd=cwd,
+                                             requested_by=requested_by)
+        if resolution.resolved:
+            return resolution
+    searched = str(resolution.fallback_reason or _not_found_sentence(
+        str(root / WIF_CLIMATOLOGY_FILE),
+        str(Path.cwd() / WIF_CLIMATOLOGY_FILE))).rstrip()
+    if not searched.endswith("."):
+        searched += "."
+    raise MissingWifClimatologyDataset(
+        (requested_by or "mp28_aerosol_source='auto'")
+        + " needs WRF's monthly WIF aerosol climatology to initialize "
+        "mp_physics=28, and " + searched
+        + " The pinned download into " + str(root) + " failed as well "
+        "(its reason is printed above). Without the dataset the aerosol "
+        "would start from thompson_init's synthetic CCN/IN profile, a "
+        "different forecast from WRF's, so the run stops here. Stage it "
+        "with `woof fetch-tables --wif` (or `--wif --from DIR` offline), "
+        "set [shared] wif_climatology_path or $" + WIF_CLIMATOLOGY_PATH_ENV
+        + ", or select [shared] mp28_aerosol_source='synthetic' to take the "
+        "synthetic profile deliberately.")
+
+
+def _not_found_sentence(staged: str, probe: str) -> str:
+    return (
         "no " + WIF_CLIMATOLOGY_FILE + " was found. Searched, in order: "
         "[shared] wif_climatology_path (unset), $" + WIF_CLIMATOLOGY_PATH_ENV
         + " (unset), $" + WIF_CLIMATOLOGY_ROOT_ENV + " (unset), the root "
-        "`woof fetch-tables --wif` stages into (" + str(staged) + "), and "
-        "the working directory (" + str(probe) + "). A candidate that "
+        "`woof fetch-tables --wif` stages into (" + staged + "), and "
+        "the working directory (" + probe + "). A candidate that "
         "exists but does not begin with a complete WPS intermediate "
         "(IFV=5) field record is not counted as found, because an empty "
         "or truncated copy would refuse in the ingest lane instead of "
@@ -946,11 +1111,52 @@ def resolve_wif_climatology(path=None, *, env=None, cwd=None,
         "redistribute this 225 MB dataset; it is WRF's own, downloaded with "
         "WRF, taken from a WRF run/ directory (" + WIF_REFERENCE_SOURCE
         + "), or staged with `woof fetch-tables --wif --from DIR`.")
-    if explicit_required:
-        raise MissingWifClimatologyDataset(
-            (requested_by or "mp28_aerosol_source='climatology'")
-            + " requires the dataset and " + reason)
-    return WifSourceResolution(None, "unresolved", tuple(tried), reason)
+
+
+def _file_sha256(path) -> str:
+    """SHA-256 of a resolved dataset, cached per (path, size, mtime)."""
+    from pathlib import Path
+
+    stat = Path(path).stat()
+    key = (str(path), stat.st_size, stat.st_mtime_ns)
+    cached = _SHA256_CACHE.get(key)
+    if cached is None:
+        import hashlib
+
+        digest = hashlib.sha256()
+        with Path(path).open("rb") as stream:
+            while True:
+                block = stream.read(1 << 22)
+                if not block:
+                    break
+                digest.update(block)
+        cached = _SHA256_CACHE[key] = digest.hexdigest()
+    return cached
+
+
+_SHA256_CACHE: dict = {}
+
+
+def portable_wif_statement(resolution) -> str:
+    """The resolution as a preparation receipt binds it: by content, not by host path.
+
+    A resolved dataset is named by the rule that found it, its byte count
+    and its SHA-256; an unresolved search by :attr:`WifSourceResolution.
+    portable_reason`.  Two processes that would read the same bytes (or
+    find none) from different working directories or home directories
+    state the same sentence, and two that would read different copies do
+    not.  The absolute paths stay in what a run prints and in
+    :func:`describe_wif_source`, which are records, not identity.
+    """
+    if resolution.resolved:
+        from pathlib import Path
+
+        sha256 = _file_sha256(resolution.path)
+        size = Path(resolution.path).stat().st_size
+        return (f"{resolution.origin}; {size} bytes, sha256 {sha256}"
+                + ("" if sha256 != WIF_REFERENCE_SHA256
+                   else f" (the {WIF_REFERENCE_SOURCE} reference)"))
+    return str(resolution.portable_reason or resolution.fallback_reason or "")
 
 
 def describe_wif_source(resolution):
@@ -960,7 +1166,6 @@ def describe_wif_source(resolution):
     copies produce two different initial conditions, and a receipt that
     merely repeated the pinned constant would hide exactly that.
     """
-    import hashlib
     from pathlib import Path
 
     if not resolution.resolved:
@@ -968,14 +1173,7 @@ def describe_wif_source(resolution):
                 "candidates": list(resolution.candidates),
                 "fallback_reason": resolution.fallback_reason}
     source = Path(resolution.path)
-    digest = hashlib.sha256()
-    with source.open("rb") as stream:
-        while True:
-            block = stream.read(1 << 22)
-            if not block:
-                break
-            digest.update(block)
-    sha256 = digest.hexdigest()
+    sha256 = _file_sha256(source)
     return {
         "resolved": True,
         "origin": resolution.origin,

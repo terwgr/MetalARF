@@ -85,7 +85,7 @@
 # OFFLINE ONLY
 #   Every invocation is `cargo test --locked --offline`.  Both workspaces
 #   vendor their dependencies (tools/rustwx/vendor/crates-io,
-#   tools/grib1_bridge/vendor/crates-io) with a .cargo/config.toml that
+#   shared by all sixteen consumer workspaces) with a .cargo/config.toml that
 #   replaces the crates.io source, so a green leg proves the vendored
 #   closure is complete.  Dropping --offline would let a leg pass on a
 #   box with a warm registry cache and fail on the release box, which is
@@ -193,6 +193,10 @@ cpu  tools/rustwx  rusty-weather  30
 # Fetch: the HTTP/S3 side of the ingest path, offline-testable parts.
 cpu  tools/rustwx  rw-fetch  44
 
+# The global globe packer (2.8.9): native-grid reads, derived columns and
+# the zlib-ABI encoder the global worker's frames are written through.
+cpu  tools/rustwx  rw-globe-pack  3
+
 # The verification instruments: `rw_fieldcmp`, the paired-FRAME judge
 # that prints the campaign metric table, and `rw_runscore`, the
 # paired-RUN judge that reduces two run directories to one distance per
@@ -248,8 +252,21 @@ cpu  tools/rustwx  rw-nexrad  125
 # (31 lib + 12 in tests/cli.rs).
 cpu  tools/rustwx  rw-netcdf  43
 
+# Soundings: native profile validation and real PNG rendering, plus the
+# CLI library's input/store unit conversions. First green run 2026-10-18:
+# rustwx-sounding = 2 lib + 16 integration; rw-soundings = 2 lib.
+cpu  tools/rustwx  rustwx-sounding  18
+cpu  tools/rustwx  rw-soundings  2
+
 # Surface and upper-air observations.
 cpu  tools/rustwx  rw-obs  115
+
+# The forecast verification scorer behind `woof scoreboard --request`
+# (scoreboard-v1 and the obs-match-v2 interpolate_to_reports action).
+# Floor is its first green run in this list, 2026-10-09: 4 lib + 12 bin +
+# 3 cli_roundtrip + 1 large_arrays (a 213,578,750-value volume, about a
+# minute in debug and a 0.9 GB scratch frame it deletes) + 7 nightly.
+cpu  tools/rustwx  rw-scoreboard  27
 
 # The ATMS front door: HDF5 inventory, SDR/GEO decode and the ring-cell
 # thinning the global microwave leg reads.  Its own tests hold the stamp
@@ -267,6 +284,12 @@ cpu  tools/rustwx  rw-atms  5
 # any of those still decodes and still prints a plausible record, which
 # is exactly the class of defect only its own tests catch.
 cpu  tools/rustwx  rw-odim  52
+
+# National radar-volume feed listings (rw_radar_feeds, `woof obs radar-feeds`):
+# the dated URL rows and the FMI/DMI archive lookup that feed rw-odim. A listing
+# that cut a window wrongly still prints plausible rows, so only its own tests
+# catch it. Floor is its first green run, 8 (Linux, cargo 1.94.0, 2.9.2 compose).
+cpu  tools/rustwx  rw-radar-feeds  8
 
 # Satellite: the GOES ABI ingest and the L2 cloud products.  --lib is
 # the whole crate EXCEPT tests/cloud_products.rs, which is the entry
@@ -303,10 +326,9 @@ cpu  tools/rustwx  rw-simradar  31
 # history frame to a picture -- `rw_mpas_convert` gathers an unstructured
 # mesh onto a structured render window and writes the wrfout-shaped
 # classic netCDF frame the pinned renderer opens, and `rw_mpas_init`
-# builds the mesh side.  It replaced tools/mpas_render_bridge's Python,
-# which stays only as the reference the parity record
-# (evidence/rw-mpas-converter-parity.json: 127 of 127 PNGs
-# byte-identical) is about, so this crate is the only thing between a
+# builds the mesh side.  Its parity with the retired Python reference bridge
+# is recorded in evidence/rw-mpas-converter-parity.json: 127 of 127 PNGs
+# byte-identical.  This crate is the only thing between a
 # wrong resample weight and an MPAS product plot that is plausible and
 # in the wrong place -- a mesh-to-grid gather that picks the wrong cell
 # does not crash, it draws the storm somewhere else.  Floor was its
@@ -329,6 +351,30 @@ cpu  tools/rustwx  rw-mpas  418
 # the larger mesh suite so its three controls cannot disappear under its floor.
 cpu  tools/rustwx  rw-mpas  3  --test radar_history_contract
 
+# The stored-word stream comparator (`rw_mpas_static verify`, formerly the
+# rw_mpas_verify binary) driven through the woof hex CLI on synthetic
+# tapes. The CLI is another repository's, so in the cpu shard these three
+# could only panic for want of it, and they turned this crate's leg red
+# the day they merged. Run them where woof hex is installed, with
+# MPAS_VERIFY_TEST_ROOT naming a scratch folder (and MPAS_VERIFY_CLI or
+# MPAS_VERIFY_PYTHON if `python3 -m woof.hex.cli` is not the CLI):
+#     python tools/battery/run_cargo_gates.py --shard fixtures
+fixtures  tools/rustwx  rw-mpas  3  --test verify_mpas_cli -- --ignored
+
+# rw-tempo: the Rust port of NCAR/TEMPO 9adf9ef's table builders
+# (params/utils), loaded through librw_tempo by woof/tempo_assets.py when
+# the RRFS v2 hex TEMPO preset builds its collection and freezing tables.  A
+# wrong table entry does not crash; it moves every TEMPO rate.  Floor is the
+# delivered Rust suite: the three unit tests in src/lib.rs (layout size,
+# libgcc powi order, decade table sizes), which is what da2496f45 reported
+# ("cargo test 3 passed").  809cdc87b wrote 4 here, the count of the
+# Python side tests/test_tempo_rust_init.py, which no cargo run can meet;
+# the 2.8.9 E3 public CI reproduction ran the crate at 3 passed and the
+# leg went UNDER-RAN.  The Python four are the field-by-field check against
+# TEMPO's own tempo_init; they need a gfortran dump that does not ship
+# (declared in tools/battery/must_run_gates.txt) and were never cargo tests.
+cpu  tools/rustwx  rw-tempo  3
+
 # rw-isobaric: THIS project's crate.  The log-pressure column walk the
 # renderer's pressure-level charts and the ML exporter both interpolate
 # with, and the ECMWF below-ground rules ERA5's pressure levels are filled
@@ -338,6 +384,22 @@ cpu  tools/rustwx  rw-mpas  3  --test radar_history_contract
 # each branch of both rules against its hand computation.  Floor is its
 # first green run, 2026-10-01: 12 across the lib.
 cpu  tools/rustwx  rw-isobaric  12
+
+# rw-post: THIS project's crate, the clean-room post-processor that
+# replaces the held-out exporter modules (Group B so far: pressure-level
+# fields, sea-level pressure, precipitable water).  A wrong weight here
+# moves every exported pressure level and sea-level pressure, and a stale
+# kernel artifact would make the card disagree with the CPU path.  The CPU
+# suite checks closed-form isothermal columns, the membrane solver on a
+# harmonic field, the kernel constants against the reference and the
+# CUBIN/PTX hashes against their sources.  Floor first 11 (2026-10-05);
+# raised to 29 across the lib at the 2.8.7 merge-and-accept run, which
+# carries groups A to E, simulated_ir and the B1 analytic-height test.
+cpu  tools/rustwx  rw-post  29
+# The CUDA path must equal the CPU path bit for bit, or a frame exported on
+# a card differs from the same frame exported on a CPU-only install.  Needs
+# a card; 1 test, first green on an RTX 5090 (sm_120), 2026-10-05.
+gpu  tools/rustwx  rw-post  1  --lib -- --ignored
 
 # rw-mlexport: THIS project's crate, the binary behind `woof ml-export`.
 # A training dataset is read by code nobody here watches, so a wrong
@@ -351,6 +413,32 @@ cpu  tools/rustwx  rw-isobaric  12
 # mean, and the refusals.  Floor is its green run of 2026-10-01: 27 lib +
 # 11 in tests/export_roundtrip.rs.
 cpu  tools/rustwx  rw-mlexport  38
+
+# rw-grib2export: THIS project's crate, the clean-room GRIB2 exporter
+# behind `export-grib2`, `go --grib2`, run_options.grib2 and `render
+# --grib2-out` (2.8.7).  A GRIB2 file is read by tools nobody here
+# watches, so a wrong code, level or grid point does not crash, it puts a
+# field in the wrong place on someone else's map.  The suite packs planes
+# with missing cells through the exporter's own message builder and decodes
+# them again (codes, both fixed surfaces, bitmap, every value within half
+# the packing quantum, complex and simple packing), places a Lambert grid
+# south row first, refuses a rotated latitude-longitude grid it cannot
+# encode, keeps the catalog ids unique and the request refusals named.
+# The independent-decoder proof (ecCodes over every message of a real WOOF
+# frame) is the lane receipt, not this leg.  Floor first 8 (2026-10-05);
+# raised to 19 across the lib at the 2.8.7 merge-and-accept run (the
+# restored options, octet 14, extrema windows and simulated_ir identity).
+cpu  tools/rustwx  rw-grib2export  19
+
+# rw-superob: THIS project's crate, the Rust port of woof/obs/superob.py
+# (2.8.7): gate geometry, placement on the target grid, the per-cell
+# accumulators, correlation-coefficient QC, the velocity alias masks, the
+# clear-air census, the multi-radar merge and the region-global dealias of
+# each sweep, behind the C ABI woof/obs/superob_bridge.py loads.  Every
+# radar observation the DA assimilates comes out of it, so a wrong cell
+# does not crash, it moves an analysis.  Floor is its first green run,
+# 2026-10-07, Rust 1.94.0 on Linux: 4 across the lib.
+cpu  tools/rustwx  rw-superob  4
 
 # rw-libm: THIS project's crate, the transcendentals the WPS orographic
 # projection uses in place of the platform C library.  f32::powf and
@@ -487,15 +575,28 @@ cpu  tools/rw_wps  mapped-engine  121
 # integration), which is also what it reports here.
 cpu  tools/rw_wps  rw-wps  65
 
+# projected-intermediate: THIS project's crate, the projected MET library
+# woof hex loads for HRRR and every other projected source.  It joined
+# this list the day it joined the release bundle (2.9.1).  Its suite needs
+# no engine library: the exact-donor entry is a recording stub, and the
+# crop and geometry tests use the HRRR grid's own projection constants,
+# checked against the engine's latlon_to_ij at one point.  Whole-MET byte
+# identity against the engine's operator is woof hex's native test.
+# Floor is its first green run, 8 (Windows, cargo 1.94.0).
+cpu  tools/rw_wps  projected-intermediate  8
+
 # Local interfaces: exact TOML editing, request origins, saved-file ownership,
 # and actual worker process groups/Windows Job Objects. @python is the battery
 # interpreter path, resolved as one environment value without shell expansion.
 # Cold Windows/Linux: 7 visual + 2 geography builder; 14 terminal + 4 worker controls.
-cpu  tools/arwen-launchpad  arwen-launchpad  9
-cpu  tools/arwen-tui  arwen-tui  18  WOOF_TUI_TEST_PYTHON=@python
+# slimtest-s10 2026-10-20: floor lowered from 9 to 8 (1 duplicate tests removed; llvm-cov regions not lower)
 
 # The regular-grid Zarr reader ships with the bundle. The real CLI reads a
 # hand-encoded store, writes NetCDF, and preserves CF packing, missingness,
 # time/level selection and decoded record bytes; units and no-clobber controls
 # prevent a plausible mislabeled field or overwritten output from passing.
 cpu  tools/zarr_bridge  rw-zarr  3
+
+# Fire danger (cap-fire-indices, 2026-10-20): FWI, KBDI and NFDRS 2016 with carried state,
+# rw_fire_indices. Unit tests plus tests/restart.rs (state carried across a restart).
+cpu  tools/rustwx  fire-indices  9

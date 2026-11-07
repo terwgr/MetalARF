@@ -1,0 +1,212 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ruc_diagnostics",
+      "source": "woof/metal/shaders/hexrrfs_ruc_diagnostics.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/ruc_lsm_8c9f1a8.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ruc_diagnostics",
+      "cuda_symbol": "diags_sfcdiags_ruclsm",
+      "threads_per_group": 32,
+      "resources": [
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read"
+        ],
+        [
+          "qsfc",
+          "float",
+          "read"
+        ],
+        [
+          "cqs2",
+          "float",
+          "read"
+        ],
+        [
+          "chs",
+          "float",
+          "read"
+        ],
+        [
+          "chs2",
+          "float",
+          "read"
+        ],
+        [
+          "t3d",
+          "float",
+          "read"
+        ],
+        [
+          "qv3d",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rho3d",
+          "float",
+          "read"
+        ],
+        [
+          "p3d",
+          "float",
+          "read"
+        ],
+        [
+          "psfc2d",
+          "float",
+          "read"
+        ],
+        [
+          "cqs",
+          "float",
+          "read_write"
+        ],
+        [
+          "t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "th2",
+          "float",
+          "read_write"
+        ],
+        [
+          "q2",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "hfx": [
+          [
+            "nc"
+          ]
+        ],
+        "qfx": [
+          [
+            "nc"
+          ]
+        ],
+        "tsk": [
+          [
+            "nc"
+          ]
+        ],
+        "qsfc": [
+          [
+            "nc"
+          ]
+        ],
+        "cqs2": [
+          [
+            "nc"
+          ]
+        ],
+        "chs": [
+          [
+            "nc"
+          ]
+        ],
+        "chs2": [
+          [
+            "nc"
+          ]
+        ],
+        "t3d": [
+          [
+            "nc"
+          ]
+        ],
+        "qv3d": [
+          [
+            "nc"
+          ]
+        ],
+        "dz": [
+          [
+            "nc"
+          ]
+        ],
+        "rho3d": [
+          [
+            "nc"
+          ]
+        ],
+        "p3d": [
+          [
+            "nc"
+          ]
+        ],
+        "psfc2d": [
+          [
+            "nc"
+          ]
+        ],
+        "cqs": [
+          [
+            "nc"
+          ]
+        ],
+        "t2": [
+          [
+            "nc"
+          ]
+        ],
+        "th2": [
+          [
+            "nc"
+          ]
+        ],
+        "q2": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "mynn",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rovcp",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

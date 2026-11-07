@@ -81,7 +81,7 @@ def test_one_refusal_is_raised_unchanged(tmp_path):
 def test_a_refused_required_selector_does_not_hide_the_rest(tmp_path):
     """mp_physics is required; its refusal used to end the check."""
     inp = _with(physics=" sf_lake_physics = 2, 2,\n",
-                replace=((" mp_physics = 55, 55,", " mp_physics = 3, 3,"),))
+                replace=((" mp_physics = 10, 10,", " mp_physics = 999, 999,"),))
     problems = namelist_refusals(parse_namelist_text(WPS_TEXT),
                                  parse_namelist_text(inp))
     texts = [str(p) for p in problems]
@@ -373,7 +373,8 @@ def test_every_rule_carries_its_measured_reach(contract):
     assert keys["physics"]["keys"]["use_mp_re"]["reach"] == "first"
     # &fdda is read whole, and its nudging selectors still refuse.
     assert keys["fdda"]["any_key"] is True
-    assert keys["fdda"]["keys"]["grid_fdda"]["values"] == [0]
+    # labs/nudging (2.9.11): grid_fdda = 1/2 import as analysis nudging.
+    assert keys["fdda"]["keys"]["grid_fdda"]["values"] == [0, 1, 2]
 
 
 # ---------------------------------------------------------------------------

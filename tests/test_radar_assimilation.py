@@ -366,7 +366,7 @@ def test_config_with_no_radar_source_waits_for_the_batch_list():
 
 def test_config_refuses_unknown_z_source():
     with pytest.raises(RadarAssimilationError, match="z_source"):
-        _config(z_source="z_mean")
+        _config(z_source="z_median")
 
 
 def test_reflectivity_for_a_scheme_with_no_hx_route_is_refused_at_config_time():
@@ -379,18 +379,39 @@ def test_reflectivity_for_a_scheme_with_no_hx_route_is_refused_at_config_time():
     rows = consumer_rows_by_selector("microphysics", "radar_da")
     routes = {mp: row["reflectivity_route"] for mp, row in rows.items()}
     assert set(routes.values()) <= {
-        "operator", "scheme-diagnostic", "native-not-separable", "none"}, routes
+        "operator", "scheme-diagnostic", "native-not-separable",
+        "native-not-routed", "none", "unrouted"}, routes
     fused = [mp for mp, route in routes.items()
              if route == "native-not-separable"]
-    # NO SCHEME IS "unrouted" ANY MORE, and mp=50 is the only fused one.
+    # WSM7 has a native diagnostic but no radar DA H(x) operator yet.
+    # Its route remains refused explicitly; earlier routes stay admitted.
     # mp=9 was unrouted, then recorded as fused when audit R-050 read its
     # kernel; its Z block has since been lifted into its own kernel
     # (woof/core/kernels/milbrandt2_zet.cu), which updates nothing, so it
     # is routed as a scheme diagnostic.  The gate that refuses an unrouted
     # scheme is exercised below on a synthesised row, because a positive
     # control that can only run while the defect exists is not a control.
-    assert not [mp for mp, route in routes.items() if route == "unrouted"]
-    assert set(fused) == {50}, routes
+    #
+    # FAST_SBM (30) is the one unrouted scheme: it writes no REFL_10CM (its
+    # polar-scattering diagnostic is not ported), so there is no H(x) over
+    # its bin spectra.  The gate refuses it here, at configuration, which is
+    # the shipped positive control the synthesised row below stood in for.
+    assert sorted(mp for mp, route in routes.items() if route == "unrouted") == [24, 30]
+    with pytest.raises(RadarAssimilationError, match=r"no H\(x\) route"):
+        _config(reflectivity=True, analysis_fields=HYDRO_FIELDS,
+                positivity_policy="clip", mp_physics=30)
+    # NOR is any scheme fused any more: mp=50's Z was lifted into
+    # woof/core/kernels/p3_zdiag.cu (audit S14) and is a scheme
+    # diagnostic.  The fused arm of the gate is driven on a probe row
+    # (_fused_probe) by the tests below.
+    # The named schemes are the fused ones now: TEMPO (900) computes its Z
+    # inside its own step (obsop.NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP), so a
+    # reflectivity cycle on it is refused by name below, the positive
+    # control this arm lacked.  Ferrier-Aligo (5) computes its DBZ column
+    # inside EGCP01COLUMN, so it is fused too.
+    from woof.microphysics_schemes import NAMED_MP_IDS
+    assert set(fused) == {5} | set(NAMED_MP_IDS), routes
+    assert routes[50] == "scheme-diagnostic", routes
     for mp in fused:
         with pytest.raises(RadarAssimilationError,
                            match="Turn off the arm"):
@@ -405,7 +426,7 @@ def test_reflectivity_for_a_scheme_with_no_hx_route_is_refused_at_config_time():
                           positivity_policy="clip", mp_physics=mp)
             assert cfg.mp_physics == mp
     # Velocity-only cycles never consult the route: the way out works.
-    assert _config(mp_physics=fused[0]).reflectivity is False
+    assert _config(mp_physics=50).reflectivity is False
 
 
 def test_an_unrouted_scheme_would_be_refused_at_config_time(monkeypatch):
@@ -464,7 +485,33 @@ def test_the_unrouted_class_is_still_refused_by_name(monkeypatch):
                    positivity_policy="clip", mp_physics=10).mp_physics == 10
 
 
-def test_the_way_out_of_a_reflectivity_refusal_names_the_arm_that_is_ON():
+def _fused_probe(monkeypatch, mp=1, option="kessler-mp1"):
+    """Make one scheme's registry row say its Z is fused with its step.
+
+    No shipped scheme is in that class any more (P3 left it with audit
+    S14), so the refusal is driven on a probe row, as the unrouted class
+    is above: the row, the reason the refusal prints, and no clear-air
+    floor, exactly the state P3 was in.
+    """
+    from copy import deepcopy
+
+    import woof.physics_registry as pr
+    from woof.da import obsop
+
+    perturbed = deepcopy(pr.registry_view())
+    row = perturbed["components"]["microphysics"]["options"][option][
+        "consumers"]["radar_da"]
+    row["reflectivity_route"] = "native-not-separable"
+    row["reflectivity_route_reason"] = "a probe row, not a shipped state"
+    monkeypatch.setattr(pr, "_REGISTRY", perturbed)
+    monkeypatch.setitem(obsop.NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP, mp,
+                        "a probe scheme whose Z is fused with its step.")
+    monkeypatch.delitem(obsop.CLEAR_AIR_FLOOR_DBZ, mp, raising=False)
+    return mp
+
+
+def test_the_way_out_of_a_reflectivity_refusal_names_the_arm_that_is_ON(
+        monkeypatch):
     """A refusal whose way out leaves the run refused is not a refusal.
 
     The third arm (``fall_speed="reflectivity"``, which reads the simulated
@@ -476,7 +523,7 @@ def test_the_way_out_of_a_reflectivity_refusal_names_the_arm_that_is_ON():
     are actually on, and every branch of it is followed here to a config
     that constructs.
     """
-    fused = 50  # fused Z, no operator (see the route test above)
+    fused = _fused_probe(monkeypatch)
     with pytest.raises(RadarAssimilationError) as third_arm:
         _config(velocity=True, reflectivity=False, clear_air=False,
                 fall_speed="reflectivity", mp_physics=fused)
@@ -590,7 +637,8 @@ def test_the_clear_air_floor_refusal_names_its_own_way_out(monkeypatch):
     assert without.velocity and without.clear_air is False
 
 
-def test_a_scheme_with_no_operator_is_refused_before_the_floor_question():
+def test_a_scheme_with_no_operator_is_refused_before_the_floor_question(
+        monkeypatch):
     """Order matters because the floor's way out assumes an operator.
 
     For a scheme the radar operator cannot simulate at all, "state
@@ -602,6 +650,7 @@ def test_a_scheme_with_no_operator_is_refused_before_the_floor_question():
     """
     from woof.da.obsop import CLEAR_AIR_FLOOR_DBZ
 
+    _fused_probe(monkeypatch)
     routes = _all_reflectivity_routes()
     fused = [mp for mp, route in routes.items()
              if route == "native-not-separable"
@@ -774,6 +823,14 @@ def test_provenance_names_what_happened(analysis):
         assert np.isfinite(entry["innovation_mean"])
         assert entry["obs_error_mean"] == pytest.approx(OBS_ERR_MS)
     assert provenance["filter"]["active_points"] > 0
+    # Where the call spent its wall clock, stage by stage in run order: the
+    # receipt that tells an observation-side cost from the filter's.
+    stages = provenance["stage_wall_seconds"]
+    assert list(stages)[:3] == ["observations_read_and_thinned",
+                                "checkpoints_read", "prior_stacked"]
+    assert {"radar_batches", "filter", "restaggered"} <= set(stages)
+    assert all(value >= 0.0 for value in stages.values())
+    assert provenance["filter"]["neighbor_search"] in ("index", "forward", "dense")
     # JSON-serialisable, because it lands in the cycle manifest.
     import json
     json.dumps(provenance)
@@ -833,6 +890,59 @@ def test_scheme_reflectivity_provider_kessler(world):
     assert np.all(np.isfinite(dbz))
     # Rain is present, so somewhere must read above the clear-air floor.
     assert float(dbz.max()) > -35.0
+
+
+@pytest.mark.parametrize("mp_physics, version", [(8, "wrf_461"),
+                                                  (28, "wrf_39_noaa"),
+                                                  (28, "wrf_461")])
+def test_scheme_reflectivity_provider_thompson_host_checkpoint(mp_physics, version):
+    """A host checkpoint of a Thompson scheme gets the scheme's own H(x).
+
+    The host fallback mirrors only Kessler, WSM6 and Morrison; the regional
+    door hands the provider host arrays, so before the device route every
+    Thompson analysis (the HRRR suite's mp 28 included) ran with no
+    reflectivity or clear-air batch at all.  The provider answers on the
+    device copy now, and the answer is the CUDA path's own value.
+    """
+    cp = pytest.importorskip("cupy")
+    try:
+        cp.cuda.runtime.getDeviceCount()
+    except Exception:
+        pytest.skip("no CUDA device")
+    from woof.da.obsop import HOST_REFLECTIVITY_MIRRORS
+
+    assert mp_physics not in HOST_REFLECTIVITY_MIRRORS
+    rng = np.random.default_rng(7)
+    shape = (NZ, NY, NX)
+    p = np.linspace(95000.0, 30000.0, NZ)[:, None, None] * np.ones(shape)
+    theta = np.linspace(300.0, 330.0, NZ)
+    state = {"p": p, "thp": np.zeros(shape), "qv": np.full(shape, 8e-3),
+             "qc": np.zeros(shape), "qi": np.zeros(shape),
+             "qr": np.where(rng.random(shape) > 0.5, 2e-3, 0.0),
+             "nr": np.full(shape, 5e3), "qs": np.zeros(shape),
+             "qg": np.zeros(shape)}
+    run = types.SimpleNamespace(mp_physics=mp_physics, thompson_version=version,
+                                thompson_fork_snow_fall=(
+                                    "wrf_39_noaa" if version == "wrf_39_noaa"
+                                    else "blend"))
+    dbz = scheme_reflectivity_provider(run, base_theta=theta)(0, state)
+    assert dbz.shape == shape and dbz.dtype == np.float64
+    assert np.all(np.isfinite(dbz))
+    rain = state["qr"] > 0.0
+    assert float(dbz[rain].min()) > 20.0       # 2 g/kg of rain is an echo
+    assert float(dbz[~rain].max()) <= -30.0    # an empty cell reads the floor
+    # The same state, evaluated by the CUDA path directly.
+    view = types.SimpleNamespace(
+        **{k: cp.asarray(v, dtype=cp.float32) for k, v in state.items()},
+        thb=cp.asarray(theta, dtype=cp.float32), qh=None, ns=None, ng=None,
+        nc=None, ni=None)
+    buffers = {}
+    view.scratch = lambda shp, slot, dtype=None: buffers.setdefault(
+        slot, cp.zeros(tuple(shp), dtype=cp.float32 if dtype is None else dtype))
+    direct = cp.asnumpy(obsop.simulated_reflectivity(view, run))
+    np.testing.assert_array_equal(dbz, direct.astype(np.float64))
+    # The checkpoint itself is not written by the operator.
+    assert float(state["qg"].max()) == 0.0
 
 
 def test_scheme_provider_refuses_bad_base_theta():
@@ -1136,6 +1246,10 @@ def _perturbed_member(center, base_theta, seed):
         setattr(state, absent, None)
     cfg = perturb.PerturbationConfig(
         dx_km=H_DX_M / 1000.0, dy_km=H_DX_M / 1000.0, rim_width=H_RIM,
+        # this namespace carries no vertical coordinate (php, mup are
+        # None), so the default hydrostatic mass balance refuses it by
+        # name; the twin here is about the species draw, not the column
+        mass_balance="none",
         fields=(
             perturb.FieldPerturbation("u", 1.5, H_SCALE_KM),
             perturb.FieldPerturbation("v", 1.5, H_SCALE_KM),
@@ -1283,6 +1397,23 @@ def test_perturbation_gives_every_species_spread_and_breaks_no_pair(
             assert record["factor_min"] > 0.0
 
 
+def _positivity_parts(receipt):
+    """The positivity receipt as the list of passes that ran.
+
+    Since 69505529f (DA lane 3's field rules) a card analysis bounds the
+    joint solve on the device and then bounds again the fields the rules
+    replaced, and the receipt is ``{"device": ..., "after_field_rules":
+    ...}``; the host route still writes one flat receipt.  Every pass
+    carries its own ``policy`` and mass accounting, so each is checked.
+    """
+    if receipt is None:
+        return []
+    if "policy" in receipt:
+        return [receipt]
+    assert set(receipt) == {"device", "after_field_rules"}, sorted(receipt)
+    return [receipt["device"], receipt["after_field_rules"]]
+
+
 def _hydro_config(**overrides):
     from woof.da.moments import analysis_fields
 
@@ -1383,9 +1514,11 @@ def test_hydro_analysis_is_non_negative_and_moment_consistent(
     from woof.da.moments import moment_consistency_report
 
     increments, provenance = hydro_analysis
-    positivity = provenance["positivity"]
-    assert positivity["policy"] == "clip"
-    assert positivity["mass_left_negative"] == 0.0
+    parts = _positivity_parts(provenance["positivity"])
+    assert parts
+    for positivity in parts:
+        assert positivity["policy"] == "clip"
+        assert positivity["mass_left_negative"] == 0.0
     for index, member in increments.items():
         background = read_checkpoint_state(member_background_checkpoint(
             hydro_world.member_states[index]["member_dir"]))
@@ -1446,7 +1579,8 @@ def test_the_receipt_names_the_eigensolver_that_produced_it(analysis):
     assert filt["max_jacobi_sweeps"] == 0
 
 
-def test_rtpp_is_available_and_differs_from_rtps(hydro_world, hydro_grid):
+def test_rtpp_is_available_and_differs_from_rtps(
+        hydro_world, hydro_grid, hydro_analysis):
     """Both relaxations run; at the same alpha they are not the same.
 
     The ensemble MEAN increment is relaxation-independent -- neither
@@ -1463,9 +1597,7 @@ def test_rtpp_is_available_and_differs_from_rtps(hydro_world, hydro_grid):
         reflectivity_provider=hydro_world.provider)
     assert prov["relaxation"] == "rtpp"
     assert prov["filter"]["relaxation"] == "rtpp"
-    rtps, _ = assimilate_radar_grid(
-        checkpoints, hydro_world.obs_path, hydro_grid, _hydro_config(),
-        reflectivity_provider=hydro_world.provider)
+    rtps, _ = hydro_analysis
     mean_rtpp = np.mean([rtpp[i]["thp"] for i in sorted(rtpp)], axis=0)
     mean_rtps = np.mean([rtps[i]["thp"] for i in sorted(rtps)], axis=0)
     assert np.allclose(mean_rtpp, mean_rtps, atol=1e-10)
@@ -1479,8 +1611,12 @@ def test_reflectivity_thinning_reduces_the_assimilated_count(hydro_world,
         for index, info in hydro_world.member_states.items()}
     _, provenance = assimilate_radar_grid(
         checkpoints, hydro_world.obs_path, hydro_grid,
+        # the horizontal thinning alone: no classes, every level, no top
+        # (woof.da.radar_classes has its own counts in test_da_radar_classes)
         _hydro_config(reflectivity_thinning_cells=2,
-                      reflectivity_error_inflation=3.0),
+                      reflectivity_error_inflation=3.0,
+                      reflectivity_clear_floor_dbz=None,
+                      reflectivity_level_stride=1, radar_top_pa=None),
         reflectivity_provider=hydro_world.provider)
     receipt = provenance["reflectivity_thinning"]
     assert receipt["cells"] == 2
@@ -1523,8 +1659,8 @@ def test_positivity_clip_fires_and_is_counted(hydro_world, hydro_grid):
                       positivity_policy="none"),
         reflectivity_provider=hydro_world.provider)
     # With no policy, negatives are counted and LEFT -- a stated choice.
-    receipt = provenance["positivity"]
-    assert receipt is None or receipt["policy"] == "none"
+    for receipt in _positivity_parts(provenance["positivity"]):
+        assert receipt["policy"] == "none"
 
     prior = {}
     for name in ("qr", "qs", "qg", "qv"):
@@ -1757,3 +1893,131 @@ def test_a_host_solve_puts_no_analysis_on_the_card(world, grid):
     assert analysis_device_price(
         _config(solve_device="host"), members=MEMBERS, grid=grid,
         document=read_document(world.obs_path, expected_grid=grid)) is None
+
+
+# ---------------------------------------------------------------------------
+# member backgrounds without a host round trip (DA analysis data movement)
+# ---------------------------------------------------------------------------
+
+
+def test_views_and_in_memory_states_give_byte_identical_increments(
+        hydro_world, hydro_grid, hydro_analysis):
+    """The cycle driver no longer saves a whole-state mirror of every
+    member to a second npz and reads it back with ``fields=None``: it hands
+    the analysis a lazy view of each member's own restart, or the live
+    mirror itself.  Neither may move a single bit of the analysis."""
+    from woof.da.radar_assimilation import CheckpointStateView
+
+    paths = {index: member_background_checkpoint(info["member_dir"])
+             for index, info in hydro_world.member_states.items()}
+    views = {index: CheckpointStateView(path)
+             for index, path in paths.items()}
+    in_memory = {index: read_checkpoint_state(path)
+                 for index, path in paths.items()}
+    reference, reference_prov = hydro_analysis
+    try:
+        for states in (views, in_memory):
+            increments, provenance = assimilate_radar_grid(
+                states, hydro_world.obs_path, hydro_grid, _hydro_config(),
+                reflectivity_provider=hydro_world.provider)
+            assert set(increments) == set(reference)
+            for index, member in reference.items():
+                assert set(increments[index]) == set(member)
+                for name, values in member.items():
+                    assert increments[index][name].dtype == values.dtype
+                    assert increments[index][name].tobytes() == \
+                        values.tobytes(), (index, name)
+            assert provenance["innovations"] == reference_prov["innovations"]
+        # Every field is read once and then served from the view's cache.
+        assert views[0]["qv"] is views[0]["qv"]
+        assert reference_prov["checkpoints"][0] == paths[0].name
+    finally:
+        for view in views.values():
+            view.close()
+    with pytest.raises(RadarAssimilationError, match="closed"):
+        views[0]["thp"]
+
+
+def test_checkpoint_view_is_a_read_only_mapping_of_state_arrays(tmp_path):
+    from woof.da.radar_assimilation import CheckpointStateView
+
+    path = tmp_path / "gpuwmrst_d01_000600.npz"
+    u = np.arange(12, dtype=np.float32).reshape(1, 3, 4)
+    np.savez(path, **{"state/u": u, "state/qv": u * 2,
+                      "driver/rainnc": u[0], "header": np.zeros(3, np.uint8)})
+    view = CheckpointStateView(path)
+    assert sorted(view) == ["qv", "u"] and len(view) == 2
+    assert "u" in view and "rainnc" not in view
+    assert view["u"].tobytes() == u.tobytes()
+    assert view.cached_bytes == u.nbytes
+    with pytest.raises(KeyError):
+        view["rainnc"]
+    assert view.name == path.name
+    # Stored members are mapped read-only from the file, not copied.
+    assert not view["qv"].flags.writeable
+    with pytest.raises(ValueError):
+        view["qv"][0, 0, 0] = 1.0
+    view.close()
+    assert view.cached_bytes == 0
+    with pytest.raises(RadarAssimilationError, match="no checkpoint"):
+        CheckpointStateView(tmp_path / "missing.npz")
+
+
+def test_checkpoint_view_maps_every_layout_and_falls_back_when_compressed(
+        tmp_path):
+    from woof.da.radar_assimilation import CheckpointStateView
+
+    rng = np.random.default_rng(9)
+    arrays = {"state/c": rng.normal(size=(3, 4, 5)).astype(np.float32),
+              "state/f": np.asfortranarray(rng.normal(size=(2, 3))),
+              "state/i": np.arange(7, dtype=np.int16),
+              "state/s": np.float64(2.5),
+              "state/e": np.zeros((0, 3), np.float32)}
+    for name, writer in (("stored.npz", np.savez),
+                         ("deflated.npz", np.savez_compressed)):
+        path = tmp_path / name
+        writer(path, **arrays)
+        view = CheckpointStateView(path)
+        for key, value in arrays.items():
+            got = view[key[len("state/"):]]
+            want = np.asarray(value)
+            assert got.dtype == want.dtype and got.shape == want.shape
+            assert np.array_equal(got, want)
+            assert got.tobytes(order="A") == want.tobytes(order="A")
+        view.close()
+
+
+def test_in_memory_member_states_are_the_same_analysis_as_checkpoint_files(
+        world, grid):
+    """The cycle driver hands its held snapshots straight to the analysis
+    instead of a savez/load round trip; the answer must not move a bit."""
+    checkpoints = {
+        index: member_background_checkpoint(info["member_dir"])
+        for index, info in world.member_states.items()}
+    states = {index: read_checkpoint_state(path)
+              for index, path in checkpoints.items()}
+    before = {index: {name: value.copy() for name, value in state.items()}
+              for index, state in states.items()}
+    from_files, prov_files = assimilate_radar_grid(
+        checkpoints, world.obs_path, grid, _config())
+    from_memory, prov_memory = assimilate_radar_grid(
+        states, world.obs_path, grid, _config())
+    assert sorted(from_files) == sorted(from_memory)
+    for index in from_files:
+        assert sorted(from_files[index]) == sorted(from_memory[index])
+        for name in from_files[index]:
+            a, b = from_files[index][name], from_memory[index][name]
+            assert a.dtype == b.dtype and a.shape == b.shape
+            assert a.tobytes() == b.tobytes(), (index, name)
+    # Read, never written: the caller's arrays come back untouched.
+    for index, state in states.items():
+        for name, value in state.items():
+            assert value.tobytes() == before[index][name].tobytes()
+    assert all(label.startswith("in-memory member")
+               for label in prov_memory["checkpoints"].values())
+    def untimed(record):
+        if not isinstance(record, dict):
+            return record
+        return {key: untimed(value) for key, value in record.items()
+                if not key.endswith("_seconds")}
+    assert untimed(prov_files["filter"]) == untimed(prov_memory["filter"])

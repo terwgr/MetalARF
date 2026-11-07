@@ -1,0 +1,344 @@
+{
+  "kernels": [
+    {
+      "name": "tiedtke_column",
+      "cuda_symbol": "tiedtke_column",
+      "module": "tiedtke_family",
+      "source": "woof/metal/shaders/tiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/tiedtke.cu",
+      "resources": [
+        [
+          "u3d",
+          "float",
+          "read"
+        ],
+        [
+          "v3d",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "t3d",
+          "float",
+          "read"
+        ],
+        [
+          "qv3d",
+          "float",
+          "read"
+        ],
+        [
+          "qc3d",
+          "float",
+          "read"
+        ],
+        [
+          "qi3d",
+          "float",
+          "read"
+        ],
+        [
+          "pi3d",
+          "float",
+          "read"
+        ],
+        [
+          "rho3d",
+          "float",
+          "read"
+        ],
+        [
+          "qvften",
+          "float",
+          "read"
+        ],
+        [
+          "qvpblten",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "pcps",
+          "float",
+          "read"
+        ],
+        [
+          "p8w",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "znu",
+          "float",
+          "read"
+        ],
+        [
+          "rthcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqccuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqicuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rucuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "raincv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pratec",
+          "float",
+          "read_write"
+        ],
+        [
+          "cu_act_flag",
+          "int32",
+          "read_write"
+        ],
+        [
+          "workspace_f",
+          "float",
+          "read_write"
+        ],
+        [
+          "workspace_i",
+          "int32",
+          "read_write"
+        ],
+        [
+          "workspace_b",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvften": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvpblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pcps": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqccuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqicuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rucuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rvcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "raincv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pratec": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cu_act_flag": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace_f": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace_b": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "stepcu",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "f_qc",
+          "int32"
+        ],
+        [
+          "f_qi",
+          "int32"
+        ],
+        [
+          "force_continue",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz"
+      ]
+    }
+  ]
+}

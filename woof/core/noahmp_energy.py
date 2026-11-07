@@ -96,8 +96,6 @@ fixture marks the same slots with role ``undef`` and never pins the residue.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -109,49 +107,6 @@ from woof.core.noahmp_libm import expf, f32, powf, sqrtf, tanhf
 from woof.core.noahmp_radiation import RadiationOptions, albedo, surrad
 from woof.core.noahmp_thermal import phasechange, tsnosoi
 from woof.core.noahmp_vegeflux import VegeFluxParameters, vege_flux
-
-_VEGE_FLUX_OVERRIDE = ContextVar("noahmp_vege_flux_override", default=None)
-_BARE_FLUX_OVERRIDE = ContextVar("noahmp_bare_flux_override", default=None)
-
-
-@contextmanager
-def vege_flux_override(callback):
-    """Temporarily route this context's VEGE_FLUX call through ``callback``.
-
-    A :class:`ContextVar` makes the staging seam safe for concurrent domains
-    and async tasks.  Direct ENERGY and fixture calls see the unmodified host
-    routine because the default is ``None``.
-    """
-    token = _VEGE_FLUX_OVERRIDE.set(callback)
-    try:
-        yield
-    finally:
-        _VEGE_FLUX_OVERRIDE.reset(token)
-
-
-@contextmanager
-def bare_flux_override(callback):
-    """The BARE_FLUX counterpart of :func:`vege_flux_override`."""
-    token = _BARE_FLUX_OVERRIDE.set(callback)
-    try:
-        yield
-    finally:
-        _BARE_FLUX_OVERRIDE.reset(token)
-
-
-def _call_vege_flux(*args, **kwargs):
-    callback = _VEGE_FLUX_OVERRIDE.get()
-    if callback is None:
-        return vege_flux(*args, **kwargs)
-    return callback(*args, **kwargs)
-
-
-def _call_bare_flux(*args, **kwargs):
-    callback = _BARE_FLUX_OVERRIDE.get()
-    if callback is None:
-        return bare_flux(*args, **kwargs)
-    return callback(*args, **kwargs)
-
 
 class LeafRequest:
     """One paused physical leaf call, as :func:`energy_steps` yields it.
@@ -173,7 +128,7 @@ class LeafRequest:
         return f"LeafRequest({self.leaf!r}, {len(self.args)} args)"
 
 
-#: The host answer for a paused leaf, honouring the two override ContextVars.
+#: The host answer for a paused leaf.
 #: ENERGY owns the two flux leaves; anything paused outside ENERGY registers
 #: itself, which is what keeps this module from importing its own callers.
 #:
@@ -183,8 +138,8 @@ class LeafRequest:
 #: leaf for many columns in one launch -- and for no other; nothing about the
 #: arithmetic changes when they are.
 _HOST_LEAF = {
-    "vege_flux": _call_vege_flux,
-    "bare_flux": _call_bare_flux,
+    "vege_flux": lambda *args, **kw: vege_flux(*args, **kw),
+    "bare_flux": lambda *args, **kw: bare_flux(*args, **kw),
     "thermoprop": lambda **kw: thermoprop(**kw),
     "tsnosoi": lambda **kw: tsnosoi(**kw),
     "phasechange": lambda **kw: phasechange(**kw),
@@ -237,9 +192,6 @@ RW = f32(461.269)
 
 # ENERGY's own PARAMETERs, :2028-2030
 MPE = f32(1.0e-6)
-#: :2029.  Read only by the OPT_BTR 2 (CLM) and 3 (SSiB) legs, both dead
-#: under the pinned opt_btr=1; kept so the constant list matches the source.
-PSIWLT = f32(-150.0)
 Z0 = f32(0.002)          # bare-soil roughness length under the canopy
 #: RADIATION's own MPE, :2767 -- a different literal from ENERGY's.
 _RADIATION_MPE = f32(1.0e-6)
@@ -275,8 +227,11 @@ class EnergyOptions:
     opt_irr: int = 0
     soil_update_steps: int = 1
     calculate_soil: bool = True
+    noahmp_snow_age: str = "wrf_470"
 
     def check(self) -> None:
+        from woof.noahmp_generation import snow_age_generation
+        snow_age_generation(self.noahmp_snow_age)
         if self.opt_sfc != 1:
             raise NotImplementedError(
                 "opt_sfc != 1 selects SFCDIF2, dead under the Registry "
@@ -287,8 +242,8 @@ class EnergyOptions:
                 "default opt_crs=1; they are deliberately not transcribed")
         if self.opt_alb != 2:
             raise NotImplementedError(
-                "opt_alb != 2 selects SNOWALB_BATS, dead under the Registry "
-                "default opt_alb=2; it is deliberately not transcribed")
+                "opt_alb must be 2 (CLASS); opt_alb=1 needs SNOWALB_BATS's "
+                "snow-age-dependent albedo calculation, which is not implemented")
         if self.opt_btr != 1:
             raise NotImplementedError(
                 "opt_btr != 1 selects the CLM (2) or SSiB (3) BTRAN leg at "
@@ -318,10 +273,11 @@ class EnergyOptions:
                 "FVEG and LAI before ENERGY is reached")
 
     def radiation_options(self) -> RadiationOptions:
-        return RadiationOptions(opt_rad=self.opt_rad, opt_alb=self.opt_alb)
+        return RadiationOptions(opt_rad=self.opt_rad, opt_alb=self.opt_alb,
+                                noahmp_snow_age=self.noahmp_snow_age)
 
 
-PINNED_OPTIONS = EnergyOptions()
+PINNED_OPTIONS = EnergyOptions(noahmp_snow_age="wrf_461")
 
 
 # ---------------------------------------------------------------------------
@@ -642,7 +598,6 @@ def energy_steps(p: EnergyParameters, *,
             "and the RSURF/RHSUR leg at :2178-2181.  No fixture in this tree "
             "admits it")
 
-    nlay = nsnow + nsoil
     zsnso = [f32(v) for v in zsnso]
     dzsnso = [f32(v) for v in dzsnso]
     stc = [f32(v) for v in stc]

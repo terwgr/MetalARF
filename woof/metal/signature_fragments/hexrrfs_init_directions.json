@@ -1,0 +1,72 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_init_pools",
+      "source": "woof/metal/shaders/hexrrfs_init_pools.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/driver_rrfs.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_init_directions",
+      "cuda_symbol": "rrfs_init_directions",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "lat",
+          "float",
+          "read"
+        ],
+        [
+          "lon",
+          "float",
+          "read"
+        ],
+        [
+          "east",
+          "float",
+          "read_write"
+        ],
+        [
+          "north",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lat": [
+          [
+            "extent"
+          ]
+        ],
+        "lon": [
+          [
+            "extent"
+          ]
+        ],
+        "east": [
+          [
+            "3",
+            "extent"
+          ]
+        ],
+        "north": [
+          [
+            "3",
+            "extent"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "cells",
+          "int32"
+        ],
+        [
+          "extent",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

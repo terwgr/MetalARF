@@ -193,7 +193,7 @@ def test_root_guard_refuses_before_disabled_overlay(tmp_path,receipt):
 def test_root_guard_accepts_attestation(tmp_path,nested):
     receipt={'terrain_smoothing':{'d03':TerrainSmoothing('none').echo()}}
     if nested: receipt={'baseline':receipt}
-    base={}
+    base={"HGT_M": np.zeros((2, 2))}
     got=apply_prepared_highres(base,SimpleNamespace(),config=carrier(tmp_path),domain_id=3,
             case_date=date(2000,1,1),landuse_attrs=None,baseline_receipt=receipt)
     assert got[0] is base and got[1] is receipt
@@ -268,7 +268,7 @@ def synthetic_geog(tmp_path):
     root=tmp_path/'GEOG';root.mkdir()
     selection=build.GeogSelection.fallback(root)
     for field in build._DEFAULT_GEOG_DIRS:
-        directory=selection.path(field);directory.mkdir(exist_ok=True)
+        directory=selection.path(field);directory.mkdir(parents=True,exist_ok=True)
         categorical=field in ('landuse','soil_top','soil_bottom')
         nz=12 if field in ('greenfrac','lai','albedo') else 1
         kv=_write_index(directory,dx=10,dy=10,known_lat=-85,known_lon=-175,tile_x=6,tile_y=6,

@@ -215,6 +215,23 @@ def _mapped_proof_literals() -> tuple[dict[str, list[set[str]]],
                         raise AssertionError(
                             "_seal_posted_mapped's proof grew a key this gate "
                             "cannot read statically; teach it, do not delete it")
+    # A CONDITIONAL builder: a module function whose whole answer is
+    # ``return {...} if <receipt> else {}`` (mapped_direct's
+    # _soil_floor_receipts, which spreads the identical receipt into the
+    # proof AND the cache header -- 2.8.8 acceptance D-02).  Spread into a
+    # proof, every key its dict can hold is optional, exactly as if the
+    # IfExp were written inline.
+    conditional_builders: dict[str, set[str]] = {}
+    for function in functions:
+        last = function.body[-1] if function.body else None
+        if not (isinstance(last, ast.Return) and isinstance(last.value, ast.IfExp)):
+            continue
+        branches = (last.value.body, last.value.orelse)
+        if all(isinstance(branch, ast.Dict) and all(
+                isinstance(item, ast.Constant) and isinstance(item.value, str)
+                for item in branch.keys) for branch in branches):
+            conditional_builders[function.name] = {
+                item.value for branch in branches for item in branch.keys}
     head_parts: dict[str, object] = {}
     for node in ordered:
         if node is None:
@@ -263,6 +280,11 @@ def _mapped_proof_literals() -> tuple[dict[str, list[set[str]]],
                 unconditional = _unconditional_spread_key(value)
                 if unconditional is not None:
                     keys.add(unconditional)
+                    continue
+                if (isinstance(value, ast.Call)
+                        and isinstance(value.func, ast.Name)
+                        and value.func.id in conditional_builders):
+                    opted_in |= conditional_builders[value.func.id]
                     continue
                 # (2) `**({...} if <receipt> is not None else {})` -- both
                 # branches are read and every key either can contribute
@@ -321,7 +343,10 @@ def test_the_reader_and_the_writer_agree_on_the_mapped_proof_inventory():
         "woof/mapped_direct.py no longer publishes one direct proof and "
         "two hierarchy proofs (one-shot and chained); teach this gate the "
         "new document")
-    assert literals["PROOF_SCHEMA"] == [set(runner.MAPPED_DIRECT_PROOF_KEYS)], (
+    # Current writers retain measurements in preparation-runtime.json.
+    # The reader still accepts the older optional in-proof telemetry.
+    assert literals["PROOF_SCHEMA"] == [set(runner.MAPPED_DIRECT_PROOF_KEYS)
+                                       - runner.MAPPED_PREPARATION_TELEMETRY_KEYS], (
         "the mapped direct proof the writer publishes and the inventory "
         "the forecast runner accepts have drifted apart")
     # The chained tree's proof is the runner's whole inventory; the
@@ -332,13 +357,15 @@ def test_the_reader_and_the_writer_agree_on_the_mapped_proof_inventory():
         [sorted(hierarchy), sorted(hierarchy - {"boundary_stream"})]), (
         "the mapped hierarchy proofs the writer publishes and the "
         "inventory the forecast runner accepts have drifted apart")
+    # Conditional keys include the default RUC layer moisture-floor receipt.
+    # Bind the real writer's inventory so a fired floor cannot break preflight.
     # The opted-in half, bound the same way.  A key the writer can add
     # conditionally that the runner does not tolerate is the same dead
     # last leg as a required key it does not know -- it just waits for
     # someone to turn the option on.
     assert optional["PROOF_SCHEMA"] | optional["HIERARCHY_PROOF_SCHEMA"] \
         == set(runner.MAPPED_OPTIONAL_PROOF_KEYS), (
-        "the mapped proof keys the writer publishes only on opt-in and "
+        "the mapped proof keys the writer publishes conditionally and "
         "the optional inventory the forecast runner tolerates have "
         "drifted apart")
 
@@ -350,11 +377,25 @@ def test_prepared_runner_capability_query_is_side_effect_free_without_run_args(
     payload = json.loads(capsys.readouterr().out)
     assert payload == runner.runner_capabilities()
     assert payload["schema"] == "gpuwm-runner-capabilities-v1"
-    assert payload["supported_sources"] == [
+    # Model-table rows (a family row plus one per model in its declared
+    # table) join through the table, not a literal: the arbitrary
+    # acceptance test.  Everything else is pinned by name.
+    from woof.prepared_source_schemas import composed_packaged_profiles
+    from woof.source_adapters import source_adapters
+    model_table_rows = {adapter.source_id for adapter in source_adapters()
+                        if adapter.model_table
+                        and adapter.source_id in composed_packaged_profiles()}
+    assert model_table_rows
+    assert payload["supported_sources"] == sorted({
         "20crv3", "20crv3-cf", "aifs", "aigefs", "aigfs",
         "ecmwf-ens", "ecmwf-open-data", "era5", "era5-l137", "gdas", "gefs",
-        "gem-gdps", "gfs", "hrrr", "hrrr-native", "hrrr-prs", "icon-d2", "icon-eu",
-        "icon-global", "mapped", "rap", "rap-native", "rrfs"]
+        # lane/cap-gefs-archive (6a3b8fd50bf): the indexed GEFS retrospectives.
+        "gefs-reforecast", "gefs-reforecast-weekly", "gefs-v11", "gefs-v11-flat",
+        "gem-gdps", "gfs", "hex-global", "hrrr", "hrrr-native", "hrrr-prs", "icon-d2", "icon-eu",
+        "icon-global", "mapped", "rap", "rap-native", "rrfs",
+        # 2.9.7: IFS HRES open data at 0.1 degree (E-SRC) and the RRFS
+        # ensemble member with its deterministic companion (S9).
+        "ecmwf-open-data-0p1", "rrfs-ens"} | model_table_rows)
     assert payload["physics_profile_ids"] == list(runner.PHYSICS_PROFILES)
     assert payload["report_schema"] == runner.REPORT_SCHEMA
     assert payload["window"]["limit_policy"] \
@@ -1515,7 +1556,8 @@ def _prepared_fixture(
         domain_bundle.mkdir(parents=True)
     static_path = domain_bundle / "native-static.npz"
     if source == "20crv3":
-        np.savez(static_path, STATIC=np.ones((1,), dtype=np.float64))
+        np.savez(static_path, STATIC=np.ones((1,), dtype=np.float64),
+                 HGT_M=np.zeros((exp.root.run.ny, exp.root.run.nx), dtype=np.float64))
     else:
         static_path.write_bytes(b"hash-bound-test-static")
     geometry_path = domain_bundle / "geometry-receipt.json"
@@ -1804,7 +1846,7 @@ def _prepared_fixture(
                 "path": "native-static.npz",
                 "bytes": static_path.stat().st_size,
                 "sha256": _sha256(static_path),
-                "fields": ["STATIC"],
+                "fields": ["HGT_M", "STATIC"],
             },
             "geometry": geometry_payload,
             "prepared_cache": cache_receipt,
@@ -1843,7 +1885,7 @@ def _prepared_fixture(
                     "path": "native-static.npz",
                     "bytes": static_path.stat().st_size,
                     "sha256": _sha256(static_path),
-                    "fields": ["STATIC"],
+                    "fields": ["HGT_M", "STATIC"],
                 },
                 "geometry_receipt": {
                     "path": "geometry-receipt.json",
@@ -2011,7 +2053,7 @@ def _prepared_fixture(
                     "path": "native-static.npz",
                     "bytes": (prepared / "native-static.npz").stat().st_size,
                     "sha256": _sha256(prepared / "native-static.npz"),
-                    "fields": ["STATIC"],
+                    "fields": ["HGT_M", "STATIC"],
                 },
                 "root_geometry": geometry_payload,
                 "static_catalog": {"schema": "test-catalog-v1"},
@@ -2070,7 +2112,8 @@ def test_gpuwm_sim_composes_the_command_a_real_bundle_is_accepted_with(
     monkeypatch.setattr(
         runner, "load_native_static_cache",
         lambda path, actual_grid, ny, nx: {
-            "STATIC": np.ones((ny, nx), dtype=np.float64)})
+            "STATIC": np.ones((ny, nx), dtype=np.float64),
+            "HGT_M": np.zeros((ny, nx), dtype=np.float64)})
 
     from woof import stage_cli
 
@@ -2128,7 +2171,7 @@ def test_preflight_accepts_exact_portable_single_domain_authorities(
         lambda receipt, static, actual_grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
     inputs = runner.preflight_prepared_forecast(
         source=source, prepared_root=fixture.prepared,
@@ -2215,7 +2258,8 @@ def _bind_synthetic_preflight_geometry(monkeypatch, *, hierarchy: bool):
     monkeypatch.setattr(
         runner, "load_native_static_cache",
         lambda path, actual_grid, ny, nx: {
-            "STATIC": np.ones((ny, nx), dtype=np.float64)})
+            "STATIC": np.ones((ny, nx), dtype=np.float64),
+            "HGT_M": np.zeros((ny, nx), dtype=np.float64)})
 
 
 def _preflight_fixture(fixture, *, physics_profile=runner.PHYSICS_PROFILE,
@@ -2371,6 +2415,19 @@ def test_a_named_profile_still_binds_switch_for_switch():
         runner._validate_physics(
             exp, runner.TWENTYCRV3_WSM6_PHYSICS_PROFILE,
             exp.run_seconds, 3600, source="gfs")
+
+
+def test_a_disagreeing_history_interval_flag_is_refused_not_ignored():
+    """Open-defects ledger A15: --history-interval-seconds that disagrees
+    with the hash-bound experiment used to warn and then write the
+    experiment's cadence; it is refused now, naming the flag.  The
+    run-length half of A15 is retired by lane/fp-door-run-length-fetch:
+    a requested --run-seconds is applied to the experiment and executed
+    (tests/test_prepared_run_length.py), so it is no longer refused."""
+    exp = load_experiment(ROOT / "configs" / "gfs_wrf_direct_proof.toml")
+    with pytest.raises(ValueError, match="--history-interval-seconds 600"):
+        runner._validate_physics(exp, None, exp.run_seconds, 600.0,
+                                 source="gfs")
 
 
 def test_the_product_default_suite_is_admitted_without_a_profile(
@@ -2570,17 +2627,43 @@ def _write_280_receipt(fixture):
 # corrections e13fa45c0 / 59f7e280f change WSM6 physics. The named receipt
 # records CQ=False; the synthetic unnamed receipt keeps the current resolved
 # settings, but still carries the old registry's physical operators.
+# 2.8.8 advanced the YSU and classic MM5 restart algorithm identities
+# (woof/checkpoint_identity.py): both now compute differently, and the
+# registry names each changed kernel identity.
 _EXPECTED_280_PREFLIGHT_REFUSALS = {
     runner.PHYSICS_PROFILE: [
         "resolved.moist_cq (prepared False, this build True)",
         "registry physics of components.microphysics.options.wsm6-mp6 (changed)",
+        "registry physics of components.pbl.options.ysu (changed)",
+        "registry physics of components.surface_layer.options.classic-mm5 "
+        "(changed)",
+        # golden/ports-rad: icloud gained the value 2 (declared).
+        "registry physics of parameters.icloud (changed)",
         "registry physics of parameters.moist_cq (changed)",
     ],
     None: [
         "registry physics of components.microphysics.options.wsm6-mp6 (changed)",
+        "registry physics of components.pbl.options.ysu (changed)",
+        "registry physics of components.surface_layer.options.classic-mm5 "
+        "(changed)",
+        # golden/ports-rad: icloud gained the value 2 (declared).
+        "registry physics of parameters.icloud (changed)",
         "registry physics of parameters.moist_cq (changed)",
     ],
 }
+
+
+def _woof_renamed_part_refusals() -> set[str]:
+    """Registry parts whose physics differs from 2.8.0 only by the package
+    name: their source names woof (a module path or the data package), so
+    2.8.0's recorded digests cannot match them and the preflight names them
+    as changed beside the recorded differences above."""
+    from woof.physics_registry import (
+        registry_physics_part_sources, strip_registry_documentation)
+    package = re.compile(r"\bwoof[._/]|woof_data/")
+    return {f"registry physics of {name} (changed)"
+            for name, source in registry_physics_part_sources().items()
+            if package.search(json.dumps(strip_registry_documentation(source)))}
 
 
 @pytest.mark.parametrize("physics_profile", [runner.PHYSICS_PROFILE, None])
@@ -2597,8 +2680,9 @@ def test_a_proof_prepared_under_the_280_registry_resolves_at_preflight(
     by name.  The registry history resolves 2.8.0's document to its
     physics, and what was added since is off in the configuration this
     build loads. The later CQ corrections (e13fa45c0 / 59f7e280f) change
-    WSM6's physical result, so these two historical preparations now
-    refuse with exactly the recorded CQ differences. An unknown registry
+    WSM6's physical result, and 2.8.8 advanced the YSU and classic MM5
+    kernel identities, so these two historical preparations now refuse
+    with exactly those recorded differences. An unknown registry
     document still refuses separately, naming it.
     """
 
@@ -2614,8 +2698,13 @@ def test_a_proof_prepared_under_the_280_registry_resolves_at_preflight(
         _preflight_fixture(fixture, physics_profile=physics_profile)
     prefix = "physics selection differs from the hash-bound experiment/profile: "
     assert prefix in str(caught.value)
-    assert str(caught.value).split(prefix, 1)[1] \
-        == "; ".join(_EXPECTED_280_PREFLIGHT_REFUSALS[physics_profile])
+    assert "Prepare again" in str(caught.value)
+    refused = str(caught.value).split(prefix, 1)[1].split(
+        ". Prepare again", 1)[0].split("; ")
+    expected = _EXPECTED_280_PREFLIGHT_REFUSALS[physics_profile]
+    renamed = _woof_renamed_part_refusals()
+    assert [line for line in refused
+            if line in expected or line not in renamed] == expected
 
     for receipt in (proof["physics"], proof["export"]["physics"]):
         receipt["registry_sha256"] = "e" * 64
@@ -2631,7 +2720,8 @@ def test_a_proof_prepared_under_the_280_registry_resolves_at_preflight(
     if physics_profile is not None:
         expected_unknown.insert(0,
             "resolved.moist_cq (prepared False, this build True)")
-    assert str(caught.value).split(prefix, 1)[1] == "; ".join(expected_unknown)
+    assert "Prepare again" in str(caught.value)
+    assert str(caught.value).split(prefix, 1)[1].split(". Prepare again", 1)[0] == "; ".join(expected_unknown)
 
 
 @pytest.mark.parametrize("physics_profile", [runner.PHYSICS_PROFILE, None])
@@ -2692,9 +2782,11 @@ def test_unnamed_forecast_main_reaches_execution_and_states_the_status(
     def fake_run(inputs, *, output_directory, observer=None,
                  first_products=None, stream_init="auto",
                  progress_options=None, preflight_seconds=None,
-                 kernel_cache_census=None, restart=None, health_debug=False):
+                 kernel_cache_census=None, restart=None, health_debug=False,
+                 columns=None):
         observed["inputs"] = inputs
         observed["observer"] = observer
+        observed["columns"] = columns
         observed["first_products"] = first_products
         observed["stream_init"] = stream_init
         observed["progress_options"] = progress_options
@@ -3381,7 +3473,7 @@ def test_preflight_accepts_exact_nssl2_validation_candidate_and_binds_receipt(
         lambda receipt, static, actual_grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
     inputs = runner.preflight_prepared_forecast(
         source="gfs", prepared_root=fixture.prepared,
@@ -3449,7 +3541,7 @@ def test_preflight_accepts_materialized_morrison_for_named_sources(
         lambda receipt, static, actual_grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
     inputs = runner.preflight_prepared_forecast(
         source=source, prepared_root=fixture.prepared,
@@ -3484,7 +3576,7 @@ def test_preflight_accepts_guarded_thompson_for_each_prepared_source(
         lambda receipt, static, actual_grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
     inputs = runner.preflight_prepared_forecast(
         source=source, prepared_root=fixture.prepared,
@@ -3535,36 +3627,25 @@ def test_preflight_accepts_guarded_thompson_for_each_prepared_source(
     ]) == len(runtime.assets)
 
 
-def test_thompson_profile_rejects_wsm6_cache_before_restore(
-        tmp_path, monkeypatch):
+@pytest.mark.parametrize("prepared_profile,requested_profile,message", [
+    (runner.PHYSICS_PROFILE, runner.THOMPSON_PHYSICS_PROFILE,
+     "guarded Thompson MP8"),
+    (runner.THOMPSON_PHYSICS_PROFILE, runner.PHYSICS_PROFILE,
+     "supported prepared-cache profile"),
+])
+def test_prepared_profile_rejects_another_cache_before_restore(
+        tmp_path, monkeypatch, prepared_profile, requested_profile, message):
     _bind_test_thompson_runtime(tmp_path, monkeypatch)
-    fixture = _prepared_fixture(tmp_path, "gfs")
+    fixture = _prepared_fixture(tmp_path, "gfs", physics_profile=prepared_profile)
 
-    with pytest.raises(ValueError, match="guarded Thompson MP8"):
+    with pytest.raises(ValueError, match=message):
         runner.preflight_prepared_forecast(
             source="gfs", prepared_root=fixture.prepared,
             proof_sha256=_sha256(fixture.proof),
             source_manifest_sha256=_sha256(fixture.source_manifest),
             prepared_content_sha256=fixture.content_sha256,
             experiment_config=fixture.experiment, wps_namelist=fixture.wps,
-            physics_profile=runner.THOMPSON_PHYSICS_PROFILE,
-            run_seconds=fixture.run_seconds, history_interval_seconds=3600)
-
-
-def test_wsm6_profile_rejects_thompson_cache_before_restore(
-        tmp_path, monkeypatch):
-    _bind_test_thompson_runtime(tmp_path, monkeypatch)
-    fixture = _prepared_fixture(
-        tmp_path, "gfs", physics_profile=runner.THOMPSON_PHYSICS_PROFILE)
-
-    with pytest.raises(ValueError, match="supported prepared-cache profile"):
-        runner.preflight_prepared_forecast(
-            source="gfs", prepared_root=fixture.prepared,
-            proof_sha256=_sha256(fixture.proof),
-            source_manifest_sha256=_sha256(fixture.source_manifest),
-            prepared_content_sha256=fixture.content_sha256,
-            experiment_config=fixture.experiment, wps_namelist=fixture.wps,
-            physics_profile=runner.PHYSICS_PROFILE,
+            physics_profile=requested_profile,
             run_seconds=fixture.run_seconds, history_interval_seconds=3600)
 
 
@@ -3677,7 +3758,7 @@ def test_preflight_derives_hash_bound_hierarchy_d01_bundle(
         lambda receipt, static, actual_grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
     inputs = runner.preflight_prepared_forecast(
         source="gfs", prepared_root=fixture.prepared,
@@ -3708,7 +3789,7 @@ def test_hierarchy_d01_nssl2_authority_uses_dynamic_microphysics_label(
         lambda receipt, static, actual_grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+        lambda path, actual_grid, ny, nx: {"STATIC": np.ones((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
     inputs = runner.preflight_prepared_forecast(
         source="gfs", prepared_root=fixture.prepared,
@@ -3750,7 +3831,8 @@ def test_preflight_rejects_wrong_source_adapter_even_when_bundle_is_self_consist
     monkeypatch.setattr(
         runner, "validate_native_lambert_contract", lambda *args, **kwargs: object())
     monkeypatch.setattr(runner, "verify_native_static_receipt", lambda *args: {})
-    monkeypatch.setattr(runner, "load_native_static_cache", lambda *args: {})
+    monkeypatch.setattr(runner, "load_native_static_cache",
+                        lambda path, grid, ny, nx: {"HGT_M": np.zeros((ny, nx))})
 
     with pytest.raises(ValueError, match="source identity differs"):
         runner.preflight_prepared_forecast(
@@ -3871,7 +3953,8 @@ def test_preflight_rejects_resolved_wrf_contract_drift(
     monkeypatch.setattr(
         runner, "validate_native_lambert_contract", lambda *args, **kwargs: object())
     monkeypatch.setattr(runner, "verify_native_static_receipt", lambda *args: {})
-    monkeypatch.setattr(runner, "load_native_static_cache", lambda *args: {})
+    monkeypatch.setattr(runner, "load_native_static_cache",
+                        lambda path, grid, ny, nx: {"HGT_M": np.zeros((ny, nx))})
 
     with pytest.raises(ValueError, match="export source hashes differ"):
         runner.preflight_prepared_forecast(
@@ -4186,9 +4269,11 @@ def test_source_neutral_surface_contract_rejects_land_identity_drift():
                             num_soil_layers=4))
 
 
-def test_output_due_thompson_consumes_native_refl_10cm_stash():
+def test_output_due_thompson_consumes_native_refl_10cm_stash(monkeypatch):
+    from woof.core import refl
+
     state = SimpleNamespace(
-        qv=object(), physics=SimpleNamespace(mp_physics=8))
+        qv=np.ones((2, 3, 4), np.float32), physics=SimpleNamespace(mp_physics=8))
     native = object()
     consumed = []
 
@@ -4197,9 +4282,20 @@ def test_output_due_thompson_consumes_native_refl_10cm_stash():
 
     assert result is native
     assert consumed == [state]
-    assert runner._consume_due_native_refl_10cm(
-        state, 0, lambda actual: pytest.fail("initial frame consumed a stash")) \
-        is None
+    # The analysis frame consumes no stash: it is the analysis diagnostic
+    # (18dbe1d5449; WRF's zeros in exact mode). This test owns the routing,
+    # so a stand-in answers for the diagnostic.
+    analysed = []
+
+    def analysis(actual, *, shape=None):
+        analysed.append(actual)
+        return np.full(actual.qv.shape, 7.0, np.float32)
+
+    monkeypatch.setattr(refl, "analysis_refl_10cm", analysis)
+    frame = runner._consume_due_native_refl_10cm(
+        state, 0, lambda actual: pytest.fail("initial frame consumed a stash"))
+    assert analysed == [state]
+    assert frame.shape == (2, 3, 4) and np.all(frame == 7.0)
 
 
 def _retime_single_domain(exp, *, cadence_seconds, run_seconds=None):
@@ -4251,20 +4347,68 @@ def test_hash_bound_history_cadence_uses_floor_schedule_for_any_due_output(
     assert receipt["run_end_frame_scheduled"] is last_equals_run_end
 
 
-def test_hash_bound_history_cadence_warns_on_cli_mismatch(capsys):
-    """Warn-not-block: the hash-bound experiment cadence is what the
-    run uses; a stale flag is named, not fatal.  The non-whole-step
-    cadence stays a refusal (KEEP-HARD: the schedule cannot exist)."""
+def test_hash_bound_history_cadence_refuses_a_disagreeing_cli_cadence(capsys):
+    """Open-defects ledger A15: a flag that disagrees with the hash-bound
+    cadence used to be warned about and ignored, so a run asking for
+    10-minute frames on an hourly experiment wrote hourly frames.  It is
+    refused now, naming both cadences; the matching value still runs.
+    The non-whole-step cadence stays a refusal (the schedule cannot
+    exist)."""
     base = load_experiment(ROOT / "configs" / "gfs_wrf_direct_proof.toml")
     subhourly = _retime_single_domain(base, cadence_seconds=900.0)
-    receipt = runner._validate_hash_bound_history_cadence(subhourly, 1800.0)
-    err = capsys.readouterr().err
-    assert "warning:" in err and "authoritative" in err
+    with pytest.raises(ValueError, match=r"--history-interval-seconds 1800 "
+                       r"asks for a history frame every 1800 s.*"
+                       r"history_interval_s = 900 s"):
+        runner._validate_hash_bound_history_cadence(subhourly, 1800.0)
+    hourly = _retime_single_domain(base, cadence_seconds=3600.0)
+    with pytest.raises(ValueError, match="silently deliver"):
+        runner._validate_hash_bound_history_cadence(hourly, 600.0)
+    receipt = runner._validate_hash_bound_history_cadence(subhourly, 900.0)
+    assert capsys.readouterr().err == ""
     assert receipt["experiment_seconds"] == 900.0
 
     nonstep = _retime_single_domain(base, cadence_seconds=71.0)
     with pytest.raises(ValueError, match="whole number of exact model time steps"):
         runner._validate_hash_bound_history_cadence(nonstep, 71.0)
+
+
+def test_quicklook_domain_runs_its_own_default_history_cadence(tmp_path):
+    """U-E3 (2026-10-26, WOOF run_2f1ab5667c4cbdf6): a single-domain run
+    with ``--quicklook-interval 300`` on 15-minute full frames refused its
+    own default before the first step.  ``_clock_defaults`` reads the
+    TOML's declared history_interval_s (900, the FULL cadence), the parsed
+    DomainConfig carries the 300 s quick-look alarm, and the cadence check
+    compared the two.  Both name the experiment's own stream now; a
+    cadence that is neither still refuses, and the schedule still counts
+    every alarm frame (quick-look subsets included)."""
+    text = (ROOT / "configs" / "gfs_wrf_direct_proof.toml").read_text(
+        encoding="utf-8")
+    assert text.count("history_interval_s = 3600.0\n") == 1
+    text = text.replace(
+        "history_interval_s = 3600.0\n",
+        "history_interval_s = 900.0\nquicklook = { every_s = 300.0 }\n")
+    config = tmp_path / "quicklook.toml"
+    config.write_text(text, encoding="utf-8")
+    exp = load_experiment(config)
+    assert exp.root.history_interval_s == 300.0
+    assert exp.root.full_history_interval_s == 900.0
+
+    run_seconds, default_cadence = runner._clock_defaults(config)
+    assert default_cadence == 900.0
+    receipt = runner._validate_hash_bound_history_cadence(exp, default_cadence)
+    assert receipt["full_history_seconds"] == 900.0
+    assert receipt["quicklook_seconds"] == 300.0
+    assert receipt["expected_frame_count"] == int(run_seconds // 300) + 1
+    assert runner._validate_hash_bound_history_cadence(
+        exp, 300.0)["expected_frame_count"] == receipt["expected_frame_count"]
+    with pytest.raises(ValueError, match=r"history_interval_s = 900 s on d01 "
+                       r"\(with a 300 s quick-look stream\)"):
+        runner._validate_hash_bound_history_cadence(exp, 600.0)
+    plan = runner._execution_plan_receipt(
+        source_exp=exp, executed_exp=exp, profile="p",
+        history_interval_seconds=default_cadence)
+    assert not [row for row in plan["execution_overrides"]
+                if row["kind"] == "output-cadence"]
 
 
 def test_adaptive_prepared_cadence_reaches_exact_offgrid_output_schedule():
@@ -4316,42 +4460,27 @@ def test_cli_requires_explicit_source_physics_run_and_history_output_contract():
     assert args.history_interval_seconds == 900.0
 
 
-def test_cli_accepts_explicit_nssl2_validation_candidate_profile():
+@pytest.mark.parametrize("source,profile,run_seconds", [
+    ("era5", runner.NSSL2_PHYSICS_PROFILE, "43200"),
+    ("gfs", runner.THOMPSON_PHYSICS_PROFILE, "10800"),
+])
+def test_cli_accepts_explicit_candidate_profile(source, profile, run_seconds):
     args = runner._parse_args([
-        "--source", "era5",
+        "--source", source,
         "--prepared-root", "prepared",
         "--proof-sha256", "1" * 64,
         "--source-manifest-sha256", "2" * 64,
         "--prepared-content-sha256", "3" * 64,
         "--experiment-config", "experiment.toml",
         "--wps-namelist", "namelist.wps",
-        "--physics-profile", runner.NSSL2_PHYSICS_PROFILE,
-        "--run-seconds", "43200",
+        "--physics-profile", profile,
+        "--run-seconds", run_seconds,
         "--history-interval-seconds", "3600",
         "--io-mode", "history",
         "--outdir", "run",
     ])
 
-    assert args.physics_profile == runner.NSSL2_PHYSICS_PROFILE
-
-
-def test_cli_accepts_explicit_guarded_thompson_profile():
-    args = runner._parse_args([
-        "--source", "gfs",
-        "--prepared-root", "prepared",
-        "--proof-sha256", "1" * 64,
-        "--source-manifest-sha256", "2" * 64,
-        "--prepared-content-sha256", "3" * 64,
-        "--experiment-config", "experiment.toml",
-        "--wps-namelist", "namelist.wps",
-        "--physics-profile", runner.THOMPSON_PHYSICS_PROFILE,
-        "--run-seconds", "10800",
-        "--history-interval-seconds", "3600",
-        "--io-mode", "history",
-        "--outdir", "run",
-    ])
-
-    assert args.physics_profile == runner.THOMPSON_PHYSICS_PROFILE
+    assert args.physics_profile == profile
 
 
 # ---------------------------------------------------------------------------
@@ -4577,8 +4706,12 @@ def test_the_runner_accepts_the_manifest_this_release_s_fetch_authors(
     identity = manifest["source"]
     assert sorted(identity) == [
         "cycle", "model", "pressure_levels_hpa", "product", "top_pressure_pa"]
-    assert len(identity["pressure_levels_hpa"]) == 23
-    assert identity["top_pressure_pa"] == 5000.0
+    # A 50 hPa top takes one published level strictly above it (40 hPa):
+    # real.exe needs source atmosphere above the model top, not at it
+    # (GFS preparation patch 0001).
+    assert len(identity["pressure_levels_hpa"]) == 24
+    assert min(identity["pressure_levels_hpa"]) == 40.0
+    assert identity["top_pressure_pa"] == 4000.0
 
     roles, receipt = runner._manifest_file_specs(
         "gfs", manifest,
@@ -4593,7 +4726,7 @@ def test_the_runner_accepts_the_manifest_this_release_s_fetch_authors(
     # Routed, not ignored: the ladder reaches the receipt and the derived
     # source top is the one the vertical contract is entitled to.
     assert receipt["pressure_levels_hpa"] == identity["pressure_levels_hpa"]
-    assert receipt["source_top_pressure_pa"] == 5000.0
+    assert receipt["source_top_pressure_pa"] == 4000.0
     assert receipt["experiment_p_top_pa"] == 5000.0
 
 
@@ -4654,7 +4787,7 @@ def test_the_runner_holds_the_level_ladder_to_the_vertical_contract(
     manifest = _authored_gfs_front_door_manifest(
         tmp_path, monkeypatch, top_pressure_pa=5000.0)
 
-    with pytest.raises(ValueError, match="reaching 5000 Pa"):
+    with pytest.raises(ValueError, match="reaching 4000 Pa"):
         runner._manifest_file_specs(
             "gfs", manifest,
             _experiment_stub(start_time=_GFS_FETCH_CYCLE, p_top_pa=1000.0),
@@ -4981,20 +5114,12 @@ def test_a_floor_receipt_that_differs_from_its_proof_still_refuses():
             proof_extra={"soil_moisture_floor": {"floored_land_cells": 99}}))
 
 
-def test_a_cache_receipt_absent_from_the_proof_still_refuses():
-    """A cache claiming a floor its proof never recorded is inconsistent."""
-
+@pytest.mark.parametrize("side", ["user_extra", "proof_extra"])
+def test_a_receipt_absent_from_one_authority_still_refuses(side):
+    """A floor recorded only in the cache or only in its proof is inconsistent."""
     with pytest.raises(ValueError, match="user metadata differs"):
         runner._validate_cache_metadata(**_cache_metadata_case(
-            user_extra={"soil_moisture_floor": _FLOOR_RECEIPT}))
-
-
-def test_a_proof_receipt_absent_from_the_cache_still_refuses():
-    """And the mirror: the proof recorded a floor the cache did not."""
-
-    with pytest.raises(ValueError, match="user metadata differs"):
-        runner._validate_cache_metadata(**_cache_metadata_case(
-            proof_extra={"soil_moisture_floor": _FLOOR_RECEIPT}))
+            **{side: {"soil_moisture_floor": _FLOOR_RECEIPT}}))
 
 
 def test_a_genuinely_mismatched_knob_is_still_refused():
@@ -5150,17 +5275,21 @@ def test_a_bundle_prepared_before_a_tolerant_run_field_still_loads(tmp_path):
         == {f"domain_config.run.{name}" for name in dropped}
 
 
-def test_a_bundle_that_really_used_the_feature_is_still_refused(tmp_path):
-    """Absence is tolerated; a DIFFERENT value is not."""
+@pytest.mark.parametrize("field,value,message", [
+    ("use_adaptive_time_step", True, "use_adaptive_time_step"),
+    ("mp_physics", 10, r"mp_physics \(prepared 10"),
+])
+def test_changed_cache_identity_names_the_differing_field(tmp_path, field, value, message):
+    """Changed adaptive-step values refuse; identity refusals name what differs."""
     fixture = _prepared_fixture(tmp_path, "20crv3")
     header = json.loads(
         (fixture.domain_bundle / "prepared-cache" / "header.json").read_text(
             encoding="utf-8"))
     expected = header["identity"]
     observed = json.loads(_canonical(expected))
-    observed["domain_config"]["run"]["use_adaptive_time_step"] = True
+    observed["domain_config"]["run"][field] = value
 
-    with pytest.raises(ValueError, match="use_adaptive_time_step"):
+    with pytest.raises(ValueError, match=message):
         runner._resolve_cache_identity_compatibility(
             source="20crv3", observed=observed, expected=expected)
 
@@ -5246,25 +5375,6 @@ def test_an_output_only_switch_keeps_the_single_domain_cache(tmp_path, name):
     assert [entry["field"] for entry in receipt["compatibility_overrides"]] \
         == [f"domain_config.run.{name}"]
     run["mp_physics"] = 10
-    with pytest.raises(ValueError, match=r"mp_physics \(prepared 10"):
-        runner._resolve_cache_identity_compatibility(
-            source="20crv3", observed=observed, expected=expected)
-
-
-def test_the_identity_refusal_names_what_differs(tmp_path):
-    """The sentence stood alone and named nothing.
-
-    A user could not tell an upgrade from a changed configuration, which
-    is the whole diagnostic question at that moment.
-    """
-    fixture = _prepared_fixture(tmp_path, "20crv3")
-    header = json.loads(
-        (fixture.domain_bundle / "prepared-cache" / "header.json").read_text(
-            encoding="utf-8"))
-    expected = header["identity"]
-    observed = json.loads(_canonical(expected))
-    observed["domain_config"]["run"]["mp_physics"] = 10
-
     with pytest.raises(ValueError, match=r"mp_physics \(prepared 10"):
         runner._resolve_cache_identity_compatibility(
             source="20crv3", observed=observed, expected=expected)
@@ -5367,3 +5477,21 @@ def test_explicit_locator_does_not_relax_sealed_manifest_name_safety(tmp_path, r
     manifest["files"][role]["name"] = unsafe
     with pytest.raises(ValueError, match="has an unsafe name"):
         runner._manifest_file_specs("era5", manifest, load_experiment(fixture.experiment), proof)
+
+
+def test_the_era5_writer_binds_a_fired_ruc_layer_floor():
+    """D-02 sweep: the RUC state names its floor ``soil_moisture_floor``
+    (90ae5edc9), the Noah state ``moisture_floor``; the ERA5 writer read
+    the Noah name alone and dropped a fired RUC floor from cache and proof."""
+
+    from woof import era5_direct
+
+    ruc = {"policy": "wrf-ruc-layer-source-smois-max-0.005",
+           "floored_values": 3}
+    noah = {"floored_land_cells": 2}
+    bind = era5_direct._soil_receipt_bindings
+    assert bind(SimpleNamespace(soil_moisture_floor=ruc)) == {
+        "soil_moisture_floor": ruc}
+    assert bind(SimpleNamespace(moisture_floor=noah)) == {
+        "soil_moisture_floor": noah}
+    assert bind(SimpleNamespace(moisture_floor={}, deep_soil_repair={})) == {}

@@ -40,13 +40,6 @@ def backend_name(value: Any) -> str:
     return "numpy"
 
 
-def asnumpy(value: Any) -> np.ndarray:
-    if is_cupy_array(value):
-        import cupy as cp
-        return cp.asnumpy(value)
-    return np.asarray(value)
-
-
 def scalar(value: Any) -> float:
     """Move one scalar to the host without copying its parent array."""
     if is_cupy_array(value):
@@ -63,3 +56,12 @@ def synchronize(value: Any) -> None:
 
 __all__ = ["asnumpy", "backend_name", "is_cupy_array", "is_metal_array",
            "namespace", "scalar", "synchronize"]
+
+
+def asnumpy(value):
+    if is_metal_array(value):
+        return value.to_numpy()
+    if is_cupy_array(value):
+        import cupy as cp
+        return cp.asnumpy(value)
+    return np.asarray(value)

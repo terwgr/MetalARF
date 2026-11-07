@@ -11,6 +11,7 @@
 //! rw-ingest), and `export` (palette PNG quick-looks).
 
 pub mod abi;
+pub mod ami;
 pub mod cloud;
 pub mod composite;
 pub mod cwp;
@@ -18,8 +19,10 @@ pub mod dmw;
 pub mod events;
 pub mod export;
 pub mod follow;
+pub mod geo_imager;
 pub mod geostationary;
 pub mod goes;
+pub mod himawari;
 pub mod netcdf;
 pub mod palette;
 pub mod s3;
@@ -35,3 +38,10 @@ pub use events::{NEVER_CANCEL, SatError, SatEvent, print_event};
 pub use follow::{FollowConfig, FollowSummary, follow};
 pub use store::{StoredFrame, WrittenFrame, read_frame, write_band_frame};
 pub use window::{EvictionReport, WindowConfig, enforce_window};
+
+pub(crate) fn boxed_error(message: impl Into<String>) -> Box<dyn std::error::Error> {
+    Box::new(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        message.into(),
+    ))
+}

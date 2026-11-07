@@ -691,7 +691,7 @@
         ],
         "switches": [
           [
-            11
+            12
           ]
         ],
         "status": [
@@ -728,6 +728,10 @@
         ],
         [
           "float_bundle_size",
+          "int32"
+        ],
+        [
+          "lsm",
           "int32"
         ]
       ],

@@ -143,20 +143,47 @@ INIT_ABI_MARKER = (
     "rw_mpas_init --met MET --static STATIC.nc --capsule CAPSULE.nc")
 
 #: ``rw_mpas_convert``'s contract: the output schema and the progress
-#: tokens, which is the literal that changes when the tape contract does.
+#: tokens, which is the literal that changes when the tape contract does,
+#: plus the flags callers pass that an older build refuses (``--remap`` and
+#: its REMAP/BUDGET lines, ``--jobs``).  Without them a pre-2.9.0 converter
+#: matched, passed ``woof doctor``, and the woof hex product stage died
+#: on ``unknown flag --remap``.
 CONVERT_ABI_MARKER = (
-    "gpuwm-rw-mpas-convert-v1\tCONVERTED\tWINDOW\tWEIGHTS\tFINISHED")
+    "gpuwm-rw-mpas-convert-v1\tCONVERTED\tWINDOW\tWEIGHTS\tFINISHED"
+    "\tREMAP\tBUDGET\t--remap nearest|product\t--jobs N")
 
-#: ``rw_mpas_lbc``'s contract, at the head of its argument vector.  The
-#: crate's literal is four usage lines with newlines between them, so
-#: this is a prefix rather than the whole thing, for the reason
-#: :data:`INIT_ABI_MARKER` states: a marker that has to reproduce an
-#: embedded newline exactly breaks on a reflow that changed nothing.
+#: ``rw_mpas_lbc``'s contract, its first usage line through the
+#: physics-mode switch.  The crate's literal is four usage lines with
+#: newlines between them, so this is a prefix rather than the whole thing,
+#: for the reason :data:`INIT_ABI_MARKER` states: a marker that has to
+#: reproduce an embedded newline exactly breaks on a reflow that changed
+#: nothing.  It reaches ``[--physics-mode correct|exact]`` (2.9.0: correct
+#: by default, spelled default first) because the producer reads unknown
+#: flags without complaint: a build from before the switch would take
+#: ``--physics-mode correct`` and write native case-9 boundary winds.
 #: Spelled to match :data:`woof.bridges.BRIDGE_ABI_MARKERS`; a test
-#: binds the two.
+#: binds the two, and both to the crate's literal.
 LBC_ABI_MARKER = (
     "rw_mpas_lbc --grid INIT.nc --out-dir DIR "
-    "--start-time YYYY-MM-DD_HH:MM:SS --stop-time YYYY-MM-DD_HH:MM:SS")
+    "--start-time YYYY-MM-DD_HH:MM:SS --stop-time YYYY-MM-DD_HH:MM:SS "
+    "--interval YYYY-MM-DD_HH:MM:SS=MET_PATH [--interval ...] "
+    "--nfglevels N --fg-interval-seconds N --extrap-airtemp MODE "
+    "--use-spechumd yes|no --theta-adv-order N --coef-3rd-order X "
+    "--oned-underflow preserve|reproduce-ifx-ftz "
+    "[--physics-mode correct|exact]")
+
+#: ``rw_hex_points``'s contract: its ``--abi`` line (schema name and the
+#: stdout progress tokens).  Spelled to match
+#: :data:`woof.bridges.BRIDGE_ABI_MARKERS`.
+POINTS_ABI_MARKER = "gpuwm-rw-hex-points-v1\tPOINT\tSOUNDING\tMETEOGRAM\tFINISHED"
+
+#: The RRFS-MPAS initializer's --abi line (rw-mpas rrfs_init::job::ABI_MARKER).
+INIT_RRFS_ABI_MARKER = (
+    "rw_mpas_init_v831 stdin: hex-init-job/v1 JSON; stage=case7|case9|"
+    "static|terrain|vertical|artifact|prepare|gwd|surface")
+
+#: The GSL orographic statistics generator's usage head.
+GSL_ORO_ABI_MARKER = "rw_mpas_gsl_oro --grid MESH.nc --geog WPS_GEOG --out ORO.nc"
 
 #: ``CARGO_BUILD_HINT``: the one-liner that builds the mesh tools, from a
 #: checkout root, spelled for the shell rule when it is read.
@@ -249,6 +276,12 @@ class MpasBridge:
         """The binary, or a refusal carrying this install's remedy."""
 
         found = self.find()
+        if found is None and not os.environ.get(self.env_var):
+            # An artifact the platform wheel leaves to the bridge bundle
+            # (woof.bridge_assets.on_demand_artifacts) is staged on first use.
+            from woof.bridges import fetch_on_demand
+            if fetch_on_demand(self.name):
+                found = self.find()
         if found is None:
             raise MeshRequestError(
                 f"{self.subject} ({self.name}) is not built or not found.\n"
@@ -358,11 +391,40 @@ LBC = MpasBridge(
     abi_marker=LBC_ABI_MARKER,
 )
 
-#: Every MPAS binary the crate builds, by artifact name.  Read by
+#: Soundings and meteograms at named points straight off MPAS native
+#: history: the woof hex product door's third binary (2.9.0).  It is a bin
+#: of rw-wrfbatch, not rw-mpas, but it sits on this ladder because this is
+#: the table woof hex resolves its engines through and ``woof doctor``
+#: reports from; left off it, a pip install of both packages had no point
+#: pictures and ``woof hex doctor`` exited 1 naming it.
+POINTS = MpasBridge(
+    name="rw_hex_points",
+    env_var="WOOF_RW_HEX_POINTS",
+    subject="the MPAS sounding and meteogram renderer",
+    abi_marker=POINTS_ABI_MARKER,
+)
+
+#: Every MPAS binary the bundle carries, by artifact name.  Read by
 #: ``woof doctor`` and by the bundle-coverage test, so a sixth binary
 #: is a row here and is reported without a second edit.
+#: The RRFS-MPAS init door's two binaries (woof hex init --physics-suite
+#: hrrrv5): the fork's init_atmosphere in Rust, and the GSL drag statistics.
+INIT_RRFS = MpasBridge(
+    name="rw_mpas_init_v831",
+    env_var="WOOF_RW_MPAS_INIT_V831",
+    subject="the RRFS-MPAS initializer",
+    abi_marker=INIT_RRFS_ABI_MARKER,
+)
+GSL_ORO = MpasBridge(
+    name="rw_mpas_gsl_oro",
+    env_var="WOOF_RW_MPAS_GSL_ORO",
+    subject="the GSL orographic statistics generator",
+    abi_marker=GSL_ORO_ABI_MARKER,
+)
+
 BRIDGES: dict[str, MpasBridge] = {
-    bridge.name: bridge for bridge in (MESH, STATIC, INIT, GEOMETRY, HOSTPREP, CONVERT, LBC)}
+    bridge.name: bridge for bridge in (MESH, STATIC, INIT, GEOMETRY, HOSTPREP, CONVERT, LBC, POINTS,
+                                       INIT_RRFS, GSL_ORO)}
 
 
 # ---------------------------------------------------------------------------
@@ -1002,17 +1064,16 @@ def plan(*, spec: dict, cells: int, workdir: Path) -> dict:
                       "--cells", str(int(cells)), "--dry-run"])
 
 
-#: The two arms of the generator, and what choosing one costs.
+#: The two arms of the generator.
 #:
-#: ``rebuild`` is the DEFAULT and the arm every registered mesh digest was
-#: minted on: the spherical Delaunay is rebuilt from scratch after every
-#: relaxation sweep.  ``incremental`` keeps the facet list and repairs it by
-#: Lawson flips -- the same triangulation, but each cell keeps the neighbour
-#: ring ROTATION it had where a rebuild re-rolls it for about 27 % of cells,
-#: and the grid file records the rotation.  So the fast arm produces a
-#: DIFFERENT FILE from the same request and cannot reproduce a pinned
-#: SHA-256.  It is asked for by name for exactly that reason, and the arm
-#: that ran is stamped into the receipt whenever it is not the default.
+#: ``incremental`` is the binary's DEFAULT (2026-10-16: no
+#: single-threaded stages): the facet list is kept and repaired by Lawson
+#: flips.  ``rebuild`` rebuilds the spherical Delaunay from scratch after
+#: every relaxation sweep, which is slower.  Neighbour rings start at their
+#: smallest neighbour index, so both arms write the same bytes; meshes
+#: registered before 2026-10-16 used the old ring rotation and are not
+#: reproduced byte for byte by either.  The door passes an arm only when one
+#: is asked for.
 TRIANGULATION_ARMS = ("rebuild", "incremental")
 
 
@@ -1037,11 +1098,11 @@ def generate(*, spec: dict, cells: int, out: Path, workdir: Path,
         if triangulation not in TRIANGULATION_ARMS:
             raise MeshRequestError(
                 f"--triangulation {triangulation} is not an arm; it is "
-                "`rebuild` (the default, and the arm every registered mesh "
-                "digest was minted on -- the only one that reproduces one "
-                "byte for byte) or `incremental` (the same triangulation "
-                "kept and repaired by Lawson flips, which is faster and "
-                "writes a different file)")
+                "`incremental` (the default: the triangulation kept and "
+                "repaired by Lawson flips) or `rebuild` (rebuilt every sweep, "
+                "slower); both write the same bytes, and meshes registered "
+                "before 2026-10-16 used the old ring rotation and are not "
+                "reproduced by either")
         arguments += ["--triangulation", triangulation]
     return _run_mesh(arguments, progress=progress)
 
@@ -1243,13 +1304,20 @@ def default_static_path(grid: Path) -> Path:
 
 def build_static(*, grid: Path, out: Path, geog: Path | None = None,
                  nominal_dx_m: float | None = None, clobber: bool = False,
-                 receipt: Path | None = None, progress=None) -> dict:
+                 receipt: Path | None = None, progress=None,
+                 legacy_static: bool = False) -> dict:
     """Build the static half of the pair and return the engine's document.
 
     Separated from :func:`generate` because the two binaries are separate
     artifacts with separate contracts, and joined at the door because a
     grid without its static is not a deliverable: the mesh registry pins
     both by byte count and SHA-256 and refuses a mesh carrying one.
+
+    The static is MPAS-A v8.4.2's native one by default (2.9.0).
+    ``legacy_static`` asks for the pre-2.9.0 stream (82 variables, the
+    with-lakes land use with its lake class stored as water), for a
+    consumer that still needs that schema.  It is not the bytes
+    of a pre-2.9.0 build: 2.9.0's shared static arithmetic applies to it.
     """
 
     from woof import rustwx_static
@@ -1267,6 +1335,8 @@ def build_static(*, grid: Path, out: Path, geog: Path | None = None,
         argv += ["--receipt", str(receipt)]
     if clobber:
         argv.append("--clobber")
+    if legacy_static:
+        argv.append("--legacy-static")
     try:
         return rustwx_static.run_static(binary, argv, on_progress=progress)
     except rustwx_static.StaticEngineError as error:
@@ -1385,13 +1455,9 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--triangulation", choices=TRIANGULATION_ARMS, default=None,
         help="how the Delaunay is kept between relaxation sweeps.  "
-             "rebuild (the default) rebuilds it every sweep and is the arm "
-             "every registered mesh was generated with -- the only one that "
-             "reproduces a pinned SHA-256.  incremental keeps the facets "
-             "and repairs them by Lawson flips: the same triangulation, "
-             "much faster, and a DIFFERENT FILE, because each cell keeps "
-             "the ring rotation a rebuild re-rolls.  For a mesh that has "
-             "never existed")
+             "incremental (the default) keeps the facets and repairs them "
+             "by Lawson flips; rebuild rebuilds it every sweep (slower).  "
+             "Both write the same bytes")
     parser.add_argument(
         "--clobber", action="store_true",
         help="replace an existing --out")

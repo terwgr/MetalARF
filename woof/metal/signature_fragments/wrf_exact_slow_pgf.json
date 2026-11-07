@@ -1,0 +1,306 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "slow_pgf",
+      "layout_version": 1,
+      "module": "dycore",
+      "name": "wrf_exact_slow_pgf",
+      "parameters": [
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "cfn",
+          "float32"
+        ],
+        [
+          "cfn1",
+          "float32"
+        ],
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "half_rdx",
+          "float32"
+        ],
+        [
+          "half_rdy",
+          "float32"
+        ],
+        [
+          "top_lid",
+          "int32"
+        ],
+        [
+          "use_cq",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "diagnostics",
+          "int32"
+        ],
+        [
+          "bigstep",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "ru_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "rv_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pb",
+          "float",
+          "read"
+        ],
+        [
+          "al",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "cqu",
+          "float",
+          "read"
+        ],
+        [
+          "cqv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "al": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "cqu": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cqv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "ru_t": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv_t": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_slow_pgf.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

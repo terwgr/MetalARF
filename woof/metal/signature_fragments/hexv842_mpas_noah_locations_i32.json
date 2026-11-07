@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_noah_locations_i32",
+      "module": "hexv842_mpas_noah_locations_i32",
+      "source": "woof/metal/shaders/hexv842_mpas_noah_locations_i32.metal",
+      "cuda_source": "woof/hex/mpasphys/noah_v842.py",
+      "cuda_symbol": "finish_module_locations",
+      "resources": [
+        [
+          "locations",
+          "int32",
+          "read"
+        ],
+        [
+          "routes",
+          "int32",
+          "read"
+        ],
+        [
+          "state",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "locations": [
+          [
+            "any_1d"
+          ]
+        ],
+        "routes": [
+          [
+            "any_1d"
+          ]
+        ],
+        "state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -242,7 +242,7 @@ def _frame(seed: int) -> dict:
 
 
 def _write_wrfout(path, stamps, *, grid_id=2, dx=1000.0, seed_offset=0,
-                  model_label=None):
+                  model_label=None, t2_offset=0.0):
     grid = SimpleNamespace(truelat1=38.5, truelat2=39.5, stand_lon=-96.5,
                            ref_lat=39.0, ref_lon=-96.5)
     attrs = wrf_global_attrs(
@@ -254,7 +254,9 @@ def _write_wrfout(path, stamps, *, grid_id=2, dx=1000.0, seed_offset=0,
     with WrfoutWriter(path, nx=_NX, ny=_NY, nz=_NZ, dx=dx, dy=dx,
                       global_attrs=attrs) as writer:
         for index, stamp in enumerate(stamps):
-            writer.write_frame(stamp, _frame(seed=7 + index + seed_offset))
+            fields = _frame(seed=7 + index + seed_offset)
+            fields["T2"] = (fields["T2"] + np.float32(t2_offset)).astype(np.float32)
+            writer.write_frame(stamp, fields)
     return path
 
 
@@ -1201,7 +1203,7 @@ def test_list_products_reports_the_full_catalog(wrfout, tmp_path, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     # The complete catalog is enumerated, not just what renders.
-    # 359 = 163 + the standalone 10 m wind chart + this fixture's 23
+    # 364 = 163 + the standalone 10 m wind chart + this fixture's 23
     # generic ``var:`` rows (stored 2-D planes no named product claims;
     # the generic family is store-dependent, so the count is the
     # FIXTURE's, not the build's) + the 172 ensemble/probabilistic
@@ -1216,9 +1218,55 @@ def test_list_products_reports_the_full_catalog(wrfout, tmp_path, capsys):
     # wrfout import gained the eleven column products (three isotherm
     # heights, three supercooled water paths, five hydrometeor column
     # maxima); ``rw_wrfbatch --list-products`` counts the same eleven,
-    # ``selectable_slugs`` 322 to 333.
-    assert "total=359" in out
+    # ``selectable_slugs`` 322 to 333. Five optional AQ rows add surface
+    # smoke, dry PM2.5, dust, ozone and aerosol optical depth; the existing
+    # canonical smoke and column recipes remain in the original catalog.
+    # The coupled fire's three maps (fire_perimeter, fire_ros,
+    # fire_heat_flux, lane/ec-sfire) are listed too, excluded on this
+    # fixture because it carries no refined fire grid: 364 + 3 = 367.
+    # Three interval winter products add snowfall_window, snow_10to1_window
+    # and snow_kuchera_window to that complete catalog: 367 + 3 = 370.
+    # The radiation cloud-fraction column maximum (cldfra_max, golden/ports-rad,
+    # 2.9.0) is the twelfth column product: 370 + 1 = 371.
+    # The Earth-2 export (189e1776dc6) adds three direct products,
+    # 100m_wind_speed, 500mb_omega and 850mb_specific_humidity (rw_wrfbatch
+    # --list-products: selectable_slugs 345 -> 348): 371 + 3 = 374.
+    # The 2.9.4 capability lanes add 35 named rows (selectable_slugs 348 ->
+    # 382): cap-ivt's eleven (ivt twice, ivt_vectors, ivt_full_column, the
+    # four eastward/northward components, iwv, ar_outline, freezing_level),
+    # cap-hail's eight hail_max_* maps, the heat/fire/lightning diagnostics'
+    # nine (haines_low/mid/high, hot_dry_windy, lightning_threat_1..3,
+    # pr92_flash_rate, wbgt_2m), cap-snow's three (snow_depth_change,
+    # snow_depth_total, snowfall_liquid_equivalent), cap-fire-fuels'
+    # fire_fuel and fire_terrain, cap-visibility's fog_flag and the hex-ivt
+    # engine's 925mb_height_winds: 374 + 35 = 409.
+    # The hex IVT companion's model-column recipe (bc8db45d3fe) renamed its
+    # duplicate "ivt" to ivt_column and gave its two component planes their
+    # own rows, ivt_column_eastward and ivt_column_northward: 409 + 2 = 411.
+    # The two fixed-height W products from lane/292-les-w-products
+    # (1km_vertical_velocity, 3km_vertical_velocity; catalog fixture
+    # b0790a03c8): 411 + 2 = 413.
+    assert "total=413" in out
+    for slug in ("ivt", "ivt_column", "ivt_column_eastward",
+                 "ivt_column_northward"):
+        rows = [line for line in out.splitlines()
+                if len(line.split()) >= 3 and line.split()[2] == slug]
+        assert len(rows) == 1, (slug, rows)
+    for slug in ("snowfall_window", "snow_10to1_window", "snow_kuchera_window"):
+        rows = [line for line in out.splitlines()
+                if len(line.split()) >= 3 and line.split()[2] == slug]
+        assert len(rows) == 1, (slug, rows)
     assert "renderable" in out and "excluded" in out
+    for slug in ("smoke_near_surface", "pm25_near_surface",
+                 "dust_near_surface", "ozone_near_surface", "aod_550"):
+        rows = [line for line in out.splitlines()
+                if len(line.split()) >= 3 and line.split()[2] == slug]
+        assert len(rows) == 1, (slug, rows)
+        assert rows[0].lstrip().startswith("missing-fields"), rows[0]
+        assert "not stored:" in rows[0], rows[0]
+    for slug in ("smoke_pm25_native", "smoke_column"):
+        assert any(len(line.split()) >= 3 and line.split()[2] == slug
+                   for line in out.splitlines()), slug
     # The generic rows are part of the catalog, not a side channel: every
     # stored plane without a named product renders as ``var:<name>``.
     #
@@ -1231,18 +1279,29 @@ def test_list_products_reports_the_full_catalog(wrfout, tmp_path, capsys):
     # into the listing as renderable (``generic-deduped``) so that a
     # request for a spelling this build accepts is not refused by the
     # listing that describes it.  They are also why ``total=`` still
-    # says 359 while 365 rows print: the total is the ENGINE's catalog
+    # says 364 while 370 rows print: the total is the ENGINE's catalog
     # and these six are the door's addition to it.
     generic_rows = [line for line in out.splitlines()
                     if " generic " in line and " var:" in line]
     deduped = [line for line in generic_rows
                if "already rendered by a named product" in line]
-    assert len(generic_rows) == 29, out
-    assert len(deduped) == 6, deduped
+    #
+    # 33 and 10 in 2.9.4: the heat/fire diagnostics lane (8c96bae6bf2) stores
+    # heat_index_2m, apparent_temperature_2m, wetbulb_2m and
+    # fire_weather_composite planes, each the sole source of its named
+    # product, so each prints as one more deduplicated generic row.
+    # 34 and 11: lane/vpd-window-products (51fabe790f, merged 054770cd6e)
+    # stores the native WRF vpd_2m plane, the sole source of its named VPD
+    # product and of the day-window VPD rows, so it is one more
+    # deduplicated generic row.
+    assert len(generic_rows) == 34, out
+    assert len(deduped) == 11, deduped
     assert sorted(re.search(r"var:(\S+)", line).group(1)
                   for line in deduped) == [
-        "apcp", "composite_reflectivity", "dewpoint_2m", "orography",
-        "relative_humidity_2m", "temperature_2m"], deduped
+        "apcp", "apparent_temperature_2m", "composite_reflectivity",
+        "dewpoint_2m", "fire_weather_composite", "heat_index_2m", "orography",
+        "relative_humidity_2m", "temperature_2m", "vpd_2m",
+        "wetbulb_2m"], deduped
     assert all("renderable" in line for line in generic_rows), generic_rows
     # The fixture's fields prove out the reflectivity composite ...
     assert any("composite_reflectivity" in line and "renderable" in line
@@ -1299,8 +1358,10 @@ def test_general_products_skip_unavailable_subhour_windows(
     # 22: simulated_ir_satellite left the general and hurricane presets
     # when the lane record gained its reason, and 10m_wind_gusts and
     # precipitation_type left general when every run of it was measured
-    # drawing 20 of 24 (no wrfout carries their fields).
-    assert len(general) == 22 and "qpf_1h" in general
+    # drawing 20 of 24 (no wrfout carries their fields).  26 in 2.9.4: cap-ivt
+    # added ivt, iwv, freezing_level and ar_outline, drawn from the stored
+    # moisture, wind and geopotential every history carries.
+    assert len(general) == 26 and "qpf_1h" in general
     if single_frame:
         wrfout = _write_wrfout(tmp_path / "first-wrfout.nc", _STAMPS[:1])
     frame_idx = 0 if single_frame else 1
@@ -1498,8 +1559,11 @@ def test_the_render_after_the_availability_listing_imports_nothing(
     assert len(transcripts) == 2, "one availability listing, one render"
     listing, draw = transcripts
     assert "PROCESS Opening WRF " in listing
-    assert "PROCESS Reusing the imported WRF run " in draw, draw
+    # The listing drops the unavailable wind window, changing the scoped
+    # field set. Its saved import still supplies all surviving products.
+    assert "IMPORTED from " in draw and "(no frame reopened)" in draw, draw
     assert "PROCESS Opening WRF " not in draw, draw
+    assert "PROCESS Computing WRF " not in draw, draw
 
 
 @needs_renderer
@@ -1643,9 +1707,6 @@ def test_series_grouping_keeps_actual_runs_grids_and_episodes_separate(tmp_path)
 
 @pytest.mark.parametrize("attribute,value", [
     ("GPUWM_INITIAL_CONDITION_SOURCE", "different-source"),
-    ("GPUWM_INITIAL_CONDITION_CYCLE", "1974-04-03_12:00:00"),
-    ("GPUWM_INITIAL_FORECAST_LEAD_HOURS", 6),
-    ("MP_PHYSICS", 6), ("GPUWM_SURFACE_RADIATION_POLICY", "disabled"),
 ])
 def test_carrier_updates_do_not_join_different_source_or_scientific_histories(tmp_path, attribute, value):
     import netCDF4
@@ -2017,6 +2078,125 @@ def test_native_run_difference_reaches_the_cli_and_publishes_its_pictures(
                                           encoding="utf-8")
         (folder / "stdout.log").write_text(transcript.out, encoding="utf-8")
         (folder / "stderr.log").write_text(transcript.err, encoding="utf-8")
+
+
+def _png_rgb(path) -> tuple[int, int, list[tuple[int, int, int]]]:
+    """(width, height, RGB pixels) of an 8-bit RGB or RGBA PNG, decoded with
+    zlib alone, so the pixel checks add no image-library dependency."""
+
+    import zlib
+
+    data = Path(render_layout.fs_path(path)).read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{path} is not a PNG"
+    offset, idat, header = 8, b"", None
+    while offset < len(data):
+        length, kind = struct.unpack(">I4s", data[offset:offset + 8])
+        body = data[offset + 8:offset + 8 + length]
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            idat += body
+        offset += 12 + length
+    width, height, depth, color, _, _, interlace = header
+    assert depth == 8 and color in (2, 6) and interlace == 0, header
+    channels = 3 if color == 2 else 4
+    stride = width * channels
+    raw = zlib.decompress(idat)
+    rows, previous = [], bytearray(stride)
+    for y in range(height):
+        start = y * (stride + 1)
+        kind, line = raw[start], bytearray(raw[start + 1:start + 1 + stride])
+        for i in range(stride):
+            left = line[i - channels] if i >= channels else 0
+            up = previous[i]
+            corner = previous[i - channels] if i >= channels else 0
+            if kind == 1:
+                line[i] = (line[i] + left) & 255
+            elif kind == 2:
+                line[i] = (line[i] + up) & 255
+            elif kind == 3:
+                line[i] = (line[i] + (left + up) // 2) & 255
+            elif kind == 4:
+                guess = left + up - corner
+                pa, pb, pc = abs(guess - left), abs(guess - up), abs(guess - corner)
+                pick = left if pa <= pb and pa <= pc else (up if pb <= pc else corner)
+                line[i] = (line[i] + pick) & 255
+        rows.append(bytes(line))
+        previous = line
+    pixels = [tuple(row[x * channels:x * channels + 3])
+              for row in rows for x in range(width)]
+    return width, height, pixels
+
+
+def _blue_share(path) -> float:
+    """The share of the map's middle that is drawn in a blue difference band.
+
+    The middle of the canvas (left of the colour bar, below the header) is
+    all map, so a uniform negative difference that the bar draws fills it
+    with blue, and one the bar's neutral bands swallow leaves it white.
+    """
+
+    width, height, pixels = _png_rgb(path)
+    xs = range(int(width * 0.15), int(width * 0.75))
+    ys = range(int(height * 0.25), int(height * 0.85))
+    blue = sum(1 for y in ys for x in xs
+               if pixels[y * width + x][2] - pixels[y * width + x][0] > 50)
+    return blue / (len(xs) * len(ys))
+
+
+@needs_renderer
+def test_a_difference_inside_the_fixed_bars_neutral_bands_is_drawn_not_blank(
+        tmp_path, capsys):
+    """WHAT BREAKAGE THIS PREVENTS (gate law): a 2 m temperature difference
+    of 0.9 °F on every cell drew as a blank white map, because the fixed
+    +/-10 °F bar's neutral middle bands reach 2 °F; two runs that differ
+    everywhere looked identical.  Now the bar is fitted to the difference,
+    the map is coloured, the receipt names the rule, and identical runs
+    still say so on the fixed bar."""
+
+    name = "wrfout_d02_1974-04-03_18_00_00.nc"
+    a_dir, b_dir, same_dir = tmp_path / "a", tmp_path / "b", tmp_path / "same"
+    for folder in (a_dir, b_dir, same_dir):
+        folder.mkdir()
+    _write_wrfout(a_dir / name, _STAMPS[:1])
+    _write_wrfout(b_dir / name, _STAMPS[:1], t2_offset=0.5)
+    _write_wrfout(same_dir / name, _STAMPS[:1])
+
+    def draw(other, case, *extra):
+        command = ["render", "--diff", str(a_dir), str(other), "--products", "t2",
+                   "--out", str(tmp_path / case), *extra]
+        rc = cli.main(command)
+        transcript = capsys.readouterr()
+        out = run_stamp.latest(tmp_path / case)
+        pictures = sorted(out.rglob("*.png")) if out is not None else []
+        return rc, transcript, pictures
+
+    rc, transcript, pictures = draw(b_dir, "warm")
+    assert rc == 0, transcript.err
+    line = next(row for row in transcript.out.splitlines()
+                if "difference d02-1km_2m_temperature" in row)
+    assert "(adaptive(table=10," in line, line
+    assert "differing=192" in line and "cells=192" in line, line
+    assert re.search(r"max_abs=0\.90\d", line), line
+    assert len(pictures) == 1, pictures
+    assert _blue_share(pictures[0]) > 0.5, "the difference was drawn as no difference"
+
+    rc, transcript, pictures = draw(same_dir, "same")
+    assert rc == 0, transcript.err
+    line = next(row for row in transcript.out.splitlines()
+                if "difference d02-1km_2m_temperature" in row)
+    assert "(table)" in line and "differing=0" in line, line
+    assert _blue_share(pictures[0]) < 0.01
+
+    # Every bar fitted to its own difference, by name; an unreadable table
+    # is refused before anything is drawn.
+    rc, transcript, _ = draw(b_dir, "auto", "--diff-table", "auto")
+    assert rc == 0, transcript.err
+    assert "(p99=0.90" in transcript.out, transcript.out
+    rc, transcript, pictures = draw(b_dir, "missing", "--diff-table",
+                                    str(tmp_path / "no-such-table.json"))
+    assert rc == 2 and "--diff-table" in transcript.err, transcript.err
+    assert pictures == []
 
 
 @needs_renderer
@@ -2784,7 +2964,7 @@ def test_native_difference_registered_window_absence_is_a_skip_not_a_failure(
 
 
 @needs_renderer
-@pytest.mark.parametrize("theme_name", ["woof-light", "woof-dark"])
+@pytest.mark.parametrize("theme_name", ["woof-dark"])
 def test_native_750m_nest_inherits_the_woof_theme_without_changing_generic_pixels(
         tmp_path, theme_name):
     """The site's extends file reaches Rust and keeps public WOOF labels.

@@ -46,28 +46,14 @@ which is 0 for every slot except ``cu_nca``, whose cold value is the
 -100 eligibility sentinel (woof/core/physics.py driver init;
 module_cu_kfeta.F:3152-3156).
 
-ACCUMULATED PRECIPITATION IS THE EXCEPTION (:data:`STRIP_ACCUMULATORS`).
-Fresh ground has had rain since the run began; only the nest has not been
-there to see it.  A strip started at zero drew a band of too little total
-rain along every leading edge, one per move (a 12 h tropical storm run
-moved its 3 km nest 8 times).  WRF interpolates RAINC, RAINNC, RAINSH,
-SNOWNC, GRAUPELNC and HAILNC from the parent onto the exposed cells
-(Registry.EM_COMMON flag ``d``; share/mediation_nest_move.F runs
-med_interp_domain after shift_domain_em on the exposed mask), so a cell's
-total is the parent's rain before the nest arrived plus the nest's after,
-which is what a gauge there measures.  The route preparers pass those
-parent values (:func:`parent_strip_accumulations`, WRF's SINT) as
-``strip`` to :func:`shift_continuation`.  The same holds for the old
-footprint's specified ring where it lands inside the new one: the nest's
-microphysics never touches that ring (WRF's clipped tiles,
-:func:`woof.core.physics_inventory.spec_zone_ring_slices`), so its rain total
-is what the cell had when it arrived, and after a move it drew a one-cell
-line of too little rain inside the nest, one per move (the ring column
-held 24.3 mm beside 32 to 34 mm at 12 h).  It takes the parent's too.
-A nest spawned mid-run starts from the parent's at birth by the same rule
-(:func:`seed_birth_accumulations`); born at zero, the ground it held since
-birth counted from a later start than the ground each move seeded, and
-every move left a band of too much rain instead.
+ACCUMULATED PRECIPITATION belongs to the nest that integrated it. The
+route preparers use core.nest_accumulation to archive the outgoing interior
+in a fixed native frame and restore previously visited cells. Unvisited
+strips start at zero. Products must report their sampled exposure, since the
+nest cannot estimate precipitation while absent. Parent SINT still fills
+prognostic fields, including hydrometeors; it does not seed rain totals.
+The parent_strip_accumulations helper below retains the historical policy
+only as an explicit reference for reproduction of pre-fix runs.
 """
 
 from __future__ import annotations
@@ -113,8 +99,24 @@ def _host(value) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(value))
 
 
+def _array_module(value):
+    if hasattr(value, "__cuda_array_interface__"):
+        import cupy as cp
+
+        return cp
+    return np
+
+
+def _capture(value):
+    """Own the bytes across arena release without a device-to-host round trip."""
+    if callable(getattr(value, "to_numpy", None)):
+        return _host(value).copy()
+    xp = _array_module(value)
+    return xp.array(value, copy=True, order="C")
+
+
 def capture_continuation(state, driver, *, store=None) -> dict[str, np.ndarray]:
-    """Host copies of every registry slot present on the outgoing child.
+    """Copies of every registry slot on the outgoing child's device.
 
     Called while the outgoing child is whole (the runner's
     ``capture_outgoing`` seam -- host staging releases the device arrays
@@ -126,56 +128,57 @@ def capture_continuation(state, driver, *, store=None) -> dict[str, np.ndarray]:
         raise ValueError(
             "this checkpoint has no physical PBL rates for relocation; "
             "advance to the next scheduled PBL call before moving the nest")
+    def capture(name, value):
+        # Shared PBL/GF rates occur in both manifests under the same key.
+        if name in captured:
+            return captured[name]
+        if store is None:
+            return _capture(value)
+        # The template supplies inventory only. Copy canonical bytes directly;
+        # copying its last slab first would allocate device buffers to discard.
+        key = "scratch/" + name if "/" not in name else name
+        if key not in store:
+            raise ValueError(f"streamed continuation is missing canonical carrier {key}")
+        return _host(store[key]).copy()
+
     captured: dict[str, np.ndarray] = {}
     existing = getattr(state, "existing_scratch", None)
     if callable(existing):
         for slot in continuation_slots():
             value = existing(slot)
             if value is not None:
-                captured[slot] = _host(value)
+                captured[slot] = capture(slot, value)
     from woof.io.restart import (CUMULUS_CALLABLE_ARRAYS,
                                   DRIVER_HELD_FORCING_ATTRS)
 
     for name in sorted(DRIVER_HELD_FORCING_ATTRS):
         value = getattr(driver, name, None)
         if value is not None:
-            captured[f"held/{name}"] = _host(value)
+            captured[f"held/{name}"] = capture(f"held/{name}", value)
     from woof.io.restart import pbl_raw_manifest, pbl_diagnostic_manifest
 
     for key, value in {**pbl_raw_manifest(driver),
                        **pbl_diagnostic_manifest(driver)}.items():
-        captured[key] = _host(value)
+        captured[key] = capture(key, value)
     # Radiation's physical heating rates already have canonical storage.
     # Carry them independently of surface fluxes: both feed future physics.
     for name in ("rthratenlw", "rthratensw"):
         value = getattr(driver, name, None)
         if value is not None:
-            captured[f"driver/{name}"] = _host(value)
+            captured[f"driver/{name}"] = capture(f"driver/{name}", value)
     adapter = getattr(driver, "cumulus_callable", None)
     for name in sorted(CUMULUS_CALLABLE_ARRAYS):
         value = getattr(adapter, name, None)
         if value is not None:
-            captured[f"cumulus/{name}"] = _host(value)
-    if store is not None:
-        # The state/template supplies the registry inventory, not live bytes.
-        # Canonical streaming names match restart names; only bare scratch
-        # capture names need their namespace. Missing carriers must refuse;
-        # falling back to the template would silently copy its last slab.
-        canonical = {}
-        for name in captured:
-            key = "scratch/" + name if "/" not in name else name
-            if key not in store:
-                raise ValueError(f"streamed continuation is missing canonical carrier {key}")
-            canonical[name] = _host(store[key]).copy()
-        return canonical
+            captured[f"cumulus/{name}"] = capture(f"cumulus/{name}", value)
     return captured
 
 
-#: The accumulated-precipitation slots a moving nest's fresh ground takes
-#: from its parent instead of from cold (module notes).  RAINSH has no slot:
-#: the driver writes it as zero on every domain.
+#: Integrated precipitation counters carried on the fixed nest lattice.
+#: Fresh unvisited ground starts at zero. The legacy OFF control alone
+#: uses parent totals. RAINSH is written as zero and has no scratch slot.
 STRIP_ACCUMULATORS = ("mp_rainnc", "mp_snownc", "mp_graupelnc", "mp_hailnc",
-                      "cu_rainc")
+                      "cu_rainc", "mp_cloudnc")
 
 #: What the receipt says the rule is.
 STRIP_ACCUMULATION_RULE = (
@@ -262,44 +265,26 @@ def parent_strip_accumulations(parent_node, child_dc, slots, *,
 
 
 def seed_birth_accumulations(state, parent_node, child_dc) -> dict:
-    """A spawned nest starts its accumulated precipitation from its
-    parent's, the same rule a move applies to its new ground.
-
-    WHY (a stated physics ruling, :data:`STRIP_ACCUMULATION_RULE`).  A move
-    seeds new ground with the parent's rain since the run began.  A living
-    nest born at zero holds only its rain since birth on the ground it
-    already covers, so every move after a mid-run spawn left a band of too
-    much rain (the parent's rain from before the birth) along its leading
-    edge: the stripe the move rule exists to remove, the other way round.
-    WRF zeroes a late nest's accumulators (mp_init when not a restart) and
-    interpolates the parent's onto a moved nest's exposed cells, which is
-    that same inconsistency.  Here the nest arrives on all of its ground at
-    birth, so all of it starts from the parent's.  The
-    history's run total, whose lead the renderer measures from the
-    simulation start, then holds the rain since that start everywhere on
-    the nest, which is what a gauge there measured over the same window.
-    A nest that exists from the start is unchanged: its parent holds no
-    rain yet.
-
-    Seeds the accumulator slots the child already carries (its driver
-    aliases them at construction), in place, and returns the receipt of
-    :func:`parent_strip_accumulations` with ``event = "birth"``.
-    """
+    """Start nest-only counters at birth, without importing parent history."""
     existing = getattr(state, "existing_scratch", None)
     slots = ([slot for slot in STRIP_ACCUMULATORS if existing(slot) is not None]
              if callable(existing) else [])
-    seed, receipt = parent_strip_accumulations(
-        parent_node, child_dc, slots, geometry_owner=state)
-    receipt["event"] = "birth"
-    for slot, values in seed.items():
-        target = state.scratch(values.shape, slot)
-        if hasattr(target, "__cuda_array_interface__"):
-            import cupy as cp
-
-            target[...] = cp.asarray(values)
-        else:
-            target[...] = values
-    return receipt
+    if not getattr(getattr(child_dc, "run", None), "nest_accumulation_archive", True):
+        seed, receipt = parent_strip_accumulations(
+            parent_node, child_dc, slots, geometry_owner=state)
+        receipt["event"] = "birth"
+        for slot, values in seed.items():
+            target = state.scratch(values.shape, slot)
+            if hasattr(target, "__cuda_array_interface__"):
+                import cupy as cp
+                target[...] = cp.asarray(values)
+            else:
+                target[...] = values
+        return receipt
+    for slot in slots:
+        existing(slot)[...] = 0
+    return dict(event="birth", rule="nest-only totals since birth", seeded=slots,
+                convective_in_rainnc=False, parent_precipitation=False)
 
 
 def shift_continuation(captured: dict[str, np.ndarray],
@@ -310,8 +295,7 @@ def shift_continuation(captured: dict[str, np.ndarray],
     arithmetic, and therefore the same cells, as the serialised-state
     transplant -- and the strip is the slot's cold value, or, for a slot
     ``strip`` names, that array's values there (a moving nest's fresh
-    ground takes the parent's accumulated precipitation,
-    :func:`parent_strip_accumulations`).  For those slots the cells of the
+    ground takes its archived nest-only total, or zero if unvisited).  For those slots the cells of the
     old footprint's ``ring``-wide specified ring that land inside the new
     footprint take ``strip`` too: the nest never accumulated there.  A
     disjoint plan (nothing shared) yields all-cold arrays, which is
@@ -320,12 +304,14 @@ def shift_continuation(captured: dict[str, np.ndarray],
     strip = strip or {}
     shifted: dict[str, np.ndarray] = {}
     for name, value in captured.items():
+        xp = _array_module(value)
         cold = np.float32(PHYSICS_CONTINUATION_COLD_VALUES.get(name, 0.0))
-        staged = np.full_like(value, cold)
+        staged = xp.full_like(value, cold)
         seed = strip.get(name)
         if seed is not None and tuple(seed.shape) != tuple(value.shape):
             seed = None
         if seed is not None:
+            seed = xp.asarray(seed)
             staged[...] = seed
         window = plan.window(value.shape)
         if window is not None:
@@ -333,6 +319,7 @@ def shift_continuation(captured: dict[str, np.ndarray],
             staged[..., dst_j, dst_i] = value[..., src_j, src_i]
             if seed is not None and ring > 0:
                 stale = _old_ring_inside(value.shape[-2:], window, ring)
+                stale = xp.asarray(stale)
                 staged[..., stale] = seed[..., stale]
         shifted[name] = staged
     return shifted
@@ -376,6 +363,7 @@ def restore_continuation(state, driver,
     """
     moved: list[str] = []
     cold_only: list[str] = []
+    cold_flags = []
     for slot in continuation_slots():
         staged = shifted.get(slot)
         if staged is None:
@@ -388,8 +376,7 @@ def restore_continuation(state, driver,
         else:
             target[...] = staged
         moved.append(slot)
-        if not staged.any():
-            cold_only.append(slot)
+        cold_flags.append((slot, staged.any()))
     from woof.io.restart import DRIVER_HELD_FORCING_ATTRS
 
     for name in sorted(DRIVER_HELD_FORCING_ATTRS):
@@ -407,8 +394,7 @@ def restore_continuation(state, driver,
         else:
             target[...] = staged
         moved.append(key)
-        if not staged.any():
-            cold_only.append(key)
+        cold_flags.append((key, staged.any()))
     from woof.io.restart import pbl_raw_manifest, pbl_diagnostic_manifest
 
     raw_targets = {**pbl_raw_manifest(driver), **pbl_diagnostic_manifest(driver)}
@@ -429,8 +415,7 @@ def restore_continuation(state, driver,
         else:
             target[...] = staged
         moved.append(key)
-        if not staged.any():
-            cold_only.append(key)
+        cold_flags.append((key, staged.any()))
     w0avg_moved = False
     staged = shifted.get(W0AVG_KEY)
     adapter = getattr(driver, "cumulus_callable", None)
@@ -459,6 +444,13 @@ def restore_continuation(state, driver,
         # which the rebuilt clock has already passed.
         adapter._history_time = None
         w0avg_moved = True
+    if cold_flags:
+        # One small diagnostic transfer, rather than a synchronization for
+        # every carried physics array.
+        xp = next((_array_module(flag) for _, flag in cold_flags
+                   if hasattr(flag, "__cuda_array_interface__")), np)
+        flags = _host(xp.stack([flag for _, flag in cold_flags]))
+        cold_only = [name for (name, _), flag in zip(cold_flags, flags) if not flag]
     return {
         "registry": "woof.io.restart.SERIALIZED_SCRATCH_SLOTS"
                     " + CUMULUS_CALLABLE_ARRAYS + DRIVER_HELD_FORCING_ATTRS",
@@ -472,7 +464,7 @@ def restore_continuation(state, driver,
 # The surface-radiation carriers
 # ---------------------------------------------------------------------------
 #
-# WHY THIS EXISTS (a development machine GPU campaign, 2026-08-24).  A relocation
+# WHY THIS EXISTS (test host B GPU campaign, 2026-08-24).  A relocation
 # rebuilds the moved child's physics driver from cold
 # (`woof.runtime.rebuild_child_driver_from_land_state` ->
 # `initialize_physics`), which allocates a fresh buffer for every
@@ -536,7 +528,7 @@ def relocatable_carriers() -> tuple[str, ...]:
 
 
 def capture_carriers(driver, *, store=None, scalars=None) -> dict[str, object]:
-    """Host copies of the outgoing child's carriers, plus its ledger.
+    """Device copies of the outgoing child's carriers, plus its ledger.
 
     Called from the preparer's ``capture_outgoing`` seam while the
     outgoing child is still whole.  A carrier the configuration never
@@ -551,21 +543,20 @@ def capture_carriers(driver, *, store=None, scalars=None) -> dict[str, object]:
         for name in relocatable_carriers():
             value = driver_fields.get(name)
             if value is not None:
-                fields[name] = _host(value)
+                if store is None:
+                    fields[name] = _capture(value)
+                else:
+                    key = "fields/" + name
+                    if key not in store:
+                        raise ValueError(f"streamed radiation is missing canonical carrier {key}")
+                    fields[name] = _host(store[key]).copy()
         carriers = getattr(driver, "carriers", None)
-        if carriers is not None:
+        if carriers is not None and store is None:
             contract = carriers.state()
     if store is not None:
-        canonical = {}
-        for name in fields:
-            key = "fields/" + name
-            if key not in store:
-                raise ValueError(f"streamed radiation is missing canonical carrier {key}")
-            canonical[name] = _host(store[key]).copy()
         if scalars is None:
             raise ValueError("streamed radiation capture requires canonical scalar carriers")
         from copy import deepcopy
-        fields = canonical
         contract = deepcopy(scalars.get("carriers"))
     return {"fields": fields, "contract": contract}
 
@@ -591,7 +582,7 @@ def shift_carriers(captured: dict[str, np.ndarray], plan,
             "the strip must come from a real donor column")
     shifted: dict[str, np.ndarray] = {}
     for name, value in captured.items():
-        staged = np.zeros_like(value)
+        staged = _array_module(value).zeros_like(value)
         window = plan.window(value.shape)
         if window is None:
             continue

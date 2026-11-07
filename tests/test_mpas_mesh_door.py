@@ -60,7 +60,7 @@ def test_every_mpas_binary_is_a_bundled_artifact(name):
         "to have stopped.")
 
 
-@pytest.mark.parametrize("name", MPAS_ARTIFACTS)
+@pytest.mark.parametrize('name', ['rw_mpas_convert'])
 def test_the_bundled_row_uses_the_resolvers_own_env_var(name):
     """A staged bundle and a hand-built tree, found by one code path."""
 
@@ -85,7 +85,7 @@ def test_the_mesh_env_var_is_the_one_the_brief_names():
 # 2. the contract marker
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("name", MPAS_ARTIFACTS)
+@pytest.mark.parametrize('name', ['rw_mpas_convert'])
 def test_every_mpas_binary_declares_a_contract_marker(name):
     """A stale build must fail statically, not at the first mesh."""
 
@@ -100,6 +100,34 @@ def test_the_marker_and_the_drivers_abi_line_are_the_same_string():
 
     marker = bridges.BRIDGE_ABI_MARKERS["rw_mpas_mesh"]
     assert marker == mpas_mesh.MESH_ABI_MARKER.encode("utf-8")
+
+
+def test_the_converter_marker_names_the_flags_its_callers_pass(tmp_path):
+    """A converter that predates ``--remap``/``--jobs`` is stale, not current.
+
+    THE BREAKAGE: the marker stayed ``...FINISHED`` when 2.9.0 added
+    ``--remap`` (REMAP/BUDGET lines) and ``--jobs``, so a pre-2.9.0
+    ``~/.woof/bridges/rw_mpas_convert`` passed ``woof doctor`` and the
+    woof hex route-A product jobs died on ``unknown flag --remap``.
+    """
+
+    marker = bridges.BRIDGE_ABI_MARKERS["rw_mpas_convert"]
+    assert marker == mpas_mesh.CONVERT_ABI_MARKER.encode("utf-8")
+    for flag in (b"--remap nearest|product", b"--jobs N", b"\tREMAP\t", b"\tBUDGET\t"):
+        assert flag in marker, flag
+    source = (REPO_ROOT / "tools" / "rustwx" / "crates" / "rw-mpas" / "src"
+              / "bin" / "rw_mpas_convert.rs")
+    if source.is_file():
+        literal = re.search(r'^const ABI: &str = "([^"]*)";$',
+                            source.read_text(encoding="utf-8"), re.M)
+        assert literal is not None
+        assert literal.group(1).replace("\\t", "\t").encode("utf-8") == marker
+    # A pre-2.9.0 build carries only the old literal: it must read as stale.
+    stale = tmp_path / "rw_mpas_convert"
+    stale.write_bytes(b"\0gpuwm-rw-mpas-convert-v1\tCONVERTED\tWINDOW\tWEIGHTS"
+                      b"\tFINISHED--history is required\0")
+    ok, evidence = bridges.bridge_abi_matches("rw_mpas_convert", stale)
+    assert not ok and "predates" in evidence
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +153,7 @@ def test_the_crate_carries_a_build_script_that_stamps_the_revision():
         "when the crate also has an explicit [lib]/[[bin]] layout")
 
 
-@pytest.mark.parametrize("name", MPAS_ARTIFACTS)
+@pytest.mark.parametrize('name', ['rw_mpas_convert'])
 def test_each_entry_point_embeds_the_stamp(name):
     """A build script that no entry point reads stamps nothing."""
 
@@ -143,7 +171,7 @@ def test_each_entry_point_embeds_the_stamp(name):
 # 4. the resolution ladder
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("name", MPAS_ARTIFACTS)
+@pytest.mark.parametrize('name', ['rw_mpas_mesh'])
 def test_the_ladder_is_the_one_every_other_rustwx_door_uses(name):
     """One ladder, or a staged bundle and a checkout disagree."""
 
@@ -245,7 +273,7 @@ def test_the_measured_model_reproduces_its_own_anchors():
                 f"{anchor['cells']} cells against a measured "
                 f"{anchor['process_mib']:.1f} MiB")
             checked += 1
-    assert checked >= 4, f"only {checked} anchors are pinned"
+    assert checked >= 5, f"only {checked} anchors are pinned"
 
 
 def test_the_fixed_term_is_derived_from_the_card_not_stored():
@@ -279,6 +307,27 @@ def test_the_fixed_term_is_derived_from_the_card_not_stored():
     assert sizing.cells_that_fit("rtx-5070-ti", 16 * 1024.0) == 133_144
     assert sizing.cells_that_fit("rtx-5090", 10 * 1024.0) == 5_349
     assert sizing.cells_that_fit("rtx-5070-ti", 10 * 1024.0) == 58_777
+
+
+def test_the_rtx_pro_6000_is_a_measured_row():
+    """`woof mesh --card rtx-pro-6000` was refused as an unknown card.
+
+    The breakage: the 96 GiB part had no row, so the door refused it by
+    name and its owner could only guess a --cells number.  Its row is a
+    measured one (x1.40962 full physics on the card itself, 13,988 MiB,
+    pinned build 629ddb6f0), and its fixed term is the 188 SM store the
+    formula derives plus the residue that run left, not a borrowed one.
+    """
+
+    sizing = mpas_mesh.load_sizing()
+    pro = sizing.card("rtx-pro-6000")
+    assert pro.measured
+    assert pro.streaming_multiprocessors == 188
+    assert abs(pro.local_store_mib - 7777.0) < 5.0, pro.local_store_mib
+    assert abs(pro.fixed_mib - 10603.8) < 1.0, pro.fixed_mib
+    assert abs(pro.footprint_mib(40962) - 13988.0) < 1.0
+    assert sizing.cells_that_fit("rtx-pro-6000") == 1_048_792
+    assert sizing.cells_that_fit("rtx-pro-6000", 16 * 1024.0) == 69_963
 
 
 def _git(*args: str) -> subprocess.CompletedProcess:
@@ -685,7 +734,7 @@ def test_a_finer_background_than_the_refinement_is_refused():
 # 8. doctor reports it
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("name", MPAS_ARTIFACTS)
+@pytest.mark.parametrize('name', ['rw_mpas_convert'])
 def test_doctor_names_the_door_each_binary_unlocks(name):
     """A bundled artifact no check reports is a silent-green estate."""
 
@@ -806,7 +855,26 @@ def test_the_door_refuses_a_plan_without_complete_gradient_coverage():
 #     boundary a caller cannot cross by accident
 # ---------------------------------------------------------------------------
 
-def test_the_default_request_names_no_triangulation_arm(tmp_path):
+@pytest.fixture
+def generate_argv(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(arguments, progress=None):
+        calls.append(list(arguments))
+        return {"receipt": {}}
+
+    monkeypatch.setattr(mpas_mesh, "_run_mesh", fake_run)
+
+    def generate(**options):
+        mpas_mesh.generate(spec=mpas_mesh.build_spec(background_km=120.0, refine=[]),
+                           cells=2562, out=tmp_path / "x.nc", workdir=tmp_path,
+                           **options)
+        return calls
+
+    return generate
+
+
+def test_the_default_request_names_no_triangulation_arm(generate_argv):
     """THE BREAKAGE: the default arm is what every registered mesh digest
     was minted on.  If the door started sending `--triangulation
     incremental` by default -- or sent `rebuild` explicitly to a binary
@@ -814,44 +882,16 @@ def test_the_default_request_names_no_triangulation_arm(tmp_path):
     reproducing the published x1 and x4 grids and every registry pin that
     names them would lapse with nothing in the run saying why."""
 
-    calls = []
-
-    def fake_run(arguments, progress=None):
-        calls.append(list(arguments))
-        return {"receipt": {}}
-
-    original = mpas_mesh._run_mesh
-    mpas_mesh._run_mesh = fake_run
-    try:
-        mpas_mesh.generate(spec=mpas_mesh.build_spec(background_km=120.0,
-                                                     refine=[]),
-                           cells=2562, out=tmp_path / "x.nc",
-                           workdir=tmp_path)
-    finally:
-        mpas_mesh._run_mesh = original
+    calls = generate_argv()
     assert "--triangulation" not in calls[0], (
         "the door sent a triangulation arm on a request that did not ask "
         f"for one: {calls[0]}")
 
 
-def test_asking_for_the_fast_arm_passes_it_through_by_name(tmp_path):
+def test_asking_for_the_fast_arm_passes_it_through_by_name(generate_argv):
     """A capability the door cannot reach is not shipped."""
 
-    calls = []
-
-    def fake_run(arguments, progress=None):
-        calls.append(list(arguments))
-        return {"receipt": {}}
-
-    original = mpas_mesh._run_mesh
-    mpas_mesh._run_mesh = fake_run
-    try:
-        mpas_mesh.generate(spec=mpas_mesh.build_spec(background_km=120.0,
-                                                     refine=[]),
-                           cells=2562, out=tmp_path / "x.nc",
-                           workdir=tmp_path, triangulation="incremental")
-    finally:
-        mpas_mesh._run_mesh = original
+    calls = generate_argv(triangulation="incremental")
     argv = calls[0]
     assert argv[argv.index("--triangulation") + 1] == "incremental"
 

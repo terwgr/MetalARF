@@ -534,13 +534,35 @@ def test_km_opt3_config_admission():
     assert ok.km_opt == 3
     validate_run_config(RunConfig(**base, km_opt=3, isfflx=2,
                                   bl_pbl_physics=0))
-    with pytest.raises(ValueError, match="khdif"):
-        validate_run_config(RunConfig(**base, km_opt=3, khdif=75.0))
+    # Under diff_opt = 2 WRF ignores khdif/kvdif outside km_opt = 1, and so
+    # does woof/core/diffusion.py, so km_opt = 3 beside a dormant constant
+    # imports as written (890e2523a, WRF fire namelists).  diff_opt = 1
+    # still refuses it (f586d1128): WRF's diff_opt = 1 vertical diffusion
+    # reads kvdif whatever km_opt is, and this engine would drop that term.
+    dormant = validate_run_config(RunConfig(**base, km_opt=3, khdif=75.0,
+                                            kvdif=25.0))
+    assert (dormant.diff_opt, dormant.km_opt, dormant.khdif,
+            dormant.kvdif) == (2, 3, 75.0, 25.0)
+    for option in (2, 4):
+        for name in ("khdif", "kvdif"):
+            with pytest.raises(ValueError, match="khdif"):
+                validate_run_config(RunConfig(**base, diff_opt=1,
+                                              km_opt=option,
+                                              **{name: 75.0}))
+    # km_opt=1 under diff_opt=2 with the PBL off runs WRF's
+    # vertical_diffusion_2 surface arms (isotropic_km into the same
+    # package), so it consumes the prescribed forcing; diff_opt=1 does not.
+    validate_run_config(RunConfig(**base, km_opt=1, isfflx=2,
+                                  tke_heat_flux=0.24))
+    validate_run_config(RunConfig(**base, km_opt=1, isfflx=0,
+                                  sf_sfclay_physics=0,
+                                  tke_drag_coefficient=0.0013))
     with pytest.raises(ValueError, match="isfflx=2"):
-        validate_run_config(RunConfig(**base, km_opt=1, isfflx=2))
+        validate_run_config(RunConfig(**base, km_opt=1, diff_opt=1,
+                                      isfflx=2))
     with pytest.raises(ValueError, match="isfflx=0"):
-        validate_run_config(RunConfig(**base, km_opt=1, isfflx=0,
-                                      sf_sfclay_physics=0))
+        validate_run_config(RunConfig(**base, km_opt=1, diff_opt=1,
+                                      isfflx=0, sf_sfclay_physics=0))
     with pytest.raises(ValueError, match="mix_isotropic"):
         validate_run_config(RunConfig(**base, km_opt=3, mix_isotropic=2))
 

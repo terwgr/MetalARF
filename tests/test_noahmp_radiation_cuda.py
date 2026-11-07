@@ -26,7 +26,7 @@ from woof.core.fp32_ulp import assert_bit_exact, max_ulp
 cp = pytest.importorskip("cupy")
 
 KDIR = Path(__file__).resolve().parents[1] / "woof" / "core" / "kernels"
-ORACLE = Path(__file__).resolve().parents[1] / "tests" / "data" / "noahmp" / "oracle"
+ORACLE = Path(__file__).resolve().parents[1] / "tests" / "data" / "oracles" / "noahmp"
 
 F = np.float32
 

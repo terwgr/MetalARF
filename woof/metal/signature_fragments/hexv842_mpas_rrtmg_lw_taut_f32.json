@@ -1,0 +1,70 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_taut_f32",
+      "module": "hexv842_mpas_rrtmg_lw_taut_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_taut_f32.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_taut",
+      "resources": [
+        [
+          "gas_tau",
+          "float",
+          "read"
+        ],
+        [
+          "taua",
+          "float",
+          "read"
+        ],
+        [
+          "ngb",
+          "int32",
+          "read"
+        ],
+        [
+          "taut",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "gas_tau": [
+          [
+            "any_1d"
+          ]
+        ],
+        "taua": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ngb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "taut": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

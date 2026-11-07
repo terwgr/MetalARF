@@ -147,7 +147,8 @@ _REQUIRED_KEYS = (
 _OPTIONAL_KEYS = (
     "forcing_interval_s", "output_domain", "source_orography",
     "source_orography_variable", "co2_vmr", "water_temperature_overlay",
-    "water_temperature_policy", "preprocess_backend",
+    "water_temperature_policy", "preprocess_backend", "gfs_snow_convention",
+    "gfs_lake_skin", "gfs_lake_ice",
 )
 _KNOWN_KEYS = frozenset(_REQUIRED_KEYS) | frozenset(_OPTIONAL_KEYS)
 
@@ -486,6 +487,22 @@ class CaseDataConfig:
     #: when it is not declared; declared, it joins the InputCatalog and
     #: the run identity moves exactly when the data does.
     water_temperature_overlay: Path | None = None
+    #: WPS doubles WEASD and derives SNOWH; raw retains the input fields.
+    gfs_snow_convention: str = "wps"
+    #: Skin temperature of a land-use lake on the GFS route.  ``wps``: the
+    #: masked water interpolation with metgrid's whole-array search, so a
+    #: lake GFS does not resolve takes the nearest GFS water, as WPS and
+    #: real.exe (no use_tavg_for_tsk) give it.  ``air_temperature``: the
+    #: inland-water reach (INLAND_WATER_SOURCE_REACH_M), past which such a
+    #: lake takes the 2 m air temperature there instead.
+    gfs_lake_skin: str = "wps"
+    #: Ice on a land-use lake on the GFS route.  ``observed``: a daily
+    #: observed snow and ice analysis (IMS, woof.ingest.lake_ice) freezes
+    #: the lake cells it sees frozen, on every domain of the tree, and the
+    #: run falls back loudly to the forcing's ice when none can be read.
+    #: ``wps``: the forcing's ice only (metgrid's nearest-water search, as
+    #: WPS and real.exe give it), so a lake GFS does not resolve starts open.
+    gfs_lake_ice: str = "observed"
     #: Which provider decides the water-surface temperature.  Silence is
     #: ``era5_class_coherent``: one provider per surface class and per
     #: connected body of water, which is what makes a bare run's lakes
@@ -701,6 +718,58 @@ def same_case_data_path(first, second) -> bool:
     return identity(first) == identity(second)
 
 
+def resolve_fetch_out(value, *, base_dir: Path, forcing=()) -> Path:
+    """``[fetch].out`` as a directory, anchored where ``[case_data]`` is.
+
+    A relative ``[fetch].out`` is relative to the configuration's own
+    folder, exactly as ``[case_data].forcing`` is, so a configuration
+    works from any working directory.  D-11 (2.8.8 acceptance): the out
+    key was read against the working directory while forcing was read
+    against the configuration, so an ERA5 configuration written to
+    ``sub/experiment.toml`` ran only from the folder it was written in.
+
+    Configurations written by ``woof domain`` before 2.8.8 carry an out
+    relative to the folder the wizard ran in. Such a file still names
+    its own forcing. If an ancestor of the configuration folder resolves
+    the old out to that declared forcing directory, use that directory.
+    This compatibility reading depends on the configuration and forcing,
+    never on the launch working directory or whether files already exist.
+    """
+
+    path = Path(str(value)).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    anchored = (Path(base_dir) / path).resolve()
+    parents = [Path(entry).resolve().parent for entry in forcing]
+    if parents and not any(same_case_data_path(anchored, parent) for parent in parents):
+        for ancestor in Path(base_dir).resolve().parents:
+            legacy = (ancestor / path).resolve()
+            if all(same_case_data_path(legacy, parent) for parent in parents):
+                return legacy
+    return anchored
+
+
+def config_fetch_out(raw: Mapping, *, base_dir: Path) -> Path | None:
+    """A configuration's ``[fetch].out``, absolute (:func:`resolve_fetch_out`).
+
+    ``None`` when the configuration names no out.  The configuration's
+    own ``[case_data].forcing`` is the evidence a pre-2.8.8 out is read
+    by; forcing that does not resolve is refused by the input gate of
+    whatever reads it next, and only stops serving as evidence here.
+    """
+
+    fetch = raw.get("fetch")
+    if not isinstance(fetch, Mapping) or not fetch.get("out"):
+        return None
+    try:
+        data = optional_case_data_from_tables(
+            dict(raw), source=str(base_dir), base_dir=Path(base_dir))
+    except (OSError, ValueError, TypeError, KeyError):
+        data = None
+    return resolve_fetch_out(fetch["out"], base_dir=Path(base_dir),
+                             forcing=data.forcing if data is not None else ())
+
+
 def _resolve_forcing(base_dir: Path, value, source: str, *,
                      require_match: bool = True) -> tuple[Path, ...]:
     entries = value if isinstance(value, list) else [value]
@@ -854,6 +923,19 @@ def build_case_data(raw: dict, *, source: str, base_dir: Path,
             orog_path = _resolve_path(base_dir, raw_orography,
                                       "source_orography", source)
 
+    snow_convention = raw.get("gfs_snow_convention", "wps")
+    if snow_convention not in ("wps", "raw"):
+        raise ValueError("gfs_snow_convention must be 'wps' or 'raw'")
+    lake_skin = raw.get("gfs_lake_skin", "wps")
+    if lake_skin not in GFS_LAKE_SKIN_CHOICES:
+        raise ValueError(
+            "gfs_lake_skin must be one of "
+            + ", ".join(repr(choice) for choice in GFS_LAKE_SKIN_CHOICES))
+    lake_ice = raw.get("gfs_lake_ice", GFS_LAKE_ICE_CHOICES[0])
+    if lake_ice not in GFS_LAKE_ICE_CHOICES:
+        raise ValueError(
+            "gfs_lake_ice must be one of "
+            + ", ".join(repr(choice) for choice in GFS_LAKE_ICE_CHOICES))
     water_policy = None
     if "water_temperature_policy" in raw:
         from woof.ingest.water_temperature import (
@@ -986,7 +1068,9 @@ def build_case_data(raw: dict, *, source: str, base_dir: Path,
         sfcp_to_sfcp=sfcp, co2_vmr=co2, output_title=title,
         output_domain=domain, forcing_interval_s=interval,
         water_temperature_overlay=overlay_path,
-        water_temperature_policy=water_policy,
+        water_temperature_policy=water_policy, gfs_snow_convention=snow_convention,
+        gfs_lake_skin=lake_skin,
+        gfs_lake_ice=lake_ice,
         preprocess_backend=preprocess_backend)
 
 
@@ -1026,6 +1110,30 @@ def preparation_case_policy(data, *, sfcp_to_sfcp=None):
         "sfcp_to_sfcp": pressure,
         "water_temperature_policy": resolve_water_temperature_policy(data),
         "water_temperature_overlay": None if overlay is None else str(overlay.resolve()),
+    }
+
+
+#: ``gfs_lake_skin`` values; the first is the default.
+GFS_LAKE_SKIN_CHOICES = ("wps", "air_temperature")
+
+#: ``gfs_lake_ice`` values; the first is the default
+#: (woof.ingest.lake_ice.LAKE_ICE_CHOICES).
+GFS_LAKE_ICE_CHOICES = ("observed", "wps")
+
+
+def gfs_preparation_policy(data):
+    """The GFS route's own preparation operands, beside the shared ones.
+
+    Kept out of :func:`preparation_case_policy` on purpose: every route
+    binds that dict into its source identity, so a GFS-only key there
+    would move every ERA5 and HRRR preparation's identity (and miss every
+    prepared cache once) for a choice those routes never make.
+    """
+    return {
+        "gfs_snow_convention": "wps" if data is None else data.gfs_snow_convention,
+        "gfs_lake_skin": "wps" if data is None else data.gfs_lake_skin,
+        "gfs_lake_ice": (GFS_LAKE_ICE_CHOICES[0] if data is None
+                         else data.gfs_lake_ice),
     }
 
 
@@ -1084,6 +1192,9 @@ def load_experiment_case_bytes(
         raise TypeError("experiment config payload must be bytes")
     base = Path(base_dir)
     raw = tomllib.load(io.BytesIO(payload))
+    from woof.vertical_contract import validate_config_source_top
+
+    validate_config_source_top(raw, context=source)
     # The whole shape, read before the companion tables are split off:
     # the missing-table refusal reports which tables the file DID carry
     # and which route its [fetch] hints put it on, and neither survives
@@ -1097,6 +1208,17 @@ def load_experiment_case_bytes(
     if fetch_table is not None:
         from woof.fetch import validate_fetch_hints
         validate_fetch_hints(fetch_table, source=source)
+        # The same route chem sources the experiment loader resolves.
+        from woof.config import apply_route_chem_sources
+        apply_route_chem_sources(raw, fetch_table)
+        # The same fill the config-table loader applies
+        # (woof.experiment.build_experiment_from_config_tables): a
+        # configuration naming an operational-fork source and omitting a
+        # scheme-generation selector runs that source's generation through
+        # this door too, so `woof run` and `woof sim` read one physics
+        # from one file.
+        from woof.physics_source_defaults import fill_omitted_generation_selectors
+        fill_omitted_generation_selectors(raw, fetch_table)
     # The optional [static] table (high-resolution static geography)
     # splits off identically; its schema is owned by
     # woof.static.highres_production and validated, never dropped.

@@ -1,0 +1,13 @@
+{
+  "kernels": [{
+    "name": "da_masked_wind_add", "module": "da_masked_wind",
+    "source": "woof/metal/shaders/da_masked_wind.metal",
+    "cuda_source": "woof/da/perturb.py", "cuda_symbol": "_apply_perturbations_host",
+    "resources": [["left", "uint32", "read"], ["right", "uint32", "read"],
+                  ["mask", "uint32", "read"], ["out", "uint32", "read_write"]],
+    "shapes": {"left": [["n"]], "right": [["n"]],
+               "mask": [["plane"]], "out": [["n"]]},
+    "parameters": [["n", "int32"], ["plane", "int32"]],
+    "arithmetic_policies": ["default"], "layout_version": 1, "threads_per_group": 128
+  }]
+}

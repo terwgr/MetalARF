@@ -19,11 +19,20 @@ This module does that, for any file a row of
   offset must be a whole number of cells, the case grid must lie wholly
   inside, and the file's own latitudes and longitudes over the window
   must equal the case grid's;
-* a row may declare per-field nearest/bilinear sampling when a grid at
-  the same spacing starts between source cells; file coordinates are
-  verified on the original source lattice before that sampling;
+* a row may declare per-field nearest/bilinear/bilinear-masked sampling
+  when a grid at the same spacing starts between source cells; file
+  coordinates are verified on the original source lattice before that
+  sampling.  ``bilinear-masked`` restricts each point to source points of
+  its own class in the row's ``sampling_mask`` field, the masked
+  interpolation WPS gives land-only fields (soil temperature, albedo,
+  greenness, leaf area, snow albedo), whose value over water is a fill;
 * decoding, the crop and sampling run in Rust (``rw_netcdf dump``); this
-  module only resolves the row, checks contracts and places the arrays.
+  module only resolves the row, checks contracts and places the arrays;
+* on a grid the file does not describe (another spacing) a row may name
+  the WPS ``geog_data_res`` tokens that rebuild its own datasets
+  (``off_grid_geog_data_res``): the static build then takes those tokens in
+  place of WPS's default inventory (:func:`off_grid_tokens`), so a soil
+  state analysed on the file's soil texture is not integrated on another.
 
 A configuration that names no source reads no external file, so its
 statics stay byte-identical. Adding another published static file is a
@@ -31,7 +40,6 @@ row, not a code path.
 """
 from __future__ import annotations
 
-import hashlib
 import math
 import os
 from dataclasses import dataclass
@@ -54,6 +62,9 @@ CACHE_ENV = "WOOF_STATIC_SOURCE_ROOT"
 #: The decoder contract token for ``--window`` (rw_netcdf ``--abi``).
 WINDOW_ABI_TOKEN = "dump_window_v1"
 SAMPLE_ABI_TOKEN = "dump_sample_window_v1"
+MASKED_SAMPLE_ABI_TOKEN = "dump_sample_window_masked_v1"
+#: Per-field sampling methods a row may declare.
+SAMPLING_METHODS = ("nearest", "bilinear", "bilinear-masked")
 #: The formats this reader understands.
 FORMATS = ("wps-geo_em",)
 
@@ -119,6 +130,13 @@ class StaticSourceRow:
     drag_semantics: str = ""
     provenance: str = ""
     field_sampling: tuple[tuple[str, str], ...] = ()
+    #: WPS ``geog_data_res`` tokens that rebuild this file's datasets from
+    #: WPS_GEOG at a spacing the file does not describe; empty keeps WPS's
+    #: default inventory there.
+    off_grid_geog_data_res: str = ""
+    #: The file's class field (a land mask) that ``bilinear-masked``
+    #: fields are sampled by; empty when no field is masked.
+    sampling_mask: str = ""
 
     @property
     def grid_map(self) -> dict[str, object]:
@@ -141,7 +159,8 @@ class StaticSourceRow:
 def _row_from_table(entry: Mapping[str, object], *, where: str) -> StaticSourceRow:
     required = ("id", "describes", "format", "filename", "url", "mirrors",
                 "sha256", "bytes", "grid", "attrs", "fields")
-    known = set(required) | {"rename", "drag_semantics", "provenance", "field_sampling"}
+    known = set(required) | {"rename", "drag_semantics", "provenance", "field_sampling",
+                             "off_grid_geog_data_res", "sampling_mask"}
     missing = [key for key in required if key not in entry]
     unknown = sorted(set(entry) - known)
     if missing or unknown:
@@ -173,9 +192,30 @@ def _row_from_table(entry: Mapping[str, object], *, where: str) -> StaticSourceR
         raise StaticSourceError(f"{where}: two fields map onto one engine name")
     sampling = dict(entry.get("field_sampling") or {})
     if sampling and (set(sampling) != set(fields)
-                     or set(sampling.values()) - {"nearest", "bilinear"}):
+                     or set(sampling.values()) - set(SAMPLING_METHODS)):
         raise StaticSourceError(f"{where}: field_sampling must name every source "
-                                "field once with nearest or bilinear")
+                                f"field once with one of {SAMPLING_METHODS}")
+    sampling_mask = str(entry.get("sampling_mask", ""))
+    masked = "bilinear-masked" in sampling.values()
+    if masked != bool(sampling_mask) or (sampling_mask and (
+            sampling_mask not in fields or sampling.get(sampling_mask) != "nearest")):
+        raise StaticSourceError(
+            f"{where}: bilinear-masked fields need sampling_mask, a field of the "
+            "row sampled nearest (and sampling_mask needs a masked field); "
+            "without it a land-only field's water fill blends into coast cells")
+    off_grid = entry.get("off_grid_geog_data_res", "")
+    if not isinstance(off_grid, str):
+        raise StaticSourceError(f"{where}: off_grid_geog_data_res must be a "
+                                "'+'-joined geog_data_res string")
+    if off_grid:
+        from .build import _SUPPORTED_GEOG_TOKENS
+        tokens = [part.strip().lower() for part in off_grid.split("+")]
+        unknown = sorted({tok for tok in tokens if tok not in _SUPPORTED_GEOG_TOKENS})
+        if not all(tokens) or unknown:
+            raise StaticSourceError(
+                f"{where}: off_grid_geog_data_res names {unknown or 'an empty token'}; "
+                f"the static builder knows {sorted(_SUPPORTED_GEOG_TOKENS)}, so "
+                "an off-grid domain would build datasets the row never named")
     return StaticSourceRow(
         id=str(entry["id"]), describes=str(entry["describes"]),
         format=str(entry["format"]), filename=str(entry["filename"]),
@@ -187,7 +227,8 @@ def _row_from_table(entry: Mapping[str, object], *, where: str) -> StaticSourceR
         fields=fields, rename=tuple(sorted(rename.items())),
         drag_semantics=str(entry.get("drag_semantics", "")),
         provenance=str(entry.get("provenance", "")),
-        field_sampling=tuple(sorted(sampling.items())))
+        field_sampling=tuple(sorted(sampling.items())),
+        off_grid_geog_data_res=off_grid, sampling_mask=sampling_mask)
 
 
 @lru_cache(maxsize=None)
@@ -399,13 +440,14 @@ def verify_local_file(path: Path, row: StaticSourceRow) -> None:
             f"{path} holds {stat.st_size} bytes, the static source "
             f"{row.id!r} pins {row.bytes}; a truncated or other file would "
             "put other geography under the source's name")
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            digest.update(block)
-    if digest.hexdigest() != row.sha256:
+    from woof.geog_assets import sha256_file, GeogFetchError
+    try:
+        digest = sha256_file(path)
+    except GeogFetchError as error:
+        raise StaticSourceError(f"static source {row.id!r}: {error}; unverified geography must not be used") from error
+    if digest != row.sha256:
         raise StaticSourceError(
-            f"{path} has sha256 {digest.hexdigest()}, the static source "
+            f"{path} has sha256 {digest}, the static source "
             f"{row.id!r} pins {row.sha256}; refusing other bytes under the "
             "source's name")
 
@@ -456,23 +498,93 @@ def _fetch_static_source_locked(source_id: str, root: Path, *, progress,
     for url in (row.url, *row.mirrors):
         kwargs = {} if urlopen_fn is None else {"urlopen_fn": urlopen_fn}
         try:
-            geog_assets.download_archive(
+            record = geog_assets.download_archive(
                 url, partial, expected_bytes=row.bytes, progress=progress,
-                label=row.id, **kwargs)
-            geog_assets.verify_archive(
-                partial, expected_sha256=row.sha256, expected_bytes=row.bytes,
-                source="hf", allow_drift=False, progress=progress,
-                label=row.id)
+                expected_sha256=row.sha256,
+                label=row.id, report_every_bytes=max(row.bytes // 10, 1),
+                **kwargs)
+            if record is None:
+                geog_assets.verify_archive(
+                    partial, expected_sha256=row.sha256, expected_bytes=row.bytes,
+                    source="hf", allow_drift=False, progress=progress,
+                    label=row.id)
         except (OSError, geog_assets.GeogFetchError) as error:
+            if "pin refused" in str(error) or "pinned object refused" in str(error):
+                raise geog_assets.GeogFetchError(f"static source {row.id}: {error}") from error
             errors.append(f"{url}: {error}")
             continue
         partial.replace(final)
-        verify_local_file(final, row)
+        if record is None:
+            verify_local_file(final, row)
         progress(f"fetch-geog: static source {row.id} staged at {final}")
         return final
     raise geog_assets.GeogFetchError(
         f"static source {row.id!r} could not be fetched from any of its "
         f"{1 + len(row.mirrors)} URL(s): " + "; ".join(errors))
+
+
+def required_static_rows(raw, *, base_dir=None) -> tuple[StaticSourceRow, ...]:
+    """The static-source rows a run of this configuration will read.
+
+    The row the configuration's ``[static] source`` names, or the one its
+    ``[fetch]`` source's metadata selects on the row's own cone -- the
+    same resolution the static build makes
+    (:func:`woof.static.highres_production.resolve_static_highres`) --
+    when at least one domain is at the row's grid spacing.  A row at
+    another spacing is never read (:func:`overlay_static_source` reports
+    it ``NOT_APPLICABLE``), so it is not asked for.
+    """
+    from .highres_production import raw_domain_spacings, resolve_static_highres
+
+    fetch = raw.get("fetch") if isinstance(raw, Mapping) else None
+    source = (fetch or {}).get("source") if isinstance(fetch, Mapping) else None
+    carrier = resolve_static_highres(raw, source=str(source or "configuration"),
+                                     base_dir=base_dir)
+    setting = static_source_for(carrier)
+    if setting is None:
+        return ()
+    row = setting.row
+    g = row.grid_map
+    spacings = raw_domain_spacings(raw)
+    if not any(abs(float(dx) - float(g["dx"])) <= 1e-6
+               and abs(float(dx) - float(g["dy"])) <= 1e-6 for dx in spacings):
+        return ()
+    return (row,)
+
+
+def stage_required_static_sources(raw, geog_root, *, base_dir=None,
+                                  progress=print, fetch=None) -> list[Path]:
+    """Fetch every static file this configuration reads and is not staged.
+
+    The run's own statics, staged through the same fetch as ``woof
+    fetch-geog --static-source ID`` (:func:`fetch_static_source`: the pin,
+    the resume, the verification and the cache folder are that command's),
+    with a line naming the file and its size before the download and
+    progress lines while it runs.  A file already staged is verified by
+    :func:`resolve_local_file` and not fetched again.
+
+    Breakage it prevents: a run of a shipped HRRR configuration recipe
+    stopped at static preparation, after its forcing download, until the
+    user had run ``fetch-geog --static-source hrrr-conus-v4`` by hand
+    (WOOF 1.0.3 GPU smoke, 2026-10-06).
+    """
+    fetch = fetch_static_source if fetch is None else fetch
+    Path(geog_root).mkdir(parents=True, exist_ok=True)
+    staged = []
+    for row in required_static_rows(raw, base_dir=base_dir):
+        try:
+            staged.append(resolve_local_file(row, geog_root))
+            continue
+        except FileNotFoundError:
+            pass
+        host = row.url.split("/")[2] if "://" in row.url else row.url
+        progress(
+            f"note: static source {row.id} is not staged; fetching "
+            f"{row.bytes / 1e9:.2f} GB from {host} into "
+            f"{Path(geog_root) / CACHE_SUBDIR / row.id} (the same as "
+            f"`{fetch_command(row, geog_root)}`)")
+        staged.append(fetch(row.id, Path(geog_root), progress=progress))
+    return staged
 
 
 # ---------------------------------------------------------------------------
@@ -611,14 +723,14 @@ def crop_window(row: StaticSourceRow, grid) -> tuple[int, int] | None:
 # The overlay.
 # ---------------------------------------------------------------------------
 
-def _require_window_reader(dataset, *, sampled=False) -> None:
+def _require_window_reader(dataset, *, sampled=False, masked=False) -> None:
     import subprocess
     try:
         abi = subprocess.run([os.fspath(dataset._executable), "--abi"],
                              capture_output=True, text=True, timeout=60).stdout
     except OSError as error:
         abi = str(error)
-    required = SAMPLE_ABI_TOKEN if sampled else WINDOW_ABI_TOKEN
+    required = (MASKED_SAMPLE_ABI_TOKEN if masked else SAMPLE_ABI_TOKEN) if sampled         else WINDOW_ABI_TOKEN
     if required not in abi:
         from woof.netcdf_bridge import netcdf_remedy
         raise StaticSourceError(
@@ -673,7 +785,9 @@ def overlay_static_source(fields: MutableMapping[str, np.ndarray], grid,
             "build left to it")
     path = resolve_local_file(row, geog_root)
     dataset = Dataset(path)
-    _require_window_reader(dataset, sampled=sampled)
+    masked = sampled and any(row.sampling_map.get(served[name]) == "bilinear-masked"
+                             for name in wanted)
+    _require_window_reader(dataset, sampled=sampled, masked=masked)
     attrs = dataset.global_attributes
     g = row.grid_map
     expected_attrs = {**row.attrs_map,
@@ -760,8 +874,10 @@ def overlay_static_source(fields: MutableMapping[str, np.ndarray], grid,
                 f"{path} lacks {served[name]}, which static source "
                 f"{row.id!r} declares")
         if sampled:
-            values = variable.read_sample_window(i0=i0, ni=nx, j0=j0, nj=ny,
-                                                  method=row.sampling_map[served[name]])
+            method = row.sampling_map[served[name]]
+            values = variable.read_sample_window(
+                i0=i0, ni=nx, j0=j0, nj=ny, method=method,
+                mask=row.sampling_mask if method == "bilinear-masked" else None)
         else:
             values = variable.read_window(i0=i0, ni=nx, j0=j0, nj=ny)
         if values.shape[0] == 1 and len(values.shape) >= 3:
@@ -793,6 +909,7 @@ def overlay_static_source(fields: MutableMapping[str, np.ndarray], grid,
         **({"sampling": {"mode": "fractional-same-spacing",
                           "methods": {name: row.sampling_map[file_name]
                                       for name, file_name in taken.items()},
+                          **({"mask": row.sampling_mask} if masked else {}),
                           "source_coordinate_window": {"i0": ci0, "j0": cj0,
                                                        "ni": cni, "nj": cnj}}}
            if sampled else {}),
@@ -807,13 +924,41 @@ def overlay_static_source(fields: MutableMapping[str, np.ndarray], grid,
     return fields
 
 
+def off_grid_tokens(setting: StaticSourceSetting | None, grid) -> str | None:
+    """The ``geog_data_res`` a grid the source does not describe builds with.
+
+    ``None`` when there is no setting, when the source describes ``grid``
+    (it is overlaid as before), or when its row names no off-grid tokens.
+    The breakage this prevents (1 km HRRR-physics runs scored cold and
+    moist, 2026-10-05): a domain at another spacing than the file was
+    built from WPS's default inventory, whose STATSGO soil texture differs
+    from the file's BNU texture on 63% of land cells, so HRRR's analysed
+    soil moisture, made on BNU, read 0.05 wetter in RUC's moisture
+    availability and the land surface over-evaporated.
+    """
+    if setting is None:
+        return None
+    row = setting.row
+    if not row.off_grid_geog_data_res:
+        return None
+    # The recipe exists to carry the source's soil texture; a setting that
+    # takes no soil from the source (source_fields without "soil") asked
+    # for none of it.
+    if ALL_GROUPS not in setting.groups and "soil" not in setting.groups:
+        return None
+    if sampling_window(row, grid) is not None:
+        return None
+    return row.off_grid_geog_data_res
+
+
 __all__ = [
     "ALL_GROUPS", "CACHE_ENV", "CACHE_SUBDIR", "FIELD_GROUPS",
     "StaticSourceError", "StaticSourceRow", "StaticSourceSetting",
     "PROJECTION_KEYS", "TABLE_PATH", "crop_window", "projection_mismatch",
     "sampling_window", "fetch_command", "fetch_static_source",
     "field_groups", "overlay_static_source", "parse_static_source",
-    "require_root_static_source", "resolve_local_file", "served_names",
+    "require_root_static_source", "required_static_rows",
+    "off_grid_tokens", "resolve_local_file", "served_names", "stage_required_static_sources",
     "setting_from_echo", "source_grid", "static_source_for",
     "static_source_receipt", "static_source_row", "static_source_rows",
     "verify_local_file",

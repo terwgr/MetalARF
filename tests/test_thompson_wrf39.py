@@ -15,25 +15,23 @@ The breakage each gate prevents, named:
    statement sits in a THOMPSON_AA_WRF39 arm; with the define absent the
    preprocessed source of every aerosol unit must be the v4.6.1 code, which
    this test checks by stripping the fork arms and comparing with the
-   pre-fork source pinned by its SHA-256.
-4. ``test_fork_fixture_against_the_fork_fortran`` -- the port's fork
-   generation against the fork's own Fortran (NOAA-EMC/HRRR v4.1.21
-   module_mp_thompson.F, built by tools/thompson_fork_oracle/build.sh) on 42
-   saved real-data columns: with the fork's own snow fall no cell of any
-   field may differ by more than 1e-2 and the echo by more than 1e-3 dB;
-   with the default blend only melting-layer snow may differ.  Needs a C++
-   compiler and the fork's tables (WOOF_THOMPSON_FORK_TABLE_ROOT); skips
-   naming the missing piece.
+   v4.6.1 source pinned by its SHA-256 (V461_STRIPPED_SHA256, moved by the
+   2.8.6 mp=28 accumulator rework; the pre-rework claim against the
+   pre-fork commit is held by
+   ``test_the_fork_arms_were_pure_insertions_until_the_rework``).
+4. The fork generation's word-for-word agreement with the fork's own
+   Fortran is tests/test_thompson_fork_column_gpu.py (0 ULP on every
+   output of the column unit, woof/core/kernels/thompson_fork.cu).  The
+   host-backend fixture check that stood here graded the multi-kernel fork
+   path at 1e-2 relative; that path no longer runs the generation.
 """
+# Replaced in 2.9.1 (the WRF exact chain): test_fork_fixture_against_the_fork_fortran -> tests/test_thompson_fork_column_gpu.py::test_every_output_cell_is_the_forks_word.
+# Replaced in 2.9.1 (the WRF exact chain): test_fork_fixture_with_the_default_snow_fall -> tests/test_thompson_fork_column_gpu.py::test_the_blend_snow_fall_moves_only_melting_snow.
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import shutil
-import subprocess
-import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -137,6 +135,12 @@ def test_a_missing_fork_table_set_is_refused_with_the_build_command(
     def unavailable(*args):
         raise FileNotFoundError("GNU Fortran is unavailable for this control")
     monkeypatch.setattr(thompson_fork_assets, "_build_source", unavailable)
+    # The published route is a real download once a release carries the
+    # set (2.8.7 on); this control is about the refusal, not the network.
+    monkeypatch.setenv(thompson_fork_assets.FORK_RELEASE_BASE_ENV, "")
+    monkeypatch.delenv(thompson_fork_assets.FORK_TABLE_SOURCE_ROOT_ENV, raising=False)
+    monkeypatch.delenv(thompson_fork_assets.FORK_TABLE_ASSET_URL_BASE_ENV, raising=False)
+    monkeypatch.setattr(thompson_fork_assets, "_packaged_source", lambda: None)
     monkeypatch.setenv("WOOF_THOMPSON_FORK_TABLE_ROOT", str(tmp_path))
     with pytest.raises(FileNotFoundError,
                        match="tools/thompson_fork_oracle/build.sh"):
@@ -162,29 +166,87 @@ def _strip_fork_arms(text: str) -> str:
     return _FORK_ARM.sub(lambda m: m.group("else") or "", text)
 
 
-@pytest.mark.parametrize("unit", [
-    "thompson_aerosol_state.cu", "thompson_aerosol_sed.cu"])
+#: SHA-256 of each unit's v4.6.1 source: the file with every THOMPSON_AA_WRF39
+#: arm stripped (#else arms kept), right-stripped, UTF-8.
+#:
+#: MOVED ON PURPOSE 2026-10-05 by the mp=28 accumulator rework
+#: (lane/cut286-mp28-g3, 2.8.6).  Until then this test compared the stripped
+#: source with the pre-fork commit 7ab2e3dcf through git, so it skipped on
+#: every test tree without history (the node and box trees), and the rework,
+#: which changes the v4.6.1 path itself (WRF's qcten/qrten/nrten/qiten/niten
+#: accumulators and one terminal apply, module_mp_thompson.F :1670, :3975,
+#: :4023-4053), would have failed it only where git was present.  The v4.6.1
+#: path is now pinned here by hash, so the check runs on every tree: an edit
+#: to a fork arm that leaks into the v4.6.1 code changes this hash and fails.
+#: The rework's own v4.6.1 change is graded against WRF by the g3 gate
+#: (tests/test_thompson_aerosol_adapter.py, 22 of 22 fixtures inside the
+#: flat 2e-6 bound); the fork arms themselves are untouched by it
+#: (test_the_fork_arms_were_pure_insertions_until_the_rework below holds
+#: the earlier claim at the last pre-rework staging commit, ed2b14e7d).
+#:
+#: MOVED AGAIN 2026-10-07 by lane/verify-thompson-aerosol-mp28: every
+#: EXP/LOG/LOG10/** in both arms calls WOOF's own libm words
+#: (thompson_aerosol_libm.cuh), graded by the 0 ULP column oracle
+#: (tools/thompson_aerosol_column_oracle) and tests/test_thompson_aerosol_libm.py.
+#:
+#: MOVED AGAIN 2026-10-07 by lane/mp28fix-sedim-refl: the v4.6.1 path's own
+#: snow and graupel fallout, surface totals, classic graupel number and
+#: calc_refl10cm (the frozen mp=8 kernels no longer reach mp=28), graded by
+#: the column oracle and tests/test_thompson_aerosol_sedim_refl.py.  The fork
+#: arms are untouched.  Previously 4f6bda7a20547e64 (state), e9b877b64b1f9624
+#: (sed).
+#:
+#: MOVED AGAIN 2026-10-07 by lane/mp28-exact: WRF's snow and graupel
+#: accumulators in the v4.6.1 snow and graupel fallout (:3871-3937,
+#: :4054-4059), the phase cleanup's latent heat into tten on WRF's
+#: ocp(k)/lvap(k) (:3943-3973), and the warm network's entry mask with
+#: WRF's melting level (thompson_aa_entry_warm_mask, :1971-2013), graded by
+#: tests/test_thompson_aerosol_column_oracle_gpu.py, including the separate
+#: exact-freezing fixture and legacy-mask negative control. The fork arms are
+#: untouched.  Previously c98df22af539c88e (state), 8a7f09658ba014b1 (sed).
+V461_STRIPPED_SHA256 = {
+    "thompson_aerosol_state.cu":
+        "1d09b519d926d28a710e144555fb7cc81ee6af527ac6ed3e2f07b3b6053a24b3",
+    "thompson_aerosol_sed.cu":
+        "980288a1b5df4d2bd6ab1b3288ce7196805ef8e3fd4d2971c30f178e8400f7bc",
+}
+
+
+@pytest.mark.parametrize("unit", sorted(V461_STRIPPED_SHA256))
 def test_the_v461_arms_are_untouched_by_the_fork_define(unit):
     """For the units whose fork arms are pure insertions and #else pairs,
-    stripping the fork arms returns the pre-fork source byte for byte."""
-    import subprocess as sp
+    stripping the fork arms returns the pinned v4.6.1 source byte for byte."""
+    import hashlib
     current = (_KERNELS / unit).read_text(encoding="utf-8")
-    exported = os.environ.get("WOOF_FORK_BASE_TREE")
-    if exported:
-        # An export of the pre-fork commit (a node test tree has no .git).
-        base = (Path(exported) / "woof" / "core" / "kernels"
-                / unit).read_text(encoding="utf-8")
+    # The appended fork kernels leave only their separating blank lines.
+    stripped = _strip_fork_arms(current).rstrip()
+    assert hashlib.sha256(stripped.encode("utf-8")).hexdigest() == (
+        V461_STRIPPED_SHA256[unit])
+
+
+@pytest.mark.parametrize("unit", sorted(V461_STRIPPED_SHA256))
+def test_the_fork_arms_were_pure_insertions_until_the_rework(unit):
+    """The fork lane's claim as it stood before the accumulator rework: at
+    ed2b14e7d, stripping the fork arms returned the pre-fork 7ab2e3dcf
+    source byte for byte.  Reads git history (or two exports named by
+    WOOF_FORK_BASE_TREE and WOOF_FORK_PRE_REWORK_TREE)."""
+    import subprocess as sp
+    trees = (os.environ.get("WOOF_FORK_BASE_TREE"),
+             os.environ.get("WOOF_FORK_PRE_REWORK_TREE"))
+    if all(trees):
+        base, pre = ((Path(tree) / "woof" / "core" / "kernels"
+                      / unit).read_text(encoding="utf-8") for tree in trees)
     else:
         try:
-            base = sp.run(
-                ["git", "show", f"7ab2e3dcf:woof/core/kernels/{unit}"],
+            base, pre = (sp.run(
+                ["git", "show", f"{rev}:woof/core/kernels/{unit}"],
                 cwd=_ROOT, capture_output=True, text=True, check=True,
-                encoding="utf-8").stdout
+                encoding="utf-8").stdout for rev in ("7ab2e3dcf", "ed2b14e7d"))
         except (OSError, sp.CalledProcessError):
-            pytest.skip("no git history (or WOOF_FORK_BASE_TREE export) "
-                        "to read the pre-fork source from")
-    # The appended fork kernels leave only their separating blank lines.
-    assert _strip_fork_arms(current).rstrip() == base.rstrip()
+            pytest.skip("no git history (or WOOF_FORK_BASE_TREE and "
+                        "WOOF_FORK_PRE_REWORK_TREE exports) to read the "
+                        "pre-fork and pre-rework sources from")
+    assert _strip_fork_arms(pre).rstrip() == base.rstrip()
 
 
 def test_every_fork_arm_is_reachable_only_through_the_define():
@@ -196,52 +258,6 @@ def test_every_fork_arm_is_reachable_only_through_the_define():
             (_KERNELS / unit).read_text(encoding="utf-8"))
         assert "thompson_aa_wrf39_" not in text, unit
         assert "THOMPSON_AA_WRF39_" not in text, unit
-
-
-def _run_check(snow_fall: str) -> dict:
-    root = os.environ.get("WOOF_THOMPSON_FORK_TABLE_ROOT") or str(
-        Path.home() / ".woof" / "tables" / "thompson-wrf39-noaa")
-    if not (Path(root) / "qr_acr_qg.dat").is_file():
-        pytest.skip("the fork's Thompson tables are not staged (build them "
-                    "with tools/thompson_fork_oracle/build.sh and set "
-                    "WOOF_THOMPSON_FORK_TABLE_ROOT)")
-    if shutil.which("g++") is None and shutil.which("c++") is None:
-        pytest.skip("no C++ compiler to build the host kernels")
-    done = subprocess.run(
-        [sys.executable,
-         str(_ROOT / "tools" / "thompson_fork_oracle" / "fork_fixture_check.py"),
-         "--snow-fall", snow_fall],
-        capture_output=True, text=True, check=False,
-        env=dict(os.environ, CUDA_VISIBLE_DEVICES="-1",
-                 GPUWM_THOMPSON_FORK_TABLE_ROOT=root))
-    assert done.returncode == 0, done.stderr[-4000:]
-    return json.loads(done.stdout.strip().splitlines()[-1])
-
-
-def test_fork_fixture_against_the_fork_fortran():
-    result = _run_check("wrf_39_noaa")
-    beyond = {name: field["n_beyond_1e-2"]
-              for name, field in result["fields"].items()
-              if field["n_beyond_1e-2"]}
-    assert beyond == {}
-    assert result["refl"]["max_abs_db"] <= 1.0e-3
-
-
-def test_fork_fixture_with_the_default_snow_fall():
-    """The blend differs from the fork only in snow: in the melting layer,
-    and above it in the same columns, because the fork's singular speed
-    there sets the column's fallout substep count."""
-    result = _run_check("blend")
-    snow_columns = set()
-    for name, field in result["fields"].items():
-        if name in ("qs", "re_snow"):
-            snow_columns |= {cell["at"][0] for cell in field["cells"]}
-            assert (any(cell["t_in"] > 273.15 for cell in field["cells"])
-                    or not field["cells"])
-        else:
-            assert field["n_beyond_1e-2"] == 0, name
-    assert snow_columns
-
 
 
 def test_the_operational_fork_signature_names_the_fork_s_own_keys():
@@ -261,7 +277,7 @@ def test_the_operational_fork_signature_names_the_fork_s_own_keys():
 def test_a_public_wrf_namelist_imports_the_v461_thompson(tmp_path):
     from test_namelist_import import INPUT_TEXT, _load, _pair
     from woof.namelist_import import import_namelists
-    inp = INPUT_TEXT.replace(" mp_physics = 55, 55,", " mp_physics = 28, 28,")
+    inp = INPUT_TEXT.replace(" mp_physics = 10, 10,", " mp_physics = 28, 28,")
     text, _ = import_namelists(*_pair(tmp_path, inp=inp), name="fork")
     assert "thompson_version" not in text
     exp = _load(tmp_path, text, "fork.toml")

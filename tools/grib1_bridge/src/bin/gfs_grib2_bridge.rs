@@ -8,11 +8,12 @@ use gpuwm_preprocess_cpu::quantization::{
     decode_quantum, is_coded_value, BoundKind, BoundVerdict, Bounds, ClampTally,
 };
 use grib_core::grib2::{flip_rows, unpack_message, Grib2File, Grib2Message, GridDefinition};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
@@ -24,7 +25,7 @@ const SOIL_LEVEL_TYPE: u8 = 106;
 /// The isobaric ladder every GFS subset must carry, in Pa.
 ///
 /// This is the floor, not the ceiling. A case whose model top sits above 100
-/// hPa needs the ladder EXTENDED UPWARD -- `gpuwm fetch --source gfs
+/// hPa needs the ladder EXTENDED UPWARD -- `woof fetch --source gfs
 /// --p-top-pa 5000` fetches the 70 and 50 hPa levels as well -- and a bridge
 /// that insists on exactly these 21 would refuse the very file that was
 /// fetched to satisfy it. The observed ladder is therefore derived from the
@@ -502,86 +503,9 @@ struct SeriesInput {
 }
 
 fn sha256_bytes(data: &[u8]) -> [u8; 32] {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
-    ];
-    let mut hash = [
-        0x6a09e667u32,
-        0xbb67ae85,
-        0x3c6ef372,
-        0xa54ff53a,
-        0x510e527f,
-        0x9b05688c,
-        0x1f83d9ab,
-        0x5be0cd19,
-    ];
-    let bit_length = (data.len() as u64).wrapping_mul(8);
-    let mut padded = data.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
-    }
-    padded.extend_from_slice(&bit_length.to_be_bytes());
-    for block in padded.chunks_exact(64) {
-        let mut words = [0u32; 64];
-        for (index, bytes) in block.chunks_exact(4).enumerate() {
-            words[index] = u32::from_be_bytes(bytes.try_into().unwrap());
-        }
-        for index in 16..64 {
-            let s0 = words[index - 15].rotate_right(7)
-                ^ words[index - 15].rotate_right(18)
-                ^ (words[index - 15] >> 3);
-            let s1 = words[index - 2].rotate_right(17)
-                ^ words[index - 2].rotate_right(19)
-                ^ (words[index - 2] >> 10);
-            words[index] = words[index - 16]
-                .wrapping_add(s0)
-                .wrapping_add(words[index - 7])
-                .wrapping_add(s1);
-        }
-        let mut state = hash;
-        for index in 0..64 {
-            let s1 =
-                state[4].rotate_right(6) ^ state[4].rotate_right(11) ^ state[4].rotate_right(25);
-            let choice = (state[4] & state[5]) ^ ((!state[4]) & state[6]);
-            let temp1 = state[7]
-                .wrapping_add(s1)
-                .wrapping_add(choice)
-                .wrapping_add(K[index])
-                .wrapping_add(words[index]);
-            let s0 =
-                state[0].rotate_right(2) ^ state[0].rotate_right(13) ^ state[0].rotate_right(22);
-            let majority = (state[0] & state[1]) ^ (state[0] & state[2]) ^ (state[1] & state[2]);
-            let temp2 = s0.wrapping_add(majority);
-            state = [
-                temp1.wrapping_add(temp2),
-                state[0],
-                state[1],
-                state[2],
-                state[3].wrapping_add(temp1),
-                state[4],
-                state[5],
-                state[6],
-            ];
-        }
-        for index in 0..8 {
-            hash[index] = hash[index].wrapping_add(state[index]);
-        }
-    }
-    let mut output = [0u8; 32];
-    for (chunk, value) in output.chunks_exact_mut(4).zip(hash) {
-        chunk.copy_from_slice(&value.to_be_bytes());
-    }
-    output
+    // RustCrypto selects the CPU's SHA implementation at runtime. The
+    // digest contract is unchanged; no padded copy of the input is needed.
+    Sha256::digest(data).into()
 }
 
 fn hex_sha256(data: &[u8]) -> String {
@@ -592,7 +516,21 @@ fn hex_sha256(data: &[u8]) -> String {
 }
 
 fn sha256_file(path: &Path) -> Result<String, Box<dyn Error>> {
-    Ok(hex_sha256(&fs::read(path)?))
+    let mut file = File::open(path)?;
+    let mut hash = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = match file.read(&mut buffer) {
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if count == 0 {
+            break;
+        }
+        hash.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hash.finalize()))
 }
 
 fn matches_parameter(message: &Grib2Message, expected: Parameter) -> bool {
@@ -712,21 +650,11 @@ fn validate_common(
         )
         .into());
     }
-    // Two packings are certified here, one per publisher form.  The
-    // NOMADS grib-filter `subregion` crop re-encodes to DRT 5.0 (simple
-    // packing), which is what the original proof corpus was built from.
-    // The raw noaa-gfs-bdp-pds S3 objects -- the full-file route -- are
-    // DRT 5.3 (complex packing + second-order spatial differencing),
-    // and their admission has its own real-product proof: a committed
-    // matched pair of the same SOILW field from the same cycle, where
-    // the bitmap-carried missing cells land in identical positions and
-    // every present cell decodes to the identical f64 bit pattern
-    // through both packings
-    // (`the_raw_53_bitmap_decode_matches_the_nomads_crop_cell_for_cell`).
-    // The proof covers exactly the envelope NCEP publishes -- general
-    // group splitting, NO embedded missing-value management (the bitmap
-    // carries the mask), second-order differencing -- so everything
-    // outside that envelope still refuses by name.
+    // Simple packing and complex packing with second-order differencing.
+    // Historical GFS also declares embedded primary/secondary missing codes.
+    // The shared decoder excludes those cells from the differencing chain;
+    // scan_normalized carries their mask alongside the Section-6 bitmap.
+    // Required atmospheric fields still reject every missing cell.
     match message.data_rep.template {
         0 => {}
         3 => {
@@ -738,11 +666,10 @@ fn validate_common(
                 )
                 .into());
             }
-            if message.data_rep.missing_value_management != 0 {
+            if message.data_rep.missing_value_management > 2 {
                 return Err(format!(
                     "unsupported GFS complex-packing missing-value management {} \
-                     (only 0 is certified: GFS missing cells travel in the \
-                     bitmap, never as embedded substitutes)",
+                     (reserved Code Table 5.5 value; cannot identify missing codes)",
                     message.data_rep.missing_value_management
                 )
                 .into());
@@ -786,7 +713,8 @@ fn validate_common(
     // drops Section 6's bitmap when every cell of the crop is defined, so
     // an all-land crop carries these fields with no bitmap at all; the
     // old equality check refused that valid crop.  Missing cells still
-    // need an explicit bitmap: emit_values refuses any NaN outside one.
+    // need an explicit bitmap or declared embedded code. The decode mask
+    // combines both; emit_values still refuses missing required fields.
     if message.bitmap.is_some() && !allow_missing {
         return Err(format!(
             "GFS missing-value policy mismatch: bitmap={} expected={allow_missing}",
@@ -829,8 +757,8 @@ fn validate_common(
         || !grid.lon2.is_finite()
         || !grid.dx.is_finite()
         || !grid.dy.is_finite()
-        || !same_level(grid.dx, 0.25)
-        || !same_level(grid.dy, 0.25)
+        || ![0.25, 0.5, 1.0].iter().any(|dx| same_level(grid.dx, *dx))
+        || !same_level(grid.dy, grid.dx)
         || !same_level(grid.lat2, latitude_span)
         || !same_level(grid.lon2, grid.lon1 + (grid.nx - 1) as f64 * grid.dx)
     {
@@ -880,6 +808,8 @@ fn flip_mask_rows(mask: &mut [bool], nx: usize, ny: usize) {
     }
 }
 
+type ScannedValues = (Vec<f64>, Option<Vec<bool>>);
+
 /// Decode one message into this bridge's canonical south-to-north
 /// row-major order, with its missing-value mask in the same order.
 ///
@@ -890,11 +820,24 @@ fn flip_mask_rows(mask: &mut [bool], nx: usize, ny: usize) {
 /// missing cells to the wrong rows.
 fn scan_normalized(
     message: &Grib2Message,
-) -> Result<(Vec<f64>, Option<Vec<bool>>), Box<dyn Error>> {
+) -> Result<ScannedValues, Box<dyn Error>> {
     let nx = message.grid.nx as usize;
     let ny = message.grid.ny as usize;
     let mut values = unpack_message(message)?;
     let mut present = message.bitmap.clone();
+    if message.data_rep.template == 3
+        && matches!(message.data_rep.missing_value_management, 1 | 2)
+    {
+        // unpack_message creates NaN only for a declared missing code or
+        // bitmap cell. Do this before the row flip so both masks move together.
+        let mask = present.get_or_insert_with(|| vec![true; values.len()]);
+        if mask.len() != values.len() {
+            return Err("embedded missing mask length differs from decoded grid".into());
+        }
+        for (cell, value) in mask.iter_mut().zip(&values) {
+            if value.is_nan() { *cell = false; }
+        }
+    }
     if message.grid.scan_mode == NORTH_TO_SOUTH_SCAN {
         if values.len() != nx * ny {
             return Err(format!(
@@ -1033,6 +976,7 @@ fn inventory(
     hour: u32,
     expected_forecast_process_id: u8,
     pressure_levels_pa: &[f64],
+    snow_convention: SnowConvention,
 ) -> Result<Inventory, Box<dyn Error>> {
     let mut selected = Vec::with_capacity(PRESSURE_SPECS.len() * pressure_levels_pa.len() + 19);
     let mut fingerprint: Option<GridFingerprint> = None;
@@ -1073,7 +1017,13 @@ fn inventory(
         }
     }
     let mut land_mask_parameter = None;
-    for spec in SURFACE_SPECS.into_iter().chain(SOIL_SPECS) {
+    for mut spec in SURFACE_SPECS.into_iter().chain(SOIL_SPECS) {
+        if spec.name == "SNOWH" && snow_convention == SnowConvention::Wps {
+            // Vtable.GFS reads WEASD; WPS derives depth from that field.
+            // A WPS decode must not depend on SNOD being present.
+            spec.parameter.number = 13;
+            spec.maximum = 100_000.0; // input WEASD bounds, before conversion
+        }
         let (index, actual_spec) = if spec.name == "LANDSEA" {
             let (index, parameter_number) = land_mask_match(&file.messages)?;
             land_mask_parameter = Some(parameter_number);
@@ -1170,6 +1120,7 @@ fn inventory(
     })
 }
 
+#[cfg(test)]
 fn parse_series(path: &Path) -> Result<Vec<SeriesInput>, Box<dyn Error>> {
     parse_series_rows(path, false)
 }
@@ -1353,6 +1304,7 @@ fn write_field(
     writer: &mut BufWriter<File>,
     spec: FieldSpec,
     all_water_source: bool,
+    snow_convention: SnowConvention,
 ) -> Result<FieldSummary, Box<dyn Error>> {
     let (values, present) = scan_normalized(message)?;
     let expected = message.grid.nx as usize * message.grid.ny as usize;
@@ -1364,13 +1316,14 @@ fn write_field(
         )
         .into());
     }
-    emit_values_with_surface_support(
+    emit_converted_values(
         &values,
         present.as_deref(),
         spec,
         field_quantum(message),
         all_water_source,
         writer,
+        snow_convention,
     )
 }
 
@@ -1388,6 +1341,7 @@ fn emit_values<W: Write>(
     emit_values_with_surface_support(values, present, spec, quantum, false, writer)
 }
 
+#[cfg(test)]
 fn emit_values_with_surface_support<W: Write>(
     values: &[f64],
     present: Option<&[bool]>,
@@ -1395,6 +1349,18 @@ fn emit_values_with_surface_support<W: Write>(
     quantum: f64,
     all_water_source: bool,
     writer: &mut W,
+) -> Result<FieldSummary, Box<dyn Error>> {
+    emit_converted_values(values, present, spec, quantum, all_water_source, writer, SnowConvention::Raw)
+}
+
+fn emit_converted_values<W: Write>(
+    values: &[f64],
+    present: Option<&[bool]>,
+    spec: FieldSpec,
+    quantum: f64,
+    all_water_source: bool,
+    writer: &mut W,
+    snow_convention: SnowConvention,
 ) -> Result<FieldSummary, Box<dyn Error>> {
     let bounds = spec.bounds();
     let mut finite = 0usize;
@@ -1423,6 +1389,7 @@ fn emit_values_with_surface_support<W: Write>(
                     return Err(out_of_range(spec, value, excursion, tolerance));
                 }
             }
+            value = snow_convention.convert(spec.name, value);
             finite += 1;
             minimum = minimum.min(value);
             maximum = maximum.max(value);
@@ -1578,14 +1545,44 @@ fn fnv1a64(values: &[u32]) -> u64 {
 
 /// Worker count for the series' independent work (one input object, or
 /// one forecast hour, per task): `GPUWM_GFS_BRIDGE_THREADS` when it
-/// names a positive count (`gpuwm prep --preprocess-workers`), else
+/// names a positive count (`woof prep --preprocess-workers`), else
 /// every core this process may run on.
 ///
 /// Named breakage: the whole series was read, hashed and decoded on one
 /// core -- every forecast hour one after another, with the input and
-/// every written array hashed by the software SHA-256 below -- so the
+/// every written array hashed by the old scalar SHA-256 -- so the
 /// decode of a multi-day GFS series took minutes on a 16-core box.
 const THREADS_ENV: &str = "GPUWM_GFS_BRIDGE_THREADS";
+
+/// WPS 4.6 rrpr.F:877-889 and its SNOWH derivation. Keep the raw GFS
+/// WEASD/SNOD choice explicit; both the bridge gate and preparation receipt
+/// name it. Default agrees with the MPAS met_intermediate.rs GFS path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SnowConvention { Wps, Raw }
+
+impl SnowConvention {
+    fn parse(value: &str) -> Result<Self, Box<dyn Error>> {
+        match value {
+            "wps" => Ok(Self::Wps),
+            "raw" => Ok(Self::Raw),
+            _ => Err("GPUWM_GFS_SNOW_CONVENTION must be wps or raw".into()),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self { Self::Wps => "wps", Self::Raw => "raw" }
+    }
+
+    fn convert(self, name: &str, value: f64) -> f64 {
+        // Native ungrib stores the decoded field in REAL before rrpr.
+        // Retain its two FP32 operations for the derived depth.
+        match (self, name) {
+            (Self::Wps, "SNOW") => ((value as f32) * 2.0_f32) as f64,
+            (Self::Wps, "SNOWH") => (((value as f32) * 2.0_f32) * 0.005_f32) as f64,
+            _ => value,
+        }
+    }
+}
 
 fn bridge_threads() -> usize {
     env::var(THREADS_ENV)
@@ -1685,6 +1682,7 @@ fn write_hour(
     inv: &Inventory,
     file: &Grib2File,
     all_water_source: bool,
+    snow_convention: SnowConvention,
 ) -> Result<HourOutput, Box<dyn Error>> {
     use std::fmt::Write as _;
     let time_dir = partial.join(format!("f{:03}", input.hour));
@@ -1704,7 +1702,7 @@ fn write_hour(
         let mut writer = BufWriter::new(File::create(&path)?);
         for selected in inv.selected.iter().filter(|field| field.name == name) {
             let message = &file.messages[selected.index];
-            let summary = write_field(message, &mut writer, selected.spec, all_water_source)?;
+            let summary = write_field(message, &mut writer, selected.spec, all_water_source, snow_convention)?;
             output
                 .clamp_census
                 .entry(name)
@@ -2035,6 +2033,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     {
         return Err(usage.into());
     }
+    let snow_convention = SnowConvention::parse(
+        &env::var("GPUWM_GFS_SNOW_CONVENTION").unwrap_or_else(|_| "wps".to_string()))?;
     let inputs = parse_series_rows(Path::new(&args[1]), lead_batch)?;
     let output = PathBuf::from(&args[2]);
     let cycle = args[3].trim_end_matches('Z').replace('T', " ");
@@ -2048,7 +2048,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // path replacement cannot change the bytes between validation and write.
     //
     // One object per task, several at once, answered in series order: the
-    // objects are independent, and the read, the software SHA-256 and the
+    // objects are independent, and the read, the SHA-256 and the
     // parse of each one were the serial half of the bridge.
     let loaded: Vec<(Grib2File, String)> = in_index_order(inputs.len(), |index| {
         let bytes = fs::read(&inputs[index].path)?;
@@ -2087,6 +2087,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 input.hour,
                 input.expected_forecast_process_id,
                 &pressure_levels_pa,
+                snow_convention,
             )
         })
         .collect::<Result<_, _>>()?;
@@ -2217,6 +2218,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "land_mask_parameter\t{}",
             inventories[0].land_mask_parameter
         )?;
+        writeln!(gate, "snow_convention\t{}", snow_convention.name())?;
         writeln!(gate, "invariant_fields\tSOURCE_OROGRAPHY,LANDSEA")?;
         writeln!(
             gate,
@@ -2240,7 +2242,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // every document below is the serial bridge's byte for byte.
         let hours = in_index_order(inputs.len(), |index| {
             write_hour(&partial, &inputs[index], &inventories[index], &loaded[index].0,
-                       all_water_source)
+                       all_water_source, snow_convention)
         })?;
         for hour in hours {
             manifest.write_all(hour.manifest_rows.as_bytes())?;
@@ -2294,6 +2296,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
+
+    #[test]
+    fn wps_snow_uses_weasd_for_both_outputs_and_preserves_missing() {
+        let mut spec = spec_named("SNOW");
+        for (name, expected) in [("SNOW", 24.0_f32), ("SNOWH", 24.0_f32 * 0.005_f32)] {
+            spec.name = name;
+            let mut bytes = Vec::new();
+            let summary = emit_converted_values(
+                &[12.0, f64::NAN], Some(&[true, false]), spec, 0.0,
+                false, &mut bytes, SnowConvention::Wps).unwrap();
+            assert_eq!(f32::from_le_bytes(bytes[0..4].try_into().unwrap()), expected);
+            assert!(f32::from_le_bytes(bytes[4..8].try_into().unwrap()).is_nan());
+            assert_eq!((summary.finite, summary.missing), (1, 1));
+            assert_eq!(summary.maximum, expected as f64);
+        }
+        assert_eq!(SnowConvention::Raw.convert("SNOW", 12.0), 12.0);
+        assert_eq!(SnowConvention::Raw.convert("SNOWH", 0.3), 0.3);
+        assert!(SnowConvention::parse("unknown").is_err());
+    }
 
     fn valid_message(parameter_number: u8) -> Grib2Message {
         Grib2Message {
@@ -2442,7 +2463,7 @@ mod tests {
         for (position, value) in values.iter().enumerate() {
             assert_eq!(
                 mask[position],
-                (*value as usize) % 3 == 0,
+                (*value as usize).is_multiple_of(3),
                 "mask and values disagree at {position}"
             );
         }
@@ -2488,6 +2509,32 @@ mod tests {
     }
 
     #[test]
+    fn historical_embedded_missing_soil_keeps_its_mask_and_required_fields_refuse() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/gfs-archive/soil-embedded-missing-2017091812.grib2");
+        let bytes = fs::read(path).unwrap();
+        assert_eq!(hex_sha256(&bytes),
+            "5cc4fc37e3ecfca0a51690ff0f88d2dc831ac0a738e1ad8dbd27794f29626169");
+        let file = Grib2File::from_bytes(&bytes).unwrap();
+        let message = &file.messages[0];
+        assert_eq!(message.data_rep.missing_value_management, 1);
+        assert!(message.bitmap.is_none());
+        validate_common(message, "2017-09-18 12:00:00", 0, 81, true).unwrap();
+        let (values, present) = scan_normalized(message).unwrap();
+        let mask = present.unwrap();
+        assert_eq!(values.len(), 1_038_240);
+        assert_eq!(mask.iter().filter(|cell| !**cell).count(), 687_174);
+        assert!(values.iter().zip(&mask).all(|(value, present)| value.is_finite() == *present));
+        let summary = emit_values(&values, Some(&mask), SOIL_SPECS[0], 0.0,
+                                  &mut Vec::new()).unwrap();
+        assert_eq!((summary.finite, summary.missing), (351_066, 687_174));
+        let mut required = SOIL_SPECS[0];
+        required.allow_missing = false;
+        assert!(emit_values(&values, Some(&mask), required, 0.0, &mut Vec::new()).is_err());
+        assert!(emit_values(&values, None, SOIL_SPECS[0], 0.0, &mut Vec::new()).is_err());
+    }
+
+    #[test]
     fn all_missing_ocean_record_preserves_full_grid_and_row_window_missing_values() {
         let message = all_missing_ocean_fixture();
         assert_eq!(message.grid.num_data_points, 43584);
@@ -2530,7 +2577,7 @@ mod tests {
         assert_eq!((summary.finite, summary.missing), (0, 43584));
         assert!(summary.minimum.is_nan() && summary.maximum.is_nan());
         assert_eq!(bytes.len(), 4 * 43584);
-        assert!(bytes.chunks_exact(4).all(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()).is_nan()));
+        assert!(bytes.as_chunks::<4>().0.iter().all(|chunk| f32::from_le_bytes(*chunk).is_nan()));
         assert!(emit_values_with_surface_support(&values, present.as_deref(), PRESSURE_SPECS[0], 0.0, true, &mut Vec::new()).is_err());
         let mut incorrect = present.unwrap(); incorrect[0] = true;
         assert!(emit_values_with_surface_support(&values, Some(&incorrect), SOIL_SPECS[0], 0.0, true, &mut Vec::new()).is_err());
@@ -2584,7 +2631,7 @@ mod tests {
     fn an_all_land_nomads_crop_decodes_its_soil_and_snow() {
         let file = all_land_crop_fixture();
         let levels = observed_pressure_levels(&file).unwrap();
-        let selected = inventory(&file, "2026-09-27 12:00:00", 0, 81, &levels).unwrap();
+        let selected = inventory(&file, "2026-09-27 12:00:00", 0, 81, &levels, SnowConvention::Raw).unwrap();
         assert!(!source_is_all_water(&file, &selected).unwrap());
         let mut names = Vec::new();
         for field in selected.selected.iter().filter(|field| field.spec.allow_missing) {
@@ -3048,7 +3095,7 @@ mod tests {
         }
         let file = Grib2File { messages };
 
-        let selected = inventory(&file, "2026-07-20 00:00:00", 0, 81, &certified)
+        let selected = inventory(&file, "2026-07-20 00:00:00", 0, 81, &certified, SnowConvention::Raw)
             .expect("the certified request against a fuller file");
         assert_eq!(
             selected.selected.len(),
@@ -3062,7 +3109,7 @@ mod tests {
 
         let mut too_deep = certified.clone();
         too_deep.insert(0, 3_000.0);
-        let refusal = inventory(&file, "2026-07-20 00:00:00", 0, 81, &too_deep)
+        let refusal = inventory(&file, "2026-07-20 00:00:00", 0, 81, &too_deep, SnowConvention::Raw)
             .expect_err("a level the file lacks must refuse")
             .to_string();
         assert!(refusal.contains("missing required GFS field"), "{refusal}");
@@ -3196,7 +3243,7 @@ mod tests {
 
         // DRT 5.3 is admitted only inside the envelope NCEP publishes
         // and the committed matched pairs prove: general group
-        // splitting, no embedded missing-value management, second-order
+        // splitting, declared missing-value modes, second-order
         // spatial differencing.  Each departure refuses by name, and
         // plain complex packing (5.2) has no proof corpus at all.
         let raw_s3_form = |message: &mut Grib2Message| {
@@ -3223,12 +3270,13 @@ mod tests {
         let mut embedded_missing = valid_message(0);
         raw_s3_form(&mut embedded_missing);
         embedded_missing.data_rep.missing_value_management = 1;
-        assert!(
-            validate_common(&embedded_missing, "2026-07-20 00:00:00", 0, 81, false)
-                .unwrap_err()
-                .to_string()
-                .contains("missing-value management 1")
-        );
+        for mode in [1, 2] {
+            embedded_missing.data_rep.missing_value_management = mode;
+            validate_common(&embedded_missing, "2026-07-20 00:00:00", 0, 81, false).unwrap();
+        }
+        embedded_missing.data_rep.missing_value_management = 3;
+        assert!(validate_common(&embedded_missing, "2026-07-20 00:00:00", 0, 81, false)
+                .unwrap_err().to_string().contains("missing-value management 3"));
 
         let mut foreign_splitting = valid_message(0);
         raw_s3_form(&mut foreign_splitting);
@@ -3268,6 +3316,27 @@ mod tests {
                 .to_string()
                 .contains("bits_per_value 64")
         );
+    }
+
+    #[test]
+    fn sha256_padding_boundaries_and_streamed_file_keep_standard_words() {
+        let cases = [
+            (0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            (55, "463eb28e72f82e0a96c0a4cc53690c571281131f672aa229e0d45ae59b598b59"),
+            (56, "da2ae4d6b36748f2a318f23e7ab1dfdf45acdc9d049bd80e59de82a60895f562"),
+            (63, "29af2686fd53374a36b0846694cc342177e428d1647515f078784d69cdb9e488"),
+            (64, "fdeab9acf3710362bd2658cdc9a29e8f9c757fcf9811603a8c447cd1d9151108"),
+            (65, "4bfd2c8b6f1eec7a2afeb48b934ee4b2694182027e6d0fc075074f2fabb31781"),
+            (65553, "db321256cd80da245f26f881e6b51650d0c95881f47d47e0e8c51a455b66af34"),
+        ];
+        let path = env::temp_dir().join(format!("gpuwm-gfs-sha-{}", std::process::id()));
+        for (length, expected) in cases {
+            let bytes: Vec<_> = (0..length).map(|index| (index % 251) as u8).collect();
+            assert_eq!(hex_sha256(&bytes), expected);
+            fs::write(&path, &bytes).unwrap();
+            assert_eq!(sha256_file(&path).unwrap(), expected);
+        }
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -3503,8 +3572,8 @@ mod tests {
         // The emitted value is the bound itself, not the excursion.
         assert_eq!(summary.maximum, 1.0);
         let emitted: Vec<f32> = sink
-            .chunks_exact(4)
-            .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+            .as_chunks::<4>().0.iter()
+            .map(|bytes| f32::from_le_bytes(*bytes))
             .collect();
         assert_eq!(emitted, vec![0.0f32, 0.25, 1.0, 1.0]);
     }

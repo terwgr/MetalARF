@@ -1,7 +1,9 @@
 """Typed Metal launchers for the WRF Smagorinsky kernel family.
 
-Launchers preserve device buffer ownership. CPU arrays and WRF exact mode are
-refused; there is no numerical fallback in this module.
+Launchers preserve device buffer ownership. The metric-aware km_opt=4
+coefficient, tendency, vertical, surface, N2 and TKE stages have separate
+integer binary32 exact implementations.
+Other arithmetic stages refuse exact mode; CPU arrays are always refused.
 """
 
 from __future__ import annotations
@@ -26,15 +28,16 @@ def _shape(array, expected, name):
         raise ValueError(f"{name} shape {array.shape} != expected {expected}")
 
 
-def _submit(entrypoint, arrays, parameters, count):
-    if WRF_EXACT:
+def _submit(entrypoint, arrays, parameters, count, *, exact_entrypoint=None):
+    if WRF_EXACT and exact_entrypoint is None:
         raise NotImplementedError(
             "Metal smag2d flat-oracle kernels support ordinary FP32 only")
     if count <= 0:
         return None
     context = next(iter(arrays.values())).buffer.context
-    return context.submit_kernel(entrypoint, arrays, parameters,
-                                 exact_policy=False, grid_size=count)
+    return context.submit_kernel(
+        exact_entrypoint if WRF_EXACT else entrypoint, arrays, parameters,
+        exact_policy=WRF_EXACT, grid_size=count)
 
 
 def submit_zero_boundary_strips(buf, cfg, width, *, stag_high_extra=0):
@@ -66,73 +69,8 @@ def submit_zero_boundary_strips(buf, cfg, width, *, stag_high_extra=0):
         "boundary_y": int(bool(cfg.open_y or getattr(cfg, "specified", False)
                                 or getattr(cfg, "nested", False))),
     }
-    return _submit("smag_zero_boundary_strips", arrays, params, buf.size)
-
-
-def submit_smag2d_km(u, v, xkmh, xkhh, *, rdx, rdy, mlen, c_s,
-                      prandtl):
-    nz, ny, nx = xkmh.shape
-    arrays = _arrays(u=u, v=v, xkmh=xkmh, xkhh=xkhh)
-    _shape(u, (nz, ny, nx + 1), "u")
-    _shape(v, (nz, ny + 1, nx), "v")
-    _shape(xkhh, (nz, ny, nx), "xkhh")
-    params = {"rdx": float(np.float32(rdx)), "rdy": float(np.float32(rdy)),
-              "mlen": float(np.float32(mlen)), "c_s": float(np.float32(c_s)),
-              "prandtl": float(np.float32(prandtl)),
-              "nz": nz, "ny": ny, "nx": nx}
-    return _submit("smag2d_km", arrays, params, nz * ny * nx)
-
-
-def _submit_hd(entrypoint, field_name, field, xk, mut, c1, c2, tend,
-               *, rdx, rdy, open_axis=None):
-    nz, ny, nx = xk.shape
-    arrays = _arrays(**{field_name: field, "xk": xk, "mut": mut,
-                        "c1": c1, "c2": c2, "tend": tend})
-    _shape(xk, (nz, ny, nx), "xk")
-    _shape(mut, (ny, nx), "mut")
-    c_levels = nz + 1 if entrypoint == "smag_hd_w" else nz
-    _shape(c1, (c_levels,), "c1")
-    _shape(c2, (c_levels,), "c2")
-    params = {"rdx": float(np.float32(rdx)), "rdy": float(np.float32(rdy)),
-              "nz": nz, "ny": ny, "nx": nx}
-    if open_axis is not None:
-        key, enabled = open_axis
-        params[key] = int(bool(enabled))
-    return _submit(entrypoint, arrays, params, tend.size)
-
-
-def submit_smag_hd_s(f, xk, mut, c1, c2, tend, *, rdx, rdy):
-    nz, ny, nx = xk.shape
-    _shape(f, (nz, ny, nx), "f")
-    _shape(tend, (nz, ny, nx), "tend")
-    return _submit_hd("smag_hd_s", "f", f, xk, mut, c1, c2, tend,
-                      rdx=rdx, rdy=rdy)
-
-
-def submit_smag_hd_u(u, xk, mut, c1, c2, tend, *, rdx, rdy,
-                     open_x=False):
-    nz, ny, nx = xk.shape
-    _shape(u, (nz, ny, nx + 1), "u")
-    _shape(tend, (nz, ny, nx + 1), "tend")
-    return _submit_hd("smag_hd_u", "u", u, xk, mut, c1, c2, tend,
-                      rdx=rdx, rdy=rdy, open_axis=("open_x", open_x))
-
-
-def submit_smag_hd_v(v, xk, mut, c1, c2, tend, *, rdx, rdy,
-                     open_y=False):
-    nz, ny, nx = xk.shape
-    _shape(v, (nz, ny + 1, nx), "v")
-    _shape(tend, (nz, ny + 1, nx), "tend")
-    return _submit_hd("smag_hd_v", "v", v, xk, mut, c1, c2, tend,
-                      rdx=rdx, rdy=rdy, open_axis=("open_y", open_y))
-
-
-def submit_smag_hd_w(w, xk, mut, c1, c2, tend, *, rdx, rdy):
-    nz, ny, nx = xk.shape
-    _shape(w, (nz + 1, ny, nx), "w")
-    _shape(tend, (nz + 1, ny, nx), "tend")
-    return _submit_hd("smag_hd_w", "w", w, xk, mut, c1, c2, tend,
-                      rdx=rdx, rdy=rdy)
+    return _submit("smag_zero_boundary_strips", arrays, params, buf.size,
+                   exact_entrypoint="wrf_exact_smag_zero_boundary_strips")
 
 
 def _wrf_common(state, cfg, *, time_t):
@@ -185,9 +123,6 @@ def _wrf_common(state, cfg, *, time_t):
 
 def submit_wrf_smag_deform(state, cfg, d11, d22, d12, *, time_t=False):
     """Submit metric-aware WRF D11/D22/D12 into caller-owned scratch."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal wrf_smag_deform exact round-to-nearest path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     for name, out in (("d11", d11), ("d22", d22), ("d12", d12)):
         _arrays(**{name: out})
@@ -195,15 +130,13 @@ def submit_wrf_smag_deform(state, cfg, d11, d22, d12, *, time_t=False):
         arrays[name] = out
     if nz < 3:
         raise NotImplementedError("WRF deformation interpolation requires nz >= 3")
-    return _submit("wrf_smag_deform", arrays, params, nz * ny * nx)
+    return _submit("wrf_smag_deform", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_smag_deform")
 
 
 def submit_wrf_smag2d_km(state, cfg, d11, d22, d12, xkmh, xkhh, *,
                            c_s, prandtl=1.0 / 3.0, time_t=False):
     """Submit WRF's terrain-aware 2-D mixing-length reduction."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal wrf_smag2d_km exact round-to-nearest path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     for name, array in (("d11", d11), ("d22", d22), ("d12", d12),
                         ("xkmh", xkmh), ("xkhh", xkhh)):
@@ -214,7 +147,8 @@ def submit_wrf_smag2d_km(state, cfg, d11, d22, d12, xkmh, xkhh, *,
         raise NotImplementedError("WRF smag2d mixing length requires nz >= 3")
     params.update(c_s=float(np.float32(c_s)),
                   prandtl=float(np.float32(prandtl)))
-    return _submit("wrf_smag2d_km", arrays, params, nz * ny * nx)
+    return _submit("wrf_smag2d_km", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_smag2d_km")
 
 
 def submit_wrf_calc_n2(state, cfg, bn2, *, time_t=False):
@@ -225,8 +159,6 @@ def submit_wrf_calc_n2(state, cfg, bn2, *, time_t=False):
     ``alt`` buffer when absent, with explicit presence flags matching the
     CUDA call.
     """
-    if WRF_EXACT:
-        raise NotImplementedError("Metal wrf_calc_n2 exact path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     suffix = "0" if time_t else ""
     moist = state.qv is not None
@@ -241,15 +173,13 @@ def submit_wrf_calc_n2(state, cfg, bn2, *, time_t=False):
     })
     params.update(thb3d=int(state.thb.ndim == 3),
                   has_qc=int(has_qc), has_qi=int(has_qi))
-    return _submit("wrf_calc_n2", arrays, params, nz * ny * nx)
+    return _submit("wrf_calc_n2", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_calc_n2")
 
 
 def submit_wrf_smag3d_km(state, cfg, d11, d22, d12, bn2,
                          xkmh, xkhh, xkmv, xkhv, *, time_t=False):
     """Submit the WRF full-deformation 3-D Smagorinsky coefficient stage."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal wrf_smag3d_km exact path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     for name, array in (("d11", d11), ("d22", d22), ("d12", d12),
                         ("bn2", bn2), ("xkmh", xkmh), ("xkhh", xkhh),
@@ -262,14 +192,13 @@ def submit_wrf_smag3d_km(state, cfg, d11, d22, d12, bn2,
                   dt=float(np.float32(cfg.dt)),
                   mix_upper_bound=float(np.float32(cfg.mix_upper_bound)),
                   isotropic=int(cfg.mix_isotropic))
-    return _submit("wrf_smag3d_km", arrays, params, nz * ny * nx)
+    return _submit("wrf_smag3d_km", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_smag3d_km")
 
 
 def submit_wrf_tke_km(state, cfg, bn2, xkmh, xkhh, xkmv, xkhv,
                       *, seed, time_t=False):
     """Submit the WRF prognostic TKE exchange-coefficient stage."""
-    if WRF_EXACT:
-        raise NotImplementedError("Metal wrf_tke_km exact path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     suffix = "0" if time_t else ""
     arrays.update({
@@ -287,15 +216,24 @@ def submit_wrf_tke_km(state, cfg, bn2, xkmh, xkhh, xkmv, xkhv,
                   mix_upper_bound=float(np.float32(cfg.mix_upper_bound)),
                   isotropic=int(cfg.mix_isotropic),
                   seed=float(np.float32(seed)))
-    return _submit("wrf_tke_km", arrays, params, nz * ny * nx)
+    return _submit("wrf_tke_km", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_tke_km")
+
+
+def submit_wrf_exact_tke_mass(mub, mup, mut):
+    """Assemble the TKE caller's mass with its CuPy add-ufunc semantics."""
+    arrays = _arrays(mub=mub, mup=mup, mut=mut)
+    for name, array in arrays.items():
+        _shape(array, mut.shape, name)
+    arrays = {name: array.view((array.size,)) for name, array in arrays.items()}
+    return _submit("wrf_exact_tke_mass", arrays, {"n": mut.size}, mut.size,
+                   exact_entrypoint="wrf_exact_tke_mass")
 
 
 def submit_wrf_tke_rhs(state, cfg, bn2, d11, d22, d12, xkmh, xkmv,
                        xkhv, mut, ustm, hfx, rtke, budget_terms, *,
                        has_ustm, has_hfx, budget_on, time_t=False):
     """Submit the WRF once-per-step TKE source and positivity limiter."""
-    if WRF_EXACT:
-        raise NotImplementedError("Metal wrf_tke_rhs exact path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     suffix = "0" if time_t else ""
     arrays.update({
@@ -317,27 +255,24 @@ def submit_wrf_tke_rhs(state, cfg, bn2, d11, d22, d12, xkmh, xkmv,
                   drag=float(np.float32(cfg.tke_drag_coefficient)),
                   heat=float(np.float32(cfg.tke_heat_flux)),
                   isfflx=int(cfg.isfflx), budget_on=int(budget_on))
-    return _submit("wrf_tke_rhs", arrays, params, nz * ny * nx)
+    return _submit("wrf_tke_rhs", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_tke_rhs")
 
 
 def submit_wrf_smag_km_bc(xkmh, xkhh, *, boundary_x, boundary_y):
     """Preserve the cold-zero logical outer K row on physical boundaries."""
-    if WRF_EXACT:
-        raise NotImplementedError("Metal wrf_smag_km_bc has no exact policy")
     nz, ny, nx = xkmh.shape
     arrays = _arrays(xkmh=xkmh, xkhh=xkhh)
     _shape(xkhh, (nz, ny, nx), "xkhh")
     params = {"nz": nz, "ny": ny, "nx": nx,
               "boundary_x": int(bool(boundary_x)),
               "boundary_y": int(bool(boundary_y))}
-    return _submit("wrf_smag_km_bc", arrays, params, nz * ny * nx)
+    return _submit("wrf_smag_km_bc", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_smag_km_bc")
 
 
 def _submit_wrf_smag_hd(state, cfg, km, tend, *, time_t, stagger,
                         d11=None, d22=None, d12=None):
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal WRF stress exact round-to-nearest path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     for name, array in (("km", km), ("tend", tend)):
         arrays[name] = _arrays(**{name: array})[name]
@@ -355,7 +290,8 @@ def _submit_wrf_smag_hd(state, cfg, km, tend, *, time_t, stagger,
         _shape(array, (nz, ny, nx), name)
     if nz < 3:
         raise NotImplementedError("WRF stress interpolation requires nz >= 3")
-    return _submit(entry, arrays, params, tend.size)
+    return _submit(entry, arrays, params, tend.size,
+                   exact_entrypoint=entry.replace("wrf_", "wrf_exact_", 1))
 
 
 def submit_wrf_smag_hd_u(state, cfg, km, d11, d12, tend, *, time_t=False):
@@ -372,9 +308,6 @@ def submit_wrf_smag_hd_v(state, cfg, km, d22, d12, tend, *, time_t=False):
 
 def submit_wrf_smag_vd(state, cfg, km, tend, *, stagger, time_t=False):
     """Submit one metric-aware vertical momentum diffusion component."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal WRF vertical stress exact arithmetic is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     arrays["km"] = _arrays(km=km)["km"]
     _shape(km, (nz, ny, nx), "km")
@@ -388,15 +321,13 @@ def submit_wrf_smag_vd(state, cfg, km, tend, *, stagger, time_t=False):
         raise ValueError(f"unknown vertical Smagorinsky stagger {stagger!r}")
     arrays["tend"] = _arrays(tend=tend)["tend"]
     _shape(tend, shape, "tend")
-    return _submit(name, arrays, params, tend.size)
+    return _submit(name, arrays, params, tend.size,
+                   exact_entrypoint=name.replace("wrf_", "wrf_exact_", 1))
 
 
 def submit_wrf_smag_vd_scalar(state, cfg, field, khv, tend, *,
                               full_theta=False, time_t=False):
     """Submit the registered vertical scalar diffusion kernel."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal WRF vertical scalar diffusion has no exact policy")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     arrays.update(var=_arrays(var=field)["var"], thb=_arrays(thb=state.thb)["thb"],
                   khv=_arrays(khv=khv)["khv"], tend=_arrays(tend=tend)["tend"])
@@ -405,7 +336,8 @@ def submit_wrf_smag_vd_scalar(state, cfg, field, khv, tend, *,
     _shape(khv, (nz, ny, nx), "khv")
     _shape(tend, (nz, ny, nx), "tend")
     params.update(full_theta=int(bool(full_theta)), thb3d=int(state.thb.ndim == 3))
-    return _submit("wrf_smag_vd_s", arrays, params, tend.size)
+    return _submit("wrf_smag_vd_s", arrays, params, tend.size,
+                   exact_entrypoint="wrf_exact_smag_vd_s")
 
 
 def submit_bound_tke(tke, upper_bound):
@@ -413,7 +345,7 @@ def submit_bound_tke(tke, upper_bound):
     arrays = _arrays(tke=flat)
     return _submit("bound_tke", arrays,
                    {"n": tke.size, "upper": float(np.float32(upper_bound))},
-                   tke.size)
+                   tke.size, exact_entrypoint="wrf_exact_bound_tke")
 
 
 def submit_wrf_smag_surface(state, cfg, *, kind, time_t=False, tend=None,
@@ -422,9 +354,6 @@ def submit_wrf_smag_surface(state, cfg, *, kind, time_t=False, tend=None,
                              apply_heat=False, apply_moist=False,
                              heat_flux=0.0, write_hfx=False):
     """Submit one isfflx-selected WRF lower-boundary flux kernel."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal WRF Smagorinsky surface exact expression paths are not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     if kind in ("u", "v"):
         arrays["ustm"] = _arrays(ustm=ustm)["ustm"]
@@ -458,15 +387,13 @@ def submit_wrf_smag_surface(state, cfg, *, kind, time_t=False, tend=None,
     else:
         raise ValueError(f"unknown WRF Smagorinsky surface mode {kind!r}")
     return _submit(name, arrays, params, ny * (nx + 1) if kind in ("u", "u_cd0")
-                   else ((ny + 1) * nx if kind in ("v", "v_cd0") else ny * nx))
+                   else ((ny + 1) * nx if kind in ("v", "v_cd0") else ny * nx),
+                   exact_entrypoint=name.replace("wrf_", "wrf_exact_", 1))
 
 
 def submit_wrf_smag_flux_s(state, cfg, f, kh, fx, fy, *, full_theta=False,
                            time_t=False):
     """Build the terrain-aware scalar face fluxes into caller scratch."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal wrf_smag_flux_s exact scalar reconstruction is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     for name, array, shape in (
             ("f", f, (nz, ny, nx)), ("kh", kh, (nz, ny, nx)),
@@ -482,14 +409,12 @@ def submit_wrf_smag_flux_s(state, cfg, f, kh, fx, fy, *, full_theta=False,
         raise NotImplementedError("WRF scalar face reconstruction requires nz >= 3")
     params.update(full_theta=int(bool(full_theta)), thb3d=int(thb.ndim == 3))
     return _submit("wrf_smag_flux_s", arrays, params,
-                   nz * (ny + 1) * (nx + 1))
+                   nz * (ny + 1) * (nx + 1),
+                   exact_entrypoint="wrf_exact_smag_flux_s")
 
 
 def submit_wrf_smag_hd_s(state, cfg, fx, fy, tend, *, time_t=False):
     """Add the metric-corrected scalar face-flux divergence to tendency."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal wrf_smag_hd_s exact divergence path is not ported")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     for name, array, shape in (
             ("fx", fx, (nz, ny, nx + 1)),
@@ -497,7 +422,8 @@ def submit_wrf_smag_hd_s(state, cfg, fx, fy, tend, *, time_t=False):
             ("tend", tend, (nz, ny, nx))):
         arrays[name] = _arrays(**{name: array})[name]
         _shape(array, shape, name)
-    return _submit("wrf_smag_hd_s", arrays, params, nz * ny * nx)
+    return _submit("wrf_smag_hd_s", arrays, params, nz * ny * nx,
+                   exact_entrypoint="wrf_exact_smag_hd_s")
 
 
 def submit_wrf_smag_w_primitives(state, cfg, cached_what, cached_rdz,
@@ -546,43 +472,15 @@ def submit_wrf_smag_hd_w_cached(state, cfg, km, cached_what, cached_rdz,
                    (nz + 1) * ny * nx)
 
 
-def submit_wrf_smag_w_stress(state, cfg, km, tx, ty, *, time_t=False):
-    """Produce the interior tau13/tau23 face stresses for w diffusion."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal WRF w-stress exact expression policy is not ported")
-    arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
-    for name, array, shape in (("km", km, (nz, ny, nx)),
-                               ("tx", tx, (nz, ny, nx + 1)),
-                               ("ty", ty, (nz, ny + 1, nx))):
-        arrays[name] = _arrays(**{name: array})[name]
-        _shape(array, shape, name)
-    return _submit("wrf_smag_w_stress", arrays, params,
-                   nz * (ny + 1) * (nx + 1))
-
-
-def submit_wrf_smag_hd_w_stress(state, cfg, tx, ty, tend, *, time_t=False):
-    """Apply the separately materialized tau13/tau23 stresses to w."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal WRF w-stress exact divergence is not ported")
-    arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
-    for name, array, shape in (
-            ("tx", tx, (nz, ny, nx + 1)),
-            ("ty", ty, (nz, ny + 1, nx)),
-            ("tend", tend, (nz + 1, ny, nx))):
-        arrays[name] = _arrays(**{name: array})[name]
-        _shape(array, shape, name)
-    return _submit("wrf_smag_hd_w_stress", arrays, params,
-                   (nz + 1) * ny * nx)
-
-
 def submit_wrf_smag_hd_w(state, cfg, km, tend, *, time_t=False):
     """Submit the ordinary Metal W terrain-stress path using caller scratch.
 
     Metal does not expose a CUDA compute-capability label. The cached source
     route used by the non-sm_120 CUDA targets is the supported route here.
     """
+    if WRF_EXACT:
+        return submit_wrf_smag_hd_w_direct(state, cfg, km, tend,
+                                           time_t=time_t)
     nz, ny, nx = km.shape
     what = state.scratch((nz + 1, ny, nx), "acoustic_a")
     rdz = state.scratch((nz, ny, nx), "acoustic_c2a")
@@ -595,10 +493,7 @@ def submit_wrf_smag_hd_w(state, cfg, km, tend, *, time_t=False):
 
 
 def submit_wrf_smag_hd_w_direct(state, cfg, km, tend, *, time_t=False):
-    """Submit CUDA's direct W reference form for ordinary diagnostics."""
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal direct W reference does not implement WRF exact arithmetic")
+    """Submit CUDA's direct W form: the reference route and the exact policy."""
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     arrays["km"] = _arrays(km=km)["km"]
     arrays["tend"] = _arrays(tend=tend)["tend"]
@@ -606,7 +501,8 @@ def submit_wrf_smag_hd_w_direct(state, cfg, km, tend, *, time_t=False):
     _shape(tend, (nz + 1, ny, nx), "tend")
     if nz < 3:
         raise NotImplementedError("WRF direct W stress requires nz >= 3")
-    return _submit("wrf_smag_hd_w", arrays, params, (nz + 1) * ny * nx)
+    return _submit("wrf_smag_hd_w", arrays, params, (nz + 1) * ny * nx,
+                   exact_entrypoint="wrf_exact_smag_hd_w")
 
 
 def submit_wrf_smag_map_factor(tendency, map_factor, *, nz, ny, nx,
@@ -617,9 +513,6 @@ def submit_wrf_smag_map_factor(tendency, map_factor, *, nz, ny, nx,
     FP32 ``(1 / map_factor)`` followed by a separately rounded multiply.
     Ordinary paths use FP32 division of the tendency by the map factor.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal dry map-factor coupling has no WRF-exact policy")
     nz, ny, nx = int(nz), int(ny), int(nx)
     if min(nz, ny, nx) <= 0:
         raise ValueError("map-factor coupling requires positive mass dimensions")
@@ -650,4 +543,15 @@ def submit_wrf_smag_map_factor(tendency, map_factor, *, nz, ny, nx,
     params = {"nz": nz, "ny": ny, "nx": nx,
               "stagger": codes[stagger],
               "multiply_reciprocal": int(multiply_reciprocal)}
-    return _submit("smag2d_couple_map_factor", arrays, params, tendency.size)
+    return _submit("smag2d_couple_map_factor", arrays, params, tendency.size,
+                   exact_entrypoint="wrf_exact_smag_map_factor")
+
+
+def submit_add_open_ring(target, plane, cfg):
+    """``target += plane`` on the open-boundary ring of two 2-D planes."""
+    arrays = _arrays(target=target, plane=plane)
+    _shape(plane, tuple(target.shape), "plane")
+    ny, nx = target.shape
+    return _submit("add_open_ring", arrays,
+                   {"ny": ny, "nx": nx, "open_x": int(bool(cfg.open_x)),
+                    "open_y": int(bool(cfg.open_y))}, ny * nx)

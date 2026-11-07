@@ -7,6 +7,7 @@ use rustwx_core::{
 use serde::{Deserialize, Serialize};
 use std::fmt;
 mod members;
+mod archives;
 pub use members::{DeclaredMember, DeclaredRewrite, declared_member, declared_members, selected_member_product, product_member, member_url};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,13 +74,21 @@ pub enum GribLevelKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum RenderStyle {
+    WeatherWbgt,
+    WeatherHdw,
+    WeatherHaines,
+    WeatherLightningThreat,
+    WeatherFlashRate,
     WeatherCape,
     WeatherCin,
     WeatherReflectivity,
     WeatherUh,
+    WeatherVerticalVelocity,
     WeatherTemperature,
     WeatherDewpoint,
     WeatherRh,
+    WeatherSpecificHumidity,
+    WeatherOmega,
     WeatherProbability,
     WeatherWinds,
     WeatherHeight,
@@ -87,7 +96,11 @@ pub enum RenderStyle {
     WeatherWindGust,
     WeatherCloudCover,
     WeatherPrecipitableWater,
+    WeatherIvt,
     WeatherQpf,
+    WeatherSnowfall,
+    WeatherSnowDepthChange,
+    WeatherHail,
     WeatherCategorical,
     WeatherVisibility,
     WeatherRadarReflectivity,
@@ -112,17 +125,23 @@ pub enum RenderStyle {
     /// A hydrometeor mixing ratio in g kg-1, sequential, masked below a
     /// hundredth of a gram.
     WeatherHydrometeorMixingRatio,
+    AirQualityPm25,
+    AirQualityOzone,
+    AerosolOpticalDepth,
+    DustConcentration,
 }
 
 fn recipe_lineage(slug: &str, family: ProductFamily) -> ProductLineage {
     match slug {
         "2m_theta_e_10m_winds" | "2m_heat_index" | "2m_wind_chill" => ProductLineage::Derived,
+        "wbgt_2m" | "hot_dry_windy" | "haines_low" | "haines_mid" | "haines_high" | "lightning_threat_1" | "lightning_threat_2" | "lightning_threat_3" | "pr92_flash_rate" => ProductLineage::Derived,
         "1h_qpf" => ProductLineage::Windowed,
         _ => family.default_lineage(),
     }
 }
 
 fn recipe_maturity(slug: &str) -> ProductMaturity {
+    if matches!(slug, "lightning_threat_1" | "lightning_threat_2" | "lightning_threat_3" | "pr92_flash_rate") { return ProductMaturity::Experimental; }
     if slug.starts_with("nbm_qmd_") {
         return ProductMaturity::Experimental;
     }
@@ -539,7 +558,14 @@ const GFS_SOURCES: &[SourceDescriptor] = &[
         idx_available: false,
         priority: 4,
         max_age_hours: None,
-        notes: "Historical NCEI archive",
+        notes: "Historical NCEI archive; requested resolution is explicit",
+    },
+    SourceDescriptor {
+        id: SourceId::Gdex,
+        idx_available: false,
+        priority: 3,
+        max_age_hours: None,
+        notes: "GDEX d084001 (RDA ds084.1), CC BY 4.0",
     },
 ];
 
@@ -3271,6 +3297,37 @@ const FIELD_REFS_SPRD_MSLP: GribFieldSpec = field_spec(
     &["MSLET:mean sea level", "PRMSL:mean sea level"],
 );
 
+const FIELD_IVT: GribFieldSpec = field_spec(
+    "integrated_vapor_transport", "Integrated Vapor Transport",
+    ProductFamily::Native, GribLevelKind::EntireAtmosphere, None,
+    Some(FieldSelector::entire_atmosphere(CanonicalField::IntegratedVaporTransport)), &[],
+);
+const FIELD_IVT_U: GribFieldSpec = field_spec(
+    "integrated_vapor_transport_u", "Eastward Integrated Vapor Transport",
+    ProductFamily::Native, GribLevelKind::EntireAtmosphere, None,
+    Some(FieldSelector::entire_atmosphere(CanonicalField::IntegratedVaporTransportU)), &[],
+);
+const FIELD_IVT_V: GribFieldSpec = field_spec(
+    "integrated_vapor_transport_v", "Northward Integrated Vapor Transport",
+    ProductFamily::Native, GribLevelKind::EntireAtmosphere, None,
+    Some(FieldSelector::entire_atmosphere(CanonicalField::IntegratedVaporTransportV)), &[],
+);
+const FIELD_925_HEIGHT: GribFieldSpec = field_spec(
+    "height_925mb", "925 hPa HEIGHT", ProductFamily::Pressure,
+    GribLevelKind::IsobaricHpa, Some(925),
+    Some(FieldSelector::isobaric(CanonicalField::GeopotentialHeight, 925)), &[],
+);
+const FIELD_925_U: GribFieldSpec = field_spec(
+    "u_925mb", "925 hPa U", ProductFamily::Pressure,
+    GribLevelKind::IsobaricHpa, Some(925),
+    Some(FieldSelector::isobaric(CanonicalField::UWind, 925)), &[],
+);
+const FIELD_925_V: GribFieldSpec = field_spec(
+    "v_925mb", "925 hPa V", ProductFamily::Pressure,
+    GribLevelKind::IsobaricHpa, Some(925),
+    Some(FieldSelector::isobaric(CanonicalField::VWind, 925)), &[],
+);
+
 const FIELD_PWAT: GribFieldSpec = field_spec(
     "precipitable_water",
     "Precipitable Water",
@@ -3551,6 +3608,11 @@ const FIELD_CATEGORICAL_SNOW: GribFieldSpec = field_spec(
     &["CSNOW:surface"],
 );
 
+const FIELD_FOG_FLAG: GribFieldSpec = field_spec(
+    "fog_flag_surface", "Low Visibility (< 1000 m)", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::FogFlag)), &[],
+);
+
 const FIELD_VISIBILITY: GribFieldSpec = field_spec(
     "visibility_surface",
     "Visibility",
@@ -3656,6 +3718,16 @@ const FIELD_SUPERCOOLED_WATER_PATH_3_6KM: GribFieldSpec = field_spec(
     &[],
 );
 
+const FIELD_CLOUD_FRACTION_COLUMN_MAX: GribFieldSpec = field_spec(
+    "cloud_fraction_column_max",
+    "Radiation Cloud Fraction, Column Maximum",
+    ProductFamily::Native,
+    GribLevelKind::ColumnMaximum,
+    None,
+    Some(FieldSelector::column_maximum(CanonicalField::TotalCloudCover)),
+    &[],
+);
+
 const FIELD_CLOUD_WATER_COLUMN_MAX: GribFieldSpec = field_spec(
     "cloud_water_column_max",
     "Cloud Water Mixing Ratio, Column Maximum",
@@ -3694,6 +3766,58 @@ const FIELD_SNOW_COLUMN_MAX: GribFieldSpec = field_spec(
     None,
     Some(FieldSelector::column_maximum(CanonicalField::SnowMixingRatio)),
     &[],
+);
+
+const FIELD_MODEL_SNOWFALL: GribFieldSpec = field_spec(
+    "snowfall_window", "Model snowfall depth, window total", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::ModelSnowfall)), &[],
+);
+const FIELD_SNOW_10TO1: GribFieldSpec = field_spec(
+    "snow_10to1_window", "10:1 snowfall depth, window total", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::Snowfall10to1)), &[],
+);
+const FIELD_SNOW_KUCHERA: GribFieldSpec = field_spec(
+    "snow_kuchera_window", "Kuchera snowfall depth, window total", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::SnowfallKuchera)), &[],
+);
+const FIELD_SNOWFALL_LIQUID_EQUIVALENT: GribFieldSpec = field_spec("snowfall_liquid_equivalent", "Snowfall liquid equivalent, window total", ProductFamily::Surface, GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::SnowfallLiquidEquivalent)), &[]);
+
+const FIELD_SNOW_DEPTH_TOTAL: GribFieldSpec = field_spec("snow_depth_total", "LSM snow depth", ProductFamily::Surface, GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::SnowDepth)), &[]);
+
+const FIELD_SNOW_DEPTH_CHANGE: GribFieldSpec = field_spec("snow_depth_change", "LSM snow depth change", ProductFamily::Surface, GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::SnowDepthChange)), &[]);
+
+
+const FIELD_HAILMAXSURFACE: GribFieldSpec = field_spec(
+    "hail_max_surface", "PSD maximum hail diameter at lowest model level", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailMaxSurface)), &[],
+);
+const FIELD_HAILMAXCOLUMN: GribFieldSpec = field_spec(
+    "hail_max_column", "PSD maximum hail diameter over column", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailMaxColumn)), &[],
+);
+const FIELD_HAILMAXSURFACERUN: GribFieldSpec = field_spec(
+    "hail_max_surface_run", "Run maximum PSD surface hail diameter", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailMaxSurfaceRun)), &[],
+);
+const FIELD_HAILMAXCOLUMNRUN: GribFieldSpec = field_spec(
+    "hail_max_column_run", "Run maximum PSD column hail diameter", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailMaxColumnRun)), &[],
+);
+const FIELD_HAILCASTMAX: GribFieldSpec = field_spec(
+    "hail_max_hailcast", "HAILCAST maximum surviving ice diameter", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailcastMax)), &[],
+);
+const FIELD_HAILCASTMEAN: GribFieldSpec = field_spec(
+    "hail_max_hailcast_mean", "HAILCAST mean surviving ice diameter", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailcastMean)), &[],
+);
+const FIELD_HAILCASTSTD: GribFieldSpec = field_spec(
+    "hail_max_hailcast_std", "HAILCAST diameter standard deviation", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailcastStd)), &[],
+);
+const FIELD_HAILCASTRUN: GribFieldSpec = field_spec(
+    "hail_max_hailcast_run", "Run maximum HAILCAST diameter", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HailcastRun)), &[],
 );
 
 const FIELD_GRAUPEL_COLUMN_MAX: GribFieldSpec = field_spec(
@@ -3795,6 +3919,26 @@ const FIELD_PRECIPITATION_TYPE: GribFieldSpec = field_spec(
     ],
 );
 
+const FIELD_1KM_VERTICAL_VELOCITY: GribFieldSpec = field_spec(
+    "vertical_velocity_1km_agl",
+    "1 km AGL Vertical Velocity (upward positive)",
+    ProductFamily::Native,
+    GribLevelKind::HeightAboveGround,
+    Some(1000),
+    Some(FieldSelector::height_agl(CanonicalField::GeometricVerticalVelocity, 1000)),
+    &["DZDT:1000 m above ground"],
+);
+
+const FIELD_3KM_VERTICAL_VELOCITY: GribFieldSpec = field_spec(
+    "vertical_velocity_3km_agl",
+    "3 km AGL Vertical Velocity (upward positive)",
+    ProductFamily::Native,
+    GribLevelKind::HeightAboveGround,
+    Some(3000),
+    Some(FieldSelector::height_agl(CanonicalField::GeometricVerticalVelocity, 3000)),
+    &["DZDT:3000 m above ground"],
+);
+
 const FIELD_1KM_REFLECTIVITY: GribFieldSpec = field_spec(
     "radar_reflectivity_1km_agl",
     "1km AGL Reflectivity",
@@ -3862,7 +4006,155 @@ const FIELD_COLUMN_INTEGRATED_SMOKE: GribFieldSpec = field_spec(
     ],
 );
 
+const FIELD_PM25_SFC: GribFieldSpec = field_spec(
+    "pm25_near_surface", "Lowest-Level Dry PM2.5", ProductFamily::Native,
+    GribLevelKind::Surface, None,
+    Some(FieldSelector::surface(CanonicalField::Pm25Dry)), &[],
+);
+const FIELD_DUST_SFC: GribFieldSpec = field_spec(
+    "dust_near_surface", "Near-Surface Dust", ProductFamily::Native,
+    GribLevelKind::Surface, None,
+    Some(FieldSelector::surface(CanonicalField::DustMassConcentration)), &[],
+);
+const FIELD_OZONE_SFC: GribFieldSpec = field_spec(
+    "ozone_near_surface", "Lowest-Level Ozone", ProductFamily::Native,
+    GribLevelKind::Surface, None,
+    Some(FieldSelector::surface(CanonicalField::OzoneConcentration)), &[],
+);
+const FIELD_AOD550: GribFieldSpec = field_spec(
+    "aod_550", "550 nm Aerosol Optical Depth", ProductFamily::Native,
+    GribLevelKind::EntireAtmosphere, None,
+    Some(FieldSelector::entire_atmosphere(CanonicalField::AerosolOpticalDepth550)),
+    &["AOTK:entire atmosphere"],
+);
+
+const FIELD_850_Q: GribFieldSpec = field_spec(
+    "q_850mb", "850 hPa Specific Humidity", ProductFamily::Pressure,
+    GribLevelKind::IsobaricHpa, Some(850),
+    Some(FieldSelector::isobaric(CanonicalField::SpecificHumidity, 850)), &["SPFH:850 mb"],
+);
+const FIELD_500_OMEGA: GribFieldSpec = field_spec(
+    "omega_500mb", "500 hPa Pressure Vertical Velocity", ProductFamily::Pressure,
+    GribLevelKind::IsobaricHpa, Some(500),
+    Some(FieldSelector::isobaric(CanonicalField::Omega, 500)), &["VVEL:500 mb"],
+);
+const FIELD_100_WIND: GribFieldSpec = field_spec(
+    "wind_100m", "100 m AGL Wind Speed", ProductFamily::Native,
+    GribLevelKind::HeightAboveGround, Some(100),
+    Some(FieldSelector::height_agl(CanonicalField::WindSpeed, 100)), &["WIND:100 m above ground"],
+);
+
+// Native model-level moisture transport products.
+const FIELD_IVTMAGNITUDE: GribFieldSpec = field_spec("ivt_1000_300", "IVT 1000-300 hPa", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::IvtMagnitude)), &[]);
+const FIELD_IVTEASTWARD: GribFieldSpec = field_spec("ivt_eastward_1000_300", "Eastward IVT 1000-300 hPa", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::IvtEastward)), &[]);
+const FIELD_IVTNORTHWARD: GribFieldSpec = field_spec("ivt_northward_1000_300", "Northward IVT 1000-300 hPa", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::IvtNorthward)), &[]);
+const FIELD_INTEGRATEDWATERVAPOUR: GribFieldSpec = field_spec("integrated_water_vapour", "Integrated Water Vapour Surface to Model Top", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::IntegratedWaterVapour)), &[]);
+const FIELD_FULLCOLUMNIVTEASTWARD: GribFieldSpec = field_spec("ivt_eastward_full_column", "Eastward Water Vapour Flux Surface to Model Top", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::FullColumnIvtEastward)), &[]);
+const FIELD_FULLCOLUMNIVTNORTHWARD: GribFieldSpec = field_spec("ivt_northward_full_column", "Northward Water Vapour Flux Surface to Model Top", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::FullColumnIvtNorthward)), &[]);
+const FIELD_FULLCOLUMNIVTMAGNITUDE: GribFieldSpec = field_spec("ivt_full_column", "Water Vapour Flux Surface to Model Top", ProductFamily::Native, GribLevelKind::EntireAtmosphere, None, Some(FieldSelector::entire_atmosphere(CanonicalField::FullColumnIvtMagnitude)), &[]);
+
+const FIELD_WBGT: GribFieldSpec = field_spec(
+    "wbgt_2m", "Outdoor WBGT, radiation balance", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::Wbgt)), &[],
+);
+const FIELD_HOTDRYWINDY: GribFieldSpec = field_spec(
+    "hot_dry_windy", "Hot Dry Windy, instantaneous", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HotDryWindy)), &[],
+);
+const FIELD_HAINESLOW: GribFieldSpec = field_spec(
+    "haines_low", "Haines index, low elevation", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HainesLow)), &[],
+);
+const FIELD_HAINESMID: GribFieldSpec = field_spec(
+    "haines_mid", "Haines index, middle elevation", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HainesMid)), &[],
+);
+const FIELD_HAINESHIGH: GribFieldSpec = field_spec(
+    "haines_high", "Haines index, high elevation", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::HainesHigh)), &[],
+);
+const FIELD_LIGHTNINGTHREAT1: GribFieldSpec = field_spec(
+    "lightning_threat_1", "Lightning threat LTG1", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::LightningThreat1)), &[],
+);
+const FIELD_LIGHTNINGTHREAT2: GribFieldSpec = field_spec(
+    "lightning_threat_2", "Lightning threat LTG2", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::LightningThreat2)), &[],
+);
+const FIELD_LIGHTNINGTHREAT3: GribFieldSpec = field_spec(
+    "lightning_threat_3", "Lightning threat LTG3", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::LightningThreat3)), &[],
+);
+const FIELD_PR92FLASHRATE: GribFieldSpec = field_spec(
+    "pr92_flash_rate", "PR92 maximum-updraft flash rate", ProductFamily::Surface,
+    GribLevelKind::Surface, None, Some(FieldSelector::surface(CanonicalField::Pr92FlashRate)), &[],
+);
+
 const PLOT_RECIPES: &[PlotRecipe] = &[
+    PlotRecipe {
+        slug: "wbgt_2m", title: "Outdoor WBGT, radiation balance", filled: FIELD_WBGT,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherWbgt,
+    },
+    PlotRecipe {
+        slug: "hot_dry_windy", title: "Hot Dry Windy, instantaneous", filled: FIELD_HOTDRYWINDY,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHdw,
+    },
+    PlotRecipe {
+        slug: "haines_low", title: "Haines index, low elevation", filled: FIELD_HAINESLOW,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHaines,
+    },
+    PlotRecipe {
+        slug: "haines_mid", title: "Haines index, middle elevation", filled: FIELD_HAINESMID,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHaines,
+    },
+    PlotRecipe {
+        slug: "haines_high", title: "Haines index, high elevation", filled: FIELD_HAINESHIGH,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHaines,
+    },
+    PlotRecipe {
+        slug: "lightning_threat_1", title: "Lightning threat LTG1", filled: FIELD_LIGHTNINGTHREAT1,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherLightningThreat,
+    },
+    PlotRecipe {
+        slug: "lightning_threat_2", title: "Lightning threat LTG2", filled: FIELD_LIGHTNINGTHREAT2,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherLightningThreat,
+    },
+    PlotRecipe {
+        slug: "lightning_threat_3", title: "Lightning threat LTG3", filled: FIELD_LIGHTNINGTHREAT3,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherLightningThreat,
+    },
+    PlotRecipe {
+        slug: "pr92_flash_rate", title: "PR92 maximum-updraft flash rate", filled: FIELD_PR92FLASHRATE,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherFlashRate,
+    },
+
+    PlotRecipe { slug: "850mb_specific_humidity", title: "850 hPa Specific Humidity", filled: FIELD_850_Q,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherSpecificHumidity },
+    PlotRecipe { slug: "500mb_omega", title: "500 hPa Omega (negative is ascent)", filled: FIELD_500_OMEGA,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherOmega },
+    PlotRecipe { slug: "100m_wind_speed", title: "100 m AGL Wind Speed", filled: FIELD_100_WIND,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherWinds },
+    PlotRecipe {
+        slug: "smoke_near_surface", title: "Near-Surface Smoke", filled: FIELD_SMOKE_MASS_DENSITY_8M,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::AirQualityPm25,
+    },
+    PlotRecipe {
+        slug: "pm25_near_surface", title: "Lowest-Level Dry PM2.5", filled: FIELD_PM25_SFC,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::AirQualityPm25,
+    },
+    PlotRecipe {
+        slug: "dust_near_surface", title: "Near-Surface Dust", filled: FIELD_DUST_SFC,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::DustConcentration,
+    },
+    PlotRecipe {
+        slug: "ozone_near_surface", title: "Lowest-Level Ozone (instantaneous)", filled: FIELD_OZONE_SFC,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::AirQualityOzone,
+    },
+    PlotRecipe {
+        slug: "aod_550", title: "550 nm Aerosol Optical Depth", filled: FIELD_AOD550,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::AerosolOpticalDepth,
+    },
+
     PlotRecipe {
         slug: "200mb_height_winds",
         title: "200mb Height / Winds",
@@ -5557,6 +5849,27 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         style: RenderStyle::WeatherWindGust,
     },
     PlotRecipe {
+        slug: "ivt_column", title: "Integrated Vapor Transport (model column)", filled: FIELD_IVT,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherIvt,
+    },
+    PlotRecipe {
+        slug: "ivt_column_eastward", title: "Eastward Integrated Vapor Transport (model column)", filled: FIELD_IVT_U,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh,
+    },
+    PlotRecipe {
+        slug: "ivt_column_northward", title: "Northward Integrated Vapor Transport (model column)", filled: FIELD_IVT_V,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh,
+    },
+    PlotRecipe {
+        slug: "ivt_vectors", title: "Integrated Vapor Transport / Direction (model column)", filled: FIELD_IVT,
+        contours: None, barbs_u: Some(FIELD_IVT_U), barbs_v: Some(FIELD_IVT_V), style: RenderStyle::WeatherIvt,
+    },
+    PlotRecipe {
+        slug: "925mb_height_winds", title: "925mb Height / Winds", filled: FIELD_925_HEIGHT,
+        contours: Some(FIELD_925_HEIGHT), barbs_u: Some(FIELD_925_U), barbs_v: Some(FIELD_925_V),
+        style: RenderStyle::WeatherHeight,
+    },
+    PlotRecipe {
         slug: "precipitable_water",
         title: "Precipitable Water",
         filled: FIELD_PWAT,
@@ -5647,6 +5960,15 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         style: RenderStyle::WeatherCloudCover,
     },
     PlotRecipe {
+        slug: "fog_flag",
+        title: "Low Visibility (< 1000 m)",
+        filled: FIELD_FOG_FLAG,
+        contours: None,
+        barbs_u: None,
+        barbs_v: None,
+        style: RenderStyle::WeatherCategorical,
+    },
+    PlotRecipe {
         slug: "visibility",
         title: "Visibility",
         filled: FIELD_VISIBILITY,
@@ -5722,6 +6044,15 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         style: RenderStyle::WeatherSupercooledWaterPath,
     },
     PlotRecipe {
+        slug: "cloud_fraction_column_max",
+        title: "Radiation Cloud Fraction, Column Maximum",
+        filled: FIELD_CLOUD_FRACTION_COLUMN_MAX,
+        contours: None,
+        barbs_u: None,
+        barbs_v: None,
+        style: RenderStyle::WeatherCloudCover,
+    },
+    PlotRecipe {
         slug: "cloud_water_column_max",
         title: "Cloud Water, Column Maximum",
         filled: FIELD_CLOUD_WATER_COLUMN_MAX,
@@ -5756,6 +6087,56 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         barbs_u: None,
         barbs_v: None,
         style: RenderStyle::WeatherHydrometeorMixingRatio,
+    },
+    PlotRecipe {
+        slug: "snowfall_window", title: "Model snowfall, window total",
+        filled: FIELD_MODEL_SNOWFALL, contours: None, barbs_u: None, barbs_v: None,
+        style: RenderStyle::WeatherSnowfall,
+    },
+    PlotRecipe {
+        slug: "snow_10to1_window", title: "10:1 snowfall, window total",
+        filled: FIELD_SNOW_10TO1, contours: None, barbs_u: None, barbs_v: None,
+        style: RenderStyle::WeatherSnowfall,
+    },
+    PlotRecipe {
+        slug: "snow_kuchera_window", title: "Kuchera snowfall, window total",
+        filled: FIELD_SNOW_KUCHERA, contours: None, barbs_u: None, barbs_v: None,
+        style: RenderStyle::WeatherSnowfall,
+    },
+    PlotRecipe { slug: "snowfall_liquid_equivalent", title: "Snowfall liquid equivalent, window total", filled: FIELD_SNOWFALL_LIQUID_EQUIVALENT, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherQpf },
+    PlotRecipe { slug: "snow_depth_total", title: "LSM snow depth", filled: FIELD_SNOW_DEPTH_TOTAL, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherSnowfall },
+    PlotRecipe { slug: "snow_depth_change", title: "LSM snow depth change", filled: FIELD_SNOW_DEPTH_CHANGE, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherSnowDepthChange },
+    PlotRecipe {
+        slug: "hail_max_surface", title: "PSD maximum hail diameter at lowest model level", filled: FIELD_HAILMAXSURFACE,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_column", title: "PSD maximum hail diameter over column", filled: FIELD_HAILMAXCOLUMN,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_surface_run", title: "Run maximum PSD surface hail diameter", filled: FIELD_HAILMAXSURFACERUN,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_column_run", title: "Run maximum PSD column hail diameter", filled: FIELD_HAILMAXCOLUMNRUN,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_hailcast", title: "HAILCAST maximum surviving ice diameter", filled: FIELD_HAILCASTMAX,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_hailcast_mean", title: "HAILCAST mean surviving ice diameter", filled: FIELD_HAILCASTMEAN,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_hailcast_std", title: "HAILCAST diameter standard deviation", filled: FIELD_HAILCASTSTD,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
+    },
+    PlotRecipe {
+        slug: "hail_max_hailcast_run", title: "Run maximum HAILCAST diameter", filled: FIELD_HAILCASTRUN,
+        contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherHail,
     },
     PlotRecipe {
         slug: "graupel_column_max",
@@ -6019,6 +6400,24 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         style: RenderStyle::WeatherVorticity,
     },
     PlotRecipe {
+        slug: "1km_vertical_velocity",
+        title: "1 km AGL Vertical Velocity (upward positive)",
+        filled: FIELD_1KM_VERTICAL_VELOCITY,
+        contours: None,
+        barbs_u: None,
+        barbs_v: None,
+        style: RenderStyle::WeatherVerticalVelocity,
+    },
+    PlotRecipe {
+        slug: "3km_vertical_velocity",
+        title: "3 km AGL Vertical Velocity (upward positive)",
+        filled: FIELD_3KM_VERTICAL_VELOCITY,
+        contours: None,
+        barbs_u: None,
+        barbs_v: None,
+        style: RenderStyle::WeatherVerticalVelocity,
+    },
+    PlotRecipe {
         slug: "1km_reflectivity",
         title: "1km AGL Reflectivity",
         filled: FIELD_1KM_REFLECTIVITY,
@@ -6061,7 +6460,7 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         contours: None,
         barbs_u: None,
         barbs_v: None,
-        style: RenderStyle::WeatherTemperature,
+        style: RenderStyle::AirQualityPm25,
     },
     PlotRecipe {
         slug: "smoke_column",
@@ -6072,6 +6471,20 @@ const PLOT_RECIPES: &[PlotRecipe] = &[
         barbs_v: None,
         style: RenderStyle::WeatherTemperature,
     },
+    PlotRecipe { slug: "ivt", title: "IVT 1000-300 hPa and Transport Direction", filled: FIELD_IVTMAGNITUDE, contours: Some(FIELD_IVTMAGNITUDE), barbs_u: Some(FIELD_IVTEASTWARD), barbs_v: Some(FIELD_IVTNORTHWARD), style: RenderStyle::WeatherRh },
+
+    PlotRecipe { slug: "ar_outline", title: "AR Threshold: IVT >= 250 kg m-1 s-1", filled: FIELD_IVTMAGNITUDE, contours: Some(FIELD_IVTMAGNITUDE), barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+
+    PlotRecipe { slug: "iwv", title: "Integrated Water Vapour Surface to Model Top", filled: FIELD_INTEGRATEDWATERVAPOUR, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+
+    PlotRecipe { slug: "freezing_level", title: "Lowest 0 C Isotherm Height MSL", filled: FIELD_ISOTHERM_HEIGHT_0C, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+
+    PlotRecipe { slug: "ivt_full_column", title: "Water Vapour Flux Surface to Model Top", filled: FIELD_FULLCOLUMNIVTMAGNITUDE, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+    PlotRecipe { slug: "ivt_eastward_1000_300", title: "Eastward IVT 1000-300 hPa", filled: FIELD_IVTEASTWARD, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+    PlotRecipe { slug: "ivt_northward_1000_300", title: "Northward IVT 1000-300 hPa", filled: FIELD_IVTNORTHWARD, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+    PlotRecipe { slug: "ivt_eastward_full_column", title: "Eastward Water Vapour Flux Surface to Model Top", filled: FIELD_FULLCOLUMNIVTEASTWARD, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+    PlotRecipe { slug: "ivt_northward_full_column", title: "Northward Water Vapour Flux Surface to Model Top", filled: FIELD_FULLCOLUMNIVTNORTHWARD, contours: None, barbs_u: None, barbs_v: None, style: RenderStyle::WeatherRh },
+
 ];
 
 pub fn built_in_models() -> &'static [ModelSummary] {
@@ -6122,6 +6535,17 @@ pub fn plot_recipe_fetch_plan(
         slug: slug.to_string(),
     })?;
     plot_recipe_fetch_plan_for(recipe, model)
+}
+
+/// Plan a recipe whose canonical fields are supplied by a local store or
+/// caller. Download capability cannot reject an already available plane.
+/// The host must resolve every store requirement before rendering.
+pub fn plot_recipe_store_plan(slug: &str, model: ModelId) -> Result<PlotRecipeFetchPlan, ModelError> {
+    let recipe = plot_recipe(slug).ok_or_else(|| ModelError::UnknownPlotRecipe { slug: slug.into() })?;
+    let fields = collect_recipe_fields(recipe);
+    let (product, fetch_policy) = plot_recipe_fetch_defaults(model, &fields);
+    Ok(PlotRecipeFetchPlan { recipe_slug: recipe.slug, model, product, fetch_policy,
+        fetch_mode: fetch_policy.fetch_mode(), fields })
 }
 
 pub fn selector_fetch_plan(
@@ -6282,7 +6706,7 @@ pub fn selector_supported_for_model(selector: FieldSelector, model: ModelId) -> 
         }
         (CanonicalField::WindGust, VerticalSelector::HeightAboveGroundMeters(10)) => true,
         (CanonicalField::SmokeMassDensity, VerticalSelector::HeightAboveGroundMeters(8)) => {
-            matches!(model, ModelId::Hrrr | ModelId::HrrrAk)
+            matches!(model, ModelId::Hrrr | ModelId::HrrrAk | ModelId::WrfGdex)
         }
         (CanonicalField::PressureReducedToMeanSeaLevel, VerticalSelector::MeanSeaLevel) => true,
         (
@@ -6295,14 +6719,29 @@ pub fn selector_supported_for_model(selector: FieldSelector, model: ModelId) -> 
             | CanonicalField::HighCloudCover,
             VerticalSelector::EntireAtmosphere,
         ) => true,
-        (CanonicalField::ColumnIntegratedSmoke, VerticalSelector::EntireAtmosphere) => {
-            matches!(model, ModelId::Hrrr | ModelId::HrrrAk)
+        // HRRR-Smoke's AOTK/COLMD from its files, and ArWen's own wrfout
+        // (AOD5502D, SMOKE_COLUMN) through the store: the chem products
+        // draw both through one recipe.
+        (CanonicalField::AerosolOpticalDepth550, VerticalSelector::EntireAtmosphere) => {
+            matches!(model, ModelId::Hrrr | ModelId::HrrrAk | ModelId::WrfGdex)
         }
+        (CanonicalField::ColumnIntegratedSmoke, VerticalSelector::EntireAtmosphere) => {
+            matches!(model, ModelId::Hrrr | ModelId::HrrrAk | ModelId::WrfGdex)
+        }
+        // ArWen chem wrfout planes with no operational-source counterpart
+        // (PM2_5_DRY, DUST_SFC and o3 at the lowest mass level).
+        (
+            CanonicalField::Pm25Dry
+            | CanonicalField::DustMassConcentration
+            | CanonicalField::OzoneConcentration,
+            VerticalSelector::Surface,
+        ) => matches!(model, ModelId::WrfGdex),
         (
             CanonicalField::TotalPrecipitation | CanonicalField::ProbabilityOfPrecipitation,
             VerticalSelector::Surface,
         ) => true,
         (CanonicalField::Visibility, VerticalSelector::Surface) => true,
+        (CanonicalField::FogFlag, VerticalSelector::Surface) => matches!(model,ModelId::WrfGdex),
         // Surface geopotential height is orography.  Every NWP source in
         // the catalog carries it (it is the model's own terrain), and the
         // store lane resolves it from the WRF import's `orography` plane.
@@ -6322,6 +6761,11 @@ pub fn selector_supported_for_model(selector: FieldSelector, model: ModelId) -> 
                 | ModelId::RrfsA
                 | ModelId::Rrfs | ModelId::RrfsPublic
                 | ModelId::RrfsFireWx
+                // WRF-family stores: the importer derives the four flags
+                // from the lowest-level hydrometeor fluxes (rw-wrfbatch
+                // push_precip_type). Breakage it prevents: a WOOF winter
+                // run had no precipitation-type map at all.
+                | ModelId::WrfGdex
         ),
         (CanonicalField::LandSeaMask, VerticalSelector::Surface) => {
             matches!(model, ModelId::EcmwfOpenData)
@@ -6381,7 +6825,8 @@ pub fn selector_supported_for_model(selector: FieldSelector, model: ModelId) -> 
             VerticalSelector::EntireAtmosphere | VerticalSelector::HeightAboveGroundLayerMeters { .. },
         ) => matches!(model, ModelId::WrfGdex),
         (
-            CanonicalField::CloudWaterMixingRatio
+            CanonicalField::TotalCloudCover
+            | CanonicalField::CloudWaterMixingRatio
             | CanonicalField::RainWaterMixingRatio
             | CanonicalField::CloudIceMixingRatio
             | CanonicalField::SnowMixingRatio
@@ -6652,22 +7097,6 @@ pub fn latest_available_run_at_forecast_hour(
     )
 }
 
-pub fn latest_available_run_for_products(
-    model: ModelId,
-    source: Option<SourceId>,
-    date_yyyymmdd: &str,
-    products: &[&str],
-) -> Result<LatestRun, ModelError> {
-    let agent = build_agent();
-    latest_available_run_for_products_with_probe(
-        model,
-        source,
-        date_yyyymmdd,
-        products,
-        |resolved| availability_probe_ok(&agent, resolved),
-    )
-}
-
 pub fn latest_available_run_for_products_at_forecast_hour(
     model: ModelId,
     source: Option<SourceId>,
@@ -6705,6 +7134,7 @@ where
     )
 }
 
+#[cfg(test)]
 fn latest_available_run_for_products_with_probe<F>(
     model: ModelId,
     source: Option<SourceId>,
@@ -6925,6 +7355,9 @@ fn range_probe_ok(agent: &ureq::Agent, url: &str) -> bool {
 }
 
 fn build_grib_url(source: SourceId, request: &ModelRunRequest) -> Result<String, ModelError> {
+    if let Some(result) = archives::object_url(source, request) {
+        return result;
+    }
     Ok(match request.model {
         ModelId::Hrrr => build_hrrr_url(source, request),
         ModelId::HrrrAk => build_hrrr_ak_url(source, request),
@@ -7373,17 +7806,6 @@ fn build_ecmwf_url(source: SourceId, request: &ModelRunRequest) -> Result<String
         request.forecast_hour,
         stream
     ))
-}
-
-fn ecmwf_open_data_forecast_hour_supported(cycle_hour_utc: u8, forecast_hour: u16) -> bool {
-    match cycle_hour_utc {
-        0 | 12 => {
-            (forecast_hour <= 144 && forecast_hour % 3 == 0)
-                || (forecast_hour > 144 && forecast_hour <= 360 && forecast_hour % 6 == 0)
-        }
-        6 | 18 => forecast_hour <= 144 && forecast_hour % 3 == 0,
-        _ => false,
-    }
 }
 
 fn build_aifs_url(source: SourceId, request: &ModelRunRequest) -> Result<String, ModelError> {
@@ -8657,9 +9079,7 @@ fn model_specific_surface_field_gap(field: &GribFieldSpec, model: ModelId) -> Op
         (_, "wind_chill_2m_agl") => Some(
             "2m Wind Chill is surface-derived rather than native; the direct/native recipe registry does not yet wire the required T2/U10/V10 dependency bundle into one renderable product".to_string(),
         ),
-        (ModelId::WrfGdex, "visibility_surface") => Some(
-            "Visibility is not part of the current WRF/GDEX one-off path; no verified wrfout visibility field is wired yet".to_string(),
-        ),
+
         (ModelId::Aifs, "wind_gust_10m_agl" | "visibility_surface") => Some(format!(
             "{} is not present in the current Earth2Archive AIFS NetCDF schema",
             field.label
@@ -8698,7 +9118,7 @@ fn model_specific_surface_field_gap(field: &GribFieldSpec, model: ModelId) -> Op
 // (every 25 hPa from 100 to 1000): that one is what extraction can admit;
 // this one is what recipe validation/UI exposes.
 fn is_supported_upper_air_level(level_hpa: u16) -> bool {
-    matches!(level_hpa, 200 | 250 | 300 | 500 | 700 | 850)
+    matches!(level_hpa, 200 | 250 | 300 | 500 | 700 | 850 | 925)
 }
 
 fn unsupported_selector_reason(selector: FieldSelector, model: ModelId) -> String {

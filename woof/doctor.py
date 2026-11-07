@@ -63,7 +63,6 @@ from __future__ import annotations
 from collections.abc import Callable
 import ctypes
 from dataclasses import dataclass
-import hashlib
 import importlib.metadata
 from importlib.util import find_spec
 
@@ -82,6 +81,7 @@ from woof import rustwx
 from woof import rustwx_fetch
 from woof import science_core
 from woof.explain import explain_enabled
+from woof.file_digest import sha256_file as _sha256
 
 # The pip extras exactly as the README installs them.
 #
@@ -153,9 +153,10 @@ def _geog_hint() -> str:
             f"  # ({size_phrase()}) into\n"
             "  # $GPUWM_CASE_DATA_ROOT/WPS_GEOG, or --root DIR.\n"
             "  # Resumable, SHA-256-verified, re-run safe.\n"
-            f"  # `--datasets wrf` stages the {len(wrf)} the WRF static\n"
+            f"  # `--datasets wrf` stages the {len(wrf)} pins the WRF static\n"
             f"  # builder opens ({size_phrase(wrf)}) and\n"
-            "  # skips the Noah-MP soil archive only `woof mesh` reads.")
+            "  # skips the pins only `woof mesh` or a named\n"
+            "  # geog_data_res option reads.")
 
 
 GEOG_HINT = _geog_hint()
@@ -196,6 +197,10 @@ _BRIDGE_CONSUMERS = {
                     "stage writes its regional intermediates with this "
                     "binary and "
                     "refuses rather than falling back without it",
+    "met_intermediate": "public initial-condition preparation that writes "
+                        "WPS intermediates from a regular-grid source "
+                        "(the installed woof hex RRFS preset and ICON init "
+                        "rows), which refuses by name without it",
 }
 
 #: The doors a box without CuPy cannot open, and the half it keeps.
@@ -382,14 +387,6 @@ def _build_action(crate_relative: str = bridges.CRATE_RELATIVE) -> str:
     return "woof doctor --explain"
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 # ---------------------------------------------------------------------------
 # Python packages: actual imports, in a subprocess
 # ---------------------------------------------------------------------------
@@ -426,15 +423,28 @@ def _import_probe(module: str,
     try:
         probe = subprocess.run(
             [sys.executable, "-c", code], capture_output=True, text=True,
-            errors="replace", timeout=_PROBE_TIMEOUT_S * 4)
-    except (OSError, subprocess.TimeoutExpired) as error:
+            errors="replace", timeout=_PROBE_TIMEOUT_S * 10)
+    except subprocess.TimeoutExpired as error:
+        return False, (f"installed; import probe timed out after {error.timeout:g} s "
+                       "without an answer (box load can delay a probe); retry doctor "
+                       "when the load falls. No import failure was established.")
+    except OSError as error:
         return False, f"installed but the import probe failed to run: {error}"
     if probe.returncode == 0:
         return True, (probe.stdout or "").strip() or "imported"
     tail = [line for line in (probe.stderr or "").strip().splitlines()
             if line.strip()]
     reason = tail[-1] if tail else f"exit {probe.returncode}"
+    if probe.returncode == -2 or reason == "KeyboardInterrupt":
+        return False, ("installed; import probe interrupted before an answer "
+                       "(SIGINT/KeyboardInterrupt, including an external probe timeout); "
+                       "retry doctor when the load falls. No import failure was established.")
     return False, f"installed but failed to import: {reason}"
+
+
+def _import_probe_incomplete(evidence: str) -> bool:
+    return ("import probe timed out" in evidence
+            or "import probe interrupted" in evidence)
 
 
 #: CuPy ships one wheel per CUDA major (``cupy-cuda12x``, ``cupy-cuda13x``)
@@ -588,10 +598,14 @@ def _installed_cupy_wheels() -> list[tuple[str, int | None]]:
 
 def _cublas_pairing_probe() -> dict:
     """Run :data:`_CUBLAS_PAIRING_PROBE` out of process; ``{}`` if not."""
+    return _json_probe(_CUBLAS_PAIRING_PROBE)
 
+
+def _json_probe(script: str) -> dict:
+    """Run an isolated JSON probe with the shared timeout and failure evidence."""
     try:
         probe = subprocess.run(
-            [sys.executable, "-c", _CUBLAS_PAIRING_PROBE],
+            [sys.executable, "-c", script],
             capture_output=True, text=True, errors="replace",
             timeout=_PROBE_TIMEOUT_S * 4)
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -659,34 +673,69 @@ def _overlapping_cupy_check(wheels: list[tuple[str, int | None]]) -> Check:
 
 
 def _host_threads_check() -> Check:
-    """Whether ``[devices]`` slab threads can run at once on this interpreter.
+    """The interpreter and its lock: whether ``--devices N>1`` will run here.
 
     THE BREAKAGE THIS NAMES: every slab of a multi-card forecast steps from
     its own Python thread, and on a GIL build those threads take turns on
-    one interpreter lock -- measured on a two-socket 4-card box, radiation
-    steps of 13-25 s under the lock against 5-8 s on a free-threaded
-    interpreter, and four cards slower than two.  Never blocking: one-card
-    forecasts do not care, and a GIL build still runs every forecast.
+    one interpreter lock -- measured 2 cards at 0.78x of one card on 3.12,
+    against 33/20/17 s per forecast hour on 1/2/4 cards on free-threaded
+    3.14t.  So every multi-card door refuses on such an interpreter
+    (:func:`woof.free_threading.refuse_multi_card_under_gil`), and this
+    row says so before a run does.  Never blocking: one-card forecasts do
+    not care, and a GIL build still runs every one-card forecast.
     """
-    from woof.free_threading import free_threaded_build
+    from woof.free_threading import (MULTI_CARD_GIL_REFUSAL, free_threaded_build,
+                                      multi_card_lock_reason)
 
     name = "multi-card host threads"
     version = ".".join(str(v) for v in sys.version_info[:3])
-    if free_threaded_build():
+    gil_env = os.environ.get("PYTHON_GIL")
+    interpreter = (f"{sys.executable} (Python {version}, "
+                   f"{'free-threaded' if free_threaded_build() else 'GIL'} build, "
+                   f"PYTHON_GIL={gil_env if gil_env is not None else 'unset'})")
+    reason = multi_card_lock_reason()
+    if reason is None:
         return Check(name, "verified",
-                     f"free-threaded Python {version}: [devices] slab threads "
-                     "run at once (PYTHON_GIL=0 is kept for command lines)",
-                     brief="free-threaded")
+                     f"{interpreter}: the interpreter lock is off in this "
+                     "process, so --devices N>1 slab threads run at once "
+                     "(command lines re-run themselves with PYTHON_GIL=0)",
+                     brief=f"free-threaded {version}, GIL off")
+    # install.sh and install.ps1 make .venv on free-threaded 3.14t by
+    # default (2.8.8), so the remedy is to let them make it again; a
+    # pip-only environment is remade on a 3.14t uv provides.
+    #
+    # Every line is a comment, deliberately.  The closing line of the
+    # report says every remedy line is a command "to run as printed, in
+    # the order printed", so a pasted report would have deleted .venv --
+    # the environment this report runs in, and on a pip install whatever
+    # .venv the reader's own directory holds -- part-way through the
+    # other gaps' commands, then called an installer a pip install does
+    # not have.  Remaking an environment is a choice made on purpose, not
+    # a line in a select-all paste; it is spelled out here for the shell
+    # the rest of the report is spelled for (bridges.WINDOWS_SHELL, which
+    # tests force both ways), not the host's os.name.
+    if bridges.WINDOWS_SHELL:
+        rebuild = "Remove-Item -Recurse -Force .venv; .\\install.ps1"
+        installer = ".\\install.ps1"
+    else:
+        rebuild = "rm -rf .venv && bash install.sh"
+        installer = "install.sh"
+    remedy = (f"# {MULTI_CARD_GIL_REFUSAL}\n"
+              "# for multi-card forecasts, remake the environment on free-threaded Python 3.14t\n"
+              "# (not pasted as a command: it deletes the environment this report runs in);\n"
+              f"# in a source checkout {installer} provisions 3.14t by default, so from its root:\n"
+              f"#   {rebuild}\n"
+              "# a pip install: uv venv --seed --python 3.14t, then in it\n"
+              "#   pip install --prefer-binary woof (cftime 1.6.6 has no 3.14t wheel)\n"
+              "#   and export PYTHON_GIL=0 in the venv's activate")
     return Check(
         name, "info",
-        f"Python {version} has the interpreter lock: the slab threads of a "
-        "multi-card [devices] forecast take turns on it, so extra cards add "
-        "little; one-card forecasts are unaffected",
-        "# for multi-card forecasts, reinstall under a free-threaded Python 3.14\n"
-        "export WOOF_PYTHON=python3.14t\n"
-        "bash install.sh",
-        action="reinstall under python3.14t for multi-card forecasts",
-        brief="GIL build: multi-card slabs take turns", blocking=False)
+        f"{interpreter}: {reason}, so woof go/preflight/sim/ensemble refuse "
+        "--devices N>1 here (multi-card slab threads would take turns on the "
+        "lock: 2 cards measured 0.78x of 1); one-card forecasts are unaffected",
+        remedy,
+        action="remake the environment on free-threaded python3.14t with PYTHON_GIL=0 for multi-card forecasts",
+        brief="GIL on: --devices N>1 refused", blocking=False)
 
 
 def _cupy_check() -> Check:
@@ -745,6 +794,9 @@ def _cupy_check() -> Check:
                 f"but the CuPy-wheel/box CUDA pairing was not judged: "
                 f"{_short(str(reason), 96)}",
                 brief=f"cupy {evidence}, no device", blocking=False)
+        if _names_full_device(cublas):
+            return _full_device_check("cupy (GPU runtime)", cublas,
+                                      status="present")
         # A device exists and the first cuBLAS load failed.  This is the
         # CUDA-major trap when the majors disagree, and a broken install
         # either way; both refuse, because the next real run dies at its
@@ -811,6 +863,9 @@ def _cupy_check() -> Check:
             + f".  It can still run {_GPU_STILL_WORKS}{served}", remedy,
             action=action, brief="not installed",
             severity=SEVERITY_UNREACHABLE)
+    if _import_probe_incomplete(evidence):
+        return Check("cupy (GPU runtime)", "untested", evidence,
+                     brief=_short(evidence), blocking=False)
     # CuPy IS installed and would not import.  The extra cannot be the
     # answer to every version of that -- see _cupy_import_failure_remedy,
     # which reads the import's own message and routes accordingly.
@@ -963,7 +1018,7 @@ sys.stdout.write(json.dumps(out))
 """
 
 
-def _nvrtc_header_probe() -> dict:
+def _nvrtc_header_probe(*, reuse_bound=False) -> dict:
     """Run :data:`_NVRTC_HEADER_PROBE` cold, out of process; ``{}`` if not."""
 
     if find_spec("cupy") is None:
@@ -972,7 +1027,9 @@ def _nvrtc_header_probe() -> dict:
         environment = dict(os.environ, CUPY_CACHE_DIR=cache)
         try:
             probe = subprocess.run(
-                [sys.executable, "-c", _NVRTC_HEADER_PROBE],
+                [sys.executable, "-c", (
+                    "from woof.forecast_readiness import main; main()"
+                    if reuse_bound else _NVRTC_HEADER_PROBE)],
                 capture_output=True, text=True, errors="replace",
                 env=environment, timeout=_PROBE_TIMEOUT_S * 6)
         except subprocess.TimeoutExpired:
@@ -987,6 +1044,14 @@ def _nvrtc_header_probe() -> dict:
         result = json.loads(probe.stdout or "{}")
         if not isinstance(result, dict) or not result or probe.returncode != 0:
             raise ValueError("the probe produced no successful structured result")
+        if reuse_bound:
+            # Cache rejection and unsupported-layout warnings originate in
+            # the child. Keep them visible even when the cold fallback passes.
+            if probe.stderr:
+                sys.stderr.write(probe.stderr)
+            if result.get("readiness_cache") == "bound-cold":
+                print("note: forecast readiness used a cold probe for the "
+                      "current compiler/header binding", file=sys.stderr)
         return result
     except ValueError:
         tail = [line for line in (probe.stderr or "").strip().splitlines()
@@ -1018,7 +1083,7 @@ def _cuda_headers_remedy(box_major: int | None) -> tuple[str, str]:
     no headers, because no CuPy wheel has ever carried a header tree.  A
     buyer following it watches pip succeed and the fault survive.
 
-    WHAT LEADS NOW, and why it changed.  MEASURED on a development machine
+    WHAT LEADS NOW, and why it changed.  MEASURED on test host A
     (Ubuntu, CUDA 13 driver, no ``nvcc``, no ``/usr/local/cuda``, no
     conda), 2026-08-17: a bare ``pip install cupy-cuda13x`` gives a 274
     MiB environment in which cuBLAS, a self-contained ``RawModule`` and a
@@ -1126,6 +1191,44 @@ def _names_missing_cuda_headers(text: object) -> bool:
     return any(marker in lowered for marker in _HEADERS_FAILURE_MARKERS)
 
 
+#: Messages that say the probed CARD had no memory left, not that the
+#: install is wrong.  Named breakage: on a shared 4-card node whose card 0
+#: another process had filled (96.9 of 97.9 GB), `bash install.sh` exited 1
+#: and doctor printed "MISSING cupy ... -> pip install 'recast-woof[gpu-cu13]'",
+#: "MISSING CUDA kernel headers" and "MISSING radar-DA eigensolver" for a
+#: correct install, because every probe opens the first visible card and
+#: an allocation of 512 bytes failed there.
+_DEVICE_FULL_MARKERS = ("out of memory", "outofmemoryerror",
+                        "cudaerrormemoryallocation",
+                        "cuda_error_out_of_memory")
+
+
+def _names_full_device(*texts: object) -> bool:
+    """Does any of these failure messages say the card was out of memory?"""
+
+    return any(marker in str(text or "").lower()
+               for text in texts for marker in _DEVICE_FULL_MARKERS)
+
+
+def _full_device_check(name: str, evidence: object, *,
+                       status: str = "info") -> Check:
+    """Not judged: the probed card is full, which says nothing of the install."""
+
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    card = (f"CUDA_VISIBLE_DEVICES={visible}" if visible
+            else "the first card (CUDA_VISIBLE_DEVICES is unset)")
+    return Check(
+        name, status,
+        f"not judged -- the probe ran on {card}, which had no memory to "
+        f"give: {_short(str(evidence), 96)}.  Another process holds that "
+        "card; the install is not what failed",
+        "# point the probe at a card with free memory, then re-run doctor:\n"
+        "nvidia-smi --query-gpu=index,uuid,memory.used,memory.total --format=csv\n"
+        "CUDA_VISIBLE_DEVICES=<a free index or GPU-uuid> woof doctor",
+        action="CUDA_VISIBLE_DEVICES=<free card> woof doctor",
+        brief="card full, not judged", blocking=False)
+
+
 #: The markers that name the WHEEL: a shared library the wheel
 #: hard-codes and the loader could not produce.  (Their opposite number,
 #: the toolkit-headers class, is :data:`_HEADERS_FAILURE_MARKERS`, which
@@ -1179,7 +1282,7 @@ def _cupy_import_failure_remedy(evidence: str,
     ]), headers_action
 
 
-def _cuda_headers_check() -> Check:
+def _cuda_headers_check(*, reuse_bound=False) -> Check:
     """Can CuPy compile and run here, and which measured stage failed?
 
     A check rather than a footnote because the gap is silent by
@@ -1200,7 +1303,8 @@ def _cuda_headers_check() -> Check:
             "not judged -- compiling a kernel is device contact and "
             "GPUWM_NO_LOCAL_GPU is set",
             brief="device not touched", blocking=False)
-    result = _nvrtc_header_probe()
+    result = (_nvrtc_header_probe(reuse_bound=True) if reuse_bound
+              else _nvrtc_header_probe())
     if "cupy" in result:
         return Check(
             name, "info",
@@ -1230,11 +1334,20 @@ def _cuda_headers_check() -> Check:
     self_contained = result.get("self_contained", "did not report")
     headers = result.get("toolkit_headers", "did not report")
     cuda_path = result.get("cuda_path") or "unset"
+    if _names_full_device(self_contained if self_contained != "ok" else "",
+                          headers if headers != "ok" else ""):
+        return _full_device_check(
+            name, self_contained if self_contained != "ok" else headers)
     if self_contained == "ok" and headers == "ok":
+        cache = result.get("readiness_cache")
+        detail = (
+            "a self-contained kernel and a cupy reduction ran again; "
+            "prior cold compilation bound to unchanged compiler/header bytes"
+            if cache == "bound-warm" else
+            "a self-contained kernel and a cupy reduction compiled and ran "
+            "from a COLD cache")
         return Check(
-            name, "verified",
-            f"a self-contained kernel and a cupy reduction compiled and ran "
-            f"from a COLD cache (CUDA_PATH {cuda_path})",
+            name, "verified", f"{detail} (CUDA_PATH {cuda_path})",
             brief="kernels compile and run", blocking=False)
     stage = result.get("self_contained_stage")
     if stage in {"allocation", "launch", "synchronize", "readback", "validation"}:
@@ -1435,11 +1548,19 @@ rs = numpy.random.RandomState(0)
 b = rs.standard_normal((8, 6, 6))
 a = b @ b.transpose(0, 2, 1) + 6.0 * numpy.eye(6)
 a = 0.5 * (a + a.transpose(0, 2, 1))
+# The second batch is above 64, the global-work tier an ensemble of more
+# than 64 members takes; both tiers must solve for the default to be whole.
+c = rs.standard_normal((2, 66, 66))
+c = c @ c.transpose(0, 2, 1) + 66.0 * numpy.eye(66)
+c = 0.5 * (c + c.transpose(0, 2, 1))
 try:
     from woof.core.jacobi_eigh import batched_eigh
-    w, v = batched_eigh(cupy.asarray(a))
-    got = cupy.asnumpy(v @ (w[:, :, None] * v.transpose(0, 2, 1)))
-    residual = float(numpy.abs(got - a).max() / numpy.abs(a).max())
+    residual = 0.0
+    for m in (a, c):
+        w, v = batched_eigh(cupy.asarray(m))
+        got = cupy.asnumpy(v @ (w[:, :, None] * v.transpose(0, 2, 1)))
+        residual = max(residual,
+                       float(numpy.abs(got - m).max() / numpy.abs(m).max()))
     out["jacobi"] = "ok" if residual < 1e-12 else f"residual {residual:.2e}"
 except Exception as error:
     out["jacobi"] = f"{type(error).__name__}: {error}"
@@ -1456,19 +1577,7 @@ def _eigensolver_probe() -> dict:
     """Run :data:`_EIGENSOLVER_PROBE` out of process; ``{}`` if it could not."""
     if find_spec("cupy") is None:
         return {"cupy": "not installed"}
-    try:
-        probe = subprocess.run(
-            [sys.executable, "-c", _EIGENSOLVER_PROBE],
-            capture_output=True, text=True, errors="replace",
-            timeout=_PROBE_TIMEOUT_S * 4)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        return {"probe": f"did not run: {error}"}
-    try:
-        return json.loads(probe.stdout or "{}")
-    except ValueError:
-        tail = [line for line in (probe.stderr or "").strip().splitlines()
-                if line.strip()]
-        return {"probe": tail[-1] if tail else f"exit {probe.returncode}"}
+    return _json_probe(_EIGENSOLVER_PROBE)
 
 
 def _da_eigensolver_check() -> Check:
@@ -1506,6 +1615,8 @@ def _da_eigensolver_check() -> Check:
 
     jacobi = result.get("jacobi", "did not report")
     library = result.get("library", "did not report")
+    if jacobi != "ok" and library != "ok" and _names_full_device(jacobi, library):
+        return _full_device_check(name, jacobi)
     if jacobi == "ok":
         # The supported path works, so cuSOLVER is genuinely optional and
         # its absence is news rather than a gap.
@@ -1612,6 +1723,9 @@ _IMPORT_NAME = {
     # The wheel-gate tests' build backend ([dev] extra): they run setup.py
     # with the battery's interpreter.
     "setuptools": "setuptools",
+    # The undefined-name gate's linter ([dev] extra):
+    # tests/test_no_undefined_names.py runs it.
+    "ruff": "ruff",
     # The CDS client ([era5] extra): distribution and module share the name.
     "cdsapi": "cdsapi",
     "huggingface-hub": "huggingface_hub",
@@ -1622,6 +1736,8 @@ _IMPORT_NAME = {
     # what a reader needs -- an importable woof_data is what
     # woof.data_assets resolves against.
     "recast-woof-data": "woof_data",
+    # The 7z decoder ([hydro-conus] extra) for EPA's NHDPlus V2.1 archives.
+    "py7zr": "py7zr",
 }
 
 
@@ -1842,6 +1958,16 @@ class _ExtraFacts:
 #: every door named here must be a real door, and every extra the
 #: installed metadata declares must appear here.
 _EXTRA_FACTS: dict[str, _ExtraFacts] = {
+    # The LGPL-2.1+ 7z decoder for EPA's NHDPlus V2.1 source archives.  Absent
+    # is normal: `--hydro on` over CONUS then prepares the worldwide fabric
+    # and says why (woof.hydro.acquire), so nothing stops.
+    "hydro-conus": _ExtraFacts(
+        doors=("woof go --hydro on over CONUS with the NHDPlus V2.1 provider",),
+        still_works="every forecast door, and --hydro on itself, which falls "
+                    "back to the worldwide fabric",
+        blocking=False, severity=SEVERITY_DEGRADED,
+        deferred_to="py7zr (7z decoder)",
+        expected_absent=True),
     "gpu-cu12": _ExtraFacts(
         doors=_GPU_DOORS, still_works=_GPU_STILL_WORKS,
         blocking=True, severity=SEVERITY_UNREACHABLE,
@@ -1862,8 +1988,7 @@ _EXTRA_FACTS: dict[str, _ExtraFacts] = {
         doors=("woof enprod", "woof render --engine matplotlib",
                "woof go's render stage (it gates on the wrf package)",
                "python -m tools.da_nowcast render and the launcher's "
-               "basemap endpoint (pyshp)",
-               "python -m tilestream.realcase_render (pyshp)"),
+               "basemap endpoint (pyshp)"),
         still_works="woof render's DEFAULT rust engine, which draws from "
                     "the rw_wrfbatch binary and needs no Python package "
                     "from this extra",
@@ -2003,6 +2128,8 @@ def _package_evidence(requirement: _Requirement,
         return ("absent", label, "not installed")
     if ok:
         return ("ok", label, f"{evidence} (distribution {version})")
+    if _import_probe_incomplete(evidence):
+        return ("untested", label, evidence)
     return ("broken", label, evidence)
 
 
@@ -2245,6 +2372,11 @@ def _base_dependency_check(base: tuple[_Requirement, ...],
             "pip install --force-reinstall woof",
             action="pip install --force-reinstall woof",
             brief=_short(detail), blocking=True, severity=SEVERITY_BROKEN)
+    incomplete = [(label, why) for _i, state, label, why in states
+                  if state == "untested"]
+    if incomplete:
+        detail = "; ".join(f"{label}: {why}" for label, why in incomplete)
+        return Check(name, "untested", detail, brief=_short(detail), blocking=False)
     packages = ", ".join(label for _i, _s, label, _w in states)
     detail = f"{packages} imported in subprocesses"
     if elsewhere:
@@ -2419,9 +2551,15 @@ def _exec_probe(path: Path) -> tuple[bool, str]:
                       "another platform"
     try:
         with bridges.quiet_loader_errors():
+            # stdin closed: rw_globe_pack reads a JSON request from stdin, so
+            # with an inherited open stdin (a terminal, the container build's
+            # pipe) it waited for input until the timeout and the probe called
+            # it broken (2.9.2 cut, 2026-10-17).  At EOF it prints its
+            # diagnostic and exits 1, which the verdict below accepts.
             probe = subprocess.run(
                 [str(path), "--version"], capture_output=True, text=True,
-                errors="replace", timeout=_PROBE_TIMEOUT_S)
+                errors="replace", timeout=_PROBE_TIMEOUT_S,
+                stdin=subprocess.DEVNULL)
     except OSError as error:
         return False, f"exists but failed to execute: {error}"
     except subprocess.TimeoutExpired:
@@ -2745,35 +2883,54 @@ _OBS_FRONT_DOOR_ACTION = ("build the obs front doors from a clone "
 #: the bundle carries it, rather than waiting for this map to catch up.
 #: ``tests/test_doctor_route_accuracy.py`` fails when they disagree.
 _CHECKED_ARTIFACTS = {
+    "nextgen_hydrofabric": "the `NextGen nextgen_hydrofabric` line",
+    "arwen_nextgen_forcing": "the `NextGen arwen_nextgen_forcing` line",
+    "rw_nextgen_verify": "the `NextGen rw_nextgen_verify` line",
+    "rw_nextgen_output": "the `NextGen rw_nextgen_output` line",
+    "rw_hydro_world": "the `hydro door rw_hydro_world` line",
+    "rw_hydro_params": "the `hydro door rw_hydro_params` line",
+    "rw_hydrofabric": "the `hydro door rw_hydrofabric` line",
+    "nextgen-reservoir-prepare": "the `hydro door nextgen-reservoir-prepare` line",
+    "rw_hydro_init": "the `hydro door rw_hydro_init` line",
+    "rw_hail": "the `obs front door` lines",
+    "rw_fire_indices": "the `fire danger indices` line",
+    "rw_ice_verify": "the `ice observation binding` line",
+    "rw_ocean": "the `ocean preparation` line",
+    "rw_bathy": "the `surge bathymetry` line",
+    "rw_ocean_verify": "the `ocean SST verification` line",
+    "rw-wind-table": "the `wind turbine tables` line",
     "grib1_bridge": "the `bridge ...` lines",
     "gfs_grib2_bridge": "the `bridge ...` lines",
     "hrrr_grib2_bridge": "the `bridge ...` lines",
     "grib2_inventory": "the `bridge ...` and mapped/20CRv3 route lines",
     "grib2_dump": "the `bridge ...` and mapped/20CRv3 route lines",
     "gdt101_remap": "the `bridge ...` lines",
+    "met_intermediate": "the `bridge ...` lines",
     "gpuwm_preprocess_cpu": "the `cpu preprocess library` line",
     "rw_fetch": "the `fetch backbone` line",
     "rw_wrfbatch": "the `renderer` line",
     "rw_simradar": "the `simulated radar` line",
+    "rw_soundings": "the `sounding window renderer` line",
+    "rw_tc_fields": "the `cyclone field reader` line",
     "rw_mpas_mesh": "the `mesh generator` line",
     "rw_mpas_static": "the `mesh static builder` line",
     "rw_nexrad": "the `radar front door` line",
     "region_global_dealias": "the `region-global dealiasing engine` line",
     "rw_odim": "the `obs front door` lines",
+    "rw_radar_feeds": "the `obs front door` lines",
     "rw_mrms": "the `obs front door` lines",
     "rw_stage4": "the `obs front door` lines",
     "rw_asos": "the `obs front door` lines",
+    "rw_airnow": "the `obs front door` lines",
     "rw_goes": "the `obs front door` lines",
     "rw_opera": "the `obs front door` lines",
-    # The global model's observation doors: graded by `woof global
-    # doctor`, whose `rust doors` rows check each one's size and SHA-256
-    # against this release's pins and its contract literal.
-    "rw_atms": "`woof global doctor` (its `rust doors` rows)",
-    "rw_gnssro": "`woof global doctor` (its `rust doors` rows)",
-    "rw_ndbc": "`woof global doctor` (its `rust doors` rows)",
-    "rw_igra2": "`woof global doctor` (its `rust doors` rows)",
-    "rw_amv": "`woof global doctor` (its `rust doors` rows)",
-    "rw_wis2": "`woof global doctor` (its `rust doors` rows)",
+    "rw_igra2": "the `obs stream door` lines",
+    "rw_amv": "the `obs stream door` lines",
+    "rw_ndbc": "the `obs stream door` lines",
+    "rw_gnssro": "the `obs stream door` lines",
+    "rw_wis2": "the `obs stream door` lines",
+    "rw_prepbufr": "the `obs stream door` lines",
+    "rw_madis": "the `obs stream door` lines",
     "rw_netcdf": "the `NetCDF decoder` line",
     "rw_zarr": "the `era5 route fetch transport` line",
     "netcdf_writer": "the `NetCDF writer` line",
@@ -2782,15 +2939,29 @@ _CHECKED_ARTIFACTS = {
     "obs_regrid": "the `observation remap` line",
     "obs_score": "the `observation scoring` line",
     "rw_isobaric": "the `isobaric height reader` line",
+    "rw_superob": "the `radar superob` line",
     "rw_mpas_mesh": "the `MPAS binary` lines",
     "rw_mpas_init": "the `MPAS binary` lines",
     "rw_mpas_geometry": "the `MPAS binary` lines",
     "rw_mpas_hostprep": "the `MPAS binary` lines",
     "rw_mpas_convert": "the `MPAS binary` lines",
     "rw_mpas_lbc": "the `MPAS binary` lines",
+    "rw_hex_points": "the `MPAS binary` lines",
+    "rw_mpas_init_v831": "the `MPAS binary` lines",
+    "rw_mpas_gsl_oro": "the `MPAS binary` lines",
+    "rw_tempo": "the `TEMPO initialization library` line",
+    "rw_projected_intermediate": "the `projected MET intermediate` line",
     "rw_mlexport": "the `ML dataset exporter` line",
+    "rw_icechunk": "the `Icechunk native history` line",
+    "rw_grib2export": "the `GRIB2 exporter` line",
     "rw_verify": "the `observation verification engine` line",
     "rw_compare": "the `comparison engine` line",
+    "rw_ensbatch": "the `ensemble reducer` line",
+    "rw_nowcast_frames": "the `nowcast frames converter` line",
+    "rw_globe_pack": "the `global globe packer` line",
+    "rw_probgrid": "the `probability map renderer` line",
+    "rw_scorecard": "the `observation scorecard` line",
+    "rw_scoreboard": "the `forecast verification scorer` line",
 }
 
 
@@ -2857,7 +3028,8 @@ def _bundle_coverage_checks() -> list[Check]:
                 name, "missing",
                 f"in this release's bundle and not staged here; needed by: "
                 f"{artifact.consumer}.  Doctor has no contract probe for "
-                "this artifact, so staging it is all this line can ask for",
+                "this artifact, so staging it is all this line can ask for"
+                ,
                 "woof fetch-bridges\n"
                 "  # stages every pinned artifact, this one included",
                 action="woof fetch-bridges",
@@ -2881,12 +3053,47 @@ _STAGED_ESTATE_NAME = ("staged bridge estate (the bytes the routes "
                        "resolve vs this release's pins)")
 
 
+def _hex_helpers_check() -> Check | None:
+    """Where the hex model's compiled helpers come from on this install.
+
+    A PyPI platform wheel carries their pins, not the helpers (WOOF 1.1.0
+    r16, PyPI's per-file limit): the first hex door that needs one fetches
+    the release's helper archive and verifies every file
+    (:mod:`woof.hex.helpers`).  Not staged yet is the expected state of a
+    fresh install, so it is reported and never blocks.
+    """
+
+    try:
+        from woof.hex import helpers
+        state = helpers.status()
+    except Exception:                                # noqa: BLE001
+        return None
+    if state["state"] == "absent":
+        return None
+    if state["state"] == "packaged":
+        return Check("hex helpers", "verified",
+                     f"{state['files']} programs carried in {state['dir']}",
+                     brief=f"{state['files']} carried")
+    if state["state"] == "staged":
+        return Check("hex helpers", "verified",
+                     f"{state['files']} programs staged at {state['dir']}, verified against this "
+                     f"release's pins ({state['bundle']})",
+                     brief=f"{state['files']} staged")
+    return Check("hex helpers", "info",
+                 f"on demand: {state['files']} programs in {state['bundle']} "
+                 f"({state['bundle_bytes'] / 1e6:.1f} MB) are fetched from {state['url']} and verified by "
+                 f"the first hex command that needs one; `woof fetch-bridges` stages them now into "
+                 f"{state['dir']}",
+                 action="woof fetch-bridges",
+                 brief="on demand, not staged yet")
+
+
 def _staged_estate_check() -> Check:
     """Are the artifacts this box RESOLVES the bytes this release pinned?
 
     Every other artifact line in this report asks a question of one
     binary: is it there, does it launch, does it declare this contract.
-    a development machine answered yes to all three on an estate staged in August by an
+    test host A answered yes to all three on an estate staged in August by an
     earlier release -- the files were present, they launched, and
     :data:`woof.bridges.BRIDGE_ABI_MARKERS` only moves when a contract
     version bumps, which it had not -- so ``woof doctor`` printed no
@@ -2917,7 +3124,7 @@ def _staged_estate_check() -> Check:
     The doors ask the same question now, at the moment they pick a file
     (:func:`woof.bridges.require_release_pin`, over the same pins and
     the same size-and-SHA-256 comparison), which is what this line used
-    to say alone: a development machine's report named the skew and every route went on
+    to say alone: test host A's report named the skew and every route went on
     running the August bytes anyway.  This check keeps its own job --
     saying what the estate IS, all of it, before anything opens a door
     -- and stays a reader: it resolves inside
@@ -3171,9 +3378,12 @@ def _obs_front_door_checks() -> list[Check]:
                        "tools.obs_fetch_stage4)",
              "asos": "woof obs asos (and python -m tools.obs_fetch_asos)",
              "goes": "woof obs goes",
+             "airnow": "woof obs airnow",
              "opera": "woof obs opera",
              "odim": "woof obs odim, and every `woof obs radar` "
-                     "subcommand"}
+                     "subcommand",
+             "radar-feeds": "woof obs radar-feeds",
+             "hail": "woof obs hail"}
     # Read from the resolver rather than enumerated here, so a door added
     # to FRONT_DOORS and not to `doors` above is a loud KeyError in the
     # test suite instead of a silently unreported binary -- which is the
@@ -3212,6 +3422,24 @@ def _obs_front_door_checks() -> list[Check]:
             # identical refusal again.  When a release does start
             # bundling these, this line becomes that one command with no
             # edit here.
+            if in_bundle and bridges.on_demand_fetch_offered(front.name):
+                # An on-demand artifact (the platform wheel leaves it to the
+                # bundle; its first use stages it): the same row the stream
+                # doors get.  Breakage (2.9.2 cut, Windows wheel smoke,
+                # 2026-10-17): rw_radar_feeds, on demand since 2.9.2, was
+                # reported "not staged; woof obs radar-feeds cannot run"
+                # on a fresh install, which is false: its first use runs.
+                checks.append(Check(
+                    name, "missing",
+                    "not staged yet -- it is fetched on demand: the platform "
+                    f"wheel does not carry it, and the first `{door}` that "
+                    "needs it stages it from this release's bundle",
+                    f"woof fetch-bridges --partial --artifact {front.name}",
+                    action=f"woof fetch-bridges --partial --artifact {front.name}",
+                    brief="on demand; staged by its first fetch",
+                    group=_GROUP_ENGINES, blocking=False,
+                    severity=SEVERITY_OPT_IN))
+                continue
             if in_bundle:
                 bundle_note = ("it IS in this release's prebuilt bundle, so "
                                "one command stages it")
@@ -3260,6 +3488,67 @@ def _obs_front_door_checks() -> list[Check]:
                 action=f"rebuild {front.name}", brief=_short(evidence),
                 group=_GROUP_ENGINES, blocking=False,
                 severity=SEVERITY_UNREACHABLE))
+            continue
+        checks.append(Check(name, "verified", f"{found} -- {evidence}",
+                            brief=_short(evidence), group=_GROUP_ENGINES))
+    return checks
+
+
+def _obs_stream_door_checks() -> list[Check]:
+    """The observation-stream doors (``woof obs streams``) and prepbufr.
+
+    They are on-demand artifacts: pinned in this release's bundle, not in
+    the platform wheel, staged by the first fetch that needs one.  So an
+    absent one on a pip install whose pins hold it is the expected state and
+    reads ``opt-in``; anywhere a download cannot supply it (a checkout, no
+    bundle for this platform) it reads ``unreachable`` with the build route,
+    the severity an absent obs front door has.  Resolution only: doctor
+    never downloads.
+    """
+
+    try:
+        from woof.obs import frontdoor
+    except ImportError:                          # pragma: no cover - partial
+        return []
+    doors = [*frontdoor.STREAM_DOORS.values(), frontdoor.PREPBUFR]
+    checks: list[Check] = []
+    for front in doors:
+        name = f"obs stream door {front.name} ({front.subject})"
+        try:
+            found = front.find()
+        except FileNotFoundError as error:
+            checks.append(Check(
+                name, "missing", f"{error} -- its observation streams cannot be fetched",
+                f"# unset {front.env_var} or point it at a real build:\n" + front.remedy(),
+                action=f"unset {front.env_var}, or point it at a real build",
+                brief=f"{front.env_var} names a missing file",
+                group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_UNREACHABLE))
+            continue
+        if found is None:
+            if bridges.on_demand_fetch_offered(front.name):
+                checks.append(Check(
+                    name, "missing",
+                    "not staged yet -- it is fetched on demand: the platform "
+                    "wheel does not carry it, and the first stream fetch that "
+                    "needs it stages it from this release's bundle",
+                    front.remedy(),
+                    action=f"woof fetch-bridges --partial --artifact {front.name}",
+                    brief="on demand; staged by its first fetch",
+                    group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_OPT_IN))
+            else:
+                checks.append(Check(
+                    name, "missing",
+                    "not built and not staged -- its observation streams cannot be fetched",
+                    front.remedy(), action=_OBS_FRONT_DOOR_ACTION,
+                    brief="not staged; its streams cannot be fetched",
+                    group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_UNREACHABLE))
+            continue
+        ok, evidence = front.probe(found)
+        if not ok:
+            checks.append(Check(
+                name, "missing", f"{found} -- {evidence}; its streams cannot be fetched",
+                front.remedy(), action=f"rebuild {front.name}", brief=_short(evidence),
+                group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_UNREACHABLE))
             continue
         checks.append(Check(name, "verified", f"{found} -- {evidence}",
                             brief=_short(evidence), group=_GROUP_ENGINES))
@@ -3339,6 +3628,11 @@ _MPAS_DOORS = {
     "rw_mpas_hostprep": "MPAS forecast host preparation",
     "rw_mpas_convert": "MPAS history onto the renderer's tape",
     "rw_mpas_lbc": "MPAS lateral boundaries for a limited-area mesh",
+    "rw_hex_points": "soundings and meteograms from MPAS history "
+                     "(the woof hex product door)",
+    "rw_mpas_init_v831": "RRFS-MPAS initial conditions and boundaries "
+                         "(woof hex init --physics-suite hrrrv5)",
+    "rw_mpas_gsl_oro": "GSL orographic drag statistics for the RRFS suites",
 }
 
 #: One action for all five: they share a clone, a cargo build and a
@@ -3404,6 +3698,10 @@ def _mpas_bridge_checks() -> list[Check]:
                 severity=SEVERITY_UNREACHABLE))
             continue
         if found is None:
+            row = _on_demand_row(label, name, door)
+            if row is not None:
+                checks.append(row)
+                continue
             checks.append(Check(
                 label, "missing",
                 f"not built and not staged -- {door} cannot run",
@@ -3452,6 +3750,32 @@ def _mpas_bridge_checks() -> list[Check]:
     return checks
 
 
+def _icechunk_check() -> Check:
+    from woof import output_formats
+
+    def find():
+        # Doctor reads the estate; it never stages an on-demand artifact.
+        with bridges.inspection_only():
+            return output_formats.find_binary()
+
+    label = "Icechunk native history (rw_icechunk)"
+    if not os.environ.get("WOOF_RW_ICECHUNK"):
+        try:
+            absent = find() is None
+        except FileNotFoundError:
+            absent = False
+        if absent:
+            row = _on_demand_row(label, "rw_icechunk", "--output-format icechunk",
+                                 crate_relative="tools/rw_icechunk")
+            if row is not None:
+                return row
+    return _byte_contract_door_check(
+        label=label, name="rw_icechunk",
+        env_var="WOOF_RW_ICECHUNK", find=find,
+        remedy=output_formats.remedy, door="--output-format icechunk",
+        missing_severity=SEVERITY_UNREACHABLE)
+
+
 def _ml_export_check() -> Check:
     """``rw_mlexport``, the binary behind ``woof ml-export``.
 
@@ -3464,33 +3788,45 @@ def _ml_export_check() -> Check:
     from woof import ml_export
 
     binary = ml_export.BINARY
-    label = f"ML dataset exporter ({binary.name})"
-    door = "woof ml-export"
+    # On demand since 2.9.11 (PyPI per-file limit): the first export stages it.
+    row = _absent_on_demand_row(f"ML dataset exporter ({binary.name})", binary.name,
+                                binary.env_var, binary.find, "woof ml-export")
+    if row is not None:
+        return row
+    return _byte_contract_door_check(
+        label=f"ML dataset exporter ({binary.name})", name=binary.name,
+        env_var=binary.env_var, find=binary.find, remedy=binary.remedy,
+        door="woof ml-export", missing_severity=SEVERITY_UNREACHABLE)
+
+
+def _byte_contract_door_check(*, label, name, env_var, find, remedy,
+                              door, missing_severity) -> Check:
+    """Resolve an executable and judge the contract marker in its bytes."""
     try:
-        found = binary.find()
+        found = find()
     except FileNotFoundError as error:
         return Check(
             label, "missing", f"{error} -- {door} cannot run",
-            f"# {binary.env_var} names a missing executable: point it at a "
-            "real build, or unset it --\n" + binary.remedy(),
-            action=f"unset {binary.env_var}, or point it at a build",
-            brief=f"{binary.env_var} names a missing file",
+            f"# {env_var} names a missing executable: point it at a "
+            "real build, or unset it --\n" + remedy(),
+            action=f"unset {env_var}, or point it at a build",
+            brief=f"{env_var} names a missing file",
             group=_GROUP_ENGINES, blocking=False,
-            severity=SEVERITY_UNREACHABLE)
+            severity=missing_severity)
     if found is None:
         return Check(
             label, "missing", f"not built and not staged -- {door} cannot run",
-            binary.remedy(), action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+            remedy(), action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
             brief=f"not staged; {door} cannot run",
             group=_GROUP_ENGINES, blocking=False,
-            severity=SEVERITY_UNREACHABLE)
-    ok, evidence = bridges.bridge_abi_matches(binary.name, found)
+            severity=missing_severity)
+    ok, evidence = bridges.bridge_abi_matches(name, found)
     if not ok:
         return Check(
             label, "missing", f"{found} -- {evidence}; {door} would hand it a "
             "request it does not speak",
             "# this one is STALE, so re-point does not help; rebuild it:\n"
-            + binary.remedy(),
+            + remedy(),
             action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
             brief="stale build; rebuild it", group=_GROUP_ENGINES,
             blocking=False, severity=SEVERITY_BROKEN)
@@ -3582,6 +3918,50 @@ def _verification_engine_check() -> Check:
         missing_severity=SEVERITY_DEGRADED)
 
 
+def _probe_ensemble_reducer(path) -> tuple[bool, str]:
+    """The refusal :func:`woof.rustwx.require_ensemble_diagnostic_reducer`
+    applies before any ensemble member starts, as a door probe."""
+
+    import subprocess
+
+    from woof import rustwx
+
+    try:
+        rustwx.require_ensemble_diagnostic_reducer(path)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        return False, str(error)
+    return True, ("--ensemble-diagnostic-reduce-abi "
+                  + rustwx.CPU_ENSEMBLE_REDUCTION_ABI)
+
+
+def _ensemble_reducer_check() -> Check:
+    """``rw_ensbatch``, the native ensemble diagnostic reducer.
+
+    The bundle carries it (woof.bridge_assets, WOOF_ENSEMBLE_RENDERER)
+    and the ensemble route refuses before its members start when it is
+    missing or older than the reduction contract; with no line here a box
+    whose copy was stale showed a green estate until an ensemble run was
+    already queued.  Degraded rather than unreachable: single forecasts do
+    not use it.
+    """
+
+    from woof import rustwx
+
+    filename = bridges.executable_name("rw_ensbatch")
+    return _rustwx_door_check(
+        label="ensemble reducer (rw_ensbatch)",
+        env_var="WOOF_ENSEMBLE_RENDERER",
+        find=lambda: rustwx.find_ensemble_product_renderer(None),
+        remedy=bridges.artifact_remedy(
+            env_var="WOOF_ENSEMBLE_RENDERER", filename=filename,
+            subject="the ensemble reducer",
+            crate_relative=bridges.RUSTWX_CRATE_RELATIVE,
+            one_liner=bridges.rustwx_build_hint(), artifact="rw_ensbatch"),
+        doors=(("ensemble diagnostic reduction and aggregate product "
+                "rendering", _probe_ensemble_reducer),),
+        missing_severity=SEVERITY_DEGRADED)
+
+
 def _comparison_engine_check() -> Check:
     """``rw_compare``, the reference-model comparison engine.
 
@@ -3605,6 +3985,407 @@ def _comparison_engine_check() -> Check:
                 rustwx_lanes.probe_compare_reference_bin)))
 
 
+def _grib2_export_check() -> Check:
+    """``rw_grib2export``, the binary behind ``woof export-grib2``.
+
+    Held out of 2.8.6 with its binary (30dda9aeb dropped this line then);
+    2.8.7 bundles the clean-room exporter again, so the line returns.
+    Without it the native GRIB2 history export, and the live GRIB2 output a
+    run writes as frames land, cannot run; nothing else is touched.  Judged
+    by the exporter's own ``--abi`` probe, the one its door refuses by.
+    """
+
+    from woof import grib2_export
+
+    binary = grib2_export.BINARY
+    return _rustwx_door_check(
+        label=f"GRIB2 exporter ({binary.name})",
+        env_var=binary.env_var, find=binary.find, remedy=binary.remedy(),
+        doors=(("woof export-grib2 and a run's live --grib2 output",
+                binary.probe),))
+
+
+def _gpu_post_kernels_check() -> Check:
+    """Do the GPU post kernels load on this card?
+
+    Breakage this names: through 2.9.0 the exporter's PTX (NVRTC 13.4,
+    PTX ISA 9.4) was refused by drivers older than CUDA 13.4 (measured on
+    595.91, CUDA 13.2: ``CUDA_ERROR_UNSUPPORTED_PTX_VERSION``), so on
+    every card without an embedded CUBIN ``--grib2`` and ``export-grib2``
+    computed every product on the CPU and said so only in manifest.json.
+    Judged by the exporter's own ``--probe-post-device``, which opens the
+    card the way a run does.  Degraded, never blocking: the CPU path
+    writes the same bytes, only slower.
+    """
+
+    from woof import grib2_export
+
+    name = "GPU post kernels (GRIB2 products on the GPU)"
+    if no_local_gpu():
+        return Check(name, "untested",
+                     "not tested: GPUWM_NO_LOCAL_GPU is set, so the card is not opened",
+                     brief="not tested (GPUWM_NO_LOCAL_GPU)", group=_GROUP_ENGINES)
+    try:
+        exe = grib2_export.BINARY.find()
+    except (FileNotFoundError, RuntimeError):
+        exe = None
+    if exe is None:
+        return Check(name, "untested",
+                     "not tested: the GRIB2 exporter is not staged (see its own line)",
+                     brief="not tested (no exporter)", group=_GROUP_ENGINES)
+    probe = grib2_export.probe_post_device(exe)
+    if probe is None:
+        return Check(name, "untested",
+                     f"not tested: {exe} has no --probe-post-device (an older build)",
+                     brief="not tested (older exporter)", group=_GROUP_ENGINES)
+    floor = probe.get("ptx_driver_floor") or "CUDA 12.0"
+    if probe.get("ok"):
+        return Check(name, "verified", str(probe.get("device")),
+                     brief=str(probe.get("device")), group=_GROUP_ENGINES)
+    if not probe.get("driver"):
+        return Check(name, "info",
+                     f"no NVIDIA driver: GRIB2 products are computed on the CPU ({probe.get('error')})",
+                     brief="no NVIDIA driver; GRIB2 post on the CPU", group=_GROUP_ENGINES)
+    if probe.get("operation") not in (None, "load post kernels", "resolve post kernel"):
+        # No card to judge (none visible, or it would not open): not a
+        # driver-floor gap, and the forecast's own GPU lines say why.
+        return Check(name, "untested",
+                     f"not tested: no CUDA device opened ({probe.get('error')}); GRIB2 products "
+                     "would be computed on the CPU",
+                     brief="not tested (no CUDA device opened)", group=_GROUP_ENGINES)
+    return Check(
+        name, "missing",
+        f"the card did not load the post kernels, so --grib2 and export-grib2 compute every "
+        f"product on the CPU (the same bytes, slower): {probe.get('error')}",
+        "# GRIB2 output stays correct on the CPU.  To compute it on the GPU, install an\n"
+        f"# NVIDIA driver at or above {floor}, then rerun `woof doctor`.",
+        action=f"update the NVIDIA driver ({floor} or newer)",
+        brief="kernels refused by the driver; GRIB2 post on the CPU",
+        group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_DEGRADED)
+
+
+def _nowcast_frames_check() -> Check:
+    """``rw_nowcast_frames``, the NetCDF nowcast to frames-root converter.
+
+    One door, ``rw_nowcast_frames from-netcdf``, judged by
+    :func:`woof.rustwx_lanes.probe_nowcast_frames_bin` (the ``--abi``
+    line), the probe :func:`woof.rustwx_lanes.require_nowcast_frames_bin`
+    refuses by.  Degraded rather than unreachable when absent: forecasts,
+    renders and the in-tree nowcast runner (which writes the frames
+    contract itself) are untouched; only a NetCDF nowcast cannot reach a
+    comparison sheet.
+    """
+
+    from woof import rustwx_lanes
+
+    return _rustwx_door_check(
+        label=f"nowcast frames converter ({rustwx_lanes.NOWCAST_FRAMES_NAME})",
+        env_var=rustwx_lanes.NOWCAST_FRAMES_ENV,
+        find=rustwx_lanes.find_nowcast_frames_bin,
+        remedy=rustwx_lanes.nowcast_frames_remedy(),
+        doors=(("rw_nowcast_frames from-netcdf (NetCDF nowcasts onto the "
+                "comparison sheets)", rustwx_lanes.probe_nowcast_frames_bin),),
+        missing_severity=SEVERITY_DEGRADED)
+
+
+def _observation_scorecard_check() -> Check:
+    """``rw_scorecard``, the native standing observation scorecard.
+
+    One door, ``woof obs scorecard``, judged by the bundle contract
+    marker :func:`woof.obs.scorecard.binary` refuses by.  Degraded rather
+    than unreachable when absent: forecasts and renders are untouched;
+    only the recorded-case scorecard cannot run.
+    """
+
+    from woof.obs import scorecard
+
+    def probe(path):
+        return bridges.bridge_abi_matches("rw_scorecard", path)
+
+    filename = bridges.executable_name("rw_scorecard")
+    return _rustwx_door_check(
+        label="observation scorecard (rw_scorecard)",
+        env_var="WOOF_RW_SCORECARD",
+        find=scorecard.find_binary,
+        remedy=bridges.artifact_remedy(
+            env_var="WOOF_RW_SCORECARD", filename=filename,
+            subject="the observation scorecard",
+            crate_relative=bridges.RUSTWX_CRATE_RELATIVE,
+            one_liner=bridges.rustwx_build_hint(), artifact="rw_scorecard"),
+        doors=(("woof obs scorecard", probe),),
+        missing_severity=SEVERITY_DEGRADED)
+
+
+def _forecast_scoreboard_check() -> Check:
+    """``rw_scoreboard``, the forecast verification scorer.
+
+    One door, ``woof scoreboard --request``, judged by
+    :func:`woof.scoreboard.probe` (the ``--abi`` line), the refusal that
+    door applies.  Degraded rather than unreachable when absent: only the
+    scoreboard requests cannot run.
+    """
+
+    from woof import scoreboard
+
+    label = "forecast verification scorer (rw_scoreboard)"
+    row = _absent_on_demand_row(label, scoreboard.BINARY.name, scoreboard.BINARY.env_var,
+                                scoreboard.BINARY.find, "woof scoreboard --request")
+    if row is not None:
+        return row
+    return _rustwx_door_check(
+        label=label,
+        env_var=scoreboard.BINARY.env_var,
+        find=scoreboard.BINARY.find,
+        remedy=scoreboard.BINARY.remedy(),
+        doors=(("woof scoreboard --request", scoreboard.probe),),
+        missing_severity=SEVERITY_DEGRADED)
+
+
+def _tc_fields_check() -> Check:
+    """``rw_tc_fields``, the cyclone field reader behind ``woof tc-tracks``.
+
+    Resolved through the same ladder :func:`woof.tc_tracks.binary` walks
+    (``WOOF_RW_TC_FIELDS``, the staged bundle, the rustwx build) and judged
+    stale out of its bytes, as ``woof fetch-bridges`` judges it.  Degraded
+    rather than unreachable when absent: forecasts and renders are
+    untouched; only cyclone tracking on finished output cannot run.
+    """
+
+    name = "rw_tc_fields"
+    env_var = "WOOF_RW_TC_FIELDS"
+    filename = bridges.executable_name(name)
+    label = f"cyclone field reader ({name})"
+    door = "woof tc-tracks"
+    remedy = bridges.artifact_remedy(
+        env_var=env_var, filename=filename,
+        subject="the cyclone field reader",
+        crate_relative=bridges.RUSTWX_CRATE_RELATIVE,
+        one_liner=bridges.rustwx_build_hint(), artifact=name)
+    row = _absent_on_demand_row(label, name, env_var, lambda: bridges.find_artifact(
+        env_var, filename, crate_relative=bridges.RUSTWX_CRATE_RELATIVE), door)
+    if row is not None:
+        return row
+    return _byte_contract_door_check(
+        label=label, name=name, env_var=env_var,
+        find=lambda: bridges.find_artifact(
+            env_var, filename, crate_relative=bridges.RUSTWX_CRATE_RELATIVE),
+        remedy=lambda: remedy, door=door, missing_severity=SEVERITY_DEGRADED)
+
+
+#: The 2.9.4 capability lanes' tools that are not obs front doors, with the
+#: door each one serves (cap-fire-indices, cap-fzra, cap-waves-couple,
+#: cap-slab-ocean, cap-surge).
+_CAPABILITY_TOOLS = {
+    "rw_fire_indices": ("fire danger indices", "the stateful FWI/KBDI door (woof.fire_danger_state)"),
+    "rw_ice_verify": ("ice observation binding", "freezing-rain verification (woof.ensemble.ice_accretion verify)"),
+    "rw_ocean": ("ocean preparation", "the coupled ocean door (woof.ocean.door)"),
+    "rw_bathy": ("surge bathymetry", "the storm-surge door (woof.ocean.surge)"),
+    "rw_ocean_verify": ("ocean SST verification", "ocean SST verification (woof.ocean.mixed_layer.verify)"),
+    # labs/windfarm (2.9.11): the turbine-inventory decoder behind --wind-farms.
+    "rw-wind-table": ("wind turbine tables", "the wind-farm doors (woof go --wind-farms, woof.wind_inputs)"),
+}
+
+
+def _capability_tool_checks() -> list[Check]:
+    """The capability lanes' five non-front-door tools, one line each.
+
+    Breakage it prevents: the 2.9.4 capability lanes bundled rw_fire_indices,
+    rw_ice_verify, rw_ocean, rw_ocean_verify and rw_bathy with no doctor line, so an
+    install whose fire danger, ice verification, ocean or surge doors could not run
+    read green (tests/test_doctor_route_accuracy.py::
+    test_every_bundled_artifact_is_covered_by_a_check).  Each tool is resolved
+    through the artifact ladder without fetching, an absent on-demand tool gets
+    the on-demand row, and a present one is judged stale out of its bytes
+    against its BRIDGE_ABI_MARKERS contract.  Degraded, never blocking:
+    forecasts are untouched; only that door cannot run.
+    """
+    from woof import bridge_assets
+
+    checks = []
+    for artifact in bridge_assets.BUNDLED_ARTIFACTS:
+        if artifact.name not in _CAPABILITY_TOOLS:
+            continue
+        subject, door = _CAPABILITY_TOOLS[artifact.name]
+        label = f"{subject} ({artifact.name})"
+        filename = bridge_assets.artifact_filename(
+            artifact, bridge_assets.host_platform() or "linux-x86_64")
+        remedy = bridges.artifact_remedy(
+            env_var=artifact.env_var, filename=filename, subject=subject,
+            crate_relative=artifact.crate, artifact=artifact.name)
+        with bridges.inspection_only():
+            candidates = bridges.artifact_candidates(
+                artifact.env_var, filename, crate_relative=artifact.crate)
+        found = next((candidate for candidate in candidates
+                      if candidate.is_file() and os.access(candidate, os.X_OK)), None)
+        if found is None:
+            row = (_on_demand_row(label, artifact.name, door, crate_relative=artifact.crate)
+                   if artifact.on_demand and not os.environ.get(artifact.env_var) else None)
+            if row is not None:
+                checks.append(row)
+                continue
+            checks.append(Check(
+                label, "missing", f"{filename} not built and not staged -- {door} cannot run",
+                remedy, action=_build_action(artifact.crate),
+                brief=f"not staged; {door} cannot run", group=_GROUP_ENGINES,
+                severity=SEVERITY_DEGRADED, blocking=False))
+            continue
+        ok, evidence = bridges.bridge_abi_matches(artifact.name, found)
+        if not ok:
+            checks.append(Check(
+                label, "missing", f"{found} -- {evidence}",
+                "# this one is STALE, so re-point does not help; rebuild it:\n" + remedy,
+                action=_build_action(artifact.crate), brief="stale build; rebuild it",
+                group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_BROKEN))
+            continue
+        checks.append(Check(label, "verified", f"{found} -- {evidence}", group=_GROUP_ENGINES))
+    return checks
+
+
+def _earth2_runtime_checks() -> list[Check]:
+    """The Earth2Studio interpreter and the TempestExtremes tools ``woof tc-tracks`` runs.
+
+    Breakage these lines prevent (2.9.3 door 6, G12, 2026-10-20): on a fresh install every
+    tc-tracks backend refused and earth2-diagnose stopped, while this report checked only
+    ``rw_tc_fields`` and said nothing.  Resolved through :mod:`woof.earth2_env`, the same lookup
+    the doors use.  Absent while the doors may build the managed environment on first use, a row is
+    opt-in, as an on-demand bridge is before its first fetch; with WOOF_EARTH2_FETCH=0 the doors
+    refuse instead, so it is degraded.  Breakage the opt-in prevents (2.9.4 R15 at 2147c15faf,
+    RTX 4090, 2026-10-22): every bare pip install reported both rows degraded and failed the defaults
+    leg's doctor row although the first tc-tracks or earth2-diagnose call builds them.
+    """
+    from woof import earth2_env
+
+    absent = SEVERITY_OPT_IN if earth2_env.fetch_allowed() else SEVERITY_DEGRADED
+    checks = []
+    label = "Earth2Studio interpreter (tc-tracks wuduan/vitart, earth2-diagnose)"
+    try:
+        found, notes = earth2_env.find_python(("cyclone",))
+    except Exception as error:  # a broken table must still print a line
+        found, notes = None, [f"{type(error).__name__}: {error}"]
+    if found:
+        checks.append(Check(label, "verified", f"{found} -- earth2studio with the [cyclone] extra"))
+    else:
+        detail = "not found -- " + ("; ".join(notes) or "no candidate")
+        checks.append(Check(
+            label, "missing", detail, "# " + earth2_env.remedy(("cyclone",)),
+            action=earth2_env.SETUP_COMMAND,
+            brief="missing; built on first use or by " + earth2_env.SETUP_COMMAND,
+            blocking=False, severity=absent))
+    label = "TempestExtremes DetectNodes/StitchNodes (tc-tracks --backend tempestextremes)"
+    try:
+        tools = [earth2_env.find_tool(name) for name in earth2_env.TEMPEST_TOOLS]
+        problem = None
+    except ValueError as error:
+        tools, problem = [None, None], str(error)
+    if all(tools):
+        checks.append(Check(label, "present", " ".join(tools)))
+    else:
+        missing = [n for n, t in zip(earth2_env.TEMPEST_TOOLS, tools) if not t]
+        checks.append(Check(
+            label, "missing", problem or f"{', '.join(missing)} not found (WOOF_DETECTNODES/"
+            f"WOOF_STITCHNODES, PATH, {earth2_env.managed_tool_dir()})",
+            "# " + earth2_env.tempest_remedy(), action=earth2_env.SETUP_COMMAND,
+            brief="missing; built on first use or by " + earth2_env.SETUP_COMMAND,
+            blocking=False, severity=absent))
+    return checks
+
+
+def _absent_on_demand_row(label: str, artifact: str, env_var: str, find, door: str) -> Check | None:
+    """The on-demand row when ``artifact`` resolves nowhere and no override names it, else None.
+
+    Breakage it prevents: rw_scoreboard and rw_tc_fields went on demand in 2.9.4 (PyPI per-file
+    limit), and their rows would read "not built and not staged" on a fresh install whose first
+    use stages them.  A set override, a present build or a missing pin falls through to the
+    ordinary line.
+    """
+    if os.environ.get(env_var):
+        return None
+    try:
+        with bridges.inspection_only():
+            found = find()
+    except (FileNotFoundError, RuntimeError):
+        return None
+    if found is not None:
+        return None
+    return _on_demand_row(label, artifact, door)
+
+
+def _on_demand_row(label: str, artifact: str, door: str, *,
+                   crate_relative: str = bridges.RUSTWX_CRATE_RELATIVE) -> Check | None:
+    """The on-demand row for an absent artifact the platform wheel leaves to the bundle, or None.
+
+    The row the obs front doors get (``on demand; staged by its first fetch``), for the other
+    artifacts that are on demand.  Breakage it prevents (2.9.3 pass 23 R12, Windows wheel smoke):
+    rw_soundings and rw_nextgen_verify went on demand in 3b66d4c13ce, but their rows still said
+    "not staged; its doors cannot run", which a fresh install contradicts: the first use stages them.
+    """
+    if not bridges.on_demand_fetch_offered(artifact, crate_relative):
+        return None
+    return Check(
+        label, "missing",
+        "not staged yet -- it is fetched on demand: the platform wheel does not carry it, and "
+        f"the first `{door}` that needs it stages it from this release's bundle",
+        f"woof fetch-bridges --partial --artifact {artifact}",
+        action=f"woof fetch-bridges --partial --artifact {artifact}",
+        brief="on demand; staged by its first fetch",
+        group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_OPT_IN)
+
+
+def _sounding_renderer_check() -> Check:
+    """``rw_soundings``, the website-style sounding window renderer.
+
+    One door, ``woof soundings``, judged by :func:`woof.soundings.probe`
+    (the ``--abi`` line), the refusal that door applies.  Degraded rather
+    than unreachable when absent: forecasts and renders are untouched; only
+    the sounding product cannot be drawn.
+
+    A build the door accepts is then asked to create its render device
+    (:func:`woof.soundings.device`).  Breakage this prevents: the ``--abi``
+    line alone read green on a headless server without the Vulkan loader
+    where every render panicked creating its device.  The line names the
+    device (GPU adapter, or the CPU rasteriser and why no GPU was usable).
+    """
+
+    from woof import soundings
+
+    label = "sounding window renderer (rw_soundings)"
+    filename = bridges.executable_name("rw_soundings")
+    try:
+        absent = soundings.find_binary() is None
+    except FileNotFoundError:
+        absent = False          # a named override that is missing: the door check reports it
+    if absent:
+        row = _on_demand_row(label, "rw_soundings", "woof soundings")
+        if row is not None:
+            return row
+    door = _rustwx_door_check(
+        label=label,
+        env_var=soundings.ENV,
+        find=soundings.find_binary,
+        remedy=bridges.artifact_remedy(
+            env_var=soundings.ENV, filename=filename,
+            subject="the sounding window renderer",
+            crate_relative=bridges.RUSTWX_CRATE_RELATIVE,
+            one_liner=bridges.rustwx_build_hint(), artifact="rw_soundings"),
+        doors=(("woof soundings", soundings.probe),),
+        missing_severity=SEVERITY_DEGRADED)
+    if door.status != "verified":
+        return door
+    found = soundings.find_binary()
+    ok, evidence = soundings.device(found)
+    if ok:
+        return Check(label, "verified", f"{door.detail}; render device: {evidence}",
+                     group=_GROUP_ENGINES)
+    return Check(
+        label, "missing", f"{found} -- cannot create a render device: {evidence}",
+        "# install the Vulkan loader for GPU rendering, or let the CPU rasteriser draw:\n"
+        "sudo apt-get install -y libvulkan1\n"
+        f"unset {soundings.RENDERER_ENV}",
+        action="sudo apt-get install -y libvulkan1",
+        brief="no render device", group=_GROUP_ENGINES, blocking=False,
+        severity=SEVERITY_DEGRADED)
+
+
 def _simulated_radar_check() -> Check:
     """Check the optional native radar capability without touching a GPU.
 
@@ -3626,9 +4407,18 @@ def _simulated_radar_check() -> Check:
                      brief=f"{SIMULATED_RADAR_ENV} names a missing file",
                      group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_UNREACHABLE)
     if found is None:
-        return Check(label, "missing", "not staged; simulated radar cannot run", remedy,
-                     action=build, brief="not staged; simulated radar cannot run",
-                     group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_UNREACHABLE)
+        # On demand since 2.9.11 (PyPI per-file limit): a fresh install's
+        # first radar door stages it, so the row says that, not "cannot run".
+        row = (None if os.environ.get(SIMULATED_RADAR_ENV) else
+               _on_demand_row(label, "rw_simradar",
+                              "woof simulated-radar or [simulated_radar] run"))
+        if row is not None:
+            return row
+        return Check(label, "missing",
+                     "not staged; simulated radar cannot run" ,
+                     remedy, action=build, brief="not staged; simulated radar cannot run",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_UNREACHABLE)
     ok, evidence = bridges.bridge_abi_matches("rw_simradar", found)
     return Check(label, "verified" if ok else "missing", f"{found}: {evidence}",
                  None if ok else remedy, action=None if ok else build,
@@ -3813,17 +4603,7 @@ def _netcdf_decoder_check() -> Check:
 
 
 def _mapped_engine_check() -> Check:
-    """The mapped decode engine, and whether a bare mapped run needs it.
-
-    Two verdicts from one probe, because the answer genuinely depends on
-    which engine is the default: while the default is the Python engine
-    an absent binary costs nothing and saying ``missing`` would be a
-    false alarm, and the moment the default flips an absent binary costs
-    every mapped source and anything softer than ``missing`` would be
-    the ``ok``-on-a-dead-route defect this report exists to prevent.
-    The check reads :data:`woof.mapped_engine_bridge.DEFAULT_ENGINE`
-    rather than restating it, so the flip moves this line with it.
-    """
+    """The default mapped decoder (Rust since 10ef633138d), with its gaps."""
 
     name = "mapped decode engine (woof prep --source mapped)"
     try:
@@ -3836,8 +4616,6 @@ def _mapped_engine_check() -> Check:
                      brief="mapped_engine_bridge not importable",
                      group=_GROUP_ENGINES)
     default = engine_bridge.DEFAULT_ENGINE
-    blocker = engine_bridge.DEFAULT_ENGINE_BLOCKER
-    required = default == engine_bridge.ENGINE_RUST
     try:
         found = engine_bridge.find_engine()
     except FileNotFoundError as error:
@@ -3856,48 +4634,55 @@ def _mapped_engine_check() -> Check:
             "no prebuilt executable (searched "
             + ", ".join(str(c) for c in engine_bridge.engine_candidates())
             + ")")
-        if required:
-            return Check(
-                name, "missing",
-                f"{detail} -- blocks every mapped source, which is the "
-                "default decode path",
-                engine_bridge.engine_remedy_lines("it is not staged"),
-                action=_build_action(engine_bridge.ENGINE_CRATE_RELATIVE),
-                brief="not staged; no mapped source can be read",
-                group=_GROUP_ENGINES)
         return Check(
-            name, "info",
-            f"{detail}. Mapped sources decode on the {default} engine on "
-            f"this release, so nothing is blocked: {blocker}",
+            name, "missing",
+            f"{detail} -- blocks every mapped source, which is the "
+            "default decode path",
             engine_bridge.engine_remedy_lines("it is not staged"),
             action=_build_action(engine_bridge.ENGINE_CRATE_RELATIVE),
-            brief=f"not staged; mapped decode runs on {default}",
-            group=_GROUP_ENGINES, blocking=False)
+            brief="not staged; no mapped source can be read",
+            group=_GROUP_ENGINES)
     matches, reason = bridges.bridge_abi_matches(
         engine_bridge.ENGINE_NAME, found)
     if not matches:
         return Check(
-            name, "missing" if required else "info",
+            name, "missing",
             f"{found} {reason}",
             engine_bridge.engine_remedy_lines(reason),
             action=_build_action(engine_bridge.ENGINE_CRATE_RELATIVE),
             brief="staged build predates this release's frameset contract",
-            group=_GROUP_ENGINES, blocking=required)
-    if required:
-        # The paths still routed to Python are named HERE rather than
-        # left for a reader to discover from a receipt: this line is
-        # what a user reads to learn where their bytes are decoded, and
-        # "the Rust engine is the default" without the exceptions would
-        # be a true sentence that leaves a false impression.
-        suffix = "".join(f"; {gap}" for gap in engine_bridge.ENGINE_GAPS)
-    else:
-        suffix = (f"; mapped decode runs on the {default} engine by default "
-                  f"on this release -- {blocker}")
+            group=_GROUP_ENGINES, blocking=True)
+    # The paths still routed to Python are named HERE rather than
+    # left for a reader to discover from a receipt: this line is
+    # what a user reads to learn where their bytes are decoded, and
+    # "the Rust engine is the default" without the exceptions would
+    # be a true sentence that leaves a false impression.
+    suffix = "".join(f"; {gap}" for gap in engine_bridge.ENGINE_GAPS)
     return Check(
         name, "verified", f"{found} speaks {engine_bridge.FRAMESET_SCHEMA}"
         + suffix,
         brief=f"staged; default engine is {default}",
         group=_GROUP_ENGINES)
+
+
+def _library_check(name, bridge, *, resolve, abi, remedy, consequence,
+                   brief, missing_errors=(FileNotFoundError,)) -> Check:
+    """Resolve and load a library through its own seam, retaining ABI evidence."""
+    try:
+        path = getattr(bridge, resolve)()
+    except missing_errors as error:
+        return Check(
+            name, "missing", f"{error} -- {consequence}", remedy,
+            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+            brief=f"not staged; {brief}", group=_GROUP_ENGINES)
+    reason = bridge.unavailable_reason()
+    if reason is not None:
+        return Check(
+            name, "missing", f"{path} -- {reason} -- {consequence}", remedy,
+            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+            brief=f"not loadable; {brief}", group=_GROUP_ENGINES)
+    return Check(name, "verified", f"{path} -- ABI {getattr(bridge, abi)}",
+                 brief="staged", group=_GROUP_ENGINES)
 
 
 def _ncwrite_check() -> Check:
@@ -3939,24 +4724,10 @@ def _ncwrite_check() -> Check:
         "  # WOOF_WRFINPUT_WRITER=python (the WRF input pair) select the\n"
         "  # netCDF4 writer as an explicit workaround, each onto its own\n"
         "  # HDF5 container (NETCDF4_CLASSIC / NETCDF4)")
-    try:
-        path = nc_writer_bridge.resolve_ncwrite_bridge()
-    except FileNotFoundError as error:
-        return Check(
-            name, "missing", f"{error} -- {blocks}", remedy,
-            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not staged; default history/WRF-input writes blocked",
-            group=_GROUP_ENGINES)
-    reason = nc_writer_bridge.unavailable_reason()
-    if reason is not None:
-        return Check(
-            name, "missing", f"{path} -- {reason} -- {blocks}", remedy,
-            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not loadable; default history/WRF-input writes blocked",
-            group=_GROUP_ENGINES)
-    return Check(name, "verified",
-                 f"{path} -- ABI {nc_writer_bridge.NCWRITE_ABI}",
-                 brief="staged", group=_GROUP_ENGINES)
+    return _library_check(
+        name, nc_writer_bridge, resolve="resolve_ncwrite_bridge", abi="NCWRITE_ABI",
+        remedy=remedy, consequence=blocks,
+        brief="default history/WRF-input writes blocked")
 
 
 def _static_builder_check() -> Check:
@@ -3999,24 +4770,10 @@ def _static_builder_check() -> Check:
         "\n  # WOOF_STATIC_PYTHON=1 selects the numpy fallback as an\n"
         "  # explicit workaround (byte-identical fields, measured ~11x\n"
         "  # slower at corridor scale)")
-    try:
-        path = rust_bridge.resolve_static_bridge()
-    except FileNotFoundError as error:
-        return Check(
-            name, "missing", f"{error} -- {degrades}", remedy,
-            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not staged; static builds degrade to the fallback",
-            group=_GROUP_ENGINES)
-    reason = rust_bridge.unavailable_reason()
-    if reason is not None:
-        return Check(
-            name, "missing", f"{path} -- {reason} -- {degrades}", remedy,
-            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not loadable; static builds degrade to the fallback",
-            group=_GROUP_ENGINES)
-    return Check(name, "verified",
-                 f"{path} -- ABI {rust_bridge.STATIC_ABI}",
-                 brief="staged", group=_GROUP_ENGINES)
+    return _library_check(
+        name, rust_bridge, resolve="resolve_static_bridge", abi="STATIC_ABI",
+        remedy=remedy, consequence=degrades,
+        brief="static builds degrade to the fallback")
 
 
 def _obs_regrid_check() -> Check:
@@ -4063,24 +4820,10 @@ def _obs_regrid_check() -> Check:
         "\n  # WOOF_OBSREGRID_PYTHON=1 selects the scipy fallback as an\n"
         "  # explicit workaround (bit-identical everywhere except exact\n"
         "  # neighbour ties, where scipy has no defined answer)")
-    try:
-        path = regrid_bridge.resolve_obsregrid_bridge()
-    except FileNotFoundError as error:
-        return Check(
-            name, "missing", f"{error} -- {degrades}", remedy,
-            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not staged; observation scores degrade to the fallback",
-            group=_GROUP_ENGINES)
-    reason = regrid_bridge.unavailable_reason()
-    if reason is not None:
-        return Check(
-            name, "missing", f"{path} -- {reason} -- {degrades}", remedy,
-            action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not loadable; observation scores degrade to the fallback",
-            group=_GROUP_ENGINES)
-    return Check(name, "verified",
-                 f"{path} -- ABI {regrid_bridge.OBSREGRID_ABI}",
-                 brief="staged", group=_GROUP_ENGINES)
+    return _library_check(
+        name, regrid_bridge, resolve="resolve_obsregrid_bridge", abi="OBSREGRID_ABI",
+        remedy=remedy, consequence=degrades,
+        brief="observation scores degrade to the fallback")
 
 
 def _noah_init_check() -> Check:
@@ -4128,6 +4871,135 @@ def _obs_score_check() -> Check:
                  brief="staged", group=_GROUP_ENGINES)
 
 
+def _globe_pack_check() -> Check:
+    """``rw_globe_pack``, the global globe frame and statics packer (2.8.9).
+
+    The global worker publishes globe frames and resolves verified baked
+    statics through it, judged by its ABI marker. Non-blocking and degraded
+    when absent: regional, hex and ensemble forecasts never call it, but a
+    global run falls back to building its statics natively (about 2,000 s
+    at T255) and cannot pack its globe frames.
+    """
+
+    name = "global globe packer (rw_globe_pack)"
+    filename = bridges.executable_name("rw_globe_pack")
+    remedy = bridges.artifact_remedy(
+        env_var="WOOF_RW_GLOBE_PACK", filename=filename,
+        subject="the global globe packer",
+        crate_relative=bridges.RUSTWX_CRATE_RELATIVE,
+        one_liner=bridges.rustwx_build_hint(), artifact="rw_globe_pack")
+    degrades = ("global runs build their statics natively and cannot pack "
+                "globe frames")
+    # The packer is built in tools/rustwx (the remedy's own command), so a
+    # checkout's tools/rustwx/target rung comes before the shared resolver,
+    # whose checkout rung is tools/grib1_bridge.  Without it a fresh
+    # `bash install.sh` built rw_globe_pack and doctor still reported it
+    # missing, with a remedy that rebuilt the same file.
+    try:
+        path = None
+        if not os.environ.get("WOOF_RW_GLOBE_PACK"):
+            for built in (rustwx.crate_dir() / "target" / "release" / filename,
+                          rustwx.crate_dir() / "target" / "debug" / filename):
+                if built.is_file():
+                    path = bridges.accept_resolved(built.resolve())
+                    break
+        if path is None:
+            path = bridges.find_artifact("WOOF_RW_GLOBE_PACK", filename)
+    except FileNotFoundError as error:
+        path, reason = None, str(error)
+    else:
+        reason = None if path is not None else f"{filename} is not staged"
+    if path is None:
+        return Check(name, "missing",
+                     f"{reason} -- {degrades}", remedy,
+                     action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+                     brief="not staged; global statics build natively",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    marker = bridges.BRIDGE_ABI_MARKERS["rw_globe_pack"]
+    try:
+        carries = marker in path.read_bytes()
+    except OSError as error:
+        carries, reason = False, f"unreadable ({error})"
+    if not carries:
+        return Check(name, "missing",
+                     f"{path} -- {reason or 'does not carry the ' + marker.decode() + ' contract'} "
+                     f"-- {degrades}", remedy,
+                     action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+                     brief="stale build; global statics build natively",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    return Check(name, "verified", f"{path} -- ABI {marker.decode()}",
+                 brief="staged", group=_GROUP_ENGINES)
+
+
+def _probgrid_check() -> Check:
+    """``rw_probgrid``, the fixed-ladder probability map renderer (2.9.9).
+
+    Draws a precomputed probability field (a post-processed severe
+    probability) on a fixed ladder through the production panel path,
+    judged by its ABI marker. Non-blocking and degraded when absent:
+    forecasts and every other map are untouched; only those probability
+    maps cannot be drawn.
+    """
+
+    name = "probability map renderer (rw_probgrid)"
+    filename = bridges.executable_name("rw_probgrid")
+    remedy = bridges.artifact_remedy(
+        env_var="WOOF_RW_PROBGRID", filename=filename,
+        subject="the probability map renderer",
+        crate_relative=bridges.RUSTWX_CRATE_RELATIVE,
+        one_liner=bridges.rustwx_build_hint(), artifact="rw_probgrid")
+    degrades = "fixed-ladder probability maps are not drawn"
+    # Built in tools/rustwx like rw_globe_pack, so a checkout's
+    # tools/rustwx/target rung comes before the shared resolver.
+    try:
+        path = None
+        if not os.environ.get("WOOF_RW_PROBGRID"):
+            for built in (rustwx.crate_dir() / "target" / "release" / filename,
+                          rustwx.crate_dir() / "target" / "debug" / filename):
+                if built.is_file():
+                    path = bridges.accept_resolved(built.resolve())
+                    break
+        if path is None:
+            path = bridges.find_artifact("WOOF_RW_PROBGRID", filename)
+    except FileNotFoundError as error:
+        path, reason = None, str(error)
+    else:
+        reason = None if path is not None else f"{filename} is not staged"
+    if path is None:
+        if bridges.on_demand_fetch_offered("rw_probgrid"):
+            return Check(
+                name, "missing",
+                "not staged yet -- it is fetched on demand: the platform wheel does not carry it; "
+                "`woof fetch-bridges --partial --artifact rw_probgrid` stages it from this release's bundle",
+                "woof fetch-bridges --partial --artifact rw_probgrid",
+                action="woof fetch-bridges --partial --artifact rw_probgrid",
+                brief="on demand; staged by woof fetch-bridges",
+                group=_GROUP_ENGINES, blocking=False, severity=SEVERITY_OPT_IN)
+        return Check(name, "missing",
+                     f"{reason} -- {degrades}", remedy,
+                     action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+                     brief="not staged; probability maps are not drawn",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    marker = bridges.BRIDGE_ABI_MARKERS["rw_probgrid"]
+    try:
+        carries = marker in path.read_bytes()
+    except OSError as error:
+        carries, reason = False, f"unreadable ({error})"
+    if not carries:
+        return Check(name, "missing",
+                     f"{path} -- {reason or 'does not carry the ' + marker.decode() + ' contract'} "
+                     f"-- {degrades}", remedy,
+                     action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
+                     brief="stale build; probability maps are not drawn",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    return Check(name, "verified", f"{path} -- ABI {marker.decode()}",
+                 brief="staged", group=_GROUP_ENGINES)
+
+
 def _isobaric_reader_check() -> Check:
     """The isobaric-height reader the Python height consumers call.
 
@@ -4157,24 +5029,367 @@ def _isobaric_reader_check() -> Check:
         filename=isobaric_bridge.library_names()[0],
         subject="the isobaric height reader",
         crate_relative=bridges.RUSTWX_CRATE_RELATIVE)
+    return _library_check(
+        name, isobaric_bridge, resolve="resolve_isobaric_bridge", abi="ISOBARIC_ABI",
+        remedy=remedy, consequence=degrades, brief="isobaric height reads refuse")
+
+
+def _tempo_library_check() -> Check | None:
+    """``rw_tempo``, the TEMPO tempo_init library (2.9.0).
+
+    ``woof.core.tempo_rust`` loads it through ctypes whenever a run selects
+    TEMPO, and there is no Python implementation behind it.  Until 2.9.0 no
+    wheel and no bundle carried it, so TEMPO -- and the rrfs-v2-hex-tempo
+    preset -- stopped at "build it from a checkout" on every pip install.
+    Judged by loading it and reading its ABI, the way the loader does.
+
+    ``None`` where the seam itself is absent: the preparation-only RW-WPS
+    package stages no forecast physics (tools/build_rw_wps_release.py), runs
+    no TEMPO and bundles no TEMPO library, so a line there would report a
+    missing file for a door that package does not have.
+    """
+
+    name = "TEMPO initialization library (rw-tempo)"
+    degrades = ("a run selecting TEMPO microphysics, and the "
+                "rrfs-v2-hex-tempo preset, cannot build TEMPO's tables")
     try:
-        path = isobaric_bridge.resolve_isobaric_bridge()
+        from woof.core import tempo_rust
+    except ImportError:
+        return None
+    remedy = bridges.artifact_remedy(
+        env_var=tempo_rust.TEMPO_BRIDGE_ENV,
+        filename=tempo_rust.library_name(),
+        subject="the TEMPO initialization library",
+        crate_relative=bridges.RUSTWX_CRATE_RELATIVE)
+    try:
+        path = tempo_rust.resolve()
     except FileNotFoundError as error:
         return Check(
             name, "missing", f"{error} -- {degrades}", remedy,
             action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not staged; isobaric height reads refuse",
+            brief="not staged; TEMPO cannot initialize",
             group=_GROUP_ENGINES)
-    reason = isobaric_bridge.unavailable_reason()
-    if reason is not None:
+    try:
+        tempo_rust.load()
+    except (OSError, RuntimeError, AttributeError) as error:
         return Check(
-            name, "missing", f"{path} -- {reason} -- {degrades}", remedy,
+            name, "missing", f"{path} -- {error} -- {degrades}", remedy,
             action=_build_action(bridges.RUSTWX_CRATE_RELATIVE),
-            brief="not loadable; isobaric height reads refuse",
+            brief="not loadable; TEMPO cannot initialize",
             group=_GROUP_ENGINES)
     return Check(name, "verified",
-                 f"{path} -- ABI {isobaric_bridge.ISOBARIC_ABI}",
+                 f"{path} -- ABI {tempo_rust.ABI_VERSION}",
                  brief="staged", group=_GROUP_ENGINES)
+
+
+#: The four entries woof hex resolves from the projected MET library.
+_PROJECTED_INTERMEDIATE_ENTRIES = (
+    "gpuwm_projected_intermediate_v1", "gpuwm_projected_geometry_v1",
+    "gpuwm_projected_geometry_release_v1", "gpuwm_projected_window_v1")
+
+
+def _projected_intermediate_check() -> Check:
+    """``rw_projected_intermediate``, the projected MET library (2.9.1).
+
+    ``woof hex intermediate`` loads it through ctypes for HRRR and every
+    other projected source, and has no Python field route behind it.  On
+    2.9.0 no wheel and no bundle carried it, so a pip install could start
+    hex only from lat-lon sources.  Judged the way woof hex loads it: the
+    file resolves, its ABI answers, and the four entries it binds exist.
+    Not blocking: a WOOF run never calls it.
+    """
+
+    import ctypes
+
+    from woof import bridge_assets
+
+    name = "projected MET intermediate (rw_projected_intermediate)"
+    artifact = next(a for a in bridge_assets.BUNDLED_ARTIFACTS
+                    if a.name == "rw_projected_intermediate")
+    filename = bridge_assets.artifact_filename(
+        artifact, bridge_assets.host_platform() or "linux-x86_64")
+    degrades = ("woof hex cannot start a hex point run from HRRR or any "
+                "other projected source (lat-lon sources are unaffected)")
+    remedy = bridges.artifact_remedy(
+        env_var=artifact.env_var, filename=filename,
+        subject="the projected MET intermediate library",
+        crate_relative=artifact.crate, artifact=artifact.name)
+    # woof hex's own ladder: the bridge ladder, then a checkout build in
+    # the engine workspace (woof.hex.hrrr_intermediate._native_projected_entry).
+    workspace = bridges._package_parent() / artifact.crate / "target"
+    try:
+        path = bridges.find_artifact(artifact.env_var, filename) or next(
+            (candidate for candidate in (workspace / "release" / filename,
+                                         workspace / "debug" / filename)
+             if candidate.is_file()), None)
+    except FileNotFoundError as error:
+        path, reason = None, str(error)
+    else:
+        reason = f"{filename} is not staged"
+    if path is None:
+        return Check(name, "missing", f"{reason} -- {degrades}",
+                     remedy, action=_build_action(artifact.crate),
+                     brief="not staged; hex from HRRR refuses",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    symbol, expected = bridge_assets.library_abi_for(artifact.name)
+    try:
+        library = ctypes.CDLL(str(path))
+        probe = getattr(library, symbol)
+        probe.restype = ctypes.c_uint32
+        version = int(probe())
+        absent = [entry for entry in _PROJECTED_INTERMEDIATE_ENTRIES
+                  if not hasattr(library, entry)]
+    except (OSError, AttributeError) as error:
+        return Check(name, "missing", f"{path} -- not loadable ({error}) -- {degrades}",
+                     remedy, action=_build_action(artifact.crate),
+                     brief="not loadable; hex from HRRR refuses",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    if version != expected or absent:
+        detail = (f"ABI {version}, this release speaks {expected}" if version != expected
+                  else f"lacks {', '.join(absent)}")
+        return Check(name, "missing", f"{path} -- stale build: {detail} -- {degrades}",
+                     remedy, action=_build_action(artifact.crate),
+                     brief="stale build; hex from HRRR refuses",
+                     group=_GROUP_ENGINES, blocking=False,
+                     severity=SEVERITY_DEGRADED)
+    return Check(name, "verified", f"{path} -- ABI {version}",
+                 brief="staged", group=_GROUP_ENGINES)
+
+
+def _nextgen_checks() -> list[Check]:
+    """Probe the shipped hydro artifacts through their consumer ladders.
+
+    This is a CPU ABI/entrypoint check, not a fabric-coverage or skill verdict.
+    Inspection must not fetch, rebuild or refresh an estate to make it pass.
+    """
+    from woof import bridge_assets, hydrofabric
+    from woof.hydro import forcing_inputs, verify_usgs, output
+
+    probes = {
+        "nextgen_hydrofabric": (hydrofabric._library,
+                               ("arwen_hydrofabric_read_into",)),
+        "arwen_nextgen_forcing": (forcing_inputs._library,
+                                 ("arwen_forcing_prepare", "arwen_forcing_read_packet")),
+        "rw_nextgen_verify": (verify_usgs._binary, ()),
+        "rw_nextgen_output": (output._library, ("rw_nextgen_output_call", "rw_nextgen_output_free")),
+    }
+    checks = []
+    with bridges.inspection_only():
+        for artifact in bridge_assets.BUNDLED_ARTIFACTS:
+            if artifact.name not in probes:
+                continue
+            loader, entries = probes[artifact.name]
+            filename = bridge_assets.artifact_filename(
+                artifact, bridge_assets.host_platform() or "linux-x86_64")
+            remedy = bridges.artifact_remedy(
+                env_var=artifact.env_var, filename=filename,
+                subject=f"NextGen {artifact.name}",
+                crate_relative=artifact.crate, artifact=artifact.name)
+            try:
+                loaded = loader()
+                if artifact.kind == "library":
+                    path = loaded._name
+                    symbol, expected = bridge_assets.library_abi_for(artifact.name)
+                    version = int(getattr(loaded, symbol)())
+                    if version != expected:
+                        raise RuntimeError(f"ABI {version}; this release speaks {expected}")
+                    for entry in entries:
+                        getattr(loaded, entry)
+                    detail = f"{path} -- ABI {version}, required entrypoints present"
+                else:
+                    path = Path(loaded)
+                    result = subprocess.run([str(path), "--version"], capture_output=True,
+                                            text=True, timeout=10, check=True)
+                    marker = "nextgen-gauge-table-v1"
+                    if marker not in result.stdout:
+                        raise RuntimeError(f"{path}: --version lacks {marker}")
+                    detail = f"{path} -- {result.stdout.strip()}"
+            except (OSError, AttributeError, RuntimeError, ValueError,
+                    subprocess.SubprocessError) as error:
+                row = (_on_demand_row(f"NextGen {artifact.name}", artifact.name,
+                                      ("woof go (coupled hydro)" if artifact.name == "rw_nextgen_output"
+                                       else "woof hydro verify-usgs"), crate_relative=artifact.crate)
+                       if artifact.on_demand and not os.environ.get(artifact.env_var) else None)
+                if row is not None:
+                    checks.append(row)
+                    continue
+                checks.append(Check(
+                    f"NextGen {artifact.name}", "missing",
+                    f"{error} -- this hydro consumer cannot run", remedy,
+                    action=_build_action(artifact.crate), group=_GROUP_ENGINES,
+                    severity=SEVERITY_DEGRADED, blocking=False))
+            else:
+                checks.append(Check(f"NextGen {artifact.name}", "verified", detail,
+                                    brief="CPU ABI/entrypoints checked",
+                                    group=_GROUP_ENGINES))
+    return checks
+
+
+#: The default-on hydro door's provider tools, bundled on demand by
+#: e81d769e735 (2.9.3 improve-1).
+_HYDRO_DOOR_TOOLS = ("rw_hydro_world", "rw_hydro_params", "rw_hydrofabric",
+                     "nextgen-reservoir-prepare", "rw_hydro_init")
+
+
+def _hydro_door_tool_checks() -> list[Check]:
+    """The five tools the default-on hydro door runs to build a covering fabric.
+
+    Breakage it prevents: e81d769e735 bundled these tools on demand so the
+    default hydro door could find them (it had refused with "builder
+    executable rw_hydro_world not found"), and no doctor line reported any of
+    them, so an install whose hydro door could not prepare a fabric read
+    green.  Each tool is resolved through the ladder the door uses
+    (:func:`woof.hydro.door._executable`) but never fetched -- inspection
+    reports, it does not stage -- and a present tool must answer a bare call
+    with its own usage line, the entrypoint the door's probe calls.  Not a
+    fabric-coverage verdict.
+    """
+    from woof import bridge_assets
+
+    checks = []
+    for artifact in bridge_assets.BUNDLED_ARTIFACTS:
+        if artifact.name not in _HYDRO_DOOR_TOOLS:
+            continue
+        label = f"hydro door {artifact.name}"
+        filename = bridge_assets.artifact_filename(
+            artifact, bridge_assets.host_platform() or "linux-x86_64")
+        with bridges.inspection_only():
+            candidates = bridges.artifact_candidates(
+                artifact.env_var, filename, crate_relative=artifact.crate)
+        path = next((candidate for candidate in candidates
+                     if candidate.is_file() and os.access(candidate, os.X_OK)), None)
+        if path is None:
+            row = (_on_demand_row(label, artifact.name, "woof run (default-on hydro)",
+                                  crate_relative=artifact.crate)
+                   if artifact.on_demand and not os.environ.get(artifact.env_var) else None)
+            if row is not None:
+                checks.append(row)
+                continue
+            checks.append(Check(
+                label, "missing",
+                f"{filename} not found -- the default-on hydro door cannot prepare "
+                "a fabric, so forecasts run without hydro and the receipt names the gap",
+                bridges.artifact_remedy(
+                    env_var=artifact.env_var, filename=filename, subject=label,
+                    crate_relative=artifact.crate, artifact=artifact.name),
+                action=_build_action(artifact.crate), group=_GROUP_ENGINES,
+                severity=SEVERITY_DEGRADED, blocking=False))
+            continue
+        marker = f"usage: {artifact.name}"
+        try:
+            answer = subprocess.run([str(path)], capture_output=True, text=True, timeout=10)
+            text = answer.stdout + answer.stderr
+        except (OSError, subprocess.SubprocessError) as error:
+            text = f"did not answer: {error}"
+        if marker not in text:
+            lines = text.strip().splitlines()
+            checks.append(Check(
+                label, "missing",
+                f"{path} does not answer a bare call with '{marker}' "
+                f"({lines[-1] if lines else 'no output'}) -- the hydro door cannot drive it",
+                bridges.artifact_remedy(
+                    env_var=artifact.env_var, filename=filename, subject=label,
+                    crate_relative=artifact.crate, artifact=artifact.name),
+                action=_build_action(artifact.crate), group=_GROUP_ENGINES,
+                severity=SEVERITY_DEGRADED, blocking=False))
+            continue
+        checks.append(Check(label, "verified", f"{path} -- answers with its usage line",
+                            brief="present; entrypoint answers", group=_GROUP_ENGINES))
+    return checks
+
+
+def _hydro_proj_checks() -> list[Check]:
+    """Load each hydro bridge's PROJ and transform one EPSG point.
+
+    A bare usage call never loaded the former dlopen dependency, so doctor
+    reported green on hosts whose default-on hydro silently turned off.
+    """
+    from woof import bridge_assets
+    import ctypes
+    wanted = {"rw_hydro_world", "rw_hydrofabric", "rw_hydro_init", "nextgen_hydrofabric"}
+    checks = []
+    for artifact in bridge_assets.BUNDLED_ARTIFACTS:
+        if artifact.name not in wanted:
+            continue
+        label = f"hydro PROJ {artifact.name}"
+        filename = bridge_assets.artifact_filename(artifact, bridge_assets.host_platform() or "linux-x86_64")
+        with bridges.inspection_only():
+            candidates = bridges.artifact_candidates(artifact.env_var, filename, crate_relative=artifact.crate)
+        path = next((p for p in candidates if p.is_file()), None)
+        if path is None:
+            # An on-demand hydro bridge the platform wheel leaves to the bundle: its first use stages it, and
+            # the projection is proved then.  Breakage it prevents (2.9.7 pass 5 R12, Windows wheel smoke): a
+            # fresh install showed "MISSING rust engines (3)" for the three hydro executables that hydro, opt-in
+            # since 2.9.4.1, had never needed to stage.
+            row = _on_demand_row(label, artifact.name, "woof run --hydro on", crate_relative=artifact.crate)
+            if row is not None:
+                checks.append(row)
+                continue
+        try:
+            if path is None:
+                raise FileNotFoundError(f"{filename} is not staged")
+            if artifact.name == "nextgen_hydrofabric":
+                with bridges.quiet_loader_errors():
+                    library = ctypes.CDLL(str(path))
+                probe = library.arwen_hydrofabric_proj_probe
+                probe.argtypes, probe.restype = [], ctypes.c_int
+                if probe() != 0:
+                    raise ValueError("the loaded library's EPSG:4326 -> EPSG:5070 transform failed")
+            else:
+                answer = subprocess.run([str(path), "--proj-probe"], capture_output=True, text=True, timeout=30)
+                if answer.returncode:
+                    raise ValueError((answer.stderr or answer.stdout).strip()[-1000:])
+                result = json.loads(answer.stdout)
+                if (result.get("proj_version") != "9.7.1" or result.get("network") is not False
+                        or result.get("resources") != "embedded-only"):
+                    raise ValueError(f"unexpected projection probe: {result}")
+            checks.append(Check(label, "verified", f"{path} -- transforms (-97, 35) from EPSG:4326 to EPSG:5070; "
+                                "static PROJ 9.7.1, embedded database, network off",
+                                brief="loaded; one point transformed", group=_GROUP_ENGINES))
+        except (OSError, ValueError, AttributeError, subprocess.SubprocessError) as error:
+            checks.append(Check(label, "missing", f"{error} -- this bridge cannot prove its hydro projection",
+                                bridges.artifact_remedy(env_var=artifact.env_var, filename=filename,
+                                    subject=label, crate_relative=artifact.crate, artifact=artifact.name),
+                                action=_build_action(artifact.crate), group=_GROUP_ENGINES,
+                                severity=SEVERITY_DEGRADED, blocking=False))
+    return checks
+
+
+def _radar_superob_check() -> Check:
+    """The radar superob the default radar observation build calls.
+
+    ``missing``, because the stage refuses without it rather than falling
+    back: the numpy module runs only on the stated opt-out
+    ``WOOF_SUPEROB_PYTHON=1``, so an absent library stops every radar
+    observation build (and with it every radar DA cycle) by name.
+    """
+
+    name = "radar superob (rw-superob)"
+    degrades = ("every radar observation build refuses its superob stage, "
+                "so radar DA cycles stop at observation prep")
+    try:
+        from woof.obs import superob_bridge
+    except ImportError as error:                 # pragma: no cover - partial
+        return Check(name, "missing",
+                     f"woof.obs.superob_bridge is not importable ({error}) "
+                     f"-- {degrades}",
+                     "# reinstall so the superob seam imports:\n"
+                     "  pip install --force-reinstall woof",
+                     brief="superob_bridge not importable",
+                     group=_GROUP_ENGINES)
+    remedy = bridges.artifact_remedy(
+        env_var=superob_bridge.SUPEROB_BRIDGE_ENV,
+        filename=superob_bridge.library_name(),
+        subject="the radar superob",
+        crate_relative=bridges.RUSTWX_CRATE_RELATIVE) + (
+        "\n  # WOOF_SUPEROB_PYTHON=1 runs the numpy reference as an\n"
+        "  # explicit workaround")
+    return _library_check(
+        name, superob_bridge, resolve="resolve_superob_bridge", abi="SUPEROB_ABI",
+        remedy=remedy, consequence=degrades, brief="radar observation builds refuse",
+        missing_errors=(superob_bridge.SuperobBridgeMissing, FileNotFoundError))
 
 
 def _region_dealias_check() -> Check:
@@ -4504,7 +5719,7 @@ def _cpu_library_check() -> Check:
     # It used to read `... --offline  then copy it into <dir> or set
     # WOOF_CPU_PREPROCESS_BRIDGE`, which a reader pastes whole and the
     # shell hands to cargo as arguments -- the exact failure the remedy
-    # contract exists to stop, and a a development machine field finding.
+    # contract exists to stop, and a test host G field finding.
     remedy = (bridges.install_aware_build_hint(bridges.CARGO_BUILD_HINT)
               + "\n  # then copy the built library into "
               f"{bridges.default_bridge_dir()},\n"
@@ -4535,10 +5750,12 @@ def _cpu_library_check() -> Check:
     path, abi = backend.path, backend.abi_version
     indexed = backend.indexed_donor_interp
     from woof.ingest.cpu_backend import (
-        MASKED_NEAREST_ENTRY, MASKED_STENCIL_ENTRY, WPS_MASKED_CHAIN_ENTRY)
+        MASKED_NEAREST_ENTRY, MASKED_STENCIL_ENTRY, WPS_MASKED_CHAIN_ENTRY,
+        WPS_MASKED_REACH_ENTRY)
 
     lacking = [name for name, present in (
         (WPS_MASKED_CHAIN_ENTRY, backend.wps_masked_chain_entry),
+        (WPS_MASKED_REACH_ENTRY, backend.wps_masked_chain_entry),
         (MASKED_STENCIL_ENTRY, backend.masked_stencil_entry),
     ) if not present]
     lacking.extend(getattr(backend, "water_blend_missing", ()))
@@ -4725,11 +5942,20 @@ def _thompson_tables_check() -> Check:
         _valid, invalid, absent = classify_assets(Path(root))
         if fetchable and not invalid and len(absent) == len(fetchable):
             total_mib = sum(a.bytes for a in fetchable) / (1024 * 1024)
+            # Without a named root the first mp_physics=8 run stages the
+            # set itself (table_assets.require_thompson_tables), so a
+            # fresh install is not broken: the default works, it just
+            # has not been paid for yet.  A named root is the operator's
+            # mirror, never filled for them, and stays a blocking gap.
+            from woof.table_assets import auto_stage_applies
+            automatic = auto_stage_applies()
             return Check(
                 "thompson tables", "missing",
                 f"{', '.join(a.filename for a in fetchable)} not staged "
                 f"at {root} (externalized: published as a release asset, "
-                "not shipped in the package)",
+                "not shipped in the package)"
+                + ("; the first mp_physics=8 run stages them "
+                   "automatically" if automatic else ""),
                 "woof fetch-tables\n"
                 f"  # one {total_mib:.0f} MiB download, SHA-256 verified "
                 "against the\n"
@@ -4737,7 +5963,9 @@ def _thompson_tables_check() -> Check:
                 "  # local directory instead, offline",
                 action="woof fetch-tables",
                 brief=f"{len(fetchable)} externalized table(s) not staged "
-                      f"({total_mib:.0f} MiB)")
+                      f"({total_mib:.0f} MiB)",
+                blocking=not automatic,
+                severity="degraded" if automatic else None)
         return Check(
             "thompson tables", "missing", str(error),
             REINSTALL_HINT
@@ -4937,6 +6165,53 @@ def _arbitrary_input_check() -> Check:
         brief=f"woof adapt authors {', '.join(formats)} from a descriptor")
 
 
+def _ocean_climatology_check() -> Check:
+    """Is the default mixed-layer ocean's WOA18 MLD climatology staged here?
+
+    The ocean is on by default for forecasts of 48 h and more and starts
+    from one month of this climatology.  Unstaged, a forecast fetches its
+    month from NCEI at its first step, so an NCEI outage stops it there
+    (2026-10-22: THREDDS 503 for an hour, a run died after 60 min of
+    preparation).  Degraded, not blocking: the default still works while
+    NCEI answers.  Reads only local files (size + SHA-256 per month).
+    """
+    try:
+        from woof.ocean.mixed_layer import climatology
+        root, valid, damaged = climatology.staged_state()
+    except Exception as error:                          # noqa: BLE001
+        return Check("ocean climatology", "missing",
+                     f"cannot resolve the ocean climatology cache: {error}",
+                     "woof fetch-tables --ocean",
+                     action="woof fetch-tables --ocean",
+                     brief=_short(str(error)), blocking=False,
+                     severity="degraded")
+    if len(valid) == 12:
+        return Check(
+            "ocean climatology", "verified",
+            f"12 NOAA WOA18 monthly MLD files at {root} "
+            "(size + SHA-256 per pinned month)",
+            brief="12 months staged")
+    absent = [m for m in range(1, 13) if m not in valid and m not in damaged]
+    parts = []
+    if absent:
+        parts.append(f"{len(absent)} month(s) not staged")
+    if damaged:
+        parts.append(f"month(s) {', '.join(f'{m:02d}' for m in damaged)} "
+                     "do not match their pins (moved aside and refetched "
+                     "on use)")
+    return Check(
+        "ocean climatology", "missing",
+        f"{'; '.join(parts)} at {root}; the default mixed-layer ocean "
+        "(48 h and longer) then fetches its month from NCEI at the "
+        "forecast's first step, and fails there while NCEI is down",
+        "woof fetch-tables --ocean\n"
+        "  # 12 files, about 85 MB, SHA-256 verified before install;\n"
+        "  # --from DIR stages them from a local copy, offline",
+        action="woof fetch-tables --ocean",
+        brief=f"{12 - len(valid)} of 12 WOA18 months not staged",
+        blocking=False, severity="degraded")
+
+
 def _noah_tables_check() -> Check:
     try:
         from woof.core.landuse import load_landuse_table
@@ -4975,7 +6250,7 @@ def geography_gaps(geog: Path) -> list[Check]:
 
     Scoped to the WRF consumer, because ``go`` runs the WRF static path
     and nothing else.  The same tree also carries a mesh-scoped verdict
-    -- ``woof mesh`` opens a Noah-MP soil archive the WRF builder never
+    -- ``woof mesh`` opens land-use pins the WRF builder never
     touches -- and folding that in here would refuse a WRF run over a
     download its own preprocessing has no reader for.
     """
@@ -5008,14 +6283,17 @@ def _geog_tree_checks(geog: Path, *,
 
     from woof.geog_assets import (
         GEOG_CONSUMER_MESH, GEOG_CONSUMER_WRF, GEOG_CONSUMERS,
-        datasets_required_by)
+        datasets_required_by, default_geog_consumers, archive_for,
+        packaged_recipe_datasets)
 
-    wanted = GEOG_CONSUMERS if consumers is None else consumers
+    wanted = default_geog_consumers() if consumers is None else consumers
 
     # The WRF door's own column, not the whole fetchable inventory: this
     # tree also carries datasets that builder never opens, and reporting
     # them here would call a working WRF install broken.
-    GEOG_DATASETS = datasets_required_by(GEOG_CONSUMER_WRF)
+    # By directory, as the builder opens them: the soil categories are two
+    # children of the soilgrids container, whose index sits in each child.
+    from woof.geog_assets import WRF_DEFAULT_GEOG_DIRS as GEOG_DATASETS
 
     checks: list[Check] = []
     if not geog.is_dir():
@@ -5056,32 +6334,69 @@ def _geog_tree_checks(geog: Path, *,
                 f"{geog} carries all {len(GEOG_DATASETS)} datasets the WRF "
                 "static builder opens, each with its WPS index file",
                 brief=f"all {len(GEOG_DATASETS)} WRF datasets indexed"))
+        # The packaged recipes' terrain drag reads pins no consumer column
+        # requires (orogwd3_10m for the CONUS HRRR recipe's gwd_opt = 3).
+        # Defect: doctor called the tree complete while `woof go` refused
+        # that recipe for them.  Not blocking: a configuration without
+        # that drag option never opens them.  Whole-tree report only:
+        # geography_gaps (the go preflight) asks for the WRF consumer alone,
+        # and go checks the drag datasets per configuration itself.
+        recipe_missing, recipe_pins = [], []
+        for name in (packaged_recipe_datasets() if consumers is None else ()):
+            for child in archive_for(name).index_subdirs or ("",):
+                if not (geog / name / child / "index").is_file():
+                    recipe_missing.append(str(Path(name) / child))
+                    if name not in recipe_pins:
+                        recipe_pins.append(name)
+        if recipe_missing:
+            action = "woof fetch-geog --datasets " + ",".join(recipe_pins)
+            checks.append(Check(
+                "WPS_GEOG recipes", "missing",
+                f"{geog}: the packaged recipes' terrain drag reads "
+                f"datasets that are not indexed: {', '.join(recipe_missing)}",
+                action, action=action,
+                brief=f"{len(recipe_missing)} packaged-recipe index(es) missing",
+                blocking=False))
 
     if GEOG_CONSUMER_MESH in wanted:
         checks.extend(_mesh_geog_checks(geog))
+    # Optional doors are checked only when requested. Index locations and
+    # membership come from pins, including any future multi-dataset archive.
+    for consumer in wanted:
+        if consumer in (GEOG_CONSUMER_WRF, GEOG_CONSUMER_MESH):
+            continue
+        missing = []
+        for name in datasets_required_by(consumer):
+            pin = archive_for(name)
+            for child in pin.index_subdirs or ("",):
+                if not (geog / name / child / "index").is_file():
+                    missing.append(str(Path(name) / child))
+        action = f"woof fetch-geog --datasets {consumer}"
+        checks.append(Check(
+            f"WPS_GEOG {consumer}", "missing" if missing else "verified",
+            f"{geog}: missing indexed datasets: {', '.join(missing)}" if missing
+            else f"{geog}: all {consumer} datasets indexed",
+            action if missing else "", action=action if missing else None))
     return checks
 
 
 def _mesh_geog_checks(geog: Path) -> list[Check]:
     """The mesh door's own completeness verdict over the same tree.
 
-    `woof mesh` builds a static of 82 variables and five of them are the
-    Noah-MP soil group, which the WRF static builder never opens.  The
+    `woof mesh` builds MPAS-A's native static (79 variables, 2.9.0) and
+    five of them are the Noah-MP soil group, which the WRF static builder
+    never opens; its land use and GWD mask come from two archives the WRF
+    builder does not read either.  The
     two doors therefore need different datasets out of one tree, and this
     report used to have one verdict for both: without this row doctor
     called the tree complete and `woof mesh` then refused it, which is
     the report being wrong rather than the tree.
 
-    It BLOCKS when the mesh builder is on this box.  The soil archive was
-    an opt-in while the door's own binary was optional too, and the row
-    was ``info`` to match.  It is a required download for that door now,
-    so an install carrying `rw_mpas_static` and not its geography has a
-    door it advertises and cannot open -- ``unreachable``, exactly the
-    severity `blocking_gaps` defines for it, and green over that box is
-    the thing the exit code exists to prevent.  With no mesh builder
-    resolvable the row stays ``info``: the geography is not what stops
-    that door, `_mpas_bridge_checks` already reports the binary, and a
-    WRF-only install may not be failed over a door it does not have.
+    It blocks only when MPAS support was requested: woof hex is installed
+    or WOOF_RW_MPAS_STATIC names a builder by hand.  Every wheel bundles
+    `rw_mpas_static`, so resolving that binary alone does not establish
+    intent.  Without an MPAS request the row stays missing but opt-in:
+    WRF never reads these datasets and its complete geography must pass.
     """
 
     from woof import rustwx_static
@@ -5089,49 +6404,40 @@ def _mesh_geog_checks(geog: Path) -> list[Check]:
     absent = rustwx_static.missing_geog_datasets(geog)
     if not absent:
         return []
-    try:
-        installed = rustwx_static.find_static_bin() is not None
-    except FileNotFoundError:
-        # WOOF_RW_MPAS_STATIC names a missing file.  The operator asked
-        # for this door by hand, so it is installed as far as intent
-        # goes; the binary check reports the broken override itself.
-        installed = True
-    # The bare command, not the dataset flag.  The archive these come
-    # from is part of the default fetch set now, so naming the flag would
-    # teach a narrower command than the one that works; it is named in
-    # the comment because 13 GB deserves to be identified before it
-    # starts.  Read off the pin table, never spelled here.
-    carriers = ", ".join(rustwx_static.fetchable_for(absent))
+    # An override also requests MPAS when its path is broken; the binary
+    # check separately reports that missing executable.
+    requested = (bool(os.environ.get(rustwx_static.STATIC_ENV))
+                 or find_spec("hexcore") is not None)
+    # The bare command, not the dataset flag.  The archives these come
+    # from are part of the default fetch set, so naming the flag would
+    # teach a narrower command than the one that works.  The size is the
+    # size of the archives actually absent, read off the pin table: it
+    # was a literal "~13 GB" (the soil archive's) on every tree, so a
+    # WRF-only tree (`--datasets wrf`, the WOOF image's set) short of only
+    # the two land-use archives -- ~0.05 GB to fetch, ~2 GB unpacked --
+    # was quoted the 13 GB soil archive it already carries.
+    from woof.geog_assets import size_phrase
+
+    carrier_names = rustwx_static.fetchable_for(absent)
+    carriers = ", ".join(carrier_names)
+    size = size_phrase(tuple(carrier_names))
     remedy = ("woof fetch-geog\n"
-              f"  # the default set stages {carriers}, the archive these\n"
-              "  # come from (~13 GB unpacked); `--datasets mesh` narrows\n"
-              "  # the download to what woof mesh reads\n"
+              f"  # the default set stages {carriers} ({size}),\n"
+              "  # the archive(s) these come from; a re-run fetches only\n"
+              "  # what is absent; `--datasets mesh` narrows the default\n"
+              "  # set to what woof mesh reads\n"
               "  # or `woof mesh --no-static` to write the grid alone")
-    if installed:
-        return [Check(
-            "WPS_GEOG (MPAS static)", "missing",
-            f"{geog} cannot build an MPAS static: "
-            f"{', '.join(absent)} are absent, and "
-            f"{rustwx_static.STATIC_NAME} is installed on this box. `woof "
-            "mesh` writes the grid and refuses the static half of the pair, "
-            "and the mesh registry admits neither on its own, so the door "
-            "cannot be opened. Nothing on the WRF side reads these, so a "
-            "WRF-only run is unaffected",
-            remedy, action="woof fetch-geog",
-            brief=f"{len(absent)} dataset(s) short of an MPAS static",
-            blocking=True, severity=SEVERITY_UNREACHABLE)]
     return [Check(
-        "WPS_GEOG (MPAS static)", "info",
+        "WPS_GEOG (MPAS static)", "missing",
         f"{geog} cannot build an MPAS static: "
-        f"{', '.join(absent)} are absent. `woof mesh` needs them for the "
-        "static half of the pair, and the mesh registry admits neither the "
-        f"grid nor the static on its own. {rustwx_static.STATIC_NAME} is not "
-        "installed here either, so this is not what stops that door; nothing "
-        "on the WRF side reads these, so a WRF-only install is not broken "
-        "by it",
-        remedy,
+        f"{', '.join(absent)} are absent. `woof mesh` writes the grid and "
+        "refuses the static half of the pair, and the mesh registry admits "
+        "neither on its own, so the door cannot be opened. Nothing on the "
+        "WRF side reads these, so a WRF-only run is unaffected",
+        remedy, action="woof fetch-geog",
         brief=f"{len(absent)} dataset(s) short of an MPAS static",
-        blocking=False)]
+        blocking=requested,
+        severity=SEVERITY_UNREACHABLE if requested else SEVERITY_OPT_IN)]
 
 
 def _case_data_root_check() -> list[Check]:
@@ -5630,7 +6936,8 @@ def _hrrr_fetch_path_check() -> Check:
         return Check(
             name, "verified",
             f"engine rust ({found}), default --mode {fetch.HRRR_DEFAULT_MODE}"
-            " (whole objects in parallel range GETs)",
+            " (the .idx record subset in parallel range GETs; a whole "
+            "object where the index cannot carry it)",
             brief=f"rust, {fetch.HRRR_DEFAULT_MODE}", group=_GROUP_ROUTE)
     return Check(
         name, "info",
@@ -6110,12 +7417,23 @@ def _collect_checks(sources: tuple[str, ...] | None = None,
     # through 2.3.3, which is how a box with every radar-adjacent
     # observation route dead could print a fully green estate.
     checks.extend(_obs_front_door_checks())
+    checks.extend(_obs_stream_door_checks())
     # The five MPAS binaries no bundle carried and no check reported.
     checks.extend(_mpas_bridge_checks())
     checks.append(_ml_export_check())
+    checks.append(_icechunk_check())
+    checks.append(_grib2_export_check())
+    checks.append(_gpu_post_kernels_check())
     checks.append(_verification_engine_check())
     checks.append(_comparison_engine_check())
+    checks.append(_ensemble_reducer_check())
+    checks.append(_nowcast_frames_check())
+    checks.append(_observation_scorecard_check())
+    checks.append(_forecast_scoreboard_check())
     checks.append(_simulated_radar_check())
+    checks.append(_sounding_renderer_check())
+    checks.append(_tc_fields_check())
+    checks.extend(_earth2_runtime_checks())
     checks.append(_netcdf_decoder_check())
     checks.append(_mapped_engine_check())
     checks.append(_ncwrite_check())
@@ -6124,6 +7442,17 @@ def _collect_checks(sources: tuple[str, ...] | None = None,
     checks.append(_obs_score_check())
     checks.append(_noah_init_check())
     checks.append(_isobaric_reader_check())
+    tempo_check = _tempo_library_check()
+    if tempo_check is not None:
+        checks.append(tempo_check)
+    checks.append(_projected_intermediate_check())
+    checks.extend(_nextgen_checks())
+    checks.extend(_hydro_door_tool_checks())
+    checks.extend(_hydro_proj_checks())
+    checks.extend(_capability_tool_checks())
+    checks.append(_globe_pack_check())
+    checks.append(_probgrid_check())
+    checks.append(_radar_superob_check())
     checks.append(_region_dealias_check())
     checks.extend(_bridge_checks())
     # ABOUT the report, not about an artifact: does every artifact the
@@ -6135,6 +7464,9 @@ def _collect_checks(sources: tuple[str, ...] | None = None,
     # staged estate from an earlier release passes all of them and then
     # refuses at the first preparation.
     checks.append(_staged_estate_check())
+    hex_helpers = _hex_helpers_check()
+    if hex_helpers is not None:
+        checks.append(hex_helpers)
     # After the bridges, because it is the question the five `ok bridge`
     # lines above do NOT answer: whether the route that needs two of
     # them can actually reach them.
@@ -6148,6 +7480,7 @@ def _collect_checks(sources: tuple[str, ...] | None = None,
     checks.append(_thompson_tables_check())
     checks.append(_p3_table_check())
     checks.append(_noah_tables_check())
+    checks.append(_ocean_climatology_check())
     checks.append(_arbitrary_input_check())
     checks.extend(_case_data_root_check())
     phase("install identity and provenance")
@@ -6609,6 +7942,21 @@ def doctor_main(args) -> int:
               else f"woof doctor: nothing recorded as changed since {since}.")
         return 0
     sources = getattr(args, "source", None) or None
+    from woof.forecast_gpu import FORECAST_GPU_REQUIREMENT
+
+    # Keep driver contact isolated, like the deeper runtime checks below:
+    # a broken driver must not wedge the diagnostic's own interpreter.
+    availability = _json_probe(
+        "import json; from woof.forecast_gpu import forecast_gpu_gap; "
+        "print(json.dumps({'gap': forecast_gpu_gap()}))")
+    gap = availability.get('gap')
+    if 'gap' not in availability:
+        gap = f"GPU availability probe did not complete ({availability.get('probe', 'no answer')})"
+    if gap is not None:
+        # stderr preserves --json's machine surface. Print before inventory
+        # so a no-device install gets the forecast/CPU boundary first.
+        print(f"woof doctor: ForecastGPURequired: {FORECAST_GPU_REQUIREMENT} "
+              f"Detected: {gap}.", file=sys.stderr, flush=True)
     checks = collect_checks(tuple(sources) if sources else None,
                             progress=_progress_to_stderr)
     if getattr(args, "json", False):
@@ -6749,7 +8097,7 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["Check", "DOCTOR_SOURCES", "DOCTOR_STATE_ENV",
+__all__ = ["Check", "DOCTOR_SOURCES", "DOCTOR_STATE_ENV",  # noqa: F822 -- module __getattr__
            "DOCTOR_STATE_SCHEMA",
            "SETUP_ACTIONS", "SEVERITY_BROKEN", "SEVERITY_DEGRADED",
            "SEVERITY_OPT_IN", "SEVERITY_UNREACHABLE", "blocking_gaps",

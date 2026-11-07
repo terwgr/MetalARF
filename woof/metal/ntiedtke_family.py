@@ -174,6 +174,7 @@ class _MetalNtPipeline:
         self.ncol = int(ncol)
         self.nz = int(nz)
         self.width = int(width)
+        self.dry_mass_coupling = False
         self.w = MetalNtWorkspace(module, ncol=width, nz=nz)
         self.llo3_mask = module.zeros((1,), np.int32)
         self.llo3_partials = module.zeros((2 * width,), np.int32)
@@ -198,7 +199,7 @@ class _MetalNtPipeline:
 
     def _run_stage(self, stage: str) -> None:
         from woof.core.ntiedtke import (
-            NT_LEVEL_BASE, NT_STAGE_ALIASES, NT_STAGE_SIGNATURE,
+            NT_LEVEL_BASE, NT_STAGE_ALIASES,
         )
         base = NT_LEVEL_BASE.get(stage, 1)
         entry = _SIGNATURES[stage]
@@ -253,6 +254,9 @@ class _MetalNtPipeline:
         self.zero_run_head()
         self._run_stage("ntiedtke_prep")
         self._run_stage("ntiedtke_convert")
+        if self.dry_mass_coupling:
+            from woof.metal.correct_mode import correct_ntiedtke
+            correct_ntiedtke(self, forcing=True)
         self.snapshot_forcing()
         for stage in NT_CALL_ORDER[2:]:
             if stage == "ntiedtke_cuascn":
@@ -260,6 +264,9 @@ class _MetalNtPipeline:
             elif stage == "ntiedtke_cududvn":
                 self.snapshot_momentum()
             self._run_stage(stage)
+        if self.dry_mass_coupling:
+            from woof.metal.correct_mode import correct_ntiedtke
+            correct_ntiedtke(self, forcing=False)
 
 
 def _metal_flat(array, *, shape, name, context):
@@ -275,7 +282,7 @@ def _metal_flat(array, *, shape, name, context):
 
 def run_new_tiedtke(owner, *, atmosphere, fields, state, cfg):
     """Run New Tiedtke using only Metal storage and native stage launches."""
-    from woof.core.ntiedtke import _nt_model_dt, nt_tile_columns
+    from woof.core.ntiedtke import _nt_itimestep, _nt_model_dt, nt_tile_columns
     from woof.core.preflight import MEASURED_LOCAL_MEMORY_PROFILE
     from woof.core.physics import _NativeNtCumulusResult
 
@@ -340,6 +347,8 @@ def run_new_tiedtke(owner, *, atmosphere, fields, state, cfg):
     else:
         pipeline = owner._metal_pipeline[1]
         pipeline.retime(float(_nt_model_dt(cfg)))
+    pipeline.dry_mass_coupling = bool(getattr(cfg, "ntiedtke_dry_mass_coupling", False))
+    pipeline.scalars["itimestep"] = np.int32(_nt_itimestep(state, cfg))
     chunks = (ncol + width - 1) // width
     pipeline.llo3_flags = module.zeros((chunks,), np.int32)
     pipeline.w.bind("dx", 1).fill(np.float32(cfg.dx))

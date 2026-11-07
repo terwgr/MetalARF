@@ -1,0 +1,703 @@
+{
+  "name": "climate_diagnostics_exact",
+  "module": "climate_diagnostics_exact",
+  "source": "woof/metal/shaders/climate_diagnostics_exact.metal",
+  "cuda_source": "woof/core/kernels/climate_diagnostics.cu",
+  "cuda_symbol": "clwrf_output_calc",
+  "resources": [
+    [
+      "t2",
+      "float",
+      "read"
+    ],
+    [
+      "q2",
+      "float",
+      "read"
+    ],
+    [
+      "tsk",
+      "float",
+      "read"
+    ],
+    [
+      "swdown",
+      "float",
+      "read"
+    ],
+    [
+      "swddni",
+      "float",
+      "read"
+    ],
+    [
+      "u10",
+      "float",
+      "read"
+    ],
+    [
+      "v10",
+      "float",
+      "read"
+    ],
+    [
+      "raincv",
+      "float",
+      "read"
+    ],
+    [
+      "rainncv",
+      "float",
+      "read"
+    ],
+    [
+      "t2min",
+      "float",
+      "read_write"
+    ],
+    [
+      "t2max",
+      "float",
+      "read_write"
+    ],
+    [
+      "tt2min",
+      "float",
+      "read_write"
+    ],
+    [
+      "tt2max",
+      "float",
+      "read_write"
+    ],
+    [
+      "t2mean",
+      "float",
+      "read_write"
+    ],
+    [
+      "t2std",
+      "float",
+      "read_write"
+    ],
+    [
+      "q2min",
+      "float",
+      "read_write"
+    ],
+    [
+      "q2max",
+      "float",
+      "read_write"
+    ],
+    [
+      "tq2min",
+      "float",
+      "read_write"
+    ],
+    [
+      "tq2max",
+      "float",
+      "read_write"
+    ],
+    [
+      "q2mean",
+      "float",
+      "read_write"
+    ],
+    [
+      "q2std",
+      "float",
+      "read_write"
+    ],
+    [
+      "skintempmin",
+      "float",
+      "read_write"
+    ],
+    [
+      "skintempmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "tskintempmin",
+      "float",
+      "read_write"
+    ],
+    [
+      "tskintempmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "skintempmean",
+      "float",
+      "read_write"
+    ],
+    [
+      "skintempstd",
+      "float",
+      "read_write"
+    ],
+    [
+      "swradmin",
+      "float",
+      "read_write"
+    ],
+    [
+      "swradmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "tswradmin",
+      "float",
+      "read_write"
+    ],
+    [
+      "tswradmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "swradmean",
+      "float",
+      "read_write"
+    ],
+    [
+      "swradstd",
+      "float",
+      "read_write"
+    ],
+    [
+      "swnormmin",
+      "float",
+      "read_write"
+    ],
+    [
+      "swnormmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "tswnormmin",
+      "float",
+      "read_write"
+    ],
+    [
+      "tswnormmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "swnormmean",
+      "float",
+      "read_write"
+    ],
+    [
+      "swnormstd",
+      "float",
+      "read_write"
+    ],
+    [
+      "u10max",
+      "float",
+      "read_write"
+    ],
+    [
+      "v10max",
+      "float",
+      "read_write"
+    ],
+    [
+      "spduv10max",
+      "float",
+      "read_write"
+    ],
+    [
+      "tspduv10max",
+      "float",
+      "read_write"
+    ],
+    [
+      "u10mean",
+      "float",
+      "read_write"
+    ],
+    [
+      "v10mean",
+      "float",
+      "read_write"
+    ],
+    [
+      "spduv10mean",
+      "float",
+      "read_write"
+    ],
+    [
+      "u10std",
+      "float",
+      "read_write"
+    ],
+    [
+      "v10std",
+      "float",
+      "read_write"
+    ],
+    [
+      "spduv10std",
+      "float",
+      "read_write"
+    ],
+    [
+      "raincvmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "traincvmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "raincvmean",
+      "float",
+      "read_write"
+    ],
+    [
+      "raincvstd",
+      "float",
+      "read_write"
+    ],
+    [
+      "rainncvmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "trainncvmax",
+      "float",
+      "read_write"
+    ],
+    [
+      "rainncvmean",
+      "float",
+      "read_write"
+    ],
+    [
+      "rainncvstd",
+      "float",
+      "read_write"
+    ],
+    [
+      "cl_nsteps",
+      "float",
+      "read_write"
+    ],
+    [
+      "cl_nsteps_wind",
+      "float",
+      "read_write"
+    ]
+  ],
+  "shapes": {
+    "t2": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "q2": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tsk": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swdown": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swddni": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "u10": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "v10": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "raincv": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "rainncv": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "t2min": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "t2max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tt2min": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tt2max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "t2mean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "t2std": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "q2min": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "q2max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tq2min": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tq2max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "q2mean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "q2std": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "skintempmin": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "skintempmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tskintempmin": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tskintempmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "skintempmean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "skintempstd": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swradmin": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swradmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tswradmin": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tswradmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swradmean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swradstd": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swnormmin": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swnormmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tswnormmin": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tswnormmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swnormmean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "swnormstd": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "u10max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "v10max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "spduv10max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "tspduv10max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "u10mean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "v10mean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "spduv10mean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "u10std": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "v10std": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "spduv10std": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "raincvmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "traincvmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "raincvmean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "raincvstd": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "rainncvmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "trainncvmax": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "rainncvmean": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "rainncvstd": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "cl_nsteps": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "cl_nsteps_wind": [
+      [
+        "ny",
+        "nx"
+      ]
+    ]
+  },
+  "parameters": [
+    [
+      "count",
+      "int32"
+    ],
+    [
+      "ny",
+      "int32"
+    ],
+    [
+      "nx",
+      "int32"
+    ],
+    [
+      "dt",
+      "float32"
+    ],
+    [
+      "xtime",
+      "float32"
+    ],
+    [
+      "secs",
+      "float32"
+    ],
+    [
+      "diag_int",
+      "int32"
+    ],
+    [
+      "wind_int",
+      "int32"
+    ],
+    [
+      "restart",
+      "int32"
+    ]
+  ],
+  "threads_per_group": 128,
+  "layout_version": 1,
+  "arithmetic_policies": [
+    "wrf-exact"
+  ]
+}

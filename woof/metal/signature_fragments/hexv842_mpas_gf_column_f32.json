@@ -1,0 +1,146 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_gf_column_f32",
+      "module": "hexv842_mpas_gf_column_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_gf_column_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/gf_mpas_v842.py",
+      "cuda_symbol": "gf_column",
+      "resources": [
+        [
+          "levels",
+          "float",
+          "read_write"
+        ],
+        [
+          "surface",
+          "float",
+          "read_write"
+        ],
+        [
+          "kpbl",
+          "int32",
+          "read_write"
+        ],
+        [
+          "outlev",
+          "float",
+          "read_write"
+        ],
+        [
+          "outsurface",
+          "float",
+          "read_write"
+        ],
+        [
+          "outint",
+          "int32",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "highwater",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "levels": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outlev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outsurface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outint": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scratch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "highwater": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "column",
+          "int32"
+        ],
+        [
+          "scratch_words",
+          "int32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "deep",
+          "int32"
+        ],
+        [
+          "shallow",
+          "int32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

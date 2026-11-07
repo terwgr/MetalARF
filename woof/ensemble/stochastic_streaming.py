@@ -99,13 +99,17 @@ class StochasticSweepLease:
         if self.pending is not None:
             raise RuntimeError("previous stochastic domain sweep has not completed")
         if self.xp is None:
-            import cupy as cp
-            self.xp = cp
+            if self.hook.host:
+                self.xp = np
+            else:
+                import cupy as cp
+                self.xp = cp
         processes = ([self.hook.sppt] if self.hook.sppt is not None else [])
         if self.hook.skebs is not None:
             processes += [self.hook.skebs.psi, self.hook.skebs.theta]
         processes += list(self.hook.spp.values())
-        devices = {int(process.device) for process in processes}
+        devices = {int(process.device) for process in processes
+                   if process.device is not None}
         if len(devices) > 1:
             raise ValueError("one stochastic spectral owner cannot span different CUDA source cards")
         cuda = getattr(self.xp, "cuda", None)
@@ -206,7 +210,8 @@ class StochasticWindowBinding:
             bind = getattr(getattr(state, "physics", None), "bind_spp_patterns", None)
             if bind is None:
                 raise RuntimeError("stochastic SPP window needs the actual selected parameter consumers")
-            bind(self.spp)
+            from woof.ensemble.stochastic_execution import device_patterns
+            bind(device_patterns(state, self.spp))
 
     def after_nonmicrophysics(self, state, cfg, tendencies):
         if not self.enabled:
@@ -219,6 +224,10 @@ class StochasticWindowBinding:
         rates = {"u": tendencies.ru, "v": tendencies.rv, "theta": tendencies.rtheta, "qv": tendencies.rqv}
         if any(value is None for value in rates.values()):
             raise RuntimeError("stochastic window needs every original nonmicrophysics component")
+        from woof.ensemble.stochastic_execution import _is_metal, _host
+        metal = _is_metal(state)
+        if metal:
+            rates = {name: _host(value) for name, value in rates.items()}
         factors = None
         if self.forcing is not None:
             from woof.ensemble.stochastic_execution import coupled_mass_factors
@@ -229,8 +238,14 @@ class StochasticWindowBinding:
                 raise RuntimeError("stochastic compute window was already applied")
         result = self.lease.hook.transform_nonmicrophysics(rates, tendency_scope="nonmicrophysics",
             mass_factors=factors, sppt_patterns=self.patterns, skebs_forcing=self.forcing)
+        if metal:
+            for name, target in (("u", tendencies.ru), ("v", tendencies.rv),
+                                 ("theta", tendencies.rtheta), ("qv", tendencies.rqv)):
+                target[...] = np.ascontiguousarray(result[name], dtype=np.float32)
         with self.lease._lock:
             self.lease.completed.add(self.window_id)
+        if metal:
+            return tendencies
         return replace(tendencies, ru=result["u"], rv=result["v"], rtheta=result["theta"], rqv=result["qv"])
 
 

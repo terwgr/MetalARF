@@ -119,6 +119,24 @@ def offline_index(monkeypatch):
 @pytest.fixture
 def python_engine(monkeypatch):
     monkeypatch.setattr(rustwx_fetch, "find_fetch_bin", lambda: None)
+    # Since 49f8a677f every HRRR soil file also carries the cycle's runtime
+    # surface records, which only the Rust backbone cuts; with the
+    # backbone hidden here that step is not this file's question (request
+    # identity), so it appends nothing and records each table field as
+    # appended.  The record matters: fetch_hrrr reuses a soil file only
+    # when its receipt names every runtime surface field, so an empty
+    # binding would fetch every soil file again.
+    # tests/test_fetch.py and tests/test_runtime_surface_fallback.py own
+    # the step itself.
+    from woof import runtime_surface_fetch
+
+    def recorded(path, *, adapter, **kwargs):
+        return [{"field": name, "units": units, "selector": selector}
+                for name, _product, selector, units, *_ in
+                adapter.runtime_surface_fields]
+
+    monkeypatch.setattr(runtime_surface_fetch,
+                        "append_runtime_surface_records", recorded)
 
 
 def _with_probe(monkeypatch, name: str, probe, **fixed):
@@ -280,57 +298,6 @@ def test_a_named_hrrr_cycle_with_wait_for_waits_instead_of_refusing(
     assert _manifest(out)["forecast_hours"] == [0, 1, 2]
     assert sorted(path.name for path in (out / "posting").glob("f*.json")) == [
         "f000.json", "f001.json", "f002.json"]
-
-
-def test_a_complete_gfs_folder_is_reused_when_no_provider_answers(
-        tmp_path, monkeypatch, capsys, offline_index):
-    downloads: list[str] = []
-    monkeypatch.setattr(gfs_transport, "_download",
-                        _dated_gfs_download(downloads))
-    out = tmp_path / "gfs"
-    fetch.fetch_gfs(cycle=datetime(2026, 1, 31, 6), hours=(0, 3),
-                    area=fetch.parse_area(AREA), out=out,
-                    progress=lambda line: None)
-    before = _files(out)
-
-    def unreachable(*args, **kwargs):
-        raise AssertionError("a complete folder asked the provider for bytes")
-
-    monkeypatch.setattr(gfs_transport, "_download", unreachable)
-    monkeypatch.setattr(fetch, "_head_ok", lambda url: False)
-    _with_probe(monkeypatch, "require_published_cycle", lambda url: False)
-    rc = cli.main(["fetch", "--source", "gfs", "--cycle", "2026-01-31T06",
-                   "--hours", "3", "--area", AREA, "--out", str(out)])
-    captured = capsys.readouterr()
-    assert rc == 0, captured.err
-    assert "already in" in captured.out
-    payload = {name: body for name, body in _files(out).items()
-               if name.endswith(".grib2")}
-    assert payload == {name: body for name, body in before.items()
-                       if name.endswith(".grib2")}
-    assert _manifest(out)["mode"] == "nomads-cgi-subset"
-
-
-def test_a_complete_hrrr_folder_is_reused_when_no_provider_answers(
-        tmp_path, monkeypatch, capsys, python_engine):
-    downloads: list[str] = []
-    monkeypatch.setattr(hrrr_transport, "_download_product",
-                        _dated_hrrr_product(downloads))
-    out = tmp_path / "hrrr"
-    fetch.fetch_hrrr(cycle=datetime(2026, 1, 31, 6), hours=(0, 1),
-                     area=None, out=out, progress=lambda line: None)
-    downloads.clear()
-    monkeypatch.setattr(fetch, "_head_ok", lambda url: False)
-    _with_probe(monkeypatch, "require_published_cycle", lambda url: False)
-    rc = cli.main(["fetch", "--source", "hrrr", "--cycle", "2026-01-31T06",
-                   "--hours", "1", "--out", str(out)])
-    captured = capsys.readouterr()
-    assert rc == 0, captured.err
-    assert downloads == []
-    assert "already in" in captured.out
-    assert _manifest(out)["forecast_hours"] == [0, 1]
-    assert {entry["transport"] for entry in _manifest(out)["files"]
-            if entry["role"] in ("atmosphere", "soil")} == {"s3"}
 
 
 def test_a_partial_folder_still_asks_whether_the_cycle_is_published(
@@ -680,26 +647,29 @@ def test_latest_hrrr_wait_for_with_transport_auto_waits_on_both_hosts(
     assert handed[0][1] in ("nomads", "s3") and handed[0][2] is False
 
 
+@pytest.mark.parametrize("pinned, option", [("s3", []), ("nomads", ["--transport", "auto"])], ids=["default", "auto"])
 def test_a_complete_hrrr_folder_with_transport_auto_keeps_its_host(
-        tmp_path, monkeypatch, capsys, python_engine):
+        tmp_path, monkeypatch, capsys, python_engine, pinned, option):
     downloads: list[str] = []
     monkeypatch.setattr(hrrr_transport, "_download_product",
                         _dated_hrrr_product(downloads))
     out = tmp_path / "hrrr"
     fetch.fetch_hrrr(cycle=datetime(2026, 1, 31, 6), hours=(0, 1),
-                     area=None, out=out, transport="nomads",
+                     area=None, out=out, transport=pinned,
                      progress=lambda line: None)
     downloads.clear()
     monkeypatch.setattr(fetch, "_head_ok", lambda url: False)
     _with_probe(monkeypatch, "require_published_cycle", lambda url: False)
     rc = cli.main(["fetch", "--source", "hrrr", "--cycle", "2026-01-31T06",
-                   "--hours", "1", "--transport", "auto",
+                   "--hours", "1", *option,
                    "--out", str(out)])
     captured = capsys.readouterr()
     assert rc == 0, captured.err
     assert downloads == []
     assert {entry["transport"] for entry in _manifest(out)["files"]
-            if entry["role"] in ("atmosphere", "soil")} == {"nomads"}
+            if entry["role"] in ("atmosphere", "soil")} == {pinned}
+    assert "already in" in captured.out
+    assert _manifest(out)["forecast_hours"] == [0, 1]
 
 
 def test_run_plan_resolves_latest_with_transport_auto(tmp_path, monkeypatch):
@@ -807,6 +777,7 @@ def test_a_complete_recent_gfs_folder_is_reused_without_asking_anyone(
         if name.endswith(".grib2")}
     assert _manifest(out)["record_bars"][0]["expected"] == \
         fetch.GFS_SUBSET_RECORD_COUNT
+    assert _manifest(out)["mode"] == "nomads-cgi-subset"
 
 
 def test_a_fullfile_rerun_reads_no_index_and_keeps_the_serving_host(
@@ -857,7 +828,7 @@ def test_a_fullfile_rerun_reads_no_index_and_keeps_the_serving_host(
 
 
 def test_a_skipped_hrrr_file_keeps_the_host_that_served_it(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, python_engine):
     downloads: list[str] = []
     monkeypatch.setattr(hrrr_transport, "_download_product",
                         _dated_hrrr_product(downloads))
@@ -1003,7 +974,10 @@ def test_an_hrrr_host_that_does_not_serve_a_product_is_refused_in_words(
     assert rc == 2, err
     assert "Traceback" not in err
     assert "s3 answered HTTP 404" in err
-    assert "HRRR cycle 2026-02-01T06Z f00" in err
+    # Both hours 404 on s3 here and the pool fetches f00 and f01 at once,
+    # so the sentence names whichever failed first: f00 alone, f01 under
+    # load (seen on a development machine's full CPU leg).  Either names this cycle.
+    assert re.search(r"HRRR cycle 2026-02-01T06Z f0[01] ", err), err
 
 
 def test_a_404_past_the_hosts_retention_names_the_host_that_keeps_it():

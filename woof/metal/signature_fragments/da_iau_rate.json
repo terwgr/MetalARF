@@ -1,0 +1,11 @@
+{
+  "kernels": [{
+    "name": "da_iau_rate", "module": "da_iau_rate",
+    "source": "woof/metal/shaders/da_iau_rate.metal",
+    "cuda_source": "woof/da/iau.py", "cuda_symbol": "IauForcing.step_rates",
+    "resources": [["delta", "float", "read"], ["rate", "float", "read_write"]],
+    "shapes": {"delta": [["n"]], "rate": [["n"]]},
+    "parameters": [["n", "int32"], ["factor", "float32"], ["accumulate", "int32"]],
+    "arithmetic_policies": ["default"], "layout_version": 1, "threads_per_group": 128
+  }]
+}

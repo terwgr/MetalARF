@@ -1,0 +1,377 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_rrtm_lw_mm5atm",
+      "module": "wrf_exact_rrtm_mm5atm",
+      "source": "woof/metal/shaders/wrf_exact_rrtm_mm5atm.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "source_only_helper": true,
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "p_pa",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read"
+        ],
+        [
+          "tw",
+          "float",
+          "read"
+        ],
+        [
+          "pw_pa",
+          "float",
+          "read"
+        ],
+        [
+          "tsfc",
+          "float",
+          "read"
+        ],
+        [
+          "emiss",
+          "float",
+          "read"
+        ],
+        [
+          "o3wrk",
+          "float",
+          "read"
+        ],
+        [
+          "ppwrkh",
+          "float",
+          "read"
+        ],
+        [
+          "pprof",
+          "float",
+          "read"
+        ],
+        [
+          "tprof",
+          "float",
+          "read"
+        ],
+        [
+          "pavel",
+          "float",
+          "read_write"
+        ],
+        [
+          "tavel",
+          "float",
+          "read_write"
+        ],
+        [
+          "pz",
+          "float",
+          "read_write"
+        ],
+        [
+          "tz",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "taucloud",
+          "float",
+          "read_write"
+        ],
+        [
+          "coldry",
+          "float",
+          "read_write"
+        ],
+        [
+          "wkl",
+          "float",
+          "read_write"
+        ],
+        [
+          "wx",
+          "float",
+          "read_write"
+        ],
+        [
+          "tbound",
+          "float",
+          "read_write"
+        ],
+        [
+          "semiss",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "p_pa": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "dz": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "qv": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "qc": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "qr": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "qi": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "qs": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "qg": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "cldfra": [
+          [
+            "ncol",
+            "nz"
+          ]
+        ],
+        "tw": [
+          [
+            "ncol",
+            "nz+1"
+          ]
+        ],
+        "pw_pa": [
+          [
+            "ncol",
+            "nz+1"
+          ]
+        ],
+        "tsfc": [
+          [
+            "ncol"
+          ]
+        ],
+        "emiss": [
+          [
+            "ncol"
+          ]
+        ],
+        "o3wrk": [
+          [
+            "31"
+          ]
+        ],
+        "ppwrkh": [
+          [
+            "32"
+          ]
+        ],
+        "pprof": [
+          [
+            "nprof"
+          ]
+        ],
+        "tprof": [
+          [
+            "nprof"
+          ]
+        ],
+        "pavel": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tavel": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "pz": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "tz": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "cldfra_out": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "taucloud": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "coldry": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "wkl": [
+          [
+            "ncol",
+            "nlay",
+            "35"
+          ]
+        ],
+        "wx": [
+          [
+            "ncol",
+            "nlay",
+            "4"
+          ]
+        ],
+        "tbound": [
+          [
+            "ncol"
+          ]
+        ],
+        "semiss": [
+          [
+            "ncol",
+            "16"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "nprof",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "co2vmr",
+          "float32"
+        ],
+        [
+          "n2ovmr",
+          "float32"
+        ],
+        [
+          "ch4vmr",
+          "float32"
+        ],
+        [
+          "r",
+          "float32"
+        ],
+        [
+          "g",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

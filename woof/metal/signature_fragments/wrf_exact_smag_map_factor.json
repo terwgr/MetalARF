@@ -1,0 +1,88 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_smag_map_factor",
+      "module": "wrf_exact_smag_map_factor",
+      "source": "woof/metal/shaders/wrf_exact_smag_map_factor.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_couple_dry_mixing_map_factor",
+      "resources": [
+        [
+          "tendency",
+          "float",
+          "read_write"
+        ],
+        [
+          "map_factor",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "tendency": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ],
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "map_factor": [
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "ny",
+            "nx+1"
+          ],
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "stagger",
+          "int32"
+        ],
+        [
+          "multiply_reciprocal",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

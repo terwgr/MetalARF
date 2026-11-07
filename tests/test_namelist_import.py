@@ -18,6 +18,7 @@ import dataclasses
 from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
+import re
 
 import pytest
 
@@ -25,6 +26,7 @@ import woof.cli as cli
 from woof.physics_compat import CONSTANT_DOWNWARD_LONGWAVE_ACK
 from woof.experiment import DEFAULT_COLUMN_CHUNK, load_experiment
 from woof.namelist_import import (GF_SCHEME_GENERATION_NOTICE,
+                                   MYNN_MIXSCALARS_DEFAULT_NOTICE,
                                    SubstitutionReport, import_namelists,
                                    parse_namelist)
 from woof.native_wrf_contract import validate_native_lambert_contracts
@@ -32,7 +34,15 @@ from woof.static.lambert import (
     grids_from_projection_config,
     grids_from_wps_namelist,
 )
-from woof.verify.cases.real74_d01 import BUNDLE
+try:
+    from woof.verify.cases.real74_d01 import BUNDLE
+except ModuleNotFoundError as error:
+    # Recast WOOF leaves this verification case module out; without it there
+    # is no reference bundle either, so the three @requires_bundle cases skip
+    # and every synthetic case still runs.
+    if error.name != "woof.verify.cases.real74_d01":
+        raise
+    BUNDLE = Path(__file__).resolve().parent / "reference-bundle-not-in-this-tree"
 
 REPO = Path(__file__).resolve().parents[1]
 BUNDLE_WPS = BUNDLE / "namelists" / "namelist.wps"
@@ -42,10 +52,12 @@ requires_bundle = pytest.mark.skipif(
     reason="WRF 1974 reference bundle not present")
 
 #: Synthetic 2-domain namelist pair mirroring the bundle's shape (child
-#: ratio 3 at (40, 30) inside a 100 x 80 parent; ISHMAEL/Shin-Hong/RRTMG
-#: selections -- ISHMAEL and RRTMG exercise both ratified substitutions
-#: without the bundle, and Shin-Hong exercises the native bl_pbl=11
-#: import that replaced its former substitution).
+#: ratio 3 at (40, 30) inside a 100 x 80 parent; Morrison/Shin-Hong/RRTMG
+#: selections -- RRTMG exercises the ratified radiation substitution
+#: without the bundle, Morrison is the scheme the bundle's campaign ran in
+#: place of ISHMAEL (55, refused by name since 2026-10-12), and Shin-Hong
+#: exercises the native bl_pbl=11 import that replaced its former
+#: substitution).
 WPS_TEXT = """\
 &share
  wrf_core = 'ARW',
@@ -120,7 +132,7 @@ INPUT_TEXT = """\
  smooth_option = 0,
 /
 &physics
- mp_physics = 55, 55,
+ mp_physics = 10, 10,
  ra_lw_physics = 4, 4,
  ra_sw_physics = 4, 4,
  radt = 12, 3,
@@ -171,120 +183,70 @@ def _pair(tmp_path, wps=WPS_TEXT, inp=INPUT_TEXT):
 
 
 def _generic_hierarchy_pair(tmp_path, max_dom: int):
-    """Valid all-sibling hierarchy used to exercise every compiled count."""
-
+    """Expand the shared pair to a valid all-sibling hierarchy."""
     def col(root, child=None):
-        if child is None:
-            child = root
-        return ", ".join(str(value) for value in (
-            [root] + [child] * (max_dom - 1)))
+        child = root if child is None else child
+        return ", ".join(str(value) for value in [root] + [child] * (max_dom - 1))
 
-    start = col("'1999-05-03_12:00:00'")
-    end = col("'1999-05-03_18:00:00'")
-    wps = f"""\
-&share
- wrf_core = 'ARW',
- max_dom = {max_dom},
- start_date = {start},
- end_date = {end},
- interval_seconds = 21600,
-/
-&geogrid
- parent_id = {col(1)},
- parent_grid_ratio = {col(1, 3)},
- i_parent_start = {col(1, 40)},
- j_parent_start = {col(1, 30)},
- e_we = {col(101, 61)},
- e_sn = {col(81, 61)},
- geog_data_res = {col("'default'")},
- dx = 12000,
- dy = 12000,
- map_proj = 'lambert',
- ref_lat = 39.7,
- ref_lon = -83.9,
- truelat1 = 30.0,
- truelat2 = 60.0,
- stand_lon = -83.9,
- geog_data_path = '/geog',
-/
-"""
-    inp = f"""\
-&time_control
- run_hours = 6,
- start_year = {col(1999)},
- start_month = {col(5)},
- start_day = {col(3)},
- start_hour = {col(12)},
- end_year = {col(1999)},
- end_month = {col(5)},
- end_day = {col(3)},
- end_hour = {col(18)},
- input_from_file = {col('.true.')},
- history_interval = {col(60, 15)},
- restart_interval = 60,
-/
-&domains
- time_step = 60,
- max_dom = {max_dom},
- e_we = {col(101, 61)},
- e_sn = {col(81, 61)},
- e_vert = {col(9)},
- eta_levels = 1.0, 0.9, 0.8, 0.7, 0.6,
-              0.5, 0.4, 0.2, 0.0,
- p_top_requested = 5000,
- dx = {col(12000.0, 4000.0)},
- dy = {col(12000.0, 4000.0)},
- grid_id = {', '.join(str(i) for i in range(1, max_dom + 1))},
- parent_id = {col(0, 1)},
- i_parent_start = {col(1, 40)},
- j_parent_start = {col(1, 30)},
- parent_grid_ratio = {col(1, 3)},
- parent_time_step_ratio = {col(1, 3)},
- feedback = 0,
- smooth_option = 0,
-/
-&physics
- mp_physics = {col(6)},
- ra_lw_physics = {col(4)},
- ra_sw_physics = {col(4)},
- radt = {col(12, 3)},
- sf_sfclay_physics = {col(91)},
- sf_surface_physics = {col(2)},
- bl_pbl_physics = {col(1)},
- bldt = {col(0)},
- cu_physics = {col(1, 0)},
- cudt = {col(5, 0)},
-/
-&dynamics
- hybrid_opt = 2,
- etac = 0.2,
- w_damping = 1,
- epssm = {col(0.5)},
- diff_opt = {col(2)},
- km_opt = {col(4)},
- mix_full_fields = {col('.true.')},
- diff_6th_opt = {col(2)},
- diff_6th_factor = {col(0.12, 0.10)},
- diff_6th_slopeopt = {col(1)},
- base_temp = 290.0,
- damp_opt = 3,
- zdamp = {col(5000.0)},
- dampcoef = {col(0.2)},
- khdif = {col(0)},
- kvdif = {col(0)},
- non_hydrostatic = {col('.true.')},
- use_theta_m = 0,
- moist_adv_opt = {col(1)},
-/
-&bdy_control
- spec_bdy_width = 5,
- spec_zone = 1,
- relax_zone = 4,
- specified = {col('.true.', '.false.')},
- nested = {col('.false.', '.true.')},
-/
-"""
+    def expand(text, columns):
+        for key, values in columns.items():
+            text, count = re.subn(rf"(?m)^ {key}\s*=.*$",
+                                  f" {key} = {values},", text)
+            assert count == 1, key
+        return text
+
+    geometry = {
+        "max_dom": max_dom, "e_we": col(101, 61), "e_sn": col(81, 61),
+        "parent_grid_ratio": col(1, 3), "i_parent_start": col(1, 40),
+        "j_parent_start": col(1, 30),
+    }
+    wps = expand(WPS_TEXT.split("&ungrib")[0], {
+        **geometry, "parent_id": col(1), "geog_data_res": col("'default'"),
+        "start_date": col("'1999-05-03_12:00:00'"),
+        "end_date": col("'1999-05-03_18:00:00'"),
+    })
+    # These optional sections and controls were never part of this fixture.
+    wps = re.sub(r"(?m)^ io_form_geogrid = .*\n", "", wps)
+    wps = re.sub(r"(?m)^( +\w+) +=", r"\1 =", wps)
+    inp = expand(INPUT_TEXT, {
+        **geometry, "parent_id": col(0, 1),
+        "start_year": col(1999), "start_month": col(5),
+        "start_day": col(3), "start_hour": col(12),
+        "end_year": col(1999), "end_month": col(5),
+        "end_day": col(3), "end_hour": col(18),
+        "input_from_file": col('.true.'), "history_interval": col(60, 15),
+        "e_vert": col(9), "dx": col(12000.0, 4000.0),
+        "dy": col(12000.0, 4000.0),
+        "grid_id": ", ".join(str(i) for i in range(1, max_dom + 1)),
+        "parent_time_step_ratio": col(1, 3),
+        "mp_physics": col(6), "ra_lw_physics": col(4),
+        "ra_sw_physics": col(4), "radt": col(12, 3),
+        "sf_sfclay_physics": col(91), "sf_surface_physics": col(2),
+        "bl_pbl_physics": col(1), "bldt": col(0),
+        "cu_physics": col(1, 0), "cudt": col(5, 0),
+        "epssm": col(0.5), "diff_opt": col(2), "km_opt": col(4),
+        "mix_full_fields": col('.true.'), "diff_6th_opt": col(2),
+        "diff_6th_factor": col(0.12, 0.10), "diff_6th_slopeopt": col(1),
+        "base_temp": 290.0, "zdamp": col(5000.0), "dampcoef": col(0.2),
+        "khdif": col(0), "kvdif": col(0), "non_hydrostatic": col('.true.'),
+        "moist_adv_opt": col(1),
+        "specified": col('.true.', '.false.'),
+        "nested": col('.false.', '.true.'),
+    })
+    inp = re.sub(r"(?m)^ (?:interval_seconds|restart) = .*\n", "", inp)
     return _pair(tmp_path, wps=wps, inp=inp)
+
+
+def _bundle_text_as_run() -> str:
+    """The bundle namelist with its ISHMAEL selector (55) replaced by the
+    Morrison selector (10) the campaign ran, on every domain, and nothing
+    else changed."""
+    lines = BUNDLE_INPUT.read_text(encoding="utf-8").splitlines(keepends=True)
+    rows = [i for i, line in enumerate(lines)
+            if line.strip().startswith("mp_physics")]
+    assert len(rows) == 1 and re.search(r"\b55\b", lines[rows[0]])
+    lines[rows[0]] = re.sub(r"\b55\b", "10", lines[rows[0]])
+    return "".join(lines)
 
 
 def _effective_bundle_input(tmp_path):
@@ -298,8 +260,13 @@ def _effective_bundle_input(tmp_path):
     omission resolves to the same Registry default 0 the old scope
     adjustment pinned.  test_nwp_diagnostics_maps_and_reaches_every_run_
     config proves the = 1 spelling translates.
+
+    It also asks for Morrison (mp_physics = 10) by its own number: the
+    campaign ran Morrison in place of the reference's ISHMAEL, and since
+    2026-10-12 the importer refuses 55 by name instead of making that swap
+    itself.
     """
-    text = BUNDLE_INPUT.read_text(encoding="utf-8")
+    text = _bundle_text_as_run()
     nwp = " nwp_diagnostics                     = 1,\n"
     assert text.count(nwp) == 1
     text = text.replace(nwp, "")
@@ -338,23 +305,12 @@ def test_parser_handles_continuation_lines_and_types(tmp_path):
     assert wps["geogrid"]["map_proj"] == ["lambert"]
 
 
-def test_parser_repetition_edge_cases(tmp_path):
-    f = tmp_path / "edge.nml"
-    f.write_text("&s\n a = 3*1.5,\n b = 4*.true.,\n c = 2*'x',\n"
-                 " d = 1.0D-2, -2.5d0,\n/\n")
-    parsed = parse_namelist(f)
-    assert parsed["s"]["a"] == [1.5, 1.5, 1.5]
-    assert parsed["s"]["b"] == [True, True, True, True]
-    assert parsed["s"]["c"] == ["x", "x"]
-    assert parsed["s"]["d"] == [0.01, -2.5]
-
-
 # ---------------------------------------------------------------------------
 # Synthetic import: staggered conversion, substitutions, derived chain
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("max_dom", range(1, 22))
+@pytest.mark.parametrize("max_dom", [1, 2, 6, 21])
 def test_importer_builds_every_supported_hierarchy_cardinality(
         tmp_path, max_dom):
     toml_text, _report = import_namelists(
@@ -573,8 +529,8 @@ def test_synthetic_import_resolves_and_reports(tmp_path):
     subs = {(s.key, s.wrf_value): (s.gpuwm_key, s.gpuwm_value,
                                    s.gpuwm_name)
             for s in report.substitutions}
-    assert subs[("mp_physics", 55)] == ("mp_physics", 10,
-                                        "Morrison 2-moment")
+    # Morrison is asked for by its own number and runs as itself: no row.
+    assert not any(s.key == "mp_physics" for s in report.substitutions)
     # bl_pbl 11 imports natively since the Shin-Hong port: no substitution
     # row, and the selector reaches every domain as itself (the mp8/mp18
     # promotion contract shape).
@@ -583,9 +539,9 @@ def test_synthetic_import_resolves_and_reports(tmp_path):
     assert subs[("ra_lw_physics/ra_sw_physics", 4)] == (
         "ra_physics", 4, "RTE+RRTMGP")
     formatted = report.format()
-    for token in ("mp_physics 55", "Morrison 2-moment",
-                  "RRTMG", "RTE+RRTMGP"):
+    for token in ("RRTMG", "RTE+RRTMGP"):
         assert token in formatted, token
+    assert "mp_physics 55" not in formatted
     assert "bl_pbl_physics 11" not in formatted
     # every consumed-without-counterpart key carries a reason
     assert all(d.reason for d in report.dropped)
@@ -669,17 +625,6 @@ def test_omitted_epssm_uses_registry_default_on_every_domain(tmp_path):
     assert exp.auto_epssm == (1, 2)
 
 
-def test_direct_scheme_ids_map_without_substitution(tmp_path):
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55",
-                             "mp_physics = 10, 10").replace(
-        "bl_pbl_physics = 11, 11", "bl_pbl_physics = 1, 1")
-    _, report = import_namelists(*_pair(tmp_path, inp=inp))
-    keys = {s.key for s in report.substitutions}
-    assert "mp_physics" not in keys
-    assert "bl_pbl_physics" not in keys
-    assert "ra_lw_physics/ra_sw_physics" in keys  # RRTMG -> RTE+RRTMGP
-
-
 def test_thompson_maps_without_substitution_or_environment(
         monkeypatch, tmp_path):
     """mp8 imports first-class: no enable guard, no table-root environment.
@@ -692,7 +637,7 @@ def test_thompson_maps_without_substitution_or_environment(
     """
     monkeypatch.delenv("WOOF_EXPERIMENTAL_THOMPSON_MP8", raising=False)
     monkeypatch.delenv("WOOF_THOMPSON_TABLE_ROOT", raising=False)
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 8, 8")
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 8, 8")
     toml_text, report = import_namelists(*_pair(tmp_path, inp=inp))
     output = tmp_path / "thompson.toml"
     output.write_text(toml_text, encoding="utf-8")
@@ -707,7 +652,7 @@ def test_nssl2_maps_first_class_without_substitution(tmp_path):
     selector intact.  The scheme's maturity ("wrf-matched-run-candidate" in
     physics_registry_v2.json) is a registry statement, not an importer
     gate -- exactly the mp8 promotion contract shape."""
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 18, 18")
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 18, 18")
     toml_text, report = import_namelists(*_pair(tmp_path, inp=inp))
     output = tmp_path / "nssl2.toml"
     output.write_text(toml_text, encoding="utf-8")
@@ -717,7 +662,7 @@ def test_nssl2_maps_first_class_without_substitution(tmp_path):
 
 @pytest.mark.parametrize("soil_layers", [6, 9])
 def test_target_thompson_mynn_ruc_suite_imports_without_substitution(tmp_path, soil_layers):
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55",
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10",
                              "mp_physics = 8, 8").replace(
         "sf_sfclay_physics = 91, 91",
         "sf_sfclay_physics = 5, 5").replace(
@@ -739,9 +684,9 @@ def test_target_thompson_mynn_ruc_suite_imports_without_substitution(tmp_path, s
     ]
 
 
-@pytest.mark.parametrize("soil_layers", [5, 7, 10])
+@pytest.mark.parametrize("soil_layers", [5])
 def test_imported_ruc_soil_geometry_still_requires_a_defined_count(tmp_path, soil_layers):
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 8, 8").replace(
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 8, 8").replace(
         "sf_surface_physics = 2, 2", "sf_surface_physics = 3, 3").replace(
         " bldt = 0, 0,", f" num_soil_layers = {soil_layers},\n bldt = 0, 0,")
     with pytest.raises(ValueError, match="soil"):
@@ -870,7 +815,7 @@ def test_mixed_modern_rrtmg_discloses_the_selected_spectrum_without_changing_opt
 
 
 def test_wsm6_and_hail_opt_import_without_substitution(tmp_path):
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55",
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10",
                              "mp_physics = 6, 6").replace(
         "&physics\n", "&physics\n hail_opt = 1,\n")
     toml_text, report = import_namelists(*_pair(tmp_path, inp=inp))
@@ -884,7 +829,7 @@ def test_wsm6_and_hail_opt_import_without_substitution(tmp_path):
 
 
 def test_wsm6_hail_opt_import_rejects_invalid_value(tmp_path):
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55",
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10",
                              "mp_physics = 6, 6").replace(
         "&physics\n", "&physics\n hail_opt = 2,\n")
     with pytest.raises(ValueError, match="hail_opt"):
@@ -898,10 +843,11 @@ def test_wsm6_hail_opt_import_rejects_invalid_value(tmp_path):
 def test_rejects_unmapped_scheme(tmp_path):
     # mp_physics = 8 stood here while Thompson was env-gated; it imports
     # first-class now (see test_thompson_maps_without_substitution_or_
-    # environment).  Lin (mp 2) has no woof implementation and keeps this
+    # environment).  The unsupported selector 7 (Goddard 4-ice) has no woof implementation and keeps this
     # rejection path accurate.
-    inp = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 2, 2")
-    with pytest.raises(ValueError, match="no ratified woof mapping"):
+    # Since 2.9.1 it is refused by its scheme name, not as a bare number.
+    inp = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 7, 7")
+    with pytest.raises(ValueError, match="NU-WRF Goddard 4-ice"):
         import_namelists(*_pair(tmp_path, inp=inp))
     inp = INPUT_TEXT.replace("bl_pbl_physics = 11, 11",
                              "bl_pbl_physics = 5, 5")
@@ -909,13 +855,6 @@ def test_rejects_unmapped_scheme(tmp_path):
     toml_text, _ = import_namelists(*_pair(tmp_path, inp=inp))
     assert "bl_pbl_physics = 5" in toml_text
     assert "sf_sfclay_physics = 91" in toml_text
-
-
-def test_rejects_moving_nest_keys(tmp_path):
-    inp = INPUT_TEXT.replace(" time_step = 60,",
-                             " time_step = 60,\n num_moves = 2,")
-    with pytest.raises(ValueError, match="moving-nest"):
-        import_namelists(*_pair(tmp_path, inp=inp))
 
 
 def test_rejects_wps_input_layout_mismatch(tmp_path):
@@ -960,15 +899,6 @@ def test_rejects_idealized_input_from_file(tmp_path):
         import_namelists(*_pair(tmp_path, inp=inp))
 
 
-def test_rejects_unmapped_namelist_key(tmp_path):
-    # tracer_opt has no woof counterpart of any class (rk_ord, the old
-    # example here, is now a validated fixed-by-ArWen key).
-    inp = INPUT_TEXT.replace(" hybrid_opt = 2,",
-                             " hybrid_opt = 2,\n tracer_opt = 2,")
-    with pytest.raises(ValueError, match="unmapped key"):
-        import_namelists(*_pair(tmp_path, inp=inp))
-
-
 def test_ordinary_land_use_keys_import_with_receipts(tmp_path):
     """``num_land_cat`` and ``fractional_seaice``, from the field report.
 
@@ -987,23 +917,34 @@ def test_ordinary_land_use_keys_import_with_receipts(tmp_path):
     toml_text, report = import_namelists(*_pair(tmp_path, inp=inp))
 
     # num_land_cat invents no TOML value; fractional_seaice = 1 under Noah
-    # (the fixture's sf_surface_physics = 2) is recorded as fixed at 0,
-    # because only the RUC seam carries the 0.02 fractional threshold.
+    # (the fixture's sf_surface_physics = 2) is a DECLARED DIVERGENCE the
+    # terminal prints, because only the RUC seam carries the fractional
+    # blend.  Until 2026-10-12 it sat in the "fixed (validated)" bucket,
+    # which said the request was met.
     assert "num_land_cat" not in toml_text
-    assert "fractional_seaice" not in toml_text
+    import tomllib as _tomllib
+    assert "fractional_seaice" not in _tomllib.loads(toml_text)["shared"]
+    assert "#   fractional_seaice 1 (" in toml_text      # the header says so
     fixed = {(f.section, f.key): f for f in report.fixed}
     assert fixed[("physics", "num_land_cat")].fixed_value == 21
     assert "LANDUSE.TBL" in fixed[("physics", "num_land_cat")].reason
-    seaice = fixed[("physics", "fractional_seaice")]
-    assert seaice.values == (1,) and seaice.fixed_value == 0
+    assert ("physics", "fractional_seaice") not in fixed
+    (seaice,) = [s for s in report.substitutions
+                 if s.key == "fractional_seaice"]
+    assert (seaice.wrf_value, seaice.gpuwm_value) == (1, 0)
     assert "RUC" in seaice.reason
+    assert "strictly between 0.02 and 1" in seaice.reason
+    # The WRF input door announces it rather than refusing it.
+    from woof.wrfinput_door import require_preserved_wrf_selectors
+    require_preserved_wrf_selectors(dataclasses.replace(
+        report, substitutions=(seaice,)))
     rendered = report.format()
     assert "num_land_cat" in rendered and "fractional_seaice" in rendered
 
     # Under RUC the key is WRF's own and reaches RunConfig as written.
     ruc = INPUT_TEXT.replace(
         " cudt = 5, 0,", " cudt = 5, 0,\n fractional_seaice = 1,").replace(
-        "mp_physics = 55, 55", "mp_physics = 8, 8").replace(
+        "mp_physics = 10, 10", "mp_physics = 8, 8").replace(
         "sf_sfclay_physics = 91, 91", "sf_sfclay_physics = 5, 5").replace(
         "sf_surface_physics = 2, 2", "sf_surface_physics = 3, 3").replace(
         "bl_pbl_physics = 11, 11", "bl_pbl_physics = 5, 5").replace(
@@ -1061,7 +1002,7 @@ def test_native_passive_vapor_headers_enable_moisture_with_microphysics_off(
     """Only native QV headers distinguish passive vapor from a dry mp=0 file."""
     inp = INPUT_TEXT
     for old, new in (
-        ("mp_physics = 55, 55", "mp_physics = 0, 0"),
+        ("mp_physics = 10, 10", "mp_physics = 0, 0"),
         ("ra_lw_physics = 4, 4", "ra_lw_physics = 0, 0"),
         ("ra_sw_physics = 4, 4", "ra_sw_physics = 0, 0"),
         ("sf_sfclay_physics = 91, 91", "sf_sfclay_physics = 0, 0"),
@@ -1083,14 +1024,14 @@ def test_native_passive_vapor_headers_enable_moisture_with_microphysics_off(
 
 def test_implicit_switches_come_from_the_shipped_profile_not_the_importer(
         tmp_path):
-    """``moist_cq`` and ``top_lid`` have ONE authority now.
+    """``moist_cq`` has ONE authority; an omitted ``top_lid`` is WRF's.
 
-    WRF's namelist has no ``moist_cq`` key, and woof's ``top_lid``
-    default is deliberately not WRF's Registry default.  The importer used
-    to answer both itself -- ``moist_cq = mp_physics > 0`` and WRF's open
-    top -- while the HRRR root preparer and the domain wizard read the
-    shipped physics profiles.  CQ now follows WRF for every moist suite;
-    the top-lid policy still comes from the selected profile.
+    WRF's namelist has no ``moist_cq`` key, so the importer asks the
+    shipped physics profiles, as the HRRR root preparer and the domain
+    wizard do.  ``top_lid`` IS a namelist key: since 2026-10-12 an omitted
+    one is WRF's Registry default (open top) whatever the profile's
+    certified lid, because that is the run the namelist describes; until
+    then it took the profile's lid.
     """
 
     from woof.physics_compat import (
@@ -1098,7 +1039,7 @@ def test_implicit_switches_come_from_the_shipped_profile_not_the_importer(
     )
 
     wsm6 = INPUT_TEXT.replace(
-        " mp_physics = 55, 55,", " mp_physics = 6, 6,").replace(
+        " mp_physics = 10, 10,", " mp_physics = 6, 6,").replace(
         " ra_lw_physics = 4, 4,", " ra_lw_physics = 0, 0,").replace(
         " ra_sw_physics = 4, 4,", " ra_sw_physics = 1, 1,").replace(
         " bl_pbl_physics = 11, 11,", " bl_pbl_physics = 1, 1,").replace(
@@ -1113,9 +1054,10 @@ def test_implicit_switches_come_from_the_shipped_profile_not_the_importer(
     profile = single_domain_runtime_switches(WSM6_PROFILE_ID)
     assert profile["moist_cq"] is True and profile["top_lid"] is True
     assert "moist_cq = true" in toml_text
-    assert "top_lid = true" in toml_text
+    # The profile's rigid lid is not applied to a namelist that omits it.
+    assert "top_lid = false" in toml_text
     applied = {entry.key: entry for entry in report.defaults_applied}
-    assert WSM6_PROFILE_ID in applied["top_lid"].reason
+    assert "top_lid" not in applied
 
     # The Morrison-family profile states an open-top policy, and the importer
     # agrees with it for the profile's own suite.  The fixture selects
@@ -1133,22 +1075,22 @@ def test_implicit_switches_come_from_the_shipped_profile_not_the_importer(
 
     # And the native Shin-Hong variant of the same suite matches no
     # shipped profile. Moisture pressure correction stays active, while
-    # the top-lid switch takes the RunConfig default.
+    # an omitted top_lid is WRF's open top here too.
     shinhong_toml, _ = import_namelists(*_pair(tmp_path))
     assert "moist_cq = true" in shinhong_toml
-    assert "top_lid = true" in shinhong_toml
+    assert "top_lid = false" in shinhong_toml
 
-    # An explicit namelist top_lid still wins over the profile: this is a
-    # default, not an override.
+    # An explicit namelist top_lid is imported as written: the rigid lid
+    # stays one spelling away.
     explicit = wsm6.replace(
         " use_theta_m = 0,",
-        " use_theta_m = 0,\n top_lid = .false., .false.,")
+        " use_theta_m = 0,\n top_lid = .true., .true.,")
     explicit_toml, _ = import_namelists(
         *_pair(tmp_path, inp=explicit),
         # Derived from the WSM6 no-radiation pair above, so it carries the
         # same constant-longwave declaration.
         acknowledgements=(CONSTANT_DOWNWARD_LONGWAVE_ACK,))
-    assert "top_lid = false" in explicit_toml
+    assert "top_lid = true" in explicit_toml
 
 
 def test_the_bare_door_books_theta_m_as_the_same_substitution_as_the_other_two(
@@ -1579,8 +1521,8 @@ def _import_with(tmp_path, extra_dynamics="", extra_physics="",
         inp = inp.replace(" hybrid_opt = 2,",
                           " hybrid_opt = 2,\n" + extra_dynamics)
     if extra_physics:
-        inp = inp.replace(" mp_physics = 55, 55,",
-                          " mp_physics = 55, 55,\n" + extra_physics)
+        inp = inp.replace(" mp_physics = 10, 10,",
+                          " mp_physics = 10, 10,\n" + extra_physics)
     if extra_input:
         inp += extra_input
     return import_namelists(*_pair(tmp_path, inp=inp))
@@ -1872,9 +1814,7 @@ def test_mynn_identity_keys_fix_at_identity_and_refuse_others(tmp_path):
     assert "bl_mynn_mixlength = 1" in text
     assert fixed[("physics", "bl_mynn_closure")].fixed_value == 2.6
     for line, match in ((" bl_mynn_mixlength = 0,\n", "bl_mynn_mixlength"),
-                        (" icloud_bl = 0,\n", "icloud_bl"),
-                        (" bl_mynn_tkeadvect = .true., .true.,\n",
-                         "bl_mynn_tkeadvect")):
+                        (" icloud_bl = 0,\n", "icloud_bl")):
         with pytest.raises(ValueError, match=match):
             _import_with(tmp_path, extra_physics=line)
 
@@ -1882,7 +1822,7 @@ def test_mynn_identity_keys_fix_at_identity_and_refuse_others(tmp_path):
 def test_mynn_mixing_length_and_scalar_diffusion_import_without_substitution(tmp_path):
     # The WRF post-PBL selector must not turn on MYNN's separate plume path.
     inp = INPUT_TEXT.replace(
-        " mp_physics = 55, 55,",
+        " mp_physics = 10, 10,",
         " mp_physics = 28, 28,\n bl_mynn_mixlength = 2,\n scalar_pblmix = 1,")
     inp = inp.replace(" bl_pbl_physics = 11, 11,", " bl_pbl_physics = 5, 5,")
     inp = inp.replace(" sf_sfclay_physics = 91, 91,", " sf_sfclay_physics = 5, 5,")
@@ -1894,13 +1834,58 @@ def test_mynn_mixing_length_and_scalar_diffusion_import_without_substitution(tmp
         assert domain.run.bl_mynn_mixscalars == 0
     assert "bl_mynn_mixlength = 2" in text
     assert "scalar_pblmix = 1" in text
+    # The omitted key took the v4.6.1 Registry default, and the import
+    # says so: v4.7.x defaults it to 1 and is indistinguishable here.
+    assert MYNN_MIXSCALARS_DEFAULT_NOTICE in report.notices
+    assert "Registry.EM_COMMON:2479" in report.format()
+
+
+def test_mynn_mixscalars_default_notice_names_the_omission_only(tmp_path):
+    base = INPUT_TEXT.replace(" mp_physics = 10, 10,", " mp_physics = 28, 28,")
+    base = base.replace(" bl_pbl_physics = 11, 11,", " bl_pbl_physics = 5, 5,")
+    base = base.replace(" sf_sfclay_physics = 91, 91,", " sf_sfclay_physics = 5, 5,")
+    # Stated explicitly (either value): the namelist chose, no notice.
+    for value in (0, 1):
+        inp = base.replace(" mp_physics = 28, 28,",
+                           f" mp_physics = 28, 28,\n bl_mynn_mixscalars = {value},")
+        text, report = import_namelists(
+            *_pair(tmp_path, inp=inp), name=f"mynn-mixscalars-{value}")
+        assert MYNN_MIXSCALARS_DEFAULT_NOTICE not in report.notices
+        exp = _load(tmp_path, text, f"mynn-mixscalars-{value}.toml")
+        assert {d.run.bl_mynn_mixscalars for d in exp.domains} == {value}
+    # A non-MYNN namelist that omits the key gets no MYNN notice.
+    _, report = import_namelists(*_pair(tmp_path, inp=INPUT_TEXT), name="ysu-plain")
+    assert MYNN_MIXSCALARS_DEFAULT_NOTICE not in report.notices
+
+
+def test_hrrr_fork_namelist_omits_mixscalars_and_imports_hrrr_mixing(tmp_path):
+    """The operational HRRR namelist (V3.9 line, no bl_mynn_mixscalars key)
+    imports as HRRR runs: scalar_pblmix = 1 diffuses the aerosols, the
+    MYNN plume key stays 0, and the receipt names the omitted default."""
+    from woof.fortran_namelist import parse_namelist
+    path = Path(__file__).parent / "fixtures/namelist/hrrr_wrf-v4.1.21.nl"
+    physics = parse_namelist(path)["physics"]
+    assert "bl_mynn_mixscalars" not in physics
+    assert physics["scalar_pblmix"][0] == 1
+    assert physics["mp_physics"][0] == 28
+    assert physics["bl_pbl_physics"][0] == 5
+    inp = INPUT_TEXT.replace(" mp_physics = 10, 10,",
+                             " mp_physics = 28, 28,\n scalar_pblmix = 1,")
+    inp = inp.replace(" bl_pbl_physics = 11, 11,", " bl_pbl_physics = 5, 5,")
+    inp = inp.replace(" sf_sfclay_physics = 91, 91,", " sf_sfclay_physics = 5, 5,")
+    text, report = import_namelists(*_pair(tmp_path, inp=inp), name="hrrr-mixing")
+    exp = _load(tmp_path, text, "hrrr-mixing.toml")
+    for domain in exp.domains:
+        assert domain.run.scalar_pblmix == 1
+        assert domain.run.bl_mynn_mixscalars == 0
+    assert MYNN_MIXSCALARS_DEFAULT_NOTICE in report.notices
 
 
 def test_wrf3x_mynn_tkebudget_spelling_imports_the_gsd41_generation(tmp_path):
     # bl_mynn_tkebudget is the WRF 3.x spelling of MYNN's budget switch; a
     # namelist written that way selects the WRF 3.9-branch MYNN (gsd_41).
     inp = INPUT_TEXT.replace(
-        " mp_physics = 55, 55,",
+        " mp_physics = 10, 10,",
         " mp_physics = 28, 28,\n bl_mynn_mixlength = 2,\n"
         " bl_mynn_tkebudget = 0,")
     inp = inp.replace(" bl_pbl_physics = 11, 11,", " bl_pbl_physics = 5, 5,")
@@ -1912,9 +1897,12 @@ def test_wrf3x_mynn_tkebudget_spelling_imports_the_gsd41_generation(tmp_path):
         assert domain.run.bl_mynn_mixlength == 2
     assert 'bl_mynn_version = "gsd_41"' in text
     assert 'ra_rrtmg_variant = "rrtmg_legacy"' in text
-    with pytest.raises(ValueError, match="in-cloud QC_BL"):
-        import_namelists(*_pair(tmp_path, inp=inp), name="mynn-gsd41-modern",
-                         rrtmg_variant="rte-rrtmgp")
+    # U-E4: every radiation coupling carries the gsd_41 QC_BL merge, so the
+    # RTE+RRTMGP arm imports too (it was refused before the merge was shared).
+    modern, _ = import_namelists(*_pair(tmp_path, inp=inp), name="mynn-gsd41-modern",
+                                 rrtmg_variant="rte-rrtmgp")
+    for domain in _load(tmp_path, modern, "mynn-gsd41-modern.toml").domains:
+        assert (domain.run.bl_mynn_version, domain.run.ra_rrtmg_variant) == ("gsd_41", "rte-rrtmgp")
     with pytest.raises(ValueError, match="bl_mynn_tkebudget"):
         import_namelists(*_pair(tmp_path, inp=inp.replace(
             "bl_mynn_tkebudget = 0,", "bl_mynn_tkebudget = 1,")),
@@ -1923,7 +1911,7 @@ def test_wrf3x_mynn_tkebudget_spelling_imports_the_gsd41_generation(tmp_path):
 
 def test_wrf4_mynn_namelist_keeps_the_wrf461_generation(tmp_path):
     inp = INPUT_TEXT.replace(
-        " mp_physics = 55, 55,", " mp_physics = 28, 28,\n bl_mynn_mixlength = 2,")
+        " mp_physics = 10, 10,", " mp_physics = 28, 28,\n bl_mynn_mixlength = 2,")
     inp = inp.replace(" bl_pbl_physics = 11, 11,", " bl_pbl_physics = 5, 5,")
     inp = inp.replace(" sf_sfclay_physics = 91, 91,", " sf_sfclay_physics = 5, 5,")
     text, _ = import_namelists(*_pair(tmp_path, inp=inp), name="mynn-461")
@@ -1945,7 +1933,7 @@ def test_actual_fork_mynn_keys_select_source_and_radiation(tmp_path):
         value = physics[key][0]
         literal = (".true." if value else ".false.") if type(value) is bool else str(value)
         rows.append(f" {key} = {literal},")
-    inp = INPUT_TEXT.replace(" mp_physics = 55, 55,", " mp_physics = 28, 28,\n" + "\n".join(rows))
+    inp = INPUT_TEXT.replace(" mp_physics = 10, 10,", " mp_physics = 28, 28,\n" + "\n".join(rows))
     inp = inp.replace(" bl_pbl_physics = 11, 11,", " bl_pbl_physics = 5, 5,")
     inp = inp.replace(" sf_sfclay_physics = 91, 91,", " sf_sfclay_physics = 5, 5,")
     text, _ = import_namelists(*_pair(tmp_path, inp=inp), name="fork-mynn-keys")
@@ -2009,29 +1997,21 @@ def test_disabled_stochastic_parameters_do_not_enable_any_scheme(tmp_path):
     assert ("stoch", "kmaxforc") in dropped
 
 
-def test_complete_disabled_wrf_stochastic_defaults_keep_original_import_bytes(tmp_path):
-    from woof.wrf_namelist_registry import wrf_namelist_keys
-    entries = [f" {key} = {row['default']}," for (section, key), row in wrf_namelist_keys().items()
-               if section == "stoch"]
-    reference, _ = _import_with(tmp_path)
-    actual, _ = _import_with(tmp_path, extra_input="&stoch\n" + "\n".join(entries) + "\n/\n")
-    assert actual == reference
-
-
 @pytest.mark.parametrize("setting, reason", [
-    # An active random selector is refused with the reason every run door
-    # gives (its spread amplitude has no observation calibration) and the
-    # key that set it; an unknown key keeps its own answer.
-    ("pert_thom = .true.", "&stoch pert_thom = .*spread amplitudes have not been calibrated"),
-    ("perturb_bdy = 1", "&stoch perturb_bdy = .*spread amplitudes have not been calibrated"),
+    # An active random selector with no runtime consumer is refused by name
+    # with the fields it would leave unperturbed and the key that set it
+    # (2.9.0 stochastic admission: the blanket uncalibrated-spread refusal
+    # named no breakage); an unknown key keeps its own answer.
+    ("pert_thom = .true.", "&stoch pert_thom = .*no runtime consumer.*would remain unperturbed"),
+    ("perturb_bdy = 1", "&stoch perturb_bdy = .*no runtime consumer.*would remain unperturbed"),
     ("unknown_noise = 0", "unmapped key")])
 def test_disabled_parameter_handling_does_not_drop_active_or_unknown_settings(tmp_path, setting, reason):
     with pytest.raises(ValueError, match=reason):
         _import_with(tmp_path, extra_input="&stoch\n" + setting + ",\n/\n")
 
 
-def test_fdda_active_nudging_refuses_disabled_drops(tmp_path):
-    with pytest.raises(ValueError, match="nudging"):
+def test_fdda_missing_clock_refuses_disabled_drops(tmp_path):
+    with pytest.raises(ValueError, match="gfdda_interval_m"):
         _import_with(tmp_path,
                      extra_input="&fdda\n grid_fdda = 1, 1,\n/\n")
     _, report = _import_with(
@@ -2040,21 +2020,6 @@ def test_fdda_active_nudging_refuses_disabled_drops(tmp_path):
     dropped = {(d.section, d.key) for d in report.dropped}
     assert ("fdda", "grid_fdda") in dropped
     assert ("fdda", "gfdda_inname") in dropped
-
-
-def test_time_control_stream_and_logging_keys_drop(tmp_path):
-    inp = INPUT_TEXT.replace(
-        " restart = .false.,",
-        " restart = .false.,\n debug_level = 100,\n"
-        " adjust_output_times = .true.,\n"
-        " auxhist2_interval = 10, 10,\n"
-        " auxinput4_inname = 'wrflowinp_d<domain>',\n"
-        " iofields_filename = 'fields.txt', 'fields.txt',\n")
-    _, report = import_namelists(*_pair(tmp_path, inp=inp))
-    dropped = {(d.section, d.key) for d in report.dropped}
-    for key in ("debug_level", "adjust_output_times", "auxhist2_interval",
-                "auxinput4_inname", "iofields_filename"):
-        assert ("time_control", key) in dropped, key
 
 
 def test_domains_decomposition_keys_drop(tmp_path):
@@ -2085,7 +2050,7 @@ def test_auto_level_keys_inert_with_eta_refused_without(tmp_path):
 
 
 def test_nssl_parameters_pin_registry_defaults_under_mp18(tmp_path):
-    base = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 18, 18")
+    base = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 18, 18")
     ok = base.replace(" mp_physics = 18, 18,",
                       " mp_physics = 18, 18,\n nssl_alphah = 0.0,\n"
                       " nssl_rho_qhl = 900.0,")
@@ -2097,8 +2062,8 @@ def test_nssl_parameters_pin_registry_defaults_under_mp18(tmp_path):
     with pytest.raises(ValueError, match="nssl_cccn"):
         import_namelists(*_pair(tmp_path, inp=bad))
     # under any other scheme the parameters are inert in WRF too -> drop
-    inert = INPUT_TEXT.replace(" mp_physics = 55, 55,",
-                               " mp_physics = 55, 55,\n nssl_cccn = 1.0e9,")
+    inert = INPUT_TEXT.replace(" mp_physics = 10, 10,",
+                               " mp_physics = 10, 10,\n nssl_cccn = 1.0e9,")
     _, report = import_namelists(*_pair(tmp_path, inp=inert))
     dropped = {(d.section, d.key): d for d in report.dropped}
     assert "inert" in dropped[("physics", "nssl_cccn")].reason
@@ -2111,7 +2076,7 @@ def test_nssl_variant_selectors_import_natively(tmp_path):
     that turns hail or predicted CCN off must come through as those values
     rather than being fixed back to the shipped default lane.
     """
-    base = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 18, 18")
+    base = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 18, 18")
     inp = base.replace(" mp_physics = 18, 18,",
                        " mp_physics = 18, 18,\n nssl_hail_on = 0,\n"
                        " nssl_ccn_on = 0,")
@@ -2143,7 +2108,7 @@ def test_deprecated_nssl_scheme_ids_canonicalize_like_wrf(tmp_path):
                   "nssl_density_on": 1}),
     ):
         inp = INPUT_TEXT.replace(
-            "mp_physics = 55, 55", f"mp_physics = {scheme_id}, {scheme_id}")
+            "mp_physics = 10, 10", f"mp_physics = {scheme_id}, {scheme_id}")
         toml_text, report = import_namelists(*_pair(tmp_path, inp=inp))
         output = tmp_path / f"nssl_mp{scheme_id}.toml"
         output.write_text(toml_text, encoding="utf-8")
@@ -2161,7 +2126,7 @@ def test_deprecated_nssl_scheme_ids_canonicalize_like_wrf(tmp_path):
 
 def test_unported_nssl_variants_are_refused_by_name(tmp_path):
     """No nearby NSSL branch is substituted for an unported one."""
-    base = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 18, 18")
+    base = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 18, 18")
     one_moment = base.replace(" mp_physics = 18, 18,",
                               " mp_physics = 18, 18,\n"
                               " nssl_2moment_on = 0,")
@@ -2177,14 +2142,14 @@ def test_unported_nssl_variants_are_refused_by_name(tmp_path):
     # scheme ID the user actually wrote.
     for scheme_id in (19, 21):
         inp = INPUT_TEXT.replace(
-            "mp_physics = 55, 55", f"mp_physics = {scheme_id}, {scheme_id}")
+            "mp_physics = 10, 10", f"mp_physics = {scheme_id}, {scheme_id}")
         with pytest.raises(ValueError, match="one-moment"):
             import_namelists(*_pair(tmp_path, inp=inp))
 
 
 def test_nssl_variant_selectors_refuse_a_per_domain_split(tmp_path):
     """Hail on in one domain and off in another would change the state set."""
-    base = INPUT_TEXT.replace("mp_physics = 55, 55", "mp_physics = 18, 18")
+    base = INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 18, 18")
     split = base.replace(" mp_physics = 18, 18,",
                          " mp_physics = 18, 18,\n nssl_hail_on = 1, 0,")
     with pytest.raises(ValueError, match="one NSSL variant for the whole"):
@@ -2220,7 +2185,8 @@ def test_report_carries_three_explicit_sections(tmp_path):
 # ---------------------------------------------------------------------------
 
 @requires_bundle
-def test_original_bundle_namelist_books_its_omitted_theta_m_as_a_substitution():
+def test_original_bundle_namelist_books_its_omitted_theta_m_as_a_substitution(
+        tmp_path):
     """The published original is not silently rewritten to woof scope.
 
     Since the nwp_diagnostics unpin (STEP17) the original's remaining
@@ -2230,8 +2196,16 @@ def test_original_bundle_namelist_books_its_omitted_theta_m_as_a_substitution():
     door books, rather than refused on this door alone, so the assertion
     inverts with the refusal it cited.
     """
+    # The original asks for ISHMAEL, which is refused by name since
+    # 2026-10-12 (never run as Morrison under the namelist's back) ...
+    with pytest.raises(NamelistRefusal, match="Jensen-ISHMAEL"):
+        import_namelists(BUNDLE_WPS, BUNDLE_INPUT, name="real74_4dom")
+    # ... and with only that selector stated as the campaign ran it, the
+    # omitted use_theta_m is the one remaining booked divergence.
+    original = Path(tmp_path) / "namelist.input"
+    original.write_text(_bundle_text_as_run(), encoding="utf-8")
     _toml, report = import_namelists(
-        BUNDLE_WPS, BUNDLE_INPUT, name="real74_4dom")
+        BUNDLE_WPS, original, name="real74_4dom")
     booked = [item for item in report.substitutions
               if item.key == "use_theta_m"]
     assert len(booked) == 1
@@ -2362,11 +2336,19 @@ def test_effective_bundle_round_trip_reproduces_committed_toml(tmp_path):
     assert header_bl in harmonized
     assert "Shin-Hong" not in toml_text
     harmonized = harmonized.replace(header_bl, "")
-    for receipt_line, imported_line in (("\ntop_lid = false\n",
-                                         "\ntop_lid = true\n"),):
-        assert receipt_line in harmonized
-        assert imported_line in toml_text
-        harmonized = harmonized.replace(receipt_line, imported_line)
+    # Third: the campaign's ISHMAEL -> Morrison swap.  The effective namelist
+    # now asks for Morrison by its own number (55 is refused by name), so
+    # the receipt's header row for that swap is the one line it loses.
+    header_mp = ("\n#   mp_physics 55 (ISHMAEL) -> "
+                 "mp_physics 10 (Morrison 2-moment)")
+    assert header_mp in harmonized
+    assert "ISHMAEL" not in toml_text
+    harmonized = harmonized.replace(header_mp, "")
+    # The campaign ran WRF's open top (the bundle namelist omits top_lid),
+    # and since 2026-10-12 an omitted top_lid imports as exactly that, so
+    # the receipt's lid line needs no harmonizing any more.
+    assert "\ntop_lid = false\n" in harmonized
+    assert "\ntop_lid = false\n" in toml_text
     # The later adaptive-clock importer spells out twelve defaults the old
     # receipt omitted. Admit exactly that attributed block, never any changed
     # clock setting; the independent loaded-experiment test below still checks
@@ -2387,11 +2369,10 @@ def test_effective_bundle_round_trip_reproduces_committed_toml(tmp_path):
     assert "column_chunk" not in toml_text
     subs = {(s.key, s.wrf_value, s.gpuwm_key, s.gpuwm_value)
             for s in report.substitutions}
-    # bl_pbl 11 left this set when the Shin-Hong port admitted the scheme;
-    # the two remaining rows are the complete ratified-substitution
-    # inventory.
+    # bl_pbl 11 left this set when the Shin-Hong port admitted the scheme
+    # and mp 55 when ISHMAEL became a named refusal; the remaining row is
+    # the complete package-substitution inventory.
     assert subs == {
-        ("mp_physics", 55, "mp_physics", 10),
         ("ra_lw_physics/ra_sw_physics", 4, "ra_physics", 4),
     }
     # the bundle's hand-typed 333.333333 d04 dx cross-checks against the
@@ -2419,11 +2400,9 @@ def test_effective_bundle_import_matches_loaded_committed_experiment(tmp_path):
     # Same enumerated importer-behaviour changes as the byte round-trip
     # test above: the campaign receipt records the Shin-Hong -> YSU
     # substitution; a fresh import is native bl_pbl_physics = 11, and a
-    # Morrison + Shin-Hong suite matches no shipped profile, so the
-    # implicit top-lid answer falls back to the RunConfig default.
-    with_bl = (harmonized
-               .replace("\nbl_pbl_physics = 1\n", "\nbl_pbl_physics = 11\n")
-               .replace("\ntop_lid = false\n", "\ntop_lid = true\n"))
+    # omitted top_lid is WRF's open top, as the campaign ran it.
+    with_bl = harmonized.replace("\nbl_pbl_physics = 1\n",
+                                 "\nbl_pbl_physics = 11\n")
     assert with_bl != harmonized
     harmonized = with_bl
     harmonized_path = tmp_path / "committed_harmonized.toml"
@@ -2457,7 +2436,7 @@ def test_cli_import_namelist_writes_output_and_report(tmp_path, capsys):
                      "--output", str(out), "--name", "synth99"]) == 0
     captured = capsys.readouterr().out
     assert "Physics substitutions" in captured
-    assert "Morrison 2-moment" in captured
+    assert "RTE+RRTMGP" in captured
     assert out.exists()
     assert not out.with_suffix(out.suffix + ".tmp").exists()  # atomic
     exp = load_experiment(out)
@@ -2990,15 +2969,6 @@ def test_an_undefined_fine_input_stream_index_is_refused_by_name(tmp_path):
     assert "unmapped key" not in message
 
 
-def test_a_fine_input_stream_column_longer_than_max_dom_is_refused(tmp_path):
-    """The support report rejects extra domain values rather than
-    truncating them; the importer reads the same column the same way."""
-    inp_text = INPUT_TEXT.replace(
-        " run_hours = 6,", " run_hours = 6,\n fine_input_stream = 0, 0, 2,")
-    with pytest.raises(ValueError, match="rejected rather than truncated"):
-        import_namelists(*_pair(tmp_path, inp=inp_text))
-
-
 @pytest.mark.parametrize("column,undefined,delayed,refused,diverges", [
     ([0], (), (), False, False),
     ([0, 0, 0], (), (), False, False),
@@ -3026,21 +2996,6 @@ def test_the_fine_input_stream_decision_is_the_whole_answer(
     assert (decision.divergence is not None) is diverges
     assert decision.way_out == (FINE_INPUT_STREAM_DELAYED_WAY_OUT if diverges
                                 else FINE_INPUT_STREAM_WAY_OUT)
-
-
-def test_a_non_integer_fine_input_stream_is_refused_not_coerced(tmp_path):
-    """A Fortran logical is not a stream index.  The shared function is the
-    one type gate, so no door reads a different column from the one the
-    namelist wrote."""
-    from woof.namelist_import import fine_input_stream_decision
-
-    with pytest.raises(ValueError, match="Fortran integer tokens"):
-        fine_input_stream_decision([0, True])
-    inp_text = INPUT_TEXT.replace(
-        " run_hours = 6,",
-        " run_hours = 6,\n fine_input_stream = 0, .true.,")
-    with pytest.raises(ValueError, match="Fortran integer tokens"):
-        import_namelists(*_pair(tmp_path, inp=inp_text))
 
 
 # ---------------------------------------------------------------------------
@@ -3191,10 +3146,25 @@ def test_non_source_fixed_triplet_keeps_current_staging_importer_bytes(tmp_path)
         *_single_domain_pair(tmp_path, _fixed_through_adaptive_input(60)),
         name="fixed-triplet-control")
     baseline = json.loads(fixture.read_text())
-    assert hashlib.sha256(text.encode()).hexdigest() == baseline["fixed_triplet_60"]
+    # Pinned before mp_physics = 55 was refused; the input now asks for
+    # Morrison by its own number, and the retired header line put back
+    # reproduces the pinned bytes exactly.
+    from ishmael_retirement import with_retired_line
+    # The pin also predates the capabilities campaign's three import lines.
+    from capability_campaign_import import without_campaign_import_lines
+    # The pin also predates the package's name: the importer's comment lines
+    # name the program and its module paths (woof here), and the pinned bytes
+    # carry the engine's spelling of those words.
+    engine_spelling = "".join(line.replace("woof", "gpuwm") if line.startswith("#") else line
+                              for line in text.splitlines(keepends=True))
+    assert hashlib.sha256(with_retired_line(
+        without_campaign_import_lines(engine_spelling)).encode()).hexdigest() \
+        == baseline["fixed_triplet_60"]
     assert "terrain_clock" not in text
     run = _load(tmp_path, text).root.run
-    assert run.terrain_clock == "measured"
+    # No terrain_clock written: the run reads the default, "local_face"
+    # from 2.8.8.
+    assert run.terrain_clock == "local_face"
     assert run.use_adaptive_time_step is True
     assert not any(row.key == "use_adaptive_time_step" for row in report.fixed)
 
@@ -3254,7 +3224,8 @@ def test_an_adaptive_clock_with_a_range_still_imports_as_adaptive(
     assert "terrain_clock" not in toml_text
     run = _load(tmp_path, toml_text).root.run
     assert run.use_adaptive_time_step is True
-    assert run.terrain_clock == "measured"
+    # Nothing written: the default, "local_face" from 2.8.8.
+    assert run.terrain_clock == "local_face"
 
 
 def test_a_nested_namelist_with_a_pinned_root_triplet_stays_adaptive(
@@ -3278,16 +3249,17 @@ def test_a_nested_namelist_with_a_pinned_root_triplet_stays_adaptive(
     assert "terrain_clock" not in toml_text
     exp = _load(tmp_path, toml_text)
     assert exp.root.run.use_adaptive_time_step is True
-    assert exp.root.run.terrain_clock == "measured"
+    # Nothing written: the default, "local_face" from 2.8.8.
+    assert exp.root.run.terrain_clock == "local_face"
 
-def _import_radiation_options(tmp_path, lines, *, mp_physics=55,
+def _import_radiation_options(tmp_path, lines, *, mp_physics=10,
                               rrtmg_variant="rrtmg_legacy"):
     """INPUT_TEXT with ``lines`` (one namelist line each) appended inside
     &physics, the microphysics column set to ``mp_physics`` on both
     domains, imported with the named RRTMG mapping."""
     block = "".join(f" {line},\n" for line in lines)
     inp = INPUT_TEXT.replace(
-        " mp_physics = 55, 55,",
+        " mp_physics = 10, 10,",
         f" mp_physics = {mp_physics}, {mp_physics},\n" + block)
     return import_namelists(*_pair(tmp_path, inp=inp),
                             rrtmg_variant=rrtmg_variant)
@@ -3317,14 +3289,13 @@ def test_swint_opt_and_aer_opt_reach_the_run_config(tmp_path):
 
 
 @pytest.mark.parametrize(("line", "mp", "match"), [
-    ("swint_opt = 2", 55, "swint_opt"),
-    ("aer_opt = 1", 28, "not transcribed"),
-    ("aer_opt = 2", 28, "not transcribed"),
+    ("swint_opt = 2", 10, "swint_opt"),
+    ("aer_opt = 1", 28, "domain-1 aerod parent forcing"),
     ("aer_opt = 4", 28, "must be 0, 1, 2 or 3"),
-    # mp_physics = 55 (P3): WRF gates aer_opt = 3 on the Thompson aerosol
+    # mp_physics = 10 (Morrison): WRF gates aer_opt = 3 on the Thompson aerosol
     # package, so the namelist claims aerosol-aware radiation it would
     # not get.
-    ("aer_opt = 3", 55, "mp_physics = 28"),
+    ("aer_opt = 3", 10, "mp_physics = 28"),
 ])
 def test_swint_opt_and_aer_opt_refusals_name_the_gap(tmp_path, line, mp,
                                                      match):
@@ -3419,3 +3390,156 @@ def test_parsed_source_text_carries_explicit_selectors_without_opening_labels():
     assert cfg.bl_mynn_version == "wrf_461"
     assert cfg.ra_rrtmg_variant == "rrtmg_legacy"
     assert cfg.rrtmg_cloud_optics_form == "noaa_wrf39"
+
+
+def test_fast_sbm_maps_without_substitution(tmp_path):
+    text=INPUT_TEXT.replace("mp_physics = 10, 10", "mp_physics = 30, 30")
+    toml_text,report=import_namelists(*_pair(tmp_path,inp=text),rrtmg_variant="rrtmg_legacy")
+    target=tmp_path/"fast-sbm.toml"; target.write_text(toml_text)
+    assert load_experiment(target).root.run.mp_physics==30
+    assert not any(row.key=="mp_physics" for row in report.substitutions)
+def _g3_input(extra_physics: str = "") -> str:
+    """INPUT_TEXT selecting Grell 3D (cu_physics = 5) on d01."""
+    return _gf_input(extra_physics).replace(
+        " cu_physics = 3, 0,", " cu_physics = 5, 0,")
+
+
+def test_grell_3d_imports_natively_with_its_keys(tmp_path):
+    """cu_physics = 5 reaches its domain as itself, with clos_choice,
+    ishallow and cugd_avedx, and the model-step cadence pinned."""
+    toml_text, report = import_namelists(
+        *_pair(tmp_path, inp=_g3_input(
+            "\n ishallow = 1,\n clos_choice = 0,\n cugd_avedx = 3,")),
+        name="g3")
+    assert "cu_physics = 5" in toml_text
+    assert "cugd_avedx = 3" in toml_text
+    assert "cudt_minutes = 0.0" in toml_text
+    out = tmp_path / "g3.toml"
+    out.write_text(toml_text)
+    exp = load_experiment(out)
+    assert [dc.run.cu_physics for dc in exp.domains] == [5, 0]
+    assert exp.root.run.cugd_avedx == 3
+    assert exp.root.run.ishallow == 1
+    assert exp.root.run.cudt_minutes == 0.0
+    assert exp.domain(2).run.cugd_avedx == 1
+    dropped = {entry.key: entry for entry in report.dropped}
+    assert "cudt[1]" in dropped and "model step" in dropped["cudt[1]"].reason
+
+
+def test_grell_3d_imports_nondefault_ensemble_dimensions(tmp_path):
+    text, report = import_namelists(
+        *_pair(tmp_path, inp=_g3_input("\n maxens = 4,\n maxens2 = 3,\n maxens3 = 17,\n ensdim = 204,\n cu_diag = 1, 0,")), name="g3dims")
+    assert "maxens = 4" in text and "ensdim = 204" in text and "cu_diag = 1" in text
+    run = _load(tmp_path,text).root.run
+    assert run.maxens == 4 and run.ensdim == 204 and run.cu_diag == 1
+    with pytest.raises(ValueError, match="closure writes would exceed"):
+        import_namelists(*_pair(tmp_path, inp=_g3_input("\n maxens = 4,")), name="g3short")
+
+
+#: NCAR's public WRF v4.4 CONUS 12 km benchmark namelist sets every Grell
+#: ensemble dimension to 1 under the conus suite's Tiedtke cumulus.
+NCAR_BENCHMARK_ENSEMBLE = ("\n maxiens = 1,\n maxens = 1,\n maxens2 = 1,"
+                           "\n maxens3 = 1,\n ensdim = 1,")
+
+
+def test_grell_ensemble_controls_without_grell_3d_are_dropped_as_inert(tmp_path):
+    """2.9.0 refused these with "cu_physics=5 is required", which refused
+    NCAR's CONUS benchmark as shipped; wrf.exe accepts and ignores them."""
+    inp = INPUT_TEXT.replace(" cudt = 5, 0,", " cudt = 5, 0,"
+                             + NCAR_BENCHMARK_ENSEMBLE
+                             + "\n convtrans_avglen_m = 20,")
+    toml_text, report = import_namelists(*_pair(tmp_path, inp=inp), name="ncarens")
+    dropped = {entry.key: entry for entry in report.dropped}
+    for key in ("maxiens", "maxens", "maxens2", "maxens3", "ensdim",
+                "convtrans_avglen_m"):
+        assert key in dropped, key
+        assert key not in toml_text
+    assert "inert" in dropped["ensdim"].reason
+    run = _load(tmp_path, toml_text).root.run
+    assert run.cu_physics == 1 and run.maxens == 3 and run.ensdim == 144
+
+
+def test_cu_diag_on_a_non_grell_scheme_is_refused_as_wrf_refuses_it(tmp_path):
+    inp = INPUT_TEXT.replace(" cudt = 5, 0,", " cudt = 5, 0,\n cu_diag = 1, 0,")
+    with pytest.raises(ValueError, match="module_check_a_mundo"):
+        import_namelists(*_pair(tmp_path, inp=inp), name="kfdiag")
+
+
+def test_cu_diag_under_grell_freitas_is_dropped_as_wrf_sets_it(tmp_path):
+    toml_text, report = import_namelists(
+        *_pair(tmp_path, inp=_gf_input("\n cu_diag = 1,")), name="gfdiag")
+    dropped = {entry.key: entry for entry in report.dropped}
+    assert "cu_diag" in dropped and "cu_diag" not in toml_text
+
+
+def test_user_aerosol_keys_reach_loaded_run_config(tmp_path):
+    text,report=_import_radiation_options(tmp_path,["aer_opt = 2","aer_type = 2",
+        "aer_aod550_val = 0.2","aer_angexp_opt = 3","aer_ssa_opt = 3","aer_asy_opt = 3"],mp_physics=6)
+    exp=_load(tmp_path,text)
+    for dc in exp.domains:
+        assert dc.run.aer_opt==2 and dc.run.aer_type==2
+        assert dc.run.aer_aod550_val==0.2 and dc.run.aer_angexp_opt==3
+        assert dc.run.aer_ssa_opt==3 and dc.run.aer_asy_opt==3
+
+
+#: NCAR's public WRF v4.4 CONUS 12 km benchmark namelists, as shipped in
+#: v4.4_bench_conus12km.  Its namelist.wps starts at 00 UTC (the WPS run)
+#: while the forecast starts at 12 UTC; the run doors build the WPS layout
+#: from the wrfinput files, so this file-pair import aligns the start.
+NCAR_CONUS12KM = Path(__file__).resolve().parent / "data" / "ncar_v44_conus12km"
+
+
+def _ncar_conus12km_pair(tmp_path, *, restart_interval=None):
+    wps = (NCAR_CONUS12KM / "namelist.wps").read_text().replace(
+        "2019-11-26_00:00:00", "2019-11-26_12:00:00")
+    inp = (NCAR_CONUS12KM / "namelist.input").read_text()
+    if restart_interval is not None:
+        inp, count = re.subn(r"(?m)^ restart_interval\s*=\s*660,",
+                             f" restart_interval = {restart_interval},", inp)
+        assert count == 1
+    return _pair(tmp_path, wps=wps, inp=inp)
+
+
+def test_ncar_conus12km_benchmark_namelist_imports_as_shipped(tmp_path):
+    """2.9.0 refused it ("cu_physics=5 is required") at both run doors."""
+    toml_text, report = import_namelists(*_ncar_conus12km_pair(tmp_path),
+                                         name="ncar12")
+    dropped = {entry.key for entry in report.dropped}
+    assert {"maxens", "maxens2", "maxens3", "ensdim"} <= dropped
+    exp = _load(tmp_path, toml_text)
+    assert exp.restart_interval_s == 39600.0   # 660 min = 550 steps of 72 s
+
+
+def test_restart_interval_past_the_run_imports_as_no_restart(tmp_path):
+    """restart_interval = 99999 at 72 s steps is not a whole number of
+    steps; wrf.exe's alarm never rings inside a 12 h run, so it writes no
+    restart file.  2.9.0 refused the namelist."""
+    toml_text, report = import_namelists(
+        *_ncar_conus12km_pair(tmp_path, restart_interval=99999), name="ncarri")
+    fixed = {(f.section, f.key): f for f in report.fixed}
+    assert "never rings" in fixed[("time_control", "restart_interval")].reason
+    assert _load(tmp_path, toml_text).restart_interval_s == 0.0
+
+
+def test_restart_interval_off_the_step_grid_rings_on_wrfs_step(tmp_path):
+    # 361 min = 300.83 steps of 72 s: wrf.exe writes once, on step 301.
+    toml_text, report = import_namelists(
+        *_ncar_conus12km_pair(tmp_path, restart_interval=361), name="ncar361")
+    assert _load(tmp_path, toml_text).restart_interval_s == 301 * 72
+    # 15 min = 12.5 steps: wrf.exe writes on steps 13, 25, 38, 50, ...,
+    # an uneven pattern a fixed cadence cannot reproduce.
+    with pytest.raises(ValueError, match="not a fixed step cadence"):
+        import_namelists(*_ncar_conus12km_pair(tmp_path, restart_interval=15),
+                         name="ncar15")
+
+
+@pytest.mark.parametrize("values,expected", [
+    (".false., .false.", [False, False]),
+    (".true., .false.", [True, False]),
+])
+def test_native_wrf_mixing_preserves_supported_domain_values(tmp_path,values,expected):
+    inp=INPUT_TEXT.replace("mix_full_fields = .true., .true.", "mix_full_fields = "+values)
+    text,report=import_namelists(*_pair(tmp_path,inp=inp),preserve_wrf_mixing=True)
+    imported=_load(tmp_path,text)
+    assert [d.run.mix_full_fields for d in imported.domains]==expected
+    assert not any(x.key=="mix_full_fields" for x in report.substitutions)

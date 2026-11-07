@@ -298,12 +298,16 @@ def test_the_bundle_default_and_env_var_stay_in_the_case_module():
 
     import subprocess
 
+    from _woof_snapshot import left_out
+
     out = subprocess.run(
         ["git", "grep", "-l", "WOOF_REAL74_REFERENCE_BUNDLE", "--",
-         "gpuwm/", "tools/"],
+         "woof/", "tools/"],
         cwd=REPO_ROOT, capture_output=True, text=True)
     hits = sorted(line for line in out.stdout.splitlines() if line.strip())
-    assert hits == ["woof/verify/cases/real74_d01.py"], hits
+    case = "woof/verify/cases/real74_d01.py"
+    # a tree that leaves the case module out carries the names nowhere at all
+    assert hits == ([] if left_out(case) else [case]), hits
     # `tilestream/realdata.py` reads the same variable and predates this
     # row; it is the streamed transport's own resolver, not a default in
     # the model package, and it is deliberately NOT swept in above so

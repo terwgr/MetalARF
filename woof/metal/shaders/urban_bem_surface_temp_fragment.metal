@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "urban_bem_surface_temp_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
+#include "soft_gfk_pow.metalh"
 using namespace metal;
 #pragma clang fp contract(off)
 
@@ -38,15 +39,15 @@ kernel void urban_bem_surface_temp_fragment(
     if(p.nurbm<1||p.nurbm>11||type<1||type>p.nurbm){error[ulong(col)*2ul]=7201;return;}
     int nd=class_int[uint(type)];
     if(nd<1||nd>2){error[ulong(col)*2ul]=7202;return;}
-    float em=class_float[98u+uint(type-1)];
-    float alb=class_float[65u+uint(type-1)];
+    float em=class_float[99u+uint(type-1)];
+    float alb=class_float[66u+uint(type-1)];
     const float dzg[10]={0.2f,0.12f,0.08f,0.05f,0.03f,0.02f,0.02f,0.01f,0.005f,0.0025f};
     const ulong soil=ulong(col)*20ul;
     const ulong coeff=ulong(col)*10ul;
     const ulong rad=ulong(col)*2ul;
     const ulong pressure=ulong(col)*126ul+72ul;
     for(int dir=0;dir<nd;++dir){
-        float tsig=tg[soil+uint(dir*10+9)];
+        float tsig=tg[soil+uint(9*2+dir)];
         float alpha=ubmst_add(ubmst_add(ubmst_sub(ubmst_add(
             ubmst_mul(ubmst_sub(1.0f,alb),rsg[rad+uint(dir)]),
             ubmst_mul(em,rlg[rad+uint(dir)])),ubmst_mul(ubmst_mul(em,p.sigma),ubmst_pow4(tsig))),
@@ -56,7 +57,7 @@ kernel void urban_bem_surface_temp_fragment(
         for(int iz=1;iz<10;++iz)cddz[iz]=ubmst_div(ubmst_mul(2.0f,alag[coeff+uint(iz)]),ubmst_add(dzg[iz],dzg[iz-1]));
         float a[30],b[10];
         for(int q=0;q<30;++q)a[q]=0.0f;
-        for(int iz=0;iz<10;++iz)b[iz]=tg[soil+uint(dir*10+iz)];
+        for(int iz=0;iz<10;++iz)b[iz]=tg[soil+uint(iz*2+dir)];
         a[1]=1.0f;
         for(int iz=1;iz<9;++iz){
             float dz=dzg[iz];
@@ -82,9 +83,9 @@ kernel void urban_bem_surface_temp_fragment(
             if(a[iz*3+1]==0.0f){error[rad+uint(dir)]=7203;return;}
             b[iz]=ubmst_div(b[iz],a[iz*3+1]);
         }
-        for(int iz=0;iz<10;++iz)tg[soil+uint(dir*10+iz)]=b[iz];
+        for(int iz=0;iz<10;++iz)tg[soil+uint(iz*2+dir)]=b[iz];
         float pr=interp[pressure];
-        ptg[rad+uint(dir)]=ubmst_mul(b[9],precise::pow(ubmst_div(pr,100000.0f),-0.28585657f));
+        ptg[rad+uint(dir)]=ubmst_mul(b[9],as_type<float>(soft_gfk_pow_bits(as_type<uint>(ubmst_div(pr,100000.0f)),as_type<uint>(-0.28585657f))));
         float net=ubmst_sub(ubmst_add(ubmst_mul(ubmst_sub(1.0f,alb),rsg[rad+uint(dir)]),ubmst_mul(em,rlg[rad+uint(dir)])),ubmst_mul(ubmst_mul(em,p.sigma),ubmst_pow4(tsig)));
         gfg[rad+uint(dir)]=ubmst_add(net,sfg[rad+uint(dir)]);
     }

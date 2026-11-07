@@ -11,13 +11,17 @@ _N_INPUT = 52
 _N_OUTPUT = 68
 
 
-def submit_glacier_columns(*, x, isnow, zsoil, dt, y, status, context):
+def submit_glacier_columns(*, x, isnow, zsoil, dt, y, status, context,
+                           noahmp_snow_age="wrf_470"):
     """Submit one packed glacier column batch on `context`.
 
     The resources preserve `noahmp_glacier_column`'s CUDA layout: 52 float
     inputs, one snow index, a shared four-layer soil-depth row, 68 float
     outputs, and a two-int snow-index/error result per column.
     """
+    from woof.noahmp_generation import snow_age_generation
+
+    night_age = snow_age_generation(noahmp_snow_age) == "wrf_470"
     arrays = {"in": x, "ii": isnow, "zsoil_row": zsoil,
               "out": y, "io": status}
     ncase = int(x.shape[0])
@@ -47,7 +51,8 @@ def submit_glacier_columns(*, x, isnow, zsoil, dt, y, status, context):
         raise ValueError("Noah-MP glacier dispatch extent exceeds int32")
     return context.submit_kernel(
         "noahmp_glacier_column", arrays,
-        {"dt": np.float32(dt), "ncase": ncase}, exact_policy=True,
+        {"dt": np.float32(dt), "ncase": ncase,
+         "night_age": int(night_age)}, exact_policy=True,
         grid_size=((ncase + _THREADS - 1) // _THREADS) * _THREADS,
         threads_per_group=_THREADS)
 

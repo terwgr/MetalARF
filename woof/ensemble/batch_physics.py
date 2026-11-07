@@ -9,6 +9,7 @@ physics primitives, not yet a full PhysicsDriver replacement.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from math import prod
 from operator import index
@@ -50,20 +51,29 @@ def remap_shared_column_loads(source, pointers, *, member_columns):
     return source
 
 
-def _native_column_kernel(module, entry, *, shared_pointers=(), member_columns):
+def _native_column_kernel(module, entry, *, shared_pointers=(), member_columns, defines=()):
     from woof.core import kernels
     if not shared_pointers:
-        return kernels.get_kernel(module, entry), {"source_policy": "unchanged native kernel"}
+        kernel = (kernels.get_kernel_int_defines(module, entry, defines) if defines
+                  else kernels.get_kernel(module, entry))
+        return kernel, {"source_policy": "unchanged native kernel", "defines": list(defines)}
     import cupy as cp
     from woof import wrf_exact
     from woof.certify.kernel_manifest import record_module
-    original = kernels.module_source(module)
+    original = (kernels.module_source_int_defines(module, defines) if defines
+                else kernels.module_source(module))
     source = remap_shared_column_loads(original, shared_pointers, member_columns=member_columns)
-    options = wrf_exact.effective_options(("-std=c++17",)) if wrf_exact.ENABLED else ("-std=c++17",)
-    compiled = cp.RawModule(code=source, options=options)
+    options = wrf_exact.effective_options(kernels.module_options(module)) if wrf_exact.ENABLED else kernels.module_options(module)
     key = f"woof.ensemble.batch_physics:{module}:{entry}:shared-column-loads[columns={member_columns}]"
-    kernels._compile_observed(compiled, key)
-    record_module(key, source=source, options=options, module=compiled)
+    if module in kernels._NO_FTZ_MODULES:
+        # The scalar unit's own compile site (RawModule appends -ftz=true
+        # after the caller's options, which would flush the subnormal words
+        # the scalar kernel keeps).
+        compiled = kernels.compile_noftz_module(module, source, key)
+    else:
+        compiled = cp.RawModule(code=source, options=options)
+        kernels._compile_observed(compiled, key)
+        record_module(key, source=source, options=options, module=compiled)
     return compiled.get_function(entry), {"source_policy": "integer-only shared column indexing",
                                           "scalar_source_sha256": sha256(original.encode()).hexdigest(),
                                           "source_sha256": sha256(source.encode()).hexdigest(),
@@ -250,7 +260,7 @@ def ysu_output_plan(*, nz, ny, nx, members, reserved_bytes=0):
 
 def prepare_ysu_column_batch(inputs, *, members, ny, nx, dt, available_bytes,
                              topdown=1, array_module=None, reserved_bytes=0,
-                             shared_fields=()):
+                             shared_fields=(), ysu_version="wrf_480"):
     """Bind the unchanged native YSU kernel over already packed columns.
 
     Inputs must already have member rings, static ownership and A-grid winds
@@ -260,6 +270,9 @@ def prepare_ysu_column_batch(inputs, *, members, ny, nx, dt, available_bytes,
     if array_module is None:
         import cupy as array_module
     from woof.core.physics_inventory import YSU_BLOCK
+    from woof.ysu_generations import ysu_kernel_selection
+    from woof.wrf_exact import ENABLED
+    module, defines = ysu_kernel_selection(ysu_version, strict=ENABLED)
     members, ny, nx = _positive(members, "members"), _positive(ny, "ny"), _positive(nx, "nx")
     if set(inputs) != set(YSU_COLUMNS + YSU_SURFACES):
         raise ValueError("YSU needs the complete named packed column/surface input inventory")
@@ -287,7 +300,7 @@ def prepare_ysu_column_batch(inputs, *, members, ny, nx, dt, available_bytes,
         array = storage.arrays[f"ysu:{name}"]
         shape = (nz, members * ny, nx) if name in YSU_VOLUME_OUTPUTS else (members * ny, nx)
         outputs[name] = array.reshape(shape)
-    kernel, source_receipt = _native_column_kernel("ysu", "ysu_column",
+    kernel, source_receipt = _native_column_kernel(module, "ysu_column", defines=defines,
         shared_pointers=shared_fields if members > 1 else (), member_columns=ny * nx)
     args = tuple(inputs[name] for name in YSU_COLUMNS + YSU_SURFACES)
     args += tuple(outputs[name] for name in ("du", "dv", "dtheta", "dqv", "dqc", "dqi", "hpbl", "kpbl", "exch_h", "exch_m", "wstar", "delta"))
@@ -306,7 +319,7 @@ def prepare_ysu_column_batch(inputs, *, members, ny, nx, dt, available_bytes,
     launch.outputs = outputs
     launch.inputs = dict(inputs)
     launch.members = members
-    launch.receipt = {"layout": "level-member-y-x", "members": members,
+    launch.receipt = {"layout": "level-member-y-x", "ysu_version": ysu_version, "members": members,
                       "launches_per_call": 1, "entry": "ysu_column",
                       **source_receipt,
                       "shared_fields": list(shared_fields),
@@ -369,7 +382,7 @@ NOAH_SHARED_FIELDS = frozenset({"ivgtyp", "isltyp", "shdmin", "shdmax", "tmn", "
 
 
 def prepare_noah_column_batch(fields, params, *, members, ny, nx, dt, dzs,
-                              shared_fields=(), isurban=13, isice=15,
+                              shared_fields=(), isurban=None, isice=None,
                               xice_threshold=0.5, frpcpn=False, usemonalb=False,
                               rdlai2d=False, opt_thcnd=1, array_module=None):
     """One nonurban Noah launch, shared lookup tables and explicit static loads.
@@ -380,7 +393,13 @@ def prepare_noah_column_batch(fields, params, *, members, ny, nx, dt, dzs,
     """
     if array_module is None:
         import cupy as array_module
-    from woof.core.noah import _F2D, _F3D, _TPB, _device_tables, NUM_SOIL_LAYERS
+    from woof.core.noah import (_F2D, _F3D, _TPB, _device_tables, NUM_SOIL_LAYERS,
+                                 noah_category_ids)
+    if isurban is None or isice is None:
+        # the dataset's own ISURBAN/ISICE, as launch_noah resolves them
+        dataset_isurban, dataset_isice = noah_category_ids(params)
+        isurban = dataset_isurban if isurban is None else isurban
+        isice = dataset_isice if isice is None else isice
     members, ny, nx = _positive(members, "members"), _positive(ny, "ny"), _positive(nx, "nx")
     shared_fields = tuple(shared_fields)
     if set(shared_fields) - NOAH_SHARED_FIELDS:
@@ -543,6 +562,37 @@ class PackedThompsonState:
     def existing_scratch(self, slot):
         return self._scratch.get(slot)
 
+    @contextmanager
+    def analysis_diagnostic_view(self):
+        """Shape this packed state for one whole-state diagnostic call.
+
+        The analysis frame diagnoses reflectivity once, before the first
+        step, through the shared scheme diagnostic
+        (woof.core.state_reflectivity.diagnose).  That diagnostic forms
+        its temperature in the ``refl_t`` slot and reads ``thb`` against
+        the member fields.  ``refl_t`` is dead when the diagnostic returns,
+        so it is admitted for that call only instead of entering the packed
+        arena layout for every step; a shared single-member ``thb`` slab is
+        tiled over the packed members for the same call (same words per
+        member, so the result is the per-member ordinary diagnosis).
+        """
+        import cupy as cp
+        shape = tuple(self.thp.shape)
+        added = "refl_t" not in self._scratch
+        if added:
+            self._scratch["refl_t"] = cp.empty(shape, dtype=np.float32)
+        thb = self.thb
+        if thb.ndim == 3 and tuple(thb.shape) != shape:
+            if thb.shape[1] == 0 or shape[1] % thb.shape[1] or thb.shape[::2] != shape[::2]:
+                raise ValueError(f"shared thb {thb.shape} does not tile the packed members {shape}")
+            self.thb = cp.tile(thb, (1, shape[1] // thb.shape[1], 1))
+        try:
+            yield self
+        finally:
+            self.thb = thb
+            if added:
+                del self._scratch["refl_t"]
+
 
 THOMPSON_VOLUME_SLOTS = (
     "mp_th", "mp_pii", "mp_thompson_temperature", "mp_dz8w",
@@ -557,12 +607,21 @@ THOMPSON_SURFACE_SLOTS = (
 )
 
 
-def thompson_column_scratch_fields(*, nz, ny, nx, reflectivity=False):
+#: Correct mode, finding WB1 (RunConfig.thompson_cloud_surface_booking,
+#: woof/core/thompson_cloud_booking.py): the settled-cloud total and its
+#: per-call amount.  Admitted only when the key is on, so an exact-mode
+#: packed state keeps the inventory it had before the correction.
+THOMPSON_CLOUD_BOOKING_SLOTS = ("mp_cloudnc", "mp_cloudncv")
+
+
+def thompson_column_scratch_fields(*, nz, ny, nx, reflectivity=False,
+                                   cloud_booking=False):
     """The stock classic adapter's named column scratch inventory.
 
     Its interface buffer mp_z8w remains present although the stock adapter
     no longer reads it. Reflectivity is reserved ahead of the output-due
     call so its zero-initialized specified ring exists before capture.
+    ``cloud_booking`` admits the correct-mode WB1 surface slots.
     """
     nz, ny, nx = _positive(nz, "nz"), _positive(ny, "ny"), _positive(nx, "nx")
     fields = [ColumnField(name, (nz, ny, nx)) for name in THOMPSON_VOLUME_SLOTS]
@@ -570,6 +629,9 @@ def thompson_column_scratch_fields(*, nz, ny, nx, reflectivity=False):
     fields.append(ColumnField("mp_z8w", (nz + 1, ny, nx)))
     if reflectivity:
         fields.append(ColumnField("refl_10cm", (nz, ny, nx)))
+    if cloud_booking:
+        fields += [ColumnField(name, (ny, nx))
+                   for name in THOMPSON_CLOUD_BOOKING_SLOTS]
     return tuple(fields)
 
 
@@ -596,7 +658,14 @@ def _clone_thompson_column_adapter(prepare):
     from woof.core import microphysics
     from woof.core import constants as c
     import cupy as cp
-    source = textwrap.dedent(inspect.getsource(microphysics._apply_thompson))
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        # Strict Thompson is the scalar port (_apply_thompson_strict), which
+        # has no packed-column call sites; packing members would run the
+        # default adapter under a strict process.
+        raise ValueError("the packed Thompson column adapter runs the default adapter only; "
+                         "GPUWM_WRF_EXACT=1 runs members through the ordinary runner")
+    source = textwrap.dedent(inspect.getsource(microphysics._apply_thompson_default))
     tree = ast.parse(source)
     original_assignment = ast.dump(ast.parse("pii[...] = cp.power(state.p / DTYPE(c.P0), DTYPE(c.RCP))").body[0], include_attributes=False)
     counts = {"prepare": 0, "pii": 0}
@@ -626,7 +695,7 @@ def _clone_thompson_column_adapter(prepare):
     namespace = dict(microphysics.__dict__)
     namespace.update(__ensemble_prepare_thompson=prepare, __ensemble_pii_into=pii_into)
     exec(compile(tree, "<admitted-thompson-column-adapter>", "exec"), namespace)
-    return namespace["_apply_thompson"], sha256(source.encode()).hexdigest()
+    return namespace["_apply_thompson_default"], sha256(source.encode()).hexdigest()
 
 
 def prepare_thompson_column_batch(state, cfg, *, members, ny, nx, dt,
@@ -667,7 +736,9 @@ def prepare_thompson_column_batch(state, cfg, *, members, ny, nx, dt,
         if array.shape not in ((levels,), (levels, ny, nx)) or array.dtype != np.dtype("float32") or not array.flags.c_contiguous:
             raise ValueError(f"Thompson {name} must be one shared base-state slab or vertical profile")
     # Check the complete scratch contract before a prognostic word moves.
-    for field in thompson_column_scratch_fields(nz=nz, ny=ny, nx=nx):
+    for field in thompson_column_scratch_fields(
+            nz=nz, ny=ny, nx=nx,
+            cloud_booking=getattr(cfg, "thompson_cloud_surface_booking", False) is True):
         packed_shape = ((field.shape[0], members * ny, nx) if len(field.shape) == 3 else (members * ny, nx))
         state.scratch(packed_shape, field.name)
     if members == 1:
@@ -704,6 +775,13 @@ def prepare_thompson_column_batch(state, cfg, *, members, ny, nx, dt,
                             if state.existing_scratch(slot) is not None})
         if state.existing_scratch("refl_10cm") is not None:
             ring_fields["refl_10cm"] = state.existing_scratch("refl_10cm")
+        # WB1's booking zeroes the specified-zone ring through the whole-domain
+        # ring guard, which on a packed state covers only the outer stripes;
+        # each member's own ring words are restored here as the stock guard
+        # leaves them, so a packed member books what its ordinary run books.
+        for slot in THOMPSON_CLOUD_BOOKING_SLOTS:
+            if state.existing_scratch(slot) is not None:
+                ring_fields[slot] = state.existing_scratch(slot)
         ring_fields["h_diabatic"] = state.h_diabatic
         ring = PreparedPhysicsRing(ring_fields, members=members, ny=ny, nx=nx,
                                    width=cfg.spec_zone, available_bytes=available_bytes,
@@ -898,7 +976,17 @@ class PreparedPhysicsCoupling:
                                          "rqc": rates["dqc"], "rqi": rates.get("dqi")},
                            du=rates["du"], dv=rates["dv"])
 
-    def couple_column_tendencies(self, state, cfg, **rates):
+    def couple_column_tendencies(self, state, cfg, *, shared_zero_components=(), **rates):
+        # shared_zero_components is the single-domain coupler's storage hint
+        # (c563a6f8860: radiation and held KF share one zero backing for the
+        # components they never produce). It is not a rate. This coupler
+        # already owns one persistent output per component per instance and
+        # zeros absent backings in the launch, so the hint needs no storage
+        # here; only the stock contract is kept: never share an active or
+        # optional component.
+        if any(name not in {"ru", "rv", "rqv", "rqc"} or rates.get(name) is not None
+               for name in shared_zero_components):
+            raise ValueError("cannot share an active or optional tendency component")
         du, dv = rates.pop("ru", None), rates.pop("rv", None)
         return self.couple(cfg=cfg, rates=rates, du=du, dv=dv)
 
@@ -943,124 +1031,6 @@ def bind_column_driver_coupling(driver, *, pbl_coupling, radiation_coupling):
         setattr(driver, name, MethodType(function, driver))
     driver._ensemble_persistent_couplers = (pbl_coupling, radiation_coupling)
     return driver
-
-
-ATMOSPHERE_VOLUMES = ("theta", "temperature", "pressure", "exner", "u", "v", "dz", "qv", "qc", "qi", "qs", "rho", "eos_pressure")
-ATMOSPHERE_INTERFACES = ("p_interface", "z_interface")
-
-
-def atmosphere_memory_plan(*, nz, ny, nx, reserved_bytes=0):
-    """Outer-member arithmetic carriers for the exact stock phy_prep DAG."""
-    nz, ny, nx = _positive(nz, "nz"), _positive(ny, "ny"), _positive(nx, "nx")
-    specs = [BatchArraySpec(f"atmosphere:{name}", (nz, ny, nx), "member")
-             for name in ATMOSPHERE_VOLUMES + ("qtot", "mass_coefficient", "layer")]
-    specs += [BatchArraySpec(f"atmosphere:{name}", (nz + 1, ny, nx), "member") for name in ATMOSPHERE_INTERFACES]
-    specs.append(BatchArraySpec("atmosphere:mut", (ny, nx), "member"))
-    return BatchMemoryPlan(tuple(specs), reserved_bytes=reserved_bytes)
-
-
-class PreparedPhysicsAtmosphere:
-    """Member-aware C-grid prep followed by explicit column packing.
-
-    The elementwise operations and downward hydrostatic fold follow
-    core.physics._prepare_atmosphere, in the same order and precision.
-    Every intermediate has a named allocation. The per-level loop remains
-    sequential across height, while each launch contains every member.
-    Actual GPU word qualification against the stock helper is required.
-    """
-
-    def __init__(self, batch, *, available_bytes, array_module=None):
-        if array_module is None:
-            import cupy as array_module
-        from woof.ensemble.batch_state import BatchedDomainState
-        if not isinstance(batch, BatchedDomainState):
-            raise TypeError("physics atmosphere needs the admitted member dycore state")
-        self.batch, self._xp = batch, array_module
-        self.members = batch.members
-        cfg = batch.cfg
-        self.nz, self.ny, self.nx = cfg.nz, cfg.ny, cfg.nx
-        outer_plan = atmosphere_memory_plan(nz=cfg.nz, ny=cfg.ny, nx=cfg.nx)
-        packed_fields = tuple(ColumnField(name, (cfg.nz, cfg.ny, cfg.nx)) for name in ATMOSPHERE_VOLUMES)
-        packed_fields += tuple(ColumnField(name, (cfg.nz + 1, cfg.ny, cfg.nx)) for name in ATMOSPHERE_INTERFACES)
-        packed_fields += (ColumnField("mut", (cfg.ny, cfg.nx)),)
-        packed_plan = column_memory_plan(packed_fields)
-        combined = outer_plan.required_bytes(self.members) + packed_plan.required_bytes(self.members)
-        if combined > available_bytes:
-            raise MemoryError(f"member-aware physics atmosphere needs {combined} bytes before native scheme workspaces")
-        self.storage = BatchStorage(outer_plan, self.members, array_module=array_module, available_bytes=available_bytes)
-        self.columns = ColumnBuffers(packed_fields, members=self.members,
-                                     available_bytes=available_bytes - outer_plan.required_bytes(self.members),
-                                     array_module=array_module)
-        self.device = int(array_module.cuda.runtime.getDevice())
-        self.required_bytes = combined
-
-    def _array(self, name):
-        return self.storage.arrays[f"atmosphere:{name}"]
-
-    def _volume_input(self, name):
-        array = self.batch.storage.arrays[name]
-        spec = self.batch.storage.specs[name]
-        if spec.ownership == "member":
-            return array.reshape((self.members,) + ((spec.shape[0], 1, 1) if len(spec.shape) == 1 else spec.shape))
-        if array.ndim == 1:
-            return array[None, :, None, None]
-        return array[None]
-
-    def __call__(self):
-        if int(self._xp.cuda.runtime.getDevice()) != self.device:
-            raise RuntimeError("physics atmosphere uses a different current device")
-        from woof.core import constants as c
-        xp, state = self._xp, self.batch
-        get = self._array
-        xp.add(self._volume_input("thb"), state.thp, out=get("theta"))
-        xp.divide(state.p, np.float32(c.P0), out=get("exner"))
-        xp.power(get("exner"), np.float32(c.RCP), out=get("exner"))
-        xp.multiply(get("theta"), get("exner"), out=get("temperature"))
-        # Staggered neighbors are selected inside each explicit member.
-        xp.add(state.u[:, :, :, :-1], state.u[:, :, :, 1:], out=get("u"))
-        xp.multiply(get("u"), np.float32(0.5), out=get("u"))
-        xp.add(state.v[:, :, :-1, :], state.v[:, :, 1:, :], out=get("v"))
-        xp.multiply(get("v"), np.float32(0.5), out=get("v"))
-        xp.add(self._volume_input("phb"), state.php, out=get("z_interface"))
-        xp.divide(get("z_interface"), np.float32(c.G), out=get("z_interface"))
-        xp.subtract(get("z_interface")[:, 1:], get("z_interface")[:, :-1], out=get("dz"))
-        get("qtot").fill(0)
-        for name in ("qv", "qc", "qr", "qi", "qs", "qg", "qh"):
-            array = state.storage.arrays.get(name)
-            if array is not None:
-                xp.add(get("qtot"), array, out=get("qtot"))
-        mub = state.storage.arrays["mub2d"]
-        xp.add(state.mup, mub if state.storage.specs["mub2d"].ownership == "member" else mub[None], out=get("mut"))
-        xp.multiply(self._volume_input("c1h"), get("mut")[:, None], out=get("mass_coefficient"))
-        xp.add(get("mass_coefficient"), self._volume_input("c2h"), out=get("mass_coefficient"))
-        xp.add(np.float32(1), get("qtot"), out=get("layer"))
-        xp.multiply(get("layer"), get("mass_coefficient"), out=get("layer"))
-        xp.multiply(get("layer"), self._volume_input("dnw"), out=get("layer"))
-        get("p_interface")[:, self.nz].fill(np.float32(state.p_top))
-        for level in range(self.nz - 1, -1, -1):
-            xp.subtract(get("p_interface")[:, level + 1], get("layer")[:, level], out=get("p_interface")[:, level])
-        xp.add(get("p_interface")[:, :-1], get("p_interface")[:, 1:], out=get("pressure"))
-        xp.multiply(get("pressure"), np.float32(0.5), out=get("pressure"))
-        for name in ("qv", "qc", "qi", "qs"):
-            array = state.storage.arrays.get(name)
-            if array is None:
-                get(name).fill(0)
-            else:
-                xp.copyto(get(name), array)
-        xp.add(np.float32(1), get("qv"), out=get("rho"))
-        xp.divide(get("rho"), state.alt, out=get("rho"))
-        xp.copyto(get("eos_pressure"), state.p)
-        result = {name: self.columns.pack(name, get(name)) for name in ATMOSPHERE_VOLUMES + ATMOSPHERE_INTERFACES}
-        self.columns.pack("mut", get("mut"))
-        return {name: array for name, array in result.items() if name != "eos_pressure"}
-
-    @property
-    def packed_eos_pressure(self):
-        return self.columns.packed("eos_pressure")
-
-    @property
-    def packed_mut(self):
-        return self.columns.packed("mut")
 
 
 def packed_physics_atmosphere_fields(*, nz, ny, nx):
@@ -1154,8 +1124,8 @@ class PreparedPackedPhysicsAtmosphere:
         from woof.core import constants as c
         xp, state, out = self._xp, self.state, self._out
         xp.add(self._thb, self._volume(state.thp), out=out("theta"))
-        xp.divide(self._volume(state.p), np.float32(c.P0), out=out("exner"))
-        xp.power(out("exner"), np.float32(c.RCP), out=out("exner"))
+        from woof.core.physics import _physics_exner
+        _physics_exner(self._volume(state.p), out=out("exner"))
         xp.multiply(out("theta"), out("exner"), out=out("temperature"))
         u = state.u.reshape(self.nz, self.members, self.ny, self.nx + 1)
         v = state.v.reshape(self.nz, self.members, self.ny + 1, self.nx)
@@ -1256,7 +1226,8 @@ def bind_owned_default_column_driver(driver, cfg, atmosphere, *, members, ny, nx
               "qfx": f["qfx"], "wspd": f["wspd"], "br": f["br"], "psim": f["fm"], "psih": f["fh"],
               "xland": f["xland"], "u10": f["u10"], "v10": f["v10"]}
     ysu = prepare_ysu_column_batch(inputs, members=members, ny=ny, nx=nx, dt=driver.bldt_seconds,
-        topdown=cfg.ysu_topdown_pblmix, available_bytes=available_bytes - extras_plan.required_bytes(members),
+        topdown=cfg.ysu_topdown_pblmix, ysu_version=cfg.ysu_version,
+        available_bytes=available_bytes - extras_plan.required_bytes(members),
         array_module=array_module, shared_fields=tuple(sorted(shared_surfaces & {"xland"})))
     sf_inputs = {"u": active["u"][0], "v": active["v"][0], "t": active["temperature"][0], "qv": active["qv"][0],
                  "p": active["pressure"][0], "dz8w": active["dz"][0], "psfc": active["p_interface"][0],
@@ -1312,6 +1283,8 @@ def bind_owned_default_column_driver(driver, cfg, atmosphere, *, members, ny, nx
     def native_ysu(*args, **kwargs):
         actual = list(args[:10]) + [kwargs["rthraten"]] + [kwargs[name] for name in YSU_SURFACES]
         verify_pointers(actual, [inputs[name] for name in YSU_COLUMNS + YSU_SURFACES])
+        if kwargs.get("ysu_version", "wrf_480") != cfg.ysu_version:
+            raise ValueError("YSU generation changed after admission; entrainment tendencies would use a different cap")
         if kwargs.get("bep") is not None or kwargs.get("topo") is not None or np.float32(kwargs["dt"]) != np.float32(driver.bldt_seconds):
             raise ValueError("YSU options changed after the native column launch was admitted")
         return ysu()
@@ -1342,8 +1315,15 @@ def bind_owned_default_column_driver(driver, cfg, atmosphere, *, members, ny, nx
         function.__kwdefaults__ = original.__kwdefaults__
         setattr(driver, method, MethodType(function, driver))
     original = PhysicsDriver._run_ysu
+    # The 2.9.1 exact chain routes YSU's RTHRATEN through
+    # radiation_theta_forcing(), which is the LW + SW sum whenever the strict
+    # coupled total (_wrf_rthraten) is absent; the packed producer below is
+    # that sum, so a driver carrying the strict total has no packed producer.
+    if getattr(driver, "_wrf_rthraten", None) is not None:
+        raise ValueError("the packed YSU producer sums the LW and SW heating rows; "
+                         "a strict process's coupled RTHRATEN has no packed producer")
     tree = ast.parse(textwrap.dedent(inspect.getsource(original)))
-    target = ast.dump(ast.parse("cp.ascontiguousarray(self.rthratenlw + self.rthratensw)", mode="eval").body, include_attributes=False)
+    target = ast.dump(ast.parse("cp.ascontiguousarray(self.radiation_theta_forcing())", mode="eval").body, include_attributes=False)
     replacements = [0]
 
     class HeatingSum(ast.NodeTransformer):

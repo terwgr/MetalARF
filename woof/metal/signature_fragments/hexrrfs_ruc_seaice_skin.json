@@ -1,0 +1,74 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ruc_boundaries",
+      "source": "woof/metal/shaders/hexrrfs_ruc_boundaries.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/ruc_lsm_8c9f1a8.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ruc_seaice_skin",
+      "cuda_symbol": "drivers_correct_tsk_over_seaice",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "xice",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read"
+        ],
+        [
+          "tsk_sea",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsk_ice",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "xice": [
+          [
+            "nc"
+          ]
+        ],
+        "tsk": [
+          [
+            "nc"
+          ]
+        ],
+        "tsk_sea": [
+          [
+            "nc"
+          ]
+        ],
+        "tsk_ice": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

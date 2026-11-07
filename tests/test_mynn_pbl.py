@@ -57,6 +57,22 @@ from tools.mynn_pbl_wrf461_oracle.validate_turbulence_oracle import (
     TURBULENCE_ULP_BUDGET,
 )
 
+# Consumer expectations come from the independent generated declarations.
+from woof.physics_registry import implemented_selector_values as _intake_selectors
+from woof.physics_registry import consumer_rows_by_selector as _intake_rows
+_INTAKE_MP = tuple(sorted(_intake_selectors("microphysics")))
+_INTAKE_REFL = tuple(mp for mp in _INTAKE_MP if mp)
+_INTAKE_PRODUCERS = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "reflectivity_input_species").items()
+    if row is not None))
+_INTAKE_NATIVE = tuple(sorted(set(_INTAKE_REFL) - set(_INTAKE_PRODUCERS)))
+_INTAKE_SNOW = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qs" in (row or {}).get("state_fields", ())))
+_INTAKE_SIX = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qg" in (row or {}).get("state_fields", ())))
+
 
 #: The total-order FP32 key is shared rather than re-derived here.
 #: Thirteen local copies of this two-line bit trick carried the same
@@ -87,7 +103,7 @@ def _assert_within_ulp(got, expected, budget: int, err_msg: str) -> None:
 
 ORACLE = (
     Path(__file__).parents[1]
-    / "tests" / "data" / "mynn" / "oracle" / "pbl-level2.csv"
+    / "tests" / "data" / "oracles" / "mynn" / "pbl-level2.csv"
 )
 PBLH_ORACLE = ORACLE.with_name("pblh-scale.csv")
 MIXLENGTH_ORACLE = ORACLE.with_name("mixlength.csv")
@@ -559,7 +575,8 @@ def test_the_snow_species_path_is_exact_against_the_wrf_driver_oracle():
     ((0, False), (1, False), (6, True), (8, True), (10, True), (18, True),
      # Registry.EM_COMMON:3036, package thompsonaero:
      # moist:qv,qc,qr,qi,qs,qg -- F_QS is true, exactly as for 8.
-     (28, True)),
+     (28, True),
+     (50, False)),
 )
 def test_mynn_flag_qs_matches_wrf_registry_packages(mp_physics, expected):
     """Exercise multiple selectors on both sides of WRF Registry ``F_QS``."""
@@ -600,18 +617,22 @@ def test_the_registry_publishes_the_mynn_snow_species_contract():
     assert "qs" not in species["withheld"]
     # 28 is here because Registry.EM_COMMON:3036 gives package thompsonaero
     # moist:qv,qc,qr,qi,qs,qg, so WRF's generated F_QS is true for it; 16 is
-    # here for the same reason, from package wdm6scheme at :3031.  This
+    # here for the same reason, from package wdm6scheme at :3031, and 30
+    # from FAST_SBM's fast_khain_lynn_shpund at registry.sbm:318.  This
     # list is the WRF-derived classification and must equal the set the
     # shipped runtime applies (mynn_pbl_runtime.MYNN_SNOW_MICROPHYSICS),
     # which is asserted directly below.
+    # 900 (TEMPO, a named scheme) joins from its capability row, whose
+    # ice masses carry qs (woof/microphysics_schemes.py).
     assert species["flag_qs_true_microphysics_selectors"] == [
-        6, 8, 9, 10, 16, 18, 28]
+        2, 4, 6, 8, 9, 10, 16, 18, 24, 28, 30, 106, 900]
     # 50 (P3) is on the FALSE side substantively, not by omission: the
     # p3_1category package is moist:qv,qc,qr,qi with no qs at all
     # (Registry.EM_COMMON:3038), so WRF's F_QS is false and MYNN's sqs = 0
     # is P3's own answer rather than a field woof withheld -- the opposite
     # of the mp=28 case this list was corrected for.
-    assert species["flag_qs_false_microphysics_selectors"] == [0, 1, 50]
+    # Registry.EM_COMMON:3017 gives WSM3 combined qc/qr, no separate qs.
+    assert species['flag_qs_false_microphysics_selectors'] == [0, 1, 3, 5, 50]
 
     from woof.core.mynn_pbl_runtime import MYNN_SNOW_MICROPHYSICS
 

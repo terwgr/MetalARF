@@ -15,7 +15,7 @@ from woof.ingest.analyzed_numbers import CANONICAL_NUMBER_FIELDS
 
 
 ATMOSPHERIC_FIELDS = frozenset({
-    "T", "PRES", "SPFH", "U", "V", "GHT", "QC", "QR", "QI", "QS", "QG",
+    "T", "PRES", "SPFH", "U", "V", "GHT", "QC", "QR", "QI", "QS", "QG", "WW", "OMEGA",
     *CANONICAL_NUMBER_FIELDS.values(),
 })
 #: The canonical names of exactly the fields ATMOSPHERIC_FIELDS lists under
@@ -36,6 +36,7 @@ CANONICAL_ATMOSPHERIC_FIELDS = frozenset({
     "cloud_water_mixing_ratio", "rain_water_mixing_ratio",
     "cloud_ice_mixing_ratio", "snow_mixing_ratio",
     "graupel_or_hail_mixing_ratio",
+    "vertical_velocity", "pressure_vertical_velocity",
     *CANONICAL_NUMBER_FIELDS,
 })
 WINDOW_SCHEMA = "gpuwm-mapped-atmospheric-window-v1"
@@ -161,7 +162,7 @@ def atmospheric_window_for_grids(metadata, grids):
     source or a requested feature.
     """
     from woof.ingest.horiz import (
-        _regular_coordinates, global_longitude_period_columns, global_ring_cut,
+        _regular_coordinates, global_longitude_period_columns, global_source_cut,
         source_coordinate_transform,
     )
     from woof.ingest.interpolation_support import regular_source_support
@@ -171,7 +172,11 @@ def atmospheric_window_for_grids(metadata, grids):
     if metadata.projection is None and global_longitude_period_columns(metadata.longitude) is not None:
         longitudes = [pair[1] for grid in grids
                       for pair in (grid.latlon_mass(), grid.latlon_u(), grid.latlon_v())]
-        if not longitudes or global_ring_cut(metadata.longitude, *longitudes) is not None:
+        latitudes = [pair[0] for grid in grids
+                     for pair in (grid.latlon_mass(), grid.latlon_u(), grid.latlon_v())]
+        if not longitudes or global_source_cut(
+                metadata.latitude, metadata.longitude, *longitudes,
+                target_latitudes=latitudes) is not None:
             return None
     transform, _ = source_coordinate_transform(metadata)
     supports = []

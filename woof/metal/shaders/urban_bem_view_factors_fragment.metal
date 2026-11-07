@@ -1,29 +1,34 @@
 #include <metal_stdlib>
 #include "urban_bem_view_factors_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
 using namespace metal;
+#include "soft_glibc_solar_trig.metalh"
+static inline float ubmv_atan_pinned(float x) { return as_type<float>(soft_glibc_solar_atanf(as_type<uint>(x))); }
+
 #pragma clang fp contract(off)
 
 static inline float ubmv_add(float a, float b) { return as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubmv_sub(float a, float b) { return as_type<float>(soft32_sub(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubmv_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubmv_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
-static inline float ubmv_sqrt(float x) { return precise::sqrt(x); }
-static inline float ubmv_log(float x) { return precise::log(x); }
-static inline float ubmv_atan(float x) { return precise::atan(x); }
+static inline float ubmv_sqrt(float x) { return as_type<float>(soft32_sqrt(as_type<uint>(x))); }
+static inline float ubmv_pow_half(float x) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x),0x3f000000u)); }
+static inline float ubmv_log(float x) { return as_type<float>(soft_gfk_log(as_type<uint>(x))); }
+static inline float ubmv_atan(float x) { return ubmv_atan_pinned(x); }
 
 // WRF module_sf_bep_bem.F bb_view_factors/bb_fprls/bb_fnrms
 // (4875-5013, 5021-5048). The output is a per-column/per-direction canyon
-// factor set. The source's logarithm/power choices still require review at
-// integration; this uses Metal precise math and source-ordered FP32 ops.
+// factor set, with the pinned logarithm and power operation graphs.
 static inline float ubmv_fprls(float a, float b, float c) {
     const float x = ubmv_div(a, c), y = ubmv_div(b, c);
     if (a == 0.0f || b == 0.0f) return 0.0f;
     const float x2 = ubmv_mul(x, x), y2 = ubmv_mul(y, y);
-    const float root = ubmv_sqrt(ubmv_div(ubmv_mul(ubmv_add(1.0f, x2), ubmv_add(1.0f, y2)), ubmv_add(ubmv_add(1.0f, x2), y2)));
+    const float root = ubmv_pow_half(ubmv_div(ubmv_mul(ubmv_add(1.0f, x2), ubmv_add(1.0f, y2)), ubmv_add(ubmv_add(1.0f, x2), y2)));
     const float t1 = ubmv_log(root);
-    const float t2 = ubmv_mul(ubmv_mul(y, ubmv_sqrt(ubmv_add(1.0f, x2))), ubmv_atan(ubmv_div(y, ubmv_sqrt(ubmv_add(1.0f, x2)))));
-    const float t3 = ubmv_mul(ubmv_mul(x, ubmv_sqrt(ubmv_add(1.0f, y2))), ubmv_atan(ubmv_div(x, ubmv_sqrt(ubmv_add(1.0f, y2)))));
+    const float t2 = ubmv_mul(ubmv_mul(y, ubmv_pow_half(ubmv_add(1.0f, x2))), ubmv_atan(ubmv_div(y, ubmv_pow_half(ubmv_add(1.0f, x2)))));
+    const float t3 = ubmv_mul(ubmv_mul(x, ubmv_pow_half(ubmv_add(1.0f, y2))), ubmv_atan(ubmv_div(x, ubmv_pow_half(ubmv_add(1.0f, y2)))));
     const float v = ubmv_sub(ubmv_sub(ubmv_add(ubmv_add(t1, t2), t3), ubmv_mul(y, ubmv_atan(y))), ubmv_mul(x, ubmv_atan(x)));
     return ubmv_div(ubmv_mul(v, 2.0f), ubmv_mul(ubmv_mul(3.141592653f, x), y));
 }
@@ -94,16 +99,16 @@ kernel void urban_bem_view_factors_fragment(
         const float a1s = ubmv_mul(ubmv_sub(z[zbase + uint(jz + 1)], z[zbase + uint(jz)]), dxy[item]);
         const float a2s = ubmv_mul(ubmv_sub(hut, z[zbase + uint(jz + 1)]), dxy[item]);
         const float a12s = ubmv_mul(ubmv_sub(hut, z[zbase + uint(jz)]), dxy[item]);
-        const float a4s = ubmv_mul(width, dxy[item]);
+        const float a4s = ubmv_mul(ws, dxy[item]);
         const float fts = ubmv_div(ubmv_sub(ubmv_mul(a12s, f12s), ubmv_mul(a2s, f1s)), a1s);
         fws[vectorbase + uint(jz)] = ubmv_div(ubmv_mul(fts, a1s), a4s);
 
-        const float f12gnd = ubmv_fnrm(ws, dxy[item], ubmv_sub(hut, z[zbase + uint(jz)]));
-        const float f1gnd = ubmv_fnrm(ws, dxy[item], ubmv_sub(hut, z[zbase + uint(jz + 1)]));
+        const float f12gnd = ubmv_fnrm(ws, dxy[item], z[zbase + uint(jz + 1)]);
+        const float f1gnd = ubmv_fnrm(ws, dxy[item], z[zbase + uint(jz)]);
         const float ag = ubmv_mul(ubmv_sub(z[zbase + uint(jz + 1)], z[zbase + uint(jz)]), dxy[item]);
         const float a2g = ubmv_mul(z[zbase + uint(jz)], dxy[item]);
         const float a12g = ubmv_mul(z[zbase + uint(jz + 1)], dxy[item]);
-        const float a4g = ubmv_mul(width, dxy[item]);
+        const float a4g = ubmv_mul(ws, dxy[item]);
         const float ftgnd = ubmv_div(ubmv_sub(ubmv_mul(a12g, f12gnd), ubmv_mul(a2g, f1gnd)), ag);
         fwg[vectorbase + uint(jz)] = ubmv_div(ubmv_mul(ftgnd, ag), a4g);
 

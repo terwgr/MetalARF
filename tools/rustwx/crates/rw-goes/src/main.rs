@@ -48,8 +48,11 @@
 //! rw_goes verify    --pack FILE.goespack
 //! ```
 
+mod aod;
 mod cloudtop;
 mod forward;
+mod geo;
+mod glm;
 mod pack;
 mod radiance;
 
@@ -121,7 +124,8 @@ pub const CLOUDTOP_VERIFY_SCHEMA: &str = "gpuwm-obs.goes-cloudtop-verify.v1";
 /// _it_pins` below binds the literal to the three constants instead, so
 /// a schema bump that forgets this line fails the crate's own tests.
 const ABI_MARKER: &str = "gpuwm-obs.goes-fetch.v1\tgpuwm-obs.goes-cwp.v2\t\
-gpuwm-obs.goes-cloudtop.v2\tgpuwm-obs.goes-bt.v1\tgpuwm-da.abi-forward.v1";
+gpuwm-obs.goes-cloudtop.v2\tgpuwm-obs.goes-bt.v1\tgpuwm-da.abi-forward.v1\tgpuwm-obs.goes-aod.v1\t\
+gpuwm-obs.glm-fed.v2";
 
 /// The ABI scan mode the operational feed has run since 2019.  A flip to
 /// the contingency mode is a flag, not a rebuild.
@@ -134,7 +138,7 @@ const CWP_FORMULA: &str = "CWP[g m^-2] = (2/3) * tau * r_e[um] * rho[g cm^-3]";
 const DEFAULT_CACHE_DIR: &str = ".rw-goes-cache";
 
 const USAGE: &str = "\
-usage: rw_goes <list|fetch|cwp|cloud-top|bt|colocate|quicklook|forward|verify> [OPTIONS]
+usage: rw_goes <list|fetch|cwp|cloud-top|aod|bt|colocate|quicklook|forward|geo-fetch|geo-bt|glm|verify> [OPTIONS]
        rw_goes --version | --help | --abi
 
   list       report the ABI L2 cloud granules a (satellite, sector, product
@@ -158,6 +162,21 @@ usage: rw_goes <list|fetch|cwp|cloud-top|bt|colocate|quicklook|forward|verify> [
              table (gpuwm-da.abi-fast-model.v1, trained on CRTM) on the model
              columns of a gpuwm-da.abi-columns.v2 stream and write brightness
              temperatures with Jacobians as a gpuwm-da.abi-crtm.v1 stream
+  geo-fetch  resolve and download one scan of a geostationary imager from the
+             source table (Himawari-8/9 AHI, GK-2A AMI, GOES 16/18/19 ABI full
+             disk and CONUS): --satellite H09|GK2A|G18 --sector F|C --bands
+             8,9,10,13 and --time T (newest complete scan at or before T,
+             --tolerance-minutes, default 30) or --live (--lookback-minutes,
+             default 60); --cache DIR; prints a gpuwm-obs.geo-fetch.v1 record
+  geo-bt     decode one band of a Himawari AHI scan (--rad once per HSD
+             segment, .DAT or .DAT.bz2) or a GK-2A AMI L1B file (--rad FILE)
+             to brightness temperature with the file's own calibration and
+             write a gpuwm-obs.goes-bt.v1 pack (planes bt, rad, lat, lon,
+             rad_dqf; per-row measurement times); --window or --bbox
+             S,N,W,E crops it (--bbox also works for bt)
+  glm        GOES GLM flash extent density for one valid time: list and fetch
+             the 20 s GLM-L2-LCFA granules around it, count distinct flashes
+             per local-grid pixel and write the lit cells (options below)
   verify     re-read any pack family and re-prove its header, schema and
              payload digest
 
@@ -257,6 +276,10 @@ per-pixel DQF planes (schema v2, 2026-08-06)
   could not be recovered from a v1 pack at all.  The counts and the mask are
   unchanged and still there; the plane is what they could not answer.
 
+aod options: --aod FILE --out FILE [--window XS,XC,YS,YC]
+  AOD at 550 nm; DQF 0 high retained, 1 medium/2 low/3 no retrieval rejected.
+  list/fetch use --products AOD --sector C or F.
+
 cwp options (planes: cwp, phase, cod, cps, lat, lon, then the _dqf planes)
   --cod FILE            ABI-L2-COD granule (required)
   --cps FILE            ABI-L2-CPS granule (required)
@@ -317,6 +340,21 @@ bt options (planes: bt, rad, lat, lon, then bcm and cmip_bt when given, then
   --band N              refuse unless the granule is this band
   --out FILE            pack destination (required)
   --window XS,XC,YS,YC  decode only this fixed-grid window, every file alike
+
+glm options (writes FILE.csv and the gpuwm-obs.glm-fed.v2 record FILE.json)
+  --time TIME           the valid time W (required)
+  --center LAT,LON      the local grid's centre (required)
+  --radius-km R         cells inside this radius (required)
+  --out FILE.csv        the FED table (required)
+  --satellite ID        auto (default: G19 from 2025-04-07, G16 before), G16,
+                        G18 or G19
+  --accumulation-minutes A  granules starting in [W - A/2, W + A/2), default 5;
+                        fewer than round(3 A) granules is refused
+  --pixel-km P          FED cell, default 10 (the ~10 km GLM pixel)
+  --cache DIR           granule cache (rw-sat layout), default ./.rw-goes-cache
+  --bucket NAME         override the satellite's open-data bucket
+  --files F,F,...       read these granules instead of listing the bucket
+  --no-quality          keep flashes whose flash_quality_flag is not 0
 
 forward options
   --columns FILE        the gpuwm-da.abi-columns.v2 stream of model columns
@@ -405,6 +443,9 @@ fn run(args: &[String]) -> Result<String, Box<dyn Error>> {
         "--help" | "-h" | "help" => return Ok(USAGE.to_string()),
         "--version" | "-V" => return Ok(format!("rw_goes {VERSION}\n")),
         "--abi" => return Ok(format!("{ABI_MARKER}\n")),
+        // GLM has its own flags (a valid time and a local grid, no
+        // sector or product set), so it parses its own arguments.
+        "glm" => return glm::cmd_glm(&args[1..]),
         _ => {}
     }
     let options = Options::parse(&args[1..])?;
@@ -413,11 +454,14 @@ fn run(args: &[String]) -> Result<String, Box<dyn Error>> {
         "fetch" => cmd_fetch(&options),
         "cwp" => cmd_cwp(&options),
         "cloud-top" => cmd_cloud_top(&options),
+        "aod" => aod::cmd_aod(&options),
         "bt" => cmd_bt(&options.radiance),
         "colocate" => cmd_colocate(&options.radiance),
         "superobs" => cmd_superobs(&options.radiance),
         "quicklook" => cmd_quicklook(&options.radiance),
         "forward" => cmd_forward(&options.forward),
+        "geo-fetch" => geo::cmd_geo_fetch(&options.geo),
+        "geo-bt" => geo::cmd_geo_bt(&options.geo),
         "verify" => cmd_verify(&options),
         other => Err(boxed_error(format!(
             "unknown subcommand {other:?}\n\n{USAGE}"
@@ -443,6 +487,7 @@ struct Options {
     out: Option<PathBuf>,
     limit_scans: Option<usize>,
     complete_only: bool,
+    aod: Option<PathBuf>,
     cod: Option<PathBuf>,
     cps: Option<PathBuf>,
     actp: Option<PathBuf>,
@@ -456,6 +501,8 @@ struct Options {
     radiance: RadianceOptions,
     /// The forward operator's flags.
     forward: ForwardOptions,
+    /// geo-fetch / geo-bt flags.
+    geo: geo::GeoOptions,
 }
 
 impl Options {
@@ -499,6 +546,7 @@ impl Options {
                     options.limit_scans = Some(count)
                 }
                 "--complete-only" => options.complete_only = true,
+                "--aod" => options.aod = Some(PathBuf::from(value()?)),
                 "--cod" => options.cod = Some(PathBuf::from(value()?)),
                 "--cps" => options.cps = Some(PathBuf::from(value()?)),
                 "--actp" => options.actp = Some(PathBuf::from(value()?)),
@@ -542,7 +590,30 @@ impl Options {
                     }
                     options.forward.threads = Some(count)
                 }
-                "--rad" => options.radiance.rad = Some(PathBuf::from(value()?)),
+                "--rad" => {
+                    let path = PathBuf::from(value()?);
+                    options.geo.rad.push(path.clone());
+                    options.radiance.rad = Some(path)
+                }
+                "--time" => options.geo.time = Some(value()?),
+                "--live" => options.geo.live = true,
+                "--tolerance-minutes" => {
+                    let raw = value()?;
+                    options.geo.tolerance_minutes = Some(raw.parse::<i64>().map_err(|_| {
+                        boxed_error(format!("--tolerance-minutes expects minutes, got {raw:?}"))
+                    })?)
+                }
+                "--lookback-minutes" => {
+                    let raw = value()?;
+                    options.geo.lookback_minutes = Some(raw.parse::<i64>().map_err(|_| {
+                        boxed_error(format!("--lookback-minutes expects minutes, got {raw:?}"))
+                    })?)
+                }
+                "--bbox" => {
+                    let b = geo::parse_bbox(&value()?)?;
+                    options.geo.bbox = Some(b);
+                    options.radiance.bbox = Some(b)
+                }
                 "--received-utc" => options.radiance.received_utc = Some(value()?),
                 "--acm" => options.radiance.acm = Some(PathBuf::from(value()?)),
                 "--cmip" => options.radiance.cmip = Some(PathBuf::from(value()?)),
@@ -617,6 +688,13 @@ impl Options {
         options.radiance.window = options.window;
         options.radiance.pack = options.pack.clone();
         options.forward.out = options.out.clone();
+        options.geo.out = options.out.clone();
+        options.geo.cache = options.cache.clone();
+        options.geo.satellite = options.satellite.clone();
+        options.geo.sector = options.sector.clone();
+        options.geo.bands = options.forward.bands.clone();
+        options.geo.window = options.window;
+        options.geo.received_utc = options.radiance.received_utc.clone();
         Ok(options)
     }
 
@@ -2186,6 +2264,7 @@ fn cmd_verify(options: &Options) -> Result<String, Box<dyn Error>> {
     if CLOUDTOP_READABLE_SCHEMAS.contains(&declared.as_str()) {
         return verify_cloudtop_pack(path, &bytes, &declared);
     }
+    if declared == aod::AOD_SCHEMA { return aod::verify(&bytes); }
     if BT_READABLE_SCHEMAS.contains(&declared.as_str()) {
         return verify_bt_pack(path, &bytes);
     }
@@ -2411,14 +2490,14 @@ mod tests {
         // The marker is a literal (no const-format crate in the offline
         // vendor closure), so this is what keeps it accurate: bump a schema
         // without touching the marker and this test is the refusal.
-        for needle in [FETCH_SCHEMA, pack::CWP_SCHEMA, cloudtop::CLOUDTOP_SCHEMA, radiance::BT_SCHEMA, forward::FORWARD_SCHEMA] {
+        for needle in [FETCH_SCHEMA, pack::CWP_SCHEMA, cloudtop::CLOUDTOP_SCHEMA, radiance::BT_SCHEMA, forward::FORWARD_SCHEMA, aod::AOD_SCHEMA, glm::GLM_FED_SCHEMA] {
             assert!(
                 ABI_MARKER.contains(needle),
                 "--abi does not pin {needle}, so a wrapper written against \
                  it could not tell a drifted binary from a current one"
             );
         }
-        assert_eq!(ABI_MARKER.split('\t').count(), 5);
+        assert_eq!(ABI_MARKER.split('\t').count(), 7);
     }
 
     #[test]
@@ -2595,9 +2674,6 @@ mod tests {
         planes.insert("cwp".to_string(), key);
         let meta = PackMeta {
             schema: CWP_SCHEMA_V1.to_string(),
-            status: "READY".to_string(),
-            satellite: "G19".to_string(),
-            sector: "C".to_string(),
             scan_start: "2026-08-04T18:01:17Z".to_string(),
             scan_end: "2026-08-04T18:03:54.500Z".to_string(),
             sources: vec![SourceEntry {
@@ -2612,32 +2688,10 @@ mod tests {
                 // real historical JSON deserialize here.
                 dqf_plane: String::new(),
             }],
-            window: None,
-            projection: ProjectionEntry {
-                perspective_point_height_m: 35786023.0,
-                semi_major_axis_m: 6378137.0,
-                semi_minor_axis_m: 6356752.31414,
-                longitude_of_projection_origin_deg: -75.0,
-                sweep_angle_axis: "x".to_string(),
-            },
-            nx: 2,
-            ny: 1,
-            x_scan_rad: vec![0.0, 1.0e-4],
-            y_scan_rad: vec![0.0],
             planes,
             plane_order: vec!["cwp".to_string()],
             arrays,
-            payload_bytes: payload.len(),
-            content_sha256: hex_sha256(&payload),
-            cwp_counts: CwpRow::default(),
-            coefficients: CoefficientTable {
-                formula: CWP_FORMULA.to_string(),
-                liquid_density_g_cm3: 1.0,
-                ice_density_g_cm3: 0.917,
-                ice_coefficient_provisional: true,
-                mixed_phase_takes_ice_branch_provisional: true,
-                clear_sky_emits_zero: true,
-            },
+            ..pack::tests::minimal_meta(&payload)
         };
         let path = dir.join("historical.goespack");
         std::fs::write(&path, encode_pack(&meta, &payload).unwrap()).unwrap();
@@ -3010,38 +3064,13 @@ mod tests {
         planes.insert("cwp".to_string(), key);
         let meta = PackMeta {
             schema: CWP_SCHEMA.to_string(),
-            status: "READY".to_string(),
-            satellite: "G19".to_string(),
-            sector: "C".to_string(),
             scan_start: "2026-08-04T18:01:17Z".to_string(),
             scan_end: "2026-08-04T18:03:54.500Z".to_string(),
             sources: Vec::new(),
-            window: None,
-            projection: ProjectionEntry {
-                perspective_point_height_m: 35786023.0,
-                semi_major_axis_m: 6378137.0,
-                semi_minor_axis_m: 6356752.31414,
-                longitude_of_projection_origin_deg: -75.0,
-                sweep_angle_axis: "x".to_string(),
-            },
-            nx: 2,
-            ny: 1,
-            x_scan_rad: vec![0.0, 1.0e-4],
-            y_scan_rad: vec![0.0],
             planes,
             plane_order: vec!["cwp".to_string()],
             arrays,
-            payload_bytes: payload.len(),
-            content_sha256: hex_sha256(&payload),
-            cwp_counts: CwpRow::default(),
-            coefficients: CoefficientTable {
-                formula: CWP_FORMULA.to_string(),
-                liquid_density_g_cm3: 1.0,
-                ice_density_g_cm3: 0.917,
-                ice_coefficient_provisional: true,
-                mixed_phase_takes_ice_branch_provisional: true,
-                clear_sky_emits_zero: true,
-            },
+            ..pack::tests::minimal_meta(&payload)
         };
         std::fs::write(&path, encode_pack(&meta, &payload).unwrap()).unwrap();
 
@@ -3083,33 +3112,10 @@ mod tests {
         let mut planes = BTreeMap::new();
         planes.insert("cloud_top_height_m".to_string(), key);
         let meta = CloudTopMeta {
-            schema: CLOUDTOP_SCHEMA.to_string(),
-            status: "READY".to_string(),
-            satellite: "G19".to_string(),
-            sector: "C".to_string(),
-            scan_start: "2026-08-04T18:01:17Z".to_string(),
-            scan_end: "2026-08-04T18:03:54.500Z".to_string(),
-            sources: Vec::new(),
-            window: None,
-            projection: ProjectionEntry {
-                perspective_point_height_m: 35786023.0,
-                semi_major_axis_m: 6378137.0,
-                semi_minor_axis_m: 6356752.31414,
-                longitude_of_projection_origin_deg: -75.0,
-                sweep_angle_axis: "x".to_string(),
-            },
-            nx: 2,
-            ny: 1,
-            x_scan_rad: vec![0.0, 5.0e-4],
-            y_scan_rad: vec![0.0],
             planes,
             plane_order: vec!["cloud_top_height_m".to_string()],
             arrays,
-            payload_bytes: payload.len(),
-            content_sha256: hex_sha256(&payload),
-            pairs_with_schema: pairs_with_schema(),
-            regrid: NO_REGRID.to_string(),
-            sibling: None,
+            ..cloudtop::tests::minimal_meta(&payload)
         };
         // Deliberately a name that says nothing, and a name that lies.
         for name in ["anonymous.bin", "definitely_a_cwp_pack.goespack"] {

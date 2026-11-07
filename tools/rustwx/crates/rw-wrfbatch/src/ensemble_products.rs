@@ -6,10 +6,11 @@
 
 use std::{path::{Path, PathBuf}, time::Instant, io::{BufWriter, Write}};
 use netcrust::File;
+use rayon::prelude::*;
 use rustwx_render::{ContourLayer, LegendControls, LegendMode, LevelDensity, RenderDensity, advisory};
-use crate::{panel::{PanelRequest, layout_path, render_panel, safe_component}, scales};
+use crate::{panel::{PanelRequest, layout_path, render_panel_with_rgba, safe_component}, scales};
 
-pub const ABI: &str = "gpuwm-rw-wrfbatch-resident-ensemble-v2\tCDF5\tmean\tspread\tmin\tmax\tprobability\tpaintball\tpostage\tfraction\ttyped-diagnostic\tRENDERED\tFAILED";
+pub const ABI: &str = "gpuwm-rw-wrfbatch-resident-ensemble-v2\tCDF5\tmean\tspread\tmin\tmax\tprobability\tpaintball\tpostage\tfraction\ttyped-diagnostic\ts2s-window\tglobal-ensemble-projection\tRENDERED\tFAILED";
 const CONTRACT: &str = "gpuwm-resident-ensemble-products.v1";
 
 fn attr(file: &File, name: &str) -> Result<String, String> {
@@ -34,20 +35,78 @@ fn shaped(file: &File, name: &str, expected: &[usize]) -> Result<Vec<f32>, Strin
     Ok(array.values().iter().map(|&v| v as f32).collect())
 }
 
+// S2S window means and anomalies have declared units and fixed comparison
+// scales. The generic 0..100 fallback would hide every height/MSLP mean.
+fn s2s_scale(field: &str, kind: &str) -> Option<rustwx_render::ColorScale> {
+    let anomaly = field.ends_with("_anomaly");
+    let base = field.strip_suffix("_anomaly").unwrap_or(field);
+    let (low, high, delta, spread) = match base {
+        "temperature2" => (240.0, 320.0, 10.0, 10.0),
+        "precipitation_rate" | "freezing_rain_rate" => (0.0, 10.0, 5.0, 5.0),
+        "z500" => (4500.0, 6200.0, 300.0, 150.0),
+        "mslp" => (960.0, 1040.0, 20.0, 15.0),
+        _ => return None,
+    };
+    if kind == "spread" { return Some(scales::spread_scale(spread)); }
+    if anomaly {
+        use rustwx_render::difference::{difference_scale, DifferenceTable};
+        return Some(rustwx_render::ColorScale::Discrete(difference_scale(DifferenceTable::builtin(), delta)));
+    }
+    if base == "temperature2" { return None; } // canonical operational temperature palette
+    let mut scale = scales::spread_scale(high - low);
+    if let rustwx_render::ColorScale::Discrete(ref mut ladder) = scale {
+        for level in &mut ladder.levels { *level += low; }
+        ladder.extend = rustwx_render::ExtendMode::Both;
+    }
+    Some(scale)
+}
+
+
+fn is_ice(field: &str) -> bool {
+    matches!(field, "ice_accretion" | "ice_accretion_horizontal")
+}
+fn ice_scale() -> rustwx_render::ColorScale {
+    use rustwx_render::{ColorScale, DiscreteColorScale, ExtendMode, Color};
+    ColorScale::Discrete(DiscreteColorScale {
+        levels: vec![0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0],
+        colors: [[220,240,255],[150,210,245],[80,165,220],[45,105,180],
+                 [95,60,170],[155,45,155],[210,45,115],[250,90,75]]
+            .iter().map(|c| Color::rgba(c[0],c[1],c[2],255)).collect(),
+        extend: ExtendMode::Max, mask_below: Some(0.01),
+    })
+}
+fn threshold_display(field: &str, threshold: f64, units: &str) -> (String, String) {
+    if is_ice(field) { return (format!("{:.2}", threshold / 25.4), "in".into()); }
+    if field == "temperature2_below_freezing" {
+        return (format!("{:.2}", if (threshold - 273.15).abs() < 0.0001 { 0.0 } else { threshold - 273.15 }), "C".into());
+    }
+    (format!("{}", threshold as f32), units.into())
+}
+
 fn field_title(field: &str) -> &str {
     match field {
         "qpf_1h" => "1 h precipitation", "qpf_3h" => "3 h precipitation",
         "qpf_6h" => "6 h precipitation", "rain_total" => "forecast precipitation",
         "wind10" => "10 m wind speed", "gust" => "wind gust",
-        "temperature2" => "2 m temperature", "dewpoint2" => "2 m dewpoint",
+        "temperature2" | "temperature2_below_freezing" => "2 m temperature",
+        "freezing_rain_rate" => "saved-frame freezing-rain rate",
+        "freezing_rain_total" => "saved-frame freezing-rain liquid",
+        "ice_accretion" => "saved-frame FRAM radial ice",
+        "ice_accretion_horizontal" => "saved-frame FRAM horizontal ice", "dewpoint2" => "2 m dewpoint",
         "refl" => "composite reflectivity", "uh" => "2-5 km updraft helicity",
-        "humidity2" => "2 m relative humidity", other => other,
+        "humidity2" => "2 m relative humidity",
+        "z500" => "500 hPa geopotential height", "mslp" => "mean sea level pressure",
+        "precipitation_rate" => "precipitation rate",
+        "temperature2_anomaly" => "2 m temperature anomaly",
+        "z500_anomaly" => "500 hPa geopotential height anomaly",
+        "mslp_anomaly" => "mean sea level pressure anomaly",
+        "precipitation_rate_anomaly" => "precipitation rate anomaly", other => other,
     }
 }
 
 fn field_recipe(field: &str) -> &str {
     match field {
-        "temperature2" => "2m_temperature", "dewpoint2" => "2m_dewpoint",
+        "temperature2" | "temperature2_below_freezing" => "2m_temperature", "dewpoint2" => "2m_dewpoint",
         "humidity2" => "2m_relative_humidity", "wind10" => "10m_wind_speed_and_direction",
         "gust" => "10m_wind_gusts", "rain_total" => "total_qpf",
         "refl" => "composite_reflectivity", "uh" => "uh_2to5km", other => other,
@@ -58,12 +117,12 @@ fn field_style(field: &str, units: &str) -> Option<rustwx_products::viewer::Stor
     use rustwx_core::{CanonicalField as F, FieldSelector as S};
     let selector = match field {
         "refl" => S::entire_atmosphere(F::CompositeReflectivity),
-        "temperature2" => S::height_agl(F::Temperature, 2),
+        "temperature2" | "temperature2_below_freezing" => S::height_agl(F::Temperature, 2),
         "dewpoint2" => S::height_agl(F::Dewpoint, 2),
         "humidity2" => S::height_agl(F::RelativeHumidity, 2),
         "wind10" => S::height_agl(F::WindSpeed, 10),
         "gust" => S::height_agl(F::WindGust, 10),
-        "rain_total" | "qpf_1h" | "qpf_3h" | "qpf_6h" => S::surface(F::TotalPrecipitation),
+        "rain_total" | "freezing_rain_total" | "qpf_1h" | "qpf_3h" | "qpf_6h" => S::surface(F::TotalPrecipitation),
         "uh" => S::height_layer_agl(F::UpdraftHelicity, 2000, 5000),
         _ => return rustwx_products::viewer::operational_style_for_store_variable(
             field, &serde_json::json!({"derived": field_recipe(field)}), units, rustwx_core::ModelId::WrfGdex),
@@ -139,6 +198,11 @@ fn validate_probability(values: &[f32], counts: &[f32], members: usize) -> Resul
 /// The subtitle row of a full-size ensemble map: the roster and the valid
 /// time on the left, the source label on the right.
 fn roster_subtitles(members: usize, valid: &str, source: &str) -> (String, String) {
+    // One plane is a deterministic field (a single run or an observation),
+    // not an ensemble of one: no roster to name.
+    if members == 1 {
+        return (format!("valid {valid}"), format!("source: {source}"));
+    }
     (format!("{} | valid {valid}", roster_words(members)), format!("source: {source}"))
 }
 
@@ -196,19 +260,44 @@ fn plane(out: &Path, domain: &str, valid: &str, subtitles: (String, String),
          slug: String, title: String, values: Vec<f32>, units: String,
          scale: rustwx_render::ColorScale, contours: Vec<ContourLayer>,
          colorbar: bool, width: u32, height: u32) -> Result<PathBuf, String> {
+    plane_geo(out, domain, valid, subtitles, latitude, longitude, ny, nx, slug, title, values, units, scale,
+              contours, colorbar, width, height).map(|(path, _)| path)
+}
+
+/// One drawn map's lines on stdout: `RENDERED\t<path>`, then `GEOREF\t<path>\t<json>` with its map transform
+/// (one rustwx.render-georef/v1 panel), which the caller folds into the folder's `render-georef.json`.
+/// THE BREAKAGE THIS CLOSES: every ensemble product map (WOOF run_6a0d19f802e9bb6c: 2,016 of them) went out with
+/// no transform, so a click on it could not become a latitude and longitude and the site's soundings were off.
+fn said(target: &Path, geo: Option<&rustwx_render::PanelGeoReference>) {
+    println!("RENDERED\t{}", target.display());
+    if let Some(json) = geo.and_then(|g| serde_json::to_string(g).ok()) {
+        println!("GEOREF\t{}\t{json}", target.display());
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn plane_geo(out: &Path, domain: &str, valid: &str, subtitles: (String, String),
+         latitude: &[f32], longitude: &[f32], ny: usize, nx: usize,
+         slug: String, title: String, values: Vec<f32>, units: String,
+         scale: rustwx_render::ColorScale, contours: Vec<ContourLayer>,
+         colorbar: bool, width: u32, height: u32)
+         -> Result<(PathBuf, Option<rustwx_render::PanelGeoReference>), String> {
     let day = valid.get(..10).unwrap_or(valid);
     let target = layout_path(out, domain, &slug, day,
                             &format!("{slug}_{}", safe_component(valid, "valid")));
-    render_panel(PanelRequest {
+    render_panel_with_rgba(PanelRequest {
         lat_deg: latitude, lon_deg: longitude, projection: None, ny, nx, values,
         product_slug: slug, title, display_units: units, scale, cbar_tick_step: None,
         legend: LegendControls { density: LevelDensity::default(), mode: LegendMode::Stepped },
         render_density: RenderDensity::default(),
         subtitle_left: subtitles.0, subtitle_center: None,
         subtitle_right: subtitles.1, width, height,
-        contours, colorbar, overlays: None, annotations: None, out_path: target,
-    })
+        contours, colorbar, overlays: MAP_OVERLAYS.get(), annotations: None, out_path: target,
+    }, None)
 }
+
+/// The `--overlays` of this process's one `--ensemble-products` call.
+static MAP_OVERLAYS: std::sync::OnceLock<crate::annotate::MapOverlays> = std::sync::OnceLock::new();
 
 fn typed_shape(file: &File, name: &str, dims: &[&str], shape: &[usize]) -> Result<(), String> {
     let variable = file.variable(name).ok_or_else(|| format!("missing variable {name}"))?;
@@ -232,6 +321,7 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
         .filter(|&n| n.is_finite() && n >= 1.0 && n.fract() == 0.0)
         .ok_or("ensemble_members must name the complete integer roster")? as usize;
     let valid = attr(&file, "valid_time")?;
+    let is_s2s = file.attribute("s2s_window").is_some();
     let lat = file.read_array_f64("XLAT").map_err(|e| format!("read XLAT: {e}"))?;
     if lat.shape().len() != 2 || lat.shape().contains(&0) {
         return Err("XLAT must be a nonempty (south_north,west_east) plane".into());
@@ -250,6 +340,18 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
         selected.sort();
     }
     if selected.is_empty() { return Err("aggregate file has no ensemble fields".into()); }
+    // Each field writes distinct product paths and owns a native reader. The
+    // old serial loop left a card waiting behind minutes of single-core plots.
+    // Open a separate reader per field instead of sharing a NetCDF handle.
+    let mut seen = std::collections::HashSet::new();
+    selected.retain(|field| seen.insert(field.clone()));
+    if selected.len() > 1 {
+        let frames: Result<Vec<Vec<PathBuf>>, String> = selected.par_iter()
+            .map(|field| render(path, out, std::slice::from_ref(field), domain,
+                                source, width, height, products))
+            .collect();
+        return frames.map(|rows| rows.into_iter().flatten().collect());
+    }
     let mut written = Vec::new();
     // How many of a stamp's valid-time lines this file's frame has cut.
     let mut stamp_lines_cut = 0usize;
@@ -258,10 +360,16 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
         let units = file.variable(&mean_name).and_then(|v| v.attribute("units").and_then(|a| a.as_string()).map(str::to_string))
             .ok_or_else(|| format!("{mean_name} has no declared units"))?;
         let style = field_style(&field, &units);
-        for kind in ["mean", "spread", "min", "max"] {
-            if !products.iter().any(|p| p == kind) { continue; }
+        for kind in ["mean", "spread", "min", "max", "pmm"] {
+            if !products.iter().any(|p| p == kind) || file.variable(&format!("{field}_{kind}")).is_none() { continue; }
             let mut values = shaped(&file, &format!("{field}_{kind}"), &[ny, nx])?;
-            let (scale, display_units) = if kind == "spread" {
+            let s2s = if is_s2s || field == "freezing_rain_rate" { s2s_scale(&field, kind) } else { None };
+            let (scale, display_units) = if is_ice(&field) {
+                values.iter_mut().for_each(|v| *v /= 25.4);
+                (if kind == "spread" { scales::spread_scale(0.5) } else { ice_scale() }, "in".into())
+            } else if let Some(scale) = s2s {
+                (scale, units.clone())
+            } else if kind == "spread" {
                 let upper = if units == "1" { 1.0 } else { match field.as_str() { "temperature2" | "dewpoint2" => 15.0,
                     "humidity2" => 40.0, "refl" => 30.0, "uh" => 150.0, _ => 50.0 }
                 };
@@ -273,10 +381,16 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
                 (if units == "1" { scales::probability_scale() } else { scales::spread_scale(100.0) }, units.clone())
             };
             let slug = format!("ens_{kind}_{}", safe_component(&field, "field"));
-            let target = plane(out, domain, &valid, roster_subtitles(members, &valid, source), &latitude, &longitude,
-                ny, nx, slug, format!("Ensemble {kind} {} ({display_units})", field_title(&field)),
+            let (target, geo) = plane_geo(out, domain, &valid, roster_subtitles(members, &valid, source), &latitude, &longitude,
+                ny, nx, slug,
+                if members == 1 && kind == "mean" {
+                    // The plain product title for one deterministic plane.
+                    format!("{} ({display_units})", field_title(&field))
+                } else {
+                    format!("Ensemble {kind} {} ({display_units})", field_title(&field))
+                },
                 values, display_units, scale, vec![], true, width, height)?;
-            println!("RENDERED\t{}", target.display()); written.push(target);
+            said(&target, geo.as_ref()); written.push(target);
         }
         if products.iter().any(|p| p == "postage") && file.variable(&format!("{field}_members")).is_some() {
             let member_name = format!("{field}_members"); let member_dim = format!("{field}_member");
@@ -291,7 +405,12 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
                 let slug = format!("ens_postage_{}_page_{}", safe_component(&field, "field"), first / 16 + 1);
                 for member in first..end {
                     let mut member_values = values[member * ny * nx..(member + 1) * ny * nx].to_vec();
-                    let (scale, display_units) = if let Some(ref style) = style {
+                    let (scale, display_units) = if is_ice(&field) {
+                        member_values.iter_mut().for_each(|v| *v /= 25.4);
+                        (ice_scale(), "in".into())
+                    } else if let Some(scale) = s2s_scale(&field, "mean") {
+                        (scale, units.clone())
+                    } else if let Some(ref style) = style {
                         member_values.iter_mut().for_each(|v| *v = style.convert.apply(*v));
                         (style.scale.clone(), style.display_units.clone())
                     } else { (if units == "1" { scales::probability_scale() } else { scales::spread_scale(100.0) }, units.clone()) };
@@ -336,7 +455,9 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
             // The producer stores float32 thresholds. Its shortest round-trip
             // spelling is both exact and readable on a product title.
             let threshold_label = format!("{}", threshold as f32);
-            if products.iter().any(|p| p == "paintball") && file.variable(&format!("{field}_paintball")).is_some() {
+            let (display_threshold, threshold_units) = threshold_display(&field, threshold, &units);
+            for contour_product in ["paintball", "spaghetti"] {
+            if products.iter().any(|p| p == contour_product) && file.variable(&format!("{field}_paintball")).is_some() {
                 let paint_name = format!("{field}_paintball");
                 let threshold_dim = format!("{field}_threshold"); let word_dim = format!("{field}_member_word");
                 let words = (members + 63) / 64;
@@ -349,11 +470,12 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
                     levels: vec![0.5], color: crate::annotate::parse_color(rustwx_ensemble::member_color(member as u32 + 1)),
                     width: 2, labels: false, show_extrema: false, pattern: Default::default(), major_every: None, major_width: None,
                 }).collect();
-                let slug = format!("ens_paintball_{}_{}_{}", safe_component(&field, "field"), comparison, safe_component(&threshold_label, "threshold"));
-                let target = plane(out, domain, &valid, roster_subtitles(members, &valid, source), &latitude, &longitude, ny, nx, slug,
-                    format!("Paintball {} {relation} {threshold_label} {units}", field_title(&field)),
+                let slug = format!("ens_{contour_product}_{}_{}_{}", safe_component(&field, "field"), comparison, safe_component(&threshold_label, "threshold"));
+                let (target, geo) = plane_geo(out, domain, &valid, roster_subtitles(members, &valid, source), &latitude, &longitude, ny, nx, slug,
+                    format!("{contour_product} {} {relation} {display_threshold} {threshold_units}", field_title(&field)),
                     vec![f32::NAN; ny * nx], units.clone(), scales::spread_scale(1.0), contours, false, width, height)?;
-                println!("RENDERED\t{}", target.display()); written.push(target);
+                said(&target, geo.as_ref()); written.push(target);
+            }
             }
             if !products.iter().any(|p| p == "prob") { continue; }
             let slug = format!("ens_prob_{}_{}_{}", safe_component(&field, "field"), comparison,
@@ -362,18 +484,18 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
             let target = layout_path(out, domain, &slug, day,
                                      &format!("{slug}_{}", safe_component(&valid, "valid")));
             let started = Instant::now();
-            let target = render_panel(PanelRequest {
+            let (target, geo) = render_panel_with_rgba(PanelRequest {
                 lat_deg: &latitude, lon_deg: &longitude, projection: None, ny, nx,
                 values: probabilities[index * ny * nx..(index + 1) * ny * nx].to_vec(),
-                product_slug: slug, title: format!("P({} {relation} {threshold_label} {units})", field_title(&field)),
+                product_slug: slug, title: format!("P({} {relation} {display_threshold} {threshold_units})", field_title(&field)),
                 display_units: "fraction".into(), scale: scales::probability_scale(), cbar_tick_step: Some(0.1),
                 legend: LegendControls { density: LevelDensity::default(), mode: LegendMode::Stepped },
                 render_density: RenderDensity::default(),
                 subtitle_left: roster_subtitles(members, &valid, source).0, subtitle_center: None,
                 subtitle_right: roster_subtitles(members, &valid, source).1, width, height,
                 contours: Vec::new(), colorbar: true, overlays: None, annotations: None, out_path: target,
-            })?;
-            println!("RENDERED\t{}", target.display());
+            }, None)?;
+            said(&target, geo.as_ref());
             println!("ENSEMBLE_PLANE\t{field}\tthreshold={threshold}\tcomparison={comparison}\tmembers={members}\trender_ms={:.3}", started.elapsed().as_secs_f64() * 1000.0);
             written.push(target);
         }
@@ -382,7 +504,65 @@ pub fn render(path: &Path, out: &Path, fields: &[String], domain: &str,
 }
 
 /// Additive dispatch: existing deterministic WRF invocations retain their ABI.
+/// Validated presentation settings shared by the CLI and bounded resident worker.
+pub struct RenderOptions {
+    input: PathBuf,
+    out: PathBuf,
+    fields: Vec<String>,
+    domain: String,
+    source: String,
+    width: u32,
+    height: u32,
+    products: Vec<String>,
+}
+
+impl RenderOptions {
+    /// Parse only; this never opens a weather frame or initializes CUDA.
+    pub fn parse(args: &[String]) -> Result<Self, String> {
+        if args.first().map(String::as_str) != Some("--ensemble-products") {
+            return Err("expected --ensemble-products".into());
+        }
+        let input = args.get(1).ok_or("--ensemble-products requires a CDF5 path")?;
+        let mut out = None; let mut fields = Vec::new(); let mut domain = "d01".to_string();
+        let mut source = concat!("WOOF ", env!("GPUWM_ENGINE_VERSION")).to_string(); let mut width = 1200; let mut height = 900;
+        let mut products = vec!["mean", "spread", "min", "max", "prob", "paintball", "postage", "pmm", "spaghetti"].into_iter().map(str::to_string).collect::<Vec<_>>();
+        let mut i = 2;
+        while i < args.len() {
+            let value = args.get(i + 1).ok_or_else(|| format!("{} requires a value", args[i]))?;
+            match args[i].as_str() {
+                "--out-dir" => out = Some(PathBuf::from(value)),
+                "--fields" => fields = value.split(',').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect(),
+                "--products" => products = value.split(',').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect(),
+                "--domain" => domain = value.clone(), "--source-label" => source = value.clone(),
+                "--width" => width = value.parse().map_err(|_| "invalid --width")?,
+                "--height" => height = value.parse().map_err(|_| "invalid --height")?,
+                // Geographic lines, labels and rings drawn over every map this
+                // call paints (the same schema as rw_wrfbatch --overlays): a
+                // nest's box and name over its parent, a track, a site.
+                "--overlays" => {
+                    let loaded = crate::annotate::MapOverlays::load(std::path::Path::new(value))?;
+                    let _ = MAP_OVERLAYS.set(loaded);
+                }
+                other => return Err(format!("unknown ensemble product option {other}")),
+            }
+            i += 2;
+        }
+        if width < 160 || height < 120 { return Err("ensemble map dimensions must be at least 160x120".into()); }
+        if products.is_empty() || products.iter().any(|p| !["mean", "spread", "min", "max", "prob", "paintball", "postage", "pmm", "spaghetti"].contains(&p.as_str())) {
+            return Err("ensemble products must name mean,spread,min,max,prob,paintball,postage".into());
+        }
+        Ok(Self { input: PathBuf::from(input), out: out.ok_or("--out-dir is required")?, fields, domain, source, width, height, products })
+    }
+
+    pub fn render_at(&self, input: &Path, out: &Path) -> Result<(), String> {
+        render(input, out, &self.fields, &self.domain, &self.source, self.width, self.height, &self.products).map(|_| ())
+    }
+}
+
 pub fn try_cli(args: &[String]) -> Option<Result<(), String>> {
+    if args.first().map(String::as_str) == Some("--ensemble-sheet") {
+        return Some(compose_family_sheet(args));
+    }
     if args.first().map(String::as_str) == Some("--ensemble-diagnostic-reduce-abi") {
         println!("{}", crate::ensemble_reduce::ABI);
         return Some(Ok(()));
@@ -397,32 +577,29 @@ pub fn try_cli(args: &[String]) -> Option<Result<(), String>> {
         println!("{ABI}"); return Some(Ok(()));
     }
     if args.first().map(String::as_str) != Some("--ensemble-products") { return None; }
-    Some((|| {
-        let input = args.get(1).ok_or("--ensemble-products requires a CDF5 path")?;
-        let mut out = None; let mut fields = Vec::new(); let mut domain = "d01".to_string();
-        let mut source = "ArWen".to_string(); let mut width = 1200; let mut height = 900;
-        let mut products = vec!["mean", "spread", "min", "max", "prob", "paintball", "postage"].into_iter().map(str::to_string).collect::<Vec<_>>();
-        let mut i = 2;
-        while i < args.len() {
-            let value = args.get(i + 1).ok_or_else(|| format!("{} requires a value", args[i]))?;
-            match args[i].as_str() {
-                "--out-dir" => out = Some(PathBuf::from(value)),
-                "--fields" => fields = value.split(',').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect(),
-                "--products" => products = value.split(',').map(str::trim).filter(|v| !v.is_empty()).map(str::to_string).collect(),
-                "--domain" => domain = value.clone(), "--source-label" => source = value.clone(),
-                "--width" => width = value.parse().map_err(|_| "invalid --width")?,
-                "--height" => height = value.parse().map_err(|_| "invalid --height")?,
-                other => return Err(format!("unknown ensemble product option {other}")),
-            }
-            i += 2;
-        }
-        if width < 160 || height < 120 { return Err("ensemble map dimensions must be at least 160x120".into()); }
-        if products.is_empty() || products.iter().any(|p| !["mean", "spread", "min", "max", "prob", "paintball", "postage"].contains(&p.as_str())) {
-            return Err("ensemble products must name mean,spread,min,max,prob,paintball,postage".into());
-        }
-        render(Path::new(input), &out.ok_or("--out-dir is required")?, &fields, &domain, &source, width, height, &products)?;
-        Ok(())
-    })())
+    Some(RenderOptions::parse(args).and_then(|options| options.render_at(&options.input, &options.out)))
+}
+
+fn compose_family_sheet(args: &[String]) -> Result<(), String> {
+    #[derive(serde::Deserialize)]
+    struct Request { rows: Vec<Vec<PathBuf>>, output: PathBuf, title: String, valid_time: String }
+    let input = args.get(1).ok_or("--ensemble-sheet needs a JSON request")?;
+    let request: Request = serde_json::from_slice(&std::fs::read(input).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    if request.rows.is_empty() || request.rows[0].is_empty()
+        || request.rows.iter().any(|row| row.len() != request.rows[0].len()) {
+        return Err("ensemble sheet needs rectangular nonempty panel rows".into());
+    }
+    let rows: Result<Vec<Vec<image::RgbaImage>>, String> = request.rows.par_iter().map(|row|
+        row.iter().map(|path| image::open(path).map(|image| image.to_rgba8()).map_err(|e| e.to_string())).collect()
+    ).collect();
+    let sheet = crate::compare::compose_sheet_rows(&rows?, &crate::compare::SheetHeader {
+        title: request.title, subtitle: format!("valid {} UTC; all panels on the same model grid", request.valid_time),
+    })?;
+    if let Some(parent) = request.output.parent() { std::fs::create_dir_all(parent).map_err(|e| e.to_string())?; }
+    sheet.save(&request.output).map_err(|e| e.to_string())?;
+    println!("RENDERED\t{}", request.output.display());
+    Ok(())
 }
 
 #[cfg(test)]
@@ -439,7 +616,8 @@ mod tests {
         let (left, right) = roster_subtitles(20, valid, "ArWen");
         assert_eq!(left, "20 members | valid 2026-10-02_18:00:00");
         assert_eq!(right, "source: ArWen");
-        assert_eq!(roster_subtitles(1, valid, "ArWen").0, "1 member | valid 2026-10-02_18:00:00");
+        // One plane is a deterministic field, not an ensemble of one.
+        assert_eq!(roster_subtitles(1, valid, "ArWen").0, "valid 2026-10-02_18:00:00");
     }
     /// A stamp row that holds `room` characters and cuts, with the map
     /// renderer's own say-once advisory, anything longer.

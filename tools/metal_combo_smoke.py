@@ -391,7 +391,7 @@ def main():
     parser.add_argument("--mp-zero-out-all", type=int, choices=(0, 1),
                         default=0, help="also process scalar species arrays")
     parser.add_argument("--sf-lake-physics", type=int, choices=(0, 1),
-                        default=0, help="RUC lake columns on Metal")
+                        default=0, help="Noah, RUC and Noah-MP lake columns on Metal")
     parser.add_argument("--alb-sol", type=int, choices=(0, 1), default=0,
                         help="RUC sun-angle land albedo on Metal")
     parser.add_argument("--spp-lsm", type=int, choices=(0, 1), default=0,

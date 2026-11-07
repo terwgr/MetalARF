@@ -103,6 +103,34 @@ static inline float mynn_gfk_logf(float value)
     return as_type<float>(soft_gfk_log(as_type<uint>(value)));
 }
 
+// glibc log10f (e_log10f.c on logf), spelled with the unit's non-FTZ
+// operators; Metal's log10 is a different function.
+static inline float mynn_gfk_log10f(float x)
+{
+    const float ivln10 = as_type<float>(0x3ede5bd9u);
+    const float log10_2hi = as_type<float>(0x3e9a2080u);
+    const float log10_2lo = as_type<float>(0x355427dbu);
+    const float two25 = as_type<float>(0x4c000000u);
+    uint hx = as_type<uint>(x);
+    int k = 0;
+    if (int(hx) < 0x00800000) {
+        if ((hx & 0x7fffffffu) == 0u) return as_type<float>(0xff800000u);
+        if (int(hx) < 0) return as_type<float>(0x7fc00000u);
+        k -= 25;
+        x = mynn_f32_mul(x, two25);
+        hx = as_type<uint>(x);
+    }
+    if (hx >= 0x7f800000u) return mynn_f32_add(x, x);
+    k += int(hx >> 23) - 127;
+    const int i = (k < 0) ? 1 : 0;
+    hx = (hx & 0x007fffffu) | (uint(0x7f - i) << 23);
+    const float y = float(k + i);
+    x = as_type<float>(hx);
+    const float z = mynn_f32_add(mynn_f32_mul(y, log10_2lo),
+                                 mynn_f32_mul(ivln10, mynn_gfk_logf(x)));
+    return mynn_f32_add(z, mynn_f32_mul(y, log10_2hi));
+}
+
 static inline float mynn_gfk_atanf(float value)
 {
     return as_type<float>(soft_gfk_atanf(as_type<uint>(value)));
@@ -539,8 +567,9 @@ kernel void mynn_driver_prep_columns(
             mynn_f32_sub(theta,
                 mynn_f32_mul(mynn_f32_div(xlvcp, e), qc)),
             mynn_f32_mul(mynn_f32_div(xlscp, e), qi));
-        r.thetav[index] = mynn_f32_mul(
-            theta, mynn_f32_add(1.0f, mynn_f32_mul(p608, qv_value)));
+        // The fork's thetav (module_bl_mynn.F:4268) uses the literal 0.608.
+        r.thetav[index] = mynn_f32_mul(theta, mynn_f32_add(1.0f,
+            mynn_f32_mul(q.gsd41 != 0 ? 0.608f : p608, qv_value)));
         r.qke_seed[index] = mynn_f32_mul(lead, mynn_f32_max2(
             mynn_f32_div(mynn_f32_sub(reach, r.zw[index]), denom), 0.01f));
     }
@@ -679,6 +708,28 @@ static inline void mynn_predict_column(
         const ulong idx = ulong(k) * ncol + ulong(column);
         r.qke_out[idx] = gsd41 ? mynn_f32_max2(r.d[idx], 1.0e-4f)
             : min(max(r.d[idx], 1.0e-3f), 150.0f);
+    }
+
+    if (gsd41) {
+        for (int k = 0; k < nz - 1; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float b2l = r.qkw[idx] <= 0.0f ? 0.0f
+                : mynn_f32_div(mynn_f32_mul(mynn_f32_mul(15.0f, 0.25f),
+                    mynn_f32_add(r.el[idx + ncol], r.el[idx])), r.qkw[idx]);
+            const float pdt_here = k == 0 ? r.pdt[base + ncol] : r.pdt[idx];
+            const float pdq_here = k == 0 ? r.pdq[base + ncol] : r.pdq[idx];
+            const float pdc_here = k == 0 ? r.pdc[base + ncol] : r.pdc[idx];
+            r.tsq_out[idx] = mynn_f32_mul(b2l,
+                mynn_f32_add(r.pdt[idx + ncol], pdt_here));
+            r.qsq_out[idx] = mynn_f32_mul(b2l,
+                mynn_f32_add(r.pdq[idx + ncol], pdq_here));
+            r.cov_out[idx] = mynn_f32_mul(b2l,
+                mynn_f32_add(r.pdc[idx + ncol], pdc_here));
+        }
+        r.tsq_out[top] = r.tsq_out[top - ncol];
+        r.qsq_out[top] = r.qsq_out[top - ncol];
+        r.cov_out[top] = r.cov_out[top - ncol];
+        return;
     }
 
     for (int k = 0; k < nz - 1; ++k) {
@@ -908,12 +959,16 @@ kernel void mynn_level2_columns(
             mynn_f32_max2(duz, 1.0e-10f));
         const float a2fac = mynn_f32_div(1.0f,
             mynn_f32_add(1.0f, mynn_f32_max2(ri, 0.0f)));
+        const float a2r = q.gsd41 != 0
+            ? mynn_f32_div(a2, mynn_f32_add(1.0f, mynn_f32_max2(ri, 0.0f)))
+            : mynn_f32_mul(a2, a2fac);
         const float rfc = mynn_f32_div(g1, mynn_f32_add(g1, g2));
         const float f1 = mynn_f32_add(
             mynn_f32_add(mynn_f32_mul(b1, mynn_f32_sub(g1, c1)),
                 mynn_f32_mul(
                     mynn_f32_mul(
-                        mynn_f32_mul(mynn_f32_mul(3.0f, a2), a2fac),
+                        (q.gsd41 != 0 ? mynn_f32_mul(3.0f, a2r)
+                            : mynn_f32_mul(mynn_f32_mul(3.0f, a2), a2fac)),
                         mynn_f32_sub(1.0f, c2)),
                     mynn_f32_sub(1.0f, c5))),
             mynn_f32_mul(mynn_f32_mul(2.0f, a1),
@@ -927,9 +982,9 @@ kernel void mynn_level2_columns(
         const float rf2 = mynn_f32_div(mynn_f32_mul(b1, g1), f2);
         const float smc = mynn_f32_div(
             mynn_f32_mul(mynn_f32_div(a1,
-                mynn_f32_mul(a2, a2fac)), f1), f2);
+                a2r), f1), f2);
         const float shc = mynn_f32_mul(
-            mynn_f32_mul(3.0f, mynn_f32_mul(a2, a2fac)),
+            mynn_f32_mul(3.0f, a2r),
             mynn_f32_add(g1, g2));
         const float ri1 = mynn_f32_div(0.5f, smc);
         const float ri2 = mynn_f32_mul(rf1, smc);
@@ -956,6 +1011,8 @@ kernel void mynn_level2_columns(
         r.sh[idx] = sh;
     }
 }
+
+static inline float mynn_tanhf(float x);
 
 // gsd41: KPBL blends the theta-v and TKE levels with the height weight, and
 // the scale-awareness ratio uses max(dx, 10) without the 2.5 factor.
@@ -1020,7 +1077,7 @@ static inline void mynn_pblh_scale_column(
     const float tanh_arg = mynn_f32_div(
         mynn_f32_sub(zi, 200.0f), 400.0f);
     const float weight = mynn_f32_add(
-        mynn_f32_mul(0.5f, tanh(tanh_arg)), 0.5f);
+        mynn_f32_mul(0.5f, mynn_tanhf(tanh_arg)), 0.5f);
     if (maxqke > 0.05f) {
         zi = mynn_f32_add(
             mynn_f32_mul(pblh_tke, mynn_f32_sub(1.0f, weight)),
@@ -1183,6 +1240,9 @@ static inline void mynn_turbulence_interface(
         mynn_f32_add(1.0f, mynn_f32_max2(ri, 0.0f)));
     const ulong a2fac_sq = mynn_f64_from_f32(
         mynn_f32_mul(a2fac, a2fac));
+    const float a2den = mynn_f32_add(1.0f, mynn_f32_max2(ri, 0.0f));
+    const ulong a2den64 = mynn_f64_from_f32(a2den);
+    const ulong a2den_sq = mynn_f64_from_f32(mynn_f32_mul(a2den, a2den));
     const float three_c1 = mynn_f32_mul(3.0f, c1);
     const float three_c1_e5c = mynn_f32_mul(three_c1, e5c);
     const ulong gmel = soft64_mul(mynn_f64_from_f32(r.gm[idx]), elsq);
@@ -1200,17 +1260,21 @@ static inline void mynn_turbulence_interface(
         r.sm[idx] = mynn_f64_to_f32(soft64_mul(
             mynn_f64_from_f32(r.sm[idx]), qdiv));
         const ulong qdiv2 = soft64_mul(qdiv, qdiv);
-        e1 = soft64_sub(q3sq, soft64_mul(soft64_mul(
-            soft64_mul(mynn_f64_from_f32(e1c), ghel),
-            mynn_f64_from_f32(a2fac)), qdiv2));
-        e2 = soft64_sub(q3sq, soft64_mul(soft64_mul(
-            soft64_mul(mynn_f64_from_f32(e2c), ghel),
-            mynn_f64_from_f32(a2fac)), qdiv2));
-        e3 = soft64_add(e1, soft64_mul(soft64_mul(
-            soft64_mul(mynn_f64_from_f32(e3c), ghel), a2fac_sq), qdiv2));
-        e4 = soft64_sub(e1, soft64_mul(soft64_mul(
-            soft64_mul(mynn_f64_from_f32(e4c), ghel),
-            mynn_f64_from_f32(a2fac)), qdiv2));
+        e1 = soft64_sub(q3sq, soft64_mul((gsd41
+            ? soft64_div(soft64_mul(mynn_f64_from_f32(e1c), ghel), a2den64)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e1c), ghel),
+                mynn_f64_from_f32(a2fac))), qdiv2));
+        e2 = soft64_sub(q3sq, soft64_mul((gsd41
+            ? soft64_div(soft64_mul(mynn_f64_from_f32(e2c), ghel), a2den64)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e2c), ghel),
+                mynn_f64_from_f32(a2fac))), qdiv2));
+        e3 = soft64_add(e1, soft64_mul(
+            (gsd41 ? soft64_div(soft64_mul(mynn_f64_from_f32(e3c), ghel), a2den_sq)
+                : soft64_mul(soft64_mul(mynn_f64_from_f32(e3c), ghel), a2fac_sq)), qdiv2));
+        e4 = soft64_sub(e1, soft64_mul((gsd41
+            ? soft64_div(soft64_mul(mynn_f64_from_f32(e4c), ghel), a2den64)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e4c), ghel),
+                mynn_f64_from_f32(a2fac))), qdiv2));
         eden = soft64_add(soft64_mul(e2, e4), soft64_mul(
             soft64_mul(soft64_mul(e3, mynn_f64_from_f32(e5c)), gmel),
             qdiv2));
@@ -1218,14 +1282,21 @@ static inline void mynn_turbulence_interface(
             eden = 0x3bc79ca10c924223ul;
     } else {
         qdiv = 0x3ff0000000000000ul;
-        e1 = soft64_sub(q3sq, soft64_mul(soft64_mul(
-            mynn_f64_from_f32(e1c), ghel), mynn_f64_from_f32(a2fac)));
-        e2 = soft64_sub(q3sq, soft64_mul(soft64_mul(
-            mynn_f64_from_f32(e2c), ghel), mynn_f64_from_f32(a2fac)));
-        e3 = soft64_add(e1, soft64_mul(soft64_mul(
-            mynn_f64_from_f32(e3c), ghel), a2fac_sq));
-        e4 = soft64_sub(e1, soft64_mul(soft64_mul(
-            mynn_f64_from_f32(e4c), ghel), mynn_f64_from_f32(a2fac)));
+        e1 = soft64_sub(q3sq, (gsd41 ? soft64_div(soft64_mul(
+            mynn_f64_from_f32(e1c), ghel), a2den64)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e1c), ghel),
+                mynn_f64_from_f32(a2fac))));
+        e2 = soft64_sub(q3sq, (gsd41 ? soft64_div(soft64_mul(
+            mynn_f64_from_f32(e2c), ghel), a2den64)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e2c), ghel),
+                mynn_f64_from_f32(a2fac))));
+        e3 = soft64_add(e1, (gsd41 ? soft64_div(soft64_mul(
+            mynn_f64_from_f32(e3c), ghel), a2den_sq)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e3c), ghel), a2fac_sq)));
+        e4 = soft64_sub(e1, (gsd41 ? soft64_div(soft64_mul(
+            mynn_f64_from_f32(e4c), ghel), a2den64)
+            : soft64_mul(soft64_mul(mynn_f64_from_f32(e4c), ghel),
+                mynn_f64_from_f32(a2fac))));
         eden = soft64_add(soft64_mul(e2, e4), soft64_mul(
             soft64_mul(e3, mynn_f64_from_f32(e5c)), gmel));
         if (soft64_less(eden, 0x3bc79ca10c924223ul))
@@ -1234,7 +1305,8 @@ static inline void mynn_turbulence_interface(
             mynn_f64_from_f32(a1)), soft64_sub(e3, soft64_mul(
                 mynn_f64_from_f32(three_c1), e4)));
         r.sm[idx] = mynn_f64_to_f32(soft64_div(sm_num, eden));
-        const float a2fac_product = mynn_f32_mul(a2, a2fac);
+        const float a2fac_product = gsd41 ? mynn_f32_div(a2, a2den)
+            : mynn_f32_mul(a2, a2fac);
         const ulong sh_num = soft64_mul(soft64_mul(q3sq,
             mynn_f64_from_f32(a2fac_product)), soft64_add(e2,
                 soft64_mul(mynn_f64_from_f32(three_c1_e5c), gmel)));
@@ -1411,7 +1483,7 @@ kernel void mynn_condensation_default_columns(
         if (frozen > 1.0e-9f && zagl > pblh2) {
             const float rh_hack = mynn_f32_min2(rhmax, mynn_f32_add(
                 rhcrit, mynn_f32_mul(mynn_f32_mul(wt2, 0.045f),
-                    mynn_f32_add(9.0f, log10(frozen)))));
+                    mynn_f32_add(9.0f, mynn_gfk_log10f(frozen)))));
             rh = mynn_f32_max2(rh, rh_hack);
             const float q1_rh = mynn_f32_add(-3.0f, mynn_f32_div(
                 mynn_f32_mul(3.0f, mynn_f32_sub(rh, rhcrit)),
@@ -1421,7 +1493,7 @@ kernel void mynn_condensation_default_columns(
         if (r.qc[idx] > 1.0e-6f && zagl > pblh2) {
             const float rh_hack = mynn_f32_min2(rhmax, mynn_f32_add(
                 rhcrit, mynn_f32_mul(mynn_f32_mul(wt2, 0.08f),
-                    mynn_f32_add(6.0f, log10(r.qc[idx])))));
+                    mynn_f32_add(6.0f, mynn_gfk_log10f(r.qc[idx])))));
             rh = mynn_f32_max2(rh, rh_hack);
             const float q1_rh = mynn_f32_add(-3.0f, mynn_f32_div(
                 mynn_f32_mul(3.0f, mynn_f32_sub(rh, rhcrit)),
@@ -2064,11 +2136,13 @@ static inline void mynn_boulac_elblavg(
     device const float *zw, device const float *dz,
     device const float *qtke, device const float *thetaw,
     device float *elblavg, device float *dlu, device float *dld,
-    uint ncol, int nz, uint column)
+    uint ncol, int nz, uint column, bool gsd41 = false)
 {
-    const float beta = mynn_f32_div(9.81f, 300.0f);
     for (int iz = 0; iz < nz; ++iz) {
         const ulong idx = ulong(iz) * ulong(ncol) + ulong(column);
+        // The fork's BouLac parcel buoyancy uses its interface theta.
+        const float beta = gsd41 ? mynn_f32_div(9.81f, thetaw[idx])
+                                 : mynn_f32_div(9.81f, 300.0f);
         float zup = 0.0f, zzz = 0.0f, zup_inf = 0.0f;
         dlu[idx] = mynn_f32_sub(mynn_f32_sub(
             zw[ulong(nz) * ulong(ncol) + ulong(column)], zw[idx]),
@@ -2170,9 +2244,17 @@ static inline void mynn_boulac_elblavg(
         }
         dld[idx] = mynn_f32_min2(dld[idx],
             zw[ulong(iz + 1) * ulong(ncol) + ulong(column)]);
-        const float up = mynn_f32_max2(mynn_f32_min2(dlu[idx], 1000.0f), 0.1f);
-        const float down = mynn_f32_max2(mynn_f32_min2(dld[idx], 1000.0f), 0.1f);
-        float value = mynn_f32_sqrt(mynn_f32_mul(up, down));
+        float value;
+        if (gsd41) {
+            // The fork's CASE(1) consumes the minimum before either
+            // displacement is clipped; module_bl_mynn.F:1389-1405 of the
+            // v4.1.21 source.
+            value = mynn_f32_min2(dlu[idx], dld[idx]);
+        } else {
+            const float up = mynn_f32_max2(mynn_f32_min2(dlu[idx], 1000.0f), 0.1f);
+            const float down = mynn_f32_max2(mynn_f32_min2(dld[idx], 1000.0f), 0.1f);
+            value = mynn_f32_sqrt(mynn_f32_mul(up, down));
+        }
         value = mynn_f32_div(value,
             mynn_f32_add(1.0f, mynn_f32_div(value, 2000.0f)));
         elblavg[idx] = iz == nz - 1
@@ -2386,6 +2468,98 @@ static inline void mynn_mym_length_local(
     }
 }
 
+// GSD MYNN v4.1 (NOAA-EMC WRF 3.9 branch, tag v4.1.21) module_bl_mynn.F:852-966
+// mym_length CASE(1), the fork's operational length: harmonic lengths and
+// the minimum BouLac displacement, with no EDMF contribution and no wind
+// dependent enhancement. vflx is the buoyancy flux the caller built from the
+// surface fluxes (the cold start passes the zero mym_initialize holds).
+static inline void mynn_mym_length_gsd41_case1(
+    device const float *dz, device const float *zw,
+    device const float *qke, device const float *dtv,
+    device const float *theta,
+    device float *el, device float *qkw, device float *qtke,
+    device float *thetaw, device float *elblavg,
+    device float *dlu, device float *dld,
+    float rmo, float vflx, float zi, float psig_bl,
+    uint ncol, int nz, uint column)
+{
+    const ulong base = ulong(column);
+    const float gtr = mynn_f32_div(9.81f, 300.0f);
+    const float zi2 = mynn_f32_max2(zi, 300.0f);
+    const float h1 = mynn_f32_min2(mynn_f32_max2(
+        mynn_f32_mul(0.3f, zi2), 300.0f), 750.0f);
+    const float h2 = mynn_f32_div(h1, 2.0f);
+    qtke[base] = mynn_f32_max2(mynn_f32_div(qke[base], 2.0f), 0.01f);
+    thetaw[base] = theta[base];
+    qkw[base] = mynn_f32_sqrt(mynn_f32_max2(qke[base], 1.0e-10f));
+    for (int k = 1; k < nz; ++k) {
+        const ulong idx = ulong(k) * ulong(ncol) + ulong(column);
+        const ulong prev = idx - ulong(ncol);
+        const float afk = mynn_f32_div(dz[idx],
+            mynn_f32_add(dz[idx], dz[prev]));
+        const float abk = mynn_f32_sub(1.0f, afk);
+        qkw[idx] = mynn_f32_sqrt(mynn_f32_max2(mynn_f32_add(
+            mynn_f32_mul(qke[idx], abk), mynn_f32_mul(qke[prev], afk)),
+            1.0e-3f));
+        qtke[idx] = mynn_f32_div(mynn_f32_mul(qkw[idx], qkw[idx]), 2.0f);
+        thetaw[idx] = mynn_f32_add(mynn_f32_mul(theta[idx], abk),
+                                   mynn_f32_mul(theta[prev], afk));
+    }
+    float elt = 1.0e-5f, vsc_sum = 1.0e-5f;
+    for (int k = 1; k < nz; ++k) {
+        const ulong idx = ulong(k) * ulong(ncol) + ulong(column);
+        if (!(zw[idx] <= mynn_f32_add(zi2, h1))) break;
+        const ulong prev = idx - ulong(ncol);
+        const float dzk = mynn_f32_mul(0.5f, mynn_f32_add(dz[idx], dz[prev]));
+        const float qdz = mynn_f32_mul(mynn_f32_max2(
+            mynn_f32_sub(qkw[idx], 0.0f), 0.03f), dzk);
+        elt = mynn_f32_add(elt, mynn_f32_mul(qdz, zw[idx]));
+        vsc_sum = mynn_f32_add(vsc_sum, qdz);
+    }
+    elt = mynn_f32_div(mynn_f32_mul(0.23f, elt), vsc_sum);
+    const float vsc = mynn_gfk_powf(mynn_f32_mul(mynn_f32_mul(gtr, elt),
+        mynn_f32_max2(vflx, 0.0f)), mynn_f32_div(1.0f, 3.0f));
+    mynn_boulac_elblavg(zw, dz, qtke, thetaw, elblavg, dlu, dld,
+                        ncol, nz, column, true);
+    el[base] = 0.0f;
+    for (int k = 1; k < nz; ++k) {
+        const ulong idx = ulong(k) * ulong(ncol) + ulong(column);
+        const float zwk = zw[idx];
+        float elb, elf;
+        if (dtv[idx] > 0.0f) {
+            const float bv = mynn_f32_sqrt(mynn_f32_mul(gtr, dtv[idx]));
+            elb = mynn_f32_mul(mynn_f32_div(mynn_f32_mul(0.65f, qkw[idx]), bv),
+                mynn_f32_add(1.0f, mynn_f32_mul(mynn_f32_div(3.0f, 0.65f),
+                    mynn_f32_sqrt(mynn_f32_div(vsc,
+                        mynn_f32_mul(bv, elt))))));
+            elb = mynn_f32_min2(elb, zwk);
+            elf = mynn_f32_div(mynn_f32_mul(0.65f, qkw[idx]), bv);
+        } else {
+            elb = 1.0e10f;
+            elf = elb;
+        }
+        float els;
+        if (rmo > 0.0f) {
+            els = mynn_f32_div(mynn_f32_mul(0.4f, zwk), mynn_f32_add(1.0f,
+                mynn_f32_mul(2.3f,
+                    mynn_f32_min2(mynn_f32_mul(zwk, rmo), 1.0f))));
+        } else {
+            els = mynn_f32_mul(mynn_f32_mul(0.4f, zwk),
+                mynn_gfk_powf(mynn_f32_sub(1.0f,
+                    mynn_f32_mul(mynn_f32_mul(20.0f, zwk), rmo)), 0.2f));
+        }
+        const float weight = mynn_f32_add(mynn_f32_mul(0.5f,
+            mynn_tanhf(mynn_f32_div(mynn_f32_sub(zwk,
+                mynn_f32_add(zi2, h1)), h2))), 0.5f);
+        float value = mynn_f32_min2(mynn_f32_div(elb, mynn_f32_add(
+            mynn_f32_add(mynn_f32_div(elb, elt), mynn_f32_div(elb, els)),
+            1.0f)), elf);
+        value = mynn_f32_add(mynn_f32_mul(value, mynn_f32_sub(1.0f, weight)),
+            mynn_f32_mul(mynn_f32_mul(0.4f, elblavg[idx]), weight));
+        el[idx] = mynn_f32_mul(value, psig_bl);
+    }
+}
+
 // WRF v4.1 module_bl_mynn.F:mym_length CASE(2), the GSD experimental
 // cloud-aware mixing length. Keep this separate from the RAP/HRRR CASE(1)
 // helper above: its cloud-regime buoyancy length, cloud turnover length,
@@ -2399,7 +2573,7 @@ static inline void mynn_mym_length_gsd41(
     device float *el, device float *qkw, device float *qtke,
     device float *thetaw, float rmo, float flt, float flq,
     float zi, float psig_bl, uint ncol, int nz, uint column,
-    bool zero_profile_inputs = false)
+    bool zero_profile_inputs = false, bool unsquared_qtke = false)
 {
     const ulong base = ulong(column);
     const float gtr = mynn_f32_div(9.81f, 300.0f);
@@ -2425,7 +2599,11 @@ static inline void mynn_mym_length_gsd41(
         qkw[idx] = mynn_f32_sqrt(mynn_f32_max2(mynn_f32_add(
             mynn_f32_mul(qke[idx], abk), mynn_f32_mul(qke[prev], afk)),
             1.0e-3f));
-        qtke[idx] = mynn_f32_mul(0.5f, mynn_f32_mul(qkw[idx], qkw[idx]));
+        // :995 converts with 0.5*qkw; its option 1 and every later
+        // generation use 0.5*qkw**2.
+        qtke[idx] = unsquared_qtke
+            ? mynn_f32_mul(0.5f, qkw[idx])
+            : mynn_f32_mul(0.5f, mynn_f32_mul(qkw[idx], qkw[idx]));
         thetaw[idx] = mynn_f32_add(mynn_f32_mul(theta[idx], abk),
                                    mynn_f32_mul(theta[prev], afk));
     }
@@ -2542,28 +2720,37 @@ kernel void mynn_mixlength_gsd41_columns(
     uint column [[thread_position_in_grid]])
 {
     if (column >= uint(q.ncol) || q.nz < 2) return;
-    mynn_mym_length_gsd41(r.dz, r.zw, r.qke, r.dtv, r.theta,
-        r.edmf_w, r.edmf_a, r.cldfra, r.vt, r.vq, r.el, r.qkw, r.qtke,
-        r.thetaw, r.rmo[column], r.flt[column], r.flq[column],
-        r.zi[column], r.psig_bl[column], uint(q.ncol), q.nz, column);
-}
-
-// Cold-start proposal for module_bl_mynn.F:mym_initialize. This deliberately
-// uses the pinned portable double pow candidate and narrows only once. The
-// candidate is not asserted equivalent to CUDA libdevice's binary64 pow.
-static inline float mynn_initialize_powf_candidate(float x, float y)
-{
-    return mynn_f64_to_f32(soft64_plm_pow(mynn_f64_from_f32(x),
-                                          mynn_f64_from_f32(y)));
+    if (q.mixlength == 2) {
+        mynn_mym_length_gsd41(r.dz, r.zw, r.qke, r.dtv, r.theta,
+            r.edmf_w, r.edmf_a, r.cldfra, r.vt, r.vq, r.el, r.qkw, r.qtke,
+            r.thetaw, r.rmo[column], r.flt[column], r.flq[column],
+            r.zi[column], r.psig_bl[column], uint(q.ncol), q.nz, column,
+            false, q.unsquared_qtke != 0);
+        return;
+    }
+    // GSD module_bl_mynn.F:920,1015: both lengths take their buoyancy flux
+    // from the lowest level's vt and vq.
+    const float tv0 = mynn_f32_mul(
+        mynn_f32_sub(mynn_f32_div(461.6f, 287.0f), 1.0f), 300.0f);
+    const float vflx = mynn_f32_add(
+        mynn_f32_mul(mynn_f32_add(r.vt[column], 1.0f), r.flt[column]),
+        mynn_f32_mul(mynn_f32_add(r.vq[column], tv0), r.flq[column]));
+    mynn_mym_length_gsd41_case1(r.dz, r.zw, r.qke, r.dtv, r.theta,
+        r.el, r.qkw, r.qtke, r.thetaw, r.elblavg, r.dlu, r.dld,
+        r.rmo[column], vflx, r.zi[column], r.psig_bl[column],
+        uint(q.ncol), q.nz, column);
 }
 
 template <typename Resources, typename Params>
-// Length laws: 1 is WRF nonlocal, 2 is GSD 4.1, 3 is WRF local.
+// Length laws: 1 is WRF nonlocal, 2 is GSD 4.1 CASE(2), 3 is WRF local,
+// 4 is GSD 4.1 CASE(1).
 static inline void mynn_initialize_column(
-    constant Resources &r, constant Params &q, uint column, int mixlength)
+    constant Resources &r, constant Params &q, uint column, int mixlength,
+    bool unsquared_qtke = false)
 {
     if (column >= uint(q.ncol) || q.nz < 2) return;
     const int nz = q.nz;
+    const bool gsd41 = mixlength == 2 || mixlength == 4;
     const ulong ncol = ulong(q.ncol);
     const ulong base = ulong(column);
     device float *qkw = r.scratch + 0 * nz * ncol;
@@ -2633,12 +2820,18 @@ static inline void mynn_initialize_column(
         const float level_gh = mynn_f32_negate(mynn_f32_mul(dtq, gtr));
         const float ri = mynn_f32_div(mynn_f32_negate(level_gh),
             mynn_f32_max2(duz, 1.0e-10f));
-        const float a2fac = mynn_f32_div(1.0f, mynn_f32_add(1.0f,
-            mynn_f32_max2(ri, 0.0f)));
+        // GSD 4.1 divides a2 by 1 + max(ri, 0); v4.6.1 multiplies by a2fac.
+        const float a2fac = mynn_f32_div(1.0f,
+            mynn_f32_add(1.0f, mynn_f32_max2(ri, 0.0f)));
+        const float a2r = gsd41
+            ? mynn_f32_div(a2, mynn_f32_add(1.0f, mynn_f32_max2(ri, 0.0f)))
+            : mynn_f32_mul(a2, mynn_f32_div(1.0f, mynn_f32_add(1.0f,
+                  mynn_f32_max2(ri, 0.0f))));
         const float f1 = mynn_f32_add(mynn_f32_add(mynn_f32_mul(b1,
             mynn_f32_sub(g1, c1)), mynn_f32_mul(mynn_f32_mul(
-            mynn_f32_mul(mynn_f32_mul(mynn_f32_mul(3.0f, a2), a2fac),
-            mynn_f32_sub(1.0f, c2)), mynn_f32_sub(1.0f, c5)), 1.0f)),
+            (gsd41 ? mynn_f32_mul(3.0f, a2r)
+                : mynn_f32_mul(mynn_f32_mul(3.0f, a2), a2fac)),
+            mynn_f32_sub(1.0f, c2)), mynn_f32_sub(1.0f, c5))),
             mynn_f32_mul(mynn_f32_mul(2.0f, a1),
             mynn_f32_sub(3.0f, mynn_f32_mul(2.0f, c2))));
         const float f2 = mynn_f32_sub(mynn_f32_mul(b1,
@@ -2648,9 +2841,9 @@ static inline void mynn_initialize_column(
             mynn_f32_sub(g1, c1)), f1);
         const float rf2 = mynn_f32_div(mynn_f32_mul(b1, g1), f2);
         const float smc = mynn_f32_div(mynn_f32_mul(mynn_f32_div(a1,
-            mynn_f32_mul(a2, a2fac)), f1), f2);
+            a2r), f1), f2);
         const float shc = mynn_f32_mul(mynn_f32_mul(3.0f,
-            mynn_f32_mul(a2, a2fac)), mynn_f32_add(g1, g2));
+            a2r), mynn_f32_add(g1, g2));
         const float ri1 = mynn_f32_div(0.5f, smc);
         const float ri2 = mynn_f32_mul(rf1, smc);
         const float ri3 = mynn_f32_sub(mynn_f32_mul(mynn_f32_mul(4.0f, rf2),
@@ -2669,7 +2862,7 @@ static inline void mynn_initialize_column(
     }
     if (q.initialize_qke != 0) {
         r.qke[base] = mynn_f32_mul(mynn_f32_mul(1.5f,
-            mynn_f32_mul(ust, ust)), mynn_initialize_powf_candidate(
+            mynn_f32_mul(ust, ust)), mynn_gfk_powf(
                 24.0f, mynn_f32_div(2.0f, 3.0f)));
         for (int k = 1; k < nz; ++k) {
             const ulong idx = ulong(k) * ncol + base;
@@ -2681,7 +2874,7 @@ static inline void mynn_initialize_column(
         }
     }
     const float phm0 = mynn_f32_div(15.0f,
-        mynn_initialize_powf_candidate(24.0f, mynn_f32_div(1.0f, 3.0f)));
+        mynn_gfk_powf(24.0f, mynn_f32_div(1.0f, 3.0f)));
     r.tsq[base] = mynn_f32_mul(phm0, mynn_f32_mul(
         mynn_f32_div(0.0f, ust), mynn_f32_div(0.0f, ust)));
     r.qsq[base] = r.tsq[base];
@@ -2693,7 +2886,7 @@ static inline void mynn_initialize_column(
         r.el[idx] = mynn_f32_div(vkz, mynn_f32_add(1.0f,
                                                    mynn_f32_div(vkz, 100.0f)));
     }
-    const float qkemin = mixlength == 2 ? 1.0e-12f : 1.0e-3f;
+    const float qkemin = (mixlength == 2 || mixlength == 4) ? 1.0e-12f : 1.0e-3f;
     for (int iteration = 0; iteration < 5; ++iteration) {
         if (mixlength == 3) {
             mynn_mym_length_local(r.dz, r.zw, r.qke, dtv, r.edmf_w,
@@ -2703,7 +2896,11 @@ static inline void mynn_initialize_column(
             mynn_mym_length_gsd41(r.dz, r.zw, r.qke, dtv, r.theta,
                 nullptr, nullptr, nullptr, nullptr, nullptr,
                 r.el, qkw, qtke, thetaw, rmo, 0.0f, 0.0f, zi, psig,
-                uint(q.ncol), nz, column, true);
+                uint(q.ncol), nz, column, true, unsquared_qtke);
+        } else if (mixlength == 4) {
+            mynn_mym_length_gsd41_case1(r.dz, r.zw, r.qke, dtv, r.theta,
+                r.el, qkw, qtke, thetaw, elblavg, dlu, dld, rmo, 0.0f, zi,
+                psig, uint(q.ncol), nz, column);
         } else {
             mynn_mym_length(r.dz, r.zw, r.u, r.v, r.qke, dtv, r.theta,
                 r.edmf_w, r.edmf_a, r.el, qkw, qtke, thetaw, elblavg, dlu, dld,
@@ -2728,11 +2925,11 @@ static inline void mynn_initialize_column(
         if (q.initialize_qke != 0) {
             const float uf = mynn_f32_max2(ust, 0.02f);
             r.qke[base] = mynn_f32_mul(mynn_f32_mul(uf, uf),
-                mynn_initialize_powf_candidate(mynn_f32_mul(24.0f, elv),
+                mynn_gfk_powf(mynn_f32_mul(24.0f, elv),
                     mynn_f32_div(2.0f, 3.0f)));
         }
         const float phm = mynn_f32_div(15.0f,
-            mynn_initialize_powf_candidate(mynn_f32_div(24.0f,
+            mynn_gfk_powf(mynn_f32_div(24.0f,
                 mynn_f32_mul(elv, elv)), mynn_f32_div(1.0f, 3.0f)));
         r.tsq[base] = mynn_f32_mul(phm, mynn_f32_mul(
             mynn_f32_div(0.0f, ust), mynn_f32_div(0.0f, ust)));
@@ -2746,7 +2943,7 @@ static inline void mynn_initialize_column(
             const float tmpq = mynn_f32_min2(mynn_f32_max2(mynn_f32_mul(
                 b1l, mynn_f32_add(pdk[idx + ncol], pdk[idx])), qkemin), 125.0f);
             if (q.initialize_qke != 0)
-                r.qke[idx] = mynn_initialize_powf_candidate(tmpq,
+                r.qke[idx] = mynn_gfk_powf(tmpq,
                                                   mynn_f32_div(2.0f, 3.0f));
             const float b2l = r.qke[idx] <= 0.0f ? 0.0f : mynn_f32_div(
                 mynn_f32_mul(15.0f, mynn_f32_div(b1l, 24.0f)),
@@ -2783,7 +2980,8 @@ kernel void mynn_initialize_gsd41_columns(
     constant MynnInitializeGsd41ColumnsParams &q [[buffer(1)]],
     uint column [[thread_position_in_grid]])
 {
-    mynn_initialize_column(r, q, column, 2);
+    mynn_initialize_column(r, q, column, q.mixlength == 2 ? 2 : 4,
+                           q.unsquared_qtke != 0);
 }
 
 // A non-null qc_orig/qi_orig selects the GSD MYNN v4.1 mynn_tendencies: no
@@ -2793,7 +2991,8 @@ kernel void mynn_initialize_gsd41_columns(
 template <typename Resources, typename Params>
 static inline void mynn_tendencies_column(
     constant Resources &r, constant Params &q, uint column,
-    device const float *qc_orig, device const float *qi_orig)
+    device const float *qc_orig, device const float *qi_orig,
+    bool old_cloud_tendencies = false)
 {
     const bool gsd41 = qc_orig != nullptr;
     if (column >= uint(q.ncol) || q.nz < 2) return;
@@ -3164,7 +3363,8 @@ static inline void mynn_tendencies_column(
         // asymmetry is WRF's, not a transcription slip.
         r.dth[ulong(idx) * ulong(ncol) + column] = 0.0f;
     }
-    mynn_moisture_check_column(delt, xlvcp, xlscp, delp, r.exner, sqv2, sqc2, sqi2, sqs2, r.thl, r.dqv, r.dqc, r.dqi, r.dqs, r.dth, uint(ncol), column, nz);
+    if (!old_cloud_tendencies)
+        mynn_moisture_check_column(delt, xlvcp, xlscp, delp, r.exner, sqv2, sqc2, sqi2, sqs2, r.thl, r.dqv, r.dqc, r.dqi, r.dqs, r.dth, uint(ncol), column, nz);
 
     if (gsd41) {
         // Fork :3404, :3417 and :3449: the updated specific humidity over
@@ -3181,6 +3381,16 @@ static inline void mynn_tendencies_column(
                     mynn_f32_div(sqc2[idx], denominator), qc_orig[idx]), delt);
                 r.dqi[idx] = mynn_f32_div(mynn_f32_sub(
                     mynn_f32_div(sqi2[idx], denominator), qi_orig[idx]), delt);
+                if (old_cloud_tendencies) {
+                    // Fork :3418-3421 and :3450-3453, a defined
+                    // water-creating clip.
+                    if (soft32_greater(0u, as_type<uint>(mynn_f32_add(
+                            mynn_f32_mul(r.dqc[idx], delt), qc_orig[idx]))))
+                        r.dqc[idx] = mynn_f32_div(-qc_orig[idx], delt);
+                    if (soft32_greater(0u, as_type<uint>(mynn_f32_add(
+                            mynn_f32_mul(r.dqi[idx], delt), qi_orig[idx]))))
+                        r.dqi[idx] = mynn_f32_div(-qi_orig[idx], delt);
+                }
             }
         }
     }
@@ -3201,8 +3411,8 @@ static inline void mynn_tendencies_column(
                 mynn_f32_add(
                     mynn_f32_add(r.thl[ulong(idx) * ulong(ncol) + column],
                              mynn_f32_mul(mynn_f32_div(xlvcp, r.exner[ulong(idx) * ulong(ncol) + column]),
-                                      sqc2[ulong(idx) * ulong(ncol) + column])),
-                    mynn_f32_mul(mynn_f32_div(xlscp, r.exner[ulong(idx) * ulong(ncol) + column]), sqi2[ulong(idx) * ulong(ncol) + column])),
+                                      old_cloud_tendencies ? r.sqc[ulong(idx) * ulong(ncol) + column] : sqc2[ulong(idx) * ulong(ncol) + column])),
+                    mynn_f32_mul(mynn_f32_div(xlscp, r.exner[ulong(idx) * ulong(ncol) + column]), old_cloud_tendencies ? r.sqi[ulong(idx) * ulong(ncol) + column] : sqi2[ulong(idx) * ulong(ncol) + column])),
                 r.th[ulong(idx) * ulong(ncol) + column]),
             delt);
     }
@@ -3222,7 +3432,8 @@ kernel void mynn_tendencies_gsd41_columns(
     constant MynnTendenciesGsd41ColumnsParams &q [[buffer(1)]],
     uint column [[thread_position_in_grid]])
 {
-    mynn_tendencies_column(r, q, column, r.qc_original, r.qi_original);
+    mynn_tendencies_column(r, q, column, r.qc_original, r.qi_original,
+                            q.old_cloud_tendencies != 0);
 }
 
 // module_bl_mynn.F:5679-6823, default EDMF mass-flux branch. The column
@@ -3472,9 +3683,9 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
         const float exc_fac = gsd41 ? 0.58f : mynn_f32_mul(
             mynn_f32_sub(landsea, 1.5f) >= 0.0f ? 2.32f : 0.58f, ac_wsp);
         const float zratio = mynn_gfk_powf(mynn_f32_div(50.0f, pblh), onethird);
-        const float sigma_w = mynn_f32_mul(mynn_f32_mul(1.34f, wstar),
-            mynn_f32_mul(zratio, mynn_f32_sub(1.0f,
-                mynn_f32_div(mynn_f32_mul(0.8f, 50.0f), pblh))));
+        const float sigma_w = mynn_f32_mul(mynn_f32_mul(
+            mynn_f32_mul(1.34f, wstar), zratio), mynn_f32_sub(1.0f,
+                mynn_f32_div(mynn_f32_mul(0.8f, 50.0f), pblh)));
         const float scalar_zratio = gsd41
             ? mynn_gfk_powf(mynn_f32_div(50.0f, pblh), -onethird) : zratio;
         const float sigma_qt = mynn_f32_mul(mynn_f32_mul(1.34f, qstar), scalar_zratio);

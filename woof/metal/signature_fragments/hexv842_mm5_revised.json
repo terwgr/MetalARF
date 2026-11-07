@@ -1,0 +1,81 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mm5_revised",
+      "module": "hexv842_mm5_revised",
+      "source": "woof/metal/shaders/hexv842_mm5_revised.metal",
+      "cuda_source": "woof/hex/mpasphys/sfclay_mm5_v842.py",
+      "cuda_symbol": "mm5_columns",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read_write"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
+        ],
+        [
+          "tables",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "48",
+            "n"
+          ]
+        ],
+        "constants": [
+          [
+            "13"
+          ]
+        ],
+        "tables": [
+          [
+            "4004"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "isfflx",
+          "int32"
+        ],
+        [
+          "isftcflx",
+          "int32"
+        ],
+        [
+          "iz0tlnd",
+          "int32"
+        ],
+        [
+          "scm_force_flux",
+          "int32"
+        ],
+        [
+          "shalwater_z0",
+          "int32"
+        ],
+        [
+          "optional_mask",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

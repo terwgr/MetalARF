@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -417,6 +418,9 @@ def test_number_moment_wrfinput_contract_writes_arbitrary_vertical_shape(
 
 
 def _export_a_real_prepared_cache(tmp_path, mp_physics, numbers=None,
+                                  *, boundary_scalars=None,
+                                  replace_start=None, intervals=1, surface_override=None,
+                                  zones=(5, 1, 4), cells=12,
                                   **run_overrides):
     """A real CPU cold start through the prepared cache and the export.
 
@@ -425,6 +429,16 @@ def _export_a_real_prepared_cache(tmp_path, mp_physics, numbers=None,
     exporter.  Returns ``(output, cfg, seeded)``: the export folder, the
     configuration the cache records, and the state's own values of the
     ``numbers`` named (WRF name to state name), read before the export.
+
+    ``boundary_scalars`` is the scalar inventory the boundary is built
+    with (an aerosol-forced mp=28 run adds nwfa and nifa to qv, as its
+    initialization does when the aerosols come from input), and
+    ``replace_start`` edits the start state in place AFTER the boundary
+    was built from it, which is what a separate initial analysis
+    (``--initial-inputs``) does to a prepared cache.  ``intervals`` is
+    the number of hourly boundary intervals.  ``zones`` is
+    ``(spec_bdy_width, spec_zone, relax_zone)`` and ``cells`` the square
+    domain's mass points per side.
     """
     import dataclasses
 
@@ -435,7 +449,8 @@ def _export_a_real_prepared_cache(tmp_path, mp_physics, numbers=None,
         attach_lateral_boundaries, build_state_lateral_boundaries)
     from woof.ingest.prepared_cache import write_prepared_cache
 
-    ny, nx = 12, 12
+    ny, nx = cells, cells
+    spec_bdy_width, spec_zone, relax_zone = zones
     valid_time = datetime(2026, 7, 20, 6)
     # A specified mp=28 domain otherwise refuses without WRF's WIF
     # climatology file; the aerosol source is not what is under test.
@@ -444,8 +459,8 @@ def _export_a_real_prepared_cache(tmp_path, mp_physics, numbers=None,
     run.update(run_overrides)
     result, cfg = _analyzed_hrrr_real_init(
         mp_physics, shape=(ny, nx), map_proj=1, hypsometric_opt=2,
-        specified=True, nested=False, spec_bdy_width=5, spec_zone=1,
-        relax_zone=4, **run, **aerosol)
+        specified=True, nested=False, spec_bdy_width=spec_bdy_width,
+        spec_zone=spec_zone, relax_zone=relax_zone, **run, **aerosol)
     state = result.state
     seeded = {}
     for wrf_name, state_name in (numbers or {}).items():
@@ -461,10 +476,17 @@ def _export_a_real_prepared_cache(tmp_path, mp_physics, numbers=None,
         static["MAPFAC_M"], static["MAPFAC_U"], static["MAPFAC_V"],
         static["F"], static["E"],
         sina=static["SINALPHA"], cosa=static["COSALPHA"])
+    if boundary_scalars is not None:
+        state._external_scalar_boundary_fields = tuple(boundary_scalars)
     boundaries = build_state_lateral_boundaries(
-        [state, state], (valid_time, valid_time + timedelta(hours=1)),
-        spec_bdy_width=5, spec_zone=1, relax_zone=4)
+        [state] * (intervals + 1),
+        tuple(valid_time + timedelta(hours=hour)
+              for hour in range(intervals + 1)),
+        spec_bdy_width=spec_bdy_width, spec_zone=spec_zone,
+        relax_zone=relax_zone)
     attach_lateral_boundaries(state, boundaries)
+    if replace_start is not None:
+        replace_start(state)
 
     static_path = tmp_path / "native-static.npz"
     np.savez(static_path, **static)
@@ -494,11 +516,18 @@ def _export_a_real_prepared_cache(tmp_path, mp_physics, numbers=None,
         "SNOW": np.zeros((ny, nx), dtype=np.float32),
         "SNOWH": np.zeros((ny, nx), dtype=np.float32),
     }
+    if surface_override is not None:
+        surface_override(surface, static)
+        np.savez(static_path, **static)
+        geometry_doc = json.loads(geometry_path.read_text())
+        geometry_doc["cache"]["sha256"] = _sha256(static_path)
+        geometry_doc["cache"]["bytes"] = static_path.stat().st_size
+        geometry_path.write_text(json.dumps(geometry_doc))
     cache_path = tmp_path / "prepared-cache"
     write_prepared_cache(
         cache_path,
         identity={"domain_config": {"run": dataclasses.asdict(cfg)},
-                  "forcing_hours": [0, 1],
+                  "forcing_hours": list(range(intervals + 1)),
                   "static_cache_sha256": _sha256(static_path)},
         initial_result=result, met=met, surface=surface,
         boundaries=boundaries,
@@ -567,6 +596,94 @@ def test_a_profile_free_export_states_the_physics_its_cache_was_prepared_with(
         with netCDF4.Dataset(output / name) as dataset:
             stated = {key: int(dataset.getncattr(key)) for key in expected}
         assert stated == expected, name
+
+
+@pytest.mark.parametrize("categories, islake", [(61, 21), (20, -1), (21, 21)])
+def test_the_export_writes_the_land_categories_its_static_has(
+        tmp_path, categories, islake):
+    """LANDUSEF, land_cat_stag and NUM_LAND_CAT follow the static.
+
+    An urban canopy run prepares WRF's MODIS legend with the built types
+    51-61, 61 planes; the 15 arc-second MODIS set has 20 and no lake
+    class.  The export wrote into the frozen file's 21 and stopped after
+    the forecast had run ("LANDUSEF source shape (61, 170, 170) !=
+    (21, 170, 170)", the SF template with sf_urban_physics = 1 and Annual
+    NLCD on the HRRR route).  real.exe writes num_land_cat planes and
+    states it in both files, as the forecast's own history does.  The
+    manifest's resolved physics contract digest stays the one the
+    preparation recomputes from mp_physics alone: a first version of the
+    fix put the resized contract's digest there and the run stopped one
+    check later ("proof export source hashes differ from preparation").
+    """
+    from woof.prepared_single_domain_forecast import (
+        _resolved_wrf_direct_contract_sha256)
+
+    expected = {}
+
+    def land_use(_surface, static):
+        ny, nx = static["LU_INDEX"].shape
+        planes = np.zeros((categories, ny, nx), dtype=np.float64)
+        planes[9] = 0.4                    # grassland
+        planes[categories - 1] = 0.6       # the last plane: LCZ 11 / lake
+        static["LANDUSEF"] = planes
+        expected["LANDUSEF"] = planes.astype(np.float32)
+
+    output, _cfg, _seeded = _export_a_real_prepared_cache(
+        tmp_path, 8, surface_override=land_use)
+    with netCDF4.Dataset(output / "wrfinput_d01") as dataset:
+        assert len(dataset.dimensions["land_cat_stag"]) == categories
+        np.testing.assert_array_equal(
+            np.asarray(dataset.variables["LANDUSEF"][0], dtype=np.float32),
+            expected["LANDUSEF"])
+    for name in ("wrfinput_d01", "wrfbdy_d01"):
+        with netCDF4.Dataset(output / name) as dataset:
+            assert int(dataset.getncattr("NUM_LAND_CAT")) == categories, name
+            assert int(dataset.getncattr("ISLAKE")) == islake, name
+            assert int(dataset.getncattr("ISURBAN")) == 13, name
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["source"]["resolved_physics_contract_sha256"] == \
+        _resolved_wrf_direct_contract_sha256(8)
+
+
+@pytest.mark.parametrize("gwd_opt", [1, 3])
+def test_a_terrain_drag_export_records_the_digest_the_preflight_recomputes(
+        tmp_path, gwd_opt):
+    """A gwd_opt run's export names the digest its forecast checks.
+
+    The export writes the statistics the drag scheme reads (gwd_opt = 3:
+    the twenty GSL large- and small-scale fields), and it once also took
+    the digest of that drag-extended contract.  The forecast's preflight
+    recomputes the digest from mp_physics alone, so every gwd_opt != 0
+    run -- the hrrr_v4_gsd41 recipe on hrrr-native among them -- finished
+    its forecast and then exited rc=1 at the seal's preflight with
+    "proof export source hashes differ from preparation" (2.9.10).  The
+    files keep the statistics; the digest is the package's.
+    """
+    from woof.prepared_single_domain_forecast import (
+        _resolved_wrf_direct_contract_sha256)
+    from woof.static.orographic import required_static_fields
+
+    names = required_static_fields(0, gwd_opt)
+    written = {}
+
+    def drag_statistics(_surface, static):
+        ny, nx = static["HGT_M"].shape
+        for index, name in enumerate(names):
+            value = np.full((ny, nx), 1.0 + 0.25 * index, dtype=np.float32)
+            static[name] = value
+            written[name] = value
+
+    output, cfg, _seeded = _export_a_real_prepared_cache(
+        tmp_path, 28, surface_override=drag_statistics, gwd_opt=gwd_opt)
+    assert int(cfg.gwd_opt) == gwd_opt
+    with netCDF4.Dataset(output / "wrfinput_d01") as dataset:
+        for name in names:
+            np.testing.assert_array_equal(
+                np.asarray(dataset.variables[name][0], dtype=np.float32),
+                written[name])
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["source"]["resolved_physics_contract_sha256"] == \
+        _resolved_wrf_direct_contract_sha256(28)
 
 
 def test_a_profile_free_export_refuses_a_cache_that_records_no_physics():
@@ -673,6 +790,56 @@ def test_the_export_holds_one_theta_representation_and_says_which(tmp_path):
     assert manifest["use_theta_m"] == EXPORT_USE_THETA_M
 
 
+def test_an_hrrr_width_boundary_exports_its_own_ten_row_wrfbdy(tmp_path):
+    """U-E6: spec_bdy_width = 10 (the HRRR recipe's 1 + 9) exports.
+
+    The exporter required spec_bdy_width = 5, the frozen v4.6.1 file's
+    bdy_width, so every HRRR-recipe preparation had its companion
+    wrfinput/wrfbdy refused ("unsupported direct-export configuration:
+    {'spec_bdy_width': (10, 5)}").  The real CPU route here (cold start,
+    prepared cache, export) writes a 10-row wrfbdy whose strips are the
+    prepared tables' and which the real WRF-input reader takes back.
+    """
+    from woof.ingest.wrfinput import read_wrfinput, read_wrfbdy
+
+    output, cfg, _ = _export_a_real_prepared_cache(
+        tmp_path, 6, zones=(10, 1, 9), cells=28)
+    assert cfg.spec_bdy_width == 10
+    with netCDF4.Dataset(output / "wrfbdy_d01") as boundary:
+        assert boundary.dimensions["bdy_width"].size == 10
+        for suffix in ("XS", "XE", "YS", "YE"):
+            assert boundary.variables[f"T_B{suffix}"].shape[1] == 10
+            assert np.isfinite(np.asarray(
+                boundary.variables[f"T_B{suffix}"][0])).all()
+    dims = dict(west_east=cfg.nx, west_east_stag=cfg.nx + 1,
+                south_north=cfg.ny, south_north_stag=cfg.ny + 1,
+                bottom_top=cfg.nz, bottom_top_stag=cfg.nz + 1,
+                soil_layers_stag=4)
+    restored = read_wrfinput(output / "wrfinput_d01", cfg=cfg,
+                             expected_dimensions=dims, require_complete=False)
+    read_back = read_wrfbdy(output / "wrfbdy_d01", restored=restored,
+                            run_seconds=3600, forcing_interval_seconds=3600,
+                            spec_bdy_width=cfg.spec_bdy_width, cfg=cfg)
+    assert len(read_back.intervals) == 1
+
+
+def test_the_export_refuses_a_boundary_narrower_than_its_zones(tmp_path):
+    """The width is free, the zones still have to fit in it."""
+
+    cache = _minimal_prepared_cache(tmp_path / "prepared", {
+        "mp_physics": 6, "hybrid_opt": 2, "hypsometric_opt": 2,
+        "specified": True, "nested": False, "spec_bdy_width": 8,
+        "spec_zone": 1, "relax_zone": 9,
+        "bl_pbl_physics": 1, "sf_sfclay_physics": 91, "sf_surface_physics": 2,
+    })
+    with pytest.raises(StockWrfExportUnsupported) as refusal:
+        export_prepared_wrf(
+            cache, tmp_path / "static.npz", tmp_path / "geometry.json",
+            tmp_path / "wrf-native-input",
+            valid_time=datetime(2026, 7, 29, 6))
+    assert set(refusal.value.unsupported) == {"spec_bdy_width"}
+
+
 def test_dry_export_roundtrips_through_the_real_wrf_input_reader(tmp_path):
     """The initial dry theta must match the boundary's FP32 coupling.
 
@@ -694,6 +861,140 @@ def test_dry_export_roundtrips_through_the_real_wrf_input_reader(tmp_path):
                            run_seconds=3600, forcing_interval_seconds=3600,
                            cfg=cfg)
     assert len(boundary.intervals) == 1
+
+
+def _replace_the_start(state):
+    """A separate initial analysis: every boundary field of the start state
+    differs from the atmosphere the boundary head was built from, as the
+    mapped route's ``--initial-inputs`` leaves a prepared cache."""
+    state.u[...] += np.float32(1.5)
+    state.v[...] -= np.float32(0.75)
+    state.thp[...] += np.float32(0.4)
+    state.php[...] += np.float32(30.0)
+    state.mup[...] += np.float32(40.0)
+    state.qv[...] *= np.float32(1.03)
+    state.nwfa[...] *= np.float32(1.2)
+    state.nifa[...] *= np.float32(0.8)
+
+
+def _door_read(output, cfg):
+    from woof.ingest.wrfinput import read_wrfinput, read_wrfbdy
+
+    dims = dict(west_east=cfg.nx, west_east_stag=cfg.nx + 1,
+                south_north=cfg.ny, south_north_stag=cfg.ny + 1,
+                bottom_top=cfg.nz, bottom_top_stag=cfg.nz + 1,
+                soil_layers_stag=4)
+    restored = read_wrfinput(output / "wrfinput_d01", cfg=cfg,
+                             expected_dimensions=dims, require_complete=False)
+    boundary = read_wrfbdy(output / "wrfbdy_d01", restored=restored,
+                           run_seconds=7200, forcing_interval_seconds=3600,
+                           cfg=cfg)
+    return restored, boundary
+
+
+def _aerosol_forced_export(tmp_path):
+    """mp=28 whose boundary forces the aerosol numbers, start replaced after
+    the boundary was built, two hourly intervals; the door reads it under
+    ``use_aero_icbc = .true.`` (aer_init_opt = 1), so QNWFA/QNIFA are
+    checked too."""
+    import dataclasses
+
+    output, cfg, _ = _export_a_real_prepared_cache(
+        tmp_path, 28, boundary_scalars=("qv", "nwfa", "nifa"),
+        replace_start=_replace_the_start, intervals=2)
+    return output, dataclasses.replace(cfg, aer_init_opt=1)
+
+
+def test_a_replaced_start_state_exports_a_pair_the_wrf_door_accepts(tmp_path):
+    """--stock-wrf-export, then the WRF-input door, on WOOF's own files.
+
+    The mapped route builds its boundary head from the boundary source and
+    then replaces the start state with the separate initial analysis.  The
+    export copied that head into wrfbdy record 0, so the first record
+    described another atmosphere than wrfinput_d01, and the door refused
+    WOOF's own pair ("wrfbdy U west does not match initial wrfinput_d01:
+    100,250 of 100,250 points differ" on a 400 x 400 RAP crop).  Its
+    aerosol tables were zeros beside a nonzero QNWFA, the second refusal
+    behind the first.  real.exe's first record is always the coupling of
+    its own wrfinput; WRFDA's da_update_bc is WRF's rule for a replaced
+    start: the first record becomes the new start's coupling and its
+    tendency keeps the interval's end.  The door accepts the pair, restores
+    exactly the prepared start state, and its forcing reaches the prepared
+    boundary at the end of the first interval and from then on.
+    """
+    from woof.ingest.lateral_bc import evaluate_boundary_side
+
+    output, cfg = _aerosol_forced_export(tmp_path)
+    restored, boundary = _door_read(output, cfg)
+    assert len(boundary.intervals) == 2
+    assert {"u", "v", "theta", "phi", "mu", "qv", "nwfa", "nifa"} <= set(
+        boundary.intervals[0].fields)
+
+    cache = PreparedCache(tmp_path / "prepared-cache")
+    # The door restores the prepared START state, bit for bit.
+    for wrf_name, key in (("U", "state/u"), ("V", "state/v"),
+                          ("PH", "state/php"), ("MU", "state/mup"),
+                          ("QVAPOR", "state/qv"), ("QNWFA", "state/nwfa"),
+                          ("QNIFA", "state/nifa")):
+        np.testing.assert_array_equal(
+            np.asarray(restored.raw[wrf_name], np.float32).view(np.uint32),
+            np.asarray(cache.array(key), np.float32).view(np.uint32),
+            err_msg=wrf_name)
+    theta = (np.asarray(cache.array("base/thb"), np.float32)
+             + np.asarray(cache.array("state/thp"), np.float32)
+             - np.float32(300.0))
+    np.testing.assert_array_equal(
+        np.asarray(restored.raw["T"], np.float32).view(np.uint32),
+        theta.view(np.uint32))
+
+    # The first interval ends on the prepared boundary, and the second
+    # starts there: the replaced start changes the first record only.
+    for name in ("u", "v", "theta", "phi", "mu", "qv", "nwfa", "nifa"):
+        for side in ("west", "east", "south", "north"):
+            prefix = f"lbc/0/{name}/{side}"
+            prepared_end = (
+                np.asarray(cache.array(f"{prefix}/value"), np.float64)
+                + 3600.0 * np.asarray(cache.array(f"{prefix}/tendency"),
+                                      np.float64))
+            door_end, _ = evaluate_boundary_side(
+                getattr(boundary.intervals[0].fields[name], side), 3600.0)
+            second, _ = evaluate_boundary_side(
+                getattr(boundary.intervals[1].fields[name], side), 0.0)
+            prepared_second = np.asarray(
+                cache.array(f"lbc/1/{name}/{side}/value"), np.float64)
+            scale = np.abs(prepared_end).max() + 1e-30
+            assert np.abs(door_end - prepared_end).max() <= 1e-5 * scale, (
+                name, side)
+            assert np.abs(second - prepared_second).max() <= 1e-5 * scale, (
+                name, side)
+    with netCDF4.Dataset(output / "wrfbdy_d01") as dataset:
+        for suffix, side in (("XS", "west"), ("YE", "north")):
+            for wrf_name, name in (("U", "u"), ("QNWFA", "nwfa")):
+                for kind, part in (("B", "value"), ("BT", "tendency")):
+                    written = np.asarray(
+                        dataset[f"{wrf_name}_{kind}{suffix}"][1], np.float32)
+                    np.testing.assert_array_equal(
+                        written, np.asarray(
+                            _lbc_to_wrf(cache, 1, name, side, part),
+                            np.float32))
+
+
+def test_the_door_still_refuses_a_first_record_that_is_not_its_wrfinput(
+        tmp_path):
+    """The check stays: the prepared head under the replaced start is what
+    the export used to write, and it is a different atmosphere."""
+    from woof.ingest.wrfinput import read_wrfinput, read_wrfbdy
+
+    output, cfg = _aerosol_forced_export(tmp_path)
+    cache = PreparedCache(tmp_path / "prepared-cache")
+    with netCDF4.Dataset(output / "wrfbdy_d01", "a") as dataset:
+        for suffix, side in (("XS", "west"), ("XE", "east"),
+                             ("YS", "south"), ("YE", "north")):
+            dataset[f"U_B{suffix}"][0] = _lbc_to_wrf(
+                cache, 0, "u", side, "value")
+    with pytest.raises(ValueError, match="wrfbdy U west does not match "
+                       "initial wrfinput_d01"):
+        _door_read(output, cfg)
 
 
 def test_global_updates_keep_stock_wrf_v4_gate_and_geometry():
@@ -967,8 +1268,9 @@ def test_canonical_surface_bypasses_source_specific_soil_nodes():
         "ALBEDO12M": np.full((12, 2, 2), 20.0),
         "LAI12M": np.full((12, 2, 2), 2.0),
         "SNOALB": np.full((2, 2), 60.0),
+        "LANDMASK": np.ones((2, 2)),
     }
-    actual = _surface_fields(Cache(), static, 3)
+    actual = _surface_fields(Cache(), static, datetime(2024, 4, 15))
     np.testing.assert_array_equal(actual["TSLB"], values["TSLB"])
     np.testing.assert_array_equal(actual["SH2O"], values["SH2O"])
     np.testing.assert_allclose(actual["VEGFRA"], 50.0)
@@ -1019,13 +1321,13 @@ def test_frozen_soil_refusal_is_typed_export_representability():
     """
     cache, static = _frozen_soil_case(272.0)
     with pytest.raises(StockWrfExportUnsupported, match="frozen-soil SH2O"):
-        _surface_fields(cache, static, 3)
+        _surface_fields(cache, static, datetime(2024, 4, 15))
 
 
 def test_a_warm_column_still_exports_so_the_refusal_is_not_free():
     """Negative control: the same case above freezing writes SH2O."""
     cache, static = _frozen_soil_case(285.0)
-    fields = _surface_fields(cache, static, 3)
+    fields = _surface_fields(cache, static, datetime(2024, 4, 15))
     np.testing.assert_array_equal(fields["SH2O"], fields["SMOIS"])
 
 
@@ -1375,6 +1677,30 @@ _WSM6_STOCK_PHYSICS = {
 }
 
 
+def _hierarchy_context(domain, physics, static_hash):
+    cfg = {name: getattr(domain.run, name)
+           for name in ("nx", "ny", "nz", "dx", "dy", "dt", *physics)}
+    geometry = {"center_lat": 36.0, "center_lon": -97.0,
+                "ref_lat": 39.7, "ref_lon": -83.9, "truelat1": 30.0,
+                "truelat2": 60.0, "stand_lon": -83.9}
+    return _HierarchyCache(domain.grid_id), cfg, geometry, 5000.0, static_hash
+
+
+def _hierarchy_experiment(domains):
+    return SimpleNamespace(
+        domains=tuple(domains), projection=SimpleNamespace(map_proj="lambert"),
+        start_time=datetime(1999, 5, 3, 12),
+        vertical=SimpleNamespace(
+            eta_levels=(1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.2, 0.0),
+            p_top=5000.0, hybrid_opt=2))
+
+
+class _HierarchyCache:
+    def __init__(self, grid_id):
+        self.header_path = Path(f"header-d{grid_id:02d}.json")
+        self.header = {"content_sha256": f"content-d{grid_id:02d}"}
+
+
 @pytest.mark.parametrize("max_dom", range(1, 22))
 def test_hierarchy_export_publishes_every_input_and_root_boundary_atomically(
         tmp_path, monkeypatch, max_dom):
@@ -1401,15 +1727,7 @@ def test_hierarchy_export_publishes_every_input_and_root_boundary_atomically(
             60, 60, 12000.0 / (3 ** ratio_depth),
             60.0 / (3 ** ratio_depth), specified=False, nested=True)
         domains.append(domain)
-    exp = SimpleNamespace(
-        domains=tuple(domains),
-        projection=SimpleNamespace(map_proj="lambert"),
-        start_time=datetime(1999, 5, 3, 12),
-        vertical=SimpleNamespace(
-            eta_levels=(1.0, 0.9, 0.8, 0.7, 0.6,
-                        0.5, 0.4, 0.2, 0.0),
-            p_top=5000.0, hybrid_opt=2),
-    )
+    exp = _hierarchy_experiment(tuple(domains))
     artifacts = tuple(_artifact(grid_id) for grid_id in range(1, max_dom + 1))
 
     def fake_root_export(_prepared, _static, _geometry, output, **_kwargs):
@@ -1428,33 +1746,9 @@ def test_hierarchy_export_publishes_every_input_and_root_boundary_atomically(
             "forcing_hours": [0, 6],
         }
 
-    class Cache:
-        def __init__(self, grid_id):
-            self.header_path = Path(f"header-d{grid_id:02d}.json")
-            self.header = {"content_sha256": f"content-d{grid_id:02d}"}
-
     def fake_context(artifact, domain, _exp, _expected_grid, _valid_time):
-        cfg = {
-            "nx": domain.run.nx, "ny": domain.run.ny,
-            "nz": domain.run.nz, "dx": domain.run.dx,
-            "dy": domain.run.dy, "dt": domain.run.dt,
-            **{key: getattr(domain.run, key) for key in _WSM6_STOCK_PHYSICS},
-        }
-        geometry = {
-            "center_lat": 36.0, "center_lon": -97.0,
-            "ref_lat": 39.7, "ref_lon": -83.9,
-            "truelat1": 30.0, "truelat2": 60.0,
-            "stand_lon": -83.9,
-        }
-        return Cache(domain.grid_id), cfg, geometry, 5000.0, \
-            f"static-d{domain.grid_id:02d}"
-
-    class LoadedStatic:
-        def __enter__(self):
-            return {}
-
-        def __exit__(self, *_args):
-            return False
+        return _hierarchy_context(
+            domain, _WSM6_STOCK_PHYSICS, f"static-d{domain.grid_id:02d}")
 
     written_updates = {}
 
@@ -1471,7 +1765,7 @@ def test_hierarchy_export_publishes_every_input_and_root_boundary_atomically(
         wrf_direct, "grids_from_projection_config",
         lambda _exp: tuple(object() for _ in range(max_dom)))
     monkeypatch.setattr(wrf_direct, "_prepared_domain_context", fake_context)
-    monkeypatch.setattr(wrf_direct.np, "load", lambda *_a, **_k: LoadedStatic())
+    monkeypatch.setattr(wrf_direct.np, "load", lambda *_a, **_k: nullcontext({}))
     monkeypatch.setattr(wrf_direct, "_wrfinput_fields", lambda *_a, **_k: {})
     monkeypatch.setattr(wrf_direct, "_write_wrfinput", fake_write)
     monkeypatch.setattr(
@@ -1601,12 +1895,7 @@ def test_the_root_export_stages_where_a_door_measures_it(tmp_path, monkeypatch):
     d01.run = run(100, 80, 12000.0, 60.0, specified=True, nested=False)
     d02 = _domain(2, 1, specified=False, nested=True)
     d02.run = run(60, 60, 4000.0, 20.0, specified=False, nested=True)
-    exp = SimpleNamespace(
-        domains=(d01, d02), projection=SimpleNamespace(map_proj="lambert"),
-        start_time=datetime(1999, 5, 3, 12),
-        vertical=SimpleNamespace(
-            eta_levels=(1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.2, 0.0),
-            p_top=5000.0, hybrid_opt=2))
+    exp = _hierarchy_experiment((d01, d02))
     monkeypatch.setattr(wrf_direct, "export_prepared_wrf", root_export)
     monkeypatch.setattr(wrf_direct, "grids_from_projection_config",
                         lambda _exp: (object(), object()))
@@ -1652,12 +1941,7 @@ def test_the_tree_export_states_each_domains_recorded_physics(
     d02 = _domain(2, 1, specified=False, nested=True)
     d02.run = run(60, 60, 4000.0, 20.0, specified=False, nested=True,
                   cu_physics=0)
-    exp = SimpleNamespace(
-        domains=(d01, d02), projection=SimpleNamespace(map_proj="lambert"),
-        start_time=datetime(1999, 5, 3, 12),
-        vertical=SimpleNamespace(
-            eta_levels=(1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.2, 0.0),
-            p_top=5000.0, hybrid_opt=2))
+    exp = _hierarchy_experiment((d01, d02))
 
     root_kwargs = {}
 
@@ -1676,26 +1960,8 @@ def test_the_tree_export_states_each_domains_recorded_physics(
                 "next_boundary_times": ["1999-05-03_18:00:00"],
                 "forcing_hours": [0, 6]}
 
-    class Cache:
-        def __init__(self, grid_id):
-            self.header_path = Path(f"header-d{grid_id:02d}.json")
-            self.header = {"content_sha256": f"content-d{grid_id:02d}"}
-
     def fake_context(artifact, domain, _exp, _expected_grid, _valid_time):
-        cfg = {"nx": domain.run.nx, "ny": domain.run.ny, "nz": domain.run.nz,
-               "dx": domain.run.dx, "dy": domain.run.dy, "dt": domain.run.dt,
-               **{key: getattr(domain.run, key) for key in thompson}}
-        geometry = {"center_lat": 36.0, "center_lon": -97.0,
-                    "ref_lat": 39.7, "ref_lon": -83.9, "truelat1": 30.0,
-                    "truelat2": 60.0, "stand_lon": -83.9}
-        return Cache(domain.grid_id), cfg, geometry, 5000.0, "static"
-
-    class LoadedStatic:
-        def __enter__(self):
-            return {}
-
-        def __exit__(self, *_args):
-            return False
+        return _hierarchy_context(domain, thompson, "static")
 
     written = {}
     validated = {}
@@ -1713,7 +1979,7 @@ def test_the_tree_export_states_each_domains_recorded_physics(
     monkeypatch.setattr(wrf_direct, "grids_from_projection_config",
                         lambda _exp: (object(), object()))
     monkeypatch.setattr(wrf_direct, "_prepared_domain_context", fake_context)
-    monkeypatch.setattr(wrf_direct.np, "load", lambda *_a, **_k: LoadedStatic())
+    monkeypatch.setattr(wrf_direct.np, "load", lambda *_a, **_k: nullcontext({}))
     monkeypatch.setattr(wrf_direct, "_wrfinput_fields", lambda *_a, **_k: {})
     monkeypatch.setattr(wrf_direct, "_write_wrfinput", fake_write)
     monkeypatch.setattr(wrf_direct, "_validate_file", fake_validate)
@@ -1736,3 +2002,135 @@ def test_the_tree_export_states_each_domains_recorded_physics(
     # ...and the file check holds the written file to the same values.
     assert {key: validated["wrfinput_d02"].get(key)
             for key in expected} == expected
+
+
+class _VegetationCache:
+    """The two PreparedCache members the start-vegetation export reads."""
+
+    def __init__(self, arrays):
+        self._arrays = {name: None for name in arrays}
+        self._values = arrays
+
+    def array(self, name):
+        return self._values[name]
+
+
+def _vegetation_static(ny=6, nx=7):
+    rng = np.random.default_rng(20261007)
+    landmask = np.ones((ny, nx))
+    landmask[0, :] = 0.0
+    return {
+        "GREENFRAC": rng.uniform(0.05, 0.95, (12, ny, nx)),
+        "LAI12M": rng.uniform(0.1, 6.0, (12, ny, nx)),
+        "ALBEDO12M": rng.uniform(8.0, 25.0, (12, ny, nx)),
+        "LANDMASK": landmask,
+    }
+
+
+def test_the_export_writes_the_vegetation_the_run_starts_with():
+    """VEGFRA, LAI and ALBBCK are the forecast's own start values.
+
+    The export wrote the calendar month's raw GREENFRAC, LAI12M and
+    ALBEDO12M while the prepared forecast starts from the analyzed VEGFRA
+    (or GREENFRAC on the date) and date-interpolated LAI and albedo, so
+    stock WRF ran another land surface: 12 % RMS VEGFRA and 89 W m-2 RMS
+    latent heat after ten minutes on a HRRR-start crop.
+    """
+    from woof.core.landuse import monthly_background_albedo, surface_leaf_area
+    from woof.static.build import monthly_interp_to_date
+
+    static = _vegetation_static()
+    when = datetime(2024, 5, 21, 18)
+    ruc = {"sf_surface_physics": 3, "rdlai2d": True}
+    analyzed = np.full(static["LANDMASK"].shape, 42.5)
+    got = wrf_direct._run_start_vegetation(
+        _VegetationCache({"met/VEGFRA": analyzed}), static, when, ruc)
+    np.testing.assert_array_equal(got["VEGFRA"], analyzed)
+    np.testing.assert_array_equal(
+        got["LAI"], surface_leaf_area(SimpleNamespace(**ruc),
+                                      static["LAI12M"], when))
+    np.testing.assert_array_equal(
+        got["ALBBCK"], monthly_background_albedo(
+            static["ALBEDO12M"], static["LANDMASK"], when))
+    assert np.all(got["ALBBCK"][0] == np.float32(0.08))
+
+    climatology = wrf_direct._run_start_vegetation(
+        _VegetationCache({}), static, when, ruc)
+    np.testing.assert_allclose(
+        climatology["VEGFRA"],
+        100.0 * monthly_interp_to_date(static["GREENFRAC"], when))
+    # Not the calendar month's raw value the export used to write.
+    assert not np.allclose(climatology["VEGFRA"],
+                           100.0 * static["GREENFRAC"][4])
+    assert not np.allclose(climatology["LAI"], static["LAI12M"][4])
+
+
+def test_stock_export_snow_ice_th2_and_attributes_are_read_back(tmp_path):
+    def surfaces(surface, static):
+        surface["SNOW"][0, :4] = [0.0, 9.999, 10.0, 100.0]
+        surface["SEAICE"][1, :2] = [0.0, 1.0]
+        surface["LANDMASK"][1, :2] = [0.0, 1.0]
+        surface["XLAND"][1, :2] = [2.0, 1.0]
+        static["LU_INDEX"][1, :2] = 21
+        static["SCT_DOM"][1, :2] = 14
+    output, cfg, _ = _export_a_real_prepared_cache(tmp_path, 8,
+        surface_override=surfaces, diff_opt=1, diff_6th_slopeopt=0)
+    with netCDF4.Dataset(output / "wrfinput_d01") as ds:
+        np.testing.assert_array_equal(ds["SNOWC"][0,0,:4], [0,0,1,1])
+        assert ds["IVGTYP"][0,1,1] == 15
+        assert ds["ISLTYP"][0,1,1] == 16
+        assert ds["SNOALB"][0,1,1] == 0.75
+        assert ds["IVGTYP"][0,1,0] == 17
+        pressure = ds["P"][0,0] + ds["PB"][0,0]
+        from woof.wrf_direct import _RCP, _P0
+        expected = ds["T2"][0] * (_P0 / pressure) ** _RCP
+        np.testing.assert_allclose(ds["TH2"][0], expected, rtol=2e-7)
+        assert ds.SURFACE_INPUT_SOURCE == 3
+        assert ds.DIFF_OPT == 1
+        assert ds.DIFF_6TH_SLOPEOPT == 0
+        assert ds.GHG_INPUT == 0
+
+
+@pytest.mark.parametrize('topo,gwd', [(0,0),(1,0),(2,1),(0,3),(1,3)])
+def test_export_preserves_selected_terrain_drag_statistics(tmp_path, topo, gwd):
+    from woof.static.orographic import required_static_fields
+    cfg = {'topo_wind': topo, 'gwd_opt': gwd}
+    names = required_static_fields(topo,gwd)
+    static = {name: np.arange(24,dtype=np.float32).reshape(4,6)+i*.125
+              for i,name in enumerate(names)}
+    fields = wrf_direct._terrain_drag_export_fields(static,cfg,(4,6))
+    contract = _physics_contract_bundle(_load_contract(),6,cfg)['wrfinput']
+    path = tmp_path/'wrfinput'
+    _write_wrfinput(path,contract,_dimensions(contract,nx=6,ny=4,nz=49),{},
+                    fields,'2026-10-28_03:00:00',engine='python')
+    with netCDF4.Dataset(path) as ds:
+        for name in names:
+            assert ds[name].dimensions == ('Time','south_north','west_east')
+            np.testing.assert_array_equal(ds[name][0].data.view('u4'), static[name].view('u4'))
+        if 'VAR_SSO' in names:
+            assert ds['GOT_VAR_SSO'][0] == 1
+
+
+def test_export_refuses_incomplete_terrain_drag_statistics():
+    cfg={'gwd_opt':3}
+    with pytest.raises(ValueError,match='missing required terrain-drag statistic VARLS'):
+        wrf_direct._terrain_drag_export_fields({},cfg,(4,6))
+    with pytest.raises(ValueError,match='invalid terrain-drag statistic VARLS'):
+        wrf_direct._terrain_drag_export_fields({'VARLS':np.ones((6,4))},cfg,(4,6))
+
+
+def test_export_preserves_lake_bathymetry_and_presence(tmp_path):
+    depth = np.arange(24, dtype=np.float32).reshape(4,6) + 10
+    cfg = {"sf_lake_physics": 1, "use_lakedepth": 1}
+    mask = np.ones((4,6), dtype=np.float32)
+    fields = wrf_direct._lake_export_fields({"LAKE_DEPTH": depth}, cfg, mask)
+    contract = _physics_contract_bundle(_load_contract(), 6, cfg)["wrfinput"]
+    path = tmp_path / "wrfinput"
+    _write_wrfinput(path, contract, _dimensions(contract,nx=6,ny=4,nz=49), {},
+                   fields, "2026-10-28_03:00:00", engine="python")
+    with netCDF4.Dataset(path) as ds:
+        np.testing.assert_array_equal(ds["LAKE_DEPTH"][0].data.view("u4"), depth.view("u4"))
+        assert ds["LAKE_DEPTH_FLAG"][0] == 1
+    with pytest.raises(ValueError, match="missing required lake bathymetry"):
+        wrf_direct._lake_export_fields({}, cfg, mask)
+    assert wrf_direct._lake_export_fields({}, cfg, np.zeros_like(mask)) == {}

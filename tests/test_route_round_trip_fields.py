@@ -79,6 +79,7 @@ DRIFTED = {
     "ruc_qvg_cold_start": {"ruc_qvg_cold_start": "wrf"},
     "ruc_2m_diagnostic": {"ruc_2m_diagnostic": "flux"},
     "fractional_seaice": {"fractional_seaice": 1},
+    "seaice_threshold": {"seaice_threshold": 271.4},
     "diff_6th_form": {"diff_6th_form": "wrf_461", "diff_6th_factor2": None},
     "upper_wind_limiter_form": {"upper_wind_limiter_form": "wrf_461"},
     "mp_zero_out": {"mp_zero_out": 0},
@@ -99,9 +100,10 @@ def test_a_toml_value_the_recipe_fills_differently_reaches_the_route(
         for key in settings:
             assert getattr(replayed.run, key) == getattr(domain.run, key), key
     # The fill these values defeat is real: without them the route reads
-    # the recipe's value (fractional_seaice has no fill, only a row).
+    # the recipe's value (fractional_seaice and seaice_threshold have no
+    # fill, only a row).
     recipe = recipe_physics_defaults("hrrr")
-    if field != "fractional_seaice":
+    if field not in ("fractional_seaice", "seaice_threshold"):
         assert recipe[field] != settings[field]
 
 
@@ -208,17 +210,54 @@ def test_a_field_the_forecast_reads_from_the_toml_emits(tmp_path):
     assert paths["namelist_input"].is_file()
 
 
-def test_a_field_neither_the_pair_nor_the_forecast_table_carries_is_refused(
-        tmp_path):
-    """Groups (a) and (c) stay compared.
+def test_a_chem_switch_the_forecast_reads_from_the_toml_emits(tmp_path):
+    """The chem operator's switches are group (b) too.
 
-    moist_cq has no WRF key and is not read from the TOML alone (it is in
-    the prepared identity), so a TOML value the pair cannot carry is
-    still refused by name.
+    The importer drops a pair's &chem whole (WRF-Chem is a declared
+    divergence), so the pair can never carry kemit or chemdt; the chem
+    step reads both from the bound TOML.  Before their entries this
+    emission was refused at the round trip for values the forecast reads.
     """
 
+    exp, paths = _emit(tmp_path, "chem", kemit=5, chemdt=10.0,
+                       dust_opt=3, seas_opt=1)
+    assert (exp.root.run.kemit, exp.root.run.chemdt) == (5, 10.0)
+    assert paths["namelist_input"].is_file()
+
+
+def test_a_field_neither_the_pair_nor_the_forecast_table_carries_is_refused(
+        tmp_path, monkeypatch):
+    """Groups (a) and (c) stay compared.
+
+    moist_cq has no WRF key, so only its group (b) entry lets a TOML
+    counterfactual through; take the entry away and the same value is
+    refused by name, which is what any field without a spelling or an
+    entry gets.
+    """
+
+    import woof.hrrr_route_inputs as route
+
+    monkeypatch.setattr(route, "ROUTE_FORECAST_TOML_FIELDS", {
+        key: value for key, value in ROUTE_FORECAST_TOML_FIELDS.items()
+        if key != "moist_cq"})
     with pytest.raises(HrrrRouteInputError, match="moist_cq"):
         _emit(tmp_path, "moist-cq", moist_cq=False)
+
+
+def test_a_moist_cq_counterfactual_emits_and_the_pair_cannot_state_it(
+        tmp_path):
+    """The forecast reads moist_cq from the TOML; the pair has no key.
+
+    The pair re-imports as True (the importer's physics_compat answer),
+    preparation never reads the switch (PREPARATION_INERT_RUN_FIELDS), so
+    the counterfactual reaches the forecast and nothing else.
+    """
+
+    exp, paths = _emit(tmp_path, "moist-cq", moist_cq=False)
+    assert exp.root.run.moist_cq is False
+    assert _replay(paths).root.run.moist_cq is True
+    for half in ("namelist_input", "stock_namelist_input"):
+        assert "moist_cq" not in paths[half].read_text(encoding="utf-8")
 
 
 def _inert_run_fields():
@@ -234,18 +273,39 @@ def test_a_forecast_toml_field_is_inert_unspelled_and_read_where_cited(field):
 
     * preparation-inert: preparing from the pair's default stamps the
       same cache, so the forecast's own cache comparison cannot object;
-    * no importer spelling: the pair cannot carry it at all;
+    * no spelling in the route's pair: the importer has none, or (the chem
+      door's fields, which a WRF &chem group maps onto since 2026-10-12)
+      the route's emitted pair carries no &chem group to spell it in;
     * the cited module names the field, so the reader is real.
     """
 
+    import re
     from dataclasses import fields as dataclass_fields
 
     from woof.config import RunConfig
+    from woof.physics_compat import IMPLICIT_RUNTIME_SWITCHES
 
     assert field in {item.name for item in dataclass_fields(RunConfig)}
     assert field in _inert_run_fields()
     importer = (ROOT / "woof/namelist_import.py").read_text(encoding="utf-8")
-    assert field not in importer
+    if field in IMPLICIT_RUNTIME_SWITCHES:
+        # A switch WRF has no key for: the importer STATES it, from
+        # physics_compat, and never reads it from a namelist group.
+        assert not re.search(
+            r"\.(take|scalar|col|registry_col|peek)\(\s*[\"']" + field
+            + r"[\"']", importer), field
+    else:
+        from woof.namelist_chem import CHEM_DOOR_RUN_FIELDS
+
+        if field in CHEM_DOOR_RUN_FIELDS:
+            import inspect
+
+            from woof.hrrr_route_inputs import render_namelist_input
+
+            emitter = inspect.getsource(render_namelist_input)
+            assert "&chem" not in emitter and field not in emitter, field
+        else:
+            assert field not in importer
     reader = ROUTE_FORECAST_TOML_FIELDS[field].split()[0].rstrip(",")
     assert field in (ROOT / reader).read_text(encoding="utf-8"), reader
 
@@ -262,14 +322,67 @@ def test_every_compared_inert_field_has_a_spelling_in_the_pair():
     """
 
     from woof.hrrr_route_inputs import round_trip_exempt_run_fields
+    from woof.namelist_import import imported_fire_fields
     from woof.physics_source_defaults import PHYSICS_SELECTOR_VALUES
 
-    importer = (ROOT / "woof/namelist_import.py").read_text(encoding="utf-8")
+    # The importer's text is two files since 2026-10-12: the &chem group and
+    # the chem array's &dynamics switches are read in woof/namelist_chem.py.
+    importer = "".join(
+        (ROOT / path).read_text(encoding="utf-8")
+        for path in ("woof/namelist_import.py", "woof/namelist_chem.py"))
+    # The &fire group is read by table, not key by key.
+    table_read = set(imported_fire_fields())
+    # So are the ocean mixed layer's settings: the importer walks
+    # ocean_namelist_defaults() (woof/surface_ocean.py) and names only
+    # sf_ocean_physics and oml_gamma by their own spelling.
+    from woof.surface_ocean import ocean_namelist_defaults
+    table_read |= set(ocean_namelist_defaults())
     unspelled = sorted(
         field for field in _inert_run_fields() - round_trip_exempt_run_fields()
-        if field not in PHYSICS_SELECTOR_VALUES
+        if field not in PHYSICS_SELECTOR_VALUES and field not in table_read
         and f'"{field}' not in importer and f"{field} =" not in importer)
     assert unspelled == []
+
+
+def test_a_fire_group_key_is_read_by_the_importer_table(tmp_path):
+    """The table the spelling test trusts is the one the importer reads.
+
+    Three &fire keys that appear nowhere in the importer's text, one per
+    Registry type, are stated off their defaults in a pair and import as
+    stated; the refinement ratios and woof's fire extensions are not
+    &fire keys and stay out of the table.
+    """
+
+    from woof.namelist_import import imported_fire_fields
+    from test_namelist_import import INPUT_TEXT, _pair
+
+    fields = set(imported_fire_fields())
+    assert not {"sr_x", "sr_y", "fire_static", "fire_smoke"} & fields
+    stated = {"fire_viscosity_bg": 0.25, "fire_lsm_band_ngp": 6,
+              "fire_is_real_perim": True}
+    importer = (ROOT / "woof/namelist_import.py").read_text(encoding="utf-8")
+    for key in stated:
+        assert key in fields and key not in importer, key
+    from woof.sfire_config import FireRunFields
+
+    def fortran(value):
+        if isinstance(value, bool):
+            return ".true." if value else ".false."
+        return repr(value)
+
+    # The root column keeps the Registry default; the fire domain states
+    # the value, as the fire door's own import test does.
+    rows = "".join(
+        f" {key}={fortran(getattr(FireRunFields(), key))},"
+        f"{fortran(value)},\n" for key, value in stated.items())
+    text = INPUT_TEXT.replace("&domains", "&domains\n sr_x=0,4, sr_y=0,3,") + (
+        "\n&fire\n ifire=0,2, fire_fuel_read=0,0,\n" + rows + "/\n")
+    translated, _report = import_namelists(*_pair(tmp_path, inp=text))
+    path = tmp_path / "fire.toml"
+    path.write_text(translated, encoding="utf-8")
+    child = load_experiment(path).domain(2).run
+    for key, value in stated.items():
+        assert getattr(child, key) == value, key
 
 
 def _routed_configs():
@@ -294,14 +407,6 @@ def _routed_configs():
     return routed
 
 
-#: moist_cq = false is a verification counterfactual these namelists
-#: cannot encode (ROUTE_IMPLICIT_SWITCHES).  These two attempts have been
-#: refused for it since before this change; the refusal names it alone.
-MOIST_CQ_COUNTERFACTUALS = {
-    "configs/les_tornado_100m_mayfield_20211210_attempt2.toml",
-    "configs/les_tornado_100m_mayfield_20211210_attempt2b.toml",
-}
-
 TORNADO_LES = tuple(
     f"configs/les_tornado_100m_{name}.toml" for name in (
         "dodgecity_20160524", "mayfield_20211210",
@@ -311,9 +416,9 @@ TORNADO_LES = tuple(
 @pytest.mark.parametrize("config", _routed_configs())
 def test_every_shipped_hrrr_route_config_emits_its_pair(tmp_path, config):
     """Every routed shipped config writes its pair, the four tornado LES
-    configs round 1 refused (inflow_perturbation on d03) among them."""
-
-    import re
+    configs round 1 refused (inflow_perturbation on d03) among them, and
+    the two moist_cq = false attempts refused before moist_cq joined
+    ROUTE_FORECAST_TOML_FIELDS."""
 
     from woof.companion_domains import candidate_wps_text
 
@@ -332,12 +437,6 @@ def test_every_shipped_hrrr_route_config_emits_its_pair(tmp_path, config):
             writer=lambda target, text: target.write_text(
                 text, encoding="utf-8"))
 
-    if config in MOIST_CQ_COUNTERFACTUALS:
-        with pytest.raises(HrrrRouteInputError) as refusal:
-            emit()
-        named = set(re.findall(r"d\d\d (\w+): config", str(refusal.value)))
-        assert named == {"moist_cq"}
-        return
     emit()
 
 
@@ -393,3 +492,199 @@ def test_a_mosaic_tile_count_beside_mosaic_off_is_dead_state(tmp_path):
     _, paths = _emit(tmp_path, "mosaic-off", mosaic_cat=5)
     assert "mosaic_cat" not in parse_namelist(
         paths["namelist_input"])["physics"]
+
+
+#: Stock WRF keys the importer reads and the renderer never wrote: a TOML
+#: stating any of them emitted a pair that said the Registry default, so
+#: the round trip refused configs/recipes/hrrr_v4_gsd41.toml and
+#: hrrr_configuration_cut.toml on this route.  One emission per group,
+#: each value off the default and admissible on the RUC/MYNN recipe.
+LAND_LAKE_DRAG = {
+    "ruc-mosaic": {"mosaic_lu": 1, "mosaic_soil": 1},
+    "sea-ice-albedo": {"seaice_albedo_default": 0.6},
+    "clm-lake": {"sf_lake_physics": 1, "use_lakedepth": 0,
+                 "lakedepth_default": 40.0, "lake_min_elev": 2.5},
+    "gsl-drag": {"gwd_opt": 3},
+    "implicit-advection": {"zadvect_implicit": 1},
+}
+
+
+@pytest.mark.parametrize("group", sorted(LAND_LAKE_DRAG))
+def test_land_lake_and_drag_settings_reach_both_halves(tmp_path, group):
+    settings = LAND_LAKE_DRAG[group]
+    exp, paths = _emit(tmp_path, group, **settings)
+    replay = _replay(paths)
+    for domain, replayed in zip(exp.domains, replay.domains):
+        for key, value in settings.items():
+            assert getattr(domain.run, key) == value, key
+            assert getattr(replayed.run, key) == value, key
+    native = parse_namelist(paths["namelist_input"])
+    stock = parse_namelist(paths["stock_namelist_input"])
+    for section in ("physics", "dynamics"):
+        for key in settings:
+            assert native[section].get(key) == stock[section].get(key), key
+    assert all(any(key in native[section] for section in native)
+               for key in settings)
+
+
+def test_the_default_emission_writes_none_of_the_land_lake_and_drag_rows(
+        tmp_path):
+    """Each row is written only off the WRF default: bytes unchanged."""
+
+    _, paths = _emit(tmp_path, "defaults")
+    native = parse_namelist(paths["namelist_input"])
+    keys = {key for group in LAND_LAKE_DRAG.values() for key in group}
+    assert not keys & {key for section in native.values() for key in section}
+
+
+def _emit_config(tmp_path, config):
+    """Emit ``config``'s pair through this route whatever its own source."""
+
+    from woof.companion_domains import candidate_wps_text
+
+    path = ROOT / config
+    exp = load_experiment(path)
+    raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    output = tmp_path / path.name
+    write_hrrr_route_inputs(
+        output, exp, wps_text=candidate_wps_text(raw, exp, exp, path),
+        writer=lambda target, text: target.write_text(text, encoding="utf-8"))
+    return exp, route_input_paths(output)
+
+
+@pytest.mark.parametrize("config", (
+    "configs/recipes/hrrr_configuration_cut.toml",
+    "configs/recipes/hrrr_v4_gsd41.toml",
+    "configs/hrrr_v4_vertical_order5.toml",
+    "configs/recipes/conus_hrrr_configuration.toml",
+))
+def test_the_shipped_hrrr_recipes_emit_on_this_route(tmp_path, config):
+    """Refused here before: RUC mosaic, implicit vertical advection, the
+    WIF triple (with and without the analyzed request) and moist_cq were
+    read back as their defaults."""
+
+    exp, paths = _emit_config(tmp_path, config)
+    replay = _replay(paths)
+    for key in ("aer_init_opt", "wif_input_opt", "use_rap_aero_icbc",
+                "mp28_aerosol_source", "mosaic_lu", "mosaic_soil",
+                "zadvect_implicit"):
+        assert getattr(replay.root.run, key) == getattr(exp.root.run, key), key
+
+
+ADAPTIVE_CLOCK_FIELDS = (
+    "use_adaptive_time_step", "step_to_output_time", "adaptation_domain",
+    "target_cfl", "target_hcfl", "max_step_increase_pct",
+    "starting_time_step", "max_time_step", "min_time_step",
+    "time_step_sound", "terrain_clock")
+
+
+@pytest.mark.parametrize("config", (
+    "configs/recipes/hrrr_v4_gsd41.toml",
+    "configs/recipes/hrrr_configuration_cut.toml",
+))
+def test_an_adaptive_clock_reads_back_as_the_adaptive_clock(tmp_path, config):
+    """Pinned at equal bounds (hrrr_v4_gsd41: 20/20/20 s) or not.
+
+    The importer reads an operational namelist's pinned triplet as WRF's
+    fixed step; the route's own pair carries terrain_clock in its woof
+    selector comment, and then the clock comes back as the configuration
+    wrote it, because the prepared cache binds use_adaptive_time_step and
+    the forecast reads the configuration.
+    """
+
+    exp, paths = _emit_config(tmp_path, config)
+    assert exp.root.run.use_adaptive_time_step is True
+    replay = _replay(paths)
+    for key in ADAPTIVE_CLOCK_FIELDS:
+        assert getattr(replay.root.run, key) == getattr(exp.root.run, key), key
+    assert replay.root.time_step == exp.root.time_step
+
+
+def test_the_operational_pinned_triplet_still_reads_as_the_fixed_step(
+        tmp_path):
+    """No woof selector comment: WRF's reading of 20/20/20 is kept."""
+
+    wps = (ROOT / "tests/fixtures/source_requests/hrrr_namelist.wps.c18"
+           ).read_text(encoding="utf-8")
+    wps = wps.replace("2026-09-29_12:00:00", "2018-08-26_12:00:00")
+    wps = wps.replace("2026-09-30_06:00:00", "2018-08-26_18:00:00")
+    (tmp_path / "namelist.wps").write_text(wps, encoding="utf-8")
+    from operational_namelist_edits import write_importable
+    text, _ = import_namelists(
+        tmp_path / "namelist.wps",
+        write_importable(ROOT / "tests/data/hrrr_wrf_v4_1_21.nl",
+                         tmp_path / "hrrr_wrf.nl"),
+        request_source="hrrr")
+    document = tomllib.loads(text)
+    flat = dict(document["shared"])
+    for table in document.get("domain", []):
+        flat.update(table)
+    assert flat.get("use_adaptive_time_step", False) is False
+    assert flat["terrain_clock"] == "pinned"
+
+
+def test_an_analyzed_request_beside_the_whole_wif_triple_keeps_the_triple(
+        tmp_path):
+    """use_rap_aero_icbc decides the source; the triple is carried as written."""
+
+    exp, paths = _emit(tmp_path, "analyzed-triple", aer_init_opt=1,
+                       wif_input_opt=1, mp28_aerosol_source="auto")
+    replay = _replay(paths)
+    run = replay.root.run
+    assert (run.aer_init_opt, run.wif_input_opt, run.use_rap_aero_icbc,
+            run.mp28_aerosol_source) == (1, 1, True, "auto")
+
+
+def test_the_operational_namelist_still_imports_the_analyzed_spelling(
+        tmp_path):
+    """Only half the triple (no wif_input_opt): unchanged import."""
+
+    wps = (ROOT / "tests/fixtures/source_requests/hrrr_namelist.wps.c18"
+           ).read_text(encoding="utf-8")
+    wps = wps.replace("2026-09-29_12:00:00", "2018-08-26_12:00:00")
+    wps = wps.replace("2026-09-30_06:00:00", "2018-08-26_18:00:00")
+    (tmp_path / "namelist.wps").write_text(wps, encoding="utf-8")
+    from operational_namelist_edits import write_importable
+    text, _ = import_namelists(
+        tmp_path / "namelist.wps",
+        write_importable(ROOT / "tests/data/hrrr_wrf_v4_1_21.nl",
+                         tmp_path / "hrrr_wrf.nl"))
+    shared = tomllib.loads(text)["shared"]
+    assert shared["use_rap_aero_icbc"] is True
+    assert shared["mp28_aerosol_source"] == "analysis"
+    assert "aer_init_opt" not in shared and "wif_input_opt" not in shared
+
+
+def test_a_root_topo_wind_reaches_both_halves(tmp_path):
+    """YSU's topographic wind correction, root only (a child's statics
+    carry no sub-grid orography, so the experiment refuses it there)."""
+
+    from woof.companion_domains import candidate_wps_text
+
+    config = ROOT / "configs/real74_4dom.toml"
+    exp = load_experiment(config)
+    assert exp.root.run.bl_pbl_physics == 1
+    exp = replace(exp, domains=tuple(
+        replace(domain, run=replace(
+            domain.run, topo_wind=1 if domain.grid_id == 1 else 0))
+        for domain in exp.domains))
+    raw = tomllib.loads(config.read_text(encoding="utf-8"))
+    output = tmp_path / config.name
+    write_hrrr_route_inputs(
+        output, exp, wps_text=candidate_wps_text(raw, exp, exp, config),
+        writer=lambda path, text: path.write_text(text, encoding="utf-8"))
+    paths = route_input_paths(output)
+    native = parse_namelist(paths["namelist_input"])["physics"]
+    stock = parse_namelist(paths["stock_namelist_input"])["physics"]
+    assert native["topo_wind"] == stock["topo_wind"] == [1, 0, 0, 0]
+    assert [domain.run.topo_wind for domain in _replay(paths).domains] \
+        == [1, 0, 0, 0]
+
+
+def test_history_switch_round_trips(tmp_path):
+    exp, paths = _emit(tmp_path, "history-switch",
+                       history_interval2_s=7200.,
+                       history_interval_change_s=10800.)
+    replay = _replay(paths)
+    assert replay.root.run.history_interval2_s == 7200.
+    assert replay.root.run.history_interval_change_s == 10800.

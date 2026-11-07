@@ -1,0 +1,574 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_setcoef_f32",
+      "module": "hexv842_mpas_rrtmg_lw_setcoef_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_setcoef_f32.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw.cu",
+      "cuda_symbol": "rlw_setcoef",
+      "resources": [
+        [
+          "pavel",
+          "float",
+          "read"
+        ],
+        [
+          "tavel",
+          "float",
+          "read"
+        ],
+        [
+          "tz",
+          "float",
+          "read"
+        ],
+        [
+          "tbound_v",
+          "float",
+          "read"
+        ],
+        [
+          "semiss",
+          "float",
+          "read"
+        ],
+        [
+          "coldry",
+          "float",
+          "read"
+        ],
+        [
+          "wkl",
+          "float",
+          "read"
+        ],
+        [
+          "wbroad",
+          "float",
+          "read"
+        ],
+        [
+          "totplnk",
+          "float",
+          "read"
+        ],
+        [
+          "totplk16",
+          "float",
+          "read"
+        ],
+        [
+          "preflog",
+          "float",
+          "read"
+        ],
+        [
+          "tref",
+          "float",
+          "read"
+        ],
+        [
+          "chi_mls",
+          "float",
+          "read"
+        ],
+        [
+          "laytrop_v",
+          "int32",
+          "read_write"
+        ],
+        [
+          "jp",
+          "int32",
+          "read_write"
+        ],
+        [
+          "jt",
+          "int32",
+          "read_write"
+        ],
+        [
+          "jt1",
+          "int32",
+          "read_write"
+        ],
+        [
+          "planklay",
+          "float",
+          "read_write"
+        ],
+        [
+          "planklev",
+          "float",
+          "read_write"
+        ],
+        [
+          "plankbnd",
+          "float",
+          "read_write"
+        ],
+        [
+          "colh2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "colco2",
+          "float",
+          "read_write"
+        ],
+        [
+          "colo3",
+          "float",
+          "read_write"
+        ],
+        [
+          "coln2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "colco",
+          "float",
+          "read_write"
+        ],
+        [
+          "colch4",
+          "float",
+          "read_write"
+        ],
+        [
+          "colo2",
+          "float",
+          "read_write"
+        ],
+        [
+          "colbrd",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac00",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac01",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac10",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac11",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2oco2",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2oco2_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2oo3",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2oo3_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2on2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2on2o_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2och4",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_h2och4_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_n2oco2",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_n2oco2_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_o3co2",
+          "float",
+          "read_write"
+        ],
+        [
+          "rat_o3co2_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "selffac",
+          "float",
+          "read_write"
+        ],
+        [
+          "selffrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "indself",
+          "int32",
+          "read_write"
+        ],
+        [
+          "forfac",
+          "float",
+          "read_write"
+        ],
+        [
+          "forfrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "indfor",
+          "int32",
+          "read_write"
+        ],
+        [
+          "minorfrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "scaleminor",
+          "float",
+          "read_write"
+        ],
+        [
+          "scaleminorn2",
+          "float",
+          "read_write"
+        ],
+        [
+          "indminor",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pavel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tavel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tbound_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "semiss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coldry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wkl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wbroad": [
+          [
+            "any_1d"
+          ]
+        ],
+        "totplnk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "totplk16": [
+          [
+            "any_1d"
+          ]
+        ],
+        "preflog": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "chi_mls": [
+          [
+            "any_1d"
+          ]
+        ],
+        "laytrop_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "jp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "jt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "jt1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "planklay": [
+          [
+            "any_1d"
+          ]
+        ],
+        "planklev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plankbnd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colh2o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colco2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colo3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coln2o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colco": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colch4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colo2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "colbrd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fac00": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fac01": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fac10": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fac11": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2oco2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2oco2_1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2oo3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2oo3_1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2on2o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2on2o_1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2och4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_h2och4_1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_n2oco2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_n2oco2_1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_o3co2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rat_o3co2_1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "selffac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "selffrac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "indself": [
+          [
+            "any_1d"
+          ]
+        ],
+        "forfac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "forfrac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "indfor": [
+          [
+            "any_1d"
+          ]
+        ],
+        "minorfrac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scaleminor": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scaleminorn2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "indminor": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlayers",
+          "int32"
+        ],
+        [
+          "istart",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

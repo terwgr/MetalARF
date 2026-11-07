@@ -18,7 +18,7 @@
 //!
 //! `dwd-full` probes `DwdProvider::with_dual_pol()` (ZDR/RhoHV/PhiDP
 //! sweeps included, ~50 parts); it is not part of `all`. Default sites:
-//! shmu=skjav, dwd=asb, chmi=brd, ord=nohur (Norway's split PVOL feed:
+//! shmu=skjav, dwd=asb, chmi=brd, ord=nohur (Norway's split PVOL feed —
 //! pass another ORD site, e.g. frtou, to probe the per-sweep SCAN shape).
 //! Exit code 1 when any requested probe fails.
 

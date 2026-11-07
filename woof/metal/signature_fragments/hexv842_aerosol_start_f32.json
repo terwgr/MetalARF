@@ -1,0 +1,132 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_aerosol_start_f32",
+      "module": "hexv842_aerosol_start_f32",
+      "source": "woof/metal/shaders/hexv842_aerosol_start_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/framework_init_v842.py",
+      "cuda_symbol": "thompson_aerosols_init_v842",
+      "resources": [
+        [
+          "zgrid",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "area",
+          "float",
+          "read"
+        ],
+        [
+          "nwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nwfa2d",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zgrid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nwfa2d": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "w_on",
+          "int32"
+        ],
+        [
+          "w_log",
+          "float32"
+        ],
+        [
+          "w0",
+          "float32"
+        ],
+        [
+          "w1",
+          "float32"
+        ],
+        [
+          "i_on",
+          "int32"
+        ],
+        [
+          "i_log",
+          "float32"
+        ],
+        [
+          "i0",
+          "float32"
+        ],
+        [
+          "i1",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

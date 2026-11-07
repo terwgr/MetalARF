@@ -1,0 +1,101 @@
+{
+  "name": "wrf_exact_rrtmg_lw_inatm",
+  "module": "wrf_exact_rrtmg_lw_inatm",
+  "source": "woof/metal/shaders/wrf_exact_rrtmg_lw_inatm.metal",
+  "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+  "cuda_symbol": "rlw_inatm",
+  "resources": [
+    [
+      "plev",
+      "float",
+      "read"
+    ],
+    [
+      "wkl",
+      "float",
+      "read_write"
+    ],
+    [
+      "wx",
+      "float",
+      "read_write"
+    ],
+    [
+      "coldry",
+      "float",
+      "read_write"
+    ],
+    [
+      "wbrodl",
+      "float",
+      "read_write"
+    ],
+    [
+      "pwvcm",
+      "float",
+      "read_write"
+    ]
+  ],
+  "shapes": {
+    "plev": [
+      [
+        "ncol",
+        "nl+1"
+      ]
+    ],
+    "wkl": [
+      [
+        "ncol",
+        "38",
+        "nl"
+      ]
+    ],
+    "wx": [
+      [
+        "ncol",
+        "4",
+        "nl"
+      ]
+    ],
+    "coldry": [
+      [
+        "ncol",
+        "nl"
+      ]
+    ],
+    "wbrodl": [
+      [
+        "ncol",
+        "nl"
+      ]
+    ],
+    "pwvcm": [
+      [
+        "ncol"
+      ]
+    ]
+  },
+  "parameters": [
+    [
+      "ncol",
+      "int32"
+    ],
+    [
+      "nl",
+      "int32"
+    ],
+    [
+      "grav",
+      "float32"
+    ],
+    [
+      "avogad",
+      "float32"
+    ]
+  ],
+  "threads_per_group": 128,
+  "layout_version": 1,
+  "arithmetic_policies": [
+    "wrf-exact"
+  ]
+}

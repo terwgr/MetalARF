@@ -1,0 +1,178 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_length1_validate_f32",
+      "module": "hexv842_mpas_bl_mynn_length1_validate_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_length1_validate_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_mym_length",
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "u1",
+          "float",
+          "read"
+        ],
+        [
+          "v1",
+          "float",
+          "read"
+        ],
+        [
+          "qke",
+          "float",
+          "read"
+        ],
+        [
+          "dtv",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_w1",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_a1",
+          "float",
+          "read"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "rmo",
+          "float",
+          "read"
+        ],
+        [
+          "fltv",
+          "float",
+          "read"
+        ],
+        [
+          "psig_bl",
+          "float",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dtv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_w1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_a1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rmo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fltv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psig_bl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "karman",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

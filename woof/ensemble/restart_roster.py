@@ -4,13 +4,26 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
 import time
+from contextlib import nullcontext
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from woof.ensemble.physical_fields import sha256_of_file as digest_file
 
 CONTRACT = "gpuwm-ensemble-restart.v1"
 IDENTITIES = "ensemble-identities.json"
 ROSTER = "ensemble-restart.json"
 INPUTS = "ensemble-inputs.json"
+#: Sealed copies of every file a roster names, one directory per seal. The
+#: live run directory keeps changing after a seal: the next frame rewrites the
+#: domain ensemble-manifest.json and ensemble-history-ledger.json within a
+#: second, and members retire superseded checkpoint sets and pending packs.
+#: A roster that named only the live files was valid for under a second, so a
+#: killed or stopped ensemble could never resume (2.9.1 audit, one card,
+#: "ensemble resume file is missing or hash-mismatched: d01/ensemble-manifest.json").
+GENERATIONS = ".ensemble-resume/generations"
 
 
 class CheckpointProgress:
@@ -28,22 +41,37 @@ class CheckpointProgress:
         if checkpoint is not None and str(checkpoint) != self.last_attempted_checkpoint:
             self.last_attempted_checkpoint = str(checkpoint)
             with self.lock:
-                save = getattr(self.collector, "save_resume", None)
-                if not callable(save):
+                if not callable(getattr(self.collector, "save_resume", None)):
                     raise ValueError("checkpointed ensemble requires a durable diagnostic collector")
+                bind_checkpoint_member(self.root, checkpoint)
                 try:
-                    save()
+                    # The collector snapshot is taken inside seal, under the
+                    # collector checkpoint hold, so members on other cards
+                    # cannot retire the packs it names before they are hashed.
+                    seal(self.root, collector=self.collector)
                 except TimeoutError:
+                    # A deferred snapshot leaves this checkpoint unbound, as
+                    # before; the previous roster stays the durable one.
+                    Path(checkpoint).with_suffix(".member.json").unlink(missing_ok=True)
                     event["ensemble_checkpoint_deferred"] = "product drain exceeded bounded checkpoint hold"
                     return self.callback(**event)
-                bind_checkpoint_member(self.root, checkpoint)
-                seal(self.root)
                 self.last_checkpoint = str(checkpoint)
             event["ensemble_restart_roster"] = str(self.root / ROSTER)
         return self.callback(**event)
 
     def __getattr__(self, name):
         return getattr(self.callback, name)
+
+
+def checkpoint_hold(collector):
+    """Hold every member submission and pack retirement while a roster seals.
+
+    Members on other cards keep submitting diagnostics while one member's
+    checkpoint seals. Without this hold a submission could complete a frame
+    and retire the pending packs that the just-saved collector.json names.
+    """
+    hold = getattr(collector, "checkpoint_hold", None)
+    return hold() if callable(hold) else nullcontext()
 
 
 def bind_checkpoint_member(root, checkpoint):
@@ -56,6 +84,7 @@ def bind_checkpoint_member(root, checkpoint):
     header = read_restart_header(checkpoint)
     paths = tree_restart_members(checkpoint) if header.get("domain_ids") else {1: checkpoint}
     record = {"schema": CONTRACT, "member_id": owner["memberId"], "identity_sha256": owner["memberIdentity"],
+        **({"provenance": owner["provenance"]} if owner.get("provenance") else {}),
         "files": [{"path": relative_file(root, path), "sha256": digest_file(path), "bytes": path.stat().st_size}
             for path in paths.values()]}
     atomic_json(checkpoint.with_suffix(".member.json"), record)
@@ -68,14 +97,6 @@ def atomic_json(path, record):
     pending = path.with_suffix(path.suffix + ".pending")
     pending.write_text(json.dumps(record, sort_keys=True, indent=2, default=str) + "\n", encoding="utf-8")
     pending.replace(path)
-
-
-def digest_file(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def relative_file(root, path):
@@ -101,10 +122,28 @@ def identity_record(request, member_order, member_inputs, seeds):
         payload = {"member_id": member, "seed": seeds[member],
             "experiment": restart_identity_payload(inputs.experiment),
             "source": getattr(inputs, "source", None),
-            "prepared_head_sha256": getattr(inputs, "prepared_head_sha256", None)}
+            "prepared_head_sha256": getattr(inputs, "prepared_head_sha256", None),
+            # V1 checkpoint hashes predate per-row provenance. Their request
+            # already retains the original labels, so keep those hashes stable.
+            **({"provenance": request.provenance[member]} if request.provenance
+               and request.provenance[member].get("schema") == "gpuwm-member-provenance.v2" else {})}
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
         rows.append({**payload, "identity_sha256": hashlib.sha256(encoded).hexdigest()})
     return {"schema": CONTRACT, "request": selected, "member_order": list(member_order), "members": rows}
+
+
+def _matches(path, item):
+    return path.is_file() and path.stat().st_size == item["bytes"] and digest_file(path) == item["sha256"]
+
+
+def _parallel_file_map(function, items):
+    from woof.ingest.cpu_backend import available_cpu_count
+    items = list(items)
+    if not items:
+        return []
+    with ThreadPoolExecutor(max_workers=min(len(items), available_cpu_count()),
+                            thread_name_prefix="ensemble-seal") as workers:
+        return list(workers.map(function, items))
 
 
 def verify_roster(path, identities, *, root):
@@ -114,11 +153,27 @@ def verify_roster(path, identities, *, root):
     rows = record.get("members", [])
     if [row.get("member_id") for row in rows] != identities["member_order"]:
         raise ValueError("ensemble restart roster must name every original member exactly once in order")
-    for item in record.get("files", []):
-        path = resolve_file(root, item["path"])
-        if not path.is_file() or path.stat().st_size != item["bytes"] or digest_file(path) != item["sha256"]:
-            raise ValueError(f"ensemble resume file is missing or hash-mismatched: {item['path']}")
+    files = record.get("files", [])
+    matches = _parallel_file_map(lambda item: _matches(
+        resolve_file(root, item.get("snapshot", item["path"])), item), files)
+    for item, matches_file in zip(files, matches):
+        if "snapshot" in item:
+            # The sealed copy is the authority; the live file may have moved on.
+            if not matches_file:
+                raise ValueError(
+                    f"ensemble resume file is missing or hash-mismatched: {item['path']} (its sealed copy "
+                    f"{item['snapshot']} is missing or changed). Copy the whole run directory, including "
+                    ".ensemble-resume, or run the ensemble again into a new --outdir")
+        elif not matches_file:
+            # A roster sealed before sealed copies existed (woof 2.9.0 and
+            # earlier) names only live files that later frames rewrite.
+            raise ValueError(
+                f"ensemble resume file is missing or hash-mismatched: {item['path']}. This roster keeps no "
+                "sealed copy of its files (sealed by woof 2.9.0 or earlier), and the run changed that file "
+                "after the seal; run the ensemble again into a new --outdir")
     for row, identity in zip(rows, identities["members"]):
+        if row.get("provenance") != identity.get("provenance"):
+            raise ValueError("ensemble checkpoint lineage differs from its original member identity")
         if row.get("identity_sha256") != identity["identity_sha256"]:
             raise ValueError("ensemble checkpoint was assigned to another member")
         if row.get("status") not in ("completed", "checkpoint", "pending"):
@@ -131,6 +186,92 @@ def verify_roster(path, identities, *, root):
         if row["status"] == "completed" and not isinstance(row.get("result"), dict):
             raise ValueError("completed ensemble member has no retained forecast result")
     return record
+
+
+def _place(source, destination, *, link):
+    """Atomically put ``source``'s bytes at ``destination``.
+
+    ``link`` shares the inode when the filesystem allows it (checkpoint sets
+    and other write-once files), so a seal or restore costs no copy; JSON
+    authorities are always copied, because only a copy is immune to a writer
+    that rewrites its file in place.
+    """
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    pending = destination.with_name(destination.name + ".pending")
+    pending.unlink(missing_ok=True)
+    if link:
+        try:
+            os.link(source, pending)
+        except OSError as error:
+            if isinstance(error, FileNotFoundError):
+                raise
+            shutil.copyfile(source, pending)
+    else:
+        shutil.copyfile(source, pending)
+    pending.replace(destination)
+    return destination
+
+
+def _source_revision(path):
+    """A copy may be reused only while its live source has not changed.
+
+    Device, inode, size and mtime name a content change. ctime is left out:
+    a reader that hard-links a member's restart files changes their ctime
+    without changing a byte, and counting it made every seal repeat its
+    copy and then fail the member ("ensemble snapshot source changed during
+    copy", WoFS run_8dd42875d520e1d3, 2026-10-26).
+    """
+    status = path.stat()
+    return [status.st_dev, status.st_ino, status.st_size, status.st_mtime_ns]
+
+
+#: The collector's private trees. The sealed snapshot names every file the
+#: collector owns in them, so anything else there was written after the seal.
+COLLECTOR_PRIVATE = (".ensemble-diagnostics", "member-diagnostics")
+
+
+def restore_roster(record, *, root):
+    """Put the sealed copies back before the collector and members restart.
+
+    Files the run rewrote or retired after the seal return to their sealed
+    bytes. What the run wrote after the seal and the restored state does not
+    own is removed, because the resumed members write it again:
+    - checkpoint sets an unfinished member committed after the seal (a later
+      seal must not name an hour the restored collector has not seen);
+    - diagnostic packs, render sources and archive files in the collector's
+      private trees (their writers refuse to replace an unowned file:
+      "diagnostic scratch path already exists", 2.9.1 audit).
+    """
+    root = Path(root).resolve()
+    named, restored, removed = set(), [], []
+    files = record.get("files", ())
+    replace_live = _parallel_file_map(lambda item: "snapshot" in item and not _matches(
+        resolve_file(root, item["path"]), item), files)
+    for item, needs_restore in zip(files, replace_live):
+        live = resolve_file(root, item["path"])
+        named.add(live)
+        if needs_restore:
+            _place(resolve_file(root, item["snapshot"]), live, link=not live.name.endswith(".json"))
+            restored.append(item["path"])
+    if record.get("snapshot_generation"):
+        # A roster sealed with copies names every collector-owned file.
+        for tree in COLLECTOR_PRIVATE:
+            directory = root / tree
+            for path in sorted(directory.rglob("*")) if directory.is_dir() else ():
+                if (path.is_file() or path.is_symlink()) and path.resolve() not in named:
+                    path.unlink(missing_ok=True)
+                    removed.append(relative_file(root, path))
+    for row in record.get("members", ()):
+        if row.get("status") == "completed":
+            continue
+        directory = root / "members" / f"member-{row['member_id']:04d}"
+        for path in sorted(directory.rglob("gpuwmrst_d*.npz")) if directory.is_dir() else ():
+            if path.resolve() not in named:
+                path.unlink(missing_ok=True)
+                path.with_suffix(".member.json").unlink(missing_ok=True)
+                removed.append(relative_file(root, path))
+    return {"restored": restored, "removed_after_seal": removed}
 
 
 def get_checkpoint_member(path):
@@ -154,25 +295,11 @@ def get_checkpoint_member(path):
         files = [collector, *(resolve_file(root, name) for name in document.get("files", ()))]
     return {"memberIndex": identities["member_order"].index(identity["member_id"]),
         "memberId": identity["member_id"], "memberIdentity": identity["identity_sha256"],
+        **({"provenance": identity["provenance"]} if identity.get("provenance") else {}),
         "config": descriptor.get("experiment_config"), "wps": descriptor.get("wps_namelist"),
         "prepared": descriptor.get("prepared_root"), "root": str(root),
         "roster": str(root / ROSTER), "collectorFiles": [str(item) for item in files],
         "memberInputs": descriptors["members"]}
-
-
-def relocate_inputs(root, bindings):
-    """Rebind fetched preparation addresses without changing member identities."""
-    root = Path(root)
-    document = json.loads((root / INPUTS).read_text(encoding="utf-8"))
-    for row in document["members"]:
-        selected = bindings.get(row["member_id"], bindings.get(str(row["member_id"])))
-        if selected is None:
-            continue
-        if set(selected) - {"prepared_root", "experiment_config", "wps_namelist"}:
-            raise ValueError("ensemble input relocation may change only fetched preparation addresses")
-        row.update({name: str(value) for name, value in selected.items()})
-    atomic_json(root / INPUTS, document)
-    return seal(root)
 
 
 def resume_prepared_roster(args, request, *, observer=None):
@@ -192,8 +319,23 @@ def resume_prepared_roster(args, request, *, observer=None):
     verify_roster(roster, identities, root=root)
     first = identities["member_order"][0]
     bundle = stage_cli.resolve_bundle(Path(prepared[first]["prepared_root"]))
+    # Resume must retain the recipe's sharing of immutable prepared banks.
+    # Reopening one bank per member retains thousands of duplicate mmap
+    # regions and can exhaust vm.max_map_count before forecasting starts.
+    # Configuration and WPS bindings are part of the key: a shared directory
+    # alone does not establish matching physics or preparation arguments.
+    def binding(row):
+        return tuple(str(Path(row[name]).resolve()) if row.get(name) else None
+                     for name in ("prepared_root", "experiment_config", "wps_namelist"))
+
+    banks = {}
+
     def provider(*, shared_inputs, member_id, **unused):
-        return shared_inputs if member_id == first else member_inputs(shared_inputs, prepared[member_id])
+        banks.setdefault(binding(prepared[first]), shared_inputs)
+        key = binding(prepared[member_id])
+        if key not in banks:
+            banks[key] = member_inputs(shared_inputs, prepared[member_id])
+        return banks[key]
     sim = stage_cli.sim_command(bundle, experiment_config=Path(prepared[first]["experiment_config"]),
         wps_namelist=(Path(prepared[first]["wps_namelist"]) if prepared[first]["wps_namelist"] else None),
         outdir=root, physics_profile=None, progress_format="jsonl", render_products=None,
@@ -207,8 +349,29 @@ def resume_prepared_roster(args, request, *, observer=None):
         return runner.main(sim[3:], observer=observer)
 
 
-def seal(root, output=None, *, collector_files=()):
-    """Publish a roster only after its member checkpoints and output spool exist."""
+#: Whole seal passes tried when a file vanishes mid-pass. Another member's
+#: runner, on another card, retires its superseded checkpoint sets
+#: (retire_superseded_checkpoints) while this member's roster is being hashed.
+SEAL_ATTEMPTS = 8
+
+
+def seal(root, output=None, *, collector_files=(), collector=None):
+    """Publish a roster only after its member checkpoints and output spool exist.
+
+    With ``collector``, its snapshot is saved under :func:`checkpoint_hold`
+    and the files it names are hashed before the hold is released. A pass in
+    which any listed file disappears is repeated, so a published roster never
+    names a file that was already gone when it was hashed.
+    """
+    for attempt in range(SEAL_ATTEMPTS):
+        try:
+            return _seal_once(root, output, collector_files=collector_files, collector=collector)
+        except FileNotFoundError:
+            if attempt == SEAL_ATTEMPTS - 1:
+                raise
+
+
+def _seal_once(root, output, *, collector_files, collector):
     from woof.io.restart import read_restart_header, tree_restart_members
     from woof.supervisor import validate_manifest_checkpoint
     from woof.resume import discover_checkpoint_sets
@@ -222,15 +385,10 @@ def seal(root, output=None, *, collector_files=()):
     if (root / INPUTS).is_file():
         files.add(root / INPUTS)
     files.update(resolve_file(root, name) for name in collector_files)
-    collector_manifest = root / ".ensemble-resume" / "collector.json"
-    if collector_manifest.is_file():
-        document = json.loads(collector_manifest.read_text(encoding="utf-8"))
-        files.add(collector_manifest)
-        files.update(resolve_file(root, name) for name in document.get("files", ()))
-    rows = []
+    rows, hashed = [], {}
     for identity in identities["members"]:
         member = identity["member_id"]
-        row = {"member_id": member, "identity_sha256": identity["identity_sha256"], "status": "pending",
+        row = {"member_id": member, **({"provenance": identity["provenance"]} if identity.get("provenance") else {}), "identity_sha256": identity["identity_sha256"], "status": "pending",
                "model_elapsed_seconds": 0.0}
         if member in completed:
             if member not in results:
@@ -262,14 +420,84 @@ def seal(root, output=None, *, collector_files=()):
                     continue
                 files.update(members.values())
                 files.add(binding_path)
+                hashed.update({path: known[relative_file(root, path)] for path in members.values()})
                 row.update(status="checkpoint", checkpoint=relative_file(root, candidate.handle),
                            model_elapsed_seconds=elapsed)
                 break
         rows.append(row)
-    record = {"schema": CONTRACT, "created_time_ns": time.time_ns(), "identities": identities, "members": rows,
-        "files": [{"path": relative_file(root, path), "bytes": path.stat().st_size,
-                   "sha256": digest_file(path)} for path in sorted(files)]}
-    atomic_json(output or root / ROSTER, record)
+    with checkpoint_hold(collector):
+        if collector is not None:
+            collector.save_resume()
+        collector_manifest = root / ".ensemble-resume" / "collector.json"
+        if collector_manifest.is_file():
+            document = json.loads(collector_manifest.read_text(encoding="utf-8"))
+            files.add(collector_manifest)
+            files.update(resolve_file(root, name) for name in document.get("files", ()))
+        # Every file is copied (or hard-linked) into this seal's generation
+        # and the roster names those sealed copies, so the frames, ledger
+        # writes and checkpoint retirements that follow the seal cannot
+        # invalidate it. A member checkpoint retired during this pass raises
+        # FileNotFoundError and the pass repeats.
+        created = time.time_ns()
+        generation = root / GENERATIONS / f"{created:020d}"
+        previous_path = Path(output or root / ROSTER)
+        previous = (json.loads(previous_path.read_text(encoding="utf-8"))
+                    if previous_path.is_file() else {})
+        previous_files = {item["path"]: item for item in previous.get("files", ())}
+        try:
+            def snapshot_file(path):
+                name = relative_file(root, path)
+                revision = _source_revision(path)
+                old = previous_files.get(name, {})
+                retained = (resolve_file(root, old["snapshot"])
+                            if old.get("source_revision") == revision and "snapshot" in old else None)
+                if retained is not None and retained.is_file():
+                    # Link between sealed copies. Linking a live OUTPUT
+                    # changes its ctime while another member's writer hashes
+                    # it (four-member concurrent WoFS run, 2026-10-17).
+                    copy = _place(retained, generation / name, link=True)
+                    digest = digest_file(copy)
+                    if digest != old["sha256"]:
+                        raise ValueError(f"ensemble sealed copy changed: {name}")
+                elif path in hashed:
+                    # A member checkpoint set is write-once (published by
+                    # os.replace, retired by unlink, never rewritten in
+                    # place) and was just hashed against its committed owner
+                    # binding, so the seal links it instead of copying it.
+                    # The copy cost 44-59 GB of host disk per sealed set
+                    # (U-E10). No checkpoint reader counts ctime (E9).
+                    copy = _place(path, generation / name, link=True)
+                    digest = hashed[path]
+                else:
+                    copy = _place(path, generation / name, link=False)
+                    digest = digest_file(copy)
+                if _source_revision(path) != revision:
+                    raise FileNotFoundError(f"ensemble snapshot source changed during copy: {name}")
+                return {"path": name, "bytes": copy.stat().st_size,
+                    "sha256": digest, "source_revision": revision,
+                    "snapshot": relative_file(root, copy)}
+
+            # A retained-history roster can name tens of GB. Hash independent
+            # files across the allowed host CPUs instead of stalling the GPU
+            # on one core at every checkpoint. hashlib releases the GIL for
+            # these blocks. Keep every hash, sorted publication, the collector
+            # hold and the whole-pass retirement retry unchanged. Joining the
+            # pool before cleanup also prevents failed workers recreating it.
+            entries = _parallel_file_map(snapshot_file, sorted(files))
+            missing = [path for path in hashed if not path.is_file()]
+            if missing:
+                raise FileNotFoundError(str(missing[0]))
+        except BaseException:
+            shutil.rmtree(generation, ignore_errors=True)
+            raise
+        record = {"schema": CONTRACT, "created_time_ns": created, "identities": identities, "members": rows,
+            "snapshot_generation": relative_file(root, generation), "files": entries}
+        atomic_json(output or root / ROSTER, record)
+        if output is None or Path(output).resolve() == root / ROSTER:
+            # Older generations are no longer named by the durable roster.
+            for older in (root / GENERATIONS).iterdir() if (root / GENERATIONS).is_dir() else ():
+                if older.name < generation.name:
+                    shutil.rmtree(older, ignore_errors=True)
     return record
 
 

@@ -2,7 +2,7 @@
 """Measure woof's Noah CUDA kernel against the unmodified WRF v4.6.1 driver.
 
 Run it on the CSVs build.sh produced, or with no argument on the packaged
-fixture under ``tests/data/noah/oracle``::
+fixture under ``woof/data/noah/oracle``::
 
     python3 tools/noah_wrf461_oracle/validate_noah_oracle.py [FIXTURE_DIR]
 
@@ -20,9 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tests.physics_reference.noah_oracle import (  # noqa: E402
+from woof.verify.noah_oracle import (  # noqa: E402
+    NOAH_GLACIAL_ORACLE_FILES,
     NOAH_ORACLE_FILES,
-    glacial_divergence,
     load_noah_oracle,
     measure_noah_parity,
     noah_port_outputs,
@@ -32,24 +32,18 @@ from tests.physics_reference.noah_oracle import (  # noqa: E402
 def main(argv: list[str]) -> int:
     directory = Path(argv[1]) if len(argv) > 1 else None
     overall = 0
-    for name in NOAH_ORACLE_FILES:
+    for name in (*NOAH_ORACLE_FILES, *NOAH_GLACIAL_ORACLE_FILES):
         fixture = load_noah_oracle(name, directory)
         port = noah_port_outputs(fixture)
         parity = measure_noah_parity(fixture, port)
         glacial = int(fixture.glacial.sum())
         print(f"=== {name}  {fixture.switches}  "
-              f"{fixture.ncase} columns ({glacial} glacial, excluded) ===")
+              f"{fixture.ncase} columns ({glacial} land ice) ===")
         for field in sorted(parity, key=lambda f: -parity[f].max_ulp):
             print("   ", parity[field])
         worst = max(p.max_ulp for p in parity.values())
         overall = max(overall, worst)
         print(f"    worst max_ulp: {worst}")
-        gaps = glacial_divergence(fixture, port)
-        if gaps:
-            worst_gap = sorted(gaps.items(), key=lambda kv: -kv[1])[:5]
-            print("    SFLX_GLACIAL columns woof does not compute, "
-                  "absolute gap:",
-                  ", ".join(f"{k}={v:.6g}" for k, v in worst_gap))
     print(f"worst max_ulp over every fixture and field: {overall}")
     return 0
 

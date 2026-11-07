@@ -69,16 +69,14 @@ def test_every_rung_keeps_its_own_tracker_window_inside_the_parent():
 
 @pytest.mark.parametrize("cells", [42, 44, 48, 52, 56, 60])
 def test_the_derived_move_is_the_largest_the_nests_own_floor_admits(cells):
-    """An overlap floor f admits a per-axis magnitude of 1 - sqrt(f) of the
-    nest's width, and the binding case is the diagonal move, where both
-    factors shrink at once."""
+    """The proposal ceiling uses single-axis reach; the runner clamps direction."""
     follow = tc.follow_table_for_nest(tc.RATIO * cells, tc.RATIO * cells)
     floor = follow["min_overlap_fraction"]
     move = follow["max_move_parent_cells"]
     assert follow["max_shift_cells"] == move
-    assert (1.0 - move / cells) ** 2 >= floor
-    assert (1.0 - (move + 1) / cells) ** 2 < floor
-    assert move == int(math.floor(cells * (1.0 - math.sqrt(floor)) + 1e-9))
+    assert (1.0 - move / cells) >= floor
+    assert (1.0 - (move + 1) / cells) < floor
+    assert move == int(math.floor(cells * (1.0 - floor) + 1e-9))
     assert follow["min_shift_cells"] <= move
     assert follow["search_margin_cells"] == cells // 2
 
@@ -211,12 +209,12 @@ def test_the_cli_prints_the_chosen_nest_and_the_priced_memory(monkeypatch, capsy
     assert f"({nest['parent_cells']} parent cells)" in line[0]
 
 
-@pytest.mark.parametrize("cells,move", [(24, 3), (30, 4), (36, 5), (38, 6),
-                                        (40, 6)])
+@pytest.mark.parametrize("cells,move", [(24, 7), (30, 9), (36, 10), (38, 11),
+                                        (40, 12)])
 def test_a_nest_under_the_preset_derives_DOWN_from_the_same_floor(cells, move):
     """ONE derivation, both directions.
 
-    The preset's own 6 is what a 40-parent-cell nest's floor admits, so a
+    The preset's own 12 is what a 40-parent-cell nest's floor admits, so a
     narrower nest admits fewer and the same function that grows the
     maximum for a budget-grown nest reduces it here.  A rung carrying the
     preset's number instead would declare a move its own floor refuses,
@@ -224,8 +222,8 @@ def test_a_nest_under_the_preset_derives_DOWN_from_the_same_floor(cells, move):
     """
     follow = tc.follow_table_for_nest(tc.RATIO * cells, tc.RATIO * cells)
     assert follow["max_move_parent_cells"] == follow["max_shift_cells"] == move
-    assert (1.0 - move / cells) ** 2 >= follow["min_overlap_fraction"]
-    assert (1.0 - (move + 1) / cells) ** 2 < follow["min_overlap_fraction"]
+    assert (1.0 - move / cells) >= follow["min_overlap_fraction"]
+    assert (1.0 - (move + 1) / cells) < follow["min_overlap_fraction"]
     # The search margin is the preset's own 20 at or under the preset's
     # size: a rung emits the window its configuration declares, and only
     # a nest grown past the preset grows it.
@@ -346,8 +344,18 @@ def layout(plan):
 
 
 # Refused against the fit target until A175, inside the budget all along (read
-# at 0.05 GiB steps from 4.6 to 5.05 at the 1.13 margin: 4.75 through 4.95).
-@pytest.mark.parametrize("budget_gib", [4.75, 4.85, 4.95])
+# at 0.05 GiB steps from 4.6 to 5.05 at the 1.13 margin: 4.75 through 4.95;
+# 4.8 through 5.0 once the driver's held CLDFRA buffer is priced, RULINGS 1,
+# 2.8.7, read again at 0.05 GiB steps from 4.7 to 5.25; 4.85 through 5.05
+# since the WRF 4.6.1 Kain-Fritsch port, 26779da4e via 3bf65e9c7, keeps 66
+# column arrays in its workspace, not 52, which prices the floor at
+# 5,192,867,947 B, read the same way at the 2.9.0 lane tip; with
+# KFWS_SLOTS set back to 52 the previous pins of this file all pass; 4.9
+# through 5.15 on the 2.9.2 tip 63063559075, where the floor prices
+# 5,254,488,212 B -- the RRTMGP flux rows and the WSM6 column workspace
+# moved the resident envelope 61,620,265 B -- read at 0.05 GiB steps from
+# 4.8 to 5.2).
+@pytest.mark.parametrize("budget_gib", [4.9, 5.0, 5.1])
 def test_a_floor_inside_its_budget_is_the_preset_and_not_a_refusal(budget_gib):
     narrowed, bound = tc._budget_sizing(CARD, budget_gib)
     assert bound == "request"
@@ -436,9 +444,13 @@ def _assert_one_answer(dropped, flagged, reason):
 # 144x144, then 190x152 / 152x152, while dropping it kept 200x160 / 160x160);
 # `--tiles auto` agreed throughout, because the tree road's withholding binds
 # below both numbers there.  The sweep starts two steps under the band and
-# ends two over it, so both answers are reached on each road.
+# ends two over it, so both answers are reached on each road.  Since the
+# 66-array KF workspace (26779da4e), read at the 2.9.0 lane tip from 5.1 at
+# 0.025 / 0.05 GiB steps: `--tiles off` refuses through 5.325 and admits from
+# 5.35, and `--tiles auto` refuses through 5.6 and admits from 5.65, both
+# doors agreeing at every step; the auto sweep moves up to cross its edge.
 CARD_SWEEP_OFF = [round(5.2 + 0.025 * k, 3) for k in range(15)]
-CARD_SWEEP_AUTO = [round(5.2 + 0.05 * k, 3) for k in range(8)]
+CARD_SWEEP_AUTO = [round(5.5 + 0.05 * k, 3) for k in range(8)]
 
 
 @pytest.mark.parametrize("tiles,free_gib",
@@ -507,8 +519,18 @@ def test_the_request_bound_flag_and_the_flagless_door_give_one_answer(
 # 5,152 B, which charged this tree 8,355,840 B more.  It sat at 5.025
 # through 5.045, admitting at 5.05, on the plan's 1.15 margin; A163 measured
 # the forecast margin at 1.13 of the subtotal, read again at 0.005 GiB steps
-# from 4.85 to 5.07.)
-TILE_BAND = [4.99, 4.995, 5.0, 5.005]
+# from 4.85 to 5.07.  The held CLDFRA buffer, RULINGS 1, 2.8.7, moved it to
+# 5.005 through 5.025, admitting at 5.03, read at 0.005 GiB steps from 4.98
+# to 5.10.  The 66-array KF workspace, 26779da4e, moved it to 5.095 through
+# 5.105, admitting at 5.11, read at 0.005 GiB steps from 4.98 to 5.20 at the
+# 2.9.0 lane tip.  The 2.9.2 RRTMGP flux rows and WSM6 column workspace,
+# which price the floor at 5,254,488,212 B, moved it to 5.155 through
+# 5.165, admitting at 5.17, read at 0.005 GiB steps from 5.08 to 5.30 at
+# 63063559075.  The speed2 held-storage sharing (c563a6f8860: structurally
+# zero held radiation and KF tendency storage) moved it to 5.105 through
+# 5.115, admitting at 5.125, read at 0.005 GiB steps from 5.00 to 5.40 at
+# 3d4bfffd093.)
+TILE_BAND = [5.105, 5.11, 5.115]
 
 
 @pytest.mark.parametrize("budget_gib", TILE_BAND)
@@ -537,7 +559,7 @@ def test_the_tile_roads_band_ends_where_its_own_budget_clears_the_price():
     """And it ends there rather than where the flat road's budget or the fit
     target does, which is the whole reason neither can be the number quoted."""
     plan = tc.plan_cyclone(cycle=CYCLE, point=POINT, sizing=CARD, hours=3,
-                           tiles="auto", nest_budget_gib=5.01)
+                           tiles="auto", nest_budget_gib=5.125)
     assert plan["nest"]["dimensions"] == list(tc.CHILD_DIMS)
 
 
@@ -574,15 +596,9 @@ def test_the_bound_is_read_off_the_walk_rather_than_recomputed():
 
 # The derived maximum, measured rung by rung -----------------------------------
 #
-# This table stepped DOWN at 42 while the preset declared 8 at 40 parent
-# cells: a diagonal 8 at 40 keeps 0.64 of the child against a 0.7 floor, so
-# the derivation could not reproduce the preset and the first rungs above it
-# derived less.  The preset's maximum is now the 6 its own floor admits, so
-# the table is monotone from 40 up and the step is gone.  It is asserted
-# whole so it cannot move unnoticed, and so the prose describing it cannot go
-# stale again.
-DERIVED_MOVE = {40: 6, 42: 6, 44: 7, 46: 7, 48: 7,
-                50: 8, 52: 8, 54: 8, 56: 9, 58: 9, 60: 9}
+# Single-axis reach, with the actual vector clamped by the relocation runner.
+DERIVED_MOVE = {40: 12, 42: 12, 44: 13, 46: 13, 48: 14,
+                50: 15, 52: 15, 54: 16, 56: 16, 58: 17, 60: 18}
 
 
 @pytest.mark.parametrize("cells,move", sorted(DERIVED_MOVE.items()))
@@ -598,9 +614,9 @@ def test_the_presets_own_maximum_is_exactly_what_its_own_floor_admits():
     cells = tc.PRESET_NEST_PARENT_CELLS
     floor = VORTEX_PRESET["min_overlap_fraction"]
     preset_move = VORTEX_PRESET["max_move_parent_cells"]
-    assert (1.0 - preset_move / cells) ** 2 >= floor
-    assert (1.0 - (preset_move + 1) / cells) ** 2 < floor
-    assert preset_move == int(math.floor(cells * (1.0 - math.sqrt(floor)) + 1e-9))
+    assert (1.0 - preset_move / cells) >= floor
+    assert (1.0 - (preset_move + 1) / cells) < floor
+    assert preset_move == int(math.floor(cells * (1.0 - floor) + 1e-9))
     # So the derivation reproduces the preset at the preset's own size, and
     # a default run emits the shipped table byte for byte.
     assert tc.follow_table_for_nest(*tc.CHILD_DIMS) == VORTEX_PRESET

@@ -37,16 +37,11 @@ def dycore_config_refusals(cfg):
         refusals.append("combined radiative-open and specified boundaries")
     if (cfg.open_x or cfg.open_y) and cfg.h_sca_adv_order != 2:
         refusals.append("radiative-open boundaries require h_sca_adv_order=2")
-    if (cfg.km_opt, cfg.diff_6th_opt) not in {
-            (km, diff6) for km in (1, 2, 3, 4) for diff6 in (0, 1, 2)}:
-        refusals.append(
-            f"Smagorinsky/sixth-order diffusion pair "
-            f"(km_opt={cfg.km_opt}, diff_6th_opt={cfg.diff_6th_opt}) "
-            "has no Metal kernel pair")
-    if int(getattr(cfg, "tke_budget", 0)) != 0:
-        refusals.append("tke_budget=1 has no Metal implementation")
-    if int(cfg.diff_opt) == 1:
-        refusals.append("diff_opt=1 has no Metal kernels")
+    from woof.config import validate_km_opt
+    try:
+        validate_km_opt(cfg)
+    except ValueError as error:
+        refusals.append(str(error))
     if cfg.zadvect_implicit != 0 and int(cfg.nz) > 256:
         refusals.append("IEVA vertical advection above 256 levels")
     if cfg.damp_opt not in (0, 3):

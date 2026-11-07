@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .array import MetalArray
+from .array import MetalArray, overlaps
 
 
 _THREADS = 128
@@ -17,12 +17,6 @@ _PARAMETERS = (
     "delt", "c1sn", "c2sn", "rsmax", "isice", "urban", "ncategory",
     "limit", "forms",
 )
-
-
-def _overlaps(left: MetalArray, right: MetalArray) -> bool:
-    return (left.buffer is right.buffer
-            and left.byte_offset < right.byte_offset + right.nbytes
-            and right.byte_offset < left.byte_offset + left.nbytes)
 
 
 def submit_stage(stage: int, *, raw, flags, parameters: dict[str, object],
@@ -86,9 +80,9 @@ def submit_stage(stage: int, *, raw, flags, parameters: dict[str, object],
             raise ValueError(f"RUC SFCTMP Metal {name} must contain 9*n values")
         if (enabled and (name == "pattern_spp_lsm"
                          or has_field_sf and name == "field_sf")
-                and _overlaps(raw, array)):
+                and overlaps(raw, array)):
             raise ValueError(f"RUC SFCTMP Metal {name} must not alias the packed workspace")
-    if enabled and _overlaps(pattern, output):
+    if enabled and overlaps(pattern, output):
         raise ValueError("RUC SFCTMP Metal field_sf must not alias the SPP pattern")
     if has_field_sf and field_sf is None:
         raise ValueError("RUC SFCTMP Metal field_sf flag has no output resource")

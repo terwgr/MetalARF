@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 
 from . import metal_driver_v841 as _driver_module
+from . import metal_regional_v841 as _regional_module
 from . import metal_acoustic_lts as ltsk
 from .config_lts import local_timestep_enabled
 from .cuda_driver_lts import SUPPORTED_STAGE_ACOUSTIC_STEPS, _StageTracker, _refuse
@@ -49,6 +50,15 @@ def _dispatch_advance(mesh, state, forcing, coefficients, *, context, **kwargs):
         mesh, state, forcing, coefficients, context=context, **kwargs)
 
 
+def _dispatch_regional(runtime, mesh, state, forcing, coefficients, *, context, **kwargs):
+    attachment = _ATTACHMENTS.get(id(context))
+    if attachment is None:
+        return _ORIGINAL["regional"](runtime, mesh, state, forcing, coefficients,
+                                     context=context, **kwargs)
+    return attachment.advance_acoustic_step_regional(
+        runtime, mesh, state, forcing, coefficients, context=context, **kwargs)
+
+
 def _dispatch_recover(driver, *args, **kwargs):
     attachment = getattr(driver, "local_timestep", None)
     if attachment is None:
@@ -66,12 +76,14 @@ class MetalLocalTimestepAttachment:
         self.stage_acoustic_steps = tuple(int(v) for v in stage_acoustic_steps)
         self.arrays = driver.arrays
         self.context = driver.context
-        if (int(driver.ncells) != int(classing.n_cells)
-                or int(driver.nedges) != int(classing.n_edges)):
+        self.regional = getattr(driver, "regional_v841", None)
+        padding = int(self.regional is not None)
+        if (int(driver.ncells) != int(classing.n_cells) + padding
+                or int(driver.nedges) != int(classing.n_edges) + padding):
             raise ValueError("the classing is not the mesh the driver was built on")
         self.device = ltsk.build_device_classing(
             classing, driver.atmosphere.mesh, n_vert_levels=driver.nlev,
-            arrays=self.arrays)
+            arrays=self.arrays, padded_cells=padding, padded_edges=padding)
         self.tracker = _StageTracker(expected=self.stage_acoustic_steps)
         self._active_edge_lists: list[tuple[Any, int, int]] = []
         self._step_counts: dict[int, tuple[Any, Any]] = {}
@@ -205,14 +217,22 @@ class MetalLocalTimestepAttachment:
         return result
 
     # -- acoustic sub-step --------------------------------------------------
+    def advance_acoustic_step_regional(
+        self, runtime, mesh, state, forcing, coefficients, *, cp_dry=1004.5, **kwargs,
+    ):
+        return self.advance_acoustic_step(
+            mesh, state, forcing, coefficients, cp=cp_dry,
+            in_place=True, _regional_runtime=runtime, **kwargs)
+
     def advance_acoustic_step(
         self, mesh: Any, state: Any, forcing: Any, coefficients: Any, *,
         context: Any, dts: float, small_step: int, fzm: Any, fzp: Any, rdzw: Any,
         gravity: float = 9.80616, rgas: float = 287.0, cp: float = 1004.5,
-        in_place: bool = True,
+        in_place: bool = True, _regional_runtime=None,
     ) -> Any:
         arrays = self.arrays
         ctx = self.context
+        regional = _regional_runtime
         out = state if in_place else state.copy()
         nlev, nedges = map(int, out.ru_p.shape)
         ncells = int(out.rho_pp.shape[1])
@@ -241,15 +261,18 @@ class MetalLocalTimestepAttachment:
                 continue
             self._active_edge_lists.append((edges, size, effective))
             ltsk.launch(
-                ctx, "acoustic_ru_lts", size,
+                ctx, "acoustic_ru_regional_lts" if regional is not None else "acoustic_ru_lts",
+                nlev * size if regional is not None else size,
                 {
-                    "cells_on_edge": cells_on_edge,
+                    "cells_on_edge": regional.cells_on_edge_sentinel if regional is not None else cells_on_edge,
                     "inv_dc_edge": context.inv_dc_edge,
                     "zz": forcing.zz, "exner": forcing.exner, "cqu": forcing.cqu,
                     "zxu": forcing.zxu, "tend_ru": forcing.tend_ru,
                     "rho_pp": out.rho_pp, "rtheta_pp": out.rtheta_pp,
                     "ru_p": out.ru_p, "ru_avg": out.ru_avg,
                     "lts_active": edges,
+                    **({"spec_zone_mask_edge": mesh.spec_zone_mask_edge,
+                        "invalid": regional.acoustic_invalid} if regional is not None else {}),
                 },
                 {
                     "nlev": np.int32(nlev), "nedges": np.int32(nedges),
@@ -280,8 +303,8 @@ class MetalLocalTimestepAttachment:
                     )
 
         # 3. cell kernels, per active CELL class
-        rs = arrays.empty((nlev, ncells), np.float32)
-        ts = arrays.empty((nlev, ncells), np.float32)
+        rs = arrays.zeros((nlev, ncells), np.float32)
+        ts = arrays.zeros((nlev, ncells), np.float32)
         for index, effective in active:
             cells = self.device.cell_lists[index]
             size = self.device.cell_sizes[index]
@@ -298,7 +321,8 @@ class MetalLocalTimestepAttachment:
                  "lts_n_active": np.int32(size)},
             )
             ltsk.launch(
-                ctx, "acoustic_rs_ts_lts", size,
+                ctx, "acoustic_rs_ts_regional_lts" if regional is not None else "acoustic_rs_ts_lts",
+                nlev * size if regional is not None else size,
                 {
                     "edge_sign_on_cell": signs, "dv_edge": dv_edge,
                     "inv_area_cell": context.inv_area_cell,
@@ -310,13 +334,15 @@ class MetalLocalTimestepAttachment:
                     "n_edges_on_cell": counts, "edges_on_cell": edges_on_cell,
                     "cells_on_edge": cells_on_edge, "rs": rs, "ts": ts,
                     "lts_active": cells,
+                    **({"spec_zone_mask_cell": regional.spec_zone_mask_cell}
+                       if regional is not None else {}),
                 },
                 {"nlev": np.int32(nlev), "ncells": np.int32(ncells),
                  "nedges": np.int32(nedges), "max_edges": np.int32(max_edges),
                  "dts": step_dts, "lts_n_active": np.int32(size)},
             )
             ltsk.launch(
-                ctx, "acoustic_column_solve_lts", size,
+                ctx, "acoustic_column_solve_regional_lts" if regional is not None else "acoustic_column_solve_lts", size,
                 {
                     "zz": forcing.zz, "rho_zz": forcing.rho_zz, "fzm": fzm,
                     "fzp": fzp, "rdzw": rdzw, "dss": forcing.dss, "w": forcing.w,
@@ -331,6 +357,9 @@ class MetalLocalTimestepAttachment:
                     "ewm": context.ewm, "rw_p": out.rw_p, "rho_pp": out.rho_pp,
                     "rtheta_pp": out.rtheta_pp, "ww_avg": out.ww_avg,
                     "lts_active": cells,
+                    **({"spec_zone_mask_cell": regional.spec_zone_mask_cell,
+                        "tend_rho": forcing.tend_rho, "tend_rt": forcing.tend_rt}
+                       if regional is not None else {}),
                 },
                 {"nlev": np.int32(nlev), "ncells": np.int32(ncells),
                  "dts": step_dts, "lts_n_active": np.int32(size)},
@@ -433,6 +462,8 @@ class MetalLocalTimestepAttachment:
         if not _ATTACHMENTS:
             _ORIGINAL["advance"] = _driver_module.advance_acoustic_step_metal_v841
             _ORIGINAL["recover"] = _driver_module._recover_candidate
+            _ORIGINAL["regional"] = _regional_module.advance_acoustic_step_regional_metal_v841
+            _regional_module.advance_acoustic_step_regional_metal_v841 = _dispatch_regional
             _driver_module.advance_acoustic_step_metal_v841 = _dispatch_advance
             _driver_module._recover_candidate = _dispatch_recover
         self._saved["damping"] = driver.horizontal.divergence_damping_3d
@@ -448,6 +479,7 @@ class MetalLocalTimestepAttachment:
         if not _ATTACHMENTS and _ORIGINAL:
             _driver_module.advance_acoustic_step_metal_v841 = _ORIGINAL.pop("advance")
             _driver_module._recover_candidate = _ORIGINAL.pop("recover")
+            _regional_module.advance_acoustic_step_regional_metal_v841 = _ORIGINAL.pop("regional")
         driver.horizontal.divergence_damping_3d = self._saved["damping"]
         for name in ("_vertical_coefficients", "local_timestep"):
             if name in driver.__dict__:
@@ -463,7 +495,7 @@ class MetalLocalTimestepAttachment:
             "conservation": "approximate: flux-matched, binary32 rounding",
             "settle_coarse_cells": int(self.device.n_settle),
             "settle_is_order_defined": True,
-            "regional": False,
+            "regional": self.regional is not None,
             "executed_path": (
                 "single class: every launch list is the identity "
                 "permutation and the arithmetic is the option-off path"
@@ -497,11 +529,6 @@ def attach_local_timestep_metal(
                 "global sub-step rate, so a coarse rank would damp and exchange "
                 "stale ring-1 state",
                 "a single-device run")
-    if getattr(driver, "regional_v841", None) is not None:
-        _refuse("config_local_timestep", True,
-                "the Metal local time stepping has no limited-area acoustic "
-                "entrypoints; the regional trio is not ported",
-                "a global (non-regional) run")
     for knob in ("config_monotonic", "config_positive_definite"):
         if getattr(config, knob, False):
             _refuse(knob, True,
@@ -533,10 +560,15 @@ def attach_local_timestep_metal(
             grid_path, rates=rates,
             buffer_rings=int(config.config_local_timestep_buffer_rings),
             safety_factor=float(config.config_local_timestep_safety_factor))
-    if classing.n_cells != int(driver.ncells) or classing.n_edges != int(driver.nedges):
+    regional = getattr(driver, "regional_v841", None)
+    padding = int(regional is not None)
+    if classing.n_cells != int(driver.ncells) - padding or classing.n_edges != int(driver.nedges) - padding:
         _refuse("config_local_timestep", (classing.n_cells, classing.n_edges),
                 "the classed grid file is not the mesh the driver was built on",
                 f"a grid file with {driver.ncells} cells and {driver.nedges} edges")
+    if regional is not None:
+        from .cuda_driver_lts import refuse_interface_in_driven_zone
+        refuse_interface_in_driven_zone(classing, np.asarray(regional.masks_host.bdy_mask_cell))
     attachment = MetalLocalTimestepAttachment(
         driver, classing, stage_acoustic_steps=SUPPORTED_STAGE_ACOUSTIC_STEPS)
     attachment.attach()

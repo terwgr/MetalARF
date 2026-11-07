@@ -1,0 +1,100 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_provider_pack",
+      "module": "hexv842_nt",
+      "source": "woof/metal/shaders/hexv842_nt_provider_pack.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_convert",
+      "resources": [
+        [
+          "prefix",
+          "float32",
+          "read"
+        ],
+        [
+          "interfaces",
+          "float32",
+          "read"
+        ],
+        [
+          "math",
+          "float32",
+          "read"
+        ],
+        [
+          "extra",
+          "float32",
+          "read"
+        ],
+        [
+          "surface",
+          "float32",
+          "read"
+        ],
+        [
+          "env",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "saved",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "prefix": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interfaces": [
+          [
+            "any_1d"
+          ]
+        ],
+        "math": [
+          [
+            "any_1d"
+          ]
+        ],
+        "extra": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "env": [
+          [
+            "any_1d"
+          ]
+        ],
+        "saved": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

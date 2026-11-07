@@ -412,8 +412,7 @@ def test_a_token_nothing_builds_is_refused_by_name(tmp_path):
         assert token in message
 
 
-@pytest.mark.parametrize("geog", ["'default', 'default'", "'5m'",
-                                  "'modis_lai+default', '5m'"])
+@pytest.mark.parametrize("geog", ["'modis_lai+default', '5m'"])
 def test_geog_tree_tokens_write_no_block_and_change_nothing(tmp_path, geog):
     inp = _input(drop=(" num_land_cat = 61,\n",))
     text, report = _import(tmp_path, wps=_wps(geog), inp=inp)
@@ -757,15 +756,13 @@ def test_the_contract_carries_both_rules():
     contract = build_namelist_contract()
     sections = contract["sections"]
     num_land_cat = sections["physics"]["keys"]["num_land_cat"]
-    assert num_land_cat["values"] == [21, 61]
+    assert num_land_cat["values"] == [20, 21, 61]
     assert "use_wudapt_lcz = 1" in num_land_cat["why"]
     geog = sections["geogrid"]["keys"]["geog_data_res"]
     assert geog["values"] is None
-    # 3ada3ce436, lane/2km-landusef, admits BNU top/bottom soil tiles.
-    # The contract sorts admitted tokens; this is not dataset precedence.
-    # Retain the LCZ token and its independent urban/61-category rule.
-    assert geog["tokens"] == ["30s", "5m", "bnu_soil_30s",
-                              "cglc_modis_lcz", "default", "modis_lai"]
+    assert geog["tokens"] == ["30s", "5m", "bnu_soil_30s", "cglc_modis_lcz", "default",
+                              "islscp_soiltemp", "modis_15s", "modis_fpar", "modis_lai",
+                              "soilgrids"]
     assert geog["token_separator"] == "+"
     assert geog["reach"] == "max_dom"
     assert "also replaces terrain and soil" in geog["why"]

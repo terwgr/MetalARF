@@ -14,31 +14,19 @@ remains a transport-free numerical stage and never dispatches itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 
 import numpy as np
 
 from woof.core.kernels import get_kernel
-from woof.core.nssl2_driver_support import NSSL2DriverWorkspace
+from woof.core.nssl2_driver_support import (
+    NSSL2DriverWorkspace, _step32, _validate_surface_fields,
+)
 from woof.core.state import DTYPE
 
 _FIELD_COUNT = 16
 _THREADS = 128
 NSSL2_FUSED_TEMPERATURE_SCRATCH = "nssl2_fused_temperature"
 NSSL2_PRIMARY_ICE_TARGET_SCRATCH = "nssl2_primary_ice_target"
-
-
-def _step32(dt_s: float) -> np.float32:
-    try:
-        step = float(dt_s)
-    except (TypeError, ValueError) as exc:
-        raise TypeError("dt_s must be a positive finite scalar") from exc
-    if not math.isfinite(step) or step <= 0.0:
-        raise ValueError("dt_s must be a positive finite scalar")
-    converted = np.float32(step)
-    if not np.isfinite(converted) or converted <= 0.0:
-        raise ValueError("dt_s must be representable as positive float32")
-    return converted
 
 
 def _validate_workspace(workspace: NSSL2DriverWorkspace) -> int:
@@ -59,18 +47,6 @@ def _validate_workspace(workspace: NSSL2DriverWorkspace) -> int:
     return int(np.prod(workspace.shape, dtype=np.int64))
 
 
-def _validate_environment(
-    shape: tuple[int, int, int], fields: dict[str, object]
-) -> None:
-    for name, value in fields.items():
-        if value.shape != shape:
-            raise ValueError(f"{name} must have shape {shape}, got {value.shape}")
-        if value.dtype != DTYPE:
-            raise TypeError(f"{name} must be float32, got {value.dtype}")
-        if not value.flags.c_contiguous:
-            raise ValueError(f"{name} must be C-contiguous")
-
-
 def _validate_vertical_velocity(
     shape: tuple[int, int, int], vertical_velocity
 ) -> None:
@@ -89,6 +65,28 @@ def _validate_vertical_velocity(
         raise ValueError("vertical_velocity must be C-contiguous")
 
 
+_TABLES_READY: set[int] = set()
+
+
+def _ensure_init_tables() -> None:
+    """Build WRF's init-time tables (nssl_2mom_init) in the GS module once.
+
+    The fused kernel reads WRF's Seifert collection coefficients, its
+    incomplete-gamma ratio tables and ventilation factors from a device
+    global that ``nssl2_gs_init_tables`` fills from WRF's own GAMMA_DP,
+    GAMXINFDP, delbk and delabk.  The build is idempotent: under stream
+    capture it is simply recorded into the graph.
+    """
+    import cupy as cp
+
+    device = cp.cuda.runtime.getDevice()
+    if device in _TABLES_READY:
+        return
+    get_kernel("nssl2_fused_gs", "nssl2_gs_init_tables")((4,), (256,), ())
+    if not cp.cuda.get_current_stream().is_capturing():
+        _TABLES_READY.add(device)
+
+
 def launch_fused_gs(
     workspace: NSSL2DriverWorkspace,
     full_theta,
@@ -102,8 +100,17 @@ def launch_fused_gs(
     dt_s: float,
     *,
     hail_on: bool = True,
+    loaded_vapor=None,
 ) -> None:
     """Advance the complete default option-18 GS slab exactly once.
+
+    ``loaded_vapor`` is the vapour mixing ratio as the driver loaded it
+    (the Registry ``qv``, which nothing changes before the final scatter).
+    WRF diagnoses the primary-ice target ``t7`` from it before the
+    first-step number initialisation moves sub-threshold condensate into
+    vapour (``module_mp_nssl_2mom.F:2834-2856`` then ``:2950-2952``).
+    Omitted, the workspace vapour is used, which is the same array content
+    on every step but the first.
 
     ``hail_on`` selects WRF's hail category switch.  ``True`` is the resolved
     option-18 default (``nssl_hail_on=1``, ``lhl>1``).  ``False`` is the
@@ -166,19 +173,26 @@ def launch_fused_gs(
         "primary_ice_target_m3": primary_ice_target_m3,
         "dz": dz,
     }
-    _validate_environment(workspace.shape, fields)
+    _validate_surface_fields(fields, workspace.shape)
     _validate_vertical_velocity(workspace.shape, vertical_velocity)
+    if loaded_vapor is None:
+        loaded_vapor = workspace.field("qv")
+    else:
+        _validate_surface_fields({"loaded_vapor": loaded_vapor}, workspace.shape)
     nz, ny, nx = workspace.shape
     step = _step32(dt_s)
 
     blocks = (size + _THREADS - 1) // _THREADS
     launch = ((blocks,), (_THREADS,))
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        _ensure_init_tables()
     get_kernel("nssl2_fused_gs", "nssl2_prepare_fused_gs")(
         *launch,
         (
             temperature_k,
             primary_ice_target_m3,
-            workspace.state,
+            loaded_vapor if ENABLED else workspace.state,
             full_theta,
             air_density,
             pressure_pa,
@@ -229,6 +243,7 @@ class NSSL2FusedGS:
             fields.dz,
             self.dt_s,
             hail_on=self.hail_on,
+            loaded_vapor=getattr(fields, "qv", None),
         )
 
 

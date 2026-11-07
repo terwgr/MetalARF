@@ -8,7 +8,8 @@ import pytest
 
 from woof import prepared_domain_tree_forecast as runner
 from woof.core.model import execute_experiment
-from test_delayed_nest_activation import (
+from test_delayed_nest_activation import (  # noqa: F401 (autouse fixture)
+    analysis_reflectivity_stand_in,
     DELAY_SECONDS, _Writers, _stashing_step, _tree)
 from test_model import _Coupler, _HistoryState
 from test_prepared_domain_tree_forecast import _sha, _synthetic_prepared_tree
@@ -103,8 +104,10 @@ def test_prepared_activation_uses_exact_clock_and_shared_feedback(
         assert "commit" not in coupler.calls
     child_frames = [(ticks, refl) for gid, ticks, refl in writers.frames if gid == 2]
     assert [ticks for ticks, _ in child_frames] == [120, 180, 240, 300]
-    assert child_frames[0][1] is None
-    assert all(refl is not None for _, refl in child_frames[1:])
+    # The birth frame writes the child's analysis reflectivity (S1, lane/hrrr-auto-nests
+    # 1bce11263f: a newborn's first picture used to carry no REFL_10CM), and every later
+    # frame the microphysics stash.
+    assert all(refl is not None for _, refl in child_frames)
 
 
 class _Radiation:

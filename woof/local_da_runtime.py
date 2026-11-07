@@ -91,7 +91,7 @@ def run_synthetic_metal_analysis():
         sys.meta_path.remove(blocker)
 
 from dataclasses import asdict, replace
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 import contextlib
 import hashlib
 import json
@@ -104,7 +104,39 @@ import sys
 import time
 import numpy as np
 
+from woof.da.member_wave import sha256 as _sha
 from woof.local_da import SCHEMA, PlanError, canonical, digest, utc
+
+
+def _analysis_fields_for_states(states, mp_physics, *, static):
+    """Select sampled prognostics without breaking species pairs."""
+    from woof.da.letkf import _prior_anomalies_and_spread, _prior_spread_is_usable
+    from woof.da.moments import analysis_fields, pairs_present
+    from woof.da.radar_assimilation import _mass_field
+
+    samples = states[1:] if static else states
+    fields = analysis_fields(mp_physics, base=('u', 'v', 'thp', 'qv'), hydrometeors=True)
+    selected = []
+    for name in fields:
+        if not all(name in state for state in states):
+            continue
+        values = np.stack([_mass_field(name, state, where='local analysis') for state in samples])
+        if not np.all(np.isfinite(values)):
+            raise PlanError(f'Local analysis field {name!r} contains nonfinite prior values; '
+                            'repair the background before computing covariance.', code='NONFINITE_PRIOR')
+        # Nonzero ptp can still be negligible against the field magnitude.
+        # Use the filter owner's exact arithmetic and relative support gate.
+        # Keep ptp too: summing identical float32 members can round their mean.
+        if not np.any(np.ptp(values, axis=0) > 0):
+            continue
+        _, spread = _prior_anomalies_and_spread(values, np)
+        if _prior_spread_is_usable(float(spread.max()), float(np.abs(values).max())):
+            selected.append(name)
+    fields = selected
+    for pair in pairs_present(tuple(states[0]), mp_physics=mp_physics):
+        if not set(pair.fields) <= set(fields):
+            fields = [f for f in fields if f not in pair.fields]
+    return fields
 
 
 def _analysis_time(backend, index):
@@ -112,14 +144,6 @@ def _analysis_time(backend, index):
     if origin is not None:
         return origin + timedelta(seconds=(index + 1) * backend.plan['selected']['cadence_seconds'])
     return backend.analysis_times[index]
-
-
-def _sha(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as handle:
-        for block in iter(lambda: handle.read(1 << 20), b''):
-            h.update(block)
-    return h.hexdigest()
 
 
 def read_plan(path):
@@ -433,7 +457,7 @@ def launch(path, *, backend=None, cycle_runner=None, forecast_runner=None,
                                             progress=analysis_progress):
                 cycles = cycle_runner(cfg, root / 'cycles', n_cycles=plan['selected']['cycles'],
                     cycle_seconds=plan['selected']['cadence_seconds'], assimilate=backend.assimilate,
-                    runner=runner, positivity='clip', restart_from_analysis=True,
+                    runner=runner, positivity='mean-preserving', restart_from_analysis=True,
                     moment_policy='full-moment', moment_repair=True, mp_physics=backend.mp_physics,
                     on_event=event,
                     **({'analysis_context': backend.analysis_context}
@@ -618,7 +642,6 @@ class PreparedBackend:
         # when real columns have been prepared, before the first forecast.
 
     def prepare(self):
-        from woof import go_cli
         from woof.regional_preparation import MissingPreparationManifest
         try:
             if 'background' in self.plan:
@@ -663,8 +686,13 @@ class PreparedBackend:
                 inputs.experiment_config, expected_sha256=inputs.file_sha256['experiment_config']))
         self.state = restored.initial_result.state
         if self.setup is None:
-            names = ('thb', 'phb', 'dphb_resid', 'alb', 'rdnw', 'c1h', 'c2h', 'c3h', 'c4h',
-                     'c3f', 'c4f', 'dc3f', 'dc4f', 'mub2d', 'p_top', 'dnw')
+            # c1f, c2f and rdn: the full-level loading coefficients the
+            # static covariance's member perturbation integrates its
+            # hydrostatic php with (woof.da.perturb mass_balance, default
+            # since 2026-10-06); without them it refuses by name.
+            names = ('thb', 'phb', 'dphb_resid', 'alb', 'rdnw', 'rdn', 'c1h', 'c2h',
+                     'c1f', 'c2f', 'c3h', 'c4h', 'c3f', 'c4f', 'dc3f', 'dc4f', 'mub2d',
+                     'p_top', 'dnw')
             self.setup = {name: self._host(getattr(self.state, name)) for name in names}
             self.setup['static_covariance'] = self.plan['selected']['members'] == 1
         prepared = runtime.PreparedRealCase(cfg=exp.root.run, grid=inputs.grid,
@@ -865,7 +893,6 @@ class PreparedBackend:
             RadarAssimilationConfig, assimilate_radar_grid, scheme_reflectivity_provider, _mass_field)
         from woof.da.static_covariance import covariance_states, static_analysis, perturbation_options
         from woof.da.letkf import Localization
-        from woof.da.moments import analysis_fields, pairs_present
         from woof.da.obs_point import point_batches, state_columns
         from woof.da.obs_surface import SurfaceObsConfig, surface_to_gridded_obs
         from woof.da.obsop_cwp import checkpoint_cwp_provider
@@ -922,16 +949,10 @@ class PreparedBackend:
                     analysis_times=self.analysis_times)
                 extra.extend(replace(batch, name=f'{batch.name}:part{part}') for batch in batches)
                 receipts.append(report)
-        fields = analysis_fields(self.mp_physics, base=('u', 'v', 'thp', 'qv'), hydrometeors=True)
-        samples = states[1:] if len(background) == 1 else states
-        fields = [name for name in fields if all(name in state for state in states)
-                  and np.any(np.ptp(np.stack([_mass_field(name, state, where='local analysis')
-                                             for state in samples]), axis=0) > 0)]
-        # Never truncate a prognostic species pair merely because one of
-        # its fields happens to have zero sampled spread.
-        for pair in pairs_present(tuple(states[0]), mp_physics=self.mp_physics):
-            if not set(pair.fields) <= set(fields):
-                fields = [f for f in fields if f not in pair.fields]
+        fields = _analysis_fields_for_states(states, self.mp_physics,
+                                             static=len(background) == 1)
+        field_selection = dict(selected=list(fields),
+                               policy='sample variation and the filter usable-spread gate; species pairs stay whole')
         has_obs = bool(obs['radar'] is not None or obs['cwp'] is not None or any(np.any(b.mask) for b in extra))
         if not fields or not has_obs:
             return ({i: {'thp': np.zeros_like(background[slot]['thp'], dtype=float)} for slot, i in enumerate(index_list)},
@@ -957,7 +978,7 @@ class PreparedBackend:
             mp_physics=self.mp_physics,
             solve_device='metal' if self.device_backend == 'metal' else 'auto',
             precip_analysis=settings.get('precip_analysis', 'off') if radar else 'off',
-            positivity_policy='clip',
+            positivity_policy='mean-preserving',
             memory_budget_mib=self.plan['memory']['solve_memory_mib'])
         reflectivity_provider = scheme_reflectivity_provider(self.exp.root.run, base_theta=self.setup['thb']) if reflect else None
         cwp_provider = checkpoint_cwp_provider(self.exp.root.run, **{k: self.setup[k] for k in ('c1h', 'c2h', 'dnw', 'mub2d')}) if obs['cwp'] is not None else None
@@ -976,7 +997,8 @@ class PreparedBackend:
         if len(background) == 1:
             increments = {index_list[0]: increments[0]}
             report.update(method='static-covariance-oi', members=1, static_covariance=static_receipt)
-        report.update(routes=obs['receipts'], point_observations=receipts)
+        report.update(routes=obs['receipts'], point_observations=receipts,
+                      analysis_field_selection=field_selection)
         report['cwp_assimilated'] = observation_usage(report)['cwp_accepted'] > 0
         return increments, report
 
@@ -1186,7 +1208,7 @@ class ContinuousBackend(PreparedBackend):
         with analysis_execution_options(scratch_budget=scratch_budget, progress=progress):
             result = run_cycles(self.cfg, directory / 'cycles', n_cycles=1, first_cycle=index,
                 initial_restarts=restarts, input_binding=binding, cycle_seconds=self.plan['selected']['cadence_seconds'],
-                assimilate=self.assimilate, runner=self.member_runner, positivity='clip', restart_from_analysis=True,
+                assimilate=self.assimilate, runner=self.member_runner, positivity='mean-preserving', restart_from_analysis=True,
                 moment_policy='full-moment', moment_repair=True, mp_physics=self.mp_physics,
                 analysis_context=self.analysis_context)
         if result.status != 'COMPLETE':

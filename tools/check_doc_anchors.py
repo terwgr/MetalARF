@@ -82,7 +82,7 @@ def is_in_scope(path: str) -> bool:
 
     if path == "docs/public/CONFIGURATION.md":
         return True
-    return path.startswith("gpuwm/") and path.endswith(".py")
+    return path.startswith("woof/") and path.endswith(".py")
 
 
 def _line_numbers(match: "re.Match[str]") -> list[int]:

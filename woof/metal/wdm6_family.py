@@ -17,7 +17,7 @@ _SURFACE = ("xland", "rainnc", "rainncv", "snownc", "snowncv",
 def submit_wdm6_column(*, theta, qv, qc, qi, qr, qs, qg, nn, nc, nr, den,
                        p, pii, dz, xland, rainnc, rainncv, snownc, snowncv,
                        graupelnc, graupelncv, sr, effc, effi, effs, dt,
-                       hail_opt=0, count_status=None):
+                       hail_opt=0, count_status=None, conservative_surface=False):
     """Submit one source-equivalent thread per column and report CUDA status.
 
     ``count_status`` is a contiguous int32 view of a one-word buffer. The
@@ -71,11 +71,16 @@ def submit_wdm6_column(*, theta, qv, qc, qi, qr, qs, qg, nn, nc, nr, den,
             "Metal WDM6 needs a one-word int32 MetalArray view of its uint32 "
             "column-status storage")
     params = {
-        "dt": float(dt32), "hail_opt": int(hail_opt),
-        "nz": nz, "ny": ny, "nx": nx, "status_words": 1,
+        "delt": float(dt32), "hail_opt": int(hail_opt),
+        "nz": nz, "ny": ny, "nx": nx,
     }
+    if not isinstance(conservative_surface, bool):
+        raise TypeError("WDM6 conservative_surface must be a bool")
+    entrypoint = "wdm6_column" + ("_deep" if tier > 64 else "")
+    if conservative_surface:
+        entrypoint += "_cs"
     return context.submit_kernel(
-        "wdm6_column", {**arrays, "count_status": count_status}, params,
+        entrypoint, {**arrays, "count_status": count_status}, params,
         exact_policy=False, grid_size=ny * nx, threads_per_group=32)
 
 

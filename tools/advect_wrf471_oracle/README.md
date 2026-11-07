@@ -26,7 +26,7 @@ The inputs, compiled WRF references, GPU receipts and word archives are in
 they sat under `woof/data/advect/oracle` and, with the small-step and
 big-step fixtures, made the pure wheel 184 MB, over the 100,000,000-byte
 per-file distribution limit, while no runtime code reads them. The harness
-(`woof/verify/advect_oracle.py`) runs from a source checkout and refuses by
+(`woof/verify/advect_oracle.py`, in upstream WOOF; MetalARF does not carry it) runs from a source checkout and refuses by
 name in an install that has no `tests/data`. The move changed no fixture
 byte: every digest in `oracle-sha256sums.txt` is the same and only its path
 column moved. `receipts/h100-bw-advection-recapture.json` is a historical
@@ -332,7 +332,7 @@ options and under the RawModule options, with NVRTC 13.4 and 12.9
 and `oracle-advect-sm120-2.8.2-nvrtc{13.4,12.9}.json`). The harness's text
 patches (the flux5 mutation, the flux controls and the h/z diagnostic clone)
 patch the default compile's view of the module
-(`woof/verify/default_kernel_source.py`), not an opt-in branch.
+(`woof/verify/default_kernel_source.py`, in upstream WOOF; MetalARF does not carry it), not an opt-in branch.
 
 ## The 2.8.2 bandwidth re-pin of advection and pd_advection
 

@@ -384,6 +384,7 @@ pub fn compute_windowed_products(
     let exact_axis = manifest.is_exact_time_axis();
     let run_frames = manifest_window_frames(&manifest)?;
     let last_hour = last_window_hour(&run_frames);
+    let cadence = history_cadence(&run_frames);
     // The frames this pass may read, in slot (= lead) order; the anchor is
     // the last of them.
     let frames: Vec<WindowFrame> = run_frames
@@ -458,6 +459,19 @@ pub fn compute_windowed_products(
                 continue;
             }
         };
+        let footprint_swath = matches!(product, HrrrWindowedProduct::Wind10mRunMax | HrrrWindowedProduct::QpfTotal)
+            && manifest.hours.get(&anchor_slot).and_then(|entry| HourReader::open(&run_dir.join(&entry.file)).ok())
+                .is_some_and(|reader| reader.variable("nest_sample_coverage").is_some());
+        if footprint_swath && product == HrrrWindowedProduct::QpfTotal {
+            // Nest totals include only integrated exposure. Keep departed
+            // ground, including return visits, without borrowing parent rain.
+            spec.reduce = Reduce::Max;
+            spec.hours = (1..=anchor_hour).collect();
+        }
+        if let Some(reason) = off_cadence_reason(&spec, cadence, exact_axis) {
+            blockers.push((slug.clone(), reason));
+            continue;
+        }
         let slots = if exact_axis {
             exact_window_slots(&spec, &frames)
         } else {
@@ -470,7 +484,9 @@ pub fn compute_windowed_products(
                 if slots.len() > 1 && spec.reduce == Reduce::Direct {
                     spec.reduce = Reduce::Max;
                 }
-                accums.push(Accum::new(spec, slots).with_gaps(gaps));
+                let mut accum = Accum::new(spec, slots).with_gaps(gaps);
+                accum.footprint_swath = footprint_swath;
+                accums.push(accum);
             }
             Err(reason) => blockers.push((slug.clone(), reason)),
         }
@@ -583,7 +599,14 @@ pub fn compute_windowed_products(
                             // window is read at the whole-hour frames alone.
                             continue;
                         }
-                        accum.fold(&plane.values);
+                        if accum.footprint_swath {
+                            match read_grid_2d(&reader, &grid, "nest_sample_coverage") {
+                                Ok(mask) if mask.units == "1" => accum.fold_footprint(&plane.values, &mask.values),
+                                _ => {accum.failed = Some("moving-nest swath lacks its explicit footprint mask".into()); continue;}
+                            }
+                        } else {
+                            accum.fold(&plane.values);
+                        }
                         match plane.fidelity {
                             PlaneFidelity::Exact => {
                                 accum.exact_planes += 1;
@@ -805,6 +828,92 @@ fn exact_window_slots(
         previous = frame.lead_seconds;
     }
     Ok((inside.iter().map(|frame| frame.slot).collect(), gaps))
+}
+
+/// The opening of a blocker that is not a gap but a product this history
+/// can never draw.  The render reads a pass whose only skips carry it as a
+/// successful skip (`gpuwm.render.NOT_APPLICABLE_SKIP`).
+pub const NOT_APPLICABLE_PREFIX: &str = "not-applicable: ";
+
+/// A history written on a regular interval of two or more whole hours, as
+/// `(interval seconds, phase seconds)`, or `None` (an hourly or finer grid,
+/// an interval that is not whole hours, a single frame, or frames on no
+/// common interval).
+///
+/// The interval is the smallest spacing between stored frames; every other
+/// spacing must be a whole number of it (a missing frame on that interval is
+/// a gap, and stays one).
+fn history_cadence(frames: &[WindowFrame]) -> Option<(u64, u64)> {
+    let mut leads: Vec<u64> = frames.iter().map(|frame| frame.lead_seconds).collect();
+    leads.sort_unstable();
+    leads.dedup();
+    let steps: Vec<u64> = leads.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    let interval = *steps.iter().min()?;
+    if interval <= SECONDS_PER_HOUR
+        || interval % SECONDS_PER_HOUR != 0
+        || steps.iter().any(|step| step % interval != 0)
+    {
+        return None;
+    }
+    Some((interval, leads[0] % interval))
+}
+
+/// The blocker for a window that needs a whole hour this history never
+/// writes.
+///
+/// WHAT BREAKAGE THIS PREVENTS (gate law): a 3 km nest that keeps 3-hourly
+/// history (d02 history 10800 s under a 1-hourly 12 km parent) was asked for
+/// `qpf_1h` by the finalize stage's windowed pass; every window F(h-1)-Fh
+/// needs a frame the history never writes, so the pass drew nothing, exited
+/// 1 and `woof go` printed `FAILED render` on a run whose every picture was
+/// in place.  Such a window is not a gap in the history: it does not apply
+/// to it, and says so with [`NOT_APPLICABLE_PREFIX`].  A window whose hours
+/// all fall on the history's interval (`qpf_3h`, `qpf_6h` on that nest) is
+/// planned as before, and a frame missing on the interval stays a gap.
+fn off_cadence_reason(
+    spec: &ProductSpec,
+    cadence: Option<(u64, u64)>,
+    exact_axis: bool,
+) -> Option<String> {
+    let (interval, phase) = cadence?;
+    let needed: Vec<u16> = if exact_axis && folds_interval_maxima(spec.source) {
+        // On the exact-time axis an interval maximum needs the frame its
+        // window ends on and the one at its start (none for a window that
+        // starts with the run), not one on every whole hour between
+        // (`exact_window_slots`).
+        let start = spec.hours.first().and_then(|first| first.checked_sub(1));
+        start
+            .filter(|&start| start > 0)
+            .into_iter()
+            .chain(spec.hours.last().copied())
+            .collect()
+    } else {
+        spec.hours.clone()
+    };
+    let never: Vec<u16> = needed
+        .iter()
+        .copied()
+        .filter(|&hour| (u64::from(hour) * SECONDS_PER_HOUR) % interval != phase)
+        .collect();
+    if never.is_empty() {
+        return None;
+    }
+    let first = needed.first().copied().unwrap_or_default();
+    let last = needed.last().copied().unwrap_or_default();
+    Some(format!(
+        "{NOT_APPLICABLE_PREFIX}this grid's history is written every {}, so F{} that window \
+         F{first:03}-F{last:03} needs is never stored; the product does not apply to this history",
+        if interval % SECONDS_PER_HOUR == 0 {
+            format!("{} h", interval / SECONDS_PER_HOUR)
+        } else {
+            duration_label(interval)
+        },
+        never
+            .iter()
+            .map(|hour| format!("{hour:03}"))
+            .collect::<Vec<_>>()
+            .join(", F"),
+    ))
 }
 
 fn duration_label(seconds: u64) -> String {
@@ -1361,6 +1470,58 @@ fn history_interval_max_row(source: SourceKind) -> Option<&'static HistoryInterv
     HISTORY_INTERVAL_MAX_ROWS.iter().find(|row| row.source == source)
 }
 
+/// Every store variable [`read_source_plane`] may read for `source`, in the
+/// order it tries them: the native plane, the wrfout import's
+/// history-interval maximum ([`HISTORY_INTERVAL_MAX_ROWS`]), then the
+/// instantaneous fallbacks.
+fn source_store_names(source: SourceKind) -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = match source {
+        SourceKind::Apcp1h => vec![APCP_1H_VAR],
+        SourceKind::ApcpRunTotal => vec![APCP_RUN_TOTAL_VAR, APCP_WRFOUT_RUN_TOTAL_VAR],
+        SourceKind::Uh2to5km => vec!["uh_2to5km_max_1h", "uh_2to5km"],
+        SourceKind::WindSpeed10m => vec!["wind_speed_10m_max_1h"],
+        SourceKind::Temp2mC => vec!["temperature_2m"],
+        SourceKind::Rh2mPct => vec!["rh_2m", "relative_humidity_2m"],
+        SourceKind::Dewpoint2mC => vec!["dewpoint_2m"],
+        SourceKind::Vpd2mHpa => vec!["vpd_2m"],
+    };
+    if let Some(row) = history_interval_max_row(source) {
+        names.push(row.store_name);
+    }
+    if source == SourceKind::WindSpeed10m {
+        names.extend(["u_10m", "v_10m"]);
+    }
+    names
+}
+
+/// Every store variable `product`'s window may read, over every plan it can
+/// take (a QPF window reads `apcp_1h` or differences the run totals,
+/// whichever the store carries).  What a scoped wrfout import keeps for a
+/// window (`rw-wrfbatch`'s `required_fields_for_products`).
+///
+/// WHAT BREAKAGE THIS PREVENTS (gate law): the scoped import kept only the
+/// window's recipe selector, so `10m_wind_1h_max` and the other 10 m wind
+/// windows found neither `wrf_wspd10max` nor `u_10m`/`v_10m` in the store
+/// and drew no picture, while the whole import they fell back to without a
+/// scope spent about 5 minutes importing 25 frames at 3 km for the
+/// end-of-run windowed pass.
+pub fn window_store_reads(product: HrrrWindowedProduct) -> Vec<&'static str> {
+    let Some(end) = minimum_window_hour(product) else {
+        return Vec::new();
+    };
+    let mut names: Vec<&'static str> = Vec::new();
+    for source in [QpfSource::NativeHourly, QpfSource::DifferencedRunTotal] {
+        if let Ok(spec) = plan_product(product, end, source) {
+            for name in source_store_names(spec.source) {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    names
+}
+
 /// What one hour's source plane actually measures: recorded so the
 /// product's strategy note can label the fold accurately.  The
 /// distinction matters scientifically: an instantaneous snapshot makes
@@ -1652,6 +1813,7 @@ struct Accum {
     interval_max_field: Option<&'static str>,
     exact_planes: usize,
     gaps: WindowGaps,
+    footprint_swath: bool,
 }
 
 enum AccumState {
@@ -1685,12 +1847,23 @@ impl Accum {
             interval_max_field: None,
             exact_planes: 0,
             gaps: WindowGaps::default(),
+            footprint_swath: false,
         }
     }
 
     fn with_gaps(mut self, gaps: WindowGaps) -> Self {
         self.gaps = gaps;
         self
+    }
+
+    fn fold_footprint(&mut self, values: &[f64], mask: &[f32]) {
+        if mask.len() != values.len() || mask.iter().any(|m| *m != 0. && *m != 1.) {
+            self.failed = Some("invalid moving-nest footprint mask".into());
+            return;
+        }
+        let sampled: Vec<_> = values.iter().zip(mask).map(|(v,m)|
+            if *m == 0. {f64::NEG_INFINITY} else {*v}).collect();
+        self.fold(&sampled);
     }
 
     fn fold(&mut self, values: &[f64]) {
@@ -1820,6 +1993,9 @@ impl Accum {
                 .map(|(max, min)| max - min)
                 .collect(),
         };
+        if self.footprint_swath {
+            for value in &mut values {if *value == f64::NEG_INFINITY {*value = f64::NAN;}}
+        }
         match self.spec.finish {
             Finish::None => {}
             Finish::MmToInches => {
@@ -1906,10 +2082,22 @@ impl Accum {
                 ));
             }
         }
+        if self.footprint_swath {
+            strategy.push_str("; union of explicitly sampled nest footprints; periods outside the nest are unobserved, never parent-filled");
+            if self.spec.product == HrrrWindowedProduct::QpfTotal {
+                strategy.push_str("; only history-sampled totals are available: rain between the last saved frame and departure can be absent from a departed strip; use committed-step cyclone rain for the full sampled exposure");
+            }
+        }
         Ok(WindowedGrid {
             slug: self.spec.product.slug().to_string(),
             units: self.spec.units.to_string(),
-            title: title.to_string(),
+            title: if self.footprint_swath {
+                if title == "10 m Wind Speed (largest hourly snapshot, no stored max)" {
+                    "10 m wind max (hourly samples; sampled nest exposure)".to_string()
+                } else if self.spec.product == HrrrWindowedProduct::QpfTotal {
+                    "Nest rain total (sampled nest exposure)".to_string()
+                } else { format!("{title} (sampled nest exposure)") }
+            } else { title.to_string() },
             values,
             hours_used: self.spec.hours,
             window_hours: self.spec.window_hours,
@@ -1930,6 +2118,20 @@ mod tests {
         DerivedFieldInput, write_hour_from_fields_with_derived,
         write_hour_from_fields_with_derived_exact,
     };
+
+    #[test]
+    fn moving_nest_max_retains_both_strips_but_not_missing_interior() {
+        let spec = plan_product(HrrrWindowedProduct::Wind10mRunMax, 2, QpfSource::NativeHourly).unwrap();
+        let mut a = Accum::new(spec, vec![1, 2]);
+        a.footprint_swath = true;
+        a.fold_footprint(&[25., 20., f64::NAN, f64::NAN, f64::NAN], &[1., 1., 0., 1., 0.]);
+        a.fold_footprint(&[f64::NAN, 30., 35., 40., f64::NAN], &[0., 1., 1., 1., 0.]);
+        let result = a.finish(false).unwrap();
+        assert_eq!(&result.values[..3], &[25.*MS_TO_KT, 30.*MS_TO_KT, 35.*MS_TO_KT]);
+        assert!(result.values[3].is_nan()); // Missing inside a footprint stays missing.
+        assert!(result.values[4].is_nan()); // Never visited is not a zero wind.
+        assert!(result.title.contains("sampled nest exposure"));
+    }
 
     const NX: usize = 2;
     const NY: usize = 2;
@@ -3147,6 +3349,35 @@ mod tests {
             );
         }
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_three_hourly_history_does_not_apply_hourly_windows_and_keeps_its_gaps() {
+        // A nest keeping 3-hourly history: qpf_1h needs F005, which this
+        // history never writes, so it is not applicable rather than a gap;
+        // qpf_6h falls on the interval and is drawn.
+        let dir = test_dir("wrfout-qpf-3hourly");
+        let run = "20260608_00z";
+        for hour in [0u16, 3, 6] {
+            write_wrfout_apcp_hour(&dir, run, hour, apcp_run_accum_plane(hour));
+        }
+        let outcome = compute(&dir, run, &[0, 3, 6], &["qpf_1h", "qpf_6h"]);
+        let reason = blocker_reason(&outcome, "qpf_1h");
+        assert!(reason.starts_with(NOT_APPLICABLE_PREFIX), "{reason}");
+        assert!(reason.contains("every 3 h") && reason.contains("F005"), "{reason}");
+        assert_eq!(grid_named(&outcome, "qpf_6h").hours_used, vec![0, 6]);
+        let _ = fs::remove_dir_all(&dir);
+
+        // A frame missing ON the interval is a gap and stays one.
+        let dir = test_dir("wrfout-qpf-3hourly-gap");
+        for hour in [0u16, 3, 9, 12] {
+            write_wrfout_apcp_hour(&dir, run, hour, apcp_run_accum_plane(hour));
+        }
+        let outcome = compute(&dir, run, &[0, 3, 9, 12], &["qpf_6h"]);
+        let reason = blocker_reason(&outcome, "qpf_6h");
+        assert!(!reason.starts_with(NOT_APPLICABLE_PREFIX), "{reason}");
+        assert!(reason.contains("F006") && reason.contains("never skipped"), "{reason}");
         let _ = fs::remove_dir_all(&dir);
     }
 

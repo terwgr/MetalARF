@@ -201,7 +201,7 @@ static inline void d_twostream(thread const float *p,int ib1,int ic,thread float
     o[9]=frev[0];o[10]=frev[1];o[11]=freg[0];o[12]=freg[1];o[13]=bgap;o[14]=wgap;
 }
 
-static inline void d_albedo(thread const float *p,int ist,thread float *o) {
+static inline void d_albedo(thread const float *p,int ist,thread float *o,bool night_age) {
     float swemx=p[4],dt=p[24],cosz=p[25],elai=p[26],esai=p[27],tg=p[28],tv=p[29];
     float fsno=p[31],fwet=p[32],sneqvo=p[33],sneqv=p[34],qsnow=p[35],fveg=p[36];
     float albold=p[41],tauss=p[42],fage=p[43],mpe=K_MPE;
@@ -210,11 +210,12 @@ static inline void d_albedo(thread const float *p,int ist,thread float *o) {
     float fabd[2]={K_ZERO,K_ZERO},fabi[2]={K_ZERO,K_ZERO},ftdd[2]={K_ZERO,K_ZERO},ftid[2]={K_ZERO,K_ZERO},ftii[2]={K_ZERO,K_ZERO};
     float fsun=K_ZERO,frevd[2]={p[44],p[45]},frevi[2]={p[46],p[47]},fregd[2]={p[48],p[49]},fregi[2]={p[50],p[51]};
     float ftdi[2]={K_ZERO,K_ZERO},gdir=K_ZERO;
+    if(night_age){float sai[10]={p[0],p[1],p[2],p[3],swemx,dt,tg,sneqvo,sneqv,tauss},sao[2];d_snow_age(sai,sao);tauss=sao[0];fage=sao[1];}
     if(cosz>K_ZERO){
         float rho[2],tau[2],vai=K_ZERO;
         for(int ib=0;ib<2;++ib){vai=FADD(elai,esai);float wl=FDIV(elai,f_max(vai,mpe)),ws=FDIV(esai,f_max(vai,mpe));
             rho[ib]=f_max(FADD(FMUL(p[11+ib],wl),FMUL(p[13+ib],ws)),mpe);tau[ib]=f_max(FADD(FMUL(p[15+ib],wl),FMUL(p[17+ib],ws)),mpe);}
-        float sai[10]={p[0],p[1],p[2],p[3],swemx,dt,tg,sneqvo,sneqv,tauss},sao[2];d_snow_age(sai,sao);tauss=sao[0];fage=sao[1];
+        if(!night_age){float sai[10]={p[0],p[1],p[2],p[3],swemx,dt,tg,sneqvo,sneqv,tauss},sao[2];d_snow_age(sai,sao);tauss=sao[0];fage=sao[1];}
         float sci[4]={swemx,qsnow,dt,albold},sco[5];d_snowalb_class(sci,sco);albsnd[0]=sco[1];albsnd[1]=sco[2];albsni[0]=sco[3];albsni[1]=sco[4];albold=sco[0];
         float gai[14]={p[5],p[6],p[7],p[8],p[9],p[10],fsno,p[37],albsnd[0],albsnd[1],albsni[0],albsni[1],cosz,tg},gao[4];d_groundalb(gai,ist,gao);
         albgrd[0]=gao[0];albgrd[1]=gao[1];albgri[0]=gao[2];albgri[1]=gao[3];
@@ -232,8 +233,8 @@ static inline void d_albedo(thread const float *p,int ist,thread float *o) {
     for(int k=0;k<15;++k){o[6+2*k]=v[k][0];o[7+2*k]=v[k][1];}
 }
 
-static inline void d_radiation(thread const float *p,int ist,thread float *o) {
-    float alb[36];d_albedo(p,ist,alb);float elai=p[26],esai=p[27];thread const float *solad=p+52,*solai=p+54;
+static inline void d_radiation(thread const float *p,int ist,thread float *o,bool night_age) {
+    float alb[36];d_albedo(p,ist,alb,night_age);float elai=p[26],esai=p[27];thread const float *solad=p+52,*solai=p+54;
     float fsun=alb[3],fsha=FSUB(K_ONE,fsun),laisun=FMUL(elai,fsun),laisha=FMUL(elai,fsha),vai=FADD(elai,esai),s[37];
     s[0]=K_MPE;s[1]=fsun;s[2]=fsha;s[3]=elai;s[4]=vai;s[5]=laisun;s[6]=laisha;s[7]=solad[0];s[8]=solad[1];s[9]=solai[0];s[10]=solai[1];
     const int order[13]={4,5,6,7,8,0,1,2,3,9,10,11,12};
@@ -249,7 +250,18 @@ kernel void noahmp_radiation_batch(
     if (tid >= uint(q.n)) return;
     thread float p[56], o[19];
     for (uint k = 0; k < 56; ++k) p[k] = r.in[tid * 56 + k];
-    d_radiation(p, r.ist[tid], o);
+    d_radiation(p, r.ist[tid], o, false);
+    for (uint k = 0; k < 19; ++k) r.out[tid * 19 + k] = o[k];
+}
+
+kernel void noahmp_radiation_batch_night_age(
+    constant NoahmpRadiationBatchNightAgeResources &r [[buffer(0)]],
+    constant NoahmpRadiationBatchNightAgeParams &q [[buffer(1)]],
+    uint tid [[thread_position_in_grid]]) {
+    if (tid >= uint(q.n)) return;
+    thread float p[56], o[19];
+    for (uint k = 0; k < 56; ++k) p[k] = r.in[tid * 56 + k];
+    d_radiation(p, r.ist[tid], o, true);
     for (uint k = 0; k < 19; ++k) r.out[tid * 19 + k] = o[k];
 }
 

@@ -25,6 +25,10 @@ VERSION = "9.8.7"
 
 @pytest.fixture(scope="module")
 def workflow():
+    from _woof_snapshot import engine_workflow_reason
+    reason = engine_workflow_reason(".github/workflows/publish.yml")
+    if reason is not None:
+        pytest.skip(reason)
     return yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
 
 
@@ -60,7 +64,7 @@ def scripts(job):
 
 def test_public_mutation_waits_for_exact_assets_and_both_platforms(workflow):
     jobs = workflow["jobs"]
-    ordered = ["test", "release_authority", "prepare", "qualify", "assets", "publish", "release"]
+    ordered = ["controller", "release_authority", "prepare", "test", "qualify", "assets", "publish", "release"]
     for predecessor, successor in zip(ordered, ordered[1:]):
         assert predecessor in ancestors(jobs, successor), (predecessor, successor)
     matrix = jobs["qualify"]["strategy"]["matrix"]["include"]
@@ -79,7 +83,7 @@ def test_release_events_and_dispatch_share_a_serialized_authority(workflow):
     assert workflow["concurrency"]["cancel-in-progress"] is False
     assert "github.ref" in workflow["concurrency"]["group"]
     for name, job in workflow["jobs"].items():
-        if name != "test":
+        if name != "controller":
             assert job["if"] == "github.event_name != 'pull_request'"
 
 
@@ -106,14 +110,15 @@ def test_release_jobs_execute_the_tested_controller_after_hash_verification(work
     jobs = workflow["jobs"]
     assert "controller_sha256" in jobs["test"]["outputs"]
     for name, job in jobs.items():
-        if name == "test":
+        if name in {"controller", "test"}:
             continue
         steps = job["steps"]
         uses = [i for i, step in enumerate(steps)
                 if re.search(r"python\s+(?:tools|controller)/promote_prepared_release\.py\s", step.get("run", ""))]
+        source = "controller" if name in {"release_authority", "ci", "prepare"} else "test"
         checks = [i for i, step in enumerate(steps)
                   if "sha256sum --check --strict" in step.get("run", "")
-                  and step.get("env", {}).get("CONTROLLER_SHA256") == "${{ needs.test.outputs.controller_sha256 }}"]
+                  and step.get("env", {}).get("CONTROLLER_SHA256") == "${{ needs." + source + ".outputs.controller_sha256 }}"]
         assert uses and len(checks) == 1, name
         assert checks[0] < min(uses), name
         if name in {"prepare", "qualify"}:
@@ -148,12 +153,79 @@ def test_promotion_uses_prepared_bytes_and_keeps_existing_packaging_checks(workf
         if name != "test":
             assert not re.search(r"python\s+-m\s+build|cargo\s+build|gh\s+release\s+(?:upload|create|delete)|git\s+(?:push|tag)", scripts(job)), name
     test_script = scripts(jobs["test"])
-    for name in ("bridge_fetch", "table_fetch", "package_data_coverage", "companion_distribution",
-                 "configs_are_packaged", "doctor", "doctor_nexrad", "cli", "tui_cli", "source_adapters",
-                 "namelist_compat", "native_wrf_distribution", "prepared_publication",
-                 "publish_workflow_state_machine", "publish_dist_shape_agreement", "release_version_declaration",
-                 "bridge_bundle_adopt", "verify_source_bridge_pins", "verify_release_artifacts"):
-        assert f"tests/test_{name}.py" in test_script
+    selected = {"publish_workflow_state_machine", "release_version_declaration", "publish_dist_shape_agreement",
+                "verify_release_artifacts", "package_data_coverage", "prepared_publication"}
+    assert set(re.findall(r"tests/test_(\w+)\.py", test_script)) == selected
+    assert "cargo build" not in test_script and "rustup" not in test_script and "-e " not in test_script
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    nightly = ci["jobs"]["publication_contracts"]
+    assert nightly["if"] == "github.event_name == 'schedule'"
+    assert ci.get("on", ci.get(True))["schedule"] == [{"cron": "0 9 * * *"}]
+    # Keep the entire former tag-time selection, including the fetcher callers.
+    previous = {"bridge_fetch", "table_fetch", "package_data_coverage", "companion_distribution",
+        "configs_are_packaged", "doctor", "doctor_nexrad", "cli", "tui_cli", "source_adapters",
+        "namelist_compat", "native_wrf_distribution", "prepared_publication", "carried_channel",
+        "carried_release_packet", "publish_workflow_state_machine", "publish_dist_shape_agreement",
+        "release_version_declaration", "release_bump_version", "precut_gate_completion", "gpu_pin_set",
+        "bridge_bundle_adopt", "verify_source_bridge_pins", "verify_release_artifacts", "native_build_inputs",
+        "workflow_rehearsals", "workflow_job_replay", "pypi_capacity", "publish_preflight", "vendor_cache_ignore"}
+    assert set(re.findall(r"tests/test_(\w+)\.py", scripts(nightly))) == previous
+
+
+#: What marks a listed test file as one that stages through the fetcher:
+#: table staging (``fetch_tables``) and static assets (``geog_assets``) are
+#: pin-checked by rw_fetch since 2.8.9, and the other two name it directly.
+FETCHER_USE = ("fetch_tables", "geog_assets", "rw_fetch", "find_fetch_bin")
+
+
+def test_nightly_builds_the_fetcher_before_the_files_that_need_it(workflow):
+    """The job that roots the publish chain has the one native its files use.
+
+    The breakage, named: the v2.8.9 publish run 38124857348 failed in this
+    job on five tests of tests/test_table_fetch.py ("rw_fetch is missing"),
+    after the tag was public and the draft release created. ci.yml had a
+    fetcher on the leg that builds no natives; this job had not, and nothing
+    compared the two. This file runs in ci.yml on every push.
+    """
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    steps = ci["jobs"]["publication_contracts"]["steps"]
+    runners = [i for i, step in enumerate(steps) if "python -m pytest" in step.get("run", "")]
+    assert len(runners) == 1, runners
+    tests = steps[runners[0]]
+    listed = re.findall(r"tests/\S+\.py", tests["run"])
+    needing = [name for name in listed
+               if any(mark in (ROOT / name).read_text(encoding="utf-8") for mark in FETCHER_USE)]
+    assert "tests/test_table_fetch.py" in needing, needing
+    command = "rustup run 1.94.0 cargo build --release --locked --offline -p rw-fetch"
+    builders = [i for i, step in enumerate(steps) if command in step.get("run", "")]
+    assert len(builders) == 1 and builders[0] < runners[0], (
+        f"the test job runs {needing} with no earlier step that builds rw_fetch")
+    build = steps[builders[0]]
+    assert "if" not in build and "if" not in tests
+    assert "rustup toolchain install 1.94.0 --profile minimal" in build["run"]
+    # Outside the checkout, and named to the tests: nothing is left to the
+    # resolution ladder or to whatever a runner image happens to carry.
+    target = build["env"]["CARGO_TARGET_DIR"]
+    assert target.startswith("${{ runner.temp }}/"), target
+    assert tests["env"]["WOOF_RW_FETCH"] == target + "/release/rw_fetch"
+    # The same toolchain pin and cargo flags as ci.yml's fetcher-only leg.
+    ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    for line in build["run"].splitlines():
+        assert line.strip() in ci, line
+
+
+def test_publish_selection_has_no_unbuilt_stage1_native_dependencies(workflow):
+    job = workflow["jobs"]["test"]
+    # This job has one supported runner/interpreter; the platform matrix is
+    # qualify, which consumes the sealed packet instead of running these tests.
+    assert job["runs-on"] == "ubuntu-24.04" and "strategy" not in job
+    setup = [step for step in job["steps"] if step.get("uses", "").startswith("actions/setup-python@")]
+    assert len(setup) == 1 and setup[0]["with"]["python-version"] == "3.11"
+    listed = set(re.findall(r"tests/\S+\.py", scripts(job)))
+    native = {line.split("#", 1)[0].strip() for line in
+              (ROOT / "tools/battery/stage1_native_files.txt").read_text().splitlines()}
+    native.discard("")
+    assert not listed & native, f"new publish tests need additional native builds: {sorted(listed & native)}"
 
 
 def test_docker_publisher_upload_paths_are_workspace_relative(workflow):
@@ -165,6 +237,27 @@ def test_docker_publisher_upload_paths_are_workspace_relative(workflow):
         assert directory and not PurePosixPath(directory).is_absolute()
         assert not any(token in directory for token in ("$", "..", "\\", ":")), directory
         assert re.search(r"--out\s+[\"']?" + re.escape(directory) + r"[\"']?(?:\s|$)", stage["run"])
+
+
+def test_packet_smoke_consumes_upload_bytes_before_any_public_mutation(workflow):
+    jobs = workflow["jobs"]
+    job = jobs["test"]
+    assert needs(job) == {"controller", "release_authority", "prepare"}
+    assert job["timeout-minutes"] == 8
+    assert job["env"]["RELEASE_VERSION"] == "${{ needs.release_authority.outputs.version }}"
+    downloads = [step["with"] for step in job["steps"] if step.get("uses", "").startswith("actions/download-artifact@")]
+    assert downloads == [{"name": "release-proof", "path": "${{ runner.temp }}/release-proof"}]
+    assert 'publish_packet_smoke.py install --dists "$RUNNER_TEMP/release-proof/dists"' in scripts(job)
+    assert 'publish_packet_smoke.py check --dists "$RUNNER_TEMP/release-proof/dists"' in scripts(job)
+    assert '--dists "$RUNNER_TEMP/release-proof/dists"' in scripts(jobs["publish"])
+    # The shared _chain_static_staging_kept_off_the_network fixture imports
+    # numpy before every selected metadata contract, even on a bare venv.
+    assert "python -m pip install pytest pyyaml 'setuptools>=77' wheel 'numpy>=2'" in scripts(job)
+    for name in ("qualify", "assets", "publish", "release"):
+        assert "test" in ancestors(jobs, name)
+    uploads = [step for step in jobs["controller"]["steps"] if step.get("uses", "").startswith("actions/upload-artifact@")]
+    assert len(uploads) == 1 and uploads[0]["with"]["name"] == "publication-controller"
+    assert 'sha256sum tools/promote_prepared_release.py' in scripts(job)
 
 
 @pytest.fixture
@@ -314,14 +407,14 @@ def test_complete_index_retry_does_not_upload_again(publication, controller_case
 def test_publication_depends_on_ci_passing_on_the_published_commit(workflow):
     jobs = workflow["jobs"]
     gate = jobs["ci"]
-    assert needs(gate) == {"test", "release_authority"}
+    assert needs(gate) == {"controller", "release_authority"}
     assert gate["permissions"] == {"actions": "read"}
     run = scripts(gate)
     assert re.search(r"promote_prepared_release\.py ci-passed .*--commit \"\$PUBLICATION_COMMIT\"", run), run
     assert "GH_TOKEN" in json.dumps(gate["steps"])
     # Every job that verifies, qualifies, promotes or uploads waits for it.
     for name in jobs:
-        if name not in {"test", "release_authority", "ci"}:
+        if name not in {"controller", "release_authority", "ci"}:
             assert "ci" in ancestors(jobs, name), name
 
 
@@ -411,8 +504,17 @@ def test_ci_inventory_follows_pagination_before_judging_a_commit(publication):
     assert publication.judge_ci_runs(runs, COMMIT)[0] == "passed"
 
 
-def _ci_gate(publication, monkeypatch, tmp_path, pages):
+def _jobs(gate="completed", gate_conclusion="success", cpu="in_progress", cpu_conclusion=None):
+    names = ["syntax", "imports (ubuntu-24.04)", "imports (windows-2025)",
+             "Static qualification (Linux UNQUALIFIED)", "Static qualification (Windows exact comparisons)"]
+    rows = [{"name": name, "status": gate, "conclusion": gate_conclusion} for name in names]
+    return rows + [{"name": f"{job} ({os})", "status": cpu, "conclusion": cpu_conclusion}
+                   for job in ("cpu", "native", "oracles") for os in ("ubuntu-24.04", "windows-2025")]
+
+
+def _ci_gate(publication, monkeypatch, tmp_path, pages, jobs=None):
     seen = []
+    jobs = _jobs(gate="in_progress", gate_conclusion=None) if jobs is None else jobs
 
     class FakeGitHub:
         def __init__(self, repository):
@@ -420,6 +522,9 @@ def _ci_gate(publication, monkeypatch, tmp_path, pages):
 
         def json(self, suffix, *, data=None):
             assert data is None, "the ci gate never writes"
+            if "/jobs?" in suffix:
+                assert suffix.startswith("/actions/runs/1/attempts/1/jobs"), suffix
+                return {"jobs": jobs}
             seen.append(suffix)
             return {"workflow_runs": pages[min(len(seen), len(pages)) - 1]}
 
@@ -443,7 +548,8 @@ def test_the_ci_gate_waits_for_running_ci_then_records_the_pass(publication, mon
 
 
 def test_the_ci_gate_refuses_a_failed_run_and_gives_up_on_one_that_never_ends(publication, monkeypatch, tmp_path):
-    run, _seen, args = _ci_gate(publication, monkeypatch, tmp_path, [[_run(COMMIT, conclusion="failure")]])
+    run, _seen, args = _ci_gate(publication, monkeypatch, tmp_path, [[_run(COMMIT, conclusion="failure")]],
+                                jobs=_jobs(gate_conclusion="failure", cpu="completed", cpu_conclusion="success"))
     with pytest.raises(publication.PublicationError, match="did not pass"):
         run()
     assert not args.out.exists()
@@ -451,3 +557,26 @@ def test_the_ci_gate_refuses_a_failed_run_and_gives_up_on_one_that_never_ends(pu
     with pytest.raises(publication.PublicationError, match="gave up"):
         run()
     assert len(seen) == 6 and not args.out.exists()
+
+
+def test_ci_is_judged_on_its_fast_gate_jobs_and_the_long_batteries_do_not_gate(publication, monkeypatch, tmp_path):
+    """Project ruling, 2026-10-20: the release must not wait ~2 h for the hosted cpu batteries that already ran locally."""
+    judge = publication.judge_ci_runs
+    running = dict(_run(COMMIT, "in_progress", None), jobs=_jobs())
+    assert judge([running], COMMIT)[0] == "passed"
+    cpu_red = dict(_run(COMMIT, conclusion="failure"), jobs=_jobs(cpu="completed", cpu_conclusion="failure"))
+    assert judge([cpu_red], COMMIT)[0] == "passed"
+    gate_red = dict(_run(COMMIT, conclusion="failure"), jobs=_jobs(gate_conclusion="failure"))
+    assert judge([gate_red], COMMIT)[0] == "refused"
+    waiting = dict(_run(COMMIT, "in_progress", None), jobs=_jobs(gate="in_progress", gate_conclusion=None))
+    assert judge([waiting], COMMIT)[0] == "pending"
+    one_leg = dict(_run(COMMIT, "in_progress", None),
+                   jobs=[job for job in _jobs() if job["name"] != "imports (windows-2025)"])
+    verdict, why = judge([one_leg], COMMIT)
+    assert verdict == "pending" and "imports" in why
+    skipped = dict(_run(COMMIT, conclusion="failure"), jobs=_jobs(gate_conclusion="skipped"))
+    assert judge([skipped], COMMIT)[0] == "refused"
+    run, seen, args = _ci_gate(publication, monkeypatch, tmp_path, [[_run(COMMIT, "in_progress", None)]],
+                               jobs=_jobs())
+    run()
+    assert len(seen) == 1 and json.loads(args.out.read_text(encoding="utf-8"))["status"] == "PASS"

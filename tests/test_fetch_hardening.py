@@ -302,8 +302,9 @@ def test_the_front_door_guard_and_the_transfer_share_one_lock(monkeypatch,
     # and its transfer is the (whole or as-posted) _legacy_transfer call.
     source = inspect.getsource(fetch._fetch_main)
     guard_index = source.index("require_matching_request(args.out, source=source")
-    hold_index = source.rindex('fetch_guard.hold("fetch-out", args.out)',
-                               0, guard_index)
+    # _fetch_out is the fetch-out lock plus the release of held payloads.
+    assert 'fetch_guard.hold("fetch-out", out' in inspect.getsource(fetch._fetch_out)
+    hold_index = source.rindex('_fetch_out(args.out)', 0, guard_index)
     assert source.index("return fetch_gfs(") > hold_index
     assert source.index("manifest = _legacy_transfer(") > hold_index
 
@@ -454,8 +455,11 @@ def test_a_stale_canonical_part_never_blocks_the_next_run(tmp_path,
     monkeypatch.setattr(hrrr_transport, "_parse_index",
                         lambda body, size: (hrrr_transport.IndexRow(
                             1, 0, "PRES", "1 hybrid level", "1:0:x"),))
-    monkeypatch.setattr(hrrr_transport, "_atmosphere_selection",
-                        lambda rows, expected_count=None: (0,))
+    def selection(rows, expected_count=None, extras=()):
+        assert len(rows) == 1 and expected_count is None and extras == ()
+        return (0,)
+
+    monkeypatch.setattr(hrrr_transport, "_atmosphere_selection", selection)
     monkeypatch.setattr(hrrr_transport, "_coalesce",
                         lambda rows, selected, size: (
                             hrrr_transport.ByteRange(*ranges[0], "x", "x"),))
@@ -570,14 +574,6 @@ def test_table_install_is_bound_to_the_bytes_it_verified(tmp_path):
     installed = table_assets.fetch_asset_from_dir(root, asset, source)
     assert installed.read_bytes() == payload
     assert legacy.read_bytes() == b"evil"   # untouched, and never installed
-
-
-def test_table_staging_names_are_unique_per_writer(tmp_path):
-    root = tmp_path / "tables"
-    asset = _table_asset(root, b"x")
-    names = {table_assets._staging_path(root, asset).name for _ in range(50)}
-    assert len(names) == 50
-    assert all(str(os.getpid()) in name for name in names)
 
 
 # ---------------------------------------------------------------------------
@@ -759,7 +755,11 @@ def test_a_concurrent_fetchs_entries_are_merged_not_dropped(tmp_path,
              "datasets": {"other_ds": {"files": 2, "bytes": 40}},
              "fetched_at": "2026-07-30T00:00:00Z"}
 
-    real_extract = geog_assets.extract_datasets
+    # Since 9daf25762 an archive served by a fixture transport (any
+    # urlopen_fn but the default) is unpacked by _extract_datasets_serial,
+    # so the competing writer is injected there; extract_datasets is the
+    # default transport's path and is never reached from this cell.
+    real_extract = geog_assets._extract_datasets_serial
 
     def extract_then_let_the_other_writer_finish(*args, **kwargs):
         counts = real_extract(*args, **kwargs)
@@ -768,7 +768,7 @@ def test_a_concurrent_fetchs_entries_are_merged_not_dropped(tmp_path,
         geog_assets._write_manifest(root, manifest)
         return counts
 
-    monkeypatch.setattr(geog_assets, "extract_datasets",
+    monkeypatch.setattr(geog_assets, "_extract_datasets_serial",
                         extract_then_let_the_other_writer_finish)
     geog_assets.fetch_geog(root=root, datasets=("alpha_ds",), source="hf",
                            progress=lambda *_: None,

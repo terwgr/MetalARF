@@ -11,7 +11,7 @@ _FLOAT = np.dtype(np.float32)
 _DOUBLE = np.dtype(np.float64)
 _U64 = np.dtype(np.uint64)
 _INT = np.dtype(np.int32)
-_THREADS = 64
+_THREADS = 32
 _TNCCN_SIZE = 7 * 9 * 7 * 5 * 4
 _TNC_WEV_SIZE = 100 * 37 * 100
 
@@ -39,9 +39,9 @@ def _table_bits(array: MetalArray, name: str, count: int,
     if not isinstance(array, MetalArray) or not array.flags.c_contiguous:
         raise TypeError(f"Thompson saturation {name} must be contiguous Metal storage")
     if array.dtype == _DOUBLE:
-        bits = array.view_uint64_bits()
-    elif array.dtype == _U64:
         bits = array
+    elif array.dtype == _U64:
+        bits = array.view(array.shape, dtype=_DOUBLE)
     else:
         raise TypeError(f"Thompson saturation {name} must store float64 bits")
     if bits.size != count:
@@ -76,7 +76,7 @@ def _launch(name: str, resources: dict[str, MetalArray], parameters: dict,
         return None
     _check_no_overlap(resources, allowed_aliases or set())
     return next(iter(resources.values())).buffer.context.submit_kernel(
-        name, resources, parameters, exact_policy=True,
+        name, resources, parameters, exact_policy=False,
         grid_size=count, threads_per_group=_THREADS)
 
 
@@ -98,6 +98,7 @@ def submit_saturation_adjust(
     reference_temperature: MetalArray | None = None,
     condensation_rate: MetalArray | None = None,
     cloud_presence: MetalArray | None = None,
+    qcten=None, qvten=None, tten=None, theta=None, exner=None, heat_ocp=None,
 ):
     """Apply MP28 condensation/evaporation and aerosol number tendencies.
 
@@ -119,16 +120,23 @@ def submit_saturation_adjust(
         "reference_temperature": reference_temperature,
         "condensation_rate": condensation_rate,
         "cloud_presence": cloud_presence,
+        "qcten": qcten, "qvten": qvten, "tten": tten,
+        "theta": theta, "exner": exner, "heat_ocp": heat_ocp,
     }
+    if reference_temperature is not None and reference_density is None:
+        raise ValueError("reference_temperature requires reference_density")
+    vapor = (qvten, tten, theta, exner)
+    if sum(array is not None for array in vapor) not in (0, len(vapor)):
+        raise ValueError("qvten, tten, theta and exner are supplied together")
     fields = {
         "temperature": temperature, "pressure": pressure, "qv": qv,
         "qc": qc, "nc_entry": nc_entry, "ncten": ncten,
         "nwfaten": nwfaten, "nwfa_work_m3": nwfa_work_m3, "w": w,
     }
     resources = _active_arrays(fields, shape, context)
-    resources["tnccn_act_bits"] = _table_bits(
+    resources["tnccn_act"] = _table_bits(
         tnccn_act_bits, "tnccn_act_bits", _TNCCN_SIZE, context)
-    resources["tnc_wev_bits"] = _table_bits(
+    resources["tnc_wev"] = _table_bits(
         tnc_wev_bits, "tnc_wev_bits", _TNC_WEV_SIZE, context)
     optional_resources = _active_arrays(optional, shape, context)
     resources.update(optional_resources)
@@ -138,13 +146,9 @@ def submit_saturation_adjust(
     dt32 = np.float32(dt)
     if not np.isfinite(dt32) or dt32 <= 0.0:
         raise ValueError(f"dt must be finite and positive, got {dt}")
-    parameters = {
-        "dt": float(dt32), "size": count,
-        "has_reference_density": int(reference_density is not None),
-        "has_reference_temperature": int(reference_temperature is not None),
-        "has_condensation_rate": int(condensation_rate is not None),
-        "has_cloud_presence": int(cloud_presence is not None),
-    }
+    parameters = {"dt": float(dt32), "size": count}
+    parameters.update({"has_" + name: int(array is not None)
+                       for name, array in optional.items()})
     dummy_names = {name for name, array in optional.items() if array is None}
     return _launch("thompson_aa_saturation_adjust", resources, parameters,
                    count, dummy_names)
@@ -164,6 +168,8 @@ def submit_rain_evaporation(
     graupel_melt_marker: MetalArray | None = None,
     condensation_rate: MetalArray | None = None,
     entry_density: MetalArray | None = None,
+    qrten=None, nrten=None, qvten=None, tten=None, theta=None, exner=None,
+    heat_ocp=None, tau1_temperature=None,
 ):
     """Apply MP28 rain evaporation, latent heating, and CCN return."""
     if not isinstance(qr, MetalArray) or qr.dtype != _FLOAT:
@@ -182,7 +188,18 @@ def submit_rain_evaporation(
         "graupel_melt_marker": graupel_melt_marker,
         "condensation_rate": condensation_rate,
         "entry_density": entry_density,
+        "qrten": qrten, "nrten": nrten, "qvten": qvten, "tten": tten,
+        "theta": theta, "exner": exner, "heat_ocp": heat_ocp,
+        "tau1_temperature": tau1_temperature,
     }
+    if reference_temperature is not None and reference_density is None:
+        raise ValueError("reference_temperature requires reference_density")
+    for group in ((qrten, nrten), (qvten, tten, theta, exner),
+                  (heat_ocp, tau1_temperature)):
+        if sum(array is not None for array in group) not in (0, len(group)):
+            raise ValueError("paired rain evaporation inputs must be supplied together")
+    if heat_ocp is not None and condensation_rate is None:
+        raise ValueError("heat_ocp requires condensation_rate")
     fields = {
         "qr": qr, "nr": nr, "temperature": temperature,
         "pressure": pressure, "qv": qv, **optional,
@@ -194,15 +211,9 @@ def submit_rain_evaporation(
     dt32 = np.float32(dt)
     if not np.isfinite(dt32) or dt32 <= 0.0:
         raise ValueError(f"dt must be finite and positive, got {dt}")
-    parameters = {
-        "dt": float(dt32), "size": count,
-        "has_nwfaten": int(nwfaten is not None),
-        "has_reference_density": int(reference_density is not None),
-        "has_reference_temperature": int(reference_temperature is not None),
-        "has_graupel_marker": int(graupel_melt_marker is not None),
-        "has_condensation_rate": int(condensation_rate is not None),
-        "has_entry_density": int(entry_density is not None),
-    }
+    parameters = {"dt": float(dt32), "size": count}
+    parameters.update({"has_" + name: int(array is not None)
+                       for name, array in optional.items()})
     dummy_names = {name for name, array in optional.items() if array is None}
     return _launch("thompson_aa_rain_evaporation", resources, parameters,
                    count, dummy_names)

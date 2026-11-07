@@ -3550,7 +3550,7 @@ kernel void gf_gfdrv_stage(
     for (int k = 1; k <= nz; ++k) {
         const ulong plane = (ulong)(k - 1) * (ulong)n + (ulong)col;
         u[k]=r.u[plane]; v[k]=r.v[plane];
-        w[k]=FMUL(K_HALF,FADD(r.w[plane],r.w[plane+(ulong)n]));
+        w[k]=r.w[plane];
         t[k]=r.temperature[plane]; qv[k]=r.qv[plane];
         p[k]=r.pressure[plane]; pi_a[k]=r.exner[plane];
         rho[k]=r.rho[plane]; dz8w[k]=r.dz8w[plane];

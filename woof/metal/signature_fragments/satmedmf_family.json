@@ -1,0 +1,208 @@
+{
+  "kernels": [
+    {
+      "name": "satmedmf_fpvs_table",
+      "cuda_symbol": "satmedmf_fpvs_table",
+      "module": "satmedmf_family",
+      "source": "woof/metal/shaders/satmedmf_family.metal",
+      "cuda_source": "woof/core/kernels/satmedmf.cu",
+      "resources": [
+        [
+          "table",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "table": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "threads",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    },
+    {
+      "name": "satmedmf_exner",
+      "cuda_symbol": "satmedmf_exner",
+      "module": "satmedmf_family",
+      "source": "woof/metal/shaders/satmedmf_family.metal",
+      "cuda_source": "woof/core/kernels/satmedmf.cu",
+      "resources": [
+        [
+          "p",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "pi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "exner",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "psk",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psk": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "km",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    },
+    {
+      "name": "satmedmf_column",
+      "cuda_symbol": "satmedmf_column",
+      "module": "satmedmf_family",
+      "source": "woof/metal/shaders/satmedmf_family.metal",
+      "cuda_source": "woof/core/kernels/satmedmf.cu",
+      "resources": [
+        [
+          "dt_bits",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "input",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "output",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "kpbl",
+          "int32",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "table",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "highwater",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dt_bits": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scratch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "table": [
+          [
+            "any_1d"
+          ]
+        ],
+        "highwater": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "km",
+          "int32"
+        ],
+        [
+          "ntrac",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

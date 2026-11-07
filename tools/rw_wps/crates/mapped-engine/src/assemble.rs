@@ -51,6 +51,12 @@ pub struct DecodedCollection {
     /// other vertical kind (`_DecodedCollection.hybrid_a/hybrid_b`).
     pub hybrid_a: Vec<f64>,
     pub hybrid_b: Vec<f64>,
+    /// The full-plane pressure ladder (hPa, one value per vertical level,
+    /// `window::pressure_levels`) of an `air_pressure` decoded over the
+    /// atmospheric window, taken from each whole plane before its crop
+    /// (`GribRecord::plane_ladder_hpa`).  `None` whenever `air_pressure`
+    /// is held whole, which states its own ladder.  One valid time's slice.
+    pub original_pressure_hpa: Option<Vec<f64>>,
 }
 
 /// `mapped_source._HYBRID_LITERAL_ABS_TOL` / `_REL_TOL`: pv rides IEEE
@@ -69,7 +75,7 @@ fn resolve_hybrid_coefficients(
 ) -> Result<(Vec<f64>, Vec<f64>)> {
     let literals = mapping.hybrid_literals()?;
     if !record_pv.is_empty() {
-        if record_pv.len() % 2 != 0 {
+        if !record_pv.len().is_multiple_of(2) {
             return Err(frame_invalid(format!(
                 "pv coordinate list length {} is not an even A+B split",
                 record_pv.len()
@@ -164,6 +170,18 @@ pub fn resolve_hybrid_literals_only(
 
 /// `mapped_source._assemble_grib`.
 pub fn assemble_grib(mapping: &Mapping, records: &[GribRecord]) -> Result<DecodedCollection> {
+    assemble_grib_within(mapping, records, None)
+}
+
+/// [`assemble_grib`] for records of which some were decoded over the
+/// atmospheric window `(rows, columns)` of the canonical grid
+/// (`DecodeStream::decode_window`): their grid-relative winds are rotated
+/// with the rotation of those cells.
+pub fn assemble_grib_within(
+    mapping: &Mapping,
+    records: &[GribRecord],
+    window: Option<([usize; 2], [usize; 2])>,
+) -> Result<DecodedCollection> {
     if records.is_empty() {
         return Err(selector_unmatched("no mapped GRIB records were decoded"));
     }
@@ -204,6 +222,39 @@ pub fn assemble_grib(mapping: &Mapping, records: &[GribRecord]) -> Result<Decode
         .iter()
         .map(|position| records[*position].grid_fingerprint.as_str())
         .collect();
+    if fingerprints.len() != 1 && mapping.doc.get("coordinates")
+        .and_then(|n| n.get("horizontal")).and_then(|n| n.get("normalization"))
+        .and_then(|n| n.as_str()) == Some("coarsest_exact_subset") {
+        // A declared nested-grid publication retains every level on the
+        // coarsest published lattice. No interpolated coordinates or values.
+        use rayon::prelude::*;
+        let coarse = selected.iter().map(|i| &records[*i])
+            .min_by_key(|r| r.latitude.len() * r.longitude.len()).unwrap();
+        let mut unique = selected.clone(); unique.sort_unstable(); unique.dedup();
+        let normalized = crate::threads::install(|| unique.par_iter().map(|i| {
+            let record = &records[*i];
+            let axis = |source: &[f64], target: &[f64], longitude: bool| -> Result<Vec<usize>> {
+                target.iter().map(|v| {
+                    let indices: Vec<usize> = source.iter().enumerate().filter_map(|(j, x)| {
+                        let equal = if longitude { x.rem_euclid(360.0) == v.rem_euclid(360.0) } else { x == v };
+                        equal.then_some(j)
+                    }).collect();
+                    if indices.len() != 1 { return Err(frame_invalid("mixed-grid normalization requires one exact source cell per target coordinate")); }
+                    Ok(indices[0])
+                }).collect()
+            };
+            let y = axis(&record.latitude, &coarse.latitude, false)?;
+            let x = axis(&record.longitude, &coarse.longitude, true)?;
+            if record.values.ndim() != 2 { return Err(frame_invalid("mixed-grid GRIB record must have two horizontal dimensions")); }
+            let mut out = record.clone();
+            out.values = record.values.select(ndarray::Axis(0), &y).select(ndarray::Axis(1), &x);
+            out.latitude = coarse.latitude.clone(); out.longitude = coarse.longitude.clone();
+            out.grid_fingerprint = coarse.grid_fingerprint.clone();
+            Ok(out)
+        }).collect::<Vec<Result<GribRecord>>>());
+        let normalized = crate::threads::in_order(normalized)?;
+        return assemble_grib(mapping, &normalized);
+    }
     if fingerprints.len() != 1 {
         return Err(frame_invalid(
             "selected GRIB fields do not share one source grid",
@@ -337,12 +388,14 @@ pub fn assemble_grib(mapping: &Mapping, records: &[GribRecord]) -> Result<Decode
             level_sets.insert(levels.iter().map(|value| value.to_bits()).collect());
             chosen = Some(levels);
         }
-        if level_sets.len() != 1 {
+        if level_sets.len() > 1 {
             return Err(frame_invalid(
                 "GRIB atmospheric fields do not share one complete vertical inventory",
             ));
         }
-        chosen.expect("one level set")
+        // A surface-only contribution carries no atmospheric ladder.
+        // Full atmospheric completeness remains a composition/target check.
+        chosen.unwrap_or_default()
     };
 
     let (hybrid_a, hybrid_b) = if mapping.vertical_kind()? == "hybrid_sigma_pressure" {
@@ -414,13 +467,12 @@ pub fn assemble_grib(mapping: &Mapping, records: &[GribRecord]) -> Result<Decode
         let (value, cycle) = slot?;
         let (valid_time, member, _field_name) = *key;
         let cycle_key = (*valid_time, member.clone());
-        if let Some(existing) = cycles.get(&cycle_key) {
-            if *existing != cycle {
+        if let Some(existing) = cycles.get(&cycle_key)
+            && *existing != cycle {
                 return Err(frame_invalid(format!(
                     "mapped GRIB fields mix source cycles at {valid_time}"
                 )));
             }
-        }
         cycles.insert(cycle_key, cycle);
         direct.insert((*key).clone(), value);
     }
@@ -435,10 +487,51 @@ pub fn assemble_grib(mapping: &Mapping, records: &[GribRecord]) -> Result<Decode
                 .parameters
                 .as_ref()
                 .expect("a rotating declaration carries parameters"),
+            window,
         )?
     } else {
         direct
     };
+
+    // The whole-plane ladder of an air_pressure decoded over the window,
+    // in the vertical order its planes were stacked in: the frame states
+    // it where the full decode states the medians of its whole planes.
+    let mut original_pressure_hpa: Option<Vec<f64>> = None;
+    for ((_time, _member, name), group) in &matched {
+        if name != "air_pressure" {
+            continue;
+        }
+        let ladders: Vec<Option<f64>> =
+            group.iter().map(|position| records[*position].plane_ladder_hpa).collect();
+        if ladders.iter().all(Option::is_none) {
+            continue;
+        }
+        if original_pressure_hpa.is_some() || ladders.iter().any(Option::is_none) {
+            return Err(frame_invalid(
+                "air_pressure decoded over the atmospheric window must state a \
+                 whole-plane ladder value for every record of one valid time",
+            ));
+        }
+        let mut by_level: BTreeMap<u64, f64> = BTreeMap::new();
+        for (position, ladder) in group.iter().zip(&ladders) {
+            let level = records[*position].level_value;
+            if by_level.insert(level.to_bits(), ladder.expect("checked above")).is_some() {
+                return Err(frame_invalid(format!(
+                    "duplicate air_pressure GRIB level {level} decoded over the window"
+                )));
+            }
+        }
+        let ladder: Option<Vec<f64>> = vertical_values
+            .iter()
+            .map(|level| by_level.get(&level.to_bits()).copied())
+            .collect();
+        original_pressure_hpa = Some(ladder.ok_or_else(|| {
+            frame_invalid(
+                "air_pressure decoded over the atmospheric window does not state \
+                 a whole-plane ladder value on every level of the frame",
+            )
+        })?);
+    }
 
     Ok(DecodedCollection {
         latitude,
@@ -449,6 +542,7 @@ pub fn assemble_grib(mapping: &Mapping, records: &[GribRecord]) -> Result<Decode
         grid_fingerprint,
         hybrid_a,
         hybrid_b,
+        original_pressure_hpa,
     })
 }
 
@@ -485,14 +579,30 @@ fn carried_ladder(
         if !stacks_vertically(mapping, name)? {
             continue;
         }
-        carried.push(
-            group
-                .iter()
-                .map(|position| records[*position].level_value.to_bits())
-                .collect(),
-        );
+        let mut levels: BTreeSet<u64> = group
+            .iter()
+            .map(|position| records[*position].level_value.to_bits())
+            .collect();
+        // A field declared on part of the ladder (`published_levels`)
+        // holds the levels it is zero on as well as the ones it carries.
+        levels.extend(unpublished_levels(mapping, name, declared)?);
+        carried.push(levels);
     }
     Ok(choose_ladder(declared, &eras, &carried))
+}
+
+/// The declared levels (as bits) a `published_levels` field is not
+/// published on; empty for a field that declares no subset.
+fn unpublished_levels(mapping: &Mapping, name: &str, declared: &[f64]) -> Result<BTreeSet<u64>> {
+    let Some(published) = mapping.field(name)?.published_levels()? else {
+        return Ok(BTreeSet::new());
+    };
+    let published: BTreeSet<u64> = published.iter().map(|level| level.to_bits()).collect();
+    Ok(declared
+        .iter()
+        .map(|level| level.to_bits())
+        .filter(|bits| !published.contains(bits))
+        .collect())
 }
 
 /// The largest of `declared` and the era ladders that every set in
@@ -517,7 +627,7 @@ fn choose_ladder(declared: &[f64], eras: &[Vec<f64>], carried: &[BTreeSet<u64>])
             .copied()
             .filter(|level| members.contains(&level.to_bits()))
             .collect();
-        if fits(&ladder) && best.as_ref().map_or(true, |chosen| ladder.len() > chosen.len()) {
+        if fits(&ladder) && best.as_ref().is_none_or(|chosen| ladder.len() > chosen.len()) {
             best = Some(ladder);
         }
     }
@@ -552,6 +662,11 @@ fn assemble_one_field(
         }
         let selectors = field.selectors();
         let policy = field.missing_kind()?;
+        // `repeated_record: "last"`: a record the publisher writes twice at
+        // one level and valid time is read from its later message (HRRRv1
+        // wrfprs repeats HGT at 1000 hPa and at the surface; only the later
+        // 1000 hPa record survives into HRRRv2 and current files).
+        let repeated_last = field.repeated_record_last()?;
         let stacking_axis = if source_axes.iter().any(|axis| axis == "vertical") {
             Some("vertical")
         } else if source_axes.iter().any(|axis| axis == "half_level") {
@@ -596,12 +711,16 @@ fn assemble_one_field(
             None => {
                 let ranks: Vec<usize> = group.iter().map(|position| rank(*position)).collect();
                 let best = ranks.iter().copied().min().unwrap_or(0);
-                let chosen: Vec<usize> = group
+                let mut chosen: Vec<usize> = group
                     .iter()
                     .zip(&ranks)
                     .filter(|(_position, rank)| **rank == best)
                     .map(|(position, _rank)| *position)
                     .collect();
+                if chosen.len() > 1 && repeated_last {
+                    let later = *chosen.iter().max().expect("non-empty");
+                    chosen = vec![later];
+                }
                 if chosen.len() != 1 {
                     return Err(frame_invalid(format!(
                         "duplicate GRIB messages for scalar field {field_name} at {valid_time}"
@@ -627,16 +746,61 @@ fn assemble_one_field(
                     if best[&level.to_bits()] != *rank {
                         continue;
                     }
-                    if by_level.insert(level.to_bits(), (*position, *rank)).is_some() {
+                    let earlier = by_level.insert(level.to_bits(), (*position, *rank));
+                    if let Some((earlier_position, earlier_rank)) = earlier {
+                        if repeated_last {
+                            // The later message stands, whichever order the
+                            // group lists them in.
+                            if earlier_position > *position {
+                                by_level.insert(level.to_bits(), (earlier_position, earlier_rank));
+                            }
+                            continue;
+                        }
                         return Err(frame_invalid(format!(
                             "duplicate {field_name} GRIB level {level} at {valid_time}"
                         )));
                     }
                 }
+                // A level the field is not published on (`published_levels`)
+                // is zero when the file leaves it out; a published level the
+                // file leaves out is still missing.  A record on such a
+                // level is read like any other.
+                let published: Option<BTreeSet<u64>> = if axis_name == "vertical" {
+                    field
+                        .published_levels()?
+                        .map(|levels| levels.iter().map(|level| level.to_bits()).collect())
+                } else {
+                    None
+                };
+                let upper_boundary = field.raw.field("published_levels")
+                    .and_then(|n| n.get("absent")).and_then(|n| n.as_str())
+                    == Some("nearest_upper_boundary");
+                let boundary = if upper_boundary {
+                    if field_name != "specific_humidity" || mapping.vertical_kind()? != "pressure" {
+                        return Err(frame_invalid("upper boundary extension requires pressure-level specific_humidity"));
+                    }
+                    let levels = field.published_levels()?.unwrap();
+                    let top = levels.iter().copied().min_by(f64::total_cmp).unwrap();
+                    if vertical_values.iter().any(|v| !levels.contains(v) && *v >= top) {
+                        return Err(frame_invalid("upper boundary extension cannot fill interior or lower levels"));
+                    }
+                    Some(*by_level.get(&top.to_bits()).ok_or_else(|| frame_invalid("published upper boundary level is absent"))?)
+                } else { None };
+                let zero_levels: BTreeSet<u64> = match &published {
+                    Some(published) => vertical_values
+                        .iter()
+                        .map(|level| level.to_bits())
+                        .filter(|bits| !by_level.contains_key(bits) && !published.contains(bits))
+                        .collect(),
+                    None => BTreeSet::new(),
+                };
                 let missing: Vec<f64> = vertical_values
                     .iter()
                     .copied()
-                    .filter(|level| !by_level.contains_key(&level.to_bits()))
+                    .filter(|level| {
+                        !by_level.contains_key(&level.to_bits())
+                            && !zero_levels.contains(&level.to_bits())
+                    })
                     .collect();
                 let declared: BTreeSet<u64> =
                     vertical_values.iter().map(|value| value.to_bits()).collect();
@@ -678,6 +842,16 @@ fn assemble_one_field(
                             used.push(*position);
                             ordered.push(level_values);
                         }
+                        None if zero_levels.contains(&level.to_bits()) => {
+                            if let Some((position, rank)) = boundary {
+                                let values=scaled(position,rank);
+                                if values.iter().any(|v| !v.is_finite()) {
+                                    return Err(frame_invalid("upper boundary field contains non-finite data"));
+                                }
+                                used.push(position);
+                                ordered.push(values);
+                            } else { ordered.push(ArrayD::from_elem(plane.clone(), 0.0)); }
+                        }
                         None => ordered.push(ArrayD::from_elem(plane.clone(), f64::NAN)),
                     }
                 }
@@ -713,7 +887,7 @@ fn assemble_one_field(
                         .iter()
                         .enumerate()
                         .filter(|(_index, selector)| {
-                            selector_matches(selector, &identity, &source_format)
+                            selector_matches(selector, &identity, source_format)
                         })
                         .map(|(index, _)| index)
                         .collect();
@@ -924,7 +1098,7 @@ pub fn apply_landmask_water_missing(
 ) -> Result<BTreeMap<DirectKey, DirectValue>> {
     let mut masked_names: Vec<String> = Vec::new();
     for field in mapping.fields()? {
-        if field.missing_kind()? == "landmask_water" {
+        if ["landmask_water", "landmask_zero_water"].contains(&field.missing_kind()?) {
             masked_names.push(field.name.clone());
         }
     }
@@ -972,12 +1146,15 @@ pub fn apply_landmask_water_missing(
         for name in present {
             let key = (valid_time, member.clone(), name.clone());
             let value = &direct[&key];
+            let zero_water = mapping.field(name)?.missing_kind()? == "landmask_zero_water";
             let mut masked = value.values.as_standard_layout().to_owned();
             let cells = water.len();
             let total = masked.len();
             for (position, cell) in masked.iter_mut().enumerate() {
                 if water[position % cells] {
-                    *cell = f64::NAN;
+                    *cell = if zero_water { 0.0 } else { f64::NAN };
+                } else if zero_water && !cell.is_finite() {
+                    return Err(frame_invalid(format!("{name} has missing land values under landmask_zero_water")));
                 }
             }
             debug_assert_eq!(total % cells, 0, "a masked field is whole horizontal planes");
@@ -987,6 +1164,11 @@ pub fn apply_landmask_water_missing(
                 DirectValue {
                     values: masked,
                     missing_count,
+                    references: if zero_water {
+                        let mut references = value.references.clone();
+                        references.push("missing_policy:landmask_zero_water:land_fraction_threshold_0.5".into());
+                        references
+                    } else { value.references.clone() },
                     ..value.clone()
                 },
             ));
@@ -1003,8 +1185,12 @@ pub fn apply_landmask_water_missing(
 pub fn rotate_grid_relative_winds(
     direct: BTreeMap<DirectKey, DirectValue>,
     parameters: &crate::model::LambertParameters,
+    window: Option<([usize; 2], [usize; 2])>,
 ) -> Result<BTreeMap<DirectKey, DirectValue>> {
-    let (sina, cosa) = crate::lambert::declared_grid_rotation(parameters);
+    // Each rotation is computed on first need: the whole grid's for a pair
+    // decoded whole, the window's cells for a pair decoded over the window.
+    let mut whole: Option<(Vec<f64>, Vec<f64>)> = None;
+    let mut windowed: Option<(Vec<f64>, Vec<f64>)> = None;
     // Same reasoning as the landmask: the rotated components are
     // computed first and written into the map this was handed.  Only
     // the wind pairs change, and copying every other field to rewrite
@@ -1045,39 +1231,76 @@ pub fn rotate_grid_relative_winds(
                 )));
             }
             let shape = u.values.shape();
-            if shape[rank - 2] != parameters.ny as usize
-                || shape[rank - 1] != parameters.nx as usize
-            {
-                return Err(frame_invalid(format!(
-                    "({u_name}, {v_name}) at {valid_time} do not share the \
-                     declared grid shape"
-                )));
-            }
+            let plane_shape = [shape[rank - 2], shape[rank - 1]];
+            let (sina, cosa) = if plane_shape == [parameters.ny as usize, parameters.nx as usize] {
+                &*whole.get_or_insert_with(|| crate::lambert::declared_grid_rotation(parameters))
+            } else {
+                match window {
+                    Some((rows, columns))
+                        if plane_shape == [rows[1] - rows[0], columns[1] - columns[0]] =>
+                    {
+                        &*windowed.get_or_insert_with(|| {
+                            crate::lambert::declared_grid_rotation_within(parameters, rows, columns)
+                        })
+                    }
+                    _ => {
+                        return Err(frame_invalid(format!(
+                            "({u_name}, {v_name}) at {valid_time} do not share the \
+                             declared grid shape"
+                        )));
+                    }
+                }
+            };
             let cells = sina.len();
             let u_values = array::contiguous(&u.values);
             let v_values = array::contiguous(&v.values);
-            let mut earth_u = u.values.as_standard_layout().to_owned();
-            let mut earth_v = v.values.as_standard_layout().to_owned();
-            for (position, cell) in earth_u.iter_mut().enumerate() {
-                let plane = position % cells;
-                *cell = u_values[position] * cosa[plane] - v_values[position] * sina[plane];
-            }
-            for (position, cell) in earth_v.iter_mut().enumerate() {
-                let plane = position % cells;
-                *cell = v_values[position] * cosa[plane] + u_values[position] * sina[plane];
-            }
+            // Cell by cell, each from its own two inputs and its plane's
+            // rotation, so the cells are computed on every core and
+            // collected in position order: the same arithmetic in the
+            // same order per cell, the same bytes.  Named breakage: the
+            // two loops ran on one core, about 1.3 s of every 3 km CONUS
+            // native-level valid time, and `..u.clone()` copied each wind
+            // component whole only to replace its values.
+            let (earth_u, earth_v): (Vec<f64>, Vec<f64>) = crate::threads::install(|| {
+                use rayon::prelude::*;
+                let earth_u = (0..u_values.len()).into_par_iter().map(|position| {
+                    let plane = position % cells;
+                    u_values[position] * cosa[plane] - v_values[position] * sina[plane]
+                }).collect();
+                let earth_v = (0..v_values.len()).into_par_iter().map(|position| {
+                    let plane = position % cells;
+                    v_values[position] * cosa[plane] + u_values[position] * sina[plane]
+                }).collect();
+                (earth_u, earth_v)
+            });
+            let earth_u = ArrayD::from_shape_vec(ndarray::IxDyn(u.values.shape()), earth_u)
+                .map_err(|error| frame_invalid(format!("rotated {u_name}: {error}")))?;
+            let earth_v = ArrayD::from_shape_vec(ndarray::IxDyn(v.values.shape()), earth_v)
+                .map_err(|error| frame_invalid(format!("rotated {v_name}: {error}")))?;
             rotated.push((
                 u_key,
                 DirectValue {
+                    name: u.name.clone(),
+                    valid_time: u.valid_time,
+                    member: u.member.clone(),
+                    source_cycle: u.source_cycle,
+                    axes: u.axes.clone(),
                     values: earth_u,
-                    ..u.clone()
+                    missing_count: u.missing_count,
+                    references: u.references.clone(),
                 },
             ));
             rotated.push((
                 v_key,
                 DirectValue {
+                    name: v.name.clone(),
+                    valid_time: v.valid_time,
+                    member: v.member.clone(),
+                    source_cycle: v.source_cycle,
+                    axes: v.axes.clone(),
                     values: earth_v,
-                    ..v.clone()
+                    missing_count: v.missing_count,
+                    references: v.references.clone(),
                 },
             ));
         }
@@ -1217,6 +1440,7 @@ mod tests {
             latitude: vec![10.0, 11.0],
             longitude: vec![20.0, 21.0, 22.0],
             grid_fingerprint: "grid".to_owned(),
+            plane_ladder_hpa: None,
         }
     }
 
@@ -1230,6 +1454,47 @@ mod tests {
             records.push(pressure_record(records.len(), 2, 2, *level));
         }
         records
+    }
+
+
+    #[test]
+    fn mixed_grids_require_explicit_exact_coarsest_subset() {
+        let mapping = pressure_mapping("");
+        let mut records = pressure_records(&[1000.0,5000.0,10000.0], &[1000.0,5000.0,10000.0]);
+        for record in records.iter_mut().filter(|r| r.level_value != 1000.0) {
+            record.latitude = vec![10.0,10.5,11.0];
+            record.longitude = vec![20.0,20.5,21.0,21.5,22.0];
+            record.values = ndarray::Array::from_shape_fn((3,5), |(y,x)| (10*y+x) as f64).into_dyn();
+            record.grid_fingerprint = "fine".into();
+        }
+        assert!(assemble_grib(&mapping, &records).is_err());
+        let mut doc = mapping.doc.to_value();
+        doc["coordinates"]["horizontal"] = serde_json::json!({"normalization":"coarsest_exact_subset"});
+        let mut mapping = mapping;
+        mapping.doc = crate::node::Node::parse(&serde_json::to_vec(&doc).unwrap()).unwrap();
+        let assembled = assemble_grib(&mapping, &records).unwrap();
+        assert_eq!(assembled.latitude, vec![10.0,11.0]);
+        assert_eq!(assembled.longitude, vec![20.0,21.0,22.0]);
+        let temperature = assembled.direct.iter().find(|((_,_,name),_)| name=="air_temperature").unwrap().1;
+        assert_eq!(temperature.values[[1,1,2]],24.0);
+        records[1].longitude[4] = 22.1;
+        assert!(assemble_grib(&mapping, &records).is_err());
+    }
+
+    #[test]
+    fn a_surface_contribution_has_no_invented_vertical_ladder() {
+        let mut mapping = pressure_mapping("");
+        let mut doc = mapping.doc.to_value();
+        doc["coordinates"]["vertical"]["levels"] = serde_json::json!([]);
+        let mut field=doc["fields"]["air_temperature"].clone();
+        field["source_axes"]=serde_json::json!(["y","x"]);
+        field["target_axes"]=serde_json::json!(["y","x"]);
+        doc["fields"]=serde_json::json!({"land_fraction":field});
+        mapping.doc = crate::node::Node::parse(&serde_json::to_vec(&doc).unwrap()).unwrap();
+        let records=vec![pressure_record(0,0,0,0.0)];
+        let assembled=assemble_grib(&mapping,&records).unwrap();
+        assert!(assembled.vertical_values.is_empty());
+        assert_eq!(assembled.direct.len(),1);
     }
 
     const ERA: &str = r#", "era_ladders": [[5000, 10000]]"#;
@@ -1308,6 +1573,158 @@ mod tests {
             choose_ladder(&declared, &eras, &carried),
             vec![5000.0, 10000.0, 20000.0]
         );
+    }
+
+    /// Temperature on the 1000/5000/10000 Pa ladder plus cloud water
+    /// (0.1.22) declared published on 5000 and 10000 Pa only.
+    fn partly_published_mapping(era_ladders: &str) -> Mapping {
+        let text = format!(
+            r#"{{"schema": "rw-wps.mapping.v1", "name": "t", "format": "grib2",
+                "coordinates": {{"vertical": {{"kind": "pressure", "units": "Pa",
+                    "levels": [1000, 5000, 10000]{era_ladders}}}}},
+                "fields": {{
+                  "air_temperature": {{"selectors": [{{"format": "grib2",
+                     "discipline": 0, "category": 0, "parameter": 0,
+                     "level_type": 100}}],
+                   "units": {{"source": "K", "target": "K"}},
+                   "source_axes": ["vertical", "y", "x"],
+                   "target_axes": ["vertical", "y", "x"],
+                   "location": "mass", "staggering": "none",
+                   "missing": {{"kind": "reject"}}}},
+                  "cloud_water_mixing_ratio": {{"selectors": [{{"format": "grib2",
+                     "discipline": 0, "category": 1, "parameter": 22,
+                     "level_type": 100}}],
+                   "units": {{"source": "kg kg-1", "target": "kg kg-1"}},
+                   "source_axes": ["vertical", "y", "x"],
+                   "target_axes": ["vertical", "y", "x"],
+                   "location": "mass", "staggering": "none",
+                   "missing": {{"kind": "reject"}},
+                   "published_levels": {{"levels": [5000, 10000], "absent": "zero"}}}}}}}}"#
+        );
+        let bytes = text.as_bytes().to_vec();
+        Mapping {
+            sha256: crate::digest::bytes_sha256(&bytes),
+            doc: crate::node::Node::parse(&bytes).unwrap(),
+            path: "<test>".to_owned(),
+        }
+    }
+
+    fn partly_published_records(temperature: &[f64], cloud: &[f64]) -> Vec<GribRecord> {
+        let mut records = Vec::new();
+        for level in temperature {
+            records.push(pressure_record(records.len(), 0, 0, *level));
+        }
+        for level in cloud {
+            records.push(pressure_record(records.len(), 1, 22, *level));
+        }
+        records
+    }
+
+    fn field_named<'c>(collection: &'c DecodedCollection, name: &str) -> &'c DirectValue {
+        collection
+            .direct
+            .values()
+            .find(|value| value.name == name)
+            .unwrap()
+    }
+
+    #[test]
+    fn upper_humidity_boundary_extends_only_above_the_published_column() {
+        let mut mapping = partly_published_mapping("");
+        let text = serde_json::to_string(&mapping.doc.to_value()).unwrap()
+            .replace("cloud_water_mixing_ratio", "specific_humidity")
+            .replace("\"zero\"", "\"nearest_upper_boundary\"");
+        mapping.doc = crate::node::Node::parse(text.as_bytes()).unwrap();
+        let all = [1000.0, 5000.0, 10000.0];
+        let records = partly_published_records(&all, &[5000.0, 10000.0]);
+        let collection = assemble_grib(&mapping, &records).unwrap();
+        let humidity = field_named(&collection, "specific_humidity");
+        assert!(humidity.values.index_axis(ndarray::Axis(0), 0).iter().all(|v| *v == 5000.0));
+        assert_eq!(humidity.values[ndarray::IxDyn(&[2, 0, 0])], 10000.0);
+        assert!(assemble_grib(&mapping, &partly_published_records(&all, &[10000.0])).is_err());
+        let bad = text.replace("[5000,10000]", "[1000,10000]");
+        mapping.doc = crate::node::Node::parse(bad.as_bytes()).unwrap();
+        assert!(assemble_grib(&mapping, &partly_published_records(&all, &[1000.0, 10000.0])).is_err());
+    }
+
+    #[test]
+    fn a_field_published_on_part_of_the_ladder_is_zero_on_the_rest() {
+        let mapping = partly_published_mapping("");
+        let all = [1000.0, 5000.0, 10000.0];
+        let records = partly_published_records(&all, &[5000.0, 10000.0]);
+        let collection = assemble_grib(&mapping, &records).unwrap();
+        // The other fields keep the whole declared ladder.
+        assert_eq!(collection.vertical_values, all.to_vec());
+        assert_eq!(field_named(&collection, "air_temperature").values.shape(), &[3, 2, 3]);
+        let cloud = field_named(&collection, "cloud_water_mixing_ratio");
+        assert_eq!(cloud.values.shape(), &[3, 2, 3]);
+        assert!(cloud.values.index_axis(ndarray::Axis(0), 0).iter().all(|value| *value == 0.0));
+        assert_eq!(cloud.values[ndarray::IxDyn(&[1, 0, 0])], 5000.0);
+        assert_eq!(cloud.values[ndarray::IxDyn(&[2, 1, 2])], 10000.0);
+        assert_eq!(cloud.missing_count, 0);
+        assert_eq!(cloud.references, vec!["<test>:3", "<test>:4"]);
+    }
+
+    #[test]
+    fn a_published_level_the_file_leaves_out_still_refuses_by_name() {
+        let mapping = partly_published_mapping("");
+        let all = [1000.0, 5000.0, 10000.0];
+        let records = partly_published_records(&all, &[10000.0]);
+        let refusal = assemble_grib(&mapping, &records).unwrap_err();
+        assert_eq!(
+            refusal.message,
+            "cloud_water_mixing_ratio vertical coverage mismatch; missing=[5000.0], extra=[]"
+        );
+    }
+
+    #[test]
+    fn a_record_on_an_unpublished_level_is_read() {
+        let mapping = partly_published_mapping("");
+        let all = [1000.0, 5000.0, 10000.0];
+        let collection = assemble_grib(&mapping, &partly_published_records(&all, &all)).unwrap();
+        let cloud = field_named(&collection, "cloud_water_mixing_ratio");
+        assert_eq!(cloud.values[ndarray::IxDyn(&[0, 0, 0])], 1000.0);
+    }
+
+    #[test]
+    fn a_partly_published_field_does_not_shorten_the_era_ladder_choice() {
+        // Temperature carries every declared level, so the declared
+        // ladder fits; the cloud field's unpublished 1000 Pa does not
+        // push the decode onto the era ladder that omits it.
+        let mapping = partly_published_mapping(r#", "era_ladders": [[5000, 10000]]"#);
+        let all = [1000.0, 5000.0, 10000.0];
+        let collection =
+            assemble_grib(&mapping, &partly_published_records(&all, &[5000.0, 10000.0])).unwrap();
+        assert_eq!(collection.vertical_values, all.to_vec());
+        // A publication without 1000 Pa anywhere still takes the era ladder.
+        let shorter = assemble_grib(
+            &mapping,
+            &partly_published_records(&[5000.0, 10000.0], &[5000.0, 10000.0]),
+        )
+        .unwrap();
+        assert_eq!(shorter.vertical_values, vec![5000.0, 10000.0]);
+    }
+
+    #[test]
+    fn a_published_levels_declaration_other_than_zero_refuses() {
+        let text = r#"{"schema": "rw-wps.mapping.v1", "name": "t", "format": "grib2",
+            "coordinates": {"vertical": {"kind": "pressure", "units": "Pa",
+                "levels": [1000, 5000]}},
+            "fields": {"cloud_water_mixing_ratio": {"selectors": [{"format": "grib2",
+                 "discipline": 0, "category": 1, "parameter": 22, "level_type": 100}],
+               "units": {"source": "kg kg-1", "target": "kg kg-1"},
+               "source_axes": ["vertical", "y", "x"], "target_axes": ["vertical", "y", "x"],
+               "location": "mass", "missing": {"kind": "reject"},
+               "published_levels": {"levels": [5000], "absent": "nan"}}}}"#;
+        let bytes = text.as_bytes().to_vec();
+        let mapping = Mapping {
+            sha256: crate::digest::bytes_sha256(&bytes),
+            doc: crate::node::Node::parse(&bytes).unwrap(),
+            path: "<test>".to_owned(),
+        };
+        let records = partly_published_records(&[], &[5000.0]);
+        let refusal = assemble_grib(&mapping, &records).unwrap_err();
+        assert!(refusal.message.contains("published_levels.absent"), "{}", refusal.message);
     }
 
     #[test]

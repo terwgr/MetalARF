@@ -11,7 +11,7 @@
       "input_utf8": "[experiment]\nname = \"ordinary-nested\"\nstart_time = 2024-01-01T00:00:00\nrun_seconds = 120.0\nfeedback = 1\n\n[shared]\nnz = 16\nztop = 12000.0\nmoist = true\nspp_conv = 0\nspp_pbl = 0\nsf_lake_physics = 0\nsf_surface_mosaic = 0\nslope_rad = 0\ntopo_wind = 0\ngwd_opt = 0\nadaptive_nest_lattice = false\n\n[[domain]]\ngrid_id = 1\nparent_id = 0\nnx = 32\nny = 24\ndx = 3000.0\ntime_step = 12\n\n[[domain]]\ngrid_id = 2\nparent_id = 1\ni_parent_start = 5\nj_parent_start = 5\nparent_grid_ratio = 3\nparent_time_step_ratio = 3\nnx = 18\nny = 18\nnested = true\nspecified = false\n"
     }
   },
-  "emitter_path": "gpuwm/toml_document.py",
+  "emitter_path": "woof/toml_document.py",
   "emitter_source_sha256": "afdc2d6941ea8361c9470f439eef754e767efd2ffad5a7f94ba546bc01e6dfa0",
   "schema": "ensemble-off-emitted-config-baseline.v1",
   "staging_revision": "00bbfcf9a91723125b4a1328248e90b66e611256"

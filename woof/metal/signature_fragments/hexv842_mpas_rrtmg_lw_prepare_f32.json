@@ -1,0 +1,132 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_prepare_f32",
+      "module": "hexv842_mpas_rrtmg_lw_prepare_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_prepare_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_lw_v842.py",
+      "cuda_symbol": "mpas_lw_prepare",
+      "resources": [
+        [
+          "m",
+          "float",
+          "read"
+        ],
+        [
+          "interfaces",
+          "float",
+          "read"
+        ],
+        [
+          "surface",
+          "float",
+          "read"
+        ],
+        [
+          "pin",
+          "float",
+          "read"
+        ],
+        [
+          "ozone",
+          "float",
+          "read"
+        ],
+        [
+          "a",
+          "float",
+          "read_write"
+        ],
+        [
+          "lev",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interfaces": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pin": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ozone": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lev": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nm",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "icloud",
+          "int32"
+        ],
+        [
+          "reqc",
+          "int32"
+        ],
+        [
+          "reqi",
+          "int32"
+        ],
+        [
+          "reqs",
+          "int32"
+        ],
+        [
+          "o3input",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "presence",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

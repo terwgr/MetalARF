@@ -1,7 +1,7 @@
 {
   "schema": "arwen.zarr-vendor.v1",
-  "lock_sha256": "ede24c77959987eb9df504486b5a593cd22b9c068f75a6c3bf1fed130f326729",
-  "command": "cd tools/zarr_bridge && cargo vendor --locked --offline --versioned-dirs vendor/crates-io",
+  "lock_sha256": "57268c88b7c15f964cd20af6d1f6eb2ef292808bdcdda38f17783762809d4aed",
+  "command": "python tools/update_zarr_license_notice.py (shared registry maintenance: tools/rustwx/VENDOR.md)",
   "packages": [
     {
       "name": "adler2",
@@ -187,15 +187,15 @@
     },
     {
       "name": "core-foundation",
-      "version": "0.9.4",
-      "package_sha256": "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f",
+      "version": "0.10.1",
+      "package_sha256": "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6",
       "license": "MIT OR Apache-2.0",
       "license_file": null
     },
     {
       "name": "core-foundation",
-      "version": "0.10.1",
-      "package_sha256": "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6",
+      "version": "0.9.4",
+      "package_sha256": "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f",
       "license": "MIT OR Apache-2.0",
       "license_file": null
     },

@@ -110,7 +110,9 @@ def _float_array(name: str, value: object, *, ndim: int | None = None) -> FloatA
         raise TypeError(f"{name} must have dtype float32 or float64, got {array.dtype}")
     if ndim is not None and array.ndim != ndim:
         raise ValueError(f"{name} must be {ndim}-dimensional, got shape {array.shape}")
-    if not np.all(np.isfinite(array)):
+    from .host_parallel import all_finite
+
+    if not all_finite(array):
         raise ValueError(f"{name} contains non-finite values")
     return array
 
@@ -255,38 +257,13 @@ def build_terrain_coupling(
         raise ValueError("cells_on_edge contains an edge with the same cell twice")
 
     dtype = raw_zb.dtype
-    n_levels_p1 = logical_zb.shape[0]
-    signs = np.zeros((n_cells, max_edges), dtype=dtype)
-    zb_cell = np.zeros((n_levels_p1, n_cells, max_edges), dtype=dtype)
-    zb3_cell = np.zeros_like(zb_cell)
-    canonical_eoc = np.full((n_cells, max_edges), -1, dtype=np.int64)
     coefficient = dtype.type(config_coef_3rd_order)
+    from .rust_hostprep import terrain_metrics
 
-    for cell in range(n_cells):
-        used: set[int] = set()
-        for slot in range(int(counts[cell])):
-            edge = int(eoc[cell, slot])
-            if edge < 0 or edge >= n_edges:
-                raise ValueError(
-                    f"active edges_on_cell[{cell}, {slot}]={edge} is out of range"
-                )
-            if edge in used:
-                raise ValueError(f"cell {cell} lists edge {edge} more than once")
-            used.add(edge)
-            canonical_eoc[cell, slot] = edge
-            if int(coe[edge, 0]) == cell:
-                side = 0
-                signs[cell, slot] = dtype.type(1.0)
-            elif int(coe[edge, 1]) == cell:
-                side = 1
-                signs[cell, slot] = dtype.type(-1.0)
-            else:
-                raise ValueError(
-                    f"cell {cell} is not present in cells_on_edge for edge {edge}"
-                )
-            zb_cell[:, cell, slot] = logical_zb[:, side, edge]
-            # Frozen atm_couple_coef_3rd_order scales zb3_cell after copying.
-            zb3_cell[:, cell, slot] = coefficient * logical_zb3[:, side, edge]
+    canonical_eoc, signs, zb_cell, zb3_cell = terrain_metrics(
+        counts=counts, edges=eoc, cells_on_edge=coe, zb=logical_zb,
+        zb3=logical_zb3, coefficient=coefficient,
+    )
 
     return TerrainCoupling(
         n_edges_on_cell=counts,
@@ -554,72 +531,42 @@ def recover_velocities(
     nlev, ncells = rho_l.shape
     nedges = coupling.n_edges
 
-    u = np.empty((nlev, nedges), dtype=dtype)
-    for edge in range(nedges):
-        cell1 = int(coupling.cells_on_edge[edge, 0])
-        cell2 = int(coupling.cells_on_edge[edge, 1])
-        for level in range(nlev):
-            denominator = rho_l[level, cell1] + rho_l[level, cell2]
-            if denominator == dtype.type(0.0):
-                raise FloatingPointError(
-                    f"zero edge-density denominator at level {level}, edge {edge}"
-                )
-            u[level, edge] = two * ru_l[level, edge] / denominator
-
+    cell1, cell2 = coupling.cells_on_edge.T
+    denominator = rho_l[:, cell1] + rho_l[:, cell2]
+    invalid = np.argwhere(denominator.T == dtype.type(0.0))
+    if invalid.size:
+        edge, level = invalid[0]
+        raise FloatingPointError(f"zero edge-density denominator at level {level}, edge {edge}")
+    u = two * ru_l / denominator
     w = np.zeros((nlev + 1, ncells), dtype=dtype)
-    for cell in range(ncells):
-        for level in range(1, nlev):
-            interp_zz = (
-                fzm_l[level] * zz_l[level, cell]
-                + fzp_l[level] * zz_l[level - 1, cell]
-            )
-            if interp_zz == dtype.type(0.0):
-                raise FloatingPointError(
-                    f"zero interface zz denominator at level {level}, cell {cell}"
-                )
-            w[level, cell] = rw_l[level, cell] / interp_zz
-
-    for cell in range(ncells):
-        for slot in range(int(coupling.n_edges_on_cell[cell])):
-            edge = int(coupling.edges_on_cell[cell, slot])
-            cell_sign = coupling.edges_on_cell_sign[cell, slot]
-            flux = (
-                cf1_l * ru_l[0, edge]
-                + cf2_l * ru_l[1, edge]
-                + cf3_l * ru_l[2, edge]
-            )
-            w[0, cell] = w[0, cell] + cell_sign * (
-                coupling.zb_cell[0, cell, slot]
-                + np.copysign(one, flux) * coupling.zb3_cell[0, cell, slot]
-            ) * flux
-            for level in range(1, nlev):
-                flux = (
-                    fzm_l[level] * ru_l[level, edge]
-                    + fzp_l[level] * ru_l[level - 1, edge]
-                )
-                w[level, cell] = w[level, cell] + cell_sign * (
-                    coupling.zb_cell[level, cell, slot]
-                    + np.copysign(one, flux) * coupling.zb3_cell[level, cell, slot]
-                ) * flux
-
-        bottom_density = (
-            cf1_l * rho_l[0, cell]
-            + cf2_l * rho_l[1, cell]
-            + cf3_l * rho_l[2, cell]
-        )
-        if bottom_density == dtype.type(0.0):
+    interp_zz = fzm_l[1:nlev, None] * zz_l[1:nlev] + fzp_l[1:nlev, None] * zz_l[:nlev-1]
+    invalid = np.argwhere(interp_zz.T == dtype.type(0.0))
+    if invalid.size:
+        cell, level = invalid[0]
+        raise FloatingPointError(f"zero interface zz denominator at level {level+1}, cell {cell}")
+    w[1:nlev] = rw_l[1:nlev] / interp_zz
+    for slot in range(coupling.edges_on_cell.shape[1]):
+        cell = np.flatnonzero(coupling.n_edges_on_cell > slot)
+        edge = coupling.edges_on_cell[cell, slot]
+        cell_sign = coupling.edges_on_cell_sign[cell, slot]
+        flux = cf1_l * ru_l[0, edge] + cf2_l * ru_l[1, edge] + cf3_l * ru_l[2, edge]
+        w[0, cell] = w[0, cell] + cell_sign * (coupling.zb_cell[0, cell, slot]
+            + np.copysign(one, flux) * coupling.zb3_cell[0, cell, slot]) * flux
+        flux = fzm_l[1:nlev, None] * ru_l[1:nlev, edge] + fzp_l[1:nlev, None] * ru_l[:nlev-1, edge]
+        w[1:nlev, cell] = w[1:nlev, cell] + cell_sign * (coupling.zb_cell[1:nlev, cell, slot]
+            + np.copysign(one, flux) * coupling.zb3_cell[1:nlev, cell, slot]) * flux
+    bottom_density = cf1_l * rho_l[0] + cf2_l * rho_l[1] + cf3_l * rho_l[2]
+    interp_rho = fzm_l[1:nlev, None] * rho_l[1:nlev] + fzp_l[1:nlev, None] * rho_l[:nlev-1]
+    # Preserve the scalar path's cell-first failure ordering.
+    zeros = np.concatenate(((bottom_density == dtype.type(0.0))[None, :], interp_rho == dtype.type(0.0)))
+    invalid = np.argwhere(zeros.T)
+    if invalid.size:
+        cell, level = invalid[0]
+        if level == 0:
             raise FloatingPointError(f"zero bottom density denominator at cell {cell}")
-        w[0, cell] = w[0, cell] / bottom_density
-        for level in range(1, nlev):
-            interp_rho = (
-                fzm_l[level] * rho_l[level, cell]
-                + fzp_l[level] * rho_l[level - 1, cell]
-            )
-            if interp_rho == dtype.type(0.0):
-                raise FloatingPointError(
-                    f"zero interface density denominator at level {level}, cell {cell}"
-                )
-            w[level, cell] = w[level, cell] / interp_rho
+        raise FloatingPointError(f"zero interface density denominator at level {level}, cell {cell}")
+    w[0] = w[0] / bottom_density
+    w[1:nlev] = w[1:nlev] / interp_rho
 
     return RecoveredVelocity(u=u, w=w)
 

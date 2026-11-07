@@ -60,17 +60,18 @@ def submit_nssl2_nucond_supersaturation(
               "exner": exner, "qv": qv, "supersaturation_percent": scratch}
     _cell_resources(context, nz, ny, nx, fields)
     n = nz * ny * nx
+    from woof.wrf_exact import ENABLED
     return context.submit_kernel(
-        "nssl2_nucond_supersaturation", fields,
+        "nssl2_nucond_supersaturation_exact" if ENABLED else "nssl2_nucond_supersaturation", fields,
         {"n": n, "nz": nz, "ny": ny, "nx": nx},
-        exact_policy=False, grid_size=n, threads_per_group=_TPB)
+        exact_policy=ENABLED, grid_size=n, threads_per_group=_TPB)
 
 
 def submit_nssl2_nucond_default(
         context, full_theta, air_density, pressure_pa, exner, w_interface,
         initial_supersaturation_percent, qv, qc, qr, qi, qs, qndrop, qnr,
         qni, qns, qnn, dt_s, *, nz, ny, nx,
-        concentration_space=False, predicted_ccn=True):
+        concentration_space=False, predicted_ccn=True, frozen=None):
     """Advance the default WRF ``ipconc=5`` warm NUCOND stage in place."""
     nz, ny, nx = _dimensions(nz, ny, nx)
     if type(concentration_space) is not bool or type(predicted_ccn) is not bool:
@@ -92,16 +93,26 @@ def submit_nssl2_nucond_default(
     params = {"dt": step32, "concentration_space": int(concentration_space),
               "n": n, "nz": nz, "horizontal_size": ny * nx,
               "predicted_ccn": int(predicted_ccn), "ny": ny, "nx": nx}
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        names = ("qg", "qh", "qng", "qnh", "qvolg", "qvolh")
+        if frozen is not None:
+            frozen = tuple(frozen)
+            if len(frozen) != len(names) or not concentration_space:
+                raise ValueError("frozen NUCOND needs six concentration-space fields")
+            _cell_resources(context, nz, ny, nx, dict(zip(names, frozen)))
+        resources.update(zip(names, frozen if frozen is not None else (qv,) * len(names)))
+        params["has_frozen"] = int(frozen is not None)
     return context.submit_kernel(
-        "nssl2_nucond_default", resources, params, exact_policy=False,
-        grid_size=n, threads_per_group=_TPB)
+        "nssl2_nucond_stage_exact" if ENABLED else "nssl2_nucond_default",
+        resources, params, exact_policy=ENABLED, grid_size=n, threads_per_group=_TPB)
 
 
 def launch_nucond(
         context, full_theta, air_density, pressure_pa, exner, w_interface,
         qv, qc, qr, qi, qs, qndrop, qnr, qni, qns, qnn, dt_s, *,
         supersaturation_scratch, concentration_space=False,
-        predicted_ccn=True):
+        predicted_ccn=True, frozen=None):
     """Queue the prepass and default warm-phase NUCOND kernel in order.
 
     The caller owns ``supersaturation_scratch`` so it can reuse storage across
@@ -114,6 +125,13 @@ def launch_nucond(
     nz, ny, nx = full_theta.shape
     nz, ny, nx = _dimensions(nz, ny, nx)
     context = context or full_theta.buffer.context
+    from woof.wrf_exact import ENABLED
+    if ENABLED and frozen is not None:
+        frozen = tuple(frozen)
+        if len(frozen) != 6 or not concentration_space:
+            raise ValueError("frozen NUCOND needs six concentration-space fields")
+        _cell_resources(context, nz, ny, nx, dict(zip(
+            ("qg", "qh", "qng", "qnh", "qvolg", "qvolh"), frozen)))
     submit_nssl2_nucond_supersaturation(
         context, full_theta, pressure_pa, exner, qv,
         supersaturation_scratch, nz=nz, ny=ny, nx=nx)
@@ -121,7 +139,8 @@ def launch_nucond(
         context, full_theta, air_density, pressure_pa, exner, w_interface,
         supersaturation_scratch, qv, qc, qr, qi, qs, qndrop, qnr, qni,
         qns, qnn, dt_s, nz=nz, ny=ny, nx=nx,
-        concentration_space=concentration_space, predicted_ccn=predicted_ccn)
+        concentration_space=concentration_space, predicted_ccn=predicted_ccn,
+        frozen=frozen)
 
 
 @dataclass(frozen=True)
@@ -145,13 +164,15 @@ class NSSL2MetalNucond:
                 (nz, ny, nx),
                 byte_offset=state.byte_offset + index * nz * ny * nx * 4)
 
+        from woof.wrf_exact import ENABLED
+        frozen = tuple(layer(i) for i in (5, 6, 11, 12, 14, 15)) if ENABLED and self.concentration_space else None
         launch_nucond(
             state.buffer.context, fields.theta, fields.rho, fields.pressure,
             fields.pii, fields.w, layer(0), layer(1), layer(2), layer(3),
             layer(4), layer(7), layer(8), layer(9), layer(10), layer(13),
             self.dt_s, supersaturation_scratch=self.supersaturation_scratch,
             concentration_space=self.concentration_space,
-            predicted_ccn=self.predicted_ccn)
+            predicted_ccn=self.predicted_ccn, frozen=frozen)
 
 
 __all__ = [

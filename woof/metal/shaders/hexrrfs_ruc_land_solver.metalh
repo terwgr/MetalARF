@@ -1,0 +1,3407 @@
+// Land closure translated from the retained RRFS RUC solver.
+static inline F land_qsn ( thread Tables & tb , thread Arena & arena , F tn , FArray < F > t ) {
+F r = ntc :: tc_add ( ntc :: tc_div ( ntc :: tc_sub ( tn , 173.15f ) , .05f ) , 1.f ) ;
+int i = to_i32 ( r ) ;
+if ( i < 1 ) {
+i = 1 ;
+r = 1.f ;
+}
+if ( i > 5000 ) {
+i = 5000 ;
+r = 5001.f ;
+}
+F r1 = t ( i ) ;
+return ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_sub ( t ( i + 1 ) , r1 ) , ntc :: tc_sub ( r , i ) ) , r1 ) ;
+}
+template <typename R0, typename R1>
+static inline void land_vilka ( thread Tables & tb , thread Arena & arena , F tn , F d1 , F d2 , F pp , R0 qs_ref , R1 ts_ref , FArray < F > tt , int nstep , int ii , int j , int iland , int isoil ) {
+F f1 , t1 , rn ;
+int i , i1 ;
+const F first = ntc::tc_add(ntc::tc_div(ntc::tc_sub(tn, 1.7315e2f), .05f), 1);
+// The source indexes tt before checking its first Newton iterate.
+if (!(first >= F(1) && first < F(5001))) {
+    atomicOr(arena.error, 1);
+    return;
+}
+i = to_i32(first);
+t1 = ntc :: tc_add ( 173.1f , ntc :: tc_mul ( F ( i ) , .05f ) ) ;
+f1 = ntc :: tc_sub ( ntc :: tc_add ( t1 , ntc :: tc_mul ( d1 , tt ( i ) ) ) , d2 ) ;
+i1 = to_i32 ( ntc :: tc_sub ( i , ntc :: tc_div ( f1 , ntc :: tc_add ( .05f , ntc :: tc_mul ( d1 , ntc :: tc_sub ( tt ( i + 1 ) , tt ( i ) ) ) ) ) ) ) ;
+i = i1 ;
+if ( i > 5000 || i < 1 ) {
+atomicOr ( arena . error , 1 ) ;
+return ;
+}
+for ( ;
+;
+) {
+i1 = i ;
+t1 = ntc :: tc_add ( 173.1f , ntc :: tc_mul ( F ( i ) , .05f ) ) ;
+f1 = ntc :: tc_sub ( ntc :: tc_add ( t1 , ntc :: tc_mul ( d1 , tt ( i ) ) ) , d2 ) ;
+rn = ntc :: tc_div ( f1 , ntc :: tc_add ( .05f , ntc :: tc_mul ( d1 , ntc :: tc_sub ( tt ( i + 1 ) , tt ( i ) ) ) ) ) ;
+i = i - to_i32 ( rn ) ;
+if ( i > 5000 || i < 1 ) {
+atomicOr ( arena . error , 1 ) ;
+return ;
+}
+if ( i1 == i ) break ;
+}
+(*ts_ref) = ntc :: tc_sub ( t1 , ntc :: tc_mul ( .05f , rn ) ) ;
+(*qs_ref) = ntc :: tc_div ( ntc :: tc_add ( tt ( i ) , ntc :: tc_mul ( ntc :: tc_sub ( tt ( i ) , tt ( i + 1 ) ) , rn ) ) , pp ) ;
+}
+template <typename R0>
+static inline void land_soilprop ( thread Tables & tb , thread Arena & arena , int spp_lsm , FArray < F > rstochcol , FArray < F > fieldcol_sf , int nzs , FArray < F > fwsat , FArray < F > lwsat , FArray < F > tav , FArray < F > keepfr , FArray < F > soilmois , FArray < F > soiliqw , FArray < F > soilice , FArray < F > soilmoism , FArray < F > soiliqwm , FArray < F > soilicem , int globalid , F qwrtz , F rhocs , F dqm , F qmin , F psis , F bclh , F ksat , F riw , F xlmelt , F cp , F g0_p , F cvw , R0 ci_ref , F kqwrtz , F kice , F kwt , FArray < F > thdif , FArray < F > diffu , FArray < F > hydro , FArray < F > cap ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+FArray < F > hk = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > detal = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > kasat = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > kjpl = arena . alloc < F > ( 1 , nzs ) ;
+F x ;
+F x1 ;
+F x2 ;
+F x4 ;
+F ws ;
+F wd ;
+F fact ;
+F fach ;
+F facd ;
+F psif ;
+F tln ;
+F tavln ;
+F tn ;
+F pf ;
+F a ;
+F am ;
+F ame ;
+F h ;
+int nzs1 ;
+int k ;
+F kzero ;
+F gamd ;
+F kdry ;
+F kas ;
+F x5 ;
+F sr ;
+F ke ;
+nzs1 = ( nzs - 1 ) ;
+kzero = 2.f ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+detal ( k ) = 0.f ;
+kasat ( k ) = 0.f ;
+kjpl ( k ) = 0.f ;
+hk ( k ) = 0.f ;
+}
+ws = ntc :: tc_add ( dqm , qmin ) ;
+x1 = ntc :: tc_div ( xlmelt , ntc :: tc_mul ( g0_p , psis ) ) ;
+x2 = ntc :: tc_mul ( ntc :: tc_div ( x1 , bclh ) , ws ) ;
+x4 = ntc :: tc_div ( ntc :: tc_add ( bclh , 1.f ) , bclh ) ;
+gamd = ntc :: tc_mul ( ntc :: tc_sub ( 1.f , ws ) , 2700.f ) ;
+kdry = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_mul ( 0.135f , gamd ) , 64.7f ) , ntc :: tc_sub ( 2700.f , ntc :: tc_mul ( 0.947f , gamd ) ) ) ;
+if ( ( qwrtz > 0.2f ) ) {
+kas = ntc :: tc_mul ( rrfs_gfk_pow ( kqwrtz , qwrtz ) , rrfs_gfk_pow ( kzero , ntc :: tc_sub ( 1.f , qwrtz ) ) ) ;
+}
+else {
+kas = ntc :: tc_mul ( rrfs_gfk_pow ( kqwrtz , qwrtz ) , rrfs_gfk_pow ( 3.f , ntc :: tc_sub ( 1.f , qwrtz ) ) ) ;
+}
+for ( k = 1 ;
+k <= nzs1 ;
+k += 1 ) {
+tn = ntc :: tc_sub ( tav ( k ) , 273.15f ) ;
+wd = ntc :: tc_sub ( ws , ntc :: tc_mul ( riw , soilicem ( k ) ) ) ;
+psif = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( psis , 100.f ) , rrfs_gfk_pow ( ntc :: tc_div ( wd , ntc :: tc_add ( soiliqwm ( k ) , qmin ) ) , bclh ) ) , rrfs_gfk_pow ( ntc :: tc_div ( ws , wd ) , 3.f ) ) ;
+pf = ruc_log10f_rn ( fabs ( psif ) ) ;
+fact = ntc :: tc_add ( 1.f , ntc :: tc_mul ( riw , soilicem ( k ) ) ) ;
+if ( ( pf <= 5.2f ) ) {
+hk ( k ) = ntc :: tc_mul ( ntc :: tc_mul ( 420.f , rrfs_exp_fma ( ( - ntc :: tc_add ( pf , 2.7f ) ) ) ) , fact ) ;
+}
+else {
+hk ( k ) = ntc :: tc_mul ( .1744f , fact ) ;
+}
+if ( ( ( soilicem ( k ) != 0 ) && ( tn < 0.f ) ) ) {
+detal ( k ) = ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( 273.15f , x2 ) , ntc :: tc_mul ( tav ( k ) , tav ( k ) ) ) , rrfs_gfk_pow ( ntc :: tc_div ( tav ( k ) , ntc :: tc_mul ( x1 , tn ) ) , x4 ) ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+detal ( k ) = 0.f ;
+}
+}
+kasat ( k ) = ntc :: tc_mul ( ntc :: tc_mul ( rrfs_gfk_pow ( kas , ntc :: tc_sub ( 1.f , ws ) ) , rrfs_gfk_pow ( kice , fwsat ( k ) ) ) , rrfs_gfk_pow ( kwt , lwsat ( k ) ) ) ;
+x5 = ntc :: tc_div ( ntc :: tc_add ( soilmoism ( k ) , qmin ) , ws ) ;
+if ( ( soilicem ( k ) == 0.f ) ) {
+sr = ruc_max < F > ( 0.101f , x5 ) ;
+ke = ntc :: tc_add ( ruc_log10f_rn ( sr ) , 1.f ) ;
+}
+else {
+ke = x5 ;
+}
+kjpl ( k ) = ntc :: tc_add ( ntc :: tc_mul ( ke , ntc :: tc_sub ( kasat ( k ) , kdry ) ) , kdry ) ;
+cap ( k ) = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_sub ( 1.f , ws ) , rhocs ) , ntc :: tc_mul ( ntc :: tc_add ( soiliqwm ( k ) , qmin ) , cvw ) ) , ntc :: tc_mul ( soilicem ( k ) , (*ci_ref) ) ) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_sub ( dqm , soilmoism ( k ) ) , cp ) , 1.2f ) ) , ntc :: tc_mul ( ntc :: tc_mul ( detal ( k ) , 1.e3f ) , xlmelt ) ) ;
+a = ntc :: tc_mul ( riw , soilicem ( k ) ) ;
+if ( ( ntc :: tc_sub ( ws , a ) < 0.12f ) ) {
+diffu ( k ) = 0.f ;
+}
+else {
+h = ruc_max < F > ( 0.f , ntc :: tc_div ( ntc :: tc_sub ( ntc :: tc_add ( soilmoism ( k ) , qmin ) , a ) , ruc_max < F > ( 1.e-8f , ntc :: tc_sub ( ws , a ) ) ) ) ;
+facd = 1.f ;
+if ( ( a != 0.f ) ) {
+facd = ntc :: tc_sub ( 1.f , ntc :: tc_div ( a , ruc_max < F > ( 1.e-8f , soilmoism ( k ) ) ) ) ;
+}
+ame = ruc_max < F > ( 1.e-8f , ntc :: tc_sub ( ws , a ) ) ;
+diffu ( k ) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( ( - bclh ) , ksat ) , psis ) , ame ) , rrfs_gfk_pow ( ntc :: tc_div ( ws , ame ) , 3.f ) ) , rrfs_gfk_pow ( h , ntc :: tc_add ( bclh , 2.f ) ) ) , facd ) ;
+}
+thdif ( k ) = ntc :: tc_div ( kjpl ( k ) , cap ( k ) ) ;
+}
+if ( false ) {
+;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( ntc :: tc_sub ( ws , ntc :: tc_mul ( riw , soilice ( k ) ) ) < 0.12f ) ) {
+hydro ( k ) = 0.f ;
+}
+else {
+fach = 1.f ;
+if ( ( soilice ( k ) != 0.f ) ) {
+fach = ntc :: tc_sub ( 1.f , ntc :: tc_div ( ntc :: tc_mul ( riw , soilice ( k ) ) , ruc_max < F > ( 1.e-8f , soilmois ( k ) ) ) ) ;
+}
+am = ruc_max < F > ( 1.e-8f , ntc :: tc_sub ( ws , ntc :: tc_mul ( riw , soilice ( k ) ) ) ) ;
+hydro ( k ) = ruc_min < F > ( ksat , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_div ( ksat , am ) , rrfs_gfk_pow ( ntc :: tc_div ( soiliqw ( k ) , am ) , ntc :: tc_add ( ntc :: tc_mul ( 2.f , bclh ) , 2.f ) ) ) , fach ) ) ;
+if ( ( hydro ( k ) < 1.e-10f ) ) {
+hydro ( k ) = 0.f ;
+}
+}
+}
+}
+
+template <typename R0>
+static inline void land_transf ( thread Tables & tb , thread Arena & arena , int i , int j , int nzs , int nroot , FArray < F > soiliqw , F tabs , F lai , F gswin , F dqm , F qmin , F ref , F wilt , FArray < F > zshalf , F pc , int iland , FArray < F > tranf , R0 transum_ref ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+F totliq ;
+F did ;
+int k ;
+F gx ;
+F sm1 ;
+F sm2 ;
+F sm3 ;
+F sm4 ;
+F ap0 ;
+F ap1 ;
+F ap2 ;
+F ap3 ;
+F ap4 ;
+F ftem ;
+F pctot ;
+F fsol ;
+F f1 ;
+F cmin ;
+F cmax ;
+F totcnd ;
+FArray < F > part = arena . alloc < F > ( 1 , nzs ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+part ( k ) = 0.f ;
+tranf ( k ) = 0.f ;
+}
+(*transum_ref) = 0.f ;
+totliq = ntc :: tc_add ( soiliqw ( 1 ) , qmin ) ;
+sm1 = totliq ;
+sm2 = ntc :: tc_mul ( sm1 , sm1 ) ;
+sm3 = ntc :: tc_mul ( sm2 , sm1 ) ;
+sm4 = ntc :: tc_mul ( sm3 , sm1 ) ;
+ap0 = 0.299f ;
+ap1 = ( - 8.152f ) ;
+ap2 = 61.653f ;
+ap3 = ( - 115.876f ) ;
+ap4 = 59.656f ;
+gx = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ap0 , ntc :: tc_mul ( ap1 , sm1 ) ) , ntc :: tc_mul ( ap2 , sm2 ) ) , ntc :: tc_mul ( ap3 , sm3 ) ) , ntc :: tc_mul ( ap4 , sm4 ) ) ;
+if ( ( totliq >= ref ) ) {
+gx = 1.f ;
+}
+if ( ( totliq <= 0.f ) ) {
+gx = 0.f ;
+}
+if ( ( gx > 1.f ) ) {
+gx = 1.f ;
+}
+if ( ( gx < 0.f ) ) {
+gx = 0.f ;
+}
+did = zshalf ( 2 ) ;
+part ( 1 ) = ntc :: tc_mul ( did , gx ) ;
+if ( ( totliq > ref ) ) {
+tranf ( 1 ) = did ;
+}
+else if ( ( totliq <= wilt ) ) {
+tranf ( 1 ) = 0.f ;
+}
+else {
+tranf ( 1 ) = ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_sub ( totliq , wilt ) , ntc :: tc_sub ( ref , wilt ) ) , did ) ;
+}
+for ( k = 2 ;
+k <= nroot ;
+k += 1 ) {
+totliq = ntc :: tc_add ( soiliqw ( k ) , qmin ) ;
+sm1 = totliq ;
+sm2 = ntc :: tc_mul ( sm1 , sm1 ) ;
+sm3 = ntc :: tc_mul ( sm2 , sm1 ) ;
+sm4 = ntc :: tc_mul ( sm3 , sm1 ) ;
+gx = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ap0 , ntc :: tc_mul ( ap1 , sm1 ) ) , ntc :: tc_mul ( ap2 , sm2 ) ) , ntc :: tc_mul ( ap3 , sm3 ) ) , ntc :: tc_mul ( ap4 , sm4 ) ) ;
+if ( ( totliq >= ref ) ) {
+gx = 1.f ;
+}
+if ( ( totliq <= 0.f ) ) {
+gx = 0.f ;
+}
+if ( ( gx > 1.f ) ) {
+gx = 1.f ;
+}
+if ( ( gx < 0.f ) ) {
+gx = 0.f ;
+}
+did = ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ;
+part ( k ) = ntc :: tc_mul ( did , gx ) ;
+if ( ( totliq >= ref ) ) {
+tranf ( k ) = did ;
+}
+else if ( ( totliq <= wilt ) ) {
+tranf ( k ) = 0.f ;
+}
+else {
+tranf ( k ) = ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_sub ( totliq , wilt ) , ntc :: tc_sub ( ref , wilt ) ) , did ) ;
+}
+}
+if ( ( lai > 4.f ) ) {
+pctot = 0.8f ;
+}
+else {
+pctot = pc ;
+}
+if ( false ) {
+;
+}
+if ( ( tabs <= 302.15f ) ) {
+ftem = ntc :: tc_div ( 1.0f , ntc :: tc_add ( 1.0f , rrfs_exp_fma ( ntc :: tc_mul ( ( - 0.41f ) , ntc :: tc_sub ( tabs , 282.05f ) ) ) ) ) ;
+}
+else {
+ftem = ntc :: tc_div ( 1.0f , ntc :: tc_add ( 1.0f , rrfs_exp_fma ( ntc :: tc_mul ( 0.5f , ntc :: tc_sub ( tabs , 314.0f ) ) ) ) ) ;
+}
+if ( false ) {
+;
+}
+cmin = ntc :: tc_div ( 1.f , tb . rsmax_data ) ;
+cmax = ntc :: tc_div ( 1.f , tb . rstbl ( iland ) ) ;
+if ( ( lai > 1.f ) ) {
+cmax = ntc :: tc_div ( lai , tb . rstbl ( iland ) ) ;
+}
+f1 = 0.f ;
+if ( ( gswin < tb . rgltbl ( iland ) ) ) {
+fsol = ntc :: tc_div ( 1.f , ntc :: tc_add ( 1.f , rrfs_exp_fma ( ntc :: tc_mul ( ( - 0.034f ) , ntc :: tc_sub ( gswin , 3.5f ) ) ) ) ) ;
+}
+else {
+fsol = 1.f ;
+}
+if ( false ) {
+;
+}
+totcnd = ntc :: tc_div ( ntc :: tc_add ( cmin , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_sub ( cmax , cmin ) , ftem ) , fsol ) ) , cmax ) ;
+if ( false ) {
+;
+}
+(*transum_ref) = 0.f ;
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+tranf ( k ) = ntc :: tc_mul ( ntc :: tc_mul ( tranf ( k ) , totcnd ) , pctot ) ;
+(*transum_ref) = ntc :: tc_add ( (*transum_ref) , tranf ( k ) ) ;
+}
+if ( false ) {
+;
+}
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4>
+static inline void land_soilmoist ( thread Tables & tb , thread Arena & arena , F delt , int nzs , int nddzs , FArray < F > dtdzs , FArray < F > dtdzs2 , F riw , FArray < F > zsmain , FArray < F > zshalf , FArray < F > diffu , FArray < F > hydro , F qsg , F qvg , F qcg , F qcatm , F qvatm , F prcp , F qkms , FArray < F > transp , F drip , F dew , F smelt , FArray < F > soilice , F vegfrac , F snowfrac , F soilres , int globalid , F dqm , F qmin , F ref , F ksat , F ras , R0 infmax_ref , FArray < F > soilmois , FArray < F > soiliqw , R1 mavail_ref , R2 runoff_ref , R3 runoff2_ref , R4 infiltrp_ref ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+FArray < F > cosmc = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > rhsmc = arena . alloc < F > ( 1 , nzs ) ;
+F dzs ;
+F r1 ;
+F r2 ;
+F r3 ;
+F r4 ;
+F r5 ;
+F r6 ;
+F r7 ;
+F r8 ;
+F r9 ;
+F r10 ;
+F refkdt ;
+F refdk ;
+F delt1 ;
+F f1max ;
+F f2max ;
+F f1 ;
+F f2 ;
+F fd ;
+F kdt ;
+F val ;
+F ddt ;
+F px ;
+F fk ;
+F fkmax ;
+F qq ;
+F umveg ;
+F infmax1 ;
+F trans ;
+F totliq ;
+F flx ;
+F flxsat ;
+F qtot ;
+F did ;
+F x1 ;
+F x2 ;
+F x4 ;
+F denom ;
+F q2 ;
+F q4 ;
+F dice ;
+F fcr ;
+F acrt ;
+F frzx ;
+F sum ;
+F cvfrz ;
+int nzs1 ;
+int nzs2 ;
+int k ;
+int kk ;
+int k1 ;
+int kn ;
+int ialp1 ;
+int jj ;
+int jk ;
+nzs1 = ( nzs - 1 ) ;
+nzs2 = ( nzs - 2 ) ;
+;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+cosmc ( k ) = 0.f ;
+rhsmc ( k ) = 0.f ;
+}
+did = ntc :: tc_sub ( zsmain ( nzs ) , zshalf ( nzs ) ) ;
+x1 = ntc :: tc_sub ( zsmain ( nzs ) , zsmain ( nzs1 ) ) ;
+denom = ntc :: tc_add ( ntc :: tc_add ( 1.f , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_div ( diffu ( nzs1 ) , x1 ) , did ) , delt ) ) , ntc :: tc_mul ( ntc :: tc_div ( hydro ( nzs ) , ntc :: tc_mul ( 2.f , did ) ) , delt ) ) ;
+cosmc ( 1 ) = ntc :: tc_div ( ntc :: tc_mul ( delt , ntc :: tc_add ( ntc :: tc_div ( ntc :: tc_div ( diffu ( nzs1 ) , did ) , x1 ) , ntc :: tc_div ( ntc :: tc_div ( hydro ( nzs1 ) , 2.f ) , did ) ) ) , denom ) ;
+rhsmc ( 1 ) = ntc :: tc_div ( ntc :: tc_add ( soilmois ( nzs ) , ntc :: tc_div ( ntc :: tc_mul ( transp ( nzs ) , delt ) , did ) ) , denom ) ;
+denom = ntc :: tc_add ( 1.f , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_div ( diffu ( nzs1 ) , x1 ) , did ) , delt ) ) ;
+cosmc ( 1 ) = ntc :: tc_div ( ntc :: tc_mul ( delt , ntc :: tc_add ( ntc :: tc_div ( ntc :: tc_div ( diffu ( nzs1 ) , did ) , x1 ) , ntc :: tc_div ( hydro ( nzs1 ) , did ) ) ) , denom ) ;
+rhsmc ( 1 ) = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_sub ( soilmois ( nzs ) , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( hydro ( nzs ) , delt ) , did ) , soilmois ( nzs ) ) ) , ntc :: tc_div ( ntc :: tc_mul ( transp ( nzs ) , delt ) , did ) ) , denom ) ;
+cosmc ( 1 ) = 0.f ;
+rhsmc ( 1 ) = soilmois ( nzs ) ;
+for ( k = 1 ;
+k <= nzs2 ;
+k += 1 ) {
+kn = ( nzs - k ) ;
+k1 = ( ( 2 * kn ) - 3 ) ;
+x4 = ntc :: tc_mul ( ntc :: tc_mul ( 2.f , dtdzs ( k1 ) ) , diffu ( ( kn - 1 ) ) ) ;
+x2 = ntc :: tc_mul ( ntc :: tc_mul ( 2.f , dtdzs ( ( k1 + 1 ) ) ) , diffu ( kn ) ) ;
+q4 = ntc :: tc_add ( x4 , ntc :: tc_mul ( hydro ( ( kn - 1 ) ) , dtdzs2 ( ( kn - 1 ) ) ) ) ;
+q2 = ntc :: tc_sub ( x2 , ntc :: tc_mul ( hydro ( ( kn + 1 ) ) , dtdzs2 ( ( kn - 1 ) ) ) ) ;
+denom = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x2 ) , x4 ) , ntc :: tc_mul ( q2 , cosmc ( k ) ) ) ;
+cosmc ( ( k + 1 ) ) = ntc :: tc_div ( q4 , denom ) ;
+if ( false ) {
+;
+}
+rhsmc ( ( k + 1 ) ) = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_add ( soilmois ( kn ) , ntc :: tc_mul ( q2 , rhsmc ( k ) ) ) , ntc :: tc_mul ( ntc :: tc_div ( transp ( kn ) , ntc :: tc_sub ( zshalf ( ( kn + 1 ) ) , zshalf ( kn ) ) ) , delt ) ) , denom ) ;
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+}
+trans = transp ( 1 ) ;
+umveg = ntc :: tc_mul ( ntc :: tc_sub ( 1.f , vegfrac ) , soilres ) ;
+(*runoff_ref) = 0.f ;
+(*runoff2_ref) = 0.f ;
+dzs = zsmain ( 2 ) ;
+r1 = cosmc ( nzs1 ) ;
+r2 = rhsmc ( nzs1 ) ;
+r3 = ntc :: tc_div ( diffu ( 1 ) , dzs ) ;
+r4 = ntc :: tc_add ( r3 , ntc :: tc_mul ( hydro ( 1 ) , .5f ) ) ;
+r5 = ntc :: tc_sub ( r3 , ntc :: tc_mul ( hydro ( 2 ) , .5f ) ) ;
+r6 = ntc :: tc_mul ( qkms , ras ) ;
+;
+totliq = ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( prcp , ntc :: tc_div ( drip , delt ) ) , ntc :: tc_mul ( ntc :: tc_mul ( umveg , dew ) , ras ) ) , smelt ) ;
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+flx = totliq ;
+(*infiltrp_ref) = totliq ;
+cvfrz = 3.f ;
+refkdt = 3.f ;
+refdk = 3.4341e-6f ;
+delt1 = ntc :: tc_div ( delt , 86400.f ) ;
+f1max = ntc :: tc_mul ( dqm , zshalf ( 2 ) ) ;
+f2max = ntc :: tc_mul ( dqm , ntc :: tc_sub ( zshalf ( 3 ) , zshalf ( 2 ) ) ) ;
+f1 = ntc :: tc_mul ( f1max , ntc :: tc_sub ( 1.f , ntc :: tc_div ( soilmois ( 1 ) , dqm ) ) ) ;
+dice = ntc :: tc_mul ( soilice ( 1 ) , zshalf ( 2 ) ) ;
+fd = f1 ;
+for ( k = 2 ;
+k <= nzs1 ;
+k += 1 ) {
+dice = ntc :: tc_add ( dice , ntc :: tc_mul ( ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) , soilice ( k ) ) ) ;
+fkmax = ntc :: tc_mul ( dqm , ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ) ;
+fk = ntc :: tc_mul ( fkmax , ntc :: tc_sub ( 1.f , ntc :: tc_div ( soilmois ( k ) , dqm ) ) ) ;
+fd = ntc :: tc_add ( fd , fk ) ;
+}
+kdt = ntc :: tc_div ( ntc :: tc_mul ( refkdt , ksat ) , refdk ) ;
+val = ntc :: tc_sub ( 1.f , rrfs_exp_fma ( ntc :: tc_mul ( ( - kdt ) , delt1 ) ) ) ;
+ddt = ntc :: tc_mul ( fd , val ) ;
+px = ntc :: tc_mul ( ( - totliq ) , delt ) ;
+if ( ( px < 0.0f ) ) {
+px = 0.0f ;
+}
+if ( ( px > 0.0f ) ) {
+infmax1 = ntc :: tc_div ( ntc :: tc_mul ( px , ntc :: tc_div ( ddt , ntc :: tc_add ( px , ddt ) ) ) , delt ) ;
+}
+else {
+infmax1 = 0.f ;
+}
+if ( false ) {
+;
+}
+frzx = ntc :: tc_mul ( ntc :: tc_mul ( 0.15f , ntc :: tc_div ( ntc :: tc_add ( dqm , qmin ) , ref ) ) , ntc :: tc_div ( 0.412f , 0.468f ) ) ;
+fcr = 1.f ;
+if ( ( dice > 1.e-2f ) ) {
+acrt = ntc :: tc_div ( ntc :: tc_mul ( cvfrz , frzx ) , dice ) ;
+sum = 1.f ;
+ialp1 = to_i32 ( ntc :: tc_sub ( cvfrz , 1 ) ) ;
+for ( jk = 1 ;
+jk <= ialp1 ;
+jk += 1 ) {
+k = 1 ;
+for ( jj = ( jk + 1 ) ;
+jj <= ialp1 ;
+jj += 1 ) {
+k = ( k * jj ) ;
+}
+sum = ntc :: tc_add ( sum , ntc :: tc_div ( rrfs_gfk_pow ( acrt , ntc :: tc_sub ( cvfrz , jk ) ) , F ( k ) ) ) ;
+}
+fcr = ntc :: tc_sub ( 1.f , ntc :: tc_mul ( rrfs_exp_fma ( ( - acrt ) ) , sum ) ) ;
+}
+if ( false ) {
+;
+;
+}
+infmax1 = ntc :: tc_mul ( infmax1 , fcr ) ;
+(*infmax_ref) = ruc_max < F > ( infmax1 , ntc :: tc_mul ( hydro ( 1 ) , soilmois ( 1 ) ) ) ;
+(*infmax_ref) = ruc_min < F > ( (*infmax_ref) , ( - totliq ) ) ;
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+if ( ( ( - totliq ) > (*infmax_ref) ) ) {
+(*runoff_ref) = ntc :: tc_sub ( ( - totliq ) , (*infmax_ref) ) ;
+flx = ( - (*infmax_ref) ) ;
+if ( false ) {
+;
+}
+}
+(*infiltrp_ref) = flx ;
+r7 = ntc :: tc_div ( ntc :: tc_mul ( .5f , dzs ) , delt ) ;
+r4 = ntc :: tc_add ( r4 , r7 ) ;
+flx = ntc :: tc_sub ( flx , ntc :: tc_mul ( soilmois ( 1 ) , r7 ) ) ;
+r8 = ntc :: tc_mul ( ntc :: tc_mul ( umveg , r6 ) , ntc :: tc_sub ( 1.f , snowfrac ) ) ;
+qtot = ntc :: tc_add ( qvatm , qcatm ) ;
+r9 = trans ;
+r10 = ntc :: tc_sub ( qtot , qsg ) ;
+if ( ( r10 <= 0.f ) ) {
+qq = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_sub ( ntc :: tc_mul ( r5 , r2 ) , flx ) , r9 ) , ntc :: tc_sub ( ntc :: tc_sub ( r4 , ntc :: tc_mul ( r5 , r1 ) ) , ntc :: tc_div ( ntc :: tc_mul ( r10 , r8 ) , ntc :: tc_sub ( ref , qmin ) ) ) ) ;
+flxsat = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( ( - dqm ) , ntc :: tc_sub ( ntc :: tc_sub ( r4 , ntc :: tc_mul ( r5 , r1 ) ) , ntc :: tc_div ( ntc :: tc_mul ( r10 , r8 ) , ntc :: tc_sub ( ref , qmin ) ) ) ) , ntc :: tc_mul ( r5 , r2 ) ) , r9 ) ;
+}
+else {
+qq = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_sub ( ntc :: tc_mul ( r2 , r5 ) , flx ) , ntc :: tc_mul ( r8 , ntc :: tc_sub ( ntc :: tc_sub ( qtot , qcg ) , qvg ) ) ) , r9 ) , ntc :: tc_sub ( r4 , ntc :: tc_mul ( r1 , r5 ) ) ) ;
+flxsat = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( ( - dqm ) , ntc :: tc_sub ( r4 , ntc :: tc_mul ( r1 , r5 ) ) ) , ntc :: tc_mul ( r2 , r5 ) ) , ntc :: tc_mul ( r8 , ntc :: tc_sub ( ntc :: tc_sub ( qtot , qvg ) , qcg ) ) ) , r9 ) ;
+}
+if ( ( qq < 0.f ) ) {
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+soilmois ( 1 ) = 1.e-8f ;
+}
+else if ( ( qq > dqm ) ) {
+soilmois ( 1 ) = dqm ;
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+(*runoff_ref) = ntc :: tc_add ( (*runoff_ref) , ntc :: tc_sub ( flxsat , flx ) ) ;
+}
+else {
+soilmois ( 1 ) = ruc_min < F > ( dqm , ruc_max < F > ( 1.e-8f , qq ) ) ;
+}
+if ( ( globalid == tb . targetcell ) ) {
+;
+;
+}
+for ( k = 2 ;
+k <= nzs ;
+k += 1 ) {
+kk = ( ( nzs - k ) + 1 ) ;
+qq = ntc :: tc_add ( ntc :: tc_mul ( cosmc ( kk ) , soilmois ( ( k - 1 ) ) ) , rhsmc ( kk ) ) ;
+if ( ( qq < 0.f ) ) {
+soilmois ( k ) = 1.e-8f ;
+}
+else if ( ( qq > dqm ) ) {
+soilmois ( k ) = dqm ;
+if ( ( k == nzs ) ) {
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+(*runoff2_ref) = ntc :: tc_add ( (*runoff2_ref) , ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_sub ( qq , dqm ) , ntc :: tc_sub ( zsmain ( k ) , zshalf ( k ) ) ) , delt ) ) ;
+}
+else {
+(*runoff2_ref) = ntc :: tc_add ( (*runoff2_ref) , ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_sub ( qq , dqm ) , ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ) , delt ) ) ;
+}
+}
+else {
+soilmois ( k ) = ruc_min < F > ( dqm , ruc_max < F > ( 1.e-8f , qq ) ) ;
+}
+}
+if ( ( globalid == tb . targetcell ) ) {
+;
+}
+(*mavail_ref) = ruc_max < F > ( .00001f , ruc_min < F > ( 1.f , ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_div ( soilmois ( 1 ) , ntc :: tc_sub ( ref , qmin ) ) , ntc :: tc_sub ( 1.f , snowfrac ) ) , ntc :: tc_mul ( 1.f , snowfrac ) ) ) ) ;
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4, typename R5, typename R6, typename R7, typename R8>
+static inline void land_soiltemp ( thread Tables & tb , thread Arena & arena , int i , int j , int iland , int isoil , F delt , int ktau , F conflx , int nzs , int nddzs , int nroot , F prcpms , F rainf , F patm , F tabs , F qvatm , F qcatm , F emiss , F rnet , F qkms , F tkms , F pc , F rho , F vegfrac , F lai , FArray < F > thdif , FArray < F > cap , R0 drycan_ref , R1 wetcan_ref , R2 transum_ref , F dew , R3 mavail_ref , F soilres , F alfa , int globalid , F dqm , F qmin , F bclh , FArray < F > zsmain , FArray < F > zshalf , FArray < F > dtdzs , FArray < F > tbq , F xlv , F cp , F g0_p , F cvw , F stbolt , FArray < F > tso , R4 soilt_ref , R5 qvg_ref , R6 qsg_ref , R7 qcg_ref , R8 x_ref ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+F x1 ;
+F x2 ;
+F x4 ;
+F dzstop ;
+F can ;
+F ft ;
+F sph ;
+F tn ;
+F trans ;
+F umveg ;
+F denom ;
+F fex ;
+F fkt ;
+F d1 ;
+F d2 ;
+F d9 ;
+F d10 ;
+F did ;
+F r211 ;
+F r21 ;
+F r22 ;
+F r6 ;
+F r7 ;
+F d11 ;
+F pi ;
+F h ;
+F fkq ;
+F r210 ;
+F aa ;
+F bb ;
+F pp ;
+F q1 ;
+F qs1 ;
+F ts1 ;
+F tq2 ;
+F tx2 ;
+F tdenom ;
+F c ;
+F cc ;
+F aa1 ;
+F rhcs ;
+F h1 ;
+F qgold ;
+FArray < F > cotso = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > rhtso = arena . alloc < F > ( 1 , nzs ) ;
+int nzs1 ;
+int nzs2 ;
+int k ;
+int k1 ;
+int kn ;
+int kk ;
+int iter ;
+iter = 0 ;
+nzs1 = ( nzs - 1 ) ;
+nzs2 = ( nzs - 2 ) ;
+dzstop = ntc :: tc_div ( 1.f , ntc :: tc_sub ( zsmain ( 2 ) , zsmain ( 1 ) ) ) ;
+qgold = (*qvg_ref) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+cotso ( k ) = 0.f ;
+rhtso ( k ) = 0.f ;
+}
+cotso ( 1 ) = 0.f ;
+rhtso ( 1 ) = tso ( nzs ) ;
+for ( k = 1 ;
+k <= nzs2 ;
+k += 1 ) {
+kn = ( nzs - k ) ;
+k1 = ( ( 2 * kn ) - 3 ) ;
+x1 = ntc :: tc_mul ( dtdzs ( k1 ) , thdif ( ( kn - 1 ) ) ) ;
+x2 = ntc :: tc_mul ( dtdzs ( ( k1 + 1 ) ) , thdif ( kn ) ) ;
+ft = ntc :: tc_sub ( ntc :: tc_add ( tso ( kn ) , ntc :: tc_mul ( x1 , ntc :: tc_sub ( tso ( ( kn - 1 ) ) , tso ( kn ) ) ) ) , ntc :: tc_mul ( x2 , ntc :: tc_sub ( tso ( kn ) , tso ( ( kn + 1 ) ) ) ) ) ;
+denom = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x1 ) , x2 ) , ntc :: tc_mul ( x2 , cotso ( k ) ) ) ;
+cotso ( ( k + 1 ) ) = ntc :: tc_div ( x1 , denom ) ;
+rhtso ( ( k + 1 ) ) = ntc :: tc_div ( ntc :: tc_add ( ft , ntc :: tc_mul ( x2 , rhtso ( k ) ) ) , denom ) ;
+}
+if ( ( globalid == tb . targetcell ) ) {
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+;
+}
+}
+rhcs = cap ( 1 ) ;
+h = (*mavail_ref) ;
+trans = ntc :: tc_div ( ntc :: tc_mul ( (*transum_ref) , (*drycan_ref) ) , zshalf ( ( nroot + 1 ) ) ) ;
+can = ntc :: tc_add ( (*wetcan_ref) , trans ) ;
+umveg = ntc :: tc_mul ( ntc :: tc_sub ( 1.f , vegfrac ) , soilres ) ;
+;
+fkt = tkms ;
+d1 = cotso ( nzs1 ) ;
+d2 = rhtso ( nzs1 ) ;
+tn = (*soilt_ref) ;
+d9 = ntc :: tc_mul ( ntc :: tc_mul ( thdif ( 1 ) , rhcs ) , dzstop ) ;
+d10 = ntc :: tc_mul ( ntc :: tc_mul ( tkms , cp ) , rho ) ;
+r211 = ntc :: tc_div ( ntc :: tc_mul ( .5f , conflx ) , delt ) ;
+r21 = ntc :: tc_mul ( ntc :: tc_mul ( r211 , cp ) , rho ) ;
+r22 = ntc :: tc_div ( .5f , ntc :: tc_mul ( ntc :: tc_mul ( thdif ( 1 ) , delt ) , ntc :: tc_mul ( dzstop , dzstop ) ) ) ;
+r6 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( emiss , stbolt ) , .5f ) , ntc :: tc_mul ( ntc :: tc_mul ( tn , tn ) , ntc :: tc_mul ( tn , tn ) ) ) ;
+r7 = ntc :: tc_div ( r6 , tn ) ;
+d11 = ntc :: tc_add ( rnet , r6 ) ;
+tdenom = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( d9 , ntc :: tc_add ( ntc :: tc_sub ( 1.f , d1 ) , r22 ) ) , d10 ) , r21 ) , r7 ) , ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) ) ;
+fkq = ntc :: tc_mul ( qkms , rho ) ;
+r210 = ntc :: tc_mul ( r211 , rho ) ;
+c = ntc :: tc_mul ( ntc :: tc_mul ( vegfrac , fkq ) , can ) ;
+cc = ntc :: tc_div ( ntc :: tc_mul ( c , xlv ) , tdenom ) ;
+aa = ntc :: tc_div ( ntc :: tc_mul ( xlv , ntc :: tc_add ( ntc :: tc_mul ( fkq , umveg ) , r210 ) ) , tdenom ) ;
+bb = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( d10 , tabs ) , ntc :: tc_mul ( r21 , tn ) ) , ntc :: tc_mul ( xlv , ntc :: tc_add ( ntc :: tc_mul ( qvatm , ntc :: tc_add ( ntc :: tc_mul ( fkq , umveg ) , c ) ) , ntc :: tc_mul ( r210 , (*qvg_ref) ) ) ) ) , d11 ) , ntc :: tc_mul ( d9 , ntc :: tc_add ( d2 , ntc :: tc_mul ( r22 , tn ) ) ) ) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) , ruc_max < F > ( 273.15f , tabs ) ) ) , tdenom ) ;
+aa1 = ntc :: tc_add ( aa , cc ) ;
+pp = ntc :: tc_mul ( patm , 1.e3f ) ;
+aa1 = ntc :: tc_div ( aa1 , pp ) ;
+land_vilka (tb , arena , tn , aa1 , bb , pp , &(qs1) , &(ts1) , tbq , ktau , i , j , iland , isoil) ;
+tq2 = qvatm ;
+tx2 = ntc :: tc_mul ( tq2 , ntc :: tc_sub ( 1.f , h ) ) ;
+q1 = ntc :: tc_add ( tx2 , ntc :: tc_mul ( h , qs1 ) ) ;
+if ( false ) {
+;
+}
+bool rrfs_saturated = ! ( q1 < qs1 ) ;
+if ( ! rrfs_saturated ) {
+bb = ntc :: tc_sub ( bb , ntc :: tc_mul ( aa , tx2 ) ) ;
+aa = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_mul ( aa , h ) , cc ) , pp ) ;
+land_vilka (tb , arena , tn , aa , bb , pp , &(qs1) , &(ts1) , tbq , ktau , i , j , iland , isoil) ;
+q1 = ntc :: tc_add ( tx2 , ntc :: tc_mul ( h , qs1 ) ) ;
+if ( false ) {
+;
+}
+rrfs_saturated = ( q1 >= qs1 ) ;
+}
+if ( rrfs_saturated ) {
+(*qvg_ref) = qs1 ;
+(*qsg_ref) = qs1 ;
+tso ( 1 ) = ts1 ;
+(*qcg_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( q1 , qs1 ) ) ;
+if ( false ) {
+;
+}
+}
+else {
+(*qsg_ref) = qs1 ;
+(*qvg_ref) = q1 ;
+tso ( 1 ) = ts1 ;
+(*qcg_ref) = 0.f ;
+if ( false ) {
+;
+}
+}
+;
+if ( false ) {
+;
+}
+(*soilt_ref) = ts1 ;
+for ( k = 2 ;
+k <= nzs ;
+k += 1 ) {
+kk = ( ( nzs - k ) + 1 ) ;
+tso ( k ) = ntc :: tc_add ( rhtso ( kk ) , ntc :: tc_mul ( cotso ( kk ) , tso ( ( k - 1 ) ) ) ) ;
+}
+(*x_ref) = ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_mul ( cp , rho ) , r211 ) , ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( rhcs , zsmain ( 2 ) ) , 0.5f ) , delt ) ) , ntc :: tc_sub ( (*soilt_ref) , tn ) ) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( xlv , rho ) , r211 ) , ntc :: tc_sub ( (*qvg_ref) , qgold ) ) ) ;
+if ( ( globalid == tb . targetcell ) ) {
+;
+;
+;
+}
+(*x_ref) = ntc :: tc_sub ( (*x_ref) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) , ntc :: tc_sub ( ruc_max < F > ( 273.15f , tabs ) , (*soilt_ref) ) ) ) ;
+if ( false ) {
+;
+}
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4, typename R5, typename R6, typename R7, typename R8, typename R9, typename R10, typename R11, typename R12, typename R13, typename R14, typename R15, typename R16, typename R17, typename R18, typename R19, typename R20, typename R21, typename R22, typename R23, typename R24, typename R25, typename R26>
+static inline void land_snowtemp ( thread Tables & tb , thread Arena & arena , int i , int j , int iland , int isoil , F delt , int ktau , F conflx , int nzs , int nddzs , int nroot , R0 snwe_ref , F snwepr , R1 snhei_ref , F newsnow , R2 snowfrac_ref , R3 beta_ref , F deltsn , F snth , R4 rhosn_ref , F rhonewsn , F meltfactor , F prcpms , F rainf , F patm , F tabs , F qvatm , F qcatm , F glw , F gsw , R5 emiss_ref , R6 rnet_ref , F qkms , F tkms , F pc , F rho , F vegfrac , FArray < F > thdif , FArray < F > cap , R7 drycan_ref , R8 wetcan_ref , R9 cst_ref , FArray < F > tranf , F transum , R10 dew_ref , R11 mavail_ref , int globalcellid , F dqm , F qmin , F psis , F bclh , FArray < F > zsmain , FArray < F > zshalf , FArray < F > dtdzs , FArray < F > tbq , F xlvm , F cp , F rovcp , F g0_p , F cvw , F stbolt , R12 snweprint_ref , R13 snheiprint_ref , R14 rsm_ref , FArray < F > tso , R15 soilt_ref , R16 soilt1_ref , R17 tsnav_ref , R18 qvg_ref , R19 qsg_ref , R20 qcg_ref , R21 smelt_ref , R22 snoh_ref , R23 snflx_ref , R24 s_ref , R25 ilnb_ref , R26 x_ref ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+F rhonewcsn ;
+int nzs1 ;
+int nzs2 ;
+int k ;
+int k1 ;
+int kn ;
+int kk ;
+F x1 ;
+F x2 ;
+F x4 ;
+F dzstop ;
+F can ;
+F ft ;
+F sph ;
+F tn ;
+F trans ;
+F umveg ;
+F denom ;
+F cotsn ;
+F rhtsn ;
+F xsn1 ;
+F ddzsn1 ;
+F x1sn1 ;
+F ftsnow ;
+F denomsn ;
+F t3 ;
+F upflux ;
+F xinet ;
+F ras ;
+F xlmelt ;
+F rhocsn ;
+F thdifsn ;
+F epot ;
+F xsn ;
+F ddzsn ;
+F x1sn ;
+F d1sn ;
+F d2sn ;
+F d9sn ;
+F r22sn ;
+F fso ;
+F fsn ;
+F fkt ;
+F d1 ;
+F d2 ;
+F d9 ;
+F d10 ;
+F did ;
+F r211 ;
+F r21 ;
+F r22 ;
+F r6 ;
+F r7 ;
+F d11 ;
+F pi ;
+F h ;
+F fkq ;
+F r210 ;
+F aa ;
+F bb ;
+F pp ;
+F q1 ;
+F qs1 ;
+F ts1 ;
+F tq2 ;
+F tx2 ;
+F tdenom ;
+F c ;
+F cc ;
+F aa1 ;
+F rhcs ;
+F h1 ;
+F tsob ;
+F snprim ;
+F sh1 ;
+F sh2 ;
+F smeltg ;
+F snohg ;
+F snodif ;
+F soh ;
+F cmc2ms ;
+F tnold ;
+F qgold ;
+F snohgnew ;
+FArray < F > transp = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > cotso = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > rhtso = arena . alloc < F > ( 1 , nzs ) ;
+F edir1 ;
+F ec1 ;
+F ett1 ;
+F eeta ;
+F qfx ;
+F hfx ;
+F rsmfrac ;
+F soiltfrac ;
+F hsn ;
+F rr ;
+F keff ;
+F fact ;
+int nmelt ;
+int iter ;
+if ( arena . snowtemp_calls ) ++ * arena . snowtemp_calls ;
+if ( arena . entry_ilnb ) (*ilnb_ref) = * arena . entry_ilnb ;
+iter = 0 ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+cotso ( k ) = 0.f ;
+rhtso ( k ) = 0.f ;
+}
+keff = 0.265f ;
+if ( false ) {
+;
+}
+xlmelt = 3.35e+5f ;
+rhocsn = ntc :: tc_mul ( 2090.f , (*rhosn_ref) ) ;
+rhonewcsn = ntc :: tc_mul ( 2090.f , rhonewsn ) ;
+if ( ( isncond_opt == 1 ) ) {
+thdifsn = ntc :: tc_div ( 0.265f , rhocsn ) ;
+}
+else {
+fact = 1.f ;
+if ( ( ( (*rhosn_ref) < 156.f ) || ( ( newsnow > 0.f ) && ( rhonewsn < 156.f ) ) ) ) {
+keff = ntc :: tc_add ( 0.023f , ntc :: tc_mul ( ntc :: tc_mul ( 0.234f , (*rhosn_ref) ) , 1.e-3f ) ) ;
+}
+else {
+keff = ntc :: tc_add ( ntc :: tc_sub ( 0.138f , ntc :: tc_mul ( ntc :: tc_mul ( 1.01f , (*rhosn_ref) ) , 1.e-3f ) ) , ntc :: tc_mul ( ntc :: tc_mul ( 3.233f , ntc :: tc_mul ( (*rhosn_ref) , (*rhosn_ref) ) ) , 1.e-6f ) ) ;
+}
+if ( ( ( ( newsnow <= 0.f ) && ( (*snhei_ref) > 1.f ) ) && ( (*rhosn_ref) > 250.f ) ) ) {
+thdifsn = 4.431718e-7f ;
+}
+else {
+thdifsn = ntc :: tc_mul ( ntc :: tc_div ( keff , rhocsn ) , fact ) ;
+}
+}
+ras = ntc :: tc_mul ( rho , 1.e-3f ) ;
+soiltfrac = (*soilt_ref) ;
+(*smelt_ref) = 0.f ;
+soh = 0.f ;
+smeltg = 0.f ;
+snohg = 0.f ;
+snodif = 0.f ;
+(*rsm_ref) = 0.f ;
+rsmfrac = 0.f ;
+fsn = 1.f ;
+fso = 0.f ;
+nzs1 = ( nzs - 1 ) ;
+nzs2 = ( nzs - 2 ) ;
+qgold = (*qvg_ref) ;
+dzstop = ntc :: tc_div ( 1.f , ntc :: tc_sub ( zsmain ( 2 ) , zsmain ( 1 ) ) ) ;
+cotso ( 1 ) = 0.f ;
+rhtso ( 1 ) = tso ( nzs ) ;
+for ( k = 1 ;
+k <= nzs2 ;
+k += 1 ) {
+kn = ( nzs - k ) ;
+k1 = ( ( 2 * kn ) - 3 ) ;
+x1 = ntc :: tc_mul ( dtdzs ( k1 ) , thdif ( ( kn - 1 ) ) ) ;
+x2 = ntc :: tc_mul ( dtdzs ( ( k1 + 1 ) ) , thdif ( kn ) ) ;
+ft = ntc :: tc_sub ( ntc :: tc_add ( tso ( kn ) , ntc :: tc_mul ( x1 , ntc :: tc_sub ( tso ( ( kn - 1 ) ) , tso ( kn ) ) ) ) , ntc :: tc_mul ( x2 , ntc :: tc_sub ( tso ( kn ) , tso ( ( kn + 1 ) ) ) ) ) ;
+denom = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x1 ) , x2 ) , ntc :: tc_mul ( x2 , cotso ( k ) ) ) ;
+cotso ( ( k + 1 ) ) = ntc :: tc_div ( x1 , denom ) ;
+rhtso ( ( k + 1 ) ) = ntc :: tc_div ( ntc :: tc_add ( ft , ntc :: tc_mul ( x2 , rhtso ( k ) ) ) , denom ) ;
+}
+if ( ( (*snhei_ref) >= snth ) ) {
+if ( ( (*snhei_ref) <= ntc :: tc_add ( deltsn , snth ) ) ) {
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+(*ilnb_ref) = 1 ;
+snprim = ruc_max < F > ( snth , (*snhei_ref) ) ;
+tsob = tso ( 1 ) ;
+(*soilt1_ref) = tso ( 1 ) ;
+xsn = ntc :: tc_div ( ntc :: tc_div ( delt , 2.f ) , ntc :: tc_add ( zshalf ( 2 ) , ntc :: tc_mul ( 0.5f , snprim ) ) ) ;
+ddzsn = ntc :: tc_div ( xsn , snprim ) ;
+x1sn = ntc :: tc_mul ( ddzsn , thdifsn ) ;
+x2 = ntc :: tc_mul ( dtdzs ( 1 ) , thdif ( 1 ) ) ;
+ft = ntc :: tc_sub ( ntc :: tc_add ( tso ( 1 ) , ntc :: tc_mul ( x1sn , ntc :: tc_sub ( (*soilt_ref) , tso ( 1 ) ) ) ) , ntc :: tc_mul ( x2 , ntc :: tc_sub ( tso ( 1 ) , tso ( 2 ) ) ) ) ;
+denom = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x1sn ) , x2 ) , ntc :: tc_mul ( x2 , cotso ( nzs1 ) ) ) ;
+cotso ( nzs ) = ntc :: tc_div ( x1sn , denom ) ;
+rhtso ( nzs ) = ntc :: tc_div ( ntc :: tc_add ( ft , ntc :: tc_mul ( x2 , rhtso ( nzs1 ) ) ) , denom ) ;
+cotsn = cotso ( nzs ) ;
+rhtsn = rhtso ( nzs ) ;
+(*tsnav_ref) = ntc :: tc_sub ( ntc :: tc_mul ( 0.5f , ntc :: tc_add ( (*soilt_ref) , tso ( 1 ) ) ) , 273.15f ) ;
+}
+else {
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+(*ilnb_ref) = 2 ;
+snprim = deltsn ;
+tsob = (*soilt1_ref) ;
+xsn = ntc :: tc_div ( ntc :: tc_div ( delt , 2.f ) , ntc :: tc_mul ( 0.5f , deltsn ) ) ;
+xsn1 = ntc :: tc_div ( ntc :: tc_div ( delt , 2.f ) , ntc :: tc_add ( zshalf ( 2 ) , ntc :: tc_mul ( 0.5f , ntc :: tc_sub ( (*snhei_ref) , deltsn ) ) ) ) ;
+ddzsn = ntc :: tc_div ( xsn , deltsn ) ;
+ddzsn1 = ntc :: tc_div ( xsn1 , ntc :: tc_sub ( (*snhei_ref) , deltsn ) ) ;
+x1sn = ntc :: tc_mul ( ddzsn , thdifsn ) ;
+x1sn1 = ntc :: tc_mul ( ddzsn1 , thdifsn ) ;
+x2 = ntc :: tc_mul ( dtdzs ( 1 ) , thdif ( 1 ) ) ;
+ft = ntc :: tc_sub ( ntc :: tc_add ( tso ( 1 ) , ntc :: tc_mul ( x1sn1 , ntc :: tc_sub ( (*soilt1_ref) , tso ( 1 ) ) ) ) , ntc :: tc_mul ( x2 , ntc :: tc_sub ( tso ( 1 ) , tso ( 2 ) ) ) ) ;
+denom = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x1sn1 ) , x2 ) , ntc :: tc_mul ( x2 , cotso ( nzs1 ) ) ) ;
+cotso ( nzs ) = ntc :: tc_div ( x1sn1 , denom ) ;
+rhtso ( nzs ) = ntc :: tc_div ( ntc :: tc_add ( ft , ntc :: tc_mul ( x2 , rhtso ( nzs1 ) ) ) , denom ) ;
+ftsnow = ntc :: tc_sub ( ntc :: tc_add ( (*soilt1_ref) , ntc :: tc_mul ( x1sn , ntc :: tc_sub ( (*soilt_ref) , (*soilt1_ref) ) ) ) , ntc :: tc_mul ( x1sn1 , ntc :: tc_sub ( (*soilt1_ref) , tso ( 1 ) ) ) ) ;
+denomsn = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x1sn ) , x1sn1 ) , ntc :: tc_mul ( x1sn1 , cotso ( nzs ) ) ) ;
+cotsn = ntc :: tc_div ( x1sn , denomsn ) ;
+rhtsn = ntc :: tc_div ( ntc :: tc_add ( ftsnow , ntc :: tc_mul ( x1sn1 , rhtso ( nzs ) ) ) , denomsn ) ;
+(*tsnav_ref) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_div ( 0.5f , (*snhei_ref) ) , ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_add ( (*soilt_ref) , (*soilt1_ref) ) , deltsn ) , ntc :: tc_mul ( ntc :: tc_add ( (*soilt1_ref) , tso ( 1 ) ) , ntc :: tc_sub ( (*snhei_ref) , deltsn ) ) ) ) , 273.15f ) ;
+}
+}
+if ( ( ( (*snhei_ref) < snth ) && ( (*snhei_ref) > 0.f ) ) ) {
+snprim = ntc :: tc_add ( (*snhei_ref) , zsmain ( 2 ) ) ;
+fsn = ntc :: tc_div ( (*snhei_ref) , snprim ) ;
+fso = ntc :: tc_sub ( 1.f , fsn ) ;
+(*soilt1_ref) = tso ( 1 ) ;
+tsob = tso ( 2 ) ;
+xsn = ntc :: tc_div ( ntc :: tc_div ( delt , 2.f ) , ntc :: tc_add ( ntc :: tc_sub ( zshalf ( 3 ) , zsmain ( 2 ) ) , ntc :: tc_mul ( 0.5f , snprim ) ) ) ;
+ddzsn = ntc :: tc_div ( xsn , snprim ) ;
+x1sn = ntc :: tc_mul ( ddzsn , ntc :: tc_add ( ntc :: tc_mul ( fsn , thdifsn ) , ntc :: tc_mul ( fso , thdif ( 1 ) ) ) ) ;
+x2 = ntc :: tc_mul ( dtdzs ( 2 ) , thdif ( 2 ) ) ;
+ft = ntc :: tc_sub ( ntc :: tc_add ( tso ( 2 ) , ntc :: tc_mul ( x1sn , ntc :: tc_sub ( (*soilt_ref) , tso ( 2 ) ) ) ) , ntc :: tc_mul ( x2 , ntc :: tc_sub ( tso ( 2 ) , tso ( 3 ) ) ) ) ;
+denom = ntc :: tc_sub ( ntc :: tc_add ( ntc :: tc_add ( 1.f , x1sn ) , x2 ) , ntc :: tc_mul ( x2 , cotso ( ( nzs - 2 ) ) ) ) ;
+cotso ( nzs1 ) = ntc :: tc_div ( x1sn , denom ) ;
+rhtso ( nzs1 ) = ntc :: tc_div ( ntc :: tc_add ( ft , ntc :: tc_mul ( x2 , rhtso ( ( nzs - 2 ) ) ) ) , denom ) ;
+(*tsnav_ref) = ntc :: tc_sub ( ntc :: tc_mul ( 0.5f , ntc :: tc_add ( (*soilt_ref) , tso ( 1 ) ) ) , 273.15f ) ;
+cotso ( nzs ) = cotso ( nzs1 ) ;
+rhtso ( nzs ) = rhtso ( nzs1 ) ;
+cotsn = cotso ( nzs ) ;
+rhtsn = rhtso ( nzs ) ;
+}
+nmelt = 0 ;
+(*snoh_ref) = 0.f ;
+ett1 = 0.f ;
+epot = ntc :: tc_mul ( ( - qkms ) , ntc :: tc_sub ( qvatm , qgold ) ) ;
+rhcs = cap ( 1 ) ;
+h = (*mavail_ref) ;
+trans = ntc :: tc_div ( ntc :: tc_mul ( transum , (*drycan_ref) ) , zshalf ( ( nroot + 1 ) ) ) ;
+can = ntc :: tc_add ( (*wetcan_ref) , trans ) ;
+umveg = ntc :: tc_sub ( 1.f , vegfrac ) ;
+fkt = tkms ;
+d1 = cotso ( nzs1 ) ;
+d2 = rhtso ( nzs1 ) ;
+tn = (*soilt_ref) ;
+d9 = ntc :: tc_mul ( ntc :: tc_mul ( thdif ( 1 ) , rhcs ) , dzstop ) ;
+d10 = ntc :: tc_mul ( ntc :: tc_mul ( tkms , cp ) , rho ) ;
+r211 = ntc :: tc_div ( ntc :: tc_mul ( .5f , conflx ) , delt ) ;
+r21 = ntc :: tc_mul ( ntc :: tc_mul ( r211 , cp ) , rho ) ;
+r22 = ntc :: tc_div ( .5f , ntc :: tc_mul ( ntc :: tc_mul ( thdif ( 1 ) , delt ) , ntc :: tc_mul ( dzstop , dzstop ) ) ) ;
+r6 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( (*emiss_ref) , stbolt ) , .5f ) , ntc :: tc_mul ( ntc :: tc_mul ( tn , tn ) , ntc :: tc_mul ( tn , tn ) ) ) ;
+r7 = ntc :: tc_div ( r6 , tn ) ;
+d11 = ntc :: tc_add ( (*rnet_ref) , r6 ) ;
+if ( ( (*snhei_ref) >= snth ) ) {
+if ( ( (*snhei_ref) <= ntc :: tc_add ( deltsn , snth ) ) ) {
+d1sn = cotso ( nzs ) ;
+d2sn = rhtso ( nzs ) ;
+if ( false ) {
+;
+}
+}
+else {
+d1sn = cotsn ;
+d2sn = rhtsn ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+d9sn = ntc :: tc_div ( ntc :: tc_mul ( thdifsn , rhocsn ) , snprim ) ;
+r22sn = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( snprim , snprim ) , 0.5f ) , ntc :: tc_mul ( thdifsn , delt ) ) ;
+if ( false ) {
+;
+}
+}
+if ( ( ( (*snhei_ref) < snth ) && ( (*snhei_ref) > 0.f ) ) ) {
+d1sn = d1 ;
+d2sn = d2 ;
+d9sn = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_mul ( fsn , thdifsn ) , rhocsn ) , ntc :: tc_mul ( ntc :: tc_mul ( fso , thdif ( 1 ) ) , rhcs ) ) , snprim ) ;
+r22sn = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( snprim , snprim ) , 0.5f ) , ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_mul ( fsn , thdifsn ) , ntc :: tc_mul ( fso , thdif ( 1 ) ) ) , delt ) ) ;
+if ( false ) {
+;
+}
+}
+if ( ( (*snhei_ref) == 0.f ) ) {
+d9sn = d9 ;
+r22sn = r22 ;
+d1sn = d1 ;
+d2sn = d2 ;
+if ( false ) {
+;
+}
+}
+;
+for ( ;
+;
+) {
+;
+tdenom = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( d9sn , ntc :: tc_add ( ntc :: tc_sub ( 1.f , d1sn ) , r22sn ) ) , d10 ) , r21 ) , r7 ) , ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) ) , ntc :: tc_div ( ntc :: tc_mul ( rhonewcsn , newsnow ) , delt ) ) ;
+fkq = ntc :: tc_mul ( qkms , rho ) ;
+r210 = ntc :: tc_mul ( r211 , rho ) ;
+c = ntc :: tc_mul ( ntc :: tc_mul ( vegfrac , fkq ) , can ) ;
+cc = ntc :: tc_div ( ntc :: tc_mul ( c , xlvm ) , tdenom ) ;
+aa = ntc :: tc_div ( ntc :: tc_mul ( xlvm , ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_mul ( (*beta_ref) , fkq ) , umveg ) , r210 ) ) , tdenom ) ;
+bb = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( d10 , tabs ) , ntc :: tc_mul ( r21 , tn ) ) , ntc :: tc_mul ( xlvm , ntc :: tc_add ( ntc :: tc_mul ( qvatm , ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_mul ( (*beta_ref) , fkq ) , umveg ) , c ) ) , ntc :: tc_mul ( r210 , qgold ) ) ) ) , d11 ) , ntc :: tc_mul ( d9sn , ntc :: tc_add ( d2sn , ntc :: tc_mul ( r22sn , tn ) ) ) ) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) , ruc_max < F > ( 273.15f , tabs ) ) ) , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( rhonewcsn , newsnow ) , delt ) , ruc_min < F > ( 273.15f , tabs ) ) ) , tdenom ) ;
+aa1 = ntc :: tc_add ( aa , cc ) ;
+pp = ntc :: tc_mul ( patm , 1.e3f ) ;
+aa1 = ntc :: tc_div ( aa1 , pp ) ;
+bb = ntc :: tc_sub ( bb , ntc :: tc_div ( (*snoh_ref) , tdenom ) ) ;
+land_vilka (tb , arena , tn , aa1 , bb , pp , &(qs1) , &(ts1) , tbq , ktau , i , j , iland , isoil) ;
+tq2 = qvatm ;
+tx2 = ntc :: tc_mul ( tq2 , ntc :: tc_sub ( 1.f , h ) ) ;
+q1 = ntc :: tc_add ( tx2 , ntc :: tc_mul ( h , qs1 ) ) ;
+if ( false ) {
+;
+}
+bool rrfs_saturated = ! ( q1 < qs1 ) ;
+if ( ! rrfs_saturated ) {
+bb = ntc :: tc_sub ( bb , ntc :: tc_mul ( aa , tx2 ) ) ;
+aa = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_mul ( aa , h ) , cc ) , pp ) ;
+land_vilka (tb , arena , tn , aa , bb , pp , &(qs1) , &(ts1) , tbq , ktau , i , j , iland , isoil) ;
+q1 = ntc :: tc_add ( tx2 , ntc :: tc_mul ( h , qs1 ) ) ;
+if ( false ) {
+;
+}
+rrfs_saturated = ( q1 > qs1 ) ;
+}
+if ( rrfs_saturated ) {
+(*qvg_ref) = qs1 ;
+(*qsg_ref) = qs1 ;
+(*qcg_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( q1 , qs1 ) ) ;
+if ( false ) {
+;
+}
+}
+else {
+(*qsg_ref) = qs1 ;
+(*qvg_ref) = q1 ;
+(*qcg_ref) = 0.f ;
+if ( false ) {
+;
+}
+}
+;
+(*soilt_ref) = ts1 ;
+if ( ( ( ( ( nmelt == 1 ) && ( (*snowfrac_ref) == 1.f ) ) && ( (*snwe_ref) > 0.f ) ) && ( (*soilt_ref) > 273.15f ) ) ) {
+(*soilt_ref) = ruc_min < F > ( 273.15f , (*soilt_ref) ) ;
+}
+if ( false ) {
+if ( ( ( i == 266 ) && ( j == 447 ) ) ) {
+;
+}
+}
+if ( ( (*snhei_ref) >= snth ) ) {
+if ( ( (*snhei_ref) > ntc :: tc_add ( deltsn , snth ) ) ) {
+(*soilt1_ref) = ruc_min < F > ( 273.15f , ntc :: tc_add ( rhtsn , ntc :: tc_mul ( cotsn , (*soilt_ref) ) ) ) ;
+tso ( 1 ) = ntc :: tc_add ( rhtso ( nzs ) , ntc :: tc_mul ( cotso ( nzs ) , (*soilt1_ref) ) ) ;
+tsob = (*soilt1_ref) ;
+}
+else {
+tso ( 1 ) = ntc :: tc_add ( rhtso ( nzs ) , ntc :: tc_mul ( cotso ( nzs ) , (*soilt_ref) ) ) ;
+(*soilt1_ref) = tso ( 1 ) ;
+tsob = tso ( 1 ) ;
+}
+}
+else if ( ( ( (*snhei_ref) > 0.f ) && ( (*snhei_ref) < snth ) ) ) {
+tso ( 2 ) = ntc :: tc_add ( rhtso ( nzs1 ) , ntc :: tc_mul ( cotso ( nzs1 ) , (*soilt_ref) ) ) ;
+tso ( 1 ) = ntc :: tc_add ( tso ( 2 ) , ntc :: tc_mul ( ntc :: tc_sub ( (*soilt_ref) , tso ( 2 ) ) , fso ) ) ;
+(*soilt1_ref) = tso ( 1 ) ;
+tsob = tso ( 2 ) ;
+}
+else {
+tso ( 1 ) = (*soilt_ref) ;
+(*soilt1_ref) = (*soilt_ref) ;
+tsob = tso ( 1 ) ;
+}
+if ( ( ( nmelt == 1 ) && ( (*snowfrac_ref) == 1.f ) ) ) {
+(*soilt1_ref) = ruc_min < F > ( 273.15f , (*soilt1_ref) ) ;
+tso ( 1 ) = ruc_min < F > ( 273.15f , tso ( 1 ) ) ;
+tsob = ruc_min < F > ( 273.15f , tsob ) ;
+}
+if ( ( ( (*snhei_ref) > 0.f ) && ( (*snhei_ref) < snth ) ) ) {
+for ( k = 3 ;
+k <= nzs ;
+k += 1 ) {
+kk = ( ( nzs - k ) + 1 ) ;
+tso ( k ) = ntc :: tc_add ( rhtso ( kk ) , ntc :: tc_mul ( cotso ( kk ) , tso ( ( k - 1 ) ) ) ) ;
+}
+}
+else {
+for ( k = 2 ;
+k <= nzs ;
+k += 1 ) {
+kk = ( ( nzs - k ) + 1 ) ;
+tso ( k ) = ntc :: tc_add ( rhtso ( kk ) , ntc :: tc_mul ( cotso ( kk ) , tso ( ( k - 1 ) ) ) ) ;
+}
+}
+if ( false ) {
+;
+}
+if ( nmelt == 1 ) {
+break ;
+}
+if ( ( ( ( (*soilt_ref) > 273.15f ) && ( (*beta_ref) == 1.f ) ) && ( (*snhei_ref) > 0.f ) ) ) {
+nmelt = 1 ;
+soiltfrac = ntc :: tc_add ( ntc :: tc_mul ( (*snowfrac_ref) , 273.15f ) , ntc :: tc_mul ( ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) , (*soilt_ref) ) ) ;
+(*qsg_ref) = ruc_min < F > ( (*qsg_ref) , ntc :: tc_div ( land_qsn ( tb , arena , soiltfrac , tbq ) , pp ) ) ;
+(*qvg_ref) = ntc :: tc_add ( ntc :: tc_mul ( (*snowfrac_ref) , (*qsg_ref) ) , ntc :: tc_mul ( ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) , (*qvg_ref) ) ) ;
+t3 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( stbolt , tn ) , tn ) , tn ) ;
+upflux = ntc :: tc_mul ( ntc :: tc_mul ( t3 , 0.5f ) , ntc :: tc_add ( tn , soiltfrac ) ) ;
+xinet = ntc :: tc_mul ( (*emiss_ref) , ntc :: tc_sub ( glw , upflux ) ) ;
+epot = ntc :: tc_mul ( ( - qkms ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+q1 = ntc :: tc_mul ( epot , ras ) ;
+if ( ( ( q1 <= 0.f ) || ( iter == 1 ) ) ) {
+(*dew_ref) = ( - epot ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+}
+qfx = ntc :: tc_mul ( ntc :: tc_mul ( ( - xlvm ) , rho ) , (*dew_ref) ) ;
+eeta = ntc :: tc_div ( qfx , xlvm ) ;
+}
+else {
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+transp ( k ) = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - vegfrac ) , q1 ) , tranf ( k ) ) , (*drycan_ref) ) , zshalf ( ( nroot + 1 ) ) ) ;
+ett1 = ntc :: tc_sub ( ett1 , transp ( k ) ) ;
+}
+for ( k = ( nroot + 1 ) ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+}
+edir1 = ntc :: tc_mul ( ntc :: tc_mul ( q1 , umveg ) , (*beta_ref) ) ;
+ec1 = ntc :: tc_mul ( ntc :: tc_mul ( q1 , (*wetcan_ref) ) , vegfrac ) ;
+cmc2ms = ntc :: tc_mul ( ntc :: tc_div ( (*cst_ref) , delt ) , ras ) ;
+eeta = ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_add ( edir1 , ec1 ) , ett1 ) , 1.e3f ) ;
+qfx = ntc :: tc_mul ( xlvm , eeta ) ;
+}
+hfx = ntc :: tc_mul ( ( - d10 ) , ntc :: tc_sub ( tabs , soiltfrac ) ) ;
+if ( ( (*snhei_ref) >= snth ) ) {
+soh = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( thdifsn , rhocsn ) , ntc :: tc_sub ( soiltfrac , tsob ) ) , snprim ) ;
+(*snflx_ref) = soh ;
+}
+else {
+soh = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_mul ( fsn , thdifsn ) , rhocsn ) , ntc :: tc_mul ( ntc :: tc_mul ( fso , thdif ( 1 ) ) , rhcs ) ) , ntc :: tc_sub ( soiltfrac , tsob ) ) , snprim ) ;
+(*snflx_ref) = soh ;
+}
+(*x_ref) = ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_add ( r21 , ntc :: tc_mul ( d9sn , r22sn ) ) , ntc :: tc_sub ( soiltfrac , tn ) ) , ntc :: tc_mul ( ntc :: tc_mul ( xlvm , r210 ) , ntc :: tc_sub ( (*qvg_ref) , qgold ) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+}
+(*snoh_ref) = ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( (*rnet_ref) , qfx ) , hfx ) , soh ) , (*x_ref) ) , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( rhonewcsn , newsnow ) , delt ) , ntc :: tc_sub ( ruc_min < F > ( 273.15f , tabs ) , soiltfrac ) ) ) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) , ntc :: tc_sub ( ruc_max < F > ( 273.15f , tabs ) , soiltfrac ) ) ) ;
+(*snoh_ref) = ruc_max < F > ( 0.f , (*snoh_ref) ) ;
+(*smelt_ref) = ntc :: tc_mul ( ntc :: tc_div ( (*snoh_ref) , xlmelt ) , 1.e-3f ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+if ( ( ( epot > 0.f ) && ( snwepr <= ntc :: tc_mul ( ntc :: tc_mul ( epot , ras ) , delt ) ) ) ) {
+(*beta_ref) = ntc :: tc_div ( snwepr , ntc :: tc_mul ( ntc :: tc_mul ( epot , ras ) , delt ) ) ;
+(*smelt_ref) = ruc_min < F > ( (*smelt_ref) , ntc :: tc_sub ( ntc :: tc_div ( snwepr , delt ) , ntc :: tc_mul ( ntc :: tc_mul ( (*beta_ref) , epot ) , ras ) ) ) ;
+(*snwe_ref) = 0.f ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+else {
+(*smelt_ref) = ruc_max < F > ( 0.f , (*smelt_ref) ) ;
+if ( ( ( ( (*rhosn_ref) < 350.f ) || ( ( newsnow > 0.f ) && ( rhonewsn < 450.f ) ) ) && ( (*soilt_ref) < 283.f ) ) ) {
+(*smelt_ref) = ruc_min < F > ( (*smelt_ref) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_div ( delt , 60.f ) , 5.6e-8f ) , meltfactor ) , ruc_max < F > ( 1.f , ntc :: tc_sub ( (*soilt_ref) , 273.15f ) ) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+rr = ruc_max < F > ( 0.f , ntc :: tc_sub ( ntc :: tc_div ( snwepr , delt ) , ntc :: tc_mul ( ntc :: tc_mul ( (*beta_ref) , epot ) , ras ) ) ) ;
+if ( ( (*smelt_ref) > rr ) ) {
+(*smelt_ref) = ruc_min < F > ( (*smelt_ref) , rr ) ;
+(*snwe_ref) = 0.f ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+}
+;
+snohgnew = ntc :: tc_mul ( ntc :: tc_mul ( (*smelt_ref) , xlmelt ) , 1.e3f ) ;
+snodif = ruc_max < F > ( 0.f , ntc :: tc_sub ( (*snoh_ref) , snohgnew ) ) ;
+(*snoh_ref) = snohgnew ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+if ( ( (*smelt_ref) > 0.f ) ) {
+rsmfrac = ruc_min < F > ( 0.18f , ruc_max < F > ( 0.08f , ntc :: tc_mul ( ntc :: tc_div ( snwepr , 0.10f ) , 0.13f ) ) ) ;
+if ( ( ( (*snhei_ref) > 0.01f ) && ( (*rhosn_ref) < 350.f ) ) ) {
+(*rsm_ref) = ntc :: tc_mul ( ntc :: tc_mul ( rsmfrac , (*smelt_ref) ) , delt ) ;
+}
+else {
+(*rsm_ref) = 0.f ;
+}
+if ( ( (*rsm_ref) > 0.f ) ) {
+(*smelt_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( (*smelt_ref) , ntc :: tc_div ( (*rsm_ref) , delt ) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+}
+if ( ( (*snwe_ref) > 0.f ) ) {
+(*snwe_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( snwepr , ntc :: tc_mul ( ntc :: tc_add ( (*smelt_ref) , ntc :: tc_mul ( ntc :: tc_mul ( (*beta_ref) , epot ) , ras ) ) , delt ) ) ) ;
+}
+}
+else {
+if ( ( ( (*snhei_ref) != 0.f ) && ( (*beta_ref) == 1.f ) ) ) {
+epot = ntc :: tc_mul ( ( - qkms ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+(*snwe_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( snwepr , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( (*beta_ref) , epot ) , ras ) , delt ) ) ) ;
+}
+else {
+(*snwe_ref) = 0.f ;
+}
+}
+if ( nmelt == 1 ) {
+continue ;
+}
+break ;
+}
+;
+if ( ( ( (*smelt_ref) > 0.f ) && ( (*rsm_ref) > 0.f ) ) ) {
+if ( ( (*snwe_ref) <= (*rsm_ref) ) ) {
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+else {
+xsn = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_mul ( (*rhosn_ref) , ntc :: tc_sub ( (*snwe_ref) , (*rsm_ref) ) ) , ntc :: tc_mul ( 1.e3f , (*rsm_ref) ) ) , (*snwe_ref) ) ;
+(*rhosn_ref) = ruc_min < F > ( ruc_max < F > ( 58.8f , xsn ) , 500.f ) ;
+rhocsn = ntc :: tc_mul ( 2090.f , (*rhosn_ref) ) ;
+if ( ( isncond_opt == 1 ) ) {
+thdifsn = ntc :: tc_div ( 0.265f , rhocsn ) ;
+}
+else {
+fact = 1.f ;
+if ( ( ( (*rhosn_ref) < 156.f ) || ( ( newsnow > 0.f ) && ( rhonewsn < 156.f ) ) ) ) {
+keff = ntc :: tc_add ( 0.023f , ntc :: tc_mul ( ntc :: tc_mul ( 0.234f , (*rhosn_ref) ) , 1.e-3f ) ) ;
+}
+else {
+keff = ntc :: tc_add ( ntc :: tc_sub ( 0.138f , ntc :: tc_mul ( ntc :: tc_mul ( 1.01f , (*rhosn_ref) ) , 1.e-3f ) ) , ntc :: tc_mul ( ntc :: tc_mul ( 3.233f , ntc :: tc_mul ( (*rhosn_ref) , (*rhosn_ref) ) ) , 1.e-6f ) ) ;
+}
+if ( ( ( ( newsnow <= 0.f ) && ( (*snhei_ref) > 1.f ) ) && ( (*rhosn_ref) > 250.f ) ) ) {
+thdifsn = 4.431718e-7f ;
+}
+else {
+thdifsn = ntc :: tc_mul ( ntc :: tc_div ( keff , rhocsn ) , fact ) ;
+}
+}
+}
+}
+if ( ( (*snhei_ref) >= snth ) ) {
+(*s_ref) = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( thdifsn , rhocsn ) , ntc :: tc_sub ( (*soilt_ref) , tsob ) ) , snprim ) ;
+(*snflx_ref) = (*s_ref) ;
+(*s_ref) = ntc :: tc_mul ( d9 , ntc :: tc_sub ( tso ( 1 ) , tso ( 2 ) ) ) ;
+}
+else if ( ( ( (*snhei_ref) < snth ) && ( (*snhei_ref) > 0.f ) ) ) {
+(*s_ref) = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_mul ( fsn , thdifsn ) , rhocsn ) , ntc :: tc_mul ( ntc :: tc_mul ( fso , thdif ( 1 ) ) , rhcs ) ) , ntc :: tc_sub ( (*soilt_ref) , tsob ) ) , snprim ) ;
+(*snflx_ref) = (*s_ref) ;
+(*s_ref) = ntc :: tc_mul ( d9 , ntc :: tc_sub ( tso ( 1 ) , tso ( 2 ) ) ) ;
+}
+else {
+(*s_ref) = ntc :: tc_mul ( d9sn , ntc :: tc_sub ( (*soilt_ref) , tsob ) ) ;
+(*snflx_ref) = (*s_ref) ;
+(*s_ref) = ntc :: tc_mul ( d9 , ntc :: tc_sub ( tso ( 1 ) , tso ( 2 ) ) ) ;
+}
+(*snhei_ref) = ntc :: tc_div ( ntc :: tc_mul ( (*snwe_ref) , 1.e3f ) , (*rhosn_ref) ) ;
+if ( ( ( tso ( 1 ) > 273.15f ) && ( (*snhei_ref) > 0.f ) ) ) {
+if ( ( (*snhei_ref) > ntc :: tc_add ( deltsn , snth ) ) ) {
+hsn = ntc :: tc_sub ( (*snhei_ref) , deltsn ) ;
+if ( false ) {
+;
+}
+}
+else {
+if ( false ) {
+;
+}
+hsn = (*snhei_ref) ;
+}
+soiltfrac = ntc :: tc_add ( ntc :: tc_mul ( (*snowfrac_ref) , 273.15f ) , ntc :: tc_mul ( ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) , tso ( 1 ) ) ) ;
+snohg = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_sub ( tso ( 1 ) , soiltfrac ) , ntc :: tc_add ( ntc :: tc_mul ( cap ( 1 ) , zshalf ( 2 ) ) , ntc :: tc_mul ( ntc :: tc_mul ( rhocsn , 0.5f ) , hsn ) ) ) , delt ) ;
+snohg = ruc_max < F > ( 0.f , snohg ) ;
+snodif = 0.f ;
+smeltg = ntc :: tc_mul ( ntc :: tc_div ( snohg , xlmelt ) , 1.e-3f ) ;
+if ( ( ( ( (*rhosn_ref) < 350.f ) || ( ( newsnow > 0.f ) && ( rhonewsn < 450.f ) ) ) && ( (*soilt_ref) < 283.f ) ) ) {
+smeltg = ruc_min < F > ( smeltg , 5.8e-9f ) ;
+}
+rr = ntc :: tc_div ( (*snwe_ref) , delt ) ;
+smeltg = ruc_min < F > ( smeltg , rr ) ;
+snohgnew = ntc :: tc_mul ( ntc :: tc_mul ( smeltg , xlmelt ) , 1.e3f ) ;
+snodif = ruc_max < F > ( 0.f , ntc :: tc_sub ( snohg , snohgnew ) ) ;
+if ( false ) {
+;
+}
+(*snwe_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( (*snwe_ref) , ntc :: tc_mul ( smeltg , delt ) ) ) ;
+(*snhei_ref) = ntc :: tc_div ( ntc :: tc_mul ( (*snwe_ref) , 1.e3f ) , (*rhosn_ref) ) ;
+(*smelt_ref) = ntc :: tc_add ( (*smelt_ref) , smeltg ) ;
+if ( ( (*snhei_ref) > 0.f ) ) {
+tso ( 1 ) = soiltfrac ;
+}
+if ( false ) {
+;
+if ( ( (*snhei_ref) == 0.f ) ) {
+;
+}
+}
+}
+if ( false ) {
+;
+}
+(*snweprint_ref) = (*snwe_ref) ;
+(*snheiprint_ref) = ntc :: tc_div ( ntc :: tc_mul ( (*snweprint_ref) , 1.e3f ) , (*rhosn_ref) ) ;
+if ( false ) {
+;
+;
+}
+(*x_ref) = ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_add ( r21 , ntc :: tc_mul ( d9sn , r22sn ) ) , ntc :: tc_sub ( (*soilt_ref) , tn ) ) , ntc :: tc_mul ( ntc :: tc_mul ( xlvm , r210 ) , ntc :: tc_sub ( (*qsg_ref) , qgold ) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+}
+(*x_ref) = ntc :: tc_sub ( ntc :: tc_sub ( (*x_ref) , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( rhonewcsn , newsnow ) , delt ) , ntc :: tc_sub ( ruc_min < F > ( 273.15f , tabs ) , (*soilt_ref) ) ) ) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( rainf , cvw ) , prcpms ) , ntc :: tc_sub ( ruc_max < F > ( 273.15f , tabs ) , (*soilt_ref) ) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+;
+}
+if ( ( (*snhei_ref) > 0.f ) ) {
+if ( ( (*ilnb_ref) > 1 ) ) {
+(*tsnav_ref) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_div ( 0.5f , (*snhei_ref) ) , ntc :: tc_add ( ntc :: tc_mul ( ntc :: tc_add ( (*soilt_ref) , (*soilt1_ref) ) , deltsn ) , ntc :: tc_mul ( ntc :: tc_add ( (*soilt1_ref) , tso ( 1 ) ) , ntc :: tc_sub ( (*snhei_ref) , deltsn ) ) ) ) , 273.15f ) ;
+}
+else {
+(*tsnav_ref) = ntc :: tc_sub ( ntc :: tc_mul ( 0.5f , ntc :: tc_add ( (*soilt_ref) , tso ( 1 ) ) ) , 273.15f ) ;
+}
+}
+else {
+(*tsnav_ref) = ntc :: tc_sub ( (*soilt_ref) , 273.15f ) ;
+}
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4, typename R5, typename R6, typename R7, typename R8, typename R9, typename R10, typename R11, typename R12, typename R13, typename R14, typename R15>
+static inline void land_soilvegin ( thread Tables & tb , thread Arena & arena , int mosaic_lu , int mosaic_soil , FArray < F > soilfrac , int nscat , F shdmin , F shdmax , int nlcat , R0 ivgtyp_ref , R1 isltyp_ref , int iswater , R2 iforest_ref , FArray < F > lufrac , F vegfrac , R3 emiss_ref , R4 pc_ref , R5 znt_ref , R6 lai_ref , int rdlai2d , R7 qwrtz_ref , R8 rhocs_ref , R9 bclh_ref , R10 dqm_ref , R11 ksat_ref , R12 psis_ref , R13 qmin_ref , R14 ref_ref , R15 wilt_ref , int i , int j ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+int nsoilclas = 19 ;
+int nvegclas = ( 24 + 3 ) ;
+int ilsnow = 99 ;
+FArray < F > lqma = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lrhc = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lpsi = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lqmi = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lbcl = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lkas = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lwil = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lref = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > datqtz = arena . alloc < F > ( 1 , nsoilclas ) ;
+FArray < F > lalb = arena . alloc < F > ( 1 , nvegclas ) ;
+FArray < F > lmoi = arena . alloc < F > ( 1 , nvegclas ) ;
+FArray < F > lemi = arena . alloc < F > ( 1 , nvegclas ) ;
+FArray < F > lrou = arena . alloc < F > ( 1 , nvegclas ) ;
+FArray < F > lthi = arena . alloc < F > ( 1 , nvegclas ) ;
+FArray < F > lsig = arena . alloc < F > ( 1 , nvegclas ) ;
+FArray < F > lpc = arena . alloc < F > ( 1 , nvegclas ) ;
+int kstart ;
+int kfin ;
+int lstart ;
+int lfin ;
+int k ;
+F area ;
+F factor ;
+F znt1 ;
+F lb ;
+FArray < F > znttoday = arena . alloc < F > ( 1 , nlcat ) ;
+FArray < F > laitoday = arena . alloc < F > ( 1 , nlcat ) ;
+FArray < F > deltalai = arena . alloc < F > ( 1 , nlcat ) ;
+(*iforest_ref) = tb . ifortbl ( (*ivgtyp_ref) ) ;
+if ( false ) {
+if ( ( ( i == 375 ) && ( j == 254 ) ) ) {
+;
+}
+}
+ruc_assign ( deltalai ( RRange {
+0 , 0 }
+) , 0.f ) ;
+if ( ( ntc :: tc_sub ( shdmax , shdmin ) < 1 ) ) {
+factor = 1.f ;
+}
+else {
+factor = ntc :: tc_sub ( 1.f , ruc_max < F > ( 0.f , ruc_min < F > ( 1.f , ntc :: tc_div ( ntc :: tc_sub ( vegfrac , shdmin ) , ruc_max < F > ( 1.f , ntc :: tc_sub ( shdmax , shdmin ) ) ) ) ) ) ;
+}
+for ( k = 1 ;
+k <= nlcat ;
+k += 1 ) {
+if ( ( tb . ifortbl ( k ) == 1 ) ) {
+deltalai ( k ) = ruc_min < F > ( 0.2f , ntc :: tc_mul ( 0.8f , tb . laitbl ( k ) ) ) ;
+}
+if ( ( ( tb . ifortbl ( k ) == 2 ) || ( tb . ifortbl ( k ) == 7 ) ) ) {
+deltalai ( k ) = ruc_min < F > ( 0.5f , ntc :: tc_mul ( 0.8f , tb . laitbl ( k ) ) ) ;
+}
+if ( ( tb . ifortbl ( k ) == 3 ) ) {
+deltalai ( k ) = ruc_min < F > ( 0.45f , ntc :: tc_mul ( 0.8f , tb . laitbl ( k ) ) ) ;
+}
+if ( ( tb . ifortbl ( k ) == 4 ) ) {
+deltalai ( k ) = ruc_min < F > ( 0.75f , ntc :: tc_mul ( 0.8f , tb . laitbl ( k ) ) ) ;
+}
+if ( ( tb . ifortbl ( k ) == 5 ) ) {
+deltalai ( k ) = ruc_min < F > ( 0.86f , ntc :: tc_mul ( 0.8f , tb . laitbl ( k ) ) ) ;
+}
+if ( ( k != iswater ) ) {
+laitoday ( k ) = ntc :: tc_sub ( tb . laitbl ( k ) , ntc :: tc_mul ( deltalai ( k ) , factor ) ) ;
+if ( ( tb . ifortbl ( k ) == 7 ) ) {
+znttoday ( k ) = ntc :: tc_sub ( tb . z0tbl ( k ) , ntc :: tc_mul ( 0.125f , factor ) ) ;
+}
+else {
+znttoday ( k ) = tb . z0tbl ( k ) ;
+}
+}
+else {
+laitoday ( k ) = tb . laitbl ( k ) ;
+znttoday ( k ) = (*znt_ref) ;
+}
+}
+if ( false ) {
+if ( ( ( i == 358 ) && ( j == 260 ) ) ) {
+;
+}
+}
+(*emiss_ref) = 0.f ;
+(*znt_ref) = 0.f ;
+znt1 = 0.f ;
+(*pc_ref) = 0.f ;
+if ( ( ! rdlai2d ) ) {
+(*lai_ref) = 0.f ;
+}
+area = 0.f ;
+lb = 5.f ;
+if ( ( mosaic_lu == 1 ) ) {
+for ( k = 1 ;
+k <= nlcat ;
+k += 1 ) {
+area = ntc :: tc_add ( area , lufrac ( k ) ) ;
+(*emiss_ref) = ntc :: tc_add ( (*emiss_ref) , ntc :: tc_mul ( tb . lemitbl ( k ) , lufrac ( k ) ) ) ;
+(*znt_ref) = ntc :: tc_add ( (*znt_ref) , ntc :: tc_div ( lufrac ( k ) , ntc :: tc_mul ( rrfs_gfk_log ( ntc :: tc_div ( lb , znttoday ( k ) ) ) , rrfs_gfk_log ( ntc :: tc_div ( lb , znttoday ( k ) ) ) ) ) ) ;
+znt1 = ntc :: tc_add ( znt1 , ntc :: tc_mul ( lufrac ( k ) , znttoday ( k ) ) ) ;
+if ( ( ! rdlai2d ) ) {
+(*lai_ref) = ntc :: tc_add ( (*lai_ref) , ntc :: tc_mul ( laitoday ( k ) , lufrac ( k ) ) ) ;
+}
+(*pc_ref) = ntc :: tc_add ( (*pc_ref) , ntc :: tc_mul ( tb . pctbl ( k ) , lufrac ( k ) ) ) ;
+}
+if ( ( area > 1.f ) ) {
+area = 1.f ;
+}
+if ( ( area <= 0.f ) ) {
+;
+atomicOr ( arena . error , 2 ) ;
+return ;
+}
+if ( false ) {
+if ( ( ( i == 358 ) && ( j == 260 ) ) ) {
+;
+}
+}
+(*emiss_ref) = ntc :: tc_div ( (*emiss_ref) , area ) ;
+znt1 = ntc :: tc_div ( znt1 , area ) ;
+(*znt_ref) = ntc :: tc_div ( lb , rrfs_exp_fma ( ntc :: tc_sqrt ( ntc :: tc_div ( 1.f , (*znt_ref) ) ) ) ) ;
+if ( ( ! rdlai2d ) ) {
+(*lai_ref) = ntc :: tc_div ( (*lai_ref) , area ) ;
+}
+(*pc_ref) = ntc :: tc_div ( (*pc_ref) , area ) ;
+if ( false ) {
+if ( ( ( i == 358 ) && ( j == 260 ) ) ) {
+;
+}
+}
+}
+else {
+(*emiss_ref) = tb . lemitbl ( (*ivgtyp_ref) ) ;
+(*znt_ref) = znttoday ( (*ivgtyp_ref) ) ;
+(*pc_ref) = tb . pctbl ( (*ivgtyp_ref) ) ;
+if ( ( ! rdlai2d ) ) {
+(*lai_ref) = laitoday ( (*ivgtyp_ref) ) ;
+}
+}
+(*rhocs_ref) = 0.f ;
+(*bclh_ref) = 0.f ;
+(*dqm_ref) = 0.f ;
+(*ksat_ref) = 0.f ;
+(*psis_ref) = 0.f ;
+(*qmin_ref) = 0.f ;
+(*ref_ref) = 0.f ;
+(*wilt_ref) = 0.f ;
+(*qwrtz_ref) = 0.f ;
+area = 0.f ;
+if ( ( mosaic_soil == 1 ) ) {
+for ( k = 1 ;
+k <= nscat ;
+k += 1 ) {
+if ( ( k != 14 ) ) {
+area = ntc :: tc_add ( area , soilfrac ( k ) ) ;
+(*rhocs_ref) = ntc :: tc_add ( (*rhocs_ref) , ntc :: tc_mul ( ntc :: tc_mul ( tb . hc ( k ) , 1.e6f ) , soilfrac ( k ) ) ) ;
+(*bclh_ref) = ntc :: tc_add ( (*bclh_ref) , ntc :: tc_mul ( tb . bb ( k ) , soilfrac ( k ) ) ) ;
+(*dqm_ref) = ntc :: tc_add ( (*dqm_ref) , ntc :: tc_mul ( ntc :: tc_sub ( tb . maxsmc ( k ) , tb . drysmc ( k ) ) , soilfrac ( k ) ) ) ;
+(*ksat_ref) = ntc :: tc_add ( (*ksat_ref) , ntc :: tc_mul ( tb . satdk ( k ) , soilfrac ( k ) ) ) ;
+(*psis_ref) = ntc :: tc_sub ( (*psis_ref) , ntc :: tc_mul ( tb . satpsi ( k ) , soilfrac ( k ) ) ) ;
+(*qmin_ref) = ntc :: tc_add ( (*qmin_ref) , ntc :: tc_mul ( tb . drysmc ( k ) , soilfrac ( k ) ) ) ;
+(*ref_ref) = ntc :: tc_add ( (*ref_ref) , ntc :: tc_mul ( tb . refsmc ( k ) , soilfrac ( k ) ) ) ;
+(*wilt_ref) = ntc :: tc_add ( (*wilt_ref) , ntc :: tc_mul ( tb . wltsmc ( k ) , soilfrac ( k ) ) ) ;
+(*qwrtz_ref) = ntc :: tc_add ( (*qwrtz_ref) , ntc :: tc_mul ( tb . qtz ( k ) , soilfrac ( k ) ) ) ;
+}
+}
+if ( ( area > 1.f ) ) {
+area = 1.f ;
+}
+if ( ( area <= 0.f ) ) {
+(*rhocs_ref) = ntc :: tc_mul ( tb . hc ( (*isltyp_ref) ) , 1.e6f ) ;
+(*bclh_ref) = tb . bb ( (*isltyp_ref) ) ;
+(*dqm_ref) = ntc :: tc_sub ( tb . maxsmc ( (*isltyp_ref) ) , tb . drysmc ( (*isltyp_ref) ) ) ;
+(*ksat_ref) = tb . satdk ( (*isltyp_ref) ) ;
+(*psis_ref) = ( - tb . satpsi ( (*isltyp_ref) ) ) ;
+(*qmin_ref) = tb . drysmc ( (*isltyp_ref) ) ;
+(*ref_ref) = tb . refsmc ( (*isltyp_ref) ) ;
+(*wilt_ref) = tb . wltsmc ( (*isltyp_ref) ) ;
+(*qwrtz_ref) = tb . qtz ( (*isltyp_ref) ) ;
+}
+else {
+(*rhocs_ref) = ntc :: tc_div ( (*rhocs_ref) , area ) ;
+(*bclh_ref) = ntc :: tc_div ( (*bclh_ref) , area ) ;
+(*dqm_ref) = ntc :: tc_div ( (*dqm_ref) , area ) ;
+(*ksat_ref) = ntc :: tc_div ( (*ksat_ref) , area ) ;
+(*psis_ref) = ntc :: tc_div ( (*psis_ref) , area ) ;
+(*qmin_ref) = ntc :: tc_div ( (*qmin_ref) , area ) ;
+(*ref_ref) = ntc :: tc_div ( (*ref_ref) , area ) ;
+(*wilt_ref) = ntc :: tc_div ( (*wilt_ref) , area ) ;
+(*qwrtz_ref) = ntc :: tc_div ( (*qwrtz_ref) , area ) ;
+}
+}
+else {
+if ( ( (*isltyp_ref) != 14 ) ) {
+(*rhocs_ref) = ntc :: tc_mul ( tb . hc ( (*isltyp_ref) ) , 1.e6f ) ;
+(*bclh_ref) = tb . bb ( (*isltyp_ref) ) ;
+(*dqm_ref) = ntc :: tc_sub ( tb . maxsmc ( (*isltyp_ref) ) , tb . drysmc ( (*isltyp_ref) ) ) ;
+(*ksat_ref) = tb . satdk ( (*isltyp_ref) ) ;
+(*psis_ref) = ( - tb . satpsi ( (*isltyp_ref) ) ) ;
+(*qmin_ref) = tb . drysmc ( (*isltyp_ref) ) ;
+(*ref_ref) = tb . refsmc ( (*isltyp_ref) ) ;
+(*wilt_ref) = tb . wltsmc ( (*isltyp_ref) ) ;
+(*qwrtz_ref) = tb . qtz ( (*isltyp_ref) ) ;
+}
+}
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4, typename R5, typename R6, typename R7, typename R8, typename R9, typename R10, typename R11, typename R12, typename R13, typename R14, typename R15, typename R16, typename R17, typename R18, typename R19, typename R20, typename R21, typename R22, typename R23, typename R24, typename R25, typename R26, typename R27, typename R28, typename R29>
+static inline void land_soil ( thread Tables & tb , thread Arena & arena , int spp_lsm , FArray < F > rstochcol , FArray < F > fieldcol_sf , int i , int j , int iland , int isoil , F delt , int ktau , F conflx , int nzs , int nddzs , int nroot , R0 prcpms_ref , R1 rainf_ref , F patm , F qvatm , F qcatm , F glw , F gsw , F gswin , F emiss , R2 rnet_ref , F qkms , F tkms , F pc , R3 cst_ref , R4 drip_ref , F infwater , F rho , F vegfrac , F lai , int myj , F qwrtz , F rhocs , F dqm , F qmin , F ref , F wilt , F psis , F bclh , F ksat , R5 sat_ref , F cn , FArray < F > zsmain , FArray < F > zshalf , FArray < F > dtdzs , FArray < F > dtdzs2 , FArray < F > tbq , F xlv , R6 cp_ref , R7 rovcp_ref , F g0_p , F cw , R8 stbolt_ref , R9 tabs_ref , F kqwrtz , F kice , F kwt , FArray < F > soilmois , FArray < F > tso , FArray < F > smfrkeep , FArray < F > keepfr , R10 dew_ref , R11 soilt_ref , R12 qvg_ref , R13 qsg_ref , R14 qcg_ref , R15 edir1_ref , R16 ec1_ref , R17 ett1_ref , R18 eeta_ref , R19 qfx_ref , R20 hfx_ref , R21 s_ref , R22 evapl_ref , R23 prcpl_ref , R24 fltot_ref , R25 runoff1_ref , R26 runoff2_ref , R27 mavail_ref , FArray < F > soilice , FArray < F > soiliqw , R28 infiltrp_ref , R29 smf_ref , int globalcellid ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+F transum ;
+F t3 ;
+F upflux ;
+F xinet ;
+F g0 ;
+F lv ;
+F xlmelt ;
+F dzstop ;
+F can ;
+F epot ;
+F fac ;
+F ft ;
+F fq ;
+F hft ;
+F q1 ;
+F ras ;
+F rhoice ;
+F sph ;
+F trans ;
+F zn ;
+F ci ;
+F cvw ;
+F tln ;
+F tavln ;
+F pi ;
+F dd1 ;
+F cmc2ms ;
+F drycan ;
+F wetcan ;
+F infmax ;
+F riw ;
+F x ;
+FArray < F > transp = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > cap = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > diffu = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > hydro = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > thdif = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > tranf = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > tav = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soilmoism = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soilicem = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soiliqwm = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > detal = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > fwsat = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > lwsat = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > told = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > smold = arena . alloc < F > ( 1 , nzs ) ;
+F soiltold ;
+F soilres ;
+F alfa ;
+F fex ;
+F fex_fc ;
+F fc ;
+F psit ;
+int nzs1 ;
+int nzs2 ;
+int k ;
+rhoice = 900.f ;
+ci = ntc :: tc_mul ( rhoice , 2100.f ) ;
+xlmelt = 3.35e+5f ;
+cvw = cw ;
+(*prcpl_ref) = (*prcpms_ref) ;
+(*smf_ref) = 0.f ;
+soiltold = (*soilt_ref) ;
+wetcan = 0.f ;
+drycan = 1.f ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+soilmoism ( k ) = 0.f ;
+soilice ( k ) = 0.f ;
+soiliqw ( k ) = 0.f ;
+soilicem ( k ) = 0.f ;
+soiliqwm ( k ) = 0.f ;
+lwsat ( k ) = 0.f ;
+fwsat ( k ) = 0.f ;
+tav ( k ) = 0.f ;
+cap ( k ) = 0.f ;
+thdif ( k ) = 0.f ;
+diffu ( k ) = 0.f ;
+hydro ( k ) = 0.f ;
+tranf ( k ) = 0.f ;
+detal ( k ) = 0.f ;
+told ( k ) = 0.f ;
+smold ( k ) = 0.f ;
+}
+nzs1 = ( nzs - 1 ) ;
+nzs2 = ( nzs - 2 ) ;
+dzstop = ntc :: tc_div ( 1.f , ntc :: tc_sub ( zsmain ( 2 ) , zsmain ( 1 ) ) ) ;
+ras = ntc :: tc_mul ( rho , 1.e-3f ) ;
+riw = ntc :: tc_mul ( rhoice , 1.e-3f ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+tln = rrfs_gfk_log ( ntc :: tc_div ( tso ( k ) , 273.15f ) ) ;
+if ( ( tln < 0.f ) ) {
+soiliqw ( k ) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_add ( dqm , qmin ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( xlmelt , ntc :: tc_sub ( tso ( k ) , 273.15f ) ) , tso ( k ) ) , 9.81f ) , psis ) , ntc :: tc_div ( ( - 1.f ) , bclh ) ) ) , qmin ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , soiliqw ( k ) ) ;
+soiliqw ( k ) = ruc_min < F > ( soiliqw ( k ) , soilmois ( k ) ) ;
+soilice ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilmois ( k ) , soiliqw ( k ) ) , riw ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+soilice ( k ) = ruc_min < F > ( soilice ( k ) , smfrkeep ( k ) ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmois ( k ) , ntc :: tc_mul ( soilice ( k ) , riw ) ) ) ;
+}
+}
+else {
+soilice ( k ) = 0.f ;
+soiliqw ( k ) = soilmois ( k ) ;
+}
+}
+for ( k = 1 ;
+k <= nzs1 ;
+k += 1 ) {
+tav ( k ) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( tso ( k ) , tso ( ( k + 1 ) ) ) ) ;
+soilmoism ( k ) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( soilmois ( k ) , soilmois ( ( k + 1 ) ) ) ) ;
+tavln = rrfs_gfk_log ( ntc :: tc_div ( tav ( k ) , 273.15f ) ) ;
+if ( ( tavln < 0.f ) ) {
+soiliqwm ( k ) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_add ( dqm , qmin ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( xlmelt , ntc :: tc_sub ( tav ( k ) , 273.15f ) ) , tav ( k ) ) , 9.81f ) , psis ) , ntc :: tc_div ( ( - 1.f ) , bclh ) ) ) , qmin ) ;
+fwsat ( k ) = ntc :: tc_sub ( dqm , soiliqwm ( k ) ) ;
+lwsat ( k ) = ntc :: tc_add ( soiliqwm ( k ) , qmin ) ;
+soiliqwm ( k ) = ruc_max < F > ( 0.f , soiliqwm ( k ) ) ;
+soiliqwm ( k ) = ruc_min < F > ( soiliqwm ( k ) , soilmoism ( k ) ) ;
+soilicem ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilmoism ( k ) , soiliqwm ( k ) ) , riw ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+soilicem ( k ) = ruc_min < F > ( soilicem ( k ) , ntc :: tc_mul ( 0.5f , ntc :: tc_add ( smfrkeep ( k ) , smfrkeep ( ( k + 1 ) ) ) ) ) ;
+soiliqwm ( k ) = ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmoism ( k ) , ntc :: tc_mul ( soilicem ( k ) , riw ) ) ) ;
+fwsat ( k ) = ntc :: tc_sub ( dqm , soiliqwm ( k ) ) ;
+lwsat ( k ) = ntc :: tc_add ( soiliqwm ( k ) , qmin ) ;
+}
+}
+else {
+soilicem ( k ) = 0.f ;
+soiliqwm ( k ) = soilmoism ( k ) ;
+lwsat ( k ) = ntc :: tc_add ( dqm , qmin ) ;
+fwsat ( k ) = 0.f ;
+}
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( soilice ( k ) > 0.f ) ) {
+smfrkeep ( k ) = soilice ( k ) ;
+}
+else {
+smfrkeep ( k ) = ntc :: tc_div ( soilmois ( k ) , riw ) ;
+}
+}
+land_soilprop (tb , arena , spp_lsm , rstochcol , fieldcol_sf , nzs , fwsat , lwsat , tav , keepfr , soilmois , soiliqw , soilice , soilmoism , soiliqwm , soilicem , globalcellid , qwrtz , rhocs , dqm , qmin , psis , bclh , ksat , riw , xlmelt , (*cp_ref) , g0_p , cvw , &(ci) , kqwrtz , kice , kwt , thdif , diffu , hydro , cap) ;
+fq = qkms ;
+q1 = ntc :: tc_mul ( ntc :: tc_mul ( ( - qkms ) , ras ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+(*dew_ref) = 0.f ;
+if ( ( qvatm >= (*qsg_ref) ) ) {
+(*dew_ref) = ntc :: tc_mul ( fq , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+}
+wetcan = ruc_min < F > ( 0.25f , rrfs_gfk_pow ( ruc_max < F > ( 0.f , ntc :: tc_div ( (*cst_ref) , (*sat_ref) ) ) , cn ) ) ;
+drycan = ntc :: tc_sub ( 1.f , wetcan ) ;
+land_transf (tb , arena , i , j , nzs , nroot , soiliqw , (*tabs_ref) , lai , gswin , dqm , qmin , ref , wilt , zshalf , pc , iland , tranf , &(transum)) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+told ( k ) = tso ( k ) ;
+smold ( k ) = soilmois ( k ) ;
+}
+fex = ruc_min < F > ( 1.f , ntc :: tc_div ( soilmois ( 1 ) , dqm ) ) ;
+fex = ruc_max < F > ( fex , 0.01f ) ;
+psit = ntc :: tc_mul ( psis , rrfs_gfk_pow ( fex , ( - bclh ) ) ) ;
+psit = ruc_max < F > ( ( - 1.e5f ) , psit ) ;
+alfa = ruc_min < F > ( 1.f , rrfs_exp_fma ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( g , psit ) , r_v ) , (*soilt_ref) ) ) ) ;
+alfa = 1.f ;
+fc = ref ;
+fex_fc = 1.f ;
+if ( ( ( ntc :: tc_add ( soilmois ( 1 ) , qmin ) > fc ) || ( ntc :: tc_sub ( qvatm , (*qvg_ref) ) > 0.f ) ) ) {
+soilres = 1.f ;
+}
+else {
+fex_fc = ruc_min < F > ( 1.f , ntc :: tc_div ( ntc :: tc_add ( soilmois ( 1 ) , qmin ) , fc ) ) ;
+fex_fc = ruc_max < F > ( fex_fc , 0.01f ) ;
+soilres = ntc :: tc_mul ( 0.25f , ntc :: tc_mul ( ntc :: tc_sub ( 1.f , glibc_cosf ( ntc :: tc_mul ( piconst , fex_fc ) ) ) , ntc :: tc_sub ( 1.f , glibc_cosf ( ntc :: tc_mul ( piconst , fex_fc ) ) ) ) ) ;
+}
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+}
+land_soiltemp (tb , arena , i , j , iland , isoil , delt , ktau , conflx , nzs , nddzs , nroot , (*prcpms_ref) , (*rainf_ref) , patm , (*tabs_ref) , qvatm , qcatm , emiss , (*rnet_ref) , qkms , tkms , pc , rho , vegfrac , lai , thdif , cap , &(drycan) , &(wetcan) , &(transum) , (*dew_ref) , &((*mavail_ref)) , soilres , alfa , globalcellid , dqm , qmin , bclh , zsmain , zshalf , dtdzs , tbq , xlv , (*cp_ref) , g0_p , cvw , (*stbolt_ref) , tso , &((*soilt_ref)) , &((*qvg_ref)) , &((*qsg_ref)) , &((*qcg_ref)) , &(x)) ;
+(*ett1_ref) = 0.f ;
+(*dew_ref) = 0.f ;
+if ( ( qvatm >= (*qsg_ref) ) ) {
+(*dew_ref) = ntc :: tc_mul ( qkms , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+(*ett1_ref) = 0.f ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+}
+}
+else {
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+transp ( k ) = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( vegfrac , ras ) , qkms ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) , tranf ( k ) ) , drycan ) , zshalf ( ( nroot + 1 ) ) ) ;
+if ( ( transp ( k ) > 0.f ) ) {
+transp ( k ) = 0.f ;
+}
+(*ett1_ref) = ntc :: tc_sub ( (*ett1_ref) , transp ( k ) ) ;
+}
+for ( k = ( nroot + 1 ) ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+}
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+tln = rrfs_gfk_log ( ntc :: tc_div ( tso ( k ) , 273.15f ) ) ;
+if ( ( tln < 0.f ) ) {
+soiliqw ( k ) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_add ( dqm , qmin ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( xlmelt , ntc :: tc_sub ( tso ( k ) , 273.15f ) ) , tso ( k ) ) , 9.81f ) , psis ) , ntc :: tc_div ( ( - 1.f ) , bclh ) ) ) , qmin ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , soiliqw ( k ) ) ;
+soiliqw ( k ) = ruc_min < F > ( soiliqw ( k ) , soilmois ( k ) ) ;
+soilice ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilmois ( k ) , soiliqw ( k ) ) , riw ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+soilice ( k ) = ruc_min < F > ( soilice ( k ) , smfrkeep ( k ) ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmois ( k ) , ntc :: tc_mul ( soilice ( k ) , riw ) ) ) ;
+}
+}
+else {
+soilice ( k ) = 0.f ;
+soiliqw ( k ) = soilmois ( k ) ;
+}
+}
+land_soilmoist (tb , arena , delt , nzs , nddzs , dtdzs , dtdzs2 , riw , zsmain , zshalf , diffu , hydro , (*qsg_ref) , (*qvg_ref) , (*qcg_ref) , qcatm , qvatm , ( - infwater ) , qkms , transp , (*drip_ref) , (*dew_ref) , 0.f , soilice , vegfrac , 0.f , soilres , globalcellid , dqm , qmin , ref , ksat , ras , &(infmax) , soilmois , soiliqw , &((*mavail_ref)) , &((*runoff1_ref)) , &((*runoff2_ref)) , &((*infiltrp_ref))) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( soilice ( k ) > 0.f ) ) {
+if ( ( ( tso ( k ) > told ( k ) ) && ( soilmois ( k ) > smold ( k ) ) ) ) {
+keepfr ( k ) = 1.f ;
+}
+else {
+keepfr ( k ) = 0.f ;
+}
+}
+}
+t3 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( (*stbolt_ref) , soiltold ) , soiltold ) , soiltold ) ;
+upflux = ntc :: tc_mul ( ntc :: tc_mul ( t3 , 0.5f ) , ntc :: tc_add ( soiltold , (*soilt_ref) ) ) ;
+xinet = ntc :: tc_mul ( emiss , ntc :: tc_sub ( glw , upflux ) ) ;
+hft = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - tkms ) , (*cp_ref) ) , rho ) , ntc :: tc_sub ( (*tabs_ref) , (*soilt_ref) ) ) ;
+(*hfx_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - tkms ) , (*cp_ref) ) , rho ) , ntc :: tc_sub ( (*tabs_ref) , (*soilt_ref) ) ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_mul ( p1000mb , 0.00001f ) , patm ) , (*rovcp_ref) ) ) ;
+q1 = ntc :: tc_mul ( ntc :: tc_mul ( ( - qkms ) , ras ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+cmc2ms = 0.f ;
+if ( ( q1 <= 0.f ) ) {
+(*ec1_ref) = 0.f ;
+(*edir1_ref) = 0.f ;
+(*ett1_ref) = 0.f ;
+if ( myj ) {
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - qkms ) , ras ) , ntc :: tc_sub ( ntc :: tc_div ( qvatm , ntc :: tc_add ( 1.f , qvatm ) ) , ntc :: tc_div ( (*qsg_ref) , ntc :: tc_add ( 1.f , (*qsg_ref) ) ) ) ) , 1.e3f ) ;
+(*cst_ref) = ntc :: tc_sub ( (*cst_ref) , ntc :: tc_mul ( ntc :: tc_mul ( (*eeta_ref) , delt ) , vegfrac ) ) ;
+if ( false ) {
+;
+}
+}
+else {
+(*eeta_ref) = ntc :: tc_mul ( ( - rho ) , (*dew_ref) ) ;
+(*cst_ref) = ntc :: tc_add ( (*cst_ref) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( delt , (*dew_ref) ) , ras ) , vegfrac ) ) ;
+if ( false ) {
+;
+}
+}
+(*qfx_ref) = ntc :: tc_mul ( xlv , (*eeta_ref) ) ;
+(*eeta_ref) = ntc :: tc_mul ( ( - rho ) , (*dew_ref) ) ;
+}
+else {
+(*edir1_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - soilres ) , ntc :: tc_sub ( 1.f , vegfrac ) ) , qkms ) , ras ) , ntc :: tc_sub ( qvatm , (*qvg_ref) ) ) ;
+cmc2ms = ntc :: tc_mul ( ntc :: tc_div ( (*cst_ref) , delt ) , ras ) ;
+(*ec1_ref) = ntc :: tc_mul ( ntc :: tc_mul ( q1 , wetcan ) , vegfrac ) ;
+if ( false ) {
+;
+;
+}
+(*cst_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( (*cst_ref) , ntc :: tc_mul ( (*ec1_ref) , delt ) ) ) ;
+if ( myj ) {
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - soilres ) , qkms ) , ras ) , ntc :: tc_sub ( ntc :: tc_div ( qvatm , ntc :: tc_add ( 1.f , qvatm ) ) , ntc :: tc_div ( (*qvg_ref) , ntc :: tc_add ( 1.f , (*qvg_ref) ) ) ) ) , 1.e3f ) ;
+}
+else {
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+;
+}
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_add ( (*edir1_ref) , (*ec1_ref) ) , (*ett1_ref) ) , 1.e3f ) ;
+if ( false ) {
+;
+}
+}
+(*qfx_ref) = ntc :: tc_mul ( xlv , (*eeta_ref) ) ;
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_add ( (*edir1_ref) , (*ec1_ref) ) , (*ett1_ref) ) , 1.e3f ) ;
+}
+if ( false ) {
+;
+;
+}
+(*evapl_ref) = (*eeta_ref) ;
+(*s_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( thdif ( 1 ) , cap ( 1 ) ) , dzstop ) , ntc :: tc_sub ( tso ( 1 ) , tso ( 2 ) ) ) ;
+(*fltot_ref) = ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( (*rnet_ref) , hft ) , ntc :: tc_mul ( xlv , (*eeta_ref) ) ) , (*s_ref) ) , x ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+if ( ( detal ( 1 ) != 0.f ) ) {
+(*smf_ref) = (*fltot_ref) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+}
+;
+;
+;
+;
+;
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4, typename R5, typename R6, typename R7, typename R8, typename R9, typename R10, typename R11, typename R12, typename R13, typename R14, typename R15, typename R16, typename R17, typename R18, typename R19, typename R20, typename R21, typename R22, typename R23, typename R24, typename R25, typename R26, typename R27, typename R28, typename R29, typename R30, typename R31, typename R32, typename R33, typename R34, typename R35, typename R36, typename R37, typename R38, typename R39, typename R40, typename R41, typename R42, typename R43>
+static inline void land_snowsoil ( thread Tables & tb , thread Arena & arena , int spp_lsm , FArray < F > rstochcol , FArray < F > fieldcol_sf , int i , int j , int isoil , F delt , int ktau , F conflx , int nzs , int nddzs , int nroot , F meltfactor , F rhonewsn , F snhei_crit , R0 iland_ref , F prcpms , F rainf , F newsnow , R1 snhei_ref , R2 snwe_ref , R3 snowfrac_ref , R4 rhosn_ref , F patm , F qvatm , F qcatm , F glw , F gsw , F gswin , R5 emiss_ref , R6 rnet_ref , int ivgtyp , F qkms , F tkms , F pc , R7 cst_ref , R8 drip_ref , F infwater , F rho , F vegfrac , R9 alb_ref , R10 znt_ref , F lai , int myj , int globalcellid , F qwrtz , F rhocs , F dqm , F qmin , F ref , F wilt , F psis , F bclh , F ksat , F sat , F cn , FArray < F > zsmain , FArray < F > zshalf , FArray < F > dtdzs , FArray < F > dtdzs2 , FArray < F > tbq , F xlv , R11 cp_ref , R12 rovcp_ref , F g0_p , F cw , R13 stbolt_ref , R14 tabs_ref , F kqwrtz , F kice , F kwt , R15 ilnb_ref , R16 snweprint_ref , R17 snheiprint_ref , R18 rsm_ref , FArray < F > soilmois , FArray < F > tso , FArray < F > smfrkeep , FArray < F > keepfr , R19 dew_ref , R20 soilt_ref , R21 soilt1_ref , R22 tsnav_ref , R23 qvg_ref , R24 qsg_ref , R25 qcg_ref , R26 smelt_ref , R27 snoh_ref , R28 snflx_ref , R29 snom_ref , R30 edir1_ref , R31 ec1_ref , R32 ett1_ref , R33 eeta_ref , R34 qfx_ref , R35 hfx_ref , R36 s_ref , R37 sublim_ref , R38 prcpl_ref , R39 fltot_ref , R40 runoff1_ref , R41 runoff2_ref , R42 mavail_ref , FArray < F > soilice , FArray < F > soiliqw , R43 infiltrp_ref ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+int nzs1 ;
+int nzs2 ;
+int k ;
+F transum ;
+F snth ;
+F newsn ;
+F t3 ;
+F upflux ;
+F xinet ;
+F beta ;
+F snwepr ;
+F epdt ;
+F pp ;
+F g0 ;
+F lv ;
+F xlvm ;
+F xlmelt ;
+F dzstop ;
+F can ;
+F epot ;
+F fac ;
+F ft ;
+F fq ;
+F hft ;
+F q1 ;
+F ras ;
+F rhoice ;
+F sph ;
+F trans ;
+F zn ;
+F ci ;
+F cvw ;
+F tln ;
+F tavln ;
+F pi ;
+F dd1 ;
+F cmc2ms ;
+F drycan ;
+F wetcan ;
+F infmax ;
+F riw ;
+F deltsn ;
+F h ;
+F umveg ;
+FArray < F > transp = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > cap = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > diffu = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > hydro = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > thdif = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > tranf = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > tav = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soilmoism = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soilicem = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soiliqwm = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > detal = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > fwsat = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > lwsat = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > told = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > smold = arena . alloc < F > ( 1 , nzs ) ;
+F soiltold ;
+F qgold ;
+F x ;
+cvw = cw ;
+xlmelt = 3.35e+5f ;
+xlvm = ntc :: tc_add ( xlv , xlmelt ) ;
+soiltold = (*soilt_ref) ;
+qgold = (*qvg_ref) ;
+x = 0.f ;
+deltsn = ntc :: tc_div ( ntc :: tc_mul ( 0.05f , 1.e3f ) , (*rhosn_ref) ) ;
+snth = ntc :: tc_div ( ntc :: tc_mul ( 0.01f , 1.e3f ) , (*rhosn_ref) ) ;
+if ( ( (*snhei_ref) >= ntc :: tc_add ( deltsn , snth ) ) ) {
+if ( ( ntc :: tc_sub ( ntc :: tc_sub ( (*snhei_ref) , deltsn ) , snth ) < snth ) ) {
+deltsn = ntc :: tc_mul ( 0.5f , ntc :: tc_sub ( (*snhei_ref) , snth ) ) ;
+}
+if ( false ) {
+;
+}
+}
+rhoice = 900.f ;
+ci = ntc :: tc_mul ( rhoice , 2100.f ) ;
+ras = ntc :: tc_mul ( rho , 1.e-3f ) ;
+riw = ntc :: tc_mul ( rhoice , 1.e-3f ) ;
+(*rsm_ref) = 0.f ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+soilmoism ( k ) = 0.f ;
+soiliqwm ( k ) = 0.f ;
+soilice ( k ) = 0.f ;
+soilicem ( k ) = 0.f ;
+lwsat ( k ) = 0.f ;
+fwsat ( k ) = 0.f ;
+tav ( k ) = 0.f ;
+cap ( k ) = 0.f ;
+diffu ( k ) = 0.f ;
+hydro ( k ) = 0.f ;
+thdif ( k ) = 0.f ;
+tranf ( k ) = 0.f ;
+detal ( k ) = 0.f ;
+told ( k ) = 0.f ;
+smold ( k ) = 0.f ;
+}
+(*snweprint_ref) = 0.f ;
+(*snheiprint_ref) = 0.f ;
+(*prcpl_ref) = prcpms ;
+nzs1 = ( nzs - 1 ) ;
+nzs2 = ( nzs - 2 ) ;
+dzstop = ntc :: tc_div ( 1.f , ntc :: tc_sub ( zsmain ( 2 ) , zsmain ( 1 ) ) ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+tln = rrfs_gfk_log ( ntc :: tc_div ( tso ( k ) , 273.15f ) ) ;
+if ( ( tln < 0.f ) ) {
+soiliqw ( k ) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_add ( dqm , qmin ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( xlmelt , ntc :: tc_sub ( tso ( k ) , 273.15f ) ) , tso ( k ) ) , 9.81f ) , psis ) , ntc :: tc_div ( ( - 1.f ) , bclh ) ) ) , qmin ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , soiliqw ( k ) ) ;
+soiliqw ( k ) = ruc_min < F > ( soiliqw ( k ) , soilmois ( k ) ) ;
+soilice ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilmois ( k ) , soiliqw ( k ) ) , riw ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+soilice ( k ) = ruc_min < F > ( soilice ( k ) , smfrkeep ( k ) ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmois ( k ) , ntc :: tc_mul ( ntc :: tc_mul ( soilice ( k ) , rhoice ) , 1.e-3f ) ) ) ;
+}
+}
+else {
+soilice ( k ) = 0.f ;
+soiliqw ( k ) = soilmois ( k ) ;
+}
+}
+for ( k = 1 ;
+k <= nzs1 ;
+k += 1 ) {
+tav ( k ) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( tso ( k ) , tso ( ( k + 1 ) ) ) ) ;
+soilmoism ( k ) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( soilmois ( k ) , soilmois ( ( k + 1 ) ) ) ) ;
+tavln = rrfs_gfk_log ( ntc :: tc_div ( tav ( k ) , 273.15f ) ) ;
+if ( ( tavln < 0.f ) ) {
+soiliqwm ( k ) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_add ( dqm , qmin ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( xlmelt , ntc :: tc_sub ( tav ( k ) , 273.15f ) ) , tav ( k ) ) , 9.81f ) , psis ) , ntc :: tc_div ( ( - 1.f ) , bclh ) ) ) , qmin ) ;
+fwsat ( k ) = ntc :: tc_sub ( dqm , soiliqwm ( k ) ) ;
+lwsat ( k ) = ntc :: tc_add ( soiliqwm ( k ) , qmin ) ;
+soiliqwm ( k ) = ruc_max < F > ( 0.f , soiliqwm ( k ) ) ;
+soiliqwm ( k ) = ruc_min < F > ( soiliqwm ( k ) , soilmoism ( k ) ) ;
+soilicem ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilmoism ( k ) , soiliqwm ( k ) ) , riw ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+soilicem ( k ) = ruc_min < F > ( soilicem ( k ) , ntc :: tc_mul ( 0.5f , ntc :: tc_add ( smfrkeep ( k ) , smfrkeep ( ( k + 1 ) ) ) ) ) ;
+soiliqwm ( k ) = ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmoism ( k ) , ntc :: tc_mul ( soilicem ( k ) , riw ) ) ) ;
+fwsat ( k ) = ntc :: tc_sub ( dqm , soiliqwm ( k ) ) ;
+lwsat ( k ) = ntc :: tc_add ( soiliqwm ( k ) , qmin ) ;
+}
+}
+else {
+soilicem ( k ) = 0.f ;
+soiliqwm ( k ) = soilmoism ( k ) ;
+lwsat ( k ) = ntc :: tc_add ( dqm , qmin ) ;
+fwsat ( k ) = 0.f ;
+}
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( soilice ( k ) > 0.f ) ) {
+smfrkeep ( k ) = soilice ( k ) ;
+}
+else {
+smfrkeep ( k ) = ntc :: tc_div ( soilmois ( k ) , riw ) ;
+}
+}
+land_soilprop (tb , arena , spp_lsm , rstochcol , fieldcol_sf , nzs , fwsat , lwsat , tav , keepfr , soilmois , soiliqw , soilice , soilmoism , soiliqwm , soilicem , globalcellid , qwrtz , rhocs , dqm , qmin , psis , bclh , ksat , riw , xlmelt , (*cp_ref) , g0_p , cvw , &(ci) , kqwrtz , kice , kwt , thdif , diffu , hydro , cap) ;
+(*smelt_ref) = 0.f ;
+h = (*mavail_ref) ;
+fq = qkms ;
+(*dew_ref) = 0.f ;
+umveg = ntc :: tc_sub ( 1.f , vegfrac ) ;
+epot = ntc :: tc_mul ( ( - fq ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+snwepr = (*snwe_ref) ;
+beta = 1.f ;
+epdt = ntc :: tc_mul ( ntc :: tc_mul ( epot , ras ) , delt ) ;
+if ( ( ( epdt > 0.f ) && ( snwepr <= epdt ) ) ) {
+beta = ntc :: tc_div ( snwepr , ruc_max < F > ( 1.e-8f , epdt ) ) ;
+(*snwe_ref) = 0.f ;
+}
+wetcan = ruc_min < F > ( 0.25f , rrfs_gfk_pow ( ruc_max < F > ( 0.f , ntc :: tc_div ( (*cst_ref) , sat ) ) , cn ) ) ;
+drycan = ntc :: tc_sub ( 1.f , wetcan ) ;
+land_transf (tb , arena , i , j , nzs , nroot , soiliqw , (*tabs_ref) , lai , gswin , dqm , qmin , ref , wilt , zshalf , pc , (*iland_ref) , tranf , &(transum)) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+told ( k ) = tso ( k ) ;
+smold ( k ) = soilmois ( k ) ;
+}
+if ( false ) {
+;
+}
+land_snowtemp (tb , arena , i , j , (*iland_ref) , isoil , delt , ktau , conflx , nzs , nddzs , nroot , &((*snwe_ref)) , snwepr , &((*snhei_ref)) , newsnow , &((*snowfrac_ref)) , &(beta) , deltsn , snth , &((*rhosn_ref)) , rhonewsn , meltfactor , prcpms , rainf , patm , (*tabs_ref) , qvatm , qcatm , glw , gsw , &((*emiss_ref)) , &((*rnet_ref)) , qkms , tkms , pc , rho , vegfrac , thdif , cap , &(drycan) , &(wetcan) , &((*cst_ref)) , tranf , transum , &((*dew_ref)) , &((*mavail_ref)) , globalcellid , dqm , qmin , psis , bclh , zsmain , zshalf , dtdzs , tbq , xlvm , (*cp_ref) , (*rovcp_ref) , g0_p , cvw , (*stbolt_ref) , &((*snweprint_ref)) , &((*snheiprint_ref)) , &((*rsm_ref)) , tso , &((*soilt_ref)) , &((*soilt1_ref)) , &((*tsnav_ref)) , &((*qvg_ref)) , &((*qsg_ref)) , &((*qcg_ref)) , &((*smelt_ref)) , &((*snoh_ref)) , &((*snflx_ref)) , &((*s_ref)) , &((*ilnb_ref)) , &(x)) ;
+(*dew_ref) = 0.f ;
+(*ett1_ref) = 0.f ;
+pp = ntc :: tc_mul ( patm , 1.e3f ) ;
+epot = ntc :: tc_mul ( ( - fq ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+if ( ( epot > 0.f ) ) {
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+transp ( k ) = ntc :: tc_div ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( vegfrac , ras ) , fq ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) , tranf ( k ) ) , drycan ) , zshalf ( ( nroot + 1 ) ) ) ;
+(*ett1_ref) = ntc :: tc_sub ( (*ett1_ref) , transp ( k ) ) ;
+}
+for ( k = ( nroot + 1 ) ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+}
+}
+else {
+(*dew_ref) = ( - epot ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+transp ( k ) = 0.f ;
+}
+(*ett1_ref) = 0.f ;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+tln = rrfs_gfk_log ( ntc :: tc_div ( tso ( k ) , 273.15f ) ) ;
+if ( ( tln < 0.f ) ) {
+soiliqw ( k ) = ntc :: tc_sub ( ntc :: tc_mul ( ntc :: tc_add ( dqm , qmin ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_div ( ntc :: tc_mul ( xlmelt , ntc :: tc_sub ( tso ( k ) , 273.15f ) ) , tso ( k ) ) , 9.81f ) , psis ) , ntc :: tc_div ( ( - 1.f ) , bclh ) ) ) , qmin ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , soiliqw ( k ) ) ;
+soiliqw ( k ) = ruc_min < F > ( soiliqw ( k ) , soilmois ( k ) ) ;
+soilice ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilmois ( k ) , soiliqw ( k ) ) , riw ) ;
+if ( ( keepfr ( k ) == 1.f ) ) {
+soilice ( k ) = ruc_min < F > ( soilice ( k ) , smfrkeep ( k ) ) ;
+soiliqw ( k ) = ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmois ( k ) , ntc :: tc_mul ( soilice ( k ) , riw ) ) ) ;
+}
+}
+else {
+soilice ( k ) = 0.f ;
+soiliqw ( k ) = soilmois ( k ) ;
+}
+}
+land_soilmoist (tb , arena , delt , nzs , nddzs , dtdzs , dtdzs2 , riw , zsmain , zshalf , diffu , hydro , (*qsg_ref) , (*qvg_ref) , (*qcg_ref) , qcatm , qvatm , ( - infwater ) , qkms , transp , 0.f , 0.f , (*smelt_ref) , soilice , vegfrac , (*snowfrac_ref) , 1.f , globalcellid , dqm , qmin , ref , ksat , ras , &(infmax) , soilmois , soiliqw , &((*mavail_ref)) , &((*runoff1_ref)) , &((*runoff2_ref)) , &((*infiltrp_ref))) ;
+if ( ( (*snhei_ref) == 0.f ) ) {
+(*tsnav_ref) = ntc :: tc_sub ( (*soilt_ref) , 273.15f ) ;
+}
+(*snom_ref) = ntc :: tc_add ( (*snom_ref) , ntc :: tc_mul ( ntc :: tc_mul ( (*smelt_ref) , delt ) , 1.e3f ) ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( soilice ( k ) > 0.f ) ) {
+if ( ( ( tso ( k ) > told ( k ) ) && ( soilmois ( k ) > smold ( k ) ) ) ) {
+keepfr ( k ) = 1.f ;
+}
+else {
+keepfr ( k ) = 0.f ;
+}
+}
+}
+t3 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( (*stbolt_ref) , soiltold ) , soiltold ) , soiltold ) ;
+upflux = ntc :: tc_mul ( ntc :: tc_mul ( t3 , 0.5f ) , ntc :: tc_add ( soiltold , (*soilt_ref) ) ) ;
+xinet = ntc :: tc_mul ( (*emiss_ref) , ntc :: tc_sub ( glw , upflux ) ) ;
+(*hfx_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - tkms ) , (*cp_ref) ) , rho ) , ntc :: tc_sub ( (*tabs_ref) , (*soilt_ref) ) ) , rrfs_gfk_pow ( ntc :: tc_div ( ntc :: tc_mul ( p1000mb , 0.00001f ) , patm ) , (*rovcp_ref) ) ) ;
+if ( false ) {
+;
+}
+hft = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - tkms ) , (*cp_ref) ) , rho ) , ntc :: tc_sub ( (*tabs_ref) , (*soilt_ref) ) ) ;
+if ( false ) {
+;
+}
+q1 = ntc :: tc_mul ( ntc :: tc_mul ( ( - fq ) , ras ) , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+cmc2ms = 0.f ;
+if ( ( q1 < 0.f ) ) {
+(*edir1_ref) = 0.f ;
+(*ec1_ref) = 0.f ;
+(*ett1_ref) = 0.f ;
+if ( myj ) {
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ( - qkms ) , ras ) , ntc :: tc_sub ( ntc :: tc_div ( qvatm , ntc :: tc_add ( 1.f , qvatm ) ) , ntc :: tc_div ( (*qsg_ref) , ntc :: tc_add ( 1.f , (*qsg_ref) ) ) ) ) , 1.e3f ) ;
+(*cst_ref) = ntc :: tc_sub ( (*cst_ref) , ntc :: tc_mul ( ntc :: tc_mul ( (*eeta_ref) , delt ) , vegfrac ) ) ;
+if ( false ) {
+;
+}
+}
+else {
+(*dew_ref) = ntc :: tc_mul ( qkms , ntc :: tc_sub ( qvatm , (*qsg_ref) ) ) ;
+(*eeta_ref) = ntc :: tc_mul ( ( - rho ) , (*dew_ref) ) ;
+(*cst_ref) = ntc :: tc_add ( (*cst_ref) , ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( delt , (*dew_ref) ) , ras ) , vegfrac ) ) ;
+if ( false ) {
+;
+}
+}
+(*qfx_ref) = ntc :: tc_mul ( xlvm , (*eeta_ref) ) ;
+(*eeta_ref) = ntc :: tc_mul ( ( - rho ) , (*dew_ref) ) ;
+}
+else {
+(*edir1_ref) = ntc :: tc_mul ( ntc :: tc_mul ( q1 , umveg ) , beta ) ;
+cmc2ms = ntc :: tc_mul ( ntc :: tc_div ( (*cst_ref) , delt ) , ras ) ;
+(*ec1_ref) = ntc :: tc_mul ( ntc :: tc_mul ( q1 , wetcan ) , vegfrac ) ;
+(*cst_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( (*cst_ref) , ntc :: tc_mul ( (*ec1_ref) , delt ) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+;
+}
+if ( myj ) {
+(*eeta_ref) = ntc :: tc_mul ( ( - ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( qkms , ras ) , ntc :: tc_sub ( ntc :: tc_div ( qvatm , ntc :: tc_add ( 1.f , qvatm ) ) , ntc :: tc_div ( (*qsg_ref) , ntc :: tc_add ( 1.f , (*qsg_ref) ) ) ) ) , 1.e3f ) ) , beta ) ;
+if ( false ) {
+;
+}
+}
+else {
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_add ( (*edir1_ref) , (*ec1_ref) ) , (*ett1_ref) ) , 1.e3f ) ;
+if ( false ) {
+;
+}
+}
+(*qfx_ref) = ntc :: tc_mul ( xlvm , (*eeta_ref) ) ;
+(*eeta_ref) = ntc :: tc_mul ( ntc :: tc_add ( ntc :: tc_add ( (*edir1_ref) , (*ec1_ref) ) , (*ett1_ref) ) , 1.e3f ) ;
+}
+(*s_ref) = (*snflx_ref) ;
+(*sublim_ref) = ntc :: tc_mul ( (*edir1_ref) , 1.e3f ) ;
+(*fltot_ref) = ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( (*rnet_ref) , hft ) , ntc :: tc_mul ( xlvm , (*eeta_ref) ) ) , (*s_ref) ) , (*snoh_ref) ) , x ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+}
+;
+;
+;
+;
+;
+}
+
+template <typename R0, typename R1, typename R2, typename R3, typename R4, typename R5, typename R6, typename R7, typename R8, typename R9, typename R10, typename R11, typename R12, typename R13, typename R14, typename R15, typename R16, typename R17, typename R18, typename R19, typename R20, typename R21, typename R22, typename R23, typename R24, typename R25, typename R26, typename R27, typename R28, typename R29, typename R30, typename R31, typename R32, typename R33, typename R34, typename R35, typename R36, typename R37, typename R38, typename R39, typename R40, typename R41, typename R42, typename R43, typename R44, typename R45, typename R46, typename R47, typename R48, typename R49, typename R50, typename R51, typename R52, typename R53, typename R54, typename R55, typename R56, typename R57, typename R58, typename R59, typename R60>
+static inline void land_sfctmp ( thread Tables & tb , thread Arena & arena , int spp_lsm , FArray < F > rstochcol , FArray < F > fieldcol_sf , F delt , int ktau , F conflx , int i , int j , int nzs , int nddzs , int nroot , F meltfactor , R0 iland_ref , R1 isoil_ref , F xland , int ivgtyp , int isltyp , R2 prcpms_ref , R3 newsnms_ref , R4 snwe_ref , R5 snhei_ref , R6 snowfrac_ref , R7 rhosn_ref , R8 rhonewsn_ref , R9 rhosnfall_ref , R10 snowrat_ref , R11 grauprat_ref , R12 icerat_ref , R13 curat_ref , F patm , F tabs , F qvatm , F qcatm , F rho , F glw , F gsw , R14 emiss_ref , F qkms , F tkms , F pc , R15 mavail_ref , R16 cst_ref , F vegfra , R17 alb_ref , R18 znt_ref , R19 alb_snow_ref , F alb_snow_free , F lai , int myj , F seaice , int isice , R20 qwrtz_ref , R21 rhocs_ref , R22 dqm_ref , R23 qmin_ref , R24 ref_ref , R25 wilt_ref , R26 psis_ref , R27 bclh_ref , R28 ksat_ref , R29 sat_ref , F cn , FArray < F > zsmain , FArray < F > zshalf , FArray < F > dtdzs , FArray < F > dtdzs2 , FArray < F > tbq , F cp , F rovcp , F g0 , F lv , F stbolt , F cw , F c1sn , F c2sn , F kqwrtz , F kice , F kwt , R30 snweprint_ref , R31 snheiprint_ref , R32 rsm_ref , FArray < F > soilm1d , FArray < F > ts1d , FArray < F > smfrkeep , FArray < F > keepfr , R33 soilt_ref , R34 soilt1_ref , R35 tsnav_ref , R36 dew_ref , R37 qvg_ref , R38 qsg_ref , R39 qcg_ref , R40 smelt_ref , R41 snoh_ref , R42 snflx_ref , R43 snom_ref , R44 snowfallac_ref , R45 acsnow_ref , R46 edir1_ref , R47 ec1_ref , R48 ett1_ref , R49 eeta_ref , R50 qfx_ref , R51 hfx_ref , R52 s_ref , R53 sublim_ref , R54 evapl_ref , R55 prcpl_ref , R56 fltot_ref , R57 runoff1_ref , R58 runoff2_ref , FArray < F > soilice , FArray < F > soiliqw , R59 infiltr_ref , R60 smf_ref , int globalcellid ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+int ilands ;
+FArray < F > ts1ds = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soilm1ds = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > smfrkeeps = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soiliqws = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > soilices = arena . alloc < F > ( 1 , nzs ) ;
+FArray < F > keepfrs = arena . alloc < F > ( 1 , nzs ) ;
+F dews ;
+F mavails ;
+F edir1s ;
+F ec1s ;
+F csts ;
+F ett1s ;
+F eetas ;
+F evapls ;
+F infiltrs ;
+F prcpls ;
+F qvgs ;
+F qsgs ;
+F qcgs ;
+F qfxs ;
+F hfxs ;
+F fltots ;
+F runoff1s ;
+F runoff2s ;
+F ss ;
+F soilts ;
+int k ;
+int ilnb = 0 ;
+F bsn ;
+F xsn ;
+F rainf ;
+F snth ;
+F newsn ;
+F t3 ;
+F upflux ;
+F xinet ;
+F snhei_crit ;
+F snhei_crit_newsn ;
+F keep_snow_albedo ;
+F snowfracnewsn ;
+F newsnowratio ;
+F dd1 ;
+F snowfrac2 ;
+F m ;
+F rhonewgr ;
+F rhonewice ;
+F rnet ;
+F gswnew ;
+F gswin ;
+F emissn ;
+F zntsn ;
+F emiss_snowfree ;
+F vegfrac ;
+F snow_mosaic ;
+F snfr ;
+F vgfr ;
+F albsn ;
+F drip ;
+F dripsn ;
+F dripliq ;
+F interw ;
+F intersn ;
+F infwater ;
+F intwratio ;
+int ilsnow = 99 ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+snhei_crit = ntc :: tc_div ( ntc :: tc_mul ( 0.01601f , rhowater ) , (*rhosn_ref) ) ;
+snhei_crit_newsn = ntc :: tc_div ( ntc :: tc_mul ( 0.0005f , rhowater ) , (*rhosn_ref) ) ;
+zntsn = tb . z0tbl ( isice ) ;
+snow_mosaic = 0.f ;
+snfr = 1.f ;
+newsn = 0.f ;
+newsnowratio = 0.f ;
+snowfracnewsn = 0.f ;
+(*rhonewsn_ref) = 100.f ;
+if ( ( (*snhei_ref) == 0.f ) ) {
+(*snowfrac_ref) = 0.f ;
+}
+(*smelt_ref) = 0.f ;
+rainf = 0.f ;
+(*rsm_ref) = 0.f ;
+dd1 = 0.f ;
+(*infiltr_ref) = 0.f ;
+vegfrac = ntc :: tc_mul ( 0.01f , vegfra ) ;
+drip = 0.f ;
+dripsn = 0.f ;
+dripliq = 0.f ;
+(*smf_ref) = 0.f ;
+interw = 0.f ;
+intersn = 0.f ;
+infwater = 0.f ;
+gswnew = gsw ;
+gswin = ntc :: tc_div ( gsw , ntc :: tc_sub ( 1.f , (*alb_ref) ) ) ;
+albsn = (*alb_snow_ref) ;
+emissn = 0.98f ;
+emiss_snowfree = tb . lemitbl ( ivgtyp ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+}
+if ( ( (*snhei_ref) > ntc :: tc_div ( ntc :: tc_mul ( 0.0081f , 1.e3f ) , (*rhosn_ref) ) ) ) {
+bsn = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_div ( delt , 3600.f ) , c1sn ) , rrfs_exp_fma ( ntc :: tc_sub ( ntc :: tc_mul ( 0.08f , ruc_min < F > ( 0.f , (*tsnav_ref) ) ) , ntc :: tc_mul ( ntc :: tc_mul ( c2sn , (*rhosn_ref) ) , 1.e-3f ) ) ) ) ;
+if ( ! ( ntc :: tc_mul ( ntc :: tc_mul ( bsn , (*snwe_ref) ) , 100.f ) < 1.e-4f ) ) {
+xsn = ntc :: tc_div ( ntc :: tc_mul ( (*rhosn_ref) , ntc :: tc_sub ( rrfs_exp_fma ( ntc :: tc_mul ( ntc :: tc_mul ( bsn , (*snwe_ref) ) , 100.f ) ) , 1.f ) ) , ntc :: tc_mul ( ntc :: tc_mul ( bsn , (*snwe_ref) ) , 100.f ) ) ;
+(*rhosn_ref) = ruc_min < F > ( ruc_max < F > ( 58.8f , xsn ) , 500.f ) ;
+}
+;
+}
+if ( ( (*snowfrac_ref) < 0.75f ) ) {
+snow_mosaic = 1.f ;
+}
+newsn = ntc :: tc_mul ( (*newsnms_ref) , delt ) ;
+if ( ( newsn > 0.f ) ) {
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+newsnowratio = ruc_min < F > ( 1.f , ntc :: tc_div ( newsn , ntc :: tc_add ( (*snwe_ref) , newsn ) ) ) ;
+(*rhonewsn_ref) = ruc_min < F > ( 125.f , ntc :: tc_div ( 1000.0f , ruc_max < F > ( 8.f , ntc :: tc_mul ( 17.f , rrfs_tanhf ( ntc :: tc_mul ( ntc :: tc_sub ( 276.65f , tabs ) , 0.15f ) ) ) ) ) ) ;
+rhonewgr = ruc_min < F > ( 500.f , ntc :: tc_div ( rhowater , ruc_max < F > ( 2.f , ntc :: tc_mul ( 3.5f , rrfs_tanhf ( ntc :: tc_mul ( ntc :: tc_sub ( 274.15f , tabs ) , 0.3333f ) ) ) ) ) ) ;
+rhonewice = (*rhonewsn_ref) ;
+(*rhosnfall_ref) = ruc_min < F > ( 500.f , ruc_max < F > ( 58.8f , ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_add ( ntc :: tc_mul ( (*rhonewsn_ref) , (*snowrat_ref) ) , ntc :: tc_mul ( rhonewgr , (*grauprat_ref) ) ) , ntc :: tc_mul ( rhonewice , (*icerat_ref) ) ) , ntc :: tc_mul ( rhonewgr , (*curat_ref) ) ) ) ) ;
+(*rhonewsn_ref) = (*rhosnfall_ref) ;
+xsn = ntc :: tc_div ( ntc :: tc_add ( ntc :: tc_mul ( (*rhosn_ref) , (*snwe_ref) ) , ntc :: tc_mul ( (*rhonewsn_ref) , newsn ) ) , ntc :: tc_add ( (*snwe_ref) , newsn ) ) ;
+(*rhosn_ref) = ruc_min < F > ( ruc_max < F > ( 58.8f , xsn ) , 500.f ) ;
+}
+if ( ( (*prcpms_ref) != 0.f ) ) {
+rainf = 1.f ;
+}
+drip = 0.f ;
+intwratio = 0.f ;
+if ( ( vegfrac > 0.01f ) ) {
+interw = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( 0.25f , delt ) , (*prcpms_ref) ) , ntc :: tc_sub ( 1.f , rrfs_exp_fma ( ntc :: tc_mul ( ( - 0.5f ) , lai ) ) ) ) , vegfrac ) ;
+intersn = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( 0.25f , newsn ) , ntc :: tc_sub ( 1.f , rrfs_exp_fma ( ntc :: tc_mul ( ( - 0.5f ) , lai ) ) ) ) , vegfrac ) ;
+infwater = ntc :: tc_sub ( (*prcpms_ref) , ntc :: tc_div ( interw , delt ) ) ;
+if ( ( ntc :: tc_add ( interw , intersn ) > 0.f ) ) {
+intwratio = ntc :: tc_div ( interw , ntc :: tc_add ( interw , intersn ) ) ;
+}
+dd1 = ntc :: tc_add ( ntc :: tc_add ( (*cst_ref) , interw ) , intersn ) ;
+(*cst_ref) = dd1 ;
+if ( ( (*cst_ref) > (*sat_ref) ) ) {
+(*cst_ref) = (*sat_ref) ;
+drip = ntc :: tc_sub ( dd1 , (*sat_ref) ) ;
+}
+}
+else {
+(*cst_ref) = 0.f ;
+drip = 0.f ;
+interw = 0.f ;
+intersn = 0.f ;
+infwater = (*prcpms_ref) ;
+}
+if ( ( newsn > 0.f ) ) {
+(*snwe_ref) = ruc_max < F > ( 0.f , ntc :: tc_sub ( ntc :: tc_add ( (*snwe_ref) , newsn ) , intersn ) ) ;
+if ( ( drip > 0.f ) ) {
+if ( ( snow_mosaic == 1.f ) ) {
+dripliq = ntc :: tc_mul ( drip , intwratio ) ;
+dripsn = ntc :: tc_sub ( drip , dripliq ) ;
+(*snwe_ref) = ntc :: tc_add ( (*snwe_ref) , dripsn ) ;
+infwater = ntc :: tc_add ( infwater , dripliq ) ;
+dripliq = 0.f ;
+dripsn = 0.f ;
+}
+else {
+(*snwe_ref) = ntc :: tc_add ( (*snwe_ref) , drip ) ;
+}
+}
+(*snhei_ref) = ntc :: tc_div ( ntc :: tc_mul ( (*snwe_ref) , rhowater ) , (*rhosn_ref) ) ;
+newsn = ntc :: tc_div ( ntc :: tc_mul ( newsn , rhowater ) , (*rhonewsn_ref) ) ;
+}
+if ( ( (*snhei_ref) > 0.0f ) ) {
+(*iland_ref) = isice ;
+if ( ( isncovr_opt == 1 ) ) {
+(*snowfrac_ref) = ruc_min < F > ( 1.f , ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( 2.f , snhei_crit ) ) ) ;
+}
+else if ( ( isncovr_opt == 2 ) ) {
+(*snowfrac_ref) = ruc_min < F > ( 1.f , ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( 2.f , snhei_crit ) ) ) ;
+snowfrac2 = rrfs_tanhf ( ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( ntc :: tc_mul ( 2.5f , ruc_min < F > ( 0.2f , (*znt_ref) ) ) , ntc :: tc_div ( (*rhosn_ref) , (*rhonewsn_ref) ) ) ) ) ;
+(*snowfrac_ref) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( (*snowfrac_ref) , snowfrac2 ) ) ;
+}
+else {
+m = 1.f ;
+(*snowfrac_ref) = rrfs_tanhf ( ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( ntc :: tc_mul ( 10.f , sncovfac ( ivgtyp ) ) , rrfs_gfk_pow ( ntc :: tc_div ( (*rhosn_ref) , (*rhonewsn_ref) ) , m ) ) ) ) ;
+}
+if ( ( newsn > 0.f ) ) {
+snowfracnewsn = ruc_min < F > ( 1.f , ntc :: tc_div ( (*snowfallac_ref) , snhei_crit_newsn ) ) ;
+}
+if ( ( ivgtyp == tb . urban ) ) {
+(*snowfrac_ref) = ruc_min < F > ( 0.75f , (*snowfrac_ref) ) ;
+}
+if ( ( (*snowfrac_ref) < 0.75f ) ) {
+snow_mosaic = 1.f ;
+}
+keep_snow_albedo = 0.f ;
+if ( ( ( snowfracnewsn > 0.99f ) && ( (*rhosnfall_ref) < 450.f ) ) ) {
+keep_snow_albedo = 1.f ;
+snow_mosaic = 0.f ;
+}
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+if ( ( ( ( newsn == 0.f ) && ( (*znt_ref) <= 0.2f ) ) && ( ivgtyp != isice ) ) ) {
+if ( ( (*snhei_ref) <= ntc :: tc_mul ( 2.f , (*znt_ref) ) ) ) {
+(*znt_ref) = ntc :: tc_add ( ntc :: tc_mul ( 0.55f , (*znt_ref) ) , ntc :: tc_mul ( 0.45f , tb . z0tbl ( (*iland_ref) ) ) ) ;
+}
+else if ( ( ( (*snhei_ref) > ntc :: tc_mul ( 2.f , (*znt_ref) ) ) && ( (*snhei_ref) <= ntc :: tc_mul ( 4.f , (*znt_ref) ) ) ) ) {
+(*znt_ref) = ntc :: tc_add ( ntc :: tc_mul ( 0.2f , (*znt_ref) ) , ntc :: tc_mul ( 0.8f , tb . z0tbl ( (*iland_ref) ) ) ) ;
+}
+else if ( ( (*snhei_ref) > ntc :: tc_mul ( 4.f , (*znt_ref) ) ) ) {
+(*znt_ref) = tb . z0tbl ( (*iland_ref) ) ;
+}
+}
+if ( ( snow_mosaic == 1.f ) ) {
+albsn = (*alb_snow_ref) ;
+if ( ( ( keep_snow_albedo > 0.9f ) && ( albsn < 0.4f ) ) ) {
+albsn = 0.7f ;
+}
+(*emiss_ref) = emissn ;
+}
+else {
+albsn = ruc_max < F > ( ntc :: tc_mul ( keep_snow_albedo , (*alb_snow_ref) ) , ruc_min < F > ( ntc :: tc_add ( alb_snow_free , ntc :: tc_mul ( ntc :: tc_sub ( (*alb_snow_ref) , alb_snow_free ) , (*snowfrac_ref) ) ) , (*alb_snow_ref) ) ) ;
+if ( ( ( ( newsn > 0.f ) && ( keep_snow_albedo > 0.9f ) ) && ( albsn < 0.4f ) ) ) {
+albsn = 0.7f ;
+}
+(*emiss_ref) = ruc_max < F > ( ntc :: tc_mul ( keep_snow_albedo , emissn ) , ruc_min < F > ( ntc :: tc_add ( emiss_snowfree , ntc :: tc_mul ( ntc :: tc_sub ( emissn , emiss_snowfree ) , (*snowfrac_ref) ) ) , emissn ) ) ;
+}
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+if ( ( ( albsn < 0.4f ) || ( keep_snow_albedo == 1 ) ) ) {
+(*alb_ref) = albsn ;
+}
+else {
+(*alb_ref) = ruc_min < F > ( albsn , ruc_max < F > ( ntc :: tc_sub ( albsn , ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_mul ( 0.1f , ntc :: tc_sub ( (*soilt_ref) , 263.15f ) ) , ntc :: tc_sub ( 273.15f , 263.15f ) ) , albsn ) ) , ntc :: tc_sub ( albsn , 0.05f ) ) ) ;
+}
+if ( ( snow_mosaic == 1.f ) ) {
+gswnew = ntc :: tc_mul ( gswin , ntc :: tc_sub ( 1.f , alb_snow_free ) ) ;
+t3 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( stbolt , (*soilt_ref) ) , (*soilt_ref) ) , (*soilt_ref) ) ;
+upflux = ntc :: tc_mul ( t3 , (*soilt_ref) ) ;
+xinet = ntc :: tc_mul ( emiss_snowfree , ntc :: tc_sub ( glw , upflux ) ) ;
+rnet = ntc :: tc_add ( gswnew , xinet ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+soilm1ds ( k ) = soilm1d ( k ) ;
+ts1ds ( k ) = ts1d ( k ) ;
+smfrkeeps ( k ) = smfrkeep ( k ) ;
+keepfrs ( k ) = keepfr ( k ) ;
+soilices ( k ) = soilice ( k ) ;
+soiliqws ( k ) = soiliqw ( k ) ;
+}
+soilts = (*soilt_ref) ;
+qvgs = (*qvg_ref) ;
+qsgs = (*qsg_ref) ;
+qcgs = (*qcg_ref) ;
+csts = (*cst_ref) ;
+mavails = (*mavail_ref) ;
+(*smelt_ref) = 0.f ;
+runoff1s = 0.f ;
+runoff2s = 0.f ;
+ilands = ivgtyp ;
+land_soil (tb , arena , spp_lsm , rstochcol , fieldcol_sf , i , j , ilands , (*isoil_ref) , delt , ktau , conflx , nzs , nddzs , nroot , &((*prcpms_ref)) , &(rainf) , patm , qvatm , qcatm , glw , gswnew , gswin , emiss_snowfree , &(rnet) , qkms , tkms , pc , &(csts) , &(dripliq) , infwater , rho , vegfrac , lai , myj , (*qwrtz_ref) , (*rhocs_ref) , (*dqm_ref) , (*qmin_ref) , (*ref_ref) , (*wilt_ref) , (*psis_ref) , (*bclh_ref) , (*ksat_ref) , &((*sat_ref)) , cn , zsmain , zshalf , dtdzs , dtdzs2 , tbq , lv , &(cp) , &(rovcp) , g0 , cw , &(stbolt) , &(tabs) , kqwrtz , kice , kwt , soilm1ds , ts1ds , smfrkeeps , keepfrs , &(dews) , &(soilts) , &(qvgs) , &(qsgs) , &(qcgs) , &(edir1s) , &(ec1s) , &(ett1s) , &(eetas) , &(qfxs) , &(hfxs) , &(ss) , &(evapls) , &(prcpls) , &(fltots) , &(runoff1s) , &(runoff2s) , &(mavails) , soilices , soiliqws , &(infiltrs) , &((*smf_ref)) , globalcellid) ;
+}
+gswnew = ntc :: tc_mul ( gswin , ntc :: tc_sub ( 1.f , (*alb_ref) ) ) ;
+t3 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( stbolt , (*soilt_ref) ) , (*soilt_ref) ) , (*soilt_ref) ) ;
+upflux = ntc :: tc_mul ( t3 , (*soilt_ref) ) ;
+xinet = ntc :: tc_mul ( (*emiss_ref) , ntc :: tc_sub ( glw , upflux ) ) ;
+rnet = ntc :: tc_add ( gswnew , xinet ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+}
+if ( ( snow_mosaic == 1.f ) ) {
+snfr = 1.f ;
+}
+else {
+snfr = (*snowfrac_ref) ;
+}
+land_snowsoil (tb , arena , spp_lsm , rstochcol , fieldcol_sf , i , j , (*isoil_ref) , delt , ktau , conflx , nzs , nddzs , nroot , meltfactor , (*rhonewsn_ref) , snhei_crit , &((*iland_ref)) , (*prcpms_ref) , rainf , newsn , &((*snhei_ref)) , &((*snwe_ref)) , &(snfr) , &((*rhosn_ref)) , patm , qvatm , qcatm , glw , gswnew , gswin , &((*emiss_ref)) , &(rnet) , ivgtyp , qkms , tkms , pc , &((*cst_ref)) , &(dripsn) , infwater , rho , vegfrac , &((*alb_ref)) , &((*znt_ref)) , lai , myj , globalcellid , (*qwrtz_ref) , (*rhocs_ref) , (*dqm_ref) , (*qmin_ref) , (*ref_ref) , (*wilt_ref) , (*psis_ref) , (*bclh_ref) , (*ksat_ref) , (*sat_ref) , cn , zsmain , zshalf , dtdzs , dtdzs2 , tbq , lv , &(cp) , &(rovcp) , g0 , cw , &(stbolt) , &(tabs) , kqwrtz , kice , kwt , &(ilnb) , &((*snweprint_ref)) , &((*snheiprint_ref)) , &((*rsm_ref)) , soilm1d , ts1d , smfrkeep , keepfr , &((*dew_ref)) , &((*soilt_ref)) , &((*soilt1_ref)) , &((*tsnav_ref)) , &((*qvg_ref)) , &((*qsg_ref)) , &((*qcg_ref)) , &((*smelt_ref)) , &((*snoh_ref)) , &((*snflx_ref)) , &((*snom_ref)) , &((*edir1_ref)) , &((*ec1_ref)) , &((*ett1_ref)) , &((*eeta_ref)) , &((*qfx_ref)) , &((*hfx_ref)) , &((*s_ref)) , &((*sublim_ref)) , &((*prcpl_ref)) , &((*fltot_ref)) , &((*runoff1_ref)) , &((*runoff2_ref)) , &((*mavail_ref)) , soilice , soiliqw , &((*infiltr_ref))) ;
+if ( ( snow_mosaic == 1.f ) ) {
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+;
+;
+;
+;
+;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+soilm1d ( k ) = ntc :: tc_add ( ntc :: tc_mul ( soilm1ds ( k ) , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( soilm1d ( k ) , (*snowfrac_ref) ) ) ;
+ts1d ( k ) = ntc :: tc_add ( ntc :: tc_mul ( ts1ds ( k ) , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( ts1d ( k ) , (*snowfrac_ref) ) ) ;
+smfrkeep ( k ) = ntc :: tc_add ( ntc :: tc_mul ( smfrkeeps ( k ) , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( smfrkeep ( k ) , (*snowfrac_ref) ) ) ;
+if ( ( (*snowfrac_ref) > 0.5f ) ) {
+keepfr ( k ) = keepfr ( k ) ;
+}
+else {
+keepfr ( k ) = keepfrs ( k ) ;
+}
+soilice ( k ) = ntc :: tc_add ( ntc :: tc_mul ( soilices ( k ) , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( soilice ( k ) , (*snowfrac_ref) ) ) ;
+soiliqw ( k ) = ntc :: tc_add ( ntc :: tc_mul ( soiliqws ( k ) , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( soiliqw ( k ) , (*snowfrac_ref) ) ) ;
+}
+(*dew_ref) = ntc :: tc_add ( ntc :: tc_mul ( dews , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*dew_ref) , (*snowfrac_ref) ) ) ;
+(*soilt_ref) = ntc :: tc_add ( ntc :: tc_mul ( soilts , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*soilt_ref) , (*snowfrac_ref) ) ) ;
+(*qvg_ref) = ntc :: tc_add ( ntc :: tc_mul ( qvgs , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*qvg_ref) , (*snowfrac_ref) ) ) ;
+(*qsg_ref) = ntc :: tc_add ( ntc :: tc_mul ( qsgs , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*qsg_ref) , (*snowfrac_ref) ) ) ;
+(*qcg_ref) = ntc :: tc_add ( ntc :: tc_mul ( qcgs , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*qcg_ref) , (*snowfrac_ref) ) ) ;
+(*edir1_ref) = ntc :: tc_add ( ntc :: tc_mul ( edir1s , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*edir1_ref) , (*snowfrac_ref) ) ) ;
+(*ec1_ref) = ntc :: tc_add ( ntc :: tc_mul ( ec1s , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*ec1_ref) , (*snowfrac_ref) ) ) ;
+(*cst_ref) = ntc :: tc_add ( ntc :: tc_mul ( csts , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*cst_ref) , (*snowfrac_ref) ) ) ;
+(*ett1_ref) = ntc :: tc_add ( ntc :: tc_mul ( ett1s , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*ett1_ref) , (*snowfrac_ref) ) ) ;
+(*eeta_ref) = ntc :: tc_add ( ntc :: tc_mul ( eetas , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*eeta_ref) , (*snowfrac_ref) ) ) ;
+(*qfx_ref) = ntc :: tc_add ( ntc :: tc_mul ( qfxs , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*qfx_ref) , (*snowfrac_ref) ) ) ;
+(*hfx_ref) = ntc :: tc_add ( ntc :: tc_mul ( hfxs , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*hfx_ref) , (*snowfrac_ref) ) ) ;
+(*s_ref) = ntc :: tc_add ( ntc :: tc_mul ( ss , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*s_ref) , (*snowfrac_ref) ) ) ;
+(*evapl_ref) = ntc :: tc_mul ( evapls , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) ;
+(*sublim_ref) = ntc :: tc_mul ( (*sublim_ref) , (*snowfrac_ref) ) ;
+(*prcpl_ref) = ntc :: tc_add ( ntc :: tc_mul ( prcpls , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*prcpl_ref) , (*snowfrac_ref) ) ) ;
+(*fltot_ref) = ntc :: tc_add ( ntc :: tc_mul ( fltots , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*fltot_ref) , (*snowfrac_ref) ) ) ;
+(*alb_ref) = ruc_max < F > ( ntc :: tc_mul ( keep_snow_albedo , (*alb_ref) ) , ruc_min < F > ( ntc :: tc_add ( alb_snow_free , ntc :: tc_mul ( ntc :: tc_sub ( (*alb_ref) , alb_snow_free ) , (*snowfrac_ref) ) ) , (*alb_ref) ) ) ;
+(*emiss_ref) = ruc_max < F > ( ntc :: tc_mul ( keep_snow_albedo , emissn ) , ruc_min < F > ( ntc :: tc_add ( emiss_snowfree , ntc :: tc_mul ( ntc :: tc_sub ( emissn , emiss_snowfree ) , (*snowfrac_ref) ) ) , emissn ) ) ;
+(*runoff1_ref) = ntc :: tc_add ( ntc :: tc_mul ( runoff1s , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*runoff1_ref) , (*snowfrac_ref) ) ) ;
+(*runoff2_ref) = ntc :: tc_add ( ntc :: tc_mul ( runoff2s , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*runoff2_ref) , (*snowfrac_ref) ) ) ;
+(*mavail_ref) = ntc :: tc_add ( ntc :: tc_mul ( mavails , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( 1.f , (*snowfrac_ref) ) ) ;
+(*infiltr_ref) = ntc :: tc_add ( ntc :: tc_mul ( infiltrs , ntc :: tc_sub ( 1.f , (*snowfrac_ref) ) ) , ntc :: tc_mul ( (*infiltr_ref) , (*snowfrac_ref) ) ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+;
+;
+}
+}
+if ( ( (*snhei_ref) == 0.f ) ) {
+(*alb_ref) = alb_snow_free ;
+(*iland_ref) = ivgtyp ;
+}
+else {
+if ( ( isncovr_opt == 1 ) ) {
+(*snowfrac_ref) = ruc_min < F > ( 1.f , ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( 2.f , snhei_crit ) ) ) ;
+}
+else if ( ( isncovr_opt == 2 ) ) {
+(*snowfrac_ref) = ruc_min < F > ( 1.f , ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( 2.f , snhei_crit ) ) ) ;
+snowfrac2 = rrfs_tanhf ( ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( ntc :: tc_mul ( 2.5f , ruc_min < F > ( 0.2f , (*znt_ref) ) ) , ntc :: tc_div ( (*rhosn_ref) , (*rhonewsn_ref) ) ) ) ) ;
+(*snowfrac_ref) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( (*snowfrac_ref) , snowfrac2 ) ) ;
+}
+else {
+m = 1.f ;
+(*snowfrac_ref) = rrfs_tanhf ( ntc :: tc_div ( (*snhei_ref) , ntc :: tc_mul ( ntc :: tc_mul ( 10.f , sncovfac ( ivgtyp ) ) , rrfs_gfk_pow ( ntc :: tc_div ( (*rhosn_ref) , (*rhonewsn_ref) ) , m ) ) ) ) ;
+}
+}
+if ( ( ivgtyp == tb . urban ) ) {
+(*snowfrac_ref) = ruc_min < F > ( 0.75f , (*snowfrac_ref) ) ;
+}
+(*snowfallac_ref) = ntc :: tc_add ( (*snowfallac_ref) , newsn ) ;
+}
+else {
+(*snheiprint_ref) = 0.f ;
+(*snweprint_ref) = 0.f ;
+(*smelt_ref) = 0.f ;
+t3 = ntc :: tc_mul ( ntc :: tc_mul ( ntc :: tc_mul ( stbolt , (*soilt_ref) ) , (*soilt_ref) ) , (*soilt_ref) ) ;
+upflux = ntc :: tc_mul ( t3 , (*soilt_ref) ) ;
+xinet = ntc :: tc_mul ( (*emiss_ref) , ntc :: tc_sub ( glw , upflux ) ) ;
+rnet = ntc :: tc_add ( gswnew , xinet ) ;
+if ( ( globalcellid == tb . targetcell ) ) {
+;
+;
+}
+land_soil (tb , arena , spp_lsm , rstochcol , fieldcol_sf , i , j , (*iland_ref) , (*isoil_ref) , delt , ktau , conflx , nzs , nddzs , nroot , &((*prcpms_ref)) , &(rainf) , patm , qvatm , qcatm , glw , gswnew , gswin , (*emiss_ref) , &(rnet) , qkms , tkms , pc , &((*cst_ref)) , &(drip) , infwater , rho , vegfrac , lai , myj , (*qwrtz_ref) , (*rhocs_ref) , (*dqm_ref) , (*qmin_ref) , (*ref_ref) , (*wilt_ref) , (*psis_ref) , (*bclh_ref) , (*ksat_ref) , &((*sat_ref)) , cn , zsmain , zshalf , dtdzs , dtdzs2 , tbq , lv , &(cp) , &(rovcp) , g0 , cw , &(stbolt) , &(tabs) , kqwrtz , kice , kwt , soilm1d , ts1d , smfrkeep , keepfr , &((*dew_ref)) , &((*soilt_ref)) , &((*qvg_ref)) , &((*qsg_ref)) , &((*qcg_ref)) , &((*edir1_ref)) , &((*ec1_ref)) , &((*ett1_ref)) , &((*eeta_ref)) , &((*qfx_ref)) , &((*hfx_ref)) , &((*s_ref)) , &((*evapl_ref)) , &((*prcpl_ref)) , &((*fltot_ref)) , &((*runoff1_ref)) , &((*runoff2_ref)) , &((*mavail_ref)) , soilice , soiliqw , &((*infiltr_ref)) , &((*smf_ref)) , globalcellid) ;
+}
+}
+
+static inline void land_ruc_land ( thread Tables & tb , thread Arena & arena , int spp_lsm , FArray < F > pattern_spp_lsm , FArray < F > field_sf , F dt , int ktau , int nsl , int restart , int cycling , int lakemodel , FArray < F > lakemask , FArray < F > graupelncv , FArray < F > snowncv , FArray < F > rainncv , FArray < F > zs , FArray < F > rainbl , FArray < F > snow , FArray < F > snowh , FArray < F > snowc , FArray < F > frzfrac , int frpcpn , FArray < F > rhosnf , FArray < F > precipfr , FArray < F > z3d , FArray < F > p8w , FArray < F > t3d , FArray < F > qv3d , FArray < F > qc3d , FArray < F > rho3d , FArray < F > glw , FArray < F > gsw , FArray < F > emiss , FArray < F > chklowq , FArray < F > chs , FArray < F > flqc , FArray < F > flhc , FArray < F > mavail , FArray < F > canwat , FArray < F > vegfra , FArray < F > alb , FArray < F > znt , FArray < F > z0 , FArray < F > snoalb , FArray < F > albbck , FArray < F > lai , int mminlu , FArray < F > landusef , int nlcat , int mosaic_lu , int mosaic_soil , FArray < F > soilctop , int nscat , FArray < F > qsfc , FArray < F > qsg , FArray < F > qvg , FArray < F > qcg , FArray < F > dew , FArray < F > soilt1 , FArray < F > tsnav , FArray < F > tbot , FArray < int > ivgtyp , FArray < int > isltyp , FArray < F > xland , int iswater , int isice , FArray < F > xice , F xice_threshold , F cp , F rovcp , F g0 , F lv , F stbolt , FArray < F > soilmois , FArray < F > sh2o , FArray < F > smavail , FArray < F > smmax , FArray < F > tso , FArray < F > soilt , FArray < F > hfx , FArray < F > qfx , FArray < F > lh , FArray < F > sfcrunoff , FArray < F > udrunoff , FArray < F > acrunoff , FArray < F > sfcexc , FArray < F > sfcevp , FArray < F > grdflx , FArray < F > snowfallac , FArray < F > acsnow , FArray < F > snom , FArray < F > smfr3d , FArray < F > keepfr3dflag , int myjpbl , FArray < F > shdmin , FArray < F > shdmax , int rdlai2d , FArray < int > globalcells , int ids , int ide , int jds , int jde , int kds , int kde , int ims , int ime , int jms , int jme , int kms , int kme , int its , int ite , int jts , int jte , int kts , int kte , bool has_pattern_spp_lsm , bool has_field_sf , bool has_graupelncv , bool has_snowncv , bool has_rainncv ) {
+const int arena_mark = arena . used ;
+ArenaScope arena_scope ( arena , arena_mark ) ;
+int nvegclas = ( 24 + 3 ) ;
+FArray < F > field_sf_loc = arena . alloc < F > ( ims , ime , 1 , nsl , jms , jme ) ;
+FArray < F > pc = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > runoff1 = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > runoff2 = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > emissl = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > zntl = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > lmavail = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > smelt = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > snoh = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > snflx = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > edir = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > ec = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > ett = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > sublim = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > sflx = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > smf = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > evapl = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > prcpl = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > seaice = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > land_point = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > infiltr = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > budget = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > acbudget = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > waterbudget = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > acwaterbudget = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > smtotold = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > snowold = arena . alloc < F > ( its , ite , jts , jte ) ;
+FArray < F > canwatold = arena . alloc < F > ( its , ite , jts , jte ) ;
+F rhocs ;
+F rhonewsn ;
+F rhosn ;
+F rhosnfall ;
+F bclh ;
+F dqm ;
+F ksat ;
+F psis ;
+F qmin ;
+F qwrtz ;
+F ref ;
+F wilt ;
+F canwatr ;
+F snowfrac ;
+F snhei ;
+F snwe ;
+F cn ;
+F sat ;
+F cw ;
+F c1sn ;
+F c2sn ;
+F kqwrtz ;
+F kice ;
+F kwt ;
+FArray < F > zsmain = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > zshalf = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > dtdzs2 = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > dtdzs = arena . alloc < F > ( 1 , ( 2 * ( nsl - 2 ) ) ) ;
+FArray < F > tbq {
+arena . tbq , 1 , 1 , 1 , 1 , 5001 , 5001 , 5001 , 1 , 1 }
+;
+FArray < F > soilm1d = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > tso1d = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > soilice = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > soiliqw = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > smfrkeep = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > keepfr = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > lufrac = arena . alloc < F > ( 1 , nlcat ) ;
+FArray < F > soilfrac = arena . alloc < F > ( 1 , nscat ) ;
+F rsm ;
+F snweprint ;
+F snheiprint ;
+F prcpms ;
+F newsnms ;
+F prcpncliq ;
+F prcpncfr ;
+F prcpculiq ;
+F prcpcufr ;
+F patm ;
+F patmb ;
+F tabs ;
+F qvatm ;
+F qcatm ;
+F q2sat ;
+F conflx ;
+F rho ;
+F qkms ;
+F tkms ;
+F snowrat ;
+F grauprat ;
+F graupamt ;
+F icerat ;
+F curat ;
+F infiltrp ;
+F cq ;
+F r61 ;
+F r273 ;
+F arp ;
+F brp ;
+F x ;
+F evs ;
+F eis ;
+F cropfr ;
+F cropsm ;
+F newsm ;
+F factor ;
+F meltfactor ;
+F ac ;
+F as ;
+F wb ;
+int nroot ;
+int iland ;
+int isoil ;
+int iforest ;
+int i ;
+int j ;
+int k ;
+int nzs ;
+int nzs1 ;
+int nddzs ;
+int k1 ;
+int l ;
+int k2 ;
+int kp ;
+int km ;
+int globalcellid ;
+int message ;
+int print_flag = false ;
+FArray < F > rstoch = arena . alloc < F > ( ims , ime , 1 , nsl , jms , jme ) ;
+FArray < F > rstoch_temp = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > field_sf_temp = arena . alloc < F > ( 1 , nsl ) ;
+FArray < F > emisso = arena . alloc < F > ( ims , ime , jms , jme ) ;
+FArray < F > vegfrao = arena . alloc < F > ( ims , ime , jms , jme ) ;
+FArray < F > albo = arena . alloc < F > ( ims , ime , jms , jme ) ;
+FArray < F > snoalbo = arena . alloc < F > ( ims , ime , jms , jme ) ;
+FArray < F > emisslo = arena . alloc < F > ( its , ite , jts , jte ) ;
+nzs = nsl ;
+nddzs = ( 2 * ( nzs - 2 ) ) ;
+ruc_assign ( rstoch , 0.0f ) ;
+ruc_assign ( field_sf_loc , 0.0f ) ;
+if ( ( spp_lsm == 1 ) ) {
+for ( j = jts ;
+j <= jte ;
+j += 1 ) {
+for ( i = its ;
+i <= ite ;
+i += 1 ) {
+for ( k = 1 ;
+k <= nsl ;
+k += 1 ) {
+rstoch ( i , k , j ) = pattern_spp_lsm ( i , k , j ) ;
+field_sf_loc ( i , k , j ) = field_sf ( i , k , j ) ;
+}
+}
+}
+}
+cq = ntc :: tc_sub ( 173.15f , .05f ) ;
+r273 = ntc :: tc_div ( 1.f , 273.15f ) ;
+r61 = ntc :: tc_mul ( 6.1153f , 0.62198f ) ;
+arp = ntc :: tc_div ( ntc :: tc_mul ( 77455.f , 41.9f ) , 461.525f ) ;
+brp = ntc :: tc_div ( ntc :: tc_mul ( 64.f , 41.9f ) , 461.525f ) ;
+k = 5002 ;
+for ( j = jts ;
+j <= jte ;
+j += 1 ) {
+for ( i = its ;
+i <= ite ;
+i += 1 ) {
+if ( ( ( lakemodel == 1.f ) && ( lakemask ( i , j ) == 1.f ) ) ) {
+return ;
+}
+land_point ( i , j ) = 0.f ;
+if ( ( ( ntc :: tc_sub ( xland ( i , j ) , 1.5f ) < 0.f ) && ( xice ( i , j ) >= xice_threshold ) ) ) {
+seaice ( i , j ) = 1.f ;
+}
+else {
+seaice ( i , j ) = 0.f ;
+if ( ( soilmois ( i , 1 , j ) < 0.7f ) ) {
+land_point ( i , j ) = 1.f ;
+}
+}
+if ( ( ( ntc :: tc_sub ( xland ( i , j ) , 1.5f ) >= 0.f ) || ( ( seaice ( i , j ) < 0.50f ) && ( land_point ( i , j ) < 0.5f ) ) ) ) {
+smavail ( i , j ) = 1.0f ;
+smmax ( i , j ) = 1.0f ;
+snow ( i , j ) = 0.0f ;
+snowh ( i , j ) = 0.0f ;
+snowc ( i , j ) = 0.0f ;
+lmavail ( i , j ) = 1.0f ;
+iland = iswater ;
+isoil = 14 ;
+if ( false ) {
+;
+}
+patmb = ntc :: tc_mul ( p8w ( i , 1 , j ) , 1.e-2f ) ;
+qvg ( i , j ) = ntc :: tc_div ( land_qsn ( tb , arena , soilt ( i , j ) , tbq ) , patmb ) ;
+qsfc ( i , j ) = ntc :: tc_div ( qvg ( i , j ) , ntc :: tc_add ( 1.f , qvg ( i , j ) ) ) ;
+chklowq ( i , j ) = 1.f ;
+q2sat = ntc :: tc_div ( land_qsn ( tb , arena , t3d ( i , 1 , j ) , tbq ) , patmb ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+soilmois ( i , k , j ) = 1.0f ;
+sh2o ( i , k , j ) = 1.0f ;
+smfr3d ( i , k , j ) = 0.0f ;
+smfr3d ( i , k , j ) = 0.0f ;
+tso ( i , k , j ) = soilt ( i , j ) ;
+}
+}
+else if ( ( ( ntc :: tc_sub ( xland ( i , j ) , 1.5f ) < 0.f ) && ( seaice ( i , j ) > 0.5f ) ) ) {
+if ( false ) {
+;
+}
+land_point ( i , j ) = 0.f ;
+iland = isice ;
+isoil = 16 ;
+znt ( i , j ) = 0.011f ;
+snoalb ( i , j ) = 0.75f ;
+dqm = 1.f ;
+ref = 1.f ;
+qmin = 0.f ;
+wilt = 0.f ;
+emissl ( i , j ) = 0.98f ;
+patmb = ntc :: tc_mul ( p8w ( i , 1 , j ) , 1.e-2f ) ;
+qvg ( i , j ) = ntc :: tc_div ( land_qsn ( tb , arena , soilt ( i , j ) , tbq ) , patmb ) ;
+qsg ( i , j ) = qvg ( i , j ) ;
+qsfc ( i , j ) = ntc :: tc_div ( qvg ( i , j ) , ntc :: tc_add ( 1.f , qvg ( i , j ) ) ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+soilmois ( i , k , j ) = 1.f ;
+smfr3d ( i , k , j ) = 1.f ;
+sh2o ( i , k , j ) = 0.f ;
+keepfr3dflag ( i , k , j ) = 0.f ;
+tso ( i , k , j ) = ruc_min < F > ( 271.4f , tso ( i , k , j ) ) ;
+}
+}
+else {
+if ( false ) {
+;
+land_point ( i , j ) = 1.f ;
+}
+}
+}
+}
+if ( arena . preparation_only ) return ;
+if ( ( ktau == 1 ) ) {
+if ( ( ( ! restart ) && ( ! cycling ) ) ) {
+for ( j = jts ;
+j <= jte ;
+j += 1 ) {
+for ( i = its ;
+i <= ite ;
+i += 1 ) {
+for ( k = 1 ;
+k <= nsl ;
+k += 1 ) {
+keepfr3dflag ( i , k , j ) = 0.f ;
+}
+if ( ( ( soilt1 ( i , j ) < 170.f ) || ( soilt1 ( i , j ) > 400.f ) ) ) {
+if ( ( snowc ( i , j ) > 0.f ) ) {
+soilt1 ( i , j ) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( soilt ( i , j ) , tso ( i , 1 , j ) ) ) ;
+if ( false ) {
+;
+}
+}
+else {
+soilt1 ( i , j ) = tso ( i , 1 , j ) ;
+}
+}
+tsnav ( i , j ) = ntc :: tc_sub ( ntc :: tc_mul ( 0.5f , ntc :: tc_add ( soilt ( i , j ) , tso ( i , 1 , j ) ) ) , 273.15f ) ;
+patmb = ntc :: tc_mul ( p8w ( i , kms , j ) , 1.e-2f ) ;
+qsg ( i , j ) = ntc :: tc_div ( land_qsn ( tb , arena , soilt ( i , j ) , tbq ) , patmb ) ;
+if ( ( ( qcg ( i , j ) < 0.f ) || ( qcg ( i , j ) > 0.1f ) ) ) {
+qcg ( i , j ) = 0.f ;
+if ( false ) {
+;
+}
+}
+if ( ( ( qvg ( i , j ) <= 0.f ) || ( qvg ( i , j ) > 0.1f ) ) ) {
+qvg ( i , j ) = qv3d ( i , 1 , j ) ;
+if ( false ) {
+;
+}
+}
+qsfc ( i , j ) = ntc :: tc_div ( qvg ( i , j ) , ntc :: tc_add ( 1.f , qvg ( i , j ) ) ) ;
+smelt ( i , j ) = 0.f ;
+snom ( i , j ) = 0.f ;
+snowfallac ( i , j ) = 0.f ;
+precipfr ( i , j ) = 0.f ;
+rhosnf ( i , j ) = ( - 1.e3f ) ;
+snflx ( i , j ) = 0.f ;
+dew ( i , j ) = 0.f ;
+pc ( i , j ) = 0.f ;
+zntl ( i , j ) = 0.f ;
+runoff1 ( i , j ) = 0.f ;
+runoff2 ( i , j ) = 0.f ;
+sfcrunoff ( i , j ) = 0.f ;
+udrunoff ( i , j ) = 0.f ;
+acrunoff ( i , j ) = 0.f ;
+emissl ( i , j ) = 0.f ;
+budget ( i , j ) = 0.f ;
+acbudget ( i , j ) = 0.f ;
+waterbudget ( i , j ) = 0.f ;
+acwaterbudget ( i , j ) = 0.f ;
+smtotold ( i , j ) = 0.f ;
+canwatold ( i , j ) = 0.f ;
+chklowq ( i , j ) = 1.f ;
+infiltr ( i , j ) = 0.f ;
+snoh ( i , j ) = 0.f ;
+edir ( i , j ) = 0.f ;
+ec ( i , j ) = 0.f ;
+ett ( i , j ) = 0.f ;
+sublim ( i , j ) = 0.f ;
+sflx ( i , j ) = 0.f ;
+smf ( i , j ) = 0.f ;
+evapl ( i , j ) = 0.f ;
+prcpl ( i , j ) = 0.f ;
+}
+}
+for ( k = 1 ;
+k <= nsl ;
+k += 1 ) {
+soilice ( k ) = 0.f ;
+soiliqw ( k ) = 0.f ;
+}
+}
+}
+prcpms = 0.f ;
+newsnms = 0.f ;
+prcpncliq = 0.f ;
+prcpculiq = 0.f ;
+prcpncfr = 0.f ;
+prcpcufr = 0.f ;
+for ( j = jts ;
+j <= jte ;
+j += 1 ) {
+for ( i = its ;
+i <= ite ;
+i += 1 ) {
+if ( ( land_point ( i , j ) > 0.5f ) ) {
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+}
+iland = ivgtyp ( i , j ) ;
+isoil = isltyp ( i , j ) ;
+tabs = t3d ( i , kms , j ) ;
+qvatm = qv3d ( i , kms , j ) ;
+qcatm = qc3d ( i , kms , j ) ;
+patm = ntc :: tc_mul ( p8w ( i , kms , j ) , 1.e-5f ) ;
+conflx = ntc :: tc_mul ( z3d ( i , kms , j ) , 0.5f ) ;
+rho = rho3d ( i , kms , j ) ;
+snowrat = 0.f ;
+grauprat = 0.f ;
+icerat = 0.f ;
+curat = 0.f ;
+if ( frpcpn ) {
+prcpncliq = ntc :: tc_mul ( rainncv ( i , j ) , ntc :: tc_sub ( 1.f , frzfrac ( i , j ) ) ) ;
+prcpncfr = ntc :: tc_mul ( rainncv ( i , j ) , frzfrac ( i , j ) ) ;
+if ( ( ( frzfrac ( i , j ) > 0.f ) && ( tabs < 273.f ) ) ) {
+prcpculiq = ruc_max < F > ( 0.f , ntc :: tc_mul ( ntc :: tc_sub ( rainbl ( i , j ) , rainncv ( i , j ) ) , ntc :: tc_sub ( 1.f , frzfrac ( i , j ) ) ) ) ;
+prcpcufr = ruc_max < F > ( 0.f , ntc :: tc_mul ( ntc :: tc_sub ( rainbl ( i , j ) , rainncv ( i , j ) ) , frzfrac ( i , j ) ) ) ;
+}
+else {
+if ( ( tabs < 273.f ) ) {
+prcpcufr = ruc_max < F > ( 0.f , ntc :: tc_sub ( rainbl ( i , j ) , rainncv ( i , j ) ) ) ;
+prcpculiq = 0.f ;
+}
+else {
+prcpcufr = 0.f ;
+prcpculiq = ruc_max < F > ( 0.f , ntc :: tc_sub ( rainbl ( i , j ) , rainncv ( i , j ) ) ) ;
+}
+}
+prcpms = ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_add ( prcpncliq , prcpculiq ) , dt ) , 1.e-3f ) ;
+newsnms = ntc :: tc_mul ( ntc :: tc_div ( ntc :: tc_add ( prcpncfr , prcpcufr ) , dt ) , 1.e-3f ) ;
+if ( has_graupelncv ) {
+graupamt = graupelncv ( i , j ) ;
+}
+else {
+graupamt = 0.f ;
+}
+if ( ( ntc :: tc_add ( prcpncfr , prcpcufr ) > 0.f ) ) {
+snowrat = ruc_min < F > ( 1.f , ruc_max < F > ( 0.f , ntc :: tc_div ( snowncv ( i , j ) , ntc :: tc_add ( prcpncfr , prcpcufr ) ) ) ) ;
+grauprat = ruc_min < F > ( 1.f , ruc_max < F > ( 0.f , ntc :: tc_div ( graupamt , ntc :: tc_add ( prcpncfr , prcpcufr ) ) ) ) ;
+icerat = ruc_min < F > ( 1.f , ruc_max < F > ( 0.f , ntc :: tc_div ( ntc :: tc_sub ( ntc :: tc_sub ( prcpncfr , snowncv ( i , j ) ) , graupamt ) , ntc :: tc_add ( prcpncfr , prcpcufr ) ) ) ) ;
+curat = ruc_min < F > ( 1.f , ruc_max < F > ( 0.f , ntc :: tc_div ( prcpcufr , ntc :: tc_add ( prcpncfr , prcpcufr ) ) ) ) ;
+}
+}
+else {
+if ( ( tabs <= 273.15f ) ) {
+prcpms = 0.f ;
+newsnms = ntc :: tc_mul ( ntc :: tc_div ( rainbl ( i , j ) , dt ) , 1.e-3f ) ;
+snowrat = 1.f ;
+}
+else {
+prcpms = ntc :: tc_mul ( ntc :: tc_div ( rainbl ( i , j ) , dt ) , 1.e-3f ) ;
+newsnms = 0.f ;
+}
+}
+precipfr ( i , j ) = ntc :: tc_mul ( ntc :: tc_mul ( newsnms , dt ) , 1.e3f ) ;
+qkms = ntc :: tc_div ( ntc :: tc_div ( flqc ( i , j ) , rho ) , mavail ( i , j ) ) ;
+tkms = ntc :: tc_div ( ntc :: tc_div ( flhc ( i , j ) , rho ) , ntc :: tc_mul ( cp , ntc :: tc_add ( 1.f , ntc :: tc_mul ( 0.84f , qvatm ) ) ) ) ;
+snwe = ntc :: tc_mul ( snow ( i , j ) , 1.e-3f ) ;
+snhei = snowh ( i , j ) ;
+canwatr = ntc :: tc_mul ( canwat ( i , j ) , 1.e-3f ) ;
+snowfrac = snowc ( i , j ) ;
+rhosnfall = rhosnf ( i , j ) ;
+snowold ( i , j ) = snwe ;
+zsmain ( 1 ) = 0.f ;
+zshalf ( 1 ) = 0.f ;
+for ( k = 2 ;
+k <= nzs ;
+k += 1 ) {
+zsmain ( k ) = zs ( k ) ;
+zshalf ( k ) = ntc :: tc_mul ( 0.5f , ntc :: tc_add ( zsmain ( ( k - 1 ) ) , zsmain ( k ) ) ) ;
+}
+for ( k = 1 ;
+k <= nlcat ;
+k += 1 ) {
+lufrac ( k ) = landusef ( i , k , j ) ;
+}
+for ( k = 1 ;
+k <= nscat ;
+k += 1 ) {
+soilfrac ( k ) = soilctop ( i , k , j ) ;
+}
+nzs1 = ( nzs - 1 ) ;
+if ( false ) {
+;
+}
+for ( k = 2 ;
+k <= nzs1 ;
+k += 1 ) {
+k1 = ( ( 2 * k ) - 3 ) ;
+k2 = ( k1 + 1 ) ;
+x = ntc :: tc_div ( ntc :: tc_div ( dt , 2.f ) , ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ) ;
+dtdzs ( k1 ) = ntc :: tc_div ( x , ntc :: tc_sub ( zsmain ( k ) , zsmain ( ( k - 1 ) ) ) ) ;
+dtdzs2 ( ( k - 1 ) ) = x ;
+dtdzs ( k2 ) = ntc :: tc_div ( x , ntc :: tc_sub ( zsmain ( ( k + 1 ) ) , zsmain ( k ) ) ) ;
+if ( false ) {
+;
+}
+}
+cw = 4.183e6f ;
+kqwrtz = 7.7f ;
+kice = 2.2f ;
+kwt = 0.57f ;
+c1sn = 0.026f ;
+c2sn = 21.f ;
+nroot = 4 ;
+rhonewsn = 200.f ;
+if ( ( ( snow ( i , j ) > 0.f ) && ( snowh ( i , j ) > 0.f ) ) ) {
+rhosn = ntc :: tc_div ( snow ( i , j ) , snowh ( i , j ) ) ;
+}
+else {
+rhosn = 300.f ;
+}
+if ( false ) {
+if ( ( ( ktau == 1 ) && ( globalcells ( i ) == tb . targetcell ) ) ) {
+;
+}
+}
+land_soilvegin (tb , arena , mosaic_lu , mosaic_soil , soilfrac , nscat , shdmin ( i , j ) , shdmax ( i , j ) , nlcat , &(iland) , &(isoil) , iswater , &(iforest) , lufrac , vegfra ( i , j ) , &(emissl ( i , j )) , &(pc ( i , j )) , &(znt ( i , j )) , &(lai ( i , j )) , rdlai2d , &(qwrtz) , &(rhocs) , &(bclh) , &(dqm) , &(ksat) , &(psis) , &(qmin) , &(ref) , &(wilt) , i , j) ;
+if ( false ) {
+if ( ( ( ktau == 1 ) && ( globalcells ( i ) == tb . targetcell ) ) ) {
+;
+}
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+;
+}
+}
+cn = tb . cfactr_data ;
+sat = 5.e-4f ;
+if ( ( iforest > 2 ) ) {
+meltfactor = 2.0f ;
+for ( k = 2 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( zsmain ( k ) >= 0.4f ) ) {
+nroot = k ;
+break ;
+}
+}
+}
+else {
+meltfactor = 0.85f ;
+for ( k = 2 ;
+k <= nzs ;
+k += 1 ) {
+if ( ( zsmain ( k ) >= 1.1f ) ) {
+nroot = k ;
+break ;
+}
+}
+}
+;
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+;
+;
+;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+soilm1d ( k ) = ruc_min < F > ( ruc_max < F > ( 0.f , ntc :: tc_sub ( soilmois ( i , k , j ) , qmin ) ) , dqm ) ;
+tso1d ( k ) = tso ( i , k , j ) ;
+soiliqw ( k ) = ruc_min < F > ( ruc_max < F > ( 0.f , ntc :: tc_sub ( sh2o ( i , k , j ) , qmin ) ) , soilm1d ( k ) ) ;
+soilice ( k ) = ntc :: tc_div ( ntc :: tc_sub ( soilm1d ( k ) , soiliqw ( k ) ) , 0.9f ) ;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+smfrkeep ( k ) = smfr3d ( i , k , j ) ;
+keepfr ( k ) = keepfr3dflag ( i , k , j ) ;
+}
+lmavail ( i , j ) = ruc_max < F > ( 0.00001f , ruc_min < F > ( 1.f , ntc :: tc_div ( soilm1d ( 1 ) , ntc :: tc_sub ( ref , qmin ) ) ) ) ;
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+;
+;
+;
+}
+smtotold ( i , j ) = 0.f ;
+for ( k = 1 ;
+k <= ( nzs - 1 ) ;
+k += 1 ) {
+smtotold ( i , j ) = ntc :: tc_add ( smtotold ( i , j ) , ntc :: tc_mul ( ntc :: tc_add ( qmin , soilm1d ( k ) ) , ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ) ) ;
+}
+smtotold ( i , j ) = ntc :: tc_add ( smtotold ( i , j ) , ntc :: tc_mul ( ntc :: tc_add ( qmin , soilm1d ( nzs ) ) , ntc :: tc_sub ( zsmain ( nzs ) , zshalf ( nzs ) ) ) ) ;
+canwatold ( i , j ) = canwatr ;
+if ( false ) {
+;
+}
+ruc_assign ( rstoch_temp , rstoch ( i , RRange {
+0 , 0 }
+, j ) ) ;
+ruc_assign ( field_sf_temp , field_sf_loc ( i , RRange {
+0 , 0 }
+, j ) ) ;
+land_sfctmp (tb , arena , spp_lsm , rstoch_temp , field_sf_temp , dt , ktau , conflx , i , j , nzs , nddzs , nroot , meltfactor , &(iland) , &(isoil) , xland ( i , j ) , ivgtyp ( i , j ) , isltyp ( i , j ) , &(prcpms) , &(newsnms) , &(snwe) , &(snhei) , &(snowfrac) , &(rhosn) , &(rhonewsn) , &(rhosnfall) , &(snowrat) , &(grauprat) , &(icerat) , &(curat) , patm , tabs , qvatm , qcatm , rho , glw ( i , j ) , gsw ( i , j ) , &(emissl ( i , j )) , qkms , tkms , pc ( i , j ) , &(lmavail ( i , j )) , &(canwatr) , vegfra ( i , j ) , &(alb ( i , j )) , &(znt ( i , j )) , &(snoalb ( i , j )) , albbck ( i , j ) , lai ( i , j ) , myjpbl , seaice ( i , j ) , isice , &(qwrtz) , &(rhocs) , &(dqm) , &(qmin) , &(ref) , &(wilt) , &(psis) , &(bclh) , &(ksat) , &(sat) , cn , zsmain , zshalf , dtdzs , dtdzs2 , tbq , cp , rovcp , g0 , lv , stbolt , cw , c1sn , c2sn , kqwrtz , kice , kwt , &(snweprint) , &(snheiprint) , &(rsm) , soilm1d , tso1d , smfrkeep , keepfr , &(soilt ( i , j )) , &(soilt1 ( i , j )) , &(tsnav ( i , j )) , &(dew ( i , j )) , &(qvg ( i , j )) , &(qsg ( i , j )) , &(qcg ( i , j )) , &(smelt ( i , j )) , &(snoh ( i , j )) , &(snflx ( i , j )) , &(snom ( i , j )) , &(snowfallac ( i , j )) , &(acsnow ( i , j )) , &(edir ( i , j )) , &(ec ( i , j )) , &(ett ( i , j )) , &(qfx ( i , j )) , &(lh ( i , j )) , &(hfx ( i , j )) , &(sflx ( i , j )) , &(sublim ( i , j )) , &(evapl ( i , j )) , &(prcpl ( i , j )) , &(budget ( i , j )) , &(runoff1 ( i , j )) , &(runoff2 ( i , j )) , soilice , soiliqw , &(infiltrp) , &(smf ( i , j )) , globalcells ( i )) ;
+ruc_assign ( field_sf_loc ( i , RRange {
+0 , 0 }
+, j ) , field_sf_temp ) ;
+if ( ( mosaic_lu == 1 ) ) {
+if ( ( irrig_opt == 1 ) ) {
+if ( ( ( lufrac ( tb . crop ) > 0 ) && ( lai ( i , j ) > 1.1f ) ) ) {
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+cropsm = ntc :: tc_sub ( ntc :: tc_mul ( 1.1f , wilt ) , qmin ) ;
+if ( ( soilm1d ( k ) < ntc :: tc_mul ( cropsm , lufrac ( tb . crop ) ) ) ) {
+if ( false ) {
+;
+}
+soilm1d ( k ) = ntc :: tc_mul ( cropsm , lufrac ( tb . crop ) ) ;
+if ( false ) {
+;
+}
+}
+}
+}
+else if ( ( ( ivgtyp ( i , j ) == tb . natural ) && ( lai ( i , j ) > 0.7f ) ) ) {
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+cropsm = ntc :: tc_sub ( ntc :: tc_mul ( 1.2f , wilt ) , qmin ) ;
+if ( ( soilm1d ( k ) < ntc :: tc_mul ( ntc :: tc_mul ( cropsm , lufrac ( tb . natural ) ) , 0.4f ) ) ) {
+if ( false ) {
+;
+;
+;
+;
+}
+soilm1d ( k ) = ntc :: tc_mul ( ntc :: tc_mul ( cropsm , lufrac ( tb . natural ) ) , 0.4f ) ;
+if ( false ) {
+;
+}
+}
+}
+}
+}
+else if ( ( irrig_opt == 2 ) ) {
+factor = ruc_max < F > ( 0.f , ruc_min < F > ( 1.f , ntc :: tc_div ( ntc :: tc_sub ( vegfra ( i , j ) , shdmin ( i , j ) ) , ruc_max < F > ( 1.f , ntc :: tc_sub ( shdmax ( i , j ) , shdmin ( i , j ) ) ) ) ) ) ;
+if ( ( ( ( lufrac ( tb . crop ) > 0 ) || ( lufrac ( tb . natural ) > 0.f ) ) && ( factor > 0.75f ) ) ) {
+for ( k = 1 ;
+k <= nroot ;
+k += 1 ) {
+cropsm = ntc :: tc_sub ( ntc :: tc_mul ( 1.1f , wilt ) , qmin ) ;
+cropfr = ruc_min < F > ( 1.f , ntc :: tc_add ( lufrac ( tb . crop ) , ntc :: tc_mul ( 0.4f , lufrac ( tb . natural ) ) ) ) ;
+newsm = ntc :: tc_add ( ntc :: tc_mul ( cropsm , cropfr ) , ntc :: tc_mul ( ntc :: tc_sub ( 1.f , cropfr ) , soilm1d ( k ) ) ) ;
+if ( ( soilm1d ( k ) < newsm ) ) {
+if ( false ) {
+;
+}
+soilm1d ( k ) = newsm ;
+if ( false ) {
+;
+}
+}
+}
+}
+}
+else {
+if ( false ) {
+;
+}
+}
+}
+if ( ( spp_lsm == 1 ) ) {
+for ( k = 1 ;
+k <= nsl ;
+k += 1 ) {
+field_sf ( i , k , j ) = field_sf_loc ( i , k , j ) ;
+}
+}
+smavail ( i , j ) = 0.f ;
+smmax ( i , j ) = 0.f ;
+for ( k = 1 ;
+k <= ( nzs - 1 ) ;
+k += 1 ) {
+smavail ( i , j ) = ntc :: tc_add ( smavail ( i , j ) , ntc :: tc_mul ( ntc :: tc_add ( qmin , soilm1d ( k ) ) , ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ) ) ;
+smmax ( i , j ) = ntc :: tc_add ( smmax ( i , j ) , ntc :: tc_mul ( ntc :: tc_add ( qmin , dqm ) , ntc :: tc_sub ( zshalf ( ( k + 1 ) ) , zshalf ( k ) ) ) ) ;
+}
+smavail ( i , j ) = ntc :: tc_add ( smavail ( i , j ) , ntc :: tc_mul ( ntc :: tc_add ( qmin , soilm1d ( nzs ) ) , ntc :: tc_sub ( zsmain ( nzs ) , zshalf ( nzs ) ) ) ) ;
+smmax ( i , j ) = ntc :: tc_add ( smmax ( i , j ) , ntc :: tc_mul ( ntc :: tc_add ( qmin , dqm ) , ntc :: tc_sub ( zsmain ( nzs ) , zshalf ( nzs ) ) ) ) ;
+sfcrunoff ( i , j ) = ntc :: tc_add ( sfcrunoff ( i , j ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff1 ( i , j ) , dt ) , 1000.0f ) ) ;
+udrunoff ( i , j ) = ntc :: tc_add ( udrunoff ( i , j ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff2 ( i , j ) , dt ) , 1000.0f ) ) ;
+acrunoff ( i , j ) = ntc :: tc_add ( acrunoff ( i , j ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff1 ( i , j ) , dt ) , 1000.0f ) ) ;
+smavail ( i , j ) = ntc :: tc_mul ( smavail ( i , j ) , 1000.f ) ;
+smmax ( i , j ) = ntc :: tc_mul ( smmax ( i , j ) , 1000.f ) ;
+smtotold ( i , j ) = ntc :: tc_mul ( smtotold ( i , j ) , 1000.f ) ;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+soilmois ( i , k , j ) = ntc :: tc_add ( soilm1d ( k ) , qmin ) ;
+sh2o ( i , k , j ) = ruc_min < F > ( ntc :: tc_add ( soiliqw ( k ) , qmin ) , soilmois ( i , k , j ) ) ;
+tso ( i , k , j ) = tso1d ( k ) ;
+}
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+smfr3d ( i , k , j ) = smfrkeep ( k ) ;
+keepfr3dflag ( i , k , j ) = keepfr ( k ) ;
+}
+z0 ( i , j ) = znt ( i , j ) ;
+sfcexc ( i , j ) = tkms ;
+patmb = ntc :: tc_mul ( p8w ( i , 1 , j ) , 1.e-2f ) ;
+q2sat = ntc :: tc_div ( land_qsn ( tb , arena , tabs , tbq ) , patmb ) ;
+qsfc ( i , j ) = ntc :: tc_div ( qvg ( i , j ) , ntc :: tc_add ( 1.f , qvg ( i , j ) ) ) ;
+if ( ( ( qvatm >= ntc :: tc_mul ( q2sat , 0.95f ) ) && ( qvatm < qvg ( i , j ) ) ) ) {
+chklowq ( i , j ) = 0.f ;
+}
+else {
+chklowq ( i , j ) = 1.f ;
+}
+if ( false ) {
+if ( ( chklowq ( i , j ) == 0.f ) ) {
+;
+}
+}
+if ( ( snow ( i , j ) == 0.f ) ) {
+emissl ( i , j ) = tb . lemitbl ( ivgtyp ( i , j ) ) ;
+}
+emiss ( i , j ) = emissl ( i , j ) ;
+snow ( i , j ) = ntc :: tc_mul ( ruc_min < F > ( 3.f , snwe ) , 1000.f ) ;
+snowh ( i , j ) = ruc_min < F > ( 7.5f , snhei ) ;
+canwat ( i , j ) = ntc :: tc_mul ( canwatr , 1000.f ) ;
+infiltr ( i , j ) = infiltrp ;
+mavail ( i , j ) = lmavail ( i , j ) ;
+sfcevp ( i , j ) = ntc :: tc_add ( sfcevp ( i , j ) , ntc :: tc_mul ( qfx ( i , j ) , dt ) ) ;
+grdflx ( i , j ) = ntc :: tc_mul ( ( - 1.f ) , sflx ( i , j ) ) ;
+if ( ( ( snowfrac > 0.f ) && ( xice ( i , j ) >= xice_threshold ) ) ) {
+snowfrac = ntc :: tc_mul ( snowfrac , xice ( i , j ) ) ;
+}
+snowc ( i , j ) = snowfrac ;
+rhosnf ( i , j ) = rhosnfall ;
+sfcevp ( i , j ) = ntc :: tc_add ( sfcevp ( i , j ) , ntc :: tc_mul ( qfx ( i , j ) , dt ) ) ;
+ac = 0.f ;
+as = 0.f ;
+ac = ruc_max < F > ( 0.f , ntc :: tc_sub ( canwat ( i , j ) , canwatold ( i , j ) ) ) ;
+as = ruc_max < F > ( 0.f , ntc :: tc_sub ( snwe , snowold ( i , j ) ) ) ;
+wb = ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_add ( rainbl ( i , j ) , ntc :: tc_mul ( ntc :: tc_mul ( smelt ( i , j ) , dt ) , 1.e3f ) ) , ntc :: tc_mul ( qfx ( i , j ) , dt ) ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff1 ( i , j ) , dt ) , 1.e3f ) ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff2 ( i , j ) , dt ) , 1.e3f ) ) , ac ) , as ) , ntc :: tc_sub ( smavail ( i , j ) , smtotold ( i , j ) ) ) ;
+waterbudget ( i , j ) = ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_sub ( ntc :: tc_add ( rainbl ( i , j ) , ntc :: tc_mul ( ntc :: tc_mul ( smelt ( i , j ) , dt ) , 1.e3f ) ) , ntc :: tc_mul ( qfx ( i , j ) , dt ) ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff1 ( i , j ) , dt ) , 1.e3f ) ) , ntc :: tc_mul ( ntc :: tc_mul ( runoff2 ( i , j ) , dt ) , 1.e3f ) ) , ac ) , as ) , ntc :: tc_sub ( smavail ( i , j ) , smtotold ( i , j ) ) ) ;
+acwaterbudget ( i , j ) = ntc :: tc_add ( acwaterbudget ( i , j ) , waterbudget ( i , j ) ) ;
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+}
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+;
+}
+if ( ( globalcells ( i ) == tb . targetcell ) ) {
+;
+for ( k = 1 ;
+k <= nzs ;
+k += 1 ) {
+;
+}
+}
+}
+;
+}
+}
+}

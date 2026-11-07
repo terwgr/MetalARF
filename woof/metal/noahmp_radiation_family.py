@@ -11,9 +11,13 @@ _THREADS = 64
 _I32_MAX = np.iinfo(np.int32).max
 
 
-def submit_noahmp_radiation_batch(in_rows, ist, out_rows, *, n=None):
+def submit_noahmp_radiation_batch(in_rows, ist, out_rows, *, n=None,
+                                   noahmp_snow_age="wrf_470"):
     """Submit ``[n,56] + [n] -> [n,19]`` radiation rows on one context."""
     from .array import MetalArray
+    from woof.noahmp_generation import radiation_kernel
+
+    kernel_name = radiation_kernel(noahmp_snow_age)
 
     if WRF_EXACT:
         raise NotImplementedError(
@@ -39,7 +43,7 @@ def submit_noahmp_radiation_batch(in_rows, ist, out_rows, *, n=None):
         if array.buffer.context is not context:
             raise ValueError("Noah-MP radiation resources must share one context")
     return context.submit_kernel(
-        "noahmp_radiation_batch", arrays, {"n": count}, exact_policy=False,
+        kernel_name, arrays, {"n": count}, exact_policy=False,
         grid_size=((count + _THREADS - 1) // _THREADS) * _THREADS,
         threads_per_group=_THREADS)
 

@@ -1,0 +1,86 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_exact_delta_scale",
+      "module": "rrtmgp_exact_outputs",
+      "source": "woof/metal/shaders/rrtmgp_exact_outputs.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_rte.cu",
+      "cuda_symbol": "rrtmgp_delta_scale",
+      "resources": [
+        [
+          "tau_in",
+          "float",
+          "read"
+        ],
+        [
+          "ssa_in",
+          "float",
+          "read"
+        ],
+        [
+          "g_in",
+          "float",
+          "read"
+        ],
+        [
+          "tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "ssa",
+          "float",
+          "read_write"
+        ],
+        [
+          "asym",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tau_in": [
+          [
+            "n"
+          ]
+        ],
+        "ssa_in": [
+          [
+            "n"
+          ]
+        ],
+        "g_in": [
+          [
+            "n"
+          ]
+        ],
+        "tau": [
+          [
+            "n"
+          ]
+        ],
+        "ssa": [
+          [
+            "n"
+          ]
+        ],
+        "asym": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

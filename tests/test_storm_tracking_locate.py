@@ -31,10 +31,7 @@ import pytest
 import woof.core.storm_tracking as st
 from woof.core.storm_tracking import FollowConfig, NestFootprint, StormTracker
 
-
-def _footprint():
-    return NestFootprint(grid_id=2, i_parent_start=102, j_parent_start=31,
-                         child_nx=240, child_ny=240, parent_grid_ratio=3)
+from test_storm_tracking_refinement import _footprint, _bowl, _tree
 
 
 def _config(**over):
@@ -45,29 +42,38 @@ def _config(**over):
     return FollowConfig(**base)
 
 
-def _bowl(ny, nx, cj, ci, depth=60.0, width=6.0):
-    j, i = np.mgrid[0:ny, 0:nx]
-    r2 = (j - cj) ** 2 + (i - ci) ** 2
-    return (1500.0 - depth * np.exp(-r2 / (2.0 * width ** 2))).astype(
-        np.float64)
-
-
 def _plane_patch(monkeypatch, plane):
     monkeypatch.setattr(st, "_plane_from_state",
                         lambda *a, **k: plane)
 
 
-def _tree():
-    """Mover d02 at ratio 3 with a refine grid d03 at ratio 4."""
-    d03 = SimpleNamespace(
-        cfg=SimpleNamespace(grid_id=3, i_parent_start=83, j_parent_start=83,
-                            parent_grid_ratio=4),
-        children=[], state=SimpleNamespace(), _started=True)
-    d02 = SimpleNamespace(
-        cfg=SimpleNamespace(grid_id=2, i_parent_start=102, j_parent_start=31,
-                            parent_grid_ratio=3),
-        children=[d03], state=SimpleNamespace(), _started=True)
-    return d02, d03
+def test_hurricane_pressure_minimum_is_not_the_qualifying_area_centroid(monkeypatch):
+    fp = _footprint()
+    ci, cj = (round(v) for v in fp.center_parent_ij)
+    plane = np.full((200, 220), 1005.)
+    plane[cj+2, ci+3] = 970.
+    _plane_patch(monkeypatch, plane)
+    fix = StormTracker(_config(level_hpa=0, threshold=1100., pressure_center='minimum',
+                                fallback_level_hpa=850.)).locate(SimpleNamespace(), fp, 600.)
+    assert fix.center_parent_ij == (ci+3, cj+2)
+    assert fix.extremum == 970.
+    assert 'fallback_level_hpa' not in fix.evidence
+
+
+def test_hurricane_missing_mslp_uses_850_height_circulation(monkeypatch):
+    fp = _footprint()
+    ci, cj = fp.center_parent_ij
+    def pressure(state, field, level_hpa=None, **kwargs):
+        if level_hpa is None:
+            raise st.TrackerRefusal('MSLP column reduction unavailable')
+        assert level_hpa == 850.
+        return _bowl(200, 220, cj+2, ci+3)
+    monkeypatch.setattr(st, '_plane_from_state', pressure)
+    fix = StormTracker(_config(level_hpa=0, threshold=1100., pressure_center='minimum',
+                                fallback_level_hpa=850.)).locate(SimpleNamespace(), fp, 600.)
+    assert fix.center_parent_ij == pytest.approx((ci+3, cj+2), abs=.3)
+    assert fix.evidence['fallback_level_hpa'] == [850.]
+    assert 'MSLP column reduction' in fix.evidence['primary_failure']
 
 
 # ---------------------------------------------------------------------------

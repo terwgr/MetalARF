@@ -9,16 +9,22 @@
 //! the worker count cannot change an output element's arithmetic.
 
 pub mod dealias;
+pub mod chem_conversions;
+pub mod chem_diagnostics;
+pub mod chem_fire_reduce;
 pub mod eta;
 pub mod ensemble;
 pub mod grib2_supplement;
 pub mod quantization;
 pub mod surface_pressure;
 pub mod aerosol_emission;
+pub mod aerosol_numbers;
 // The static-dataset ingest arm: a WPS intermediate READER (the
 // inverse of src/bin/met_intermediate.rs's writer) and the
 // global-source bilinear the seam of a cyclic lat/lon grid needs.
 pub mod wif_ffi;
+pub mod chem_remap;
+pub mod grib2_stack;
 pub mod wps_intermediate;
 // WPS metgrid's masked-field chain (soil, snow, skin, sea ice) in float64,
 // byte-identical to the NumPy transcription it replaced.
@@ -38,6 +44,7 @@ pub mod water_owner;
 // The bounded surface-nearest search of the CPU backend in float32,
 // byte-identical to the NumPy code it replaced.
 pub mod surface_nearest;
+pub mod missing_value_chain;
 // Elementwise exp, log, pow and the trigonometric functions through the
 // vendored libm crate, so a host preparation's transcendentals are the same
 // on every CPU and C library (gpuwm/core/portable_math.py).
@@ -50,8 +57,12 @@ pub mod health_scan;
 pub mod ozone;
 pub mod cold_start;
 pub mod host_arrays;
+pub mod analysis_exchange;
 pub mod preparation_fingerprints;
 pub mod noah_init;
+// IMS daily snow and ice (NSIDC G02156) sampled at target points: the
+// observed lake-ice provider's reader (gpuwm/ingest/lake_ice.py).
+pub mod ims_snow_ice;
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -110,6 +121,8 @@ pub(crate) const ERR_INTERPOLATION_WINDOW: i32 = 7;
 /// target reads the top source value with no new layer extrapolated.
 /// A power of two keeps `tolerance * top` exact in FP32, so the Rust,
 /// CUDA and launcher comparisons give the same verdict on every column.
+// Preserve the exact power-of-two tolerance shared with CUDA.
+#[allow(clippy::excessive_precision)]
 pub(crate) const TOP_COLOCATION_RTOL: f32 = 1.52587890625e-5;
 pub(crate) const ERR_PANIC: i32 = 127;
 
@@ -742,8 +755,11 @@ fn vertical_column(
             }
         }
         let result = if let Some(lower) = found {
-            if target_level + 1 >= 1 + vboundb {
-                let fits_upper = lower + 2 <= x.len() - 1;
+            // WRF's `k+1 >= 1+vboundb` in wrapping unsigned arithmetic, as the CUDA kernel
+            // does: vboundb = -1 (usize::MAX) wraps to 0 and admits every level. The
+            // clippy rewrite to `k >= vboundb` (3b41df516e) dropped the wrap.
+            if target_level.wrapping_add(1) >= vboundb.wrapping_add(1) {
+                let fits_upper = lower + 2 < x.len();
                 let fits_lower = lower >= 1;
                 if fits_upper && fits_lower {
                     0.5 * (lagrange(&x[lower..lower + 3], &oy[lower..lower + 3], 2, target_x)
@@ -1140,6 +1156,8 @@ mod tests {
     }
 
     #[test]
+    // Keep the recorded pressure words and their original decimal spellings.
+    #[allow(clippy::excessive_precision)]
     fn a_moist_native_top_is_colocated_with_its_dry_target() {
         // HRRR's top mass level at a 1500 Pa lid: dry 1500 + 0.00235 *
         // 98500 = 1731.475 Pa.  The native file holds the FULL pressure,
@@ -1168,6 +1186,8 @@ mod tests {
     }
 
     #[test]
+    // Keep the recorded pressure words and their original decimal spellings.
+    #[allow(clippy::excessive_precision)]
     fn a_target_meaningfully_above_the_source_top_is_still_refused() {
         let source = [98000.0f32, 70000.0, 30000.0, 5000.0, 2209.2018, 1731.4755];
         for logp in [false, true] {
@@ -1208,3 +1228,5 @@ mod tests {
         }
     }
 }
+
+pub mod lake_state;

@@ -1,0 +1,978 @@
+{
+  "kernels": [
+    {
+      "name": "seaice_initialize",
+      "cuda_symbol": "ice_initialize",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/ocean/seaice/thermodynamics.cu",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read"
+        ],
+        [
+          "land",
+          "float",
+          "read"
+        ],
+        [
+          "lake",
+          "float",
+          "read"
+        ],
+        [
+          "snow",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read"
+        ],
+        [
+          "sst",
+          "float",
+          "read_write"
+        ],
+        [
+          "hi",
+          "float",
+          "read_write"
+        ],
+        [
+          "hs",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "s",
+          "float",
+          "read_write"
+        ],
+        [
+          "skin",
+          "float",
+          "read_write"
+        ],
+        [
+          "mask",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lake": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sst": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s": [
+          [
+            "any_1d"
+          ]
+        ],
+        "skin": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    },
+    {
+      "name": "seaice_precipitation",
+      "cuda_symbol": "ice_precipitation",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/ocean/seaice/thermodynamics.cu",
+      "resources": [
+        [
+          "rain",
+          "float",
+          "read"
+        ],
+        [
+          "pending",
+          "float",
+          "read"
+        ],
+        [
+          "ta",
+          "float",
+          "read"
+        ],
+        [
+          "ratio",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rain": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pending": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ratio": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    },
+    {
+      "name": "seaice_step",
+      "cuda_symbol": "ice_step",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/ocean/seaice/thermodynamics.cu",
+      "resources": [
+        [
+          "ap",
+          "float",
+          "read_write"
+        ],
+        [
+          "vp",
+          "float",
+          "read_write"
+        ],
+        [
+          "sp",
+          "float",
+          "read_write"
+        ],
+        [
+          "tp",
+          "float",
+          "read_write"
+        ],
+        [
+          "mask",
+          "float",
+          "read"
+        ],
+        [
+          "rain",
+          "float",
+          "read"
+        ],
+        [
+          "snowfall",
+          "float",
+          "read"
+        ],
+        [
+          "growth",
+          "float",
+          "read_write"
+        ],
+        [
+          "melt",
+          "float",
+          "read_write"
+        ],
+        [
+          "energy",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "float",
+          "read_write"
+        ],
+        [
+          "ocean",
+          "float",
+          "read_write"
+        ],
+        [
+          "ocean_heat",
+          "float",
+          "read_write"
+        ],
+        [
+          "coupled",
+          "float",
+          "read_write"
+        ],
+        [
+          "dhi",
+          "float",
+          "read_write"
+        ],
+        [
+          "da",
+          "float",
+          "read_write"
+        ],
+        [
+          "hiout",
+          "float",
+          "read_write"
+        ],
+        [
+          "hsout",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsk",
+          "float",
+          "read_write"
+        ],
+        [
+          "sst",
+          "float",
+          "read"
+        ],
+        [
+          "ta",
+          "float",
+          "read"
+        ],
+        [
+          "qa",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "ch",
+          "float",
+          "read"
+        ],
+        [
+          "sw",
+          "float",
+          "read"
+        ],
+        [
+          "lw",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "emiss",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowh",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rain": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowfall": [
+          [
+            "any_1d"
+          ]
+        ],
+        "growth": [
+          [
+            "any_1d"
+          ]
+        ],
+        "melt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "energy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "error": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ocean": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ocean_heat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dhi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "da": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hiout": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hsout": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sst": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsfc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "albedo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "emiss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coupled": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt0",
+          "float32"
+        ],
+        [
+          "qo0",
+          "float32"
+        ],
+        [
+          "hnew0",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    },
+    {
+      "name": "seaice_blend_ocean",
+      "cuda_symbol": "ice_blend_ocean",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/ocean/seaice/thermodynamics.cu",
+      "resources": [
+        [
+          "mask",
+          "float",
+          "read"
+        ],
+        [
+          "a",
+          "float",
+          "read"
+        ],
+        [
+          "skin",
+          "float",
+          "read"
+        ],
+        [
+          "sst",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "skin": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sst": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsk": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    },
+    {
+      "name": "seaice_ocean_freeze",
+      "cuda_symbol": "ice_ocean_freeze",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/ocean/seaice/thermodynamics.cu",
+      "resources": [
+        [
+          "mask",
+          "float",
+          "read"
+        ],
+        [
+          "a",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "skin",
+          "float",
+          "read_write"
+        ],
+        [
+          "hi",
+          "float",
+          "read_write"
+        ],
+        [
+          "s",
+          "float",
+          "read"
+        ],
+        [
+          "hs",
+          "float",
+          "read_write"
+        ],
+        [
+          "growth",
+          "float",
+          "read_write"
+        ],
+        [
+          "energy",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "float",
+          "read_write"
+        ],
+        [
+          "ocean",
+          "float",
+          "read_write"
+        ],
+        [
+          "dhi",
+          "float",
+          "read_write"
+        ],
+        [
+          "da",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowh",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "sst",
+          "float",
+          "read_write"
+        ],
+        [
+          "tml",
+          "float",
+          "read_write"
+        ],
+        [
+          "hml",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "skin": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "growth": [
+          [
+            "any_1d"
+          ]
+        ],
+        "energy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "error": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ocean": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dhi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "da": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "albedo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sst": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tml": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hml": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "hnew",
+          "float32"
+        ],
+        [
+          "water_capacity",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    },
+    {
+      "name": "seaice_mask_xice",
+      "cuda_symbol": "PhysicsDriver._run_noah_seaice",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/core/physics.py",
+      "resources": [
+        [
+          "mask",
+          "float",
+          "read"
+        ],
+        [
+          "xice",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xice": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    }
+  ]
+}

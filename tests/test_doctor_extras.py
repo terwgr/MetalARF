@@ -421,7 +421,7 @@ def test_every_extra_the_packaging_declares_has_recorded_facts():
     missing = sorted(extra for extra, requirements in
                      _pyproject_extras().items()
                      if extra not in doctor._EXTRA_FACTS
-                     and any(not _requirement_name(text).startswith("woof")
+                     and any(not _requirement_name(text).startswith("recast-woof")
                              for text in requirements))
     assert not missing, (
         f"teach woof.doctor._EXTRA_FACTS what these unlock: {missing}")

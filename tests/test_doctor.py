@@ -156,7 +156,7 @@ def test_doctor_cli_exit_codes_and_report_shape(monkeypatch, capsys,
     else:
         # Line 1 is the install headline (which copy of woof produced
         # this); the report's own banner follows it.
-        assert "\ngpuwm doctor\n" in out
+        assert "\nwoof doctor\n" in out
     assert rc_healthy_or_not in (0, 1)
 
     monkeypatch.setattr(doctor, "find_spec", lambda name: None)
@@ -330,8 +330,9 @@ def _stage_wrf_geog(root):
     return root
 
 
+@pytest.mark.parametrize("bundled_builder", [False, True])
 def test_the_wrf_verdict_ignores_the_soil_archive_the_wrf_builder_never_opens(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, bundled_builder):
     """A WRF-only install stays green without the mesh-scoped archive.
 
     The row for it exists -- doctor may not call a tree complete that
@@ -343,31 +344,85 @@ def test_the_wrf_verdict_ignores_the_soil_archive_the_wrf_builder_never_opens(
     from woof import rustwx_static
 
     geog = _stage_wrf_geog(tmp_path / "WPS_GEOG")
-    monkeypatch.setattr(rustwx_static, "find_static_bin", lambda: None)
+    monkeypatch.delenv("WOOF_RW_MPAS_STATIC", raising=False)
+    monkeypatch.setattr(doctor, "find_spec", lambda name: None)
+    monkeypatch.setattr(rustwx_static, "find_static_bin",
+                        lambda: tmp_path / "rw_mpas_static" if bundled_builder
+                        else None)
     checks = doctor._geog_tree_checks(geog)
     by_name = {check.name: check for check in checks}
     assert by_name["WPS_GEOG"].status == "verified"
     # the WRF-scoped consumer, asked on its own, sees no gap at all
     assert doctor.geography_gaps(geog) == []
     mesh_row = by_name["WPS_GEOG (MPAS static)"]
+    assert mesh_row.status == "missing"
     assert not mesh_row.blocking
+    assert mesh_row.severity == doctor.SEVERITY_OPT_IN
     assert doctor.blocking_gaps(checks) == []
     assert "soilgrids" in mesh_row.remedy
+    assert mesh_row.action == "woof fetch-geog"
+    monkeypatch.setattr(doctor, "collect_checks", lambda *a, **kw: checks)
+    assert cli.main(["doctor", "--json"]) == 0
 
 
-def test_the_mesh_verdict_blocks_when_that_door_is_installed(
+def test_the_mesh_remedy_quotes_the_size_of_what_is_absent(
         tmp_path, monkeypatch):
-    """With the mesh builder ON the box, its geography gap fails doctor.
+    """A WRF-only tree with woof hex installed: the remedy's size is true.
+
+    The reported state (2.9.4 + woof hex 0.4.2, `woof fetch-geog
+    --datasets wrf`): doctor names the two land-use archives the native
+    MPAS static reads and the WRF set does not stage.  Its remedy quoted
+    "~13 GB unpacked" -- the soil archive the tree already carries --
+    for a ~0.05 GB fetch.
+    """
+
+    from woof import geog_assets, rustwx_static
+
+    geog = _stage_geog_as_fetch_geog_does(tmp_path / "WPS_GEOG",
+                                          geog_assets.GEOG_CONSUMER_WRF)
+    monkeypatch.delenv("WOOF_RW_MPAS_STATIC", raising=False)
+    monkeypatch.setattr(doctor, "find_spec",
+                        lambda name: object() if name == "hexcore" else None)
+    monkeypatch.setattr(rustwx_static, "find_static_bin",
+                        lambda: tmp_path / "rw_mpas_static")
+    row = {check.name: check for check in doctor._geog_tree_checks(geog)}[
+        "WPS_GEOG (MPAS static)"]
+    absent = rustwx_static.missing_geog_datasets(geog)
+    mesh_only = [archive.dataset for archive in geog_assets.GEOG_ARCHIVES
+                 if archive.required_by == (geog_assets.GEOG_CONSUMER_MESH,)]
+    assert absent == mesh_only
+    assert row.brief == f"{len(mesh_only)} dataset(s) short of an MPAS static"
+    assert row.blocking
+    carriers = tuple(rustwx_static.fetchable_for(absent))
+    assert geog_assets.size_phrase(carriers) in row.remedy
+    assert "13 GB" not in row.remedy
+    assert row.action == "woof fetch-geog"
+
+
+@pytest.mark.parametrize("mpas_request", ["hexcore", "override"])
+def test_the_mesh_verdict_blocks_when_that_door_is_requested(
+        tmp_path, monkeypatch, mpas_request):
+    """An explicit MPAS install or builder override needs its geography.
+
+    Replaces test_the_mesh_verdict_blocks_when_that_door_is_installed
+    (2.9.2, b3fe11f572): a bundled rw_mpas_static is every install, so
+    "installed" no longer means the MPAS door was asked for.
 
     The concrete breakage: `woof mesh` writes the grid and refuses the
     static half, and the mesh registry admits neither on its own -- so a
-    box that has the builder and not its geography cannot open a door it
-    advertises.  Reported `info`/non-blocking, that box read green.
+    box that requested MPAS and lacks its geography cannot open that door.
+    The bundled builder alone is not a request for MPAS support.
     """
 
     from woof import rustwx_static
 
     geog = _stage_wrf_geog(tmp_path / "WPS_GEOG")
+    monkeypatch.delenv("WOOF_RW_MPAS_STATIC", raising=False)
+    monkeypatch.setattr(doctor, "find_spec",
+                        lambda name: object() if name == mpas_request else None)
+    if mpas_request == "override":
+        monkeypatch.setenv("WOOF_RW_MPAS_STATIC",
+                           str(tmp_path / "rw_mpas_static"))
     monkeypatch.setattr(rustwx_static, "find_static_bin",
                         lambda: tmp_path / "rw_mpas_static")
     checks = doctor._geog_tree_checks(geog)
@@ -379,6 +434,8 @@ def test_the_mesh_verdict_blocks_when_that_door_is_installed(
     assert doctor.blocking_gaps(checks) == [mesh_row]
     # and the WRF path is still not dragged into it
     assert doctor.geography_gaps(geog) == []
+    monkeypatch.setattr(doctor, "collect_checks", lambda *a, **kw: checks)
+    assert cli.main(["doctor", "--json"]) == 1
 
 
 def test_the_mesh_row_goes_quiet_once_the_soil_archive_is_staged(
@@ -447,8 +504,12 @@ def test_the_mesh_row_goes_quiet_on_the_tree_fetch_geog_actually_stages(
     geog = tmp_path / "WPS_GEOG"
     for consumer in geog_assets.GEOG_CONSUMERS:
         _stage_geog_as_fetch_geog_does(geog, consumer)
-    # The soil group sits under its container and nowhere else.
-    containers = [a for a in geog_assets.GEOG_ARCHIVES if a.index_subdirs]
+    # The soil group sits under its container and nowhere else.  Only the
+    # containers a consumer requires are staged here: 2.9.0's optional GSL
+    # terrain-drag container (orogwd3_10m, required by no consumer) is not
+    # part of what this row checks.
+    containers = [a for a in geog_assets.GEOG_ARCHIVES if a.index_subdirs
+                  and set(a.required_by) & set(geog_assets.GEOG_CONSUMERS)]
     assert containers, "the pin table carries a container archive"
     for archive in containers:
         for child in archive.index_subdirs:
@@ -464,8 +525,9 @@ def test_the_mesh_row_goes_quiet_on_the_tree_fetch_geog_actually_stages(
     assert doctor.blocking_gaps(checks) == []
 
 
+@pytest.mark.parametrize("mpas_requested", [False, True])
 def test_one_child_missing_from_the_staged_container_is_named_alone(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, mpas_requested):
     """An interrupted extraction is still reported, by the child it lost."""
 
     from woof import geog_assets, rustwx_static
@@ -476,11 +538,18 @@ def test_one_child_missing_from_the_staged_container_is_named_alone(
     lost = [name for name in rustwx_static.REQUIRED_GEOG_DATASETS
             if rustwx_static.geog_dataset_candidates(geog, name)[1:]][-1]
     (rustwx_static.geog_dataset_dir(geog, lost) / "index").unlink()
+    monkeypatch.delenv("WOOF_RW_MPAS_STATIC", raising=False)
+    monkeypatch.setattr(doctor, "find_spec",
+                        lambda name: object() if mpas_requested
+                        and name == "hexcore" else None)
     monkeypatch.setattr(rustwx_static, "find_static_bin",
                         lambda: tmp_path / "rw_mpas_static")
     row = {check.name: check for check in doctor._geog_tree_checks(geog)}[
         "WPS_GEOG (MPAS static)"]
-    assert row.status == "missing" and row.blocking
+    assert row.status == "missing"
+    assert row.blocking is mpas_requested
+    assert row.severity == (doctor.SEVERITY_UNREACHABLE if mpas_requested
+                            else doctor.SEVERITY_OPT_IN)
     assert lost in row.detail
     assert row.brief == "1 dataset(s) short of an MPAS static"
 
@@ -791,14 +860,62 @@ def test_a_bridge_that_predates_the_contract_is_missing_not_ok(
     # The isobaric-height reader resolves through its own ladder
     # (woof.isobaric_bridge, the obs-regrid one) for the MPAS binaries'
     # reason: it builds in `tools/rustwx`, not the grib1_bridge crate.
-    assert extra == {"region_global_dealias", "netcdf_writer",
+    from _woof_snapshot import without_left_out_artifacts
+    assert extra == without_left_out_artifacts({"region_global_dealias", "netcdf_writer",
                      "gpuwm_preprocess_cpu",
                      "gpuwm_mapped_engine", "static_fields", "obs_regrid", "obs_score",
-                     "rw_isobaric",
+                     "rw_isobaric", "rw_superob",
                      "rw_mpas_mesh", "rw_mpas_static", "rw_mpas_init", "rw_mpas_geometry", "rw_mpas_hostprep",
                      "rw_mpas_convert", "rw_mpas_lbc", "arwen-tui", "rw_zarr", "rw_netcdf",
-                     "rw_mlexport", "rw_simradar",
-                     "rw_compare", "rw_verify"}
+                     # 2.9.0: the MPAS point renderer (the MPAS binaries'
+                     # ladder and reason) and the TEMPO init library (its
+                     # own ladder, woof.core.tempo_rust).
+                     "rw_hex_points", "rw_tempo",
+                     # The RRFS init door's two binaries (the MPAS binaries'
+                     # ladder and reason).
+                     "rw_mpas_init_v831", "rw_mpas_gsl_oro",
+                     # 2.9.1: the projected MET library builds in
+                     # tools/rw_wps and woof hex resolves it through its
+                     # own ladder, the mapped engine's reason.
+                     "rw_projected_intermediate",
+                     "rw_icechunk", "rw_mlexport", "rw_simradar", "rw_grib2export",
+                     # 2.9.3: the tropical-cyclone field reader (7b6ffde29b2) builds in
+                     # tools/rustwx and resolves through woof.tc_tracks, the MPAS binaries reason.
+                     "rw_tc_fields",
+                     "rw_compare", "rw_verify", "rw_nowcast_frames",
+                     # The ensemble reducer builds in tools/rustwx and
+                     # resolves through WOOF_ENSEMBLE_RENDERER, so it is
+                     # off BRIDGE_ENV for the MPAS binaries' reason.
+                     "rw_ensbatch",
+                     # The global globe packer (2.8.9) builds in tools/rustwx
+                     # and resolves through WOOF_RW_GLOBE_PACK, likewise.
+                     "rw_globe_pack",
+                     # The fixed-ladder probability renderer builds in
+                     # tools/rustwx and resolves through WOOF_RW_PROBGRID,
+                     # likewise.
+                     "rw_probgrid",
+                     # The observation scorecard and the forecast
+                     # verification scorer build in tools/rustwx and resolve
+                     # through WOOF_RW_SCORECARD / WOOF_RW_SCOREBOARD, so
+                     # they are off BRIDGE_ENV for the same reason.
+                     "rw_scorecard", "rw_scoreboard",
+                     # The sounding window renderer (2.9.3) builds in
+                     # tools/rustwx and resolves through WOOF_SOUNDINGS
+                     # (woof.soundings.find_binary), likewise.
+                     "rw_soundings",
+                     # Hydro consumers resolve from their own workspaces.
+                     "nextgen_hydrofabric", "arwen_nextgen_forcing",
+                     "rw_nextgen_verify",
+                     # 2.9.4 capability lanes, each resolved through its own
+                     # door's ladder: rw_ice_verify (woof.ensemble.ice_accretion,
+                     # cap-fzra), rw_fire_indices (woof.fire_danger_state,
+                     # cap-fire-indices), rw_ocean (woof.ocean.door, its own
+                     # tools/ocean_prepare workspace, cap-waves-couple) and
+                     # rw_ocean_verify (woof.ocean.mixed_layer.verify,
+                     # cap-slab-ocean) and rw_bathy (woof.ocean.surge.driver,
+                     # its own tools/rw-bathy workspace, cap-surge).
+                     "rw_ice_verify", "rw_fire_indices", "rw_ocean", "rw_ocean_verify",
+                     "rw_bathy"})
 
 
 def test_the_decoder_door_gates_the_contract_for_every_caller(
@@ -1664,6 +1781,14 @@ def _force_every_gap(monkeypatch, tmp_path, *, windows, shape, mode,
     from woof.core import noah as noah_core
     from woof.core import thompson_contract
     from woof.ingest import cpu_backend
+    # Modules that bind load_tables / validate_table_assets by name at import
+    # are imported BEFORE the patches below: imported first during this test
+    # (doctor imports them lazily), they kept the raising stand-ins for the
+    # rest of the worker, and test_wrfinput_surface_native failed on
+    # "qr_acr_qg_V4.dat is not where it should be" (2.9.4 pass 723a0719).
+    import woof.core.landuse  # noqa: F401
+    import woof.tempo_assets  # noqa: F401
+    import woof.thompson_fork_build  # noqa: F401
 
     _set_staging(monkeypatch, tmp_path, available=staging)
 
@@ -1682,10 +1807,10 @@ def _force_every_gap(monkeypatch, tmp_path, *, windows, shape, mode,
         # was measured missing on 2026-08-18: every checkout arm of this
         # test was red, and the paste it rejected carried `git clone
         # https://.../arwen woof` from the mapped-engine remedy alone.
-        for crate in ("grib1_bridge", "rustwx", "region_global_dealias",
-                      "rw_wps", "arwen-tui"):
-            (root / "tools" / crate).mkdir(parents=True, exist_ok=True)
-            (root / "tools" / crate / "Cargo.toml").write_text(
+        from woof import bridge_assets
+        for crate in {artifact.crate for artifact in bridge_assets.BUNDLED_ARTIFACTS}:
+            (root / crate).mkdir(parents=True, exist_ok=True)
+            (root / crate / "Cargo.toml").write_text(
                 "[package]\n", encoding="utf-8")
 
     # The shell under test (_force_shell).
@@ -1877,9 +2002,13 @@ def test_the_whole_printed_report_pastes_as_one_sequence(
                 # the download would send a reader to a command that
                 # does not fix what they are missing.
                 continue
-            assert commands[0] == "woof fetch-bridges", (
+            # An on-demand artifact's block names the same command scoped
+            # to itself (`woof fetch-bridges --partial --artifact NAME`),
+            # one pinned member instead of the whole bundle.
+            fetch = re.compile(r"woof fetch-bridges( --partial --artifact [\w-]+)?")
+            assert fetch.fullmatch(commands[0]), (
                 f"the prebuilt bundle must be offered first: {commands[:2]}")
-            assert all(command == "woof fetch-bridges"
+            assert all(fetch.fullmatch(command)
                        for command in commands), (
                 "the source build must be commented out when the bundle "
                 f"is offered: {commands}")
@@ -2208,6 +2337,7 @@ def _wheel_shaped_install(monkeypatch, tmp_path):
     monkeypatch.setattr(bridges, "crate_dir", lambda: tmp_path / "no-crate")
     monkeypatch.setattr(bridges, "_package_parent", lambda: site_packages)
     monkeypatch.setattr(bridges, "default_bridge_dir", lambda: staged)
+    monkeypatch.setattr(bridges, "legacy_bridge_dir", lambda: tmp_path / "no-legacy-bridges")
     monkeypatch.setattr(bridges, "packaged_bridge_dir", lambda: packaged)
     # Redirect the rung frontdoor resolves too, now that the import
     # above has pinned the real function as the restore target.
@@ -2325,13 +2455,32 @@ def test_the_default_estate_carries_every_route(monkeypatch):
     assert "hrrr-prs route" in one
 
 
-def test_the_provenance_check_reports_the_path_a_run_will_take():
+def test_the_provenance_check_reports_the_path_a_run_will_take(monkeypatch):
     check = doctor._install_identity_check()
     assert check.status == "verified"
     assert any(source in check.detail
                for source in ("git", "installed-wheel-record",
                               "installed-source-content",
                               "gpuwm-native-distribution-manifest"))
+
+    # A busy checkout must retain its identity when git status times out,
+    # without claiming that an unchecked working tree is clean.
+    from woof import provenance
+    root = Path(__file__).resolve().parents[1]
+    expected = provenance.git_dir_identity(root)
+    run = provenance.subprocess.run
+
+    def timeout_status(command, **kwargs):
+        if "status" in command:
+            raise provenance.subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return run(command, **kwargs)
+
+    monkeypatch.setattr(provenance.subprocess, "run", timeout_status)
+    identity = provenance.git_identity(root)
+    assert identity["commit_full"] == expected["commit_full"]
+    assert identity["branch"] == expected["branch"]
+    assert identity["dirty"] is None
+    assert "git status timed out" in identity["dirty_unknown_reason"]
 
 
 def test_the_provenance_check_is_a_blocking_gap_when_nothing_can_answer(
@@ -2439,6 +2588,44 @@ def test_the_probe_of_a_non_image_returns_in_bounded_time(tmp_path):
     elapsed = time.perf_counter() - started
     assert not ok
     assert elapsed < 5.0, f"the probe took {elapsed:.1f} s"
+
+
+def test_the_probe_does_not_wait_on_a_bridge_that_reads_stdin(tmp_path, monkeypatch):
+    """A bridge that reads its request from stdin (rw_globe_pack) exits at EOF.
+
+    Breakage (2.9.2 cut, 2026-10-17): the probe inherited an open stdin
+    (the Linux container build's pipe; a user's terminal under `woof
+    doctor`), rw_globe_pack waited for its JSON request, and after 30 s
+    the probe called the binary broken.  The probe now hands every
+    launch a closed stdin; at EOF rw_globe_pack prints its diagnostic and
+    exits 1, an orderly launch.  Proven on the real binary with an open
+    pipe on stdin: 30 s and "did not exit" before, at once after.
+    """
+
+    import shutil
+    import subprocess
+    import time
+
+    cat = shutil.which("cat")
+    if os.name == "nt" or not cat:
+        pytest.skip("the stdin-reading stand-in is POSIX cat (a real ELF that reads stdin to EOF)")
+    fake = tmp_path / doctor.bridges.executable_name("rw_globe_pack")
+    shutil.copy2(cat, fake)
+    fake.chmod(0o755)
+    launches = []
+    real_run = subprocess.run
+
+    def recording_run(*args, **kwargs):
+        launches.append(kwargs)
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(doctor.subprocess, "run", recording_run)
+    started = time.perf_counter()
+    ok, evidence = doctor._exec_probe(fake)
+    elapsed = time.perf_counter() - started
+    assert ok, evidence
+    assert elapsed < 5.0, f"the probe took {elapsed:.1f} s"
+    assert launches and all(call.get("stdin") == subprocess.DEVNULL for call in launches), launches
 
 
 def test_the_release_probe_accepts_the_real_mapped_engine():
@@ -2736,7 +2923,7 @@ def _resolve_extra(extras: dict[str, list[str]], name: str) -> set[str]:
         seen.add(key)
         assert key in extras, f"pyproject declares no [{key}] extra"
         for dep in extras[key]:
-            inner = re.fullmatch(r"woof\[([^\]]+)\]", dep.strip())
+            inner = re.fullmatch(r"recast-woof\[([^\]]+)\]", dep.strip())
             if inner:
                 stack.extend(part.strip()
                              for part in inner.group(1).split(","))
@@ -3263,3 +3450,22 @@ def test_the_long_path_row_is_in_the_default_estate():
 
     names = [c.name for c in doctor.collect_checks(sources=())]
     assert "Windows long paths (install root depth)" in names
+
+
+def test_a_full_card_is_not_judged_and_never_sent_to_reinstall_cupy(
+        monkeypatch):
+    """Named breakage: a correct install on a 4-card node whose card 0
+    another process had filled was told "MISSING cupy -> pip install
+    'recast-woof[gpu-cu13]'" and `install.sh` exited 1.  The words are the V12
+    box's own (2026-10-09)."""
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    check = _pairing(
+        monkeypatch, [("cupy-cuda13x", 13)],
+        {"wheel_runtime": 13000, "driver": 13020, "devices": 4,
+         "cublas": "OutOfMemoryError: Out of memory allocating 512 bytes "
+                   "(allocated so far: 0 bytes)."})
+    assert check.status == "present"
+    assert not check.blocking
+    assert "not judged" in check.detail
+    assert "CUDA_VISIBLE_DEVICES=0" in check.detail
+    assert "pip install" not in (check.remedy or "")

@@ -388,17 +388,12 @@ class MetalRegionalDrivingState:
         kernels: MetalRegionalKernels,
         scalar_names: Sequence[str] = ("lbc_qv",),
     ) -> None:
-        self._pool = LbcPool(inventory)
+        self._pool = LbcPool(inventory, scalar_names=scalar_names)
         self._context = context
         self._module = _module(context)
         self._kernels = kernels
         self._masks = masks
         self._scalar_names = tuple(scalar_names)
-        if not self._scalar_names:
-            raise ConfigurationRefusal(
-                "scalar_names", (),
-                "the lbc_scalars var_array always carries at least qv",
-                "scalar_names=('lbc_qv', ...)")
         self._cells_on_edge = cells_on_edge
         self._zz = zz
         self.nlev = int(n_vert_levels)
@@ -431,9 +426,13 @@ class MetalRegionalDrivingState:
         w = self._upload(self._slab(admitted, "lbc_w"))
         rho = self._upload(self._slab(admitted, "lbc_rho"))
         theta = self._upload(self._slab(admitted, "lbc_theta"))
-        scalars = self._upload(np.stack(
-            [self._slab(admitted, name) for name in self._scalar_names], axis=0))
-        qv = scalars[0]
+        if self._scalar_names:
+            scalars = self._upload(np.stack(
+                [self._slab(admitted, name) for name in self._scalar_names], axis=0))
+            qv = scalars[0]
+        else:
+            scalars = self._module.empty((0, *self._cell_shape), np.float32)
+            qv = self._module.zeros(self._cell_shape, np.float32)
         rho_zz = self._module.empty(self._cell_shape, np.float32)
         rtheta_m = self._module.empty(self._cell_shape, np.float32)
         self._kernels.launch(
@@ -822,7 +821,8 @@ def advance_scalars_regional_metal_v841(
         {"ntracers": _i(ntracers), "nlev": _i(nlev), "ncells": _i(ncells),
          "coefficient": _f(config_coef_3rd_order)})
     weight = np.float32(
-        1.0 / 3.0 if rk_step == 1 else 0.5 if rk_step == 2 else 1.0)
+        1.0 / 3.0 if rk_step == 1 and runtime.time_integration_order == 3
+        else 0.5 if rk_step in (1, 2) else 1.0)
     target = module.empty(rho_zz_old.shape, np.float32)
     launch(
         ctx, "hexv841_transport_interpolate_target_v841", nlev * ncells,
@@ -885,7 +885,9 @@ class MetalRegionalRuntimeV841:
         n_vert_levels: int,
         device_atmosphere: Any,
         v841_context: Any,
+        time_integration_order: int = 3,
         config_relax_zone_divdamp_coef: float = 6.0,
+        config_lbc_w: str = "zero",
         scalar_names: Sequence[str] = ("lbc_qv",),
     ) -> None:
         self.driven_scalars = int(len(tuple(scalar_names)))
@@ -906,6 +908,7 @@ class MetalRegionalRuntimeV841:
         self.nlev = int(n_vert_levels)
         self.outer_dt = float(outer_dt)
         self.dynamics_split = int(dynamics_split)
+        self.time_integration_order = int(time_integration_order)
         self.config_relax_zone_divdamp_coef = float(
             config_relax_zone_divdamp_coef)
         self.kernels = MetalRegionalKernels(context)
@@ -931,6 +934,11 @@ class MetalRegionalRuntimeV841:
         self.bdy_mask_cell = module.asarray(np.ascontiguousarray(np.append(
             np.asarray(self.masks_host.bdy_mask_cell, np.int32),
             np.int32(N_BDY_ZONE))))
+        self.nearest_w_cell = None
+        if config_lbc_w.strip() == "nearest":
+            nearest = np.full(padded.n_cells, padded.garbage_cell, np.int32)
+            nearest[:padded.n_cells_solve] = self.masks_host.nearest_relaxation_cell
+            self.nearest_w_cell = module.asarray(nearest)
         self.bdy_mask_edge = module.asarray(np.ascontiguousarray(np.append(
             np.asarray(self.masks_host.bdy_mask_edge, np.int32),
             np.int32(N_BDY_ZONE))))
@@ -1035,7 +1043,7 @@ class MetalRegionalRuntimeV841:
             rk_timestep=rk_timestep_f32(
                 outer_dt=self.outer_dt,
                 dynamics_split=self.dynamics_split,
-                rk_step=int(rk_step)))
+                rk_step=int(rk_step), order=self.time_integration_order))
 
     def driving_values(self, name: str, rk_step: int) -> Any:
         return self.driving.state_at(name, self.clock, self._stage_offset(rk_step))
@@ -1195,13 +1203,25 @@ class MetalRegionalRuntimeV841:
              "ncells": _i(int(vertical_velocity.shape[-1])),
              "nspec": _i(masks.n_spec_cells)})
 
+    def apply_configured_w_boundary(self, vertical_velocity: Any) -> None:
+        """Apply NOAA's interior nearest-donor option after stage diagnostics."""
+        if self.nearest_w_cell is None:
+            return
+        launch(self.context_metal, "hexrrfs_w_boundary", self.n_cells_solve,
+               {"mask": self.bdy_mask_cell, "nearest": self.nearest_w_cell,
+                "w": vertical_velocity},
+               {"nlev": _i(self.nlev), "ncells": _i(vertical_velocity.shape[-1]),
+                "first": _i(0), "end": _i(self.n_cells_solve),
+                "relaxation": _i(N_RELAX_ZONE), "zero": _i(0)})
+
     # -- graft: the scalar boundary stages ---------------------------------
 
     def bdy_adjust_scalars(self, scalars: Any, rk_step: int) -> None:
         """``atm_srk3:2688-2717``."""
 
         dt_rk = transport_rk_timestep_f32(
-            outer_dt=self.outer_dt, rk_step=int(rk_step))
+            outer_dt=self.outer_dt, rk_step=int(rk_step),
+            order=self.time_integration_order)
         driving = self.driving.state_at("scalars", self.clock, dt_rk)
         masks = self.masks
         mesh = self.atmosphere.mesh

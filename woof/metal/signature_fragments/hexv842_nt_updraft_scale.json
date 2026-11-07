@@ -1,0 +1,114 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_updraft_scale",
+      "module": "hexv842_nt_updraft_scale",
+      "source": "woof/metal/shaders/hexv842_nt_updraft_scale.metal",
+      "cuda_source": "woof/hex/mpasphys/ntiedtke_v842.py",
+      "cuda_symbol": "ntiedtke_updraft_scale",
+      "resources": [
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "sf_i",
+          "int32",
+          "read"
+        ],
+        [
+          "sf",
+          "float",
+          "read"
+        ],
+        [
+          "out_i",
+          "int32",
+          "read_write"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sf_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

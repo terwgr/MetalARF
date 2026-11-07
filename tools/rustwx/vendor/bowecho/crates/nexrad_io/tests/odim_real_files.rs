@@ -2,7 +2,7 @@
 //! polar volumes (four writers, four HDF5 feature mixes).
 //!
 //! Fixture provenance (expected values extracted with an independent
-//! Python reader (h5py 3.15.1) not with this crate):
+//! Python reader — h5py 3.15.1 — not with this crate):
 //!
 //! - `tests/data/bejab.pvol.hdf`: RMI Belgium Jabbeke C-band PVOL,
 //!   2019-06-06 00:00:22 UTC, 11 DBZH sweeps, H5rad 2.0, superblock v0,
@@ -23,7 +23,7 @@
 //!   under a v0 superblock and old-style groups, and float64 gzip-chunked
 //!   data planes. Fetched 2026-07-07 from the OPERA ORD 24h bucket
 //!   (`.../2026/07/07/ES/espdg/PVOL/espdg@20260707T1927@0.5_1.5@
-//!   DBZH_VRADH.h5`): the exact object BowEcho's v0.30-RC1 live poll
+//!   DBZH_VRADH.h5`) — the exact object BowEcho's v0.30-RC1 live poll
 //!   failed on before hdf5lite learned the v2 header dialect.
 
 use chrono::{TimeZone, Utc};
@@ -46,7 +46,7 @@ fn real_bejab_pvol_decodes_site_geometry_and_gates() {
     assert!(nexrad_io::odim::looks_like_hdf5_bytes(BEJAB));
     let volume = nexrad_io::odim::decode_odim_h5_volume(BEJAB).expect("decode bejab");
 
-    // source = "WMO:06410,RAD:BX42,PLC:Jabbeke,NOD:bejab,...": NOD wins.
+    // source = "WMO:06410,RAD:BX42,PLC:Jabbeke,NOD:bejab,..." — NOD wins.
     assert_eq!(volume.site.id, "BEJAB");
     assert_eq!(volume.site.name.as_deref(), Some("Jabbeke"));
     assert_close(volume.site.latitude_deg.unwrap(), 51.1917, 1e-4, "lat");
@@ -88,7 +88,7 @@ fn real_bejab_pvol_decodes_site_geometry_and_gates() {
         "v[359,597]",
     );
 
-    // Top sweep changes geometry (25 deg, 300 gates): chunk clipping etc.
+    // Top sweep changes geometry (25 deg, 300 gates) — chunk clipping etc.
     let top = &volume.cuts[10];
     assert_close(top.elevation_deg, 25.0, 1e-5, "top elangle");
     assert_eq!(
@@ -121,7 +121,7 @@ fn real_bewid_pvol_reads_vlen_string_attrs_and_root_nyquist() {
     assert_close(volume.site.latitude_deg.unwrap(), 49.9143, 1e-4, "lat");
     assert_close(volume.site.longitude_deg.unwrap(), 5.5056, 1e-4, "lon");
     assert_close(volume.site.elevation_m.unwrap(), 592.0, 1e-3, "height");
-    // /what date+time are VARIABLE-LENGTH strings in this writer: decoding
+    // /what date+time are VARIABLE-LENGTH strings in this writer — decoding
     // them exercises the hdf5lite global-heap path on real bytes.
     assert_eq!(
         volume.volume_time,
@@ -171,7 +171,7 @@ fn real_bewid_pvol_reads_vlen_string_attrs_and_root_nyquist() {
 fn real_norst_pvol_reads_superblock_v1_and_half_degree_sweep() {
     let volume = nexrad_io::odim::decode_odim_h5_volume(NORST).expect("decode norst");
 
-    // source = "WMO:01104,NOD:norst", NOD preferred over the leading WMO.
+    // source = "WMO:01104,NOD:norst" — NOD preferred over the leading WMO.
     assert_eq!(volume.site.id, "NORST");
     assert_close(volume.site.latitude_deg.unwrap(), 67.5307, 1e-4, "lat");
     assert_close(volume.site.longitude_deg.unwrap(), 12.0986, 1e-4, "lon");
@@ -275,7 +275,7 @@ fn real_espdg_pvol_decodes_v2_object_headers_end_to_end() {
         let gates = &cut.radials[0].gate_range;
         // AEMET writes where/rstart = 200.0 METRES (IRIS quirk; spec says
         // km). The decoder's physical-sanity rule reinterprets it, so the
-        // first bin sits at the true 200 m, not 200 km downrange.
+        // first bin sits at the true 200 m — not 200 km downrange.
         assert_eq!(
             (gates.first_gate_m, gates.gate_spacing_m, gates.gate_count),
             (200, 500, 299),

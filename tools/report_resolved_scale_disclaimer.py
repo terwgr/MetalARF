@@ -72,6 +72,8 @@ INTERNAL_RECEIPT = REPO_ROOT / "docs" / "superpowers" / "receipts" / (
     "perf-gate-sentence.json"
 )
 
+SCALE_PAGE = Path("docs/public/RESOLVED-SCALE.md")
+
 PUBLIC_DOC_PATHSPEC = ("README.md", "docs/public/*.md")
 
 BASELINE_GREPS = {
@@ -337,7 +339,7 @@ def mutant_verdicts() -> dict:
             shutil.copy2(REPO_ROOT / "README.md", root / "README.md")
             for page in (REPO_ROOT / "docs" / "public").glob("*.md"):
                 shutil.copy2(page, root / "docs" / "public" / page.name)
-            readme = root / "README.md"
+            readme = root / SCALE_PAGE
             text = readme.read_text(encoding="utf-8")
             occurrences = text.count(before)
             readme.write_text(text.replace(before, after), encoding="utf-8")
@@ -420,7 +422,7 @@ def build_public_receipt(base: str, tip: str | None = None) -> dict:
         name: run(["git", "grep", "-inE", pattern, "--", *PUBLIC_DOC_PATHSPEC])
         for name, pattern in BASELINE_GREPS.items()
     }
-    readme_item = find_item(REPO_ROOT / "README.md", "- **Resolved scale.**")
+    readme_item = find_item(REPO_ROOT / SCALE_PAGE, "- **Resolved scale.**")
     verification = REPO_ROOT / "docs" / "public" / "VERIFICATION.md"
     verification_item = find_item(
         verification, "- **No resolved tornado dynamics.**"
@@ -435,10 +437,13 @@ def build_public_receipt(base: str, tip: str | None = None) -> dict:
         for i, line in enumerate(verification_lines)
         if line.startswith("- **FP32 ")
     )
-    da_line = 1 + next(
+    # The bullet the item follows.  7268b9482 replaced the page's "No data
+    # assimilation" bullet, the anchor until then, with the
+    # observation-validation one now in that place.
+    preceding_line = 1 + next(
         i
         for i, line in enumerate(verification_lines)
-        if line.startswith("- **No data assimilation")
+        if line.startswith("- **No observation-validation claim")
     )
     changelog_diff = run(
         ["git", "diff", *diff_endpoints(base, tip), "--", "CHANGELOG.md"]
@@ -487,9 +492,9 @@ def build_public_receipt(base: str, tip: str | None = None) -> dict:
                 VERIFICATION_PINNED_FIGURE_SUBSTRINGS,
             ),
             "precedes_fp32_bullet_line": fp32_line,
-            "follows_no_data_assimilation_bullet_line": da_line,
+            "follows_no_observation_validation_bullet_line": preceding_line,
             "ordering_holds": (
-                da_line
+                preceding_line
                 < (verification_item["first_line"] or 0)
                 < fp32_line
             ),

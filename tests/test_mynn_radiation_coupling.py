@@ -85,7 +85,10 @@ def test_every_non_mynn_radiation_path_is_byte_identical(
         # and the merge is the rla_mynn kernel, which
         # tests/test_rrtmg_legacy_device_glue.py holds bitwise to
         # merge_mynn_bl_clouds + mynn_bl_cloud_supplied + unsized_mynn_radii.
-        assert "active_bl = mynn_bl_cloud_active(" in source
+        # golden/ports-rad gates the merge on icloud = 1 too: with icloud = 2
+        # the cloud fraction is WRF's binary cal_cldfra2, which the MYNN
+        # subgrid merge does not touch.
+        assert "active_bl = icloud == 1 and mynn_bl_cloud_active(" in source
         assert '"rla_mynn"' in source
         assert "if active_bl:" in source
     else:
@@ -163,7 +166,9 @@ def test_nssl_legacy_mass_radius_and_cloud_fraction_match_wrf():
     adapter_source = inspect.getsource(RRTMGLegacyRadiation.__call__)
     assert ("f_qi, f_qs = legacy_cloud_fraction_flags(mp_physics)"
             in adapter_source)
-    assert "radii = _radius_meters_blocks({" in adapter_source
+    # 2.9.1 exact chain: a default process converts the declared radii to
+    # metres (a strict prep takes the microphysics microns directly).
+    assert "radii = _radius_meters_blocks(radii)" in adapter_source
     assert "f_qi=f_qi, f_qs=f_qs" in adapter_source
     # NSSL declares both species, so the pair is (True, True) and this
     # oracle comparison is unchanged by the P3 split.

@@ -30,6 +30,22 @@ each is pinned by a named test in ``tests/test_thompson_aerosol_adapter.py``:
     Pinned by ``test_entry_state_is_read_only_until_the_single_terminal_apply``
     and ``test_accumulators_are_zeroed_at_entry_not_carried_between_calls``.
 
+1b. **The cloud-water accumulator.**  ``state.qc`` obeys the same contract:
+    it is WRF's ``qc1d``, read-only from the entry rewrite to the terminal
+    apply, and every stage that moves cloud water -- the cold and warm
+    source networks (:2987), the condensation (:3480), the cloud fallout
+    (:3832) and the phase cleanup (:3949, :3962) -- adds its tendency to
+    ``qcten`` and reads the working cloud as ``qc1d + qcten*DT``, formed
+    the way WRF forms it.  The sum is applied ONCE, at :3975.  Applying each
+    stage to ``state.qc`` in turn rounded the cloud once per stage where WRF
+    rounds it once per call: one float32 ulp of the entry value on
+    aero-cloud-freeze-nc (4.926e-06 against the 2e-06 gate), and on
+    aero-cold-overlap the same ulp left the cloud at exactly zero where WRF
+    keeps 2**-36, flipping the :4007 branch and zeroing the droplets.
+    Measured stage by stage against WRF's own running qcten with
+    tools/thompson_wrf461_oracle/compare_port_stages_aero.py: bitwise after
+    the condensation, the fallout and the cleanup on every G3 fixture.
+
 2.  **Warm/cold entry-mask disjointness.**  The cold network returns for
     ``T >= 273.15`` and the warm network returns unless its held mask is set,
     and both kernel headers state that the two gates are exact complements.
@@ -55,6 +71,19 @@ each is pinned by a named test in ``tests/test_thompson_aerosol_adapter.py``:
     launchers carry Cooper and must never appear on this path; using them
     would ADD a second ice source rather than substitute for it.
     Pinned by ``test_no_cooper_bearing_classic_launcher_is_ever_called``.
+
+1c. **The rain and ice accumulators** (the v4.6.1 generation).  ``qr``,
+    ``nr``, ``qi`` and ``ni`` follow the same contract: the source networks
+    add to ``qrten``/``nrten``/``qiten``/``niten`` (:3022-3067) and run the
+    :3033-3055 / :3070-3091 balances in WRF's tendency form, the rain
+    evaporation adds :3562/:3564, mp=28's own rain and ice fallouts add
+    :3800-3810 / :3851-3862 to them, the cleanup adds :3949-3964, and
+    ``launch_terminal_rain_ice`` applies them once with WRF's :4023-4053
+    size bounds -- after the freeze, where WRF has them.  In-place, the ice
+    size bound sat in the ice fallout, before the freeze, and the freeze's
+    negative droplet number then landed on an already bounded ice number
+    (wp08-freeze level 4); stage by stage the in-place rain also rounded
+    once per stage.  The fork keeps the in-place form.
 
 5.  **Which density feeds which kernel.**  WRF keeps TWO air densities in
     play across the condensation seam and uses both.  :3193 diagnoses the
@@ -107,24 +136,32 @@ each is pinned by a named test in ``tests/test_thompson_aerosol_adapter.py``:
     this density (zero where :3236 failed, negative where :3568 floored the
     pair), read by the ``_with_presence`` entry points this adapter launches
     and, since the classic rain fallout repair (7727fda3c), microphysics.py
-    launches for mp=8 as well.  ``test_the_two_residuals_that_live_in_the_frozen_kernel_
-    are_measured_here`` keeps the record of both.
+    launches for mp=8 as well.  On the v4.6.1 accumulator path (1c) mp=28's
+    own tendency-form rain fallout forms the gate and the pair where WRF
+    does; ``test_the_frozen_kernel_mechanisms_no_longer_reach_mp28`` keeps
+    the record of both.
 
 WHAT IS REUSED FROM THE FROZEN mp=8 MODULE, AND WHY THAT IS SOUND
 -----------------------------------------------------------------
-Eight launchers come from ``woof.core.thompson`` unchanged:
+Two launchers come from ``woof.core.thompson`` unchanged on the v4.6.1
+path: ``launch_hydrometeor_column_mask`` (twice) and
+``launch_graupel_fallout_column_mask``, pure column reductions over mass
+with no arithmetic to round.  Everything else is mp=28's own: the rain and
+ice fallout in tendency form (property 1c), and the snow and graupel
+fallout, the surface totals in mp_gt_driver's order of addition, the
+classic graupel number's entry diagnosis and terminal bound, and the 10 cm
+reflectivity, which used to be thompson.cu's and refl.cu's classic kernels.
+Those units are byte-frozen for mp=8 and their arithmetic is not WRF's
+(CUDA's powf/pow/log10f, the graupel slope taken from the intercept with a
+size clamp WRF does not apply, the substep factor folded as DT*onstep,
+crg(4) = 720, binary64 radar constants); the 0 ULP column oracle
+(tools/thompson_aerosol_column_oracle) measured them.  ``nwfa`` and
+``nifa`` have NO sedimentation term anywhere in module_mp_thompson.F; any
+implementation that adds one is wrong.  The fork generation still reuses
+the classic reflectivity on its own intercept.
 
-* ``launch_classic_graupel_number_init`` / ``_finalize`` -- ``is_hail_aware``
-  is false for mp=8 and mp=28 alike, so the ``idx_bg1 = 5`` / ``rho_g = 400``
-  classic graupel-number diagnostic is bit-identical.
-* ``launch_hydrometeor_column_mask`` (twice) and
-  ``launch_graupel_fallout_column_mask`` -- pure column reductions over mass.
-* ``launch_ice_sedimentation`` / ``_snow_`` / ``_graupel_`` / ``_rain_`` --
-  :3790-3936 contains no ``is_aerosol_aware`` branch and no nc/nwfa/nifa
-  reference.  ``nwfa`` and ``nifa`` have NO sedimentation term anywhere in
-  module_mp_thompson.F; any implementation that adds one is wrong.
-
-They are called with the identical ordered argument tuples mp=8 uses, which
+The two reused masks are called with the identical ordered argument tuples
+mp=8 uses, which
 ``test_reused_classic_launchers_receive_the_mp8_argument_shape`` pins.
 
 ENTRY-STATE ALIASING (why there are no ``nc_entry`` scratch copies)
@@ -132,12 +169,13 @@ ENTRY-STATE ALIASING (why there are no ``nc_entry`` scratch copies)
 ``launch_aerosol_entry_cloud_number`` reproduces :1826-1848 including its
 in-place side effect: ``qc1d`` and ``nc1d`` are ZEROED wherever
 ``qc1d <= R1`` (:1844-1845).  After that call ``state.nc`` *is* WRF's
-``nc1d``, and nothing writes ``state.nc`` again until the terminal apply at
-step 13 -- so ``state.nc`` itself is passed as the ``nc_entry`` argument
-everywhere, with no copy.  The same holds for ``state.nwfa``/``state.nifa``,
-which no kernel between the entry snapshot and the finalize writes at all.
-``woof/core/preflight.py``'s mp=28 slot registry reflects exactly this: it
-budgets ``qc_entry`` and ``ni_entry`` copies and no ``nc_entry`` copy.
+``nc1d`` and ``state.qc`` *is* WRF's ``qc1d``, and nothing writes either
+again until the terminal apply at step 13 -- so both are passed as the
+entry arguments everywhere, with no copy.  The same holds for
+``state.nwfa``/``state.nifa``, which no kernel between the entry snapshot
+and the finalize writes at all.  ``woof/core/preflight.py``'s mp=28 slot
+registry reflects exactly this: it budgets the ``qcten`` accumulator and an
+``ni_entry`` copy, and no ``qc_entry`` or ``nc_entry`` copy.
 """
 
 from __future__ import annotations
@@ -182,8 +220,16 @@ AEROSOL_SCRATCH_SLOTS = (
     "mp_thompson_aero_entry_density",
     "mp_thompson_aero_tau1_density",
     "mp_thompson_aero_nwfa_work_m3",
-    "mp_thompson_aero_qc_entry",
-    "mp_thompson_aero_ni_entry",
+    "mp_thompson_aero_qcten",
+    "mp_thompson_aero_qrten",
+    "mp_thompson_aero_nrten",
+    "mp_thompson_aero_qiten",
+    "mp_thompson_aero_niten",
+    "mp_thompson_aero_qvten",
+    "mp_thompson_aero_tten",
+    "mp_thompson_aero_qsten",
+    "mp_thompson_aero_qgten",
+    "mp_thompson_aero_ngten",
     "mp_thompson_aero_condensation_rate",
 )
 
@@ -221,6 +267,80 @@ def _wrf39_table_root() -> str:
     return str(ensure_thompson_fork_tables())
 
 
+def _apply_thompson_fork_call(
+        state: DomainState, cfg: RunConfig, dt: float, table_root: str, *,
+        refl_10cm_due: bool) -> MicrophysicsDiagnostics:
+    """One ``mp_physics=28`` call as the operational HRRR fork.
+
+    The whole of the fork's mp_gt_driver runs in one column kernel
+    (woof/core/kernels/thompson_fork.cu, woof.core.thompson_fork), in the
+    fork's own tendency form and arithmetic, so a column agrees with the
+    fork's Fortran word for word (tools/thompson_fork_oracle/
+    gpu_column_oracle.py).  The bracket around it is WOOF's: the full theta
+    and the Exner function formed as every scheme forms them, the pre-call
+    theta saved for ``h_diabatic``, the reflectivity stashed for output and
+    moist_physics_finish's clamped theta increment.
+    """
+    from woof.core.mynn_radiation import wrf_itimestep
+    from woof.core.refl import refl_melting_for, stash_refl_10cm
+    from woof.core.thompson_aerosol_runtime import load_aerosol_device_tables
+    from woof.core.thompson_fork import launch_thompson_fork_column
+    from woof.core.thompson_runtime import load_classic_device_tables
+
+    nz, ny, nx = state.p.shape
+    thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
+    phb = state.phb if state.phb.ndim == 3 else state.phb[:, None, None]
+    th = state.scratch((nz, ny, nx), "mp_th")
+    pii = state.scratch((nz, ny, nx), "mp_pii")
+    dz = state.scratch((nz, ny, nx), "mp_dz8w")
+    z8w = state.scratch((nz + 1, ny, nx), "mp_z8w")
+    th[...] = thb + state.thp
+    from woof.core.microphysics import prepare_microphysics_exner
+    prepare_microphysics_exner(state.p, pii)
+    z8w[...] = (phb + state.php) / DTYPE(c.G)
+    dz[...] = z8w[1:] - z8w[:-1]
+
+    surface_shape = (ny, nx)
+    rainnc = state.scratch(surface_shape, "mp_rainnc")
+    rainncv = state.scratch(surface_shape, "mp_rainncv")
+    snownc = state.scratch(surface_shape, "mp_snownc")
+    snowncv = state.scratch(surface_shape, "mp_snowncv")
+    graupelnc = state.scratch(surface_shape, "mp_graupelnc")
+    graupelncv = state.scratch(surface_shape, "mp_graupelncv")
+    sr = state.scratch(surface_shape, "mp_sr")
+
+    table_owner = load_classic_device_tables(_wrf39_table_root(),
+                                             version="wrf_39_noaa")
+    ccn_table = load_aerosol_device_tables(table_root).ccn_activation_table
+
+    save_pre_mp_theta(state)
+    refl = state.scratch((nz, ny, nx), "refl_10cm") if refl_10cm_due \
+        else None
+    # calc_refl10cm's melting-snow term: off on the fork's first step
+    # (itimestep 1, :5374-5379) and wherever WOOF's state policy turns the
+    # melting term off (woof.core.refl.refl_melting_for).
+    elapsed = getattr(state, "elapsed_seconds", None)
+    first_step = (elapsed is not None
+                  and wrf_itimestep(float(elapsed), float(dt)) == 1)
+    launch_thompson_fork_column(
+        th, pii, state.p, state.w, dz, state.qv, state.qc, state.qr,
+        state.qi, state.qs, state.qg, state.ni, state.nr, state.nc,
+        state.nwfa, state.nifa, state.nwfa2d, th, rainnc, rainncv, snownc,
+        snowncv, graupelnc, graupelncv, sr, refl, state.effc, state.effi,
+        state.effs, table_owner, ccn_table, dt,
+        first_time_step=first_step or not refl_melting_for(state),
+        do_refl=bool(refl_10cm_due),
+        singular_fall=getattr(cfg, "thompson_fork_snow_fall",
+                              "blend") == "wrf_39_noaa")
+    if refl_10cm_due:
+        stash_refl_10cm(state, refl)
+    moist_physics_finish(state, cfg, th, dt)
+    return MicrophysicsDiagnostics(
+        rainnc=rainnc, rainncv=rainncv, sr=sr,
+        snownc=snownc, snowncv=snowncv,
+        graupelnc=graupelnc, graupelncv=graupelncv)
+
+
 def _apply_thompson_aerosol_call(
         state: DomainState, cfg: RunConfig, dt: float, *,
         refl_10cm_due: bool, version: str) -> MicrophysicsDiagnostics:
@@ -240,15 +360,17 @@ def _apply_thompson_aerosol_call(
         raise ValueError(
             "Thompson mp=28 state lacks " + ", ".join(missing))
 
-    # Frozen mp=8 launchers, reused byte-for-byte.  Imported here (not at
-    # module scope) for the same reason _apply_thompson does: it keeps the
-    # import graph acyclic and lets a call-recording test monkeypatch the
-    # owning module's attribute.
+    from woof.wrf_exact import ENABLED
+    if ENABLED and version == "wrf_39_noaa":
+        return _apply_thompson_fork_call(state, cfg, dt, table_root,
+                                        refl_10cm_due=refl_10cm_due)
+
+    # The frozen mp=8 column masks, reused byte-for-byte.  Imported here
+    # (not at module scope) for the same reason _apply_thompson does: it
+    # keeps the import graph acyclic and lets a call-recording test
+    # monkeypatch the owning module's attribute.
     from woof.core.thompson import (
-        launch_classic_graupel_number_finalize,
-        launch_classic_graupel_number_init,
         launch_graupel_fallout_column_mask,
-        launch_graupel_sedimentation,
         launch_hydrometeor_column_mask,
         launch_ice_sedimentation,
         launch_rain_sedimentation,
@@ -272,21 +394,33 @@ def _apply_thompson_aerosol_call(
     from woof.core.thompson_aerosol_sed import (
         launch_aa_cloud_sedimentation,
         launch_aa_final_phase_cleanup,
+        launch_aa_graupel_sedimentation,
+        launch_aa_ice_sedimentation_accumulate,
+        launch_aa_rain_sedimentation_accumulate,
+        launch_aa_snow_sedimentation,
+        launch_aa_surface_precipitation,
         launch_wrf39_graupel_sedimentation,
         launch_wrf39_ice_sedimentation,
+        launch_wrf39_rain_sedimentation,
         launch_wrf39_snow_sedimentation,
         launch_wrf39_warm_snow_boost,
     )
     from woof.core.thompson_aerosol_state import (
+        launch_aa_entry_warm_mask,
+        launch_aa_graupel_number_finalize,
+        launch_aa_graupel_number_init,
         launch_aerosol_effective_radius,
+        launch_aerosol_exner,
         launch_aerosol_entry_cloud_number,
         launch_aerosol_entry_snapshot,
         launch_aerosol_micro_columns,
         launch_aerosol_state_finalize,
         launch_aerosol_surface_emission,
         launch_aerosol_surface_rain_fraction,
+        launch_aerosol_vapour_fill,
         launch_aerosol_working_number,
         launch_tau1_density,
+        launch_terminal_rain_ice,
         launch_wrf39_graupel_finalize,
         launch_wrf39_graupel_intercept,
         WRF39_INTERCEPT_ENTRY,
@@ -380,11 +514,63 @@ def _apply_thompson_aerosol_call(
         (nz, ny, nx), "mp_thompson_aero_tau1_density")
     nwfa_work_m3 = state.scratch(
         (nz, ny, nx), "mp_thompson_aero_nwfa_work_m3")
-    qc_entry = state.scratch((nz, ny, nx), "mp_thompson_aero_qc_entry")
-    ni_entry = state.scratch((nz, ny, nx), "mp_thompson_aero_ni_entry")
+    qcten = state.scratch((nz, ny, nx), "mp_thompson_aero_qcten")
+    # THE RAIN AND ICE ACCUMULATORS (property 1c), v4.6.1 generation only:
+    # the fork keeps its in-place rain and ice and holds the entry ice
+    # number for the cleanup's melt credit instead.
+    accumulate_rain_ice = not wrf39
+    if accumulate_rain_ice:
+        qrten = state.scratch((nz, ny, nx), "mp_thompson_aero_qrten")
+        nrten = state.scratch((nz, ny, nx), "mp_thompson_aero_nrten")
+        qiten = state.scratch((nz, ny, nx), "mp_thompson_aero_qiten")
+        niten = state.scratch((nz, ny, nx), "mp_thompson_aero_niten")
+        rain_ice_tendencies = dict(qrten=qrten, nrten=nrten, qiten=qiten,
+                                   niten=niten)
+        ni_entry = state.ni
+        # THE VAPOUR AND TEMPERATURE ACCUMULATORS, v4.6.1 generation only.
+        # WRF's qvten/tten (:1668-1669 zero) collect the sources (:2982,
+        # :3164-3179), the condensation (:3479, :3483) and the rain
+        # evaporation (:3563, :3566) as REAL tendencies, and every block
+        # re-forms its working state from them: MAX(1.E-10, qv1d +
+        # DT*qvten) and t1d + DT*tten.  So state.qv stays qv1d from the
+        # networks through the rain evaporation, and the running vapour is
+        # formed once after it; temperature is re-formed by every writer as
+        # t1d + DT*tten, t1d = th*pii.  Adding each block's increment to the
+        # running state instead rounded once per block and moved the
+        # post-condensation ssatw whose sign decides the rain evaporation
+        # (:3501) at levels the adjustment brought to saturation.
+        qvten = state.scratch((nz, ny, nx), "mp_thompson_aero_qvten")
+        tten = state.scratch((nz, ny, nx), "mp_thompson_aero_tten")
+        vapor_tendencies = dict(qvten=qvten, tten=tten)
+        vapor_block = dict(qvten=qvten, tten=tten, theta=th, exner=pii)
+        # THE SNOW AND GRAUPEL ACCUMULATORS, v4.6.1 generation only.  WRF's
+        # qsten/qgten/ngten (:1674-1677 zero) collect the sources
+        # (:3094-3161) and the snow and graupel fallout (:3871-3937) as REAL
+        # tendencies; the fallout forms its working content as qs1d +
+        # qsten*DT (:3257) and qg1d + qgten*DT (:3283), and :4054-4059
+        # applies each sum once.  So state.qs, state.qg and the private
+        # graupel number stay the entry state until the fallout.  Applying
+        # the sources in place and the fallout on top of that rounded twice
+        # where WRF rounds once (632 qs and 417 qg cells of the column
+        # oracle at strict dt 20 s).
+        qsten = state.scratch((nz, ny, nx), "mp_thompson_aero_qsten")
+        qgten = state.scratch((nz, ny, nx), "mp_thompson_aero_qgten")
+        ngten = state.scratch((nz, ny, nx), "mp_thompson_aero_ngten")
+        frozen_tendencies = dict(qsten=qsten, qgten=qgten, ngten=ngten)
+    else:
+        qrten = nrten = qiten = niten = None
+        rain_ice_tendencies = {}
+        qvten = tten = None
+        vapor_tendencies = {}
+        vapor_block = {}
+        qsten = qgten = ngten = None
+        frozen_tendencies = {}
+        ni_entry = state.scratch((nz, ny, nx), "mp_thompson_aero_ni_entry")
     condensation_rate = state.scratch(
         (nz, ny, nx), "mp_thompson_aero_condensation_rate")
 
+    # Both backends fill the current pinned Exner word before setup reads it.
+    launch_aerosol_exner(state.p, pii)
     if metal_state:
         # The existing production Thompson prepare launcher owns the Metal
         # thermodynamic setup, pre-microphysics theta copy, entry temperature
@@ -393,12 +579,6 @@ def _apply_thompson_aerosol_call(
         # caller; reuse it here for the shared part of the aerosol entry.
         # Aerosol-specific entry cloud diagnosis and micro-column decision
         # still run below through their own admitted launchers.
-        # The prepare launcher READS pii (temperature = th * pii), so fill it
-        # first exactly as the mp=8 caller does; an unfilled scratch gives
-        # T = 0 and an infinite entry density.
-        from woof.metal.thompson_family import submit_exner_power
-        submit_exner_power(
-            state.p, pii, reference_pressure=c.P0, exponent=c.RCP)
         launch_adapter_prepare(
             thb, state.thp, phb, state.php, th, pii, temperature, dz,
             state.h_diabatic, state.qc, state.qi, state.ni, state.qr,
@@ -406,9 +586,7 @@ def _apply_thompson_aerosol_call(
             graupel_melt_marker, graupelncv,
             state.scratch((ny, nx), "mp_thompson_micro_columns"))
     else:
-        # Keep the established CPU/CUDA operation sequence unchanged.
         th[...] = thb + state.thp
-        pii[...] = cp.power(state.p / DTYPE(c.P0), DTYPE(c.RCP))
         temperature[...] = th * pii
         z8w[...] = (phb + state.php) / DTYPE(c.G)
         dz[...] = z8w[1:] - z8w[:-1]
@@ -420,6 +598,36 @@ def _apply_thompson_aerosol_call(
     # three), so a carried-over value from the previous step is a live
     # physics input, not a harmless stale buffer.
     zero_aerosol_accumulators(ncten, nwfaten, nifaten)
+    # :1670, and the same reasoning: the cloud-water accumulator (property
+    # 1b) is persistent scratch read by every stage after the networks.
+    qcten.fill(DTYPE(0.0))
+    for accumulator in (qrten, nrten, qiten, niten, qvten, tten, qsten,
+                        qgten, ngten):
+        if accumulator is not None:
+            accumulator.fill(DTYPE(0.0))
+    dt32 = DTYPE(dt)
+    if metal_state:
+        working_dt = state.scratch((nz, ny, nx), "mp_thompson_working_dt")
+        working_dt.fill(dt32)
+
+    def working(entry, tendency, out):
+        """WRF's working value ``X1d + Xten*DT`` into ``out``, product
+        rounded before the add (two CuPy kernels, no fused multiply-add)."""
+        if metal_state:
+            from woof.metal.bandwidth_family import add_product_rn
+            add_product_rn(entry, tendency, working_dt, out)
+        else:
+            cp.multiply(tendency, dt32, out=out)
+            cp.add(entry, out, out=out)
+        return out
+
+    def working_cloud(out):
+        """WRF's working cloud ``qc1d + qcten*DT`` into ``out``.
+
+        Two separate CuPy kernels, so the product is rounded to float32
+        before the add, as the gfortran oracle (no FMA) rounds it.
+        """
+        return working(state.qc, qcten, out)
 
     # Lifetime-alias the zero/one entry-graupel marker with the held-
     # temperature buffer, exactly as mp=8 does: the column mask consumes it
@@ -435,8 +643,19 @@ def _apply_thompson_aerosol_call(
     # headers depend on.  The warm network consumes it and overwrites the
     # same buffer with WRF's held ``prr_gml > 0`` decision.
     if not metal_state:
-        cp.greater_equal(
-            temperature, DTYPE(273.15), out=graupel_melt_marker)
+        # The v4.6.1 mask also carries WRF's melting level (:1971-2013): where
+        # a level at exactly 273.15 K has no warmer level at or above it, WRF
+        # keeps twet = temp (thompson_aa_entry_warm_mask).
+        if wrf39:
+            cp.greater_equal(
+                temperature, DTYPE(273.15), out=graupel_melt_marker)
+        else:
+            launch_aa_entry_warm_mask(temperature, graupel_melt_marker)
+
+    # The Metal prepare launcher writes the plain ``T >= 273.15`` marker the
+    # fork keeps; v4.6.1 replaces it with the melting-level mask.
+    if metal_state and not wrf39:
+        launch_aa_entry_warm_mask(temperature, graupel_melt_marker)
 
     # GRAUPELNCV is a current-call diagnostic with no earlier species kernel
     # to reset it.
@@ -446,8 +665,8 @@ def _apply_thompson_aerosol_call(
 
     # ---- 1. entry snapshot (:1795-1812) and entry droplet diagnosis -------
     # (:1826-1848).  The second call ZEROES state.qc and state.nc wherever
-    # qc <= R1, which is what makes state.nc a legitimate "nc1d" for every
-    # later kernel.
+    # qc <= R1, which is what makes state.qc and state.nc a legitimate
+    # "qc1d" and "nc1d" for every later kernel.
     # The fused source networks diagnose aerosol concentrations and the
     # droplet distribution inline.  Only entry density and the qc/nc
     # rewrite have consumers here; six diagnostic volumes were dead stores.
@@ -457,9 +676,6 @@ def _apply_thompson_aerosol_call(
     launch_aerosol_entry_cloud_number(
         state.qc, state.nc, entry_density,
         None, None, None, None)
-    # The ncten balance limiter (:2996-3019) needs BOTH the entry and the
-    # post-source cloud mass, so the entry value has to be held.
-    qc_entry[...] = state.qc
     # The rest of WRF's entry rewrite (:1871-1872, :1900-1901, :1911 and
     # :1941-1942): ice, rain, snow and graupel whose entry mixing ratio is at
     # or below R1 are ZEROED, mass and number, before any process runs, and
@@ -482,9 +698,11 @@ def _apply_thompson_aerosol_call(
                 number[...] = cp.where(present, number, DTYPE(0.0))
             mass[...] = cp.where(present, mass, DTYPE(0.0))
     # The final phase cleanup's melt credit ``ncten += ni1d*odt`` (:3949)
-    # reads the zeroed entry ice number; it is held because the sources
-    # write state.ni in place.
-    ni_entry[...] = state.ni
+    # reads the zeroed entry ice number.  On the accumulator path state.ni
+    # IS that number for the whole call; the fork holds a copy because its
+    # sources write state.ni in place.
+    if not accumulate_rain_ice:
+        ni_entry[...] = state.ni
     # WRF's column exit (:1646, :1827-1990, :2020): a column whose entry
     # condensate is all at or below R1 and which is nowhere supersaturated
     # over ice leaves mp_thompson before the source loop and never reaches
@@ -505,7 +723,8 @@ def _apply_thompson_aerosol_call(
             state.qg, state.qr, state.nr, temperature, state.p, state.qv,
             graupel_number_shadow, mode=WRF39_INTERCEPT_ENTRY)
     else:
-        launch_classic_graupel_number_init(
+        # mp_gt_driver :1266-1281, mp=28's own transcription.
+        launch_aa_graupel_number_init(
             state.qg, temperature, state.p, state.qv,
             graupel_number_shadow)
 
@@ -515,7 +734,9 @@ def _apply_thompson_aerosol_call(
         state.qc, temperature, state.p, state.qv,
         state.nc, state.nwfa, state.nifa,
         ncten, nwfaten, nifaten,
-        graupel_number_shadow, snow_velocity_boost, table_owner, dt)
+        graupel_number_shadow, snow_velocity_boost, table_owner, dt,
+        qcten=qcten, **rain_ice_tendencies, **vapor_tendencies,
+        **frozen_tendencies)
 
     # The fork's singular snow fall (thompson_fork_snow_fall = "wrf_39_noaa")
     # starts every level the sources find at or above 0 C at vts_boost 1.5
@@ -532,15 +753,20 @@ def _apply_thompson_aerosol_call(
         graupel_number_shadow, graupel_melt_marker, snow_melt_marker,
         temperature, state.p, state.qv,
         state.nc, state.nwfa, state.nifa,
-        ncten, nwfaten, nifaten, table_owner, dt)
+        ncten, nwfaten, nifaten, table_owner, dt, qcten=qcten,
+        **({} if not accumulate_rain_ice else dict(qrten=qrten, nrten=nrten)),
+        **vapor_tendencies, **frozen_tendencies)
 
     # ---- 5. the ncten balance limiter, ONCE (:2996-3019) ------------------
     # After every ncten source, before the saturation adjustment's pnc_wcd.
     # It OVERWRITES ncten where a clamp fires; running it twice is finite,
     # plausible and wrong.  ``entry_density`` is WRF's :1802 density, not a
-    # density rediagnosed from the mutated temperature and vapour.
+    # density rediagnosed from the mutated temperature and vapour.  It reads
+    # the entry cloud and the post-source working cloud; the condensation
+    # rate's slot holds the latter until the adjustment writes that rate.
     launch_ncten_balance(
-        qc_entry, state.qc, state.nc, entry_density, ncten, dt)
+        state.qc, working_cloud(condensation_rate), state.nc,
+        entry_density, ncten, dt)
 
     # The fork's fallout intercept (fork :3110-3133) is diagnosed from the
     # post-source state, before the condensation and rain evaporation move
@@ -558,28 +784,62 @@ def _apply_thompson_aerosol_call(
     if metal_state:
         # The combined shared Thompson mask launcher is admitted on Metal and
         # has the same rain-activity and entry-graupel gates as these two
-        # separate CUDA reductions. Keep the independent CUDA calls frozen.
+        # separate CUDA reductions. The accumulator generation gates on its
+        # working content; the aerosol-number slot is unused until step 7.
+        rain_working = (working(state.qr, qrten, condensation_rate)
+                        if accumulate_rain_ice else state.qr)
+        graupel_working = (working(state.qg, qgten, nwfa_work_m3)
+                           if qgten is not None else state.qg)
         launch_adapter_masks(
-            state.qr, state.qg, frozen_reference_temperature, rainncv, sr)
+            rain_working, graupel_working, frozen_reference_temperature,
+            rainncv, sr)
     else:
-        launch_hydrometeor_column_mask(state.qr, rainncv)
+        # WRF's L_qr here is the post-source (qr1d + qrten*DT) > R1; on the
+        # accumulator path that working rain sits in the condensation rate's
+        # slot until the adjustment writes the rate.
+        launch_hydrometeor_column_mask(
+            working(state.qr, qrten, condensation_rate)
+            if accumulate_rain_ice else state.qr, rainncv)
+        # ANY(L_qg) at :3903: entry graupel (:1917) whose post-source content
+        # qg1d + qgten*DT is above R1 (:3283-3302 clears L_qg and never sets
+        # it); with the accumulator that content is formed in the condensation
+        # rate's slot, which the rain mask above has finished reading.
         launch_graupel_fallout_column_mask(
-            frozen_reference_temperature, state.qg, sr)
+            frozen_reference_temperature,
+            working(state.qg, qgten, condensation_rate)
+            if qgten is not None else state.qg, sr)
 
     # ---- 7. the working aerosol number (:3189-3193, :3211) ----------------
     # The TAU+1 density, recomputed from the post-source temperature and
     # vapour -- a genuinely different density from ``entry_density``.
-    launch_tau1_density(temperature, state.p, state.qv, tau1_density)
+    # With the vapour accumulator state.qv is still qv1d; the working vapour
+    # qv1d + DT*qvten is formed in the working-aerosol slot, which the next
+    # launch overwrites (the density kernel floors it, :3192).
+    tau1_vapor = (working(state.qv, qvten, nwfa_work_m3)
+                  if qvten is not None else state.qv)
+    launch_tau1_density(temperature, state.p, tau1_vapor, tau1_density)
     launch_aerosol_working_number(
         state.nwfa, nwfaten, tau1_density, dt, nwfa_work_m3)
 
     # ---- 8/9. condensation + CCN activation, then rain evaporation --------
     # ``cloud_presence`` carries WRF's L_qc(k) out of the adjustment for the
-    # cloud fallout's column gate.  It is the held entry cloud water's slot:
-    # the balance limiter above was that copy's last reader.
-    cloud_presence = qc_entry
+    # cloud fallout's column gate.  It is the TAU+1 density's slot: the
+    # working aerosol number above was that density's last reader.
+    cloud_presence = tau1_density
     # WRF passes w1d(k) = w(i,k,j) once at mp_gt_driver:1224 with no
     # averaging, so the lower full-level slice is the exact analogue.
+    # THE PHASE CLEANUP'S LATENT-HEAT FACTORS (v4.6.1 generation).  :3953
+    # and :3964 multiply by the ocp(k) and lvap(k) WRF last formed: the
+    # TAU+1 refresh's (:3203, :3207), re-formed by the rain evaporation
+    # where its gate passes (:3517, :3519).  The adjustment writes :3207's
+    # ocp into the entry density's slot (the ncten balance was that
+    # density's last reader); the rain evaporation overwrites it where its
+    # gate passes and leaves lvap(k) in the condensation rate's slot, whose
+    # prw_vcd it is the last reader of.  Forming the heat from the final
+    # vapour and temperature instead moved theta wherever ice melted or
+    # cloud froze.
+    heat_ocp = entry_density if accumulate_rain_ice else None
+    heat_lvap = condensation_rate if accumulate_rain_ice else None
     launch_aerosol_saturation_adjust(
         temperature, state.p, state.qv, state.qc, state.nc, ncten, nwfaten,
         nwfa_work_m3, vertical_velocity,
@@ -588,7 +848,8 @@ def _apply_thompson_aerosol_call(
         reference_density=frozen_reference_density,
         reference_temperature=frozen_reference_temperature,
         condensation_rate=condensation_rate,
-        cloud_presence=cloud_presence)
+        cloud_presence=cloud_presence, qcten=qcten, heat_ocp=heat_ocp,
+        **vapor_block)
     # TWO DENSITIES, AND WRF USES BOTH.  :3242-3243 forms the working rain
     # mass and number from the TAU+1 density diagnosed at :3193 -- BEFORE the
     # condensation block -- and :3384-3388 freezes ilamr/N0_r from them.
@@ -605,7 +866,21 @@ def _apply_thompson_aerosol_call(
         reference_density=rain_reference_density,
         graupel_melt_marker=graupel_melt_marker,
         condensation_rate=condensation_rate,
-        entry_density=frozen_reference_density)
+        entry_density=frozen_reference_density,
+        **({} if not accumulate_rain_ice else dict(
+            qrten=qrten, nrten=nrten, heat_ocp=heat_ocp,
+            tau1_temperature=frozen_reference_temperature)),
+        **vapor_block)
+    if qvten is not None:
+        # WRF writes no qvten after :3563, so the running vapour qv1d +
+        # DT*qvten (unfloored; :3974 floors it) is formed here, once, for
+        # every later reader.  The spent accumulator is its own scratch
+        # (the condensation rate's slot now carries lvap(k)) and is zeroed
+        # so nothing can add it to the vapour a second time.
+        # The working-aerosol slot (the adjustment was its last reader)
+        # carries the sum; the terminal density below overwrites it.
+        state.qv[...] = working(state.qv, qvten, nwfa_work_m3)
+        qvten.fill(DTYPE(0.0))
 
     # WRF's rho(k) as the terminal apply finds it: :3193, rewritten at :3490
     # and :3572 wherever those blocks ran, and untouched after :3574.
@@ -629,26 +904,54 @@ def _apply_thompson_aerosol_call(
         # The fork has no ANY(L_qc) guard and never clears L_qc after the
         # adjustment (both are v4.6.1 additions, :3485 and :3646): its cloud
         # fallout runs in every column on the cloud the adjustment left,
-        # newly condensed cloud included.
-        launch_hydrometeor_column_mask(state.qc, snowncv)
+        # newly condensed cloud included.  The condensation rate's slot
+        # (the rain evaporation was its last reader) takes the working cloud.
+        launch_hydrometeor_column_mask(
+            working_cloud(condensation_rate), snowncv)
     else:
         launch_hydrometeor_column_mask(cloud_presence, snowncv)
+    # Correct mode, finding WB1 (RunConfig.thompson_cloud_surface_booking,
+    # woof/core/thompson_cloud_booking.py): the cloud water this fallout
+    # takes out of the lowest level is booked in CLOUDNC instead of
+    # vanishing.  The fallout adds its divergence to qcten, so the column sum
+    # of qcten on the kernel's own density, before minus after, times DT is
+    # that water.  Exact mode (the key off) issues exactly the launcher
+    # sequence above and below, nothing more.
+    book_cloud = getattr(cfg, "thompson_cloud_surface_booking", False) is True
+    if book_cloud:
+        from woof.core.thompson_cloud_booking import (
+            book_settled_cloud_tendency, cloud_column_water)
+        cloud_before = cloud_column_water(
+            qcten, temperature, state.p, state.qv, dz)
     launch_aa_cloud_sedimentation(
         state.qc, state.nc, ncten, temperature, state.p, state.qv,
         vertical_velocity, dz, dt,
         reference_density=frozen_reference_density,
         rain_active_columns=rainncv, cloud_active_columns=snowncv,
-        gamma_moments=gamma_moments)
+        qcten=qcten, gamma_moments=gamma_moments)
+    if book_cloud:
+        book_settled_cloud_tendency(state, cfg, cloud_before, qcten, dt,
+                                    temperature, state.p, state.qv, dz)
     if wrf39:
         launch_wrf39_ice_sedimentation(
             state.qi, state.ni, temperature, state.p, state.qv, dz,
             rainnc, rainncv, snownc, snowncv, dt,
             reference_density=frozen_reference_density)
     else:
-        launch_ice_sedimentation(
-            state.qi, state.ni, temperature, state.p, state.qv, dz,
-            rainnc, rainncv, snownc, snowncv, dt,
-            reference_density=frozen_reference_density)
+        # :3664-3698 and :3838-3870 in WRF's tendency form; the size bound
+        # waits for the terminal apply, after the cleanup's freeze.
+        # The surface totals are added once, in mp_gt_driver's order
+        # (:1294-1308), by launch_aa_surface_precipitation after the rain
+        # fallout; until then each pass leaves its own column total in one
+        # of the seven surface slots: pptice in snowncv, pptsnow in rainncv
+        # (the rain column mask's last reader is this ice pass), pptgraul in
+        # graupelncv and pptrain in sr (the graupel column mask's last
+        # reader is the graupel pass).
+        launch_aa_ice_sedimentation_accumulate(
+            state.qi, state.ni, qiten, niten, temperature, state.p,
+            state.qv, dz, rainnc, rainncv, snownc, snowncv, dt,
+            reference_density=frozen_reference_density,
+            rain_active_columns=rainncv, export_surface=True)
     # Melting snow falls at its speed blended with the rain fall speed
     # vtrk(k) by SR = rs/(rs+rr) (:3722-3724), and vtrk(k) is the rain
     # pass's own (:3612-3634): a level whose rr(k) is at or below R1 takes
@@ -667,18 +970,18 @@ def _apply_thompson_aerosol_call(
             velocity_boost=snow_velocity_boost,
             singular_fall=singular_snow_fall)
     else:
-        launch_snow_sedimentation(
-            state.qs, temperature, state.p, state.qv, dz,
-            rainnc, rainncv, snownc, snowncv, dt,
+        # :3257-3262, :3313-3353, :3699-3733, :3871-3902, mp=28's own pass.
+        # The melting blend forms the rain pass's vtrk(k) and rr(k) from the
+        # entry rain, its tendency so far and the evaporation's density
+        # export, as the rain fallout below does.
+        launch_aa_snow_sedimentation(
+            state.qs, temperature, state.p, state.qv, dz, rainncv, dt,
             reference_density=frozen_reference_density,
             reference_temperature=frozen_reference_temperature,
             snow_melt_marker=snow_melt_marker,
-            melt_rain_qr=state.qr,
-            melt_rain_nr=state.nr,
             velocity_boost=snow_velocity_boost,
-            melt_rain_density=rain_reference_density,
-            melt_rain_density_carries_presence=True,
-            accumulate_surface=True)
+            qr1d=state.qr, nr1d=state.nr, qrten=qrten, nrten=nrten,
+            rain_density=rain_reference_density, qsten=qsten)
     if wrf39:
         # The fork's graupel falls at least as fast as the rain above 0 C
         # (fork :3501-3502), so it reads the rain pass's inputs exactly as
@@ -695,13 +998,15 @@ def _apply_thompson_aerosol_call(
             melt_rain_density=rain_reference_density,
             active_columns=sr)
     else:
-        launch_graupel_sedimentation(
-            state.qg, temperature, state.p, state.qv, dz,
-            rainnc, rainncv, graupelnc, graupelncv, dt,
+        # :3283-3303, :3370-3376, :3740-3773, :3903-3937, mp=28's own pass:
+        # the slope from the number WRF diagnoses from rg(k), the private
+        # ng1d evolved by the number fallout alongside.
+        launch_aa_graupel_sedimentation(
+            state.qg, graupel_number_shadow, temperature, state.p, state.qv,
+            dz, graupelncv, dt,
             reference_density=frozen_reference_density,
-            active_columns=sr,
-            graupel_number_shadow=graupel_number_shadow,
-            accumulate_surface=True)
+            active_columns=sr, rain_density=rain_reference_density,
+            qgten=qgten, ngten=ngten)
     # THE THIRD DENSITY DECISION, and it is not the same as the one above.
     # This kernel builds WRF's rr(k)/nr(k) (:3794-3795) as qr*rho / nr*rho
     # from the buffer below, and WRF builds those at :3237-3238 from the :3193
@@ -712,25 +1017,56 @@ def _apply_thompson_aerosol_call(
     # overwrites with its own rho once all three of WRF's gates pass.  See
     # note 5b in the module docstring for what handing it a single density
     # costs (5.165e-04 on aero-drop-evap's RAINNC).
-    launch_rain_sedimentation(
-        state.qr, state.nr, temperature, state.p, state.qv, dz,
-        rainnc, rainncv, dt, reference_density=rain_reference_density,
-        accumulate_surface=True, density_carries_rain_presence=True)
+    if wrf39:
+        # The fork keeps its in-place rain (MP28_ACCUMULATOR_REWORK) and
+        # counts surface rain above R1*10 (fork :3556, audit T21), where
+        # v4.6.1 counts it above R1*1000 (:3817); every other statement is
+        # thompson.cu's in-place rain-presence pass.
+        launch_wrf39_rain_sedimentation(
+            state.qr, state.nr, temperature, state.p, state.qv, dz,
+            rainnc, rainncv, dt, reference_density=rain_reference_density)
+    else:
+        # :3611-3640 and :3790-3812 in WRF's tendency form; the size bounds
+        # wait for the terminal apply, like the ice above.
+        launch_aa_rain_sedimentation_accumulate(
+            state.qr, state.nr, qrten, nrten, temperature, state.p,
+            state.qv, dz, rainnc, sr, dt,
+            reference_density=rain_reference_density,
+            export_surface=True)
+        launch_aa_surface_precipitation(
+            rainnc, rainncv, snownc, snowncv, graupelnc, graupelncv, sr)
 
     # ---- 11. number-conserving phase cleanup (:3943-3966) -----------------
     launch_aa_final_phase_cleanup(
         state.qc, state.qi, state.ni, temperature,
-        state.nc, ni_entry, ncten, state.p, state.qv, dt)
+        state.nc, ni_entry, ncten, state.p, state.qv, dt, qcten=qcten,
+        **({} if not accumulate_rain_ice else dict(
+            qiten=qiten, niten=niten, tten=tten, heat_ocp=heat_ocp,
+            heat_lvap=heat_lvap, theta=th, exner=pii)))
 
     # ---- 12. classic graupel-number finalize ------------------------------
     if wrf39:
         launch_wrf39_graupel_finalize(state.qg)
     else:
-        launch_classic_graupel_number_finalize(
-            state.qg, temperature, state.p, state.qv,
-            graupel_number_shadow)
+        # :4058-4077 on rho(k) as the terminal apply finds it.
+        launch_aa_graupel_number_finalize(
+            state.qg, graupel_number_shadow, terminal_density)
 
     # ---- 13. THE single terminal apply and clamp (:3972-4021) -------------
+    # :3975, `qc1d(k) = qc1d(k) + qcten(k)*DT`: the cloud water's one
+    # rounding (property 1b).  The finalize below zeroes it at or below R1.
+    if metal_state:
+        working_cloud(condensation_rate)
+        state.qc[...] = condensation_rate
+    else:
+        cp.multiply(qcten, dt32, out=condensation_rate)
+        cp.add(state.qc, condensation_rate, out=state.qc)
+    if accumulate_rain_ice:
+        # :4023-4053, the rain and ice accumulators' one application and
+        # WRF's size bounds, on the terminal density.
+        launch_terminal_rain_ice(
+            state.qr, state.nr, state.qi, state.ni, qrten, nrten, qiten,
+            niten, terminal_density, micro_columns, dt)
     # The only place in the whole call that writes nc/nwfa/nifa from the
     # accumulators.  Each output aliases its own input, which the kernel
     # supports (every thread reads its element before writing it).  It
@@ -769,6 +1105,16 @@ def _apply_thompson_aerosol_call(
         temperature, state.p, state.qv, state.qc, state.nc,
         state.qi, state.ni, state.qs,
         state.effc, state.effi, state.effs)
+
+    # ---- 15b. mp_gt_driver's negative-vapour fill (:1436-1445) ----------
+    # After the reflectivity and effective radii (WRF hands them the
+    # unfilled qv1d) and before moist_physics_finish.  Both generations:
+    # the WRFV3.9 fork's driver carries the same loop word for word
+    # (NOAA-EMC/HRRR v4.1.21 module_mp_thompson.F:1440-1453, sha256
+    # 4d600111...; same no-microphysics exit :1938 and 1.E-10 floor :3690),
+    # which the strict fork column (kernels/thompson_fork.cu) already runs;
+    # this is the default-mode fork call reaching it too.
+    launch_aerosol_vapour_fill(state.qv)
 
     # ---- 16. surface emission: LAST aerosol write, deliberately unclamped -
     # mp_gt_driver:1310-1327 runs it AFTER mp_thompson has applied its
@@ -810,13 +1156,53 @@ def _apply_thompson_aerosol_call(
     # all non-negative, so the ratio cannot exceed 1 and WRF does not clamp
     # it.  Pinned by tests/test_thompson_aerosol_adapter.py::
     # test_the_sr_diagnostic_is_wrfs_epsilon_quotient_not_a_guarded_ratio.
-    if not metal_state:
+    # The v4.6.1 path's SR is launch_aa_surface_precipitation's, in the
+    # driver's own order of addition, (pptsnow + pptgraul + pptice).
+    if not metal_state and wrf39:
         frozen = snowncv + graupelncv
         sr[...] = frozen / (rainncv + DTYPE(1.0e-12))
     return MicrophysicsDiagnostics(
         rainnc=rainnc, rainncv=rainncv, sr=sr,
         snownc=snownc, snowncv=snowncv,
         graupelnc=graupelnc, graupelncv=graupelncv)
+
+
+def wrf39_repair_negative_aerosol(field) -> int:
+    """The WRF 3.9 fork's start-time repair of negative aerosol numbers.
+
+    NOAA-EMC/HRRR v4.1.21 module_mp_thompson.F:499-512 (QNWFA) and :555-566
+    (QNIFA), audit T25, run in thompson_init when the analysed profile is
+    present: walking each column upward, a negative number takes the larger
+    of its (already repaired) neighbour below and its neighbour above, then
+    is floored at zero; the end levels use themselves as the missing
+    neighbour.  WRF v4.6.1 has no such repair.  ``field`` is ``(nz, ny, nx)``
+    and is edited in place; ``max`` is exact, so the result is the fork's
+    word for word.  Returns how many cells were negative.
+    """
+    from woof.metal.array import MetalArray
+
+    target = field if isinstance(field, MetalArray) else None
+    if target is not None:
+        # This start-time column repair is host staged on Metal. Preserve
+        # the field's float32 words through the ordered max/where walk.
+        cp = np
+        field = target.to_numpy()
+    else:
+        import cupy as cp
+
+    negative = int(cp.count_nonzero(field < 0))
+    if negative == 0:
+        return 0
+    nz = field.shape[0]
+    zero = field.dtype.type(0)
+    for k in range(nz):
+        below = field[max(k - 1, 0)]
+        above = field[min(k + 1, nz - 1)]
+        repaired = cp.maximum(cp.maximum(below, above), zero)
+        field[k] = cp.where(field[k] < 0, repaired, field[k])
+    if target is not None:
+        target[...] = field
+    return negative
 
 
 def thompson_aerosol_init_fill(state: DomainState, cfg: RunConfig) -> dict:
@@ -889,14 +1275,24 @@ def thompson_aerosol_init_fill(state: DomainState, cfg: RunConfig) -> dict:
         # itself C-contiguous and needs no copy.
         hgt = z8w[:nz]
 
-    fill_ccn = aerosol_profile_needs_fill(state.nwfa)
-    fill_in = aerosol_profile_needs_fill(state.nifa)
+    # The sealed forcing inventory records presence independently of values:
+    # an analyzed zero remains data, including a source mass-to-number zero.
+    supplied = set(getattr(state, "_external_scalar_boundary_fields", ()))
+    fill_ccn = "nwfa" not in supplied and aerosol_profile_needs_fill(state.nwfa)
+    fill_in = "nifa" not in supplied and aerosol_profile_needs_fill(state.nifa)
     if fill_ccn or fill_in:
         launch_aerosol_init_profile(
             hgt, state.nwfa, state.nifa, state.nwfa2d,
             fill_ccn=fill_ccn, fill_in=fill_in)
     version = getattr(cfg, "thompson_version", "wrf_461")
     if version == "wrf_39_noaa":
+        # fork thompson_init :499-512 (CCN) and :555-566 (IN): a profile
+        # that arrived (no synthetic fill) has its negative numbers
+        # repaired before the lowest level is read for emission below.
+        if not fill_ccn:
+            wrf39_repair_negative_aerosol(state.nwfa)
+        if not fill_in:
+            wrf39_repair_negative_aerosol(state.nifa)
         # fork thompson_init :587-603 runs even with analysed aerosols.
         # This belongs to domain initialization, never the per-step call.
         from woof.core.thompson_aerosol_launch import thompson_version_scope
@@ -904,6 +1300,36 @@ def thompson_aerosol_init_fill(state: DomainState, cfg: RunConfig) -> dict:
         with thompson_version_scope(version):
             launch_wrf39_start_emission(state.nwfa, state.nwfa2d,
                                       dx=cfg.dx, dy=cfg.dy)
+    return {"ccn": bool(fill_ccn), "in": bool(fill_in)}
+
+
+def aerosol_profile_fill(state: DomainState) -> dict:
+    """The thompson_init synthetic CCN/IN profile, for any aerosol-aware
+    scheme whose state carries nwfa/nifa/nwfa2d (mp=28's arm above plus the
+    named schemes).  Fills only an all-zero field, exactly as above.  It
+    sits after the per-step adapter's code on purpose: it is domain
+    construction, never a per-step call."""
+    from woof.core.thompson_aerosol_state import (
+        aerosol_profile_needs_fill,
+        launch_aerosol_init_profile,
+    )
+
+    nz, ny, nx = state.p.shape
+    z8w = state.scratch((nz + 1, ny, nx), "mp_z8w")
+    if bool(getattr(state, "_metal_setup_state", False)):
+        from woof.core.thompson_aerosol_state import launch_aerosol_profile_height
+        launch_aerosol_profile_height(state.phb, state.php, z8w)
+        hgt = z8w.view((nz, ny, nx))
+    else:
+        phb = state.phb if state.phb.ndim == 3 else state.phb[:, None, None]
+        z8w[...] = (phb + state.php) / DTYPE(c.G)
+        hgt = z8w[:nz]
+    fill_ccn = aerosol_profile_needs_fill(state.nwfa)
+    fill_in = aerosol_profile_needs_fill(state.nifa)
+    if fill_ccn or fill_in:
+        launch_aerosol_init_profile(
+            hgt, state.nwfa, state.nifa, state.nwfa2d,
+            fill_ccn=fill_ccn, fill_in=fill_in)
     return {"ccn": bool(fill_ccn), "in": bool(fill_in)}
 
 

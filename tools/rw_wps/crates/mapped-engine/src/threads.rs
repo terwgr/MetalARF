@@ -43,25 +43,44 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::io::Write;
 
 #[path = "../../../../preparation_resources.rs"]
-mod resources;
+pub mod resources;
+
+/// glibc malloc arenas this process may create ([`limit_allocator_arenas`]).
+pub const ALLOCATOR_ARENAS: i32 = 8;
+
+/// Cap glibc's malloc arenas at [`ALLOCATOR_ARENAS`] unless the caller set
+/// `MALLOC_ARENA_MAX` itself; returns the cap applied, if any.  Called once,
+/// before any thread is spawned.
+///
+/// Named breakage: glibc gives each new thread its own arena (up to eight
+/// per core), and the pages a worker frees stay in its arena's heap.  On a
+/// 491-core box (V59) a compose under the parent's declared child budget
+/// (3.45 GB, the remaining-forcing batch of a 48 h RAP window) held 1.37 GB
+/// beyond its decoded first frame after the first valid time -- about
+/// 2.8 MB of freed-but-retained heap per worker, which `malloc_trim` cannot
+/// return from fragmented arenas -- and refused itself ("one source time on
+/// one worker needs 2321683623 bytes, but only 2080276944 usable bytes
+/// remain") with 470 GB of host memory free; V60 (368 cores) the same.
+/// With eight arenas the same compose runs on all 491 workers under that
+/// budget, no slower (25 frames 50.0 s unlimited, 35.4 s with eight).
+pub fn limit_allocator_arenas() -> Option<i32> {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    {
+        if std::env::var_os("MALLOC_ARENA_MAX").is_some() {
+            return None;
+        }
+        // SAFETY: mallopt only sets an allocator parameter and takes no
+        // pointer; it is called before this process starts any thread.
+        if unsafe { libc::mallopt(libc::M_ARENA_MAX, ALLOCATOR_ARENAS) } == 1 {
+            return Some(ALLOCATOR_ARENAS);
+        }
+    }
+    None
+}
 
 /// Override for the worker count, for measurement and for a caller who
 /// is running several engines at once and wants each one narrower.
 pub const THREADS_ENV: &str = "GPUWM_MAPPED_ENGINE_THREADS";
-
-/// The single-valid-time sweep the old cap of eight came from, kept
-/// because it is still the right number for ONE valid time's message
-/// decode (a 32-logical-CPU box, `examples/decode_timing.rs`, no
-/// `--output`, warm cache):
-///
-///   threads      1       2       4       8      16      32
-///   hrrr-prs  27.67   18.51   13.24   11.30   10.99   11.20  s
-///   gdas      14.97    9.23    6.52    5.65    5.63       -   s
-///
-/// A whole-series compose no longer runs one valid time at a time, so
-/// the pool is not capped at it: [`lanes`] decides how many valid times
-/// share the pool, and the pool is as wide as the machine.
-pub const SINGLE_TIME_KNEE: usize = 8;
 
 /// The most workers this process may have: the override if it parses to
 /// a positive number, else every core this process may run on.  The pool
@@ -84,103 +103,68 @@ pub fn threads() -> usize {
 /// the platform cannot say.
 ///
 /// Linux: `MemAvailable` (which counts reclaimable page cache), lowered
-/// to the headroom of every cgroup v2 limit the process runs under --
-/// its own group's and each ancestor's -- because a limit is the number
-/// the OOM killer applies, not the host's.  Windows: the physical memory
-/// `GlobalMemoryStatusEx` reports available.
+/// to the room left under every memory cgroup limit the process runs
+/// under -- v2 and v1, its own group's and each ancestor's, and the
+/// mount roots a container sees -- because a limit is the number the OOM
+/// killer applies, not the host's ([`resources::cgroup_memory`]).  The
+/// room is the limit less what EVERY process in the group already holds
+/// (its usage less the inactive page cache the kernel reclaims first).
+/// Windows: the physical memory `GlobalMemoryStatusEx` reports available.
 ///
-/// Named breakage the walk prevents: only `/sys/fs/cgroup/memory.max`
-/// was read, which is the process's own limit only inside a container
-/// with a cgroup namespace.  A job started under a limit on a shared
-/// host (a systemd scope or service with `MemoryMax`, a batch
-/// scheduler's job group) was priced on the whole host's free memory:
-/// under a 30 GiB limit on a 123 GiB host with 91 GB free, the 18 h
-/// `hrrr-prs` compose is sized for four valid times in flight, which
-/// hold 56.7 GiB; priced on the limit, it runs one.
+/// Named breakages the walk prevents:
+/// - only `/sys/fs/cgroup/memory.max` was read, which is the process's
+///   own limit only inside a container with a cgroup namespace.  A job
+///   started under a limit on a shared host (a systemd scope or service
+///   with `MemoryMax`, a batch scheduler's job group) was priced on the
+///   whole host's free memory: under a 30 GiB limit on a 123 GiB host
+///   with 91 GB free, the 18 h `hrrr-prs` compose is sized for four valid
+///   times in flight, which hold 56.7 GiB; priced on the limit, it runs
+///   one.
+/// - only cgroup v2 was read.  A vast container is cgroup v1 with its
+///   limit at `/sys/fs/cgroup/memory/memory.limit_in_bytes`, so on box G
+///   the engine budgeted 516 GB (0.7 of the host's 737 GB MemAvailable)
+///   under a 550.7 GB limit other preparations in the same container were
+///   already filling, and preparations admitted that way were SIGKILLed
+///   by the container's OOM killer (pi-a4).
 pub fn available_memory() -> Option<u64> {
     available_memory_impl()
 }
 
 #[cfg(target_os = "linux")]
 fn available_memory_impl() -> Option<u64> {
-    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
-    let mut available = meminfo.lines().find_map(|line| {
-        let rest = line.strip_prefix("MemAvailable:")?;
-        let kib = rest.trim().trim_end_matches("kB").trim().parse::<u64>().ok()?;
-        Some(kib.saturating_mul(1024))
-    })?;
-    let own = std::fs::read_to_string("/proc/self/cgroup").ok();
-    for group in cgroup_v2_ancestry(own.as_deref()) {
-        let read = |name: &str| {
-            std::fs::read_to_string(format!("/sys/fs/cgroup{group}/{name}"))
-                .ok()
-                .and_then(|text| text.trim().parse::<u64>().ok())
-        };
-        // "max" (no limit) does not parse, and a group without the
-        // memory controller has neither file: both leave the host's.
-        if let (Some(limit), Some(current)) = (read("memory.max"), read("memory.current")) {
-            let inactive_file = std::fs::read_to_string(format!("/sys/fs/cgroup{group}/memory.stat"))
-                .ok()
-                .and_then(|text| memory_stat(&text, "inactive_file"))
-                .unwrap_or(0);
-            available = available.min(cgroup_headroom(limit, current, inactive_file));
-        }
-    }
-    Some(available)
+    resources::available_memory()
 }
 
-/// What a cgroup v2 group may still fill: its limit less what it holds
-/// that the kernel cannot simply drop.  `memory.current` counts the page
-/// cache of every file the group read, and the inactive part of that
-/// cache (`inactive_file` in `memory.stat`) is reclaimed before the group
-/// is killed, as `MemAvailable` counts the host's reclaimable cache.
-///
-/// Named breakage: read as `limit - current`, a preparation that fetched
-/// or inventoried its objects inside its limit was priced as if their
-/// cache were held (the 18 h `hrrr-prs` objects are 7.7 GB), so the pool
-/// and the valid times in flight were sized on a fraction of what the
-/// group could still fill.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn cgroup_headroom(limit: u64, current: u64, inactive_file: u64) -> u64 {
-    limit.saturating_sub(current.saturating_sub(inactive_file))
+/// The memory cgroup that leaves this process the least room, as a JSON
+/// object for the worker receipt line, or `null` when no limit binds.
+fn cgroup_memory_record() -> serde_json::Value {
+    #[cfg(target_os = "linux")]
+    if let Some(found) = resources::binding_cgroup_memory() {
+        return serde_json::json!({
+            "group": found.group.display().to_string(), "limit_bytes": found.limit,
+            "usage_bytes": found.usage, "inactive_file_bytes": found.inactive_file,
+            "room_bytes": found.room(),
+        });
+    }
+    serde_json::Value::Null
 }
 
-/// One counter of a cgroup v2 `memory.stat` (`key value` per line).
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn memory_stat(text: &str, key: &str) -> Option<u64> {
-    text.lines().find_map(|line| {
-        let (name, value) = line.split_once(' ')?;
-        (name == key).then(|| value.trim().parse::<u64>().ok()).flatten()
-    })
+/// The memory cgroup numbers a host-memory refusal names, or "" when no
+/// cgroup limit binds this process.
+fn cgroup_memory_clause() -> String {
+    #[cfg(target_os = "linux")]
+    if let Some(found) = resources::binding_cgroup_memory() {
+        return cgroup_clause(&found);
+    }
+    String::new()
 }
 
-/// The cgroup v2 groups a process runs under, from its own to the root
-/// of its view, as paths below `/sys/fs/cgroup` ("" is that root).
-///
-/// `proc_self_cgroup` is the text of `/proc/self/cgroup`; its v2 line is
-/// `0::<path>`.  Without one (no file, or cgroup v1 only) only the root
-/// of the view is named, which inside a container with a cgroup
-/// namespace is the container's own group.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn cgroup_v2_ancestry(proc_self_cgroup: Option<&str>) -> Vec<String> {
-    let own = proc_self_cgroup
-        .and_then(|text| text.lines().find_map(|line| line.strip_prefix("0::")))
-        .map(|path| path.trim().trim_end_matches('/'))
-        .filter(|path| path.starts_with('/') && !path.contains(".."))
-        .unwrap_or("");
-    let mut groups = Vec::new();
-    let mut path = own;
-    loop {
-        groups.push(path.to_owned());
-        match path.rfind('/') {
-            Some(cut) if !path.is_empty() => path = &path[..cut],
-            _ => break,
-        }
-    }
-    if groups.last().is_some_and(|last| !last.is_empty()) {
-        groups.push(String::new());
-    }
-    groups
+fn cgroup_clause(found: &resources::CgroupMemory) -> String {
+    format!(
+        "; memory cgroup {}: limit {} bytes, {} bytes already held by every process in it \
+         ({} of them reclaimable page cache), {} bytes of room left",
+        found.group.display(), found.limit, found.usage, found.inactive_file, found.room())
 }
 
 #[cfg(windows)]
@@ -340,7 +324,8 @@ fn require_minimum(per_time: u64, fields: &[u64], budget: Option<u64>) -> crate:
         let minimum = series_price(1, 1, per_time, fields);
         if minimum > bytes {
             return Err(crate::refusal::host_memory(format!(
-                "one source time on one worker needs {minimum} bytes, but only {bytes} usable bytes remain; refusing before decode")));
+                "one source time on one worker needs {minimum} bytes, but only {bytes} usable bytes remain{}; refusing before decode",
+                cgroup_memory_clause())));
         }
     }
     Ok(())
@@ -378,6 +363,27 @@ pub fn lanes(per_time_bytes: u64, field_bytes: &[u64], held_bytes: u64, times: u
         .and_then(|value| value.trim().parse::<usize>().ok())
         .filter(|value| *value > 0);
     Ok(limit_requested_lanes(fit, requested))
+}
+
+/// Whether a ONE-lane writer may write a frame's bytes while the next
+/// valid time decodes: that keeps one prepared frame (priced at its
+/// decoded size, the sum of `field_bytes`) beside the valid time in
+/// flight, so it is granted only when [`series_price`] of one lane plus
+/// that frame fits the same budget [`lanes`] priced.  A platform that
+/// cannot report its memory overlaps, as [`lanes`] keeps two in flight
+/// there.
+///
+/// Named breakage: a memory-bound series (one lane) wrote each valid
+/// time's whole frame stream -- about 13 GB on a 3 km CONUS native-level
+/// source -- and only then began decoding the next, so every valid time
+/// paid its write on one core with the pool idle.
+pub fn overlap_write(per_time_bytes: u64, field_bytes: &[u64], held_bytes: u64) -> crate::refusal::Result<bool> {
+    let budget = usable_budget(held_bytes)?;
+    let decoded = field_bytes.iter().copied().fold(0u64, u64::saturating_add);
+    Ok(match budget.filter(|_| per_time_bytes > 0) {
+        Some(share) => series_price(1, width(), per_time_bytes, field_bytes).saturating_add(decoded) <= share,
+        None => true,
+    })
 }
 
 fn limit_requested_lanes(fit: usize, requested: Option<usize>) -> usize {
@@ -507,6 +513,7 @@ pub fn admit_width(per_time_bytes: u64, field_bytes: &[u64], whole_per_time_byte
         "whole_per_time_bytes": whole_per_time_bytes,
         "process_rss_bytes": process_memory().map(|(rss, _)| rss),
         "usable_budget_bytes": budget,
+        "cgroup_memory": cgroup_memory_record(),
         "declared_child_budget_bytes": declared_memory_budget()?,
         "pool": if actual_pool.is_some() { "dedicated-rayon" } else { "global-rayon-fallback" }
     }));
@@ -735,32 +742,17 @@ mod tests {
     }
 
     #[test]
-    fn every_cgroup_limit_above_the_process_is_read() {
-        let text = "0::/user.slice/user-1000.slice/run-1.scope\n";
-        assert_eq!(
-            cgroup_v2_ancestry(Some(text)),
-            vec!["/user.slice/user-1000.slice/run-1.scope", "/user.slice/user-1000.slice",
-                 "/user.slice", ""]
-        );
-        // A container's namespaced view, cgroup v1 only, or no file: the root alone.
-        assert_eq!(cgroup_v2_ancestry(Some("0::/\n")), vec![""]);
-        assert_eq!(cgroup_v2_ancestry(Some("12:memory:/docker/x\n")), vec![""]);
-        assert_eq!(cgroup_v2_ancestry(None), vec![""]);
-    }
-
-    #[test]
-    fn a_cgroup_s_inactive_file_cache_counts_as_headroom() {
-        const GIB: u64 = 1 << 30;
-        let stat = "anon 4294967296\nfile 8589934592\nactive_file 1073741824\n\
-                    inactive_file 7516192768\nfile_mapped 0\n";
-        assert_eq!(memory_stat(stat, "inactive_file"), Some(7 * GIB));
-        assert_eq!(memory_stat(stat, "file"), Some(8 * GIB));
-        assert_eq!(memory_stat(stat, "shmem"), None);
-        // 30 GiB limit, 12 GiB charged of which 7 GiB is inactive cache.
-        assert_eq!(cgroup_headroom(30 * GIB, 12 * GIB, 7 * GIB), 25 * GIB);
-        // Never more than the limit, never below zero.
-        assert_eq!(cgroup_headroom(30 * GIB, 2 * GIB, 7 * GIB), 30 * GIB);
-        assert_eq!(cgroup_headroom(30 * GIB, 40 * GIB, 0), 0);
+    fn a_refusal_names_the_cgroup_that_binds() {
+        let found = resources::CgroupMemory {
+            group: std::path::PathBuf::from("/sys/fs/cgroup/memory"),
+            limit: 550_668_075_008, usage: 500_000_000_000, inactive_file: 20_000_000_000,
+        };
+        let clause = cgroup_clause(&found);
+        assert!(clause.contains("/sys/fs/cgroup/memory"));
+        assert!(clause.contains("limit 550668075008 bytes"));
+        assert!(clause.contains("500000000000 bytes already held by every process in it"));
+        assert!(clause.contains("20000000000 of them reclaimable"));
+        assert!(clause.contains("70668075008 bytes of room left"));
     }
 
     #[test]

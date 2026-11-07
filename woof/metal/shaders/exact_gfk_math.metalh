@@ -1,0 +1,18 @@
+#ifndef WOOF_EXACT_GFK_MATH_METALH
+#define WOOF_EXACT_GFK_MATH_METALH
+
+#include "exact_binary32.metalh"
+#include "soft_gfk_pow.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_log.metalh"
+
+// The retained source's scalar function boundaries use the pinned glibc
+// operation graphs, with operands and results carried as binary32 words.
+static inline Exact32 exact_gfk_pow(Exact32 x, Exact32 y)
+{ return Exact32::from_bits(soft_gfk_pow_bits(x.bits, y.bits)); }
+static inline Exact32 exact_gfk_exp(Exact32 x)
+{ return Exact32::from_bits(soft_gfk_exp(x.bits)); }
+static inline Exact32 exact_gfk_log(Exact32 x)
+{ return Exact32::from_bits(soft_gfk_log(x.bits)); }
+
+#endif

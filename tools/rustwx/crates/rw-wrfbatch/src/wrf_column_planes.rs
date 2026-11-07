@@ -21,6 +21,7 @@
 //! column without a file.
 
 use rustwx_core::{CanonicalField, FieldSelector, GridProjection, LatLonGrid};
+use rayon::prelude::*;
 use wrf_core::WrfFile;
 
 use crate::wrf_process::{WrfHourFields, WrfProcessOptions, WrfProductGroup, push_canonical_values};
@@ -69,11 +70,17 @@ pub(crate) enum ColumnPlaneKind {
     SupercooledWaterPath { bottom_m: Option<u16>, top_m: Option<u16> },
     ColumnMaximum { variable: &'static str, field: CanonicalField },
     SimulatedInfrared,
+    VapourIntegral { field: CanonicalField },
+    VaporTransport { component: usize },
 }
 
 impl ColumnPlane {
     pub(crate) fn selector(&self) -> FieldSelector {
         match self.kind {
+            ColumnPlaneKind::VapourIntegral { field } => FieldSelector::entire_atmosphere(field),
+            ColumnPlaneKind::VaporTransport { component } => FieldSelector::entire_atmosphere(
+                [CanonicalField::IntegratedVaporTransport, CanonicalField::IntegratedVaporTransportU,
+                 CanonicalField::IntegratedVaporTransportV][component]),
             ColumnPlaneKind::IsothermHeight { celsius } => {
                 FieldSelector::isotherm_celsius(CanonicalField::GeopotentialHeight, celsius)
             }
@@ -99,6 +106,23 @@ impl ColumnPlane {
 /// The rows, in the order they are written.  A table, so a new layer or a
 /// new hydrometeor is a row here and a recipe row in `rustwx-models`.
 pub(crate) const COLUMN_PLANE_CATALOG: &[ColumnPlane] = &[
+    ColumnPlane { filter_key: "ivt", store_name: "integrated_vapor_transport", units: "kg m-1 s-1",
+        kind: ColumnPlaneKind::VaporTransport { component: 0 } },
+    ColumnPlane { filter_key: "ivt", store_name: "integrated_vapor_transport_u", units: "kg m-1 s-1",
+        kind: ColumnPlaneKind::VaporTransport { component: 1 } },
+    ColumnPlane { filter_key: "ivt", store_name: "integrated_vapor_transport_v", units: "kg m-1 s-1",
+        kind: ColumnPlaneKind::VaporTransport { component: 2 } },
+
+    // The native radiation fraction, not a diagnosed total-cloud plane.
+    ColumnPlane {
+        filter_key: "cldfra_max",
+        store_name: "cloud_fraction_column_maximum",
+        units: "%",
+        kind: ColumnPlaneKind::ColumnMaximum {
+            variable: "CLDFRA",
+            field: CanonicalField::TotalCloudCover,
+        },
+    },
     ColumnPlane {
         filter_key: "isotherm",
         store_name: "isotherm_height_0c",
@@ -195,6 +219,13 @@ pub(crate) const COLUMN_PLANE_CATALOG: &[ColumnPlane] = &[
         units: "K",
         kind: ColumnPlaneKind::SimulatedInfrared,
     },
+    ColumnPlane { filter_key: "ivt", store_name: "ivt_1000_300", units: "kg m-1 s-1", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::IvtMagnitude } },
+    ColumnPlane { filter_key: "ivt", store_name: "ivt_eastward_1000_300", units: "kg m-1 s-1", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::IvtEastward } },
+    ColumnPlane { filter_key: "ivt", store_name: "ivt_northward_1000_300", units: "kg m-1 s-1", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::IvtNorthward } },
+    ColumnPlane { filter_key: "ivt", store_name: "integrated_water_vapour", units: "kg m-2", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::IntegratedWaterVapour } },
+    ColumnPlane { filter_key: "ivt", store_name: "ivt_eastward_full_column", units: "kg m-1 s-1", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::FullColumnIvtEastward } },
+    ColumnPlane { filter_key: "ivt", store_name: "ivt_northward_full_column", units: "kg m-1 s-1", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::FullColumnIvtNorthward } },
+    ColumnPlane { filter_key: "ivt", store_name: "ivt_full_column", units: "kg m-1 s-1", kind: ColumnPlaneKind::VapourIntegral { field: CanonicalField::FullColumnIvtMagnitude } },
 ];
 
 /// The store names the current selection would write, for the planned
@@ -381,11 +412,11 @@ pub(crate) fn isotherm_height(
     if nz == 0 {
         return out;
     }
-    for (cell, slot) in out.iter_mut().enumerate() {
+    out.par_iter_mut().enumerate().for_each(|(cell, slot)| {
         let excess = |k: usize| temperature_k[k * cells + cell] - isotherm_k;
         if excess(0) == 0.0 {
             *slot = height[cell] as f32;
-            continue;
+            return;
         }
         for k in 0..nz.saturating_sub(1) {
             let below = excess(k);
@@ -405,14 +436,14 @@ pub(crate) fn isotherm_height(
                 break;
             }
         }
-    }
+    });
     out
 }
 
 /// The largest value in each column, NaN where no level is finite.
 pub(crate) fn column_maximum(field: &[f64], nz: usize, cells: usize) -> Vec<f32> {
     let mut out = vec![f32::NAN; cells];
-    for (cell, slot) in out.iter_mut().enumerate() {
+    out.par_iter_mut().enumerate().for_each(|(cell, slot)| {
         let mut best = f64::NEG_INFINITY;
         for k in 0..nz {
             let value = field[k * cells + cell];
@@ -423,7 +454,7 @@ pub(crate) fn column_maximum(field: &[f64], nz: usize, cells: usize) -> Vec<f32>
         if best.is_finite() {
             *slot = best as f32;
         }
-    }
+    });
     out
 }
 
@@ -443,7 +474,7 @@ pub(crate) fn supercooled_water_path(
     bounds_m: Option<(f64, f64)>,
 ) -> Vec<f32> {
     let mut out = vec![0.0f32; cells];
-    for (cell, slot) in out.iter_mut().enumerate() {
+    out.par_iter_mut().enumerate().for_each(|(cell, slot)| {
         let mut path = 0.0f64;
         for k in 0..nz {
             let index = k * cells + cell;
@@ -462,7 +493,7 @@ pub(crate) fn supercooled_water_path(
             }
         }
         *slot = (path * 1000.0) as f32;
-    }
+    });
     out
 }
 
@@ -524,7 +555,7 @@ pub(crate) fn simulated_infrared_brightness_temperature(
     if nz < 2 {
         return out;
     }
-    for (cell, slot) in out.iter_mut().enumerate() {
+    out.par_iter_mut().enumerate().for_each(|(cell, slot)| {
         let at = |field: &[f64], k: usize| field[k * cells + cell];
         let pressure = |k: usize| at(pressure_pa, k);
         let temperature = |k: usize| at(temperature_k, k);
@@ -574,7 +605,7 @@ pub(crate) fn simulated_infrared_brightness_temperature(
                 break;
             }
         }
-    }
+    });
     out
 }
 
@@ -638,8 +669,33 @@ pub(crate) fn push_column_planes(
             })
             .clone()
     };
+    let mut vapour: Option<Result<rustwx_calc::ivt::IvtFields, String>> = None;
+    let mut ivt = None;
     for plane in selected {
         let values = match plane.kind {
+            ColumnPlaneKind::VapourIntegral { field } => {
+                let result = vapour.get_or_insert_with(|| read_vapour_integrals(file, timeidx));
+                match result {
+                    Ok(v) => match field {
+                        CanonicalField::IvtMagnitude => v.magnitude.clone(),
+                        CanonicalField::IvtEastward => v.eastward.clone(),
+                        CanonicalField::IvtNorthward => v.northward.clone(),
+                        CanonicalField::IntegratedWaterVapour => v.iwv.clone(),
+                        CanonicalField::FullColumnIvtEastward => v.full_eastward.clone(),
+                        CanonicalField::FullColumnIvtNorthward => v.full_northward.clone(),
+                        CanonicalField::FullColumnIvtMagnitude => v.full_magnitude.clone(),
+                        _ => unreachable!("vapour catalogue field"),
+                    },
+                    Err(err) => { fields.notes.push(format!("{} skipped: {err}", plane.store_name)); continue; }
+                }
+            },
+            ColumnPlaneKind::VaporTransport { component } => {
+                let result = ivt.get_or_insert_with(|| crate::ivt::read(file, timeidx));
+                match result {
+                    Ok(planes) => planes[component].clone(),
+                    Err(error) => { fields.notes.push(format!("{} skipped: {error}", plane.store_name)); continue; }
+                }
+            }
             ColumnPlaneKind::IsothermHeight { celsius } => isotherm_height(
                 &columns.temperature_k,
                 &columns.height_msl_m,
@@ -648,7 +704,15 @@ pub(crate) fn push_column_planes(
                 T_FREEZE_K + f64::from(celsius),
             ),
             ColumnPlaneKind::ColumnMaximum { variable, .. } => match read_volume(variable) {
-                Some(field) => column_maximum(&field, nz, cells),
+                Some(field) => {
+                    let mut maximum = column_maximum(&field, nz, cells);
+                    // Radiation CLDFRA is stored as a fraction. The cloud
+                    // map's existing color scale and canonical unit are percent.
+                    if plane.units == "%" {
+                        for value in &mut maximum { *value *= 100.0; }
+                    }
+                    maximum
+                },
                 None => {
                     fields
                         .notes
@@ -1195,4 +1259,37 @@ mod tests {
         });
         assert_eq!(planned.len() - skipped.len(), 3);
     }
+}
+
+#[cfg(test)]
+mod radiation_fraction_tests {
+    use super::*;
+
+    #[test]
+    fn native_radiation_fraction_keeps_fractional_and_binary_column_maxima() {
+        let row = COLUMN_PLANE_CATALOG.iter().find(|p| p.filter_key == "cldfra_max").unwrap();
+        assert_eq!(row.units, "%");
+        assert!(rustwx_models::selector_supported_for_model(
+            row.selector(), rustwx_core::ModelId::WrfGdex));
+        assert!(matches!(row.kind, ColumnPlaneKind::ColumnMaximum { variable: "CLDFRA", .. }));
+        // Two columns share a lower clear layer; only the native upper
+        // fraction makes one partial and the other binary overcast.
+        let cf = [0.0, 0.0, 0.125, 1.0, 0.75, 0.0];
+        assert_eq!(column_maximum(&cf, 3, 2), vec![0.75, 1.0]);
+    }
+}
+
+/// Shared by the production publisher and native observation verification.
+pub(crate) fn read_vapour_integrals(file: &WrfFile, timeidx: usize) -> Result<rustwx_calc::ivt::IvtFields,String> {
+    let pressure=file.full_pressure(timeidx).map_err(|e|e.to_string())?;
+    let ratio=file.read_var("QVAPOR",timeidx).map_err(|e|e.to_string())?;
+    let psfc=file.read_var("PSFC",timeidx).map_err(|e|e.to_string())?;
+    let top=file.read_var("P_TOP",timeidx).map_err(|e|format!("P_TOP required to bound native vapour integrals: {e}"))?;
+    let model_top_pa=*top.first().ok_or("P_TOP is empty")?;
+    let wind=wrf_core::getvar(file,"uvmet",Some(timeidx),&wrf_core::ComputeOpts::default()).map_err(|e|e.to_string())?;
+    let count=file.nz*file.ny*file.nx;
+    let wind=crate::wrf_volumes::validate_earth_relative_uvmet(wind,file.nz,file.ny,file.nx,count)?;
+    rustwx_calc::ivt::compute_ivt(rustwx_calc::ivt::IvtInputs{cells:file.ny*file.nx,levels:file.nz,
+        pressure_pa:&pressure,mixing_ratio:&ratio,eastward_ms:&wind[..count],northward_ms:&wind[count..],
+        surface_pressure_pa:&psfc,model_top_pa}).map_err(|e|e.to_string())
 }

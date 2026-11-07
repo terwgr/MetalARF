@@ -388,7 +388,7 @@ kernel void noahmp_glacier_column(
     {
         float albsnd[2] = {0.0f, 0.0f};
         float albsni[2] = {0.0f, 0.0f};
-        if (cosz > 0.0f) {
+        if (p.night_age != 0 || cosz > 0.0f) {
             // SNOW_AGE_GLACIER :758-809
             if (sneqv <= 0.0f) {
                 tauss = 0.0f;
@@ -407,6 +407,8 @@ kernel void noahmp_glacier_column(
                 float sge = MU(AD(tauss, dela), SU(1.0f, dels));
                 tauss = ng_max(0.0f, sge);
             }
+        }
+        if (cosz > 0.0f) {
             // SNOWALB_CLASS_GLACIER :861-904
             float alb = AD(0.55f, MU(SU(albold, 0.55f),
                            r_exp(DV(MU(-0.01f, dt), 3600.0f))));

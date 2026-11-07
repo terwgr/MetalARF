@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 def _validate_arrays(arrays, *, shapes, name):
@@ -51,13 +52,13 @@ def submit_flow_dependent_boundaries(fields, u_flux, v_flux, spec_zone, *,
                         (nz, ny, nx + 1), (nz, ny + 1, nx)),
         name="flow-dependent boundary")
     return context.submit_kernel(
-        "lbc_dependent_batch",
+        "wrf_exact_lbc_dependent_batch" if WRF_EXACT else "lbc_dependent_batch",
         {f"f{i}": padded[i] for i in range(9)}
         | {"u_flux": u_flux, "v_flux": v_flux},
         {"nfield": len(fields), "spec_zone": spec_zone,
          "nz": nz, "ny": ny, "nx": nx, "frame_count": frame_count,
          "inflow_value": float(inflow_value)},
-        exact_policy=False, grid_size=nz * frame_count)
+        exact_policy=WRF_EXACT, grid_size=nz * frame_count)
 
 
 def submit_zero_gradient_w(field, spec_zone):

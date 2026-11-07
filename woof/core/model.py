@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from woof.core.physics_inventory import REFL_10CM_MICROPHYSICS
+
 from collections.abc import Iterator, Mapping
 from contextlib import nullcontext
 import dataclasses
@@ -18,6 +20,7 @@ from types import MappingProxyType
 from typing import Literal, Protocol, runtime_checkable
 
 from woof.core.clock import DomainClock, Schedule
+from woof.core.restart_handler_traits import durable_waiter, orders_history_itself
 from woof.config import (SURFACE_RADIATION_POLICY_REQUIRED,
                           radiation_scheme_ids)
 from woof.core.state import DomainState
@@ -77,11 +80,13 @@ class NestCoupler(Protocol):
         """Read the child only and write restricted data into scratch."""
         ...
 
-    def feedback_commit(self, node: DomainNode) -> None:
-        """PARENT MUTATED: masked merge plus ``ht_coarse`` bookkeeping."""
+    def feedback_commit(self, node: DomainNode, *, start: bool = False) -> None:
+        """PARENT MUTATED: masked merge plus ``ht_coarse`` bookkeeping.
+
+        ``start`` marks the nest-start transaction (med_nest_initial)."""
         ...
 
-    def feedback_finalize(self, node: DomainNode) -> None:
+    def feedback_finalize(self, node: DomainNode, *, start: bool = False) -> None:
         """PARENT MUTATED: restore parent halo/diagnostic validity."""
         ...
 
@@ -406,7 +411,12 @@ RESTART_TOLERATED_EXPERIMENT_FIELDS = (
 RESTART_TOLERATED_DOMAIN_FIELDS = (
     "history_interval_s", "history_begin_s", "history_end_s")
 RESTART_TOLERATED_RUN_FIELDS = (
-    "run_seconds", "output_interval_s", "restart_interval_s")
+    "run_seconds", "output_interval_s", "history_interval2_s", "history_interval_change_s", "restart_interval_s",
+    "surface_energy_diag",
+    # Correct mode WB1 (woof/correct_mode.py OUTPUT_ONLY_KEYS): books the
+    # settled-cloud total CLOUDNC and changes no prognostic word
+    # (tests/test_correct_mode_water_budget.py, every word bit-identical).
+    "thompson_cloud_surface_booking")
 
 #: ``mp_physics`` -> the RunConfig fields ONLY that scheme reads.  A domain
 #: running some other scheme drops them from its identity entirely rather
@@ -459,6 +469,17 @@ SCHEME_SCOPED_RUN_FIELDS: dict[int, tuple[str, ...]] = {
     # any other scheme, which is what makes the scoping lossless.
     50: ("p3_backend",),
 }
+
+#: Cumulus-scoped knobs: each RunConfig field and the ``cu_physics`` values
+#: that read it.  Same convention as :data:`SCHEME_SCOPED_RUN_FIELDS`, keyed
+#: by the cumulus selector instead: a domain whose cumulus scheme does not
+#: read the field drops it from its identity (woof.config refuses a
+#: non-default value there, which is what makes the drop lossless), so no
+#: fingerprint written before the field existed moves.
+def _cumulus_scoped_run_fields() -> dict[str, frozenset]:
+    from woof.config import NSAS_DX_FACTOR_SCHEMES, SAS_PGCON_SCHEMES
+    return {"nsas_dx_factor": NSAS_DX_FACTOR_SCHEMES,
+            "sas_pgcon": SAS_PGCON_SCHEMES}
 
 #: The adaptive-timestep surface, scoped OFF the restart identity whenever
 #: ``use_adaptive_time_step`` is false -- see ``restart_identity_payload``.
@@ -545,12 +566,23 @@ def restart_identity_payload(exp) -> dict:
     # experiment and must refuse.
     if experiment.get("spectral_numerics") is None:
         experiment.pop("spectral_numerics", None)
+    if experiment.get("nudging") is None:
+        experiment.pop("nudging", None)
     # Same convention for [physics_params]: ABSENT stays absent, so every
     # pre-feature fingerprint and checkpoint is preserved.  A PRESENT set
     # binds value for value: resuming a checkpoint under other constants is
     # another trajectory and must refuse.
     if experiment.get("physics_params") is None:
         experiment.pop("physics_params", None)
+    # [radar_heating]: absent stays absent (experiment_config_document drops
+    # an OFF table, so every pre-feature fingerprint is unchanged).  Present
+    # it binds, so a checkpoint written heated cannot resume under other
+    # heating or none -- except the windows ROOT, which says where the files
+    # are and not what they hold; the windows are held to the run's grid
+    # identity and their own digests when they are read.
+    heating = experiment.get("radar_heating")
+    if isinstance(heating, dict):
+        heating.pop("windows", None)
     # Same convention for the declared constant downward longwave: ABSENT
     # stays absent, so every experiment written before the field existed
     # keeps its exact fingerprint and its checkpoints keep resuming.  A
@@ -635,15 +667,40 @@ def restart_identity_payload(exp) -> dict:
         # that wrote the full inventory must resume trimmed, and one that
         # trimmed must resume full.
         domain.pop("output", None)
+        # The quick-look stream is output-only on the same terms.
+        domain.pop("full_history_interval_s", None)
+        domain.pop("quicklook_output", None)
         run = domain.get("run", {})
         drop_default_diffusion_selectors(run)
         drop_default_spp_selectors(run)
+        # ghg_input, absent-stays-absent: 0 is the fixed-gas radiation
+        # every fingerprint written before the key ran; 1 binds.
+        if not run.get("ghg_input", 0):
+            run.pop("ghg_input", None)
+        # The historical scalar operator was PD. Its unchanged default
+        # leaves old tree checkpoint identities intact; TKE activation binds.
+        if run.get("scalar_adv_opt", 1) == 1:
+            run.pop("scalar_adv_opt", None)
+        from woof.lightning_contract import drop_default_lightning_selectors
+        drop_default_lightning_selectors(run)
         # fractional_seaice, absent-stays-absent: 0 is the 0.5 sea-ice
         # threshold every RUC fingerprint written before the field ran.
         if not run.get("fractional_seaice", 0):
             run.pop("fractional_seaice", None)
         # These radiation-driver fields were absent from older fingerprints.
         # Zero retains the prior trajectory; every enabled selector binds.
+        if run.get("aer_opt", 0) != 2:
+            run.pop("aer_type", None)
+            run.pop("aer_aod550_opt", None)
+            run.pop("aer_angexp_opt", None)
+            run.pop("aer_ssa_opt", None)
+            run.pop("aer_asy_opt", None)
+            run.pop("aer_aod550_val", None)
+            run.pop("aer_angexp_val", None)
+            run.pop("aer_ssa_val", None)
+            run.pop("aer_asy_val", None)
+            run.pop("aer_auxinput15", None)
+            run.pop("aer_auxinput15_interval", None)
         for name in ("swint_opt", "aer_opt", "alb_sol"):
             if not run.get(name, 0):
                 run.pop(name, None)
@@ -670,6 +727,15 @@ def restart_identity_payload(exp) -> dict:
             run.pop("relax_timescale_s", None)
         if not run.get("relax_w"):
             run.pop("relax_w", None)
+        # New canopy controls bind selected nondefault physics while their
+        # defaults preserve the older numerical-generation fingerprint.
+        if run.get("urban_ucm_generation", "wrf_471") == "wrf_471":
+            run.pop("urban_ucm_generation", None)
+        for name in ("urban_treeoption", "urban_ttscheme", "urban_fvg"):
+            if run.get(name, -1) == -1:
+                run.pop(name, None)
+        if run.get("urban_table_dir", "") == "":
+            run.pop("urban_table_dir", None)
         # The urban canopy keys, on the same convention: with
         # sf_urban_physics = 0 (WRF's default and every experiment written
         # before the urban models existed) all three drop out, so no
@@ -679,8 +745,12 @@ def restart_identity_payload(exp) -> dict:
         # same three on the same condition (_URBAN_DIGEST_FIELDS).
         if not run.get("sf_urban_physics"):
             for name in ("sf_urban_physics", "use_wudapt_lcz",
-                         "num_urban_hi"):
+                         "num_urban_hi", "urban_water_balance"):
                 run.pop(name, None)
+        elif int(run.get("sf_urban_physics", 0)) != 1:
+            run.pop("urban_water_balance", None)
+        elif run.get("urban_water_balance", "wrf_471") == "wrf_471":
+            run.pop("urban_water_balance", None)
         # Scheme-scoped knobs leave the identity of every domain that does
         # not select their scheme (:data:`SCHEME_SCOPED_RUN_FIELDS`).
         selected = run.get("mp_physics")
@@ -688,6 +758,26 @@ def restart_identity_payload(exp) -> dict:
             if selected == scheme:
                 continue
             for name in names:
+                run.pop(name, None)
+        for name, readers in _cumulus_scoped_run_fields().items():
+            if run.get("cu_physics") not in readers:
+                run.pop(name, None)
+        # The correct-mode keys (woof/correct_mode.py), by the checkpoint
+        # echo's rule (woof/io/restart.py _drop_default_off_run_keys): a key
+        # binds only where it is on AND its scheme reads it.  Off is the
+        # matched arithmetic every fingerprint before the keys ran, and a
+        # key no selected scheme reads reaches nothing, so every experiment
+        # without WSM6 or New Tiedtke keeps its fingerprint under the 2.9.0
+        # correct-mode default, and an exact-mode WSM6 run keeps its own.
+        # Breakage this prevents: the keys joined RunConfig (False, then
+        # default-on) and moved every recorded fingerprint and tree restart
+        # identity, schemes or not (tests/test_water_overlay.py,
+        # tests/test_devices_door.py).
+        from woof.correct_mode import (CORRECTION_KEYS, OUTPUT_ONLY_KEYS,
+                                        key_in_scope)
+        for name in CORRECTION_KEYS:
+            if (name in OUTPUT_ONLY_KEYS or not run.get(name, False)
+                    or not key_in_scope(name, run)):
                 run.pop(name, None)
         # THE SURFACE-RADIATION CARRIER POLICY, on the same convention the
         # perturbation and spawn blocks above use: the DEFAULT drops out of
@@ -764,6 +854,14 @@ def restart_identity_payload(exp) -> dict:
         # ... and the original explicit vertical advection (A158).
         if not run.get("zadvect_implicit", 0):
             run.pop("zadvect_implicit", None)
+        if run.get("sf_surface_physics", 0) != 4:
+            run.pop("noahmp_snow_age", None)
+        elif run.get("noahmp_snow_age") == "wrf_461":
+            run.pop("noahmp_snow_age", None)
+        # The solar generation: wrf_461 is what every earlier fingerprint
+        # ran, so it is omitted; the WRF 4.8 default is bound by name.
+        if run.get("solar_generation", "wrf_461") == "wrf_461":
+            run.pop("solar_generation", None)
         if run.get("zadvect_implicit_variant", "wrf_471") == "wrf_471":
             run.pop("zadvect_implicit_variant", None)
         # ... and the RUC SOILPROP lineage, omitted at its wrf_45 default so
@@ -780,12 +878,29 @@ def restart_identity_payload(exp) -> dict:
         # ... and the MYNN generation, omitted at wrf_461 (every earlier
         # fingerprint), bound by name off it; its gsd_41 TKE option is
         # omitted at its default for the same reason.
+        if run.get("wind_farm_scheme", "off") == "off":
+            run.pop("wind_farm_scheme", None)
+            run.pop("wind_farm_table", None)
+            run.pop("wind_farm_max_dx_m", None)
+            run.pop("wind_farms", None)
+            run.pop("windfarm_tke_factor", None)
+        else:
+            from woof.wind_table import read_table
+            _, run["wind_farm_table_sha256"] = read_table(
+                run["wind_farm_table"], run["wind_farm_scheme"])
         if run.get("bl_mynn_version", "wrf_461") == "wrf_461":
             run.pop("bl_mynn_version", None)
+        # Headers before this selector ran the legacy YSU kernel.
+        if (run.get("bl_pbl_physics", 0) != 1
+                or run.get("ysu_version", "wrf_461") == "wrf_461"):
+            run.pop("ysu_version", None)
         if run.get("bl_mynn_gsd41_unsquared_qtke", False) is False:
             run.pop("bl_mynn_gsd41_unsquared_qtke", None)
         if run.get("bl_mynn_cloud_tendency_form", "wrf_461") == "wrf_461":
             run.pop("bl_mynn_cloud_tendency_form", None)
+        # WRF's cycling flag, omitted at its .false. default.
+        if run.get("cycling", False) is False:
+            run.pop("cycling", None)
         # ... and the MYNN surface-layer generation, omitted at its wrf_461
         # default (what every earlier build ran) so no fingerprint moves.
         if run.get("mynn_sfclay_variant", "wrf_461") == "wrf_461":
@@ -829,6 +944,8 @@ def restart_identity_payload(exp) -> dict:
         # ... and w_damp measured from Courant 1, WRF's default (A165).
         if float(run.get("w_crit_cfl", 1.0)) == 1.0:
             run.pop("w_crit_cfl", None)
+        from woof.surface_ocean import drop_inert_ocean
+        drop_inert_ocean(run)
         if not run.get("sf_lake_physics", 0):
             run.pop("sf_lake_physics", None)
             run.pop("use_lakedepth", None)
@@ -857,19 +974,51 @@ def restart_identity_payload(exp) -> dict:
         # Off, post-PBL scalar diffusion preserves pre-option fingerprints.
         if not run.get("scalar_pblmix", 0):
             run.pop("scalar_pblmix", None)
+        # The chem block, on the adaptive block's OFF argument: with
+        # chem_sets empty no chem key is read by anything (woof.config.
+        # validate_chem_config), so dropping the block keeps every chem-off
+        # fingerprint and checkpoint identity what it was before the block
+        # existed.  A chem run binds the whole block value for value.
+        if not run.get("chem_sets"):
+            from woof.config import CHEM_RUN_FIELDS
+            for name in CHEM_RUN_FIELDS:
+                run.pop(name, None)
+        # The fire block on the same rule (woof.config.inert_fire_fields).
+        from woof.config import inert_fire_fields
+        for name in inert_fire_fields(run):
+            run.pop(name, None)
         # The terrain-clock mode: "measured" is the derivation every
         # fingerprint written before the field ran under, so it drops
         # out; "pinned" binds, because the same configured clock then
         # integrates where the measured rule might have divided it.
+        # "local_face", the default from 2.8.8, binds too: it can run a
+        # longer step than "measured" on the same grid, so a run under it
+        # is not the trajectory an absent key names.
         if run.get("terrain_clock", "measured") == "measured":
             run.pop("terrain_clock", None)
         # Earlier runs held shortwave between calls, used zero aerosol,
         # and ran the WRF v4.6.1 cloud wrapper. Only moved forms bind.
+        if run.get("aer_opt", 0) != 2:
+            run.pop("aer_type", None)
+            run.pop("aer_aod550_opt", None)
+            run.pop("aer_angexp_opt", None)
+            run.pop("aer_ssa_opt", None)
+            run.pop("aer_asy_opt", None)
+            run.pop("aer_aod550_val", None)
+            run.pop("aer_angexp_val", None)
+            run.pop("aer_ssa_val", None)
+            run.pop("aer_asy_val", None)
+            run.pop("aer_auxinput15", None)
+            run.pop("aer_auxinput15_interval", None)
         for key in ("swint_opt", "aer_opt"):
             if not run.get(key, 0):
                 run.pop(key, None)
         if run.get("rrtmg_cloud_optics_form", "wrf_461") == "wrf_461":
             run.pop("rrtmg_cloud_optics_form", None)
+        # Earlier runs took rural aerosol type 1 everywhere; only the
+        # land/water type binds.
+        if run.get("rrtmg_aer3_type_source", "rural") == "rural":
+            run.pop("rrtmg_aer3_type_source", None)
         # Source members, not a path alone, identify prescribed radiation.
         from woof.core.rrtmg_smoke_identity import bind_smoke_source_identity
         if run.get("rrtmg_smoke_manifest", ""):
@@ -1052,7 +1201,6 @@ def build_experiment(exp, case_data, *,
     from woof.ingest.grib import clear_forcing_caches
     from woof.ingest.lateral_bc import bind_lateral_boundary_clock
     from woof.ingest.nest_init import initialize_child
-    from woof.ingest.preflight import build_input_catalog
     from woof.core.nest import NestCoupler as ConcreteNestCoupler
 
     from woof.progress import prep_stage
@@ -1101,7 +1249,13 @@ def build_experiment(exp, case_data, *,
     # split tree breaks.
     refuse_tree_off_the_experiment_coordinate(
         exp, active.domains, route="experiment-tree")
-    tick_clock = resolve_clock(active, lbc_interval_s=lbc_interval_s)
+    # The startup tree's tick is the DECLARED tree's (dormant nests
+    # included), so a nest spawned later joins without re-meaning a tick.
+    tick_clock = resolve_clock(
+        active, lbc_interval_s=lbc_interval_s,
+        tick_den_floor=(resolve_clock(exp, lbc_interval_s=lbc_interval_s).tick_den
+                        if active is not exp and len(active.domains) != len(exp.domains)
+                        else None))
     schedule = build_schedule(active, tick_clock)
     clocks = tick_clock.clocks()
     estimate = estimate_experiment(
@@ -1290,8 +1444,8 @@ def build_experiment(exp, case_data, *,
         if exp.feedback == 1 and node._started:
             initial = FeedbackScratch()
             node.coupler.feedback_prepare(node, initial)
-            node.coupler.feedback_commit(node)
-            node.coupler.feedback_finalize(node)
+            node.coupler.feedback_commit(node, start=True)
+            node.coupler.feedback_finalize(node, start=True)
 
     built = ExperimentState(
         root=root, nodes_by_grid_id=MappingProxyType(nodes),
@@ -1694,6 +1848,16 @@ def execute_experiment(
     original integer executor directly.
     """
     experiment = _bind_execution_physics_params(model, experiment)
+    # The host thread WAITS for the card (blocking sync) instead of
+    # spinning a core at 100 % for the whole step loop (woof/cuda_wait.py).
+    # Host-side only: no kernel, order or value changes.
+    from woof.cuda_wait import apply as _apply_cuda_wait
+    _apply_cuda_wait()
+    # A [radar_heating] table is honored by the route that attached it or
+    # refused here; a route that never attaches it would integrate an
+    # unheated forecast under the name of a heated one.
+    from woof.da.forecast_heating import require_routed
+    require_routed(model, experiment)
     from woof.core.restart_request import RestartRequest
     restart_request = RestartRequest()
     requested_restart = [False]
@@ -1749,6 +1913,46 @@ def execute_experiment(
     # that joins the tree later falls back to the dycore's own step rather
     # than to whatever the last domain happened to bind.
     steppers = dict(steppers or {})
+    strict_resident_child = None
+    from woof.wrf_exact import ENABLED as wrf_exact
+    if (wrf_exact and model.root.children
+            and getattr(model.root.state, "_metal_setup_state", False)):
+        from woof.core.dycore import strict_metal_fixed_nest_config
+        from woof.core.nest import NestCoupler as ConcreteNestCoupler
+
+        root = model.root
+        child = root.children[0]
+        root_step = root.clock.spec.step_ticks
+        flat = root.cfg.run.terrain_opt == child.cfg.run.terrain_opt == 0
+        terrain = (root.cfg.run.terrain_opt == child.cfg.run.terrain_opt == 1
+                   and root.state.phb.ndim == child.state.phb.ndim == 3)
+        if (len(model.nodes_by_grid_id) != 2 or len(root.children) != 1
+                or child.children or not isinstance(child.coupler, ConcreteNestCoupler)
+                or not (flat or terrain)
+                or child.coupler.feedback not in (0, 1)
+                or child.coupler.relocation_count
+                or child.coupler.inflow_perturbation is not None
+                or relocation_runner is not None or child.cfg.spawn is not None
+                or steppers or schedule_dispatch is not None
+                or not root.cfg.run.specified or child.cfg.run.specified
+                or not child.cfg.run.nested
+                or child.cfg.run.moist != root.cfg.run.moist
+                or (child.cfg.parent_grid_ratio, child.cfg.parent_time_step_ratio) != (3, 3)
+                or child.clock.spec.start_ticks != root.clock.spec.start_ticks
+                or child.clock.spec.history_ticks % root_step
+                or child.clock.spec.history_begin_ticks % root_step
+                or child.clock.spec.history_interval2_ticks is not None
+                or any(not getattr(node.state, "_metal_setup_state", False)
+                       or getattr(node.state, "_streamed_domain", None) is not None
+                       or getattr(node.state, "_wrf_start_history_t", None) is not None
+                       or getattr(node.state, "physics", None) is not None
+                       or node.state.has_msf or not strict_metal_fixed_nest_config(node.cfg.run)
+                       for node in (root, child))):
+            raise NotImplementedError(
+                "strict Metal nesting requires a fixed resident physics-off ratio-3 "
+                "profile with a specified parent and aligned history. Supported profiles "
+                "are one-way and two-way on flat or moist terrain")
+        strict_resident_child = child
     #: Grid ids the checkpoint's question has already been asked of, so a
     #: domain is asked once and no later than it can be.
     asked_the_checkpoints_question: set[int] = set()
@@ -1799,6 +2003,12 @@ def execute_experiment(
     if seam_experiment is None and context is not None:
         seam_experiment = context.get("experiment")
     spectral_seam = attach_seam(model, seam_experiment, steppers)
+    nudging = getattr(seam_experiment, "nudging", None)
+    if nudging is not None:
+        for node in model.walk_parent_first():
+            if (nudging.for_domain(node.cfg.grid_id) is not None
+                    and getattr(node.state, "_spectral_nudging_owner", None) is None):
+                raise ValueError("NUDGING_ANALYSES_UNBOUND: this domain has no prepared analysis forcing; use the prepared forecast route")
     feedback_scratch = {
         node.cfg.grid_id: FeedbackScratch()
         for node in model.walk_parent_first() if node.parent is not None}
@@ -1902,29 +2112,26 @@ def execute_experiment(
                     # accepted move also needs the existing full-state donor.
                     parent_stream.sync_to_state()
                     parent_streams[parent_gid] = parent_stream
-        outcome = relocation_runner.on_period_begin(
-            model, clocks, period=period,
-            # The executor's validator holds live references into the
-            # outgoing child; dropping it here is what lets the
-            # host-staged release actually free the device bytes.
-            before_rebuild=lambda gid: validators.pop(gid, None))
-        for parent_stream in parent_streams.values():
-            # reset_tracker_window already zeroes every live copy, including
-            # generated follower carriers. Preserve the legacy fixed-plane
-            # synchronization for providers that write those planes directly.
-            parent_stream.sync_from_state(TRACKER_PLANE_CARRIERS)
-        rows = [] if outcome is None else (
-            outcome.get("outcomes", []) if outcome.get("event") == "batch"
-            else [outcome])
-        for row in rows:
-            if row.get("event") != "relocated":
-                continue
-            gid = int(row["grid_id"])
+
+        def validate_rebuilt_child(gid):
             if validate_state:
                 from woof.core.health import health_validator_for_domain
                 validators[gid] = health_validator_for_domain(model, model.node(gid))
                 validators[gid].require_healthy(
                     phase=f"post-relocation.d{gid:02d}")
+
+        relocation_runner.on_period_begin(
+            model, clocks, period=period,
+            # The executor's validator holds live references into the
+            # outgoing child; dropping it here is what lets the
+            # host-staged release actually free the device bytes.
+            before_rebuild=lambda gid: validators.pop(gid, None),
+            after_rebuild=validate_rebuilt_child)
+        for parent_stream in parent_streams.values():
+            # reset_tracker_window already zeroes every live copy, including
+            # generated follower carriers. Preserve the legacy fixed-plane
+            # synchronization for providers that write those planes directly.
+            parent_stream.sync_from_state(TRACKER_PLANE_CARRIERS)
 
     def on_domain_start(grid_id, clock) -> None:
         """Run the ordinary WRF-order child init at its delayed boundary."""
@@ -2004,8 +2211,8 @@ def execute_experiment(
         if exp.feedback == 1:
             initial = FeedbackScratch()
             node.coupler.feedback_prepare(node, initial)
-            node.coupler.feedback_commit(node)
-            node.coupler.feedback_finalize(node)
+            node.coupler.feedback_commit(node, start=True)
+            node.coupler.feedback_finalize(node, start=True)
         if rebound is not None:
             # After the feedback seed, as build_experiment's t = 0 children
             # are seeded before the route attaches their steppers.
@@ -2024,6 +2231,30 @@ def execute_experiment(
     #: say which grid of a nested run sets its pace; the same host-side
     #: pair `step_observer` reports, never a device synchronise.
     step_wall_by_domain: dict[int, float] = {}
+
+    # Scheme health status words (microphysics, YSU, KF, RRTMGP, ...) are
+    # recorded on the device during the step and read ONCE when the step
+    # returns, through woof.core.health_ledger, instead of one blocking
+    # device-to-host read per scheme in the middle of the step.  Each of those
+    # reads drained the launch queue: the host waited for the card, then the
+    # card waited for the host's next launches.  Measured on a 6 h Boston
+    # 250 m run (2.8.5, one RTX PRO 6000): the microphysics read alone held
+    # the main thread 9.4 ms per domain step with the card about 50% busy.
+    # Healthy runs change in nothing but wall time (the reads are error-only;
+    # see health_ledger).  A sick step still raises the same exception, from
+    # the same step, before step_health, output, feedback or a checkpoint can
+    # observe its state.  A ledger lives on one device, so a run that sees
+    # more than one keeps the immediate reads, as does --health-debug, whose
+    # point is the immediate report.
+    step_ledger = None
+    if not health_debug:
+        try:
+            import cupy as _cp
+            if int(_cp.cuda.runtime.getDeviceCount()) == 1:
+                from woof.core.health_ledger import HealthLedger
+                step_ledger = HealthLedger(label="forecast step")
+        except Exception:  # noqa: BLE001 - no CUDA: immediate reads, as before
+            step_ledger = None
 
     def on_step(grid_id, clock) -> None:
         # WRF prints one `Timing for main:` line per model time step per
@@ -2066,16 +2297,34 @@ def execute_experiment(
             streamed_here = _streamed(grid_id)
             if streamed_here is not None:
                 streamed_here.impose_clock(node.state.elapsed_seconds)
-            steppers.get(grid_id, step)(
-                node.state, node.cfg.run,
-                # REFL_10CM is a one-frame producer/consumer handoff. A
-                # headless forecast still advances history alarms in the
-                # clock report, but has no output consumer, so it must not
-                # stage a field that can never be consumed.
-                refl_10cm_due=(
-                    history_handler is not None
-                    and clock.history_rings_within_step()))
+            from woof.core import health_ledger as _health_ledger
+            with _health_ledger.deferring(step_ledger):
+                steppers.get(grid_id, step)(
+                    node.state, node.cfg.run,
+                    # REFL_10CM is a one-frame producer/consumer handoff. A
+                    # headless forecast still advances history alarms in the
+                    # clock report, but has no output consumer, so it must not
+                    # stage a field that can never be consumed.
+                    refl_10cm_due=(
+                        history_handler is not None
+                        and node.cfg.run.mp_physics in REFL_10CM_MICROPHYSICS
+                        and clock.history_rings_within_step()),
+                    **({"fire_history_due": clock.history_rings_within_step()}
+                       if node.cfg.run.ifire == 2 else {}))
+            if step_ledger is not None:
+                # One read for every scheme site of this step; raises the
+                # first site's own refusal.  Before anything downstream.
+                step_ledger.drain()
+            from woof.core.nest_round_trip import th_phy_m_t0_after_step
+            th_phy_m_t0_after_step(node)
             refresh_model_time(node.state, clock, after_step=True)
+            # Scientific accumulators see every committed domain step. This
+            # is not the best-effort telemetry seam below: losing a wind
+            # maximum must fail the product instead of silently undersampling.
+            from woof.ensemble.runtime_context import current_capture
+            capture = current_capture()
+            if capture is not None:
+                capture.committed_step(node=node, model=model)
             if spectral_seam is not None:
                 # THE Level-2 slow-large-step hook seam.  The RK slow-mode
                 # state above is committed and the acoustic substeps are
@@ -2189,6 +2438,8 @@ def execute_experiment(
             # with the reads.
             try:
                 node.coupler.force(node)
+                if node is strict_resident_child:
+                    node.state._lateral_boundary_device.strict_resident_nest = True
                 if validators and health_debug:
                     validators[child_id].require_healthy(
                         phase=(f"post-force.d{child_id:02d}"
@@ -2252,17 +2503,45 @@ def execute_experiment(
             if validators:
                 validators[grid_id].require_healthy(
                     phase=f"pre-history.d{grid_id:02d}")
-            history_handler(model, model.node(grid_id), ticks)
+            node = model.node(grid_id)
+            nudging_owner = getattr(node.state, '_spectral_nudging_owner', None)
+            if nudging_owner is not None:
+                nudging_owner.check_at_seam()
+            from woof.wrf_exact import ENABLED as wrf_exact
+            if wrf_exact and node.parent is not None:
+                # WRF writes a nest's frame at an instant it shares with its
+                # parent after the parent's next med_nest_force, whose
+                # couple/uncouple round trip the frame then carries
+                # (woof.core.nest_round_trip.round_tripped_frame_fields).
+                node.state._wrf_frame_round_trip_due = (
+                    int(node.clock.ticks) == int(node.parent.clock.ticks)
+                    and int(node.clock.ticks) < int(node.clock.run_ticks))
+                node.state._wrf_round_trip_run = node.cfg.run
+            elif (wrf_exact and node.children
+                  and getattr(node.state, "_metal_setup_state", False)):
+                # A parent needs the tree's T/THM inventory before its
+                # first step creates the independent T snapshot.
+                node.state._wrf_round_trip_run = node.cfg.run
+            history_handler(model, node, ticks)
         if io_manager is not None:
             status.pending_d2h = int(io_manager.pending)
 
     def on_restart(ticks) -> None:
-        if io_manager is not None:
+        # A handler that orders its checkpoint after the history frames
+        # itself (the prepared single-domain door's background checkpoint
+        # writer) is not made to wait here for frames still being written.
+        if io_manager is not None and not orders_history_itself(
+                restart_handler):
             io_manager.drain()
             status.pending_d2h = int(io_manager.pending)
         if restart_handler is not None:
             restart_handler(model, ticks)
             if requested_restart[0]:
+                # A worker's request is acknowledged only once the
+                # checkpoint it asked for is durable.
+                wait = durable_waiter(restart_handler)
+                if wait is not None:
+                    wait()
                 restart_request.acknowledge()
                 requested_restart[0] = False
 
@@ -2386,6 +2665,10 @@ def execute_experiment(
         # The controller reads the same reduction the probe does rather
         # than carrying a second copy of the kernel.
         enable_wrf_cfl_recording()
+        try:
+            moving_deadline = relocation_runner.next_deadline_ticks
+        except AttributeError:
+            moving_deadline = None
         adaptive_driver = AdaptiveClockDriver(
             model, cfl_source=take_wrf_cfl,
             tick_den=model.schedule.clock.tick_den,
@@ -2394,7 +2677,8 @@ def execute_experiment(
                 else _streamed(gid).carrier_provenance()),
             map_factor_source=lambda gid: (
                 None if _streamed(gid) is None
-                else _streamed(gid).maximum_map_factor()))
+                else _streamed(gid).maximum_map_factor()),
+            deadline_source=moving_deadline)
 
     try:
         if schedule_dispatch is not None:

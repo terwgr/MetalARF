@@ -77,6 +77,7 @@ except ImportError:  # Callers that launch these kernels require CUDA explicitly
 import numpy as np
 
 from woof.config import RunConfig
+from woof.wrf_exact import ENABLED as WRF_EXACT
 from woof.core import constants as c
 from woof.core.advection import launch_flux_div_scalar, vertical_orders
 from woof.core.grid import BaseState, VerticalCoord
@@ -91,6 +92,7 @@ from woof.core.physics import (_metal_kessler_supported,
                                _metal_uwpbl_supported)
 from woof.grid_requirements import FIFTH_ORDER_STENCIL_AXIS
 from woof.core.kernels import get_kernel
+from woof.microphysics_schemes import scheme_for_state as _named_scheme_for_state
 from woof.core.state import DTYPE, DomainState, init_at_rest
 from woof.core.wdm6_constants import WDM6_NUMBER_SPECIES
 from woof.core import tke_budget
@@ -149,6 +151,12 @@ NSSL_SCALAR_SPECIES = (
     "qvolg", "qvolh")
 NSSL_SPECIES = NSSL_MASS_SPECIES + NSSL_SCALAR_SPECIES
 
+# Single-moment hail: WSM7 (mp_physics=24, Registry.EM_COMMON:3034
+# ``moist:qv,qc,qr,qi,qs,qg,qh``) carries WSM6's three ice masses and a
+# hail mass, and no number moment at all.  Every entry is a ``moist``
+# array member, so all four load cq and the buoyancy sum.
+SINGLE_MOMENT_HAIL_SPECIES = ICE_MASS_SPECIES + ("qh",)
+
 # Milbrandt-Yau option 9 carries hail mass beside graupel and a number
 # moment for EVERY one of the six hydrometeors.  The tuples are defined in
 # woof.core.milbrandt2_constants (with the WRF line references) so that
@@ -180,6 +188,14 @@ from woof.core.milbrandt2_constants import (  # noqa: E402,F401 -- re-exported
 # ``calc_cq`` and out of the hydrostatic qtot sum, exactly like the number
 # moments beside them.
 P3_SPECIES = ("qi", "ni", "nr", "qir", "qib")
+
+# Ferrier-Aligo (mp=5) registers moist:qv,qc,qr,qi and scalar:qt
+# (Registry.EM_COMMON:3019).  qi is the total ice and is transported; qt is
+# rebuilt from qc+qr+qi at every FER_HIRES entry (module_mp_fer_hires.F:388)
+# so moving it would change nothing the scheme reads, and the three f_*
+# fields are WRF state, never advected.  One ice mass and no qs/qg, so the
+# arm sits before the generic filter for P3's reason.
+FERRIER_SPECIES = ("qi",)
 
 #: The scratch slot holding a zero plane for a moist-array mass species the
 #: active scheme does not allocate.  See :func:`absent_mass_plane`.
@@ -235,7 +251,7 @@ WRF_MOIST_ARRAY_SPECIES = frozenset(
     SPECIES + ICE_MASS_SPECIES + ("qh",))
 
 
-def extra_moist_species(state: DomainState) -> tuple[str, ...]:
+def _extra_water_species(state: DomainState) -> tuple[str, ...]:
     """Active transported species beyond qv/qc/qr.
 
     WSM6 owns the three ice mass fields.  Thompson owns those plus rain/ice
@@ -265,14 +281,32 @@ def extra_moist_species(state: DomainState) -> tuple[str, ...]:
     ``qs``/``qg`` -- see :data:`P3_SPECIES`.  It is independent of the mp=9
     arm beside it: no state allocates both ``nh`` and ``qir``.
     """
+    if getattr(state,"fast_sbm_bins",None) is not None:
+        from woof.core.fast_sbm_contract import EXTRA_SPECIES
+        return EXTRA_SPECIES
     if getattr(state, "qi", None) is None:
         return ()
     if getattr(state, "qir", None) is not None:
         return P3_SPECIES
+    if getattr(state, "f_rimef", None) is not None:
+        # Ferrier-Aligo: f_rimef is allocated by exactly one scheme.
+        return FERRIER_SPECIES
     if getattr(state, "nh", None) is not None:
         return MY2_SPECIES
     if getattr(state, "qh", None) is not None:
+        # Hail mass with NO NSSL number set is the single-moment hail
+        # family (mp=24); NSSL alone allocates ``qnh`` beside ``qh``.
+        if getattr(state, "qnh", None) is None:
+            return SINGLE_MOMENT_HAIL_SPECIES
         return NSSL_SPECIES
+    # Named schemes (woof.microphysics_schemes) answer from their own
+    # capability row, selected on their discriminator field; the
+    # ``volg`` test sits ahead of the ``nwfa`` test when a scheme also carries
+    # the two aerosol tracers.
+    named = _named_scheme_for_state(state)
+    if named is not None:
+        return (named.ice_mass_species + named.moment_species
+                + named.aerosol_species)
     if getattr(state, "nwfa", None) is not None:
         return ICE_MASS_SPECIES + THOMPSON_AERO_NUMBER_SPECIES
     # WDM6 alone allocates nn. Its complete Registry scalar package is
@@ -282,7 +316,20 @@ def extra_moist_species(state: DomainState) -> tuple[str, ...]:
         return ICE_MASS_SPECIES + WDM6_NUMBER_SPECIES
     numbers = tuple(name for name in TRANSPORTED_NUMBER_SPECIES
                     if getattr(state, name, None) is not None)
-    return ICE_MASS_SPECIES + numbers
+    return tuple(n for n in ICE_MASS_SPECIES
+                 if getattr(state, n, None) is not None) + numbers
+
+
+def extra_moist_species(state: DomainState) -> tuple[str, ...]:
+    """Extra transported fields: the microphysics species, MYNN's optional
+    scalar QKE, then every PBL-owned advected scalar the state carries
+    (:data:`woof.core.physics_inventory.PBL_SCALAR_NAMES`, one shared
+    inventory keyed by PBL selector)."""
+    from woof.core.physics_inventory import PBL_SCALAR_NAMES
+    carried = tuple(name for name in PBL_SCALAR_NAMES
+                    if getattr(state, name, None) is not None)
+    return _extra_water_species(state) + (
+        ("qke_adv",) if getattr(state, "qke_adv", None) is not None else ()) + carried
 
 
 def moist_species(state: DomainState) -> tuple[str, ...]:
@@ -292,7 +339,7 @@ def moist_species(state: DomainState) -> tuple[str, ...]:
     exposing the exact prognostic mass/number moments carried by the active
     mixed-phase scheme.
     """
-    return SPECIES + extra_moist_species(state)
+    return tuple(name for name in SPECIES if getattr(state, name, None) is not None) + extra_moist_species(state)
 
 
 def _mut2d(mu, ny: int, nx: int) -> cp.ndarray:
@@ -461,14 +508,56 @@ def _pd_fold_sources(state: DomainState, cfg: RunConfig, name: str,
             lbc_held=lbc_held)
         return q0_eff
     q0_eff = state.scratch((nz, ny, nx), "moist_pd_q0")
+    sources = tuple(source for source in (fixed_tendency, physics, lbc_held)
+                    if source is not None)
+    if _pd_fold_joinable(q0, chm0, sources):
+        # One pass for ``q0_eff = q0; q0_eff += dt*S/chm0`` per source:
+        # the same FP32 multiply, divide and add per element, in order.
+        _pd_fold_kernel(len(sources))(q0, *sources, chm0,
+                                      np.float32(dt_eff), q0_eff)
+        return q0_eff
     q0_eff[...] = q0
-    if fixed_tendency is not None:
-        q0_eff += dt_eff * fixed_tendency / chm0
-    if physics is not None:
-        q0_eff += dt_eff * physics / chm0
-    if lbc_held is not None:
-        q0_eff += dt_eff * lbc_held / chm0
+    for source in sources:
+        q0_eff += dt_eff * source / chm0
     return q0_eff
+
+
+def _pd_fold_joinable(q0, chm0, sources) -> bool:
+    """The joined fold's element order needs float32 device operands of q0's
+    shape.
+
+    The separate expression promotes by NumPy rules; with any other dtype, a
+    broadcast operand, or host arrays (a CPU mirror that swaps this module's
+    ``cp`` for NumPy, tests/test_pd_advection.py) it keeps the separate
+    ufuncs.
+    """
+    arrays = (q0, chm0) + tuple(sources)
+    return all(isinstance(array, _DEVICE_ARRAY) and array.dtype == np.float32
+               and array.shape == q0.shape for array in arrays)
+
+
+#: CuPy's array type as imported, not whatever ``cp`` names at call time.
+_DEVICE_ARRAY = cp.ndarray if cp is not None else ()
+
+
+@lru_cache(maxsize=None)
+def _pd_fold_kernel(count: int):
+    """``q = q0``, then ``q = q + ((dt*S)/chm0)`` for each of ``count`` sources.
+
+    CuPy compiles this exactly as it compiles its multiply, true_divide and
+    add ufuncs (its own options, flush-to-zero appended); the ``_rn``
+    intrinsics keep each product, quotient and sum its own rounded FP32
+    operation, as the three separate ufunc launches did, so no multiply-add
+    contraction forms across them.
+    """
+    names = [f"s{index}" for index in range(count)]
+    body = "float q = q0;\n" + "".join(
+        f"q = __fadd_rn(q, __fdiv_rn(__fmul_rn(dt, {name}), chm0));\n"
+        for name in names) + "out = q;"
+    return cp.ElementwiseKernel(
+        "float32 q0, " + "".join(f"float32 {name}, " for name in names)
+        + "float32 chm0, float32 dt", "float32 out", body,
+        f"gpuwm_pd_fold_sources_{count}")
 
 
 def _exclude_specified_ring_advection(tend, spec_zone: int) -> None:
@@ -500,6 +589,18 @@ def _exclude_specified_ring_advection(tend, spec_zone: int) -> None:
     """
     sz = int(spec_zone)
     if sz <= 0:
+        return
+    from woof.metal.array import MetalArray, MetalArrayModule
+    if isinstance(tend, MetalArray):
+        from woof.metal.spec_zone_ring import submit_spec_zone_ring_copy
+        ny, nx = tend.shape[-2:]
+        dummy = MetalArrayModule(tend.buffer.context).empty((1,), np.float32)
+        for row, rows, col, cols in ((0, sz, 0, nx), (ny-sz, sz, 0, nx),
+                                     (sz, ny-2*sz, 0, sz),
+                                     (sz, ny-2*sz, nx-sz, sz)):
+            if rows > 0:
+                submit_spec_zone_ring_copy(tend, dummy, row_start=row, rows=rows,
+                                           column_start=col, columns=cols, direction=2)
         return
     tend[:, :sz, :] = 0
     tend[:, -sz:, :] = 0
@@ -609,11 +710,90 @@ def _update_scalar_in_place(q, q0, tend, c1h, c2h, mu0, mu, dt_eff: float,
     kern(*args)
 
 
+def _advance_scalars_stage_metal_strict(state, cfg, ru, rv, ww, dt_eff, final, *,
+                                        physics_tendencies, fixed_tendencies,
+                                        export_advective_forcing, implicit, apply_relax):
+    """Run the source-ordered strict species path on explicit domains."""
+    if implicit is not None and not final:
+        raise ValueError("Metal strict implicit moist transport requires the final RK stage")
+    from woof.metal.da_state import binary
+    from woof.metal.moist_stage import submit_time_t_mass
+    nz, ny, nx = state.p.shape
+    mu0 = submit_time_t_mass(state)
+    mu = binary(state.mub2d, state.mup)
+    tend = state.scratch((nz, ny, nx), "moist_rq_t")
+    species = moist_species(state)
+    forced = bool(cfg.specified or cfg.nested)
+    held_lbc = {}
+    recomputed_lbc = frozenset()
+    apply_scalar_lbc = None
+    if forced:
+        if state.lateral_boundaries is None:
+            raise RuntimeError("boundary-forced state has no lateral forcing")
+        from woof.ingest.lateral_bc import (
+            _active_device_interval, apply_state_scalar_lateral_boundary,
+            COUPLED_SCALAR_STATE_FIELDS)
+        from woof.boundary_fields import potential_external_scalar_fields
+        apply_scalar_lbc = apply_state_scalar_lateral_boundary
+        if cfg.specified:
+            supplied = _active_device_interval(state, cfg)[0].fields
+            slots = {"qv": "lbc_qv_held", "nwfa": "lbc_nwfa_held",
+                     "nifa": "lbc_nifa_held"}
+            for name in potential_external_scalar_fields(cfg):
+                if name not in supplied:
+                    continue
+                held = state.scratch((nz, ny, nx), slots[name])
+                held_lbc[name] = held
+                if apply_relax:
+                    _wrf_scalar_source(state, name, physics_tendencies,
+                                       fixed_tendencies, held)
+                    apply_scalar_lbc(state, cfg, name, held, apply_relax=True,
+                                     source_field=getattr(state, name + "0"))
+            from woof.boundary_fields import HELD_BOUNDARY_FIELDS
+            recomputed_lbc = frozenset(
+                name for name in supplied if name in COUPLED_SCALAR_STATE_FIELDS
+                and name not in HELD_BOUNDARY_FIELDS)
+    need_pd = final and not (cfg.open_x or cfg.open_y) and (cfg.moist_adv_opt == 1 or
+                         (getattr(state, "qke_adv", None) is not None
+                          and cfg.scalar_adv_opt == 1))
+    bufs = None
+    if need_pd:
+        bufs = (state.scratch((nz, ny, nx + 1), "pd_fxl"),
+                state.scratch((nz, ny, nx + 1), "pd_fxc"),
+                state.scratch((nz, ny + 1, nx), "pd_fyl"),
+                state.scratch((nz, ny + 1, nx), "pd_fyc"),
+                state.scratch((nz + 1, ny, nx), "pd_fzl"),
+                state.scratch((nz + 1, ny, nx), "pd_fzc"))
+    for name in species:
+        pd = bool(final and not (cfg.open_x or cfg.open_y)
+                  and (cfg.scalar_adv_opt if name == "qke_adv"
+                       else cfg.moist_adv_opt) == 1)
+        _advance_species_wrf(
+            state, cfg, name, getattr(state, name), getattr(state, name + "0"),
+            tend, held_lbc.get(name), ru=ru, rv=rv, ww=ww, implicit=implicit, pd=pd,
+            bufs=bufs if pd else None, mu0=mu0, mu=mu, mu0_row=mu0,
+            mu_row=mu, chm0=None, dt_eff=dt_eff, final=final,
+            physics_tendencies=physics_tendencies, fixed_tendencies=fixed_tendencies,
+            recompute=name in recomputed_lbc, apply_scalar_lbc=apply_scalar_lbc,
+            export_advective_forcing=export_advective_forcing,
+            boundary_x=bool(cfg.open_x or forced), boundary_y=bool(cfg.open_y or forced))
+    if cfg.specified:
+        _apply_specified_scalar_flow_boundaries(
+            state, cfg, ru, rv, {*held_lbc, *recomputed_lbc})
+
+
 def _advance_scalars_stage_metal(state, cfg, ru, rv, ww, dt_eff, final, *,
                                  apply_relax, physics_tendencies,
                                  fixed_tendencies, export_advective_forcing,
                                  implicit):
     """Advance Metal scalars in periodic, open, specified, or nested lanes."""
+    if WRF_EXACT:
+        return _advance_scalars_stage_metal_strict(
+            state, cfg, ru, rv, ww, dt_eff, final,
+            physics_tendencies=physics_tendencies,
+            fixed_tendencies=fixed_tendencies,
+            export_advective_forcing=export_advective_forcing,
+            implicit=implicit, apply_relax=apply_relax)
     if cfg.specified and (
             not getattr(state, "_metal_setup_state", False)
             or getattr(state, "lateral_boundaries", None) is None):
@@ -625,16 +805,27 @@ def _advance_scalars_stage_metal(state, cfg, ru, rv, ww, dt_eff, final, *,
     driver = getattr(state, "physics", None)
     physics_core = ("ru", "rv", "rtheta", "rqv", "rqc")
     physics_optional = ("rqr", "rqi", "rqs", "rw")
-    extra_scalars = (getattr(physics_tendencies, "extra_scalars", None)
-                     if physics_tendencies is not None else None) or {}
+    # The IAU forcing's step tendencies wrap the driver's own; their rates are
+    # read through scalar_for like any other, so the wrapped object is the
+    # one whose layout is checked, and the rates must be Metal arrays.
+    layout_owner = physics_tendencies
+    if type(physics_tendencies).__name__ == "IauStepTendencies":
+        layout_owner = physics_tendencies.base
+        if not all(isinstance(value, MetalArray) for value in (
+                *physics_tendencies.slow.values(),
+                *physics_tendencies.scalars.values())):
+            layout_owner = False
+    extra_scalars = (getattr(layout_owner, "extra_scalars", None)
+                     if layout_owner else None) or {}
     physics_layout_supported = (
-        physics_tendencies is None or (
-            metal_state and driver is not None
-            and driver.tendencies is physics_tendencies
-            and all(isinstance(getattr(physics_tendencies, name, None),
+        layout_owner is None or (
+            layout_owner is not False
+            and metal_state and driver is not None
+            and driver.tendencies is layout_owner
+            and all(isinstance(getattr(layout_owner, name, None),
                                MetalArray) for name in physics_core)
-            and all(getattr(physics_tendencies, name, None) is None
-                    or isinstance(getattr(physics_tendencies, name), MetalArray)
+            and all(getattr(layout_owner, name, None) is None
+                    or isinstance(getattr(layout_owner, name), MetalArray)
                     for name in physics_optional)
             and all(isinstance(value, MetalArray)
                     for value in extra_scalars.values())))
@@ -811,7 +1002,7 @@ def _capture_advective_qv_forcing_metal(state: DomainState, cfg, tend,
     _clear_metal_forcing_ring(state, cfg, state.rqvften)
 
 
-def _capture_advective_qv_forcing(state: DomainState, tend, mu0) -> None:
+def _capture_advective_qv_forcing(state: DomainState, tend, mu0, *, cfg=None) -> None:
     """EXPORT the stage's pure advective qv rate as WRF ``RQVFTEN``.
 
     ``tend`` is the WRF-coupled advective tendency of qv carrying an extra
@@ -826,6 +1017,22 @@ def _capture_advective_qv_forcing(state: DomainState, tend, mu0) -> None:
     """
     if getattr(state, "rqvften", None) is None:
         return
+    if WRF_EXACT and getattr(state, "_metal_setup_state", False):
+        if getattr(cfg, "cu_physics", 0) in (3, 6):
+            if state.has_msf:
+                from woof.metal.bandwidth_family import map_tendency
+                map_tendency(tend, state.msft, state.rqvften, add=False)
+            else:
+                state.rqvften[...] = tend
+        else:
+            from woof.metal.moist_stage import submit_strict_forcing_capture
+            submit_strict_forcing_capture(state, tend, mu0)
+        return
+    if WRF_EXACT and getattr(cfg, "cu_physics", 0) in (3, 6):
+        # WRF set_tend saves each RK stage, including the final PD stage.
+        state.rqvften[...] = (tend * state.msft[None]
+                             if state.has_msf else tend)
+        return
     rate = tend / (state.c1h[:, None, None] * mu0[None]
                    + state.c2h[:, None, None])
     if state.has_msf:
@@ -839,6 +1046,131 @@ def _ieva_scalar(state, tend, q_old, implicit, mu0, mu, dt_eff) -> None:
     from woof.core import ieva
     ieva.solve_scalar(state, tend, q_old, implicit[1], mu0, mu, dt_eff,
                       variant=getattr(implicit, "variant", "wrf_471"))
+
+
+def _wrf_scalar_source(state: DomainState, name: str, physics_tendencies,
+                       fixed_tendencies, out):
+    """Strict mode: WRF's ``moist_tend`` for one species before the boundary.
+
+    ``first_rk_step_part2`` starts it at zero and adds the physics
+    tendency (update_phy_ten), then the km_opt mixing; rk_scalar_tend adds
+    the sixth order on rk_step 1.  woof holds the mixing and the sixth
+    order together as the species' fixed tendency.
+    """
+    out[...] = 0
+    physics = (physics_tendencies.scalar_for(name)
+               if physics_tendencies is not None else None)
+    fixed = (fixed_tendencies.get(name)
+             if fixed_tendencies is not None else None)
+    if WRF_EXACT and getattr(state, "_metal_setup_state", False):
+        from woof.metal.da_state import binary
+        if physics is not None:
+            out[...] = binary(out, physics)
+        if fixed is not None:
+            out[...] = binary(out, fixed)
+    else:
+        if physics is not None:
+            out += physics
+        if fixed is not None:
+            out += fixed
+    return out
+
+
+def _advance_species_wrf(state: DomainState, cfg: RunConfig, name: str, q, q0,
+                         tend, held, *, ru, rv, ww, implicit, pd, bufs,
+                         mu0, mu, mu0_row, mu_row, chm0, dt_eff: float,
+                         final: bool, physics_tendencies, fixed_tendencies,
+                         recompute: bool, apply_scalar_lbc,
+                         export_advective_forcing: bool,
+                         boundary_x: bool, boundary_y: bool) -> None:
+    """Strict mode: one species' RK-stage update in WRF's order.
+
+    WRF holds ONE source tendency per species, ``moist_tend`` (physics,
+    mixing, sixth order, then on rk_step 1 relax_bdy_scalar adding onto
+    that sum and spec_bdy_scalar replacing the specified rows), and
+    rk_update_scalar forms ``tendency = advect_tend*msfty + sc_tend``
+    (advection only inside the specified ring) before the coupled update.
+    On the final positive-definite stage rk_update_scalar_pd first folds
+    it into the time-t scalar as ``((c1*muold+c2)*q + dt*sc)/(c1*muold+c2)``
+    with the time-t mass on both sides, and the advection then runs on
+    that scalar (module_em.F).  The default path adds the parts one by one
+    in another grouping, which moved qv in 23719 of 80000 words at the
+    end of the first RK stage (combo-sweep round 3, case p1).
+    """
+    nz, ny, nx = q0.shape
+    boundary_forced = cfg.specified or cfg.nested
+    if held is not None:
+        source = held
+    else:
+        source = _wrf_scalar_source(state, name, physics_tendencies,
+                                    fixed_tendencies,
+                                    state.scratch((nz, ny, nx), "moist_sc_t"))
+        if (cfg.nested or recompute) and apply_scalar_lbc is not None:
+            apply_scalar_lbc(state, cfg, name, source, apply_relax=True,
+                             source_field=q0)
+    ww_explicit = ww if implicit is None else implicit[0]
+    if pd:
+        q0_eff = state.scratch((nz, ny, nx), "moist_pd_q0")
+        if getattr(state, "_metal_setup_state", False):
+            _update_scalar_in_place(q0_eff, q0, source, state.c1h, state.c2h,
+                                    mu0, mu0, dt_eff, clamp=False)
+        else:
+            q0_eff[...] = ((chm0 * q0) + (DTYPE(dt_eff) * source)) / chm0
+        tend[...] = 0
+        # advect_scalar_pd's mut is rk_scalar_tend's grid%muts, the
+        # acoustic loop's MUT + MU'' (the ring its own carrier), not
+        # mub + mu_2 after small_step_finish: 1674 interior words of the
+        # final-stage qv advection differed by that rounding.
+        from woof.core.dycore import WRF_MUTS_SLOT
+        muts = state.existing_scratch(WRF_MUTS_SLOT)
+        launch_pd_fluxes(q, q0_eff, ru, rv, ww_explicit,
+                         mu if muts is None else muts, state,
+                         cfg.dx, cfg.dy, dt_eff, *bufs,
+                         msft=state.msft, has_msf=state.has_msf,
+                         open_x=boundary_x, open_y=boundary_y,
+                         vorder=vertical_orders(cfg)[0])
+        launch_pd_renorm_apply(q0_eff, mu0, *bufs, tend=tend, coord=state,
+                               dx=cfg.dx, dy=cfg.dy, dt=dt_eff,
+                               msft=state.msft, has_msf=state.has_msf,
+                               open_x=boundary_x, open_y=boundary_y)
+        if implicit is not None:
+            _ieva_scalar(state, tend, q0_eff, implicit, mu0, mu, dt_eff)
+        if name == "qv" and WRF_EXACT and cfg.cu_physics in (3, 6):
+            _capture_advective_qv_forcing(state, tend, mu0, cfg=cfg)
+        if boundary_forced:
+            _exclude_specified_ring_advection(tend, cfg.spec_zone)
+        _update_scalar_in_place(
+            q, q0_eff, tend, state.c1h, state.c2h, mu0_row, mu_row, dt_eff,
+            msft=((state.msft if getattr(state, "_metal_setup_state", False)
+                   else state.msft.reshape(-1)) if state.has_msf else None),
+            clamp=False)
+        return
+    tend[...] = 0
+    launch_flux_div_scalar(q, ru, rv, ww_explicit, tend, state,
+                           cfg.dx, cfg.dy, open_x=boundary_x,
+                           open_y=boundary_y, msf=state.msft,
+                           has_msf=state.has_msf, spec=boundary_forced,
+                           vorder=vertical_orders(cfg)[0])
+    if implicit is not None:
+        _ieva_scalar(state, tend, q0, implicit, mu0, mu, dt_eff)
+    if name == "qv" and (export_advective_forcing or (WRF_EXACT and cfg.cu_physics in (3, 6))):
+        _capture_advective_qv_forcing(state, tend, mu0, cfg=cfg)
+    if boundary_forced:
+        # flux_div_scalar fills the specified ring; rk_update_scalar's
+        # advection loop starts inside it (i_start = ids+spec_zone).
+        _exclude_specified_ring_advection(tend, cfg.spec_zone)
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.moist_stage import submit_strict_tendency
+        submit_strict_tendency(tend, source, state.msft, state.has_msf)
+    else:
+        if state.has_msf:
+            tend *= state.msft[None]
+        tend += source
+    # No clamp: rk_update_scalar keeps WRF's float32 residuals, which can
+    # be a few 1e-13 below zero after the final stage (one qv word at the
+    # first step of the round-3 pair).  The default path clamps them.
+    _update_scalar_in_place(q, q0, tend, state.c1h, state.c2h, mu0_row,
+                            mu_row, dt_eff, clamp=False)
 
 
 def advance_scalars_stage(state: DomainState, cfg: RunConfig,
@@ -933,11 +1265,14 @@ def advance_scalars_stage(state: DomainState, cfg: RunConfig,
     # woof deviation (open-BC benchmark pins).
     pd = (final and cfg.moist_adv_opt == 1
           and not (cfg.open_x or cfg.open_y))
+    scalar_pd = (final and getattr(state, "qke_adv", None) is not None
+                 and cfg.scalar_adv_opt == 1
+                 and not (cfg.open_x or cfg.open_y))
     # The coupled update rebuilds both column masses per element, so the only
     # consumer left of a materialized ``chm0`` is the PD source fold; ``chm``
     # has none at all.
     chm0 = (state.c1h[:, None, None] * mu0[None] + state.c2h[:, None, None]
-            if pd else None)
+            if pd or scalar_pd else None)
     # WRF captures qv's lateral spec+relax tendency ONCE per model step,
     # on RK step 1 from the time-t scalar (relax_bdy_scalar +
     # spec_bdy_scalar into moist_tend, solve_em.F:2255-2292, gated
@@ -981,24 +1316,50 @@ def advance_scalars_stage(state: DomainState, cfg: RunConfig,
                     raise KeyError(f"unregistered external scalar hold: {name}")
                 held_lbc[name] = held
                 if apply_relax:
-                    held[...] = 0
-                    apply_scalar_lbc(state, cfg, name, held, apply_relax=True)
+                    if WRF_EXACT:
+                        # WRF relaxes onto moist_tend, which already holds
+                        # the species' physics and mixing, with grid%mut,
+                        # the stage-start (time-t) mass: the capture runs
+                        # after small_step_finish has moved state.mup.
+                        _wrf_scalar_source(state, name, physics_tendencies,
+                                           fixed_tendencies, held)
+                        apply_scalar_lbc(state, cfg, name, held,
+                                         apply_relax=True,
+                                         source_field=getattr(state,
+                                                              name + "0"))
+                    else:
+                        held[...] = 0
+                        apply_scalar_lbc(state, cfg, name, held,
+                                         apply_relax=True)
             from woof.boundary_fields import HELD_BOUNDARY_FIELDS
             from woof.ingest.lateral_bc import COUPLED_SCALAR_STATE_FIELDS
             recomputed_lbc = frozenset(
                 name for name in supplied
                 if name in COUPLED_SCALAR_STATE_FIELDS
                 and name not in HELD_BOUNDARY_FIELDS)
-    if pd:
+    if pd or scalar_pd:
         bufs = (state.scratch((nz, ny, nx + 1), "pd_fxl"),
                 state.scratch((nz, ny, nx + 1), "pd_fxc"),
                 state.scratch((nz, ny + 1, nx), "pd_fyl"),
                 state.scratch((nz, ny + 1, nx), "pd_fyc"),
                 state.scratch((nz + 1, ny, nx), "pd_fzl"),
                 state.scratch((nz + 1, ny, nx), "pd_fzc"))
-    for name in SPECIES:
+    for name in (name for name in SPECIES if getattr(state, name, None) is not None):
         q = getattr(state, name)
         q0 = getattr(state, name + "0")
+        if WRF_EXACT:
+            _advance_species_wrf(
+                state, cfg, name, q, q0, tend, held_lbc.get(name), ru=ru,
+                rv=rv, ww=ww, implicit=implicit, pd=pd,
+                bufs=(bufs if pd else None), mu0=mu0, mu=mu,
+                mu0_row=mu0_row, mu_row=mu_row, chm0=chm0, dt_eff=dt_eff,
+                final=final, physics_tendencies=physics_tendencies,
+                fixed_tendencies=fixed_tendencies,
+                recompute=name in recomputed_lbc,
+                apply_scalar_lbc=apply_scalar_lbc,
+                export_advective_forcing=export_advective_forcing,
+                boundary_x=boundary_x, boundary_y=boundary_y)
+            continue
         # The zeroing lives on each consuming branch rather than the loop
         # prologue: on the positive-definite path the buffer is re-zeroed
         # below before any kernel reads it, so a prologue memset was ten
@@ -1105,10 +1466,28 @@ def advance_scalars_stage(state: DomainState, cfg: RunConfig,
                        if fixed_tendencies is not None else None),
                 clamp=final)
 
-    if getattr(state, "qi", None) is not None:
+    if extra_moist_species(state):
         for name in extra_moist_species(state):
+            # QKE follows scalar_adv_opt. Preserve every pre-existing
+            # field's selector when the new carrier is absent.
+            pd = (scalar_pd if name == "qke_adv" else
+                  (final and cfg.moist_adv_opt == 1
+                   and not (cfg.open_x or cfg.open_y)))
             q = getattr(state, name)
             q0 = getattr(state, name + "0")
+            if WRF_EXACT:
+                _advance_species_wrf(
+                    state, cfg, name, q, q0, tend, held_lbc.get(name), ru=ru,
+                    rv=rv, ww=ww, implicit=implicit, pd=pd,
+                    bufs=(bufs if pd else None), mu0=mu0, mu=mu,
+                    mu0_row=mu0_row, mu_row=mu_row, chm0=chm0, dt_eff=dt_eff,
+                    final=final, physics_tendencies=physics_tendencies,
+                    fixed_tendencies=fixed_tendencies,
+                    recompute=name in recomputed_lbc,
+                    apply_scalar_lbc=apply_scalar_lbc,
+                    export_advective_forcing=export_advective_forcing,
+                    boundary_x=boundary_x, boundary_y=boundary_y)
+                continue
             # See the qv/qc/qr loop: zeroing moved onto the branches that
             # consume it, dropping the dead prologue memset on the pd path.
             recompute = name in recomputed_lbc
@@ -1403,7 +1782,9 @@ def advance_tke_stage(state: DomainState, cfg: RunConfig,
         _tke_budget_transport(state, cfg, tend, final=final)
         if metal_state:
             _update_scalar_in_place(q, q0_eff, tend, state.c1h, state.c2h,
-                                    mu0, mu, dt_eff, clamp=False)
+                                    mu0, mu, dt_eff,
+                                    msft=state.msft if WRF_EXACT and state.has_msf else None,
+                                    clamp=False)
         else:
             q[...] = (chm0 * q0_eff + dt_eff * tend) / chm
     else:
@@ -1421,10 +1802,16 @@ def advance_tke_stage(state: DomainState, cfg: RunConfig,
         if fixed_tendency is not None and not metal_state:
             tend += fixed_tendency
         if metal_state:
-            _update_scalar_in_place(
-                q, q0, tend, state.c1h, state.c2h, mu0, mu, dt_eff,
-                msft=state.msft if state.has_msf else None,
-                fixed=fixed_tendency, clamp=False)
+            if WRF_EXACT and fixed_tendency is not None:
+                from woof.metal.moist_stage import submit_strict_tendency
+                submit_strict_tendency(tend, fixed_tendency, state.msft, state.has_msf)
+                _update_scalar_in_place(q, q0, tend, state.c1h, state.c2h,
+                                        mu0, mu, dt_eff, clamp=False)
+            else:
+                _update_scalar_in_place(
+                    q, q0, tend, state.c1h, state.c2h, mu0, mu, dt_eff,
+                    msft=state.msft if state.has_msf else None,
+                    fixed=fixed_tendency, clamp=False)
         else:
             q[...] = (chm0 * q0 + dt_eff * tend) / chm
 
@@ -1477,4 +1864,8 @@ def _tke_budget_transport(state, cfg, tend, *, final: bool) -> None:
         return
     slot = tke_budget.term(state, cfg, "transport")
     if slot is not None:
-        slot[...] = tend
+        if WRF_EXACT and getattr(state, "_metal_setup_state", False) and state.has_msf:
+            from woof.metal.bandwidth_family import map_tendency
+            map_tendency(tend, state.msft, slot, add=False)
+        else:
+            slot[...] = tend

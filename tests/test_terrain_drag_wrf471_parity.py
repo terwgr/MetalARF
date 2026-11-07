@@ -229,28 +229,43 @@ def test_gwdo_gsl_matches_wrf_module_bl_gwdo_gsl(dx):
 
 
 #: Worst ULP distance from ``ysu_column_topo`` to bl_ysu.F90's ctopo-present
-#: call, per field, over the columns that take WRF's branches. Cases 7, 12
+#: call, per field, over the columns that take WRF's branches. Cases 12
 #: and 13 have inherited branch differences, pinned separately below rather
-#: than hidden inside the arithmetic maximum. Measured on the RTX 4090 (sm_89) and the RTX
+#: than hidden inside the arithmetic maximum.  Case 7 (a positive subnormal
+#: br) joined the arithmetic columns in lane/parity-286, when the kernel's
+#: br > 0 compare moved to double (ysu_f2d) and stopped DAZing it. Measured on the RTX 4090 (sm_89) and the RTX
 #: 5090 (sm_120), identical on both, pinned for equality.
 #:
 #: The momentum numbers are the YSU kernel's own distance and nothing of the
 #: arm's: the worst ABSOLUTE error is 4.2375177e-08 m/s2 in every one of the
 #: five (ctopo, ctopo2) variants, the same as with ctopo = 1, which is the YSU
-#: baseline (``CTOPO_BASELINE_MAX_ULP`` in tests/test_ysu_wrf461_parity.py,
-#: du 1457 and dv 23302 against this same call).  The ULP count rises to 5826
+#: baseline (``BASELINE_MAX_ULP`` in tests/test_ysu_wrf461_parity.py,
+#: du 1457 and dv 23302 against this same call, which every YSU entry point
+#: takes with ctopo = 1 since lane/parity-286).  The ULP count rises to 5826
 #: only because ctopo = 0 and 0.5 shrink the worst lane's tendency four-fold
 #: (:func:`test_the_topo_arm_adds_no_absolute_error_to_ysus_own`).  The one
 #: U10 ULP is a 1e-45 m/s input wind: the YSU module compiles through
 #: ``cupy.RawModule``, which appends ``-ftz=true``, so ``ctopo2*u10`` flushes
 #: the subnormal to 0 where gfortran keeps it (``SUBNORMAL_LANES`` in the YSU
 #: test is the same flush; :func:`test_the_u10_ulp_is_a_flushed_subnormal_input`).
-YSU_TOPO_MAX_ULP: dict[str, int] = {"du": 5826, "dv": 23302, "u10": 1,
+#:
+#: RE-MEASURED 2026-10-05 (lane/parity-286, sweep row 10): du/dv 5826/23302
+#: -> 0.  The YSU unit now compiles with --fmad=false and glibc's powf/expf,
+#: so every (ctopo, ctopo2) variant is bitwise WRF's ctopo call; the U10 ULP is
+#: the flushed subnormal input above.  RTX PRO 6000, NVRTC 13.4.92 and 12.9.86.
+YSU_TOPO_MAX_ULP: dict[str, int] = {"du": 0, "dv": 0, "u10": 1,
                                     "v10": 0}
-YSU_BRANCH_CASES = (7, 12, 13)
+#: Held out of the tables above: case 13 only, where WRF's own prfac2 0/0
+#: writes NaN.  Case 12 (ust = hfx = qfx = 0) left with the zero-flux short
+#: circuit (golden/ports-pbl, 2026-10-12) and is graded with the rest; the
+#: tables did not move.
+YSU_BRANCH_CASES = (13,)
+#: The two calm columns, still asserted variant by variant below.
+YSU_CALM_CASES = (12, 13)
 #: The YSU kernel's worst absolute momentum-tendency error against WRF, with
-#: or without the topo arm (m/s2).
-YSU_ABS_MOMENTUM_ERROR = np.float32(4.2375177e-08)
+#: or without the topo arm (m/s2): zero since lane/parity-286 (was
+#: 4.2375177e-08, CUDA libm and contraction).
+YSU_ABS_MOMENTUM_ERROR = np.float32(0.0)
 
 
 def _ysu_topo_run():
@@ -277,6 +292,10 @@ def _ysu_topo_run():
             psim=row("psim"), psih=row("psih"), xland=row("xland"),
             u10=row("u10_in"), v10=row("v10_in"), dt=float(fx["dt"]),
             ysu_topdown_pblmix=flag, topo=(row("ctopo"), row("ctopo2")),
+            # The WRF 4.7.1 ctopo reference grades the legacy kernel; the
+            # WRF 4.8 generation's terrain columns are graded against WRF
+            # 4.8 by tools/ysu_generations_oracle/gate.py.
+            ysu_version="wrf_461",
             u10_out=u10o, v10_out=v10o)
         host = {k: cp.asnumpy(v) for k, v in out.items()}
         host["u10"] = cp.asnumpy(u10o)
@@ -299,7 +318,11 @@ def test_ysu_topo_arm_is_this_far_from_wrfs_ctopo_call():
     for name in ("u10", "v10"):
         d = _ulp(got[name][0, keep], fx[name][keep])
         measured[name] = int(d.max())
-    assert measured == YSU_TOPO_MAX_ULP, measured
+    from woof import wrf_exact
+    # The strict build keeps the subnormal u10 input the default flushes.
+    expected = (dict(YSU_TOPO_MAX_ULP, u10=0) if wrf_exact.ENABLED
+                else YSU_TOPO_MAX_ULP)
+    assert measured == expected, measured
 
 
 @requires_gpu
@@ -328,11 +351,15 @@ def test_the_u10_ulp_is_a_flushed_subnormal_input():
         assert (got[name][0, differ] == 0).all(), name
 
 
-# The fifteen legacy probes have a branch disagreement with WRF. They
-# remain constrained for every coefficient variant, not removed from the
-# oracle. Case 7 flushes a positive subnormal BR and becomes convective;
-# cases 12/13 take the inherited zero-coupling early return. WRF case 13
-# produces 0/0 in prfac2, so its heat diffusivity and theta rates are NaN.
+# The ten calm-column probes (cases 12 and 13, five coefficient variants
+# each).  Until golden/ports-pbl they took the kernel's zero-flux early
+# return and sat 1e9 ULP from WRF; with that return removed every lane is
+# WRF's word, for every (ctopo, ctopo2) variant, wherever WRF wrote a number.
+# (Case 7, a positive subnormal BR the kernel used to flush and read as
+# convective, was closed in lane/parity-286 and is graded with the rest.)
+# WRF case 13 produces 0/0 in prfac2, so its theta rates and one heat
+# diffusivity are NaN (1 << 40 is this file's ULP distance to a NaN); the
+# port is finite there by declared divergence.
 _LEGACY_FLOAT_REFERENCE = {
     "du": "utnp", "dv": "vtnp", "dtheta": "ttnp", "dqv": "qvtnp",
     "dqc": "qctnp", "dqi": "qitnp", "exch_h": "exch_hx",
@@ -340,37 +367,20 @@ _LEGACY_FLOAT_REFERENCE = {
     "delta": "delta", "u10": "u10", "v10": "v10",
 }
 _LEGACY_MAX_ULP = {
-    7: {"du": (44972260, 44972260, 44972260, 44972260, 1880226385),
-        "dv": 29686352, "dtheta": 1768691394, "dqv": 48094686,
-        "dqc": 0, "dqi": 0, "exch_h": 2914795, "exch_m": 3113042,
-        "hpbl": 1525, "wstar": 1047649058, "delta": 1100214161,
-        "u10": 0, "v10": 0},
-    12: {"du": 920253600, "dv": 912814535, "dtheta": 892734306,
-         "dqv": 830378986, "dqc": 0, "dqi": 0, "exch_h": 1029269266,
-         "exch_m": 1041400506, "hpbl": 40359677, "wstar": 0,
-         "delta": 0, "u10": 0, "v10": 0},
-    13: {"du": 919006959, "dv": 911486339, "dtheta": 1 << 40,
-         "dqv": 822223394, "dqc": 0, "dqi": 0, "exch_h": 1 << 40,
-         "exch_m": 1039745268, "hpbl": 7644438, "wstar": 0,
-         "delta": 0, "u10": 0, "v10": 0},
+    12: {name: 0 for name in _LEGACY_FLOAT_REFERENCE},
+    13: {**{name: 0 for name in _LEGACY_FLOAT_REFERENCE},
+         "dtheta": 1 << 40, "exch_h": 1 << 40},
 }
-# Finite absolute momentum errors in m/s2, measured on sm_89 and sm_120.
+# Absolute momentum errors in m/s2: exactly zero on both columns, measured on
+# sm_120 (G1 RTX PRO 6000, NVRTC 12.9.86).
 _LEGACY_MOMENTUM_ABS = {
-    7: {"du": (0.00013580848462879658, 0.00015851622447371483,
-               0.000145461643114686, 0.0001324494369328022,
-               0.00012903742026537657),
-        "dv": (3.1595758628100157e-05, 3.7215882912278175e-05,
-               3.39839025400579e-05, 3.076397115364671e-05,
-               2.9917515348643064e-05)},
-    12: {"du": (6.495582056231797e-06,) * 5,
-         "dv": (3.4636921100172913e-06,) * 5},
-    13: {"du": (5.928675363975344e-06,) * 5,
-         "dv": (3.1616953037882922e-06,) * 5},
+    12: {"du": (0.0,) * 5, "dv": (0.0,) * 5},
+    13: {"du": (0.0,) * 5, "dv": (0.0,) * 5},
 }
 
 
 @requires_gpu
-@pytest.mark.parametrize("case", YSU_BRANCH_CASES)
+@pytest.mark.parametrize("case", YSU_CALM_CASES)
 def test_legacy_ysu_branches_and_topo_outputs_keep_their_measured_distance(case):
     """Every legacy output has a numeric, NaN or exact branch constraint."""
     fx, got = _ysu_topo_run()
@@ -399,7 +409,7 @@ def test_legacy_ysu_branches_and_topo_outputs_keep_their_measured_distance(case)
                 assert float(absolute) == _LEGACY_MOMENTUM_ABS[case][port][variant]
 
     # CTOPO2's correction is independent of the inherited PBL regimes and
-    # is exactly WRF's for every legacy column, including the early return.
+    # is exactly WRF's for every legacy column, calm columns included.
     for name in ("u10", "v10"):
         _assert_bits(got[name][0, columns], fx[name][columns], f"case {case} {name}")
     if case == 7:
@@ -415,22 +425,22 @@ def test_legacy_ysu_branches_and_topo_outputs_keep_their_measured_distance(case)
             assert (got[port][:, 0, columns[1:]] != got[port][:, 0, columns[0]][:, None]).any(axis=0).all()
             assert (fx[ref][:, columns[1:]] != fx[ref][:, columns[0]][:, None]).any(axis=0).all()
     else:
-        for name in ("du", "dv", "dtheta", "dqv", "dqc", "dqi", "exch_h", "exch_m"):
-            _assert_bits(got[name][:, 0, columns], np.zeros((40, 5), np.float32), name)
-        for name in ("wstar", "delta", "topdown_radsum", "wstar3_2", "cloudflg"):
-            assert (got[name][0, columns] == 0).all(), name
-        _assert_bits(got["hpbl"][0, columns], fx["dz8w"][0, columns], "early-return hpbl")
-        np.testing.assert_array_equal(got["kpbl"][0, columns], 1)
+        # The calm columns run the whole YSU column, as WRF does: no early
+        # return, so KPBL and PBLH are WRF's on every coefficient variant
+        # (case 12: nine levels, 703.36 m; case 13: two levels).
+        np.testing.assert_array_equal(got["kpbl"][0, columns], fx["kpbl"][columns])
         np.testing.assert_array_equal(fx["kpbl"][columns], 9 if case == 12 else 2)
+        _assert_bits(got["hpbl"][0, columns], fx["hpbl"][columns], "calm-column hpbl")
         if case == 12:
             assert (fx["ust"][columns] == 0).all()
         else:
             assert (fx["ust"][columns] == np.finfo(np.float32).smallest_subnormal).all()
-        # Zero stress has no CTOPO momentum effect in WRF either, even
-        # though its background mixing differs from the port's early exit.
-        for reference in ("utnp", "vtnp"):
+        # Zero stress has no CTOPO momentum effect in WRF, and none in the
+        # port: the background mixing is the same for all five variants.
+        for port, reference in (("du", "utnp"), ("dv", "vtnp")):
             for column in columns:
                 _assert_bits(fx[reference][:, column], fx[reference][:, columns[0]], reference)
+                _assert_bits(got[port][:, 0, column], got[port][:, 0, columns[0]], port)
 
 
 @requires_gpu
@@ -488,7 +498,7 @@ _MUTATIONS = (
      "const real varmax_ss = 35.0f, varmax_fd = 160.0f, beta_ss = 0.1f;",
      "const real varmax_ss = 35.0f, varmax_fd = 160.0f, beta_ss = 0.11f;",
      "gsl", 3000),
-    ("ysu_drag", True, "real ctopo = topo.ctopo[col];",
+    ("ysu_drag", True, "real ctopo = topo.ctopo ? topo.ctopo[col] : 1.0f;",
      "real ctopo = 1.0f;", "ysu_abs", None),
     ("ysu_blend", True, "real c2 = topo.ctopo2[col];",
      "real c2 = 1.0f;", "ysu_ulp", None),
@@ -506,8 +516,13 @@ def test_oracle_gate_rejects_an_active_scheme_mutation(monkeypatch, mutation):
     kernel_manifest = import_module("woof.certify.kernel_manifest")
 
     _, ysu, old, new, gate, value = mutation
+    from woof import wrf_exact
+    from woof.ysu_generations import ysu_kernel_selection
+    # The YSU module the gates run: "ysu" by default, the strict arm's
+    # module (ysu_480) under GPUWM_WRF_EXACT=1.
+    ysu_name = ysu_kernel_selection("wrf_461", strict=wrf_exact.ENABLED)[0]
     original = kernels.module_source if ysu else terrain_drag.module_source
-    source = original("ysu") if ysu else original()
+    source = original(ysu_name) if ysu else original()
     assert source.count(old) == 1
     changed = source.replace(old, new)
     gates = {
@@ -522,6 +537,13 @@ def test_oracle_gate_rejects_an_active_scheme_mutation(monkeypatch, mutation):
         terrain_drag._module.cache_clear()
         kernels.load_module.cache_clear()
         kernels.get_kernel.cache_clear()
+        # The strict YSU arm compiles through the integer-define tier
+        # (YSU_LEGACY_TOPDOWN), which keeps caches of its own.
+        for loader in ("load_module_int_defines", "get_kernel_int_defines",
+                       "load_module_unflushed"):
+            clear = getattr(getattr(kernels, loader, None), "cache_clear", None)
+            if clear is not None:
+                clear()
 
     clear_modules()
     try:
@@ -532,7 +554,15 @@ def test_oracle_gate_rejects_an_active_scheme_mutation(monkeypatch, mutation):
             patch.setattr(kernel_manifest, "_MANIFEST", {})
             if ysu:
                 patch.setattr(kernels, "module_source", lambda name:
-                              changed if name == "ysu" else original(name))
+                              changed if name == ysu_name else original(name))
+                # The strict arm's integer-define tier assembles its own text.
+                tiered = kernels.module_source_int_defines
+                patch.setattr(
+                    kernels, "module_source_int_defines",
+                    lambda name, *args, **kwargs: (
+                        tiered(name, *args, **kwargs).replace(old, new)
+                        if name == ysu_name
+                        else tiered(name, *args, **kwargs)))
             else:
                 patch.setattr(terrain_drag, "module_source", lambda: changed)
             with pytest.raises(AssertionError):
@@ -542,8 +572,8 @@ def test_oracle_gate_rejects_an_active_scheme_mutation(monkeypatch, mutation):
         # Reload after restoring both source factory and record dictionary:
         # later tests use the production module and its production receipt.
         if ysu:
-            kernels.load_module("ysu")
-            key = f"{kernels.MODULE_KEY_ROOT}:ysu"
+            kernels.load_module(ysu_name)
+            key = f"{kernels.MODULE_KEY_ROOT}:{ysu_name}"
         else:
             import cupy as cp
             terrain_drag._module(cp.cuda.Device().id)

@@ -26,7 +26,7 @@ PHASE2_DEFAULTS = {
 }
 
 
-def _write_toml(tmp_path, *, nz=64, time_step_sound=4, grid="", dynamics=""):
+def _write_toml(tmp_path, *, nz=64, time_step_sound=4, grid="", dynamics="", run="", tail=""):
     """Minimal valid TOML; ``grid``/``dynamics`` append extra key lines
     (TOML tolerates the ragged indentation of interpolated lines)."""
     f = tmp_path / "run.toml"
@@ -45,28 +45,13 @@ def _write_toml(tmp_path, *, nz=64, time_step_sound=4, grid="", dynamics=""):
         {dynamics}
         [run]
         run_seconds = 900.0
+        {run}
+        {tail}
     """))
     return f
 
 def test_load_config(tmp_path):
-    f = tmp_path / "run.toml"
-    f.write_text(textwrap.dedent("""
-        [grid]
-        nx = 512
-        ny = 1
-        nz = 64
-        dx = 100.0
-        dy = 100.0
-        ztop = 6400.0
-        [dynamics]
-        dt = 0.5
-        time_step_sound = 4
-        khdif = 75.0
-        kvdif = 75.0
-        [run]
-        run_seconds = 900.0
-        case = "straka"
-    """))
+    f = _write_toml(tmp_path, dynamics="khdif = 75.0\nkvdif = 75.0", run='case = "straka"')
     cfg = load_config(f)
     assert cfg.nx == 512 and cfg.nz == 64
     assert cfg.dt == 0.5
@@ -102,39 +87,22 @@ def test_phase2_fields_roundtrip(tmp_path):
     combination (Task 12 final review: fail-loud guards): the open/moist
     file keeps flat terrain, the terrain file stays periodic.
     """
-    f = tmp_path / "run.toml"
-    f.write_text(textwrap.dedent("""
-        [grid]
-        nx = 512
-        ny = 1
-        nz = 64
-        dx = 100.0
-        dy = 100.0
-        ztop = 6400.0
-        [dynamics]
-        dt = 0.5
-        time_step_sound = 4
-        hybrid_opt = 2
-        etac = 0.15
-        moist = true
-        mp_physics = 1
-        moist_adv_opt = 2
-        diff_6th_opt = 2
-        diff_6th_factor = 0.25
-        km_opt = 4
-        c_s = 0.18
-        w_damping = 1
-        open_x = true
-        open_y = true
-        bl_pbl_physics = 1
-        # A PBL scheme without a surface layer is refused by
-        # validate_run_config and by woof/core/physics.py
-        # initialize_physics alike: YSU consumes UST/HFX/QFX/WSPD/RMOL and
-        # nothing writes them at sf_sfclay_physics=0.
-        sf_sfclay_physics = 91
-        [run]
-        run_seconds = 900.0
-    """))
+    f = _write_toml(tmp_path, dynamics=(
+        'hybrid_opt = 2\n'
+        'etac = 0.15\n'
+        'moist = true\n'
+        'mp_physics = 1\n'
+        'moist_adv_opt = 2\n'
+        'diff_6th_opt = 2\n'
+        'diff_6th_factor = 0.25\n'
+        'km_opt = 4\n'
+        'c_s = 0.18\n'
+        'w_damping = 1\n'
+        'open_x = true\n'
+        'open_y = true\n'
+        'bl_pbl_physics = 1\n'
+        'sf_sfclay_physics = 91\n'
+    ))
     cfg = load_config(f)
     assert cfg.hybrid_opt == 2
     assert cfg.etac == 0.15
@@ -148,24 +116,11 @@ def test_phase2_fields_roundtrip(tmp_path):
     assert cfg.w_damping == 1
     assert cfg.open_x is True
     assert cfg.open_y is True
-    g = tmp_path / "terrain.toml"
-    g.write_text(textwrap.dedent("""
-        [grid]
-        nx = 512
-        ny = 1
-        nz = 64
-        dx = 100.0
-        dy = 100.0
-        ztop = 6400.0
-        terrain_opt = 1
-        hill_height = 500.0
-        hill_halfwidth = 5000.0
-        [dynamics]
-        dt = 0.5
-        time_step_sound = 4
-        [run]
-        run_seconds = 900.0
-    """))
+    g = _write_toml(tmp_path, grid=(
+        'terrain_opt = 1\n'
+        'hill_height = 500.0\n'
+        'hill_halfwidth = 5000.0\n'
+    ))
     tcfg = load_config(g)
     assert tcfg.terrain_opt == 1
     assert tcfg.hill_height == 500.0
@@ -189,38 +144,32 @@ def test_phase2_defaults_preserve_phase1(tmp_path):
 # open boundaries or bypass the PD limiter; load_config and dycore.step both
 # reject them.)
 
-def test_rejects_open_with_terrain(tmp_path):
-    with pytest.raises(NotImplementedError, match="terrain_opt"):
-        load_config(_write_toml(tmp_path, grid="terrain_opt = 1",
-                                dynamics="open_x = true"))
-    with pytest.raises(NotImplementedError, match="terrain_opt"):
-        load_config(_write_toml(tmp_path, grid="terrain_opt = 1",
-                                dynamics="open_y = true"))
-    # flat + open and terrain + periodic both stay legal
+def test_open_boundaries_admit_boundary_aware_terrain(tmp_path):
+    for axis in ("x", "y"):
+        cfg = load_config(_write_toml(tmp_path, grid="terrain_opt = 1",
+                                     dynamics=f"open_{axis} = true"))
+        assert cfg.terrain_opt == 1 and getattr(cfg, f"open_{axis}")
     assert load_config(_write_toml(tmp_path, dynamics="open_x = true")).open_x
     assert load_config(_write_toml(tmp_path,
                                    grid="terrain_opt = 1")).terrain_opt == 1
 
 
-def test_rejects_open_with_constant_k(tmp_path):
-    with pytest.raises(NotImplementedError, match="khdif"):
-        load_config(_write_toml(tmp_path,
-                                dynamics="open_x = true\nkhdif = 75.0"))
-    with pytest.raises(NotImplementedError, match="khdif"):
-        load_config(_write_toml(tmp_path,
-                                dynamics="open_y = true\nkvdif = 75.0"))
-    with pytest.raises(NotImplementedError, match="khdif"):
-        load_config(_write_toml(tmp_path,
-                                dynamics="specified = true\nkhdif = 75.0"))
-    # constant K stays legal on periodic domains (the Straka setup)
-    cfg = load_config(_write_toml(tmp_path, dynamics="khdif = 75.0"))
-    assert cfg.khdif == 75.0
+def test_admits_open_with_constant_k(tmp_path):
+    # km_opt=1 is WRF's isotropic_km package (3641a45f7), whose operators
+    # carry WRF's open-boundary bounds; the refusal belonged to the retired
+    # periodic Laplacian.  The km1 v4.6.1 column oracle
+    # (tests/test_km1_wrf461_oracle.py) holds the open-ring words.
+    for dynamics in ("open_x = true\nkhdif = 75.0",
+                     "open_y = true\nkvdif = 75.0", "khdif = 75.0"):
+        cfg = load_config(_write_toml(tmp_path, dynamics=dynamics))
+        assert cfg.km_opt == 1 and max(cfg.khdif, cfg.kvdif) == 75.0
 
 
 def test_km_opt_selects_exactly_one_diffusion_scheme(tmp_path):
-    with pytest.raises(ValueError, match="km_opt=4.*khdif/kvdif"):
-        load_config(_write_toml(
-            tmp_path, dynamics="km_opt = 4\nkhdif = 75.0"))
+    for option in (2, 3, 4):
+        cfg = load_config(_write_toml(tmp_path,
+            dynamics=f"km_opt = {option}\nkhdif = 75.0\nkvdif = 25.0\nopen_x = true"))
+        assert (cfg.km_opt, cfg.khdif, cfg.kvdif) == (option, 75.0, 25.0)
     cfg = load_config(_write_toml(
         tmp_path, dynamics="km_opt = 1\nkhdif = 75.0\nkvdif = 25.0"))
     assert (cfg.km_opt, cfg.khdif, cfg.kvdif) == (1, 75.0, 25.0)
@@ -280,42 +229,16 @@ def test_step_guards_unsupported_combinations_cpu():
 
     base = dict(nx=8, ny=4, nz=6, dx=100.0, dy=100.0, ztop=1000.0,
                 dt=0.5, run_seconds=0.0)
-    with pytest.raises(NotImplementedError, match="terrain"):
-        step(_Stub(), RunConfig(**base, open_x=True, terrain_opt=1))
-    bumpy = _Stub()
-    bumpy.ht[2, 3] = 25.0              # nonzero ht without terrain_opt
-    with pytest.raises(NotImplementedError, match="terrain"):
-        step(bumpy, RunConfig(**base, open_y=True))
-    with pytest.raises(NotImplementedError, match="khdif"):
-        step(_Stub(), RunConfig(**base, open_x=True, khdif=75.0))
-    with pytest.raises(NotImplementedError, match="khdif"):
-        step(_Stub(), RunConfig(**base, open_y=True, kvdif=75.0))
-    with pytest.raises(NotImplementedError, match="khdif"):
-        step(_Stub(), RunConfig(**base, specified=True, khdif=75.0))
-    with pytest.raises(ValueError, match="km_opt=4.*khdif/kvdif"):
-        step(_Stub(), RunConfig(**base, km_opt=4, khdif=75.0))
+    # Constant K on open or specified boundaries is no longer refused here:
+    # km_opt=1 runs WRF's isotropic_km package (3641a45f7), so the step's
+    # khdif/kvdif guard retired with the periodic Laplacian it protected.
     with pytest.raises(ValueError, match="diff_6th_opt"):
         step(_Stub(moist=True), RunConfig(**base, moist=True,
                                           diff_6th_opt=1))
 
 
 def test_rejects_unknown_table(tmp_path):
-    f = tmp_path / "run.toml"
-    f.write_text(textwrap.dedent("""
-        [grid]
-        nx = 512
-        ny = 1
-        nz = 64
-        dx = 100.0
-        dy = 100.0
-        ztop = 6400.0
-        [dynamics]
-        dt = 0.5
-        [run]
-        run_seconds = 900.0
-        [physics]
-        mp_physics = 1
-    """))
+    f = _write_toml(tmp_path, tail="[physics]\nmp_physics = 1")
     with pytest.raises(ValueError) as excinfo:
         load_config(f)
     msg = str(excinfo.value)
@@ -357,21 +280,7 @@ def test_rejects_invalid_hybrid_opt(tmp_path):
 
 
 def test_rejects_unknown_key(tmp_path):
-    f = tmp_path / "run.toml"
-    f.write_text(textwrap.dedent("""
-        [grid]
-        nx = 512
-        ny = 1
-        nz = 64
-        dx = 100.0
-        dy = 100.0
-        ztop = 6400.0
-        [dynamics]
-        dt = 0.5
-        not_a_real_option = 1
-        [run]
-        run_seconds = 900.0
-    """))
+    f = _write_toml(tmp_path, dynamics="not_a_real_option = 1")
     with pytest.raises(ValueError) as excinfo:
         load_config(f)
     msg = str(excinfo.value)

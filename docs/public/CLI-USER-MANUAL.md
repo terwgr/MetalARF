@@ -101,6 +101,7 @@ Or in PowerShell:
 .\.venv\Scripts\Activate.ps1
 ```
 
+Use `13` when appropriate, or omit the CUDA option to use detection. The scripts install the checkout's matching `recast-woof-data` companion before the main editable package, stage external tables, and build all seventeen native workspaces: the GRIB bridges (`tools/grib1_bridge`), the renderer (`tools/rustwx`), the Zarr reader (`tools/zarr_bridge`), the mapped decode engine (`tools/rw_wps`), the dealiasing library (`tools/region_global_dealias`), hydro payload (`tools/nextgen_hydrofabric`), hydro forcing (`tools/nextgen_forcing`), gauge verification (`tools/nextgen_verify`) and hydro preparation (`tools/hydro_world`, `tools/hydro_world_params`, `tools/nextgen_reservoir_prepare`, `tools/hydro_world_init`) and ocean preparation (`tools/ocean_prepare`, `tools/rw-bathy`) and the wind-turbine table decoder (`tools/wind-table`) and hydro output (`tools/nextgen_output`) and the Icechunk store writer (`tools/rw_icechunk`). The hydro and ocean workspaces fetch their locked registry dependencies before the offline build. Missing Rust prompts for rustup consent; `--yes` / `-Yes` supplies that consent. The scripts make `.venv` on free-threaded Python 3.14t (a `python3.14t` on PATH, or one uv finds or installs), because multi-card `--devices` forecasts run about twice as fast on it; `--python` / `-Python` picks another interpreter, and when no 3.14t can be had the install goes on with a warning that names the cost. `--no-render` / `-NoRender` skips the renderer build, and `--no-fetch-tables` / `-NoFetchTables` defers the external table download.
 
 
 The release's Linux x86-64 platform wheel targets manylinux 2.28. Use the artifact appropriate to your operating system and architecture, and verify the installed environment with Doctor. See [installation details](../install.md) for distribution-specific setup.
@@ -117,6 +118,8 @@ woof go configs/first.toml --outdir runs/first --products t2,refl
 ```
 
 `domain` writes the TOML and companion authorities, including its WPS namelist, and prints the actual geometry and next steps. `check` evaluates configuration and resource readiness. `go --dry-run` validates the route and shows the launch without fetching or integrating. Removing `--dry-run` starts the chain.
+
+On a fresh install, `domain` still exits 0 when its memory checks pass and only static geography is missing. It names the missing datasets and prints `woof fetch-geog --config CONFIG.toml` for the file it created. Stage that geography before launching. A failing memory check still makes configuration creation exit nonzero.
 
 Bare `woof domain` opens guided questions. Specify `--source` in scripts: its default need not be GFS. For an 8 GiB planning target, add `--vram-gib 8`; this declares capacity rather than measuring current free memory. Check again on the machine that will run it.
 
@@ -175,7 +178,7 @@ Use UTC cycles such as `YYYY-MM-DDTHH`. `latest` may access the network. Public 
 
 `--forecast-start-hour K` begins at lead `K` from a cycle; `--hours N` remains the length of the requested window. Thus `K=12`, `N=6` requires source leads 12 through 18 and initializes from a forecast, not the cycle's analysis. Review both the cycle and the resulting model start time.
 
-Go downloads missing ERA5 using the saved `[fetch]` recipe. The default provider is Copernicus CDS, using `~/.cdsapirc`, `CDSAPI_RC`, or `CDSAPI_URL`/`CDSAPI_KEY`. Set `era5_provider = "arco"` in `[fetch]` to use Google's public hourly ARCO archive without a key, and declare `era5-combined.nc` in `[case_data].forcing`; CDS produces `era5-combined.grib` in the same fetch output directory. The Google adapter reads all 37 pressure levels and the required surface and soil fields into native NetCDF for the existing preparation path. Long windows, upper atmospheric coverage, and regional bounds must match the source's available data.
+Go downloads missing ERA5 using the saved `[fetch]` recipe. `woof domain` picks the provider: Copernicus CDS when a CDS key is present (`~/.cdsapirc`, `CDSAPI_RC`, or `CDSAPI_URL`/`CDSAPI_KEY`), otherwise Google's public hourly ARCO archive, which needs no key, and it prints which one it chose and why; `--era5-provider` names one explicitly. ERA5 is published about a week behind real time, so with no key a bare `woof domain` for a window the ARCO archive does not hold yet runs on GFS instead and says so (`--source era5` keeps ERA5 and is refused for such a window, naming the newest cycle the archive holds). A `[fetch]` table that names no provider uses the CDS. Set `era5_provider = "arco"` in `[fetch]` to use Google's public hourly ARCO archive without a key, and declare `era5-combined.nc` in `[case_data].forcing`; CDS produces `era5-combined.grib` in the same fetch output directory. The Google adapter reads all 37 pressure levels and the required surface and soil fields into native NetCDF for the existing preparation path. Long windows, upper atmospheric coverage, and regional bounds must match the source's available data.
 
 For a separate acquisition, use `woof fetch --source era5 --era5-provider cds --retrieve` or `woof fetch --source era5 --era5-provider arco`, adding the desired `--cycle`, `--hours`, `--area`, `--cadence`, and `--out`. Without `--retrieve` or the ARCO provider, the legacy CDS request-template command remains available.
 
@@ -193,10 +196,10 @@ Replace every uppercase operand with values admitted for your study. `--area` is
 
 Use a request-specific directory. Existing complete matching files are reused. Reusing a directory for different source requests can be refused; `--force-refetch` deliberately moves previous files aside and downloads again. It is not the first remedy for an unexplained validation error.
 
-### ERA5 lake temperatures
+### ERA5 lake temperatures and lake ice
 
-New CDS acquisitions include lake mixed-layer temperature, lake ice
-temperature and lake ice depth at the requested forcing times and source
+ERA5 acquisitions (CDS and ARCO) include lake mixed-layer temperature, lake
+ice temperature and lake ice depth at the requested forcing times and source
 grid. When a lake has no usable SST analysis of its own, WOOF uses the
 explicit lake-model water field. This also covers small inland lakes that
 occupy no majority-water ERA5 grid cell. The provider is reported as
@@ -204,16 +207,27 @@ occupy no majority-water ERA5 grid cell. The provider is reported as
 of that individual lake. Existing fields and source-file hashes remain
 part of the forcing provenance.
 
-This provider currently supports ice-free lake water. Every contributing
-bilinear donor must have zero lake-ice depth; a one-sided numerical-zero
-convention admits only tiny negative source roundoff within
-`2.220446049250313e-16 m`, records its use and retains the raw values.
-Any positive depth, unknown depth, or larger negative depth is refused.
-Frozen or partially frozen lake initialization needs a compatible freshwater
-ice route; lake ice is not reinterpreted as sea ice. Old forcing files that
-lack the lake fields remain readable, but an unsupported lake still refuses
-preparation. Acquire the current ERA5 inventory into a new output directory
-to preserve an older run's inputs.
+The same lake model gives the lake its ice. A lake cell's ice cover is the
+bilinear weight of the ERA5 points around it whose lake ice depth is above
+zero, and its skin temperature is their lake ice temperature. Where that cover
+is larger than ERA5's sea-ice cover, it replaces it, so a frozen lake starts
+frozen instead of as open water near 273 K. With WRF's default
+`fractional_seaice = 0`, a cell is ice at a cover of 0.5 or more, the same
+threshold as sea ice. Like real.exe with a GFS lake's ice, the ice is carried
+as the cell's sea-ice fraction (`XICE`), because the lake model is off by
+default. The preparation log counts the cells that start as lake ice, and the
+receipt's `lake_ice_mapping` lists the rule and the cells where a donor had no
+usable depth or ice temperature. Those cells keep ERA5's sea-ice cover.
+
+Open-water lake temperature needs every contributing bilinear donor to have
+zero lake-ice depth. A one-sided numerical-zero convention admits only tiny
+negative source roundoff within `2.220446049250313e-16 m`, records its use and
+retains the raw values. A lake cell with a partly frozen or unknown donor that
+the lake model does not cover with ice keeps the component skin temperature,
+and the preparation log names those cells. Old forcing files that lack the
+lake fields remain readable and use ERA5's sea-ice cover alone. Acquire the
+current ERA5 inventory into a new output directory to preserve an older run's
+inputs.
 
 ### Supply an explicit preparation donor
 
@@ -236,6 +250,8 @@ woof check CONFIG.toml --json
 ```
 
 The concise report gives the outcome and actionable diagnostics. `--explain` adds detailed estimates and evidence; JSON is available for programs. Device capacity, currently available memory, allocation budget, forecast peak, initialization requirements, and host RAM are different measurements. Read measured physical capacity separately from any declared target capacity, and requested allocation budget separately from the effective budget. See [Backends](BACKENDS.md) for Metal memory preflight.
+
+When the memory checks pass but the configuration needs unstaged geography, `check` exits 6 and names the missing datasets with the remedy `woof fetch-geog --config CONFIG.toml`. A failing memory check keeps its own exit code. `go`, including `--dry-run`, refuses missing geography before downloading forcing data.
 
 An estimate can report **INCOMPLETE** when only some gates could be evaluated. Exit zero then means those evaluated gates fit; it does not qualify an absent GPU or unevaluated requirements. An unpriced source-decode RAM requirement is unknown, not zero.
 
@@ -418,6 +434,8 @@ woof import-namelist namelist.wps namelist.input --output configs/imported.toml
 ```
 
 Without `--output`, the command reports without writing the resolved TOML. An import can substitute an implementation or refuse unsupported settings; read its report. Translation alone neither acquires the declared input data nor qualifies every WRF option. Use the producing files, not a loosely similar namelist.
+
+Which WRF physics options import, and why each other one is refused, is listed in `docs/public/WRF-OPTIONS.md`. That page is generated by putting every option WRF v4.7.1 declares through this command, so it says what the installed importer does.
 
 For a configuration that already declares local inputs in `[case_data]`, the direct route is:
 
@@ -680,6 +698,7 @@ Keep return codes, exact command arguments, configuration copies, and reported o
 | `prep` | Prepare caller-supplied inputs. | `--dry-run`, `--show-source`, support reports. |
 | `sim` | Run a finished prepared bundle. | `--print-command`. |
 | `go` | Select and execute the preparation/forecast/render chain. | `--dry-run`. |
+| `hydro` | Prepare pinned NextGen inputs or run a complete GPU hydrology realization. | `demo lower-colorado-tx --prepare-only`; see [HYDRO.md](HYDRO.md) for current runtime limits. |
 | `run` | Run declared local case data, WRF real output, or WPS met_em. | Check/import the configuration or producing namelists first. |
 | `import-namelist` | Translate a WRF namelist pair and report substitutions. | Omit `--output`. |
 | `downscale` | Integrate an offline child from archived history. | `--dry-run` writes a derived plan into new output. |

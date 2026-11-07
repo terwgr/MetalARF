@@ -1,0 +1,200 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_exact_cloud_optics",
+      "module": "rrtmgp_exact_cloud_optics",
+      "source": "woof/metal/shaders/rrtmgp_exact_cloud_optics.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_cloud_optics",
+      "resources": [
+        [
+          "clwp",
+          "float",
+          "read"
+        ],
+        [
+          "ciwp",
+          "float",
+          "read"
+        ],
+        [
+          "reliq",
+          "float",
+          "read"
+        ],
+        [
+          "dgice",
+          "float",
+          "read"
+        ],
+        [
+          "extliq",
+          "float",
+          "read"
+        ],
+        [
+          "ssaliq",
+          "float",
+          "read"
+        ],
+        [
+          "asyliq",
+          "float",
+          "read"
+        ],
+        [
+          "extice",
+          "float",
+          "read"
+        ],
+        [
+          "ssaice",
+          "float",
+          "read"
+        ],
+        [
+          "asyice",
+          "float",
+          "read"
+        ],
+        [
+          "tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "ssa",
+          "float",
+          "read_write"
+        ],
+        [
+          "asym",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "clwp": [
+          [
+            "ncell"
+          ]
+        ],
+        "ciwp": [
+          [
+            "ncell"
+          ]
+        ],
+        "reliq": [
+          [
+            "ncell"
+          ]
+        ],
+        "dgice": [
+          [
+            "ncell"
+          ]
+        ],
+        "extliq": [
+          [
+            "nliq",
+            "nband"
+          ]
+        ],
+        "ssaliq": [
+          [
+            "nliq",
+            "nband"
+          ]
+        ],
+        "asyliq": [
+          [
+            "nliq",
+            "nband"
+          ]
+        ],
+        "extice": [
+          [
+            "nice",
+            "nband",
+            "nrgh"
+          ]
+        ],
+        "ssaice": [
+          [
+            "nice",
+            "nband",
+            "nrgh"
+          ]
+        ],
+        "asyice": [
+          [
+            "nice",
+            "nband",
+            "nrgh"
+          ]
+        ],
+        "tau": [
+          [
+            "ncell",
+            "nband"
+          ]
+        ],
+        "ssa": [
+          [
+            "ncell",
+            "nband"
+          ]
+        ],
+        "asym": [
+          [
+            "ncell",
+            "nband"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "nband",
+          "int32"
+        ],
+        [
+          "nliq",
+          "int32"
+        ],
+        [
+          "nice",
+          "int32"
+        ],
+        [
+          "nrgh",
+          "int32"
+        ],
+        [
+          "liq_offset",
+          "float32"
+        ],
+        [
+          "liq_step",
+          "float32"
+        ],
+        [
+          "ice_offset",
+          "float32"
+        ],
+        [
+          "ice_step",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

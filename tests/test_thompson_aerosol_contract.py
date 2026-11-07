@@ -251,7 +251,7 @@ def test_ccn_activate_is_vendored_but_stays_out_of_the_classic_contract():
         asset.filename for asset in CLASSIC_TABLE_ASSETS}
     ignore = (Path(__file__).parents[1] / ".gitignore").read_text(
         encoding="utf-8")
-    assert ("\ngpuwm-data/woof_data/data/thompson/tables/CCN_ACTIVATE.BIN"
+    assert ("\nrecast-woof-data/woof_data/data/thompson/tables/CCN_ACTIVATE.BIN"
             not in ignore), (
         "the asset is committed now; a .gitignore entry would make a clean "
         "checkout silently unable to validate mp=28")

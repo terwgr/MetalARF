@@ -1,9 +1,9 @@
-"""Platform tagging for the wheel, decided by what the wheel CARRIES.
+"""Platform tagging and source provenance for the built distribution.
 
 Everything about this distribution is declared in ``pyproject.toml``.
-This file exists for one thing setuptools cannot express declaratively:
-a wheel that ships prebuilt Rust artifacts is not installable on every
-platform, and must not claim to be.
+This file handles build details setuptools cannot express declaratively:
+stamping the source commit, and tagging a wheel for the platform its
+prebuilt Rust artifacts run on.
 
 The rule is mechanical, and it reads the tree rather than a flag:
 
@@ -33,8 +33,11 @@ docstring for what is staged and what deliberately is not.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,6 +56,8 @@ _STAGED = _HERE / "woof" / "libexec" / "bridges"
 _MANIFEST = _STAGED / "BUNDLE.json"
 _METAL_MANIFEST = _HERE / "woof" / "libexec" / "metal" / "METAL_BUNDLE.json"
 _METAL_STAGED = _METAL_MANIFEST.parent
+_NOAH_DECODER = _HERE / 'woof' / 'hex' / 'libexec' / 'noah-table-decode'
+_NOAH_MANIFEST = _NOAH_DECODER.with_suffix('.json')
 _DARWIN_METAL_FILES = frozenset({
     "libwoof_metal.dylib",
     "woof_default.metallib",
@@ -60,6 +65,36 @@ _DARWIN_METAL_FILES = frozenset({
 })
 _DARWIN_METAL_ABI_MAJOR = 1
 _DARWIN_METAL_ABI_MINIMUM_MINOR = 7
+
+
+def _build_provenance(version: str) -> dict:
+    """Stamp at build time; retain the stamp when a wheel comes from an sdist."""
+    identity = dict(schema="gpuwm-build-provenance-v1", version=version,
+                    commit="unknown")
+    if (_HERE / ".git").exists():
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(_HERE), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True, timeout=10)
+            commit = result.stdout.strip()
+            if len(commit) == 40 and all(c in "0123456789abcdef" for c in commit):
+                identity["commit"] = commit
+        except (OSError, subprocess.SubprocessError):
+            pass
+    else:
+        try:
+            stamp = json.loads((_HERE / "gpuwm-build-provenance.json").read_text())
+            if (isinstance(stamp, dict)
+                    and stamp.get("schema") == identity["schema"]
+                    and stamp.get("version") == version):
+                commit = stamp.get("commit")
+                if (isinstance(commit, str) and len(commit) == 40
+                        and all(c in "0123456789abcdef" for c in commit)):
+                    identity["commit"] = commit
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    return identity
+
 
 #: Platform key (woof's spelling) -> the wheel platform tag it installs on.
 #:
@@ -72,6 +107,90 @@ PLATFORM_TAGS = {
     "linux-x86_64": "manylinux_2_28_x86_64",
     "darwin-arm64": "macosx_14_0_arm64",
 }
+
+#: The glibc the Linux tag promises, and the reading that checks the staged
+#: bytes keep that promise.  The linker writes each version requirement's
+#: name (``GLIBC_2.34`` and the like) into the file, so the newest one any
+#: staged ELF names is the oldest glibc that can load every artifact.
+_LINUX_POLICY_GLIBC = (2, 28)
+_GLIBC_VERSION = re.compile(rb"GLIBC_(\d+)\.(\d+)")
+_ELF_MAGIC = b"\x7fELF"
+
+
+@functools.lru_cache(maxsize=None)
+def _staged_glibc_floor(staged: Path = _STAGED) -> tuple[tuple[int, int], str] | None:
+    """``((major, minor), artifact)``: the newest glibc a staged ELF needs, or None."""
+
+    newest = None
+    for path in sorted(staged.rglob("*")):
+        if not path.is_file():
+            continue
+        with path.open("rb") as handle:
+            if handle.read(4) != _ELF_MAGIC:
+                continue
+        found = [(int(a), int(b)) for a, b in _GLIBC_VERSION.findall(path.read_bytes())]
+        if found and (newest is None or max(found) > newest[0]):
+            newest = (max(found), path.relative_to(staged).as_posix())
+    return newest
+
+
+def _platform_tag(platform: str) -> str:
+    """The wheel platform tag for the staged bytes, read from the bytes.
+
+    The breakage this prevents (2.9.4 cut, 2026-10-22): the battery's
+    measurement wheel was built from bridges compiled on an Ubuntu glibc
+    2.43 host and still tagged ``manylinux_2_28_x86_64``, because the tag
+    came from ``PLATFORM_TAGS`` alone.  pip installed it on the woof hex
+    CI runner (Ubuntu 24.04, glibc 2.39) and 398 tests failed with
+    ``version `GLIBC_2.43' not found`` (rw_mpas_hostprep, rw_mpas_static,
+    rw_wrfbatch).  A Linux wheel whose artifacts need a newer glibc than
+    the policy is now tagged with the glibc they need, so pip refuses it
+    where it cannot load; :func:`_refuse_off_policy_wheel` refuses to build
+    such a wheel at all outside a development build.
+    """
+
+    tag = PLATFORM_TAGS[platform]
+    if platform != "linux-x86_64":
+        return tag
+    floor = _staged_glibc_floor()
+    if floor is None or floor[0] <= _LINUX_POLICY_GLIBC:
+        return tag
+    (major, minor), _artifact = floor
+    return f"manylinux_{major}_{minor}_x86_64"
+
+
+def _refuse_off_policy_wheel(platform: str) -> None:
+    """No release wheel carries Linux artifacts newer than the manylinux_2_28 policy.
+
+    The release builds the Linux bridges inside the pinned manylinux_2_28
+    image (``tools/build_linux_release_bridges.py``, the cut's native stage),
+    where nothing can bind a newer symbol.  Bridges built on the host bind
+    its glibc (2.43 on the Ubuntu nodes: ``atan2f``, ``acosf``, ``libm``), and
+    a wheel of them installs on RHEL 8/9 and Ubuntu 22.04/24.04 as helpers
+    that cannot start.  A development or measurement wheel
+    (``WOOF_ALLOW_UNPINNED_WHEEL=1``, never published) is built, tagged with
+    the glibc its bytes need.
+    """
+
+    tag = _platform_tag(platform)
+    if tag == PLATFORM_TAGS[platform]:
+        return
+    (major, minor), artifact = _staged_glibc_floor()
+    if os.environ.get(_UNPINNED_OK_ENV) == "1":
+        print(f"setup.py: WARNING: woof/libexec/bridges/{artifact} needs glibc "
+              f"{major}.{minor}, newer than the {PLATFORM_TAGS[platform]} policy; this "
+              f"development wheel is tagged {tag}, so pip installs it only where it loads.",
+              file=sys.stderr)
+        return
+    raise SystemExit(
+        f"setup.py: REFUSED: woof/libexec/bridges/{artifact} needs glibc "
+        f"{major}.{minor}, newer than the {PLATFORM_TAGS[platform]} policy the "
+        "release promises: these bridges were built on a host, not in the pinned "
+        "manylinux_2_28 image, and on any host older than glibc "
+        f"{major}.{minor} every door that starts one fails with \"version "
+        f"`GLIBC_{major}.{minor}' not found\".  Build the Linux bridges with "
+        "tools/build_linux_release_bridges.py (the cut's native stage), stage "
+        "them, then build.")
 
 
 #: The packaged bridge pins document of the tree being built.  Read
@@ -375,6 +494,16 @@ def _staged_platform() -> str | None:
         raise SystemExit(
             "setup.py: REFUSED: a Darwin wheel requires both the complete "
             "bridge bundle and the Metal bundle to be staged.")
+    if _NOAH_DECODER.exists() or _NOAH_MANIFEST.exists():
+        if platform != 'darwin-arm64':
+            raise SystemExit('setup.py: REFUSED: the staged native Noah decoder requires '
+                             'the complete Darwin bridge and Metal bundles; clean it with '
+                             'tools/mpasphys_v842_noah/build_decoder.py --clean for a pure build')
+        manifest = json.loads(_NOAH_MANIFEST.read_text(encoding='utf-8'))
+        if (manifest.get('schema') != 'mpas-noah-table-decoder/v1'
+                or manifest.get('target') != 'aarch64-apple-darwin'):
+            raise SystemExit('setup.py: REFUSED: the native Noah decoder target/schema differs')
+        _verify_staged_file(_NOAH_DECODER, manifest, _NOAH_MANIFEST, 'bytes')
     return platform
 
 
@@ -438,6 +567,11 @@ _DEFAULT_MODE = 0o100644
 #: Archive prefix of the staged artifacts, as it appears in the wheel.
 _STAGED_PREFIX = "woof/libexec/bridges/"
 
+#: Deflate level of the platform wheel's rewrite.  9 rather than zlib's
+#: default 6 is 0.77 MB on the Linux wheel, measured at 2.8.9, against
+#: the 100,000,000-byte per-file limit both platform wheels were over.
+_WHEEL_DEFLATE_LEVEL = 9
+
 
 def _force_executable_bits(wheel_path: Path) -> int:
     """Stamp 0755 on every staged artifact inside a built wheel.
@@ -457,7 +591,10 @@ def _force_executable_bits(wheel_path: Path) -> int:
     been assembled on a platform that happens to preserve it.
 
     Rewrites the archive, which RECORD tolerates: RECORD hashes member
-    CONTENT, and no content changes.
+    CONTENT, and no content changes.  The rewrite is also where the
+    platform wheel's deflate level is set (:data:`_WHEEL_DEFLATE_LEVEL`).
+    The level is given to ``writestr`` because a member written from a
+    ``ZipInfo`` ignores the level the archive was opened with.
     """
 
     import shutil
@@ -468,20 +605,24 @@ def _force_executable_bits(wheel_path: Path) -> int:
     with tempfile.TemporaryDirectory() as work:
         rebuilt = Path(work) / wheel_path.name
         with zipfile.ZipFile(wheel_path) as source:
-            with zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as target:
+            # Level 9 keeps the platform wheel under the 100,000,000-byte per-file limit.
+            with zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED,
+                                 compresslevel=_WHEEL_DEFLATE_LEVEL) as target:
                 for info in source.infolist():
                     payload = source.read(info.filename)
                     updated = zipfile.ZipInfo(info.filename, info.date_time)
                     updated.compress_type = info.compress_type
                     updated.external_attr = info.external_attr
-                    if (info.filename.startswith(_STAGED_PREFIX)
+                    if ((info.filename.startswith(_STAGED_PREFIX)
                             and not info.filename.endswith("/")
-                            and not info.filename.endswith("BUNDLE.json")):
+                            and not info.filename.endswith("BUNDLE.json"))
+                            or info.filename == 'woof/hex/libexec/noah-table-decode'):
                         updated.external_attr = (_EXECUTABLE_MODE << 16)
                         stamped += 1
                     elif not info.external_attr >> 16:
                         updated.external_attr = (_DEFAULT_MODE << 16)
-                    target.writestr(updated, payload)
+                    target.writestr(updated, payload,
+                                    compresslevel=_WHEEL_DEFLATE_LEVEL)
         shutil.move(str(rebuilt), str(wheel_path))
     return stamped
 
@@ -492,7 +633,7 @@ class _PlatformWheel(_BdistWheel):
     def finalize_options(self) -> None:
         platform = _staged_platform()
         if platform is not None:
-            self.plat_name = PLATFORM_TAGS[platform]
+            self.plat_name = _platform_tag(platform)
             self.plat_name_supplied = True
         super().finalize_options()
         self.root_is_pure = platform is None
@@ -510,6 +651,8 @@ class _PlatformWheel(_BdistWheel):
         # obtain tags; they do not build a distributable package.  Gate
         # the actual wheel build, before it copies any package bytes.
         _refuse_unpinned_wheel(_staged_platform())
+        if _staged_platform() is not None:
+            _refuse_off_policy_wheel(_staged_platform())
         super().run()
         if _staged_platform() is None:
             return
@@ -522,6 +665,12 @@ class _PlatformWheel(_BdistWheel):
                 f"stamped 0{_EXECUTABLE_MODE & 0o7777:o} on {stamped} staged "
                 f"artifact(s) in {wheel_path.name}", level=2)
 
+    def write_wheelfile(self, wheelfile_base, *args, **kwargs):
+        super().write_wheelfile(wheelfile_base, *args, **kwargs)
+        stamp = _build_provenance(self.distribution.get_version())
+        (Path(wheelfile_base) / "build-provenance.json").write_text(
+            json.dumps(stamp, sort_keys=True) + "\n", encoding="utf-8")
+
 
 class _SourceDistribution(_Sdist):
     """Refuses to pack a source distribution out of a staged tree."""
@@ -533,6 +682,12 @@ class _SourceDistribution(_Sdist):
         # finalize_options; the wheel's pin gate guards its run method.
         _refuse_staged_sdist()
         super().finalize_options()
+
+    def make_release_tree(self, base_dir, files):
+        super().make_release_tree(base_dir, files)
+        (Path(base_dir) / "gpuwm-build-provenance.json").write_text(
+            json.dumps(_build_provenance(self.distribution.get_version()),
+                       sort_keys=True) + "\n", encoding="utf-8")
 
 
 #: Module-name globs, per package, that are development material and never
@@ -563,24 +718,49 @@ def is_development_module(package: str, module: str) -> bool:
                for pattern in DEVELOPMENT_MODULE_GLOBS.get(package, ()))
 
 
+#: Packages whose wheel payload is exactly their ``package-data``
+#: declaration.  setuptools' ``include-package-data`` (on by default for a
+#: pyproject build) also hands every sdist member that lives under a
+#: declared package to the wheel, and ``docs`` is a declared package for one
+#: file (``docs/mpas-seam.md``, see pyproject.toml).  MEASURED on the 2.9.2
+#: candidate: when MANIFEST.in started shipping the public pages in the
+#: source archive, the manylinux wheel grew from 3,161 to 3,287 members
+#: (+1,850,932 compressed bytes, all ``docs/``) and tripped the cut's
+#: 100,000,000-byte per-file limit.  The sdist keeps its pages; the wheel
+#: keeps its declaration.  tests/test_mpas_seam_doc_is_packaged.py measures
+#: it with a manifest contribution present.
+DECLARATION_ONLY_DATA_PACKAGES: tuple[str, ...] = ("docs",)
+
+
 class _OperationalBuildPy(_BuildPy):
     """Copies every module of a package into the wheel EXCEPT the probes."""
 
     def run(self) -> None:
         # setuptools reuses build/lib across invocations and does not remove
         # package-data files that disappeared from the source tree.  Clear
-        # only the two platform payload locations so a later pure wheel can
+        # only the platform payload locations so a later pure wheel can
         # never inherit a previously staged Darwin/Linux/Windows bundle.
         import shutil
 
         build_package = Path(self.build_lib) / "woof" / "libexec"
         for name in ("bridges", "metal"):
             shutil.rmtree(build_package / name, ignore_errors=True)
+        shutil.rmtree(Path(self.build_lib) / 'woof' / 'hex' / 'libexec', ignore_errors=True)
         super().run()
 
     def find_package_modules(self, package, package_dir):  # noqa: D102
         return [row for row in super().find_package_modules(package, package_dir)
                 if not is_development_module(row[0], row[1])]
+
+    def find_data_files(self, package, src_dir):  # noqa: D102
+        if package not in DECLARATION_ONLY_DATA_PACKAGES:
+            return super().find_data_files(package, src_dir)
+        manifest = self.manifest_files
+        self.manifest_files = {}
+        try:
+            return super().find_data_files(package, src_dir)
+        finally:
+            self.manifest_files = manifest
 
 
 setup(distclass=_BinaryDistribution,

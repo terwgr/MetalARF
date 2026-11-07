@@ -181,9 +181,11 @@ def _only(nodes, description):
 
 
 def _body_call(body, name):
+    # A direct statement: the bare call, or the call bound to one name (the
+    # spawn walk keeps each leg's executor report).
     return _only([
         statement.value for statement in body
-        if isinstance(statement, ast.Expr)
+        if isinstance(statement, (ast.Expr, ast.Assign))
         and isinstance(statement.value, ast.Call)
         and _same_expression(statement.value.func, name)
     ], f"expected one direct {name} call")
@@ -197,7 +199,7 @@ def _assert_spawn_streaming_ownership(tree):
     """
     functions = {node.name: node for node in tree.body
                  if isinstance(node, ast.FunctionDef)}
-    route = functions["run_experiment"]
+    route = functions["_run_experiment"]
     scheduled = functions["_run_built_experiment"]
     walk = functions["walk_spawn_legs"]
 
@@ -341,10 +343,14 @@ def test_both_spawn_capable_routes_either_stream_or_refuse_by_name():
     from woof import prepared_domain_tree_forecast as tree
     from woof import prepared_single_domain_forecast as single
 
-    for module in (tree, single):
-        src = inspect.getsource(module)
-        assert "refuse_unrouted_spawn" in src
-        assert "steppers_for_tree" in src
+    src = inspect.getsource(single)
+    assert "refuse_unrouted_spawn" in src
+    assert "steppers_for_tree" in src
+    # The prepared tree route spawns (docs/storm-nests.md) and adjudicates
+    # each newborn against the cold plan that priced it.
+    src = inspect.getsource(tree)
+    assert "steppers_for_tree" in src
+    assert "spawned_stepper_factory=_newborn_stepper" in src
 
 
 # ---------------------------------------------------------------------------
@@ -576,7 +582,7 @@ def test_nothing_moves_when_the_diagnostic_is_off(monkeypatch):
 
 
 def test_the_streaming_inventory_carries_what_restart_deliberately_does_not():
-    """``streaming_manifest`` == ``carrier_manifest`` + the tracker windows.
+    """Streaming adds tracker windows and carried strict acoustic mass buffers.
 
     The restart classification is right and stays right: a window means "max
     since that consumer last looked" and a checkpoint cannot know when the
@@ -589,7 +595,14 @@ def test_the_streaming_inventory_carries_what_restart_deliberately_does_not():
     from tilestream import physics_inventory as physinv
 
     added = set(physinv.streaming_only_members())
+    # Strict acoustic mass carriers survive the gap between steps too.
+    # Exact restart now retains these too; tracker windows remain stream-only.
+    acoustic_slots = {"wrf_exact_muts", "wrf_exact_mu_halo"}
     assert added == {f"scratch/{s}" for s in uh_diag.TRACKER_WINDOW_SLOTS}
+    for slot in acoustic_slots:
+        assert restart.classify_scratch_slot(slot) == "carry"
+        assert slot not in restart.SERIALIZED_SCRATCH_SLOTS
+        assert slot in restart.CHECKPOINTED_CARRIED_SCRATCH_SLOTS
     for slot in uh_diag.TRACKER_WINDOW_SLOTS:
         # "carry", not "rebuild", since feat-uh-accum: restart.py grew a
         # THIRD scratch class for exactly this pair -- genuine cross-step

@@ -279,6 +279,56 @@ def test_nvidia_smi_success_still_requires_an_actual_gpu_identity(monkeypatch):
         GPUIdentity("GPU-test", "610.74", "RTX 5090", 0),)
 
 
+_FOUR_CARDS = tuple(GPUIdentity(f"GPU-{i}aaa-card", "615.71", "RTX PRO 6000", i)
+                    for i in range(4))
+
+
+@pytest.mark.parametrize("mask, expected", [
+    ("2", 2), ("GPU-3aaa-card", 3), ("GPU-1aaa", 1), (" 0 ", 0)])
+def test_one_card_cuda_mask_selects_that_card_on_a_multi_gpu_node(
+        monkeypatch, mask, expected):
+    # Named breakage: `CUDA_VISIBLE_DEVICES=<card> woof run` on a 4-card
+    # node was refused with "--gpu-uuid is required", nvidia-smi listing
+    # every card whatever the mask said.
+    monkeypatch.setattr(supervisor, "query_gpus", lambda: _FOUR_CARDS)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", mask)
+    monkeypatch.delenv("CUDA_DEVICE_ORDER", raising=False)
+    assert supervisor.select_gpu() == _FOUR_CARDS[expected]
+
+
+@pytest.mark.parametrize("mask", [None, "", "0,1", "7", "GPU-nope", "MIG-x"])
+def test_multi_gpu_node_without_one_named_card_still_refuses(monkeypatch, mask):
+    monkeypatch.setattr(supervisor, "query_gpus", lambda: _FOUR_CARDS)
+    if mask is None:
+        monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    else:
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", mask)
+    with pytest.raises(GPUPreflightError) as refused:
+        supervisor.select_gpu()
+    assert "GPU-0aaa-card" in str(refused.value)
+
+
+def test_cuda_ordinal_on_a_mixed_node_needs_bus_order(monkeypatch):
+    mixed = (GPUIdentity("GPU-a", "615.71", "RTX 5090", 0),
+             GPUIdentity("GPU-b", "615.71", "RTX 3080", 1))
+    monkeypatch.setattr(supervisor, "query_gpus", lambda: mixed)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER", raising=False)
+    with pytest.raises(GPUPreflightError, match="PCI_BUS_ID"):
+        supervisor.select_gpu()
+    monkeypatch.setenv("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
+    assert supervisor.select_gpu() == mixed[1]
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-b")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER")
+    assert supervisor.select_gpu() == mixed[1]
+
+
+def test_explicit_uuid_wins_over_the_cuda_mask(monkeypatch):
+    monkeypatch.setattr(supervisor, "query_gpus", lambda: _FOUR_CARDS)
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2")
+    assert supervisor.select_gpu("GPU-1aaa-card") == _FOUR_CARDS[1]
+
+
 @pytest.mark.parametrize("output", ["", "Failed to initialize NVML\n"])
 def test_nvidia_smi_zero_exit_with_no_inventory_is_not_success(
         monkeypatch, output):
@@ -704,25 +754,16 @@ def _install_scripted_supervisor(monkeypatch, tmp_path, scripts, *,
     return config, checkpoint, processes
 
 
-def test_supervise_monitor_accepts_normal_complete_exit(monkeypatch, tmp_path):
+def test_supervise_masks_worker_to_the_selected_physical_uuid(
+        monkeypatch, tmp_path):
     config, _, processes = _install_scripted_supervisor(
         monkeypatch, tmp_path, [[
             {"status": "integrating", "step": 1},
             {"status": "complete", "step": 2, "exit": 0},
         ]])
     result = supervise_experiment(config, tmp_path / "out", poll_seconds=0.05)
-    assert result.attempts == 1
-    assert result.heartbeat.status == "complete"
+    assert result.attempts == 1 and result.heartbeat.status == "complete"
     assert len(processes) == 1
-
-
-def test_supervise_masks_worker_to_the_selected_physical_uuid(
-        monkeypatch, tmp_path):
-    config, _, processes = _install_scripted_supervisor(
-        monkeypatch, tmp_path, [[
-            {"status": "complete", "step": 1, "exit": 0},
-        ]])
-    supervise_experiment(config, tmp_path / "out", poll_seconds=0.05)
     assert processes[0].env["CUDA_VISIBLE_DEVICES"] == "GPU-test"
 
 
@@ -1863,7 +1904,14 @@ def test_a_config_load_refusal_capsule_carries_the_refusal_sentence(
     assert headline.startswith("ValueError: ")
     # The sentence the user can act on, verbatim from the loader.
     assert "must carry at least one [[domain]] table" in headline
-    assert str(refused.value).splitlines()[0].rstrip(".") in headline
+    # Verbatim around the config path: a deep temporary root may shorten
+    # the path itself (to its last components), never the sentence.
+    line = str(refused.value).splitlines()[0].rstrip(".")
+    before, found, after = line.partition(str(config))
+    assert found, line
+    assert headline.startswith(f"ValueError: {before}")
+    assert headline.endswith(after)
+    assert f"{config.parent.name}{os.sep}{config.name}" in headline
 
     from woof.explain import EXPLAIN_MARK
     assert EXPLAIN_MARK not in headline
@@ -1966,6 +2014,29 @@ def test_the_headline_drops_the_explain_half_and_caps_the_length():
     long = supervisor._capsule_headline(
         {"exception": {"type": "RuntimeError", "message": "x" * 4000}})
     assert len(long) < 300 and long.endswith("...")
+
+
+@pytest.mark.parametrize("root", [
+    "/srv/ci/" + "/".join(["deep-temporary-root"] * 12),
+    "D:\\ci\\" + "\\".join(["deep-temporary-root"] * 12),
+])
+def test_a_deep_config_path_never_cuts_the_refusal_sentence(root):
+    """The sentence after the path is what the user acts on.
+
+    A CI runner's 120-character temporary root pushed the loader's
+    "[[domain]] table (array of tables)" past the cap, which cut it
+    (public CI rehearsal routes B and C, 2026-10-15).
+    """
+    sep = "\\" if "\\" in root else "/"
+    path = f"{root}{sep}case-a{sep}experiment.toml"
+    sentence = ("must carry at least one [[domain]] table (array of "
+                "tables)")
+    headline = supervisor._capsule_headline({"exception": {
+        "type": "ValueError",
+        "message": f"experiment config {path} {sentence}."}})
+    assert len(path) > supervisor._CAPSULE_HEADLINE_CAP
+    assert headline == (f"ValueError: experiment config "
+                        f"...{sep}case-a{sep}experiment.toml {sentence}")
 
 
 def test_worker_failure_capsule_embeds_the_exact_config_and_small_text_inputs(

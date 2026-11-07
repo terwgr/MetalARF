@@ -28,6 +28,11 @@ import os
 import pathlib
 import re
 
+# Kernel numerics for the battery (owner ruling 2026-10-16: fast is the default, strict the opt-in).  The
+# column oracles grade units word for word against WRF, so the battery names strict before woof loads;
+# tests of the fast default select it themselves (tests/test_numerics_default.py).
+os.environ["GPUWM_NUMERICS"] = "strict"
+
 import pytest
 
 #: Set to 1 to guarantee no local device is opened, whatever is collected.
@@ -277,14 +282,14 @@ def _sibling_targets(node: ast.AST, path: str) -> set[str]:
     without ``__init__.py`` contributes siblings.  The key is the file path,
     which no dotted first-party name can be mistaken for.
     """
-    folder = pathlib.Path(path).resolve().parent
-    if (folder / "__init__.py").is_file():
-        return set()
     if isinstance(node, ast.Import):
         tops = {alias.name.split(".")[0] for alias in node.names}
     elif isinstance(node, ast.ImportFrom) and not node.level:
         tops = {(node.module or "").split(".")[0]}
     else:
+        return set()
+    folder = pathlib.Path(path).resolve().parent
+    if (folder / "__init__.py").is_file():
         return set()
     found: set[str] = set()
     for top in tops:
@@ -317,23 +322,31 @@ def _import_time_edges(path: str) -> tuple[frozenset[str], bool]:
         tree = ast.parse(pathlib.Path(path).read_text(encoding="utf-8"))
     except (OSError, SyntaxError, UnicodeDecodeError):
         return frozenset(), False
-    functions = [node for node in ast.walk(tree)
-                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
-    inside_function = {id(inner) for fn in functions for inner in ast.walk(fn)}
-    guarded = {id(inner) for node in ast.walk(tree)
-               if isinstance(node, ast.Try)
-               for statement in node.body for inner in ast.walk(statement)}
     imports: set[str] = set()
     cupy = False
-    for node in ast.walk(tree):
-        if id(node) in inside_function or id(node) in guarded:
+    # Visit only the same unguarded import-time scope as before. Walking
+    # every function subtree to build exclusion sets made a small CPU-only
+    # collection traverse millions of irrelevant nodes. In particular, a
+    # try's handlers/else/finally still count; only its body is guarded.
+    pending = [tree]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
+        if isinstance(node, ast.Try):
+            pending.extend(node.handlers)
+            pending.extend(node.orelse)
+            pending.extend(node.finalbody)
+            continue
+        pending.extend(ast.iter_child_nodes(node))
         if isinstance(node, ast.Import):
             if any(a.name.split(".")[0] == "cupy" for a in node.names):
                 cupy = True
         elif isinstance(node, ast.ImportFrom):
             if (node.module or "").split(".")[0] == "cupy":
                 cupy = True
+        else:
+            continue
         imports |= _first_party_targets(node)
         imports |= _sibling_targets(node, path)
     return frozenset(imports), cupy
@@ -845,6 +858,18 @@ def pytest_collection_modifyitems(config, items):
     _gate_on_case_inputs(items)
 
 
+@pytest.fixture
+def classic_history_frames(monkeypatch):
+    """History frames written and priced as classic CDF-2 (``--history-compression none``).
+
+    For tests of the classic frame layout and of frame counting, whose expected bytes are
+    classic frame bytes. The default (lossless compressed frames, priced at
+    ``disk_budget.COMPRESSED_HISTORY_FRACTION``) is tested in
+    tests/test_compressed_history_pricing.py.
+    """
+    monkeypatch.setenv("GPUWM_HISTORY_COMPRESSION", "none")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _isolated_fetch_lock_root(tmp_path_factory):
     """Keep every test's output locks out of the machine-wide lock root.
@@ -867,6 +892,27 @@ def _isolated_fetch_lock_root(tmp_path_factory):
         os.environ.pop(fetch_guard.LOCK_ROOT_ENV, None)
     else:
         os.environ[fetch_guard.LOCK_ROOT_ENV] = previous
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolated_fetch_connection_slots(tmp_path_factory):
+    """Keep the suite's fetch connection slots off the box-wide /tmp/gpuwm-fetch-connections.
+
+    Pools size themselves from the slots free on the box
+    (:func:`woof.fetch_connections.process_share`), so on a farm host where
+    real fetches run the expected widths would depend on whoever else holds
+    slots.  Tests that need their own slot directory set the variable per test.
+    """
+    from woof import fetch_connections
+
+    root = tmp_path_factory.mktemp("fetch-connections")
+    previous = os.environ.get(fetch_connections.DIRECTORY_ENV)
+    os.environ[fetch_connections.DIRECTORY_ENV] = str(root)
+    yield root
+    if previous is None:
+        os.environ.pop(fetch_connections.DIRECTORY_ENV, None)
+    else:
+        os.environ[fetch_connections.DIRECTORY_ENV] = previous
 
 
 @pytest.fixture(autouse=True)
@@ -899,6 +945,47 @@ def _wizard_probe_pinned_to_a_24gib_card(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _multi_card_doors_pinned_to_a_free_threaded_interpreter(monkeypatch):
+    """Pin the interpreter-lock answer every multi-card door refuses on.
+
+    ``woof go``/``check``/``sim``/ensemble refuse ``--devices N>1`` on an
+    interpreter whose lock is on (woof.free_threading.
+    refuse_multi_card_under_gil).  This suite and its CI legs run on GIL
+    CPython, and its [devices] tests exercise plumbing and admission, not
+    stepping threads, so unpinned every one of them would stop at the
+    refusal.  The refusal itself is tested in tests/test_free_threading.py,
+    which restores the real answer.  In-process invocations only.
+    """
+
+    from woof import free_threading
+
+    monkeypatch.setattr(free_threading, "multi_card_lock_reason", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _hydro_door_tools_unprobed_outside_hydro_tests(request, monkeypatch):
+    """Outside the hydro test modules, the default-on hydro door sees no builder.
+
+    A natives env.sh exports WOOF_RW_HYDRO_WORLD and the other hydro provider
+    tools, so every `woof go` a test drives (33 test files) reached the real
+    door: its tool probe ran through the tests' stage-counting Popen doubles
+    (test_a_failing_stage_replays_its_output_and_stops returned 2, not 3), and
+    non-dry launches prepared a real continental fabric, its parameters and a
+    90-day spin-up in the shared cache (test_the_memory_gate_warns_*,
+    2026-10-21). Without the env the door finds no tools; this makes
+    the env battery see the same. Hydro behaviour is tested in the modules
+    named *hydro*, which keep the real probe (or pass their own probe_row).
+    """
+
+    module = getattr(request.node, "module", None)
+    if "hydro" in getattr(module, "__name__", "hydro"):
+        return
+    from woof.hydro import door as hydro_door
+    monkeypatch.setattr(hydro_door, "probe", lambda row: [
+        "hydro provider tools not probed outside the hydro test modules"])
+
+
+@pytest.fixture(autouse=True)
 def _run_disk_pinned_to_ample_free_space(monkeypatch):
     """Pin the free disk run-plan's refusal before the download compares with.
 
@@ -915,6 +1002,105 @@ def _run_disk_pinned_to_ample_free_space(monkeypatch):
     from woof import disk_budget
 
     monkeypatch.setattr(disk_budget, "free_bytes", lambda path: 10 ** 15)
+
+
+@pytest.fixture(autouse=True)
+def _chain_static_staging_kept_off_the_network(monkeypatch):
+    """Keep the chains' static-file staging from downloading in this suite.
+
+    Since 2.8.7 each native chain stages the published static files its
+    configuration reads (``stage_required_static_sources``) before its
+    forcing fetch.  The chain tests here drive HRRR-cone configurations
+    against a fake GEOG root with every stage stubbed, so unpinned they
+    started the real 1.11 GB hrrr-conus-v4 download from NCO inside
+    tests/test_preparation_assets_wif.py (measured 2026-10-06).  The pin
+    stages nothing; no stubbed stage reads the file.  The staging itself is
+    tested in tests/test_recipe_route_inputs.py, which imports the real
+    function at module load and puts it back where it drives a chain.
+    """
+
+    from woof.static import external_source
+
+    monkeypatch.setattr(external_source, "stage_required_static_sources",
+                        lambda *args, **kwargs: [])
+
+
+@pytest.fixture(autouse=True)
+def _wif_climatology_download_kept_off_the_network(monkeypatch):
+    """Keep mp=28's automatic WIF climatology download out of this suite.
+
+    Since 2.9.7 an mp=28 preparation with no copy of
+    QNWFA_QNIFA_SIGMA_MONTHLY.dat downloads the pinned 215 MiB dataset
+    (woof.ingest.wif_climatology.acquire_wif_climatology) instead of
+    falling back to the synthetic profile.  Here the download answers as an
+    offline machine does, so the refusal path is what a test without a
+    staged dataset sees.  The staging itself is tested through
+    woof.table_assets.stage_wif_dataset directly.
+    """
+
+    from woof.ingest import wif_climatology
+
+    monkeypatch.setattr(wif_climatology, "_download_wif_dataset",
+                        lambda root: 2)
+
+
+@pytest.fixture(autouse=True)
+def _lake_ice_analysis_kept_off_the_network(monkeypatch, tmp_path_factory):
+    """Keep the GFS route's observed lake ice from downloading in this suite.
+
+    Since 2.9.1 a GFS preparation reads the daily IMS snow and ice analysis
+    (woof.ingest.lake_ice) into ~/.woof/cache/surface-obs.  Pointed at an
+    empty per-session cache and with no network answer, every preparation
+    here falls back to the forcing's ice exactly as an offline run does,
+    so fixtures recorded before the change keep their bytes.  The
+    acquisition and decision are tested in tests/test_lake_ice.py.
+    """
+
+    from urllib.error import URLError
+
+    from woof.ingest import lake_ice
+
+    monkeypatch.setenv(lake_ice.CACHE_ENV,
+                       str(tmp_path_factory.getbasetemp() / "surface-obs-empty"))
+    original = lake_ice.acquire_observed_lake_ice
+
+    def offline(valid_time, **kwargs):
+        def refuse(request, timeout):
+            raise URLError("network kept off in the test suite")
+        kwargs.setdefault("opener", refuse)
+        return original(valid_time, **kwargs)
+
+    monkeypatch.setattr(lake_ice, "acquire_observed_lake_ice", offline)
+
+
+@pytest.fixture(autouse=True)
+def _the_default_geography_root_counts_as_staged(monkeypatch):
+    """Answer the DEFAULT WPS_GEOG root as staged, on every test machine.
+
+    Since 2.8.8 ``woof go --dry-run`` asks the same geography question the
+    launch asks (it exited 0 on a tree the launch refused).  The dry-run
+    tests here plan configurations against whatever geography the machine
+    has at ``default_geog_root()``: none on public CI and a development machine, 16 GB on
+    a workstation, so without this pin the same test passed or refused by
+    host.  Only the default root is answered; a root a test NAMES
+    (``--geog-root``, ``[case_data].geog_root``, a direct call) gets the
+    real check, which is what the negative controls use
+    (tests/test_go_dry_run_geography.py,
+    tests/test_interrupt_contract.py::test_the_geography_refusal_still_fires_when_it_should),
+    and a test that patches ``geography_refusal`` itself still wins.
+    """
+
+    from woof import go_cli
+    from woof.geog_assets import default_geog_root
+
+    real = go_cli.geography_refusal
+
+    def refusal(geog_root, **kwargs):
+        if pathlib.Path(geog_root) == default_geog_root():
+            return None
+        return real(geog_root, **kwargs)
+
+    monkeypatch.setattr(go_cli, "geography_refusal", refusal)
 
 
 @pytest.fixture
@@ -1188,8 +1374,21 @@ def wrf_rust_gap() -> str | None:
 #: every collection, so `pytest tests/test_config.py` opened the NetCDF
 #: bridge, loaded the CPU library and (see grib1_bridge_gap) built a crate,
 #: for a file that reads none of them.
+def netcdf_writer_gap() -> str | None:
+    """Why the Rust NetCDF writer library cannot load here, or None."""
+
+    try:
+        from woof.io.nc_writer_bridge import resolve_ncwrite_bridge
+        resolve_ncwrite_bridge()
+    except Exception as error:                          # noqa: BLE001
+        return f"the Rust NetCDF writer library is not usable here ({str(error).splitlines()[0]})"
+    return None
+
+
 CAPABILITY_PROBES = {
     "netcdf_bridge": netcdf_bridge_gap,
+    # The ensemble product collector writes its NetCDF through this library.
+    "netcdf_writer_bridge": netcdf_writer_gap,
     "wrf_eta_bridge": functools.partial(cpu_preprocess_gap,
                                        "gpuwm_wrf_eta_f32"),
     "wrf_sfcprs_bridge": functools.partial(cpu_preprocess_gap,
@@ -1216,6 +1415,7 @@ CAPABILITY_PROBES = {
 CAPABILITY_MARKER = "requires_capability"
 
 requires_netcdf_bridge = pytest.mark.requires_capability("netcdf_bridge")
+requires_netcdf_writer_bridge = pytest.mark.requires_capability("netcdf_writer_bridge")
 requires_wrf_eta_bridge = pytest.mark.requires_capability("wrf_eta_bridge")
 requires_wrf_sfcprs_bridge = pytest.mark.requires_capability(
     "wrf_sfcprs_bridge")

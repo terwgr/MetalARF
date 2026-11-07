@@ -46,6 +46,38 @@ def member_column_view(array, *, member, members, ny, nx):
     return array
 
 
+def borrow_physics_scratch(view, driver, *, member, members, ny, nx):
+    """Point ``view``'s WB1 cloud-booking slots at the physics owner's words.
+
+    Correct mode's Thompson books CLOUDNC/CLOUDNCV (finding WB1,
+    woof/core/thompson_cloud_booking.py) into the scratch of the state its
+    physics driver runs on: the packed physics bank of a native ensemble
+    (PackedThompsonState), never the batch's own scratch. History, validation
+    and checkpoint frames read ``state._scratch``, so a member view built from
+    the batch alone wrote CLOUDNC as zeros (N > 1, where the registry priced
+    an unwritten batch slot of that name) or not at all (N = 1), while the
+    same member run ordinarily wrote its booked total.
+    """
+    from woof.core.streaming import domain_scratch
+    from woof.ensemble.batch_physics import THOMPSON_CLOUD_BOOKING_SLOTS
+    owner = getattr(driver, "state", None)
+    if owner is None:
+        return view
+    # Through the sanctioned reader rather than binding ``existing_scratch``
+    # here: this module names the up_heli_max slot, and
+    # tests/test_uh_lifecycle.py forbids an unsanctioned module that does so
+    # from acquiring the scratch API indirectly.  domain_scratch answers
+    # None for a state without the slot, as the direct lookup did.
+    booked = {}
+    for slot in THOMPSON_CLOUD_BOOKING_SLOTS:
+        value = domain_scratch(owner, slot)
+        if value is not None:
+            booked[slot] = member_column_view(value, member=member, members=members, ny=ny, nx=nx)
+    if booked:
+        view._scratch = {**view._scratch, **booked}
+    return view
+
+
 def member_output_view(owners, member, *, output_fields=None):
     """Expose the original physics writer's fields as borrowed member views."""
     from woof.ensemble.batch_dycore import member_domain_view
@@ -56,6 +88,7 @@ def member_output_view(owners, member, *, output_fields=None):
                                                ny=cfg.ny, nx=cfg.nx)
     fields = {name: borrow(value) for name, value in output_fields.items()}
     view = member_domain_view(batch, member)
+    borrow_physics_scratch(view, driver, member=member, members=batch.members, ny=cfg.ny, nx=cfg.nx)
     microphysics = getattr(driver, "microphysics", None)
     if microphysics is not None:
         microphysics = replace(microphysics, **{
@@ -153,7 +186,14 @@ def run_initialized_native_ensemble(inputs, node, *, members, member_ids=None, m
         if output_metadata is None:
             from woof.runtime import _metadata_frame
             bundle = next(bundle for bundle in inputs.domains if int(bundle.grid_id) == int(node.cfg.grid_id))
-            output_metadata = _metadata_frame(node.grid, bundle.static_fields)
+            # A WRF-file door domain writes the file's own grid words, as the
+            # ordinary writer does (woof.io.wrfout, wrf_file_grid), with the
+            # run's configuration so the rows WRF initializes rather than reads
+            # (AREA2D, DX2D, the seed arrays, NEST_POS ...) are written too, as
+            # prepared_domain_tree_forecast passes domain.run (here the batch RunConfig).
+            from woof.io.history_layout import wrf_file_grid_history_fields
+            output_metadata = {**_metadata_frame(node.grid, bundle.static_fields),
+                               **wrf_file_grid_history_fields(bundle, cfg)}
         # Each allocation receives a current remaining budget. An integer caller
         # budget is decremented by all native plans already constructed above.
         remaining = None if callable(available_bytes) else int(available_bytes)
@@ -215,6 +255,12 @@ def run_initialized_native_ensemble(inputs, node, *, members, member_ids=None, m
         reports = stability()
         reflected = (consume_refl_10cm(physics.state)
             if refl_10cm_stash_is_due(clock.ticks, domain_start_ticks=clock.spec.start_ticks) else None)
+        from woof.core.physics_inventory import REFL_10CM_MICROPHYSICS
+        if (reflected is None and clock.ticks == 0
+                and getattr(cfg, "mp_physics", 0) in REFL_10CM_MICROPHYSICS):
+            from woof.core.refl import analysis_refl_10cm
+            with physics.state.analysis_diagnostic_view():
+                reflected = analysis_refl_10cm(physics.state)
         fields = physics.driver.output_fields()
         views = tuple(member_output_view(owners, member, output_fields=fields) for member in range(members))
         validation("history", views)

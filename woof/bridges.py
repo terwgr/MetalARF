@@ -55,12 +55,14 @@ from pathlib import Path
 import re
 import shutil
 import sys
+import threading
 
 #: Bridge executable -> the environment variable that names a prebuilt
 #: copy.  The same variables drive the sealed-runtime decoder binding in
 #: :mod:`woof.source_cli`, so one mechanism serves both install modes.
 BRIDGE_ENV = {
     "grib1_bridge": "WOOF_GRIB1_BRIDGE",
+    "met_intermediate": "WOOF_MET_INTERMEDIATE",
     "gfs_grib2_bridge": "WOOF_GFS_GRIB2_BRIDGE",
     "hrrr_grib2_bridge": "WOOF_HRRR_DECODER",
     "grib2_inventory": "WOOF_GRIB2_INVENTORY",
@@ -91,7 +93,7 @@ CRATE_RELATIVE = "tools/grib1_bridge"
 #: diagnostic, and `woof doctor` therefore reported it `ok` -- and then
 #: every preparation died with `series line 1 must be HOUR<TAB>GRIB2`,
 #: a message that blames the series file woof had just written
-#: correctly.  A a development machine validation run found the cause only by diffing
+#: correctly.  A test host G validation run found the cause only by diffing
 #: two git tags.
 #:
 #: Each marker is a literal the CURRENT contract compiles into the
@@ -106,9 +108,43 @@ CRATE_RELATIVE = "tools/grib1_bridge"
 #: literal that spells the contract out (the series grammar, the usage
 #: line naming the argument vector), never a version number, which a
 #: rebuild bumps whether or not anything changed.
+# Optional contracts are probed by their caller. They must not make a
+# library with a working base contract unusable for its existing entry points.
+BRIDGE_OPTIONAL_ABI_MARKERS = {
+    "static_fields": {"extra_continuous": b"gpuwm_static_extra_continuous_v1"},
+}
+
 BRIDGE_ABI_MARKERS = {
+    "rw_mpas_physics_pool": b"gpuwm-rw-mpas-physics-pool-v1",
+    "rw_mpas_stream": b"mpas-native-stream/v1",
+    "rw_icechunk": (b"rw_icechunk --request REQUEST.json schema=icechunk-output.request/v1 "
+                    b"modes=run,append,finalize progress=jsonl native-arrays=v1"),
+    "rw_ice_verify": b"gpuwm-ice-observation-binding.v1",
+    "rw_fire_indices": b"GPUWM_FIRE_INDICES_V1",
+    "rw_ocean": b"gpuwm.ocean.prepared/v1",
+    "rw_bathy": b"gpuwm-rw-bathy-v1",
+    "rw_ocean_verify": b"gpuwm-ocean-sst-verify-v1\tdaily-mean\tndbc-WTMP\tgreat-circle\tpaired-change",
+    "rw_tc_fields": b"gpuwm.tc-fields.v1 inspect extract tempest table-units masked-quarter-degree",
+    "nextgen_hydrofabric": b"arwen_hydrofabric_read_into",
+    "arwen_nextgen_forcing": b"arwen_forcing_read_packet",
+    "rw_nextgen_verify": b"nextgen-gauge-table-v1",
+    "rw_soundings": b"gpuwm-soundings.v1 plain-run png json html",
+    "rw_globe_pack": b"gpuwm-rw-globe-pack-v1",
+    "rw_ensbatch": (
+        b"gpuwm-ensemble-diagnostic-reduce.v1\tf32-words\tf64-two-pass\t"
+        b"member-order\tsha256\tmember-weights-v1"),
+    "rw_probgrid": b"gpuwm-rw-probgrid-products-v1\tsevere\tprobability\tlow",
     "rw_verify": b"gpuwm.verify-visuals.request.v1",
+    "rw_scorecard": b"gpuwm.obs-scorecard.manifest.v1",
     "rw_compare": b"gpuwm.reference-input.v1",
+    # The nowcast frames converter's ``--abi`` line, which its main()
+    # prints from the one constant it compiles in.  Spelled to match
+    # woof.rustwx_lanes.NOWCAST_FRAMES_ABI_MARKER; a test binds the two
+    # and both to the Rust source.
+    "rw_nowcast_frames": (
+        b"gpuwm-rw-nowcast-frames-v1\tfrom-netcdf\t--netcdf\t--out\t"
+        b"--source-id\t--lattice\t--variable\t--lat\t--lon\t--issue\t"
+        b"--causal\t--receipt\t--source-kind\t--package\t--revision"),
     "rw_simradar": (b"rw_simradar --request REQUEST.json "
                    b"schema=simulated-radar.request/v1 manifest=simulated-radar.manifest/v1 "
                    b"volume_paths=v1 scene_shapes=v1"),
@@ -120,8 +156,14 @@ BRIDGE_ABI_MARKERS = {
     # "Hectopascal(hPa)") refused every request before the first chunk,
     # and a 30 s whole-request timeout cut every 80 MB chunk off on a slow
     # link.  A build older than both still carried the schema literal and
-    # passed; this literal arrived with the later of the two fixes.
-    "rw_zarr": b"http transfer failed after ",
+    # passed; that literal ("http transfer failed after ") arrived with the
+    # later of the two fixes.  The marker now is the deep-soil temperature
+    # producer's receipt schema: fetch-geog builds the default
+    # soiltemp_era5_1deg with `rw_zarr soiltemp-climatology`, which an
+    # older build answers with its usage line.
+    # Older cached readers lack `coverage`, so live hydro requests ERA5 beyond
+    # the published boundary instead of carrying its spin-up to live NWM soil.
+    "rw_zarr": b"gpuwm.zarr-coverage.v1",
     "grib1_bridge": b"usage: grib1_bridge INPUT.grb OUTPUT_DIR",
     "gfs_grib2_bridge": (
         b" must be HOUR<TAB>GRIB2[<TAB>FORECAST_PROCESS_ID]"),
@@ -198,7 +240,8 @@ BRIDGE_ABI_MARKERS = {
     # mapped_engine::ABI_CONTRACT; tests bind all three.
     "gpuwm_mapped_engine": (
         b"gpuwm-mapped-engine-abi frameset=gpuwm-mapped-frameset-v1 "
-        b"height-interfaces=1 grib2-drt=0,2,3,4,40,41,42,50,51,61,200"),
+        b"height-interfaces=1 window-fields=omega bound-clocks=window-start "
+        b"grib2-drt=0,2,3,4,40,41,42,50,51,61,200"),
     # The static-field builder cdylib (tools/rustwx/crates/static-fields),
     # the default engine for the WPS-geogrid-equivalent statics from the
     # static-rust-port lanes on.  A library, so the literal is an
@@ -216,6 +259,7 @@ BRIDGE_ABI_MARKERS = {
     # Rust engine as present.
     "obs_regrid": b"gpuwm_obsregrid_build_plan",
     "obs_score": b"gpuwm_obsscore_masked_fss",
+    "met_intermediate": b"usage: met_intermediate --vtable VTABLE --date YYYY-MM-DD_HH:MM:SS",
     "rw_mpas_geometry": b"rw_mpas_geometry --protocol hex-geometry-v1",
     "rw_mpas_hostprep": b"rw_mpas_hostprep --protocol hex-hostprep-v1",
     # The isobaric-height reader cdylib (tools/rustwx/crates/rw-isobaric),
@@ -227,6 +271,20 @@ BRIDGE_ABI_MARKERS = {
     # Spelled to match woof.isobaric_bridge.ABI_MARKER; a test binds the
     # two.
     "rw_isobaric": b"gpuwm_isobaric_heights",
+    # The TEMPO tempo_init port's ctypes seam (woof.core.tempo_rust): the
+    # blob-layout contract symbol, which changes when the blob does.
+    "rw_tempo": b"gpuwm_tempo_init_v1",
+    # The MPAS point renderer: its --abi line (output schema and stdout
+    # tokens).  Spelled to match woof.mpas_mesh.POINTS_ABI_MARKER.
+    "rw_hex_points": (
+        b"gpuwm-rw-hex-points-v1\tPOINT\tSOUNDING\tMETEOGRAM\tFINISHED"),
+    # The radar superob cdylib (tools/rustwx/crates/rw-superob), behind
+    # the DEFAULT superob stage of every radar observation build (gate
+    # placement, QC, the alias masks, the multi-radar merge and the
+    # region-global dealias of each sweep).  A library, so the literal is
+    # an exported symbol name.  Spelled to match
+    # woof.obs.superob_bridge.ABI_MARKER; a test binds the two.
+    "rw_superob": b"gpuwm_superob_call",
     # The MPAS mesh generator behind `woof mesh`.  The marker is its
     # ARGUMENT VECTOR, spelled out, because that is the literal which
     # changes exactly when the request contract changes: a binary built
@@ -272,28 +330,79 @@ BRIDGE_ABI_MARKERS = {
     "rw_mpas_init": (
         b"rw_mpas_init --met MET --static STATIC.nc --capsule CAPSULE.nc"),
     # The lateral-boundary producer, the fifth binary out of the same
-    # crate.  Truncated at the head for the reason the initial-condition
-    # builder's is: the crate's literal is four usage lines with embedded
+    # crate.  The crate's literal is four usage lines with embedded
     # newlines between them, and a marker that has to reproduce one
-    # exactly breaks on a reflow that changed nothing.  The head names
-    # the four arguments whose meaning a stale build would get wrong.
-    # Spelled to match woof.mpas_mesh.LBC_ABI_MARKER; a test binds them.
+    # exactly breaks on a reflow that changed nothing, so this is the
+    # whole FIRST line and no more.  It runs through the physics-mode
+    # switch (2.9.0, correct by default, so spelled default first):
+    # unknown flags are read without complaint, so a build from before
+    # the switch takes --physics-mode correct, writes native case-9
+    # boundary winds (IN4) from any first-guess time (IN5), and a caller
+    # relying on the default gets exact while 2.9.0 says correct.
+    # Spelled to match woof.mpas_mesh.LBC_ABI_MARKER; a test binds them,
+    # and binds both to the crate's literal.
+    # The RRFS-MPAS initializer behind `woof hex init --physics-suite
+    # hrrrv5` (the fork's init_atmosphere cases 7 and 9, its static and its
+    # vertical grid, in Rust).  Its --abi line, the literal that changes
+    # when its job contract does: a build from before the hex-init-job/v1
+    # stages would take the door's JSON and write an init under another
+    # contract.  Spelled to match the crate's rrfs_init::job::ABI_MARKER.
+    "rw_mpas_init_v831": (
+        b"rw_mpas_init_v831 stdin: hex-init-job/v1 JSON; stage=case7|case9|"
+        b"static|terrain|vertical|artifact|prepare|gwd|surface"),
+    # The GSL orographic statistics generator (ugwp_oro_data.nc for the
+    # RRFS suites' bl_ugwp_gwdo drag), the head of its usage line.
+    "rw_mpas_gsl_oro": (
+        b"rw_mpas_gsl_oro --grid MESH.nc --geog WPS_GEOG --out ORO.nc"),
     "rw_mpas_lbc": (
         b"rw_mpas_lbc --grid INIT.nc --out-dir DIR "
-        b"--start-time YYYY-MM-DD_HH:MM:SS --stop-time YYYY-MM-DD_HH:MM:SS"),
+        b"--start-time YYYY-MM-DD_HH:MM:SS --stop-time YYYY-MM-DD_HH:MM:SS "
+        b"--interval YYYY-MM-DD_HH:MM:SS=MET_PATH [--interval ...] "
+        b"--nfglevels N --fg-interval-seconds N --extrap-airtemp MODE "
+        b"--use-spechumd yes|no --theta-adv-order N --coef-3rd-order X "
+        b"--oned-underflow preserve|reproduce-ifx-ftz "
+        b"[--physics-mode correct|exact]"),
     # The history converter.  Its marker is the OUTPUT SCHEMA name and
     # the progress tokens, like the mapped engine's, because that is the
-    # literal which changes exactly when the tape contract changes.
+    # literal which changes exactly when the tape contract changes, and the
+    # flags a caller passes that an older build refuses (--remap with its
+    # REMAP/BUDGET lines, --jobs): without them a pre-2.9.0 converter
+    # matched and the woof hex product stage died on "unknown flag --remap".
     "rw_mpas_convert": (
-        b"gpuwm-rw-mpas-convert-v1\tCONVERTED\tWINDOW\tWEIGHTS\tFINISHED"),
+        b"gpuwm-rw-mpas-convert-v1\tCONVERTED\tWINDOW\tWEIGHTS\tFINISHED"
+        b"\tREMAP\tBUDGET\t--remap nearest|product\t--jobs N"),
     # The ML dataset exporter behind `woof ml-export`.  The marker is the
     # request schema, the modes and the progress grammar, the literal that
     # changes when the contract does: a build predating it would read a
     # request it does not speak.  Spelled to match
     # woof.ml_export.ABI_MARKER and rw_mlexport::ABI; a test binds them.
+    "rw_scoreboard": (b"rw_scoreboard --request JSON schema=woof.scoreboard.request.v1 "
+                      b"method=scoreboard-v1 actions=extract,observe,score,plan,merge,interpolate,accumulate,"
+                      b"interpolate_to_reports columns=WFSBCOL1"),
     "rw_mlexport": (
         b"rw_mlexport --request REQUEST.json schema=ml-export.request/v1 "
-        b"modes=run,append,finalize progress=jsonl"),
+        b"modes=run,append,finalize progress=jsonl earth2=per-channel-v1"),
+    # The clean-room GRIB2 exporter (2.8.7) behind `export-grib2`, `go
+    # --grib2`, run_options.grib2 and `render --grib2-out`.  The marker
+    # names the request schema, the WOOF catalog, the post device choice
+    # and the restored options (renderer definitions, extrema windows,
+    # composite level): a pre-2.8.7 build (the held-out UPP-derived
+    # exporter, catalog upp-post-products) or a 2.8.7 build without the
+    # options does not carry it and is refused.  Spelled to match
+    # woof.grib2_export.ABI_MARKER and rw_grib2export::ABI; tests bind them.
+    "rw_grib2export": (
+        b"rw_grib2export --request REQUEST.json schema=grib2-export.request/v1 "
+        b"modes=run,append,finalize progress=jsonl default_definitions=woof "
+        b"grid_geometry=wrf-native-locations/v1 surface_catalog=woof-post/v1 "
+        b"post_device=auto,gpu,cpu definitions=woof,renderer extrema_window=seconds "
+        b"composite_level=200,10 gust=auto,similarity,tke"),
+    # The projected MET intermediate cdylib (tools/rw_wps/crates/
+    # projected-intermediate) behind `woof hex intermediate` on HRRR and
+    # every other projected source.  A library, so the literal is an
+    # exported symbol name: the decoder-crop entry is the newest of the
+    # four woof hex resolves, so a build that predates it is refused here
+    # rather than by woof hex after the fetch.
+    "rw_projected_intermediate": b"gpuwm_projected_window_v1",
 }
 
 #: True when the shell a remedy will be pasted into is Windows
@@ -328,6 +437,12 @@ def _parent_hops(*parts: str) -> str:
 #: here so all three artifacts share one shell-correctness rule.
 RUSTWX_CRATE_RELATIVE = "tools/rustwx"
 
+# These workspaces use locked registry dependencies without a vendor config.
+# Source remedies must populate the cache before promising an offline build.
+_CARGO_REGISTRY_WORKSPACES = frozenset({
+    "tools/nextgen_forcing", "tools/nextgen_verify",
+})
+
 
 def cargo_build_one_liner(crate_relative: str = CRATE_RELATIVE) -> str:
     """``cd <crate>``, the offline build, and the ``cd`` back -- one line.
@@ -349,8 +464,10 @@ def cargo_build_one_liner(crate_relative: str = CRATE_RELATIVE) -> str:
     """
 
     separator = ";" if WINDOWS_SHELL else " &&"
+    fetch = (f"cargo fetch --locked{separator} "
+             if crate_relative in _CARGO_REGISTRY_WORKSPACES else "")
     return (f"cd {_shell_path(crate_relative)}{separator} "
-            f"cargo build --release --locked --offline{separator} "
+            f"{fetch}cargo build --release --locked --offline{separator} "
             f"cd {_parent_hops(crate_relative)}")
 
 
@@ -434,7 +551,7 @@ def rustwx_build_hint() -> str:
 #: ``CARGO_BUILD_HINT`` is the one-liner that builds every bridge, run
 #: from a source checkout's own root, spelled when it is read
 #: (:func:`lazy_build_hints`).  ``--offline`` works because the crate
-#: vendors its dependencies (``tools/grib1_bridge/vendor/crates-io``
+#: vendors its dependencies (``tools/rustwx/vendor/crates-io``
 #: plus that workspace's ``.cargo/config.toml``): no network, no
 #: registry.
 __getattr__ = lazy_build_hints(__name__, CARGO_BUILD_HINT=CRATE_RELATIVE)
@@ -585,6 +702,8 @@ def build_from_clone_hint(
         "  # this line repeats; a second clone into it just errors.",
         f"  git clone {REPOSITORY_URL} {CLONE_DIR}",
         f"  cd {_shell_path(CLONE_DIR, crate_relative)}",
+        *(["  cargo fetch --locked"]
+          if crate_relative in _CARGO_REGISTRY_WORKSPACES else []),
         "  cargo build --release --locked --offline",
         "  # back out to where you started, so the next block's relative",
         "  # paths still mean what they say.",
@@ -708,9 +827,18 @@ def sources_present(crate_relative: str = CRATE_RELATIVE) -> bool:
     the caller is actually going to name: this used to answer for
     ``tools/grib1_bridge`` whatever it was asked, so a tree carrying one
     crate and not the other got a ``cd`` into the missing one.
+
+    The crate's own ``Cargo.toml`` is the evidence, not the folder: a wheel
+    ships package data under some crate folders (tools/hydro_world/data and
+    tools/hydro_world_params/data, read by the default-on hydro door), so on a
+    pip install those folders exist with no sources in them.  Breakage it
+    prevents (2.9.4 R11 from the packet's Linux wheel, 2026-10-22): the doctor
+    took the data folder for a checkout, withheld the on-demand row of
+    rw_hydro_world and rw_hydro_params and told a pip user to run
+    ``cd site-packages/tools/hydro_world && cargo build``.
     """
 
-    return (_package_parent() / Path(crate_relative)).is_dir()
+    return (_package_parent() / Path(crate_relative) / "Cargo.toml").is_file()
 
 
 def install_aware_build_hint(one_liner: str,
@@ -926,7 +1054,7 @@ def legacy_bridge_dir() -> Path:
 
     It is shared by every woof install under this home, which is the
     defect the versioned layout closes: on 2026-10-05 a PyPI 2.8.0 venv
-    on a development machine found the flat ``rw_netcdf`` stamped by a local build
+    on test host B found the flat ``rw_netcdf`` stamped by a local build
     (``fc5b34e26``), auto-fetched 2.8.0's bundle and overwrote all 31
     files, breaking the other install that relied on them.  A pinned
     install now only READS a file here, and only when its bytes are the
@@ -1584,33 +1712,109 @@ def _dep_info_inputs(binary: Path) -> tuple[Path, ...] | None:
             continue
         if "target" in relative.parts:
             continue
+        if ".git" in relative.parts:
+            # The build scripts' rerun-if-changed on HEAD, packed-refs and
+            # the branch ref (tools/grib1_bridge/build.rs and the rustwx
+            # crates': they keep the revision stamp fresh in an incremental
+            # target).  Cargo writes those into this record, and they move
+            # on EVERY commit: a Python-only commit made the CPU library
+            # "older than its sources" and `woof go` refused until 15
+            # workspaces were rebuilt (V60, 2026-10-21).  Git metadata is
+            # not a source the bytes are compiled from.
+            continue
         if not path.is_file():
             return None
         inputs.append(path)
     return tuple(inputs) or None
 
 
+#: How long the content comparison may take before the file-time verdict
+#: stands (a git that hangs must not hang a run).
+_CONTENT_CHECK_TIMEOUT_S = 30.0
+
+
+def _inputs_match_stamped_revision(binary: Path, roots: tuple[Path, ...]) -> bool:
+    """True when every input under ``roots`` has the content it had at the
+    revision stamped into ``binary``.
+
+    The build scripts stamp ``GPUWM_BRIDGE_SOURCE_REV`` only from a tree
+    whose workspace has no tracked modifications, so the stamp names the
+    exact source content the bytes were compiled from; ``git diff --quiet
+    <stamp> -- <inputs>`` compares that content (git's content hashes)
+    with the files as they are now.  File times alone condemned a build
+    whose sources were byte-identical: a checkout, a revert or a rebase
+    rewrites a file's time without changing a byte of it.  False whenever
+    it cannot answer (no single stamp, no git, the revision not in this
+    repository, a timeout): the file-time verdict then stands.
+    """
+
+    import subprocess
+
+    try:
+        from woof import bridge_assets
+
+        revisions = set(bridge_assets.embedded_source_revisions(binary.read_bytes()))
+    except Exception:                                # noqa: BLE001
+        return False
+    if len(revisions) != 1:
+        return False
+    revision = revisions.pop()
+    root = _package_parent().resolve()
+    paths = []
+    for item in roots:
+        try:
+            relative = Path(item).resolve().relative_to(root)
+        except (OSError, ValueError):
+            return False
+        paths.append(relative.as_posix())
+    if not paths:
+        return False
+    try:
+        # git diff does not see untracked files, so an input git does not
+        # track leaves the file-time verdict standing.
+        untracked = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard",
+             "--", *paths],
+            capture_output=True, timeout=_CONTENT_CHECK_TIMEOUT_S, check=False)
+        if untracked.returncode != 0 or untracked.stdout.strip():
+            return False
+        answer = subprocess.run(
+            ["git", "-C", str(root), "diff", "--quiet", revision, "--", *paths],
+            capture_output=True, timeout=_CONTENT_CHECK_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return answer.returncode == 0
+
+
 class CheckoutBuildStatus:
     """One checkout-built artifact, measured against its own sources."""
 
     __slots__ = ("artifact", "binary", "workspace", "built_at",
-                 "newest_source", "newest_at")
+                 "newest_source", "newest_at", "roots", "_content_current")
 
     def __init__(self, artifact: str, binary: Path, workspace: Path,
                  built_at: float, newest_source: Path | None,
-                 newest_at: float):
+                 newest_at: float, roots: tuple[Path, ...] = ()):
         self.artifact = artifact
         self.binary = binary
         self.workspace = workspace
         self.built_at = built_at
         self.newest_source = newest_source
         self.newest_at = newest_at
+        self.roots = tuple(roots)
+        self._content_current: bool | None = None
 
     @property
     def current(self) -> bool:
-        """Cargo's own question: is every input older than the output?"""
+        """Is every input older than the output, or, where a file time
+        says otherwise, unchanged in content since the stamped revision?"""
 
-        return self.newest_source is None or self.newest_at <= self.built_at
+        if self.newest_source is None or self.newest_at <= self.built_at:
+            return True
+        if self._content_current is None:
+            self._content_current = _inputs_match_stamped_revision(
+                self.binary, self.roots)
+        return self._content_current
 
     def built_from(self) -> str:
         """The revision stamped into the bytes, in words.
@@ -1746,7 +1950,7 @@ def checkout_build_status(path: Path) -> CheckoutBuildStatus | None:
             roots = (workspace,)
     newest_source, newest_at = _newest_build_input(roots)
     return CheckoutBuildStatus(artifact, binary, workspace, built_at,
-                               newest_source, newest_at)
+                               newest_source, newest_at, roots)
 
 
 def require_current_checkout_build(path: Path) -> Path:
@@ -1808,11 +2012,12 @@ def executable_name(name: str) -> str:
     return f"{name}.exe" if os.name == "nt" else name
 
 
-def artifact_candidates(env_var: str, filename: str) -> tuple[Path, ...]:
+def artifact_candidates(env_var: str, filename: str, *,
+                        crate_relative: str | None = None) -> tuple[Path, ...]:
     """Deterministic candidate paths for one built artifact, best first.
 
-    THE resolution order for everything ``tools/grib1_bridge`` builds
-    (bridge executables and the CPU preprocessing library alike):
+    The resolution order for the selected crate (``tools/grib1_bridge``
+    by default, for bridge executables and the CPU preprocessing library):
     environment override, checkout release, checkout debug, ``libexec``
     beside the package, the wheel-bundled :func:`packaged_bridge_dir`,
     user-level default directory.  The environment override comes first;
@@ -1825,9 +2030,10 @@ def artifact_candidates(env_var: str, filename: str) -> tuple[Path, ...]:
     if override:
         candidates.append(Path(override))
     root = _package_parent()
+    crate = crate_dir() if crate_relative is None else root / crate_relative
     candidates.extend((
-        crate_dir() / "target" / "release" / filename,
-        crate_dir() / "target" / "debug" / filename,
+        crate / "target" / "release" / filename,
+        crate / "target" / "debug" / filename,
         root / "libexec" / "bridges" / filename,
         packaged_bridge_dir() / filename,
         default_bridge_dir() / filename,
@@ -1836,7 +2042,9 @@ def artifact_candidates(env_var: str, filename: str) -> tuple[Path, ...]:
     return tuple(candidates)
 
 
-def find_artifact(env_var: str, filename: str) -> Path | None:
+def find_artifact(env_var: str, filename: str, *,
+                  crate_relative: str | None = None,
+                  executable: bool = True) -> Path | None:
     """First existing candidate, or None.
 
     An environment override that names a missing file is a hard error:
@@ -1845,9 +2053,14 @@ def find_artifact(env_var: str, filename: str) -> Path | None:
     """
 
     override = os.environ.get(env_var)
-    for candidate in artifact_candidates(env_var, filename):
+    candidates = (artifact_candidates(env_var, filename) if crate_relative is None
+                  else artifact_candidates(env_var, filename,
+                                           crate_relative=crate_relative))
+    for candidate in candidates:
         if candidate.is_file():
-            return accept_resolved(candidate.resolve())
+            resolved = candidate.resolve()
+            return (accept_resolved(resolved) if executable else
+                    accept_resolved(resolved, executable=False))
         if override and candidate == Path(override):
             raise FileNotFoundError(
                 f"{env_var} names a missing file: {candidate}")
@@ -2190,6 +2403,111 @@ def bridge_abi_matches(name: str, path: Path) -> tuple[bool, str]:
         "correctly; rebuild it from a matching checkout")
 
 
+def fetched_on_demand(artifact: str | None) -> bool:
+    """Is ``artifact`` one the platform wheel leaves to the bundle?
+
+    True for :func:`woof.bridge_assets.on_demand_artifacts`: pinned in the
+    release bundle and not carried in the wheel, so on a fresh pip install
+    its absence is the expected state and its first use stages it.
+    """
+
+    if artifact is None:
+        return False
+    try:
+        from woof import bridge_assets
+        return any(entry.name == artifact
+                   for entry in bridge_assets.on_demand_artifacts())
+    except Exception:                                # noqa: BLE001
+        return False
+
+
+def on_demand_fetch_offered(artifact: str | None,
+                            crate_relative: str = RUSTWX_CRATE_RELATIVE) -> bool:
+    """Can this install stage the absent on-demand ``artifact`` by download?
+
+    True only where it can: the artifact is declared on demand, this install
+    carries no Rust sources for its crate (a checkout builds it instead), and
+    the pins this install carries name a bundle for this platform that holds
+    it.  Anywhere else a fetch would refuse, so nothing offers one.
+    """
+
+    if not fetched_on_demand(artifact):
+        return False
+    try:
+        return (not sources_present(crate_relative)
+                and _offer_for(artifact) is not None)
+    except Exception:                                # noqa: BLE001
+        return False
+
+
+#: On-demand artifacts this process already tried to stage, with the failure
+#: text when it did not work.  One attempt per artifact per run, so a box
+#: with no route to the release assets does not re-dial for every resolve.
+_ON_DEMAND_ATTEMPTS: dict[str, str | None] = {}
+# Held across the whole fetch: concurrent callers (a scoring pool's threads)
+# used to all pass the "already tried" check before the first finished, so
+# each warned and dialled the bundle again (rw_mrms warned 12 times in hex
+# scoring).  Waiters see the first caller's result instead.
+_ON_DEMAND_LOCK = threading.Lock()
+
+
+def on_demand_failure(artifact: str) -> str | None:
+    """Why this process's automatic staging of ``artifact`` failed, if it did."""
+
+    return _ON_DEMAND_ATTEMPTS.get(artifact)
+
+
+def fetch_on_demand(artifact: str) -> bool:
+    """Stage the on-demand ``artifact`` now; True when it was staged.
+
+    Called by a door that is about to run and found nothing on the ladder.
+    It downloads the one pinned ZIP member by HTTP range from this release's
+    bundle (:func:`woof.bridge_partial.fetch_partial`), verifies its size,
+    SHA-256 and contract marker against the pins packaged with this install,
+    and installs it in :func:`default_bridge_dir`, the rung the ladder
+    already reads.  Never inside :func:`inspection_only` (doctor and the
+    receipt writers report the estate; they never download), never for an
+    artifact the wheel carries, and never where the fetch could not deliver
+    it (:func:`on_demand_fetch_offered`).  A failure is remembered and
+    returned by :func:`on_demand_failure` so the door's refusal can say
+    what happened.
+    """
+
+    if _INSPECTION_ONLY:
+        return False
+    with _ON_DEMAND_LOCK:
+        if artifact in _ON_DEMAND_ATTEMPTS:
+            # Tried already in this process: True when that attempt staged
+            # it (a waiter re-reads the ladder), False when it failed and
+            # on_demand_failure() holds the reason.
+            return _ON_DEMAND_ATTEMPTS[artifact] is None
+        if not on_demand_fetch_offered(artifact):
+            return False
+        return _fetch_on_demand_locked(artifact)
+
+
+def _fetch_on_demand_locked(artifact: str) -> bool:
+    from woof import bridge_assets
+    from woof.bridge_partial import fetch_partial
+    from woof.explain import warn
+
+    destination = default_bridge_dir()
+    warn(f"{artifact} is fetched on demand: the platform wheel does not carry "
+         f"it, so its pinned copy is being staged from this release's bundle "
+         f"into {destination} before this run continues")
+    try:
+        pins = bridge_assets.load_pins()
+        bundle = pins.bundle_for(bridge_assets.host_platform())
+        fetch_partial(pins, bundle, destination, [artifact],
+                      progress=lambda message: print(message, file=sys.stderr))
+    except (bridge_assets.BridgeAssetError, OSError) as error:
+        _ON_DEMAND_ATTEMPTS[artifact] = (
+            f"staging it from this release's bundle failed ({error})")
+        return False
+    _ON_DEMAND_ATTEMPTS[artifact] = None
+    return True
+
+
 def artifact_remedy(*, env_var: str, filename: str, subject: str,
                     crate_relative: str = CRATE_RELATIVE,
                     one_liner: str = "", artifact: str | None = None) -> str:
@@ -2270,6 +2588,19 @@ def artifact_remedy(*, env_var: str, filename: str, subject: str,
             f"# so {subject} must be built from a clone.  About two "
             "minutes, once:\n"
             f"{source_route}")
+    if fetched_on_demand(artifact):
+        # The expected state of a fresh pip install, so it is said as one:
+        # nothing is broken, and the one-file download is the whole remedy.
+        return (
+            f"# {subject} is fetched on demand: the platform wheel does not\n"
+            "# carry it, and this one command stages it from this release's\n"
+            "# prebuilt bundle, verified against the packaged pins:\n"
+            f"  woof fetch-bridges --partial --artifact {artifact}\n"
+            "  # (plain `woof fetch-bridges` stages the whole bundle instead)\n"
+            "  # Or build it from source instead -- the route that works on\n"
+            "  # every platform, including ones with no published bundle.\n"
+            "  # Uncomment these to take it:\n"
+            + _as_comments(source_route))
     return (
         "# this install carries no Rust sources -- the wheel ships none --\n"
         f"# so there are two routes to {subject}: the prebuilt bundle\n"
@@ -2415,7 +2746,7 @@ __all__ = [
     "BRIDGE_ABI_MARKERS", "bridge_abi_matches",
     "CheckoutBuildStatus", "StaleCheckoutBuildError", "checkout_build_status",
     "checkout_workspace_of", "require_current_checkout_build",
-    "BRIDGE_ENV", "CARGO_BUILD_HINT", "CLONE_DIR", "CRATE_RELATIVE",
+    "BRIDGE_ENV", "CARGO_BUILD_HINT", "CLONE_DIR", "CRATE_RELATIVE",  # noqa: F822 -- module __getattr__
     "CPU_BRIDGE_ARTIFACT", "CPU_BRIDGE_ENV", "cpu_bridge_remedy",
     "REPOSITORY_URL", "RUSTWX_CRATE_RELATIVE", "WINDOWS_SHELL",
     "artifact_candidates", "cargo_build_one_liner",

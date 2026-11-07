@@ -1,0 +1,65 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/state.py",
+      "cuda_symbol": "adopt_wrf_theta_carrier",
+      "layout_version": 1,
+      "module": "wrf_exact_total_theta",
+      "name": "wrf_exact_adopt_theta",
+      "parameters": [
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_total_theta.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

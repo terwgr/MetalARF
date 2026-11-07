@@ -29,10 +29,14 @@ import inspect
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 from threading import RLock
 from types import MappingProxyType
 
 import numpy as np
+
+from woof.ingest.backend_contract import _sha256
 
 from woof.ingest.memory_refusal import InitializationMemoryRefused
 from woof.ingest.cpu_backend import (
@@ -114,6 +118,12 @@ def preprocess_math_call(function=None, *, prepared_parameter=None, options_para
     return selected
 
 _COMMON_IMPLEMENTATION_SOURCES = (
+    # Child preparation changes when its capture or compile contract changes.
+    # Never restore a pre-fix prepared bundle under the new SINT contract.
+    "woof/core/nest_interp.py",
+    "woof/core/diagnostics.py",
+    "woof/ingest/nest_init.py",
+    "woof/numerics.py",
     "woof/core/host_libm.py",
     "woof/core/noahmp_libm.py",
     "woof/core/thompson_entry.py",
@@ -132,14 +142,6 @@ _COMMON_IMPLEMENTATION_SOURCES = (
 )
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def _implementation_tree(backend: str) -> dict[str, object]:
     """Bind the trajectory-changing preprocessing source implementation."""
 
@@ -148,6 +150,8 @@ def _implementation_tree(backend: str) -> dict[str, object]:
     if backend == "cpu":
         names.append("woof/ingest/cpu_backend.py")
     elif backend == "cuda":
+        names.append("woof/core/kernels/nest.cu")
+        names.append("woof/core/kernels/diagnostics.cu")
         # cpu_backend.py rides with the kernel: a vertical column deeper
         # than the kernel's top tier runs on the CPU bridge
         # (woof.ingest.vert.WRF_VERT_INTERP_LEVEL_TIERS).
@@ -456,11 +460,38 @@ def _era5_rh_to_water_cpu(relative_humidity, temperature):
     t = np.asarray(_host(temperature), dtype=np.float64)
     if rh.shape != t.shape:
         raise ValueError("relative_humidity and temperature shapes differ")
+    # Elementwise, so it runs as contiguous flat slabs on host threads
+    # (woof.ingest.host_parallel): every element takes exactly the
+    # arithmetic it took in one pass, so the result is byte-identical.
+    # One pass of this was ~12 % of a CPU GFS preparation's main thread.
+    from woof.ingest.host_parallel import host_threads, map_ordered
+
+    threads = (host_threads(rh.size // _RH_SLAB_MIN_VALUES)
+               if rh.size >= 2 * _RH_SLAB_MIN_VALUES else 1)
+    if threads == 1:
+        return _rh_to_water_block(rh, t, workers=None)
+    rh_flat = np.ascontiguousarray(rh).reshape(-1)
+    t_flat = np.ascontiguousarray(t).reshape(-1)
+    edges = np.linspace(0, rh_flat.size, threads + 1).astype(np.int64)
+    slabs = [(int(a), int(b)) for a, b in zip(edges[:-1], edges[1:]) if b > a]
+    parts = map_ordered(
+        lambda slab: _rh_to_water_block(
+            rh_flat[slab[0]:slab[1]], t_flat[slab[0]:slab[1]], workers=1),
+        slabs, workers=threads)
+    return np.concatenate(parts).reshape(rh.shape)
+
+
+#: Smallest flat slab the RH conversion hands one host thread.
+_RH_SLAB_MIN_VALUES = 1 << 18
+
+
+def _rh_to_water_block(rh, t, *, workers):
     from woof.core import portable_math as pm
 
-    eis = 0.01 * pm.exp(9.550426 - 5723.265 / t + 3.53068 * pm.log(t)
-                        - 0.00728332 * t)
-    ews = 6.112 * pm.exp(17.67 * (t - 273.15) / ((t - 273.15) + 243.5))
+    eis = 0.01 * pm.exp(9.550426 - 5723.265 / t + 3.53068 * pm.log(t, workers=workers)
+                        - 0.00728332 * t, workers=workers)
+    ews = 6.112 * pm.exp(17.67 * (t - 273.15) / ((t - 273.15) + 243.5),
+                         workers=workers)
     frac = (273.15 - t) / 20.0
     blended = frac * eis + (1.0 - frac) * ews
     r = np.where(t > 253.15, blended, eis)
@@ -1043,19 +1074,10 @@ def _selection(requested: str, backend, reason: str, *, device_load=None):
     return backend
 
 
-# Auto leaves a card other work is using, because there the preparation
-# ran slower than on the CPU: on a development machine's RTX 5090, shared with a running
-# forecast or beside a loaded host, the CUDA preparation took 796 to 990 s
-# against 678 s for the CPU backend on the same case.  The busy reading is
-# NVML's utilization.gpu, the share of the last sample period in which a
-# kernel ran, so 50% means other work held the card at least half the
-# time; an RTX PRO 4500 read 100% driven by another job and 0% idle.
-#
-# Whether the preparation FITS is no longer a fraction of the card: every
-# door prices its preparation (woof.ingest.preparation_price) and
-# :func:`admit_preparation` weighs that price against the card's free
-# memory.  The 25% free-memory floor that stood in for it passed a 24 GB
-# card with 7 GB free for a preparation that needed 32 (A65).
+# Utilization is telemetry, never a CPU/CUDA arithmetic choice. The same
+# historical moving-nest SINT/EOS mismatch is fixed at preparation; actual
+# prepared-array equality remains checked before repeatability comparisons.
+# Keep this threshold for the log and multi-card placement only.
 AUTO_BUSY_UTILIZATION_PERCENT = 50
 
 
@@ -1067,11 +1089,9 @@ def _auto_device_load(cp):
     preparation's price against, so auto reads the card once.
 
     A card the probe could not open through CUDA is not missing telemetry:
-    the preparation's own context would fail the same way, so it goes to
-    the CPU, judged against the thresholds by the NVML sample taken before
-    the failure where there is one.  The probe reports that only for a
-    CUDA runtime error; a failure of the probe's own reads as missing
-    telemetry.
+    the preparation waits for that certified card to become available.
+    The probe reports this only for a CUDA runtime error; a failure of the
+    probe's own reads is missing telemetry, not a backend decision.
     """
     from woof.core.device_probe import device_memory_probe_subprocess
 
@@ -1149,9 +1169,10 @@ def resolve_preprocess_backend(backend="cuda", *, workers: int | None = None,
     ``price`` (a :class:`woof.ingest.preparation_price.PreparationDevicePrice`,
     or a callable returning one) is what the preparation needs on the
     card.  Given one, a CUDA answer is weighed against the card's free
-    memory before anything is allocated (:func:`admit_preparation`): auto
-    prepares on the CPU when it does not fit, and an explicit ``cuda`` is
-    refused by name.  A callable is priced only when the answer is CUDA.
+    memory before anything is allocated (:func:`admit_preparation`): CUDA
+    waits for occupied memory and refuses a price beyond the card's capacity.
+    Load never changes the preparation backend. A callable is priced only
+    when the answer is CUDA.
     """
     chosen = _resolve_preprocess_backend(
         backend, workers=workers, cpu_bridge=cpu_bridge, reason=reason)
@@ -1214,12 +1235,14 @@ def _resolve_preprocess_backend(backend="cuda", *, workers=None,
                 "cpu_bridge applies only to the CPU backend; under the CUDA "
                 "backend the host steps use the library the resolution "
                 "ladder picks (set WOOF_CPU_PREPROCESS_BRIDGE to choose it)")
+        _mask_to_the_least_busy_card()
         if not _gpu_runtime_installed():
             # An EXPLICIT cuda request on a CPU-only install: a named
             # refusal with the remedy, at the front of the work.  The
             # bare default reaches the CPU backend through "auto" and
             # never lands here.
             raise ValueError(_GPU_PREPROCESS_REMEDY)
+        _wait_for_the_card_blocking()
         return _selection(
             "cuda", _with_host_workers(CudaPreprocessBackend(), workers),
             named)
@@ -1243,11 +1266,13 @@ def _resolve_preprocess_backend(backend="cuda", *, workers=None,
         # reason, and recorded in the receipt: a silent swap puts a whole
         # preparation on the host's cores beside an idle card.
         device_load = None
+        certified_candidate = None
         if sealed_backends is not None and "cuda" not in sealed_backends:
             fallback = ("the sealed native distribution carries no CUDA "
                         "preprocessing")
         else:
             try:
+                _mask_to_the_least_busy_card()
                 candidate = _with_host_workers(
                     CudaPreprocessBackend(), workers)
                 cp = candidate.array_module
@@ -1256,11 +1281,9 @@ def _resolve_preprocess_backend(backend="cuda", *, workers=None,
                 else:
                     certified, sentence = _certified_cuda(cp)
                     if certified:
-                        busy_reason, device_load = _auto_device_load(cp)
-                        if busy_reason is None:
-                            return _selection("auto", candidate, sentence,
-                                              device_load=device_load)
-                        fallback = busy_reason
+                        # Admission and telemetry are outside the capability
+                        # catch below: contention must never select CPU math.
+                        certified_candidate = (candidate, cp, sentence)
                     else:
                         fallback = sentence
             except (AttributeError, ImportError, RuntimeError,
@@ -1284,11 +1307,103 @@ def _resolve_preprocess_backend(backend="cuda", *, workers=None,
                                 "start") + quoted
                 else:
                     fallback = "cupy is not installed here"
+        if certified_candidate is not None:
+            candidate, cp, sentence = certified_candidate
+            busy_reason, device_load = _auto_device_load(cp)
+            if busy_reason:
+                print(f"note: preprocess backend auto: {busy_reason}; keeping CUDA; "
+                      "waiting for device/memory admission when required",
+                      file=sys.stderr, flush=True)
+            _wait_for_the_card_blocking()
+            chosen = _selection("auto", candidate, sentence, device_load=device_load)
+            if device_load and device_load.get("cuda_error"):
+                reading, waited = _wait_for_preparation_memory(chosen, 0, device_load)
+                chosen.selection.update(initial_device_load=device_load, device_load=reading,
+                                        device_wait_seconds=waited)
+            return chosen
         _announce_auto_cpu(fallback)
         return _selection(
             "auto", ParallelCpuPreprocessBackend(workers=workers), fallback,
             device_load=device_load)
     raise ValueError("backend must be 'cuda', 'cpu', or 'auto'")
+
+
+def _cuda_not_yet_initialized() -> bool:
+    """True when this process has not called ``cuInit`` (asked without calling it)."""
+
+    import ctypes
+
+    name = "nvcuda.dll" if sys.platform == "win32" else "libcuda.so.1"
+    try:
+        driver = ctypes.CDLL(name)
+    except OSError:
+        return False
+    count = ctypes.c_int()
+    # CUDA_ERROR_NOT_INITIALIZED (3): the driver answers without starting.
+    return driver.cuDeviceGetCount(ctypes.byref(count)) == 3
+
+
+def _mask_to_the_least_busy_card(environ=None) -> str | None:
+    """On a multi-card host with no mask, prepare on the least-busy card, not card 0.
+
+    THE BREAKAGE: a preparation with no ``CUDA_VISIBLE_DEVICES`` on a shared
+    multi-card box took CUDA's device 0 whatever ran there (ml-probs T1 on
+    V8X, 2026-10-27: every ``gfs_direct`` preparation held a context on card
+    0, another lane's card, while cards 4-7 were the lane's).  The forecast
+    already refuses an ambiguous card (``supervisor.select_gpu``); a
+    preparation is short and needs no lock, so it takes the visible card
+    with the most free memory among those under the busy threshold and
+    names it.  Applied only before this process starts CUDA, only when no
+    mask is set and more than one card is listed; with none under the
+    threshold nothing is masked and ``auto`` reads the busy card as before.
+    Returns the chosen UUID or None.
+    """
+
+    environ = os.environ if environ is None else environ
+    if environ.get("CUDA_VISIBLE_DEVICES") is not None:
+        return None
+    try:
+        completed = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,uuid,memory.free,utilization.gpu",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=15, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    cards = []
+    for line in completed.stdout.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 4 or not parts[1].startswith("GPU-"):
+            continue
+        try:
+            cards.append((int(parts[0]), parts[1], int(parts[2]), int(parts[3])))
+        except ValueError:
+            continue
+    if completed.returncode != 0 or len(cards) < 2:
+        return None
+    idle = [card for card in cards if card[3] < AUTO_BUSY_UTILIZATION_PERCENT]
+    if not idle or not _cuda_not_yet_initialized():
+        return None
+    index, uuid, free_mib, utilization = max(idle, key=lambda card: (card[2], -card[0]))
+    environ["CUDA_VISIBLE_DEVICES"] = uuid
+    print(f"preprocess: {len(cards)} cards visible and no CUDA_VISIBLE_DEVICES; "
+          f"preparing on card {index} ({uuid}, {free_mib} MiB free, "
+          f"{utilization}% busy): the most free memory of the cards under "
+          f"{AUTO_BUSY_UTILIZATION_PERCENT}% busy (set CUDA_VISIBLE_DEVICES "
+          "to choose)",
+          file=sys.stderr, flush=True)
+    return uuid
+
+
+def _wait_for_the_card_blocking() -> None:
+    """A CUDA preparation's host thread sleeps on the card, never spins.
+
+    Set once the CUDA backend is chosen and before its first allocation, so
+    the primary context is created with blocking sync
+    (:mod:`woof.cuda_wait`); host-side only, no kernel or value changes.
+    """
+    from woof.cuda_wait import apply
+
+    apply()
 
 
 class PreparationDeviceRefused(InitializationMemoryRefused):
@@ -1360,8 +1475,38 @@ def preparation_refusal_message(price, free, total, *,
         f"{price.stage}, after its inputs were decoded.\n"
         f"  remedy: run the same command with {cpu_line} "
         "(the CPU preparation holds this in host memory instead), or with "
-        "--preprocess-backend auto, which makes this choice itself, or "
-        "free the card")
+        "a larger card. Automatic selection never changes to CPU because "
+        "another job occupies the card.")
+
+
+def _wait_for_preparation_memory(backend, need, reading, *, price=None):
+    """Wait for other work to release memory, preserving the CUDA choice.
+
+    The surrounding launcher owns admission/leases. This is the last memory
+    check before allocation, not another lease or an arithmetic fallback.
+    Unknown telemetry retains CUDA; an impossible capacity refuses by name.
+    """
+    import time
+
+    began = time.monotonic()
+    announced = False
+    while True:
+        free, total, observed = _device_reading(backend, reading)
+        cuda_error = (observed or {}).get("cuda_error")
+        if total is not None and need > total:
+            detail = (preparation_refusal_message(price, free or 0, total)
+                      if price is not None else "CUDA device is unavailable")
+            raise PreparationDeviceRefused(detail)
+        if not cuda_error and (free is None or free >= need):
+            return observed, time.monotonic() - began
+        if not announced:
+            available = "unread" if free is None else _gib(free)
+            print(f"note: CUDA preparation: waiting for {_gib(need)} of device memory "
+                  f"({available} free{'; ' + str(cuda_error) if cuda_error else ''}); "
+                  "keeping CUDA to preserve the prepared fields", file=sys.stderr, flush=True)
+            announced = True
+        time.sleep(1.0)
+        reading = None
 
 
 def admit_preparation(backend, price, *, workers=None, probe=None):
@@ -1380,12 +1525,11 @@ def admit_preparation(backend, price, *, workers=None, probe=None):
     stands where neither the host nor the card holds the build, and where a
     bounded backend was already admitted on a decoded price, because a
     chained forecast may have reserved only that backend's batch.
-    A CPU backend passes untouched. A CUDA backend chosen by
-    ``auto`` that does not fit the card's free memory becomes the CPU
-    backend, with one line and the reason in its receipt; a CUDA backend
-    the caller named is refused with :class:`PreparationDeviceRefused`,
-    naming the terms and the CPU line.  Either way the priced selection
-    records ``device_fit``, so a CUDA preparation says why it was admitted.
+    A CPU backend passes untouched. A CUDA backend waits for occupied
+    memory, logging the wait and recording its duration. A price beyond
+    the card's capacity is refused with :class:`PreparationDeviceRefused`.
+    Neither automatic nor explicit CUDA switches arithmetic because of load.
+    The priced selection records ``device_fit`` after admission.
     A card whose free memory cannot be read keeps the choice, recorded
     with ``fits: None``: an unread card never refuses.
 
@@ -1513,20 +1657,18 @@ def admit_preparation(backend, price, *, workers=None, probe=None):
     if free is None or int(price.need_bytes) <= int(free):
         backend.selection = dict(selection, device_fit=fit)
         return backend
-    requested = selection.get("requested", "cuda")
-    if requested != "auto":
-        raise PreparationDeviceRefused(
-            preparation_refusal_message(price, free, total))
-    reason = preparation_device_sentence(price, free, total)
-    _announce_auto_cpu(reason)
-    host_workers = workers
-    if host_workers is None:
-        host_workers = getattr(backend, "host_workers", None)
-    chosen = _selection(
-        "auto", ParallelCpuPreprocessBackend(workers=host_workers), reason,
-        device_load=selection.get("device_load"))
-    chosen.selection["device_fit"] = fit
-    return chosen
+    # Wait for capacity without changing the selected arithmetic. A mapped
+    # build may need only one bounded batch; its normal host-fit gate above
+    # remains responsible for deciding whether that route is admissible.
+    need = int(price.need_bytes)
+    if price.route == "mapped":
+        minimum = max(256 * 1024**2, int(getattr(price, "chunk_minimum_bytes", 0)))
+        if minimum <= 1024**3:
+            need = min(need, minimum + context + 256 * 1024**2)
+    reading, waited = _wait_for_preparation_memory(backend, need, _reading, price=price)
+    backend.selection = dict(selection, device_wait_seconds=(
+        selection.get("device_wait_seconds", 0.0) + waited))
+    return admit_preparation(backend, price, workers=workers, probe=reading)
 
 
 def decide_preparation_device(requested: str, price, *, probe=None
@@ -1563,13 +1705,11 @@ def decide_preparation_device(requested: str, price, *, probe=None
             "the CUDA preparation fits the card's free memory"
             if free is not None else "the card's free memory was not read"))
         return "cuda", selection
-    if normalized == "cuda":
-        raise PreparationDeviceRefused(
-            preparation_refusal_message(price, free, total))
-    reason = preparation_device_sentence(price, free, total)
-    _announce_auto_cpu(reason)
-    selection.update(backend="cpu", reason=reason)
-    return "cpu", selection
+    reading, waited = _wait_for_preparation_memory(None, int(price.need_bytes),
+                                                    _reading, price=price)
+    name, selection = decide_preparation_device(normalized, price, probe=reading)
+    selection["device_wait_seconds"] = waited
+    return name, selection
 
 
 def _sealed_distribution_preprocess_backends() -> tuple[str, ...] | None:
@@ -1592,6 +1732,172 @@ def _sealed_distribution_preprocess_backends() -> tuple[str, ...] | None:
     _path, payload = bound
     backends = payload["contract"]["platform"]["backends"]
     return tuple(backends)
+
+
+def start_time_backend(backend):
+    """The backend the START time is built on: the whole card when it fits.
+
+    ``admit_preparation`` stages a mapped build over 1 GiB in bounded
+    batches so a forecast can run beside the LATER forcing times.  The
+    start time is built before the head exists, so no forecast sits beside
+    it yet, and the bounded batches cost it about 40 s of per-batch host
+    round trips on the HRRR CONUS grid (126.8 s against 86.4 s full-device,
+    every prepared array byte-identical).  When the whole build's price
+    fits the free bytes the admission just read, the start time takes the
+    full-device backend; its caller moves the result to the host
+    (:func:`move_start_result_to_host`) and releases the pool before the
+    head is admitted, so the later bounded times and any forecast beside
+    them see the card exactly as the bounded start left it.  Same CUDA
+    kernels, same vertical-route record (shared with ``backend``) and the
+    same scientific receipt; the route taken is a measurement under
+    ``selection.chunking.start_time``.  Anything else returns ``backend``.
+    """
+
+    if not getattr(backend, "bounded_cuda", False):
+        return backend
+    selection = getattr(backend, "selection", None) or {}
+    fit = selection.get("device_fit") or {}
+    chunking = selection.get("chunking")
+    need, free = fit.get("unchunked_need_bytes"), fit.get("free_bytes")
+    if not isinstance(chunking, dict) or type(need) is not int or type(free) is not int:
+        return backend
+    if need > free:
+        chunking["start_time"] = {
+            "route": "bounded CUDA batches",
+            "reason": f"the whole build needs {_gib(need)} and the card has {_gib(free)} free"}
+        return backend
+    full = CudaPreprocessBackend(host_workers=backend.host_workers)
+    # One receipt: the start time's vertical geometries land in the
+    # bounded backend's own route list, as they do when it builds them.
+    full._vertical_routes = backend._vertical_routes
+    full.selection = selection
+    chunking["start_time"] = {
+        "route": "full-device preparation, result moved to host before the head",
+        "reason": f"the whole build needs {_gib(need)} and the card has {_gib(free)} free"}
+    return full
+
+
+def move_start_result_to_host(*objects) -> int:
+    """Copy every CuPy array these objects hold to the host, in place.
+
+    The full-device start time (:func:`start_time_backend`) leaves its met
+    fields, state and base on the card; the bounded start leaves the same
+    values in NumPy.  This turns the first into the second, attribute by
+    attribute, so everything after the start (soil, head, boundary frames,
+    the producer's reservation) runs on what the bounded start hands it.
+    A device-to-host copy is exact.  Returns the bytes moved.
+    """
+
+    import dataclasses
+    try:
+        import cupy as cp
+    except ImportError:          # no CUDA, nothing on a card
+        return 0
+    seen: set[int] = set()
+    copies: dict[int, tuple[object, np.ndarray]] = {}
+    moved = 0
+
+    def host(value):
+        nonlocal moved
+        if isinstance(value, cp.ndarray):
+            # One host copy per device array, so two names for one array
+            # stay one array.
+            if id(value) not in copies:
+                moved += int(value.nbytes)
+                copies[id(value)] = (value, value.get())
+            return copies[id(value)][1]
+        if isinstance(value, tuple) and not hasattr(value, "_fields"):
+            converted = tuple(host(item) for item in value)
+            return value if all(a is b for a, b in zip(converted, value)) else converted
+        visit(value)
+        return value
+
+    def visit(value):
+        if id(value) in seen or isinstance(value, (str, bytes, int, float, np.ndarray)):
+            return
+        seen.add(id(value))
+        if isinstance(value, dict):
+            for key in list(value):
+                converted = host(value[key])
+                if converted is not value[key]:
+                    value[key] = converted
+        elif isinstance(value, list):
+            for position, item in enumerate(value):
+                converted = host(item)
+                if converted is not item:
+                    value[position] = converted
+        elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+            for item in dataclasses.fields(value):
+                current = getattr(value, item.name)
+                converted = host(current)
+                if converted is not current:
+                    object.__setattr__(value, item.name, converted)
+        elif hasattr(value, "__dict__") and type(value).__module__.startswith("woof."):
+            for key, item in list(vars(value).items()):
+                converted = host(item)
+                if converted is not item:
+                    object.__setattr__(value, key, converted)
+            if hasattr(value, "_host_setup_state"):
+                object.__setattr__(value, "_host_setup_state", True)
+
+    # Gather every device array first and copy them on several threads,
+    # each on its own stream: one thread's pageable copies moved 22 GB in
+    # 5.8 s at HRRR CONUS.  A device-to-host copy is exact either way.
+    gather: dict[int, object] = {}
+
+    def collect(value):
+        if isinstance(value, cp.ndarray):
+            gather.setdefault(id(value), value)
+            return value
+        if isinstance(value, tuple) and not hasattr(value, "_fields"):
+            for item in value:
+                collect(item)
+            return value
+        walk(value, collect)
+        return value
+
+    walked: set[int] = set()
+
+    def walk(value, each):
+        if id(value) in walked or isinstance(value, (str, bytes, int, float, np.ndarray)):
+            return
+        walked.add(id(value))
+        if isinstance(value, dict):
+            for key in list(value):
+                each(value[key])
+        elif isinstance(value, list):
+            for item in value:
+                each(item)
+        elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+            for item in dataclasses.fields(value):
+                each(getattr(value, item.name))
+        elif hasattr(value, "__dict__") and type(value).__module__.startswith("woof."):
+            for item in list(vars(value).values()):
+                each(item)
+
+    for value in objects:
+        collect(value)
+    if gather:
+        from concurrent.futures import ThreadPoolExecutor
+        device = cp.cuda.runtime.getDevice()
+
+        def fetch(array):
+            cp.cuda.Device(device).use()
+            stream = cp.cuda.Stream(non_blocking=True)
+            with stream:
+                host = array.get(stream=stream)
+            stream.synchronize()
+            return host
+
+        cp.cuda.runtime.deviceSynchronize()
+        items = sorted(gather.items(), key=lambda item: -int(item[1].nbytes))
+        with ThreadPoolExecutor(max_workers=min(8, len(items))) as pool:
+            for (key, array), copied in zip(items, pool.map(lambda item: fetch(item[1]), items)):
+                moved += int(array.nbytes)
+                copies[key] = (array, copied)
+    for value in objects:
+        visit(value)
+    return moved
 
 
 def release_backend_memory(backend) -> None:

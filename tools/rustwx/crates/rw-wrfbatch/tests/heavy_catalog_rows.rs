@@ -16,40 +16,15 @@
 
 mod stored_plane_fixture;
 
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(tag: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "rw-wrfbatch-heavy-rows-{tag}-{}-{:?}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|value| value.as_nanos())
-                .unwrap_or_default()
-        ));
-        std::fs::create_dir_all(&dir).expect("create scratch dir");
-        Self(dir)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+mod support;
+use support::Scratch;
 
 /// `(slug, kind, status, detail)` for every `PRODUCT` row the catalog
 /// transcript carries.
 fn catalog_rows(heavy: bool) -> Vec<(String, String, String, String)> {
-    let scratch = Scratch::new(if heavy { "heavy" } else { "light" });
+    let scratch = Scratch::new("rw-wrfbatch-heavy-rows", if heavy { "heavy" } else { "light" });
     let wrfout = stored_plane_fixture::write(scratch.path());
     let store_root = scratch.path().join("store");
     let out_dir = scratch.path().join("out");

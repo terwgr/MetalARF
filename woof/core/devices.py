@@ -284,6 +284,18 @@ class DevicesRefused(ValueError):
 def validate_ranked_physics(cfg):
     """Refuse physics whose full-domain state the rank factory cannot build."""
     grid = int(getattr(cfg, "grid_id", 0))
+    chem_sets = getattr(cfg, "chem_sets", "")
+    # Only profiles with a tested domain ledger owner can run on ranks.
+    from tilestream.sfire_smoke import ranked_accepts
+    fire_smoke_only = bool(chem_sets) and ranked_accepts(cfg)
+    if chem_sets and not fire_smoke_only:
+        raise DevicesRefused(
+            f"[devices] grid_id = {grid} enables chem_sets: chemistry carries "
+            "per-domain (species,) ledger vectors and reduces mass over the "
+            "complete domain. These chemistry profiles have no qualified rank ledger "
+            "owner, so halo copies would duplicate mass accounting and the "
+            "gather would slice those vectors as grid fields. Run this grid "
+            "resident by leaving it out of [devices] domains.")
     if int(getattr(cfg, "slope_rad", 0) or 0) == 1:
         raise DevicesRefused(
             f"[devices] grid_id = {grid} sets slope_rad = 1: the shadow "

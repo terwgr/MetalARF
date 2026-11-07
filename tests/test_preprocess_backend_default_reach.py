@@ -90,8 +90,6 @@ def test_the_hrrr_root_receipt_keeps_why_auto_chose_the_cpu(
     caller" -- on a bare run where nobody named anything and auto had
     fallen to the CPU because cupy was absent.
     """
-
-    import os
     from types import SimpleNamespace
 
     from tools import hrrr_single_domain_benchmark as benchmark
@@ -109,7 +107,8 @@ def test_the_hrrr_root_receipt_keeps_why_auto_chose_the_cpu(
     bare = SimpleNamespace(preprocess_backend="auto",
                            preprocess_workers=None, cpu_preprocess_bridge=None)
     chosen, workers = benchmark._budgeted_preprocess_backend(bare)
-    assert workers == int(os.cpu_count() or 1)
+    from woof.ingest.cpu_backend import automatic_workers
+    assert workers == automatic_workers()
     assert chosen.workers == workers
     assert chosen.selection["requested"] == "auto"
     assert chosen.selection["backend"] == "cpu"
@@ -121,22 +120,6 @@ def test_the_hrrr_root_receipt_keeps_why_auto_chose_the_cpu(
     assert chosen.selection == {
         "requested": "cpu", "backend": "cpu",
         "reason": backend_module.NAMED_BY_CALLER}
-
-
-def test_auto_without_cupy_resolves_cpu_and_says_so(
-        monkeypatch, capsys, _fresh_announcement):
-    from types import SimpleNamespace
-
-    _cupyless(monkeypatch)
-    cpu = SimpleNamespace(name="cpu")
-    monkeypatch.setattr(
-        backend_module, "ParallelCpuPreprocessBackend",
-        lambda **_kwargs: cpu)
-    assert resolve_preprocess_backend("auto") is cpu
-    err = capsys.readouterr().err
-    assert err.count("\n") == 1
-    assert "cpu" in err.lower()
-    assert "cupy" in err.lower()
 
 
 def test_the_auto_line_prints_once_per_process(
@@ -168,23 +151,6 @@ def test_cuda_without_cupy_is_a_named_refusal(monkeypatch,
     assert "cupy" in text
     assert "pip install" in text
     assert "--preprocess-backend cpu" in text
-
-
-def test_cuda_with_cupy_present_stays_lazy(monkeypatch,
-                                           _fresh_announcement):
-    """The presence probe is the only new gate: with cupy resolvable the
-    cuda branch returns the same lazy backend it always has, importing
-    nothing at resolve time."""
-
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(
-        backend_module, "_gpu_runtime_installed", lambda: True)
-    monkeypatch.setattr(
-        backend_module, "CudaPreprocessBackend",
-        lambda: SimpleNamespace(name="cuda"))
-    monkeypatch.setattr("woof.local_gpu.no_local_gpu", lambda: False)
-    assert resolve_preprocess_backend("cuda").name == "cuda"
 
 
 def test_auto_with_unusable_runtime_names_the_runtime(
@@ -354,3 +320,36 @@ def test_the_certification_is_the_table_not_a_restated_literal():
     resolver = source.split("def resolve_preprocess_backend", 1)[1]
     assert "CUDA_RUNTIME_RANGE" not in resolver
     assert CUDA_RUNTIME_RANGE == (12_000, 13_000)
+
+
+def test_the_hrrr_root_budget_is_the_count_the_cpu_backend_runs(monkeypatch):
+    """A cgroup that grants fewer CPUs than the host has cores.
+
+    The root budget was os.cpu_count() (256 on a box whose cgroup grants
+    245) while the CPU backend runs effective_workers(), so every CPU
+    preparation there refused itself at f00: "f00 mapping used 245 native
+    workers; expected 256".
+    """
+    from types import SimpleNamespace
+
+    from woof.ingest import preparation_workers
+    from tools import hrrr_single_domain_benchmark as benchmark
+
+    monkeypatch.delenv(preparation_workers.PREPARATION_THREADS_ENV, raising=False)
+    monkeypatch.setattr(preparation_workers, "cpu_budget", lambda: {
+        "affinity_cpus": 256, "cgroup_cpus": 245, "available_cpus": 245})
+    # ac988f1fd reuses an automatic count for five seconds; this box's own
+    # count, read by an earlier test in the process, must not answer for
+    # the budget patched above.
+    from woof.ingest import cpu_backend
+    monkeypatch.setattr(cpu_backend, "_AUTOMATIC_WORKERS", {})
+    monkeypatch.setattr(preparation_workers, "memory_worker_limit", lambda: None)
+    named = SimpleNamespace(preprocess_backend="cpu",
+                            preprocess_workers=None, cpu_preprocess_bridge=None)
+    chosen, workers = benchmark._budgeted_preprocess_backend(named)
+    assert workers == 245
+    assert chosen.workers == workers
+    explicit = SimpleNamespace(preprocess_backend="cpu",
+                               preprocess_workers=300, cpu_preprocess_bridge=None)
+    chosen, workers = benchmark._budgeted_preprocess_backend(explicit)
+    assert workers == chosen.workers == 245

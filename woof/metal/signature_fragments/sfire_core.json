@@ -1,0 +1,1882 @@
+{
+  "kernels": [
+    {
+      "name": "sfire_cfl_reciprocal",
+      "cuda_symbol": "sfire_cfl_reciprocal",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "x",
+          "float",
+          "read"
+        ],
+        [
+          "y",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "x": [
+          [
+            "any_1d"
+          ]
+        ],
+        "y": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "unused",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_boundary",
+      "cuda_symbol": "sfire_boundary",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "bias",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_nearest",
+      "cuda_symbol": "sfire_nearest",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "ax",
+          "float",
+          "read"
+        ],
+        [
+          "ay",
+          "float",
+          "read"
+        ],
+        [
+          "d",
+          "float",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ax": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ay": [
+          [
+            "any_1d"
+          ]
+        ],
+        "d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "sx",
+          "float32"
+        ],
+        [
+          "sy",
+          "float32"
+        ],
+        [
+          "st",
+          "float32"
+        ],
+        [
+          "ex",
+          "float32"
+        ],
+        [
+          "ey",
+          "float32"
+        ],
+        [
+          "et",
+          "float32"
+        ],
+        [
+          "cx2",
+          "float32"
+        ],
+        [
+          "cy2",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_no_fire",
+      "cuda_symbol": "sfire_no_fire",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "fuel",
+          "float",
+          "read_write"
+        ],
+        [
+          "area",
+          "float",
+          "read_write"
+        ],
+        [
+          "lfn",
+          "float",
+          "read_write"
+        ],
+        [
+          "tign",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "fuel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lfn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tign": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "time",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_ignite",
+      "cuda_symbol": "sfire_ignite",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "lfn",
+          "float",
+          "read_write"
+        ],
+        [
+          "tign",
+          "float",
+          "read_write"
+        ],
+        [
+          "ax",
+          "float",
+          "read"
+        ],
+        [
+          "ay",
+          "float",
+          "read"
+        ],
+        [
+          "count",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lfn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ax": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ay": [
+          [
+            "any_1d"
+          ]
+        ],
+        "count": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "start_ts",
+          "float32"
+        ],
+        [
+          "end_ts",
+          "float32"
+        ],
+        [
+          "sx",
+          "float32"
+        ],
+        [
+          "sy",
+          "float32"
+        ],
+        [
+          "start_time",
+          "float32"
+        ],
+        [
+          "ex",
+          "float32"
+        ],
+        [
+          "ey",
+          "float32"
+        ],
+        [
+          "end_time",
+          "float32"
+        ],
+        [
+          "radius",
+          "float32"
+        ],
+        [
+          "ros",
+          "float32"
+        ],
+        [
+          "ux",
+          "float32"
+        ],
+        [
+          "uy",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_fuel_cell",
+      "cuda_symbol": "sfire_fuel_cell",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "l",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "tau",
+          "float",
+          "read"
+        ],
+        [
+          "fuel",
+          "float",
+          "read_write"
+        ],
+        [
+          "area",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "l": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tau": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fuel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "now",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_fuel_left",
+      "cuda_symbol": "sfire_fuel_left",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "l",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "tau",
+          "float",
+          "read"
+        ],
+        [
+          "fuel",
+          "float",
+          "read_write"
+        ],
+        [
+          "area",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "l": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tau": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fuel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "now",
+          "float32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_select",
+      "cuda_symbol": "sfire_select",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "dx",
+          "float",
+          "read"
+        ],
+        [
+          "uf",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "method",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_select_sided",
+      "cuda_symbol": "sfire_select_sided",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "left",
+          "float",
+          "read"
+        ],
+        [
+          "right",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "left": [
+          [
+            "any_1d"
+          ]
+        ],
+        "right": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "method",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_tend",
+      "cuda_symbol": "sfire_tend",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "lfn",
+          "float",
+          "read_write"
+        ],
+        [
+          "vx",
+          "float",
+          "read"
+        ],
+        [
+          "vy",
+          "float",
+          "read"
+        ],
+        [
+          "zx",
+          "float",
+          "read"
+        ],
+        [
+          "zy",
+          "float",
+          "read"
+        ],
+        [
+          "bbb",
+          "float",
+          "read"
+        ],
+        [
+          "betafl",
+          "float",
+          "read"
+        ],
+        [
+          "phiwc",
+          "float",
+          "read"
+        ],
+        [
+          "r0",
+          "float",
+          "read"
+        ],
+        [
+          "ischap",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "ros",
+          "float",
+          "read_write"
+        ],
+        [
+          "cfl",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lfn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bbb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "betafl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phiwc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "r0": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ischap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ros": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cfl": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "txlo",
+          "int32"
+        ],
+        [
+          "txhi",
+          "int32"
+        ],
+        [
+          "tylo",
+          "int32"
+        ],
+        [
+          "tyhi",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "upwinding",
+          "int32"
+        ],
+        [
+          "split",
+          "int32"
+        ],
+        [
+          "grows",
+          "int32"
+        ],
+        [
+          "advection",
+          "int32"
+        ],
+        [
+          "slope_factor",
+          "float32"
+        ],
+        [
+          "band",
+          "float32"
+        ],
+        [
+          "viscosity",
+          "float32"
+        ],
+        [
+          "viscosity_bg",
+          "float32"
+        ],
+        [
+          "viscosity_band",
+          "float32"
+        ],
+        [
+          "viscosity_ngp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_rk_stage",
+      "cuda_symbol": "sfire_rk_stage",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "initial",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "initial": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "stage",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_reinit_sign",
+      "cuda_symbol": "sfire_reinit_sign",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "lfn",
+          "float",
+          "read"
+        ],
+        [
+          "sign",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lfn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_advance_reinit",
+      "cuda_symbol": "sfire_advance_reinit",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "sign",
+          "float",
+          "read"
+        ],
+        [
+          "initial",
+          "float",
+          "read"
+        ],
+        [
+          "current",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "initial": [
+          [
+            "any_1d"
+          ]
+        ],
+        "current": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "txlo",
+          "int32"
+        ],
+        [
+          "txhi",
+          "int32"
+        ],
+        [
+          "tylo",
+          "int32"
+        ],
+        [
+          "tyhi",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "dt_s",
+          "float32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ],
+        [
+          "method",
+          "int32"
+        ],
+        [
+          "bdy",
+          "int32"
+        ],
+        [
+          "coeff",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_growth_limit",
+      "cuda_symbol": "sfire_growth_limit",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "before",
+          "float",
+          "read"
+        ],
+        [
+          "after",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "before": [
+          [
+            "any_1d"
+          ]
+        ],
+        "after": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_tign_update",
+      "cuda_symbol": "sfire_tign_update",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "before",
+          "float",
+          "read"
+        ],
+        [
+          "after",
+          "float",
+          "read"
+        ],
+        [
+          "tign",
+          "float",
+          "read_write"
+        ],
+        [
+          "hit",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "before": [
+          [
+            "any_1d"
+          ]
+        ],
+        "after": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hit": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "txlo",
+          "int32"
+        ],
+        [
+          "txhi",
+          "int32"
+        ],
+        [
+          "tylo",
+          "int32"
+        ],
+        [
+          "tyhi",
+          "int32"
+        ],
+        [
+          "ts",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "guard",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_flame",
+      "cuda_symbol": "sfire_flame",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "ros",
+          "float",
+          "read"
+        ],
+        [
+          "iboros",
+          "float",
+          "read"
+        ],
+        [
+          "area",
+          "float",
+          "read"
+        ],
+        [
+          "length",
+          "float",
+          "read_write"
+        ],
+        [
+          "front",
+          "float",
+          "read_write"
+        ],
+        [
+          "intensity",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ros": [
+          [
+            "any_1d"
+          ]
+        ],
+        "iboros": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "length": [
+          [
+            "any_1d"
+          ]
+        ],
+        "front": [
+          [
+            "any_1d"
+          ]
+        ],
+        "intensity": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_ideal_coords",
+      "cuda_symbol": "sfire_ideal_coords",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "x",
+          "float",
+          "read_write"
+        ],
+        [
+          "y",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "x": [
+          [
+            "any_1d"
+          ]
+        ],
+        "y": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_driver_burn",
+      "cuda_symbol": "sfire_driver_burn",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "old",
+          "float",
+          "read_write"
+        ],
+        [
+          "next",
+          "float",
+          "read"
+        ],
+        [
+          "burnt",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "next": [
+          [
+            "any_1d"
+          ]
+        ],
+        "burnt": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_assimilate_perimeter",
+      "cuda_symbol": "sfire_assimilate_perimeter",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "lfn",
+          "float",
+          "read_write"
+        ],
+        [
+          "tign",
+          "float",
+          "read_write"
+        ],
+        [
+          "historic",
+          "float",
+          "read"
+        ],
+        [
+          "historic_tign",
+          "float",
+          "read"
+        ],
+        [
+          "count",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lfn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "historic": [
+          [
+            "any_1d"
+          ]
+        ],
+        "historic_tign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "count": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "use_tign",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xlo",
+          "int32"
+        ],
+        [
+          "xhi",
+          "int32"
+        ],
+        [
+          "ylo",
+          "int32"
+        ],
+        [
+          "yhi",
+          "int32"
+        ],
+        [
+          "ts",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_flux_accumulate",
+      "cuda_symbol": "sfire_flux_accumulate",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "h",
+          "float",
+          "read"
+        ],
+        [
+          "q",
+          "float",
+          "read"
+        ],
+        [
+          "mass",
+          "float",
+          "read"
+        ],
+        [
+          "burnt",
+          "float",
+          "read"
+        ],
+        [
+          "hsum",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsum",
+          "float",
+          "read_write"
+        ],
+        [
+          "msum",
+          "float",
+          "read_write"
+        ],
+        [
+          "bsum",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "burnt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hsum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "msum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bsum": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_flux_average",
+      "cuda_symbol": "sfire_flux_average",
+      "module": "sfire_core",
+      "source": "woof/metal/shaders/sfire_core.metal",
+      "cuda_source": "woof/core/kernels/sfire_core.cu",
+      "resources": [
+        [
+          "h",
+          "float",
+          "read_write"
+        ],
+        [
+          "q",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    }
+  ]
+}

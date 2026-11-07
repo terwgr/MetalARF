@@ -57,7 +57,8 @@ def test_full_device_reconstruction_stages_only_exact_host_donors(
         uploads.append(value.copy())
         return _DeviceSintPayload(value)
     monkeypatch.setitem(sys.modules, 'cupy', SimpleNamespace(asarray=upload))
-    def interpolate(payload, cropped):
+    def interpolate(payload, cropped, *, preparation):
+        assert preparation is True
         assert isinstance(payload, _DeviceSintPayload)
         seen.append(cropped)
         return np_sint(payload.value, cropped, dtype=np.float64).astype(np.float32)
@@ -85,7 +86,7 @@ def test_original_reconstruction_backend_keeps_original_registration(monkeypatch
     assert ni._reconstruction_sint(source, registration,
         device_windows=backend == 'resident-device') is result
     assert len(seen) == 1 and seen[0][0] is source and seen[0][1] is registration
-    assert seen[0][2] == {}
+    assert seen[0][2] == {"preparation": True}
 
 
 def test_pending_child_inputs_overlap_and_collect_in_parent_order(monkeypatch):
@@ -116,6 +117,8 @@ def test_pending_child_inputs_overlap_and_collect_in_parent_order(monkeypatch):
         return SimpleNamespace(domain=domain)
 
     monkeypatch.setattr(ni, "_prepare_child_input_on_grid", prepare)
+    # A three-thread host: the budget is the host's, split over the slots.
+    monkeypatch.setattr("woof.ingest.cpu_backend.automatic_workers", lambda: 3)
     pending = ni.PendingChildInputs(
         domains, grids, "catalog", "orography", workers=3)
     result = pending.result()
@@ -164,9 +167,12 @@ def test_nested_input_catalog_preserves_era5_soilgeo_units_through_mapping(
         grid_id=2, start_time=valid_time,
         run=SimpleNamespace(moist=True, terrain_opt=1))
     grid = object()
+    # HGT_M: since c1227a11a the child door checks the terrain slope before
+    # building a coordinate; a flat plane needs no pass.
     static = {
         "LANDMASK": np.ones((2, 2)),
         "LU_INDEX": np.ones((2, 2)),
+        "HGT_M": np.zeros((2, 2)),
     }
     backend = SimpleNamespace(receipt=lambda: {"backend": "cpu"})
     monkeypatch.setattr(
@@ -206,21 +212,6 @@ def test_nested_input_catalog_preserves_era5_soilgeo_units_through_mapping(
         "regular-grid-native-state-v1"
 
 
-def test_pending_child_inputs_names_failed_domain_and_closes(monkeypatch):
-    domain = SimpleNamespace(grid_id=3)
-
-    def fail(*_args):
-        raise ValueError("bad source record")
-
-    monkeypatch.setattr(ni, "_prepare_child_input_on_grid", fail)
-    pending = ni.PendingChildInputs(
-        (domain,), {3: object()}, object(), None, workers=1)
-    with pytest.raises(RuntimeError, match=r"d03") as caught:
-        pending.result()
-    assert isinstance(caught.value.__cause__, ValueError)
-    assert pending._closed
-
-
 def test_pending_child_inputs_carries_the_cause_and_its_remedy(monkeypatch):
     """A worker that reads only the last exception line keys its retry on
     the refusal's remedy; the wrapper used to drop both."""
@@ -244,101 +235,98 @@ def test_pending_child_inputs_carries_the_cause_and_its_remedy(monkeypatch):
     assert caught.value.__cause__.args == (refusal,)
 
 
-def test_pending_child_inputs_bounds_nested_cpu_threads_to_budget(monkeypatch):
-    domains = tuple(SimpleNamespace(grid_id=grid_id) for grid_id in (2, 3, 4))
-    observed = []
-
-    def prepare(domain, _grid, _catalog, _orography, backend, workers, _bridge):
-        observed.append((domain.grid_id, backend, workers))
-        return SimpleNamespace(domain=domain)
-
-    monkeypatch.setattr(ni, "_prepare_child_input_on_grid", prepare)
-    pending = ni.PendingChildInputs(
-        domains, {domain.grid_id: object() for domain in domains},
-        object(), None, workers=8)
+def test_one_child_takes_the_hosts_threads_not_the_job_slots(monkeypatch):
+    """An HRRR 3-1 tree's one 1 km nest ran on 8 of 48 cores (F-CHILD-INIT-1KM)."""
+    seen = []
+    monkeypatch.setattr("woof.ingest.cpu_backend.automatic_workers", lambda: 48)
+    monkeypatch.setattr(
+        ni, "_prepare_child_input_on_grid",
+        lambda domain, *args: seen.append(args[4]) or SimpleNamespace(domain=domain))
+    domain = SimpleNamespace(grid_id=2)
+    pending = ni.PendingChildInputs((domain,), {2: object()}, object(), None,
+                                    workers=8)
     pending.result()
-
-    assert pending.workers == 3
-    assert dict(pending.preprocess_workers_by_domain) == {2: 3, 3: 3, 4: 2}
-    assert pending.allocated_workers == 8
-    assert sorted(observed) == [(2, "cpu", 3), (3, "cpu", 3), (4, "cpu", 2)]
-
-
-def test_pending_child_inputs_limits_submitted_residency_window(monkeypatch):
-    domains = tuple(SimpleNamespace(grid_id=grid_id) for grid_id in range(2, 7))
-    started = []
-    two_started = threading.Event()
-    release = threading.Event()
-    lock = threading.Lock()
-
-    def prepare(domain, *_args):
-        with lock:
-            started.append(domain.grid_id)
-            if len(started) == 2:
-                two_started.set()
-        assert release.wait(timeout=5.0)
-        return SimpleNamespace(domain=domain)
-
-    monkeypatch.setattr(ni, "_prepare_child_input_on_grid", prepare)
-    pending = ni.PendingChildInputs(
-        domains, {domain.grid_id: object() for domain in domains},
-        object(), None, workers=2)
-    assert two_started.wait(timeout=5.0)
-    with lock:
-        assert sorted(started) == [2, 3]
-    release.set()
-    result = pending.result()
-
-    assert [item.domain.grid_id for item in result] == list(range(2, 7))
-    assert pending._next_submit_index == len(domains)
+    assert seen == [48]
+    assert dict(pending.preprocess_workers_by_domain) == {2: 48}
+    # Two children prepared at once split the host's threads between them.
+    two = ni.PendingChildInputs(
+        (SimpleNamespace(grid_id=2), SimpleNamespace(grid_id=3)),
+        {2: object(), 3: object()}, object(), None, workers=2)
+    two.close()
+    assert dict(two.preprocess_workers_by_domain) == {2: 24, 3: 24}
 
 
-def test_six_domain_branching_hierarchy_is_deterministic_and_bounded(
-        monkeypatch):
-    parents = {2: 1, 3: 2, 4: 3, 5: 1, 6: 2}
-    domains = tuple(
-        SimpleNamespace(grid_id=grid_id, parent_id=parents[grid_id])
-        for grid_id in range(2, 7))
-    grids = {domain.grid_id: object() for domain in domains}
-    calls = []
-    lock = threading.Lock()
+def test_blend_frame_capture_is_the_whole_capture_on_the_frame():
+    """The frame-only SINT is the full SINT to the bit wherever the blend reads it."""
+    from woof.core.nest_interp import blend_terrain, register_nest, sint
 
-    def prepare(domain, grid, *_args):
-        assert grid is grids[domain.grid_id]
-        with lock:
-            calls.append(domain.grid_id)
-        return _prepared_for_barrier(domain.grid_id, domain.parent_id)
+    rng = np.random.default_rng(7)
+    nxp, nyp, nx, ny, nz = 40, 34, 61, 52, 4
+    parent = SimpleNamespace(
+        ht=rng.uniform(0, 3000, (nyp, nxp)).astype(np.float32),
+        mub2d=rng.uniform(6e4, 9.5e4, (nyp, nxp)).astype(np.float32),
+        phb=rng.uniform(0, 2e5, (nz, nyp, nxp)).astype(np.float32))
+    child_dc = SimpleNamespace(
+        parent_grid_ratio=3, i_parent_start=5, j_parent_start=6,
+        run=SimpleNamespace(nx=nx, ny=ny))
+    parent_node = SimpleNamespace(
+        cfg=SimpleNamespace(run=SimpleNamespace(nx=nxp, ny=nyp)), state=parent)
+    full = ni._capture_parent_blend_fields(child_dc, parent_node)
+    framed = ni._capture_parent_blend_frame(child_dc, parent_node, frame=10)
+    reg = register_nest(nri=3, nrj=3, i_parent_start=5, j_parent_start=6,
+                        child_nx=nx, child_ny=ny, parent_nx=nxp, parent_ny=nyp)
+    np.testing.assert_array_equal(full[2], sint(parent.phb, reg))
+    for whole, frame in zip(full, framed):
+        assert frame.shape == whole.shape and frame.dtype == whole.dtype
+        ring = np.ones(whole.shape[-2:], dtype=bool)
+        ring[10:-10, 10:-10] = False
+        np.testing.assert_array_equal(frame[..., ring], whole[..., ring])
+        fine = rng.uniform(0, 1, whole.shape)
+        a, b = fine.copy(), fine.copy()
+        blend_terrain(whole.astype(np.float64), a, spec_bdy_width=5, blend_width=5)
+        blend_terrain(frame.astype(np.float64), b, spec_bdy_width=5, blend_width=5)
+        assert a.tobytes() == b.tobytes()
+    # A frame that covers the child captures it whole.
+    assert ni._blend_frame_windows(20, 61, 10) is None
 
-    monkeypatch.setattr(ni, "_prepare_child_input_on_grid", prepare)
-    observed_orders = []
-    for worker_budget in (1, 3, 8):
-        calls.clear()
-        pending = ni.PendingChildInputs(
-            domains, grids, object(), None, workers=worker_budget,
-            preprocess_backend="cpu")
-        assert len(pending._futures) <= min(worker_budget, len(domains))
-        assert pending.allocated_workers <= worker_budget
-        result = pending.result()
-        observed_orders.append(tuple(item.domain.grid_id for item in result))
-        assert sorted(calls) == list(range(2, 7))
-        assert len(calls) == len(set(calls))
-        assert not pending._futures
-        assert pending._closed
 
-    assert observed_orders == [(2, 3, 4, 5, 6)] * 3
+def test_level_slabs_write_the_one_call_bytes(monkeypatch):
+    from woof.core.nest_interp import blend_terrain
 
-    parent_calls = []
+    monkeypatch.setattr("woof.ingest.cpu_backend.automatic_workers", lambda: 7)
+    monkeypatch.setattr(ni, "_LEVEL_SLAB_MIN_CELLS", 1)
+    rng = np.random.default_rng(3)
+    coarse, fine = rng.uniform(0, 1, (2, 23, 40, 50))
+    one = fine.copy()
+    blend_terrain(coarse, one, spec_bdy_width=5, blend_width=5)
+    sliced = fine.copy()
+    ni._on_level_slabs(23, lambda k0, k1: blend_terrain(
+        coarse[k0:k1], sliced[k0:k1], spec_bdy_width=5, blend_width=5),
+        cells=sliced.size)
+    assert one.tobytes() == sliced.tobytes()
 
-    def finalize(prepared, parent, _vertical, **_options):
-        parent_calls.append((prepared.domain.grid_id, parent.cfg.grid_id))
-        return SimpleNamespace(grid=prepared.grid, state=object())
 
-    monkeypatch.setattr(ni, "finalize_prepared_child", finalize)
-    root = SimpleNamespace(
-        cfg=SimpleNamespace(grid_id=1), grid=object(), state=object())
-    ni.finalize_prepared_child_chain(result, root, object())
-    assert parent_calls == [
-        (2, 1), (3, 2), (4, 3), (5, 1), (6, 2)]
+def test_adjust_tempqv_on_level_slabs_writes_the_one_call_bytes(monkeypatch):
+    from woof.core.nest_interp import adjust_tempqv
+
+    monkeypatch.setattr("woof.ingest.cpu_backend.automatic_workers", lambda: 4)
+    monkeypatch.setattr(ni, "_LEVEL_SLAB_MIN_CELLS", 1)
+    rng = np.random.default_rng(5)
+    nz, ny, nx = 9, 6, 7
+    mub = rng.uniform(8e4, 9e4, (ny, nx)).astype(np.float32)
+    save = (mub + rng.uniform(-300, 300, (ny, nx))).astype(np.float32)
+    c3 = np.linspace(1.0, 0.0, nz).astype(np.float32)
+    c4 = np.linspace(0.0, 4000.0, nz).astype(np.float32)
+    th = rng.uniform(-10, 40, (nz, ny, nx)).astype(np.float32)
+    pp = rng.uniform(-50, 50, (nz, ny, nx)).astype(np.float32)
+    qv = rng.uniform(1e-5, 1.5e-2, (nz, ny, nx)).astype(np.float32)
+    th1, qv1 = th.copy(), qv.copy()
+    adjust_tempqv(mub, save, c3, c4, 1e4, th1, pp, qv1)
+    th2, qv2 = th.copy(), qv.copy()
+    ni._on_level_slabs(nz, lambda k0, k1: adjust_tempqv(
+        mub, save, c3[k0:k1], c4[k0:k1], 1e4, th2[k0:k1], pp[k0:k1],
+        qv2[k0:k1]), cells=th2.size)
+    assert th1.tobytes() == th2.tobytes() and qv1.tobytes() == qv2.tobytes()
 
 
 def test_pending_child_inputs_empty_hierarchy_allocates_no_workers():
@@ -506,9 +494,12 @@ def test_prepare_child_input_dispatches_hrrr_on_own_static_landmask(
         run=SimpleNamespace(moist=True, terrain_opt=1))
     grid = object()
     landmask = np.asarray([[1.0, 1.0], [0.0, 1.0]])
+    # HGT_M: since c1227a11a the child door checks the terrain slope before
+    # building a coordinate; a flat plane needs no pass.
     static = {
         "LANDMASK": landmask,
         "LU_INDEX": np.asarray([[21, 1], [16, 21]]),
+        "HGT_M": np.zeros((2, 2)),
     }
     horizontal = HorizontalSnapshot(
         valid_time=valid_time, levels_hpa=np.asarray([1000.0]), fields={
@@ -570,6 +561,88 @@ def test_prepare_child_input_dispatches_hrrr_on_own_static_landmask(
     assert prepared.preprocess_receipt["soil_mapping"] == {"status": "PASS"}
 
 
+def _hrrr_child_case(monkeypatch, static, *, catalog_extra=None):
+    """The HRRR child door of the test above, around one static build."""
+    valid_time = datetime(2026, 7, 20)
+    source = HrrrNativeSnapshot(
+        valid_time=valid_time, forecast_hour=0,
+        i_start=0, j_start=0, ny=4, nx=5, fields={})
+    static_catalog = object()
+    catalog = SimpleNamespace(
+        snapshots=(source,), valid_times=(valid_time,), inventory=(), files=(),
+        static_catalog=static_catalog, **(catalog_extra or {}))
+    child = SimpleNamespace(
+        grid_id=2, start_time=valid_time,
+        run=SimpleNamespace(moist=True, terrain_opt=1))
+    horizontal = HorizontalSnapshot(
+        valid_time=valid_time, levels_hpa=np.asarray([1000.0]), fields={
+            "SKINTEMP": np.asarray([[281.0, 282.0], [283.0, 284.0]])})
+
+    class Backend:
+        @staticmethod
+        def receipt():
+            return {"backend": "cpu", "workers": 2}
+
+    monkeypatch.setattr(
+        "woof.ingest.preprocess_backend.resolve_preprocess_backend",
+        lambda *_args, **_kwargs: Backend())
+    monkeypatch.setattr(ni, "build_static_for_domain",
+                        lambda grid, catalog, grid_id: dict(static))
+    monkeypatch.setattr(
+        ni, "geog_selection_from_catalog",
+        lambda actual_catalog, grid_id: SimpleNamespace(
+            landuse_global_attrs=lambda: {"MMINLU": "MODIFIED_IGBP_MODIS_NOAH",
+                                          "ISWATER": 17, "ISLAKE": 21,
+                                          "ISICE": 15, "ISURBAN": 13}))
+
+    def map_hrrr(snapshot, actual_grid, **options):
+        options["soil_mapping_report"]["status"] = "PASS"
+        return horizontal
+
+    monkeypatch.setattr(ni, "interpolate_hrrr_to_lambert", map_hrrr)
+    return child, catalog
+
+
+def test_a_corridor_child_is_born_on_its_corridor_crop(monkeypatch):
+    """Plan call 5 (2.9.0): a child whose preparation sealed a statics
+    corridor initializes on that corridor's crop at its declared placement,
+    not on a footprint build, so its terrain is the ground its moves crop
+    from; the footprint's own slope pass does not run on it."""
+    from woof.static.corridor import CorridorBirth
+    footprint = {"LANDMASK": np.asarray([[1.0, 1.0], [0.0, 1.0]]),
+                 "LU_INDEX": np.asarray([[21.0, 1.0], [16.0, 21.0]]),
+                 "HGT_M": np.zeros((2, 2))}
+    crop = {name: np.array(value, copy=True) for name, value in footprint.items()}
+    crop["HGT_M"] = np.asarray([[120.0, 130.0], [125.0, 128.0]])
+    crop["EXTRA_CORRIDOR_FIELD"] = np.ones((2, 2))
+    birth = CorridorBirth(grid_id=2, fields=crop, cache_sha256="0" * 64)
+    monkeypatch.setattr(
+        "woof.static.terrain_autosmooth.prepare_fields",
+        lambda *a, **k: pytest.fail("a corridor child is not re-bounded"))
+    child, catalog = _hrrr_child_case(
+        monkeypatch, footprint, catalog_extra={"statics_corridor_births": {2: birth}})
+
+    prepared = ni._prepare_child_input_on_grid(
+        child, object(), catalog, preprocess_backend="cpu", preprocess_workers=2)
+
+    assert set(prepared.static_fields) == set(footprint)
+    for name in footprint:
+        np.testing.assert_array_equal(prepared.static_fields[name], crop[name])
+
+
+def test_a_corridor_crop_missing_a_footprint_field_is_refused_by_name(monkeypatch):
+    from woof.static.corridor import CorridorBirth, CorridorRefusal
+    footprint = {"LANDMASK": np.ones((2, 2)), "LU_INDEX": np.ones((2, 2)),
+                 "HGT_M": np.zeros((2, 2))}
+    birth = CorridorBirth(grid_id=2, cache_sha256="0" * 64,
+                          fields={"LANDMASK": np.ones((2, 2)), "HGT_M": np.zeros((2, 2))})
+    child, catalog = _hrrr_child_case(
+        monkeypatch, footprint, catalog_extra={"statics_corridor_births": {2: birth}})
+    with pytest.raises(CorridorRefusal, match="LU_INDEX"):
+        ni._prepare_child_input_on_grid(
+            child, object(), catalog, preprocess_backend="cpu", preprocess_workers=2)
+
+
 @pytest.mark.parametrize("backend", ("cuda", "auto", object()))
 def test_pending_child_inputs_rejects_unsafe_parallel_backend(backend):
     domains = tuple(SimpleNamespace(grid_id=grid_id) for grid_id in (2, 3))
@@ -585,7 +658,8 @@ def test_pending_child_inputs_rejects_unbounded_or_invalid_workers(workers):
         ni.PendingChildInputs((), {}, object(), None, workers=workers)
 
 
-def _child_binding_case(monkeypatch, child_id, soil_case=None):
+def _child_binding_case(monkeypatch, child_id, soil_case=None,
+                        catalog_mapping=None, mapping_seen=None):
     """Review anchor: REAL -> SINT -> blend all 3 -> adjust -> rederive."""
     events = []
     # These ordering/soil tests replace interpolation; constructing its CUDA
@@ -641,7 +715,8 @@ def _child_binding_case(monkeypatch, child_id, soil_case=None):
     parent_node = SimpleNamespace(cfg=SimpleNamespace(grid_id=child_id - 1))
     catalog = SimpleNamespace(inventory=("SOILGEO",), valid_times=(object(),),
                               snapshots=(object(),), files=(),
-                              water_temperature_policy="wrf_compat")
+                              water_temperature_policy="wrf_compat",
+                              **(catalog_mapping or {}))
     vertical = VerticalConfig(eta_levels=(1.0, 0.5, 0.0), p_top=10000.0,
                               hybrid_opt=2, etac=0.2)
 
@@ -673,6 +748,8 @@ def _child_binding_case(monkeypatch, child_id, soil_case=None):
     def interpolate(*_args, **kwargs):
         assert kwargs["source_orography_catalog"] is catalog
         assert kwargs["backend"] is backend
+        if mapping_seen is not None:
+            mapping_seen.append(kwargs)
         events.append("era5-own-grid")
         return horizontal
 
@@ -689,7 +766,7 @@ def _child_binding_case(monkeypatch, child_id, soil_case=None):
     monkeypatch.setattr(
         ni, "_set_map_fields", lambda *_: events.append("map"))
     monkeypatch.setattr(
-        ni, "update_diagnostics", lambda *_: events.append("preblend-eos"))
+        ni, "update_diagnostics", lambda *_, **kw: events.append("preblend-eos"))
     def preprocess(*args, **kwargs):
         nonlocal soil
         assert kwargs["lake_mask"] is None
@@ -722,7 +799,8 @@ def _child_binding_case(monkeypatch, child_id, soil_case=None):
     monkeypatch.setattr(ni, "blend_terrain", blend)
     base = object()
     def adjust_then_rederive(_state, _cfg, _coord, _save_mub, ht_fine, *,
-                             blended):
+                             blended, preparation=False):
+        assert preparation
         assert ht_fine is static["HGT_M"]
         # The re-derivation reads the float64 blend, and the FP32 state
         # already holds its rounding.
@@ -758,6 +836,35 @@ def test_initialize_child_binding_order_and_soil_never_readjusted(monkeypatch, c
     _child_binding_case(monkeypatch, child_id)
 
 
+def test_a_child_maps_with_the_root_conventions_its_catalog_carries(monkeypatch):
+    """A GFS tree's child: WPS fix_gfs_rh on RH2 too, lakes on the WPS search."""
+    seen = []
+    _child_binding_case(
+        monkeypatch, 2, catalog_mapping={
+            "relative_humidity_convention": "gfs_mixed",
+            "lake_whole_source_search": True},
+        mapping_seen=seen)
+    (kwargs,) = seen
+    assert kwargs["relative_humidity_convention"] == "gfs_mixed"
+    lakes = kwargs["inland_water_search"]
+    # The stub's land use classes one cell as ISLAKE (21).
+    assert lakes.dtype == np.bool_ and lakes.shape == (4, 5)
+    assert lakes.sum() == 1 and lakes[0, 0]
+
+
+def test_a_child_catalog_without_them_keeps_the_regular_grid_defaults(monkeypatch):
+    seen = []
+    _child_binding_case(monkeypatch, 2, mapping_seen=seen)
+    (kwargs,) = seen
+    assert kwargs["relative_humidity_convention"] == "era5_mixed"
+    assert kwargs["inland_water_search"] is None
+    import dataclasses
+    defaults = {field.name: field.default
+                for field in dataclasses.fields(ni.NestedInputCatalog)}
+    assert defaults["relative_humidity_convention"] == "era5_mixed"
+    assert defaults["lake_whole_source_search"] is False
+
+
 @pytest.mark.parametrize("source", ("era5", "hrrr"))
 @pytest.mark.parametrize("scheme,layers", ((2, 4), (3, 6), (3, 9)))
 def test_child_soil_uses_configured_geometry_and_matches_direct_provider(
@@ -766,11 +873,26 @@ def test_child_soil_uses_configured_geometry_and_matches_direct_provider(
     from woof.ingest.ruc_soil import preprocess_ruc_soil
     from woof.ingest.soil import preprocess_noah_soil
 
+    # The child seam first maps a foreign soil model's moisture onto the run's
+    # land model (woof/ingest/land_state.py: ERA5's HTESSEL into RUC or Noah,
+    # HRRR's RUC into Noah), with the child's own soil classes; after that it
+    # is the direct provider itself. Record the seam's converted fields.
+    from woof.ingest import land_state
+    converted_seen = []
+    convert = land_state.convert_source_soil_moisture
+
+    def recording(*args, **kwargs):
+        converted, receipt = convert(*args, **kwargs)
+        converted_seen.append(converted)
+        return converted, receipt
+    monkeypatch.setattr(land_state, "convert_source_soil_moisture", recording)
     result, fields, static = _child_binding_case(
         monkeypatch, 2, soil_case=(source, scheme, layers))
     provider = preprocess_ruc_soil if scheme == 3 else preprocess_noah_soil
+    assert len(converted_seen) == 1
+    converted = converted_seen[0]
     expected = provider(
-        fields, soil_type=static["SCT_DOM"], deep_soil_temperature=static["TMN"],
+        converted, soil_type=static["SCT_DOM"], deep_soil_temperature=static["TMN"],
         water_temperature_policy="wrf_compat",
         **({"num_soil_layers": layers} if scheme == 3 else {}))
     for name in ("soil_temperature", "soil_moisture", "liquid_moisture"):
@@ -861,7 +983,8 @@ def test_d01_only_declaration_fails_at_d02_initialization_with_domain_named(
             child_dc, parent_node, catalog, vertical, declaration)
 
 
-def test_press_adj_mu_matches_wrf_expression_after_eos(monkeypatch):
+@pytest.mark.parametrize("prepared", [False, True])
+def test_press_adj_mu_matches_wrf_expression_after_eos(monkeypatch, prepared):
     """start_em.F:878-892: diagnose once, correct MU_2, seed MU_1."""
     events = []
 
@@ -899,7 +1022,8 @@ def test_press_adj_mu_matches_wrf_expression_after_eos(monkeypatch):
         ni, "_base_from_blended",
         lambda *_args, **_kwargs: events.append("rederive-base") or base)
 
-    def diagnose(_state, _hypsometric_opt):
+    def diagnose(_state, _hypsometric_opt, *, preparation=False):
+        assert preparation == prepared
         events.append("eos")
         _state.al[0, 0] = np.array([0.02, 0.03], np.float32)
         _state.alt[0, 0] = np.array([0.80, 0.81], np.float32)
@@ -910,7 +1034,8 @@ def test_press_adj_mu_matches_wrf_expression_after_eos(monkeypatch):
 
     ni._adjust_and_rederive(
         state, SimpleNamespace(hypsometric_opt=2), object(),
-        state.mub2d.copy(), ht_fine, blended=object())
+        state.mub2d.copy(), ht_fine, blended=object(),
+        **({"preparation": True} if prepared else {}))
 
     expected = np.array([
         10.0 + 0.02 / (0.80 * 0.78) * 9.81 * (120.0 - 100.0),
@@ -1024,7 +1149,7 @@ def test_parent_only_wk82_child_fixture_is_cpu_testable(monkeypatch):
     monkeypatch.setattr(ni, "DomainState", _CpuState)
     monkeypatch.setattr(
         ni, "sint",
-        lambda field, reg: np_sint(field, reg, dtype=np.float64).astype(
+        lambda field, reg, *, preparation: np_sint(field, reg, dtype=np.float64).astype(
             np.float32))
     diagnosed = []
     monkeypatch.setattr(
@@ -1064,7 +1189,8 @@ def test_device_child_from_host_parent_retains_full_child_geometry(monkeypatch):
                     setattr(self, name, _DeviceSintPayload(value))
     monkeypatch.setattr(ni, 'DomainState', DeviceState)
     monkeypatch.setitem(sys.modules, 'cupy', SimpleNamespace(asarray=_DeviceSintPayload))
-    def interpolate(payload, reg):
+    def interpolate(payload, reg, *, preparation):
+        assert preparation is True
         assert isinstance(payload, _DeviceSintPayload)
         registrations.append(reg)
         return _DeviceSintPayload(np_sint(payload.value, reg, dtype=np.float64).astype(np.float32))
@@ -1128,7 +1254,8 @@ def test_mixed_parent_only_init_reuses_flat_force_slot_and_resets_heating(
 
     monkeypatch.setattr(ni, "DomainState", MixedCpuState)
 
-    def cpu_sint(field, reg, *, out=None):
+    def cpu_sint(field, reg, *, out=None, preparation=True):
+        assert preparation is True
         result = np_sint(field, reg, dtype=np.float64).astype(np.float32)
         if out is not None:
             out[...] = result

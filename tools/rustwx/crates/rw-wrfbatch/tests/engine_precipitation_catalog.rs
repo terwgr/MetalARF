@@ -31,7 +31,7 @@ const CITED_ABSENCES: &[(&str, &str)] = &[
 
 fn export() -> serde_json::Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../../gpuwm/physics_consumer_export_v1.json");
+        .join("../../../../woof/physics_consumer_export_v1.json");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|error| {
         panic!(
             "{} is the engine's consumer export and this test cannot run without it: {error}",

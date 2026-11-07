@@ -1,0 +1,422 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_turbulence25_f32",
+      "module": "hexv842_mpas_bl_mynn_turbulence25_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_turbulence25_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_mym_turbulence",
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "thl",
+          "float",
+          "read"
+        ],
+        [
+          "thetav",
+          "float",
+          "read"
+        ],
+        [
+          "qw",
+          "float",
+          "read"
+        ],
+        [
+          "ql",
+          "float",
+          "read"
+        ],
+        [
+          "vt",
+          "float",
+          "read"
+        ],
+        [
+          "vq",
+          "float",
+          "read"
+        ],
+        [
+          "qke",
+          "float",
+          "read"
+        ],
+        [
+          "tsq",
+          "float",
+          "read"
+        ],
+        [
+          "qsq",
+          "float",
+          "read"
+        ],
+        [
+          "cov",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl1d",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_w1",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_a1",
+          "float",
+          "read"
+        ],
+        [
+          "tkeprodtd",
+          "float",
+          "read"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "rmo",
+          "float",
+          "read"
+        ],
+        [
+          "fltv",
+          "float",
+          "read"
+        ],
+        [
+          "psig_bl",
+          "float",
+          "read"
+        ],
+        [
+          "sh",
+          "float",
+          "read_write"
+        ],
+        [
+          "sm",
+          "float",
+          "read_write"
+        ],
+        [
+          "el",
+          "float",
+          "read_write"
+        ],
+        [
+          "dfm",
+          "float",
+          "read_write"
+        ],
+        [
+          "dfh",
+          "float",
+          "read_write"
+        ],
+        [
+          "dfq",
+          "float",
+          "read_write"
+        ],
+        [
+          "tcd",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdk",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdt",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qshear1d",
+          "float",
+          "read_write"
+        ],
+        [
+          "qbuoy1d",
+          "float",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thetav": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ql": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cov": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfra_bl1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_w1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_a1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tkeprodtd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rmo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fltv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psig_bl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "el": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dfm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dfh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dfq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qshear1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qbuoy1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scratch": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "karman",
+          "float32"
+        ],
+        [
+          "ep1",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

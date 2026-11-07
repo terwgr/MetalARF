@@ -1,0 +1,74 @@
+#include "fast_sbm_support.metalh"
+#include "hexv842_mpas_thompson_column_log10.metalh"
+// Preserve binary32 unary negation for device-resident source floats.
+static inline F operator-(device const F& a) { return f32_word(a.bits ^ 0x80000000u); }
+static inline F operator-(constant const F& a) { return f32_word(a.bits ^ 0x80000000u); }
+#pragma clang fp contract(off)
+static inline F round(F a){return F(round(Soft8(as_type<float>(a.bits))));}
+namespace ntc {
+static inline F op(F a,F b,int which) {
+ uint x=a.bits,y=b.bits;
+ if(soft32_is_nan(x))return f32_word(soft32_quiet_nan(x));
+ if(soft32_is_nan(y))return f32_word(soft32_quiet_nan(y));
+ uint r=which==0?soft32_add(x,y):which==1?soft32_sub(x,y):which==2?soft32_mul(x,y):soft32_div(x,y);
+ return f32_word(soft32_is_nan(r)?0xffc00000u:r);
+}
+static inline Soft8 op(Soft8 a,Soft8 b,int which) {
+ ulong x=a.bits,y=b.bits;
+ if(soft64_is_nan(x))return SD8(soft64_quiet_nan(x));
+ if(soft64_is_nan(y))return SD8(soft64_quiet_nan(y));
+ ulong r=which==0?soft64_add(x,y):which==1?soft64_sub(x,y):which==2?soft64_mul(x,y):soft64_div(x,y);
+ return SD8(soft64_is_nan(r)?0xfff8000000000000ul:r);
+}
+#define NT_OP(NAME,INDEX,EXPR) \
+static inline int NAME(int a,int b){return EXPR;} \
+static inline F NAME(F a,F b){return op(a,b,INDEX);} \
+static inline F NAME(float a,float b){return op(F(a),F(b),INDEX);} \
+static inline F NAME(float a,int b){return op(F(a),F(float(b)),INDEX);} \
+static inline F NAME(int a,float b){return op(F(float(a)),F(b),INDEX);} \
+static inline Soft8 NAME(Soft8 a,Soft8 b){return op(a,b,INDEX);} \
+template<class A,class B> static inline auto NAME(A a,B b)->decltype(a+b){using T=decltype(a+b);return NAME(T(a),T(b));}
+NT_OP(tc_add,0,a+b)
+NT_OP(tc_sub,1,a-b)
+NT_OP(tc_mul,2,a*b)
+NT_OP(tc_div,3,a/b)
+#undef NT_OP
+template<class A,class B> static inline auto tc_min(A a,B b)->decltype(a+b){using T=decltype(a+b);return a<b?T(a):T(b);}
+template<class A,class B> static inline auto tc_max(A a,B b)->decltype(a+b){using T=decltype(a+b);return a>b?T(a):T(b);}
+template<class A,class B,class C> static inline auto tc_min(A a,B b,C c)->decltype(a+b+c){return tc_min(tc_min(a,b),c);}
+template<class A,class B,class C> static inline auto tc_max(A a,B b,C c)->decltype(a+b+c){return tc_max(tc_max(a,b),c);}
+static inline F tc_abs(F a){return f32_word(a.bits&0x7fffffffu);}
+static inline Soft8 tc_abs(Soft8 a){return SD8(a.bits&0x7ffffffffffffffful);}
+static inline int tc_abs(int a){return a<0?-a:a;}
+static inline F tc_sqrt(F a){uint v=soft32_sqrt(a.bits);return f32_word(soft32_is_nan(v)&&!soft32_is_nan(a.bits)?0xffc00000u:v);}
+static inline Soft8 tc_sqrt(Soft8 a){ulong v=soft64_sqrt(a.bits);return SD8(soft64_is_nan(v)&&!soft64_is_nan(a.bits)?0xfff8000000000000ul:v);}
+static inline F tc_sign(F a,F b){return f32_word((a.bits&0x7fffffffu)|(b.bits&0x80000000u));}
+static inline Soft8 tc_sign(Soft8 a,Soft8 b){return SD8((a.bits&0x7ffffffffffffffful)|(b.bits&0x8000000000000000ul));}
+static inline F tc_sngl(Soft8 a){return F(a);}
+static inline Soft8 tc_dfloat(int a){return Soft8(a);}
+static inline F tc_log10(F a){return f32_word(native_thompson_log10_bits(a.bits));}
+}
+static inline uint __float_as_uint(F a){return a.bits;}
+static inline int __float_as_int(F a){return as_type<int>(a.bits);}
+#include "hexv842_mpas_thompson_column_libm.metalh"
+namespace ntc {
+static inline F tc_exp(F a){return native_tc_math::thompson_aa_expf(a);}
+static inline Soft8 tc_exp(Soft8 a){return native_tc_math::thompson_aa_exp(a);}
+static inline F tc_log(F a){return native_tc_math::thompson_aa_logf(a);}
+static inline Soft8 tc_log(Soft8 a){return native_tc_math::thompson_aa_log(a);}
+static inline Soft8 tc_log10(Soft8 a){return native_tc_math::thompson_aa_log10(a);}
+static inline F tc_pow(F a,F b){F r=native_tc_math::thompson_aa_powf(a,b);if(!soft32_is_nan(r.bits))return r;if(soft32_is_nan(a.bits))return f32_word(soft32_quiet_nan(a.bits));if(soft32_is_nan(b.bits))return f32_word(soft32_quiet_nan(b.bits));return f32_word(0xffc00000u);}
+static inline Soft8 tc_pow(Soft8 a,Soft8 b){return native_tc_math::thompson_aa_pow(a,b);}
+template<class T> static inline T tc_pow(T a,int b){
+ bool neg=b<0;uint n=neg?0u-uint(b):uint(b);T y=(n&1u)?a:T(1);
+ while(n>>=1u){a=tc_mul(a,a);if(n&1u)y=tc_mul(y,a);}
+ return neg?tc_div(T(1),y):y;
+}
+static inline F tc_pow(float a,int b){return tc_pow(F(a),b);}
+template<class A,class B> static inline auto tc_pow(A a,B b)->decltype(a+b){using T=decltype(a+b);return tc_pow(T(a),T(b));}
+}
+
+static_assert(__is_same(decltype(-((device F*)0)[0]),F), "device unary must remain binary32");
+static_assert(__is_same(decltype(-((constant F*)0)[0]),F), "constant unary must remain binary32");
+static_assert(__is_same(decltype(ntc::tc_mul(((device F*)0)[0], -((device F*)0)[0])),F), "float multiply must remain binary32");
+static_assert(__is_same(decltype(ntc::tc_mul(((device F*)0)[0], ((device Soft8*)0)[0])),Soft8), "mixed multiply must remain binary64");

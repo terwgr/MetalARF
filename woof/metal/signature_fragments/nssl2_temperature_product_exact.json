@@ -1,0 +1,72 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/nssl2_runtime.py",
+      "cuda_symbol": "apply_nssl2_production",
+      "layout_version": 1,
+      "module": "nssl2_reduce_exact",
+      "name": "nssl2_temperature_product_exact",
+      "origin_expression": "refl_t[...] = th * pii",
+      "origin_kind": "python_fp32_expression",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_reduce_exact.metal",
+      "threads_per_group": 256
+    }
+  ]
+}

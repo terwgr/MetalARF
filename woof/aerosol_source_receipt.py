@@ -87,7 +87,7 @@ AEROSOL_SOURCE_SCHEMA = "gpuwm-run-aerosol-source-v1"
 #: QNWFA/QNIFA pair carried by the met_em series itself, which is an
 #: aerosol input by exactly the same standard even though the bytes came
 #: from the analysis rather than from a separate dataset file.
-AEROSOL_SOURCES_FROM_INPUT = ("wif-climatology", "metgrid-analyzed")
+AEROSOL_SOURCES_FROM_INPUT = ("wif-climatology", "metgrid-analyzed", "composition-chemistry")
 
 #: The schemes that HAVE water-friendly/ice-friendly aerosol number
 #: fields.  Aerosol-aware Thompson and nothing else: ``thompsonaero`` is
@@ -184,6 +184,11 @@ def aerosol_source_report_entry(receipt, *, mp_physics, when_unrecorded):
     source = plain.get("aerosol_source")
     entry["recorded"] = True
     entry["aerosol_source"] = source
+    if source == "wif-climatology":
+        entry["declared_forcing_difference"] = (
+            "Monthly water-friendly and ice-friendly aerosol climatology replaces "
+            "analysed initial and boundary aerosol. This does not reproduce "
+            "operational analysed aerosol forcing outside its coverage.")
     # ABSENCE (2), when it is the answer: the run searched and found
     # nothing, ran on the analytic profile, and says so in one boolean a
     # reader can filter on without parsing prose.

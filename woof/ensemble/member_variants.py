@@ -1,6 +1,6 @@
-"""Named member land-scheme and fixed surface-state controls.
+"""Named member physics selections and fixed surface-state controls.
 
-This roster changes existing land selectors and initial surface state.
+This roster changes existing single-run selectors and initial surface state.
 Preparation remains the ordinary source chain. A prepared authority is
 shared only when its trajectory and complete preparation configuration
 match; different soil layouts never borrow each other's prepared cache.
@@ -8,7 +8,7 @@ match; different soil layouts never borrow each other's prepared cache.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, fields
 import hashlib
 import json
 from numbers import Real
@@ -18,11 +18,27 @@ import struct
 from woof.ensemble.surface_controls import DEFAULTS, OPTIONS, validate_surface_recipe
 
 LAND_KEYS = frozenset({"sf_surface_physics", "num_soil_layers"})
-LAND_LAYOUTS = frozenset({(3, 6), (3, 9), (2, 4)})
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 
-def normalize_member_variants(value, count):
+def member_physics_keys():
+    """Use the ordinary schema, keeping source layout and draws out of arms."""
+    from woof.config import RunConfig
+    from woof.experiment import _SHARED_FORBIDDEN
+    source = SOURCE_RUN_FIELDS | frozenset(_SHARED_FORBIDDEN) | frozenset({
+        "eta_levels", "map_proj", "terrain_opt", "hill_height", "hill_halfwidth",
+        "open_x", "open_y", "time_step_sound", "min_time_step_sound",
+        "use_adaptive_time_step", "step_to_output_time", "adaptation_domain",
+        "target_cfl", "target_hcfl", "max_step_increase_pct", "starting_time_step",
+        "starting_time_step_den", "max_time_step", "max_time_step_den",
+        "min_time_step", "min_time_step_den", "adaptive_nest_lattice",
+    })
+    # Stochastic settings retain their own configuration and RNG owners.
+    return frozenset(item.name for item in fields(RunConfig)
+        if item.name not in source and not item.name.startswith(("spp_", "inflow_perturbation")))
+
+
+def normalize_member_variants(value, count, *, ladder=False):
     """Validate a complete named roster without importing numerical code."""
     if not isinstance(value, (tuple, list)) or len(value) != count:
         raise ValueError("member_variants must contain one named record for every requested member")
@@ -30,8 +46,8 @@ def normalize_member_variants(value, count):
     names = set()
     descriptors = {}
     for number, row in enumerate(value):
-        if not isinstance(row, dict) or set(row) - {"name", "physics", "surface"}:
-            raise ValueError(f"member variant {number} takes name, physics and surface")
+        if not isinstance(row, dict) or set(row) - {"name", "physics", "surface", "wind"}:
+            raise ValueError(f"member variant {number} takes name, physics, surface and wind")
         name = row.get("name")
         if not isinstance(name, str) or not _NAME.fullmatch(name):
             raise ValueError(f"member variant {number} needs a single identifier of at most 64 characters")
@@ -39,16 +55,34 @@ def normalize_member_variants(value, count):
             raise ValueError(f"member variant names must be unique: {name}")
         names.add(name)
         physics = row.get("physics", {})
-        if not isinstance(physics, dict) or set(physics) - LAND_KEYS:
-            raise ValueError(f"member variant {name} physics takes existing land selectors only: "
-                             "sf_surface_physics and num_soil_layers")
-        if physics:
-            if set(physics) != LAND_KEYS or any(type(item) is not int for item in physics.values()):
+        if not isinstance(physics, dict):
+            raise ValueError(f"member variant {name} physics must be a table")
+        unknown = set(physics) - member_physics_keys()
+        if unknown:
+            raise ValueError(f"member variant {name} physics has unsupported keys {sorted(unknown)}; "
+                             "use existing single-run physics selectors. Geometry and clocks stay "
+                             "source-bound, and stochastic controls keep their own admission; "
+                             "otherwise the member would borrow the wrong prepared grid or bypass a refusal")
+        if set(physics) & LAND_KEYS:
+            if not LAND_KEYS <= set(physics) or any(type(physics[key]) is not int for key in LAND_KEYS):
                 raise ValueError(f"member variant {name} must name both integer land selectors")
-            layout = (physics["sf_surface_physics"], physics["num_soil_layers"])
-            if layout not in LAND_LAYOUTS:
-                raise ValueError(f"member variant {name} needs an existing RUC six/nine-layer or Noah four-layer "
-                                 "soil layout; another pairing would initialize the wrong land column")
+            from types import SimpleNamespace
+            from woof.config import soil_layer_count
+            try:
+                soil_layer_count(SimpleNamespace(**{key: physics[key] for key in LAND_KEYS}))
+            except ValueError as exc:
+                raise ValueError(f"member variant {name}: {exc}; another pairing would initialize "
+                                 "the wrong land column") from exc
+            except ModuleNotFoundError as exc:
+                # The preparation-only RW-WPS package stages no forecast-side
+                # soil contract (woof.config defers scheme 3's read for that
+                # reason; tools/build_rw_wps_release.py names why). The pairing
+                # is checked again by the forecast door that runs the member,
+                # which carries the contract; a preparation install cannot run
+                # the column the check protects. Any other missing module is a
+                # packaging defect and still raises.
+                if not (exc.name or "").startswith("woof.core."):
+                    raise
         surface = row.get("surface", {})
         if not isinstance(surface, dict) or set(surface) - set(OPTIONS):
             raise ValueError(f"member variant {name} surface takes soil_moisture_scale and sst_offset_k")
@@ -58,12 +92,18 @@ def normalize_member_variants(value, count):
         surface = {**DEFAULTS, **surface}
         surface = validate_surface_recipe({"kind": "surface-state", **surface})
         surface.pop("kind")
+        wind = row.get("wind", 0.0)
+        if wind:
+            from woof.ensemble.initial_perturbation import validate_initial_perturbation
+            wind = validate_initial_perturbation({"kind": "uniform-wind", "amplitude": wind})["amplitude"]
+        elif isinstance(wind, bool) or not isinstance(wind, Real) or wind != 0:
+            raise ValueError("member wind amplitude must be finite nonnegative m/s")
         descriptor = (_canonical(physics), surface_binding_key(surface))
-        if descriptor in descriptors:
+        if descriptor in descriptors and not ladder:
             raise ValueError(f"member variants {descriptors[descriptor]} and {name} select identical "
-                             "FP32 land and surface controls; repeating them would fabricate ensemble size")
+                             "FP32 physics and surface controls; repeating them would fabricate ensemble size")
         descriptors[descriptor] = name
-        result.append({"name": name, "physics": dict(physics), "surface": surface})
+        result.append({"name": name, "physics": dict(physics), "surface": surface, **({"wind": wind} if wind else {})})
     return tuple(result)
 
 
@@ -81,7 +121,11 @@ def member_surface_options(request, member_id):
 
 
 def variant_configuration(raw, variant):
-    """Override existing land selectors on every domain through config tables."""
+    """Override ordinary physics selectors through the existing config tables.
+
+    The ordinary loader validates the complete resolved combination before
+    preparation. No selector is translated into a separate scheme adapter.
+    """
     changed = deepcopy(raw)
     physics = variant["physics"]
     if physics:
@@ -99,18 +143,36 @@ def _canonical(value):
                       default=lambda item: item.isoformat()).encode("utf-8")
 
 
-def preparation_binding_key(trajectory_identity, raw, *, experiment=None):
-    """A complete ordinary preparation authority, independent of surface arms.
+# RunConfig geometry and clock fields stay in the source half. All other
+# registered run fields belong to the member half. Unknown configuration
+# fields stay source-bound, so adding a field cannot silently widen sharing.
+SOURCE_RUN_FIELDS = frozenset({
+    "nx", "ny", "nz", "dx", "dy", "ztop", "dt", "clock_dt", "run_seconds",
+    "p_surf", "hybrid_opt", "etac", "specified", "periodic_x", "periodic_y",
+})
 
-    Prepared domain identities bind land selectors and soil count. Include
-    all scientific config tables so a different four-layer/six-layer state,
-    grid, clock, static choice or source window cannot be aliased. Fetch
-    details are already bound by the source trajectory and common recipe
-    window; the ensemble table belongs to execution, not preparation.
+
+@dataclass(frozen=True)
+class PreparationBinding:
+    source_key: str
+    physics_tail: str
+
+    @property
+    def key(self):
+        return hashlib.sha256(_canonical({"schema": "ensemble-preparation-v2",
+            "source_key": self.source_key, "physics_tail": self.physics_tail})).hexdigest()
+
+
+def preparation_binding_parts(trajectory_identity, raw, *, experiment=None):
+    """Separate immutable source composition from member initialization.
+
+    The pair still binds every scientific table. Only registered run
+    selectors leave the source half; geometry, vertical coordinates, fetch
+    inputs and the complete time window remain there. A land arm can reuse
+    composed source words, but cannot borrow another arm's prepared arrays.
     """
     authority = deepcopy(raw)
     authority.pop("ensemble", None)
-    authority.pop("fetch", None)
     if experiment is not None:
         from woof.ingest.prepared_cache import prepared_domain_config_identity
         # Resolve inherited and explicit selectors through the same identity
@@ -120,8 +182,35 @@ def preparation_binding_key(trajectory_identity, raw, *, experiment=None):
         authority["resolved_domains"] = [prepared_domain_config_identity(domain)
                                            for domain in experiment.domains]
         authority["resolved_vertical"] = asdict(experiment.vertical)
-    return hashlib.sha256(_canonical({"trajectory": trajectory_identity,
-                                     "configuration": authority})).hexdigest()
+    from woof.config import RunConfig
+    tail_fields = {item.name for item in fields(RunConfig)} - SOURCE_RUN_FIELDS
+    tail = {}
+
+    def split(table, label):
+        selected = {key: table.pop(key) for key in tuple(table) if key in tail_fields}
+        if selected:
+            tail[label] = selected
+
+    if experiment is None:
+        split(authority.get("shared", {}), "shared")
+        for number, domain in enumerate(authority.get("domain", ())):
+            split(domain, f"domain-{number}")
+    else:
+        for number, domain in enumerate(authority["resolved_domains"]):
+            split(domain.get("run", {}), f"domain-{number}")
+            # These stamps are derived exclusively from member run selectors.
+            for name in ("chem_table_identity", "orographic_sampling_contract"):
+                if name in domain:
+                    tail[f"domain-{number}.{name}"] = domain.pop(name)
+    return PreparationBinding(
+        hashlib.sha256(_canonical({"schema": "ensemble-source-v1",
+            "trajectory": trajectory_identity, "configuration": authority})).hexdigest(),
+        hashlib.sha256(_canonical(tail)).hexdigest())
+
+
+def preparation_binding_key(trajectory_identity, raw, *, experiment=None):
+    """Complete source plus physics/land binding for prepared-bank consumers."""
+    return preparation_binding_parts(trajectory_identity, raw, experiment=experiment).key
 
 
 def surface_binding_key(surface):
@@ -133,14 +222,18 @@ def surface_binding_key(surface):
                  for name in OPTIONS)
 
 
-def require_distinct_variants(raw, variants, *, experiments):
+def require_distinct_variants(raw, variants, *, experiments, trajectories=()):
     """Labels cannot turn identical ordinary initial states into extra members."""
     previous = {}
     if len(experiments) != len(variants):
         raise ValueError("member diversity must be checked against every loaded member experiment")
-    for variant, experiment in zip(variants, experiments):
+    for index, (variant, experiment) in enumerate(zip(variants, experiments)):
         key = (preparation_binding_key("shared-source", variant_configuration(raw, variant), experiment=experiment),
                surface_binding_key(variant["surface"]))
+        if trajectories:
+            key = (key, trajectories[index].identity)
+        if variant.get("wind"):
+            key = (key, index)  # the member seed owns the actual offset
         if key in previous:
             raise ValueError(f"member variants {previous[key]} and {variant['name']} select identical "
                              "land and surface states; repeating them would fabricate ensemble size")
@@ -148,4 +241,5 @@ def require_distinct_variants(raw, variants, *, experiments):
 
 
 __all__ = ["normalize_member_variants", "member_surface_options", "variant_configuration",
-           "preparation_binding_key", "surface_binding_key", "require_distinct_variants"]
+           "PreparationBinding", "preparation_binding_parts", "preparation_binding_key",
+           "surface_binding_key", "require_distinct_variants"]

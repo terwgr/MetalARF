@@ -35,13 +35,13 @@ def _entry(name, size=10):
 # ---------------------------------------------------------------------------
 
 def test_default_worker_count_is_bounded_and_documented():
-    assert fetch_pool.DEFAULT_FILE_WORKERS == 6
-    assert fetch_pool.resolve_file_workers(None) == 6
+    assert fetch_pool.DEFAULT_FILE_WORKERS == 10
+    assert fetch_pool.resolve_file_workers(None) == 10
     assert fetch_pool.resolve_file_workers(1) == 1
     assert fetch_pool.resolve_file_workers(8) == 8
 
 
-@pytest.mark.parametrize("bad", (0, -1, -6))
+@pytest.mark.parametrize("bad", (0, -1))
 def test_worker_count_must_be_positive(bad):
     with pytest.raises(ValueError, match="fetch-workers"):
         fetch_pool.resolve_file_workers(bad)

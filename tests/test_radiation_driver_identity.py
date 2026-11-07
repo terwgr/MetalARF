@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from woof.config import RunConfig
+from woof.config import CHEM_RUN_FIELDS, RunConfig
 from woof.core.model import restart_identity_payload
 from woof.experiment import (
     DomainConfig, ExperimentConfig, VerticalConfig,
@@ -33,9 +33,16 @@ def _experiment(**overrides):
 
 
 def _historical_schema(exp):
-    """A record with the complete staged fields, before these three existed."""
+    """The public off schema, before the three radiation controls existed."""
     domain = exp.domains[0]
-    old_fields = [field for field in fields(domain.run) if field.name not in OPTIONS]
+    assert domain.run.chem_sets == ""
+    neutral = {"ruc_irrigation": "wrf_461", "ruc_qvg_cold_start": "wrf",
+               "ruc_2m_diagnostic": "flux", "ruc_snow": "wrf_461"}
+    for name, default in neutral.items():
+        assert getattr(domain.run, name) == default
+    # A synthetic dataclass does not run RunConfig's public omission rules.
+    omitted = set(OPTIONS) | set(CHEM_RUN_FIELDS) | set(neutral)
+    old_fields = [field for field in fields(domain.run) if field.name not in omitted]
     old_type = make_dataclass("HistoricalRunConfig", [(field.name, field.type) for field in old_fields])
     old_run = old_type(**{field.name: getattr(domain.run, field.name) for field in old_fields})
     return replace(exp, domains=(replace(domain, run=old_run),))
@@ -46,7 +53,15 @@ def _bytes(document):
 
 
 def test_off_radiation_options_keep_complete_public_document_bytes():
-    exp = _experiment()
+    # Keep the clock selected by the recorded historical document explicit.
+    # The later default local-face clock is a separate identity change, and
+    # so is 2.9.0's WRF 4.8 solar generation (recorded under WRF 4.6.1's).
+    exp = _experiment(terrain_clock="measured", solar_generation="wrf_461",
+                      # 2.9.7's correct-mode HN1 is read under this mp=28 domain
+                      # and written while on; the recorded documents predate it.
+                      hydrometeor_handover_numbers=False)
+    assert "hydrometeor_handover_numbers" in domain_config_document(
+        _experiment(terrain_clock="measured", solar_generation="wrf_461").root)["run"]
     # These bytes came from the exact staging serializers with their real
     # 220-field RunConfig, before the three neutral radiation fields existed.
     # A synthetic dataclass skips earlier RunConfig-specific omission rules.
@@ -63,7 +78,27 @@ def test_off_radiation_options_keep_complete_public_document_bytes():
     documents = {"domain": domain_config_document(exp.root),
                  "experiment": experiment_config_document(exp),
                  "restart_identity": restart_identity_payload(exp)}
+    assert exp.root.run.cycling is False
+    assert "cycling" not in documents["domain"]["run"]
+    cycling_exp = _experiment(terrain_clock="measured", solar_generation="wrf_461", cycling=True)
+    assert domain_config_document(cycling_exp.root)["run"]["cycling"] is True
+    assert experiment_config_document(cycling_exp)["domains"][0]["run"]["cycling"] is True
+    assert restart_identity_payload(cycling_exp)["domains"][0]["run"]["cycling"] is True
+    neutral_later_fields = {
+        "thompson_version": "wrf_461",
+        "thompson_fork_snow_fall": "blend",
+        "rrtmg_cloud_optics_form": "wrf_461",
+        "rrtmg_smoke_manifest": "",
+    }
+    for field, default in neutral_later_fields.items():
+        assert getattr(exp.root.run, field) == default
     for name, document in documents.items():
+        # Later neutral controls are omitted by the actual current serializers.
+        # Their defaults and absence are explicit; every older byte stays pinned.
+        runs = ([document["run"]] if name == "domain" else
+                [domain["run"] for domain in document["domains"]])
+        for run in runs:
+            assert not set(neutral_later_fields) & set(run)
         old = control["documents"][name]
         payload = old["utf8"].encode("utf-8")
         assert len(payload) == old["bytes"]

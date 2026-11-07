@@ -96,6 +96,9 @@ def _mynn_surface(source: str) -> str:
         else if (isftcflx == 3) z0 = mynn_taylor_yelland_2001(wsp);
         else z0 = mynn_charnock_1955(ust, wsp, visc, za);
     }
+#ifdef OCEAN_WAVE_ROUGHNESS
+    if (xland >= 1.5f && ocean_z0[idx] > 0.0f) z0 = ocean_z0[idx];
+#endif
     real z0_nominal = z0;
     real rstoch = pattern_spp_pbl[idx];
     z0 = fmaxf(__fadd_rn(z0, __fmul_rn(z0, rstoch)), 1.0e-6f);
@@ -103,7 +106,7 @@ def _mynn_surface(source: str) -> str:
     if (xland >= 1.5f) {
         if (isftcflx == 2) mynn_garratt_1992(z0, restar, xland, zt, zq);
         else {
-            zt = 5.5e-5f * powf(restar, -0.60f);
+            zt = 5.5e-5f * SL_POW(restar, -0.60f);
             zt = __fadd_rn(zt, __fmul_rn(__fmul_rn(zt, 0.5f), rstoch));
             zt = fmaxf(fminf(zt, 1.0e-4f), 2.0e-9f);
             zq = zt;
@@ -134,7 +137,7 @@ def specialized_source(name: str, *, capacity: int = 40, kernel_dir=None,
     if defines and name != "mynn_surface":
         raise ValueError(f"no SPP define route for {name!r}")
     for key, value in defines:
-        if (key, value) != ("MYNN_SFCLAY_GSL_WRF39", 1):
+        if (key, value) not in (("MYNN_SFCLAY_GSL_WRF39", 1), ("OCEAN_WAVE_ROUGHNESS", 1), ("OCEAN_SPP_SURFACE", 1)):
             raise ValueError(f"unknown MYNN surface SPP define {key}={value}")
     if name == "gf":
         if type(capacity) is not int or capacity < 1:
@@ -156,11 +159,23 @@ def load_spp_module(name: str, capacity: int = 40,
     from woof.certify.kernel_manifest import record_module
     from woof.core.kernels import _compile_observed
     source = specialized_source(name, capacity=capacity, defines=defines)
-    options = ("-std=c++17",)
-    module = cp.RawModule(code=source, options=options, name_expressions=None)
+    # The SPP MYNN PBL compiles as the deterministic unit does, without
+    # FMA contraction (woof.core.kernels._NO_FMAD_MODULES, lane/mynn-exact):
+    # a zero pattern must give the native unit's words, which
+    # tests/test_spp_consumers_gpu.py measures.
+    from woof.core.kernels import _NO_FTZ_MODULES, compile_noftz_module
     key = f"woof.core.spp:{name}[capacity={capacity}]"
     if defines:
         key += "[" + ",".join(f"{k}={v}" for k, v in defines) + "]"
+    if name in _NO_FTZ_MODULES:
+        # The deterministic MYNN surface and PBL units compile without FTZ
+        # (woof.core.kernels.compile_noftz_module): their headers keep WRF's
+        # subnormal words, and RawModule would append FTZ after the caller's
+        # options.  The SPP unit takes the same compile site and options, so
+        # a zero pattern still gives the native unit's words.
+        return compile_noftz_module(name, source, key)
+    options = ("-std=c++17",)
+    module = cp.RawModule(code=source, options=options, name_expressions=None)
     _compile_observed(module, key)
     record_module(key, source=source, options=options, module=module)
     return module

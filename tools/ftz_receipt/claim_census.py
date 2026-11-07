@@ -60,7 +60,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.ftz_receipt import route_inventory as ri
+if not __package__:
+    # Run by file name: make `tools` resolve to this tree, not to another
+    # installed checkout (D1; see route_inventory.require_same_tree).
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from tools.ftz_receipt import route_inventory as ri  # noqa: E402
 
 SCHEMA_ID = "gpuwm.ftz-claim-census/v2"
 
@@ -98,6 +103,15 @@ VENDOR_PREFIXES = ("tools/grib1_bridge/vendor/", "tools/rustwx/vendor/",
 #: they are not among the claims the census checks.  Everything else stays in
 #: scope, the probe and this tool's own tests included.
 SELF_PREFIXES = ("tools/ftz_receipt/receipt/", "tools/ftz_receipt/fixtures/")
+#: Compiled-image records, not prose.  The shipped cold-start kernel packs
+#: (fix/singlecore-stalls, rebuilt for 2.9.11) are one JSON line each: the
+#: NVRTC options every image was compiled with ("-ftz=true" is a fact the
+#: loader re-checks, not a sentence about arithmetic) and the xz/base64 cubin
+#: payload, whose letters spell "FTZ" by chance.  Registering a 5.8 MB line as
+#: an anchor would pin the image bytes, which the pack's own identity already
+#: does.
+COMPILED_IMAGE_FILES = ("woof/data/kernel-pack-cuda12.json",
+                        "woof/data/kernel-pack-cuda13.json")
 
 #: Files whose FTZ mention motivates shipped behaviour rather than describing
 #: it.  They are REGISTERED here and left untouched: revisiting any of them
@@ -139,7 +153,7 @@ def release_exclusions(root: Path) -> list[str]:
 
 def is_excluded(relpath: str, globs: list[str]) -> bool:
     if relpath.startswith(VENDOR_PREFIXES) or relpath.startswith(
-            SELF_PREFIXES):
+            SELF_PREFIXES) or relpath in COMPILED_IMAGE_FILES:
         return True
     for pattern in globs:
         if fnmatch.fnmatch(relpath, pattern):
@@ -163,8 +177,34 @@ def public_files(root: Path) -> list[str]:
     out = subprocess.run(["git", "ls-files"], cwd=str(root),
                          capture_output=True, text=True, check=True)
     globs = release_exclusions(root)
+    # Recast WOOF: the hex model folded in (woof/hex, components/hex) carries
+    # its own FTZ authority and claims; this census is the regional engine's.
     return sorted({path for path in out.stdout.splitlines()
-                   if path.strip() and not is_excluded(path, globs)})
+                   if path.strip() and not is_excluded(path, globs)
+                   and not path.startswith(("woof/hex/", "components/hex/"))})
+
+
+def _long_path(path: Path) -> Path:
+    """``path`` in a form Windows opens past MAX_PATH (260 characters).
+
+    The census was regenerated on the desktop with the tree under a deep
+    scratch directory, where tests/data/wrf471_diffusion/producer-snapshots/
+    <sha256>-rounding_attribution.py.txt is longer than MAX_PATH.  Reading
+    it raised OSError, the scan skipped it as if it were binary, and its
+    three claim lines dropped out of the census (2.9.4 fold records
+    a2814d3403, a7e2b8dca8, 14f69ad418), so the Linux check reported them
+    unregistered.  Only a file git tracks reaches here, so a read failure
+    other than absence or non-UTF-8 content now raises instead of
+    silently shrinking the census.
+    """
+    if sys.platform != "win32":
+        return path
+    text = str(path.resolve())
+    if text.startswith("\\\\?\\"):
+        return path
+    if text.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + text[2:])
+    return Path("\\\\?\\" + text)
 
 
 def anchor_sha256(text: str) -> str:
@@ -182,8 +222,13 @@ def collect_sites(root: Path, files: list[str],
         if path.suffix and path.suffix not in TEXT_SUFFIXES:
             continue
         try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+            text = _long_path(path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            # Tracked but absent from this working tree (a deletion not
+            # yet committed).  _long_path makes this a real absence on
+            # Windows too, not a path longer than MAX_PATH.
+            continue
+        except UnicodeDecodeError:
             continue
         for number, line in enumerate(text.splitlines(), 1):
             if not CLAIM_PATTERN.search(line):
@@ -395,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", default=None)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
+    ri.require_same_tree(__file__)
     root = Path(args.root).resolve() if args.root else ri.repo_root()
     out = default_output(root)
     previous = (json.loads(out.read_text(encoding="utf-8"))

@@ -65,7 +65,7 @@ as ``Δx 3 km``, and plots are labelled with the model that produced
 them (``--source-label``, default :func:`default_source_label`) rather
 than the GDEX fetch source the rust engine's ``wrf`` store identity
 inherits.  That default carries the version of the code that is
-EXECUTING (``ArWen 1.8.7``), which is not the same number as
+EXECUTING (``WOOF 1.8.7``), which is not the same number as
 ``woof.__version__``: see :func:`default_source_label`.
 
 Every derived quantity comes from the mandated ``wrf`` package (pip
@@ -163,7 +163,7 @@ def _netcdf_read(path):
             yield dataset
 
 def default_source_label() -> str:
-    """``ArWen 1.8.7`` -- the brand plus the version that is EXECUTING.
+    """``WOOF 1.8.7`` -- the brand plus the version that is EXECUTING.
 
     THE product stamp, and the reason it is a function rather than a
     constant.  Both engines put this string on the plot verbatim: the
@@ -556,16 +556,15 @@ PRODUCTS = {
 
 #: The shared product names, as the rust engine's catalog slugs.
 #:
-#: This maps four of the five in :data:`PRODUCTS`.  ``olr`` is absent
-#: because the rust catalog has no OLR chart yet -- that half is upstream
-#: work in the renderer's own catalog, and the entry lands here when the
-#: slug it would name exists.  Pointing an alias at a plausible-looking
-#: slug before then is precisely the ``wind10`` bug described below: a
-#: mapping that reads correct and returns the wrong chart.  Until the
-#: catalog carries one, ``--products olr --engine rust`` passes ``olr``
-#: through as a raw slug and the renderer refuses it by name, which is a
-#: legible answer; ``--products all --engine rust`` is unaffected, since
-#: ``all`` is the renderer's own catalog and never this table.
+#: All five of :data:`PRODUCTS`.  ``olr`` maps to ``var:wrf_olr``, the
+#: engine's own chart of the history's stored ``OLR`` plane (the same
+#: W m-2 flux the matplotlib panel draws), and NOT to the catalog's
+#: ``simulated_ir_satellite``: that is a brightness temperature from a
+#: radiative-transfer operator, a different quantity that the history
+#: lane does not serve, and pointing ``olr`` at it would be the
+#: ``wind10`` bug below again.  Before this entry ``woof render --help``
+#: listed ``olr`` and the engine refused it as an unknown slug (2.8.7 and
+#: 2.8.8 candidates alike).
 #:
 #: Each value is the slug of a chart whose SUBJECT is what the key
 #: names.  ``wind10`` used to map to ``mslp_10m_winds`` under a comment
@@ -589,6 +588,8 @@ RUST_PRODUCT_ALIASES = {
     "wind10": "10m_wind_speed_and_direction",
     # run-total accumulated precipitation
     "precip": "total_qpf",
+    # top-of-atmosphere outgoing longwave, the stored OLR plane in W m-2
+    "olr": "var:wrf_olr",
 }
 
 #: What each alias must actually DRAW, as the canonical store selector
@@ -1158,6 +1159,10 @@ def catalog_main(args) -> int:
               file=sys.stderr)
         return 2
     print(result.stdout, end="")
+    # The short names --help advertises, with the engine product each one
+    # asks for, so the two answers to "what may I put in --products" agree.
+    print("render: shared names: " + ", ".join(
+        f"{name} -> {slug}" for name, slug in RUST_PRODUCT_ALIASES.items()))
     print("render: `woof render --list-products WRFOUT` adds which of "
           "these that file can actually render, and why not the rest")
     return 0
@@ -1255,9 +1260,10 @@ def render_series_rust(paths, *, products: str, timeidx: int | None,
         # owned scratch so previously published first pictures retain bytes
         # and timestamps; only requested history frames are delivered.
         engine_out = store / "png" if context else outdir
+        imported = store / "catalog-import.json"
         available, unavailable = _available_window_request(
             renderer, subject, products, store, heavy=heavy, paths=series,
-            section=section)
+            section=section, save_import=imported)
         if not available:
             return [], [], unavailable
         batches = (["all"] if timeidx is None else [str(timeidx)])
@@ -1276,7 +1282,8 @@ def render_series_rust(paths, *, products: str, timeidx: int | None,
                 section=section, isotherms=isotherms,
                 section_across_km=section_across_km,
                 section_size=section_size,
-                section_top_km=section_top_km, fills=fills)
+                section_top_km=section_top_km, fills=fills,
+                from_import=imported if imported.is_file() else None)
             written.extend(batch[0])
             failures.extend(batch[1])
             skipped.extend(batch[2])
@@ -1297,12 +1304,33 @@ def render_series_rust(paths, *, products: str, timeidx: int | None,
         if wanted_times is not None:
             selected = []
             for png in written:
-                if _engine_output_time(png.name) in wanted_times:
-                    delivered = outdir / png.name
-                    os.replace(render_layout.fs_path(png),
-                               render_layout.fs_path(delivered))
-                    selected.append(delivered)
-                    drawn_at[delivered] = png
+                moment = render_layout.engine_output_time(png.name)
+                if moment is None:
+                    # Which frame drew it is unknowable from its name, so
+                    # it cannot be told from a discarded baseline; it is
+                    # named and left undelivered, never the end of a run
+                    # whose frames are already drawn.
+                    print(f"render: warning: not delivered, the frame time "
+                          f"cannot be read from the file name: {png}",
+                          file=sys.stderr)
+                    skipped.append((png.stem, "frame time not readable from "
+                                    "the file name; picture not delivered"))
+                    continue
+                if moment not in wanted_times:
+                    continue
+                # A native SFIRE panel is drawn already filed under
+                # <domain>/<product>/<valid-day>/; it keeps that path.
+                try:
+                    relative = png.relative_to(engine_out)
+                except ValueError:
+                    relative = Path(png.name)
+                delivered = outdir / relative
+                os.makedirs(render_layout.fs_path(delivered.parent),
+                            exist_ok=True)
+                os.replace(render_layout.fs_path(png),
+                           render_layout.fs_path(delivered))
+                selected.append(delivered)
+                drawn_at[delivered] = png
             written = selected
     written = render_georef.file_pictures(
         outdir, written,
@@ -1332,7 +1360,7 @@ def _wanted_slots(series, wanted_times, *, each: bool = False) -> list[str] | No
     series joined across a moving nest's moves.  Its baselines are the
     nest's frames at other places, usually many more than the frames the
     series delivers, and a launch into the same store reuses the first
-    one's import.  Measured on a development machine over a 3 km 48 x 48 storm nest's
+    one's import.  Measured on test host D over a 3 km 48 x 48 storm nest's
     series of 20 frames (17 baselines, 3 wanted, every product): 17.7 s
     drawing every frame, 6.2 s for three single-frame launches, and the
     206 pictures both drew byte-identical.  Drawing every frame also put a
@@ -1365,18 +1393,6 @@ def _wanted_slots(series, wanted_times, *, each: bool = False) -> list[str] | No
     return [str(stamps.index(wanted[0]))]
 
 
-def _engine_output_time(name: str) -> datetime.datetime:
-    """Read the renderer's filename clock; no weather diagnostic is computed."""
-    exact = re.search(r"_valid_(\d{8}_\d{6})z_lead_", name)
-    if exact:
-        return datetime.datetime.strptime(exact.group(1), "%Y%m%d_%H%M%S")
-    clock = re.search(r"_(\d{8})_(\d{1,2})z_f(\d{3,})(?:_|\.)", name)
-    if clock:
-        return (datetime.datetime.strptime(clock.group(1), "%Y%m%d")
-                + datetime.timedelta(hours=int(clock.group(2)) + int(clock.group(3))))
-    raise ValueError(f"Cannot identify the rendered frame time in {name!r}")
-
-
 def _history_identity_attribute(name: str) -> bool:
     """Immutable run/grid/science identity, excluding the per-frame carrier ledger.
 
@@ -1391,8 +1407,15 @@ def _history_identity_attribute(name: str) -> bool:
              "MAP_PROJ", "TRUELAT1", "TRUELAT2", "STAND_LON", "CEN_LAT",
              "CEN_LON", "MOAD_CEN_LAT", "POLE_LAT", "POLE_LON", "HYBRID_OPT", "ETAC",
              "DT", "TITLE"}
+    # A running ledger (GPUWM_CHEM_LEDGER: the smoke budget, rewritten at
+    # every history write) is per-frame state like the carrier ledger, not
+    # identity.  Counted as identity it made every frame of a smoke run its
+    # own series, so a windowed product never had a second whole-hour frame
+    # to fold: the default HRRR v4 recipe's go render exited 1 on its
+    # windowed pass ("'windowed' names no product these frames can draw").
     return (name in names or name.endswith("_PHYSICS")
-            or name.startswith("GPUWM_") and not name.startswith("GPUWM_CARRIER_"))
+            or name.startswith("GPUWM_") and not name.startswith("GPUWM_CARRIER_")
+            and not name.endswith("_LEDGER"))
 
 
 #: What one moving nest's history frames differ by and nothing else: where
@@ -1602,7 +1625,7 @@ def history_series_groups(paths, *, context_paths=()
 
 def _available_window_request(renderer: Path, path: Path, products: str,
                               store: Path, *, heavy: bool, paths=None,
-                              section=None
+                              section=None, save_import: Path | None = None,
                               ) -> tuple[str, list[tuple[str, str]]]:
     """The request this invocation can actually draw; ``(spec, skipped)``.
 
@@ -1676,7 +1699,8 @@ def _available_window_request(renderer: Path, path: Path, products: str,
     try:
         rows, _summary = rustwx.catalog_rows(
             renderer, (path,) if paths is None else paths,
-            store_root=store, heavy=heavy, products=products)
+            store_root=store, heavy=heavy, products=products,
+            save_import=save_import)
     except (OSError, RuntimeError) as error:
         # No trustworthy availability verdict: run the unchanged native
         # request so its import/metadata/launch failure remains visible.
@@ -1704,7 +1728,8 @@ def _available_window_request(renderer: Path, path: Path, products: str,
     frames = [Path(item) for item in ((path,) if paths is None else paths)]
     subject = (str(frames[0]) if len(frames) == 1 else
                f"{frames[0]} to {frames[-1].name} ({len(frames)} frames)")
-    return available, storeless + [(slug, f"{subject}: {detail}")
+    codes = {row[0]: rustwx.catalog_code(row) for row in rows}
+    return available, storeless + [(slug, f"{detail}; {subject}" if codes.get(slug)=="inactive-fire-domain" else f"{subject}: {detail}")
                                    for slug, detail in excluded]
 
 
@@ -1817,9 +1842,13 @@ def render_wrfouts_rust(paths, *, products: str, timeidx: int | None,
         prior_georef = render_georef.read(
             outdir / render_georef.GEOREF_FILENAME)
         with scratch_store(outdir) as store:
+            # Availability can drop a product and therefore change the scoped
+            # run name. Draw from the listing's import, which already contains
+            # every surviving product's inputs, instead of importing again.
+            imported = store / "catalog-import.json"
             available, unavailable = _available_window_request(
                 renderer, path, products, store, heavy=heavy,
-                section=section)
+                section=section, save_import=imported)
             skipped.extend(unavailable)
             if not available:
                 # Main still returns nonzero when the entire request
@@ -1833,7 +1862,7 @@ def render_wrfouts_rust(paths, *, products: str, timeidx: int | None,
                 streamlines=streamlines, theme=theme, section=section,
                 isotherms=isotherms, section_across_km=section_across_km,
                 section_size=section_size, section_top_km=section_top_km,
-                fills=fills)
+                fills=fills, from_import=imported if imported.is_file() else None)
         # Filed and recorded in one hold of the manifest's lock: the
         # engine keyed this launch's pictures by the flat names they are
         # about to leave, and the next launch drops any entry whose file
@@ -1916,6 +1945,19 @@ def _place_engine_output(png: Path, outdir: Path, domain: str,
     png = _rebrand_engine_output(png)
     if layout == render_layout.FLAT:
         return png
+    # Native panels can already be filed at their declared domain/product/day.
+    # Preserve that path instead of treating a valid native filename as flat.
+    try:
+        native_parts = png.relative_to(outdir).parts
+    except ValueError:
+        native_parts = ()
+    if len(native_parts) == 4:
+        native_domain, native_product, native_day, native_name = native_parts
+        native_stamp = render_layout.NATIVE_PANEL.fullmatch(native_name)
+        if (re.fullmatch(r"d[0-9]+(?:-[0-9]+(?:\.[0-9]+)?[mk]+)?|native_grid", native_domain)
+                and native_stamp and native_product == native_stamp.group(1)
+                and native_day == native_stamp.group(2)[:8]):
+            return png
     parsed = render_layout.parse_engine_output(png.name, domain=domain)
     if parsed is None:
         # Not a name this engine's grammar produces -- so nothing here
@@ -2755,6 +2797,35 @@ def _skip_reason(detail: str, sources=()) -> str:
     return " ".join(text.split()).rstrip(".") or "no reason given"
 
 
+def inactive_domain_skips(skipped) -> bool:
+    """Only native catalog declarations of inactive fire domains succeed empty."""
+    return bool(skipped) and all(detail.startswith("inactive-fire-domain: IFIRE=0 ")
+                                for _product, detail in skipped)
+
+
+#: How the engine opens the reason of a product the input can never draw,
+#: as opposed to one it lacks a field or a frame for (``rusty-weather``
+#: ``windowed_store::NOT_APPLICABLE_PREFIX``): ``qpf_1h`` on a grid whose
+#: history is written every 3 h.
+NOT_APPLICABLE_SKIP = "not-applicable: "
+
+
+def not_applicable_skips(skipped) -> bool:
+    """Whether every skip is a product that does not apply to these inputs.
+
+    WHAT BREAKAGE THIS PREVENTS (gate law): the finalize stage's windowed
+    pass over a 3-hourly nest asked for ``qpf_1h`` alone, the engine
+    declared it not applicable, nothing was drawn, the render exited 1 and
+    ``woof go`` printed ``FAILED render`` on a run whose every picture
+    was in place.  Such a pass succeeds empty, as an inactive fire domain
+    does; a skip for a missing field or a gap still exits 1.
+    """
+    return bool(skipped) and all(
+        detail.startswith("inactive-fire-domain: IFIRE=0 ")
+        or NOT_APPLICABLE_SKIP in detail
+        for _product, detail in skipped)
+
+
 def skip_notice(skipped: list[tuple[str, str]],
                 wrote_any: bool = True, drawn=None,
                 sources=()) -> str | None:
@@ -2817,7 +2888,12 @@ def skip_notice(skipped: list[tuple[str, str]],
     for product, detail in skipped:
         first_reason.setdefault(product, _skip_reason(detail, sources))
     why = "; ".join(f"{name}: {first_reason[name]}" for name in names)
-    if wrote_any:
+    if inactive_domain_skips(skipped):
+        verdict = "The domains declare no active fire model; this is a successful skip"
+    elif not wrote_any and not_applicable_skips(skipped):
+        verdict = ("These products do not apply to these inputs; this is a "
+                   "successful skip")
+    elif wrote_any:
         verdict = ("That is not a failure and does not change the "
                    "exit code")
     else:
@@ -3066,9 +3142,16 @@ def _pair_main(args: argparse.Namespace) -> int:
         _publish_run_dir(args)
 
 
-# The renderer's refusal of a composed sheet in a difference run
-# (rustwx-render difference.rs, refuse_composed).
-_DIFF_SHEET_REFUSAL = "is a sheet composed of several panels"
+# The renderer's refusals of products that have no difference, in a
+# difference run (rustwx-render difference.rs): a sheet composed of several
+# panels (refuse_composed), and a product drawn as category codes (Haines,
+# fog flag), whose difference is not a quantity.  Marker -> what is said.
+_DIFF_REFUSALS = {
+    "is a sheet composed of several panels":
+        "a sheet composed of several panels; a difference is drawn per map product",
+    "draws category codes, and the difference of two codes is not a quantity":
+        "drawn as category codes; the difference of two codes is not a quantity",
+}
 
 
 def _diff_main(args: argparse.Namespace) -> int:
@@ -3119,14 +3202,23 @@ def _diff_main(args: argparse.Namespace) -> int:
     source_label = args.source_label or default_source_label()
     if getattr(args, "radar_colors", None):
         os.environ[rustwx.RADAR_COLORS_ENV] = args.radar_colors
+    diff_table = getattr(args, "diff_table", None)
+    if diff_table:
+        if diff_table not in rustwx.DIFFERENCE_TABLE_CHOICES:
+            if not Path(diff_table).is_file():
+                print(f"render: --diff-table {diff_table}: no such file; give "
+                      f"{' or '.join(rustwx.DIFFERENCE_TABLE_CHOICES)}, or the "
+                      "path of a JSON difference table", file=sys.stderr)
+                return 2
+            diff_table = str(Path(diff_table).resolve())
     _claim_run_dir(args, [pair[2] for pair in pairing.pairs])
     written: list[Path] = []
     failures: list[str] = []
     skipped_rows: list[tuple[str, str]] = []
-    # 'all' reaches the multi-panel sheets too, which the renderer refuses
-    # to difference (it draws per map product); under 'all' they are
-    # skipped once each and said so, and only a sheet named on the command
-    # line is a failure.  Without this every default --diff exited 1.
+    # 'all' reaches the multi-panel sheets and the category-code products
+    # too, which the renderer refuses to difference; under 'all' they are
+    # skipped once each and said so, and only such a product named on the
+    # command line is a failure.  Without this every default --diff exited 1.
     every_product = str(args.products).strip().lower() == "all"
     sheets_skipped: set[str] = set()
     try:
@@ -3142,6 +3234,7 @@ def _diff_main(args: argparse.Namespace) -> int:
                         renderer, a_paths, b_paths, timeidx=a_index, store_root=store,
                         out_dir=args.out, products=products, labels=labels,
                         sheet=args.diff_sheet, source_label=source_label,
+                        difference_table=diff_table,
                         theme=args.theme,
                         overlays=args.overlays, annotate=args.annotate,
                         streamlines=args.streamlines,
@@ -3159,18 +3252,23 @@ def _diff_main(args: argparse.Namespace) -> int:
                 print(f"render: difference {row['key']} {valid:%Y-%m-%d %H:%MZ}"
                       f" bar +/-{row.get('half_range')} {row.get('units', '')}"
                       f" ({row.get('rule')}) cells={row.get('defined_cells')}"
+                      f" differing={row.get('differing_cells')}"
                       f" max_abs={row.get('max_abs')}")
             for slug, reason in skipped:
                 print(f"render: skipped {slug}: {reason}", file=sys.stderr)
             if every_product:
-                for failure in [f for f in failed if _DIFF_SHEET_REFUSAL in f]:
-                    key = failure.split(_DIFF_SHEET_REFUSAL)[0].split()[-1]
+                kept = []
+                for failure in failed:
+                    marker = next((m for m in _DIFF_REFUSALS if m in failure), None)
+                    if marker is None:
+                        kept.append(failure)
+                        continue
+                    key = failure.split(marker)[0].split()[-1]
                     if key not in sheets_skipped:
                         sheets_skipped.add(key)
-                        print(f"render: skipped {key}: a sheet composed of "
-                              "several panels; a difference is drawn per map "
-                              "product", file=sys.stderr)
-                failed = [f for f in failed if _DIFF_SHEET_REFUSAL not in f]
+                        print(f"render: skipped {key}: {_DIFF_REFUSALS[marker]}",
+                              file=sys.stderr)
+                failed = kept
             for failure in failed:
                 print(f"render: failed {failure}", file=sys.stderr)
             written.extend(drawn)
@@ -3320,7 +3418,7 @@ def _fold_render_inputs(args: argparse.Namespace) -> str | None:
 
     source = getattr(args, "inputs_from", None)
     if source is None:
-        return None
+        return _expand_render_folders(args)
     try:
         record = json.loads(Path(source).read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -3341,6 +3439,17 @@ def _fold_render_inputs(args: argparse.Namespace) -> str | None:
                            *lists["context_wrfout"]]
     args.inputs_from = None
     _respell_invocation(lists)
+    return _expand_render_folders(args)
+
+
+def _expand_render_folders(args) -> str | None:
+    from woof.render_compare import expand_inputs
+
+    try:
+        args.wrfout = expand_inputs(getattr(args, "wrfout", ()) or ())
+        args.context_wrfout = expand_inputs(getattr(args, "context_wrfout", ()) or ())
+    except (OSError, ValueError) as error:
+        return str(error)
     return None
 
 
@@ -3389,6 +3498,28 @@ def _respell_invocation(lists: dict) -> None:
         explain.set_invocation(typed)
 
 
+def _cf_main(args: argparse.Namespace) -> int:
+    """CF diagnostics use the Rust reader and the same production panel path."""
+    from woof import rustwx
+
+    if args.wrfout or not args.cf_variable:
+        print("render: --cf needs --variable NAME and takes its input from --cf FILE.nc", file=sys.stderr)
+        return 2
+    try:
+        size = parse_size(args.size)
+        return rustwx.run_cf_renderer(
+            require_renderer(), args.cf_file, variable=args.cf_variable,
+            out_dir=args.out, valid=args.cf_valid, bounds=args.cf_bounds,
+            table=args.cf_table, contours=args.cf_contours,
+            contour_file=args.cf_contour_file, observation=args.cf_observation,
+            observation_variable=args.cf_observation_variable,
+            overlays=args.overlays, size=size, receipt=args.cf_receipt,
+            theme=args.theme)
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"render: {error}", file=sys.stderr)
+        return 2
+
+
 def render_main(args: argparse.Namespace) -> int:
     # Which tree is drawing these plots.  Idempotent -- `woof.cli.main`
     # has normally already announced -- and here as well because this
@@ -3396,9 +3527,19 @@ def render_main(args: argparse.Namespace) -> int:
     from woof.provenance_gate import announce
 
     announce("woof render")
+    if getattr(args, "cf_file", None):
+        return _cf_main(args)
     refusal = _fold_render_inputs(args)
     if refusal is not None:
         print(f"render: {refusal}", file=sys.stderr)
+        return 2
+    try:
+        from woof.hubwind import render as render_hubwind
+        hubwind_result = render_hubwind(args)
+        if hubwind_result is not None:
+            return hubwind_result
+    except (ValueError, OSError, RuntimeError) as error:
+        print(f"render: {error}", file=sys.stderr)
         return 2
     comparisons = [name for name in ("pair", "compare", "diff")
                    if getattr(args, name, None)]
@@ -3553,6 +3694,14 @@ def render_main(args: argparse.Namespace) -> int:
                   f"the other requested products are still drawn. {reason}.",
                   file=sys.stderr)
     print(f"render: engine {engine} ({why})")
+    grib2_exe = None
+    if getattr(args, "grib2_out", None) is not None:
+        from woof.grib2_live import find_exporter
+        try:
+            grib2_exe = find_exporter()
+        except (RuntimeError, FileNotFoundError) as error:
+            print(f"render: GRIB2 exporter: {error}", file=sys.stderr)
+            return 3
     # AFTER every refusal and after --list-products: this creates a
     # directory, and a command that draws nothing must leave none --
     # which is also why every exit path below runs _publish_run_dir.
@@ -3672,7 +3821,13 @@ def render_main(args: argparse.Namespace) -> int:
     # image.  The second is what keeps a skip from becoming a silent
     # success -- ask for one product, have its inputs be absent, and the
     # answer is still a nonzero exit, because nothing was drawn.
-    return 0 if written and not failures else 1
+    if grib2_exe is not None:
+        from woof import grib2_export
+        from woof.grib2_live import request_for
+        code = grib2_export.invoke(grib2_exe, request_for(args.wrfout, args.grib2_out))
+        if code:
+            return code
+    return 0 if not failures and (written or not_applicable_skips(door_skips + skipped)) else 1
 
 
 def _section_size(value: str) -> tuple[int, int]:
@@ -3725,13 +3880,35 @@ def _section_across_km(value: str) -> float:
 def register_cli(subparsers) -> None:
     parser = subparsers.add_parser(
         "render",
-        help="render forecast product PNGs from wrfout files via the "
-             "wrf package (composite reflectivity, 2 m temperature, "
-             "10 m wind, accumulated precipitation, TOA outgoing "
-             "longwave as synthetic IR)")
+        help="render forecast product PNGs from wrfout files "
+             "(composite reflectivity, 2 m temperature, 10 m wind, "
+             "accumulated precipitation, TOA outgoing longwave "
+             "radiation in W m-2)")
     parser.add_argument(
         "wrfout", type=Path, nargs="*", metavar="WRFOUT",
-        help="wrfout NetCDF file(s) written by woof run")
+        help="wrfout NetCDF files, a wrfout directory, or the output folder printed by woof go")
+    parser.add_argument("--cf", dest="cf_file", type=Path, metavar="FILE.nc",
+                        help="render a native CF diagnostic grid with file source provenance")
+    parser.add_argument("--variable", dest="cf_variable", metavar="NAME",
+                        help="CF field selected by variable name; product and units come from the CF table")
+    parser.add_argument("--valid", dest="cf_valid", metavar="UTC",
+                        help="CF valid time in ISO UTC (default: first record)")
+    parser.add_argument("--bounds", dest="cf_bounds", metavar="W,E,S,N",
+                        help="CF geographic extent in degrees, e.g. --bounds=-125,-66,24,50")
+    parser.add_argument("--cf-table", type=Path, metavar="FILE.json",
+                        help="CF variable product table (default: packaged production rows)")
+    parser.add_argument("--contours", dest="cf_contours", metavar="NAME[,NAME]",
+                        help="CF probability contours at each table row's contour_level")
+    parser.add_argument("--contour-file", dest="cf_contour_file", type=Path, metavar="FILE.nc",
+                        help="CF contour companion on the fill grid (default: --cf file)")
+    parser.add_argument("--observation", dest="cf_observation", type=Path, metavar="FILE",
+                        help="CF observation grid or MRMS GRIB2/gz beside the diagnostic on one ladder and extent")
+    parser.add_argument("--observation-variable", dest="cf_observation_variable", metavar="NAME",
+                        help="variable in a CF observation file (default: --variable)")
+    parser.add_argument("--receipt", dest="cf_receipt", type=Path, metavar="FILE.json",
+                        help="CF input, output and per-stage timing receipt")
+    parser.add_argument("--grib2-out", type=Path, metavar="DIR",
+                        help="also export every input frame as native surface and pressure-level GRIB2")
     parser.add_argument(
         "--engine", choices=("auto", "rust", "matplotlib"),
         default="auto",
@@ -3742,11 +3919,16 @@ def register_cli(subparsers) -> None:
              "probes as runnable, and REFUSES otherwise rather than "
              "drawing weather fields with matplotlib -- 'matplotlib' "
              "asks for that workaround by name and announces itself")
+    parser.add_argument("--hubwind-config", type=Path, default=None, metavar="JSON|TOML",
+                        help="hub heights, turbine, exceedance and ramp settings; JSON options or [hubwind] TOML")
     parser.add_argument(
         "--products", default="all", metavar="LIST",
         help="comma-separated products: "
              f"{', '.join(PRODUCTS)}, or 'all' (default); with the rust "
-             "engine, raw catalog slugs (sbcape, srh_0_1km, ...) also "
+             "engine these are "
+             + ", ".join(f"{name}={slug}" for name, slug
+                         in RUST_PRODUCT_ALIASES.items())
+             + ", raw catalog slugs (sbcape, srh_0_1km, ...) also "
              "work and 'all' renders its full catalog")
     parser.add_argument(
         "--timeidx", default="all", metavar="N|all",
@@ -3918,6 +4100,17 @@ def register_cli(subparsers) -> None:
     parser.add_argument(
         "--diff-sheet", action="store_true",
         help="also draw an A | B | A minus B sheet per product")
+    parser.add_argument(
+        "--diff-table", metavar="{table,auto,FILE}", default=None,
+        help="the difference colour bars: table (default: the fixed "
+             "per-product bars, so the frames of a loop share one), auto "
+             "(every bar fitted to its own difference) or a JSON file whose "
+             "keys replace the built-in table's (schema in tools/rustwx/"
+             "crates/rustwx-render/data/difference.json; "
+             "RUSTWX_DIFFERENCE_TABLE is the environment spelling).  Under "
+             "every choice a fixed bar that would draw a nonzero difference "
+             "as blank is fitted to it, and every panel prints the largest "
+             "|A-B| and how many cells differ"),
     parser.set_defaults(func=render_main)
     return parser
 

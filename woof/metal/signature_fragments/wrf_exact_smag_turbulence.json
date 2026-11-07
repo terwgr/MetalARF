@@ -1,0 +1,1640 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_calc_n2",
+      "module": "wrf_exact_smag_turbulence",
+      "source": "woof/metal/shaders/wrf_exact_smag_turbulence.metal",
+      "cuda_source": "woof/core/kernels/smag2d.cu",
+      "cuda_symbol": "wrf_calc_n2",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "bn2",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "thb3d",
+          "int32"
+        ],
+        [
+          "has_qc",
+          "int32"
+        ],
+        [
+          "has_qi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/smag2d.cu",
+      "cuda_symbol": "wrf_smag3d_km",
+      "layout_version": 1,
+      "module": "wrf_exact_smag_turbulence",
+      "name": "wrf_exact_smag3d_km",
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "c_s",
+          "float32"
+        ],
+        [
+          "prandtl",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "mix_upper_bound",
+          "float32"
+        ],
+        [
+          "isotropic",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "d11",
+          "float",
+          "read"
+        ],
+        [
+          "d22",
+          "float",
+          "read"
+        ],
+        [
+          "d12",
+          "float",
+          "read"
+        ],
+        [
+          "bn2",
+          "float",
+          "read"
+        ],
+        [
+          "xkmh",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkhh",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkmv",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkhv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d11": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d12": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d22": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_smag_turbulence.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/smag2d.cu",
+      "cuda_symbol": "wrf_tke_km",
+      "layout_version": 1,
+      "module": "wrf_exact_smag_turbulence",
+      "name": "wrf_exact_tke_km",
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "thb3d",
+          "int32"
+        ],
+        [
+          "c_k",
+          "float32"
+        ],
+        [
+          "prandtl",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "mix_upper_bound",
+          "float32"
+        ],
+        [
+          "isotropic",
+          "int32"
+        ],
+        [
+          "seed",
+          "float32"
+        ]
+      ],
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "tke",
+          "float",
+          "read"
+        ],
+        [
+          "bn2",
+          "float",
+          "read"
+        ],
+        [
+          "xkmh",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkhh",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkmv",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkhv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_smag_turbulence.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/smag2d.cu",
+      "cuda_symbol": "wrf_tke_rhs",
+      "layout_version": 1,
+      "module": "wrf_exact_smag_turbulence",
+      "name": "wrf_exact_tke_rhs",
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "thb3d",
+          "int32"
+        ],
+        [
+          "has_ustm",
+          "int32"
+        ],
+        [
+          "has_hfx",
+          "int32"
+        ],
+        [
+          "c_k",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "drag",
+          "float32"
+        ],
+        [
+          "heat",
+          "float32"
+        ],
+        [
+          "isfflx",
+          "int32"
+        ],
+        [
+          "budget_on",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "tke",
+          "float",
+          "read"
+        ],
+        [
+          "bn2",
+          "float",
+          "read"
+        ],
+        [
+          "d11",
+          "float",
+          "read"
+        ],
+        [
+          "d22",
+          "float",
+          "read"
+        ],
+        [
+          "d12",
+          "float",
+          "read"
+        ],
+        [
+          "xkmh",
+          "float",
+          "read"
+        ],
+        [
+          "xkmv",
+          "float",
+          "read"
+        ],
+        [
+          "xkhv",
+          "float",
+          "read"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "ustm",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "rtke",
+          "float",
+          "read_write"
+        ],
+        [
+          "shear",
+          "float",
+          "read_write"
+        ],
+        [
+          "buoyancy",
+          "float",
+          "read_write"
+        ],
+        [
+          "dissipation",
+          "float",
+          "read_write"
+        ],
+        [
+          "limiter",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "buoyancy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1": [
+          [
+            "nz"
+          ]
+        ],
+        "c2": [
+          [
+            "nz"
+          ]
+        ],
+        "d11": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d12": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d22": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dissipation": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_2d"
+          ]
+        ],
+        "limiter": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rtke": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "shear": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "ustm": [
+          [
+            "any_2d"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_smag_turbulence.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/moist.py",
+      "cuda_symbol": "bound_tke",
+      "layout_version": 1,
+      "module": "wrf_exact_smag_turbulence",
+      "name": "wrf_exact_bound_tke",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "upper",
+          "float32"
+        ]
+      ],
+      "resources": [
+        [
+          "tke",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tke": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_smag_turbulence.metal",
+      "threads_per_group": 128
+    },
+    {
+      "name": "wrf_exact_tke_mass",
+      "module": "wrf_exact_smag_turbulence",
+      "source": "woof/metal/shaders/wrf_exact_smag_turbulence.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "launch_wrf_tke_km",
+      "resources": [
+        [
+          "mub",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mut",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mub": [
+          [
+            "n"
+          ]
+        ],
+        "mup": [
+          [
+            "n"
+          ]
+        ],
+        "mut": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

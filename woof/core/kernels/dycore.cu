@@ -77,6 +77,23 @@ real mut_value(const real* __restrict__ mub2d,
     return rn_add(mub2d[c], mup[c]);
 }
 
+#if GPUWM_WRF_EXACT
+// WRF calc_mu_uv's face mass, the grid%muu/muv that rhs_ph and
+// horizontal_pressure_gradient read: 0.5*(MU(i)+MU(i-1)+MUB(i)+MUB(i-1))
+// left to right, ca the face's own column and cb the one before.  Summing
+// (MUB+MU) per column first, as the default does, agreed with it on the
+// time-t state of the round-3 pair and parted from the second RK stage
+// (2 ULP in ~3200 u and v pressure-gradient words, 1 ULP in 1862 rhs_ph
+// words).
+static __device__ __forceinline__
+real wrf_face_mu(const real* __restrict__ mup,
+                 const real* __restrict__ mub2d, size_t ca, size_t cb)
+{
+    return rn_mul(0.5f, rn_add(rn_add(rn_add(mup[ca], mup[cb]), mub2d[ca]),
+                               mub2d[cb]));
+}
+
+#endif
 static __device__ __forceinline__
 real pp_value(const real* __restrict__ p, const real* __restrict__ pb,
               int k, size_t c, size_t st, int base3d)
@@ -173,7 +190,15 @@ real php_half_value(const real* __restrict__ php,
         return rn_mul(0.5f, perturbation);
     real base = rn_add(phb[(size_t)k * st + c],
                        phb[(size_t)(k + 1) * st + c]);
+#if GPUWM_WRF_EXACT
+    // WRF calc_php (module_big_step_utilities_em.F:1261) sums left to right:
+    // 0.5*(phb(k)+phb(k+1)+ph(k)+ph(k+1)).  The grouped form below differs
+    // in ~24 % of words (combo-sweep round2 LOCALIZE.md, cause 1).
+    return rn_mul(0.5f, rn_add(rn_add(base, php[(size_t)k * st + c]),
+                               php[(size_t)(k + 1) * st + c]));
+#else
     return rn_mul(0.5f, rn_add(base, perturbation));
+#endif
 }
 
 
@@ -220,8 +245,12 @@ real pgf_face(size_t c_a, size_t c_b, int k, size_t st, int nz,
     size_t b = (size_t)k * st + c_b;
 
     // muf/dmu retain the old (sum -> multiply by 0.5) temporary boundary.
+#if GPUWM_WRF_EXACT
+    real muf = wrf_face_mu(mup, mub2d, c_a, c_b);
+#else
     real muf = rn_mul(0.5f, rn_add(mut_value(mub2d, mup, c_a),
                                    mut_value(mub2d, mup, c_b)));
+#endif
     real dmu = rn_mul(0.5f, rn_add(mup[c_a], mup[c_b]));
     real layer_mass = rn_add(rn_mul(c1h[k], muf), c2h[k]);
 
@@ -402,6 +431,44 @@ real q_total(const real* __restrict__ qv, const real* __restrict__ qc,
     return q;
 }
 
+#if GPUWM_WRF_EXACT
+// WRF calc_cq's cqw = 0.5*qtot with qtot accumulated species by species,
+// qtot = qtot + moist(k) + moist(k-1), in the moist array's order.  Summing
+// each level's total first and then the pair, the default spelling, moved
+// pg_buoy_w in 14471 words of the first RK stage wherever hydrometeors
+// exist (combo-sweep round 3, A088).
+static __device__ __forceinline__
+real wrf_cqw_pair(const real* __restrict__ qv, const real* __restrict__ qc,
+                  const real* __restrict__ qr, const real* __restrict__ qi,
+                  const real* __restrict__ qs, const real* __restrict__ qg,
+                  const real* __restrict__ qh, size_t a, size_t b,
+                  int moist_mode)
+{
+    real q = rn_add(rn_add(0.0f, qv[a]), qv[b]);
+    q = rn_add(rn_add(q, qc[a]), qc[b]);
+    q = rn_add(rn_add(q, qr[a]), qr[b]);
+    if (moist_mode >= 2) {
+        q = rn_add(rn_add(q, qi[a]), qi[b]);
+        q = rn_add(rn_add(q, qs[a]), qs[b]);
+        q = rn_add(rn_add(q, qg[a]), qg[b]);
+    }
+    if (moist_mode == 3) q = rn_add(rn_add(q, qh[a]), qh[b]);
+    return rn_mul(0.5f, q);
+}
+
+// WRF pg_buoy_w (module_big_step_utilities_em.F:2480, :2490) scales the
+// bracket by (1./msfty(i,j))*g, evaluated left to right, where the default
+// path takes (g*bracket)/msft: two roundings of the same quantity
+// (combo-sweep round2 LOCALIZE.md, cause 2).  Without map factors WRF's
+// msfty is 1 and (1./1.)*g is g exactly.
+static __device__ __forceinline__
+real buoyancy_scale(const real* __restrict__ msft, size_t c, int has_msf)
+{
+    if (!has_msf) return G;
+    return rn_mul(rn_div(1.0f, msft[c]), G);
+}
+#endif
+
 extern "C" __global__
 void slow_buoyancy(real* __restrict__ rw_t,
                    const real* __restrict__ p,
@@ -435,11 +502,16 @@ void slow_buoyancy(real* __restrict__ rw_t,
         if (moist_mode) {
             size_t top = (size_t)(nz - 1) * st + c;
             size_t below = top - st;
+#if GPUWM_WRF_EXACT
+            cqw = wrf_cqw_pair(qv, qc, qr, qi, qs, qg, qh, top, below,
+                               moist_mode);
+#else
             cqw = rn_mul(0.5f,
                          rn_add(q_total(qv, qc, qr, qi, qs, qg, qh,
                                         top, moist_mode),
                                 q_total(qv, qc, qr, qi, qs, qg, qh,
                                         below, moist_mode)));
+#endif
         }
         real cq1 = rn_div(1.0f, rn_add(1.0f, cqw));
         real pp_top = pp_value(p, pb, nz - 1, c, st, base3d);
@@ -452,8 +524,12 @@ void slow_buoyancy(real* __restrict__ rw_t,
             real base_mass = rn_add(rn_mul(c1f[nz], mub2d[c]), c2f[nz]);
             term = rn_sub(term, rn_mul(loading, base_mass));
         }
+#if GPUWM_WRF_EXACT
+        real buoy = rn_mul(buoyancy_scale(msft, c, has_msf), term);
+#else
         real buoy = rn_mul(G, term);
         if (has_msf) buoy = rn_div(buoy, msft[c]);
+#endif
         rw_t[ix] = rn_add(rw_t[ix], buoy);
         return;
     }
@@ -461,11 +537,16 @@ void slow_buoyancy(real* __restrict__ rw_t,
                      pp_value(p, pb, k - 1, c, st, base3d));
     real term;
     if (moist_mode) {
+#if GPUWM_WRF_EXACT
+        real cqw = wrf_cqw_pair(qv, qc, qr, qi, qs, qg, qh, ix, im,
+                                moist_mode);
+#else
         real cqw = rn_mul(0.5f,
                           rn_add(q_total(qv, qc, qr, qi, qs, qg, qh,
                                          ix, moist_mode),
                                  q_total(qv, qc, qr, qi, qs, qg, qh,
                                          im, moist_mode)));
+#endif
         real cq1 = rn_div(1.0f, rn_add(1.0f, cqw));
         term = rn_mul(rn_mul(cq1, rdn[k]), dp);
         term = rn_sub(term, rn_mul(c1f[k], mup[c]));
@@ -476,8 +557,12 @@ void slow_buoyancy(real* __restrict__ rw_t,
         term = rn_mul(rdn[k], dp);
         term = rn_sub(term, rn_mul(c1f[k], mup[c]));
     }
+#if GPUWM_WRF_EXACT
+    real buoy = rn_mul(buoyancy_scale(msft, c, has_msf), term);
+#else
     real buoy = rn_mul(G, term);
     if (has_msf) buoy = rn_div(buoy, msft[c]);
+#endif
     rw_t[ix] = rn_add(rw_t[ix], buoy);
 }
 
@@ -493,8 +578,12 @@ static __device__ __forceinline__
 real avg_mut(const real* __restrict__ mup,
              const real* __restrict__ mub2d, size_t ca, size_t cb)
 {
+#if GPUWM_WRF_EXACT
+    return wrf_face_mu(mup, mub2d, ca, cb);
+#else
     return rn_mul(0.5f, rn_add(mut_value(mub2d, mup, ca),
                                mut_value(mub2d, mup, cb)));
+#endif
 }
 
 static __device__
@@ -637,7 +726,6 @@ real supplied_fcy_value(int row, int i, int k, int ny, int nx,
     return value;
 }
 
-#if GPUWM_WRF_EXACT_C_BIGSTEP
 static __device__ __forceinline__
 real wrf_phi_field_difference(const real* __restrict__ field, int axis,
                               int i, int j, int k, int offset,
@@ -652,7 +740,6 @@ real wrf_phi_field_difference(const real* __restrict__ field, int axis,
     size_t cm = axis ? (size_t)j * nx + pm : (size_t)pm * nx + i;
     return rn_sub(field[(size_t)k * st + cp], field[(size_t)k * st + cm]);
 }
-#endif
 
 static __device__ __forceinline__
 real x_difference(int i, int offset, int j, int k, size_t st, int nx,
@@ -767,6 +854,108 @@ void slow_geopotential_vertical(real* __restrict__ rph_t,
 #endif
     if (has_msf) gw = rn_div(gw, msft[c]);
     rph_t[ix] = rn_add(tendency, gw);
+}
+
+// Native rhs_ph on open boundaries. Interior differences retain the
+// separate PH/PHB operation order; outer upwinding uses PH alone.
+// WRF v4.7.1 evaluates the west top row at kz=kde. No initializer assigns
+// FNM/FNP at kde (they loop k=2..kde-1) and the U level there is never
+// written, so at run time all three hold their zero allocation value: the
+// donor speed is zero and the term subtracts a signed zero, as WRF does.
+extern "C" __global__
+void slow_geopotential_open(real* rph_t,const real* ww,const real* w,
+    const real* u,const real* v,const real* php,const real* phb,
+    const real* mup,const real* mub,const real* rdnw,const real* fnm,const real* fnp,
+    const real* c1f,const real* c2f,real cfn,real cfn1,
+    const real* msft,const real* msfu,const real* msfv,
+    const real* mux,const real* muy,real quarter_rdx,real quarter_rdy,
+    int mapped,int open_x,int open_y,int supplied,int add_vertical,int order,int base3d,
+    int nz,int ny,int nx)
+{
+    size_t tid=(size_t)blockIdx.x*blockDim.x+threadIdx.x,st=(size_t)ny*nx;
+    if(tid>=(size_t)nz*st)return;
+    int k=int(tid/st)+1;size_t c=tid-(size_t)(k-1)*st,ix=(size_t)k*st+c;
+    int j=int(c/nx),i=int(c-(size_t)j*nx),top=k==nz;
+    real tendency=(top&&add_vertical)?0.0f:rph_t[ix];
+    real mass=rn_add(rn_mul(c1f[k],mut_value(mub,mup,c)),c2f[k]);
+    if(add_vertical) {
+        if(!top) {
+            real dl=rn_sub(rn_add(rn_sub(php[ix],php[ix-st]),base_value(phb,k,c,st,base3d)),base_value(phb,k-1,c,st,base3d));
+            real dh=rn_sub(rn_add(rn_sub(php[ix+st],php[ix]),base_value(phb,k+1,c,st,base3d)),base_value(phb,k,c,st,base3d));
+            real lo=rn_mul(rn_mul(rn_mul(0.5f,rn_add(ww[ix],ww[ix-st])),rdnw[k-1]),dl);
+            real hi=rn_mul(rn_mul(rn_mul(0.5f,rn_add(ww[ix+st],ww[ix])),rdnw[k]),dh);
+            tendency=rn_sub(tendency,rn_add(rn_mul(fnm[k],hi),rn_mul(fnp[k],lo)));
+        }
+        real gw=rn_mul(rn_mul(mass,G),w[ix]);
+        tendency=rn_add(tendency,mapped?rn_div(gw,msft[c]):gw);
+    }
+    for(int axis=0;axis<2;++axis) {
+        int pos=axis?i:j,length=axis?nx:ny,boundary=axis?open_x:open_y;
+        if(boundary&&(pos==0||pos==length-1))continue;
+        int stencil=(order==2||(boundary&&(pos==1||pos==length-2)))?2:
+                    ((boundary&&(pos==2||pos==length-3))?4:6);
+        real rd=axis?quarter_rdx:quarter_rdy;
+        if(top)rd=rn_mul(2.0f,rd);
+        real coefficient=mapped?rn_div(rd,msft[c]):rd;
+        real f0,f1;
+        if(axis) {
+            f0=supplied?supplied_fcx_value(i,j,k,ny,nx,u,mux,c1f,c2f,msfu,mapped,top,cfn,cfn1):fcx_value(i,j,k,st,ny,nx,u,mup,mub,c1f,c2f,msfu,mapped,top,cfn,cfn1);
+            f1=supplied?supplied_fcx_value(i+1,j,k,ny,nx,u,mux,c1f,c2f,msfu,mapped,top,cfn,cfn1):fcx_value(i+1,j,k,st,ny,nx,u,mup,mub,c1f,c2f,msfu,mapped,top,cfn,cfn1);
+        } else {
+            f0=supplied?supplied_fcy_value(j,i,k,ny,nx,v,muy,c1f,c2f,msfv,mapped,top,cfn,cfn1):fcy_value(j,i,k,st,ny,nx,v,mup,mub,c1f,c2f,msfv,mapped,top,cfn,cfn1);
+            f1=supplied?supplied_fcy_value(j+1,i,k,ny,nx,v,muy,c1f,c2f,msfv,mapped,top,cfn,cfn1):fcy_value(j+1,i,k,st,ny,nx,v,mup,mub,c1f,c2f,msfv,mapped,top,cfn,cfn1);
+        }
+        real contribution;
+        if(stencil==2) {
+            int pm=(pos-1+length)%length,pp=(pos+1)%length;
+            size_t cm=axis?(size_t)j*nx+pm:(size_t)pm*nx+i;
+            size_t cp=axis?(size_t)j*nx+pp:(size_t)pp*nx+i;
+            real dl=rn_sub(rn_add(rn_sub(base_value(phb,k,c,st,base3d),base_value(phb,k,cm,st,base3d)),php[ix]),php[(size_t)k*st+cm]);
+            real dh=rn_sub(rn_add(rn_sub(base_value(phb,k,cp,st,base3d),base_value(phb,k,c,st,base3d)),php[(size_t)k*st+cp]),php[ix]);
+            contribution=rn_mul(coefficient,rn_add(rn_mul(f1,dh),rn_mul(f0,dl)));
+        } else {
+            real p1=wrf_phi_field_difference(php,axis,i,j,k,1,ny,nx,st,0);
+            real p2=wrf_phi_field_difference(php,axis,i,j,k,2,ny,nx,st,0);
+            real b1=wrf_phi_field_difference(phb,axis,i,j,k,1,ny,nx,st,!base3d);
+            real b2=wrf_phi_field_difference(phb,axis,i,j,k,2,ny,nx,st,!base3d),raw,reciprocal;
+            if(stencil==4) {
+                raw=rn_sub(rn_add(rn_sub(rn_mul(8.0f,p1),p2),rn_mul(8.0f,b1)),b2);
+                reciprocal=__fdiv_rn(1.0f,12.0f);
+            } else {
+                real p3=wrf_phi_field_difference(php,axis,i,j,k,3,ny,nx,st,0);
+                real b3=wrf_phi_field_difference(phb,axis,i,j,k,3,ny,nx,st,!base3d);
+                raw=rn_add(rn_sub(rn_mul(45.0f,p1),rn_mul(9.0f,p2)),p3);
+                raw=rn_add(rn_sub(rn_add(raw,rn_mul(45.0f,b1)),rn_mul(9.0f,b2)),b3);
+                reciprocal=__fdiv_rn(1.0f,60.0f);
+            }
+            contribution=rn_mul(coefficient,rn_mul(rn_mul(rn_add(f1,f0),reciprocal),raw));
+        }
+        tendency=rn_sub(tendency,contribution);
+    }
+    // The native routine applies outer y, then outer x after interior terms.
+    for(int axis=0;axis<2;++axis) {
+        int pos=axis?i:j,length=axis?nx:ny,boundary=axis?open_x:open_y;
+        if(!boundary||(pos!=0&&pos!=length-1))continue;
+        int west_top=axis&&pos==0&&top;
+        int kz=west_top?k:min(k,nz-1);
+        real wl,wh,hm=west_top?0.0f:fnm[kz],hp=west_top?0.0f:fnp[kz];
+        if(axis) {
+            size_t face=(size_t)j*(nx+1)+i,plane=(size_t)ny*(nx+1);
+            wh=west_top?0.0f:rn_add(u[(size_t)kz*plane+face+1],u[(size_t)kz*plane+face]);
+            wl=rn_add(u[(size_t)(kz-1)*plane+face+1],u[(size_t)(kz-1)*plane+face]);
+        } else {
+            size_t face=(size_t)j*nx+i,plane=(size_t)(ny+1)*nx;
+            wh=rn_add(v[(size_t)kz*plane+face+nx],v[(size_t)kz*plane+face]);
+            wl=rn_add(v[(size_t)(kz-1)*plane+face+nx],v[(size_t)(kz-1)*plane+face]);
+        }
+        real speed=rn_mul(0.5f,rn_add(rn_mul(hm,wh),rn_mul(hp,wl)));
+        speed=pos==0?fminf(speed,0.0f):fmaxf(speed,0.0f);
+        size_t ci=axis?(pos==0?c+1:c-1):(pos==0?c+nx:c-nx);
+        real diff=pos==0?rn_sub(php[(size_t)k*st+ci],php[ix]):rn_sub(php[ix],php[(size_t)k*st+ci]);
+        real rd=rn_mul(4.0f,axis?quarter_rdx:quarter_rdy);
+        tendency=rn_sub(tendency,rn_mul(rn_mul(rd,mass),rn_mul(speed,diff)));
+    }
+    rph_t[ix]=tendency;
 }
 
 extern "C" __global__
@@ -1519,7 +1708,7 @@ void small_step_init_uv(real* __restrict__ u_pp,
         real value = rn_sub(rn_mul(ct, v0[ix]), rn_mul(cs, v[ix]));
 #if GPUWM_WRF_EXACT
         if (has_msf) {
-            value = rn_mul(value, rn_div(1.0f, msfv[(size_t)j * nx + i]));
+            value = rn_mul(value, msfv[(size_t)j * nx + i]); // strict MF_VX_INV
         }
 #else
         if (has_msf) value = rn_div(value, msfv[(size_t)j * nx + i]);
@@ -1631,7 +1820,12 @@ void small_step_finish_uv(real* __restrict__ u,
                           const real* __restrict__ msfu,
                           const real* __restrict__ msfv,
                           int has_msf, int boundary_x, int boundary_y,
+#if GPUWM_WRF_EXACT
+                          int nz, int ny, int nx,
+                          const real* __restrict__ muts_wrf)
+#else
                           int nz, int ny, int nx)
+#endif
 {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     int nyf = ny + 1, nxf = nx + 1;
@@ -1648,15 +1842,24 @@ void small_step_finish_uv(real* __restrict__ u,
         size_t cb = (size_t)j * nx + ib;
         real msa = rn_add(mub2d[ca], mup[ca]);
         real msb = rn_add(mub2d[cb], mup[cb]);
+#if GPUWM_WRF_EXACT
+        // calc_mu_uv_1 of WRF's grid%muts (the ring's is its own carrier).
+        real mna = muts_wrf[ca];
+        real mnb = muts_wrf[cb];
+#else
         real mna = rn_add(msa, mu_pp[ca]);
         real mnb = rn_add(msb, mu_pp[cb]);
+#endif
         real msf = rn_mul(0.5f, rn_add(msa, msb));
         real mnf = rn_mul(0.5f, rn_add(mna, mnb));
 #if GPUWM_WRF_EXACT
+        // muu: WRF calc_mu_uv, 0.5*(mu(i)+mu(i-1)+mub(i)+mub(i-1)).
+        // muus: calc_mu_uv_1 of muts = (mub+mu)+mu'' (advance_mu_t,
+        // module_small_step_em.F:1106; small_step_finish :392), which is
+        // the mna/mnb order above -- a regrouped muus differed from WRF in
+        // 12 % of face masses (combo-sweep round2 LOCALIZE.md, cause 7).
         msf = rn_mul(0.5f, rn_add(rn_add(rn_add(mup[ca], mup[cb]),
                                               mub2d[ca]), mub2d[cb]));
-        mnf = rn_mul(0.5f, rn_add(rn_add(rn_add(rn_add(mup[ca], mu_pp[ca]),
-                        rn_add(mup[cb], mu_pp[cb])), mub2d[ca]), mub2d[cb]));
 #endif
         real cs = rn_add(rn_mul(c1h[k], msf), c2h[k]);
         real cn = rn_add(rn_mul(c1h[k], mnf), c2h[k]);
@@ -1672,15 +1875,24 @@ void small_step_finish_uv(real* __restrict__ u,
         size_t cb = (size_t)jb * nx + i;
         real msa = rn_add(mub2d[ca], mup[ca]);
         real msb = rn_add(mub2d[cb], mup[cb]);
+#if GPUWM_WRF_EXACT
+        // calc_mu_uv_1 of WRF's grid%muts (the ring's is its own carrier).
+        real mna = muts_wrf[ca];
+        real mnb = muts_wrf[cb];
+#else
         real mna = rn_add(msa, mu_pp[ca]);
         real mnb = rn_add(msb, mu_pp[cb]);
+#endif
         real msf = rn_mul(0.5f, rn_add(msa, msb));
         real mnf = rn_mul(0.5f, rn_add(mna, mnb));
 #if GPUWM_WRF_EXACT
+        // muu: WRF calc_mu_uv, 0.5*(mu(i)+mu(i-1)+mub(i)+mub(i-1)).
+        // muus: calc_mu_uv_1 of muts = (mub+mu)+mu'' (advance_mu_t,
+        // module_small_step_em.F:1106; small_step_finish :392), which is
+        // the mna/mnb order above -- a regrouped muus differed from WRF in
+        // 12 % of face masses (combo-sweep round2 LOCALIZE.md, cause 7).
         msf = rn_mul(0.5f, rn_add(rn_add(rn_add(mup[ca], mup[cb]),
                                               mub2d[ca]), mub2d[cb]));
-        mnf = rn_mul(0.5f, rn_add(rn_add(rn_add(rn_add(mup[ca], mu_pp[ca]),
-                        rn_add(mup[cb], mu_pp[cb])), mub2d[ca]), mub2d[cb]));
 #endif
         real cs = rn_add(rn_mul(c1h[k], msf), c2h[k]);
         real cn = rn_add(rn_mul(c1h[k], mnf), c2h[k]);
@@ -1710,7 +1922,12 @@ void small_step_finish_column(real* __restrict__ w,
                               const real* __restrict__ h_diabatic,
                               real hdiab_dt, int remove_hdiab,
                               int has_msf, int base3d,
+#if GPUWM_WRF_EXACT
+                              int nz, int ny, int nx,
+                              const real* __restrict__ muts_wrf)
+#else
                               int nz, int ny, int nx)
+#endif
 {
     int c = blockIdx.x * blockDim.x + threadIdx.x;
     if (c >= ny * nx) return;
@@ -1718,7 +1935,11 @@ void small_step_finish_column(real* __restrict__ w,
     size_t bstr = base3d ? st : 1;
     size_t boff = base3d ? (size_t)c : 0;
     real mus = rn_add(mub2d[c], mup[c]);
+#if GPUWM_WRF_EXACT
+    real mun = muts_wrf[c];
+#else
     real mun = rn_add(mus, mu_pp[c]);
+#endif
 
     for (int k = 0; k <= nz; ++k) {
         size_t f = (size_t)k * st + c;

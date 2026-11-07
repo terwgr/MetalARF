@@ -22,6 +22,7 @@ from functools import lru_cache
 
 import numpy as np
 
+from woof.core.noahmp_driver_gpu import _current_device
 from woof.core.noahmp_kernel_sources import (
     DEFAULT_OPTIONS, compile_runtime_unit, runtime_unit)
 
@@ -59,7 +60,7 @@ def thermal_source() -> str:
 
 
 @lru_cache(maxsize=None)
-def _module(options: tuple[str, ...]):
+def _module(device: int, options: tuple[str, ...]):
     return compile_runtime_unit(
         "noahmp_thermal", module_key="woof.core.noahmp_thermal_gpu:thermal",
         options=options)
@@ -67,7 +68,7 @@ def _module(options: tuple[str, ...]):
 
 def thermal_module(options: tuple[str, ...] = DEFAULT_OPTIONS):
     """Compile (once per option set) the composed thermal translation unit."""
-    return _module(tuple(options))
+    return _module(_current_device(), tuple(options))
 
 
 def evaluate_thermal(leaf: str, x, ix=None):

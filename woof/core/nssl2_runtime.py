@@ -16,7 +16,6 @@ outer acceptance remains the sole authority that advances
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 from numbers import Integral
 from typing import Protocol
 
@@ -36,13 +35,14 @@ from woof.core.nssl2_contract import (
     require_ported_nssl2_mode,
     resolve_nssl2_mode_for_config,
 )
-from woof.core.nssl2_driver_support import NSSL2DriverWorkspace
+from woof.core.nssl2_driver_support import NSSL2DriverWorkspace, _step32
 from woof.core.nssl2_production_coordinator import (
     NSSL2PrecipitationFields,
     NSSL2ProductionConfigurationError,
     NSSL2ProductionHooks,
     NSSL2RegistryFields,
     run_nssl2_production_step,
+    _condensation_hooks,
 )
 from woof.core.refl import refl_10cm_is_stashed, stash_refl_10cm
 from woof.core.state import DTYPE, DomainState
@@ -99,7 +99,9 @@ class NSSL2RuntimeFields:
     ``theta`` is full dry potential temperature (K), ``rho`` is dry-air
     density (kg m-3), ``pressure`` is full pressure (Pa), ``pii`` is Exner,
     ``dz`` is full-geopotential layer depth (m), and ``w`` is the staggered
-    physical vertical velocity with shape ``(nz + 1, ny, nx)``.
+    physical vertical velocity with shape ``(nz + 1, ny, nx)``.  ``qv`` is
+    the Registry vapour as loaded (nothing writes it before the final
+    scatter); the fused GS diagnoses WRF's primary-ice target from it.
     """
 
     theta: object
@@ -108,6 +110,7 @@ class NSSL2RuntimeFields:
     pii: object
     dz: object
     w: object
+    qv: object = None
 
 
 def _require_callback(name: str, value):
@@ -123,19 +126,8 @@ def _validated_hooks(hooks: NSSL2RuntimeHooks):
     if not isinstance(hooks, NSSL2RuntimeHooks):
         raise TypeError("hooks must be NSSL2RuntimeHooks")
     fused_gs = _require_callback("fused_gs", hooks.fused_gs)
-    if hooks.nucond_qvexcess is not None:
-        if hooks.nucond is not None or hooks.qv_excess is not None:
-            raise NSSL2ProductionConfigurationError(
-                "configure either nucond_qvexcess or separate nucond and "
-                "qv_excess runtime hooks, not both")
-        condensation = (
-            _require_callback("nucond_qvexcess", hooks.nucond_qvexcess),)
-    else:
-        condensation = (
-            _require_callback("nucond", hooks.nucond),
-            _require_callback("qv_excess", hooks.qv_excess),
-        )
-    return fused_gs, condensation
+    return fused_gs, _condensation_hooks(
+        hooks, _require_callback, hook_label="runtime hooks")
 
 
 def pin_absent_nssl2_fields(
@@ -175,19 +167,6 @@ def pin_absent_nssl2_fields(
 def _require_bool(name: str, value) -> None:
     if not isinstance(value, bool):
         raise TypeError(f"{name} must be bool")
-
-
-def _step32(dt_s: float) -> np.float32:
-    try:
-        step = float(dt_s)
-    except (TypeError, ValueError) as exc:
-        raise TypeError("dt_s must be a positive finite scalar") from exc
-    if not math.isfinite(step) or step <= 0.0:
-        raise ValueError("dt_s must be a positive finite scalar")
-    converted = np.float32(step)
-    if not np.isfinite(converted) or converted <= 0.0:
-        raise ValueError("dt_s must be representable as positive float32")
-    return converted
 
 
 def _validated_binding(binding, state, hooks, step):
@@ -334,7 +313,7 @@ def _prepare_fields(state, shape) -> NSSL2RuntimeFields:
     dz[...] = z8w[1:] - z8w[:-1]
     return NSSL2RuntimeFields(
         theta=theta, rho=rho, pressure=state.p, pii=pii, dz=dz,
-        w=state.w)
+        w=state.w, qv=state.qv)
 
 
 def _validate_prepared_values(fields: NSSL2RuntimeFields) -> None:
@@ -356,6 +335,15 @@ def _validate_prepared_values(fields: NSSL2RuntimeFields) -> None:
             ("dz", fields.dz)):
         if bool(cp.any(value <= DTYPE(0.0))):
             raise ValueError(f"NSSL prepared {name} must be strictly positive")
+
+
+def _publish_temperature_metal(theta, pii, temperature):
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        from woof.metal.nssl2_runtime import submit_nssl2_temperature_product
+        return submit_nssl2_temperature_product(theta, pii, temperature)
+    from woof.metal.refl_family import submit_refl_temperature_product
+    return submit_refl_temperature_product(theta, pii, temperature)
 
 
 def _convert_radii_to_microns(state, *, validate_values: bool) -> None:
@@ -414,6 +402,10 @@ def apply_nssl2_production(
     existing WSM6/Morrison adapter cadence rather than the radiation driver's
     less frequent call schedule.
     """
+    from woof.metal.array import MetalArray
+    from woof.wrf_exact import ENABLED
+    if ENABLED and isinstance(state.p, MetalArray):
+        raise NotImplementedError("strict Metal NSSL runtime preparation is not implemented")
     fused_gs, condensation = _validated_hooks(hooks)
     for name, value in (
             ("output_due", output_due), ("radiation_due", radiation_due),
@@ -469,8 +461,7 @@ def apply_nssl2_production(
     from woof.metal.array import MetalArray
     metal_state = isinstance(fields.theta, MetalArray)
     if metal_state:
-        from woof.metal.refl_family import submit_refl_temperature_product
-        submit_refl_temperature_product(fields.theta, fields.pii, temperature)
+        _publish_temperature_metal(fields.theta, fields.pii, temperature)
     else:
         import cupy as cp
         cp.multiply(fields.theta, fields.pii, out=temperature)
@@ -483,9 +474,7 @@ def apply_nssl2_production(
             callback(workspace, fields)
             if publishes_temperature:
                 if metal_state:
-                    from woof.metal.refl_family import submit_refl_temperature_product
-                    submit_refl_temperature_product(
-                        fields.theta, fields.pii, temperature)
+                    _publish_temperature_metal(fields.theta, fields.pii, temperature)
                 else:
                     temperature[...] = fields.theta * fields.pii
         return wrapped
@@ -508,19 +497,13 @@ def apply_nssl2_production(
         else:
             moist_physics_finish(state, cfg, fields.theta, step)
 
-    if len(wrapped_condensation) == 1:
-        coordinator_hooks = NSSL2ProductionHooks(
-            fused_gs=wrap_stage(fused_gs),
-            nucond_qvexcess=wrapped_condensation[0],
-            moist_physics_finish=finish,
-        )
-    else:
-        coordinator_hooks = NSSL2ProductionHooks(
-            fused_gs=wrap_stage(fused_gs),
-            nucond=wrapped_condensation[0],
-            qv_excess=wrapped_condensation[1],
-            moist_physics_finish=finish,
-        )
+    condensation_names = (("nucond_qvexcess",) if len(wrapped_condensation) == 1
+                          else ("nucond", "qv_excess"))
+    coordinator_hooks = NSSL2ProductionHooks(
+        fused_gs=wrap_stage(fused_gs),
+        moist_physics_finish=finish,
+        **dict(zip(condensation_names, wrapped_condensation)),
+    )
 
     if not metal_state:
         save_pre_mp_theta(state)

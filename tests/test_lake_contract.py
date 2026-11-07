@@ -30,7 +30,9 @@ def test_lake_exports_are_visible_to_the_cuda_frame_census():
     # production frame inventory and admits domains with zero priced frames.
     source=(ROOT / "woof/core/kernels/lake.cu").read_text()
     assert set(re.findall(r'extern\s+"C"\s+__global__\s+void\s+(\w+)',source)) == {
-        "lake_init_columns","lake_step_columns"}
+        "lake_init_columns","lake_step_columns",
+        # f9eb12244a9 (cap-lake): table-driven lake analyses bound on the card.
+        "lake_bind_source_columns"}
 
 
 def test_lake_generator_reproduces_every_shipped_wrf_statement():
@@ -68,4 +70,25 @@ def test_lake_nonpositive_explicit_default_uses_wrf_reference_geometry():
 def test_lake_fixture_and_upstream_hashes_are_bound():
     manifest = json.loads((ORACLE / "manifest.json").read_text())
     for name, expected in manifest["files"].items():
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == expected, name
+        # The manifest is a data record and keeps the engine's package path (gpuwm/...); in this
+        # tree the package is woof/.
+        path = ROOT / ("woof/" + name[len("gpuwm/"):] if name.startswith("gpuwm/") else name)
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == expected, name
+
+
+def test_lake_arena_holds_every_live_lake_array():
+    # Breakage: the device lake arrays live in an arena of LAKE_ARENA_SLOTS
+    # 8-byte slots per thread; a transcription that declares more than that
+    # would trap mid-forecast, and two slot counts that disagree would size
+    # the launcher's arena below what the kernel takes.  The bound is every
+    # LakeStorage of the transcription plus the larger entry point's own.
+    from woof.core.lake import LAKE_ARENA_SLOTS, lake_arena_bytes, LAKE_LAUNCH_COLUMNS
+    kernels = ROOT / "woof/core/kernels"
+    count = lambda text: sum(int(n) for n in re.findall(r"LakeStorage<\w+,(\d+)>", text))
+    entry = (kernels / "lake.cu").read_text()
+    init, step = entry.split('void lake_step_columns(', 1)
+    bound = count((kernels / "lake_wrf.cuh").read_text()) + max(count(init), count(step))
+    declared = re.search(r"#define LAKE_ARENA_SLOTS (\d+)", (kernels / "lake_support.cuh").read_text())
+    assert int(declared.group(1)) == LAKE_ARENA_SLOTS == bound
+    assert lake_arena_bytes(10) == 10 * bound * 8
+    assert lake_arena_bytes(10**7) == LAKE_LAUNCH_COLUMNS * bound * 8

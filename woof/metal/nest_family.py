@@ -43,6 +43,11 @@ def _submit(context, name, arrays, parameters, count):
         return None
     if count > _I32_MAX:
         raise ValueError("Metal nest extent exceeds the int32 indexing ABI")
+    from woof.wrf_exact import ENABLED as WRF_EXACT
+    if WRF_EXACT and name in ("nest_copy_fcn", "nest_copy_fcn_theta",
+                             "nest_sint_fragment", "nest_bdy_interp1_fragment",
+                             "nest_smooth_j", "nest_smooth_i"):
+        name = "wrf_exact_" + name
     return context.submit_kernel(
         name, arrays, parameters, exact_policy=True, grid_size=count,
         threads_per_group=_THREADS)
@@ -247,6 +252,14 @@ def submit_smooth_i(context, *, parent, scratch, mode, xnu, i0, j0,
                    q["nz"] * q["niw"] * q["njw"])
 
 
+def submit_strict_feedback_clamp(context, *, parent, i0, j0, niw, njw):
+    nz, nyp, nxp = map(int, parent.shape)
+    _arrays(context, {"parent": parent}, {"parent": (nz, nyp, nxp)})
+    params = {"mode": 0, "xnu": 0.0, "i0": int(i0), "j0": int(j0),
+              "niw": int(niw), "njw": int(njw), "nz": nz, "nyp": nyp, "nxp": nxp}
+    return _submit(context, "wrf_exact_nest_clamp", {"parent": parent}, params, nz * niw * njw)
+
+
 def _unsupported(name, reason):
     raise NotImplementedError(f"Metal nest {name} is unavailable: {reason}")
 
@@ -327,12 +340,6 @@ def submit_bdy_interp1(context, *, parent, child, value, tendency, reg,
               "nyp": reg.nyp, "nxp": reg.nxp, "nlong": nlong}
     return _submit(context, "nest_bdy_interp1_fragment", arrays, params,
                    nz * sz * nlong)
-
-
-def submit_bdy_interp1_all_sides(*args, **kwargs):
-    """The fragment exposes one side per dispatch; callers loop sides."""
-    _unsupported("bdy_interp1_all_sides", "the exact ABI exports one-side "
-                 "dispatches; use submit_bdy_interp1 for each selected side")
 
 
 def submit_rect_gather_f32(context, *, source, packed, j0, i0, nz, ny, nx):

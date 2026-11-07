@@ -677,7 +677,7 @@ def test_the_global_terrain_window_keeps_unpublished_squares_as_no_data(
 
 
 def test_an_unpublished_tile_over_land_takes_the_baseline_not_a_refusal(
-        tmp_path):
+        tmp_path, monkeypatch):
     """RETIRES test_absent_tile_cross_check_counts_land_cells.
 
     One published terrain tile and one unpublished one over a domain the
@@ -685,8 +685,20 @@ def test_an_unpublished_tile_over_land_takes_the_baseline_not_a_refusal(
     ``terrain-tile-absent-over-land``.  Now the published square gives
     its relief, the unpublished square keeps the baseline's, and the two
     meet across the ramp.  Real tiles, the real Rust window and warp.
+
+    Since c1227a11a the overlay ends in the default terrain slope gate
+    (woof/static/terrain_autosmooth.py, its own cells in
+    tests/test_terrain_autosmooth.py).  This 17 x 13 grid at 250 m puts
+    real Alpine relief beside a flat 200 m baseline, a cliff the gate
+    rightly refuses, so the coverage question is asked with the gate
+    held aside and the gate's refusal of the same field is asserted at
+    the end: neither answer hides the other.
     """
     _bridge_or_fail()
+    from woof.static import terrain_autosmooth
+    real_prepare_fields = terrain_autosmooth.prepare_fields
+    monkeypatch.setattr(terrain_autosmooth, "prepare_fields",
+                        lambda fields, grid, **_kw: fields)
     meta = json.loads(_fixture("meta.json").read_text(encoding="utf-8"))
     west_tile = meta["mosaic_clip_west"]["source_tile"]
     published = west_tile.split("_COG_10_")[1].removesuffix("_DEM.tif")
@@ -720,6 +732,9 @@ def test_an_unpublished_tile_over_land_takes_the_baseline_not_a_refusal(
     np.testing.assert_array_equal(hgt[east], 200.0)
     # The published square carries real alpine relief.
     assert hgt.max() > 2000.0
+    # And the default gate refuses this cliff by name before GPU time.
+    with pytest.raises(ValueError, match="outside the measured-stable limit"):
+        real_prepare_fields(fields, grid, domain_id=1, announce=lambda *_: None)
 
 
 # ---------------------------------------------------------------------------
@@ -752,3 +767,53 @@ def test_a_config_carrying_the_overlay_block_loads_on_the_prepared_route(
         experiment_from_text(
             text + block.replace("cache_root", "cache_roots"),
             source=str(out))
+
+
+# ---------------------------------------------------------------------------
+# An all-water first footprint is not a broken overlay (TC phase 1)
+# ---------------------------------------------------------------------------
+
+def _overlay_that_changes_nothing(monkeypatch, cells):
+    """Published terrain reaches every cell and changes none of them."""
+    from types import SimpleNamespace
+    from woof.static import highres_production as production
+    monkeypatch.setattr(production, "_fetch_terrain",
+                        lambda *a, **k: (None, {"terrain_bytes_fetched": 1}))
+    coverage = {"fields": {"terrain": {"cells_outside_coverage": 0,
+                                       "cell_count": cells}}}
+    monkeypatch.setattr(production, "build_terrain_override",
+                        lambda grid, **k: ({}, {"coverage": coverage,
+                                                "sources": []}))
+    monkeypatch.setattr(production, "merge_terrain_override",
+                        lambda baseline, overrides: (
+                            {k: np.array(v, copy=True)
+                             for k, v in baseline.items()}, {}))
+    return SimpleNamespace(source_id="copernicus-dem-glo30",
+                           echo=lambda: "copernicus-dem-glo30",
+                           attribution="Copernicus DEM GLO-30")
+
+
+def test_all_water_footprint_takes_the_overlay_without_refusal(
+        tmp_path, monkeypatch):
+    # helene-2024092400-1km: the 1 km following nest starts over open water;
+    # the overlay refused it (zero-cells-replaced) and the case had to run
+    # on_refuse = "fallback-30s", losing 30 m terrain for the whole corridor.
+    from woof.static.highres_production import HighresRefusal, _apply_terrain_only
+    grid = LambertGrid(ref_lat=26.0, ref_lon=-86.0, truelat1=30.0,
+                       truelat2=60.0, stand_lon=-86.0, dx=1000.0, dy=1000.0,
+                       e_we=17, e_sn=13)
+    coverage = _overlay_that_changes_nothing(monkeypatch, 12 * 16)
+    config = HighresStaticConfig(enabled=True, cache_root=tmp_path,
+                                 fields="terrain")
+    sea = _noah_baseline(12, 16, sea_columns=16)
+    merged, detail = _apply_terrain_only(
+        sea, grid, config=config, coverage=coverage,
+        bbox=domain_footprint(grid, HALO))
+    np.testing.assert_array_equal(merged["HGT_M"], sea["HGT_M"])
+    assert detail["cells_replaced"]["total"] == 0
+    assert detail["unchanged_reason"].startswith("all-water footprint")
+    # Land that the overlay leaves untouched is still a broken overlay.
+    with pytest.raises(HighresRefusal, match="zero-cells-replaced"):
+        _apply_terrain_only(_noah_baseline(12, 16, sea_columns=4), grid,
+                            config=config, coverage=coverage,
+                            bbox=domain_footprint(grid, HALO))

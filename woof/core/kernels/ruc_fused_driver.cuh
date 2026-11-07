@@ -508,16 +508,17 @@ extern "C" __global__ void ruc_driver_prologue(
     float icealbedo,float cn,
     const float* landusef,const float* soilctop,int nlcat,int nscat,
     int mosaic_lu,int mosaic_soil,int lakemodel,
-    int qvg_air,int rdlai2d,float xice_threshold) {
+    int qvg_air,int rdlai2d,float xice_threshold,int fractional_seaice) {
     int i=blockIdx.x*blockDim.x+threadIdx.x;
     if(i>=n) return;
     D_DECLARE_SCRATCH
     D_COPY_INPUT
     // xice_threshold: module_surface_driver.F:1365-1368, 0.5 or 0.02 by
     // fractional_seaice; the host hands the run's value to every ice test.
-    bool component=D_F(xice)>=xice_threshold && D_F(xice)<=1.0f;
+    bool component=fractional_seaice==1 && D_F(xice)>=xice_threshold && D_F(xice)<=1.0f;
+    // The background ice albedo override is outside WRF's fractional block.
+    if(D_F(xice)>=xice_threshold) D_F(albbck)=icealbedo;
     if(component) {
-        D_F(albbck)=icealbedo;
         D_F(alb)=Q(B(D_F(alb),M(B(1.0f,D_F(xice)),0.08f)),D_F(xice));
         D_F(emiss)=Q(B(D_F(emiss),M(B(1.0f,D_F(xice)),0.98f)),D_F(xice));
         D_F(soilt)=D_F(tsk_save);
@@ -717,7 +718,7 @@ extern "C" __global__ void ruc_driver_epilogue(
     const int* integer,const bool* run,unsigned* flags,
     const float* tbq,const float* lemitbl,const float* half,float dt,int n,
     const float* landusef,int nlcat,int mosaic_lu,int crop,int natural,
-    int irrigation,int log_profile,float xice_threshold) {
+    int irrigation,int log_profile,float xice_threshold,int fractional_seaice) {
     int i=blockIdx.x*blockDim.x+threadIdx.x;
     if(i>=n) return;
     D_DECLARE_SCRATCH
@@ -799,18 +800,30 @@ extern "C" __global__ void ruc_driver_epilogue(
         }
         D_F(z0)=D_F(znt); D_F(sfcexc)=D_F(tkms);
         D_F(qsfc)=Q(D_F(qvg),A(1.0f,D_F(qvg)));
+        // CHKLOWQ by lineage (gpuwm.core.ruc_tier RUC_SNOW_FORMS).  wrf_45,
+        // the operational RAP/HRRR branch's LSMRUC:1083-1087 and WRF v4.0-4.5
+        // (v4.5.2 :1066): zero only under the MYJ PBL, whose surface layer is
+        // its one reader.  This port's RUC is fail-closed on MYJ, so the
+        // branch writes 1 on every land point.  GPUWM_SNOW_WRF461: WRF
+        // v4.6.1 :1069-1073 drops the MYJ test.
+#ifdef GPUWM_SNOW_WRF461
         D_F(chklowq)=D_F(qv3d)>=M(qsat,0.95f) && D_F(qv3d)<D_F(qvg) ? 0.0f:1.0f;
+#else
+        D_F(chklowq)=1.0f;
+#endif
         D_F(emiss)=D_F(snow)==0.0f ? lemitbl[integer[i]-1]:D_F(emissl);
         D_F(snow)=M(D_F(snwe),1000.0f); D_F(snowh)=D_F(snhei);
         D_F(canwat)=M(D_F(canwatr),1000.0f); D_F(mavail)=D_F(lmavail);
         D_F(sfcevp)=A(D_F(sfcevp),M(D_F(qfx),dt)); D_F(grdflx)=M(-1.0f,D_F(s));
         D_F(snowc)=D_F(snowfrac)>0.0f && D_F(xice)>=xice_threshold ? M(D_F(snowfrac),D_F(xice)):D_F(snowfrac);
         D_F(rhosnf)=D_F(rhosnfall);
-        D_F(sfcevp)=A(D_F(sfcevp),M(D_F(qfx),dt));
+        // WRF adds qfx*dt to SFCEVP a second time here (module_sf_ruclsm.F
+        // :1116, a duplicate of :1095), reporting twice the evaporation.
+        // That is a WRF defect and WOOF does not copy it: one accumulation.
     }
     D_CHECK_OUTPUT
     float fraction=D_F(xice);
-    bool component=fraction>=xice_threshold && fraction<=1.0f;
+    bool component=fractional_seaice==1 && fraction>=xice_threshold && fraction<=1.0f;
     REBLEND(alb,0.08f); REBLEND(emiss,0.98f);
     REBLEND(flhc,D_F(flhc_sea)); REBLEND(flqc,D_F(flqc_sea));
     REBLEND(cpm,D_F(cpm_sea)); REBLEND(cqs2,D_F(cqs2_sea));

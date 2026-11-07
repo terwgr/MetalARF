@@ -23,6 +23,7 @@ from pathlib import Path
 import posixpath
 import re
 import subprocess
+import tomllib
 
 import pytest
 
@@ -83,7 +84,10 @@ def _outside_references() -> dict[str, set[str]]:
                                re.findall(r'"(\.\./[^"]+)"', text)]
         for candidate in candidates:
             path = posixpath.normpath(candidate)
-            if path.startswith("..") or _root_of(path) == root:
+            # An absolute literal is never a tracked path, but REPO_ROOT / "/" is the filesystem root, which
+            # exists: serde_with 3.24.0 (vendored for rw_icechunk) builds include_str!(concat!($prefix, "/", ...))
+            # in a macro, and its bare "/" made every crate that reaches the registry "read /".
+            if path.startswith(("..", "/")) or _root_of(path) == root:
                 continue
             if (REPO_ROOT / path).exists():
                 found[root].add(path)
@@ -102,6 +106,41 @@ def test_shared_preparation_resources_follow_native_dependency_closures():
         assert "tools/preparation_resources.rs" in bridge_assets.NATIVE_BUILD_INPUTS[crate]
 
 
+@pytest.mark.parametrize("crate", (
+    "tools/grib1_bridge", "tools/rw_wps", "tools/zarr_bridge", "tools/arwen-tui",
+))
+def test_shared_registry_changes_invalidate_every_new_consumer(crate):
+    """A shared dependency edit must not reuse an old private-registry binary."""
+    from _woof_snapshot import left_out
+    if left_out(crate):
+        pytest.skip(f"{crate} is left out of this tree (tests/_woof_left_out.txt), so nothing builds from it here")
+    assert "tools/rustwx/vendor/crates-io" in bridge_assets.NATIVE_BUILD_INPUTS[crate]
+
+
+def _cargo_path_dependency(manifest: Path, name: str) -> Path:
+    document = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    dependency = document["dependencies"][name]
+    return (manifest.parent / dependency["path"]).resolve()
+
+
+@pytest.mark.parametrize("crate,manifest,dependency", [
+    ("tools/rw_wps", "tools/rw_wps/vendor/netcrust/Cargo.toml", "netcrust_shared"),
+    ("tools/zarr_bridge", "tools/zarr_bridge/Cargo.toml", "netcrust"),
+])
+def test_shared_netcdf_reader_and_its_cargo_dependencies_are_declared(
+        crate, manifest, dependency):
+    """A facade path cannot hide a shared reader from the reuse proof."""
+    reader = _cargo_path_dependency(REPO_ROOT / manifest, dependency)
+    cargo = reader / "Cargo.toml"
+    assert tomllib.loads(cargo.read_text(encoding="utf-8"))["package"]["name"] == "netcrust"
+    reached = [reader, *(_cargo_path_dependency(cargo, name)
+                        for name in ("netcdf-reader", "hdf5-reader"))]
+    declared = bridge_assets.NATIVE_BUILD_INPUTS[crate]
+    for path in reached:
+        relative = path.relative_to(REPO_ROOT.resolve()).as_posix()
+        assert _covered(relative, declared), (crate, relative, declared)
+
+
 def test_the_table_covers_every_outside_input_the_sources_reach():
     references = _outside_references()
     missing = {}
@@ -110,7 +149,9 @@ def test_the_table_covers_every_outside_input_the_sources_reach():
         closure = set(paths)
         for path in paths:
             other = _root_of(path)
-            if other is not None:
+            # The registry is an independent directory source, not a path
+            # dependency on rustwx's first-party workspace and its inputs.
+            if other is not None and path != "tools/rustwx/vendor/crates-io":
                 closure |= references[other]
         gaps = sorted(path for path in closure
                       if not _covered(path, bridge_assets.NATIVE_BUILD_INPUTS[root]))
@@ -121,7 +162,12 @@ def test_the_table_covers_every_outside_input_the_sources_reach():
         "does not list them, so a reused binary could embed a stale copy",
         missing)
     # The discovery is not vacuous: the terminal embeds its Python worker.
-    assert "woof/tui_worker.py" in references["tools/arwen-tui"]
+    from _woof_snapshot import left_out
+    if left_out("tools/arwen-tui"):
+        # a tree without the terminal: the decoder crate's shared preparation source is the witness
+        assert "tools/preparation_resources.rs" in references["tools/grib1_bridge"]
+    else:
+        assert "woof/tui_worker.py" in references["tools/arwen-tui"]
 
 
 def test_no_rust_source_embeds_from_an_excluded_path():
@@ -146,9 +192,9 @@ def test_no_rust_source_embeds_from_an_excluded_path():
     assert not embedding, embedding
 
 
-@pytest.fixture()
-def history(tmp_path):
-    repo = tmp_path / "repo"
+@pytest.fixture(scope="module")
+def history(tmp_path_factory):
+    repo = tmp_path_factory.mktemp("native-history") / "repo"
     repo.mkdir()
     env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
@@ -168,14 +214,40 @@ def history(tmp_path):
 
     git("init", "-q")
     first = commit({"tools/grib1_bridge/src/lib.rs": "a", "woof/other.py": "1",
-                    "tools/arwen-tui/src/main.rs": "t", "woof/tui_worker.py": "w"}, "one")
+                    "tools/arwen-tui/src/main.rs": "t", "woof/tui_worker.py": "w",
+                    "tools/rustwx/vendor/netcrust/src/lib.rs": "reader1",
+                    "tools/rustwx/vendor/netcrust/vendor/hdf5-reader/src/lib.rs": "hdf51"}, "one")
     python_only = commit({"woof/other.py": "2"}, "python only")
     worker = commit({"woof/tui_worker.py": "w2"}, "the embedded worker")
     notice = commit({"tools/rustwx/assets/basemap/NOTICE.txt": "n2"}, "notice refresh")
+    reader = commit({"tools/rustwx/vendor/netcrust/src/lib.rs": "reader2"}, "shared reader")
+    hdf5 = commit({"tools/rustwx/vendor/netcrust/vendor/hdf5-reader/src/lib.rs": "hdf52"},
+                  "shared HDF5 reader")
     git("checkout", "-q", "-b", "side", first)
     side = commit({"woof/side.py": "s"}, "side")
     return dict(repo=repo, first=first, python_only=python_only, worker=worker, side=side,
-                notice=notice)
+                notice=notice, reader=reader, hdf5=hdf5)
+
+
+@pytest.mark.parametrize("crate", ["tools/rw_wps", "tools/zarr_bridge"])
+@pytest.mark.parametrize("before,after,path", [
+    ("notice", "reader", "tools/rustwx/vendor/netcrust/src/lib.rs"),
+    ("reader", "hdf5", "tools/rustwx/vendor/netcrust/vendor/hdf5-reader/src/lib.rs"),
+])
+def test_shared_reader_changes_refuse_mapped_and_zarr_reuse(
+        history, crate, before, after, path):
+    repo = history["repo"]
+    assert bridge_assets.native_input_difference(
+        repo, crate, history["first"], history["python_only"]) is None
+    reason = bridge_assets.native_input_difference(
+        repo, crate, history[before], history[after])
+    assert reason is not None and path in reason
+    payload = b"junk " + MARKER + history[before].encode() + b" tail"
+    with pytest.raises(bridge_assets.BridgeAssetError, match=re.escape(path)):
+        bridge_assets.verify_source_revision(
+            payload, expected=history[after], label=crate,
+            equivalent=lambda built: bridge_assets.native_input_difference(
+                repo, crate, built, history[after]))
 
 
 def test_a_packed_data_file_does_not_force_a_rebuild(history):
@@ -195,6 +267,10 @@ def test_unchanged_inputs_at_an_ancestor_are_interchangeable(history):
 
 
 def test_a_changed_input_refuses_reuse_and_names_the_path(history):
+    from _woof_snapshot import left_out
+    if left_out("tools/arwen-tui"):
+        pytest.skip("the terminal workspace (tools/arwen-tui), whose embedded Python worker this case changes, "
+                    "is left out of this tree (tests/_woof_left_out.txt), and no build inputs are declared for it")
     repo = history["repo"]
     reason = bridge_assets.native_input_difference(
         repo, "tools/arwen-tui", history["python_only"], history["worker"])

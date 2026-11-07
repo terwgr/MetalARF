@@ -40,6 +40,14 @@ deriving child physics or time step. A restart from another nest is refused.
 The child duration must also fit entirely inside the archived forcing window;
 both `--point --hours` and a supplied child config are checked on `--dry-run`.
 
+The `--point` route picks the child's time step for you. It is the parent's
+step over the ratio when the run length, history, checkpoint and health
+intervals and the parent's frame interval are all whole numbers of it, and
+otherwise the largest shorter step they all are (a 12 km parent on 64.44 s at
+ratio 3 gives 20 s instead of 21.48 s, and the plan says so). Any `--hours`
+works. A child config you write yourself keeps the `dt` it names, and the
+review refuses one that the run length or an interval is not a whole number of.
+
 **2. For a full-physics child, nothing extra.** A child builds its own
 terrain, land use and soil at its own spacing (next section) and puts the
 parent's land-surface state on them. The rest of this item describes the
@@ -641,7 +649,7 @@ refused before the first step.
 
 ### A drawn extent on the measured card
 
-`--child-size NX,NY` with `--auto-vram` prices the extent you drew on the
+`--child-size NX,NY` with `--auto-vram` prices the extent you chose on the
 card in front of you: the door measures the local card once, prices the
 given child on it (`memory.basis` is `measured-local`, `gpu_sizing` carries
 the measurement) and reports `memory.fits`. The same holds for
@@ -881,7 +889,7 @@ with no staged Rust renderer is turned away before the child is
 integrated rather than after, with `--render-products none` named as the
 way to run the forecast anyway.
 
-**A child that does not finish keeps the pictures it drew.** A run that
+**A child that does not finish keeps the pictures it rendered.** A run that
 stops partway through -- non-finite, a refusal raised mid-run, an
 interrupt -- leaves every picture drawn while it ran exactly where it was
 published, and adds the verdict those pictures cannot carry themselves.

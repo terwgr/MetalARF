@@ -65,13 +65,17 @@ def test_grid_declaration_normalizes_and_fails_closed():
 
     with pytest.raises(ValueError, match="unsupported mapping.grid.family"):
         ms._validate_grid_declaration({"family": "icosahedral"}, "grib2")
-    with pytest.raises(ValueError, match="GRIB2 sources only"):
+    with pytest.raises(ValueError, match="requires GRIB2 or NetCDF"):
         ms._validate_grid_declaration(
             {"family": "lambert_conformal",
              "wind_basis": "earth_relative",
              "parameters": dict(HRRR_PARAMETERS)},
-            "netcdf",
+            "grib1",
         )
+    # Generated regional forecasts carry the same projected geometry in NetCDF.
+    assert ms._validate_grid_declaration(
+        {"family": "lambert_conformal", "wind_basis": "earth_relative",
+         "parameters": dict(HRRR_PARAMETERS)}, "netcdf")["family"] == "lambert_conformal"
     with pytest.raises(ValueError, match="wind_basis"):
         ms._validate_grid_declaration(
             {"family": "lambert_conformal",
@@ -150,6 +154,93 @@ def test_observed_grid_cross_check_names_both_vocabularies():
     with pytest.raises(ValueError, match="resolution_flags bit 0x08"):
         ms._require_declared_grib2_grid(
             earth_relative, declared, Path("hrrr.grib2"))
+
+
+HRRRV1_FIRST_POINT = {"lat1": 21.138, "lon1": 237.28}
+
+
+def test_a_published_first_point_admits_the_hrrrv1_archive_corner():
+    """HRRRv1 wrfprs/wrfnat (to 2016-08-23) publish the corner in millidegrees.
+
+    The packaged HRRR mappings declare that encoding; a record carrying it
+    is on the declared grid, half of it is not, and the frame still keeps
+    the declared parameters.  Without the declaration the 2016-05-24 and
+    2015-06-01 cycles were refused on the pressure route.
+    """
+
+    row = {
+        "index": "0", "nx": "1799", "ny": "1059",
+        "lat1": "21.138", "lon1": "237.28",
+        "dx": "3000", "dy": "3000",
+        "latin1": "38.5", "latin2": "38.5", "lov": "262.5",
+        "shape_of_earth": "6", "resolution_flags": "0x08",
+    }
+    with pytest.raises(ValueError, match="lat1"):
+        ms._require_declared_grib2_grid(row, _declaration(), Path("v1.grib2"))
+    declared = _declaration(published_first_points=[HRRRV1_FIRST_POINT])
+    assert declared["published_first_points"] == [HRRRV1_FIRST_POINT]
+    assert declared["parameters"] == HRRR_PARAMETERS
+    ms._require_declared_grib2_grid(row, declared, Path("v1.grib2"))
+    ms._require_declared_grib2_grid(
+        dict(row, lat1="21.138123", lon1="237.280472"), declared,
+        Path("v4.grib2"))
+    for half in ({"lon1": "237.280472"}, {"lat1": "21.139"},
+                 {"lon1": "237.281"}):
+        with pytest.raises(ValueError, match="lat1|lon1"):
+            ms._require_declared_grib2_grid(
+                dict(row, **half), declared, Path("v1.grib2"))
+    for name in ("prs", "native"):
+        packaged = json.loads((
+            Path(ms.__file__).parent / "authorities"
+            / f"rw-wps-hrrr-{name}-grib2.mapping.json").read_text("utf-8"))
+        assert ms._validate_grid_declaration(packaged["grid"], "grib2")[
+            "published_first_points"] == [HRRRV1_FIRST_POINT], name
+
+
+@pytest.mark.parametrize("points", [
+    [{"lat1": 21.2, "lon1": 237.28}],
+    [{"lat1": 21.138}],
+    {"lat1": 21.138, "lon1": 237.28},
+    [{"lat1": 21.138, "lon1": 237.28, "note": "x"}],
+])
+def test_a_published_first_point_off_the_declared_grid_is_refused(points):
+    with pytest.raises((ValueError, TypeError), match="published_first_points"):
+        _declaration(published_first_points=points)
+    with pytest.raises(ValueError, match="published_first_points"):
+        ms._validate_grid_declaration(
+            {"family": "regular_latitude_longitude",
+             "published_first_points": [HRRRV1_FIRST_POINT]}, "grib2")
+
+
+def test_the_hrrrv1_declarations_are_admission_only():
+    """A preparation bound to the mapping before the keys keeps its source.
+
+    ``published_first_points`` and ``repeated_record`` admit files the
+    mapping refused before and decode nothing a successful preparation
+    decoded differently.
+    """
+
+    from woof.source_authorities import (
+        bound_mapping_refusal, mapping_decode_identity,
+        packaged_authorities)
+
+    path = packaged_authorities("hrrr-prs-grib2-v1")["mapping"]
+    document = json.loads(path.read_text("utf-8"))
+    before = dict(document, grid={
+        key: value for key, value in document["grid"].items()
+        if key != "published_first_points"}, fields={
+        name: {key: value for key, value in field.items()
+               if key != "repeated_record"}
+        for name, field in document["fields"].items()})
+    assert before != document
+    assert mapping_decode_identity(before) == mapping_decode_identity(document)
+    old_bytes = (json.dumps(before, indent=1) + "\n").encode("utf-8")
+    assert bound_mapping_refusal("hrrr-prs-grib2-v1", old_bytes) is None
+    shifted = dict(before, grid=dict(before["grid"], parameters=dict(
+        before["grid"]["parameters"], lat1=21.138)))
+    assert bound_mapping_refusal(
+        "hrrr-prs-grib2-v1",
+        (json.dumps(shifted, indent=1) + "\n").encode("utf-8")) is not None
 
 
 def test_projected_axes_are_regular_far_below_one_period():
@@ -246,6 +337,34 @@ def test_grid_relative_winds_rotate_to_the_earth_basis_at_decode():
         collection.direct[key_u].values, u_grid * cosa, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(
         collection.direct[key_v].values, u_grid * sina, rtol=0.0, atol=1e-12)
+
+
+def test_a_repeated_record_reads_its_later_message_only_where_declared():
+    """HRRRv1 wrfprs writes HGT at the surface and at 1000 hPa twice.
+
+    The 1000 hPa pair differs, and only the later record survives into
+    HRRRv2 and current files, so a field declaring ``repeated_record:
+    "last"`` reads the later message; without the declaration a repeat is
+    still refused.
+    """
+
+    mapping = _lambert_mapping()
+    parameters = mapping["grid"]["parameters"]
+    latitude, longitude = ms._projected_axes(parameters)
+    shape = (parameters["ny"], parameters["nx"])
+    records = [
+        _record(0, 2, np.full(shape, 5.0), latitude, longitude),
+        _record(1, 3, np.zeros(shape), latitude, longitude),
+        _record(2, 2, np.full(shape, 7.0), latitude, longitude),
+    ]
+    with pytest.raises(ValueError, match="duplicate GRIB messages"):
+        ms._assemble_grib(mapping, records)
+    mapping["fields"]["eastward_wind_10m"]["repeated_record"] = "last"
+    collection = ms._assemble_grib(mapping, records)
+    key_u = (datetime(2026, 8, 15, 0), None, "eastward_wind_10m")
+    sina, cosa = ms._declared_grid_rotation(parameters)
+    np.testing.assert_allclose(
+        collection.direct[key_u].values, 7.0 * cosa, rtol=0.0, atol=1e-12)
 
 
 def test_rotation_refuses_half_a_vector():
@@ -563,7 +682,11 @@ def test_only_declared_source_rows_and_mappings_select_exact_grid_pairing():
             assert "same_grid_pairing" not in adapter.to_dict()
             if adapter.packaged_profile:
                 mapping = ms.load_mapping(packaged_authorities(adapter.packaged_profile)["mapping"])
-                assert "same_grid_pairing" not in mapping.get("grid", {})
+                declared = mapping.get("grid", {})
+                if "same_grid_pairing" in declared:
+                    assert declared["same_grid_pairing"] == "identity"
+                    assert declared["family"] == "lambert_conformal"
+                    assert ms._validate_grid_declaration(declared, mapping["format"]) == declared
 
 
 def test_unmarked_source_metadata_bytes_match_the_staged_baseline():
@@ -576,12 +699,15 @@ def test_unmarked_source_metadata_bytes_match_the_staged_baseline():
     assert hashlib.sha256(source).hexdigest() == manifest["source_adapters_sha256"]
     module_name = "_source_adapter_pairing_baseline"
     baseline = types.ModuleType(module_name)
+    # The retained registry loads its model tables beside the live package.
+    from woof import source_adapters as registry
+    baseline.__file__ = registry.__file__
     sys.modules[module_name] = baseline
     try:
         exec(compile(source, "<retained-source-adapter-baseline>", "exec"), baseline.__dict__)
         before = {adapter.source_id: adapter for adapter in baseline.source_adapters()}
         for adapter in source_adapters():
-            if adapter.same_grid_pairing is None:
+            if adapter.same_grid_pairing is None and adapter.source_id in before:
                 actual = json.dumps(adapter.to_dict(), separators=(",", ":"))
                 previous = json.dumps(before[adapter.source_id].to_dict(), separators=(",", ":"))
                 assert actual.encode("utf-8") == previous.encode("utf-8"), adapter.source_id
@@ -669,15 +795,45 @@ def test_every_other_target_projects_exactly_as_before():
 
     snapshot = _declared_snapshot()
     transform, _ = source_coordinate_transform(snapshot)
-    for target in (_wps_target(1797, 1057), _wps_target(ref_lon=-97.6),
-                   _wps_target(dx=3010.0), _wps_target(64, 48, ref_lat=39.0,
-                                                       ref_lon=-110.0)):
+    for target in (_wps_target(ref_lon=-97.6), _wps_target(dx=3010.0),
+                   _wps_target(64, 48, ref_lat=39.0, ref_lon=-110.0)):
         for lat, lon in (target.latlon_mass(), target.latlon_u(),
                          target.latlon_v()):
             y, x = transform(lat, lon)
             raw_y, raw_x = _raw_projection(HRRR_PARAMETERS, lat, lon)
             np.testing.assert_array_equal(y, raw_y)
             np.testing.assert_array_equal(x, raw_x)
+
+
+def test_an_index_aligned_window_of_the_declared_grid_copies_cell_for_cell():
+    """The one-cell inset (the 1797 x 1057 HRRR door) and an event crop of
+    the HRRR lattice are the declared grid's own cells, so they pair index
+    for index instead of interpolating at the GRIB-sphere drift."""
+
+    snapshot = _declared_snapshot()
+    transform, _ = source_coordinate_transform(snapshot)
+    unit = ms.PROJECTED_AXIS_UNIT_M
+    step = 3000.0
+    # (nx, ny, anchor i0, anchor j0): the inset, and the Iowa crop of
+    # 2026-10-06 (HRRR cells i 815..1313, j 427..993, centred on 1064, 710).
+    for nx, ny, i0, j0 in ((1797, 1057, 1, 1), (499, 567, 815, 427)):
+        full = _wps_target()
+        centre_lat, centre_lon = (np.asarray(v)[j0 + ny // 2, i0 + nx // 2]
+                                  for v in full.latlon_mass())
+        target = _wps_target(nx, ny, ref_lat=float(centre_lat),
+                             ref_lon=float(centre_lon))
+        y, x = transform(*target.latlon_mass())
+        rows, cols = np.indices((ny, nx), dtype=np.float64)
+        np.testing.assert_array_equal(y, (rows + j0) * step / unit)
+        np.testing.assert_array_equal(x, (cols + i0) * step / unit)
+        y, x = transform(*target.latlon_u())
+        rows, cols = np.indices((ny, nx + 1), dtype=np.float64)
+        np.testing.assert_array_equal(x, (cols - 0.5 + i0) * step / unit)
+        np.testing.assert_array_equal(y, (rows + j0) * step / unit)
+        y, x = transform(*target.latlon_v())
+        rows, cols = np.indices((ny + 1, nx), dtype=np.float64)
+        np.testing.assert_array_equal(y, (rows - 0.5 + j0) * step / unit)
+        np.testing.assert_array_equal(x, (cols + i0) * step / unit)
 
 
 def test_lattice_identity_takes_only_the_grids_own_staggerings():
@@ -695,10 +851,41 @@ def test_lattice_identity_takes_only_the_grids_own_staggerings():
     rows, cols = np.indices((3, 5), dtype=np.float64)
     snapped = lattice_identity(rows, cols - 0.5, nx=4, ny=3)
     np.testing.assert_array_equal(snapped[1][0], [0.0, 0.5, 1.5, 2.5, 3.0])
-    # Not the grid: another shape, a first point off its cell, a point
-    # half a cell or more from its own, a non-finite point.
+    # An index-aligned window of the grid IS the grid, cell for cell: a
+    # 2 x 2 mass window anchored on cell (1, 1), under either sphere, and
+    # a u-face window of it.  A window reaching past the grid is not.
+    rows, cols = np.indices((2, 2), dtype=np.float64)
+    for scale in (1.0, 1.01):
+        snapped = lattice_identity((rows + 1.0) * scale, (cols + 1.0) * scale,
+                                   nx=4, ny=3, sphere_scale=1.01)
+        assert snapped is not None
+        np.testing.assert_array_equal(snapped[0], rows + 1.0)
+        np.testing.assert_array_equal(snapped[1], cols + 1.0)
+    rows, cols = np.indices((2, 3), dtype=np.float64)
+    snapped = lattice_identity(rows + 1.0, cols + 0.5, nx=4, ny=3)
+    np.testing.assert_array_equal(snapped[1][0], [0.5, 1.5, 2.5])
+    assert lattice_identity(rows + 2.0, cols + 2.5, nx=4, ny=3) is None
+    # A window may reach past the grid only by the outermost FACE of a
+    # staggered axis.  A mass window whose last column or row is a full
+    # cell past the edge is not the grid: returning it would copy the
+    # edge cell into the overhang and silence the coverage refusal.
     rows, cols = np.indices((3, 4), dtype=np.float64)
-    assert lattice_identity(rows[:, :3], cols[:, :3], nx=4, ny=3) is None
+    assert lattice_identity(rows, cols + 1.0, nx=4, ny=3) is None
+    rows, cols = np.indices((3, 5), dtype=np.float64)
+    assert lattice_identity(rows, cols, nx=4, ny=3) is None
+    rows, cols = np.indices((4, 4), dtype=np.float64)
+    assert lattice_identity(rows, cols, nx=4, ny=3) is None
+    # ... while the u-face window ending on the grid's own last face
+    # (3.5 for nx=4) and the v-face window ending on its last face are.
+    rows, cols = np.indices((3, 3), dtype=np.float64)
+    snapped = lattice_identity(rows, cols + 1.5, nx=4, ny=3)
+    np.testing.assert_array_equal(snapped[1][0], [1.5, 2.5, 3.0])
+    rows, cols = np.indices((3, 2), dtype=np.float64)
+    snapped = lattice_identity(rows + 0.5, cols + 2.0, nx=4, ny=3)
+    np.testing.assert_array_equal(snapped[0][:, 0], [0.5, 1.5, 2.0])
+    # Not the grid: a first point off its cell, a point half a cell or
+    # more from its own, a non-finite point.
+    rows, cols = np.indices((3, 4), dtype=np.float64)
     assert lattice_identity(rows, cols + 2 * LATTICE_IDENTITY_ANCHOR_CELLS,
                             nx=4, ny=3) is None
     far = cols.copy()
@@ -781,7 +968,9 @@ def test_the_proof_names_the_identity_pairing_only_for_the_declared_grid():
 
     declaration = _declaration()
     assert declared_grid_pairing(declaration, _wps_target()) == "identity"
-    assert declared_grid_pairing(declaration, _wps_target(1797, 1057)) is None
+    assert declared_grid_pairing(declaration, _wps_target(1797, 1057)) == "identity"
+    assert declared_grid_pairing(
+        declaration, _wps_target(64, 48, ref_lat=39.0, ref_lon=-110.0)) is None
     assert declared_grid_pairing(declaration,
                                  _wps_target(ref_lon=-97.6)) is None
     assert declared_grid_pairing(None, _wps_target()) is None

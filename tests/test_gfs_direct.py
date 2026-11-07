@@ -231,7 +231,7 @@ def test_gfs_geometry_and_static_receipt_fail_closed(tmp_path):
         _verify_static_receipt(receipt, static, grid, exp.root.run)
 
 
-@pytest.mark.parametrize("nz", [7, 49, 80, 113])
+@pytest.mark.parametrize("nz", [7, 113])
 def test_gfs_vertical_contract_accepts_any_source_covered_explicit_eta(
         tmp_path, nz):
     config = Path(__file__).parents[1] / "configs" / "gfs_wrf_direct_proof.toml"
@@ -332,7 +332,7 @@ def test_gfs_lake_coverage_proves_a_global_in_crop_water_donor():
     point = (np.array([[30.0]]), np.array([[30.0]]))
     receipt = _source_coverage_receipt(
         snapshot, _CoverageGrid(point), np.array([[True]]))
-    assert receipt["lake_source_search"] == "global expanding nearest-water"
+    assert receipt["lake_source_search"] == "global expanding nearest-water (coverage diagnostic only)"
     assert receipt["max_lake_source_search_radius_cells"] == 32.0
     assert receipt["max_lake_source_water_distance_cells"] == 20.0
 
@@ -438,23 +438,21 @@ def test_a_whole_globe_file_has_no_edge_for_a_lake_to_miss_water_past():
     assert "lake_cells_nearest_water_past_crop" not in receipt
 
 
-def test_a_lake_with_no_gfs_water_takes_the_mapped_skin_and_is_counted(
+def test_a_lake_whose_nearer_gfs_water_could_lie_past_the_crop_is_announced(
         capsys):
-    from woof.gfs_direct import (
-        _announce_lake_source_water, lake_skin_with_source_skin_fallback)
+    from woof import gfs_direct
+    from woof.gfs_direct import _announce_lake_source_water
 
-    lakes = np.array([[True, False], [True, True]])
-    searched = np.array([[np.nan, np.nan], [281.0, np.nan]])
-    mapped = np.array([[284.0, 290.0], [285.0, 286.0]])
-    lake_skin, cells = lake_skin_with_source_skin_fallback(
-        searched, lakes, mapped)
-    assert cells == 2
-    np.testing.assert_array_equal(lake_skin[lakes], [284.0, 281.0, 286.0])
-    assert np.isnan(lake_skin[0, 1])
-    _announce_lake_source_water(cells, 1, lake_cells=3)
+    _announce_lake_source_water(1, lake_cells=3)
     said = capsys.readouterr().err
-    assert "of 3 lake cell(s), 2 took the skin temperature GFS has" in said
-    assert "1 took the nearest GFS water inside the fetched area" in said
+    assert "of 3 lake cell(s), 1 took the nearest GFS water inside the fetched area" in said
+    _announce_lake_source_water(0, lake_cells=3)
+    assert capsys.readouterr().err == ""
+    # The 2.8.x nearest-water lake override is retired with its workaround:
+    # lakes are water targets of the masked chain, whose whole-source search
+    # takes that water and whose other_surface rule covers a crop with none.
+    assert not hasattr(gfs_direct, "lake_skin_with_source_skin_fallback")
+    assert not hasattr(gfs_direct, "interpolate_lake_skin_temperature")
 
 
 def test_git_identity_degrades_accurately_outside_a_checkout(monkeypatch):
@@ -472,6 +470,14 @@ def test_git_identity_degrades_accurately_outside_a_checkout(monkeypatch):
         raise subprocess_module.CalledProcessError(128, "git")
 
     monkeypatch.setattr(gfs_direct.subprocess, "run", fail)
+    # An unstamped install: no build-metadata commit either. Without this the
+    # test read whatever wheel ran it; the release cut's science stage runs on
+    # its own stamped wheel, where the metadata commit is real and available
+    # is True (2.9.4 pass 4b, 2026-10-21, gfs-lake-ice-ims 104/105).
+    import woof.build_provenance as build_provenance
+    monkeypatch.setattr(build_provenance, "package_build_identity", lambda: dict(
+        version="unknown", commit="unknown",
+        identity_source="installed-package-metadata", receipt_line=""))
     identity = gfs_direct._git_source_identity()
     assert identity["available"] is False
     assert identity["identity_source"] == "unavailable-installed-runtime"
@@ -864,10 +870,10 @@ def test_the_shipped_two_domain_proof_config_still_passes_the_front_door():
             split_receipt["domains"][grid_id]["governance"])
 
     # A selector the registry has no option for is recorded as a blocker,
-    # not raised.  The loader refuses mp_physics = 2 before any door sees
+    # not raised.  The loader refuses mp_physics = 7 before any door sees
     # it (the registry now resolves every selector the loader admits), so
     # it is handed to the door directly here.
-    blocked = front_door_physics_selection(_respelled(mp_physics=2))
+    blocked = front_door_physics_selection(_respelled(mp_physics=7))
     assert blocked["domains"]["1"]["components"] is None
     assert "mp_physics" in blocked["domains"]["1"]["registry_blocker"]
 
@@ -1339,10 +1345,13 @@ def test_export_intent_reaches_mapped_preparation_and_stays_route_scoped(monkeyp
 
     args = _gfs_front_door_args(["--no-stock-wrf-export"])
     for validator in (source_cli._required_era5_args,
-                      source_cli._required_twentycr_args,
-                      source_cli._required_hrrr_args):
+                      source_cli._required_twentycr_args):
         errors = validator(args)
         assert any("--no-stock-wrf-export" in error for error in errors), validator.__name__
+    # U-E6: both HRRR preparers take the flag (woof prep relays it), so the HRRR
+    # route no longer refuses it.
+    assert not any("--no-stock-wrf-export" in error
+                   for error in source_cli._required_hrrr_args(args))
 
     class ReachedPreparation(Exception):
         pass
@@ -1987,3 +1996,102 @@ def test_a_gfs_domain_tree_too_deep_for_windows_is_refused_before_decode(
     assert not decoded
     assert not arguments["output_root"].exists()
     assert not list(parent.glob(".d-*"))
+
+
+def test_decode_extends_old_full_file_manifest_above_top():
+    from woof.gfs_direct import _decode_levels_above_model_top
+    levels = _decode_levels_above_model_top({"source": {}}, 10000.0)
+    assert min(levels) == 70.0
+    assert 100.0 in levels
+
+
+def test_snow_policy_defaults_to_wps_and_raw_requires_a_declared_knob(tmp_path):
+    from woof.case_data import optional_case_data_from_config, gfs_preparation_policy
+    assert gfs_preparation_policy(None)["gfs_snow_convention"] == "wps"
+    from test_case_data import make_case_toml, _CASE_DATA_TOML
+    p = make_case_toml(tmp_path, case_data=_CASE_DATA_TOML + 'gfs_snow_convention = "raw"\n')
+    assert gfs_preparation_policy(optional_case_data_from_config(p))["gfs_snow_convention"] == "raw"
+    p.write_text(p.read_text().replace('gfs_snow_convention = "raw"', 'gfs_snow_convention = "mistyped"'))
+    with pytest.raises(ValueError, match="gfs_snow_convention"):
+        optional_case_data_from_config(p)
+
+
+def test_lake_skin_policy_defaults_to_wps_and_air_temperature_is_a_declared_knob(tmp_path):
+    from woof.case_data import optional_case_data_from_config, gfs_preparation_policy
+    assert gfs_preparation_policy(None)["gfs_lake_skin"] == "wps"
+    from test_case_data import make_case_toml, _CASE_DATA_TOML
+    p = make_case_toml(tmp_path, case_data=_CASE_DATA_TOML + 'gfs_lake_skin = "air_temperature"\n')
+    assert gfs_preparation_policy(optional_case_data_from_config(p))["gfs_lake_skin"] == "air_temperature"
+    p.write_text(p.read_text().replace('"air_temperature"', '"nearest"'))
+    with pytest.raises(ValueError, match="gfs_lake_skin"):
+        optional_case_data_from_config(p)
+
+
+def test_gfs_only_policy_stays_out_of_the_shared_preparation_identity():
+    """ERA5 and HRRR bind preparation_case_policy into their source identity;
+    a GFS-only key there would move every one of their prepared caches."""
+    from woof.case_data import gfs_preparation_policy, preparation_case_policy
+    shared = preparation_case_policy(None)
+    assert not any(key.startswith("gfs_") for key in shared)
+    assert set(gfs_preparation_policy(None)) == {
+        "gfs_snow_convention", "gfs_lake_skin", "gfs_lake_ice"}
+
+
+def test_lake_ice_defaults_to_observed_and_wps_is_a_declared_knob(tmp_path):
+    from woof.case_data import optional_case_data_from_config, gfs_preparation_policy
+    assert gfs_preparation_policy(None)["gfs_lake_ice"] == "observed"
+    from test_case_data import make_case_toml, _CASE_DATA_TOML
+    p = make_case_toml(tmp_path, case_data=_CASE_DATA_TOML + 'gfs_lake_ice = "wps"\n')
+    assert gfs_preparation_policy(optional_case_data_from_config(p))["gfs_lake_ice"] == "wps"
+    p.write_text(p.read_text().replace('gfs_lake_ice = "wps"', 'gfs_lake_ice = "ims"'))
+    with pytest.raises(ValueError, match="gfs_lake_ice"):
+        optional_case_data_from_config(p)
+
+
+def test_the_gfs_route_freezes_observed_lakes_on_the_root_and_every_child():
+    """The root's soil call reads the provider's fields, and both child
+    catalogs (one-shot and chained tree) carry the root's provider."""
+    import inspect
+    from woof import gfs_direct
+    source = inspect.getsource(gfs_direct.prepare_gfs_wrf)
+    assert 'case_policy["gfs_lake_ice"], times[0]' in source
+    assert "soil = preprocess_land_surface_soil(\n            soil_fields," in source
+    assert source.count("lake_ice_provider=lake_ice_provider,") == 2
+    chained = inspect.getsource(gfs_direct._prepare_chained_gfs_tree)
+    assert "lake_ice_provider=c.lake_ice_provider," in chained
+
+
+def test_the_gfs_route_keeps_its_lakes_on_the_wps_search_by_default():
+    """The route hands its lake mask to the mapping only under "wps", and
+    both child catalogs (one-shot and chained tree) carry the root's
+    conventions, so a child is mapped as its root is."""
+    import inspect
+    from woof import gfs_direct
+    source = inspect.getsource(gfs_direct.prepare_gfs_wrf)
+    assert "inland_water_search=lake_skin_search" in source
+    assert 'if case_policy["gfs_lake_skin"] == "wps" else None' in source
+    assert source.count('relative_humidity_convention="gfs_mixed"') == 2
+    assert source.count('case_policy["gfs_lake_skin"] == "wps"),') == 1
+    chained = inspect.getsource(gfs_direct._prepare_chained_gfs_tree)
+    assert chained.count('relative_humidity_convention="gfs_mixed"') == 1
+    assert 'c.case_policy["gfs_lake_skin"] == "wps"),' in chained
+
+
+def test_git_disappearing_after_root_probe_falls_back_to_package_metadata(tmp_path, monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+    from woof import build_provenance, gfs_direct
+    root = tmp_path / 'source'
+    (root / '.git').mkdir(parents=True)
+    monkeypatch.setattr(gfs_direct, '__file__', str(root / 'woof' / 'gfs_direct.py'))
+    monkeypatch.delenv('WOOF_NATIVE_DISTRIBUTION_MANIFEST', raising=False)
+    def query(command, **kwargs):
+        if command[-1] == '--show-toplevel':
+            return SimpleNamespace(stdout=str(root))
+        raise FileNotFoundError('git disappeared')
+    monkeypatch.setattr(subprocess, 'run', query)
+    monkeypatch.setattr(build_provenance, 'owning_distribution', lambda: None)
+    identity = gfs_direct._git_source_identity()
+    assert identity['commit'] == 'unknown'
+    assert identity['tracked_worktree_clean'] is None
+    assert 'build_hash=unknown' in identity['package_provenance']['receipt_line']

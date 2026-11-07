@@ -15,8 +15,20 @@ import struct
 def source_absent_microphysics(cfg):
     """Return (WRF field names, native FP32 initial values) for active extras."""
     mp = int(cfg.mp_physics)
-    if mp in (0, 1, 6):
+    from woof.core.column_schemes import COLUMN_SCHEMES
+    if mp in COLUMN_SCHEMES:
+        return (), {}  # Single-moment column rows have no number tracers.
+    from woof.core.wsm_family_constants import (
+        selectors, source_absent_initialization,
+    )
+    if mp in selectors():
+        return source_absent_initialization(mp)
+    if mp in (0, 1, 2, 3, 6, 106):
         return (), {}
+    if mp == 30:
+        from woof.core.fast_sbm_contract import BIN_SPECIES,NUMBER_SPECIES
+        return (BIN_SPECIES+("QNCCN","QNCLOUD","QNRAIN","QNICE","QNSNOW","QNGRAUPEL"),
+                dict.fromkeys(BIN_SPECIES+NUMBER_SPECIES,0.0))
     if mp == 8:
         return ("QNICE", "QNRAIN"), {"ni": 0.0, "nr": 0.0}
     if mp == 9:
@@ -36,6 +48,12 @@ def source_absent_microphysics(cfg):
         values["qnn"] = NSSL2_BACKGROUND_CCN_PER_KG
         return (("QHAIL", "QNDROP", "QNRAIN", "QNICE", "QNSNOW", "QNGRAUPEL",
                  "QNHAIL", "QNCCN", "QVGRAUPEL", "QVHAIL"), values)
+    if mp == 5:
+        # Ferrier-Aligo: the scalar qt (WRF output name CWM) has no analysed
+        # source and real.exe never computes it; FER_HIRES rebuilds it from
+        # qc+qr+qi on the first call (module_mp_fer_hires.F:388).  The
+        # f_* state starts where fer_hires_init puts it (woof/core/state.py).
+        return ("CWM",), {"qt": 0.0}
     if mp == 50:
         return (("QNICE", "QNRAIN", "QIR", "QIB"),
                 dict.fromkeys(("ni", "nr", "qir", "qib"), 0.0))
@@ -72,6 +90,18 @@ def source_absent_microphysics(cfg):
         # woof.config.validate_run_preparation.
         return (("QNCLOUD", "QNRAIN", "QNICE"),
                 dict.fromkeys(("nc", "nr", "ni"), 0.0))
+    from woof.microphysics_schemes import scheme as _named_scheme
+    named = _named_scheme(mp)
+    if named is not None:
+        # A named scheme: every moment species starts at exact zero (the
+        # allocation value); the scheme's own entry block and its adapter's
+        # first-call graupel seeding fill them from the analysed masses.
+        # The aerosol tracers are owned by the aerosol initialisation, as
+        # for mp=28.
+        wrf_names = {"nc": "QNCLOUD", "nr": "QNRAIN", "ni": "QNICE",
+                     "ng": "QNGRAUPEL", "volg": "QVGRAUPEL"}
+        names = tuple(n for n in named.moment_species if n in wrf_names)
+        return (tuple(wrf_names[n] for n in names), dict.fromkeys(names, 0.0))
     raise ValueError(f"no native prognostic-species initialization for mp_physics={mp}")
 
 
@@ -99,6 +129,21 @@ def cold_start_seeded_numbers(cfg):
     if mp in (8, 28):
         seeded["nr"] = ("qr", "rain_number_seed")
         seeded["ni"] = ("qi", "ice_number_seed")
+    if mp == 10:
+        # Morrison: no real.exe seed; the handover closure
+        # (woof.ingest.handover_numbers) seeds all four from their masses
+        # where correct-mode key hydrometeor_handover_numbers is on (off in
+        # exact mode and in a strict WRF process), under the same receipt keys.
+        from woof.ingest.handover_numbers import closure_active
+        if closure_active(cfg):
+            seeded["nr"] = ("qr", "rain_number_seed")
+            seeded["ni"] = ("qi", "ice_number_seed")
+            seeded["ns"] = ("qs", "snow_number_seed")
+            seeded["ng"] = ("qg", "graupel_number_seed")
+    # Named schemes seed nothing here: their own entry blocks set every
+    # number moment from its mass under the scheme's assumed distribution
+    # and their adapters seed graupel
+    # number and volume from graupel mass on the first call.
     return seeded
 
 

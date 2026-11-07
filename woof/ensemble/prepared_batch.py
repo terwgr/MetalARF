@@ -81,6 +81,9 @@ def native_prepared_eligibility(inputs, node=None, *, members=2, restart=None, k
     cfg = exp.root.run if node is None else node.cfg.run
     suite = plan_suite(cfg, members=members)
     reasons = list(suite.native_fallback_reasons)
+    from woof.ensemble.optional_routing import enabled_for
+    if enabled_for(inputs):
+        reasons.append("NextGen keeps each member's original resident hydro driver")
     if members == 1:
         reasons.append("N=1 keeps the ordinary runner and output writer")
     if len(exp.domains) != 1 or _domain_count(inputs) != 1 or exp.root.parent_id != 0:
@@ -634,6 +637,8 @@ def native_memory_model_from_node(inputs, node, *, runtime_reservation, allocato
         levels.update({name: 1 for name in row["surface_slots"] if name in slots})
         if "refl_10cm" in slots:
             levels["refl_10cm"] = 1
+        from woof.ensemble.batch_physics import THOMPSON_CLOUD_BOOKING_SLOTS
+        levels.update({name: 1 for name in THOMPSON_CLOUD_BOOKING_SLOTS if name in slots})
         levels["h_diabatic"] = cfg.nz
         components.append(MemoryComponent("native_thompson_ring", "physics",
             plan=ring_memory_plan(levels, ny=cfg.ny, nx=cfg.nx, width=cfg.spec_zone, zero_fields=("h_diabatic",)),

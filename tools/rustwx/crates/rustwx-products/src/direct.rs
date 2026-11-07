@@ -40,6 +40,8 @@ mod query;
 mod rendering;
 mod titles;
 mod types;
+pub use titles::{local_accumulation_window, local_accumulation_window_from_cycle};
+pub use types::AccumulationWindow;
 pub(crate) use batch::{
     prepare_direct_batch_from_loaded, run_direct_batch_from_loaded, run_direct_batch_from_prepared,
 };
@@ -61,7 +63,7 @@ pub use planning::{
 };
 use planning::{
     PlannedDirectRecipe, canonical_fetch_product_for_selectors, group_direct_fetches,
-    plan_direct_recipes,
+    plan_direct_recipes, plan_selected_recipes,
 };
 #[cfg(test)]
 use planning::{canonical_fetch_product, should_attach_direct_idx_patterns};
@@ -76,6 +78,7 @@ use projection::{
     reference_latitude_for_projection_variant,
 };
 pub use projection::{
+    build_full_domain_projected_map_with_projection, full_domain_panel_resolved_projection,
     build_natural_projected_map_with_projection,
     build_natural_projected_map_with_projection_and_basemap_padding, build_projected_map,
     build_projected_map_with_projection, build_requested_projected_map_with_projection,
@@ -87,9 +90,9 @@ pub use projection::{
 pub(crate) use query::{load_direct_sampled_fields_from_latest, required_direct_fetch_products};
 #[cfg(test)]
 use rendering::{
-    StreamlineSetting, barb_target_columns_rows, companion_difference_subject,
-    convert_filled_field, render_fill, render_filled_field, scale_for_filled_selector,
-    scale_for_recipe, static_streamline_setting, streamlines_enabled_for_grid,
+    StreamlineSetting, barb_target_columns_rows, convert_filled_field, render_filled_field,
+    scale_for_filled_selector, scale_for_recipe, static_streamline_setting,
+    streamlines_enabled_for_grid,
 };
 use rendering::{
     apply_source_raster_policy, build_render_request, sanitize_output_suffix,
@@ -138,6 +141,7 @@ type PreparedProjectedMaps = Arc<HashMap<ProjectedMapCacheKey, ProjectedMap>>;
 impl DirectBatchRequest {
     fn from_hrrr(request: &HrrrDirectBatchRequest) -> Self {
         Self {
+            accumulation_window: None,
             model: ModelId::Hrrr,
             date_yyyymmdd: request.date_yyyymmdd.clone(),
             cycle_override_utc: request.cycle_override_utc,
@@ -189,6 +193,7 @@ fn sampling_direct_request(
     use_cache: bool,
 ) -> DirectBatchRequest {
     DirectBatchRequest {
+        accumulation_window: None,
         model,
         date_yyyymmdd: String::new(),
         cycle_override_utc: None,
@@ -258,7 +263,7 @@ pub fn render_direct_recipes_from_selected_fields(
     fetch_key: impl Into<String>,
 ) -> Result<Vec<DirectRenderedRecipe>, Box<dyn std::error::Error>> {
     fs::create_dir_all(&request.out_dir)?;
-    let planned = plan_direct_recipes(request.model, recipe_slugs)?;
+    let planned = plan_selected_recipes(request.model, recipe_slugs)?;
     let fetch_truth_by_actual_product = direct_fetch_truth_for_planned(
         request,
         latest,
@@ -337,7 +342,7 @@ pub fn render_direct_recipes_chunked_from_loader(
     fetch_key: impl Into<String>,
 ) -> Result<Vec<DirectRenderedRecipe>, Box<dyn std::error::Error>> {
     fs::create_dir_all(&request.out_dir)?;
-    let planned = plan_direct_recipes(request.model, recipe_slugs)?;
+    let planned = plan_selected_recipes(request.model, recipe_slugs)?;
     if planned.is_empty() {
         return Ok(Vec::new());
     }
@@ -987,7 +992,7 @@ fn render_direct_recipe(
                 target_ratio,
             )?;
         }
-        if let Some(annotations) = request.panel_annotations.as_ref() {
+        if let Some(annotations) = titles::recipe_annotations(request, item.recipe.slug, item.recipe.title) {
             annotations.apply(&mut render_request);
         }
         let save_timing = save_png_profile_with_options(
@@ -1238,10 +1243,12 @@ fn render_direct_composite_panel(
             request.forecast_hour,
         )
     });
-    let subtitle_right = request
-        .subtitle_right_override
-        .clone()
-        .unwrap_or_else(|| source_subtitle(latest.source));
+    // Resolve once for both the planned sheet and the fallback grid, just
+    // as single maps resolve their provenance through the active theme.
+    let subtitle_right = rustwx_render::theme::active_theme().source_subtitle(Some(
+        request.subtitle_right_override.clone()
+            .unwrap_or_else(|| source_subtitle(latest.source)),
+    )).unwrap_or_default();
     let render_start = Instant::now();
     let canvas = if let Some(sheet) = sheet.as_ref() {
         let labels: Vec<String> = panel_requests

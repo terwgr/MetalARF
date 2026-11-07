@@ -1,0 +1,37 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_mynnsfc_v600",
+      "source": "woof/metal/shaders/hexrrfs_mynnsfc_v600.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/sf_mynnsfc_v600.py",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_mynnsfc_tables",
+      "cuda_symbol": "mynnsfc_tables",
+      "resources": [
+        [
+          "tables",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tables": [
+          [
+            "4",
+            "ntable"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntable",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

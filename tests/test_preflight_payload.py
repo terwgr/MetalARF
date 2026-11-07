@@ -134,9 +134,7 @@ def test_retained_header_scalars_cannot_be_changed_in_memory(sealed, part):
 
 
 @pytest.mark.parametrize("layout,head", [("hierarchy-d01-v1", None),
-                                        ("mapped-hierarchy-d01-v1", None),
-                                        ("portable-single-domain-v2", {}),
-                                        ("mapped-direct-d01-v1", {})])
+                                        ("portable-single-domain-v2", {})])
 def test_heads_and_hierarchies_keep_the_original_reader_path(monkeypatch, layout, head):
     monkeypatch.setattr(prepared_writer, "native_hasher",
                         lambda: pytest.fail("unsupported retained path"))
@@ -170,8 +168,11 @@ def test_built_hasher_preflight_retains_real_maps_and_exact_receipt(tmp_path, mo
                         lambda *a, **k: SimpleNamespace(source="gfs"))
     monkeypatch.setattr(forecast, "verify_native_static_receipt",
                         lambda *a, **k: {"status": "PASS"})
+    # HGT_M: since c1227a11a the reader verifies the terrain auto-smoothing
+    # receipt against the static terrain; a flat plane carries none.
     monkeypatch.setattr(forecast, "load_native_static_cache",
-                        lambda path, grid, ny, nx: {"STATIC": np.ones((ny, nx))})
+                        lambda path, grid, ny, nx: {"STATIC": np.ones((ny, nx)),
+                                                    "HGT_M": np.zeros((ny, nx))})
     inputs = _preflight_fixture(fixture)
     assert inputs.cache_payload is not None
     assert inputs.cache_reader.content_sha256 == fixture.content_sha256

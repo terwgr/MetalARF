@@ -47,7 +47,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, ROOT)
 
 from woof.core.fp32_ulp import fp32_ulp_distance                # noqa: E402
-from tests.physics_reference.gf_oracle import (                             # noqa: E402
+from woof.verify.gf_oracle import (                             # noqa: E402
     GF_NZ, GF_ORACLE_DIR, load_gf_oracle,
 )
 
@@ -325,11 +325,11 @@ def main():
     lib.host_gf_gfdrv_stage(_fp(din), _fp(dsc), _ip(dii), _fp(dlev),
                             _fp(dsca), _ip(disc), 1, n, NZ)
 
-    from tests.physics_reference.gf_oracle import stage_rows_to_distrust
-    exact = ~stage_rows_to_distrust(fixture)
+    exact = np.ones(n, dtype=bool)
     fail_d = 0
-    # the pinned GFDRV boundary, on the 208 columns the driver's own
-    # decomposition reproduces
+    # the pinned GFDRV boundary, on every column (the retired 8-column
+    # "driver residual" was the reference's own accurate-double spelling of
+    # WRF's float32-widened GFS constants)
     for j, name in enumerate(
             ["rthcuten", "rqvcuten", "rqccuten", "rqicuten", "dudt_phy",
              "dvdt_phy", "gdc", "gdc2"]):
@@ -388,17 +388,6 @@ def main():
         if w != 0:
             fail_d += 1
             print(f"DRV seam {name}: max_ulp={w}")
-    # the 8 distrust columns: amplitude-only, bounded as the CPU gate bounds
-    bad = ~exact
-    got = dlev[:, DRV_LEV_FIELDS.index("rthcuten"), :][bad]
-    want = gl["rthcuten"][bad]
-    d = fp32_ulp_distance(got, want)
-    live = np.abs(want) > np.float32(1e-12)
-    rel = np.abs(got[live] - want[live]) / np.abs(want[live])
-    print(f"driver 8-column residual: max_ulp={int(d[d >= 0].max())} "
-          f"max_rel={float(rel.max()):.3e} (bounds: 34, 1e-4)")
-    if int(d[d >= 0].max()) > 34 or float(rel.max()) >= 1e-4:
-        fail_d += 1
     print(f"driver gate failures: {fail_d}")
 
     sys.exit(1 if (failures or fail_s or fail_i or fail_sh or fail_d)

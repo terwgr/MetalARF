@@ -1,0 +1,232 @@
+// Generated from woof/core/kernels/thompson_aerosol_warm.cu (WRF 4.6.1) by tools/mp28_metal/generate.py; do not edit.
+#pragma clang fp contract(off)
+namespace native_tc_math {
+constant Soft8 GFK_LOGF_INVC [ 16 ] = {
+SD8(0x3ff661ec79f8f3beul) , SD8(0x3ff571ed4aaf883dul) , SD8(0x3ff49539f0f010b0ul) , SD8(0x3ff3c995b0b80385ul) , SD8(0x3ff30d190c8864a5ul) , SD8(0x3ff25e227b0b8ea0ul) , SD8(0x3ff1bb4a4a1a343ful) , SD8(0x3ff12358f08ae5baul) , SD8(0x3ff0953f419900a7ul) , SD8(0x3ff0000000000000ul) , SD8(0x3fee608cfd9a47acul) , SD8(0x3feca4b31f026aa0ul) , SD8(0x3feb2036576afce6ul) , SD8(0x3fe9c2d163a1aa2dul) , SD8(0x3fe886e6037841edul) , SD8(0x3fe767dcf5534862ul) }
+;
+
+constant Soft8 GFK_LOGF_LOGC [ 16 ] = {
+- SD8(0x3fd57bf7808caadeul) , - SD8(0x3fd2bef0a7c06ddbul) , - SD8(0x3fd01eae7f513a67ul) , - SD8(0x3fcb31d8a68224e9ul) , - SD8(0x3fc6574f0ac07758ul) , - SD8(0x3fc1aa2bc79c8100ul) , - SD8(0x3fba4e76ce8c0e5eul) , - SD8(0x3fb1973c5a611cccul) , - SD8(0x3fa252f438e10c1eul) , SD8(0x0000000000000000ul) , SD8(0x3faaa5aa5df25984ul) , SD8(0x3fbc5e53aa362eb4ul) , SD8(0x3fc526e57720db08ul) , SD8(0x3fcbc2860d224770ul) , SD8(0x3fd1058bc8a07ee1ul) , SD8(0x3fd4043057b6ee09ul) }
+;
+
+constant ulong GFK_EXP2F_TAB [ 32 ] = {
+0x3ff0000000000000ul , 0x3fefd9b0d3158574ul , 0x3fefb5586cf9890ful , 0x3fef9301d0125b51ul , 0x3fef72b83c7d517bul , 0x3fef54873168b9aaul , 0x3fef387a6e756238ul , 0x3fef1e9df51fdee1ul , 0x3fef06fe0a31b715ul , 0x3feef1a7373aa9cbul , 0x3feedea64c123422ul , 0x3feece086061892dul , 0x3feebfdad5362a27ul , 0x3feeb42b569d4f82ul , 0x3feeab07dd485429ul , 0x3feea47eb03a5585ul , 0x3feea09e667f3bcdul , 0x3fee9f75e8ec5f74ul , 0x3feea11473eb0187ul , 0x3feea589994cce13ul , 0x3feeace5422aa0dbul , 0x3feeb737b0cdc5e5ul , 0x3feec49182a3f090ul , 0x3feed503b23e255dul , 0x3feee89f995ad3adul , 0x3feeff76f2fb5e47ul , 0x3fef199bdd85529cul , 0x3fef3720dcef9069ul , 0x3fef5818dcfba487ul , 0x3fef7c97337b9b5ful , 0x3fefa4afa2a490daul , 0x3fefd0765b6e4540ul }
+;
+
+constant Soft8 GFK_POWF_INVC [ 16 ] = {
+SD8(0x3ff661ec79f8f3beul) , SD8(0x3ff571ed4aaf883dul) , SD8(0x3ff49539f0f010b0ul) , SD8(0x3ff3c995b0b80385ul) , SD8(0x3ff30d190c8864a5ul) , SD8(0x3ff25e227b0b8ea0ul) , SD8(0x3ff1bb4a4a1a343ful) , SD8(0x3ff12358f08ae5baul) , SD8(0x3ff0953f419900a7ul) , SD8(0x3ff0000000000000ul) , SD8(0x3fee608cfd9a47acul) , SD8(0x3feca4b31f026aa0ul) , SD8(0x3feb2036576afce6ul) , SD8(0x3fe9c2d163a1aa2dul) , SD8(0x3fe886e6037841edul) , SD8(0x3fe767dcf5534862ul) }
+;
+
+constant Soft8 GFK_POWF_LOGC [ 16 ] = {
+- SD8(0x3fdefec65b963019ul) , - SD8(0x3fdb0b6832d4fca4ul) , - SD8(0x3fd7418b0a1fb77bul) , - SD8(0x3fd39de91a6dcf7bul) , - SD8(0x3fd01d9bf3f2b631ul) , - SD8(0x3fc97c1d1b3b7af0ul) , - SD8(0x3fc2f9e393af3c9ful) , - SD8(0x3fb960cbbf788d5cul) , - SD8(0x3faa6f9db6475fceul) , SD8(0x0000000000000000ul) , SD8(0x3fb338ca9f24f53dul) , SD8(0x3fc476a9543891baul) , SD8(0x3fce840b4ac4e4d2ul) , SD8(0x3fd40645f0c6651cul) , SD8(0x3fd88e9c2c1b9ff8ul) , SD8(0x3fdce0a44eb17bccul) }
+;
+
+constant Soft8 GFK_POWF_A [ 5 ] = {
+SD8(0x3fd27616c9496e0bul) , - SD8(0x3fd71969a075c67aul) , SD8(0x3fdec70a6ca7baddul) , - SD8(0x3fe7154748bef6c8ul) , SD8(0x3ff71547652ab82bul) }
+;
+
+static inline F native_gfk_log ( F x ) {
+uint ix = __float_as_uint ( x ) ;
+if ( ix == 0x3f800000u ) return 0.0f ;
+if ( ix - 0x00800000u >= 0x7f800000u - 0x00800000u ) {
+if ( ix * 2u == 0u ) return __int_as_float ( 0xff800000 ) ;
+if ( ix == 0x7f800000u ) return x ;
+if ( ( ix & 0x80000000u ) || ix * 2u >= 0xff000000u ) return __int_as_float ( 0x7fc00000 ) ;
+ix = __float_as_uint ( __fmul_rn ( ( x ) , ( 8388608.0f ) ) ) ;
+ix -= 23u << 23 ;
+}
+uint tmp = ix - 0x3f330000u ;
+int i = ( int ) ( ( tmp >> 19 ) & 15u ) ;
+int k = ( int ) tmp >> 23 ;
+uint iz = ix - ( tmp & 0xff800000u ) ;
+Soft8 z = ( Soft8 ) __uint_as_float ( iz ) ;
+Soft8 r = __dsub_rn ( ( __dmul_rn ( ( z ) , ( GFK_LOGF_INVC [ i ] ) ) ) , ( SD8 ( 0x3ff0000000000000ul ) ) ) ;
+Soft8 y0 = __dadd_rn ( ( GFK_LOGF_LOGC [ i ] ) , ( __dmul_rn ( ( ( Soft8 ) k ) , ( SD8 ( 0x3fe62e42fefa39eful ) ) ) ) ) ;
+Soft8 r2 = __dmul_rn ( ( r ) , ( r ) ) ;
+Soft8 y = __dadd_rn ( ( __dmul_rn ( ( ( SD8 ( 0x3fd5575b0be00b6aul ) ) ) , ( r ) ) ) , ( ( - SD8 ( 0x3fdffffef20a4123ul ) ) ) ) ;
+y = __dadd_rn ( ( __dmul_rn ( ( ( - SD8 ( 0x3fd00ea348b88334ul ) ) ) , ( r2 ) ) ) , ( y ) ) ;
+y = __dadd_rn ( ( __dmul_rn ( ( y ) , ( r2 ) ) ) , ( __dadd_rn ( ( y0 ) , ( r ) ) ) ) ;
+return __double2float_rn ( y ) ;
+}
+
+static inline F gfk_d2f_rn ( Soft8 y ) {
+Soft8 a = fabs ( y ) ;
+if ( a > SD8 ( 0x0000000000000000ul ) && a < SD8 ( 0x3810000000000000ul ) ) {
+Soft8 scaled = rint ( a * SD8 ( 0x4940000000000000ul ) ) ;
+uint m = ( uint ) scaled ;
+uint s = ( __double_as_longlong ( y ) < 0l ) ? 0x80000000u : 0u ;
+return __uint_as_float ( s | m ) ;
+}
+return __double2float_rn ( y ) ;
+}
+
+static inline int gfk_checkint ( uint iy ) {
+int e = ( int ) ( iy >> 23 & 0xffu ) ;
+if ( e < 0x7f ) return 0 ;
+if ( e > 0x7f + 23 ) return 2 ;
+if ( iy & ( ( 1u << ( 0x7f + 23 - e ) ) - 1u ) ) return 0 ;
+if ( iy & ( 1u << ( 0x7f + 23 - e ) ) ) return 1 ;
+return 2 ;
+}
+
+static inline bool gfk_zeroinfnan ( uint ix ) {
+return 2u * ix - 1u >= 2u * 0x7f800000u - 1u ;
+}
+
+static inline F thompson_aa_d2f ( Soft8 y ) {
+return gfk_d2f_rn ( y ) ;
+}
+
+static inline F thompson_aa_expf ( F x ) {
+const uint abstop = ( __float_as_uint ( x ) >> 20 ) & 0x7ffu ;
+if ( abstop >= ( ( __float_as_uint ( 88.0f ) ) >> 20 ) ) {
+if ( __float_as_uint ( x ) == 0xff800000u ) return 0.0f ;
+if ( abstop >= ( 0x7f800000u >> 20 ) ) return __fadd_rn ( x , x ) ;
+if ( x > __int_as_float ( 0x42b17218 ) ) return __int_as_float ( 0x7f800000 ) ;
+if ( x < - __int_as_float ( 0x42cff1b4 ) ) return 0.0f ;
+}
+const Soft8 xd = ( Soft8 ) x ;
+const Soft8 inv = SD8 ( 0x3ff71547652b82feul ) * SD8 ( 0x4040000000000000ul ) ;
+Soft8 kd = __fma_rn ( inv , xd , SD8 ( 0x4338000000000000ul ) ) ;
+const ulong ki = ( ulong ) __double_as_longlong ( kd ) ;
+kd = __dsub_rn ( kd , SD8 ( 0x4338000000000000ul ) ) ;
+const Soft8 r = __fma_rn ( inv , xd , - kd ) ;
+ulong t = GFK_EXP2F_TAB [ ki & 31ul ] ;
+t += ki << ( 52 - 5 ) ;
+const Soft8 s = __longlong_as_double ( ( long ) t ) ;
+const Soft8 z = __fma_rn ( aa_div ( aa_div ( aa_div ( SD8 ( 0x3fac6af84b912394ul ) , SD8 ( 0x4040000000000000ul ) ) , SD8 ( 0x4040000000000000ul ) ) , SD8 ( 0x4040000000000000ul ) ) , r , aa_div ( aa_div ( SD8 ( 0x3fcebfce50fac4f3ul ) , SD8 ( 0x4040000000000000ul ) ) , SD8 ( 0x4040000000000000ul ) ) ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+Soft8 y = __fma_rn ( aa_div ( SD8 ( 0x3fe62e42ff0c52d6ul ) , SD8 ( 0x4040000000000000ul ) ) , r , SD8 ( 0x3ff0000000000000ul ) ) ;
+y = __fma_rn ( z , r2 , y ) ;
+return thompson_aa_d2f ( __dmul_rn ( y , s ) ) ;
+}
+
+static inline F thompson_aa_logf ( F x ) {
+return native_gfk_log ( x ) ;
+}
+
+static inline Soft8 thompson_aa_powf_log2 ( uint ix ) {
+const uint tmp = ix - 0x3f330000u ;
+const int i = ( int ) ( ( tmp >> 19 ) & 15u ) ;
+const uint top = tmp & 0xff800000u ;
+const uint iz = ix - top ;
+const int k = ( int ) top >> 23 ;
+const Soft8 z = ( Soft8 ) __uint_as_float ( iz ) ;
+const Soft8 r = __fma_rn ( z , GFK_POWF_INVC [ i ] , - SD8 ( 0x3ff0000000000000ul ) ) ;
+const Soft8 y0 = __dadd_rn ( GFK_POWF_LOGC [ i ] , ( Soft8 ) k ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+const Soft8 y = __fma_rn ( GFK_POWF_A [ 0 ] , r , GFK_POWF_A [ 1 ] ) ;
+const Soft8 p = __fma_rn ( GFK_POWF_A [ 2 ] , r , GFK_POWF_A [ 3 ] ) ;
+const Soft8 r4 = __dmul_rn ( r2 , r2 ) ;
+Soft8 q = __fma_rn ( GFK_POWF_A [ 4 ] , r , y0 ) ;
+q = __fma_rn ( p , r2 , q ) ;
+return __fma_rn ( y , r4 , q ) ;
+}
+
+static inline Soft8 thompson_aa_powf_exp2 ( Soft8 xd , ulong sign_bias ) {
+Soft8 kd = __dadd_rn ( xd , ( aa_div ( SD8 ( 0x4338000000000000ul ) , SD8 ( 0x4040000000000000ul ) ) ) ) ;
+const ulong ki = ( ulong ) __double_as_longlong ( kd ) ;
+kd = __dsub_rn ( kd , ( aa_div ( SD8 ( 0x4338000000000000ul ) , SD8 ( 0x4040000000000000ul ) ) ) ) ;
+const Soft8 r = __dsub_rn ( xd , kd ) ;
+ulong t = GFK_EXP2F_TAB [ ki & 31ul ] ;
+t += ( ki + sign_bias ) << ( 52 - 5 ) ;
+const Soft8 s = __longlong_as_double ( ( long ) t ) ;
+const Soft8 z = __fma_rn ( SD8 ( 0x3fac6af84b912394ul ) , r , SD8 ( 0x3fcebfce50fac4f3ul ) ) ;
+const Soft8 r2 = __dmul_rn ( r , r ) ;
+Soft8 y = __fma_rn ( SD8 ( 0x3fe62e42ff0c52d6ul ) , r , SD8 ( 0x3ff0000000000000ul ) ) ;
+y = __fma_rn ( z , r2 , y ) ;
+return __dmul_rn ( y , s ) ;
+}
+
+static inline F thompson_aa_powf ( F x , F y ) {
+uint sign_bias = 0u ;
+uint ix = __float_as_uint ( x ) ;
+const uint iy = __float_as_uint ( y ) ;
+if ( ix - 0x00800000u >= 0x7f800000u - 0x00800000u || gfk_zeroinfnan ( iy ) ) {
+if ( gfk_zeroinfnan ( iy ) ) {
+if ( 2u * iy == 0u ) return 1.0f ;
+if ( ix == 0x3f800000u ) return 1.0f ;
+if ( 2u * ix > 2u * 0x7f800000u || 2u * iy > 2u * 0x7f800000u ) return __fadd_rn ( x , y ) ;
+if ( 2u * ix == 2u * 0x3f800000u ) return 1.0f ;
+if ( ( 2u * ix < 2u * 0x3f800000u ) == ! ( iy & 0x80000000u ) ) return 0.0f ;
+return __fmul_rn ( y , y ) ;
+}
+if ( gfk_zeroinfnan ( ix ) ) {
+F x2 = __fmul_rn ( x , x ) ;
+if ( ( ix & 0x80000000u ) && gfk_checkint ( iy ) == 1 ) x2 = - x2 ;
+return ( iy & 0x80000000u ) ? __fdiv_rn ( 1.0f , x2 ) : x2 ;
+}
+if ( ix & 0x80000000u ) {
+const int yint = gfk_checkint ( iy ) ;
+if ( yint == 0 ) return __int_as_float ( 0x7fc00000 ) ;
+if ( yint == 1 ) sign_bias = 1u << ( 5 + 11 ) ;
+ix &= 0x7fffffffu ;
+}
+if ( ix < 0x00800000u ) {
+ix = __float_as_uint ( __fmul_rn ( x , 8388608.0f ) ) & 0x7fffffffu ;
+ix -= 23u << 23 ;
+}
+}
+const Soft8 logx = thompson_aa_powf_log2 ( ix ) ;
+const Soft8 ylogx = __dmul_rn ( ( Soft8 ) y , logx ) ;
+const uint hi = ( uint ) ( ( ( ulong ) __double_as_longlong ( ylogx ) >> 47 ) & 0xfffful ) ;
+if ( hi >= ( uint ) ( ( ( ulong ) __double_as_longlong ( SD8 ( 0x405f800000000000ul ) ) >> 47 ) & 0xfffful ) ) {
+if ( ylogx > SD8 ( 0x405fffffffd1d571ul ) ) return sign_bias ? __int_as_float ( 0xff800000 ) : __int_as_float ( 0x7f800000 ) ;
+if ( ylogx <= - SD8 ( 0x4062c00000000000ul ) ) return sign_bias ? - 0.0f : 0.0f ;
+}
+return thompson_aa_d2f ( thompson_aa_powf_exp2 ( ylogx , ( ulong ) sign_bias ) ) ;
+}
+
+static inline F thompson_aa_log10f ( F x ) {
+uint hx = __float_as_uint ( x ) ;
+int k = 0 ;
+if ( hx < 0x00800000u || ( hx & 0x80000000u ) ) {
+if ( ( hx & 0x7fffffffu ) == 0u ) return __int_as_float ( 0xff800000 ) ;
+if ( hx & 0x80000000u ) return __int_as_float ( 0x7fc00000 ) ;
+k -= 25 ;
+hx = __float_as_uint ( __fmul_rn ( x , 33554432.0f ) ) ;
+}
+if ( hx > 0x7f7fffffu ) return __fadd_rn ( x , x ) ;
+k += ( int ) ( hx >> 23 ) - 127 ;
+const int i = ( int ) ( ( ( uint ) k & 0x80000000u ) >> 31 ) ;
+hx = ( hx & 0x007fffffu ) | ( ( uint ) ( 0x7f - i ) << 23 ) ;
+const F y = ( F ) ( k + i ) ;
+const F z = __fadd_rn ( __fmul_rn ( __uint_as_float ( 0x3ede5bd9u ) , thompson_aa_logf ( __uint_as_float ( hx ) ) ) , __fmul_rn ( y , __uint_as_float ( 0x355427dbu ) ) ) ;
+return __fadd_rn ( z , __fmul_rn ( y , __uint_as_float ( 0x3e9a2080u ) ) ) ;
+}
+
+static inline Soft8 thompson_aa_exp ( Soft8 x ) {
+return glibc_exp ( x ) ;
+}
+
+static inline Soft8 thompson_aa_log ( Soft8 x ) {
+return glibc_log ( x ) ;
+}
+
+static inline Soft8 thompson_aa_pow ( Soft8 x , Soft8 y ) {
+return glibc_pow ( x , y ) ;
+}
+
+static inline Soft8 thompson_aa_log10 ( Soft8 x ) {
+ulong hx = ( ulong ) __double_as_longlong ( x ) ;
+long k ;
+if ( hx <= 0x000ffffffffffffful || ( hx >> 63 ) ) {
+if ( ( hx & 0x7ffffffffffffffful ) == 0ul ) return __longlong_as_double ( ( long ) 0xfff0000000000000ul ) ;
+if ( hx >> 63 ) return __longlong_as_double ( ( long ) 0x7ff8000000000000ul ) ;
+k = - 1023 - 54 ;
+hx = ( ulong ) __double_as_longlong ( __dmul_rn ( x , SD8 ( 0x4350000000000000ul ) ) ) ;
+}
+else {
+k = - 1023 ;
+}
+if ( hx > 0x7feffffffffffffful ) return __dadd_rn ( x , x ) ;
+k += ( long ) ( hx >> 52 ) ;
+const long i = ( long ) ( ( ( ulong ) k ) >> 63 ) ;
+k += i ;
+hx = ( hx & 0x000ffffffffffffful ) | ( ( ulong ) ( 0x3ff - i ) << 52 ) ;
+const Soft8 y = ( Soft8 ) k ;
+const Soft8 z = __dadd_rn ( __dmul_rn ( SD8 ( 0x3fdbcb7b1526e50eul ) , thompson_aa_log ( __longlong_as_double ( ( long ) hx ) ) ) , __dmul_rn ( y , SD8 ( 0x3d59fef311f12b36ul ) ) ) ;
+return __dadd_rn ( z , __dmul_rn ( y , SD8 ( 0x3fd34413509f6000ul ) ) ) ;
+}
+
+}

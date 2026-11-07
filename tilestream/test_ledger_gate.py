@@ -176,7 +176,7 @@ def test_the_run_route_streams_instead_of_refusing():
 
     from woof import runplan, runtime
 
-    src = inspect.getsource(runtime.run_experiment)
+    src = inspect.getsource(runtime._run_experiment)
     assert 'refuse_unrouted_streaming(exp, "woof run"' not in src, (
         "woof run still refuses [tiles] at its front door while wiring "
         "the builders behind it")

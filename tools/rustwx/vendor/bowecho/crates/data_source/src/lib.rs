@@ -25,11 +25,11 @@ use thiserror::Error;
 pub const LEVEL2_ARCHIVE_BUCKET: &str = "unidata-nexrad-level2";
 pub const LEVEL2_CHUNKS_BUCKET: &str = "unidata-nexrad-level2-chunks";
 /// TCP connect budget for every feed client (see [`build_http_client`]).
-/// Was 4 s (tuned for the fast S3/CloudFerro feeds) but that dropped ALL
+/// Was 4 s — tuned for the fast S3/CloudFerro feeds — but that dropped ALL
 /// Romanian (ANM) radars for users on slow/long-haul routes: the ANM
 /// government host (opendata.meteoromania.ro) is reachable and returns 200,
 /// yet is slow to ACCEPT the connection, and a single dropped SYN plus
-/// Windows' ~3 s SYN-retransmit blows past a 4 s deadline, so those users
+/// Windows' ~3 s SYN-retransmit blows past a 4 s deadline — so those users
 /// failed every 60 s tick with "tcp connect error: deadline has elapsed".
 /// 10 s absorbs one SYN-retransmit against slow international government
 /// hosts while staying well under the 60 s poll tick. Pollers run on
@@ -397,7 +397,7 @@ pub fn fetch_mping_reports_geojson() -> Result<String> {
 /// One GET with a single immediate retry on SEND-stage failures (the
 /// stale-pooled-connection class: the server closed an idle keep-alive
 /// and the first reuse fails before any response). Status and body
-/// errors are NOT retried: they are real answers.
+/// errors are NOT retried — they are real answers.
 fn send_with_retry(
     client: &reqwest::blocking::Client,
     url: &str,
@@ -439,7 +439,7 @@ pub fn url_exists(url: &str) -> Result<bool> {
 }
 
 /// Fetch a small binary resource (e.g. a placefile icon sheet). Capped at
-/// 4 MiB: these are sprite sheets, not data files.
+/// 4 MiB — these are sprite sheets, not data files.
 pub fn fetch_bytes(url: &str) -> Result<Vec<u8>> {
     let response = metadata_http_client().get(url).send()?.error_for_status()?;
     read_response_limited(response, MAX_SMALL_RESOURCE_BYTES, "resource")
@@ -448,7 +448,7 @@ pub fn fetch_bytes(url: &str) -> Result<Vec<u8>> {
 /// Fetch a radar volume from a polled feed. Volumes run 5–25 MB
 /// (compressed NEXRAD or uncompressed msg31 conversions; international
 /// ODIM PVOLs reach ~18 MB), so this uses the download client (long
-/// timeout) with a generous cap, unlike `fetch_bytes`, which is sized
+/// timeout) with a generous cap — unlike `fetch_bytes`, which is sized
 /// for sprite sheets on the metadata client and rejects anything over
 /// 4 MiB.
 pub fn fetch_volume_bytes(url: &str) -> Result<Vec<u8>> {
@@ -564,7 +564,7 @@ fn should_retry_volume_fetch(err: &reqwest::Error) -> bool {
 }
 
 /// reqwest's Display drops the cause ("error decoding response body" with
-/// the timeout hidden in source()): join the whole chain for status text.
+/// the timeout hidden in source()) — join the whole chain for status text.
 fn reqwest_error_chain(err: &reqwest::Error) -> String {
     use std::error::Error as _;
     let mut text = err.to_string();
@@ -614,7 +614,7 @@ pub fn latest_level2_object(site: &str, days_back: i64) -> Result<S3Object> {
         })
 }
 
-/// All Level 2 volumes for one site on one UTC date, oldest first: the
+/// All Level 2 volumes for one site on one UTC date, oldest first — the
 /// archive-browser listing.
 pub fn level2_objects_for_date(site: &str, date: NaiveDate) -> Result<Vec<S3Object>> {
     let site = site.to_ascii_uppercase();
@@ -906,7 +906,7 @@ pub fn latest_realtime_level2_volume_with_listing_ttl(
     let (volume, listing_was_cached) = resolve_latest_realtime_volume(&site, listing_ttl)?;
     // Rollover: when the "latest" volume is already complete but the id list
     // came from cache, a newer volume may have appeared since the listing was
-    // cached, re-list immediately instead of waiting out the TTL.
+    // cached — re-list immediately instead of waiting out the TTL.
     if volume.complete && listing_was_cached {
         active_ids_cache().invalidate(&site);
         let (fresh, _) = resolve_latest_realtime_volume(&site, listing_ttl)?;
@@ -1906,7 +1906,7 @@ fn download_http_client() -> reqwest::blocking::Client {
 /// (`http://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt`).
 ///
 /// SHMU's open-data server (opendata.shmu.sk, the Slovak radar volume feed)
-/// sends an incomplete TLS chain: the leaf only. Browsers and schannel
+/// sends an incomplete TLS chain — the leaf only. Browsers and schannel
 /// repair that by chasing the AIA URL; rustls deliberately does not, so
 /// without this anchor every fetch from the feed fails the TLS handshake.
 const SECTIGO_DV_R36_INTERMEDIATE_PEM: &str =

@@ -30,9 +30,12 @@ from woof.core.fp32_ulp import fp32_ulp_distance
 __all__ = [
     "NOAH_ORACLE_DIR",
     "NOAH_ORACLE_FILES",
+    "NOAH_GLACIAL_ORACLE_FILES",
     "NoahOracleFixture",
     "load_noah_oracle",
     "noah_port_outputs",
+    "noah_sfcdiags_outputs",
+    "SFCDIAGS_COLUMNS",
     "measure_noah_parity",
 ]
 
@@ -52,6 +55,19 @@ NOAH_ORACLE_FILES = {
                                 usemonalb=False, rdlai2d=False),
     "noah-lsm-monalb.csv": dict(opt_thcnd=1, frpcpn=False,
                                 usemonalb=True, rdlai2d=True),
+}
+
+#: The land-ice fixtures (``run_lsm_glacial.F90``): 24 columns, every one
+#: ``ivgtyp == isice``, so WRF's driver takes its ICE == -1 arm and calls
+#: SFLX_GLACIAL on all of them.  frpcpn is the one driver switch that reaches
+#: SFLX_GLACIAL (through FFROZP); the others do not, so two passes.  These
+#: files predate the CHS/CHS2/CQS2 echo and the SFCDIAGS columns of
+#: ``run_lsm.F90``; the loader reads the columns a fixture carries.
+NOAH_GLACIAL_ORACLE_FILES = {
+    "noah-lsm-glacial.csv": dict(opt_thcnd=1, frpcpn=False,
+                                 usemonalb=False, rdlai2d=False),
+    "noah-lsm-glacial-frpcpn.csv": dict(opt_thcnd=1, frpcpn=True,
+                                        usemonalb=False, rdlai2d=False),
 }
 
 #: ``run_lsm.F90:42-44``.  The harness fixes these rather than sweeping them,
@@ -98,18 +114,26 @@ OUTPUT_COLUMNS = {
     "smstot": "smstot", "sfcrunoff": "sfcrunoff", "udrunoff": "udrunoff",
     "acsnom": "acsnom", "acsnow": "acsnow", "snopcx": "snopcx",
     "potevp": "potevp", "noahres": "noahres", "chklowq": "chklowq",
+    # INOUT arguments of lsm.  On a land column with sf_urban_physics = 0
+    # lsm writes CHS2 = CQS2 (module_sf_noahdrv.F:1275) and leaves CHS and
+    # CQS2 as they came; the port writes the same three words in place.
+    "chs": "chs_out", "chs2": "chs2_out", "cqs2": "cqs2_out",
 }
+
+#: SFCDIAGS (phys/module_sf_sfcdiags.F), which module_surface_driver.F:2994
+#: calls right after lsm, run by ``run_lsm.F90`` on lsm's own outputs.  The
+#: port's counterpart is :mod:`woof.core.noah_sfcdiags`, run on the port's
+#: outputs by :func:`noah_sfcdiags_outputs`.
+SFCDIAGS_COLUMNS = {"t2": "t2", "th2": "th2", "q2": "q2"}
 
 #: Soil profiles, compared layer by layer.
 SOIL_OUTPUT_COLUMNS = ("smois", "tslb", "sh2o", "smcrel")
 
-#: The one fixture column woof does not compute.  ``ivgtyp == isice`` selects
-#: WRF's ``SFLX_GLACIAL`` (``module_sf_noahlsm_glacial_only.F``), which
-#: woof/core/noah.py's docstring records as out of scope, so ``noah_column``
-#: returns without touching the column.  Excluding it from the parity
-#: measurement is a statement of that restriction, not a way to make a number
-#: smaller: :func:`glacial_divergence` reports how far WRF moved the column
-#: that woof left alone.
+#: The land-ice columns.  ``ivgtyp == isice`` selects WRF's ``SFLX_GLACIAL``
+#: (``module_sf_noahlsm_glacial_only.F``), which ``noah_column`` runs in
+#: ``noah_glacial_column`` (it returned without touching the column before
+#: 2.9.0).  tests/test_noah_wrf461_parity.py grades them as a population of
+#: their own, bitwise.
 GLACIAL_CASE_PREDICATE = "ivgtyp == isice"
 
 
@@ -125,6 +149,7 @@ class NoahOracleFixture:
     inputs: dict[str, np.ndarray]
     reference: dict[str, np.ndarray]
     soil_reference: dict[str, np.ndarray]
+    sfcdiags_reference: dict[str, np.ndarray]
 
     @property
     def ncase(self) -> int:
@@ -132,7 +157,7 @@ class NoahOracleFixture:
 
     @property
     def glacial(self) -> np.ndarray:
-        """Boolean mask of the columns woof skips by documented restriction."""
+        """Boolean mask of the land-ice columns (lsm's SFLX_GLACIAL arm)."""
         return self.ivgtyp.reshape(-1) == FIXTURE_ISICE
 
 
@@ -146,9 +171,10 @@ def _column(rows, key) -> np.ndarray:
 def load_noah_oracle(name: str = "noah-lsm.csv",
                      directory: Path | None = None) -> NoahOracleFixture:
     """Load one fixture CSV into ``launch_noah``'s ``(1, ncase)`` layout."""
-    if name not in NOAH_ORACLE_FILES:
+    known = {**NOAH_ORACLE_FILES, **NOAH_GLACIAL_ORACLE_FILES}
+    if name not in known:
         raise ValueError(f"{name!r} is not a packaged Noah oracle fixture; "
-                         f"expected one of {sorted(NOAH_ORACLE_FILES)}")
+                         f"expected one of {sorted(known)}")
     directory = Path(directory) if directory is not None else NOAH_ORACLE_DIR
     with (directory / name).open(newline="", encoding="ascii") as fh:
         rows = list(csv.DictReader(fh))
@@ -171,8 +197,10 @@ def load_noah_oracle(name: str = "noah-lsm.csv",
             profile[layer] = _column(rows, f"{field}{layer + 1}_in")
         inputs[field] = np.ascontiguousarray(profile)
 
+    present = set(rows[0])
     reference = {field: _column(rows, column)
-                 for field, column in OUTPUT_COLUMNS.items()}
+                 for field, column in OUTPUT_COLUMNS.items()
+                 if column in present}
     soil_reference = {}
     for field in SOIL_OUTPUT_COLUMNS:
         profile = np.empty((4, 1, len(rows)), dtype=np.float32)
@@ -180,10 +208,14 @@ def load_noah_oracle(name: str = "noah-lsm.csv",
             profile[layer] = _column(rows, f"{field}{layer + 1}")
         soil_reference[field] = np.ascontiguousarray(profile)
 
+    sfcdiags_reference = {field: _column(rows, column)
+                          for field, column in SFCDIAGS_COLUMNS.items()
+                          if column in present}
+
     return NoahOracleFixture(
-        name=name, switches=dict(NOAH_ORACLE_FILES[name]), cases=cases,
+        name=name, switches=dict(known[name]), cases=cases,
         ivgtyp=ivgtyp, isltyp=isltyp, inputs=inputs, reference=reference,
-        soil_reference=soil_reference,
+        soil_reference=soil_reference, sfcdiags_reference=sfcdiags_reference,
     )
 
 
@@ -216,6 +248,35 @@ def noah_port_outputs(fixture: NoahOracleFixture) -> dict[str, np.ndarray]:
                 itimestep=FIXTURE_ITIMESTEP, **fixture.switches)
     return {name: cp.asnumpy(value) for name, value in device.items()
             if name not in ("ivgtyp", "isltyp", "ebal")}
+
+
+def noah_sfcdiags_outputs(fixture: NoahOracleFixture,
+                          port: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """T2, TH2 and Q2 from the port's SFCDIAGS on the port's own lsm outputs.
+
+    The call is the one ``PhysicsDriver._refresh_surface_diagnostics`` makes
+    after every Noah step (:func:`woof.core.noah_sfcdiags.refresh`, with the
+    driver's constants), on the fields ``launch_noah`` wrote.  The fixture's
+    reference ran WRF's SFCDIAGS on the words WRF's lsm wrote, so a word that
+    differs here is SFCDIAGS's own or one inherited from the LSM, and the LSM
+    words are graded separately.
+    """
+    import cupy as cp
+
+    from woof.core import constants as c
+    from woof.core import noah_sfcdiags
+
+    f32 = np.float32
+    fields = {name: cp.asarray(np.ascontiguousarray(port[name], f32))
+              for name in ("tsk", "cqs2", "chs2", "qsfc", "qfx", "hfx")}
+    fields["psfc"] = cp.asarray(fixture.inputs["psfc"])
+    for name in SFCDIAGS_COLUMNS:
+        fields[name] = cp.zeros(fixture.ivgtyp.shape, dtype=cp.float32)
+    noah_sfcdiags.refresh(
+        fields, cp.asarray(fixture.inputs["qv1"]), rd=f32(c.RD),
+        cp_air=f32(c.CP), p0=f32(c.P0), rcp=f32(c.RCP),
+        active_floor=f32(1.0e-5))
+    return {name: cp.asnumpy(fields[name]) for name in SFCDIAGS_COLUMNS}
 
 
 @dataclass(frozen=True)
@@ -267,19 +328,20 @@ def _worst(fixture, field, got, want, keep) -> FieldParity:
 
 def measure_noah_parity(fixture: NoahOracleFixture,
                         port: dict[str, np.ndarray],
-                        *, include_glacial: bool = False
+                        *, include_glacial: bool = True
                         ) -> dict[str, FieldParity]:
     """ULP distance from every port output to the word ``lsm`` wrote.
 
-    ``include_glacial`` is False by default because woof does not implement
-    ``SFLX_GLACIAL`` and says so; see :func:`glacial_divergence` for the size
-    of what is being excluded.
+    ``include_glacial=False`` measures the ordinary-land columns alone, the
+    population tests/test_noah_wrf461_parity.py's ULP table pins.
     """
     keep = np.ones(fixture.ncase, dtype=bool)
     if not include_glacial:
         keep &= ~fixture.glacial
     result: dict[str, FieldParity] = {}
     for field in OUTPUT_COLUMNS:
+        if field not in fixture.reference:
+            continue
         result[field] = _worst(fixture, field, port[field],
                                fixture.reference[field], keep)
     for field in SOIL_OUTPUT_COLUMNS:
@@ -287,24 +349,3 @@ def measure_noah_parity(fixture: NoahOracleFixture,
                                fixture.soil_reference[field], keep)
     return result
 
-
-def glacial_divergence(fixture: NoahOracleFixture,
-                       port: dict[str, np.ndarray]) -> dict[str, float]:
-    """How far ``SFLX_GLACIAL`` moved the columns woof leaves untouched.
-
-    Reported as a plain difference, not ULP: this is not a rounding gap, it is
-    a routine woof does not have.  The number belongs in the registry warning
-    so a user can see the size of the restriction rather than only its name.
-    """
-    mask = fixture.glacial
-    out: dict[str, float] = {}
-    if not mask.any():
-        return out
-    for field in OUTPUT_COLUMNS:
-        got = np.ascontiguousarray(port[field], np.float32)[..., mask]
-        want = fixture.reference[field][..., mask]
-        gap = float(np.max(np.abs(got.astype(np.float64)
-                                  - want.astype(np.float64))))
-        if gap != 0.0:
-            out[field] = gap
-    return out

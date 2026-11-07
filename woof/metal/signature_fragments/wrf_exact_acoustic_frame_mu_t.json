@@ -1,0 +1,125 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_acoustic_frame_mu_t",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/wrf_exact_acoustic_advance_mu_th.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "advance_exact_frame_mu_t",
+      "resources": [
+        [
+          "mu_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "th_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rmu_t",
+          "float",
+          "read"
+        ],
+        [
+          "rth_t",
+          "float",
+          "read"
+        ],
+        [
+          "muts",
+          "float",
+          "read_write"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rmu_t": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "muts": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "th_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rth_t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dtau",
+          "float32"
+        ],
+        [
+          "spec_zone",
+          "int32"
+        ],
+        [
+          "periodic_x",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

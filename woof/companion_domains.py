@@ -43,26 +43,22 @@ class DomainScopeError(ValueError):
 # Explicit example settings already shipped in this configuration. This is
 # an editable preset, not a new detection algorithm or a model-wide default.
 #
-# THE TWO MOVEMENT BOUNDS ARE NOT INDEPENDENT, and the floor is the one
-# that states the physics: keep 0.7 of the child, so at most 0.3 of it is
-# strip the move exposes and the child must spin up.  The per-axis
-# maximum is DERIVED from it -- an overlap floor f admits a per-axis
-# magnitude of 1 - sqrt(f) of the nest's own width in parent cells on the
-# binding diagonal move, which on this 40-parent-cell-wide nest is
-# 40 * (1 - sqrt(0.7)) = 6.53, so 6
-# (woof.core.nest_relocation.max_parent_cells_for_overlap; the pair is
-# checked by tests/test_relocation_overlap_clamp.py).  Declaring 8 here
-# against a floor of 0.7 said a diagonal move of 8 was available when the
-# floor refuses it, which is what ended a cyclone quick forecast at its
-# first relocation cadence.  6 parent cells at 12 km is 72 km per 900 s
-# cadence, which no storm outruns.
+# The proposal ceiling uses the single-axis overlap limit: 30% of a
+# 40-parent-cell nest is 12 cells. The relocation runner then clamps the
+# actual vector to retain 70% overlap (six cells per axis on a diagonal).
+# A fixed diagonal ceiling of six also constrained zonal motion, halving
+# available reach. The MSLP eye is consulted and may move on every 15 min cadence.
 VORTEX_PRESET_SOURCE = "configs/cyclone_nest_slots_12km.toml: domain 2 follow"
 VORTEX_PRESET = {
-    "field": "pressure", "threshold": 25.0, "level_hpa": 850.0,
+    "field": "pressure", "threshold": 1100.0, "level_hpa": 0.0,
     "radius_km": 60.0, "search_margin_cells": 20, "min_shift_cells": 2,
-    "max_shift_cells": 6, "cooldown_seconds": 3600.0,
-    "cadence_seconds": 900.0, "max_move_parent_cells": 6,
+    "max_shift_cells": 12, "cooldown_seconds": 900.0,
+    "cadence_seconds": 900.0, "max_move_parent_cells": 12,
     "min_overlap_fraction": 0.7,
+    # MSLP minimum, with the 850 hPa circulation as fallback when no
+    # qualifying minimum is found (parked lane lane-trailer-ian).
+    "pressure_center": "minimum", "fallback_level_hpa": 850.0,
+    "fallback_deficit_m": 25.0,
 }
 
 
@@ -679,9 +675,9 @@ def capabilities():
         "physics_components": physics_components(),
         "follow_fields": list(TRACKED_FIELDS), "follow_keys": sorted(FOLLOW_KEYS | DOMAIN_FOLLOW_EXTRA_KEYS),
         "spawn_triggers": list(SPAWN_TRIGGERS), "spawn_keys": sorted(SPAWN_KEYS),
-        "presets": [{"id": "cyclone-850-example", "label": "Vortex lock at 850 hPa",
+        "presets": [{"id": "cyclone-mslp-example", "label": "Follow the MSLP minimum",
                      "source": VORTEX_PRESET_SOURCE, "settings": dict(VORTEX_PRESET),
-                     "threshold_units": "geopotential-height depth in metres",
+                     "threshold_units": "hPa (absolute MSLP ceiling)",
                      "description": "Existing cyclone example; review its explicit cadence and movement bounds for this grid."}],
         "target_mode": "scheduled discrete relocation in whole parent cells",
         "limits": ["A candidate carries every file its route reads, not the configuration alone: the TOML, its namelist.wps, and on the native regional route the two namelists and the target-domain document beside them, rendered from the edited configuration and listed in route_companions.",
@@ -1186,6 +1182,92 @@ def candidate_wps_text(raw, original_exp, exp, output, *, original_wps=None):
                      raw, len(original_exp.domains),
                      original_domain_ids=[domain.grid_id
                                           for domain in original_exp.domains])
+
+
+def configuration_wps_namelist(config_path, exp, *, raw, into=None):
+    """The WPS namelist one run of ``config_path`` hands its preparation.
+
+    ``<stem>.namelist.wps`` beside the configuration when it is there: a
+    door wrote it, and its geography choices are the user's.  Otherwise
+    the run renders it from the configuration by the doors' own renderer
+    (:func:`candidate_wps_text`, the one a save and a re-time use), holds
+    the bytes to the forecast stage's own geometry comparison
+    (:func:`woof.native_wrf_contract.validate_wps_geometry`), and writes
+    it into ``into`` -- never beside the user's file, which may sit in an
+    installed package.  Every number in it already exists in the
+    configuration's ``[projection]`` and ``[[domain]]`` tables and its
+    ``[fetch]`` cadence, so a twin file kept by hand beside each
+    configuration could only ever drift from them.
+
+    The boundary interval is ``[case_data] forcing_interval_s``, else the
+    ``[fetch]`` cadence, else the source registry's forcing interval -- the
+    interval ``woof domain`` writes for a configuration it emits.
+
+    ``into=None`` is the door's question (dry run, plan review): the
+    namelist is rendered and checked in a scratch folder and ``None``
+    comes back, so a configuration the run could not render for is
+    refused before anything is fetched.
+
+    Breakage it prevents: ``woof go`` on every shipped HRRR configuration
+    recipe stopped before any stage ("the staged route reads
+    hrrr_configuration_cut.namelist.wps beside ..."), because none of
+    them carried a WPS twin (WOOF 1.0.3 GPU smoke, 2026-10-06).
+
+    Raises ``ValueError`` naming what the renderer or the geometry check
+    refused.
+    """
+
+    import tempfile
+
+    from woof.native_wrf_contract import validate_wps_geometry
+
+    config_path = Path(config_path)
+    beside = config_path.with_name(f"{config_path.stem}.namelist.wps")
+    if beside.is_file():
+        return beside
+    fetch = raw.get("fetch") if isinstance(raw.get("fetch"), dict) else {}
+    if ((raw.get("case_data") or {}).get("forcing_interval_s") is None
+            and fetch.get("cadence") is None and fetch.get("source")):
+        from woof.source_adapters import source_forcing_interval_seconds
+
+        try:
+            interval = source_forcing_interval_seconds(str(fetch["source"]))
+        except (KeyError, ValueError):
+            interval = None
+        if interval is not None and float(interval) % 3600 == 0:
+            raw = {**raw, "fetch": {**fetch, "cadence": int(interval) // 3600}}
+    text = candidate_wps_text(raw, exp, exp, config_path)
+    data = text.encode("utf-8")
+    source = str(fetch.get("source") or "configuration")
+
+    def checked(path: Path) -> Path:
+        path.write_bytes(data)
+        try:
+            validate_wps_geometry(exp, path, source_name=source)
+        except ValueError as error:
+            raise ValueError(
+                f"the WPS namelist rendered from {config_path.name} does not "
+                f"match its own grid ({error}); put the namelist `woof "
+                f"domain` writes beside it as {beside.name}") from error
+        return path
+
+    if into is None:
+        with tempfile.TemporaryDirectory(prefix="arwen-wps-") as staging:
+            checked(Path(staging) / beside.name)
+        return None
+    into = Path(into)
+    into.mkdir(parents=True, exist_ok=True)
+    target = into / beside.name
+    if target.is_file() and target.read_bytes() == data:
+        return target
+    staged = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+    try:
+        checked(staged)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    os.replace(staged, target)
+    return target
 
 
 def candidate_route_blocker(raw, original_exp, exp, output):

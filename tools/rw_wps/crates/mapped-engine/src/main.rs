@@ -44,6 +44,14 @@ fn emit(value: serde_json::Value) {
 
 fn run() -> Result<(), Refusal> {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments.first().map(String::as_str) == Some("index-ranges") {
+        emit(mapped_engine::lead_index::run(&arguments[1..])?);
+        return Ok(());
+    }
+    if arguments.first().map(String::as_str) == Some("wps") {
+        emit(mapped_engine::wps::run(&arguments[1..])?);
+        return Ok(());
+    }
     let invocation = Invocation::parse(&arguments).inspect_err(|_| {
         // The usage line doubles as compiled-in contract text, and the
         // schema names ride with it so the ABI marker literal is anchored
@@ -66,7 +74,9 @@ fn run() -> Result<(), Refusal> {
     };
     match invocation.subcommand.as_str() {
         "capabilities" => {
-            emit(mapped_engine::engine::run_capabilities());
+            let mut capabilities = mapped_engine::engine::run_capabilities();
+            capabilities["wps_intermediate_v5"] = serde_json::json!(true);
+            emit(capabilities);
             Ok(())
         }
         "decode" => {
@@ -98,6 +108,8 @@ fn run() -> Result<(), Refusal> {
 fn main() -> ExitCode {
     let _ = std::hint::black_box(GPUWM_BRIDGE_SOURCE_REV_STAMP);
     let _ = std::hint::black_box(ABI_CONTRACT);
+    // Before the first thread exists: glibc sizes its arena table as threads arrive.
+    mapped_engine::threads::limit_allocator_arenas();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(refusal) => {

@@ -1,0 +1,48 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_gf_satvap_f32",
+      "module": "hexv842_mpas_gf_satvap_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_gf_satvap_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/gf_mpas_v842.py",
+      "cuda_symbol": "satvap",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

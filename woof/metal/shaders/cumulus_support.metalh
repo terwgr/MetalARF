@@ -1,0 +1,18 @@
+#ifndef WOOF_CUMULUS_SUPPORT_METALH
+#define WOOF_CUMULUS_SUPPORT_METALH
+// Float32 helpers shared by the translated cumulus units. Division and square
+// root are the correctly rounded soft32 forms; add, subtract and multiply stay
+// native with contraction off. The libm calls are glibc's own gfk routines.
+#include "soft_binary32.metalh"
+#include "soft_binary64.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_pow.metalh"
+#pragma clang fp contract(off)
+
+static inline float cu_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
+static inline float cu_sqrt(float a) { return as_type<float>(soft32_sqrt(as_type<uint>(a))); }
+static inline float gfk_log(float x) { return as_type<float>(soft_gfk_log(as_type<uint>(x))); }
+static inline float gfk_exp(float x) { return as_type<float>(soft_gfk_exp(as_type<uint>(x))); }
+static inline float gfk_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
+#endif

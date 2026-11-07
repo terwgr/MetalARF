@@ -15,7 +15,7 @@ made to fail by restoring WRF's defective NS*mosaic_i grid SMOIS index, and
 again by reintroducing lsm's SWDOWN>10 condition into mosaic snow damping.
 All non-held-out output words match the committed -O0 gfortran fixtures.
 CuPy FTZ divergences are pinned by exact column/field set and GPU word hashes.
-The CPU oracle gate was mutation-tested on a development machine: replacing WRF's reciprocal
+The CPU oracle gate was mutation-tested on test host A: replacing WRF's reciprocal
 then multiply with per-entry division failed all 16 initialisation fixtures.
 """
 from __future__ import annotations
@@ -32,7 +32,6 @@ MOSAIC_TILE_FIELDS: tuple[str, ...] = tuple((
 MOSAIC_TILE_FIELDS = tuple(n + "_mosaic" for n in MOSAIC_TILE_FIELDS)
 MOSAIC_SOIL_FIELDS: tuple[str, ...] = ("tslb_mosaic", "smois_mosaic", "sh2o_mosaic")
 MOSAIC_CATEGORY_FIELDS: dict[str, str] = {"mosaic_cat_index": "int32", "landusef2": "float32"}
-DEFAULT_MOSAIC_CAT = 3
 MOSAIC_URBAN_TILE_FIELDS = tuple(n + "_urb2d_mosaic" for n in
     "tr tb tg tc qc uc ts ts_rul sh lh g rn".split())
 MOSAIC_URBAN_TILE_FIELDS = tuple("ts_rul2d_mosaic" if n == "ts_rul_urb2d_mosaic" else n
@@ -52,7 +51,8 @@ class MosaicCategories:
 def load_mosaic_categories(mminlu: str, *, isurban: int, isice: int,
                            iswater: int, tbl_dir=None) -> MosaicCategories:
     from .noah import TBL_DIR
-    lines = (Path(tbl_dir or TBL_DIR) / "VEGPARM.TBL").read_text(
+    from woof.tables import table_path
+    lines = table_path("noah", Path(tbl_dir or TBL_DIR) / "VEGPARM.TBL").read_text(
         encoding="ascii").splitlines()
     try:
         start = next(i for i, s in enumerate(lines) if s.strip() == mminlu)
@@ -455,7 +455,8 @@ def launch_noah_mosaic(dev: dict, params, dt: float, dzs, *, mosaic_cat: int,
                        categories: MosaicCategories, xice_threshold: float,
                        frpcpn: bool, usemonalb: bool, rdlai2d: bool,
                        opt_thcnd: int, itimestep: int, urban=None,
-                       atmosphere=None, solar=None, use_wudapt_lcz: int = 0) -> None:
+                       atmosphere=None, solar=None, use_wudapt_lcz: int = 0,
+                       urban_water_balance=None) -> None:
     """Launch one thread per column, tile work in a device function.
 
     WRF sf_urban_physics=0 or 1, four soil layers. Glacial tiles and the mosaic
@@ -470,7 +471,9 @@ def launch_noah_mosaic(dev: dict, params, dt: float, dzs, *, mosaic_cat: int,
             dev, params, dt, dzs, mosaic_cat=mosaic_cat,
             categories=categories, xice_threshold=xice_threshold,
             frpcpn=frpcpn, usemonalb=usemonalb, rdlai2d=rdlai2d,
-            opt_thcnd=opt_thcnd, itimestep=itimestep, urban=urban)
+            opt_thcnd=opt_thcnd, itimestep=itimestep, urban=urban,
+            atmosphere=atmosphere, solar=solar, use_wudapt_lcz=use_wudapt_lcz,
+            urban_water_balance=urban_water_balance)
     import cupy as cp
     from .noah import _F2D, _F3D, _device_tables
     grid = tuple(n for n in _F2D if n != "reslin")
@@ -502,13 +505,14 @@ def launch_noah_mosaic(dev: dict, params, dt: float, dzs, *, mosaic_cat: int,
         function = _mosaic_kernel()
     else:
         from .urban_ucm import (
-            _checked, _pointer_table, _state_arrays, _packed, _device_params,
-            _status_word, _jmonth, _raise_on)
+            _checked, _pointer_table, _state_arrays, _device_params,
+            _status_word, _jmonth, _raise_on, water_balance_params)
         for n, (shape, dtype) in mosaic_array_shapes(mosaic_cat, ny, nx, urban=True).items():
             _checked(dev[n], shape, n, getattr(cp, dtype))
         sp = _pointer_table(_state_arrays(urban, ny, nx))
         tp = _pointer_table([dev[n] for n in (*MOSAIC_URBAN_TILE_FIELDS, *MOSAIC_URBAN_SOIL_FIELDS)])
-        tab, glob, isw = _device_params(_packed(urban.params))
+        tab, glob, isw = _device_params(water_balance_params(
+            urban.params, urban_water_balance))
         err = _status_word(urban)
         # The same UrbanCoupler-held solar object as the ordinary UCM route.
         # noahdrv.F:3790-3794 sets LSOLAR=.false.; urban's active arm reads
@@ -571,6 +575,8 @@ def mosaic_ucm_source():
 @lru_cache(maxsize=None)
 def _mosaic_ucm_module():
     import cupy as cp
+    from woof.cuda_subnormals import install
+    install()
     from woof.certify.kernel_manifest import record_module
     from .kernels import MODULE_KEY_ROOT, _compile_observed
     source = mosaic_ucm_source()

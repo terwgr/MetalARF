@@ -149,6 +149,15 @@ def _rebase_feedback_theta(state, reg, spec_zone) -> None:
     The expression order matches the kernel this replaces
     (kernels/lbc_state.cu:670-672, ``(result + 300) - thb``).
     """
+    from woof.wrf_exact import ENABLED as wrf_exact
+    if wrf_exact:
+        # Strict mode carries WRF's own t_2 on every domain
+        # (woof.core.state re-expresses each loaded state to thb = 300),
+        # so the restriction already IS the parent's t_2, as in WRF.  The
+        # change of frame here would be (x + 300) - 300, which is not x in
+        # FP32: on a 9 km/3 km pair it moved d01's THM in 124,313
+        # words at t = 0 (up to 1.5e-5 K) against wrf.exe 4.6.1.
+        return
     i_lo, i_hi, j_lo, j_hi = feedback_parent_bounds(
         reg, spec_zone=spec_zone)
     if i_hi < i_lo or j_hi < j_lo:
@@ -700,6 +709,10 @@ class NestCoupler:
                     run.spec_zone, run.relax_zone, run.spec_bdy_width))
         else:
             couple_nest_field(state, kind, out=out)
+        from woof.wrf_exact import ENABLED as wrf_exact
+        if wrf_exact:
+            from woof.core.nest_round_trip import couple_halo_faces
+            couple_halo_faces(state, kind, out)
         return out
 
     def _raw_child_field(self, kind: str):
@@ -720,7 +733,11 @@ class NestCoupler:
         """
         state = self.child_node.state
         _sync_in(state, ("mup", _state_attr(kind)))
-        if kind != "t":
+        from woof.wrf_exact import ENABLED as wrf_exact
+        if kind != "t" or wrf_exact:
+            # Strict mode carries WRF's t_2 itself (thb = 300 on every
+            # domain); (thp + 300) - 300 is not thp in FP32, and on a 9 km/3 km
+            # pair it moved the parent's restricted THM in every column.
             return getattr(state, _state_attr(kind))
         shape = _field_shape(state, kind)
         backing = self._scratch("nest_child_field")
@@ -914,22 +931,30 @@ class NestCoupler:
                 raise ValueError(
                     "Metal nested feedback arrays must share one context")
             from woof.metal.nest_family import submit_copy_fcn
-            if kind == "t":
+            from woof.wrf_exact import ENABLED as wrf_exact
+            resident = source.owner is None and parent_source.owner is None
+            direct_theta = wrf_exact and resident
+            if kind == "t" and not direct_theta:
                 from woof.metal.nest_family import submit_copy_fcn_theta
 
             ilo, ihi, jlo, jhi = feedback_parent_bounds(
                 reg, spec_zone=run.spec_zone)
-            sy, sx = self._transaction_chunk_shape()
+            if resident:
+                # Resident arrays are already full fields: one launch covers
+                # the exact parent rectangle without a streamed tile plan.
+                py, px = max(1, jhi - jlo + 1), max(1, ihi - ilo + 1)
+            else:
+                sy, sx = self._transaction_chunk_shape()
+                py, px = max(1, sy // reg.nrj), max(1, sx // reg.nri)
             # The Metal kernel supports global field buffers plus an exact
             # parent loop rectangle.  Submit each bounded feedback window
             # directly into the parent, avoiding unsupported Metal slicing
             # and the temporary CUDA result that the generic route uses.
-            for j in range(jlo, jhi + 1, max(1, sy // reg.nrj)):
-                for i in range(ilo, ihi + 1, max(1, sx // reg.nri)):
-                    window = (slice(j, min(j + max(1, sy // reg.nrj), jhi + 1)),
-                              slice(i, min(i + max(1, sx // reg.nri), ihi + 1)))
-                    donor = feedback_child_window(
-                        reg, window, spec_zone=run.spec_zone)
+            for j in range(jlo, jhi + 1, py):
+                for i in range(ilo, ihi + 1, px):
+                    window = (slice(j, min(j + py, jhi + 1)),
+                              slice(i, min(i + px, ihi + 1)))
+                    feedback_child_window(reg, window, spec_zone=run.spec_zone)
                     y, x = window
                     args = dict(
                         parent=parent3, child=child3,
@@ -940,7 +965,7 @@ class NestCoupler:
                         parent_i0=0, parent_j0=0, child_i0=0, child_j0=0,
                         loop_i0=x.start, loop_j0=y.start,
                         loop_ni=x.stop - x.start, loop_nj=y.stop - y.start)
-                    if kind == "t":
+                    if kind == "t" and not direct_theta:
                         submit_copy_fcn_theta(
                             context,
                             parent_thb=parent_source.device("thb"),
@@ -1032,6 +1057,15 @@ class NestCoupler:
         if bounded_operands:
             self.force_sync_bytes += (parent_source.host_to_device_bytes
                                       + child_source.host_to_device_bytes)
+
+        from woof.wrf_exact import ENABLED as wrf_exact
+        if wrf_exact and not bounded_operands:
+            # med_force_domain couples both domains in place and uncouples
+            # them after the interpolation; strict mode leaves the same
+            # (x*m)*(1/m) words (woof/core/nest_round_trip.py).
+            from woof.core.nest_round_trip import couple_round_trip
+            couple_round_trip(node.state, run)
+            couple_round_trip(parent.state, parent.cfg.run)
 
         if self.inflow_perturbation is not None:
             # After bdy_interp1 has written every rolling table and
@@ -1149,7 +1183,13 @@ class NestCoupler:
         self._prepared_feedback = payload
         out.payload = payload
 
-    def feedback_commit(self, node) -> None:
+    def feedback_commit(self, node, *, start: bool = False) -> None:
+        """Restrict the child into the parent.
+
+        ``start`` marks the nest-start transaction (med_nest_initial's
+        feedback, after which WRF restarts the parent's base state from
+        its fed-back terrain); every later call is a per-step feedback.
+        """
         if node is not self.child_node:
             raise ValueError("feedback node does not match this coupler")
         if self.feedback == 0:
@@ -1161,6 +1201,25 @@ class NestCoupler:
             raise RuntimeError("feedback clock changed after prepare")
         parent = node.parent
         run = node.cfg.run
+        from woof.wrf_exact import ENABLED as WRF_EXACT
+        if (WRF_EXACT and getattr(parent.state, "_metal_setup_state", False)
+                and getattr(parent.state, "_streamed_domain", None) is not None
+                and self.smooth_option != 0):
+            from woof.core.nest_operands import NestWindowSource
+            from woof.metal.array import MetalArray
+            source = NestWindowSource(parent.state)
+            fields = [source.array(_state_attr(kind)) for kind in payload["kinds"]]
+            if not fields or any(not isinstance(field, MetalArray) for field in fields):
+                raise NotImplementedError("strict streamed Metal smoothing requires device-store fields")
+            scratch = self._scratch("nest_parent_field")
+            if (not isinstance(scratch, MetalArray) or scratch.dtype != np.dtype(np.float32)
+                    or any(scratch.buffer.context is not field.buffer.context
+                           or scratch.size < field.size
+                           or (scratch.buffer is field.buffer
+                               and scratch.byte_offset < field.byte_offset + field.nbytes
+                               and field.byte_offset < scratch.byte_offset + scratch.nbytes)
+                           for field in fields)):
+                raise ValueError("strict streamed Metal smoothing requires independent priced scratch")
         self._bind_geometry()
 
         # A STREAMED parent is mutated here from outside dycore.step, so the
@@ -1178,7 +1237,22 @@ class NestCoupler:
         bounded_child = self._feedback_child_is_bounded()
         canonical_parent = getattr(
             parent.state, "_streamed_domain", None) is not None
-        bounded_operands = bounded_child or canonical_parent
+        bounded_operands = (bounded_child or canonical_parent
+                            or (WRF_EXACT and getattr(parent.state, "_metal_setup_state", False)))
+        strict_metal_base = (
+            WRF_EXACT and not start
+            and getattr(parent.state, "_metal_setup_state", False)
+            and parent.state.phb.ndim == 3
+            and getattr(self, "_wrf_base_fed_back", None) != (
+                int(self.registrations["m"].i_parent_start),
+                int(self.registrations["m"].j_parent_start)))
+        if strict_metal_base:
+            if (streamed_parent or canonical_parent or bounded_child or _is_streamed(node.state)
+                    or getattr(self, "relocation_count", 0)):
+                raise NotImplementedError(
+                    "strict Metal terrain base feedback requires fixed resident domains")
+            from woof.io.restart import capture_strict_terrain_prepared_identity
+            capture_strict_terrain_prepared_identity(parent.state)
         written = ["mup"]
         if streamed_parent and not canonical_parent:
             _sync_in(parent.state,
@@ -1246,6 +1320,35 @@ class NestCoupler:
                 _rebase_feedback_theta(parent.state, reg, run.spec_zone)
             written.append(_state_attr(kind))
 
+        # Strict mode, per-step: WRF also restricts the base state (phb,
+        # mub, alb and pb carry the Registry ``u`` flag,
+        # inc/nest_feedbackup_interp.inc) and nothing rebuilds it afterwards
+        # (update_after_feedback_em is a halo exchange), so from the first
+        # step on the parent integrates on the nest's averaged base inside
+        # the rectangle.  The nest's base does not change while it stays
+        # where it is, so the result is the same at every feedback and is
+        # written once per nest position.  At the start transaction the
+        # parent's start_domain rebuilds the base from the fed-back terrain
+        # instead (the restore's base).
+        from woof.wrf_exact import ENABLED as wrf_exact
+        base_kinds = ()
+        base_key = (int(self.registrations["m"].i_parent_start),
+                    int(self.registrations["m"].j_parent_start))
+        if strict_metal_base:
+            for attr in ("mub2d", "alb", "pb", "phb"):
+                self._restrict_windowed(attr, child_source, parent_source)
+            base_kinds = ("mub2d", "alb", "pb", "phb")
+        elif (wrf_exact and not start and not bounded_operands
+                and parent.state.phb.ndim == 3
+                and getattr(self, "_wrf_base_fed_back", None) != base_key):
+            reg = self.registrations["m"]
+            for attr in ("mub2d", "alb", "pb", "phb"):
+                target = getattr(parent.state, attr)
+                source = getattr(node.state, attr)
+                copy_fcn(target if target.ndim == 3 else target[None],
+                         source if source.ndim == 3 else source[None],
+                         reg, spec_zone=run.spec_zone)
+            base_kinds = ("mub2d", "alb", "pb", "phb")
         # The parent smoother, LAST -- feedback_domain_em_part2.F:176-193
         # runs nest_feedbackup_smooth.inc after the unpack, over every
         # fed-back field (Registry flag `s` rides with `u` on all of them:
@@ -1264,9 +1367,17 @@ class NestCoupler:
                     from woof.core.nest_operands import (
                         smooth_canonical_parent, streamed_chunk_shape)
                     field = parent_source.array(_state_attr(kind))
-                    smooth_canonical_parent(
-                        parent_source, kind, reg, smooth_option=self.smooth_option,
-                        chunk_shape=streamed_chunk_shape(parent.state))
+                    if WRF_EXACT and getattr(parent.state, "_metal_setup_state", False):
+                        from woof.metal.array import MetalArray
+                    else:
+                        MetalArray = ()
+                    if isinstance(field, MetalArray):
+                        smoother(field, reg, smooth_option=self.smooth_option,
+                                 scratch=self._scratch("nest_parent_field"))
+                    else:
+                        smooth_canonical_parent(
+                            parent_source, kind, reg, smooth_option=self.smooth_option,
+                            chunk_shape=streamed_chunk_shape(parent.state))
                 else:
                     field = getattr(parent.state, _state_attr(kind))
                     smoother(
@@ -1289,8 +1400,53 @@ class NestCoupler:
                 if kind not in _SIGNED_KINDS:
                     i0, j0, niw, njw = smoother_parent_window(reg)
                     if niw > 0 and njw > 0:
-                        window = field[..., j0:j0 + njw, i0:i0 + niw]
-                        _clip_nonnegative(window)
+                        if WRF_EXACT and getattr(parent.state, "_metal_setup_state", False):
+                            from woof.metal.nest_family import submit_strict_feedback_clamp
+                            field3 = field.view((1, *field.shape)) if field.ndim == 2 else field
+                            submit_strict_feedback_clamp(field.buffer.context, parent=field3,
+                                                         i0=i0, j0=j0, niw=niw, njw=njw)
+                        else:
+                            window = field[..., j0:j0 + njw, i0:i0 + niw]
+                            _clip_nonnegative(window)
+        if base_kinds:
+            if self.smooth_option != 0:
+                reg = self.registrations["m"]
+                for attr in base_kinds:
+                    field = getattr(parent.state, attr)
+                    if strict_metal_base and field.ndim == 2:
+                        field = field.view((1, *field.shape))
+                    smoother(field if field.ndim == 3 else field[None], reg,
+                             smooth_option=self.smooth_option,
+                             scratch=self._scratch("nest_parent_field"))
+            # dphb_resid and the host height cache follow the new phb.
+            parent.state.set_base_geopotential(parent.state.phb)
+            # WRF keeps its perturbation p and forms pb + p where it reads
+            # the total (calc_coef_w's c2a, small_step_prep), so the total
+            # the next step reads is the stale p on the fed-back pb.
+            p_pert = getattr(parent.state, "p_perturbation", None)
+            if p_pert is not None:
+                # rk_step_prep's calc_alt (module_em.F:176) re-forms
+                # alt = al + alb at every RK stage, rk_step 1 included, so
+                # the next step reads the stale al on the fed-back alb.
+                # Kept stale, a 9 km/3 km pair's parent left wrf.exe at its
+                # second step inside the nest (W in 96,501 words at 90 s).
+                if strict_metal_base:
+                    context = parent.state.p.buffer.context
+                    for left, right, out in (
+                            (parent.state.pb, p_pert, parent.state.p),
+                            (parent.state.al, parent.state.alb, parent.state.alt)):
+                        n = out.size
+                        context.submit_kernel(
+                            "da_state_binary",
+                            {"left": left.view((n,)), "right": right.view((n,)),
+                             "out": out.view((n,))},
+                            {"n": n, "subtract": 0}, exact_policy=False,
+                            grid_size=n, threads_per_group=128)
+                else:
+                    import cupy as cp
+                    cp.add(parent.state.pb, p_pert, out=parent.state.p)
+                    cp.add(parent.state.al, parent.state.alb, out=parent.state.alt)
+            self._wrf_base_fed_back = base_key
         if streamed_parent and not canonical_parent:
             _sync_out(parent.state, tuple(dict.fromkeys(written)))
         if bounded_operands:
@@ -1302,13 +1458,21 @@ class NestCoupler:
         self.feedback_count += 1
         self.last_feedback_ticks = int(node.clock.ticks)
 
-    def feedback_finalize(self, node) -> None:
+    def feedback_finalize(self, node, *, start: bool = False) -> None:
         if node is not self.child_node:
             raise ValueError("feedback node does not match this coupler")
         if self.feedback == 0:
             return
         if self._prepared_feedback is None:
             raise RuntimeError("feedback finalize has no committed transaction")
+        from woof.wrf_exact import ENABLED as wrf_exact
+        if wrf_exact and not start:
+            # WRF re-diagnoses nothing after a per-step feedback
+            # (update_after_feedback_em is a halo exchange): the parent's
+            # history P and its next step's first RK stage read the p/al
+            # its own solve left.  Strict mode keeps them.
+            self._prepared_feedback = None
+            return
         from woof.core.diagnostics import update_diagnostics
         from woof.core.nest_interp import (feedback_parent_bounds,
                                             smoother_parent_window)

@@ -1,0 +1,468 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/lbc_state.cu",
+      "cuda_symbol": "uncouple_feedback_field",
+      "layout_version": 1,
+      "module": "wrf_exact_nest_uncouple_off",
+      "name": "wrf_exact_nest_uncouple_off_uncouple_feedback_field",
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "thb_3d",
+          "int32"
+        ],
+        [
+          "kind",
+          "int32"
+        ],
+        [
+          "i_lo",
+          "int32"
+        ],
+        [
+          "i_hi",
+          "int32"
+        ],
+        [
+          "j_lo",
+          "int32"
+        ],
+        [
+          "j_hi",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "mny",
+          "int32"
+        ],
+        [
+          "mnx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "target",
+          "float",
+          "read_write"
+        ],
+        [
+          "coupled",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "c1f": [
+          [
+            "nz"
+          ],
+          [
+            "nz+1"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ],
+          [
+            "nz-1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz"
+          ],
+          [
+            "nz+1"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ],
+          [
+            "nz-1"
+          ]
+        ],
+        "coupled": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "mny",
+            "mnx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "mny",
+            "mnx+1"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfv": [
+          [
+            "mny+1",
+            "mnx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "mup": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "target": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz-1"
+          ],
+          [
+            "nz",
+            "mny",
+            "mnx"
+          ],
+          [
+            "nz-1",
+            "mny",
+            "mnx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_nest_uncouple_off.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/lbc_state.cu",
+      "cuda_symbol": "uncouple_feedback_field",
+      "layout_version": 1,
+      "module": "wrf_exact_nest_uncouple_on",
+      "name": "wrf_exact_nest_uncouple_on_uncouple_feedback_field",
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "thb_3d",
+          "int32"
+        ],
+        [
+          "kind",
+          "int32"
+        ],
+        [
+          "i_lo",
+          "int32"
+        ],
+        [
+          "i_hi",
+          "int32"
+        ],
+        [
+          "j_lo",
+          "int32"
+        ],
+        [
+          "j_hi",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "mny",
+          "int32"
+        ],
+        [
+          "mnx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "target",
+          "float",
+          "read_write"
+        ],
+        [
+          "coupled",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "c1f": [
+          [
+            "nz"
+          ],
+          [
+            "nz+1"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ],
+          [
+            "nz-1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz"
+          ],
+          [
+            "nz+1"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ],
+          [
+            "nz-1"
+          ]
+        ],
+        "coupled": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "mny",
+            "mnx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "mny",
+            "mnx+1"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfv": [
+          [
+            "mny+1",
+            "mnx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "mup": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "target": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz-1"
+          ],
+          [
+            "nz",
+            "mny",
+            "mnx"
+          ],
+          [
+            "nz-1",
+            "mny",
+            "mnx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_nest_uncouple_on.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

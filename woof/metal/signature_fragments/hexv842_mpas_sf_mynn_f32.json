@@ -1,0 +1,312 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_sf_mynn_tables_f32",
+      "module": "hexv842_mpas_sf_mynn_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_sf_mynn_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/sf_mynn_v842.py",
+      "cuda_symbol": "sf_mynn_tables",
+      "resources": [
+        [
+          "tables",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tables": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_sf_mynn_columns_f32",
+      "module": "hexv842_mpas_sf_mynn_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_sf_mynn_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/sf_mynn_v842.py",
+      "cuda_symbol": "sf_mynn_columns",
+      "resources": [
+        [
+          "fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
+        ],
+        [
+          "tables",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fields": [
+          [
+            "any_1d"
+          ]
+        ],
+        "constants": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tables": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "isfflx",
+          "int32"
+        ],
+        [
+          "spp_pbl",
+          "int32"
+        ],
+        [
+          "isftcflx",
+          "int32"
+        ],
+        [
+          "iz0tlnd",
+          "int32"
+        ],
+        [
+          "present",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_sf_mynn_prepare_f32",
+      "module": "hexv842_mpas_sf_mynn_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_sf_mynn_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/sf_mynn_v842.py",
+      "cuda_symbol": "sf_mynn_prepare",
+      "resources": [
+        [
+          "fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "profiles",
+          "float",
+          "read"
+        ],
+        [
+          "density",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fields": [
+          [
+            "any_1d"
+          ]
+        ],
+        "profiles": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "first",
+          "int32"
+        ],
+        [
+          "len_disp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_sf_mynn_sea_f32",
+      "module": "hexv842_mpas_sf_mynn_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_sf_mynn_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/sf_mynn_v842.py",
+      "cuda_symbol": "sf_mynn_sea",
+      "resources": [
+        [
+          "fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "sea",
+          "float",
+          "read_write"
+        ],
+        [
+          "sst",
+          "float",
+          "read"
+        ],
+        [
+          "ice",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fields": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sea": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sst": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ice": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "first",
+          "int32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ],
+        [
+          "rp3",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_sf_mynn_blend_f32",
+      "module": "hexv842_mpas_sf_mynn_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_sf_mynn_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/sf_mynn_v842.py",
+      "cuda_symbol": "sf_mynn_blend",
+      "resources": [
+        [
+          "fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "sea",
+          "float",
+          "read"
+        ],
+        [
+          "ice",
+          "float",
+          "read"
+        ],
+        [
+          "regime_hold",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fields": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sea": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ice": [
+          [
+            "any_1d"
+          ]
+        ],
+        "regime_hold": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

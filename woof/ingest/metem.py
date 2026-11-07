@@ -81,17 +81,6 @@ _OPTIONAL_3D_STATIC = (
     "LAI12M",
 )
 
-#: Global attributes that must be there, because every one of them is
-#: consumed: the grid shape, the projection, and the land-use identity
-#: that decides which category integer means water.
-_REQUIRED_GLOBALS = (
-    "WEST-EAST_GRID_DIMENSION", "SOUTH-NORTH_GRID_DIMENSION",
-    "DX", "DY", "MAP_PROJ", "TRUELAT1", "TRUELAT2", "STAND_LON",
-    "CEN_LAT", "CEN_LON", "MOAD_CEN_LAT",
-    "MMINLU", "NUM_LAND_CAT", "ISWATER", "ISLAKE", "ISICE", "ISURBAN",
-    "ISOILWATER",
-)
-
 #: How far apart ``PRES(k)`` may be across the domain before the level
 #: stops being isobaric.  float32 stores 1e5 Pa to about 0.008 Pa, and
 #: the RH lane REPLACES the file's own 3-D pressure with a flat ladder
@@ -697,8 +686,12 @@ def _unit_transform(variable, name: str) -> tuple[float, float]:
 
 
 def _check_projection(geometry, statics):
-    from woof.static.projection import WPS_MAP_PROJ_NAMES, projection_class
+    from woof.static.projection import (WPS_MAP_PROJ_NAMES,
+                                         WRF_LATLON_MAP_PROJ, latlon_refusal,
+                                         projection_class)
     code = geometry["map_proj"]
+    if code == WRF_LATLON_MAP_PROJ and code not in WPS_MAP_PROJ_NAMES:
+        raise MetgridRefusal(f"MAP_PROJ={code}: {latlon_refusal()}")
     if code not in WPS_MAP_PROJ_NAMES:
         raise MetgridRefusal(f"MAP_PROJ={code} has no native projected-grid implementation; prepare a Lambert, polar, or Mercator grid")
     try:

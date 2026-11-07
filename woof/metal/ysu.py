@@ -44,6 +44,7 @@ _BEP_TERMS = (
     "a_u_bep", "a_v_bep", "a_t_bep", "a_q_bep", "b_u_bep",
     "b_v_bep", "b_t_bep", "b_q_bep", "sf_bep", "vl_bep",
 )
+_KERNELS = {"wrf_461": "ysu_column", "wrf_480": "ysu_column_480"}
 _TPG = 32
 _MAX_TILE_COLUMNS = 1024
 _WORKSPACE_SLOTS = 18
@@ -89,6 +90,7 @@ def submit_ysu_column(
     u10_out: MetalArray | None = None, v10_out: MetalArray | None = None,
     bep: Mapping[str, MetalArray] | None = None,
     frc_urb2d: MetalArray | None = None,
+    ysu_version: str = "wrf_461",
 ) -> dict[str, MetalArray]:
     """Submit YSU PBL columns, optionally topo_wind's or the BEP arm.
 
@@ -101,6 +103,9 @@ def submit_ysu_column(
     WRF's flag_bep arm as ``woof.core.ysu.launch_ysu`` does; ``frc_urb2d`` is
     shape-checked but not read (ysu.cu's declared rural-drag divergence).
     """
+    if ysu_version not in _KERNELS:
+        raise ValueError(
+            f"ysu_version must be one of {tuple(_KERNELS)}, got {ysu_version!r}")
     if WRF_EXACT:
         raise NotImplementedError(
             "Metal YSU supports ordinary default-policy arithmetic only; "
@@ -204,7 +209,7 @@ def submit_ysu_column(
                 "bep": int(bep is not None),
             }
             context.submit_kernel(
-                "ysu_column", call_arrays, params, exact_policy=False,
+                _KERNELS[ysu_version], call_arrays, params, exact_policy=False,
                 grid_size=tilecol, threads_per_group=_TPG)
             # The submitted batch retains its argument buffers through queue
             # completion; dropping this host wrapper bounds lifetime to tile.

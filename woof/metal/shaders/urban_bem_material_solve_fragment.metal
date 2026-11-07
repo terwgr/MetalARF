@@ -11,9 +11,8 @@ static inline float ubm_div(float a,float b){return as_type<float>(soft32_div(as
 
 // WRF module_sf_bem.F:645-743. One item is a (column, building) solve. The
 // profile arrays use the bb_param per-column packing; temperatures are the
-// exact state-gather layouts. This fragment is the ordinary roof path. Green
-// roof and PV are deliberately outside its contract and remain refused by
-// the caller until their source-order terms are implemented.
+// state-gather layouts. This fragment owns the ordinary roof path; green
+// roof material and PV terms are dispatched through separate source stages.
 static inline bool ubm_wall_solve(thread float *temp, thread const float *dz,
                                  thread const float *cap, thread const float *k,
                                  float dt, float flux0, float flux1,
@@ -79,19 +78,20 @@ kernel void urban_bem_material_solve_fragment(
     if(col>=uint(p.ncol)||active[col]==0)return;
     const int nlev_i=nlev[ulong(col)*15ul+b];
     if(nlev_i<=0)return;
-    if(nlev_i>18){error[item]=3850;return;}
+    if(nlev_i>=18){error[item]=3850;return;}
     const uint nlev_u=uint(nlev_i);
     thread float dz[10],cap[10],k[11],temp[10];
     const ulong cbase=ulong(col)*10ul;
+    const ulong kbase=ulong(col)*11ul;
     const ulong itembase=(ulong(col)*15ul+b);
     // Wall stacks, followed by each window, preserving WRF's loop order.
     for(uint lev=0u;lev<nlev_u;++lev){
         for(uint face=0u;face<4u;++face){
             for(uint z=0u;z<10u;++z){
-                dz[z]=dzw[cbase+z];cap[z]=csw[cbase+z];k[z]=kw[cbase+z];
+                dz[z]=dzw[cbase+z];cap[z]=csw[cbase+z];k[z]=kw[kbase+z];
                 temp[z]=tw[((((itembase*10ul+z)*18ul+lev)*4ul)+face)];
             }
-            k[10]=kw[cbase+10ul];
+            k[10]=kw[kbase+10ul];
             const ulong fbase=(itembase*18ul+lev)*6ul+face;
             const float f0=ubm_add(hswi[fbase],hrwi[fbase]);
             const float f1=ubm_add(hswo[(itembase*18ul+lev)*4ul+face],hrwo[(itembase*18ul+lev)*4ul+face]);
@@ -113,9 +113,9 @@ kernel void urban_bem_material_solve_fragment(
             const float f0=ubm_add(hswi[base+5ul],hrwi[base+5ul]);
             const float f1=ubm_add(hswi[base+10ul],hrwi[base+10ul]);
             for(uint id=0u;id<2u;++id){
-                for(uint z=0u;z<10u;++z){dz[z]=dzf[cbase+z];cap[z]=csf[cbase+z];k[z]=kf[cbase+z];
-                    temp[z]=tflev[((((itembase*10ul+z)*17ul+lev)*2ul)+id)];}
-                k[10]=kf[cbase+10ul];
+                for(uint z=0u;z<10u;++z){dz[z]=dzf[cbase+z];cap[z]=csf[cbase+z];k[z]=kf[kbase+z];
+                    temp[z]=tflev[((((itembase*10ul+z)*17ul+lev)*2ul)+1ul)];}
+                k[10]=kf[kbase+10ul];
                 if(!ubm_wall_solve(temp,dz,cap,k,p.dt,f0,f1,10u)){error[item]=3852;return;}
                 for(uint z=0u;z<10u;++z)tflev[((((itembase*10ul+z)*17ul+lev)*2ul)+id)]=temp[z];
             }
@@ -123,8 +123,8 @@ kernel void urban_bem_material_solve_fragment(
     }
     const ulong first=(itembase*18ul)*6ul;
     for(uint id=0u;id<2u;++id){
-        for(uint z=0u;z<10u;++z){dz[z]=dzg[cbase+z];cap[z]=csg[cbase+z];k[z]=kg[cbase+z];temp[z]=tglev[(itembase*10ul+z)*2ul+id];}
-        k[10]=kg[cbase+10ul];
+        for(uint z=0u;z<10u;++z){dz[z]=dzg[cbase+z];cap[z]=csg[cbase+z];k[z]=kg[kbase+z];temp[z]=tglev[(itembase*10ul+z)*2ul+1ul];}
+        k[10]=kg[kbase+10ul];
         if(!ubm_wall_solve(temp,dz,cap,k,p.dt,0.0f,ubm_add(hswi[first+4ul],hrwi[first+4ul]),10u)){error[item]=3853;return;}
         for(uint z=0u;z<10u;++z)tglev[(itembase*10ul+z)*2ul+id]=temp[z];
     }
@@ -132,9 +132,9 @@ kernel void urban_bem_material_solve_fragment(
     const float roof_flux=ubm_add(ubm_add(hsrof[item],hrrof[item]),lsrof[item]);
     gsrof[item]=roof_flux;
     for(uint id=0u;id<2u;++id){
-        for(uint z=0u;z<10u;++z){dz[z]=dzr[cbase+z];cap[z]=csr[cbase+z];k[z]=kr[cbase+z];temp[z]=tr[(cbase+z)*18ul*2ul+(nlev_u-1u)*2ul+id];}
-        k[10]=kr[cbase+10ul];
+        for(uint z=0u;z<10u;++z){dz[z]=dzr[cbase+z];cap[z]=csr[cbase+z];k[z]=kr[kbase+z];temp[z]=tr[(cbase+z)*18ul*2ul+nlev_u*2ul+1ul];}
+        k[10]=kr[kbase+10ul];
         if(!ubm_wall_solve(temp,dz,cap,k,p.dt,ubm_add(hswi[top+5ul],hrwi[top+5ul]),roof_flux,10u)){error[item]=3854;return;}
-        for(uint z=0u;z<10u;++z)tr[(cbase+z)*18ul*2ul+(nlev_u-1u)*2ul+id]=temp[z];
+        for(uint z=0u;z<10u;++z)tr[(cbase+z)*18ul*2ul+nlev_u*2ul+id]=temp[z];
     }
 }

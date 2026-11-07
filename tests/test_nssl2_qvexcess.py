@@ -146,7 +146,7 @@ def test_qvexcess_evidence_manifest_pins_all_inputs_and_frozen_seams():
     assert frozen["base_commit_must_be_ancestor"] is True
     assert _git_is_ancestor(root, base_commit, "HEAD")
     for relative, expected in frozen.items():
-        if relative.startswith("gpuwm/"):
+        if relative.startswith("woof/"):
             assert _git_blob_digest(root, base_commit, relative) == expected
 
 

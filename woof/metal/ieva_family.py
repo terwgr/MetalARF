@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from woof.wrf_exact import ENABLED as WRF_EXACT
+
 from .array import MetalArray
 
 
@@ -72,6 +74,7 @@ def submit_ww_split(context, *, ww, u, v, mut, rdnw, c1f, c2f, ww_e,
         "zero": float(np.float32(zero)),
         "has_msf": _integer("has_msf", has_msf),
         "legacy": _integer("legacy", legacy), "nz": nz, "ny": ny, "nx": nx,
+        "strict": int(WRF_EXACT),
     }
     count = (nz + 1) * ny * nx
     if count > _I32_MAX:
@@ -83,7 +86,7 @@ def submit_ww_split(context, *, ww, u, v, mut, rdnw, c1f, c2f, ww_e,
 
 def submit_mut_new(context, *, u, v, muu, muv, c1h, c2h, rdnw,
                     mut_old, msft, msfu, msfv, mut_new, nz, ny, nx,
-                    rdx, rdy, dt, has_msf, one=1.0):
+                    rdx, rdy, dt, has_msf, one=1.0, stored_inverse=False):
     """Compute WRF CALC_MUT_NEW's bottom-up FP32 column mass update."""
     nz = _integer("nz", nz, minimum=1)
     ny = _integer("ny", ny, minimum=1)
@@ -108,7 +111,8 @@ def submit_mut_new(context, *, u, v, muu, muv, c1h, c2h, rdnw,
     parameters = {"rdx": float(np.float32(rdx)),
                   "rdy": float(np.float32(rdy)),
                   "dt": float(np.float32(dt)), "one": float(np.float32(one)),
-                  "has_msf": has_msf, "nz": nz, "ny": ny, "nx": nx}
+                  "has_msf": has_msf, "stored_inverse": int(bool(stored_inverse)),
+                  "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
         "ieva_mut_new", arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)
@@ -141,7 +145,7 @@ def submit_solve_s(context, *, tend, pert, base, base_mode, shift, rom,
                   "dt": float(np.float32(dt)),
                   "one": float(np.float32(one)),
                   "zero": float(np.float32(zero)),
-                  "nz": nz, "ny": ny, "nx": nx}
+                  "nz": nz, "ny": ny, "nx": nx, "strict": int(WRF_EXACT)}
     return context.submit_kernel(
         _tiered("ieva_solve_s", nz), arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)
@@ -181,7 +185,7 @@ def _submit_wind_solve(name, context, *, tend, old, rom, c1h, c2h,
                   "zero": 0.0, "half_val": 0.5,
                   "has_msf": has_msf, "periodic": periodic,
                   "f_lo": f_lo, "f_hi": f_hi, "legacy": legacy,
-                  "nz": nz, "ny": ny, "nx": nx}
+                  "nz": nz, "ny": ny, "nx": nx, "strict": int(WRF_EXACT)}
     return context.submit_kernel(
         _tiered(f"ieva_solve_{name}", nz), arrays, parameters, exact_policy=True,
         grid_size=grid_size, threads_per_group=_THREADS)
@@ -226,7 +230,7 @@ def submit_solve_ph(context, *, tend, ph_old, phb, rom, c1f, c2f, mut,
                   "one": float(np.float32(one)),
                   "zero": float(np.float32(zero)),
                   "half_val": float(np.float32(half_val)),
-                  "has_msf": has_msf, "nz": nz, "ny": ny, "nx": nx}
+                  "has_msf": has_msf, "nz": nz, "ny": ny, "nx": nx, "strict": int(WRF_EXACT)}
     return context.submit_kernel(
         _tiered("ieva_solve_ph", nz), arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)
@@ -278,7 +282,7 @@ def submit_solve_w(context, *, tend, utend, vtend, mux, muy, c1h, c2h,
                   "one": float(np.float32(one)), "zero": float(np.float32(zero)),
                   "half_val": float(np.float32(half_val)),
                   "has_msf": has_msf, "bx": bx, "by": by,
-                  "legacy": legacy, "nz": nz, "ny": ny, "nx": nx}
+                  "legacy": legacy, "nz": nz, "ny": ny, "nx": nx, "strict": int(WRF_EXACT)}
     return context.submit_kernel(
         _tiered("ieva_solve_w", nz), arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)

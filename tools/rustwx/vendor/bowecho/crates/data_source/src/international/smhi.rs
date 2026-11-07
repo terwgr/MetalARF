@@ -8,7 +8,7 @@
 //! Information Model; Michelson et al., OPERA WP 2.1/2.2, v2.2-2.3).
 //!
 //! Frame identity: the `lastFiles` key (e.g.
-//! `radar_angelholm_qcvol_202606120625`): the `latest.h5` convenience link
+//! `radar_angelholm_qcvol_202606120625`) — the `latest.h5` convenience link
 //! alone carries no identity, so the provider downloads the *dated* URL
 //! derived from that key (`.../qcvol/{yyyy}/{mm}/{dd}/{key}.h5`), keeping
 //! identity and bytes in lockstep. Probed live 2026-06-12: 13 areas, dated
@@ -147,7 +147,7 @@ impl RecentFrames for SmhiProvider {
 impl ArchiveFrames for SmhiProvider {
     /// Verbatim wrap of [`smhi_archive_plans_for_day`]: one dated qcvol
     /// day-catalog probe, plans oldest-first. Window lookups use the
-    /// trait's day-folding default: the dated tree is day-granular.
+    /// trait's day-folding default — the dated tree is day-granular.
     fn day_plans(&self, site_id: &str, date_utc: NaiveDate) -> Result<Vec<FramePlan>, String> {
         smhi_archive_plans_for_day(site_id, date_utc)
     }
@@ -210,7 +210,7 @@ fn plan_from_qcvol_catalog(area: &str, json: &str) -> Result<FramePlan, String> 
         .ok_or_else(|| format!("SMHI qcvol catalog for '{area}' has no lastFiles entry"))
 }
 
-/// The newest `count` qcvol entries as plans, OLDEST FIRST: the
+/// The newest `count` qcvol entries as plans, OLDEST FIRST — the
 /// `lastFiles` keys embed `yyyymmddhhmm`, so lexicographic order is
 /// chronological. This is what makes Load Loop work on Swedish radars.
 fn plans_from_qcvol_catalog(

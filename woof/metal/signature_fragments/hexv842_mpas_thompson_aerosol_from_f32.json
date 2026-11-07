@@ -1,0 +1,150 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_thompson_aerosol_from_f32",
+      "module": "hexv842_mpas_thompson_aerosol_from_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_thompson_aerosol_from_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/thompson_aero_v842.py",
+      "cuda_symbol": "aero_from_mpas_kernel",
+      "resources": [
+        [
+          "nc",
+          "float",
+          "read"
+        ],
+        [
+          "nifa",
+          "float",
+          "read"
+        ],
+        [
+          "nwfa",
+          "float",
+          "read"
+        ],
+        [
+          "before_nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "before_nifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "before_nwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "prepared_nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "prepared_nifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "prepared_nwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nifa2d",
+          "float",
+          "read"
+        ],
+        [
+          "nwfa2d",
+          "float",
+          "read"
+        ],
+        [
+          "slab",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "nc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "before_nc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "before_nifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "before_nwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prepared_nc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prepared_nifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prepared_nwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nifa2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nwfa2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "slab": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz"
+      ]
+    }
+  ]
+}

@@ -63,17 +63,12 @@ is left exactly where it is.
 
 from __future__ import annotations
 
-import bz2
-import hashlib
-import http.client
 import os
 from pathlib import Path
 import shutil
-import socket
 import sys
-import time
-import urllib.error
-import urllib.request
+import tomllib
+import uuid
 
 from woof import bridges
 from woof import fetch_guard
@@ -83,12 +78,61 @@ from woof.core.thompson_contract import (
     TableAsset,
     validate_table_assets,
 )
+from woof.geog_assets import _rw_asset, GeogFetchError
+from woof.timeline.ledger import span
+
+TABLE_SOURCE_PATH = Path(__file__).parent / "data" / "table_sources.v1.toml"
+
+
+def table_source_rows(asset: TableAsset) -> tuple[dict, ...]:
+    """Mirror choices are metadata. Every choice retains the canonical raw pin."""
+    with TABLE_SOURCE_PATH.open("rb") as source:
+        raw = tomllib.load(source)
+    if raw.get("schema") != "gpuwm-table-sources-v1":
+        raise TableAssetError("table source schema is unknown; source versions cannot be bound to the pinned coefficients")
+    return tuple(row for row in raw["source"] if row["filename"] == asset.filename
+                 and row["sha256"] == asset.sha256 and row["bytes"] == asset.bytes)
+
+
+def fetch_asset_from_sources(root: Path, asset: TableAsset) -> Path:
+    override = os.environ.get(ASSET_URL_BASE_ENV, "").strip()
+    if not override:
+        override = os.environ.get("WOOF_BRIDGE_ASSET_URL_BASE", "").strip() if asset.filename not in EXTERNALIZED_TABLE_FILENAMES else ""
+    if override:
+        return _fetch_asset_from_url(root, asset, override.rstrip("/") + "/" + asset.filename)
+    rows = table_source_rows(asset)
+    if not rows:
+        raise TableAssetError(f"{asset.filename}: no source row; fetching an unspecified table version would change lookup coefficients")
+    errors = []
+    for row in rows:
+        try:
+            print(f"woof fetch-tables: {asset.filename}: trying pinned source {row['url']}",
+                  file=sys.stderr)
+            url = row["url"]
+            if url.startswith("package://"):
+                import importlib
+                package, _, relative = url[len("package://"):].partition("/")
+                if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+                    raise TableAssetError(f"{asset.filename}: invalid packaged source path; it would read unrelated bytes outside the data package")
+                try:
+                    source = importlib.import_module(package).data_root() / relative
+                except (ImportError, AttributeError) as error:
+                    raise TableAssetError(f"{asset.filename}: {package} cannot locate its pinned data: {error}") from error
+                url = Path(source).resolve().as_uri()
+            return _fetch_asset_from_url(root, asset, url, compression=row.get("compression"))
+        except TableAssetError as error:
+            # Corruption is a refusal, never a reason to silently select another mirror.
+            if "pin refused" in str(error) or "pinned object refused" in str(error):
+                raise
+            errors.append(str(error))
+    raise TableAssetError(f"{asset.filename}: no declared source delivered the pinned bytes: " + "; ".join(errors))
 
 #: Externalized asset filenames: published as release assets and
 #: excluded from the wheel/sdist (freezeH2O.dat is additionally absent
 #: from the repository -- GitHub rejects blobs over 100 MiB).
-#: Everything else in CLASSIC_TABLE_ASSETS ships in the package, so its
-#: absence means a broken install (reinstall), not a pending download.
+#: Other classic files ship in the package. Their pinned source rows also
+#: support empty explicit roots; an undeclared gap still names an incomplete
+#: install rather than fetching unspecified lookup coefficients.
 EXTERNALIZED_TABLE_FILENAMES = frozenset({
     "freezeH2O.dat",
     "qr_acr_qg_V4.dat",
@@ -103,14 +147,6 @@ RELEASE_ASSET_BASE_URL = (
 WIF_DATA_RELEASE = "v1.0.1"
 
 ASSET_URL_BASE_ENV = "WOOF_TABLE_ASSET_URL_BASE"
-
-_BLOCK_BYTES = 8 * 1024 * 1024
-
-#: Transfer block, smaller than the hashing block on purpose: it is the
-#: resolution of the byte counter above, and an eight-MiB step over a
-#: slow link is a number that stands still for seconds at a time.
-_TRANSFER_BLOCK_BYTES = 1024 * 1024
-
 
 def asset_url_base() -> str:
     override = os.environ.get(ASSET_URL_BASE_ENV)
@@ -229,21 +265,122 @@ def unstaged_table_assets(
     return gaps
 
 
+def _first_use_staged_assets() -> frozenset[TableAsset]:
+    """Every pinned asset :func:`stage_classic_tables` puts in the root.
+
+    The classic mp=8 set plus the mp=28 activation table
+    (``CCN_ACTIVATE.BIN``), which the staging leg copies into the same
+    root because the aerosol contract shares it.
+    """
+
+    from woof.core.thompson_aerosol_contract import AEROSOL_TABLE_ASSETS
+
+    return frozenset((*CLASSIC_TABLE_ASSETS, *AEROSOL_TABLE_ASSETS))
+
+
+def _thompson_scheme_label(assets: tuple[TableAsset, ...]) -> str:
+    """``mp_physics=28 (aerosol-aware Thompson)`` or ``=8 (Thompson)``.
+
+    Derived from the asset set the caller binds: only mp=28 binds the
+    aerosol activation table.  The refusal used to hard-code ``8``, so an
+    mp=28 run was told it was mp=8.
+    """
+
+    from woof.core.thompson_aerosol_contract import AEROSOL_TABLE_ASSETS
+
+    if any(asset in AEROSOL_TABLE_ASSETS for asset in assets):
+        return "mp_physics=28 (aerosol-aware Thompson)"
+    return "mp_physics=8 (Thompson)"
+
+
+def auto_stage_applies(
+        assets: tuple[TableAsset, ...] = CLASSIC_TABLE_ASSETS) -> bool:
+    """Will an incomplete root be staged on first use rather than refused?
+
+    True when no operator named a root (``WOOF_THOMPSON_TABLE_ROOT``
+    unset) and every asset in ``assets`` is one ``woof fetch-tables``
+    stages, pins included: the classic mp=8 set, or the classic set plus
+    the mp=28 activation table.  It used to demand exactly the classic
+    set, so an mp=28 run on a fresh install (classic + CCN_ACTIVATE.BIN)
+    skipped first-use staging and was refused at prepare, after go had
+    already downloaded the forcing.  A named root is the operator's
+    mirror and is never filled behind their back (the rule
+    :func:`staging_is_self_chosen` states), and a caller binding its own
+    table set (different pins) must not be handed this one.
+    """
+
+    from woof.physics_compat import THOMPSON_TABLE_ROOT_ENV
+
+    return (not os.environ.get(THOMPSON_TABLE_ROOT_ENV)
+            and bool(assets)
+            and set(assets) <= _first_use_staged_assets())
+
+
+def _stage_on_first_use(gaps: list[TableAsset],
+                        scheme: str = "mp_physics=8 (Thompson)") -> str | None:
+    """Run the ``woof fetch-tables`` classic leg; None, or why it failed.
+
+    The defect this closes (2.9.2): a clean ``pip install recast-woof`` could
+    not run ``mp_physics=8``.  The wheel cannot carry freezeH2O.dat and
+    qr_acr_qg_V4.dat (PyPI's 100 MiB per-file cap; the recast-woof-data wheel
+    is already 98.6 MB without them), so every fresh install, image
+    build and new box refused its first Thompson forecast until someone
+    ran ``woof fetch-tables`` by hand (the image build and the 2x MPAS
+    box both hit it on 2026-10-16).  The fork Thompson set has been
+    acquired on first use since 2.8.7; the classic set now is too,
+    through the identical staging leg (same pinned sources, same SHA-256
+    verification before the atomic install, same lock), into
+    ``~/.woof/tables/thompson`` so it is paid for once per machine.
+    Offline machines still stage with ``woof fetch-tables --from DIR``.
+    The leg's progress goes to stderr so a door's stdout stays its own.
+    """
+
+    import argparse
+    import contextlib
+
+    mib = sum(asset.bytes for asset in gaps) / (1024 * 1024)
+    print(f"woof: {scheme} first use on this machine: "
+          f"staging {', '.join(asset.filename for asset in gaps)} "
+          f"({mib:.0f} MiB, SHA-256 verified against the packaged pins) "
+          f"into the user table root, once -- offline machines stage them "
+          f"with `woof fetch-tables --from DIR`", file=sys.stderr,
+          flush=True)
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            code = stage_classic_tables(
+                argparse.Namespace(root=None, from_dir=None))
+    except (TableAssetError, GeogFetchError, OSError, ValueError) as error:
+        return str(error)
+    return None if code == 0 else f"the fetch-tables leg exited {code}"
+
+
 def require_thompson_tables(
         root: Path | None = None,
         assets: tuple[TableAsset, ...] = CLASSIC_TABLE_ASSETS,
+        *,
+        stage: bool = True,
 ) -> Path:
-    """The resolved mp8 table root, or a one-sentence refusal.
+    """The resolved mp8 table root, staged on first use, or a refusal.
 
     THE preflight for ``mp_physics=8``.  It exists because the same
     condition used to be discovered by ``validate_table_assets`` at the
     top of the GPU run -- after the fetch, after preprocessing, minutes
     of paid work in -- and reached the reader as a ``FileNotFoundError``
     traceback naming a path inside site-packages.  Called from the
-    stages that select physics, it is one sentence naming the table and
-    the command that stages it, before anything expensive starts.
+    stages that select physics, before anything expensive starts.
+
+    When the root is resolved here (``root=None``) and
+    :func:`auto_stage_applies`, an absent set is staged now by
+    :func:`_stage_on_first_use` and the root re-resolved, so a fresh
+    install runs Thompson with no manual step.  ``stage=False`` only
+    inspects: when that same first-use route applies, its advisory
+    describes the next run's automatic download.  A named root, a
+    caller's own table set, or a staging failure instead names the
+    manual command needed before preparing the forecast.
     """
 
+    resolved_here = root is None
+    scheme = _thompson_scheme_label(tuple(assets))
     if root is None:
         from woof.physics_compat import thompson_table_root
 
@@ -256,13 +393,39 @@ def require_thompson_tables(
     gaps = unstaged_table_assets(root, assets)
     if not gaps:
         return root
+    failure = None
+    automatic_staging = resolved_here and auto_stage_applies(assets)
+    if stage and automatic_staging:
+        failure = _stage_on_first_use(gaps, scheme)
+        if failure is None:
+            from woof.physics_compat import thompson_table_root
+
+            root = Path(thompson_table_root())
+            gaps = unstaged_table_assets(root, assets)
+            if not gaps:
+                return root
     mib = sum(asset.bytes for asset in gaps) / (1024 * 1024)
+    missing = (f"{scheme} needs "
+               f"{', '.join(asset.filename for asset in gaps)}, which "
+               f"{'are' if len(gaps) > 1 else 'is'} not staged at {root}")
+    if not stage and automatic_staging:
+        tables = ("the two tables" if len(gaps) == 2 else
+                  "the missing table" if len(gaps) == 1 else
+                  f"the {len(gaps)} missing tables")
+        raise MissingTableAssets(
+            f"{missing} -- the first `woof go` run downloads and checks "
+            f"{tables} (about {mib:.0f} MiB) from the pinned release assets; "
+            f"`woof fetch-tables` stages them ahead of time or offline "
+            f"with `--from DIR`")
+    # One sentence, so the failure's own text is folded onto one line.
+    automatic = (" (automatic staging failed: "
+                 + " ".join(failure.split()).replace(". ", "; ") + ")"
+                 if failure else "")
     raise MissingTableAssets(
-        f"mp_physics=8 (Thompson) needs "
-        f"{', '.join(asset.filename for asset in gaps)}, which "
-        f"{'are' if len(gaps) > 1 else 'is'} not staged at {root} -- run "
+        f"{missing}{automatic} -- run "
         f"`woof fetch-tables` ({mib:.0f} MiB, SHA-256 verified against "
-        f"the packaged pins) before preparing this forecast")
+        f"the packaged pins; `--from DIR` offline) before preparing this "
+        f"forecast")
 
 
 def staging_is_self_chosen(root: Path) -> bool:
@@ -333,10 +496,56 @@ def _staging_path(root: Path, asset: TableAsset) -> Path:
     its bytes installed under the first writer's successful pin check --
     an install that never matched the pin it was blessed by.  A unique
     name means the bytes hashed are the bytes moved.
+
+    The name was the pid and ``time.time_ns()``.  Windows' clock advances
+    in coarse ticks, so writers in one process within one tick were given
+    one name (50 names asked in a row were 1 name on the windows-2025 box),
+    and two threads staging the same table wrote the same file.  A random
+    UUID per call is unique without a clock or a lock.
     """
 
     return root / (f".{asset.filename}.fetch-partial-"
-                   f"{os.getpid()}-{time.time_ns()}")
+                   f"{os.getpid()}-{uuid.uuid4().hex}")
+
+
+def _cleanup_interrupted(root: Path, asset: TableAsset) -> None:
+    """Remove this asset's unpublished fragments only after their writers died.
+
+    A terminated CLI cannot run its finally block. Its Python staging name
+    and Rust range-transfer fragment would otherwise accumulate on every
+    restart. Call under the root lock; never touch a live writer's files.
+    """
+    import re
+    import psutil
+
+    pattern = re.compile(r"^\." + re.escape(asset.filename)
+                         + r"\.fetch-partial-(\d+)-[0-9a-f]{32}"
+                         + r"(?:\.encoded)?(?:\.part-(\d+)-\d+)?$")
+    def alive(pid):
+        if pid is None:
+            return False
+        try:
+            process = psutil.Process(int(pid))
+            return process.is_running() and process.status() != psutil.STATUS_ZOMBIE
+        except psutil.NoSuchProcess:
+            return False
+        except psutil.AccessDenied:
+            return True
+    removed = 0
+    for path in root.glob(f".{asset.filename}.fetch-partial-*"):
+        match = pattern.fullmatch(path.name)
+        if (match is not None and not any(alive(pid) for pid in match.groups())
+                and not path.is_symlink() and path.is_file()):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                # A read-only cache can still hold a verified final table.
+                # An untrusted fragment never participates in its validation.
+                continue
+            removed += 1
+    if removed:
+        print(f"woof fetch-tables: {asset.filename}: removed {removed} "
+              "unpublished fragments from an interrupted transfer", file=sys.stderr)
 
 
 def _stage(temp: Path, final: Path, asset: TableAsset) -> None:
@@ -348,11 +557,7 @@ def _stage(temp: Path, final: Path, asset: TableAsset) -> None:
         raise TableAssetError(
             f"{asset.filename}: staged {actual_bytes} bytes, expected "
             f"{asset.bytes}; refused and deleted")
-    digest = hashlib.sha256()
-    with temp.open("rb") as stream:
-        while block := stream.read(_BLOCK_BYTES):
-            digest.update(block)
-    actual_sha256 = digest.hexdigest()
+    actual_sha256 = _table_hash(temp)
     if actual_sha256 != asset.sha256:
         temp.unlink(missing_ok=True)
         raise TableAssetError(
@@ -362,116 +567,64 @@ def _stage(temp: Path, final: Path, asset: TableAsset) -> None:
 
 
 def fetch_asset_from_url(root: Path, asset: TableAsset, url: str, *, compression=None) -> Path:
-    """Download ``url`` into ``root`` with pre-install verification.
+    rows = table_source_rows(asset)
+    if any(row["url"] == url for row in rows):
+        return fetch_asset_from_sources(root, asset)
+    return _fetch_asset_from_url(root, asset, url, compression=compression)
 
-    Held under the table-root lock: staging, verifying and installing is
-    one transaction, so a concurrent fetch into the same root queues
-    behind it instead of interleaving with it.
 
-    The transfer COUNTS ITS BYTES on stderr while it runs.  This is the
-    303 MiB that made ``woof setup`` sit silent for 15.5 s of its 16.2
-    (UX finding N9). The transfer counter uses its wire length, including
-    compressed transfers; installation always verifies the raw asset pin.
-    stderr because ``woof setup`` captures each step's
-    stdout; see :mod:`woof.progress`.
-    """
-
-    if compression not in (None, "bz2"):
-        raise TableAssetError(f"unsupported asset compression {compression!r}")
+def _fetch_asset_from_url(root: Path, asset: TableAsset, url: str, *, compression=None,
+                          offline_command="woof fetch-tables --from DIR") -> Path:
+    """Ranged Rust fetch and pin before the final atomic install."""
+    if compression not in (None, "bz2", "zstd"):
+        raise TableAssetError(f"{asset.filename}: unsupported compression {compression!r}; the raw table pin cannot be checked")
+    root.mkdir(parents=True, exist_ok=True)
     final = root / asset.filename
     with fetch_guard.hold("fetch-tables", root):
-        # Another fetch may have installed it while this caller waited.
-        # Verify under the same lock so a shared cache downloads once.
+        _cleanup_interrupted(root, asset)
         if final.is_file():
             _verify_in_place(final, asset)
             return final
         temp = _staging_path(root, asset)
-        transfer_temp = temp if compression is None else temp.with_name(temp.name + ".bz2")
-        attempts = max(1, int(TRANSFER_ATTEMPTS))
-        for attempt in range(1, attempts + 1):
+        encoded = temp.with_name(temp.name + ".encoded") if compression else temp
+        attrs = {"bytes": 0, "datasets": [asset.filename]}
+        counter = ByteCounter(f"woof fetch-tables: {asset.filename}", asset.bytes)
+        received_before = 0
+        def progress(received, total):
+            nonlocal received_before
+            if total:
+                counter.total = total
+            counter.advance(max(0, received - received_before))
+            received_before = received
+        with span("prep.tables.fetch", attrs=attrs):
             try:
-                _transfer(url, transfer_temp, asset)
-                break
-            except _TransientTransfer as stall:
-                transfer_temp.unlink(missing_ok=True)
-                if attempt == attempts:
-                    raise TableAssetError(
-                        f"{asset.filename}: download from {url} stalled "
-                        f"{attempts} times ({stall}); check the network "
-                        "connection and run woof fetch-tables again, or "
-                        "stage the file from a local copy with --from")
-                print(f"woof fetch-tables: {asset.filename}: {stall}; "
-                      f"retrying ({attempt + 1} of {attempts})",
-                      file=sys.stderr)
-                time.sleep(RETRY_PAUSE_SECONDS * attempt)
-            except (urllib.error.URLError, OSError) as error:
-                transfer_temp.unlink(missing_ok=True)
+                if compression is None:
+                    record = _rw_asset("asset", url=url, output=temp,
+                                       bytes=asset.bytes, sha256=asset.sha256,
+                                       on_progress=progress)
+                    progress(record["bytes"], record["bytes"])
+                    attrs["bytes"] = record["bytes"]
+                    os.replace(temp, final)
+                else:
+                    record = _rw_asset("encoded-asset", url=url, output=encoded,
+                                       on_progress=progress)
+                    progress(record["bytes"], record["bytes"])
+                    attrs["bytes"] = record["bytes"]
+                    # rw_fetch decodes in process: the host bzip2 and pzstd
+                    # this used to spawn are not on a stock Windows PATH,
+                    # so every compressed table refused there.
+                    _rw_asset("decode", input=encoded, output=temp, codec=compression)
+                    _stage(temp, final, asset)
+            except (GeogFetchError, OSError) as error:
                 raise TableAssetError(
-                    f"{asset.filename}: download failed from {url}: {error}")
-        try:
-            if compression == "bz2":
-                with bz2.open(transfer_temp, "rb") as source, temp.open("wb") as sink:
-                    shutil.copyfileobj(source, sink, _TRANSFER_BLOCK_BYTES)
-            _stage(temp, final, asset)
-        except (OSError, EOFError) as error:
-            raise TableAssetError(f"{asset.filename}: cannot decompress {url}: {error}") from error
-        finally:
-            temp.unlink(missing_ok=True)
-            transfer_temp.unlink(missing_ok=True)
+                    f"{asset.filename}: could not fetch {url}: {error}; "
+                    f"offline, stage the pinned files with `{offline_command}`") from error
+            finally:
+                counter.close()
+                temp.unlink(missing_ok=True)
+                encoded.unlink(missing_ok=True)
+        _cleanup_interrupted(root, asset)
     return final
-
-
-#: Seconds one socket operation (connecting, or waiting for the next
-#: block of the body) may take before the transfer counts as stalled.
-#: There was no deadline at all: a host that answered 200 and then sent
-#: nothing held `woof setup` forever with no progress and no message.
-SOCKET_TIMEOUT_SECONDS = 60.0
-#: Whole-transfer attempts before a stall is a refusal.
-TRANSFER_ATTEMPTS = 3
-#: Pause before a retry, times the attempt number.
-RETRY_PAUSE_SECONDS = 2.0
-
-
-class _TransientTransfer(Exception):
-    """A stall or a server-side failure worth one more try."""
-
-
-def _transfer(url: str, temp: Path, asset: TableAsset) -> None:
-    counter = None
-    try:
-        with urllib.request.urlopen(
-                url, timeout=SOCKET_TIMEOUT_SECONDS) as response, (
-                    temp.open("wb")) as sink:
-            try:
-                wire_bytes = int(getattr(response, "headers", {}).get("Content-Length", asset.bytes))
-            except (TypeError, ValueError):
-                wire_bytes = asset.bytes
-            counter = ByteCounter(f"woof fetch-tables: {asset.filename}",
-                                  wire_bytes if wire_bytes > 0 else asset.bytes)
-            while True:
-                block = response.read(_TRANSFER_BLOCK_BYTES)
-                if not block:
-                    break
-                sink.write(block)
-                counter.advance(len(block))
-    except urllib.error.HTTPError as error:
-        if error.code >= 500:
-            raise _TransientTransfer(f"the server answered {error.code}") from None
-        raise
-    except (TimeoutError, socket.timeout):
-        raise _TransientTransfer(
-            f"no data for {SOCKET_TIMEOUT_SECONDS:g} s") from None
-    except urllib.error.URLError as error:
-        if isinstance(error.reason, (TimeoutError, socket.timeout,
-                                     ConnectionError)):
-            raise _TransientTransfer(str(error.reason) or "connection timed out") from None
-        raise
-    except (ConnectionError, http.client.HTTPException) as error:
-        # a connection dropped mid-body, or a body shorter than announced
-        raise _TransientTransfer(str(error) or type(error).__name__) from None
-    finally:
-        if counter is not None:
-            counter.close()
 
 
 def fetch_asset_from_dir(root: Path, asset: TableAsset,
@@ -484,6 +637,7 @@ def fetch_asset_from_dir(root: Path, asset: TableAsset,
             f"{asset.filename}: not found in --from directory {source_dir}")
     final = root / asset.filename
     with fetch_guard.hold("fetch-tables", root):
+        _cleanup_interrupted(root, asset)
         if final.is_file():
             try:
                 _verify_in_place(final, asset)
@@ -591,9 +745,11 @@ def stage_classic_tables(args) -> int:
     # produce two half-roots and no runnable one.  Assets the package
     # does carry are copied across under the same pin verification.
     copied: list[TableAsset] = []
-    if root != packaged and staging_is_self_chosen(root):
+    if root != packaged:
         available = {asset.filename for asset in classify_assets(packaged)[0]}
         for asset in list(absent):
+            if asset.filename in EXTERNALIZED_TABLE_FILENAMES and not self_chosen:
+                continue
             if asset.filename not in available:
                 continue
             mib = asset.bytes / (1024 * 1024)
@@ -633,8 +789,10 @@ def stage_classic_tables(args) -> int:
                 return 2
             copied.append(asset)
 
+    declared = {asset.filename: table_source_rows(asset) for asset in absent}
     packaged_gaps = [asset for asset in absent
-                     if asset.filename not in EXTERNALIZED_TABLE_FILENAMES]
+                     if asset.filename not in EXTERNALIZED_TABLE_FILENAMES
+                     and not declared[asset.filename]]
     for asset in packaged_gaps:
         print(f"woof fetch-tables: {asset.filename} is missing but ships "
               "inside the package itself; this install is incomplete -- "
@@ -643,7 +801,8 @@ def stage_classic_tables(args) -> int:
         return 2
 
     fetchable = [asset for asset in absent
-                 if asset.filename in EXTERNALIZED_TABLE_FILENAMES]
+                 if asset.filename in EXTERNALIZED_TABLE_FILENAMES
+                 or declared[asset.filename]]
     if not fetchable and not copied:
         if repaired:
             validate_table_assets(root)
@@ -668,7 +827,7 @@ def stage_classic_tables(args) -> int:
                 url = f"{base}/{asset.filename}"
                 print(f"woof fetch-tables: downloading {asset.filename} "
                       f"({mib:.1f} MiB) from {url}")
-                final = fetch_asset_from_url(root, asset, url)
+                final = fetch_asset_from_sources(root, asset)
         except TableAssetError as error:
             print(f"woof fetch-tables: REFUSED: {error}")
             return 2
@@ -698,6 +857,26 @@ def fetch_tables_main(args) -> int:
     a single number.
     """
 
+    schemes = getattr(args, "schemes", None)
+    if getattr(args, "replace_damaged", False) and (not schemes or not getattr(args, "from_dir", None)):
+        print("woof fetch-tables: --replace-damaged requires --schemes and --from DIR "
+              "so the replacement source is explicit", file=sys.stderr)
+        return 2
+    if schemes:
+        if any(getattr(args, key, False) for key in
+               ("wif", "wif_only", "ocean", "ocean_only", "thompson_fork", "thompson_fork_only")):
+            print("woof fetch-tables: --schemes selects its own table set; "
+                  "run additional dataset legs in a separate fetch-tables command", file=sys.stderr)
+            return 2
+        from woof.tables import stage_schemes
+        try:
+            report = stage_schemes(schemes, source_dir=getattr(args, "from_dir", None),
+                                   replace_damaged=getattr(args, "replace_damaged", False))
+        except (TableAssetError, OSError, ValueError) as error:
+            print(f"woof fetch-tables: REFUSED: {error}", file=sys.stderr)
+            return 2
+        print(f"woof fetch-tables: {len(report.present)} required files verified (size + SHA-256)")
+        return 0
     wif_requested = bool(getattr(args, "wif", False))
     wif_only = bool(getattr(args, "wif_only", False))
     fork_requested = bool(getattr(args, "thompson_fork", False))
@@ -708,6 +887,13 @@ def fetch_tables_main(args) -> int:
         fork_code = stage_thompson_fork_tables(
             getattr(args, "from_dir", None), getattr(args, "thompson_fork_root", None))
 
+    ocean_requested = bool(getattr(args, "ocean", False))
+    ocean_only = bool(getattr(args, "ocean_only", False))
+    ocean_code: int | None = None
+    if ocean_requested or ocean_only:
+        ocean_code = stage_ocean_climatology(getattr(args, "from_dir", None),
+                                             getattr(args, "ocean_root", None))
+
     wif_code: int | None = None
     if wif_requested:
         wif_code = stage_wif_dataset(getattr(args, "from_dir", None),
@@ -716,7 +902,7 @@ def fetch_tables_main(args) -> int:
     # --wif-only is the one flag that legitimately skips the mandatory
     # leg, because it is the operator saying so in as many words.
     classic_code: int | None = None
-    if not wif_only and not fork_only:
+    if not wif_only and not fork_only and not ocean_only:
         classic_code = stage_classic_tables(args)
 
     legs = []
@@ -726,11 +912,43 @@ def fetch_tables_main(args) -> int:
         legs.append(("--wif aerosol climatology dataset", wif_code))
     if fork_code is not None:
         legs.append(("--thompson-fork coefficient tables", fork_code))
+    if ocean_code is not None:
+        legs.append(("--ocean WOA18 mixed-layer-depth climatology", ocean_code))
     if len(legs) > 1 or (wif_requested and not wif_only):
         for label, code in legs:
             state = "staged" if code == 0 else "REFUSED"
             print(f"woof fetch-tables: {label}: {state}")
     return max((code for _, code in legs), default=0)
+
+
+def stage_ocean_climatology(source_dir=None, root=None) -> int:
+    """Stage all 12 NOAA WOA18 monthly mixed-layer-depth files.
+
+    The mixed-layer ocean is on by default for forecasts of 48 h and
+    more, and its initial mixed-layer depth is this climatology.  Each
+    month is SHA-256 verified against
+    :data:`woof.ocean.mixed_layer.climatology.MONTH_PINS` before the
+    atomic install, into the very cache the forecast reads
+    (``WOOF_OCEAN_CACHE``, else ``<case data root>/ocean``), so an image
+    or AMI baked with this command never touches NCEI at forecast start.
+    Named breakage: NCEI THREDDS answered 503 for over an hour on
+    2026-10-22 and every run with water in its domain died at its first
+    step, because nothing could stage the file ahead of time.
+    """
+
+    from woof.ocean.mixed_layer import climatology
+
+    target = climatology.cache_root(root)
+    print(f"woof fetch-tables --ocean: staging 12 WOA18 monthly MLD files "
+          f"into {target}" + (f" from {source_dir}" if source_dir else ""))
+    staged, failed = climatology.stage_all(cache=target, source_dir=source_dir)
+    if failed:
+        print(f"woof fetch-tables --ocean: {len(staged)} of 12 months staged; "
+              f"months {', '.join(f'{m:02d}' for m in failed)} REFUSED -- re-run "
+              "when the source answers, or stage them with --from DIR")
+        return 2
+    print(f"woof fetch-tables --ocean: all 12 months staged and verified at {target}")
+    return 0
 
 
 def stage_wif_dataset(source_dir=None, root=None) -> int:
@@ -778,7 +996,7 @@ def stage_wif_dataset(source_dir=None, root=None) -> int:
             url, compression = wif_asset_source()
             print(f"woof fetch-tables --wif: downloading "
                   f"{WIF_DATASET_FILE} ({mib:.1f} MiB) from {url}")
-            fetch_asset_from_url(wif_root, WIF_DATASET_ASSET, url, compression=compression)
+            fetch_asset_from_sources(wif_root, WIF_DATASET_ASSET)
     except TableAssetError as error:
         print(f"woof fetch-tables --wif: REFUSED: {error}")
         return 2
@@ -788,6 +1006,13 @@ def stage_wif_dataset(source_dir=None, root=None) -> int:
     return 0
 
 
+def _table_hash(path: Path) -> str:
+    try:
+        return _rw_asset("hash", input=path)["sha256"]
+    except GeogFetchError as error:
+        raise TableAssetError(f"{path}: {error}") from error
+
+
 def _verify_in_place(path: Path, asset: TableAsset) -> None:
     """Size then SHA-256 of a file already in its final location."""
 
@@ -795,13 +1020,10 @@ def _verify_in_place(path: Path, asset: TableAsset) -> None:
     if actual_bytes != asset.bytes:
         raise TableAssetError(
             f"{path}: {actual_bytes} bytes, expected {asset.bytes}")
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while block := stream.read(_BLOCK_BYTES):
-            digest.update(block)
-    if digest.hexdigest() != asset.sha256:
+    digest = _table_hash(path)
+    if digest != asset.sha256:
         raise TableAssetError(
-            f"{path}: SHA-256 {digest.hexdigest()}, expected {asset.sha256}")
+            f"{path}: SHA-256 {digest}, expected {asset.sha256}; other lookup coefficients would change the selected physics")
 
 
 def register_cli(subparsers) -> None:
@@ -813,6 +1035,10 @@ def register_cli(subparsers) -> None:
              "delete them -- SHA-256-verified against the packaged pins "
              "before install; idempotent when everything is already "
              "present")
+    parser.add_argument("--schemes", nargs="+", metavar="FAMILY",
+                        help="stage only named physics table families, e.g. p3 noah tempo rrtmgp; see woof.tables")
+    parser.add_argument("--replace-damaged", action="store_true",
+                        help="with --schemes and --from, replace damaged files only after source pin verification")
     parser.add_argument(
         "--from", dest="from_dir", metavar="DIR", default=None,
         help="stage from a local directory instead of downloading "
@@ -835,14 +1061,33 @@ def register_cli(subparsers) -> None:
              "(same meaning as WOOF_WIF_DATA_ROOT)")
     parser.add_argument(
         "--thompson-fork", action="store_true",
-        help="stage the pinned WRF 3.9 fork Thompson coefficient set from "
-             "--from DIR, packaged fork data, or an explicitly selected mirror")
+        help="also stage the pinned WRF 3.9 fork Thompson coefficient set "
+             "(thompson_version = \"wrf_39_noaa\", the HRRR configurations' "
+             "tables; 330 MiB) into ~/.woof/tables/thompson-wrf39-noaa: from "
+             "--from DIR, packaged fork data, an explicitly selected mirror, or "
+             "the release assets, SHA-256-verified against the packaged pins "
+             "before install. Runs that select the fork acquire it automatically")
     parser.add_argument(
         "--thompson-fork-only", action="store_true",
         help="stage only the fork coefficient set and leave classic tables alone")
     parser.add_argument(
         "--thompson-fork-root", metavar="DIR", default=None,
         help="stage fork tables into DIR instead of the selected fork cache")
+    parser.add_argument(
+        "--ocean", action="store_true",
+        help="also stage the 12 NOAA WOA18 monthly mixed-layer-depth files "
+             "(about 85 MB) the default mixed-layer ocean initializes from, "
+             "SHA-256 verified, into the cache forecasts read "
+             "(WOOF_OCEAN_CACHE, else <case data root>/ocean), so no "
+             "forecast fetches them from NCEI at start")
+    parser.add_argument(
+        "--ocean-only", action="store_true",
+        help="stage only the ocean climatology and leave the coefficient "
+             "tables alone")
+    parser.add_argument(
+        "--ocean-root", metavar="DIR", default=None,
+        help="stage the ocean climatology into DIR (same meaning as "
+             "WOOF_OCEAN_CACHE)")
     parser.set_defaults(func=fetch_tables_main)
     return parser
 
@@ -854,6 +1099,7 @@ __all__ = [
     "RELEASE_ASSET_BASE_URL",
     "TableAssetError",
     "asset_url_base",
+    "auto_stage_applies",
     "classify_assets",
     "fetch_asset_from_dir",
     "fetch_asset_from_url",
@@ -863,9 +1109,18 @@ __all__ = [
     "require_thompson_tables",
     "staging_is_self_chosen",
     "stage_classic_tables",
+    "stage_ocean_climatology",
     "stage_wif_dataset",
     "staging_root",
     "unstaged_table_assets",
     "wif_asset_url_base",
     "wif_asset_source",
 ]
+
+def generated_table_root(name: str) -> Path:
+    """Persistent cache for WOOF-built, manifest-pinned coefficient assets."""
+    import re
+    if re.fullmatch(r"[a-z][a-z0-9-]*", name) is None:
+        raise ValueError("generated table family must be a plain identifier")
+    base=os.environ.get("WOOF_GENERATED_TABLE_ROOT")
+    return (Path(base) if base else Path.home()/".woof"/"tables")/name

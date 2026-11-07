@@ -46,13 +46,22 @@ def compute_moist_dynamics_coefficients_metal_v841(
     driver: Any,
     scalars: Any,
     *,
-    scalar_names: tuple[str, ...],
+    scalar_names: tuple[str, ...] | None = None,
     validation_flag: Any,
+    n_mass_loading: int | None = None,
 ) -> MetalV841MoistDynamicsCoefficients:
     """Reproduce atm_compute_moist_coefficients from raw start-state q."""
 
-    species_row = species_row_for_names(scalar_names)
-    expected = (len(tuple(scalar_names)), driver.nlev, driver.ncells)
+    if (scalar_names is None) == (n_mass_loading is None):
+        raise ValueError("pass exactly one of scalar_names or n_mass_loading")
+    if scalar_names is not None:
+        n_mass_loading = species_row_for_names(scalar_names).n_mass_loading
+        n_species = len(tuple(scalar_names))
+    else:
+        n_species = int(scalars.shape[0])
+    if not 1 <= int(n_mass_loading) <= n_species:
+        raise ValueError("n_mass_loading must name a leading run of the scalar block")
+    expected = (n_species, driver.nlev, driver.ncells)
     _require("scalars", scalars, np.float32, expected)
     _require("validation_flag", validation_flag, np.int32, (1,))
     nlev, ncells, nedges = int(driver.nlev), int(driver.ncells), int(driver.nedges)
@@ -66,14 +75,14 @@ def compute_moist_dynamics_coefficients_metal_v841(
     _launch(
         "moist_cell_coefficients_v841_f32", ncells, mctx,
         dict(scalars=scalars, qtot=qtot, cqw=cqw, invalid=validation_flag),
-        dict(nlev=_i(nlev), ncells=_i(ncells), nmass=_i(species_row.n_mass_loading)),
+        dict(nlev=_i(nlev), ncells=_i(ncells), nmass=_i(n_mass_loading)),
     )
     _launch(
         "moist_edge_coefficients_v841_f32", nedges, mctx,
         dict(cells_on_edge=driver.atmosphere.mesh.cells_on_edge,
              scalars=scalars, cqu=cqu, invalid=validation_flag),
         dict(nlev=_i(nlev), ncells=_i(ncells), nedges=_i(nedges),
-             nmass=_i(species_row.n_mass_loading)),
+             nmass=_i(n_mass_loading)),
     )
     result = MetalV841MoistDynamicsCoefficients(qtot=qtot, cqw=cqw, cqu=cqu)
     result.validate(n_vert_levels=nlev, n_cells=ncells, n_edges=nedges)

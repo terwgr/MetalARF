@@ -15,31 +15,56 @@
 # what the distribution declares, against what the package actually is
 tests/test_packaging_declaration.py
 
-# the engine a run executes: its seam files measured and named, the door's
-# and doctor's refusal of a tree that lacks one, and the seam contract held
-# against the engine in the same tree.  Real files, no card, no network.
-tests/test_engine_identity.py
-tests/test_engine_seam_contract.py
+# the engine range and the two surfaces that must name it: the derived
+# dependency specifier, the installed-engine drift check `doctor` makes at
+# install time, and the door's refusal.  Real files and real SHA-256, no
+# card, no network -- and it belongs in the tier that runs on every push
+# because the defect it answers (pip resolving an engine the seam pin
+# refuses) is a defect of the DECLARATION, which is what a push changes
+tests/test_engine_pin.py
 
 # the checkout produces one artefact rather than one per builder: line endings
 # are pinned, so the LICENSE and NOTICE bytes inside dist-info/licenses/ do not
 # depend on the cloner's core.autocrlf
 tests/test_checkout_reproducibility.py
 
+# the licence notices name every upstream text and the wheel ships them all;
+# the Noah-MP terms are stated where that portion lives; the licence holds
+# match the tree (tests/test_licence_notices.py names each breakage)
+tests/test_licence_notices.py
+tests/test_helper_licences_radar.py
+tests/test_licence_gate.py
+# the default native library build compiles a licence stub for Noah-MP v5.0; the opt-in builds it
+# by name; an opted-in run on a stubbed library is refused (no compiler or network)
+tests/test_native_licence_stubs.py
+
 # the three front doors: argument surfaces, executable resolution ladders,
 # product coverage, and every named refusal
+tests/test_file_lock.py
 tests/test_init_door.py
+tests/test_init_sources.py
+# A row's cycle window refused from the table before any transfer, and its surface input (IFS sea ice from
+# the same cycle's GFS ICEC) (fix/hex-ifs-0p1-first-cycle); host-only, network stubbed.
+tests/test_source_cycles.py
+tests/test_surface_input.py
 tests/test_render_door.py
+tests/test_products_door.py
+tests/test_first_look.py
+tests/test_first_maps.py
 
 # doctor and the doors agree about a staged bridge that is present and not
 # executable: a gap with its chmod, never a find the door then refuses
 tests/test_doctor_bridge_mode.py
+tests/test_obs_scorer_optional.py
+tests/test_land_surface_off_publication.py
+tests/test_tempo_tables_door.py
 
 # the forecast door: argument grammar, the refusal inventory, and the device
 # admission decision.  The decision is exercised at free-memory values no
 # card here has, which is the only way to test the refusal that fires when a
 # card is too small; the door's one point of device contact is substituted
 tests/test_forecast_door.py
+tests/test_forecast_door_invariant.py
 
 # the forecast receipt names the engine its seam bytes matched, not the x4
 # proof's sealed engine constants
@@ -65,6 +90,12 @@ tests/test_source_manifests.py
 # and still refuse metre-scale corruption at coarse spacing.  Builds its own
 # mesh, so it belongs in the tier that needs no assets
 tests/test_mesh_validation.py
+
+# the verticesOnCell slot convention (edge-start and edge-end both admitted,
+# mixed and broken rings refused) and the area-closure bound measured from
+# the stored precision and each element's shortest edge.  Builds on the same
+# synthetic sphere, so it also needs no assets
+tests/test_mesh_slot_convention.py
 
 # the sizing gates: a resolution spec the BUILD refuses has to be refused by
 # SIZING first.  Its arithmetic members run anywhere; the members that drive
@@ -100,6 +131,7 @@ tests/test_history_refl_q2.py
 # start state rather than published as the seam's pre-first-call placeholders
 # (+0 and 100000 Pa), from which every hour-0 2 m dewpoint map was drawn
 # with zero humidity.  Synthetic frames and a tiny netCDF; no card, no assets.
+tests/test_f000_first_call.py
 tests/test_f000_start_frame.py
 
 # ---------------------------------------------------------------------------
@@ -142,9 +174,13 @@ tests/test_admission_strings.py
 tests/test_arch_admission.py
 tests/test_cell_coordination_admission.py
 tests/test_convection_admission.py
+tests/test_ntiedtke_column_row.py
+# The init shdmax reaches Noah-MP (obs scorecard defect 2026-10-12: every land column ran at the engine 90 % fill).
+tests/test_noahmp_shdmax_binding.py
 tests/test_device_admission.py
 tests/test_domain_size_agreement.py
 tests/test_dt_admission.py
+tests/test_mpas_defaults_retired_gates.py
 tests/test_dual_edge_admission.py
 tests/test_native_free_init_admission_305.py
 tests/test_partition_device_admission.py
@@ -157,6 +193,13 @@ tests/test_regional_mesh_admission.py
 tests/test_capacity_copy_elisions.py
 tests/test_device_memory_capacity_tools.py
 tests/test_device_memory_ledger_probes.py
+# Resolve the current engine YSU probe loader with device calls replaced on CPU.
+tests/test_engine_symbol_ysu_probe.py
+# The phase-boundary device memory release (woof.hex.device_memory_release) on a stand-in
+# CuPy: what it returns, when, what each knob switches off.  Breakage it prevents: a bracket
+# that frees inside a stream capture or after a failed phase, or a knob that no longer turns
+# the saving off for an A/B run.
+tests/test_device_memory_release.py
 
 # The CUDA surfaces that are decidable without a CUDA device: kernel source
 # structure, the NVRTC reciprocal rewrite, the libm identity, the vectorised
@@ -165,6 +208,8 @@ tests/test_device_memory_ledger_probes.py
 # checking them meant no push examined the kernel sources at all.
 tests/test_cuda_physics_tier_park_v841.py
 tests/test_cuda_regional_kernels.py
+tests/test_cuda_acoustic_fusion_v841.py
+tests/test_cuda_column_order_v841.py
 tests/test_element_parallel_kernels.py
 tests/test_kernel_element_ab.py
 tests/test_fullstep_projection_probe.py
@@ -175,6 +220,10 @@ tests/test_solve_region_checks.py
 tests/test_libm_identity.py
 tests/test_nvrtc_reciprocal_rewrite.py
 tests/test_vertical_artifact_met_state.py
+tests/test_vertical_provenance_overlap.py
+tests/test_vertical_geometry_cache.py
+tests/test_vertical_field_writes.py
+tests/test_vertical_template_overlap.py
 tests/test_vertical_vectorized_equivalence.py
 
 # The regional/nesting seam: anchoring, mesh binding, the physics seam, the
@@ -184,6 +233,8 @@ tests/test_vertical_vectorized_equivalence.py
 # the native-culled reference set skip by name (measured: 11 skips across the
 # whole forty, each printing its own reason under -rs).
 tests/test_lbc.py
+# Boundary times written in parallel processes (fix/regional-boundary-finest); CPU only.
+tests/test_lbc_parallel.py
 tests/test_nest_ratio_ring_shell.py
 tests/test_refined_region_field.py
 tests/test_regional_forecast_anchor.py
@@ -204,6 +255,23 @@ tests/test_regional_class_band.py
 # and changes no interface, so nothing but a test can see it.
 tests/test_local_timestep.py
 tests/test_pbl_cadence.py
+# Full-step local time stepping: the shadow clock and census, the class
+# tables, the scalar interface law, the per-class physics clock.  The CUDA
+# halves of the monitor and scalar files skip here unless HEX_LTS_GPU_TESTS=1
+# inside a mutex grant.  The six files were on disk and on no tier list until
+# the physics stage's test_tier_membership run found them.
+tests/test_fullstep_lts_shadow.py
+tests/test_fullstep_lts_pilot_hashes.py
+tests/test_fullstep_lts_cuda_monitor.py
+tests/test_fullstep_lts_classes.py
+tests/test_fullstep_lts_scalars.py
+tests/test_fullstep_lts_physics_clock.py
+# The multi-card stage: the block index law (CPU) and the factor/apply split
+# of the donor guard and reserve cap (CUDA half skips without
+# HEX_LTS_GPU_TESTS=1 inside a mutex grant).
+tests/test_fullstep_lts_blocks.py
+tests/test_fullstep_lts_multi_kernels.py
+tests/test_fullstep_lts_restart.py
 
 # The cycling cascade: the loop that carries one forecast into the next.
 tests/test_cycle_cascade.py
@@ -249,6 +317,11 @@ tests/test_plot_pair_gallery.py
 tests/test_point_source_placement.py
 tests/test_backend_row_builder.py
 tests/test_physics_backend_rows.py
+# The per-step rollback export kept on the device (8b88574): its CPU members
+# hold the copy-destination and exporter contract with a fake CuPy; the
+# markers keep its CUDA members off this tier.  Enrolled 2026-10-05, the file
+# had arrived on no tier list.
+tests/test_cuda_seam_device_snapshot.py
 # Receipts name the machine by a salted digest, never by its network name.
 tests/test_host_identity.py
 tests/test_species_row_extended.py
@@ -256,7 +329,1015 @@ tests/test_species_row_extended.py
 # reads it, and an unarmed failure retires the seam instead of pretending it
 # rolled back. Fake engine, no card.
 tests/test_physics_rollback_policy.py
+tests/test_refusal_retired_physics.py
+# The rollback snapshot schema, detached copies, allocation fallback and host
+# materialization (same file as above; listed once). Device members carry the
+# gpu marker and run in tier 3.
 # Forecast presets are table rows the door resolves into its own cadence knob,
 # and a row cannot declare a physics suite the pinned engine seam does not
 # take as an argument.
 tests/test_forecast_preset.py
+# Source profiles are table rows pinning outside model configurations; the
+# rows say, per hex lane, which refusal each dycore setting meets; the tests
+# read the public namelist lines through the namelist door and apply each
+# knob to the forecast-column lane, and hold every refusal layer by source.
+tests/test_source_profiles.py
+# A legacy config_epssm is read and ignored with upstream's warning on the
+# v8.4.1 lanes, every numeric read sits behind a v8.4.1 dispatch, and the CPU
+# step is bitwise identical for any value (skips without the x1.2562 pair).
+tests/test_epssm_v841.py
+tests/test_rk2_v841.py
+tests/test_fct_v841.py
+tests/test_upper_damping_v841.py
+tests/test_imported_init_carriers.py
+tests/test_forecast_refusal_causes.py
+tests/test_invariant_cold_start.py
+
+# Same-host rank planning, native-tail publication, complete receipt gates and
+# resource isolation. These members use synthetic arrays, small temporary
+# NetCDF files and fake runtimes. The transport file's device members are
+# separated by the gpu marker and also belong to tier 3.
+tests/test_build_samehost_layouts_v841.py
+tests/test_complete_samehost_receipts_v841.py
+tests/test_cuda_runtime_device_selection.py
+# 0.4.8 (2026-10-26): CUDA wait mode (cuda_backend/schedule.py) against a fake driver; host-only. Breakage it
+# prevents: the hex main thread spinning one core at 100 % for the whole GPU-bound step loop.
+tests/test_cuda_schedule.py
+tests/test_partition_assets_v841.py
+tests/test_partition_local_mesh_v841.py
+tests/test_partition_regional_donor_v841.py
+tests/test_partition_regional_v841.py
+tests/test_partition_samehost_compile_v841.py
+tests/test_partition_samehost_tables_v841.py
+tests/test_partition_samehost_transport_v841.py
+tests/test_partition_samehost_v841.py
+tests/test_samehost_adapter_cpu_v841.py
+tests/test_samehost_checks_v841.py
+tests/test_samehost_dry_step_v841.py
+tests/test_samehost_forecast_check_instrument.py
+tests/test_forecast_receipt_input_digest.py
+tests/test_prepared_execution_sealing.py
+tests/test_samehost_identity_v841.py
+tests/test_samehost_physics_scope_v841.py
+tests/test_samehost_serial_io_v841.py
+
+# Rust geometry runs on the host against four-cell scalar authority arrays.
+# Its fixture skips without a staged bridge unless numeric proof is required.
+tests/test_rust_geometry.py
+
+# Graph descriptor ownership and replay receipt refusals without a card. The
+# configured CONUS evidence check reads retained JSON and skips if absent.
+# Descriptor capture on real CUDA is the same file's tier-3 member.
+tests/test_cuda_graph_tables.py
+tests/test_cuda_graph_replay_receipt.py
+tests/test_cuda_subcycle_graphs_conus.py
+# What the subcycle graph stages and keys (F1): every tendency array the subcycle reads,
+# withheld fields raising instead of reading as absent, host values keyed by value.
+tests/test_cuda_subcycle_graphs_staging.py
+# The refused-step value restore under graphs (F1 follow-through): a --stop-on-refusal run ends on the
+# committed step, not on the refused step graph replay overwrote.
+tests/test_cuda_seam_snapshot_refusal_values.py
+
+# Required default Rust host preparation against scalar authority arrays.
+tests/test_rust_hostprep.py
+
+# Content-keyed host-preparation cache: hits are bitwise the computation,
+# damaged entries are discarded, refusals are never stored.
+tests/test_prep_cache.py
+tests/test_repin_source_tables.py
+
+# Background replay of the previous run's NVRTC compiles (kernel prewarm).
+tests/test_kernel_prewarm.py
+
+# Every direct and cached NVRTC route participates in the parallel compile plan.
+# The run's whole kernel set compiled ahead on every core, every NVRTC route.
+tests/test_kernel_plan.py
+
+# History frames written by one background process are the bytes a direct
+# write gives; a broken writer falls back to the direct write.
+tests/test_history_writer.py
+tests/test_time_ledger.py
+tests/test_time_ledger_cpu.py
+
+# The start-up cache bake: the verify run must add nothing to either cache.
+tests/test_bake_startup_caches.py
+tests/test_final_identity.py
+# Suite soil geometry and species at init (nine-level RUC, aerosol source); host-only. The native file
+# skips unless RW_MPAS_INIT names a built rw_mpas_init.
+tests/test_init_physics.py
+tests/test_init_native_physics.py
+
+# Integrated speed lanes. CUDA and asset gates remain applied by the selector.
+tests/test_contract_bench_cache.py
+tests/test_contract_hostprep.py
+tests/test_cuda_subcycle_graphs_policy.py
+tests/test_hex_aot.py
+tests/test_on_demand_assets.py
+# Release packaging: the 100,000,000 B per-file PyPI cap check and the local asset stager (127.0.0.1 only).
+tests/test_check_dist_sizes.py
+tests/test_stage_release_assets.py
+tests/test_hex_bench_observer.py
+tests/test_hex_bench_pin.py
+tests/test_hex_bench_series.py
+tests/test_intermediate_bench_eviction.py
+tests/test_late_health_pipeline.py
+tests/test_lbc_stream.py
+tests/test_multi_member.py
+tests/test_point_ledger_boundaries.py
+tests/test_projected_intermediate_native.py
+tests/test_radiation_helper_scope.py
+tests/test_samehost_automatic_v841.py
+tests/test_samehost_fingerprint_default.py
+tests/test_partition_topology_v841.py
+tests/test_partition_overlap_v841.py
+tests/test_partition_field_halos_v841.py
+# RRFS stage-1 integration (2026-10-05): files that arrived on lane branches
+# with no tier entry.  The JEDI file contract (H6-T1, Rust NetCDF round
+# trips), the suite row (H4a; skips without the engine on the path), the
+# undriven-species receipt list, and the same-host rank, affinity, pipeline,
+# failure and stream-scope members of the multi-card line (their CUDA members
+# carry the gpu marker and stay off this tier).
+tests/test_jedi_contract.py
+tests/test_physics_suite_row.py
+
+# named physics suites (woof.hex.physics_suites): the suite table's schema,
+# the default suite as the frozen row and the bare door's own vector, every
+# refusal named with its follow-up, the namelist.atmosphere importer per
+# option, and woof hex physics list/resolve/import -- host-only; the
+# column-suite cases skip by name without the engine's mpas_column_suite
+tests/test_physics_suites.py
+
+# The TEMPO row's species inventory, suite resolution and namelist switch
+# (host-only); the engine-file binding case skips without a TEMPO engine.
+tests/test_tempo_row.py
+
+# the thompson_aero_column backend row on the frozen batch (host-only); it
+# landed without a tier line, which the tier census
+# (tests/test_tier_membership.py) refused
+tests/test_thompson_column_row.py
+tests/test_supplied_undriven_scalars.py
+
+# Native surface admission (woof.hex.surface_signature): the init's xland,
+# xice, ivgtyp and landmask, the columns native init converts to ice, and
+# the check_surface_signature tool over them -- host-only.
+tests/test_surface_signature.py
+tests/test_check_surface_signature_tool.py
+tests/test_samehost_cache_device_affinity_v841.py
+tests/test_samehost_completion_affinity_v841.py
+tests/test_samehost_failure_v841.py
+tests/test_samehost_pipeline_v841.py
+tests/test_samehost_rank_workers_v841.py
+tests/test_samehost_shortwave_stream_scope_v841.py
+tests/test_samehost_surface_affinity_v841.py
+tests/test_samehost_transport_graphs_v841.py
+tests/test_speculative_contract.py
+tests/test_step_gate_batch.py
+tests/test_time_ledger_runtime.py
+tests/test_vertical_halo.py
+
+tests/test_regional_class_824.py
+tests/test_preseed_admission.py
+tests/test_kernel_sidecar.py
+tests/test_contract_host_snapshot.py
+# The two transport entry points that read allow_regional_sentinels, called
+# for real on a synthetic closed sphere -- host-only.
+tests/test_transport_regional_keyword.py
+# The wheel's platform tag is measured from the bundled helper -- host-only.
+tests/test_wheel_platform_tag.py
+# publish.yml refuses a wheel whose manylinux tag an older host cannot install, or that
+# lost a libexec helper (verify-final-hex QA H3) -- host-only, synthetic wheels.
+tests/test_wheel_platform_check.py
+# The init door finds the CDF-5 template copier the wheel ships in woof/hex/libexec
+# (verify-final-hex item 4) -- host-only.
+tests/test_netcdf_copy_packaged.py
+# Prep store (prep-fast): mesh, static and ordering built once and fetched by key -- host-only.
+tests/test_prep_store.py
+# CUDA modules held per card (two-card sea-ice CUDA_ERROR_INVALID_HANDLE at step 1): the source
+# check is host-only; the two-card launch member is marked gpu and skips without two cards.
+tests/test_per_card_modules.py
+# Carried from golden 0.4.0 for verify-final-hex items 1-3: the 2.9.0 radiation helper row,
+# the convection-permitting LTS hold (6 km ring crash fix) and the multi-card LTS
+# third-stage theta capture -- all host-only.
+tests/test_engine_290_helper_set.py
+tests/test_engine_294_helper_set.py
+tests/test_fullstep_lts_convective_hold.py
+tests/test_fullstep_lts_multi_matched.py
+# G3 (tools/mpas_nightly.sh): the native reference rebuild and its word compare -- host-only.
+tests/test_g3_rebuild.py
+# Operational receipts reject truncated runs and incomplete health evidence.
+tests/test_operational_proof.py
+tests/test_operational_compare_endpoints.py
+
+# Any physics option WOOF's registry declares resolves on hex (2026-10-11):
+# the registry reader, the generic-seam route, engine-derived species rows.
+# A written registry stands in for the engine; the plan tests skip without one.
+tests/test_arbitrary_physics.py
+# Cycle lane: digest cache, vertical artifact cache and map names; off-step-path history and
+# boundary writers.  Host-only, no card, no assets.
+tests/test_cycle_speed.py
+tests/test_samehost_offpath_writers.py
+tests/test_suite_rollback_identity.py
+# MPAS-A v8.4.2 re-pin (2026-10-11): one pin named the same everywhere, four acoustic sub-steps by
+# default with two selectable, boundary species matched by name.  Host-only, no card, no assets.
+tests/test_mpas_842_repin.py
+tests/test_native_dry_agreement.py
+tests/test_native_reference_recovery.py
+tests/test_forecast_divergence.py
+# Untiered since 2026-10-09/10 (tier-membership census): measured host-only on RTX PRO 6000 host 2026-10-12 with
+# WOOF_HEX_NO_LOCAL_GPU=1 and no assets -- 21 passed.  Engine helper set, operational post, Rust
+# parallel setup tables, persistent compile cache and the two profiler self-tests.
+tests/test_engine_289_helper_set.py
+tests/test_operational_post.py
+tests/test_parallel_setup_tables.py
+tests/test_persistent_compile_cache.py
+tests/test_profile_graph_capture.py
+tests/test_profile_selftest_packaged_drivers.py
+
+# MPAS v8.4.2 port foundation (integrator, 2026-10-12): CPU members run here; members that need the native MPAS
+# reference build skip with a named reason and run in the asset tier.
+tests/test_mpas_native_backend.py
+
+# MPAS v8.4.2 port foundation (integrator, 2026-10-12): CPU members run here; members that need the native MPAS
+# reference build skip with a named reason and run in the asset tier.
+tests/test_mpasphys_contract_v842.py
+
+# MPAS v8.4.2 port foundation (integrator, 2026-10-12): CPU members run here; members that need the native MPAS
+# reference build skip with a named reason and run in the asset tier.
+tests/test_mpasphys_driver_v842.py
+tests/test_mpasphys_correct_mode_v842.py
+
+# MPAS v8.4.2 port foundation (integrator, 2026-10-12): CPU members run here; members that need the native MPAS
+# reference build skip with a named reason and run in the asset tier.
+tests/test_native_physics_oracle.py
+
+# MPAS v8.4.2 port foundation (integrator, 2026-10-12): CPU members run here; members that need the native MPAS
+# reference build skip with a named reason and run in the asset tier.
+tests/test_native_physics_reference.py
+
+# Driver slot ABI storage/selection checks; no GPU or native fixture.
+tests/test_mpasphys_device_pools_v842.py
+
+# MPAS v8.4.2 foundation (integrator, foundation landing 2026-10-13)
+tests/test_mpasphys_ready_descriptors_v842.py
+tests/test_mpasphys_registry_scalars_v842.py
+tests/test_native_written_forecast.py
+
+# d2-les: LES selectors, full native ABI and configuration routes.
+tests/test_mixing_v842_les.py
+tests/test_arwen_les.py
+# p21-rad-shared: CPU option and driver contract tests
+tests/test_radshared_v842.py
+# p21-rad-shared refused whole-forecast evidence
+tests/test_radshared_forecast_inventory_v842.py
+# p21-rad-shared hash-bound owner review packet integrity
+tests/test_radshared_owner_context_packets_v842.py
+# p24-cam-rad
+tests/test_cam_rad_v842.py
+# p23-rrtmg-sw: MPAS v8.4.2 complete shortwave module.
+tests/test_mpas_rrtmg_sw_provenance.py
+tests/test_mpas_rrtmg_sw_tables.py
+# p10-sf-mynn: CPU source, registry, driver view and sealed proof checks.
+tests/test_mpas_sf_mynn_v842.py
+# p18-seaice: driver contracts and proof metadata admission, no CUDA device.
+tests/test_seaice_v842.py
+
+
+# Register pre-existing foundation CPU fixtures found by the tier audit.
+tests/test_country_door.py
+tests/test_samehost_restart.py
+tests/test_fractional_history_schedule.py
+tests/test_native_advection_order.py
+tests/test_advection_prep_threads.py
+tests/test_radiation_chunk_v841.py
+tests/test_radiation_ozone_memo_v841.py
+tests/test_samehost_physics_scope_cuda_cache_v841.py
+# f1-native-tap: published dump index provenance (integrator, f1 landing)
+tests/test_oracle_dump_index.py
+
+# o3-diag-convective
+tests/test_mpas_convective_v842.py
+
+# o3-diag-convective
+tests/test_mpas_convective_real_v842.py
+# p21-rad-shared: whole-forecast difference-sheet custody and incomplete product controls.
+tests/test_radshared_difference_sheets_v842.py
+
+# r4-rrfs-physics-driver: whole-forecast proof evidence contract.
+tests/test_mpasphys_proof_rrfs.py
+
+# r4-rrfs-physics-driver: forecast-bound visual artifact and inspection audit
+tests/test_mpasphys_sheets_rrfs.py
+
+# d4-lam-identity: CPU native replay fixtures; device replay is opt-in.
+tests/test_regional_native_v842.py
+tests/test_regional_native_v842_branches.py
+tests/test_regional_native_v842_misc.py
+tests/test_regional_native_v842_module.py
+tests/test_regional_native_v842_real.py
+tests/test_regional_native_v842_acoustic.py
+# p2-wsm6: whole-module and driver oracle tests (skip without standalone artifact).
+tests/test_wsm6_v842.py
+# p12-bl-mynn CPU contracts and GPU lease admission metadata
+tests/test_mpas_mynn_v842_contract.py
+# p11-ysu: CPU proof guards; strict native/artifact members skip when unavailable.
+tests/mpas_ysu_v842/test_oracle.py
+
+# p15-ugwp-ngw: CPU boundary contract; native and CUDA replay require explicit opt-in.
+tests/test_ugwp_ngw_v842.py
+# p1-kessler: strict native columns and native pool storage binding.
+tests/test_kessler_v842.py
+tests/test_kessler_pool_binding_v842.py
+# p14-ugwp-oro: UGWP lifecycle and synthetic profile descriptors; CPU only.
+tests/test_mpas_ugwp_oro_v842.py
+
+# r3-rrfs-dycore: additive table selection; no native assets required.
+tests/test_dycore_variants.py
+# p6-tiedtke: CPU contracts; strict standalone fixture checks skip when unavailable.
+# p21-rad-shared: revised real-tap landing replay integrity.
+tests/test_radshared_landing_replay_v842.py
+# p21-rad-shared: the registered native-undefined exclusion (proof-bar ruling 1) stays exactly as narrow as signed.
+tests/test_native_undefined_exclusions_v842.py
+# p3-thompson real-native landing replay
+# p5-kain-fritsch: CPU launcher and source-contract checks.
+tests/test_kain_fritsch_v842.py
+# p7-ntiedtke: MPAS module authority, replay seals and output retention
+tests/test_mpas_ntiedtke_v842.py
+
+# r13-gfl: exact native capture ownership and forecast image provenance
+tests/test_rrfs_gfl_forecast_sheets.py
+# o1-streams-restart: stream contracts and staged Rust bridge resolution.
+tests/test_streams_restart_v842.py
+# d1-dycore-options: owned complete module and proof metadata tests.
+tests/test_dycore_length_v842.py
+tests/test_dycore_options_v842.py
+tests/test_dycore_publication_v842.py
+tests/test_dycore_real_columns_v842.py
+tests/test_native_nonles_config_v842.py
+tests/test_nonles_reference_v842.py
+# p17-noahmp: translation and whole-proof receipt checks; no device or reference assets.
+
+
+# p19-oml: completed proof output capture storage.
+tests/test_mpas_oml_completed_output_capture.py
+
+# i1-init-real: authenticate the delivered vertical Rust test engine and its ABI.
+tests/test_vertical_rust_fixture.py
+
+# r3-rrfs-dycore: authenticated complete real native capture replay contract.
+tests/test_rrfs_real_replay_contract.py
+# p8-grell-freitas: MPAS GF source, precision, import and authority CPU contracts
+tests/test_gf_mpas_v842.py
+
+# r1-rrfs-native-tap: authenticated archive publication and replay transport checks.
+tests/test_oracle_archive_publication.py
+
+# r1-rrfs-native-tap: retain complete fork oracle CPU admission after foundation merge.
+tests/test_rrfs_native_oracle.py
+# p9-sfclay-mm5: MPAS v8.4.2 MM5 source and launcher contract.
+tests/test_sfclay_mm5_v842.py
+
+# p9-sfclay-mm5: written-field proof and official admission metadata.
+tests/sfclay_mm5_oracle/test_written_fields.py
+
+# f2-verify-mpas: headline routing and ratchet regeneration.
+tests/test_mpas_headline_deck.py
+
+# p13-ysu-gwdo: CPU metadata and launcher checks (GPU cases are deselected).
+tests/test_ysu_gwdo_v842.py
+
+# r9-rrfs-radiation: complete real replay receipt and provenance failures.
+tests/test_rrfs_radiation_replay_validation.py
+# p22-rrtmg-lw: native LW binding and proof inventory guards.
+tests/test_mpas_rrtmg_lw_binding_v842.py
+# d3-iau: CPU namelist, window and strict-native checks; CUDA replay uses receipts/replay.sh.
+tests/test_iau_v842.py
+tests/test_iau_real_columns_v842.py
+# p25-surface-update: CPU contracts; device/native replay members use explicit fixtures.
+tests/test_surface_update_v842.py
+tests/test_surface_proof_deck_v842.py
+tests/test_surface_input_reader_v842.py
+tests/test_native_surface_service_v842.py
+# physics-resources: the in-package MPAS packet builder (maths, pins, refusals; no network or device).
+tests/test_physics_resources_build.py
+tests/test_physics_resources_selection.py
+tests/test_native_mesh_state_reads.py
+tests/test_mpasphys_runtime_execution_v842.py
+tests/test_physics_resources_fetch.py
+# physics-resources v2: the MPAS route resources by portable key (pool reader, MPAS tree, native
+# library builder, {resource:KEY} decks); no network, compiler or device.
+tests/test_physics_route_resources.py
+# B5: the wheel bundles rw_mpas_geometry (hex-vertical-v1), rw_mpas_stream and rw_mpas_static, pinned by
+# SHA-256; the engines ladder reads woof/hex/libexec first (no network, compiler or device).
+tests/test_engine_bridges_bundled.py
+# 2026-10-15: a generated grid's static holds the binary64 coordinates it declares
+# (the point door's check on real files, the pins; the pinned builder itself where its bytes are present).
+tests/test_static_coordinate_precision.py
+
+# r17-noahmp-fork: host composition, replay controller, sheets and retirement checks
+
+# r17-noahmp-fork: real native solver packet admission
+
+
+# r4-rrfs-physics-driver: exact native lineage admission.
+tests/test_rrfs_mesh_lineage.py
+# Site runner (2026-10-14): a public checkout runs gate and oracle commands directly; a shared
+# host's queues come from its site file.  Pure host logic, no device, no assets.
+tests/test_site_runner.py
+
+# Public gate index (2026-10-14): verification/gates/ is relative, pinned and consistent.
+tests/test_public_gate_index.py
+
+# correct mode and the model-side pieces (release 0.4.0, lane H1).  Breakage it prevents:
+# test_tier_membership refuses a test file no tier names, so none of these would run on a push.
+# physics.mode at the door, presets, the sealed constructors and the engine seam, with the
+# named-gap rule (a correction the engine cannot apply runs as the matched arithmetic and is
+# named in the receipt); the boundary door IN4/IN5; IAU correct mode IN1-IN3; the SG2 lagged
+# microphysics heating host twin and wiring; the DY1 native-reference OpenMP guard (Linux only);
+# the member batch runner; the IAU forcing through the held tendencies; the vectorized host
+# mesh rows.
+tests/test_correct_mode_physics_switch.py
+tests/test_correct_mode_presets.py
+tests/test_lbc_physics_mode.py
+tests/test_iau_correct_v842.py
+tests/test_lagged_heating_sg2.py
+tests/test_lagged_heating_sg2_wiring.py
+# SG2 on a limited-area mesh (2026-10-14).  Breakage it prevents: the producer launched on its
+# caller's planes, the regional garbage scrub zeroed the post-RK update's theta at the padded
+# column, and every limited-area physics run (the 1 km derecho cull) stopped in its first step
+# with "post-RK WSM6 numeric validation refused the candidate state".
+tests/test_lagged_heating_sg2_regional_garbage.py
+tests/test_native_reference_openmp_guard.py
+tests/test_forecast_batch.py
+tests/test_iau_forcing.py
+tests/test_mesh_rows_vectorized.py
+
+# Golden 0.4.0 W4 (2026-10-12): the wofs ensemble door's CPU set (hex/wofs-ensemble added these
+# files on no tier list). test_wofs_initialization no longer needs the lane's /work path.
+tests/test_hourly_ensemble.py
+tests/test_wofs_case_commands.py
+tests/test_wofs_initialization.py
+tests/test_wofs_labels.py
+tests/test_wofs_products.py
+tests/test_wofs_qualification.py
+tests/test_wofs_reference.py
+tests/test_wofs_scores.py
+# Golden 0.4.0: hour-0 reflectivity from the initial hydrometeors (host mirror of the engine operator).
+tests/test_initial_reflectivity.py
+# Golden 0.4.0 (2026-10-12): test files the merged lanes (box-doors, lts-ratio16, rrfs-shape, box-15-3)
+# added on no tier list; all host-only (the ratio16 file's one kernel test runs only with HEX_LTS_GPU_TESTS=1).
+tests/test_convection_admission_variable_mesh.py
+tests/test_forecast_receipt_packaged.py
+tests/test_fractional_history.py
+tests/test_fullstep_lts_ratio16.py
+tests/test_init_thread_identity.py
+tests/test_native_observation_score.py
+tests/test_observation_scorecard.py
+tests/test_preset_prepare.py
+tests/test_published_vertical.py
+tests/test_samehost_eager_memory.py
+tests/test_six_hour_score.py
+tests/test_vertical_cdf5_template.py
+# merge/correct-mode (integrator, 2026-10-14): correct mode at the door and in the proof harness.
+tests/test_mpasphys_correct_mode_door_v842.py
+# moving-extract: the moving variable-resolution region (hex/moving-48h c3ee8ab), host-only.  The inactive
+# no-op checks (no WOOF_HEX_MOVING_* switch: no moving import, same host and schedule, unchanged class map),
+# the moving-run convective hold (its file is tiered once, with the LTS hold above), and the moving lane's
+# remap/zone/vertical/velocity/admission/tracker tests,
+# registered as the source's move-cost follow-up (f54e247) registers them.  All pass with CUDA unused;
+# test_moving_patch's accelerator case skips by name without WOOF_HEX_SPHERICAL_OVERLAP_LIB.
+tests/test_moving_inactive_noop.py
+tests/test_moving_route_refusal.py
+tests/test_mpas_suite_lts_refusal.py
+# U-H5: SPPT/SKEB with active LTS on the MPAS route (storm rosters): admission and the class seam, host-only.
+tests/test_mpas_lts_stochastic.py
+tests/test_engine_per_card.py
+tests/test_moving_patch.py
+tests/test_moving_prelaunch_admission.py
+tests/test_moving_velocity.py
+tests/test_moving_vertical.py
+tests/test_moving_saturation.py
+tests/test_moving_mpas_route.py
+tests/test_moving_zone_balance.py
+tests/test_moving_zone_divergence.py
+# A moving region on a known path prepares its members from launch (fix/hex-movpath-prep); host-only.
+tests/test_moving_known_path.py
+tests/test_storm_tracker.py
+# rel-hex040-moving: the jolt fix (balanced remap initialization, physics caches at physical heights) and
+# the installed moving door (woof hex moving).  Breakage they prevent: a move that hands the dynamics a
+# state out of discrete force balance (the post-move jolt), and a moving nest that only a rented host's
+# shell controller could run.  Host-only; the reduced-mesh GPU check is in gpu_gates.txt.
+tests/test_moving_balance.py
+tests/test_moving_door.py
+# H1 (release 0.4.0): the analysis remap as a hexcore function (woof.hex.analysis_remap), host-only file-seam
+# checks.  Breakage it prevents: test_tier_membership refuses an untiered test file, so it would run on no push.
+tests/test_analysis_remap.py
+# merge/correct-mode-2: WB3 settlement, CUDA text substitution and slot forwarding.
+tests/test_mpasphys_wb3_correct_mode_v842.py
+# merge/correct-mode-2: WB5 settlement and the two rain-out text substitutions.
+tests/test_mpasphys_wb5_correct_mode_v842.py
+
+# the one-command global run (plan, mesh fetch against a local archive, the
+# native-static refusal, status.json/events.jsonl) and the export door against
+# a stand-in converter: no card, no assets, no network
+tests/test_global_door.py
+
+# i5-init-sfc-update: CPU receipt/admission regressions from delivered rw-mpas source (RW_MPAS_SOURCE).
+tests/test_i5_surface_proof_policy.py
+
+# B7 tail (golden 0.4.0 round-2): the artifact hygiene gate's own cases, and the forecast-time physics
+# init's engine probe; host-only. (test_prep_store.py is tiered once, above.)
+tests/test_release_hygiene.py
+tests/test_init_physics_engine_probe.py
+# B7 tail: the forecast start-up series (mesh snapshot, host threads, whole-array edge signs, background
+# fingerprint seal); host-only. Breakage it prevents: test_tier_membership refuses an untiered test file.
+tests/test_mesh_snapshot.py
+tests/test_host_parallel.py
+tests/test_edge_signs_whole_array.py
+tests/test_background_fingerprint_seal.py
+# p9-sfclay-mm5 RP3 correct-mode dispatch and declarations
+tests/test_sfclay_mm5_correct_mode_v842.py
+# p17-noahmp RP6 correct mode
+# rel-hex040-dasurface: the shared content-keyed static (woof.hex.static_cache) and the batched member init's host
+# half (woof.hex.init_gpu: WPS v5 reader, field rules, month weights, member batching); host-only.
+tests/test_static_cache.py
+tests/test_init_gpu.py
+
+# W1 (release 0.4.0): the MPAS analysis bundle (woof.hex.analysis_bundle), the forecast door's --analysis
+# (woof.hex.analysis_door) and native IAU on hex's step (woof.hex.iau_native), on host files and host arrays.
+# Breakage it prevents: test_tier_membership refuses an untiered test file, so it would run on no push.
+tests/test_analysis_bundle.py
+tests/test_iau_native.py
+tests/test_forecast_door_analysis.py
+# W1: the analysis remap's regional half (woof.hex.nest_handoff, the open-boundary mass-flux balance
+# woof.hex.moving_state calls for a limited-area target) and a nest's boundaries from its parent's
+# forecast (woof.hex.nest_boundary).  Breakage it prevents: test_tier_membership refuses an untiered file.
+tests/test_nest_handoff.py
+tests/test_nest_boundary.py
+# mem/mesh (2026-10-14): compact slot layouts for the padded device mesh tables (woof.hex.cuda_backend.compaction):
+# kept stride never below the largest count, compaction only over a one-constant tail, one off knob per table.
+# Breakage it prevents: a compaction that drops a slot some loop reads, or one whose host layout cannot be
+# rebuilt exactly for the dual-run fingerprints.
+tests/test_mesh_compaction.py
+
+# gaps-1016 (hex/global-ops): the global cycle driver (--cycle latest, posting-lag wait, store, retention),
+# the resident global ensemble door (--members / --member) and the parallel history deflate (skips by name
+# off Linux or without cargo); host-only. Breakage it prevents: test_tier_membership refuses an untiered file.
+tests/test_global_cycle.py
+tests/test_global_ensemble.py
+# 0.4.8 (2026-10-26): a global ensemble retries a member stage once and records a member that still fails as
+# missing (WOOF_FAULT_PLAN injects the faults; host-only). Breakage it prevents: one member's products throwing
+# away nine good members (WOOF run_2de68ba40c93de79).
+tests/test_global_ensemble_recovery.py
+tests/test_history_deflate.py
+tests/test_numerics.py
+
+# hex/global-defects: bundled METIS builds with a local C compiler, process
+# preparation compares CPU arrays, and scorer ownership uses local fixtures.
+# No card, network or external assets; register the inherited CPU coverage.
+tests/test_gpmetis_bundled.py
+tests/test_hostprep_processes.py
+tests/test_score_once.py
+tests/test_native_libm_batch.py
+
+tests/test_native_cell_dx.py
+
+tests/test_precision_mesh_pair.py
+
+# hex 0.4.1 batch (cherry-picks 2fe262a1, abef077b): the opt-in process history writer for one-card
+# LTS forecasts and the opt-in selected diagnostic export; host-only. Breakage it prevents: test_tier_membership
+# refuses an untiered file.
+tests/test_history_frames.py
+tests/test_diagnostic_export.py
+
+# hex-showcase landing (x-showcase): Rust float32 deformation geometry, GF compile cache, moving lifecycle and
+# recovery, native publication clock, short-duration native runs, stage timing; host-only. Breakage it
+# prevents: test_tier_membership refuses an untiered file, and an untiered file runs nowhere.
+tests/test_deformation_rust_gnu.py
+tests/test_gf_compile_cache.py
+tests/test_moving_member_floor.py
+tests/test_moving_member_recovery.py
+tests/test_moving_start_template.py
+tests/test_moving_run_lifecycle.py
+tests/test_native_publication_clock.py
+tests/test_native_short_duration.py
+tests/test_stage_timing.py
+tests/test_fingerprint_threads.py
+tests/test_mpasphys_checkpoint_v842.py
+tests/test_mpasphys_inputs_v842.py
+tests/test_mpasphys_mpi_v842.py
+tests/test_mpasphys_partition_v842.py
+tests/test_mpasphys_feature_entry_v842.py
+tests/test_native_kernel_plan_door.py
+
+# port-streams: storage ownership, bounded background writes, and Rust NetCDF round trips.
+tests/test_mpasphys_streams_output_v842.py
+tests/test_routeb_door_fixes.py
+
+# Framework clock, pool hydration and captured native words run without a card.
+tests/test_framework_backend_v842.py
+tests/test_framework_rrfs.py
+# Resident admission and strict cache identities have host-only contract checks.
+# Ported framework and resident callback/cache contracts use CPU-owned fixtures.
+tests/test_mpasphys_resident_v842.py
+tests/test_mpasphys_strict_cache_v842.py
+# Startup and finalization: exact bounded history handoffs, host mesh gathers,
+# packed partition graphs and default moving-backend selection. These use
+# small generated inputs and fake CUDA discovery, with no card or assets.
+tests/test_history_chunks.py
+tests/test_history_spool.py
+tests/test_mesh_host_parallel.py
+tests/test_moving_backend_default.py
+tests/test_packed_samehost_graph.py
+# x-rel-capture-async (hex release driver): stream-ordered device-to-pinned history capture, background hashing
+# and hand-off to the writer. Fake cupy, no card, no assets, no network; its one device test is marked gpu and
+# lands in tier 3 by marker. Breakage it prevents: test_tier_membership refuses an untiered file, and an
+# untiered file runs nowhere.
+tests/test_snapshot_transfer.py
+# Surface series clock, Rust decoder and GPU month-boundary words.
+tests/test_arwen_surface_update.py
+# S2S stochastic controls and paired daily receipt validation. Device members
+# carry gpu markers and run in tier 3; CPU coverage needs no weather inputs.
+tests/test_stochastic.py
+tests/test_stochastic_verification.py
+# Persistent S2S planning/recovery, GPU-product arithmetic with host oracles,
+# analysis provenance, correlated-noise covariance, and atomic checkpoint publication.
+tests/test_checkpoint_io.py
+tests/test_s2s_analysis.py
+tests/test_s2s_door.py
+tests/test_s2s_products.py
+# S2S terrain-baseline and daily surface-audit contracts use CPU oracle arrays,
+# bounded I/O doubles, no network, no prepared assets and no CUDA device.
+tests/test_s2s_terrain.py
+tests/test_s2s_terrain_pipeline.py
+tests/test_s2s_surface_audit.py
+tests/test_stochastic_energy.py
+# S2S source rows, archive templates and lag expansion use table metadata only.
+# Keep this coverage on every push without a card, external assets or network.
+tests/test_s2s_source_planning.py
+# Parked-lane merge (hex/parked-merge-misc, 2026-10-18): files the merged
+# lanes added without a tier row. Breakage it prevents: test_tier_membership
+# refuses an untiered file, and an untiered file runs nowhere.
+# Measured global admission model (fix-admission-render): CPU replay of
+# recorded stage peaks, no card.
+tests/test_large_global_admission.py
+# Overlapped NetCDF copies for mesh loading (fix-startup-onecore): CPU only.
+tests/test_mesh_netcdf_copies.py
+# Offline S2S CLI plans across every source and row (s2s-door): no network.
+tests/test_s2s_cli.py
+# Noah-MP sea-ice energy balance on the ArWen route (s2s-surface-update 6aab4128):
+# CPU oracle arrays, no card.
+tests/test_arwen_seaice.py
+
+# Release CPU gate intake: source contracts, host orchestration and compiler stand-ins.
+# The FCT file has CPU hook checks; its device-marked member belongs to tier 3.
+tests/test_cuda_shape.py
+tests/test_fct_horizontal_scale_fusion.py
+tests/test_history_ready.py
+tests/test_hl3_data_word_gate.py
+tests/test_hl3_environment.py
+tests/test_history_compression.py
+tests/test_jax_shape_helper_set.py
+tests/test_kernel_static.py
+tests/test_kernel_warm.py
+tests/test_mpas_shortwave_shape_dispatch.py
+# RC integration 2026-10-20: the gates unit's strict geometry maths test (its binary checks skip in unbuilt
+# checkouts) was on no tier list.
+tests/test_strict_geometry_math.py
+tests/test_native_step.py
+tests/test_record_hex_aot_recipes.py
+# fix/hex-fast-aot-multicard 2026-10-28: the warm store's content key and the multi-card catalog rows.
+tests/test_kernel_warm_venv.py
+tests/test_aot_multicard_catalog.py
+tests/test_vertical_array_receipts.py
+
+# Capabilities campaign landing (lane/hexcap-base, 2026-10-20): test files the 16 hex
+# capability lanes added without a tier row. All run with no card, assets or network
+# (measured: 220 pass on a CPU-only host; the ocean device member skips here and is
+# tier 3). Breakage it prevents: an untiered file runs on no leg at all.
+tests/test_chem_emissions.py
+tests/test_chem_transport.py
+tests/test_earth2_init_sources.py
+tests/test_global_vr_mesh_plan.py
+tests/test_high_top_vertical.py
+tests/test_ivt_products.py
+tests/test_lts_stochastic.py
+tests/test_moving_author.py
+tests/test_moving_checkpoint_stochastic.py
+tests/test_moving_ensemble.py
+tests/test_ocean_mixed_layer.py
+tests/test_region_door.py
+tests/test_s2s_energy.py
+tests/test_s2s_mjo_scores.py
+tests/test_s2s_products_part_a.py
+tests/test_s2s_renderer_packaging.py
+tests/test_scorer_build_target.py
+# One-command regional door (HRRR limited area): stage composition, receipts, class minting from
+# measured runs; stand-in engines, no card, no network.
+tests/test_regional_door.py
+tests/test_regional_mint.py
+tests/test_suite_history_snapshot.py
+tests/test_skip_score_watcher.py
+tests/test_scorer_lease_release.py
+# 0.4.5 folds: CPU tests the folded branches added (stand-ins, no card; checked with WOOF_HEX_NO_LOCAL_GPU=1).
+tests/test_column_store.py
+tests/test_export_follow.py
+tests/test_export_stack.py
+tests/test_hrrrv5_regions.py
+tests/test_extend_from_last_hour.py
+tests/test_handover_numbers.py
+tests/test_mesh_shape.py
+tests/test_mpas_route_frames.py
+tests/test_mpas_route_live_frames.py
+tests/test_mpas_route_nest_look.py
+tests/test_nest_look_dycore.py
+tests/test_nest_addon_fixes.py
+tests/test_nest_checker_fixes.py
+tests/test_nest_physics_default.py
+tests/test_nest_review30_fixes.py
+tests/test_nest_triggers.py
+tests/test_regional_from_parent.py
+tests/test_setup_targets.py
+tests/test_source_ladders.py
+tests/test_start_from_lead.py
+# hex storm-following hurricane fixes (tc/hex-stormfollow port): CPU tests, stand-ins, no card.
+tests/test_hurricane_pressure_evidence.py
+tests/test_moving_area_reconciliation.py
+tests/test_moving_carrier_codec.py
+tests/test_moving_retention.py
+tests/test_moving_seaice.py
+tests/test_prognostic_ice_census.py
+tests/test_scorecard_future_frames.py
+# 0.4.5 folds, round 2 (host path, G6, regional MPAS suite, LTS region, region lead, GSL drag statistics, rg2): CPU members; members that reach CuPy are auto-marked gpu and skip.
+tests/test_deferred_checks_v842.py
+tests/test_fullstep_lts_regional_tap.py
+tests/test_kernel_resolution_memo.py
+tests/test_moving_ensemble_mpas_route.py
+tests/test_mpas_host_orchestration_g6.py
+tests/test_mpas_resident_sync_v842.py
+tests/test_mpas_suite_limited_area.py
+tests/test_regional_lead.py
+tests/test_ugwp_oro.py
+# G3 Grell-Freitas lane-interleaved column arrays (fix/hex-mpasphys-gf): host compiles of the lowered entry
+# against the contiguous transcription on real zoom columns, and the fused pack/scatter kernels; g++ only,
+# no card. Breakage it prevents: test_tier_membership refuses an untiered file.
+tests/test_gf_grid_stride.py
+# 0.4.8 (2026-10-26): GF's host lane entry with every binary32 workspace array poisoned with NaN must give the
+# shipped outputs (host g++, as test_gf_grid_stride; skips without it). Breakage it prevents: a GF output reading
+# a stale workspace word (the 7.5 km VR stops at +6 h 36 min and +8 h 41 min on 0.4.5).
+tests/test_gf_scratch_nan.py
+tests/test_gf_pack_inputs.py
+
+# G1 output path: deferred maxima (CPU) and the gather/multi-block diagnostic kernels (GPU, MPAS_CONVECTIVE_GPU=1).
+tests/test_mpas_output_path.py
+# 0.4.5 MPAS-route speed groups (G2 radiation, G4 MYNN, G5 Thompson): CPU members; members that reach CuPy are auto-marked gpu and skip.
+tests/test_mcica_kiss_jump_v842.py
+tests/test_mpas_mynn_batched_copies.py
+tests/test_mpas_mynn_dynamic_columns.py
+tests/test_mpas_mynn_fast_helpers.py
+tests/test_thompson_fast_arithmetic.py
+tests/test_thompson_phases.py
+
+# the both-routes gate leg (tools/both_routes_gate.py): every command in tools/battery/both_routes.json parses
+# with the real parser on both physics routes, every family names both routes, GPU steps lease by VRAM in pool
+# mode, and the word comparison counts every differing value
+tests/test_both_routes_gate.py
+
+# the full-step LTS shadow's audited digest of cuda_driver.py is the shipped driver's (re-audit on any change)
+tests/test_fullstep_lts_shadow_pin.py
+
+# A device command's exit runs threading's hooks before atexit, so an idle pool worker never holds it (the hl-3 headline run).
+tests/test_device_process_exit.py
+
+# MPAS-route speed integration: the parallel owner assembly of a multi-rank frame writes the serial words
+# (CPU, stand-ins). Breakage it prevents: test_tier_membership refuses an untiered file.
+tests/test_mpas_samehost_parallel_assembly.py
+
+# MPAS LTS moving segments: admission of carrier resumes and plain moving routes, the one-real-cell edge geometry,
+# the one-collective moving frame gather (CPU).
+tests/test_mpas_lts_moving_and_assembly.py
+# MPAS LTS timeline: every class step in native-runtime-timings.json, the loop's measured rate (HEX-SHAPES-1CARD).
+tests/test_mpas_lts_timeline.py
+tests/test_mpas_frame_async_capture.py
+# MPAS-route moving tracker frame carries qv, refl10cm and the 2 m fields for setup targets (H-MPAS-SETUP).
+tests/test_mpas_tracker_frame_setup.py
+# MPAS physics is the hex default on every door; ArWen stays --physics-suite arwen_mpas_column (0.4.6).
+tests/test_physics_default.py
+# Full-step LTS: a default step moves onto the class clock (2c56994f from feat/multi-zoom-door), host-only.
+tests/test_lts_class_clock.py
+# Hex init thread pools held to the container CPU quota (R-H1 48c32452), host-only.
+tests/test_cpu_budget.py
+# Storm-following ocean-ice roles of moved sea points (polar remap, 009fe1bc2 port), host-only.
+tests/test_moving_surface_roles.py
+# Full-step LTS: the class clock takes the plan's real top class (HEX-LAM-VS-ZOOM-2026-10-27 defect 1), host-only.
+tests/test_lts_clock_top.py
+# Fold-everything batch 1 rows (host-only): init-source stall hedge, MPAS suite route dycore flags.
+tests/test_fetch_stall_hedge.py
+tests/test_suite_dycore_flags.py
+# Storm-following admission: a due move reuses only admitted members; no-safe-radius cases refused at load (host-only).
+tests/test_storm_follow_admission.py
+# MPAS-route pool decode split over reader processes (G1 hex start-up, fix/hex-startup-g1), host-only.
+tests/test_pool_reader_processes.py
+# The libm batch bridge carried by the wheel (G1 hex start-up, fix/hex-startup-g1), host-only.
+tests/test_libm_batch_packaged.py
+# MPAS-route frames encoded side by side (G1, fix/hex-startup-g1), host-only.
+tests/test_mpas_concurrent_frame_encode.py
+# Threaded whole-variable reads of classic netCDF files (G1, fix/hex-startup-g1), host-only.
+tests/test_classic_netcdf_reader.py
+# Same-host ownership duplicate refusal on a mark array (G1, fix/hex-startup-g1), host-only.
+tests/test_samehost_ownership_duplicates.py
+# MPAS-route LTS frame deposit and class-0 assembly off the class step threads (host-only).
+tests/test_mpas_lts_frame_async.py
+# Full-step LTS: the door runs the cheapest of the fixed step and LTS at each top class, on both routes (HEX-LAM-VS-ZOOM-2026-10-27 defect 2, HEX-LTS-REGRESSION-2026-10-27), host-only.
+tests/test_lts_clock_top_and_choice.py
+# Front-door refusals name the real remedy (geography under WOOF, missing static/init) (docs-findings, hex 0.4.10), host-only.
+tests/test_front_door_remedies.py
+tests/test_preflight_missing_inputs.py
+# `woof hex moving check --device cpu` vectorised in the same accumulation order, arms in parallel (docs-findings, hex 0.4.10), host-only.
+tests/test_moving_check_cpu.py
+tests/test_moving_round2_cpu.py
+# Per-card module caches unbounded (hex/multicard-gil-8card): static check plus a fake compile count, host-only.
+tests/test_per_card_module_caches.py
+# Same-host rank processes (hex/multicard-gil-8card): collectives, fd passing, executor choice; Linux host-only.
+tests/test_rank_processes.py
+# The global source mesh reaches same-host child ranks once (fix/rrfs-c3km-startup); Linux memfd + fd passing.
+tests/test_rank_processes_shared.py
+# Mesh.validate's checks on host threads, same refusals in the same order (fix/rrfs-c3km-startup-split); host-only.
+tests/test_mesh_validate_parallel.py
+# WSM6 correct-mode bindings applied before the cooperative clone (fix/hex-wsm6-correct-coop); source text only.
+tests/test_mg_first_step_wsm6_binding.py
+# The cold catalog binds RRTMG SW's live source and starts the selected physics first
+# (fix/hex-nvrtc-parallel, mg-first-step 402874f3); host-only.
+tests/test_mg_first_step_kernel_inventory.py
+# A host's source credit fitted into each map's own source line (fix/hex-source-credit); host-only.
+tests/test_render_door_source_credit.py
+# RRFS NSSL two-moment on the GPU route: fast stages, rolling rates, row initializer, column workspace (rrfs/nssl-fast); host-only.
+tests/test_rrfs_nssl_fast.py
+tests/test_rrfs_nssl_prate.py
+tests/test_rrfs_nssl_row_init.py
+tests/test_rrfs_nssl_workspace.py
+# RRFS-SD smoke on the GPU route at the 44c0849 pin: pin ABI, array layout, level orders, outer scalar groups (rrfs/smoke-fast); host-only.
+tests/test_rrfs_smoke_5d2c71e2.py
+tests/test_rrfs_smoke_advect_levels.py
+tests/test_rrfs_smoke_layout.py
+tests/test_rrfs_smoke_micro_levels.py
+tests/test_outer_scalar_groups.py
+# Member memory only when members share a card (speed/hex-member-memory-switch); single runs keep the release policy.
+tests/test_member_memory_policy.py
+# --device on the moving doors indexes the cards already visible, so a card queue's lease holds (fix/moving-device-lease).
+tests/test_moving_device_lease.py
+# A profile priced below its one run on its plain suite; the held 24 GB aerosol run prices only cards with no more
+# memory (mesh-gen-fast first-step card-fit); pricing arithmetic only, host-only.
+tests/test_mg_first_step_card_fit.py
+
+# Native Icechunk output, exact field readback and atomic snapshots.
+tests/test_output_formats.py
+
+# rrfs/nf-streams-ref (lands r11-rrfs-streams-da and r0-rrfs-native-ref): RRFS stream contracts, the Python
+# stream XML parser/timelevel clock/file IDs, and the native reference tools. Native replays skip without
+# their artifacts; the ruling-bound reference checks skip without RRFS_SOURCE_AUTHORITY_RULING.
+tests/test_stream_xml_rrfs.py
+tests/test_streams_rrfs.py
+tests/test_streams_native_clock_rrfs.py
+tests/test_streams_native_registry_rrfs.py
+tests/test_rrfs_native_reference.py
+
+# rrfs/native-free: the route-table admission test (rrfs/nf-glue) and the RRFS init door test (rrfs/nf-init).
+tests/test_route_table_rrfs.py
+tests/test_resident_rrfs_facade.py
+tests/test_rrfs_init_door.py
+tests/test_tempo_warp_source.py
+# RRFS MYNN-EDMF speed: the kernel source keeps its inlined operations and per-warp scratch layout (rrfs/mynn-speed), host-only.
+tests/test_mynnedmf_speed_source.py
+# TEMPO table programs give the native words on any host (fix/tempo-tables-own-gamma): runs the built table
+# programs on the CPU, skips where the physics decoders are not built.
+tests/test_tempo_table_programs.py
+# RRFS table fetch: pinned files placed concurrently, large ones as resumable byte ranges (rrfs/table-fetch-parallel), host-only.
+tests/test_rrfs_table_fetch_parallel.py
+# Engines woof ships on demand (rw_mpas_init_v831, rw_mpas_gsl_oro since woof 2.9.10) are staged on first use, host-only.
+tests/test_engine_on_demand_fetch.py
+# Lazy door imports behind build_parser(command) and the once-per-file NVRTC digest (hex/member-startup), host-only.
+tests/test_cli_lazy_doors.py
+# RRFS speed-2 (rrfs/speed2): MYNN-EDMF lane-group plan and convective diagnostics in place; the CuPy member of the
+# convective file carries the gpu marker and is not in this tier.
+tests/test_mynnedmf_lane_plan.py
+tests/test_rrfs_convective_inplace.py
+# RRFS DA warm start (rrfs/suites): initial-state stream selection, host-only.
+tests/test_rrfs_initial_state_selection.py
+# RRFS RUC arena rows read from the pinned CUDA source (rrfs/c3-memory), host-only.
+tests/test_rrfs_ruc_arena.py
+# hrrr-like-aerosol regional default and its pieces (the hrrr-like-aerosol and hex 0.4.9 echo lanes): emissions, cloud
+# coupling, cold soil remap and door, land admission and contract, profiles, the regional GFS default, soil wetness;
+# host members of the aerosol workspace, cloud-merge oracle and transport batching files (their device members are tier 3).
+tests/test_aerosol_emissions.py
+tests/test_cloud_coupling.py
+tests/test_cold_soil_door.py
+tests/test_cold_soil_remap.py
+tests/test_land_admission_regressions.py
+tests/test_land_contract.py
+tests/test_profiles.py
+tests/test_regional_gfs_profile_default.py
+tests/test_soil_wetness.py
+tests/test_aerosol_workspace.py
+tests/test_cloud_merge_oracle.py
+tests/test_transport_species_batch.py
+# RRFS suites (rrfs/suites): the New Tiedtke engine signature (dt or ztmst), the alias suites' resident admission,
+# the Thompson fork binding; host-only.
+tests/test_ntiedtke_engine_signature.py
+tests/test_rrfs_alias_resident.py
+tests/test_rrfs_thompson_binding.py
+# Regional IAU on the padded extent (guide/l11-regional-iau-on-0.4.9): the increment witness, host-only.
+tests/test_iau_witness.py
+# Same-host ranks read only their own boundary rows (rrfs/c3-lbc-shared), host-only.
+tests/test_lbc_shared_reader.py
+# RRFS start-up stages off one core (fix/rrfs-startup-parallel), host-only.
+tests/test_startup_parallel.py
+# Device mesh/context validated once per mesh, stream field lists expanded once (fix/hex-mc-validate-once); its
+# CuPy member skips without CuPy.
+tests/test_validate_once.py
+# The ArWen-physics route's rank executor (fix/hex-arwen-route-rank-processes): executor choice, module-constant
+# hand-over to a rank process, every limited-area rank's scalar exchange, the IAU source split; host-only.
+tests/test_samehost_rank_group_v841.py
+# RRFS re-pin to 44c0849 (guide/repin-fold-0410): route pins, vertex order, the 44c0849 stream registry; host-only.
+tests/test_route_pin_rrfs.py
+tests/test_rrfs_vertex_order.py
+tests/test_streams_registry_pins_rrfs.py
+# TEMPO fast numerics source transforms (rrfs/tempo3km e8778341), host-only.
+tests/test_tempo_fastdp_v303.py
+tests/test_tempo_fastmath_v303.py
+# RRFS dycore lane proofs (rrfs/speed3-dycore d38acc4): their host members (lane mapping, stencil extent refusals,
+# source audits) are tier 1; the bitwise replays need RRFS_*_BASE env and a card and skip without them.
+tests/test_rrfs_acoustic_lanes.py
+tests/test_rrfs_filters_lanes.py
+tests/test_rrfs_mono_lanes.py
+tests/test_rrfs_scalar_edge.py
+tests/test_rrfs_validate_pass.py
+# Hex with Regional nest maps headlined 'nest', not 'd01' (fix/hex-nest-grid-name), host-only.
+tests/test_nest_grid_name.py
+# WSM6 fast numerics source text (operators, binary32 maths, lanes over levels) and the unchanged strict text
+# (fix/hex-wsm6-fast), CPU only.
+tests/test_wsm6_fast_numerics.py
+# The shipping RRFS tree (HB11, rrfs/one-tree-fast): every native input loader reads the row's
+# keep_initialized_deformation (fix/hex-rrfs-multicard-defc 57eb90b8), prepared work arrays released at the
+# physics-to-dycore hand-off and rebound (physfix 9b5984a), fast TEMPO all-float and tiny-mass source rules with strict
+# untouched (rrfs/tempo-yolo 0a09dec9); host-only.
+tests/test_keeps_initialized_deformation.py
+tests/test_prepared_release_rebind.py
+tests/test_tempo_allfloat_v303.py
+tests/test_tempo_tinymass_v303.py
+tests/test_ysu_workspace_tile.py
+# The HRRR intermediate fetch asks for the records its decoder reads (QNC/QNI/QNR/RH2; fix/hex-hrrr-fetch-extras); host-only.
+tests/test_hrrr_intermediate_fetch_requests.py
+
+# The TEMPO lookup read-ahead resolves the suite row's bound pin set and is never held unused
+# (fix/rrfs-rank-rss, same-host rank host memory); host-only, stubbed reads.
+tests/test_tempo_lookup_prefetch_pin.py
+# WOOF_HEX_EXCHANGE_TIMING reaches every same-host transport on the MPAS-physics route, threads and processes
+# (rrfs/mc-scale2 23103f7, the same-host halo timer); host-only, source checks and the summary.
+tests/test_exchange_timing_v841.py
+# Rank-process halo rounds: socket headers only in a field schema's first round, the per-round schedule check as a
+# chain digest in each pair's flag page, final rounds compared at close (fix/hex-halo-header-once); host-only.
+tests/test_process_halo_round_check_v841.py
+# A lossless NetCDF-4 history frame with a scalar opens in netCDF-C (empty _Netcdf4Coordinates, 2026-10-29;
+# engine dd8c2e697c via the rw_mpas_stream re-pin); runs the resolved stream bridge, skips where none is installed.
+tests/test_history_netcdf4_scalar.py
+# The shared v841 dycore defers its step validation word only inside an MPAS-physics forecast collector
+# (fix/rrfs-shared-dycore-8card); host-only, no device.
+tests/test_shared_dycore_flag_deferred.py
+# Same-host rank checkpoints sealed as per-rank shards beside the step loop, loaded word for word as the one-file
+# carrier (fix/hex-ckpt-shards); host-only, two rank threads.
+tests/test_mpas_checkpoint_shards_v842.py
+# Rank processes install the forecast process's warm kernel store before their request arrives, so step 1 does not
+# recompile NVRTC units in every rank (fix/rrfs-step1-ranks); host-only, Popen stubbed.
+tests/test_rank_process_kernel_store.py
+# Correct-mode multi-card f000 TEMPO reflectivity is assembled in column slabs, not a whole global copy on rank 0's
+# card (fix/hex-f000-refl-staged); host-only, numpy stands in for cupy.
+tests/test_tempo_refl_staged.py
+# The GFS rows decode GFS's own hydrometeors (hex-only Vtable.GFS-hydrometeors.rw, the .idx subset) and the Thompson
+# start-frame reflectivity picks its scheme and names a frame without inputs (fix/hex-gfs-hydromet-thompson-f000).
+tests/test_gfs_hydrometeors_f000.py
+# Rank-process CPU windows (start-up / step 1 / stepping, system time per thread group) in the rank records
+# (fix/rank-cpu-windows); host-only, reads /proc.
+tests/test_rank_process_cpu_windows.py
+# Rank processes read only their own rows of each boundary file (fix/rank-cpu-windows); host-only, netCDF4 fixtures.
+tests/test_lbc_rank_rows.py
+# woof hex --help lists every door without the engine installed, and an engine door refuses by name
+# (the public CI packaging job installs the wheel --no-deps); host-only, the engine import is blocked.
+tests/test_cli_without_engine.py
+tests/test_moving_resident.py
+# The resident moving step's host members (feat/hex-moving-resident 78111207, woof hex 0.4.11): pool restore,
+# prep maintenance, table and rate batches, the upload cache's host bookkeeping and the zero-pool transport plan;
+# their device members are tier 3.
+tests/test_moving_kernel_modules.py
+tests/test_moving_pool_restore.py
+tests/test_moving_prep_maintenance.py
+tests/test_moving_rates_batch.py
+tests/test_moving_tables.py
+tests/test_moving_upload_cache.py
+tests/test_zero_pool_transport.py
+# Wind farms on hex globes (labs/windfarm-hex 6eda64bc): turbine inputs, farm assignment and history fields; host-only.
+tests/test_wind_farm.py
+# WOOF radar columns on committed hex states and backpressure on real consumer progress (fix/woof-simradar-hex
+# 6b3ddf7258); host-only.
+tests/test_woof_radar_stream.py
+# hrrrv5 on the 96 -> 3 km zoom globe and GF-Li on the GPU-resident route (fix/hrrrv5-zoomglobe); host-only.
+tests/test_hrrrv5_zoomglobe.py

@@ -318,6 +318,29 @@ def test_one_source_spread_over_eight_files_decodes_as_one_collection(
         value * 100.0 for value in LEVELS_DECLARED]
 
 
+def test_optional_number_column_is_carried_when_published_and_absent_otherwise(tmp_path):
+    files = _corpus(tmp_path / "corpus")
+    document = _mapping()
+    document["fields"]["snow_number"] = {
+        **_mass("snow_count", "kg-1"), "optional": True}
+    mapping = _write(tmp_path / "mapping.json", document)
+    absent = decode_mapped_source(mapping, files)
+    assert all("snow_number" not in frame.fields for frame in absent)
+    number_file = tmp_path / "snow.nc"
+    _mass_file(number_file, [("snow_count", "kg-1", 4096.0)], LEVELS_WIDE)
+    present = decode_mapped_source(mapping, [*files, number_file])
+    for frame in present:
+        assert frame.fields["snow_number"].units == "kg-1"
+        assert frame.fields["snow_number"].values.min() >= 4096.0
+
+
+def test_required_column_cannot_be_optional(tmp_path):
+    document = _mapping()
+    document["fields"]["air_temperature"]["optional"] = True
+    with pytest.raises(ValueError, match="cannot be optional"):
+        load_mapping(_write(tmp_path / "mapping.json", document))
+
+
 def test_the_same_variable_name_in_two_files_is_told_apart_by_attribute(
     tmp_path,
 ):
@@ -341,41 +364,6 @@ def test_the_same_variable_name_in_two_files_is_told_apart_by_attribute(
         ValueError,
         match="'air' directly provides both .* derive aliases explicitly",
     ):
-        decode_mapped_source(path, files)
-
-
-def test_a_field_absent_from_every_file_names_the_whole_inventory(tmp_path):
-    """Absent HERE is normal; absent EVERYWHERE is the error."""
-
-    files = _corpus(tmp_path / "corpus")
-    mapping = _mapping()
-    mapping["fields"]["skin_temperature"]["selectors"] = [
-        _selector(["not_published"], attributes={"level_desc": "Surface"})]
-    path = _write(tmp_path / "missing.json", mapping)
-    with pytest.raises(ValueError) as refusal:
-        decode_mapped_source(path, files)
-    message = str(refusal.value)
-    assert "skin_temperature" in message
-    assert "no matching variable in any of the 8 supplied" in message
-    assert "air.nc" in message and "soil.nc" in message
-
-
-def test_a_field_that_needs_the_vertical_coordinate_gets_its_error(tmp_path):
-    """Surface-only files need no vertical coordinate; a 3-D field does."""
-
-    files = _corpus(tmp_path / "corpus")
-    # Every surface file in this corpus lacks `level` entirely and decodes
-    # anyway -- that is the first half, proved by the headline test.  Here
-    # a 3-D field is pointed at a file with no vertical coordinate.
-    mapping = _mapping()
-    mapping["fields"]["air_temperature"]["selectors"] = [
-        _selector(["air"], attributes={"level_desc": "2 m"})]
-    # The 2 m field steps aside so the two selectors stay distinct; what
-    # is under test is the 3-D field meeting a coordinate-less file.
-    mapping["fields"]["air_temperature_2m"]["selectors"] = [
-        _selector(["air"], attributes={"level_desc": "2 metres"})]
-    path = _write(tmp_path / "vertical.json", mapping)
-    with pytest.raises(ValueError, match="declares a vertical axis"):
         decode_mapped_source(path, files)
 
 

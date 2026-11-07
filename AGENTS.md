@@ -1,6 +1,7 @@
 # Agents: MetalARF
 
-MetalARF is Recast WOOF 1.0.3 with a Metal backend, for Apple Silicon only.
+MetalARF integrates Recast WOOF 1.1.5 with a Metal backend, for Apple Silicon only.
+Metal acceptance remains configuration-specific; see METAL_FEATURES.md.
 Most of the tree is upstream WOOF; the port is `woof/metal/` plus the Metal
 branches in the upstream drivers that call it. If `AGENTS.local.md` exists,
 read it too.
@@ -15,8 +16,12 @@ read it too.
   `native/` (the Objective-C++ runtime).
 - `woof/libexec/metal/`: the prebuilt bundle (metallibs, dylib,
   `METAL_BUNDLE.json`). Users run it without building shaders.
-- Numerical references: NumPy paths in `woof/` and `tests/physics_reference/`.
-  Metal results are checked against these, not against CUDA.
+- Numerical references: the CUDA kernel sources, compiled for the host
+  without FP contraction by `tools/thompson_real_column_parity/host_backend.py`
+  (`HostModule`, `install()`), plus the NumPy paths in `woof/` and
+  `tests/physics_reference/`. Per-family compare tools are
+  `tools/metal_*_word_probe.py`, `tools/*_metal/` (generators and column
+  probes) and `tools/*_wrf_exact/compare.py`.
 - `tools/`: `build_metal_backend.py`, `generate_metal_kernel_signatures.py`,
   `metal_admission_check.py`, `metal_combo_smoke.py`, `build_darwin_native.py`;
   the Rust data bridges are `tools/{grib1_bridge,rustwx,rw_wps,zarr_bridge}`.
@@ -34,9 +39,11 @@ legal records out of `rg` results; use `rg -uu` when you need them.
 - Before changing the build, dependencies or repository layout, or merging
   upstream, or cutting a release, read MAINTAINING.md: it records why the
   tree looks the way it does.
-- Kernels: add a fragment with
+- Kernels: put one ABI fragment per kernel in
+  `woof/metal/signature_fragments/` and register it with
   `tools/generate_metal_kernel_signatures.py --add-fragment <frag>.json`
-  (never hand-edit `kernel_signatures.json`), rebuild with
+  (`--replace-fragment` for a changed ABI; never hand-edit
+  `kernel_signatures.json`), rebuild with
   `python tools/build_metal_backend.py --output woof/libexec/metal`, and
   commit the shader and the bundle together. The build regenerates the
   `.metalh` headers, which are not tracked.
@@ -44,6 +51,10 @@ legal records out of `rg` results; use `rg -uu` when you need them.
   uses the soft64 library, never float32 math.
 - Metal submits asynchronously, so one green run proves nothing: rerun a
   check 3 times, or once with synchronous submits.
+- Parity means the Metal result equals the host-built CUDA source word for
+  word (compare as `uint32`/`uint64`). Never relax a tolerance, never compare
+  Metal with itself, and never substitute an easier option: what cannot be
+  ported keeps an explicit refusal. Record the coverage in METAL_FEATURES.md.
 - Checks: `tools/metal_admission_check.py` (CPU), then
   `tools/metal_combo_smoke.py --pairwise`, `--suites` or `--case`. Run few
   GPU processes at once and put each under a timeout; the GPU is shared

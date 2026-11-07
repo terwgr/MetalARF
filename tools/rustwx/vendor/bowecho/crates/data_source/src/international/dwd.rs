@@ -151,7 +151,7 @@ impl DwdProvider {
     /// Fetch and parse the sweep listing of every included product (the
     /// one catalog probe both `latest` and `recent` run). The first entry
     /// is always the required `sweep_vol_z` listing with at least one
-    /// timestamped sweep (missing or empty required listings are errors)
+    /// timestamped sweep — missing or empty required listings are errors —
     /// so callers can anchor cycles on `products[0]`.
     fn fetch_product_sweeps(&self, site_id: &str) -> Result<Vec<DwdProductSweeps>, String> {
         let mut products = Vec::new();
@@ -771,7 +771,7 @@ mod tests {
         );
 
         // The recent walk over these anchors: keep Ok frames, then reverse
-        // to oldest-first, the last frame is the `latest` frame.
+        // to oldest-first — the last frame is the `latest` frame.
         let survivors: Vec<FramePlan> = anchors
             .iter()
             .filter_map(|anchor| assemble_cycle("asb", *anchor, &products).ok())

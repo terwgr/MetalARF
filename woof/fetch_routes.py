@@ -41,13 +41,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
 import functools
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shlex
 import time
+from time import perf_counter
 from types import MappingProxyType
 from typing import Mapping, Sequence
 
@@ -89,7 +92,47 @@ ROUTE_TABLE_SHA256 = (
     # breakage), and cadence_note states the grammar that replaces it.
     # Native-level atmosphere and analysis-soil routes are table entries,
     # merged with the ecmwf-ens and rrfs-ens input-ensemble rows.
-    "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2"
+    # Moved by the capabilities landing: the ecmwf-ens historical-archive rows
+    # merged over the gfs/gefs archive publication rows.
+    # Moved by fix/go-posted-cycle-default: the rap-native and hrrr-native
+    # publication_lag rows are measured (they were an unmeasured 1.5 h
+    # estimate, so a default `woof go` waited ~40 min for a posted cycle).
+    # rrfs-ens fetches its declared companion (the deterministic prslev and
+    # 2dfld pair of the same cycle) as non-primary rows bound to the
+    # composition's companion data role.
+    # Moved by the ecmwf-open-data-0p1 route (IFS HRES open data at 0.1
+    # degree, published from the 2026-10-20 cycles).
+    # Both, merged for 2.9.7.
+    # Moved by fix/U-E8: hrrr-native's soil donor counts its leads from the
+    # request's start (lead_origin window_start), so a time-lagged member
+    # takes its own run's soil at the start.  Moved by
+    # fix/ifs-0p1-first-cycle: ecmwf-open-data-0p1 begins at 2026-10-20 06Z
+    # (no 00Z cycle on any mirror) and that first cycle, which publishes no
+    # soil layers, is refused before any transfer.  Moved by
+    # fix/ifs-open-data-sea-ice: both ECMWF open-data routes declare the
+    # same cycle's GFS f000 as their sea-ice donor (seaice_data).  Moved by
+    # fix/ecmwf-seaice-aifs-ens: the aifs and ecmwf-ens routes declare it too.
+    # Moved by fix/ecmwf-record-subset: the ECMWF open-data file rows take
+    # the mapped records by the .index beside each object (record_index),
+    # and the four GFS sea-ice donors take ICEC alone by the .idx (records).
+    # Moved by fix/ecmwf-ens-record-subset: the ecmwf-ens member row also
+    # declares record_index, so a member moves only its mapped records.
+    # Moved by fix/hrrr-native-record-subset: the hrrr-native file rows
+    # take the mapped records by the .idx (record_index) and its hrrr-prs
+    # soil donor takes only its bound soil and terrain records (records).
+    # Moved by fix/gefs-record-subset: both halves of the GEFS member pair
+    # take the mapped records by the .idx beside them (record_index).
+    # Moved by fix/rrfs-record-subset: the rrfs prslev/2dfld rows and the
+    # rrfs-ens member and companion rows take the mapped records by .idx
+    # line (record_index), the nine RUC soil nodes line by line.
+    # Moved by fix/hrrr-prs-record-subset: the hrrr-prs file rows take the
+    # records the packaged profile and composition bind by the .idx beside
+    # each object (record_index), and record_subset is supported.
+    # Moved by fix/aifs-record-subset: the aifs file row takes the mapped
+    # records by the ECMWF .index (record_index, gh preferred over the
+    # pressure-level z the way the mapping reads them), and record_subset
+    # is supported.
+    "77e2d33b334057fce82a61da4eca03889dfca1833cc86c80d82f45d0c6e615b8"
 )
 
 #: Sources whose acquisition predates the route table and keeps its own
@@ -182,6 +225,12 @@ class FileRow:
     #: The byte ranges are copied unchanged, then verified by Rust inventory.
     member_index: Mapping[str, object] | None = None
     index_suffix_replaces: str | None = None
+    #: The records the packaged mapping binds, selected by the publisher's
+    #: index beside each object (:mod:`woof.record_index`); None moves the
+    #: whole object.
+    record_index: Mapping[str, object] | None = None
+    lead_min: int = 0
+    lead_max: int | None = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +242,16 @@ class ComposeRow:
     why: str
 
 
+DONOR_LEAD_ORIGINS = ("cycle", "window_start")
+
+
+def _donor_lead_origin(row) -> str:
+    origin = str(row.get("lead_origin", "cycle"))
+    if origin not in DONOR_LEAD_ORIGINS:
+        raise ValueError(f"donor lead_origin {origin!r} is not one of {DONOR_LEAD_ORIGINS}")
+    return origin
+
+
 @dataclass(frozen=True)
 class DonorRow:
     source: str
@@ -200,6 +259,14 @@ class DonorRow:
     leads: tuple[int, ...]
     cycle: str
     why: str
+    #: What ``leads`` count from: ``cycle`` (the donor's own leads, the
+    #: same for every request) or ``window_start`` (offsets from the
+    #: request's first lead, so a time-lagged request that starts at f03
+    #: takes the donor's f03 record, valid when the forecast starts).
+    lead_origin: str = "cycle"
+    #: The donor records the composition binds, selected by the donor
+    #: object's index (:mod:`woof.record_index`); None moves it whole.
+    records: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -260,6 +327,7 @@ class Route:
     record_subset_supported: bool
     record_subset_why: str
     prep: Mapping[str, object]
+    first_lead: int = 0
     publication_eras: tuple[PublicationEra, ...] = ()
     #: How a cycle posts and how long a run waits for a lead
     #: (:class:`PostingRow`).  Every loaded route has one: the loader
@@ -330,6 +398,8 @@ def _file_row(raw: Mapping[str, object]) -> FileRow:
             f"{ROUTE_TABLE_NAME}: file role {raw.get('role')!r} declares lead "
             f"rule {leads!r}; the planner reads {sorted(FILE_LEAD_RULES)}")
     return FileRow(
+        lead_min=int(raw.get("lead_min", 0)),
+        lead_max=int(raw["lead_max"]) if raw.get("lead_max") is not None else None,
         role=str(raw["role"]),
         path=str(raw["path"]),
         primary=bool(raw.get("primary", False)),
@@ -342,7 +412,51 @@ def _file_row(raw: Mapping[str, object]) -> FileRow:
                       if raw.get("member_index") else None),
         index_suffix_replaces=(str(raw["index_suffix_replaces"])
                                if raw.get("index_suffix_replaces") else None),
+        record_index=_record_index(raw),
     )
+
+
+def _record_index(raw: Mapping[str, object]) -> Mapping[str, object] | None:
+    """A file row's ``record_index``, checked at load.
+
+    Named breakage: a selection with no index sidecar would plan range
+    requests against an index URL the table never built.  Beside a member
+    index the selection narrows that member's records (both read the same
+    JSON-lines index, so one pass selects); it cannot sit beside a wgrib2
+    lead index or select by an NCEP ``.idx``, which would read a second,
+    different index of the same object.
+    """
+    if not raw.get("record_index"):
+        return None
+    from woof import record_index
+
+    label = f"{ROUTE_TABLE_NAME}: file role {raw.get('role')!r}"
+    if not raw.get("idx_sidecar"):
+        raise ValueError(f"{label} selects records but declares no idx_sidecar")
+    declaration = record_index.validate_declaration(raw["record_index"], label)
+    member = raw.get("member_index")
+    if member and (member.get("format") == "wgrib2"
+                   or declaration["format"] != "ecmwf-jsonl"):
+        raise ValueError(f"{label} narrows a member by record selection, which needs a "
+                         "JSON-lines member index and an ecmwf-jsonl selection")
+    if member and declaration.get("prefer"):
+        # The member narrowing keeps every record a clause keeps; it would
+        # move both of the records a prefer order chooses between.
+        raise ValueError(f"{label} orders a member's records by prefer, which the "
+                         "member index transfer does not apply")
+    return MappingProxyType(declaration)
+
+
+def _donor_records(source_id: str, raw: Mapping[str, object]
+                   ) -> Mapping[str, object] | None:
+    """A donor row's ``records`` selection, checked at load."""
+    if not raw.get("records"):
+        return None
+    from woof import record_index
+
+    return MappingProxyType(record_index.validate_declaration(
+        raw["records"], f"{ROUTE_TABLE_NAME}: route {source_id} donor "
+        f"{raw.get('role')!r}"))
 
 
 def _lag_rules(source_id: str, raw: Mapping[str, object]) -> tuple[LagRule, ...]:
@@ -692,6 +806,7 @@ def _build_routes() -> Mapping[str, Route]:
              tuple((int(step[0]), int(step[1])) for step in entry["steps"]))
             for entry in raw["ladders"])
         routes[source_id] = Route(
+            first_lead=int(raw.get("first_lead", 0)),
             source_id=source_id,
             label=str(raw["label"]),
             measured=str(raw.get("measured", "")),
@@ -720,7 +835,9 @@ def _build_routes() -> Mapping[str, Route]:
                 DonorRow(source=str(row["source"]), role=str(row["role"]),
                          leads=tuple(int(lead) for lead in row["leads"]),
                          cycle=str(row.get("cycle", "same")),
-                         why=str(row.get("why", "")))
+                         why=str(row.get("why", "")),
+                         lead_origin=_donor_lead_origin(row),
+                         records=_donor_records(source_id, row))
                 for row in raw.get("donors", [])),
             record_subset_supported=bool(
                 raw["record_subset"].get("supported", False)),
@@ -1078,7 +1195,14 @@ def sniff_format(path: Path) -> str | None:
 def all_fetchable_sources() -> tuple[str, ...]:
     """Every ``--source`` the fetch front door accepts, sorted."""
     from woof.cf_archive_fetch import sources
-    return tuple(sorted(set(LEGACY_ROUTE_SOURCES) | set(_ROUTES) | set(sources())))
+    return tuple(sorted(set(LEGACY_ROUTE_SOURCES) | set(_ROUTES) | set(sources())
+                        | {row.source_id for row in source_adapters.source_adapters()
+                           if row.acquisition_owner is not None}))
+
+
+def table_route_sources() -> frozenset[str]:
+    """The source ids that are rows of the route table (no aliases)."""
+    return frozenset(_ROUTES)
 
 
 def _canonical(source: str) -> str:
@@ -1247,7 +1371,7 @@ def ladder_for(route: Route, cycle: datetime) -> tuple[int, ...]:
         start = 0 if index == 0 else previous + step
         leads.extend(range(start, through + 1, step))
         previous = leads[-1]
-    return tuple(leads)
+    return tuple(lead for lead in leads if lead >= route.first_lead)
 
 
 def _extended_cycle_hours(route: Route) -> tuple[int, ...]:
@@ -1521,7 +1645,10 @@ def _ladder_words(route: Route, cycle: datetime) -> str:
     parts = []
     previous = 0
     for index, (through, step) in enumerate(_lead_steps(route, cycle)):
-        start = 0 if index == 0 else previous + step
+        # The first segment begins at the route's first published lead
+        # (ladder_for drops the leads below it), not at f000.
+        start = (-(-route.first_lead // step) * step if index == 0
+                 else previous + step)
         parts.append(f"f{start:03d}..f{through:03d} every {step} h")
         previous = through
     return ", then ".join(parts)
@@ -1602,6 +1729,7 @@ class PlannedObject:
     member_index: Mapping[str, object] | None = None
     member_ordinal: int | None = None
     index_key: str | None = None
+    record_index: Mapping[str, object] | None = None
 
     def urls(self, ladder: Sequence[Endpoint]) -> tuple[str, ...]:
         if not self.key:
@@ -1631,6 +1759,7 @@ class DonorRequest:
     cycle: datetime
     leads: tuple[int, ...]
     why: str
+    records: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -1776,7 +1905,8 @@ def endpoint_ladder(route: Route, cycle: datetime, *,
     """
 
     return fetch_endpoints.serving_ladder(
-        route.source_id, cycle=cycle, now=now, pinned=host)
+        route.source_id, cycle=cycle, now=now, pinned=host,
+        throttle_fallthrough=True)
 
 
 def resolve_request(source: str, *, cycle: datetime, hours: int,
@@ -1787,6 +1917,7 @@ def resolve_request(source: str, *, cycle: datetime, hours: int,
                     now: datetime | None = None) -> FetchPlan:
     """Everything a fetch will do, decided before a single byte moves."""
 
+    source = source_adapters.source_for_cycle(source, cycle)
     route = route_for(source)
     host = fetch_endpoints.policy_transport(route.source_id, host)
     if area is not None:
@@ -1837,18 +1968,23 @@ def resolve_request(source: str, *, cycle: datetime, hours: int,
     step0_only: list[str] = []
 
     def emit(row: FileRow, lead: int | None) -> None:
+        if lead is not None and (lead < row.lead_min or (row.lead_max is not None and lead > row.lead_max)):
+            return
         lead_context = dict(context)
         if lead is not None:
             lead_context.update({
                 "F": str(lead), "FF": f"{lead:02d}", "FFF": f"{lead:03d}"})
         for entry in (_axis_entries(route, row.axis) if row.axis else ({},)):
             key = _render(row.path, {**lead_context, **entry})
-            if key in seen:
+            identity = (key, lead) if row.member_index and row.member_index.get("format") == "wgrib2" else key
+            if identity in seen:
                 continue
-            seen.add(key)
+            seen.add(identity)
             relpath = _relpath(route, key)
             if row.member_index is not None:
-                relpath = f"members/{member_name}/{relpath}"
+                relpath = (f"members/{member_name}/leads/f{lead:03d}/{relpath}"
+                           if row.member_index.get("format") == "wgrib2"
+                           else f"members/{member_name}/{relpath}")
             index_base = key
             if row.index_suffix_replaces:
                 if not key.endswith(row.index_suffix_replaces):
@@ -1860,7 +1996,7 @@ def resolve_request(source: str, *, cycle: datetime, hours: int,
                 role=row.role, lead=lead, key=key,
                 idx_url=chosen.url(index_key) if index_key else None,
                 member_index=row.member_index, member_ordinal=member_ordinal,
-                index_key=index_key))
+                index_key=index_key, record_index=row.record_index))
             by_role.setdefault(row.role, []).append(
                 (lead if lead is not None else -1, relpath))
 
@@ -1912,7 +2048,9 @@ def resolve_request(source: str, *, cycle: datetime, hours: int,
 
     donors = tuple(
         DonorRequest(source=row.source, role=row.role, cycle=cycle,
-                     leads=row.leads, why=row.why)
+                     leads=(row.leads if row.lead_origin == "cycle"
+                            else tuple(leads[0] + lead for lead in row.leads)),
+                     why=row.why, records=row.records)
         for row in route.donors)
 
     if compose:
@@ -1962,6 +2100,37 @@ def resolve_request(source: str, *, cycle: datetime, hours: int,
         out=out, ladder=ladder, pinned_host=host)
 
 
+def donor_records_plan(plan: FetchPlan, records: Mapping[str, object]) -> FetchPlan:
+    """The part of a donor's own plan a record-selected donor moves.
+
+    A donor binds its primary object (one per lead) and nothing else, so
+    the route's other rows are not moved, and each primary object takes
+    only ``records``, the donor row's selection, by its index.  Measured
+    cost this removes: hrrr-native's hrrr-prs soil donor moved the whole
+    381 MB wrfprsf00 for 29 MB of soil records, plus a 134 MB wrfsfcf00
+    the composition never reads.
+
+    Named breakage: a donor route that composes its primary from several
+    objects, or whose primary row declares no index, cannot be cut this
+    way; it refuses here rather than handing the preparation a file with
+    records missing.
+    """
+
+    if plan.compose:
+        raise ValueError(f"the {plan.source_id} donor composes its primary from "
+                         "several objects; its records cannot be selected by index")
+    primary_roles = {row.role for row in plan.files if row.primary}
+    objects = tuple(replace(obj, record_index=records) for obj in plan.objects
+                    if obj.role in primary_roles)
+    if not objects or any(obj.index_key is None for obj in objects):
+        raise ValueError(f"the {plan.source_id} donor's primary objects declare no "
+                         "index; its records cannot be selected by index")
+    kept = {obj.relpath for obj in objects}
+    return replace(plan, objects=objects,
+                   supplement_files=tuple(path for path in plan.supplement_files
+                                          if path.as_posix() in kept))
+
+
 # --------------------------------------------------------------------------
 # Transfer
 # --------------------------------------------------------------------------
@@ -1981,7 +2150,6 @@ PREP_ARGUMENTS_NAME = "prep-arguments.json"
 PREP_ARGUMENTS_SCHEMA = "gpuwm-fetch-prep-arguments-v1"
 
 _USER_AGENT = "gpuwm-fetch/2.5 (+https://github.com/arwenweather)"
-_CHUNK = 1 << 20
 _RECOVERY_REQUEST_NAME = "fetch-recovery-request.json"
 _RECOVERY_SCHEMA = "gpuwm-fetch-recovery-v1"
 _RECOVERY_DIRECTORY = ".fetch-verified"
@@ -2013,7 +2181,7 @@ def _verify_payload(path: Path, *, magic: str, label: str) -> None:
         raise ValueError(f"{label}: the server returned an empty object")
     with path.open("rb") as handle:
         head = handle.read(len(magic))
-        if head != magic.encode("ascii"):
+        if head != magic.encode("latin1"):
             raise ValueError(
                 f"{label}: expected a {magic} payload and the first bytes "
                 f"are {head!r} -- the host answered with something that is "
@@ -2052,7 +2220,8 @@ def _admission_reporter(label: str, *, total: int, progress):
     """
 
     def landed(index: int, entry: dict) -> None:
-        note = ("already present" if entry.get("reused")
+        note = ("adopted" if entry.get("adopted") else
+                "already present" if entry.get("reused")
                 else f"{entry.get('bytes', 0) / (1024 * 1024):.1f} MiB")
         progress(progress_mod.format_transfer_done_line(
             label=label, index=index, total=total,
@@ -2063,7 +2232,7 @@ def _admission_reporter(label: str, *, total: int, progress):
 
 def _download_object(url: str, dest: Path, *, magic: str, opener=None,
                      timeout: float = 300.0, progress=None,
-                     declared_size=None) -> dict:
+                     declared_size=None, streams=1) -> dict:
     """Move one object, verify it, and return its manifest entry.
 
     ``progress`` is called with the size of each chunk as it lands.  The
@@ -2072,54 +2241,21 @@ def _download_object(url: str, dest: Path, *, magic: str, opener=None,
     route's opening line and its manifest (UX finding N10).
     """
 
-    from urllib.request import Request  # local: keeps import cost off load
+    from woof.fetch_ranges import download
 
     dest = _io_path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
-    digest = hashlib.sha256()
-    written = 0
-    request = Request(url, headers={"User-Agent": _USER_AGENT})
-    from woof.nomads_governor import paced_urlopen
-    response = paced_urlopen(
-        request, timeout=timeout,
-        **({"opener": opener} if opener is not None else {}))
-    declared = response.headers.get("Content-Length")
-    if declared_size is not None and declared is not None:
-        # The size the host itself states, the moment it states it.  A
-        # HEAD ahead of every transfer would double the request count on
-        # exactly the services whose per-request latency the pool exists
-        # to hide, so the in-flight line learns the total from the
-        # transfer that is already open.
-        try:
-            declared_size(dest, int(declared))
-        except (TypeError, ValueError):          # pragma: no cover
-            pass
     try:
-        with response, part.open("wb") as handle:
-            while True:
-                # Another file already failed this request: the rest of
-                # this one would be bytes nobody uses.
-                fetch_pool.raise_if_stopped()
-                chunk = response.read(_CHUNK)
-                if not chunk:
-                    break
-                handle.write(chunk)
-                digest.update(chunk)
-                written += len(chunk)
-                if progress is not None:
-                    progress(len(chunk))
-    except fetch_pool.TransferCancelled:
+        written, digest = download(url, part, user_agent=_USER_AGENT,
+            streams=streams, timeout=timeout, opener=opener,
+            progress=progress, declared_size=declared_size)
+    except BaseException:
         part.unlink(missing_ok=True)
         raise
-    if declared is not None and int(declared) != written:
-        part.unlink(missing_ok=True)
-        raise ValueError(
-            f"{dest.name}: the host declared {int(declared)} bytes and "
-            f"delivered {written}")
     _verify_payload(part, magic=magic, label=dest.name)
     part.replace(dest)
-    return {"name": dest.name, "bytes": written, "sha256": digest.hexdigest(),
+    return {"name": dest.name, "bytes": written, "sha256": digest,
             "url": url}
 
 
@@ -2137,9 +2273,23 @@ def _retry_delay(error: BaseException, attempt: int) -> float | None:
                                        wait_limit_s=_RETRY_WAIT_LIMIT)
 
 
+#: (source, endpoint) pairs already told that a paced host moves record-
+#: selected objects whole: one line per run, not one per object.
+_PACED_WHOLE_SAID: set[tuple[str, str]] = set()
+
+
+def _paced_host(url: str) -> bool:
+    """Does the shared NOMADS governor pace this URL's requests?"""
+
+    from woof.nomads_governor import is_nomads_url
+
+    return is_nomads_url(url)
+
+
 def _download_along_ladder(plan: FetchPlan, obj: PlannedObject, dest: Path, *,
                            magic: str, fetch, opener, progress,
-                           ladder: Sequence[Endpoint] | None = None) -> dict:
+                           ladder: Sequence[Endpoint] | None = None,
+                           records: bool = True) -> dict:
     """Move one object, asking each endpoint in turn until one serves.
 
     The rounds, the waits between them and the refusal once they are
@@ -2164,10 +2314,41 @@ def _download_along_ladder(plan: FetchPlan, obj: PlannedObject, dest: Path, *,
         url = endpoint.url(obj.key) if obj.key else obj.url
         if obj.member_index is not None:
             from woof.member_index import download_indexed_member
+            # The row's record_index narrows the member to the records the
+            # mapping binds; a caller-substituted transport keeps the whole
+            # member, as it keeps whole objects elsewhere.
             return download_indexed_member(
                 url, endpoint.url(obj.index_key), dest,
                 declaration=obj.member_index, member_ordinal=obj.member_ordinal,
-                source=plan.source_id, member=plan.member, opener=opener)
+                source=plan.source_id, member=plan.member, opener=opener,
+                forecast_hour=obj.lead,
+                records=obj.record_index if records else None)
+        if obj.record_index is not None and records and _paced_host(url):
+            # The NOMADS governor spaces every request a node sends 2.5 s
+            # apart (woof.nomads_governor), so a selection read as tens
+            # of byte ranges takes minutes there where the whole object
+            # takes seconds: a GEFS member-lead is 85 ranges, about 3.5
+            # min against ~40 s whole at NOMADS's measured 3 MB/s.  The
+            # paced host moves the object whole; the decode reads the
+            # same records from it.
+            said = (plan.source_id, endpoint.name)
+            if said not in _PACED_WHOLE_SAID:
+                _PACED_WHOLE_SAID.add(said)
+                progress(f"fetch {plan.source_id}: {endpoint.name} paces each request "
+                         "2.5 s apart, so its objects move whole rather than as "
+                         "selected records")
+        elif obj.record_index is not None and records:
+            from woof.record_index import IndexAbsent, download_records
+            try:
+                return download_records(
+                    url, endpoint.url(obj.index_key), dest,
+                    declaration=obj.record_index, opener=opener)
+            except IndexAbsent as error:
+                # The object may still be there: move it whole (the decode
+                # reads the same records from it) rather than fail it.
+                progress(f"fetch {plan.source_id}: {obj.relpath}: "
+                         f"{endpoint.name} cannot serve the record selection "
+                         f"({error}); moving the whole object")
         return fetch(url, dest, magic=magic, opener=opener)
 
     endpoint, entry = fetch_endpoints.ask_along_ladder(
@@ -2338,8 +2519,9 @@ def request_cached(plan: FetchPlan, out: Path) -> bool:
     except ValueError:
         return False
     prior = _prior_entries(out)
-    return all(_reusable_entry(out, plan, obj, prior) is not None
-               for obj in plan.objects)
+    with ThreadPoolExecutor(max_workers=max(1, min(len(plan.objects), os.cpu_count() or 1))) as pool:
+        return all(pool.map(lambda obj: _reusable_entry(out, plan, obj, prior) is not None,
+                            plan.objects))
 
 
 #: What an unpinned request records where it used to record one host.
@@ -2512,6 +2694,7 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
     # only per-file signal, arriving at completion.  Default-on: no flag
     # turns this on, and a bare run stops going quiet.
     monitor = progress_mod.TransferMonitor(f"fetch {plan.source_id}")
+    workers = fetch_pool.resolve_file_workers(file_workers)
     fetch = downloader
     if fetch is None:
         # ``declared_size`` is bound to the DEFAULT transport only, for
@@ -2520,17 +2703,49 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
         # test's fake is called exactly as before.
         fetch = functools.partial(_download_object,
                                   progress=counter.advance,
-                                  declared_size=monitor.declare_for_path)
+                                  declared_size=monitor.declare_for_path,
+                                  streams=fetch_pool.chunk_streams_per_file(
+                                      workers, files=len(plan.objects)))
 
-    workers = fetch_pool.resolve_file_workers(file_workers)
     ladder = plan.ladder or (plan.host,)
+    # A file row's record selection rides the route's own transports (the
+    # default and the Rust object door, which says so); a caller that
+    # substitutes its own transport (an offline replay, a standby store)
+    # keeps moving whole objects, as it always has.
+    records = downloader is None or bool(getattr(downloader, "route_transport", False))
 
-    # Which objects this run still has to move -- the only ones worth
-    # asking a host about.
+    # Verify files across the available cores. Unrecorded files can be
+    # adopted against the host; their HEAD/index responses are capped at
+    # 16 open connections independently of the hashing width.
+    from woof.fetch_adoption import adopt
+
+    def local_entry(obj):
+        known = _reusable_entry(out, plan, obj, prior)
+        if known is not None:
+            return {**known, "adopted": False, "reused": True,
+                    "downloaded": False}
+        dest = out / obj.relpath
+        # A failed recorded checksum is damage, not a new unmanaged file.
+        if (not dest.is_file() or _recovery_entry(out, plan, obj)
+                or prior.get(obj.relpath)):
+            return None
+        entry = adopt(dest, obj, ladder=ladder, magic=_magic_for(plan, obj.role),
+                      verify_payload=_verify_payload, opener=opener, progress=progress)
+        if entry is not None:
+            entry.update(relpath=obj.relpath, role=obj.role, lead=obj.lead,
+                         adopted=True, reused=False, downloaded=False)
+            _write_json(_recovery_path(out, obj), {
+                "request": _request_identity(plan), "key": obj.key, "file": entry})
+        return entry
+
     reuse: dict[str, dict] = {}
     pending: list[PlannedObject] = []
-    for obj in plan.objects:
-        known = _reusable_entry(out, plan, obj, prior)
+    verification_workers = max(1, min(len(plan.objects), os.cpu_count() or 1))
+    verification_started = perf_counter()
+    with ThreadPoolExecutor(max_workers=verification_workers) as pool:
+        local = list(pool.map(local_entry, plan.objects))
+    verification_seconds = perf_counter() - verification_started
+    for obj, known in zip(plan.objects, local):
         if known is not None:
             reuse[obj.relpath] = known
         else:
@@ -2558,7 +2773,8 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
         return (tuple(rung for rung in rungs if rung.name == name)
                 + tuple(rung for rung in rungs if rung.name != name))
 
-    reused = len(reuse)
+    adopted = sum(bool(entry.get("adopted")) for entry in reuse.values())
+    reused = len(reuse) - adopted
     jobs = []
     for obj in plan.objects:
         dest = out / obj.relpath
@@ -2569,7 +2785,7 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
             def _reuse(entry=known, relpath=obj.relpath, role=obj.role,
                        lead=obj.lead) -> dict:
                 return {**entry, "relpath": relpath, "role": role,
-                        "lead": lead, "reused": True}
+                        "lead": lead}
 
             jobs.append(fetch_pool.TransferJob(
                 name=obj.relpath, url=None, action=_reuse,
@@ -2584,11 +2800,16 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
                  group=groups[len(jobs)]) -> dict:
             if lead_gate is not None:
                 rungs = _headed(rungs, lead_gate(group))
+            if dest.exists():
+                from woof.fetch_guard import quarantine
+                aside = quarantine(dest)
+                progress(f"fetch {plan.source_id}: moved rejected file aside to {aside.name}")
             while True:
                 try:
                     entry = _download_along_ladder(
                         plan, obj, dest, magic=magic, fetch=fetch,
-                        opener=opener, progress=progress, ladder=rungs)
+                        opener=opener, progress=progress, ladder=rungs,
+                        records=records)
                 except ValueError as error:
                     # A payload that did not verify, or every rung
                     # refusing it once its own retries are spent.  A
@@ -2601,7 +2822,7 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
                     continue
                 break
             entry = {**entry, "relpath": relpath, "role": role, "lead": lead,
-                     "reused": False}
+                     "reused": False, "adopted": False, "downloaded": True}
             _write_json(_recovery_path(out, obj), {
                 "request": _request_identity(plan), "key": obj.key, "file": entry})
             return entry
@@ -2639,6 +2860,7 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
         f"f{plan.leads[0]:03d}..f{plan.leads[-1]:03d}"
         + (f", member {plan.member}" if plan.member else "")
         + (f"; {behind} behind it" if behind else "")
+        + (f"; {adopted} adopted" if adopted else "")
         + (f"; {reused} already present" if reused else ""))
 
     # WHAT IT IS DOING, per object, as the verified prefix grows.  The
@@ -2670,7 +2892,7 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
                                      progress=progress)
                         if lead_steps else [])
         composed_so_far.extend(composed_now)
-        _write_json(out / MANIFEST_NAME, _plan_manifest(
+        _write_route_manifest(out, _plan_manifest(
             plan, list(admitted), list(composed_so_far), None,
             complete=False))
         _write_sha256sums(out, admitted, composed_so_far)
@@ -2686,10 +2908,13 @@ def run_plan(plan: FetchPlan, *, out: Path, force: bool = False,
 
     composed = (composed_so_far if on_lead is not None
                 else _run_compose(plan, out, progress=progress))
+    receipt.update(verification_workers=verification_workers,
+                   verification_seconds=round(verification_seconds, 6),
+                   adoption_connection_cap=16)
     payload = _plan_manifest(plan, entries, composed, receipt,
                              probe_receipt=probe_receipt,
                              complete=True if on_lead is not None else None)
-    _write_json(out / MANIFEST_NAME, payload)
+    _write_route_manifest(out, payload)
     _write_sha256sums(out, entries, composed)
     return payload
 
@@ -2698,6 +2923,12 @@ def _plan_manifest(plan: FetchPlan, entries, composed, receipt, *,
                    probe_receipt=None, complete: bool | None = None) -> dict:
     """The route manifest for ``entries``; ``complete`` only on an as-posted fetch."""
 
+    acquisition = {}
+    for kind, flag in (("adopted", "adopted"), ("reused", "reused"),
+                       ("downloaded", "downloaded")):
+        selected = [entry for entry in entries if entry.get(flag)]
+        acquisition[f"{kind}_files"] = len(selected)
+        acquisition[f"{kind}_bytes"] = sum(entry.get("bytes", 0) for entry in selected)
     payload = {
         "schema": ROUTE_MANIFEST_SCHEMA,
         "route_table_sha256": packaged_route_table_sha256(),
@@ -2711,7 +2942,7 @@ def _plan_manifest(plan: FetchPlan, entries, composed, receipt, *,
         "endpoints": _endpoint_receipt(plan, entries, probe=probe_receipt),
         "files": entries,
         "composed": composed,
-        "concurrency": receipt,
+        "concurrency": {**(receipt or {}), **acquisition},
         "donors": [
             {"source": donor.source, "role": donor.role,
              "cycle": f"{donor.cycle:%Y-%m-%dT%H}Z",
@@ -2769,7 +3000,43 @@ def _endpoint_receipt(plan: FetchPlan,
     }
 
 
+def _composed_already(dest: Path, out: Path, parts) -> tuple[str, int] | None:
+    """``(sha256, bytes)`` when ``dest`` already holds exactly the parts' concatenation, else None."""
+
+    try:
+        if not dest.is_file():
+            return None
+        want = hashlib.sha256()
+        size = 0
+        for part in parts:
+            data = (out / part.relpath).read_bytes()
+            want.update(data)
+            size += len(data)
+        if dest.stat().st_size != size:
+            return None
+        have = hashlib.sha256()
+        with dest.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                have.update(chunk)
+    except OSError:
+        return None
+    return (want.hexdigest(), size) if have.hexdigest() == want.hexdigest() else None
+
+
 def _run_compose(plan: FetchPlan, out: Path, *, progress=print) -> list[dict]:
+    """Concatenate each composed valid time from its parts.
+
+    A composed file that already holds exactly its parts' bytes is left as
+    it is, and a changed one is written beside it and renamed into place.
+    THE BREAKAGE THIS PREVENTS (WOOF sensitivity smoke, 2026-10-25,
+    three gem-gdps members of one cycle with different physics): members of
+    one ensemble share one download folder (recipe_door._SharedDownloads)
+    and each member's chain runs this fetch again; the in-place rewrite of
+    ``composed/gdps_*.grib2`` by a later member moved the file an earlier
+    member's preparation had hashed, and that member's deferred re-read
+    refused with "authority changed while it was re-read". Every composed
+    route (gem-gdps, ecmwf-open-data-0p1, the GEFS routes) was exposed.
+    """
     composed: list[dict] = []
     for step in plan.compose:
         if step.kind != "concat_per_lead":
@@ -2777,15 +3044,24 @@ def _run_compose(plan: FetchPlan, out: Path, *, progress=print) -> list[dict]:
                 f"{ROUTE_TABLE_NAME}: unknown compose kind {step.kind!r}")
         dest = out / step.name
         dest.parent.mkdir(parents=True, exist_ok=True)
+        already = _composed_already(dest, out, step.parts)
+        if already is not None:
+            composed.append({
+                "name": step.name, "bytes": already[1],
+                "sha256": already[0], "lead": step.lead,
+                "parts": [part.relpath for part in step.parts]})
+            continue
         digest = hashlib.sha256()
         written = 0
-        with dest.open("wb") as handle:
+        temporary = dest.with_name(dest.name + ".composing")
+        with temporary.open("wb") as handle:
             for part in step.parts:
                 data = (out / part.relpath).read_bytes()
                 handle.write(data)
                 digest.update(data)
                 written += len(data)
-        _verify_payload(dest, magic="GRIB", label=step.name)
+        _verify_payload(temporary, magic="GRIB", label=step.name)
+        replace_file_with_retry(temporary, dest)
         composed.append({
             "name": step.name, "bytes": written,
             "sha256": digest.hexdigest(), "lead": step.lead,
@@ -2795,6 +3071,25 @@ def _run_compose(plan: FetchPlan, out: Path, *, progress=print) -> list[dict]:
                  f"time{'' if len(composed) == 1 else 's'} from "
                  f"{sum(len(item['parts']) for item in composed)} objects")
     return composed
+
+
+def _write_route_manifest(out: Path, payload: Mapping[str, object]) -> None:
+    # Preparation binds the bytes of this authority document. Transfer timing
+    # and pool width are observations, not input content: putting them here
+    # invalidates an otherwise identical preparation on every cached fetch.
+    material = dict(payload)
+    receipt = material.pop("concurrency", None)
+    # A cached object has the same authority as a freshly acquired object.
+    # Keep reuse observations in the returned payload and recovery receipts.
+    if "files" in material:
+        material["files"] = [
+            {key: value for key, value in entry.items()
+             if key not in {"reused", "adopted", "downloaded", "adoption"}}
+            for entry in material["files"]
+        ]
+    if receipt is not None:
+        _write_json(out / "fetch-pool-receipt.json", receipt)
+    _write_json(out / MANIFEST_NAME, material)
 
 
 def _write_json(path: Path, payload: Mapping[str, object]) -> None:
@@ -3017,7 +3312,15 @@ def prepares_through_packaged_composition(source: str) -> bool:
 
 def publishes_prep_handoff(source: str) -> bool:
     """Whether the implemented acquisition path publishes bound prep arguments."""
+    adapter = source_adapters.get_source_adapter(source)
+    if adapter.acquisition_owner and adapter.acquisition_prep_handoff:
+        return True
     source = canonical_source(source)
+    adapter = source_adapters.get_source_adapter(source)
+    if adapter.acquisition_owner:
+        from importlib import import_module
+        return bool(getattr(import_module(adapter.acquisition_owner),
+                            "PUBLISHES_PREP_HANDOFF", False))
     from woof.cf_archive_fetch import sources
     if source in sources():
         return True

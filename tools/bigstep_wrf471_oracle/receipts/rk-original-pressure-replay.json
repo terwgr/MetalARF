@@ -561,8 +561,8 @@
     }
   },
   "source_sha256": {
-    "gpuwm/core/moist.py": "c5b6f7d2106bf1dbfe796689186908ac30bf70d8b5d54e9b24a10a0e3c0d6b6c",
-    "gpuwm/core/dycore.py": "40f0241a12a5f25367ce3f0f4744c04a2fd7f69403f8c13d71f083bac2930b8d",
+    "woof/core/moist.py": "c5b6f7d2106bf1dbfe796689186908ac30bf70d8b5d54e9b24a10a0e3c0d6b6c",
+    "woof/core/dycore.py": "40f0241a12a5f25367ce3f0f4744c04a2fd7f69403f8c13d71f083bac2930b8d",
     "held_heating.cu": "0e51ecf64dc477bd9f7b5b97502824d4452d4f2832dfafc1d90fc75e26e18a7a",
     "rk_bookkeeping.cu": "fbda87be951e2a18addd313f57afef0bb559ba61727284f351103f680b0ce729"
   },

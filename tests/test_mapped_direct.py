@@ -556,7 +556,7 @@ def _install_prepare_fakes(
     # every state, in which order, and that arrival order and position
     # were kept distinct.
     frame_calls = {"added": [], "arrival": [], "built": [],
-                   "intervals": [], "released": []}
+                   "intervals": [], "released": [], "replaced": []}
 
     class RecordingFrames:
         inventory = ("u", "v", "theta", "phi", "mu")
@@ -570,6 +570,12 @@ def _install_prepare_fakes(
         def add_state(self, state, *, index=None):
             frame_calls["added"].append(state)
             frame_calls["arrival"].append(index)
+
+        def replace_start_state(self, state, *, index=0):
+            # Recorded in call order beside the intervals, so a test can
+            # see the start frame was replaced before interval 0 was built.
+            frame_calls["replaced"].append(
+                (index, state, len(frame_calls["intervals"])))
 
         def build(self, actual_times):
             frame_calls["built"].append(tuple(actual_times))
@@ -850,15 +856,19 @@ def test_prepare_threads_the_output_root_into_the_compose_scratch(
         Path(args["output_root"]).resolve())
 
 
-def test_separate_analysis_keeps_boundary_zero_and_uses_donor_aerosols(monkeypatch, tmp_path):
-    # Replacing forcing[0] would interpolate from the analysis toward the next
-    # boundary product. The first boundary must remain that product's f00.
+def test_separate_analysis_starts_the_boundary_from_itself_and_uses_donor_aerosols(monkeypatch, tmp_path):
+    # The first boundary record is the start state's own coupling and
+    # interval 0 runs from it to the boundary product's next time, WRFDA
+    # da_update_bc's rule (operational HRRR runs it after GSI).  It used to
+    # stay the boundary product's f00, so an HRRR start under RAP boundaries
+    # began its specified and relaxation zones from the RAP atmosphere.
     from contextlib import contextmanager
     import woof.initial_source as initial_source
 
     args, calls, expected = _install_prepare_fakes(
         monkeypatch, tmp_path, domain_count=1, backend="cpu")
     expected.exp.root.run.use_rap_aero_icbc = True
+    expected.mets[0].fields.update(QNWFA=None, QNIFA=None)
     args["initial_inputs"] = tmp_path / "initial.json"
     monkeypatch.setattr(initial_source, "read_initial_inputs", lambda _: {})
     donor_result = SimpleNamespace(state=_State())
@@ -868,7 +878,7 @@ def test_separate_analysis_keeps_boundary_zero_and_uses_donor_aerosols(monkeypat
     def initialize(met, *positional, **kwargs):
         calls_to_initializer.append(kwargs)
         if "aerosol_snapshot" in kwargs:
-            assert kwargs["aerosol_snapshot"] is expected.mets[0]
+            assert _is_donor_cut_of(kwargs["aerosol_snapshot"], expected.mets[0])
             return donor_result
         return original(met, *positional, **kwargs)
 
@@ -885,11 +895,28 @@ def test_separate_analysis_keeps_boundary_zero_and_uses_donor_aerosols(monkeypat
     monkeypatch.setattr(initial_source, "decode_initial_analysis", analysis)
     proof = mapped_direct.prepare_mapped_wrf(**args)
     assert calls["frames"]["added"] == [result.state for result in expected.results]
+    # Replaced once, frame 0, by the analysis, before any interval exists.
+    assert calls["frames"]["replaced"] == [(0, donor_result.state, 0)]
     assert calls["cache_stream"]["head"]["initial_result"] is donor_result
     assert proof["initial_source"]["source"] == "distinct-analysis"
     assert proof["initial_source"]["aerosol_source"] == "boundary-analysis"
-    assert calls_to_initializer[1]["aerosol_snapshot"] is expected.mets[0]
+    assert _is_donor_cut_of(calls_to_initializer[1]["aerosol_snapshot"], expected.mets[0])
     assert (args["output_root"] / "source-evidence" / "initial" / "request.json").read_bytes() == b"bound donor"
+
+
+def _is_donor_cut_of(donor, boundary_analysis):
+    """The donor is the boundary analysis cut to the fields a donor is read for.
+
+    The rest of the boundary analysis is released before the initial
+    analysis is built (woof.ingest.real.aerosol_donor_snapshot); the kept
+    fields are the boundary analysis' own arrays, not copies.
+    """
+    from woof.ingest.real import AEROSOL_DONOR_COORDINATE_FIELDS
+    keep = {*AEROSOL_DONOR_COORDINATE_FIELDS, "QNWFA", "QNIFA", "QNWFA_SFC", "QNIFA_SFC"}
+    return (donor is not boundary_analysis
+            and set(donor.fields) == keep & set(boundary_analysis.fields)
+            and all(donor.fields[name] is boundary_analysis.fields[name]
+                    for name in donor.fields))
 
 
 def test_the_chained_admission_is_priced_with_the_mapping_it_prepares_from(
@@ -1281,7 +1308,7 @@ def test_a_mapped_tree_defers_the_perturbation_block_the_gfs_tree_defers(
     assert all(operands.get("initial_perturbation") is None
                for operands in calls["initialize_operands"])
     assert "initial_perturbation" not in routed["source_identity"]
-    assert "deferred to prepared-tree forecast initialization" in (
+    assert "deferred to prepared forecast initialization" in (
         capsys.readouterr().err)
 
 
@@ -1293,22 +1320,19 @@ def test_a_mapped_tree_without_the_block_writes_the_proof_it_always_did(
     assert "initial_perturbation" not in proof
 
 
-def test_a_single_mapped_domain_still_refuses_the_perturbation_block(
+def test_a_single_mapped_domain_defers_the_perturbation_block(
         monkeypatch, tmp_path):
-    """The prepared single-domain runner applies no bubble, so a
-    single-domain preparation is refused by name before any work."""
+    """The prepared single-domain runner applies the bubbles to its restored
+    state (fix/single-domain-perturbation), so a single-domain preparation
+    is no longer refused: it prepares unperturbed arrays, and the runner
+    writes the treatment receipt when it applies them."""
     args, calls, expected = _install_prepare_fakes(
         monkeypatch, tmp_path, domain_count=1, backend="cpu")
     expected.exp.perturbation = _noise_bubble()
 
-    with pytest.raises(
-            ValueError,
-            match=r"single-domain mapped-adapter prepared-cache route does "
-                  r"not apply \[perturbation\]"):
-        mapped_direct.prepare_mapped_wrf(**args)
-    assert calls["build_static"] == 0
-    assert calls["interpolate"] == 0
-    assert not args["output_root"].exists()
+    proof = mapped_direct.prepare_mapped_wrf(**args)
+    assert proof is not None
+    assert args["output_root"].is_dir()
 
 
 def test_mapped_hierarchy_preserves_five_minute_offsets_end_to_end(
@@ -2779,3 +2803,115 @@ def test_a_single_mapped_domain_prepares_where_a_tree_is_refused(
 
     assert calls["build_static"] == 1
     assert args["output_root"].is_dir()
+
+
+# D-02 (2.8.8 acceptance, row I1): a RUC preparation whose layer-source
+# soil moisture floor fired (90ae5edc9) wrote ``soil_moisture_floor`` into
+# proof.json but not into the cache's user metadata, and the front door,
+# which binds every CONDITIONAL_PREPARATION_RECEIPTS key from the proof and
+# compares the user metadata EXACTLY, refused its own preparation with
+# "prepared cache user metadata differs from source/proof/experiment".
+# Every writer of the root's user metadata -- the single-domain head, the
+# one-shot tree, the chained tree's head binding and its seal -- carries
+# the identical receipt.
+_RUC_FLOOR_RECEIPT = {
+    "policy": "wrf-ruc-layer-source-smois-max-0.005",
+    "floored_values": 660, "floored_columns": 425,
+    "per_level": {"SMOIS_L1": 425, "SMOIS_L2": 235},
+    "min_pre_floor": -0.029,
+}
+
+
+def _fire_the_ruc_layer_floor(monkeypatch):
+    routed = mapped_direct.preprocess_land_surface_soil
+
+    def fired(*args, **kwargs):
+        routed(*args, **kwargs)
+        return SimpleNamespace(soil_moisture_floor=dict(_RUC_FLOOR_RECEIPT))
+
+    monkeypatch.setattr(mapped_direct, "preprocess_land_surface_soil", fired)
+
+
+def _assert_user_binds_the_proofs_receipts(user, proof):
+    from woof.ingest.prepared_cache import CONDITIONAL_PREPARATION_RECEIPTS
+
+    assert proof["soil_moisture_floor"] == _RUC_FLOOR_RECEIPT
+    for key in CONDITIONAL_PREPARATION_RECEIPTS:
+        assert (key in user) == (key in proof), key
+        assert user.get(key) == proof.get(key), key
+
+
+def test_a_fired_ruc_floor_is_bound_in_the_single_domain_cache_header(
+        monkeypatch, tmp_path):
+    args, calls, _expected = _install_prepare_fakes(
+        monkeypatch, tmp_path, domain_count=1, backend="cpu")
+    _fire_the_ruc_layer_floor(monkeypatch)
+
+    proof = mapped_direct.prepare_mapped_wrf(**args)
+
+    _assert_user_binds_the_proofs_receipts(
+        calls["cache_stream"]["head"]["metadata"], proof)
+
+
+def test_a_healthy_single_domain_cache_header_is_unchanged(
+        monkeypatch, tmp_path):
+    args, calls, _expected = _install_prepare_fakes(
+        monkeypatch, tmp_path, domain_count=1, backend="cpu")
+
+    proof = mapped_direct.prepare_mapped_wrf(**args)
+
+    assert "soil_moisture_floor" not in proof
+    assert "soil_moisture_floor" not in calls["cache_stream"]["head"]["metadata"]
+
+
+def test_a_fired_ruc_floor_is_bound_in_the_one_shot_tree_root_metadata(
+        monkeypatch, tmp_path):
+    args, calls, _expected = _install_prepare_fakes(
+        monkeypatch, tmp_path, domain_count=2, backend="cpu")
+    _fire_the_ruc_layer_floor(monkeypatch)
+
+    proof = mapped_direct.prepare_mapped_wrf(**args)
+
+    (routed,) = calls["hierarchy"]
+    _assert_user_binds_the_proofs_receipts(routed["root_metadata"], proof)
+
+
+def test_a_fired_ruc_floor_is_bound_in_the_chained_tree_root_metadata(
+        monkeypatch, tmp_path):
+    """The chained tree binds d01's user metadata at the head, before the
+    proof exists, so the binding is held to the receipt the proof head
+    will record (the same soil state's)."""
+    args, _calls, _expected = _install_prepare_fakes(
+        monkeypatch, tmp_path, domain_count=2, backend="cpu")
+    monkeypatch.setenv("WOOF_CHAINED_PREP", "1")
+    _fire_the_ruc_layer_floor(monkeypatch)
+    seen = {}
+
+    class Bound(Exception):
+        pass
+
+    def static_files(directory, *, domain, grid, static_fields):
+        return {"sha256": "c" * 64}, {}
+
+    def binding(**kwargs):
+        seen["root_metadata"] = kwargs["root_metadata"]
+        raise Bound
+
+    monkeypatch.setattr(
+        mapped_direct, "prepare_regular_source_hierarchy_head",
+        lambda **_kwargs: SimpleNamespace(
+            child_results=("d02 start",),
+            forcing_identity={"forcing_hours": [0, 1]},
+            bound_source_identity=lambda identity: dict(identity)))
+    monkeypatch.setattr(mapped_direct, "write_domain_static_files",
+                        static_files)
+    monkeypatch.setattr(mapped_direct, "write_child_domain_artifacts",
+                        lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(mapped_direct, "root_domain_artifact_binding",
+                        binding)
+
+    with pytest.raises(Bound):
+        mapped_direct.prepare_mapped_wrf(**args)
+
+    _assert_user_binds_the_proofs_receipts(
+        seen["root_metadata"], {"soil_moisture_floor": _RUC_FLOOR_RECEIPT})

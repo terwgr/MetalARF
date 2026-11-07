@@ -1,0 +1,79 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_aa_graupel_number_init",
+      "module": "thompson_aerosol_graupel_init",
+      "source": "woof/metal/shaders/thompson_aerosol_graupel_init.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_graupel_number_init",
+      "resources": [
+        [
+          "qg",
+          "uint32",
+          "read"
+        ],
+        [
+          "temperature",
+          "uint32",
+          "read"
+        ],
+        [
+          "pressure",
+          "uint32",
+          "read"
+        ],
+        [
+          "qv",
+          "uint32",
+          "read"
+        ],
+        [
+          "graupel_number",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qg": [
+          [
+            "n"
+          ]
+        ],
+        "temperature": [
+          [
+            "n"
+          ]
+        ],
+        "pressure": [
+          [
+            "n"
+          ]
+        ],
+        "qv": [
+          [
+            "n"
+          ]
+        ],
+        "graupel_number": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default",
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "pinned-aerosol-libm"
+      ]
+    }
+  ]
+}

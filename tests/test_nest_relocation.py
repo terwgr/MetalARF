@@ -24,6 +24,8 @@ from woof.core.nest_relocation import (Placement, RelocationRefusal,
                                         transplant_overlap)
 from woof.experiment import DISCRETE_RELOCATION_MODE, RelocationConfig
 
+from test_nest_relocation_staging import _scaffold
+
 
 RATIO = 3
 NX = NY = 24
@@ -449,12 +451,6 @@ def test_only_the_discrete_mode_is_implemented():
 # The new config field must not move any existing fingerprint
 # ---------------------------------------------------------------------------
 
-def _scaffold():
-    from woof.verify.cases.nest_ideal_r3 import load_scaffold
-
-    return load_scaffold()
-
-
 def test_relocation_bounds_are_outside_the_restart_identity():
     """Adding a field to ExperimentConfig would otherwise re-key every
     checkpoint ever written, including for runs with no nest at all."""
@@ -770,6 +766,7 @@ def test_relocate_refuses_a_move_the_bounds_disallow_before_rebuilding():
 # ---------------------------------------------------------------------------
 
 @requires_gpu
+@pytest.mark.gpu
 def test_relocation_verify_case_passes_every_component(tmp_path):
     """Run the artifact, not a mock: the idealized ratio-3 tree integrates,
     relocates twice, and integrates again.  ~5 s on a 5090."""

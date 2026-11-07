@@ -68,6 +68,7 @@ from woof.core.nest_relocation import (RelocationRefusal, RelocationSegment,
                                         mark_fingerprint_across_move,
                                         relocate_child)
 from woof.progress_log import centre_latlon, model_step_log
+from woof.core.storm_tracking import TRACKER_OPTIONAL_STATE_KEYS
 
 #: Versioned label for the runner's own receipt rows.
 from woof.core.uh_diag import (UH_FOLLOW_WINDOW_SLOT,
@@ -254,7 +255,16 @@ class RelocationRunner:
                     "[[relocation.move]] itinerary, and no provider was "
                     "handed in.  A runner with nothing to consult is a "
                     "nest that silently never moves, so this refuses")
+        follow = getattr(config, "follow", None)
+        if (follow is not None and getattr(follow, "field", None) == "pressure"
+                and getattr(follow, "level_hpa", ()) is None):
+            from dataclasses import replace
+
+            # Hurricane motion has a measured budget, not an arbitrary
+            # per-move cap. Keep the overlap, reach and parent-halo bounds.
+            config = replace(config, max_move_parent_cells=None)
         self.config = config
+        self.tick_den = int(schedule.clock.tick_den)
         self.provider = provider
         self.on_child_built = on_child_built
         self.staging = str(staging)
@@ -266,6 +276,10 @@ class RelocationRunner:
                               else Path(receipts_path))
         self.cadence_periods = _cadence_periods(
             getattr(config, "cadence_seconds", None), schedule)
+        if hasattr(provider, "move_interval_seconds"):
+            provider.move_interval_seconds = (
+                self.cadence_periods * int(schedule.period_ticks)
+                / int(schedule.clock.tick_den))
         #: The [relocation.containment] leg: the mover's parent slides to
         #: keep the mover contained, with the mover EARTH-FIXED under the
         #: slide.  The route wires the parent's own initializer/preparer
@@ -378,6 +392,8 @@ class RelocationRunner:
             "moves_executed": int(self.moves_executed),
             "last_proposal_t": timers.get("last_proposal_t"),
             "last_move_t": timers.get("last_move_t"),
+            **{key: timers[key] for key in TRACKER_OPTIONAL_STATE_KEYS
+               if key in timers},
         }
 
     def restore_state(self, entry) -> None:
@@ -399,7 +415,8 @@ class RelocationRunner:
                 "a follower restart entry must be a mapping, got "
                 f"{type(entry).__name__}")
         unknown = sorted(set(entry) - set(RUNNER_STATE_KEYS)
-                         - set(RUNNER_WRITER_KEYS))
+                         - set(RUNNER_WRITER_KEYS)
+                         - set(TRACKER_OPTIONAL_STATE_KEYS))
         if unknown:
             raise RelocationRefusal(
                 f"a follower restart entry carries key(s) {unknown} this "
@@ -433,6 +450,9 @@ class RelocationRunner:
 
         timers = {"last_proposal_t": entry["last_proposal_t"],
                   "last_move_t": entry["last_move_t"]}
+        for key in TRACKER_OPTIONAL_STATE_KEYS:
+            if key in entry:
+                timers[key] = entry[key]
         provider_restore = getattr(self.provider, "restore_state", None)
         if provider_restore is None:
             held = sorted(key for key, value in timers.items()
@@ -471,6 +491,26 @@ class RelocationRunner:
         """
 
         entry = {"contract": RELOCATION_RUNNER_CONTRACT, **entry}
+        fix = getattr(self.provider, "last_fix", None)
+        dx = getattr(getattr(fix, "footprint", None), "parent_dx_m", None)
+        if (entry.get("event") in ("held", "relocated")
+                and fix is not None and fix.found is not None and dx is not None
+                and fix.evidence.get("t") == entry.get("elapsed_seconds")):
+            import math
+
+            raw_i, raw_j = fix.raw_shift
+            moved_i, moved_j = entry.get("executed_shift_parent_cells", (0, 0))
+            scale = dx / 1000.
+            entry["eye_offset_before_km"] = math.hypot(raw_i, raw_j) * scale
+            entry["eye_offset_after_km"] = math.hypot(
+                raw_i - moved_i, raw_j - moved_j) * scale
+            entry["eye_tracker_field"] = fix.field_used
+            if entry["event"] == "relocated" and "move_wall_seconds" in entry:
+                print(f"d{self.config.grid_id:02d} move at "
+                      f"{entry['elapsed_seconds']:.0f}s: eye-to-centre "
+                      f"{entry['eye_offset_before_km']:.3f} -> "
+                      f"{entry['eye_offset_after_km']:.3f} km; "
+                      f"move wall {entry['move_wall_seconds']:.3f}s", flush=True)
         drain = getattr(self.provider, "drain_receipts", None)
         if callable(drain):
             tracker_rows = drain()
@@ -494,10 +534,13 @@ class RelocationRunner:
             if owner is not self:
                 model._relocation_runner = self
         if self.receipts_path is not None:
+            # A re-armed slot's runner is a fresh one on the same path: the
+            # earlier lives' rows (prior_receipts, handed on by the
+            # collection) stay in the file ahead of this life's.
             _atomic_json(self.receipts_path, {
                 "contract": RELOCATION_RUNNER_CONTRACT,
                 "config": self.config.receipt(),
-                "receipts": self.receipts,
+                "receipts": [*getattr(self, "prior_receipts", ()), *self.receipts],
             })
         return entry
 
@@ -583,6 +626,32 @@ class RelocationRunner:
 
     # -- the cadence hook -------------------------------------------------
 
+    def next_deadline_ticks(self, clocks):
+        """Next explicit moving/track deadline for the adaptive root.
+
+        An absent cadence means every actual period; it must not pin an
+        adaptive run to its nominal step. Scripted moves still name exact
+        instants, independent of whether a cadence was supplied.
+        """
+        now = next(iter(clocks.values())).ticks
+        tick_den = self.tick_den
+        cadence = getattr(self.config, "cadence_seconds", None)
+        intervals = [cadence]
+        if self.containment is not None:
+            intervals.append(self.containment.cadence_seconds or cadence)
+        if self.track_writer is not None:
+            intervals.append(self.track_writer.stream.config.interval_seconds or cadence)
+        due = []
+        for seconds in intervals:
+            if seconds is not None:
+                interval = int(Fraction(str(seconds)) * tick_den)
+                due.append((now // interval + 1) * interval)
+        for move in getattr(self.config, "moves", ()):
+            instant = int(Fraction(str(move.at_seconds)) * tick_den)
+            if instant > now:
+                due.append(instant)
+        return min(due) if due else None
+
     def is_due(self, model, clocks) -> bool:
         """Whether THIS boundary is a cadence opportunity.
 
@@ -623,8 +692,31 @@ class RelocationRunner:
         self.containment_preparer = on_child_built
         self.containment_static_provenance = static_provenance
 
+    def _reground_releasing(self, before_rebuild):
+        """Drop executor references before the route rebuilds a descendant."""
+        handler = self.reground_descendant
+        if handler is None or before_rebuild is None:
+            return handler
+
+        def reground(*, node, plan, delta_parent_cells):
+            before_rebuild(int(node.cfg.grid_id))
+            return handler(node=node, plan=plan,
+                           delta_parent_cells=delta_parent_cells)
+
+        return reground
+
+    @staticmethod
+    def _check_rebuilt_tree(receipt, grid_id, after_rebuild):
+        if after_rebuild is None:
+            return
+        after_rebuild(grid_id)
+        for descendant in receipt.get("descendants", ()):
+            # Compensated descendants keep their state and validator.
+            if not descendant.get("earth_fixed", False):
+                after_rebuild(int(descendant["grid_id"]))
+
     def _containment_opportunity(self, model, clocks, elapsed,
-                                 period, before_rebuild):
+                                 period, before_rebuild, after_rebuild=None):
         """One containment consultation: slide the mover's parent when
         the mover has drifted past the dead-band, with the mover
         earth-fixed under the slide.  Records rows only when it acts or
@@ -789,7 +881,7 @@ class RelocationRunner:
             dycore_state_workspace=getattr(
                 model, "_dycore_state_workspace", None),
             staging=self.staging,
-            reground_descendant=self.reground_descendant,
+            reground_descendant=self._reground_releasing(before_rebuild),
             earth_fixed_descendants=frozenset(
                 {int(self.config.grid_id)}),
             on_before_release=(
@@ -804,6 +896,10 @@ class RelocationRunner:
         after_move = getattr(self.containment_preparer, "after_move", None)
         if callable(after_move):
             after_move(parent_node)
+        # A slide rebuilt the ancestor even when the mover holds or is
+        # not due. Rebind the executor's released health validator before
+        # recording success or letting the tracker read the new parent.
+        self._check_rebuilt_tree(receipt, int(cont.grid_id), after_rebuild)
         record_sha = receipt["record_sha256"]
         model.experiment_fingerprint = mark_fingerprint_across_move(
             fingerprint_before, record_sha)
@@ -1108,18 +1204,32 @@ class RelocationRunner:
         })
 
     def on_period_begin(self, model, clocks, *, period=None,
-                        before_rebuild=None):
+                        before_rebuild=None, after_rebuild=None):
         """One cadence opportunity; returns the receipt row or ``None``.
 
         ``before_rebuild`` is the executor's seam for dropping references
         it holds to the outgoing child (health validators) so the
         host-staged release actually frees; it receives the grid_id.
+        ``after_rebuild`` rebinds and checks executor-owned health state
+        after each accepted move or containment slide. Its work belongs
+        to the complete move timer, while the remap timer ends before
+        the moved child's check.
         """
         root_clock = clocks[model.root.cfg.grid_id]
         ticks = int(root_clock.ticks)
         period_ticks = int(model.schedule.period_ticks)
         mover_due = ticks != 0 and ticks % (
             period_ticks * self.cadence_periods) == 0
+        if mover_due:
+            # A nest SPAWNED at this boundary was just centred on its storm
+            # by its trigger and has not stepped: it waits for its next
+            # cadence.  Moving it here re-derived a state that had never
+            # been integrated, and the moved spawned nest went non-finite
+            # within eight steps (a rented box, 19:23Z, HRRR storm nest d03).
+            mover = (getattr(model, "nodes_by_grid_id", None) or {}).get(
+                int(self.config.grid_id))
+            if mover is not None and getattr(mover, "_born_at_ticks", None) == ticks:
+                mover_due = False
         containment_due = (
             self.containment_cadence_periods is not None
             and ticks != 0
@@ -1143,6 +1253,7 @@ class RelocationRunner:
                  or ticks % (period_ticks * self.track_cadence_periods) == 0))
         if not mover_due and not containment_due and not track_due:
             return None
+        opportunity_started = time.perf_counter()
         elapsed = float(root_clock.elapsed_seconds)
         if containment_due:
             # The slide first, so the tracker then evaluates the storm in
@@ -1150,7 +1261,7 @@ class RelocationRunner:
             # opportunity re-centers AND follows, instead of following
             # first and immediately un-centering what it just did.
             self._containment_opportunity(
-                model, clocks, elapsed, period, before_rebuild)
+                model, clocks, elapsed, period, before_rebuild, after_rebuild)
         if not mover_due:
             if track_due:
                 # A track-only boundary: locate WITHOUT proposing, so the
@@ -1238,6 +1349,7 @@ class RelocationRunner:
         # footprint's overlap against) while the outgoing child is still
         # whole -- on_child_built itself fires after the host-staged
         # release, when nothing of the outgoing driver remains.
+        move_started = time.perf_counter()
         capture = getattr(self.on_child_built, "capture_outgoing", None)
         if callable(capture):
             capture(node)
@@ -1259,7 +1371,7 @@ class RelocationRunner:
             dycore_state_workspace=getattr(
                 model, "_dycore_state_workspace", None),
             staging=self.staging,
-            reground_descendant=self.reground_descendant,
+            reground_descendant=self._reground_releasing(before_rebuild),
             on_before_release=(
                 None if before_rebuild is None
                 else (lambda: before_rebuild(grid_id))),
@@ -1315,9 +1427,13 @@ class RelocationRunner:
             executed_shift=[executed_i, executed_j],
             clamped_by=clamps, grid=getattr(node, "grid", None),
             lat_from=moved_from[0], lon_from=moved_from[1])
+        remap_wall_seconds = time.perf_counter() - move_started
+        self._check_rebuilt_tree(receipt, grid_id, after_rebuild)
         return self._record(model, {
             "event": "relocated",
             "elapsed_seconds": elapsed,
+            "move_wall_seconds": time.perf_counter() - opportunity_started,
+            "remap_wall_seconds": remap_wall_seconds,
             "period": (None if period is None else int(period)),
             "grid_id": grid_id,
             "requested_shift_parent_cells": [di, dj],
@@ -1426,6 +1542,11 @@ class RelocationRunnerCollection:
         # One ordered tree ledger for the order-sensitive restart move chain.
         # Per-runner JSON receipts remain independent and unchanged.
         self.receipts = []
+        # Receipt rows of runners retired with their nest, per grid id, so a
+        # re-armed slot's new runner writes them ahead of its own: the 6 h
+        # storm-nest run (box D 2026-10-21) lost d03's whole first life of
+        # moves when its second life's runner rewrote relocation_receipts.d03.json.
+        self.retired_receipts: dict[int, list] = {}
 
     def record(self, grid_id, entry, *, unique=False):
         if unique:
@@ -1449,14 +1570,20 @@ class RelocationRunnerCollection:
         return any(r.is_due(model, clocks) for r in self.runners.values()
                    if int(r.config.grid_id) in model.nodes_by_grid_id)
 
-    def on_period_begin(self, model, clocks, *, period=None, before_rebuild=None):
+    def next_deadline_ticks(self, clocks):
+        due = [r.next_deadline_ticks(clocks) for r in self.runners.values()]
+        return min((tick for tick in due if tick is not None), default=None)
+
+    def on_period_begin(self, model, clocks, *, period=None,
+                        before_rebuild=None, after_rebuild=None):
         outcomes = []
         for gid in self.target_grid_ids:
             if gid not in model.nodes_by_grid_id:
                 continue
             runner = self.runners[gid]
             row = runner.on_period_begin(
-                model, clocks, period=period, before_rebuild=before_rebuild)
+                model, clocks, period=period, before_rebuild=before_rebuild,
+                after_rebuild=after_rebuild)
             if row is not None:
                 outcomes.append(row)
         return None if not outcomes else {"event": "batch", "outcomes": outcomes}
@@ -1470,7 +1597,11 @@ class RelocationRunnerCollection:
             return self
         incoming = (other.runners if isinstance(other, RelocationRunnerCollection)
                     else {int(other.config.grid_id): other})
+        for gid, rows in getattr(other, "retired_receipts", {}).items():
+            self.retired_receipts.setdefault(int(gid), []).extend(rows)
         for gid, runner in incoming.items():
+            if int(gid) not in self.runners and self.retired_receipts.get(int(gid)):
+                runner.prior_receipts = list(self.retired_receipts[int(gid)])
             self.runners.setdefault(int(gid), runner)
         return self
 
@@ -1479,7 +1610,9 @@ class RelocationRunnerCollection:
         # and therefore a fresh episode-local cooldown/window.
         for gid in list(self.runners):
             if gid not in model.nodes_by_grid_id:
-                self.runners.pop(gid, None)
+                runner = self.runners.pop(gid, None)
+                self.retired_receipts[gid] = [
+                    *getattr(runner, "prior_receipts", ()), *runner.receipts]
 
     def adopt_placement(self, model, node, **placement):
         """Restore through the target's own initializer and physics preparer."""

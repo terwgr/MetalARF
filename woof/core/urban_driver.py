@@ -8,10 +8,9 @@ arm as a post-LSM kernel, which is equivalent PROVIDED the land-surface
 scheme hands over the rural values it computed and nobody re-derives them.
 :class:`UrbanCoupler` is that handover and the two call points:
 
-1. the LSM runner calls :meth:`UrbanCoupler.noah_kernel_args` (Noah) or
-   :meth:`UrbanCoupler.noahmp_vegtype_remap` (Noah-MP) to get the urban
-   inputs of its own solve (NATURAL vegetation on urban columns, the rural
-   skin temperature);
+1. the Noah runner calls :meth:`UrbanCoupler.noah_kernel_args` to get the
+   urban inputs of its own solve (NATURAL vegetation on urban columns,
+   the rural skin temperature);
 2. :meth:`UrbanCoupler.after_lsm` -- before the runner zeroes ``rainbl``,
    because the UCM and BEM read RAINBL -- snapshots the rural values into
    ``UrbanState.rural`` and calls the model module's ``after_lsm``;
@@ -56,7 +55,7 @@ class UrbanModelMissing(RuntimeError):
 
 def solar_geometry(start_time: datetime, elapsed_seconds: float,
                    latitude_deg, longitude_deg, *,
-                   radt_seconds: float) -> UrbanSolar:
+                   radt_seconds: float, generation="wrf_480", array_module=None) -> UrbanSolar:
     """WRF's radconst + calc_coszen at a radiation call.
 
     module_radiation_driver.F:1188-1208: DECLIN from the call-time Julian
@@ -69,6 +68,32 @@ def solar_geometry(start_time: datetime, elapsed_seconds: float,
     hour = (valid.hour + valid.minute / 60.0 + valid.second / 3600.0
             + valid.microsecond / 3.6e9)
     julian = valid.timetuple().tm_yday - 1.0 + hour / 24.0
+    from woof.core.solar import solar_generation, geometry_at
+    solar_generation(generation)
+    if generation == "wrf_480":
+        metal = bool(getattr(array_module, "__woof_metal_array_module__", False))
+        latitude = (array_module.asarray(latitude_deg, dtype=np.float32)
+                    if metal else latitude_deg)
+        longitude = (array_module.asarray(longitude_deg, dtype=np.float32)
+                     if metal else longitude_deg)
+        ds, cz, ha = geometry_at(valid, latitude, longitude,
+            hour_offset_seconds=0.5 * radt_seconds, generation=generation,
+            start_time=start_time, elapsed_seconds=elapsed_seconds)
+        if metal:
+            # Urban forcing is packed on the host; retain the device geometry's
+            # computed words when handing them to that existing composition.
+            pair, cosine, hour_angle = ds.to_numpy(), cz.to_numpy(), ha.to_numpy()
+            declin, solcon = float(pair[0]), float(pair[1])
+        else:
+            import cupy as cp
+            declin, solcon = float(ds[0].get()), float(ds[1].get())
+            cosine, hour_angle = cp.asnumpy(cz), cp.asnumpy(ha)
+        return UrbanSolar(declin=declin, solcon=solcon,
+            coszen=cosine, hrang=hour_angle,
+            xlat=np.asarray(latitude_deg, np.float32), xlong=np.asarray(longitude_deg, np.float32),
+            gmt=float(start_time.hour + start_time.minute/60. + start_time.second/3600. + start_time.microsecond/3.6e9),
+            julday=int(start_time.timetuple().tm_yday), julian=float(julian),
+            julyr=int(valid.year), model_time=float(elapsed_seconds))
     degrad = np.pi / 180.0
     dpd = 360.0 / 365.0
     slong = dpd * (julian - 80.0 if julian >= 80.0 else julian + 285.0)
@@ -109,7 +134,7 @@ class UrbanCoupler:
 
     def __init__(self, state: UrbanState, *, lsm: int,
                  start_time: datetime | None, latitude_deg=None,
-                 longitude_deg=None, module=None) -> None:
+                 longitude_deg=None, module=None, generation="wrf_480") -> None:
         self.state = state
         self.lsm = int(lsm)
         self.module = module if module is not None else load_model_module(
@@ -125,24 +150,26 @@ class UrbanCoupler:
                 "longitude: the UCM reads DECLIN, COSZEN, HRANG and XLAT and "
                 "BEP/BEM the same plus GMT/JULDAY/XLONG, and a silent zero "
                 "would put every city on the equator at New Year")
+        from woof.core.solar import solar_generation
+        solar_generation(generation)
+        self.solar_generation = generation
         self.start_time = start_time
         self.latitude_deg = np.asarray(latitude_deg, dtype=np.float32)
         self.longitude_deg = np.asarray(longitude_deg, dtype=np.float32)
-        self.solar_updates = 0
 
     # -- solar ------------------------------------------------------------
     def update_solar(self, elapsed_seconds: float, radt_seconds: float) -> None:
         """Refresh the held solar geometry on the radiation cadence."""
+        from woof.metal.array import MetalArray, MetalArrayModule
+        arrays = (MetalArrayModule(self.state.fields["tsk"].buffer.context)
+                  if isinstance(self.state.fields.get("tsk"), MetalArray) else None)
         host = solar_geometry(self.start_time, elapsed_seconds,
                               self.latitude_deg, self.longitude_deg,
-                              radt_seconds=radt_seconds)
+                              radt_seconds=radt_seconds, generation=self.solar_generation,
+                              array_module=arrays)
         solar = self.state.solar
         solar.declin = host.declin
-        from woof.metal.array import MetalArray
-        if isinstance(self.state.fields.get("tsk"), MetalArray):
-            from woof.metal.array import MetalArrayModule
-            context = self.state.fields["tsk"].buffer.context
-            arrays = MetalArrayModule(context)
+        if arrays is not None:
             solar.coszen = arrays.asarray(host.coszen)
             solar.hrang = arrays.asarray(host.hrang)
             solar.xlat = arrays.asarray(host.xlat)
@@ -159,7 +186,6 @@ class UrbanCoupler:
         solar.julyr = host.julyr
         solar.solcon = host.solcon
         solar.model_time = host.model_time
-        self.solar_updates += 1
 
     def split_shortwave(self, fields: dict, *, ht) -> None:
         """The radiation driver's direct/diffuse split for a shortwave
@@ -207,10 +233,13 @@ class UrbanCoupler:
     # -- the LSM handover --------------------------------------------------
     def noah_kernel_args(self) -> dict:
         """What ``launch_noah(urban=...)`` needs for its pre-SFLX remap."""
-        import cupy as cp
-
         s = self.state
         f = s.fields
+        from woof.metal.array import MetalArray, MetalArrayModule
+        if isinstance(f["tsk"], MetalArray):
+            cp = MetalArrayModule(f["tsk"].buffer.context)
+        else:
+            import cupy as cp
         rural = s.rural
         shape = f["tsk"].shape
         for name in NOAH_RURAL_KERNEL_FIELDS:
@@ -226,11 +255,6 @@ class UrbanCoupler:
             "rural_q1": rural["q1"], "rural_q2k": rural["q2k"],
             "rural_zlvl": rural["zlvl"],
         }
-
-    def noahmp_vegtype_remap(self) -> dict:
-        """noahmpdrv.F:916-925 under ``sf_urban_physics > 0``."""
-        return {"option": self.state.option,
-                "natural": int(self.state.categories.natural)}
 
     def _snapshot_rural(self, fields: dict) -> None:
         rural = self.state.rural

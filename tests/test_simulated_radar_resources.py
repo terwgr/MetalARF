@@ -35,7 +35,8 @@ def test_native_quote_is_read_only_and_has_counts_for_worker_pricing(binary, tmp
     assert quote["geometry"]["gates_per_ray"] == 920
     assert quote["geometry"]["physical_cuts"] > 14  # Repeated VCP cuts cost work too.
     assert quote["geometry"]["site_count"] == 3
-    assert quote["geometry"]["sites_processed_concurrently"] == 1
+    assert quote["geometry"]["sites_processed_concurrently"] is None
+    assert "memory-admitted batches" in quote["geometry"]["site_concurrency_policy"]
     assert quote["geometry"]["quadrature_points_per_bin"] == 9
     assert quote["geometry_only"] and not quote["input_fields_validated"]
     assert not quote["price_or_duration_guarantee"]
@@ -137,4 +138,34 @@ def test_forecast_shapes_and_output_bound_reach_the_quote(binary, tmp_path):
                              text=True, timeout=30)
     assert refused.returncode != 0 and "scene_shapes" in refused.stderr
     assert "must-not-be-opened" not in refused.stderr
+    assert not (tmp_path / "output").exists()
+
+
+def test_history_without_t_is_quoted_from_its_mass_grid_and_refused_at_request(binary, tmp_path):
+    """wrf-core 93bd2ca's reader takes grid dimensions from another mass volume when T is absent.
+
+    The older 9874474 reader refused such a file at open ("variable not found in WRF file:
+    Cannot determine grid dimensions: variable 'T' not found"), so --estimate failed. Now the
+    quote reads the shape from P, and the run itself is still refused by the input contract.
+    """
+    import netCDF4
+    source = tmp_path / "no-t.nc"
+    with netCDF4.Dataset(source, "w", format="NETCDF3_64BIT_OFFSET") as dataset:
+        dataset.setncattr("BOTTOM-TOP_GRID_DIMENSION", 4)
+        for name, size in (("Time", 1), ("bottom_top", 3), ("south_north", 5), ("west_east", 6)):
+            dataset.createDimension(name, size)
+        for name in ("XLAT", "XLONG", "HGT"):
+            dataset.createVariable(name, "f4", ("Time", "south_north", "west_east"))[:] = 0.
+        for name in ("P", "PB", "QVAPOR", "QRAIN"):
+            dataset.createVariable(
+                name, "f4", ("Time", "bottom_top", "south_north", "west_east"))[:] = 0.
+    quoted = run(binary, tmp_path, {"timing": "scan"}, history=[str(source)])
+    assert quoted.returncode == 0, quoted.stderr
+    assert "Cannot determine grid dimensions" not in quoted.stderr
+    history = json.loads(quoted.stdout)["histories"][0]
+    assert [history[axis] for axis in ("nx", "ny", "nz")] == [6, 5, 3]
+    refused = run(binary, tmp_path, {}, mode="--request", history=[str(source)])
+    assert refused.returncode != 0
+    assert "radar_input_missing_columns:" in refused.stderr
+    assert "T" in refused.stderr.split("lacks variables [", 1)[1].split("]", 1)[0].split(", ")
     assert not (tmp_path / "output").exists()

@@ -42,7 +42,7 @@
       "bytes": 7482,
       "git_blob": "5e9ac72fd2a05920700b6089e2b55d86aee2aabe",
       "path": "gpuwm/config_keys.py",
-      "sha256": "ae64cfb3f526b955c45f9c0eb6ef1dfc538a6b5695a154ae2f723f55ffc5cde2"
+      "sha256": "6e12d3cf11381b38cf0a8faef163f9b4a20b426fab59768282f143179eb2c8bb"
     },
     "gpuwm.core": {
       "bytes": 0,
@@ -54,7 +54,7 @@
       "bytes": 8597,
       "git_blob": "d8010f7aa3434139cdcfc6e93c338ded913e9e87",
       "path": "gpuwm/core/attribute_tracking.py",
-      "sha256": "b1dcba48fb4cf5848e9349e6f6145ff8110fed22633f3c23e674229303c81fb1"
+      "sha256": "af16624aba06a281b4d39bf2fca96735cc0e6682020885d5ec8338f551f52b76"
     },
     "gpuwm.core.constants": {
       "bytes": 2979,
@@ -72,13 +72,13 @@
       "bytes": 7289,
       "git_blob": "4717c57109df517cee8867aa32268d4e6ca74f67",
       "path": "gpuwm/core/host_libm.py",
-      "sha256": "a1bd118c95aea370fdf6b7cf775fcf528d3b1a66937612c2ffb1ee7ddc953447"
+      "sha256": "61ae69da9d5d655867c53281a7f6e3a240093f7ba860dfa823d930226fb4abbc"
     },
     "gpuwm.core.inflow_perturbation": {
       "bytes": 25095,
       "git_blob": "65e68903c233858f5bc04a263fa16c883f4f6d34",
       "path": "gpuwm/core/inflow_perturbation.py",
-      "sha256": "7dc2e860f271a52daf66aefaba2502b8b692190a7f9652b6bf687ac6592cf8ba"
+      "sha256": "5b1b0eb00b80cc20191d9ba56d091c99c44f52febd71295b12910892ee34a964"
     },
     "gpuwm.core.microphysics_transition": {
       "bytes": 71559,
@@ -102,19 +102,19 @@
       "bytes": 16569,
       "git_blob": "a576092af495df9292a02b4b972b5afe8262bfcc",
       "path": "gpuwm/core/nssl2_contract.py",
-      "sha256": "ad246e1008d6af2fc52bd4c7aaeab90149399525a2a9a6b40f8838817f10fe9f"
+      "sha256": "353fd435f4b4c6585e5a0457bb2d174dd4c618424467548cb7593fce632a747f"
     },
     "gpuwm.core.ozone_contract": {
       "bytes": 1052,
       "git_blob": "a00ea072063c29564b02a2a7bed1111a52f847da",
       "path": "gpuwm/core/ozone_contract.py",
-      "sha256": "11e6f0452dbdaa834674e591a5d365143fe438e58888fe3914e63a209f87ed4a"
+      "sha256": "2f035d90344d10b2431a67a8f110b0566d62850414ad8e6ed6c2d68d0a863e89"
     },
     "gpuwm.core.sase_limits": {
       "bytes": 1799,
       "git_blob": "8470840e35b17b2d60c8d16717e97e1991333c34",
       "path": "gpuwm/core/sase_limits.py",
-      "sha256": "f53097a34ec031103c873c84792128586fd7f33fad7b51a2c1d2bd73ec72e1d3"
+      "sha256": "edb9d3ebe2a79a57855e97f1c8ca74df67de6d39ad6fa4b64277e3b8de2dc39b"
     },
     "gpuwm.core.storm_tracking": {
       "bytes": 137294,
@@ -132,7 +132,7 @@
       "bytes": 1457,
       "git_blob": "5e797da68eb2730dd7fd0b1cf1d2ac4179a11744",
       "path": "gpuwm/core/thompson_aerosol_constants.py",
-      "sha256": "b5dead4740569cc3f2e0622c0be8e81179200cc12f58acec13f6f106f8042488"
+      "sha256": "c3b877e45dd76b98990e0eb422f51b41a868e2fd4b681d1274ad3eec76326256"
     },
     "gpuwm.core.uh_diag": {
       "bytes": 27013,
@@ -156,7 +156,7 @@
       "bytes": 4522,
       "git_blob": "7ae4642ba58679ba40f2186dfd283856c5d5b96d",
       "path": "gpuwm/cupy_windows_warning.py",
-      "sha256": "8467ea2029df71476bdb8df6e89e5cb24b4f1a789a99117dadf4fe05ce7c4084"
+      "sha256": "1152a43abd3204bdc137b0926c49e2bd048c9eb32e6c1414f9d49f8f0c18ac55"
     },
     "gpuwm.ensemble": {
       "bytes": 1966,
@@ -180,7 +180,7 @@
       "bytes": 17589,
       "git_blob": "60e962ecd95ce63f65220131386cddfeb6f39108",
       "path": "gpuwm/ensemble/engine.py",
-      "sha256": "c38e9e2b91ab918d61d8383ce7990c992409cdbc0746c7745564e4204c7bd4d3"
+      "sha256": "68aa80b73ad74c2fb3ac25ed21954e3aaeb508027a4e60ac9b9fa7ea1541fd26"
     },
     "gpuwm.ensemble.increments": {
       "bytes": 40389,
@@ -192,7 +192,7 @@
       "bytes": 12827,
       "git_blob": "1f1e289b2ba822e970de8d0b9289750d63db716f",
       "path": "gpuwm/ensemble/manifest.py",
-      "sha256": "5e4427afd1ed21cda1acc09aacb0a50357447278b59f899564ae041d8694ef48"
+      "sha256": "fd343738cd41cad09e27d52527c8e7012ec64e126b6dbe2bebbf53f51c3b309b"
     },
     "gpuwm.ensemble.seeds": {
       "bytes": 1886,
@@ -210,7 +210,7 @@
       "bytes": 36900,
       "git_blob": "4139091aee0b7a2f2890aea5bdd027e44b3c74ab",
       "path": "gpuwm/ensemble/stochastic.py",
-      "sha256": "393a64fe0cbe5885f62690c246a927a53fa555802f65926bc88ea880d92be72f"
+      "sha256": "eb642253e1f2aee4fc33f6574234950433f5e61fdc645c69b7804f69b144c8a2"
     },
     "gpuwm.ensemble.stochastic_seeds": {
       "bytes": 2423,
@@ -234,7 +234,7 @@
       "bytes": 16758,
       "git_blob": "11b2afb67918fdf37e78881d298af0c8582d604a",
       "path": "gpuwm/explain.py",
-      "sha256": "8771f60f95e5605aa52bca8af5226ab9cb5dd172be52dc9aa023fa0bef4920f2"
+      "sha256": "e138c9c50c90a576dbb311a8f934375d6ac5afcdd62fe407b2a2c5ef5eca2e91"
     },
     "gpuwm.fetch_endpoints": {
       "bytes": 45746,
@@ -312,7 +312,7 @@
       "bytes": 9271,
       "git_blob": "e8ed5b3d227e69f1021b0d5359e30f32a0a78767",
       "path": "gpuwm/perf_timing.py",
-      "sha256": "3f00c3b4d7adc4a30b81bf360ff49ebf0e8ac7b84248f15026f494015cdab3dd"
+      "sha256": "afa28a2f4df74543a24c80f8a060e092a63345a872c8e2371cd9fe7dc709176b"
     },
     "gpuwm.physics_compat": {
       "bytes": 188928,
@@ -324,7 +324,7 @@
       "bytes": 16988,
       "git_blob": "42283d8fc65c373c20161bfc5bc1e4d8b313aa62",
       "path": "gpuwm/physics_mode.py",
-      "sha256": "650cd0ca3a9a94164cfc08fedb4911a68cbb8babebf6c99656386e82eabd9781"
+      "sha256": "c5a106d546f4223e06d0711d82ced23794febaf3c361c060a39d103594d27734"
     },
     "gpuwm.physics_registry": {
       "bytes": 191480,
@@ -342,7 +342,7 @@
       "bytes": 40214,
       "git_blob": "3cb8a6d48d614a49ab4fd5eed88e824c3bad4bcc",
       "path": "gpuwm/provenance.py",
-      "sha256": "495172bc87824105ff457b9f9a6e80aba0819f689ad4622560bb6041d358681c"
+      "sha256": "4fd8945e9b6261f7ba1dd6d70a1a15859fb0d50a13a693820096481d588edb8f"
     },
     "gpuwm.provenance_gate": {
       "bytes": 32350,
@@ -396,7 +396,7 @@
       "bytes": 7655,
       "git_blob": "a539b902aaccf123a523397124259fd4c03ac067",
       "path": "gpuwm/static/geog_stack.py",
-      "sha256": "14138b83ab0cbae547e8b82671350d3cfa7efe7acaab1ab6ba150475c48e1ed7"
+      "sha256": "61fbc2129b884e05b627172584bda35d91299f2db8028f29f52624a5cf8f15f5"
     },
     "gpuwm.static.highres": {
       "bytes": 73255,
@@ -414,13 +414,13 @@
       "bytes": 886,
       "git_blob": "13a6c2aae31f6889310b76eaa4844e8ff1917cdd",
       "path": "gpuwm/static/highres_refusal.py",
-      "sha256": "40ad3d52cb38a56529aa340892edfc04371079489fee2e148d81b7ae78d69ac9"
+      "sha256": "5a053aa6aa9eeea28653b169d9e4c09622d627075487911d418251bd63e373ac"
     },
     "gpuwm.static.lambert": {
       "bytes": 9422,
       "git_blob": "9b8c3daa5295316e423eae73b4ce6ced6c6f457a",
       "path": "gpuwm/static/lambert.py",
-      "sha256": "162eeaef0f6a5440260fed06ccd527c6c3588f448f862354d645a89e793ff53d"
+      "sha256": "966ec0dab29a583b04fe56ed72c3a5d96bf55065265cfd6aee2c4b809309a65d"
     },
     "gpuwm.static.projection": {
       "bytes": 48245,
@@ -450,7 +450,7 @@
       "bytes": 2313,
       "git_blob": "8b161dd81ee87fad956cc0e61359d85699f85375",
       "path": "gpuwm/wrf_namelist_registry.py",
-      "sha256": "3039d3b060c0f5a273be13fbedc74a79e33b7799f8eafb4aebac74df94124c62"
+      "sha256": "54deea4cee6c60d588da2053b51bc480474ac9bc960eaefae3f7e32a62f19c10"
     }
   },
   "matrix_sha256": "af0c67e20722e35d53f14d79802fb3548b7e0f72de3bc8e43d1baa050bea5e01",

@@ -79,6 +79,14 @@ extern "C" __global__ void ensemble_geometry_repeat_words(
 '''
 
 
+#: How many times RRTMGLegacyRadiation.__call__ subscripts each shared surface
+#: field, every one of them as ``surf[field][sel]``: xland at the shortwave call
+#: and again for the aer_opt=3 land/water aerosol type (rrtmg_aer3_type_source =
+#: "landmask").  The audit below refuses on any other count, because an
+#: unrewritten site would read one member's columns for the whole batch.
+_LEGACY_SHARED_SURFACE_SITES = {"xland": 2}
+
+
 def prepare_legacy_member_radiation(original, *, members, available_bytes,
                                    array_module=None, shared_surface_fields=()):
     """Reuse one legacy table/geometry owner and batch both spectra.
@@ -207,7 +215,7 @@ def prepare_legacy_member_radiation(original, *, members, available_bytes,
     tree = MemberColumns().visit(tree)
     if counts != {"shape": 1, "ozone_shape": 1, "lat": 1, "coszen": 1,
                   "day": 1, "night": 1, "lw_selector": 1, "lw_chunk": 1, "sw_chunk": 1, "result": 1,
-                  "surface": len(shared_surface_fields)}:
+                  "surface": sum(_LEGACY_SHARED_SURFACE_SITES[field] for field in shared_surface_fields)}:
         raise ValueError(f"legacy radiation member call-site audit changed: {counts}")
     ast.fix_missing_locations(tree)
     namespace = dict(legacy.RRTMGLegacyRadiation.__call__.__globals__)
@@ -452,7 +460,9 @@ class NativeBootstrapAllocationPlans:
 
 def _bootstrap_allocation_declarations(cfg, state_specs, entries):
     from woof.ensemble.batch_physics import ColumnField, column_memory_plan, thompson_column_scratch_fields
-    scratch_fields = thompson_column_scratch_fields(nz=cfg.nz, ny=cfg.ny, nx=cfg.nx, reflectivity=True)
+    scratch_fields = thompson_column_scratch_fields(
+        nz=cfg.nz, ny=cfg.ny, nx=cfg.nx, reflectivity=True,
+        cloud_booking=getattr(cfg, "thompson_cloud_surface_booking", False) is True)
     model_names = tuple(name for name in (
         "p", "alt", "thp", "php", "u", "v", "w", "mup", "qv", "qc", "qr", "qi", "qs", "qg", "ni", "nr",
         "h_diabatic", "effc", "effi", "effs", "effr", "rthften", "rqvften")
@@ -508,7 +518,7 @@ def initialize_wrfinput_member_physics(batch, restored, *, start_time, landuse=N
                                       available_bytes, column_chunk=None,
                                       constant_glw_wm2=None, fractional_seaice=False,
                                       cam_ozone=None, trace_gas_overrides=None,
-                                      array_module=None):
+                                      array_module=None, hydro_parent_geometry=None):
     """Use the ordinary WRF-input initializer once, then pack its bootstrap.
 
     This is for a common initial/surface source before member perturbations.
@@ -531,7 +541,14 @@ def initialize_wrfinput_member_physics(batch, restored, *, start_time, landuse=N
         radiation=radiation, radiation_start_time=start_time,
         radiation_latitude=restored.raw["XLAT"], radiation_longitude=restored.raw["XLONG"],
         landuse=landuse, constant_glw_wm2=constant_glw_wm2,
-        fractional_seaice=fractional_seaice, cam_ozone=cam_ozone)
+        fractional_seaice=fractional_seaice, cam_ozone=cam_ozone,
+        hydro_parent_geometry=hydro_parent_geometry)
+    if bootstrap is None:
+        # The single-run door now runs every-scheme-off; the member banks
+        # are built from a driver, so the ensemble keeps the refusal
+        # initialize_physics used to raise here.
+        raise ValueError("ensemble member physics requires at least one enabled "
+                         "physics scheme")
     array_module.cuda.get_current_stream().synchronize()
     bootstrap_used = pool.used_bytes() - used_before
     result = initialize_member_physics_from_bootstrap(batch, bootstrap_state, bootstrap,
@@ -687,6 +704,15 @@ def initialize_member_physics_from_bootstrap(batch, bootstrap_state, bootstrap_d
             ("rainnc", "mp_rainnc"), ("rainncv", "mp_rainncv"), ("sr", "mp_sr"),
             ("snownc", "mp_snownc"), ("snowncv", "mp_snowncv"),
             ("graupelnc", "mp_graupelnc"), ("graupelncv", "mp_graupelncv"))})
+    # Correct mode WB1: a member restored with its booked CLOUDNC total keeps
+    # it, as the ordinary restore does; the batch slot carries the restored
+    # (or zero) words, the packed bank books from here on.
+    from woof.ensemble.batch_physics import THOMPSON_CLOUD_BOOKING_SLOTS
+    for slot in THOMPSON_CLOUD_BOOKING_SLOTS:
+        restored = batch.storage.arrays.get("scratch:" + slot)
+        if slot in scratch and restored is not None:
+            array_module.copyto(scratch[slot].reshape(members, cfg.ny, cfg.nx),
+                                restored.reshape(members, cfg.ny, cfg.nx))
     for name, slot in (("rainnc", "mp_rainnc"), ("snownc", "mp_snownc"), ("graupelnc", "mp_graupelnc")):
         original_value = getattr(bootstrap.microphysics, name)
         target = scratch[slot].reshape(members, cfg.ny, cfg.nx)
@@ -743,7 +769,11 @@ def initialize_member_physics_from_bootstrap(batch, bootstrap_state, bootstrap_d
     bootstrap_state.physics = None
     bootstrap.state = None
     source = value = original_value = None
-    del bootstrap, bootstrap_driver, bootstrap_state, entries, pointers
+    # resolve_array closes over `pointers`, so it is released by rebinding:
+    # a deleted closure cell is a NameError for any later call, and the
+    # undefined-name gate cannot tell that none follows.
+    pointers = None
+    del bootstrap, bootstrap_driver, bootstrap_state, entries
     array_module.cuda.get_current_stream().synchronize()
     receipt["pool_live_after_initialization_bytes"] = pool.used_bytes()
     result = InitializedMemberPhysics(batch, driver, state, bank, atmosphere, microphysics, receipt)

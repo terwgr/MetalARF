@@ -43,8 +43,9 @@ import os
 import re
 from pathlib import Path
 
-import netCDF4
 import numpy as np
+
+from woof.io.netcdf_serialization import netCDF4  # first use only (D-10)
 
 from woof import downscale_pricing
 
@@ -81,31 +82,6 @@ _FRAME_RE = re.compile(
 #: the printed caveat: hourly boundaries cannot reproduce the sub-hourly
 #: forcing a live nest receives every parent step.
 CADENCE_GUIDANCE_SECONDS = 900.0
-
-#: Keys the derived child config overrides on top of the parent's
-#: restart-evidence RunConfig.  Everything else (physics selections,
-#: diffusion/damping, acoustic settings) is inherited verbatim, which is
-#: receipted -- deriving new physics silently would be fake.
-_GEOMETRY_KEYS = (
-    "nx", "ny", "dx", "dy", "dt", "grid_id", "specified", "nested",
-    "run_seconds", "output_interval_s", "clock_dt", "case",
-    # The lateral zone, sized for the parent (child_lateral_zone).
-    "spec_zone", "relax_zone", "spec_bdy_width", "relax_timescale_s",
-    "relax_w", "spec_exp",
-)
-
-
-def _card_vram_gib() -> dict:
-    """The wizard's card-tier table, imported where it is used.
-
-    One table, two front doors: ``woof domain`` and ``woof downscale``
-    have to accept the same tier names or the product documents two
-    different answers to "what cards does this support".
-    """
-
-    from woof.domain_wizard import CARD_VRAM_GIB
-
-    return CARD_VRAM_GIB
 
 
 def _frame_spacing_m(path: Path) -> float | None:
@@ -702,6 +678,66 @@ def _fraction_gcd(values):
     return result
 
 
+def child_clock_step(ceiling, clocks) -> float:
+    """The largest step no longer than ``ceiling`` that every clock is a
+    whole number of.
+
+    One answer for both kinds of parent.  ``ceiling`` is the longest step
+    the child may take (its CFL bound): the parent's ``dt`` over the ratio
+    for a fixed-step parent, the engine's clock convention at the child's
+    spacing for an adaptive one (:func:`adaptive_parent_child_step`).
+    ``clocks`` are the instants the child has to land on: its run length,
+    history, checkpoint and health intervals, and the parent's frame
+    interval, which the boundary seam needs to be a whole number of child
+    steps (``offline_child_run._child_boundary_clock``).  Zero and ``None``
+    clocks are not kept.
+
+    WHY A FIXED PARENT NEEDS IT TOO.  A 12 km parent on a 64.44 s step,
+    ratio 3, handed its child 21.48 s, and a 28 h run is 4692.74 of those:
+    the review refused it ("run_seconds/dt must be a positive integer")
+    and the only way out was to guess a run length.  The child now takes
+    20 s, the largest step under 21.48 s that 28 h, the hour of history and
+    the minute of health checks are all whole numbers of.
+
+    When the ceiling itself lands on every clock it is returned as it was
+    given, so a child whose clocks already worked keeps exactly the step it
+    always had.  The step is never longer than the ceiling.
+    """
+
+    from fractions import Fraction
+
+    given = float(ceiling)
+    limit = (ceiling if isinstance(ceiling, Fraction)
+             else Fraction(given).limit_denominator(10 ** 6))
+    kept = [float(value) for value in clocks
+            if value is not None and float(value) > 0.0]
+    if not kept:
+        return given
+    base = _fraction_gcd(kept)
+    divisions = max(1, math.ceil(base / limit))
+    # The ceiling is returned as given only when the runner's boundary
+    # clock reads it back as the same step: it rebuilds ``dt`` as the
+    # nearest fraction with denominator at most a million and refuses the
+    # run unless that fraction's float is ``dt`` again
+    # (offline_child_run._child_boundary_clock).  9.6 s / 6 is
+    # 1.5999999999999999, whose nearest such fraction is 8/5, and
+    # float(8/5) is 1.6: handing back the given float there was a step the
+    # run could not land on.
+    if (base / divisions == limit
+            and float(Fraction(given).limit_denominator(10 ** 6)) == given):
+        return given
+    # Otherwise take the longest whole division of ``base`` (a step every
+    # clock lands on) that is exactly rational within a millionth and,
+    # as a float, no longer than the given ceiling.  When the ceiling's
+    # fraction rounds a hair above it (8/5 above 1.5999999999999999) that
+    # skips the division equal to it, so the step never goes over.
+    for count in range(divisions, divisions + 10 ** 4):
+        step = base / count
+        if step.denominator <= 10 ** 6 and float(step) <= given:
+            return float(step)
+    return given
+
+
 def adaptive_parent_child_step(*, child_dx: float, child_dy: float,
                                centre_lat: float, clocks) -> float:
     """The fixed step of a child whose parent ran the adaptive clock.
@@ -720,9 +756,10 @@ def adaptive_parent_child_step(*, child_dx: float, child_dy: float,
     ``--point`` route, which has no way to set a step.  A child's step is
     the child's own: the engine's clock convention at the child's spacing
     (:func:`woof.domain_wizard.seconds_per_km`, 5 s per km outside the
-    tropics), taken down to the largest step that every clock the child
-    keeps (``clocks``: run length, history, checkpoint and health
-    intervals) is a whole number of.
+    tropics), taken down by :func:`child_clock_step` to the largest step
+    that every clock the child keeps (``clocks``: run length, history,
+    checkpoint and health intervals, and the parent's frame interval) is a
+    whole number of.
     """
 
     from fractions import Fraction
@@ -732,13 +769,7 @@ def adaptive_parent_child_step(*, child_dx: float, child_dy: float,
     spacing_km = Fraction(min(float(child_dx), float(child_dy))
                           ).limit_denominator(10 ** 6) / 1000
     ceiling = Fraction(seconds_per_km(float(centre_lat))) * spacing_km
-    kept = [float(value) for value in clocks
-            if value is not None and float(value) > 0.0]
-    if not kept:
-        return float(ceiling)
-    base = _fraction_gcd(kept)
-    divisions = max(1, math.ceil(base / ceiling))
-    return float(base / divisions)
+    return child_clock_step(ceiling, clocks)
 
 
 def _derive_child_run_config(parent_config: dict, *, parent, ratio: int,
@@ -751,12 +782,16 @@ def _derive_child_run_config(parent_config: dict, *, parent, ratio: int,
     """Child RunConfig dict: parent physics verbatim, geometry rescaled,
     lateral zone sized in parent cells (:func:`child_lateral_zone`).
 
-    A parent that ran the adaptive clock hands the child a fixed step of
-    its own (:func:`adaptive_parent_child_step`, at ``centre_lat``; the
-    parent grid's mean latitude when absent) that lands on the child's
-    run length, history and checkpoint intervals and on every value in
-    ``clock_seconds`` (the health interval), and the child's config says
-    it runs a fixed clock, which is what the offline child integrates."""
+    The child's step lands on its run length, history and checkpoint
+    intervals and on every value in ``clock_seconds`` (the health interval
+    and the parent's frame interval): the largest such step no longer than
+    the parent's ``dt`` over the ratio for a fixed-step parent
+    (:func:`child_clock_step`, which keeps ``dt / ratio`` exactly when it
+    already lands on every clock).  A parent that ran the adaptive clock
+    hands the child a fixed step of its own
+    (:func:`adaptive_parent_child_step`, at ``centre_lat``; the parent
+    grid's mean latitude when absent), and the child's config says it runs
+    a fixed clock, which is what the offline child integrates."""
     from dataclasses import fields as dataclass_fields
 
     from woof.config import RunConfig, validate_run_config
@@ -766,6 +801,8 @@ def _derive_child_run_config(parent_config: dict, *, parent, ratio: int,
               if key in known}
     child_dx = float(parent["dx"]) / ratio
     child_dy = float(parent["dy"]) / ratio
+    clocks = (run_seconds, output_interval_s,
+              parent_config.get("restart_interval_s", 0.0), *clock_seconds)
     if parent_config.get("use_adaptive_time_step"):
         if centre_lat is None:
             xlat = parent.get("xlat") if isinstance(parent, dict) else None
@@ -773,12 +810,11 @@ def _derive_child_run_config(parent_config: dict, *, parent, ratio: int,
                           else 45.0)
         child_dt = adaptive_parent_child_step(
             child_dx=child_dx, child_dy=child_dy, centre_lat=centre_lat,
-            clocks=(run_seconds, output_interval_s,
-                    parent_config.get("restart_interval_s", 0.0),
-                    *clock_seconds))
+            clocks=clocks)
         merged["use_adaptive_time_step"] = False
     else:
-        child_dt = float(parent_config["dt"]) / ratio
+        child_dt = child_clock_step(float(parent_config["dt"]) / ratio,
+                                    clocks)
     merged.update({
         "nx": int(child_nx), "ny": int(child_ny),
         "dx": child_dx,
@@ -807,6 +843,106 @@ def _derive_child_run_config(parent_config: dict, *, parent, ratio: int,
         merged["nz"] = len(ladder) - 1
     validate_run_config(RunConfig(**merged))
     return merged
+
+
+#: The ``--physics-profile`` spelling that keeps the parent's physics
+#: verbatim at any child spacing.
+PHYSICS_PROFILE_PARENT = "parent"
+
+
+def child_physics_config(parent_config: dict, *, child_dx_m: float,
+                         requested: str | None,
+                         les_below_m: float | None = None,
+                         les_closure: str | None = None,
+                         ) -> tuple[dict, str | None, str]:
+    """``(config the child is derived from, suite id or None, basis)``.
+
+    A child finer than :data:`woof.physics_menu.CONVECTION_PERMITTING_BELOW_M`
+    runs the HRRR-shape suite when no suite is named
+    (:func:`woof.physics_menu.convection_permitting_child_profile` names the
+    breakage); a coarser child inherits the parent's physics verbatim, as
+    before.  ``--physics-profile ID`` names any shipped suite and
+    ``--physics-profile parent`` keeps the parent's at any spacing.  The
+    suite replaces every switch it owns except ``epssm``, which stays the
+    parent's so its off-centering label and the child's own-ground floor
+    (``_with_parent_epssm_label``) still apply.
+
+    A child at or below ``les_below_m`` (``woof downscale
+    --les-below-m``, default 250 m) also takes the LES closure
+    (:data:`woof.domain_wizard.LES_CLOSURES`: PBL off, a 3-D closure,
+    isotropic mixing, surface fluxes) on top of whichever suite it runs,
+    the same rule ``woof domain`` writes on its nests.  THE BREAKAGE: the
+    nest-down and moving step-down routes gave every child the suite's
+    MYNN 1-D PBL at any spacing, and a child at LES spacing on a 1-D PBL
+    grew w_max from 10.7 to 23 m/s and went non-finite (2026-09-19,
+    fead4fee9a); the 2026-10-23 200 m nest-down ran MYNN at 200 m.
+    """
+
+    merged, profile, basis = _child_suite_config(
+        parent_config, child_dx_m=child_dx_m, requested=requested)
+    if les_below_m and float(child_dx_m) <= float(les_below_m):
+        from woof.domain_wizard import (DEFAULT_LES_CLOSURE,
+                                         LES_CLOSURE_WORDS, les_closure_keys)
+        name = DEFAULT_LES_CLOSURE if les_closure is None else str(les_closure)
+        merged = {**merged, **dict(les_closure_keys(name))}
+        basis += (f"; LES closure (PBL off, {LES_CLOSURE_WORDS[name]}): "
+                  f"{float(child_dx_m):g} m is at or below "
+                  f"{float(les_below_m):g} m")
+    return merged, profile, basis
+
+
+def _child_suite_config(parent_config: dict, *, child_dx_m: float,
+                        requested: str | None) -> tuple[dict, str | None, str]:
+    """:func:`child_physics_config` before the LES closure: the suite only."""
+
+    from woof.physics_menu import (CONVECTION_PERMITTING_BELOW_M,
+                                    convection_permitting_child_profile)
+
+    if requested == PHYSICS_PROFILE_PARENT:
+        return dict(parent_config), None, "the parent's physics, as asked"
+    if requested:
+        profile, basis = requested, "named by --physics-profile"
+    else:
+        profile = convection_permitting_child_profile(child_dx_m)
+        if profile is None:
+            return (dict(parent_config), None,
+                    "the parent's physics (child at or coarser than "
+                    f"{CONVECTION_PERMITTING_BELOW_M / 1000:g} km)")
+        basis = (f"the default for a child finer than "
+                 f"{CONVECTION_PERMITTING_BELOW_M / 1000:g} km")
+    from woof.domain_wizard import profile_switches
+    from woof.physics_registry import canonical_template_id
+
+    profile = canonical_template_id(profile)
+    switches = dict(profile_switches(profile))
+    switches.pop("epssm", None)
+    merged = {**parent_config, **switches}
+    # A suite that puts RUC land under a parent on another land model
+    # cold-starts the ground vapour the way every authoring door does
+    # (physics_source_defaults.AUTHORED_RUC_DEFAULTS): the default child
+    # suite is the HRRR-shape RUC suite, and with the parent's inert "wrf"
+    # every step-down from a Noah or Noah-MP parent dropped its land skin
+    # 3.5-4 K over dry soil on the first RUC step.  A RUC parent hands
+    # down its own form.
+    from woof.physics_source_defaults import authored_ruc_defaults
+
+    if not authored_ruc_defaults(parent_config.get("sf_surface_physics")):
+        for key, value in authored_ruc_defaults(merged.get("sf_surface_physics")).items():
+            if key not in switches:
+                merged[key] = value
+    # The suite owns the surface layer, so the parent's MM5-only surface-layer
+    # options go with the parent's surface layer.  The breakage this prevents:
+    # a storm run (MM5 surface layer, isftcflx/iz0tlnd on) gave its 1 km
+    # moving step-down the suite's MYNN surface layer with the storm run's
+    # isftcflx, which the configuration refuses ("isftcflx/iz0tlnd are MM5
+    # surface-layer options and require sf_sfclay_physics=1 or 91"), so every
+    # moving step-down inside a storm run failed (2.9.7 WOOF rebake canary,
+    # run_2c31777d1de61ea6).
+    if merged.get("sf_sfclay_physics") not in (1, 91):
+        for name in ("isftcflx", "iz0tlnd"):
+            if name not in switches and merged.get(name):
+                merged[name] = 0
+    return merged, profile, basis
 
 
 def _with_parent_epssm_label(merged: dict, parent_header) -> dict:
@@ -1258,7 +1394,7 @@ def _fit_child_size(parent, parent_config, *, j0: int, i0: int, ratio: int,
                     run_seconds: float, output_interval_s: float,
                     vram_gib: float, child_eta_levels=None,
                     measured_free_bytes: int | None = None,
-                    profile=None) -> tuple:
+                    profile=None, clock_seconds=()) -> tuple:
     """Largest centered square child whose peak envelope fits the card.
 
     Returns ``(size, estimate)``: the extent AND the estimator's own
@@ -1337,6 +1473,7 @@ def _fit_child_size(parent, parent_config, *, j0: int, i0: int, ratio: int,
                 parent_config, parent=parent, ratio=ratio,
                 child_nx=size, child_ny=size, run_seconds=run_seconds,
                 output_interval_s=output_interval_s,
+                clock_seconds=clock_seconds,
                 # PRICED ON THE LADDER IT WILL RUN.  Sizing without this
                 # priced a 128-level child as its 49-level parent: measured
                 # on a 342x342 4 km child against a 10 GiB card, 6.554 GiB
@@ -1550,6 +1687,10 @@ def downscale_main(args) -> int:
         # the same path as a Ctrl-C, so the reservation below is released
         # and a child already running records its stop.
         with stop_on_signal(), collect_warnings(warnings):
+            if getattr(args, "follow", None) is not None:
+                from woof.moving_downscale import moving_downscale_main
+
+                return moving_downscale_main(args)
             return _downscale_main(args, reservation, warnings)
     except BaseException:
         # Every exit that is not this command's own success releases the
@@ -1790,10 +1931,17 @@ def _downscale_main(args, reservation: _OutputReservation,
         contract.end_time - contract.start_time).total_seconds()
 
     outdir_reserved = False
+    child_physics = None
     if args.child_config is not None:
         if args.point is not None:
             raise OfflineChildContractError(
                 "pass --child-config or --point, not both")
+        if getattr(args, "physics_profile", None) is not None:
+            # Breakage: the flag would be read and silently not applied --
+            # a supplied child config carries its own physics switches.
+            raise OfflineChildContractError(
+                "--physics-profile chooses the physics of a child derived "
+                "with --point; a --child-config TOML names its own physics")
         for name in ("ratio", "i_parent_start", "j_parent_start"):
             if getattr(args, name) is None:
                 raise OfflineChildContractError(
@@ -1845,6 +1993,15 @@ def _downscale_main(args, reservation: _OutputReservation,
         j0, i0 = _nearest_parent_index(
             parent["xlat"], parent["xlong"], lat, lon)
         ratio = int(args.ratio if args.ratio is not None else 3)
+        # THE CHILD'S PHYSICS, chosen before the child is sized: a suite
+        # with more transported species prices a larger state.
+        parent_config, child_profile, physics_basis = child_physics_config(
+            parent_config, child_dx_m=float(parent["dx"]) / ratio,
+            requested=getattr(args, "physics_profile", None),
+            les_below_m=getattr(args, "les_below_m", None),
+            les_closure=getattr(args, "les_closure", None))
+        child_physics = {"physics_profile": child_profile,
+                         "basis": physics_basis}
         run_seconds = (float(args.hours) * 3600.0
                        if args.hours is not None else window_seconds)
         _validate_child_window(run_seconds, window_seconds)
@@ -1852,6 +2009,12 @@ def _downscale_main(args, reservation: _OutputReservation,
                              if args.output_interval_seconds is not None
                              else contract.interval_seconds)
         child_levels = _parse_child_levels(args.child_levels)
+        # Every instant the child's step has to land on besides its run
+        # length, history and checkpoint: the health line, and the parent's
+        # frame interval, where the boundary seam falls
+        # (offline_child_run._child_boundary_clock).
+        child_clock_seconds = (float(args.health_interval_seconds),
+                               float(contract.interval_seconds))
         sizing = _sizing_budget(args, auto_vram)
         sizing_receipt = _sizing_receipt(sizing)
         memory_vram_gib = sizing.vram_gib
@@ -1875,6 +2038,7 @@ def _downscale_main(args, reservation: _OutputReservation,
                 output_interval_s=output_interval_s,
                 vram_gib=sizing.vram_gib,
                 child_eta_levels=child_levels,
+                clock_seconds=child_clock_seconds,
                 **({"measured_free_bytes": sizing.free_bytes,
                     "profile": sizing.device_profile}
                    if sizing.measured else {}))
@@ -1888,7 +2052,7 @@ def _downscale_main(args, reservation: _OutputReservation,
             child_nx=child_nx, child_ny=child_ny,
             run_seconds=run_seconds, output_interval_s=output_interval_s,
             child_eta_levels=child_levels, centre_lat=lat,
-            clock_seconds=(float(args.health_interval_seconds),))
+            clock_seconds=child_clock_seconds)
         if parent_config.get("use_adaptive_time_step"):
             live = float(parent_config["dt"])
             warn(f"the parent ran the adaptive clock and its checkpoint "
@@ -1901,7 +2065,19 @@ def _downscale_main(args, reservation: _OutputReservation,
                      "engine's clock convention at its own spacing (5 s "
                      "per km outside the tropics), down to the largest "
                      "step its run length, history, checkpoint and health "
-                     "intervals are whole numbers of.")
+                     "intervals and the parent's frame interval are whole "
+                     "numbers of.")
+        elif merged["dt"] != float(parent_config["dt"]) / ratio:
+            over_ratio = float(parent_config["dt"]) / ratio
+            warn(f"the child runs a {merged['dt']:g} s step, not the "
+                 f"parent's {float(parent_config['dt']):g} s over the ratio "
+                 f"({over_ratio:g} s), so it lands on every clock it keeps",
+                 why="The child integrates in whole steps, and its run "
+                     "length, history, checkpoint and health intervals and "
+                     "the parent's frame interval must each be a whole "
+                     "number of them.  The step taken is the largest one "
+                     "no longer than the parent's step over the ratio "
+                     "that all of them are.")
         outdir = Path(args.out)
         child_config = derived_child_config_path(
             outdir, dry_run=bool(args.dry_run))
@@ -1927,6 +2103,9 @@ def _downscale_main(args, reservation: _OutputReservation,
               f"dx={merged['dx']:g} m (ratio {ratio}) centered on "
               f"({lat:g}, {lon:g}); parent start ({i_start}, {j_start}); "
               f"wrote {child_config}")
+        print("woof downscale: child physics: "
+              + (child_profile or "inherited from the parent")
+              + f" ({physics_basis})")
         if child_config.parent != outdir:
             print("woof downscale: --dry-run does not reserve "
                   f"{outdir} (a run refuses if it already exists), so the "
@@ -2053,6 +2232,10 @@ def _downscale_main(args, reservation: _OutputReservation,
         print("woof downscale: child terrain: its own static geography "
               f"at {float(cfg.dx):g} m, built from {static_policy.geog_root}"
               + (f" with {static_policy.highres.terrain_source} terrain"
+                 + ("" if static_policy.highres.fields == "terrain"
+                    else " and land cover and soil at source resolution "
+                         f"(fields = {static_policy.highres.fields!r}, "
+                         f"land cover {static_policy.highres.landcover_source!r})")
                  if static_policy.highres is not None
                  and static_policy.highres.enabled
                  and float(cfg.dx) <= float(
@@ -2150,6 +2333,7 @@ def _downscale_main(args, reservation: _OutputReservation,
         "max_boundary_interval_seconds": max_interval,
         "accepted_parent_cadence": bool(cadence_is_parents),
         "physics_binding": dict(binding.receipt()),
+        "child_physics": child_physics,
         "child_config": str(child_config),
         "child_config_sha256": child_config_sha256,
         "child_settings": child_settings_document(cfg),
@@ -2303,6 +2487,9 @@ def _downscale_main(args, reservation: _OutputReservation,
         return 0
 
     from woof import offline_child_run
+    warm_start = offline_child_run.warm_start_argument(
+        getattr(args, "warm_from", None), getattr(args, "warm_shift", None),
+        getattr(args, "warm_strip", None))
     namespace = argparse.Namespace(
         parent_history=[Path(p) for p in frames],
         parent_restart=(None if args.parent_restart is None
@@ -2321,6 +2508,8 @@ def _downscale_main(args, reservation: _OutputReservation,
         geog_root=(None if getattr(args, "geog_root", None) is None
                    else Path(args.geog_root)),
         state_backend=args.backend,
+        highres_cache=(None if getattr(args, "highres_cache", None) is None
+                       else Path(args.highres_cache)),
         preprocess_backend=args.preprocess_backend,
         health_interval_seconds=float(args.health_interval_seconds),
         render_products=render_products,
@@ -2335,7 +2524,13 @@ def _downscale_main(args, reservation: _OutputReservation,
         outdir_reserved=outdir_reserved,
         # The retention the plan priced the disk on, settled once: 0
         # keeps every set.
-        keep_checkpoints=int(keep_checkpoints or 0))
+        keep_checkpoints=int(keep_checkpoints or 0),
+        warm_start=warm_start,
+        # A segment of a moving step-down: the forecast's own start, and
+        # the place its frames record (on the parent's lattice), so the
+        # segments' frames are one moving nest's history.
+        simulation_start=getattr(args, "simulation_start", None),
+        history_parent_start=getattr(args, "history_parent_start", None))
     # From here the directory belongs to the run: a forecast that dies
     # mid-integration leaves frames a reader needs, and a report.json
     # whose `result` is FAIL rather than one claiming it finished.
@@ -2384,7 +2579,8 @@ def _resolve_static_policy(args, child_config, cfg):
     try:
         return load_child_static_policy(
             child_config, cfg, terrain=_flag_terrain(args),
-            geog_root=getattr(args, "geog_root", None))
+            geog_root=getattr(args, "geog_root", None),
+            highres_cache=getattr(args, "highres_cache", None))
     except ValueError as error:
         raise OfflineChildContractError(str(error)) from error
 
@@ -2460,6 +2656,8 @@ def register_cli(subparsers) -> None:
         "downscale",
         help="run a standalone child from archived parent history "
              "(native ndown replacement; woof and stock-WRF parents)")
+    from woof.output_formats import add_arguments
+    add_arguments(parser)
     parser.add_argument(
         "parent", nargs="+",
         help="parent wrfout directory or explicit history files")
@@ -2484,6 +2682,26 @@ def register_cli(subparsers) -> None:
                              "(specified=true, nested=false)")
     parser.add_argument("--child-config-sha256", default=None,
                         help="require the exact reviewed child configuration bytes")
+    parser.add_argument("--physics-profile", default=None, metavar="ID|parent",
+                        help="the --point child's physics suite, a `woof "
+                             "domain --physics-profile` id, or 'parent' to "
+                             "keep the parent's physics verbatim (default: "
+                             "thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1, "
+                             "the HRRR-shape suite, for a child finer than "
+                             "4 km; the parent's physics otherwise)")
+    from woof.domain_wizard import (DEFAULT_LES_BELOW_M, DEFAULT_LES_CLOSURE,
+                                     LES_CLOSURES)
+    parser.add_argument("--les-below-m", type=float,
+                        default=DEFAULT_LES_BELOW_M, metavar="METRES",
+                        help="a --point child at or below this spacing runs "
+                             "the LES closure (PBL off, a 3-D closure, "
+                             "isotropic mixing) on top of its suite "
+                             f"(default {DEFAULT_LES_BELOW_M:g} m, the same "
+                             "rule `woof domain` writes on nests; 0 never)")
+    parser.add_argument("--les-closure", choices=tuple(sorted(LES_CLOSURES)),
+                        default=DEFAULT_LES_CLOSURE,
+                        help="the LES child's 3-D closure: smagorinsky "
+                             "(km_opt 3, default) or tke (km_opt 2)")
     parser.add_argument("--point", default=None, metavar="LAT,LON",
                         help="derive the child around this point instead "
                              "of --child-config (woof parents only)")
@@ -2561,7 +2779,9 @@ def register_cli(subparsers) -> None:
                              "terrain, land use and soil.  By default a "
                              "child builds its own static geography at its "
                              "own spacing (terrain, land use, soil; "
-                             "Copernicus 30 m terrain at 1 km or finer) and "
+                             "Copernicus 30 m terrain at 1 km or finer, "
+                             "CGLC-MODIS-LCZ land cover and SoilGrids soil "
+                             "at 600 m or finer) and "
                              "the parent's state is blended and rebalanced "
                              "onto it as WRF's ndown does")
     parser.add_argument("--geog-root", type=Path, default=None,
@@ -2569,6 +2789,16 @@ def register_cli(subparsers) -> None:
                              "geography is built from (default: the child "
                              "config's [static] geog_root, else the staged "
                              "tree `woof fetch-geog` installs)")
+    parser.add_argument("--highres-cache", type=Path, default=None,
+                        help="the folder the child's high-resolution terrain "
+                             "tiles and land-cover rasters are read from and "
+                             "cached in (default: the child config's "
+                             "[static.highres] cache_root, else the engine's "
+                             "per-user cache).  A child at 600 m or finer "
+                             "takes land cover and soil at source resolution "
+                             "(CGLC-MODIS-LCZ, SoilGrids) as well as "
+                             "Copernicus terrain, so point this at a cache "
+                             "that already holds the land-cover raster")
     parser.add_argument("--child-surface-from", type=Path, default=None,
                         help="child-grid wrfinput/history file with land "
                              "identity + soil warm start (required for "
@@ -2637,6 +2867,71 @@ def register_cli(subparsers) -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="validate contracts, derive/print the plan, "
                              "write the derived TOML, run nothing")
+    # A STEP-DOWN THAT MOVES (woof.moving_downscale).  A parent whose grid
+    # moves between frames -- a storm run's following nest -- is read frame
+    # by frame from its own footprint, and the child is re-placed on a track
+    # every --follow-every seconds, each segment continuing the last
+    # (--warm-from below).
+    from woof.moving_downscale import FOLLOW_MODES
+    parser.add_argument("--follow", choices=FOLLOW_MODES, default=None,
+                        help="step down inside a moving parent and follow: "
+                             "'storm' keeps the child on the storm (the "
+                             "parent run's storm track, else the moving "
+                             "parent's own centre), 'parent' keeps its place "
+                             "in the moving parent, 'fixed' holds it on the "
+                             "ground, 'target' follows a severe-weather setup "
+                             "(--follow-target).  Needs --child-size; --point is where "
+                             "it starts (default: on the storm, else the "
+                             "moving parent's centre)")
+    parser.add_argument("--follow-target", default=None, dest="follow_target",
+                        choices=("low", "cape-shear", "boundary", "object", "path"),
+                        help="with --follow target: what the child follows, fixed on "
+                             "the parent's own frames: a surface low, the dominant "
+                             "MLCAPE x 0-6 km shear area, a dryline/front "
+                             "(--follow-segment), a thresholded feature "
+                             "(--follow-field), or the user's own timed path "
+                             "(--follow-path; not a tracker)")
+    parser.add_argument("--follow-path", type=Path, default=None, dest="follow_path",
+                        metavar="FILE",
+                        help="--follow-target path: timed points, JSON "
+                             "{\"rows\":[{\"time\",\"lat\",\"lon\"}]} or CSV "
+                             "valid_time,lat,lon")
+    parser.add_argument("--follow-segment", default=None, dest="follow_segment",
+                        metavar="LAT,LON,LAT,LON",
+                        help="--follow-target boundary: the dryline or front as drawn "
+                             "at the start")
+    parser.add_argument("--follow-boundary-field", default=None,
+                        dest="follow_boundary_field",
+                        choices=("dewpoint", "theta_e", "temperature"),
+                        help="--follow-target boundary: 2 m dewpoint (dryline, the "
+                             "default), theta-e or temperature (fronts)")
+    parser.add_argument("--follow-field", default=None, dest="follow_field",
+                        metavar="NAME",
+                        help="--follow-target object: the frame field (default "
+                             "REFL_10CM, column maximum; UP_HELI_MAX for rotation)")
+    parser.add_argument("--follow-threshold", type=float, default=None,
+                        dest="follow_threshold",
+                        help="the target's threshold (cape-shear index 0.25, "
+                             "boundary 4 K/100 km, object 35 dBZ, low 1 hPa)")
+    parser.add_argument("--follow-every", type=positive_float, default=None,
+                        metavar="SECONDS",
+                        help="how often a following child is re-placed "
+                             "(default 3600, a whole number of the parent's "
+                             "frame interval)")
+    parser.add_argument("--warm-from", type=Path, default=None,
+                        dest="warm_from", metavar="CHECKPOINT",
+                        help="start from the parent as usual, but carry this "
+                             "earlier child's state onto the ground both "
+                             "share (the seam a following child's segments "
+                             "join on); needs --warm-shift")
+    parser.add_argument("--warm-shift", default=None, dest="warm_shift",
+                        metavar="DI,DJ",
+                        help="this child's placement minus the earlier "
+                             "one's, in child cells")
+    parser.add_argument("--warm-strip", type=Path, default=None,
+                        dest="warm_strip", metavar="NPZ",
+                        help="accumulated precipitation for the freshly "
+                             "covered strip of a warm start, per slot")
     parser.set_defaults(func=downscale_main)
     parent_query = subparsers.add_parser('downscale-parent',
         help='read the selected parent history geometry as JSON, with '
@@ -2649,5 +2944,6 @@ def register_cli(subparsers) -> None:
 
 
 __all__ = ["DOWNSCALE_PLAN_NAME", "DOWNSCALE_PLAN_SCHEMA",
-           "PARENT_RESTART_LATEST", "downscale_main",
+           "PARENT_RESTART_LATEST", "PHYSICS_PROFILE_PARENT",
+           "child_physics_config", "downscale_main",
            "downscale_plan_path", "register_cli"]

@@ -27,7 +27,7 @@ host is for.  Promotion reorders the ladder and never shortens it, so
 fall-through is unchanged.  ``--transport`` pins one rung, disables
 fall-through and skips the probe.
 
-* ``gfs`` -- two first-class byte transports.  The default is the NOMADS
+* ``gfs`` -- three byte transports.  The default is the NOMADS
   ``filter_gfs_0p25.pl`` subsetter (spatial subregion + the exact
   variable/level selection): rate-governed, bandwidth-frugal, re-encoded
   by NOMADS to south-to-north simple packing.  ``--mode full-file``
@@ -36,8 +36,13 @@ fall-through and skips the probe.
   grids, both certified in ``gfs_grib2_bridge`` by committed matched
   pairs (the scan-order flip and the SOILW missing-value proof; see
   ``tests/fixtures/gfs-scan-order/README.md``) -- through either the
-  Rust backbone's parallel range GETs or the stdlib transport.  ``.idx``
-  byte-range subsetting of the raw objects is NOT a certified GFS route.
+  Rust backbone's parallel range GETs or the stdlib transport.
+  ``--mode idx-subset`` takes from those same objects only the records
+  the grib-filter asks for, by the byte ranges of the ``.idx`` beside
+  each one (:data:`GFS_RECORDS_MODE`): the records are copied unchanged,
+  so the decode reads the bytes it reads from the whole object, about a
+  sixth of them.  It is what the hosted AWS policy and a cycle only the
+  archive keeps take; an object whose host keeps no index moves whole.
   ``--cycle latest`` walks the same ladder with anonymous HEAD probes
   (no HTML scraping), so it resolves the newest cycle that EXISTS
   rather than the newest one the archive has caught up with.
@@ -58,9 +63,10 @@ fall-through and skips the probe.
   has no grib-filter route for these products -- its HRRR filter
   scripts cover the 2-D ``wrfsfc`` file only -- so subsetting stays
   ``.idx`` byte ranges on both hosts and the exact 561/18 record
-  contracts are unchanged.  The bytes move whole by default
-  (:data:`HRRR_DEFAULT_MODE`, through the Rust backbone's parallel
-  range GETs); ``--mode idx-subset`` is the opt-in bandwidth saver.  ``--wait-for`` polls (at most every 30 s)
+  contracts are unchanged.  By default (:data:`HRRR_DEFAULT_MODE`,
+  ``auto``) only the selected records move, through the Rust
+  backbone's parallel range GETs, and an object whose index is absent
+  or short moves whole; ``--mode full-file`` takes every object whole.  ``--wait-for`` polls (at most every 30 s)
   and downloads each forecast hour as it publishes, so preparation can
   start before a live cycle finishes publishing.  HRRR objects are
   CONUS-wide; ``.idx`` subsetting selects records, not areas, so
@@ -98,6 +104,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+import contextlib
 import functools
 
 from woof import (explain, fetch_bars, fetch_endpoints, fetch_guard,
@@ -197,12 +204,13 @@ HRRR_TRANSPORTS = ("auto", "nomads", "s3")
 #: table teaches the front door its host without a code edit.
 FETCH_TRANSPORTS = tuple(sorted(
     set(HRRR_TRANSPORTS)
+    | {row["transport"] for row in fetch_endpoints.archive_document()["layouts"]}
     | {host.name
        for source_id in fetch_routes.route_ids()
        for host in fetch_routes.route_for(source_id).hosts}))
 
 #: Which downloader moves the bytes.  ``rust`` is the vendored
-#: ``rw_fetch`` backbone (16 MiB parallel range GETs, ``.idx``
+#: ``rw_fetch`` backbone (parallel range GETs, ``.idx``
 #: coalescing, the cross-process NOMADS rate governor, a disk cache);
 #: ``python`` is the stdlib ``urllib`` transport in :mod:`tools`, which
 #: stays as the always-available fallback.  ``auto`` uses the backbone
@@ -286,22 +294,27 @@ def archive_only_cycle(source: str, cycle: datetime, now: datetime | None = None
 
 #: What ``woof fetch --source hrrr`` does when nobody says otherwise.
 #:
-#: The whole file, in parallel range GETs.  This was ``auto``, whose
-#: probe rule -- take the whole object only when the ``.idx`` cannot
-#: carry the selection -- resolves to ``idx-subset`` against every
-#: healthy host, because a healthy host publishes a complete index.  So
-#: the default was hundreds of small serial range requests: a field
-#: report timed one 419 MB HRRR file at **560 s** on a 2 Gbps host,
-#: against **27-35 s** for the same class of file taken whole through
-#: the Rust backbone.  Roughly a 16x tax, paid by default, to save
-#: bandwidth nobody had asked to save.
+#: ``auto``: the backbone's probe rule takes the ``.idx`` record subset
+#: whenever the host publishes a complete index, and the whole object
+#: when the index is absent, malformed or shorter than the object, and
+#: each file's line says which it took and why.  A whole ``wrfnat`` is
+#: 66-70 % read and a whole ``wrfprs`` 7 % (18 soil records of 708), so
+#: the whole-file default moved 2.5x the bytes the preparation reads.
+#: Measured over AWS, 2026-10-29 12Z f00-f03: whole files
+#: 4,601 MB in 176 s, the subset 1,823 MB in 137 s.  A 12 h hourly start
+#: is about 15.1 GB whole and 5.6 GB subset, on the start WOOF and the
+#: DA cycles make most.
 #:
-#: The project ruling this restores is older than the probe rule: full
-#: files are the pipeline, and record subsetting is an opt-in bandwidth
-#: saver.  ``--mode idx-subset`` still does exactly what it always did
-#: and says so in one line when it is chosen; ``--mode auto`` still
-#: exists for a caller that genuinely wants the probe to decide.
-HRRR_DEFAULT_MODE = "full-file"
+#: The 2026-07-31 reason for the whole-file default was the PYTHON
+#: transport's serial range requests (560 s for one 419 MB file); that
+#: transport only ever subsets and is unchanged.  The Rust backbone
+#: coalesces a selection into about 108 ranges per wrfnat and pulls them
+#: in parallel, and the subset carries every record the bridge reads
+#: from a whole file (``OPTIONAL_SURFACE_FIELDS`` in
+#: :mod:`tools.download_hrrr_native_subset`), so the prepared start is
+#: byte-identical either way.  ``--mode full-file`` and ``--mode
+#: idx-subset`` still force one byte mode.
+HRRR_DEFAULT_MODE = "auto"
 
 #: ``woof fetch --transport`` host names to ``rw_fetch --source``
 #: registry names.  Same two hosts, different vocabularies: ArWen has
@@ -418,6 +431,136 @@ GFS_CONTAINER_PREFIX = {"gfs": "gfs", "gdas": "gdas"}
 #: a disagreement with this constant is a loud, explicitly acknowledged
 #: re-certification event.  See :mod:`woof.fetch_bars`.
 GFS_SUBSET_RECORD_COUNT = fetch_bars.CERTIFIED_RECORD_BARS["gfs"]
+
+#: What a GFS-container fetch takes from the whole-object hosts (the AWS
+#: archive, and the operational server's own directory) when no mode is
+#: named: the records the grib-filter crop asks for, copied unchanged by
+#: the byte ranges of the ``.idx`` published beside each object.  The
+#: hosted AWS policy and a cycle only the archive still keeps take it.
+#: Measured 2026-10-29 12Z f000/f003/f006: 1,556 MB of whole
+#: objects against 266.5 MB of selected records (124 per lead, 17 %).
+#: An object whose host keeps no index is moved whole, and the log says
+#: so; ``--mode full-file`` still asks for the whole objects.
+GFS_RECORDS_MODE = "idx-subset"
+
+
+#: wgrib2's ``.idx`` names for the GRIB2 (discipline, category, parameter)
+#: codes a packaged NCEP mapping binds.  A mapping selector with a code
+#: outside this table cannot be named in an index, so its source moves
+#: whole objects rather than risk a selection that leaves a bound record
+#: out.
+NCEP_IDX_NAMES = {
+    (0, 0, 0): "TMP", (0, 1, 0): "SPFH", (0, 1, 1): "RH",
+    (0, 1, 22): "CLMR", (0, 1, 23): "ICMR", (0, 1, 24): "RWMR",
+    (0, 1, 25): "SNMR", (0, 1, 32): "GRLE", (0, 2, 2): "UGRD",
+    (0, 2, 3): "VGRD", (0, 3, 0): "PRES", (0, 3, 1): "PRMSL",
+    (0, 3, 5): "HGT", (2, 0, 0): "LAND", (2, 0, 2): "TSOIL",
+    (2, 0, 192): "SOILW", (10, 2, 0): "ICEC",
+}
+
+
+def mapped_record_levels(source: str) -> dict[str, set[str]] | None:
+    """``{VAR: {LEVEL, ...}}`` a source's packaged mapping binds, by ``.idx`` name.
+
+    Empty for a source with no packaged mapping (GFS decodes through
+    ``gfs_grib2_bridge``, which reads the grib-filter's records).  None
+    when a selector cannot be named (see :data:`NCEP_IDX_NAMES`).
+    """
+
+    adapter = source_adapters.get_source_adapter(source)
+    if adapter.packaged_profile is None:
+        return {}
+    from woof.source_authorities import packaged_authorities
+
+    mapping = json.loads(packaged_authorities(
+        adapter.packaged_profile)["mapping"].read_bytes())
+    vertical = (mapping.get("coordinates") or {}).get("vertical") or {}
+    ladder = (vertical.get("levels") or ()
+              if vertical.get("kind") == "pressure" and vertical.get("units") == "Pa"
+              else ())
+    wanted: dict[str, set[str]] = {}
+    for field in (mapping.get("fields") or {}).values():
+        for selector in field.get("selectors") or ():
+            if selector.get("format") != "grib2":
+                return None
+            name = NCEP_IDX_NAMES.get((selector.get("discipline"),
+                                       selector.get("category"),
+                                       selector.get("parameter")))
+            kind = selector.get("level_type")
+            if name is None:
+                return None
+            if kind == 100:
+                published = (field.get("published_levels") or {}).get("levels")
+                pressures = published or ladder
+                if not pressures:
+                    return None
+                levels = {f"{float(value) / 100.0:g} mb" for value in pressures}
+            elif kind == 1:
+                levels = {"surface"}
+            elif kind == 101:
+                levels = {"mean sea level"}
+            elif kind == 103:
+                levels = {f"{float(selector['level_value']):g} m above ground"}
+            elif kind == 106 and selector.get("second_level_type") == 106:
+                levels = {f"{float(selector['level_value']):g}-"
+                          f"{float(selector['second_level_value']):g} m below ground"}
+            else:
+                return None
+            wanted.setdefault(name, set()).update(levels)
+    return wanted
+
+
+def gfs_record_selection(source: str,
+                         levels_hpa: tuple[float, ...]) -> dict | None:
+    """The records a preparation reads, as an ``.idx`` record declaration.
+
+    The first ``[VAR, LEVEL]`` pair of full-match alternations is exactly
+    the grib-filter's variable-by-level cross product: a record is kept
+    when its variable is one the filter asks for AND its level is one the
+    filter asks for.  Both alternations come from the declaration the
+    crop request and its record bar already read
+    (:func:`woof.fetch_bars.nomads_selector_pairs` over
+    :mod:`tools.download_gfs_native_subset`), so the two transports take
+    the same records.  A source that prepares through a packaged mapping
+    (GDAS) also keeps every record its mapping binds, one pair per
+    variable: GDAS's mapping reads the five hydrometeor mixing ratios,
+    and a GDAS start without them is refused at prepare ("lacks required
+    fields ['cloud_ice_mixing_ratio', ...]", 2026-10-29).  The
+    grib-filter asks for the same variables
+    (:func:`tools.download_gfs_native_subset.nomads_variables` reads the
+    same mapping), so the crop and the archive's records agree.  None
+    when the mapping binds a record this table cannot name in an index.
+    """
+
+    import re
+
+    from woof.record_index import validate_declaration
+    from tools import download_gfs_native_subset as transport
+
+    pairs = fetch_bars.nomads_selector_pairs(
+        transport.nomads_variables(source), transport.NOMADS_LEVELS,
+        tuple(levels_hpa))
+    mapped = mapped_record_levels(source)
+    if mapped is None:
+        return None
+    variables = sorted({variable for variable, _level in pairs})
+    levels = sorted({level for _variable, level in pairs})
+    select = [["|".join(re.escape(name) for name in variables),
+               "|".join(re.escape(level) for level in levels)]]
+    select += [[re.escape(name), "|".join(re.escape(level)
+                                          for level in sorted(wanted))]
+               for name, wanted in sorted(mapped.items())]
+    return validate_declaration({
+        "format": "ncep-idx",
+        "select": select,
+        "why": (f"the {source} grib-filter selection (every requested "
+                "variable on every requested level, "
+                f"{len(levels_hpa)} isobaric levels)"
+                + (" and every record its packaged mapping binds"
+                   if mapped else "")
+                + ", by the .idx beside each pgrb2.0p25 object; the bytes "
+                "are copied unchanged"),
+    }, f"{source} records")
 
 # HRRR CONUS coverage is NOT a constant here.  It is derived from the
 # native Lambert grid definition -- the single source of truth in
@@ -747,7 +890,8 @@ def fetch_front_door_sources() -> tuple[str, ...]:
     with the row, which is the whole point of the route table being data.
     """
 
-    return fetch_routes.all_fetchable_sources()
+    owners = {row.source_id for row in source_adapters.source_adapters() if row.acquisition_owner}
+    return tuple(sorted(set(fetch_routes.all_fetchable_sources()) | owners))
 
 
 def native_cf_fetch_contract(source: str) -> str | None:
@@ -771,6 +915,10 @@ def fetch_accepts_area(source: str) -> bool:
     """
 
     from woof.cf_archive_fetch import sources
+    adapter = source_adapters.get_source_adapter(source)
+    if adapter.acquisition_owner:
+        from importlib import import_module
+        return bool(getattr(import_module(adapter.acquisition_owner), "FETCH_ACCEPTS_AREA", False))
     return fetch_routes.canonical_source(source) in (
         fetch_routes.LEGACY_ROUTE_SOURCES + sources())
 
@@ -1489,9 +1637,40 @@ def _hrrr_transport_base(transport: str) -> str:
         f"unknown HRRR transport {transport!r}; expected 'nomads' or 's3'")
 
 
+#: The HRRR file each rw_fetch product name stands for.
+HRRR_PRODUCT_FILES = {"nat": "wrfnat", "prs": "wrfprs", "sfc": "wrfsfc"}
+
+
+def hrrr_lead_products() -> tuple[str, ...]:
+    """Every HRRR file one lead's fetch reads, so all its probe must ask.
+
+    ``wrfnat`` (atmosphere) and ``wrfprs`` (soil), plus the file of each
+    runtime surface field the hrrr adapter declares (VEGFRA is cut from
+    ``wrfsfc``).  The breakage this prevents: NOAA posts a lead's
+    ``wrfsfc`` up to ~10 min after its ``wrfnat``/``wrfprs`` (07Z f07 on
+    2026-10-20: wrfprs 08:03:26, wrfsfc 08:13:00), so a probe of the pair
+    alone called the lead posted and the VEGFRA transfer was refused with
+    "the GRIB object is not present at this source", failing the run.
+    """
+
+    from woof.source_adapters import get_source_adapter
+
+    extra = tuple(HRRR_PRODUCT_FILES[row[1]] for row in
+                  get_source_adapter("hrrr").runtime_surface_fields)
+    return tuple(dict.fromkeys(("wrfnat", "wrfprs", *extra)))
+
+
+def hrrr_lead_urls(cycle: datetime, hour: int,
+                   transport: str = "s3") -> tuple[str, ...]:
+    """The URLs of :func:`hrrr_lead_products` for one lead on one host."""
+
+    return tuple(hrrr_object_url(cycle, hour, product, transport=transport)
+                 for product in hrrr_lead_products())
+
+
 def hrrr_object_url(cycle: datetime, hour: int, product: str,
                     transport: str = "s3") -> str:
-    if product not in ("wrfnat", "wrfprs"):
+    if product not in HRRR_PRODUCT_FILES.values():
         raise ValueError(f"unknown HRRR product {product!r}")
     return (f"{_hrrr_transport_base(transport)}/hrrr.{cycle:%Y%m%d}/conus/"
             f"hrrr.t{cycle:%H}z.{product}f{hour:02d}.grib2")
@@ -1597,10 +1776,7 @@ def cycle_probe_urls(source: str, cycle: datetime, last_hour: int,
         if transport is None:
             transport = fetch_endpoints.serving_ladder(
                 source, cycle=cycle)[0].name
-        return (hrrr_object_url(cycle, last_hour, "wrfnat",
-                                transport=transport),
-                hrrr_object_url(cycle, last_hour, "wrfprs",
-                                transport=transport))
+        return hrrr_lead_urls(cycle, last_hour, transport=transport)
     if cycle_is_probeable(source):
         return _route_probe_urls(source, cycle, last_hour, transport,
                                  cadence=cadence, start_hour=start_hour, member=member)
@@ -2357,7 +2533,8 @@ def resolve_hrrr_transport(cycle: datetime, requested: str, *,
 
     Without ``required_leads`` this keeps the historical final-hour
     selection. Native as-posted transfers supply their complete prefix:
-    every wrfnat, wrfprs and index must be available on one endpoint,
+    every wrfnat, wrfprs, runtime surface file and index must be available
+    on one endpoint,
     because a later mirrored lead can arrive before an earlier soil pair.
     An endpoint that said one of them is missing (404 or 410) is never
     taken.  When none holds the whole prefix but one could not be heard
@@ -2412,7 +2589,7 @@ def resolve_hrrr_transport(cycle: datetime, requested: str, *,
                      "none is missing; its transfer's own checks decide")
             return unheard[0]
         raise _HrrrPrefixNotPosted(
-            f"every HRRR endpoint said a wrfnat, wrfprs or index of "
+            f"every HRRR endpoint said a {', '.join(hrrr_lead_products())} or index of "
             f"f{leads[0]:03d}..f{leads[-1]:03d} is missing; a final lead "
             "alone cannot authorize downloading a missing intermediate object")
     if requested == "s3":
@@ -2427,10 +2604,7 @@ def resolve_hrrr_transport(cycle: datetime, requested: str, *,
         now = datetime.now(timezone.utc).replace(tzinfo=None)
     age_hours = fetch_endpoints.cycle_age_hours(cycle, now)
     if requested == "nomads":
-        urls = (hrrr_object_url(cycle, last_hour, "wrfnat",
-                                transport="nomads"),
-                hrrr_object_url(cycle, last_hour, "wrfprs",
-                                transport="nomads"))
+        urls = hrrr_lead_urls(cycle, last_hour, transport="nomads")
         if all(probe(url) for url in urls):
             return "nomads"
         detail = (
@@ -2447,12 +2621,11 @@ def resolve_hrrr_transport(cycle: datetime, requested: str, *,
     ladder = fetch_endpoints.serving_ladder("hrrr", cycle=cycle, now=now)
 
     def window_urls(name: str) -> tuple[str, ...]:
-        return (hrrr_object_url(cycle, last_hour, "wrfnat", transport=name),
-                hrrr_object_url(cycle, last_hour, "wrfprs", transport=name))
+        return hrrr_lead_urls(cycle, last_hour, transport=name)
 
     # The throughput rung first: an hour the archive already mirrors has
-    # nothing left to gain from the slower host.  Both final-hour
-    # objects must answer, because a fetch needs the pair.
+    # nothing left to gain from the slower host.  Every final-hour
+    # object must answer, because a fetch needs them all.
     for endpoint in fetch_endpoints.transfer_probes(ladder):
         if all(probe(url) for url in window_urls(endpoint.name)):
             progress(
@@ -2527,13 +2700,13 @@ def _hrrr_pacing_advice(*, pinned: str | None, mode: str, cached: bool,
     said = []
 
     def advise(host: str | None) -> None:
-        if (said or pinned is not None or cached or mode != "full-file"
-                or host != "nomads"):
+        if (said or pinned is not None or cached
+                or mode not in ("full-file", "auto") or host != "nomads"):
             return
         said.append(host)
         say("fetch hrrr: the operational server paces whole-file "
             "transfers -- expect several times the wall clock of "
-            "the S3 archive for --mode full-file.  It is serving "
+            "the S3 archive.  It is serving "
             "this fetch because it is the only host that has "
             "this window yet; once the archive catches up, a "
             "re-run takes it from there without being asked.")
@@ -2551,6 +2724,131 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+# Only fresh Rust publications enter this memo. Existing/resumed files still
+# undergo independent identity checks. Mutation, append and rename change keys.
+_STREAM_FACTS = OrderedDict()
+_STREAM_FACTS_LOCK = threading.Lock()
+
+
+def _stream_entry(identity):
+    # Stat clocks can have coarser resolution on overlay filesystems. A
+    # same-size write must invalidate the stream digest even inside one tick.
+    with _STREAM_FACTS_LOCK:
+        entry = _STREAM_FACTS.get(identity)
+        if entry is not None and entry['_change_watch'].unchanged():
+            return entry
+        if entry is not None:
+            _STREAM_FACTS.pop(identity)['_change_watch'].close()
+    return None
+
+
+def _publication(identity: tuple) -> dict:
+    """The fields of a :func:`_stat_identity` a Rust receipt's ``publication`` names."""
+    return dict(zip(("dev", "ino", "bytes", "mtime_ns", "ctime_ns"), identity[1:]))
+
+
+#: Output holds open in this process; see :func:`_fetch_out`.
+_FETCH_OUT_HOLDS = 0
+
+
+@contextlib.contextmanager
+def _fetch_out(out, **options):
+    """The ``fetch-out`` lock; the last one to end closes held payload files.
+
+    A Windows mutation notice keeps its payload open, and an open file
+    refuses a rename of any folder above it and a MoveFileEx replacement
+    of itself.  The fetch that published a payload owns its folder until
+    it lets go.  When no fetch in this process holds an output any more,
+    the fresh facts that keep a file open are dropped, and later checks
+    read the disk as a resumed process does.  An inotify watch holds no
+    file and stays.
+    """
+    global _FETCH_OUT_HOLDS
+    # A second writer of this folder waits as long as the holder's bytes
+    # keep arriving and refuses only a holder that stalls for the budget
+    # (fetch_guard.DirectoryProgress names the breakage).
+    options.setdefault("holder_progress", fetch_guard.DirectoryProgress(out))
+    with fetch_guard.hold("fetch-out", out, **options):
+        with _STREAM_FACTS_LOCK:
+            _FETCH_OUT_HOLDS += 1
+        try:
+            yield
+        finally:
+            with _STREAM_FACTS_LOCK:
+                _FETCH_OUT_HOLDS -= 1
+                if not _FETCH_OUT_HOLDS:
+                    for identity in [key for key, value in _STREAM_FACTS.items()
+                                     if value['_change_watch'].holds_file]:
+                        _STREAM_FACTS.pop(identity)['_change_watch'].close()
+
+
+def _remember_stream_facts(path: Path, entry: dict, *, emit_last_byte=True) -> None:
+    if (not isinstance(entry.get("grib2_messages"), int)
+            or not isinstance(entry.get("sha256"), str)):
+        return  # Compatibility with a backbone predating stream receipts.
+    published = entry.get("publication")
+    watch = None
+    if isinstance(published, dict):
+        # Watch before the identity is read, so a change after the read is
+        # noticed even when it lands inside the same change-time tick.
+        from woof.file_change_watch import FileChangeWatch
+        watch = FileChangeWatch(path)
+    try:
+        identity = _stat_identity(path)
+        if entry.get("bytes") != identity[3]:
+            raise ValueError(f"{path.name}: Rust stream receipt byte count differs from the published file; refuses a changed payload")
+        if watch is not None and any(published.get(key) != value
+                                     for key, value in _publication(identity).items()):
+            raise ValueError(f"{path.name}: payload identity changed after Rust publication; refuses binding a digest to changed bytes")
+    except BaseException:
+        if watch is not None:
+            watch.close()
+        raise
+    if watch is not None:
+        with _STREAM_FACTS_LOCK:
+            previous = _STREAM_FACTS.pop(identity, None)
+            if previous is not None:
+                previous['_change_watch'].close()
+            _STREAM_FACTS[identity] = {**entry, '_change_watch': watch}
+            while len(_STREAM_FACTS) > 4096:
+                _STREAM_FACTS.popitem(last=False)[1]['_change_watch'].close()
+    # Platforms without a change-time identity retain independent disk checks.
+    if emit_last_byte and isinstance(entry.get("last_byte_unix"), (int, float)):
+        from woof.timeline.ledger import emit
+        emit("fetch.last_byte", attrs={"name": path.name,
+             "range_completed_unix": entry["last_byte_unix"],
+             "receipt_delay_seconds": time.time() - entry["last_byte_unix"],
+             "boundary": "verified range response completion"})
+
+
+def _rename_stream_payload(landed: Path, dest: Path, entry: dict) -> None:
+    """Verify the published inode, rename it, then rebind its identity.
+
+    A rename changes ctime on Unix and ChangeTime on Windows. It may
+    change neither the bytes nor the inode, so every other identity
+    component must survive it.
+    """
+    _remember_stream_facts(landed, entry, emit_last_byte=False)
+    os.replace(landed, dest)
+    published = entry.get("publication")
+    if isinstance(published, dict):
+        actual = _publication(_stat_identity(dest))
+        if any(actual[key] != published.get(key) for key in actual if key != "ctime_ns"):
+            raise ValueError(f"{dest.name}: payload identity changed during rename; refuses binding changed bytes")
+        entry = {**entry, "publication": actual}
+    _remember_stream_facts(dest, entry)
+
+
+def _fetched_digest(path: Path) -> str:
+    entry = _stream_entry(_stat_identity(path))
+    return entry["sha256"] if entry is not None else sha256_file(path)
+
+
+def _fetched_records(path: Path) -> int:
+    entry = _stream_entry(_stat_identity(path))
+    return entry["grib2_messages"] if entry is not None else count_grib2_messages(path)
 
 
 #: sha256 of files this process has already read whole, keyed by every
@@ -2571,9 +2869,10 @@ _digest_clock_ns = time.time_ns
 
 
 def _stat_identity(path: Path) -> tuple:
-    status = os.stat(path)
-    return (os.path.abspath(path), status.st_dev, status.st_ino,
-            status.st_size, status.st_mtime_ns, status.st_ctime_ns)
+    # Not os.stat on Windows, whose st_ctime is the creation time; see
+    # woof.file_change_watch.stat_identity.
+    from woof.file_change_watch import stat_identity
+    return (os.path.abspath(path), *stat_identity(path))
 
 
 def existing_file_digest(path: Path) -> str:
@@ -2589,6 +2888,12 @@ def existing_file_digest(path: Path) -> str:
     """
 
     identity = _stat_identity(path)
+    # Same-process manifest and supplement binding may ask again immediately
+    # after publication. The trusted stream already hashed these bytes. A
+    # resumed process has no stream facts, and any file mutation changes the key.
+    streamed = _stream_entry(identity)
+    if streamed is not None:
+        return streamed["sha256"]
     with _DIGEST_MEMO_LOCK:
         known = _DIGEST_MEMO.get(identity)
         if known is not None:
@@ -2693,7 +2998,8 @@ def fetch_throughput(out: Path) -> dict | None:
 
     payload = _load_fetch_manifest(Path(out))
     if payload is None:
-        return None
+        from woof.fetch_adoption import route_throughput
+        return route_throughput(Path(out))
     files = payload.get("files")
     if not isinstance(files, list):
         return None
@@ -2733,6 +3039,8 @@ def fetch_throughput(out: Path) -> dict | None:
         "seconds": round(seconds, 6) if timed else None,
         "files_timed": timed,
         "downloaded_files": downloaded,
+        "adopted_files": 0,
+        "reused_files": len(files) - downloaded,
         "downloaded_bytes": downloaded_bytes,
         "downloaded_seconds": (round(downloaded_seconds, 6)
                                if downloaded else None),
@@ -2923,6 +3231,15 @@ def cached_request_complete(out: Path, *, source: str, cycle: datetime,
                if isinstance(entry, dict)
                and entry.get("forecast_hour") in wanted]
     if {entry.get("forecast_hour") for entry in payload} != wanted:
+        return False
+    if source == "hrrr" and _hrrr_receipt_has_old_subsets(prior, payload):
+        # Every file is here, but a subset predates the optional surface
+        # records, so the fetch takes it again; it goes the way a fresh
+        # one does.
+        if progress is not None:
+            progress(f"fetch {source}: {out} holds .idx subsets fetched "
+                     "before subsets took PBLH/LCDC/MCDC/HCDC; the fetch "
+                     "takes them again")
         return False
     vouched: list[tuple[Path, str]] = []
     for entry in payload:
@@ -3252,6 +3569,44 @@ def _manifest_payload(*, source: str, cycle: datetime,
 # GFS
 # ---------------------------------------------------------------------------
 
+def _gfs_file_levels(path: Path, source: str) -> tuple[tuple[float, ...], dict]:
+    """Read the archived object's complete pressure levels without decoding fields.
+
+    An unavailable live index cannot establish an old archive's upper ladder.
+    In particular, a 2020 object carries temperature at 40 hPa but no humidity
+    or wind there. The modern fallback table used to declare that partial level.
+    """
+    import csv
+    import io
+    import subprocess
+    from woof.bridges import find_bridge, bridge_remedy
+
+    executable = find_bridge("grib2_inventory")
+    if executable is None:
+        raise RuntimeError(bridge_remedy("grib2_inventory"))
+    started = time.perf_counter()
+    result = subprocess.run([str(executable), str(path)], capture_output=True,
+                            text=True, check=True)
+    # GRIB2 discipline/category/parameter codes, not display-name aliases.
+    required = {(0, 3, 5), (0, 0, 0), (0, 1, 0 if source == "gdas" else 1),
+                (0, 2, 2), (0, 2, 3)}
+    fields = {key: set() for key in required}
+    rows = csv.DictReader(io.StringIO("\n".join(
+        line for line in result.stdout.splitlines() if not line.startswith("#"))), delimiter="\t")
+    for row in rows:
+        key = tuple(int(row[name]) for name in ("discipline", "category", "parameter"))
+        if key in fields and int(row["level_type"]) == 100:
+            level = float(row["level_value"]) / 100
+            if math.isfinite(level) and level > 0:
+                fields[key].add(level)
+    levels = tuple(sorted(set.intersection(*fields.values())))
+    if not levels:
+        raise ValueError(f"{path}: no complete {source} pressure level in native inventory")
+    return levels, dict(method="native-file-inventory", file=path.name,
+        inventory_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),
+        wall_seconds=round(time.perf_counter() - started, 6))
+
+
 def gfs_live_index(cycle: datetime, *, progress=print, opener=None,
                    source: str = "gfs") -> str | None:
     """The live ``.idx`` behind one GFS/GDAS cycle, or None.
@@ -3269,7 +3624,12 @@ def gfs_live_index(cycle: datetime, *, progress=print, opener=None,
     whose own record count is checked anyway.
     """
 
-    url = f"{gfs_object_url(cycle, 0, source)}.idx"
+    try:
+        url = f"{gfs_object_url(cycle, 0, source)}.idx"
+    except ValueError as error:
+        progress(f"fetch {source}: no index layout for this cycle ({error}); "
+                 "the declared pressure ladder stands in; Rust validates the fields")
+        return None
     request = Request(url, headers={"User-Agent": _USER_AGENT})
     try:
         with (opener or paced_urlopen)(request, timeout=120) as response:
@@ -3307,6 +3667,59 @@ def gfs_available_levels(cycle: datetime, *, progress=print, opener=None,
                  f"{', '.join(transport.PRESSURE_FIELDS)}; the certified "
                  "ladder stands in")
     return transport.CERTIFIED_AVAILABLE_LEVELS_HPA
+
+
+#: The GRIB2 (discipline, category, number) of each 3-D field the selection
+#: takes on every isobaric level (``PRESSURE_FIELDS``; GDAS carries SPFH
+#: where GFS carries RH).
+_GFS_PRESSURE_PARAMETERS = {
+    "HGT": (0, 3, 5), "TMP": (0, 0, 0), "RH": (0, 1, 1), "SPFH": (0, 1, 0),
+    "UGRD": (0, 2, 2), "VGRD": (0, 2, 3),
+}
+
+
+def gfs_object_levels(path: Path, *, source: str = "gfs") -> tuple[float, ...]:
+    """The isobaric levels (hPa) one downloaded GFS/GDAS object carries for
+    every 3-D field, read from the object by the engine's Rust GRIB2
+    inventory; ``()`` when the inventory cannot be run or names none.
+
+    The object is the authority when its live ``.idx`` cannot be read: an
+    archive copy with no index (NCAR GDEX d084001) of a cycle from before
+    the 2021-03-22 12Z GFS v16 implementation carries 1-70 hPa as 1, 2, 3,
+    5, 7, 10, 20, 30, 50, 70, not v16's 15 and 40 hPa, so the certified
+    v16 ladder declared levels the file does not hold and the bridge
+    refused it ("missing required GFS field RH at 4000 Pa").
+    """
+
+    from woof.bridges import find_bridge
+    from woof.mapped_source import _grib2_inventory
+    from tools import download_gfs_native_subset as transport
+
+    executable = find_bridge("grib2_inventory")
+    if executable is None:
+        return ()
+    try:
+        rows = _grib2_inventory(Path(path), executable)
+    except (ValueError, RuntimeError, OSError):
+        return ()
+    names = tuple("SPFH" if source == "gdas" and name == "RH" else name
+                  for name in transport.PRESSURE_FIELDS)
+    per_field: dict[str, set[float]] = {name: set() for name in names}
+    for row in rows:
+        try:
+            if int(row["level_type"]) != 100:
+                continue
+            key = (int(row["discipline"]), int(row["category"]),
+                   int(row["parameter"]))
+            level = float(format(float(row["level_value"]) / 100.0, "g"))
+        except (KeyError, ValueError):
+            continue
+        for name in names:
+            if _GFS_PRESSURE_PARAMETERS[name] == key:
+                per_field[name].add(level)
+    if not all(per_field.values()):
+        return ()
+    return tuple(sorted(set.intersection(*per_field.values())))
 
 
 def gfs_derived_record_bar(cycle: datetime, *, progress=print,
@@ -3387,7 +3800,8 @@ def _ladder_flags(top_pressure_pa, all_levels) -> list[str]:
 
 
 def _existing_crop_refusal(name: str, observed: int, expected: int,
-                           levels: tuple[float, ...]) -> str:
+                           levels: tuple[float, ...],
+                           source: str = "gfs") -> str:
     """Why a crop already in the folder cannot serve this request.
 
     A file whose record count is exactly another ladder's was fetched
@@ -3401,9 +3815,10 @@ def _existing_crop_refusal(name: str, observed: int, expected: int,
 
     words = (f"existing {name} carries {observed} GRIB2 messages, "
              f"expected {expected}")
-    held = next((count for count in range(
-        1, len(transport.CERTIFIED_AVAILABLE_LEVELS_HPA) + 1)
-        if transport.record_count_for_levels(count) == observed), None)
+    ladder = transport.CERTIFIED_AVAILABLE_LEVELS_HPA
+    held = next((count for count in range(1, len(ladder) + 1)
+                 if container_record_count(source, ladder[-count:]) == observed),
+                None)
     if held is None or held == len(levels):
         return words + "; move it aside and re-fetch"
     return (words + f": this request takes {len(levels)} isobaric levels "
@@ -3412,21 +3827,47 @@ def _existing_crop_refusal(name: str, observed: int, expected: int,
             "or move it aside and re-fetch")
 
 
+def container_record_count(source: str, levels: tuple[float, ...]) -> int:
+    """Records one grib-filter crop of ``source`` carries on ``levels``.
+
+    The certified record bar the fetch holds every file to.  The declared
+    selection gives five records per isobaric level plus its single-level
+    records (``record_count_for_levels``).  A variable the crop asks for
+    because the source's packaged mapping binds it adds one record per
+    level the mapping says the publisher writes it on that the request
+    asks for: GDAS's five hydrometeors are written on 22 levels
+    (``published_levels``: 50..1000 hPa, no 70 hPa), 110 records on its
+    whole 41-level ladder, 334 in all.
+    """
+
+    from tools import download_gfs_native_subset as transport
+
+    declared = {name for name, _level in fetch_bars.nomads_selector_pairs(
+        transport.declared_variables(source), ("lev_surface",), ())}
+    mapped = {name: published for name, published
+              in (mapped_record_levels(source) or {}).items()
+              if name not in declared}
+    asked = fetch_bars.nomads_selector_pairs(
+        tuple(fetch_bars.filter_variable(name) for name in mapped),
+        transport.NOMADS_LEVELS, tuple(levels))
+    return transport.record_count_for_levels(len(levels)) + sum(
+        (name, level) in asked
+        for name, published in mapped.items() for level in published)
+
+
 def container_subset_record_count(source: str, *,
                                   top_pressure_pa: float | None = None,
                                   all_levels: bool = False) -> int:
     """Records one grib-filter file of ``source`` carries for this request.
 
-    Five per isobaric level of :func:`container_subset_levels` plus the
-    single-level records, which is the certified record bar the fetch
-    holds every file to.  Read against the captured inventory, so it
-    answers before any index is read (the download price asks it).
+    :func:`container_record_count` on the ladder of
+    :func:`container_subset_levels`.  Read against the captured
+    inventory, so it answers before any index is read (the download
+    price asks it).
     """
 
-    from tools import download_gfs_native_subset as transport
-
-    return transport.record_count_for_levels(len(container_subset_levels(
-        source, top_pressure_pa=top_pressure_pa, all_levels=all_levels)))
+    return container_record_count(source, container_subset_levels(
+        source, top_pressure_pa=top_pressure_pa, all_levels=all_levels))
 
 
 def fetch_gfs(*, cycle: datetime, hours: tuple[int, ...], area: Area,
@@ -3458,7 +3899,7 @@ def fetch_gfs(*, cycle: datetime, hours: tuple[int, ...], area: Area,
     See :func:`_fetch_gfs_locked` for the transfer itself.
     """
 
-    with fetch_guard.hold("fetch-out", out, progress=progress):
+    with _fetch_out(out, progress=progress):
         return _fetch_gfs_locked(
             cycle=cycle, hours=hours, area=area,
             out=deep_io_path(out, DOWNLOAD_DEPTH_BUDGET), progress=progress,
@@ -3521,6 +3962,26 @@ def _fetch_gfs_locked(*, cycle: datetime, hours: tuple[int, ...], area: Area,
         # files would otherwise pass every per-file bar here.
         require_matching_request(out, source=source, cycle=cycle, area=area,
                                  mode="nomads-cgi-subset")
+    if source == "gdas" and not force and any(out.glob("gdas.*.subset.grib2")):
+        # Before the receipt answers the record bar: a folder cut to
+        # another variable selection is refused for that, not as an
+        # upstream inventory change.
+        previous_path = out / FETCH_MANIFEST_NAME
+        previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.is_file() else {}
+        wanted = list(transport.nomads_variables(source))
+        recorded = previous.get("requested_variables")
+        if recorded != wanted:
+            missing = [name.removeprefix("var_") for name in wanted
+                       if name not in (recorded or ())]
+            raise ValueError(
+                f"{out}: these GDAS crops were fetched "
+                + (f"without {', '.join(missing)}"
+                   if recorded is not None and missing
+                   else "with another variable selection")
+                + ", and the packaged GDAS mapping reads every variable "
+                "this request asks for.  Fetch into a new folder, or pass "
+                "--force-refetch to move the old files aside and fetch "
+                "them again.")
     out.mkdir(parents=True, exist_ok=True)
     # A folder that already holds this whole request answers both index
     # questions from the receipt its files were admitted under.
@@ -3569,18 +4030,12 @@ def _fetch_gfs_locked(*, cycle: datetime, hours: tuple[int, ...], area: Area,
     bar = resolve_bar("gfs", derived,
                       accept_inventory_change=accept_inventory_change,
                       progress=progress,
-                      certified=transport.record_count_for_levels(
-                          len(levels)))
+                      certified=container_record_count(source, levels))
     if force:
         # Receipts first, then every other existing file: an interrupted
         # force must never leave a manifest behind that still claims a
         # payload it has already replaced.
         _force_quarantine_output(out, progress, source)
-    if source == "gdas" and not force and any(out.glob("gdas.*.subset.grib2")):
-        previous_path = out / FETCH_MANIFEST_NAME
-        previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.is_file() else {}
-        if previous.get("requested_variables") != list(transport.nomads_variables(source)):
-            raise ValueError("This GDAS cache predates the native specific-humidity selection. Use a new output directory or --force-refetch to preserve it and acquire the required fields.")
     prior_digests = _prior_manifest_digests(out)
     box = area.as_nomads()
     longitude_amplification = area.nomads_longitude_amplification
@@ -3605,6 +4060,11 @@ def _fetch_gfs_locked(*, cycle: datetime, hours: tuple[int, ...], area: Area,
     pool_summary: dict = {}
 
     def publish_manifest() -> Path:
+        # Another preparation may already be reading this completed series.
+        # A cached recheck must not replace it with its first verified hour.
+        # Fresh/interrupted downloads still publish each resumable prefix.
+        if receipt is not None and len(files) < len(hours):
+            return out / FETCH_MANIFEST_NAME
         # Relative names: gfs_grib2_bridge resolves them against the
         # TSV's own directory, so the fetched directory stays relocatable.
         series = out / f"{prefix}-series.tsv"
@@ -3711,7 +4171,7 @@ def _fetch_gfs_locked(*, cycle: datetime, hours: tuple[int, ...], area: Area,
             observed = count_grib2_messages(path)
             if observed != bar.expected:
                 raise ValueError(_existing_crop_refusal(
-                    name, observed, bar.expected, levels))
+                    name, observed, bar.expected, levels, source))
             digest = existing_file_digest(path)
             recorded = prior_digests.get(name)
             if recorded is not None and digest != recorded:
@@ -3838,6 +4298,19 @@ def _gfs_index_record_count(index_url: str, *, progress, label: str
     index cannot vouch for an object.
     """
 
+    return _gfs_index_census(index_url, progress=progress, label=label)[0]
+
+
+def _gfs_index_census(index_url: str, *, progress, label: str,
+                      selection: dict | None = None
+                      ) -> tuple[int | None, int | None]:
+    """``(messages in the whole object, messages the selection keeps)``.
+
+    Read from one copy of the live ``.idx``, so the two counts describe
+    the same object.  The second is ``None`` without a ``selection``;
+    both are ``None`` when the index cannot be read.
+    """
+
     request = Request(index_url, headers={"User-Agent": _USER_AGENT})
     try:
         with paced_urlopen(request, timeout=120) as response:
@@ -3846,9 +4319,18 @@ def _gfs_index_record_count(index_url: str, *, progress, label: str
         progress(f"fetch {label}: could not read {index_url} ({error}); "
                  "the GRIB2 envelope walk and the fail-closed bridge "
                  "remain the completeness gates")
-        return None
+        return None, None
     count = sum(1 for line in text.splitlines() if line.strip())
-    return count or None
+    if not count:
+        return None, None
+    if selection is None:
+        return count, None
+    from woof.record_index import count_ncep
+
+    try:
+        return count, count_ncep(text.encode("utf-8"), selection["select"])
+    except ValueError:
+        return count, None
 
 
 def _rw_fetch_gfs_fullfile(*, binary: Path, cycle: datetime, hour: int,
@@ -3869,10 +4351,11 @@ def _rw_fetch_gfs_fullfile(*, binary: Path, cycle: datetime, hour: int,
 
     from woof import rustwx_fetch
 
+    endpoint = fetch_endpoints.endpoint_named(source, transport)
     record = rustwx_fetch.run_fetch(
         binary, model=source, date=f"{cycle:%Y%m%d}", cycle=cycle.hour,
-        hours=(hour,), product=RW_FETCH_GFS_PRODUCT,
-        source=RW_FETCH_SOURCES[transport],
+        hours=(hour,), product=endpoint.product,
+        source=endpoint.rust_source,
         mode="full-file", out=out, cache_dir=cache_dir, streams=streams,
         on_progress=None if byte_relay is None else byte_relay())
     if len(record["files"]) != 1:
@@ -3880,11 +4363,25 @@ def _rw_fetch_gfs_fullfile(*, binary: Path, cycle: datetime, hour: int,
             f"rw_fetch returned {len(record['files'])} files for one "
             "forecast hour")
     entry = record["files"][0]
+    canonical = f"{GFS_CONTAINER_PREFIX[source]}.t{cycle:%H}z.pgrb2.0p25.f{hour:03d}"
+    if entry["name"] != canonical:
+        _rename_stream_payload(out / entry["name"], out / canonical, entry)
+        entry = {**entry, "name": canonical, "path": str(out / canonical),
+                 "publication": _publication(_stat_identity(out / canonical))}
+    else:
+        _remember_stream_facts(out / entry["name"], entry)
     progress(f"fetch {source} f{hour:03d}: {entry['name']} "
              f"{entry['bytes']:,} B in {entry['wall_seconds']:.1f} s "
              f"({entry['source']}, {entry['mode']} -- "
              f"{entry['mode_reason']})")
     return entry
+
+
+#: What a selected-record file's receipt entry carries beside the common
+#: fields: the index it was selected by and the object it was cut from.
+_RECORD_FILE_KEYS = ("selected_records", "index_url", "index_sha256",
+                     "index_format", "object_bytes", "object_etag",
+                     "requests")
 
 
 def fetch_gfs_fullfile(*, cycle: datetime, hours: tuple[int, ...],
@@ -3897,8 +4394,9 @@ def fetch_gfs_fullfile(*, cycle: datetime, hours: tuple[int, ...],
                        all_levels: bool = False,
                        file_workers: int | None = None,
                        transport: str | None = None,
-                       available_levels=gfs_available_levels) -> Path:
-    """Download whole ``pgrb2.0p25`` objects along the endpoint ladder.
+                       available_levels=gfs_available_levels,
+                       records: bool = False) -> Path:
+    """Download ``pgrb2.0p25`` objects along the endpoint ladder.
 
     The full-file transport for the GFS container sources, holding the
     same output-root lock discipline as :func:`fetch_gfs`.  The raw
@@ -3910,10 +4408,17 @@ def fetch_gfs_fullfile(*, cycle: datetime, hours: tuple[int, ...],
     request property: the manifest records it and the front door
     declares it to the bridge, so a whole-globe object never drags the
     mesosphere into a tornado-scale decode.
+
+    ``records`` (``--mode idx-subset``, :data:`GFS_RECORDS_MODE`) takes
+    only the records the grib-filter crop asks for from each object, by
+    the byte ranges its ``.idx`` lists (:func:`gfs_record_selection`),
+    instead of the whole object.  The records are copied unchanged, so
+    the decode reads the same bytes either way.  An object whose host
+    keeps no index is moved whole, and the log says so.
     """
 
     transport = fetch_endpoints.policy_transport(source, transport)
-    with fetch_guard.hold("fetch-out", out, progress=progress):
+    with _fetch_out(out, progress=progress):
         return _fetch_gfs_fullfile_locked(
             cycle=cycle, hours=hours, area=area,
             out=deep_io_path(out, DOWNLOAD_DEPTH_BUDGET), progress=progress,
@@ -3924,7 +4429,7 @@ def fetch_gfs_fullfile(*, cycle: datetime, hours: tuple[int, ...],
             # ``auto`` is the unpinned default written out, here as on
             # every check that asks a host before the transfer.
             pinned_host=pinned_host(transport),
-            available_levels=available_levels)
+            available_levels=available_levels, records=records)
 
 
 def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
@@ -3937,9 +4442,10 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
                                all_levels: bool,
                                file_workers: int | None = None,
                                pinned_host: str | None = None,
-                               available_levels=gfs_available_levels
+                               available_levels=gfs_available_levels,
+                               records: bool = False
                                ) -> Path:
-    """The whole-object transfer, with the output-root lock held.
+    """The whole-object (or selected-record) transfer, lock held.
 
     Per object, three independent bars before the manifest admits it:
     the GRIB2 envelope walk (every message declares edition 2 and its
@@ -3965,12 +4471,16 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
             "--all-levels takes every level the product carries; they "
             "are two answers to the same question, so pass one")
     prefix = GFS_CONTAINER_PREFIX[source]
+    # The request's byte transport: its identity in the receipt, so a
+    # folder of whole objects and a folder of selected records are never
+    # resumed onto each other.
+    mode = GFS_RECORDS_MODE if records else "full-file"
     if not force:
         # Inside the output lock, before any provider is asked: a file
         # name carries the cycle hour but not the date, so another day's
         # files would otherwise pass every per-file bar here.
         require_matching_request(out, source=source, cycle=cycle, area=area,
-                                 mode="full-file")
+                                 mode=mode)
     out.mkdir(parents=True, exist_ok=True)
     # The ladder is a DECODE declaration here, not a transfer selection:
     # the whole object carries every published level either way.  It is
@@ -3978,14 +4488,19 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
     # manifest, and handed to the bridge by the front door.  A folder
     # that already holds this whole request resolves it against the
     # published ladder its receipt recorded, and reads no index.
-    available = _recorded_published_levels(_complete_request_receipt(
+    receipt = _complete_request_receipt(
         out, force=force, source=source, cycle=cycle, area=area,
-        hours=hours, mode="full-file"))
+        hours=hours, mode=mode)
+    available = _recorded_published_levels(receipt)
+    # True while the ladder is the certified stand-in (no live index): the
+    # first downloaded object then names what it really carries.
+    ladder_from_object = False
     if available is None:
         index_text = gfs_live_index(cycle, progress=progress,
                                     source=source)
         available = available_levels(cycle, progress=progress,
                                      source=source, index_text=index_text)
+        ladder_from_object = index_text is None
     if all_levels:
         levels = tuple(float(level) for level in available)
         progress(f"fetch {source}: --all-levels declares the whole "
@@ -4004,14 +4519,62 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
                    "ladder)" if extra else " (the certified ladder "
                    "already reaches it)"))
     source_top_pa = min(levels) * 100.0
+    # The records this request takes, selected against the decode ladder
+    # just resolved.  Without a live index the ladder is the certified
+    # stand-in until the first object names what it carries, and a
+    # selection made against a stand-in could leave out a level the
+    # object really publishes, so those objects move whole.
+    selection = None
+    if records and ladder_from_object:
+        progress(f"fetch {source}: no live index to select records by; "
+                 "moving the whole pgrb2.0p25 objects instead")
+    elif records:
+        # The grib-filter's own ladder, which is not always the decode
+        # ladder declared below: GDAS takes every published level (its
+        # mapped preparation reads air temperature up to 1 hPa), so a
+        # selection cut to the declared ladder was refused at prepare
+        # ("air_temperature vertical coverage mismatch",
+        # 2026-10-29).  The crop route and this one take the same records.
+        selection = gfs_record_selection(source, container_subset_levels(
+            source, top_pressure_pa=top_pressure_pa, all_levels=all_levels,
+            available=tuple(float(level) for level in available)))
+        if selection is None:
+            progress(f"fetch {source}: its packaged mapping binds a record "
+                     "no index name here covers; moving the whole "
+                     "pgrb2.0p25 objects instead")
+    records_role = f"{source}-records"
+    whole_role = f"{source}-full-file"
+    #: Which role each file moved as, for the interrupt path's receipt.
+    file_roles: dict[str, str] = {}
     if force:
         _force_quarantine_output(out, progress, source)
     prior_digests = _prior_manifest_digests(out)
     prior_entries = _prior_manifest_entries(out)
     files: list[dict] = []
     pool_summary: dict = {}
+    file_ladder_receipt = None
 
     def publish_manifest() -> Path:
+        nonlocal available, levels, source_top_pa, ladder_from_object
+        # Keep a completed shared series stable while a second member checks
+        # cached files. Only a fresh/interrupted fetch needs prefix receipts.
+        if receipt is not None and len(files) < len(hours):
+            return out / FETCH_MANIFEST_NAME
+        if ladder_from_object and files:
+            first = min(files, key=lambda item: int(item["forecast_hour"]))
+            carried = gfs_object_levels(out / first["name"], source=source)
+            if carried:
+                ladder_from_object = False
+                if tuple(carried) != tuple(available):
+                    progress(f"fetch {source}: no live index; {first['name']} "
+                             f"carries {len(carried)} isobaric levels "
+                             f"({min(carried):g}..{max(carried):g} hPa), and the "
+                             "decode ladder is resolved against them")
+                available = carried
+                levels = (tuple(float(level) for level in available) if all_levels
+                          else transport.levels_for_top(top_pressure_pa,
+                                                        available=available))
+                source_top_pa = min(levels) * 100.0
         # Relative names: gfs_grib2_bridge resolves them against the
         # TSV's own directory, so the fetched directory stays relocatable.
         series = out / f"{prefix}-series.tsv"
@@ -4031,16 +4594,25 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
             hours=tuple(int(item["forecast_hour"]) for item in files),
             area=area, files=entries)
         payload["notes"] = (
-            "whole pgrb2.0p25 objects (north-to-south DRT 5.3 grids, "
-            "certified in gfs_grib2_bridge with its scan-order flip and "
-            "the SOILW missing-value matched pair); no area crop is "
-            "involved.  Both endpoints publish the same key with the "
-            "same bytes, so per-file endpoints may differ across a "
-            "fall-through without weakening any digest bar")
+            ("The records the grib-filter selection names, copied unchanged "
+             "from the archive GRIB2 objects by the byte ranges of their "
+             ".idx (an object whose host keeps no index is whole); no area "
+             "crop. "
+             if records else "Whole archive GRIB2 objects; no area crop. ")
+            + "The endpoint layout "
+            "declares the product resolution. Rust verifies the GRIB envelope "
+            "and the ingest bridge validates the grid and required fields.")
+        if selection is not None:
+            payload["record_selection"] = dict(selection)
+        payload["archive_products"] = {
+            name: {"product": fetch_endpoints.endpoint_named(source, name).product,
+                   "layouts": list(fetch_endpoints.endpoint_named(source, name).layouts)}
+            for name in sorted({str(item["endpoint"]) for item in files
+                                if item.get("endpoint")})}
         payload["engine"] = engine
         payload["engine_selection"] = _engine_selection(
             engine, engine_selection)
-        payload["mode"] = "full-file"
+        payload["mode"] = mode
         # WHERE THE BYTES CAME FROM, per file and in summary.  This was
         # the constant "s3" and is now what actually served: a receipt
         # that names one host while the ladder fell through to another
@@ -4076,6 +4648,8 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
         payload["source_top_pressure_pa"] = source_top_pa
         payload["published_pressure_levels_hpa"] = [
             float(format(float(level), "g")) for level in available]
+        if file_ladder_receipt is not None:
+            payload["pressure_ladder_basis"] = file_ladder_receipt
         if pool_summary:
             # The completed run's concurrency receipt; absent from
             # interrupted manifests, which measured no complete run.
@@ -4089,7 +4663,7 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
             "--cycle", cycle.strftime("%Y-%m-%dT%H"),
             "--hours", str(hours[-1] - hours[0]),
             "--cadence", str(cadence),
-            "--mode", "full-file", "--out", str(out),
+            "--mode", mode, "--out", str(out),
         ]
         if area is not None:
             command.extend(("--area", ",".join(
@@ -4146,6 +4720,10 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
         # seconds would under-report the wall a caller waited.
         file_started = time.perf_counter()
         downloaded = not path.exists()
+        role = whole_role
+        # What a selected-record file's receipt carries beside the
+        # common fields: its index, the object it was cut from.
+        extra: dict = {}
         if path.exists():
             digest = existing_file_digest(path)
             recorded = prior_digests.get(name)
@@ -4162,16 +4740,29 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
                     url = prior["url"]
                 endpoint_name = prior.get("endpoint")
                 census = "its receipt recorded"
+                if prior.get("role") == records_role:
+                    role = records_role
+                    extra = {field: prior[field] for field in _RECORD_FILE_KEYS
+                             if field in prior}
+                observed = count_grib2_messages(path)
             else:
-                idx_records = _gfs_index_record_count(
+                whole, kept = ((_gfs_index_census(
                     url + ".idx", progress=progress,
-                    label=f"{source} f{hour:03d}")
+                    label=f"{source} f{hour:03d}", selection=selection))
+                    if rungs[0].idx_available else (None, None))
                 # Nothing records which host served a file the receipt
                 # never admitted, and naming the ladder head would be a
                 # claim.
                 endpoint_name = None
                 census = "the live index lists"
-            observed = count_grib2_messages(path)
+                observed = count_grib2_messages(path)
+                # A file left by an interrupted selected-record fetch
+                # carries the selection's census; one this request moved
+                # whole (its host kept no index) carries the object's.
+                if kept is not None and observed == kept:
+                    role, idx_records = records_role, kept
+                else:
+                    idx_records = whole
             if idx_records is not None and observed != idx_records:
                 raise ValueError(
                     f"existing {name} carries {observed} GRIB2 "
@@ -4180,12 +4771,17 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
             progress(f"fetch {source} f{hour:03d}: {name} exists, "
                      f"{path.stat().st_size:,} B verified -- skipped")
         else:
-            idx_records = _gfs_index_record_count(
+            # A selected-record transfer reads its index itself and holds
+            # the file to it; a whole object is held to the index's
+            # message count, read here.
+            idx_records = (_gfs_index_record_count(
                 url + ".idx", progress=progress,
                 label=f"{source} f{hour:03d}")
+                if rungs[0].idx_available and selection is None else None)
             started = time.perf_counter()
+            taken: dict = {}
 
-            def move(endpoint: fetch_endpoints.Endpoint) -> None:
+            def move_whole(endpoint: fetch_endpoints.Endpoint) -> None:
                 if engine == "rust":
                     entry = _rw_fetch_gfs_fullfile(
                         binary=engine_bin, cycle=cycle, hour=hour,
@@ -4203,48 +4799,105 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
                 else:
                     transport._download(endpoint.url(key), path)
 
+            def move(endpoint: fetch_endpoints.Endpoint) -> None:
+                taken.clear()
+                if selection is not None:
+                    from woof.record_index import IndexAbsent, download_records
+
+                    if endpoint.idx_available:
+                        try:
+                            taken.update(download_records(
+                                endpoint.url(key), endpoint.url(key) + ".idx",
+                                path, declaration=selection,
+                                streams=max(1, int(streams or 1))))
+                            return
+                        except IndexAbsent as error:
+                            progress(f"fetch {source} f{hour:03d}: "
+                                     f"{endpoint.name} keeps no index beside "
+                                     f"{name} ({error}); moving the whole "
+                                     "object instead")
+                    else:
+                        progress(f"fetch {source} f{hour:03d}: "
+                                 f"{endpoint.name} publishes no index for "
+                                 f"{name}; moving the whole object instead")
+                move_whole(endpoint)
+
             try:
                 # The tree's one shared retry: a transfer the network cut
                 # off is asked again 2, 4, 8 and 16 s later.  The Python
                 # transport retries inside itself on the same shared
                 # classification and attempt budget, so it gets one
-                # round here rather than five rounds of five.
+                # round here rather than five rounds of five.  A
+                # selected-record transfer does not retry inside itself.
                 chosen, _ = fetch_endpoints.ask_along_ladder(
                     rungs, move, label=f"fetch {source} f{hour:03d}",
                     name=name, progress=progress,
                     discard=lambda _endpoint: path.with_name(
                         path.name + ".part").unlink(missing_ok=True),
                     attempts=(fetch_endpoints.TRANSIENT_ATTEMPTS
-                              if engine == "rust" else 1))
+                              if engine == "rust" or selection is not None
+                              else 1))
             except fetch_endpoints.TransferRefusal as error:
                 raise RuntimeError(str(error)) from None
             endpoint_name = chosen.name
             url = chosen.url(key)
-            observed = count_grib2_messages(path)
-            if idx_records is not None and observed != idx_records:
-                _quarantine_rejected(path, progress,
-                                     f"{source} full-file")
-                raise ValueError(
-                    f"downloaded {name} carries {observed} GRIB2 "
-                    f"messages where its live .idx lists "
-                    f"{idx_records}; the file has been moved aside, "
-                    "nothing was deleted")
-            digest = sha256_file(path)
-            if engine != "rust":
+            if taken:
+                # download_records refused anything but whole messages,
+                # one per selected record, from one object version.
+                role = records_role
+                idx_records = int(taken["selected_records"])
+                observed = count_grib2_messages(path)
+                digest = str(taken["sha256"])
+                extra = {field: taken[field] for field in _RECORD_FILE_KEYS
+                         if field in taken}
                 progress(f"fetch {source} f{hour:03d}: {name} "
-                         f"{path.stat().st_size:,} B in "
+                         f"{idx_records} records, {path.stat().st_size:,} of "
+                         f"{int(taken.get('object_bytes') or 0):,} B in "
                          f"{time.perf_counter() - started:.1f} s "
-                         f"({endpoint_name}, full-file)")
+                         f"({endpoint_name}, {GFS_RECORDS_MODE})")
+            else:
+                observed = _fetched_records(path)
+                if idx_records is not None and observed != idx_records:
+                    _quarantine_rejected(path, progress,
+                                         f"{source} full-file")
+                    raise ValueError(
+                        f"downloaded {name} carries {observed} GRIB2 "
+                        f"messages where its live .idx lists "
+                        f"{idx_records}; the file has been moved aside, "
+                        "nothing was deleted")
+                digest = _fetched_digest(path)
+                if engine != "rust":
+                    progress(f"fetch {source} f{hour:03d}: {name} "
+                             f"{path.stat().st_size:,} B in "
+                             f"{time.perf_counter() - started:.1f} s "
+                             f"({endpoint_name}, full-file)")
+        file_roles[name] = role
         return {
-            "name": name, "role": f"{source}-full-file",
+            "name": name, "role": role,
             "forecast_hour": hour, "bytes": path.stat().st_size,
             "seconds": round(time.perf_counter() - file_started, 6),
             "downloaded": downloaded,
             "sha256": digest, "url": url, "endpoint": endpoint_name,
             "grib2_messages": observed, "idx_records": idx_records,
+            **extra,
         }
 
     def admit(index: int, entry: dict) -> Path:
+        nonlocal available, levels, source_top_pa, file_ladder_receipt, receipt
+        if index == 0 and entry.get("idx_records") is None and (
+                top_pressure_pa is not None or all_levels):
+            available, file_ladder_receipt = _gfs_file_levels(out / entry["name"], source)
+            file_ladder_receipt["file_sha256"] = entry["sha256"]
+            levels = (available if all_levels else
+                      transport.levels_for_top(top_pressure_pa, available=available))
+            source_top_pa = min(levels) * 100.0
+            if receipt is not None and tuple(receipt.get(
+                    "pressure_levels_hpa", ())) != tuple(levels):
+                # A corrected declaration must reach as-posted consumers
+                # before they start decoding the first admitted lead.
+                receipt = None
+            progress(f"fetch {source}: archived file inventory declares {len(levels)} "
+                     f"complete pressure levels, source top {source_top_pa:g} Pa")
         files.append(entry)
         return publish_manifest()
 
@@ -4291,6 +4944,12 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
             path = out / name
             if not path.is_file():
                 break
+            # The role the transfer recorded; a file whose transfer never
+            # said how it moved could be either, so the prefix ends there.
+            role = file_roles.get(name, None if selection is not None
+                                  else whole_role)
+            if role is None:
+                break
             try:
                 observed = count_grib2_messages(path)
                 digest = sha256_file(path)
@@ -4300,7 +4959,7 @@ def _fetch_gfs_fullfile_locked(*, cycle: datetime, hours: tuple[int, ...],
             if recorded is not None and digest != recorded:
                 break
             files.append({
-                "name": name, "role": f"{source}-full-file",
+                "name": name, "role": role,
                 "forecast_hour": hour,
                 "bytes": path.stat().st_size,
                 "sha256": digest,
@@ -4482,6 +5141,24 @@ def author_gfs_front_door_manifest(
     ``--source-manifest``/``--source-manifest-sha256`` wants verbatim.
     """
 
+    # Fetches atomically publish a resumable prefix after each lead, under
+    # this same lock. A second member can be rechecking the shared download
+    # when the first reaches this stage. Wait for its complete publication,
+    # and keep the inventory, series and hashes in one locked transaction.
+    with _fetch_out(out, progress=progress):
+        return _author_gfs_front_door_manifest_locked(
+            out=out, bridge=bridge, wps_namelist=wps_namelist,
+            experiment_config=experiment_config, static_input=static_input,
+            static_receipt=static_receipt, manifest_out=manifest_out,
+            source=source, forecast_start_hour=forecast_start_hour,
+            progress=progress)
+
+
+def _author_gfs_front_door_manifest_locked(
+        *, out, bridge, wps_namelist, experiment_config, static_input,
+        static_receipt, manifest_out, source, forecast_start_hour, progress):
+    """Author the front-door manifest with the download lock held."""
+
     if source not in GFS_CONTAINER_SOURCES:
         raise ValueError(
             f"the GFS front door serves {GFS_CONTAINER_SOURCES}, not "
@@ -4521,7 +5198,8 @@ def author_gfs_front_door_manifest(
     # Either transport's payload rows: the NOMADS CGI crop and the
     # whole-object S3 route feed the same front door and the same
     # bridge, which selects by exact field identity either way.
-    payload_roles = {f"{source}-subset", f"{source}-full-file"}
+    payload_roles = {f"{source}-subset", f"{source}-full-file",
+                     f"{source}-records"}
     subset_names = {
         item.get("forecast_hour"): item.get("name")
         for item in prior.get("files", ())
@@ -4608,7 +5286,7 @@ def author_gfs_front_door_manifest(
         "schema": GFS_FRONT_DOOR_MANIFEST_SCHEMA,
         "source": identity,
         "files": {
-            role: {"name": path.name, "sha256": sha256_file(path)}
+            role: {"name": path.name, "sha256": _fetched_digest(path)}
             for role, path in roles.items()
         },
     }
@@ -4812,6 +5490,54 @@ def _prior_manifest_bars(out: Path) -> dict[str, object]:
         return bars
     except (ValueError, TypeError, AttributeError, KeyError):
         return {}
+
+
+#: The byte modes an HRRR file can land in; ``auto`` only chooses
+#: between them, per file.
+HRRR_LANDED_MODES = ("full-file", "idx-subset")
+
+
+def _hrrr_landed_mode(entry: dict | None, records: int | None,
+                      subset_ceiling: int) -> str | None:
+    """Is a kept HRRR file a whole object or an ``.idx`` record subset?
+
+    A receipt says so per file (``mode``).  One written before that key
+    existed is read by its census: a subset carries at most the
+    selection's records, a whole ``wrfnat`` or ``wrfprs`` hundreds more.
+    ``None`` when there is nothing to read it from.
+    """
+
+    recorded = (entry or {}).get("mode")
+    if recorded in HRRR_LANDED_MODES:
+        return recorded
+    if isinstance(records, bool) or not isinstance(records, int):
+        return None
+    return "full-file" if records > subset_ceiling else "idx-subset"
+
+
+def _hrrr_receipt_has_old_subsets(prior: dict, entries) -> bool:
+    """Does a receipt claim an atmosphere subset that predates the optional records?
+
+    A subset fetched before it took PBLH/LCDC/MCDC/HCDC
+    (``OPTIONAL_SURFACE_FIELDS``) carries no ``optional_surface`` key.
+    Next to a whole file or a current subset its hour selects a different
+    record set, which hrrr_grib2_bridge refuses, so the fetch sets it
+    aside and takes it again.  Whole files and current subsets mix
+    freely: they carry the same records for the bridge.
+    """
+
+    from tools import download_hrrr_native_subset as range_transport
+
+    ceiling = (range_transport.atmosphere_record_count(
+        analyzed_aerosol=True,
+        extras=tuple(prior.get("native_extras") or ()))
+        + len(range_transport.OPTIONAL_SURFACE_FIELDS))
+    return any(
+        entry.get("role") == "atmosphere"
+        and _hrrr_landed_mode(entry, entry.get("records"), ceiling)
+        == "idx-subset"
+        and "optional_surface" not in entry
+        for entry in entries)
 
 
 def _existing_hrrr_digest(dest: Path, *, expected_count: int,
@@ -5039,7 +5765,8 @@ def _rw_fetch_hrrr(*, binary: Path, cycle: datetime, hour: int, kind: str,
                    host: str, mode: str, out: Path,
                    cache_dir: Path | None, progress,
                    retries: int = 0, shown_name: str | None = None,
-                   streams: int | None = None, byte_relay=None) -> dict:
+                   streams: int | None = None, byte_relay=None,
+                   analyzed_aerosol: bool = False, extras=()) -> dict:
     """One HRRR product through the Rust backbone; returns its record.
 
     The backbone names each object after the URL it came from, so the
@@ -5067,8 +5794,17 @@ def _rw_fetch_hrrr(*, binary: Path, cycle: datetime, hour: int, kind: str,
     from tools import download_hrrr_native_subset as range_transport
     from woof import rustwx_fetch
 
-    selectors = (range_transport.atmosphere_selectors() if kind == "atmosphere"
-                 else range_transport.soil_selectors())
+    selectors = (range_transport.atmosphere_selectors(
+                     extras, analyzed_aerosol=analyzed_aerosol)
+                 if kind == "atmosphere" else range_transport.soil_selectors())
+    optional: tuple[tuple[str, str], ...] = ()
+    if kind == "atmosphere" and mode != "full-file":
+        # The backbone refuses a selector the index does not list, and
+        # these records are read only where published, so the index says
+        # which of them to ask for before the transfer is planned.
+        optional = _hrrr_optional_surface(
+            cycle=cycle, hour=hour, host=host, retries=retries)
+        selectors += range_transport.optional_surface_selectors(optional)
     patterns = out / f".rw-fetch-{kind}-f{hour:02d}.selectors"
     rustwx_fetch.write_pattern_file(patterns, selectors)
     attempt = 0
@@ -5128,11 +5864,71 @@ def _rw_fetch_hrrr(*, binary: Path, cycle: datetime, hour: int, kind: str,
     dedup = record.get("dedup")
     if isinstance(dedup, dict):
         entry["dedup"] = dedup
+    if entry.get("mode") == "idx-subset" and kind == "atmosphere":
+        entry["optional_surface"] = list(
+            range_transport.optional_surface_selectors(optional))
     progress(f"fetch hrrr f{hour:02d} {kind}: {shown_name or entry['name']} "
              f"{entry['bytes']:,} B in {entry['wall_seconds']:.1f} s "
              f"({entry['source']}, {entry['mode']} -- "
              f"{entry['mode_reason']})")
     return entry
+
+
+def _hrrr_host_byte_mode(mode: str, url: str) -> str:
+    """The byte mode ``mode`` means on the host serving ``url``.
+
+    ``auto`` takes the record subset from the archive, but the whole
+    object from a host the NOMADS governor paces: that host is held to
+    one request every 2.5 s node-wide (:mod:`woof.nomads_governor`), and
+    a wrfnat subset is about 108 coalesced ranges where the whole object
+    is about 45 chunks of 16 MiB, so there the request count, not the
+    bytes, sets the wall clock.  It serves a cycle only until the archive
+    holds it.  A named mode is taken as named.
+    """
+
+    from woof.nomads_governor import is_nomads_url
+
+    if mode == "auto" and is_nomads_url(url):
+        return "full-file"
+    return mode
+
+
+def _hrrr_optional_surface(*, cycle: datetime, hour: int, host: str,
+                           retries: int = 0) -> tuple[tuple[str, str], ...]:
+    """Which ``OPTIONAL_SURFACE_FIELDS`` this hour's wrfnat ``.idx`` lists.
+
+    One small GET (about 70 kB) through the NOMADS governor, before the
+    backbone plans its ranges.  An index the host does not have (403,
+    404, 410) lists nothing: under ``auto`` the backbone then takes the
+    whole object, under ``idx-subset`` it refuses, as it always did.  A
+    transient fault is asked again on the tree's shared schedule.
+    """
+
+    from tools import download_hrrr_native_subset as range_transport
+
+    url = hrrr_object_url(cycle, hour, "wrfnat", transport=host) + ".idx"
+    budget = min(retries, fetch_endpoints.TRANSIENT_ATTEMPTS - 1)
+    attempt = 0
+    while True:
+        try:
+            request = Request(url, headers={"User-Agent": "rw-wps-hrrr-range/1"})
+            with paced_urlopen(request, timeout=60) as response:
+                text = response.read().decode("ascii", "replace")
+            return range_transport.optional_surface_published(text)
+        except HTTPError as error:
+            if error.code in (403, 404, 410):
+                return ()
+            failure: BaseException = error
+        except (URLError, OSError) as error:
+            failure = error
+        wait = (fetch_endpoints.retry_delay(
+            failure, attempt + 1,
+            wait_limit_s=fetch_endpoints.TRANSIENT_WAIT_LIMIT_S)
+            if attempt < budget else None)
+        if wait is None:
+            raise failure
+        attempt += 1
+        fetch_pool.sleep_unless_stopped(wait, sleep=time.sleep)
 
 
 #: Cache-accounting keys the Rust backbone reports per transfer.
@@ -5203,7 +5999,9 @@ def count_selectors_in_index(index_text: str, selectors: tuple[str, ...],
     return matched
 
 
-def _hrrr_derived_bar(entry: dict, *, kind: str, out: Path) -> int | None:
+def _hrrr_derived_bar(entry: dict, *, kind: str, out: Path,
+                      analyzed_aerosol: bool = False,
+                      extras=()) -> int | None:
     """The live selection count behind one Rust HRRR transfer.
 
     In ``idx-subset`` mode the backbone selected the records itself and
@@ -5232,8 +6030,9 @@ def _hrrr_derived_bar(entry: dict, *, kind: str, out: Path) -> int | None:
         return None
     from tools import download_hrrr_native_subset as range_transport
 
-    selectors = (range_transport.atmosphere_selectors() if kind == "atmosphere"
-                 else range_transport.soil_selectors())
+    selectors = (range_transport.atmosphere_selectors(
+                     extras, analyzed_aerosol=analyzed_aerosol)
+                 if kind == "atmosphere" else range_transport.soil_selectors())
     return count_selectors_in_index(
         index_path.read_text(encoding="utf-8"), selectors,
         range_transport.ACCUMULATION_EXCLUSION)
@@ -5246,13 +6045,18 @@ def _download_one_hrrr_product(
         label: str, cache_dir: Path | None, workers: int, retries: int,
         bar_kind: str, certified: int, accept_inventory_change: bool,
         progress, dedup: list[dict] | None = None,
-        streams: int | None = None, byte_relay=None):
+        streams: int | None = None, byte_relay=None,
+        analyzed_aerosol: bool = False, extras=(),
+        mode_sink: dict | None = None):
     """Download one HRRR product from one host; ``(bar, url)``.
 
     ``dedup`` collects each Rust transfer's cache accounting, which the
     receipt sums; the download's own answer stays the two-value pair
-    every caller unpacks.  ``streams`` and ``byte_relay`` reach the Rust
-    backbone only (see :func:`_rw_fetch_hrrr`).
+    every caller unpacks.  ``mode_sink`` hears the byte mode the file
+    landed in (``mode_sink["mode"]``): under ``auto`` the backbone's
+    probe picks it per file, and the Python transport only takes
+    subsets.  ``streams`` and ``byte_relay`` reach the Rust backbone
+    only (see :func:`_rw_fetch_hrrr`).
 
     Raises
     :class:`tools.download_hrrr_native_subset.IndexInventoryError` when
@@ -5281,15 +6085,26 @@ def _download_one_hrrr_product(
             binary=engine_bin, cycle=cycle, hour=hour, kind=kind,
             host=host, mode=mode, out=out, cache_dir=cache_dir,
             progress=progress, retries=retries, shown_name=dest_name,
-            streams=streams, byte_relay=byte_relay)
+            streams=streams, byte_relay=byte_relay,
+            # Said only when asked, so every other request keeps the
+            # backbone call it always made.
+            **({"analyzed_aerosol": True} if analyzed_aerosol else {}),
+            **({"extras": extras} if extras else {}))
         if dedup is not None and isinstance(entry.get("dedup"), dict):
             dedup.append(entry["dedup"])
+        optional_surface = entry.get("optional_surface")
+        if mode_sink is not None:
+            mode_sink["mode"] = entry.get("mode")
+            if optional_surface is not None:
+                mode_sink["optional_surface"] = list(optional_surface)
         url = entry["grib_url"]
         landed = out / entry["name"]
         if landed != dest:
             # Only the soil product needs renaming: it is carved out of
             # wrfprs and ArWen files it under its own name.
-            os.replace(landed, dest)
+            _rename_stream_payload(landed, dest, entry)
+        else:
+            _remember_stream_facts(dest, entry)
         # The census can only be read after the object has landed, so a
         # tripped tripwire here refuses AFTER a payload exists.  Quarantine
         # it first, then let the refusal say what is actually on disk --
@@ -5297,8 +6112,14 @@ def _download_one_hrrr_product(
         # run also refuses, under a message swearing nothing was
         # downloaded.
         bar = resolve_bar(
-            bar_kind, _hrrr_derived_bar(entry, kind=kind, out=out),
+            bar_kind, _hrrr_derived_bar(
+                entry, kind=kind, out=out,
+                **({"analyzed_aerosol": True} if analyzed_aerosol else {}),
+                extras=extras),
             accept_inventory_change=accept_inventory_change,
+            # The optional records ride beside the certified selection
+            # where the index lists them; the bar stays the required set.
+            certified=certified + len(optional_surface or ()),
             progress=progress,
             on_refusal=lambda: _quarantine_inventory_payload(
                 dest, out, entry, progress, f"hrrr {label}"))
@@ -5309,7 +6130,7 @@ def _download_one_hrrr_product(
             # count, not the selection's.
             expected_messages = (
                 entry.get("probe", {}).get("idx_record_count") or None)
-        observed = count_grib2_messages(dest)
+        observed = _fetched_records(dest)
         if expected_messages is not None and observed != expected_messages:
             _quarantine_rejected(dest, progress, f"hrrr {label}")
             raise ValueError(
@@ -5318,12 +6139,15 @@ def _download_one_hrrr_product(
                 "the file has been moved aside, nothing was deleted")
         return bar, url
 
+    if mode_sink is not None:
+        mode_sink["mode"] = "idx-subset"
     request = range_transport.ProductRequest(
         url=url,
         index_url=url + ".idx",
         index_path=out / f"{source_name}.idx",
         destination=dest,
         kind=kind,
+        analyzed_aerosol=analyzed_aerosol,
     )
     # The selection itself is the derivation here: with the count clause
     # left on, an inventory change is refused inside the transport with
@@ -5332,16 +6156,27 @@ def _download_one_hrrr_product(
     try:
         range_transport._download_product(
             request, workers=workers, retries=retries,
-            expected_count=None if accept_inventory_change else certified)
+            expected_count=None if accept_inventory_change else certified,
+            **({"extras": extras} if extras else {}))
     except URLError as error:
         raise RuntimeError(hrrr_reach_refusal(
             host, cycle, hour, kind, error)) from None
     observed = count_grib2_messages(dest)
+    optional = ()
+    if kind == "atmosphere" and request.index_path.is_file():
+        # The selection took the optional records this index lists
+        # (OPTIONAL_SURFACE_FIELDS); the bar stays the required set.
+        optional = range_transport.optional_surface_published(
+            request.index_path.read_text(encoding="ascii", errors="replace"))
+        if mode_sink is not None:
+            mode_sink["optional_surface"] = list(
+                range_transport.optional_surface_selectors(optional))
     # An unaccepted change is normally refused inside the transport,
     # before any range GET.  Should one ever reach here the payload has
     # landed, so this refusal quarantines it and tells the truth too.
     bar = resolve_bar(bar_kind, observed,
                       accept_inventory_change=accept_inventory_change,
+                      certified=certified + len(optional),
                       progress=progress,
                       on_refusal=lambda: _quarantine_inventory_payload(
                           dest, out, {"idx_name": f"{source_name}.idx"},
@@ -5422,7 +6257,9 @@ def fetch_hrrr(*, cycle: datetime, hours: tuple[int, ...],
                accept_inventory_change: bool = False,
                file_workers: int | None = None,
                transport_fallback: tuple[str, ...] = (),
-               on_hour_ready=None) -> Path:
+               on_hour_ready=None,
+               runtime_surface: str | None = None,
+               analyzed_aerosol: bool = False, extras=()) -> Path:
     """Byte-range download the native HRRR subset series into ``out``.
 
     Single writer per ``--out``: the prior-receipt read, the ``force``
@@ -5438,7 +6275,7 @@ def fetch_hrrr(*, cycle: datetime, hours: tuple[int, ...],
     if fetch_endpoints.policy_uses_aws("hrrr"):
         transport = fetch_endpoints.policy_transport("hrrr", transport)
         transport_fallback = ()
-    with fetch_guard.hold("fetch-out", out, progress=progress):
+    with _fetch_out(out, progress=progress):
         return _fetch_hrrr_locked(
             cycle=cycle, hours=hours, area=area,
             out=deep_io_path(out, DOWNLOAD_DEPTH_BUDGET), workers=workers,
@@ -5450,7 +6287,8 @@ def fetch_hrrr(*, cycle: datetime, hours: tuple[int, ...],
             accept_inventory_change=accept_inventory_change,
             file_workers=file_workers,
             transport_fallback=transport_fallback,
-            on_hour_ready=on_hour_ready)
+            on_hour_ready=on_hour_ready, runtime_surface=runtime_surface,
+            analyzed_aerosol=analyzed_aerosol, extras=extras)
 
 
 def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
@@ -5469,8 +6307,14 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
                        accept_inventory_change: bool = False,
                        file_workers: int | None = None,
                        transport_fallback: tuple[str, ...] = (),
-                       on_hour_ready=None) -> Path:
+                       on_hour_ready=None,
+                       runtime_surface: str | None = None,
+                       analyzed_aerosol: bool = False, extras=()) -> Path:
     """The HRRR transfer, with the output-root lock already held.
+
+    ``analyzed_aerosol``: the configuration's preparation reads HRRR's
+    analyzed aerosol numbers (QNWFA/QNIFA), so the atmosphere subset
+    selects them too and a kept subset without them is fetched again.
 
     Reuses the proven ``.idx`` selection/range transport in
     :mod:`tools.download_hrrr_native_subset` per product (atmosphere
@@ -5537,12 +6381,20 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
                          f"{FETCH_MODES}")
     if engine == "rust" and engine_bin is None:
         raise ValueError("engine 'rust' needs the resolved rw_fetch binary")
-    bar_kinds = {"atmosphere": "hrrr-atmosphere", "soil": "hrrr-soil"}
-    expected_counts = {"atmosphere": range_transport.ATMOSPHERE_RECORD_COUNT,
+    bar_kinds = {"atmosphere": ("hrrr-atmosphere-aerosol" if analyzed_aerosol
+                                else "hrrr-atmosphere"),
+                 "soil": "hrrr-soil"}
+    from woof.ingest.native_extras import requested_extra_fields
+    extras = requested_extra_fields(extras)
+    expected_counts = {"atmosphere": range_transport.atmosphere_record_count(
+                           analyzed_aerosol=analyzed_aerosol, extras=extras),
                        "soil": range_transport.SOIL_RECORD_COUNT}
     from woof.source_adapters import get_source_adapter
     runtime_adapter = get_source_adapter("hrrr")
     runtime_rows = runtime_adapter.runtime_surface_fields
+    from woof.runtime_surface_fetch import declared_runtime_surface_fields
+    runtime_declared = declared_runtime_surface_fields(
+        runtime_surface, runtime_adapter)
     # Seeded, not empty: a completed resume downloads nothing and would
     # otherwise republish record_bars as [], erasing an accepted
     # inventory change the directory's files really were fetched under.
@@ -5577,7 +6429,65 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
     prior_digests = _prior_manifest_digests(out)
     prior_entries = _prior_manifest_entries(out)
     prior_records = _prior_manifest_records(out)
+    previous = out / FETCH_MANIFEST_NAME
+    previous_extras = ()
+    if previous.is_file():
+        previous_extras = tuple(json.loads(previous.read_text()).get("native_extras", ()))
+    if previous_extras != extras:
+        # A full-file census alone cannot prove which subset was requested.
+        prior_digests = {}
+        prior_entries = {}
+        prior_records = {}
     bars.update(_prior_manifest_bars(out))
+    # One record set per series: hrrr_grib2_bridge refuses a series whose
+    # hours select different records.  A subset used to lack PBLH, LCDC,
+    # MCDC and HCDC, which the bridge reads from a whole file, so
+    # `--mode idx-subset` over an interrupted full-file folder was refused
+    # 80-146 s into the preparation (updraft factory, 2023-08-07 and
+    # 2019-06-09).  A subset now takes them wherever the index lists them
+    # (receipt key ``optional_surface``), so whole files and current
+    # subsets mix; a subset from before that is set aside and fetched
+    # again.  What each file landed as is read from the receipt key, else
+    # its census.
+    subset_ceiling = {
+        "atmosphere": range_transport.atmosphere_record_count(
+            analyzed_aerosol=True, extras=extras)
+        + len(range_transport.OPTIONAL_SURFACE_FIELDS),
+        "soil": range_transport.SOIL_RECORD_COUNT + len(runtime_rows)}
+    # What a download lands as: the Python transport only takes subsets;
+    # the backbone takes the named mode, and under 'auto' its probe
+    # decides per file.
+    lands = ("idx-subset" if engine == "python"
+             else None if mode == "auto" else mode)
+    series_mode: dict[str, str | None] = {}
+
+    def kept_index_optional(dest_name: str):
+        """The optional surface records the ``.idx`` kept beside an
+        atmosphere file lists, or None when no index was kept."""
+        index = out / f"{dest_name}.idx"
+        if not index.is_file():
+            return None
+        try:
+            return range_transport.optional_surface_published(
+                index.read_text(encoding="ascii", errors="replace"))
+        except OSError:
+            return None
+
+    def kept_mode(dest_name: str, kind: str) -> str | None:
+        dest = out / dest_name
+        if not dest.exists():
+            return None
+        records = prior_records.get(dest_name)
+        if records is None:
+            # On disk but claimed by no receipt (a half-fetched hour):
+            # its own census says what it is.
+            try:
+                records = count_grib2_messages(dest)
+            except ValueError:
+                return None
+        return _hrrr_landed_mode(prior_entries.get(dest_name), records,
+                                 subset_ceiling[kind])
+
     deadline = clock() + wait_timeout_s
     files: list[dict] = []
     complete_hours: list[int] = []
@@ -5628,7 +6538,15 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
         payload["engine"] = engine
         payload["engine_selection"] = _engine_selection(
             engine, engine_selection)
-        payload["mode"] = mode
+        # The mode the claimed files ARE in (each file also says its
+        # own), not only the one asked for: a resume that kept another
+        # fetch's files labelled a whole + subset folder "full-file".
+        in_modes = {item.get("mode") for item in claimed}
+        payload["mode"] = (in_modes.pop() if len(in_modes) == 1
+                           and None not in in_modes else mode)
+        payload["requested_mode"] = mode
+        if extras:
+            payload["native_extras"] = list(extras)
         payload["record_bars"] = [
             bar.as_manifest() for bar in bars.values()]
         # What the backbone's disk cache cost this run.  A full-file
@@ -5652,6 +6570,12 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
         expected = prior_records.get(dest_name, expected_counts[kind])
         if kind == "soil" and runtime_rows and dest_name not in prior_records:
             expected += len(runtime_rows)
+        unclaimed_optional = None
+        if kind == "atmosphere" and dest_name not in prior_records:
+            # An unclaimed subset also carries the optional records its
+            # kept index lists.
+            unclaimed_optional = kept_index_optional(dest_name)
+            expected += len(unclaimed_optional or ())
         label = f"f{hour:02d} {kind}"
         # The stopwatch starts on the WHOLE product, not on the download
         # alone: a verify-skip re-hashes the file on disk and walks its
@@ -5660,6 +6584,26 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
         file_started = time.perf_counter()
         digest = None
         runtime_binding = None
+        mode_sink: dict = {}
+        if (dest.exists() and not force and kind == "atmosphere"
+                and analyzed_aerosol
+                and prior_records.get(dest_name, 0) < expected_counts[kind]):
+            # A subset kept from a fetch whose preparation did not read the
+            # aerosol pair: it lacks the records this one needs, so it is
+            # set aside (never deleted) and fetched again.  Said in the
+            # line: an idx-subset folder fetched without --analyzed-aerosol
+            # for an mp=28 aerosol-aware run is moved aside file by file and
+            # downloaded again, and the bare "moved rejected file aside"
+            # read as a broken fetch (StormNet-plus factory, 2026-10-27).
+            _quarantine_rejected(
+                dest, progress,
+                f"hrrr {label} (subset lacks the analyzed aerosol records "
+                "QNWFA/QNIFA this preparation reads; fetch subsets for an "
+                "aerosol-aware mp=28 run with `woof fetch --mode idx-subset "
+                "--analyzed-aerosol`)")
+        if dest.exists() and not force and previous_extras != extras:
+            _quarantine_rejected(dest, progress,
+                "native extra request changed; prevents reusing a different tracer inventory")
         if dest.exists() and not force:
             digest = _existing_hrrr_digest(
                 dest, expected_count=expected,
@@ -5668,7 +6612,12 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
             if kind == "soil" and runtime_rows:
                 prior_runtime = (prior_entries.get(dest_name) or {}).get("runtime_surface")
                 if (not isinstance(prior_runtime, list)
-                        or {row.get("field") for row in prior_runtime} != {row[0] for row in runtime_rows}):
+                        or {row.get("field") for row in prior_runtime} != {row[0] for row in runtime_rows}
+                        # A recorded fallback for a field this request
+                        # declares is not a reusable file: the fetch runs
+                        # again and refuses that field by name.
+                        or any(row.get("fallback_id") and row.get("field") in runtime_declared
+                               for row in prior_runtime)):
                     digest = None
                 else:
                     runtime_binding = prior_runtime
@@ -5734,15 +6683,23 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
                                       transport=host)
                 try:
                     bar, url = _download_one_hrrr_product(
-                        engine=engine, engine_bin=engine_bin, mode=mode,
+                        engine=engine, engine_bin=engine_bin,
+                        # The series' mode when one was settled above, so
+                        # a file fetched again lands like its neighbours.
+                        mode=_hrrr_host_byte_mode(
+                            series_mode.get(kind) or mode, url),
+                        mode_sink=mode_sink,
                         cycle=cycle, hour=hour, kind=kind, host=host,
                         url=url, dest=dest, dest_name=dest_name,
                         source_name=source_name, out=out, label=label,
                         cache_dir=cache_dir, workers=workers,
                         retries=retries, bar_kind=bar_kinds[kind],
                         certified=expected_counts[kind],
+                        **({"extras": extras} if extras else {}),
                         accept_inventory_change=accept_inventory_change,
                         progress=progress, dedup=cache_dedup,
+                        **({"analyzed_aerosol": True}
+                           if analyzed_aerosol else {}),
                         streams=streams,
                         byte_relay=(None if monitor is None else
                                     functools.partial(monitor.relay,
@@ -5769,8 +6726,9 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
                 runtime_binding = append_runtime_surface_records(
                     dest, adapter=runtime_adapter, cycle=cycle, lead=hour, host=chosen,
                     binary=engine_bin if engine == "rust" else None,
-                    cache_dir=cache_dir, progress=progress, streams=streams)
-            digest = sha256_file(dest)
+                    cache_dir=cache_dir, progress=progress, streams=streams,
+                    declared=runtime_declared)
+            digest = _fetched_digest(dest)
             if engine != "rust":
                 # The Rust route has already said this, with the
                 # transport it used; a second line per file said it
@@ -5779,11 +6737,25 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
                          f"{dest.stat().st_size:,} B in "
                          f"{time.perf_counter() - started:.1f} s "
                          f"({chosen})")
+        records = (_fetched_records(dest) if downloaded
+                   else count_grib2_messages(dest))
+        optional_surface = (
+            mode_sink.get("optional_surface") if downloaded
+            else (prior_entries.get(dest_name) or {}).get("optional_surface"))
+        if (optional_surface is None and not downloaded
+                and unclaimed_optional is not None):
+            optional_surface = list(
+                range_transport.optional_surface_selectors(unclaimed_optional))
         return {
             "name": dest_name, "role": kind, "forecast_hour": hour,
             "bytes": dest.stat().st_size, "sha256": digest,
             "url": url, "transport": chosen,
-            "records": count_grib2_messages(dest),
+            "records": records,
+            # The byte mode this file IS in, per file: a resume may keep
+            # files another fetch landed.
+            "mode": (mode_sink.get("mode") if downloaded else
+                     _hrrr_landed_mode(prior_entries.get(dest_name),
+                                       records, subset_ceiling[kind])),
             "seconds": round(time.perf_counter() - file_started, 6),
             # Said, not inferred.  Without it `fetch_throughput` read
             # every HRRR fetch as zero downloads -- so a re-run that
@@ -5792,6 +6764,11 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
             # caller could not tell a user which one had happened.
             "downloaded": downloaded,
             **({"runtime_surface": runtime_binding} if runtime_binding else {}),
+            # The optional surface records an atmosphere subset took
+            # (OPTIONAL_SURFACE_FIELDS); its presence marks a subset as
+            # current, so a resume keeps it beside whole files.
+            **({"optional_surface": optional_surface}
+               if optional_surface is not None else {}),
         }
 
     products = []
@@ -5802,6 +6779,73 @@ def _fetch_hrrr_locked(*, cycle: datetime, hours: tuple[int, ...],
         products.append((hour, "atmosphere", atmosphere, atmosphere,
                          "wrfnat"))
         products.append((hour, "soil", pressure, soil, "wrfprs"))
+
+    # Settle each product's series mode before anything moves.  A series
+    # already whole on disk in one mode is reused as it is, whatever was
+    # asked (refetching it would buy nothing).  Otherwise the named mode
+    # wins, and a kept file of the other mode is set aside (nothing is
+    # deleted) and fetched again in it.  Under 'auto' nothing is
+    # settled: a whole object and a current subset carry the same
+    # records for hrrr_grib2_bridge (the subset takes the optional
+    # surface records wherever the index lists them), so hours may land
+    # in either mode, each file as its own index allows.
+    for kind in ("atmosphere", "soil"):
+        if force:
+            series_mode[kind] = lands
+            continue
+        members = [(hour, dest_name) for hour, of_kind, _source, dest_name,
+                   _product in products if of_kind == kind]
+        if kind == "atmosphere":
+            for hour, dest_name in members:
+                if not ((out / dest_name).exists()
+                        and kept_mode(dest_name, kind) == "idx-subset"):
+                    continue
+                claimed = prior_entries.get(dest_name)
+                if claimed is not None:
+                    current = "optional_surface" in claimed
+                else:
+                    # A half-fetched hour no receipt claims: its census
+                    # against the index kept beside it says whether it
+                    # took the optional records that index lists.
+                    listed = kept_index_optional(dest_name)
+                    try:
+                        census = count_grib2_messages(out / dest_name)
+                    except ValueError:
+                        census = None
+                    current = (listed is not None and census
+                               == expected_counts[kind] + len(listed))
+                if not current:
+                    # Fetched before the subset took the optional surface
+                    # records: next to a whole file or a current subset
+                    # its hour selects a different record set, which the
+                    # bridge refuses (and alone it starts PBLH at zero).
+                    _quarantine_rejected(
+                        out / dest_name, progress,
+                        f"hrrr f{hour:02d} {kind} (subset fetched before "
+                        "subsets took PBLH/LCDC/MCDC/HCDC; fetching it "
+                        "again with them)")
+        present = {dest_name: (hour, kept_mode(dest_name, kind))
+                   for hour, dest_name in members
+                   if (out / dest_name).exists()}
+        found = {landed for _hour, landed in present.values()
+                 if landed is not None}
+        settled = (len(present) == len(members) and len(found) == 1
+                   and all(name in prior_entries for name in present))
+        if settled:
+            target = next(iter(found))
+        else:
+            target = lands
+        series_mode[kind] = target
+        if target is None:
+            continue
+        for dest_name, (hour, landed) in present.items():
+            if landed is not None and landed != target:
+                _quarantine_rejected(
+                    out / dest_name, progress,
+                    f"hrrr f{hour:02d} {kind} ({landed} file kept from an "
+                    f"earlier fetch; this series is {target}, and "
+                    "hrrr_grib2_bridge refuses a series whose hours carry "
+                    f"different record sets; fetching it again as {target})")
 
     def hour_checkpoint(index: int, entry: dict) -> None:
         # Checkpoint per completed hour, as GFS already did.  Publishing
@@ -6575,6 +7619,77 @@ _LEGACY_ONLY_FLAGS = {
 }
 
 
+@functools.lru_cache(maxsize=32)
+def _stream_capable(binary, identity):
+    import subprocess
+    try:
+        result = subprocess.run([str(binary), "--help"], capture_output=True,
+                                text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and "rw_fetch object --url URL --output FILE" in result.stdout
+
+
+_ROUTE_OBJECT_TRANSPORT = fetch_routes._download_object
+
+
+def _route_stream_downloader(plan, args):
+    """Use the Rust streaming door for a declared GRIB2 profile.
+
+    Other formats retain their established transport. No source names or
+    provider-specific URL algebra appear in this data path.
+    """
+    adapter = source_adapters.get_source_adapter(plan.source_id)
+    # Preserve a caller's substituted transport, including offline replays.
+    if fetch_routes._download_object is not _ROUTE_OBJECT_TRANSPORT:
+        return None
+    if "grib2" not in str(adapter.packaged_profile).lower():
+        return None
+    from woof import rustwx_fetch
+    binary = rustwx_fetch.find_fetch_bin()
+    if binary is None:
+        return None
+    # Older installed artifacts keep their former route until rebuilt.
+    # The new object door is additive to the existing fetch ABI.
+    if not _stream_capable(binary, _stat_identity(binary)):
+        return None
+    from woof.fetch_connections import max_connections
+    if (max_connections() <= rustwx_fetch.LEGACY_IDLE_CONNECTIONS and
+            not rustwx_fetch._idle_capable(str(binary), _stat_identity(binary))):
+        # An older bridge can retain idle sockets across redirected hosts.
+        # The generic Python transport can honor even a one-connection box.
+        return None
+    def download(url, dest, *, magic, opener=None):
+        # The ahead probe can promote a mirror above the plan's first
+        # endpoint. Size this transfer for its actual host, not that
+        # earlier endpoint's (possibly one-stream) politeness limit.
+        streams = fetch_pool.chunk_streams_per_file(args.fetch_workers,
+            files=len(plan.objects), host=fetch_pool.host_key(url))
+        if opener is not None or magic != "GRIB":
+            return fetch_routes._download_object(url, dest, magic=magic,
+                                                opener=opener, streams=streams)
+        env = dict(os.environ)
+        env["RUSTWX_DOWNLOAD_STREAMS"] = str(streams)
+        dest = Path(dest)
+        if dest.exists():
+            _quarantine_rejected(dest, print,
+                "verified reuse failed; prevents replacing changed input bytes")
+        job = fetch_pool.current_job()
+        relay = getattr(job, "byte_relay", None)
+        entry = rustwx_fetch._run([str(binary), "object", "--url", url,
+            "--output", str(dest)], what="object", out=dest.parent, env=env,
+            on_progress=None if relay is None else relay())
+        _remember_stream_facts(dest, entry)
+        # Preparation binds the durable source manifest. Publication identity
+        # and transfer clocks belong to the memo/ledger, not that content key.
+        return {"name": dest.name, "bytes": entry["bytes"],
+                "sha256": entry["sha256"], "url": url}
+
+    # The route's own transport: a file row's record selection still applies.
+    download.route_transport = True
+    return download
+
+
 def _route_fetch_main(args, source: str) -> int:
     """Fetch a table route with the same cycle/member/window used by its probe."""
     supplied = []
@@ -6625,7 +7740,7 @@ def _route_fetch_main(args, source: str) -> int:
         cycle = parse_cycle(args.cycle, source)
     plan = fetch_routes.resolve_request(source, cycle=cycle, hours=args.hours,
         cadence=args.cadence, start_hour=start, host=args.transport, member=args.member, out=args.out)
-    with fetch_guard.hold("fetch-out", args.out):
+    with _fetch_out(args.out):
         if not args.force_refetch:
             fetch_routes.check_prior_request(args.out, plan)
         loop = None
@@ -6651,10 +7766,7 @@ def _route_fetch_main(args, source: str) -> int:
         # before the first byte moves: a named cycle was never asked, and
         # a cached donor folder is checked for completeness instead.
         for donor in plan.donors:
-            if args.force_refetch or not cached_request_complete(
-                    _route_donor_out(args.out, donor), source=donor.source,
-                    cycle=donor.cycle, area=None, hours=tuple(donor.leads),
-                    mode="full-file", refuse_changed=True):
+            if args.force_refetch or not _donor_cached(donor, args):
                 try:
                     require_published_cycle(
                         donor.source, donor.cycle, max(donor.leads))
@@ -6663,8 +7775,27 @@ def _route_fetch_main(args, source: str) -> int:
                         f"--source {source} takes part of its start from the "
                         f"{donor.source.upper()} analysis of its own cycle, "
                         f"and {error}") from None
-        fetch_routes.run_plan(plan, out=args.out, force=args.force_refetch, file_workers=args.fetch_workers)
         donor_files = _fetch_route_donors(plan, args)
+        bound = False
+
+        def bind_ready(lead, entries, composed):
+            nonlocal bound
+            if not bound:
+                fetch_routes.write_handoff(plan, args.out, donor_files=donor_files)
+                bound = True
+
+        def bind_completed(index, entry):
+            # Probes also use the pool, but carry no payload digest.
+            if entry.get("sha256"):
+                bind_ready(None, None, None)
+
+        # Lead callbacks compose and publish verified prefixes while later
+        # inputs download. The handoff carries planned paths; complete=true
+        # remains the preparation barrier for an ordinary whole-window run.
+        with fetch_pool.completion_hook(bind_completed):
+            fetch_routes.run_plan(plan, out=args.out, force=args.force_refetch,
+                file_workers=args.fetch_workers, on_lead=bind_ready,
+                downloader=_route_stream_downloader(plan, args))
         fetch_routes.write_handoff(plan, args.out, donor_files=donor_files)
     print(f"fetch {source}: manifest {args.out / fetch_routes.MANIFEST_NAME}")
     for line in fetch_routes.handoff_lines(plan, args.out):
@@ -6730,6 +7861,7 @@ def _route_fetch_as_posted(plan, args, loop, *, last: int, options: dict) -> int
 
         fetch_routes.run_plan(plan, out=args.out, force=False,
                               file_workers=args.fetch_workers,
+                              downloader=_route_stream_downloader(plan, args),
                               lead_gate=None if whole else loop,
                               on_lead=published)
     finally:
@@ -6762,6 +7894,153 @@ def _route_donor_out(out: Path, donor) -> Path:
     return Path(out) / f"donor-{donor.source}"
 
 
+def _donor_is_table_route(donor) -> bool:
+    """Whether a declared donor is itself a row of the fetch-route table."""
+    return (donor.source not in GFS_CONTAINER_SOURCES
+            and fetch_routes.canonical_source(donor.source)
+            in fetch_routes.table_route_sources())
+
+
+def _donor_route_plan(donor, args):
+    """The donor's own table-route plan: its source, its cycle, its leads.
+
+    Refuses by name when the donor has neither a table row nor the
+    GFS-container ladder, because then nothing in this door can move
+    its bytes and the handoff would name a supplement nobody fetched.
+    """
+    if not _donor_is_table_route(donor):
+        raise ValueError(
+            f"the declared {donor.source} donor ({donor.role}) is neither "
+            f"a row of {fetch_routes.ROUTE_TABLE_NAME} nor one of the "
+            f"GFS-container sources {', '.join(GFS_CONTAINER_SOURCES)}; "
+            "nothing in this door can download it, so the handoff would "
+            "name a supplement nobody fetched")
+    start = min(donor.leads)
+    # The primary's --transport pin reaches the donor: a user who pinned
+    # a host asked for every byte of this fetch from it, and a donor that
+    # cannot serve that host refuses in its route's own words instead of
+    # quietly walking its own ladder to another host.
+    plan = fetch_routes.resolve_request(
+        donor.source, cycle=donor.cycle, hours=max(donor.leads) - start,
+        start_hour=start, host=getattr(args, "transport", None),
+        out=_route_donor_out(args.out, donor))
+    if getattr(donor, "records", None):
+        # The donor row names the records the composition binds: only the
+        # bound primary object moves, and only those records of it
+        # (hrrr-native's soil donor: 29 MB of a 381 MB wrfprs, and not the
+        # 134 MB wrfsfcf00 the donor route would also take).
+        plan = fetch_routes.donor_records_plan(plan, donor.records)
+    return plan
+
+
+def _donor_route_primary(donor_plan, donor) -> Path:
+    """The one primary object the donor role binds (its lowest lead)."""
+    if not donor_plan.primary_files:
+        raise ValueError(
+            f"the {donor.source} donor route plans no primary object for "
+            f"leads {list(donor.leads)}")
+    return Path(donor_plan.primary_files[0])
+
+
+#: The receipt a record-selected donor folder carries.
+DONOR_RECORDS_RECEIPT = "donor-records.json"
+DONOR_RECORDS_SCHEMA = "gpuwm-donor-records-v1"
+
+
+def _donor_records_request(donor) -> dict:
+    return {"source": donor.source, "cycle": f"{donor.cycle:%Y-%m-%dT%H}",
+            "leads": list(donor.leads), "records": dict(donor.records)}
+
+
+def _donor_records_cached(donor, donor_out: Path) -> list[Path] | None:
+    """The donor's record files when ``donor_out`` already holds exactly them."""
+    try:
+        receipt = json.loads((Path(donor_out) / DONOR_RECORDS_RECEIPT)
+                             .read_text(encoding="utf-8"))
+        if (receipt.get("schema") != DONOR_RECORDS_SCHEMA
+                or receipt.get("request") != json.loads(json.dumps(
+                    _donor_records_request(donor)))):
+            return None
+        paths = []
+        for entry in receipt["files"]:
+            path = Path(donor_out) / entry["name"]
+            if not path.is_file() or path.stat().st_size != entry["bytes"]:
+                return None
+            with path.open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != entry["sha256"]:
+                    return None
+            paths.append(path)
+        return paths or None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def _fetch_donor_records(donor, args, donor_out: Path) -> list[Path]:
+    """Move only the records a donor binds, by the donor object's index.
+
+    The four ECMWF-family routes bind one field from the same cycle's GFS
+    analysis (sea_ice_fraction from ICEC).  Moving the whole f000 for it
+    took about 490 MB and 25 s for a 0.1 MB record; hex already
+    took the same record by its ``.idx``.  The donor object's endpoints are
+    the GFS ladder (the hosted policy's pin first), throughput order.
+    """
+    from woof.record_index import download_records
+
+    donor_out = Path(donor_out)
+    if not args.force_refetch:
+        cached = _donor_records_cached(donor, donor_out)
+        if cached is not None:
+            print(f"fetch {donor.source} donor: {len(cached)} record file"
+                  f"{'' if len(cached) == 1 else 's'} already present")
+            return cached
+    (donor_out / DONOR_RECORDS_RECEIPT).unlink(missing_ok=True)
+    ladder = fetch_endpoints.serving_ladder(
+        donor.source, cycle=donor.cycle,
+        pinned=fetch_endpoints.policy_transport(donor.source))
+    rungs = tuple(entry for entry in fetch_endpoints.transfer_order(ladder)
+                  if entry.idx_available)
+    if not rungs:
+        raise ValueError(f"no {donor.source} endpoint for {donor.cycle:%Y-%m-%dT%H} "
+                         "publishes an index")
+    entries = []
+    paths = []
+    for lead in donor.leads:
+        key = gfs_object_key(donor.cycle, lead, donor.source)
+        dest = donor_out / f"{key.rsplit('/', 1)[-1]}.records.grib2"
+
+        def transfer(endpoint, key=key, dest=dest):
+            return download_records(endpoint.url(key), endpoint.url(key) + ".idx",
+                                    dest, declaration=donor.records)
+
+        endpoint, entry = fetch_endpoints.ask_along_ladder(
+            rungs, transfer, label=f"fetch {donor.source} donor", name=dest.name,
+            progress=print,
+            discard=lambda _endpoint, dest=dest: dest.with_name(
+                dest.name + ".part").unlink(missing_ok=True))
+        entries.append({**entry, "lead": lead, "endpoint": endpoint.name})
+        paths.append(dest)
+        print(f"fetch {donor.source} donor: f{lead:03d} {entry['selected_records']} "
+              f"record(s), {entry['bytes']:,} of {entry['object_bytes'] or 0:,} bytes "
+              f"from {endpoint.name}")
+    _atomic_write_text(donor_out / DONOR_RECORDS_RECEIPT, json.dumps(
+        {"schema": DONOR_RECORDS_SCHEMA, "request": _donor_records_request(donor),
+         "files": entries}, indent=2) + "\n")
+    return paths
+
+
+def _donor_cached(donor, args) -> bool:
+    """Whether the donor folder already holds this exact donor request."""
+    donor_out = _route_donor_out(args.out, donor)
+    if getattr(donor, "records", None) and donor.source in GFS_CONTAINER_SOURCES:
+        return _donor_records_cached(donor, donor_out) is not None
+    if _donor_is_table_route(donor):
+        return fetch_routes.request_cached(_donor_route_plan(donor, args),
+                                           donor_out)
+    return cached_request_complete(
+        donor_out, source=donor.source, cycle=donor.cycle, area=None,
+        hours=tuple(donor.leads), mode="full-file", refuse_changed=True)
+
+
 def _fetch_route_donors(plan, args) -> dict:
     """Fetch the cross-source analysis a hybrid profile declares.
 
@@ -6775,14 +8054,38 @@ def _fetch_route_donors(plan, args) -> dict:
 
     donor_files: dict[str, Path] = {}
     for donor in plan.donors:
-        if donor.source not in GFS_CONTAINER_SOURCES:
-            raise ValueError(
-                f"--source {plan.source_id} declares a {donor.source} donor "
-                "and this WOOF has no route for it")
         donor_out = _route_donor_out(args.out, donor)
         print(f"fetch {plan.source_id}: fetching the declared "
               f"{donor.source} donor into {donor_out}")
         print(f"  why: {donor.why}")
+        if donor.source not in GFS_CONTAINER_SOURCES:
+            # A donor that is itself a table route (hrrr-native's
+            # same-cycle hrrr-prs soil column) is fetched the way its
+            # own ``woof fetch --source`` line would fetch it: the
+            # route's plan for the donor's leads, into the donor
+            # folder.  Only the two GFS-container sources have no row
+            # and keep the whole-file ladder below; a donor with
+            # neither is refused by name because nothing here can
+            # move its bytes.
+            donor_plan = _donor_route_plan(donor, args)
+            fetch_routes.run_plan(donor_plan, out=donor_out,
+                                  force=args.force_refetch,
+                                  file_workers=args.fetch_workers,
+                                  downloader=_route_stream_downloader(donor_plan, args))
+            donor_files[donor.role] = donor_out / _donor_route_primary(
+                donor_plan, donor)
+            continue
+        if donor.records:
+            try:
+                donor_files[donor.role] = _fetch_donor_records(
+                    donor, args, donor_out)[0]
+                continue
+            except (ValueError, OSError) as error:
+                # A per-run fallback that says so: the whole object holds
+                # the same record, so the start still gets its field.
+                print(f"fetch {plan.source_id}: WARNING: the {donor.source} "
+                      f"donor's records could not be taken by index ({error}); "
+                      "moving the whole object instead")
         choice = select_fetch_engine("auto")
         manifest = fetch_gfs_fullfile(
             cycle=donor.cycle, hours=tuple(donor.leads), area=None,
@@ -6809,21 +8112,44 @@ def _retrieve_inapplicable_refusal(source: str) -> str:
 def fetch_main(args) -> int:
     """``woof fetch``; exit 75 when an as-posted source fell behind its budget."""
 
+    from woof.earth2_licensing import check_namespace
+    check_namespace(args)
     from woof.fetch_as_posted import SourceBehind
+    from woof.timeline.ledger import emit
 
+    from woof import fetch_connections
+    old_cap = os.environ.get(fetch_connections.MAX_CONNECTIONS_ENV)
+    configured_cap = getattr(args, "fetch_max_connections", None)
+    if configured_cap is not None:
+        os.environ[fetch_connections.MAX_CONNECTIONS_ENV] = str(fetch_connections.max_connections(configured_cap))
+    fetch_connections.max_connections()
+    emit("fetch.request", "begin", attrs={"source": args.source,
+         "worker_row": fetch_pool.worker_profile()["id"]})
     try:
         return _fetch_main(args)
     except SourceBehind as error:
         print(f"fetch {args.source}: {error}", file=sys.stderr)
         return error.exit_code
+    finally:
+        emit("fetch.request", "end", attrs={"source": args.source})
+        if configured_cap is not None:
+            if old_cap is None:
+                os.environ.pop(fetch_connections.MAX_CONNECTIONS_ENV, None)
+            else:
+                os.environ[fetch_connections.MAX_CONNECTIONS_ENV] = old_cap
 
 
 def _fetch_main(args) -> int:
+    args.source = source_adapters.source_for_cycle(args.source, getattr(args, "cycle", None))
     source = args.source
     if fetch_endpoints.policy_uses_aws(source):
         args.transport = fetch_endpoints.policy_transport(source)
-        if source in GFS_CONTAINER_SOURCES:
-            args.mode = "full-file"
+        if source in GFS_CONTAINER_SOURCES and args.mode != "full-file":
+            # The policy forbids the grib-filter host, so the bytes come
+            # from the archive's objects: the records the decode reads, by
+            # their .idx (1,556 MB -> 266.5 MB for a 6 h 3-lead start,
+            # 2026-10-29); '--mode full-file' still takes them whole.
+            args.mode = GFS_RECORDS_MODE
     _posting_flag_refusal(args, requested_as_posted(args))
     if getattr(args, "readiness", False):
         return _readiness_main(args, source)
@@ -6855,6 +8181,13 @@ def _fetch_main(args) -> int:
         # A table route refuses the flags it does not take, then validates
         # its window with the same validator.
         return _route_fetch_main(args, source)
+    acquisition_owner = source_adapters.get_source_adapter(source).acquisition_owner
+    if acquisition_owner is not None:
+        from importlib import import_module
+        return import_module(acquisition_owner).fetch(args)
+    if getattr(args, "model", None) is not None:
+        raise ValueError("--model applies to a source whose row runs a model "
+                         "(--source earth2)")
     if args.validate is not None and source != "era5":
         raise ValueError("--validate applies to --source era5 only")
     if args.fetch_workers is not None:
@@ -6883,28 +8216,32 @@ def _fetch_main(args) -> int:
                 f"{', '.join(transported)}: --source hrrr or "
                 f"{'/'.join(GFS_CONTAINER_SOURCES)} only (ERA5 is a "
                 "manual CDS retrieval)")
-    # The GFS container sources have exactly two byte transports, and
-    # --mode is how the second is chosen: the NOMADS grib-filter crop
-    # (the default; spatial subregion + exact record selection) and
-    # --mode full-file (the whole pgrb2.0p25 objects from the S3
-    # archive, the same first-class whole-file doctrine as HRRR).
-    # .idx record subsetting of the raw objects is not a certified GFS
-    # route.  'auto' asks for the default choice, so it takes exactly the
-    # path an omitted --mode takes: reuse of verified crops, the crop,
-    # and the archive's whole objects for a cycle the crop host no
-    # longer keeps.
+    # The GFS container sources have three byte transports, and --mode
+    # chooses between them: the NOMADS grib-filter crop (the default;
+    # spatial subregion + exact record selection), --mode idx-subset
+    # (the same records, copied unchanged from the whole pgrb2.0p25
+    # objects by their .idx byte ranges) and --mode full-file (the whole
+    # objects, the same first-class whole-file doctrine as HRRR).  The
+    # last two read the archive's objects; a host that keeps no index
+    # moves its objects whole under idx-subset, and says so.  'auto' asks
+    # for the default choice, so it takes exactly the path an omitted
+    # --mode takes: reuse of verified crops, the crop, and the archive's
+    # records for a cycle the crop host no longer keeps.
     gfs_fullfile = False
+    gfs_records = False
     gfs_named_mode = None if args.mode == "auto" else args.mode
     if source in GFS_CONTAINER_SOURCES:
-        if gfs_named_mode == "idx-subset":
-            raise ValueError(
-                f"--mode idx-subset: --source {source} has two byte "
-                "transports -- the NOMADS grib-filter crop (the default, "
-                "no --mode needed) and '--mode full-file' (whole "
-                "pgrb2.0p25 objects from the S3 archive).  .idx record "
-                "subsetting of the raw objects is not a certified GFS "
-                "route.")
-        gfs_fullfile = gfs_named_mode == "full-file"
+        pinned_rung = (
+            fetch_endpoints.endpoint_named(source, args.transport)
+            if args.transport not in (None, "auto") else None)
+        pinned_archive = pinned_rung is not None and bool(pinned_rung.layouts)
+        gfs_fullfile = (gfs_named_mode in ("full-file", GFS_RECORDS_MODE)
+                        or pinned_archive)
+        # An archive host named with --transport and no mode takes the
+        # records when it publishes an index, its whole objects when not.
+        gfs_records = gfs_named_mode == GFS_RECORDS_MODE or (
+            gfs_named_mode is None and pinned_archive
+            and pinned_rung.idx_available)
         if not gfs_fullfile:
             cgi_extras = sorted(
                 flag for flag, value in (
@@ -6914,10 +8251,11 @@ def _fetch_main(args) -> int:
                 ) if value is not None)
             if cgi_extras:
                 raise ValueError(
-                    f"{', '.join(cgi_extras)}: these choose how whole "
-                    "objects move and belong to '--mode full-file'; the "
-                    "default NOMADS grib-filter crop has exactly one "
-                    "transport (governed stdlib HTTP)")
+                    f"{', '.join(cgi_extras)}: these choose how the "
+                    "archive's objects move and belong to '--mode "
+                    "full-file' (or '--mode idx-subset', the same objects' "
+                    "records); the default NOMADS grib-filter crop has "
+                    "exactly one transport (governed stdlib HTTP)")
     if source not in GFS_CONTAINER_SOURCES:
         gfs_only = sorted(
             flag for flag, value in (
@@ -7169,18 +8507,33 @@ def _fetch_main(args) -> int:
             # only as whole objects in the archive.  Asking the crop host
             # for it failed with a 403 and a refusal, so a date the
             # archive holds could not be fetched without knowing a flag.
+            # The archive's .idx gives the crop's records without the
+            # rest of each object.
             gfs_fullfile = True
+            gfs_records = True
             print(f"fetch {source}: {cycle:%Y-%m-%dT%H}Z is older than the "
-                  "grib-filter host keeps; reading whole objects from the "
-                  "archive (--mode full-file)")
+                  "grib-filter host keeps; reading the same records from the "
+                  f"archive's objects by their .idx (--mode {GFS_RECORDS_MODE})")
+        if (gfs_records and not args.force_refetch and args.cycle != "latest"
+                and cached_request_complete(
+                    args.out, source=source, cycle=cycle, area=area,
+                    hours=hours, mode="full-file", progress=say_once,
+                    refuse_changed=True)):
+            # Whole objects carry every record the selection would take,
+            # so a folder that already holds this request whole is used
+            # as it is rather than refused for its transport.
+            gfs_records = False
+            say_once(f"fetch {source}: {args.out} already holds this request "
+                     "as whole objects, which carry every record; using them")
         # The request-identity guard and the transfer it authorises are
         # one decision: taking the lock around BOTH is what stops two
         # writers from passing the guard together and then publishing
         # incompatible receipts into the same directory.  The library
         # call re-enters the same lock (it is re-entrant per process).
-        requested_gfs_mode = ("full-file" if gfs_fullfile
-                              else "nomads-cgi-subset")
-        with fetch_guard.hold("fetch-out", args.out):
+        requested_gfs_mode = (
+            (GFS_RECORDS_MODE if gfs_records else "full-file") if gfs_fullfile
+            else "nomads-cgi-subset")
+        with _fetch_out(args.out):
             if not args.force_refetch:
                 require_matching_request(args.out, source=source,
                                          cycle=cycle, area=area,
@@ -7215,7 +8568,10 @@ def _fetch_main(args) -> int:
                          else "")
                       + (" [inherited, not chosen]" if choice.degraded
                          else "")
-                      + ", mode full-file (whole pgrb2.0p25 objects, "
+                      + (f", mode {GFS_RECORDS_MODE} (the grib-filter records "
+                         "of each pgrb2.0p25 object by its .idx, "
+                         if gfs_records else
+                         ", mode full-file (whole pgrb2.0p25 objects, ")
                       + " then ".join(
                           endpoint.name for endpoint in
                           fetch_endpoints.serving_ladder(
@@ -7232,7 +8588,8 @@ def _fetch_main(args) -> int:
                         top_pressure_pa=args.p_top_pa,
                         all_levels=args.all_levels,
                         transport=pinned_host(args.transport),
-                        file_workers=args.fetch_workers)
+                        file_workers=args.fetch_workers,
+                        records=gfs_records)
             else:
                 def transfer(window, force):
                     return fetch_gfs(
@@ -7253,25 +8610,16 @@ def _fetch_main(args) -> int:
         choice = select_fetch_engine(
             args.engine if args.engine is not None else "auto")
         engine, engine_bin = choice.engine, choice.binary
-        # The default is the fast path wherever the fast path exists.
-        # The Python transport can only do .idx range subsets, so on an
-        # install without the backbone the default has to stay 'auto'.
-        # The line that says what that costs is no longer here: it is
-        # said at selection time now, by select_fetch_engine, so that
-        # the GFS full-file command, the streamer's preflight and every
-        # library caller of the front door get it too rather than only
-        # this one command.
+        # The default ('auto': the record subset, whole where the index
+        # cannot carry it) is the same on both engines; the Python
+        # transport only does .idx range subsets.  What that transport
+        # costs is said at selection time, by select_fetch_engine, so the
+        # GFS full-file command, the streamer's preflight and every
+        # library caller of the front door hear it too.
         if args.mode is not None:
             mode = args.mode
-            if mode == "idx-subset":
-                print("fetch hrrr: --mode idx-subset selected: record "
-                      "subsetting saves bandwidth and costs wall clock "
-                      "(hundreds of small range GETs per file instead of "
-                      "one parallel whole-file transfer).")
-        elif engine == "rust":
-            mode = HRRR_DEFAULT_MODE
         else:
-            mode = "auto"
+            mode = HRRR_DEFAULT_MODE
         if engine == "python" and mode != "auto":
             # The build line comes from the shared shell rule: a literal
             # `&&` here was a Windows PowerShell 5.1 parser error.
@@ -7308,7 +8656,7 @@ def _fetch_main(args) -> int:
         hours = hrrr_forecast_hours(args.hours, cycle, start_hour)
         # One lock over the guard and the transfer it authorises; see the
         # GFS branch above.
-        with fetch_guard.hold("fetch-out", args.out):
+        with _fetch_out(args.out):
             if not args.force_refetch:
                 require_matching_request(args.out, source="hrrr",
                                          cycle=cycle, area=area)
@@ -7332,7 +8680,7 @@ def _fetch_main(args) -> int:
                     # cycle, and the sentence naming a host that could not
                     # be heard (GS-05). Its answer does not make the window
                     # whole: a posted final lead does not prove the
-                    # intervening wrfnat/wrfprs pairs have reached this
+                    # intervening atmosphere, soil and runtime files reached this
                     # host, so each lead is checked before it joins the
                     # downloaded prefix.
                     if not fetch_endpoints.policy_uses_aws(source):
@@ -7390,6 +8738,8 @@ def _fetch_main(args) -> int:
                     accept_inventory_change=args.accept_inventory_change,
                     file_workers=args.fetch_workers,
                     transport_fallback=transport_fallback,
+                    runtime_surface=getattr(args, "runtime_surface", None),
+                    analyzed_aerosol=bool(getattr(args, "analyzed_aerosol", False)),
                     **({} if on_hour_ready is None else {
                         "on_hour_ready": on_hour_ready}))
 
@@ -7630,8 +8980,16 @@ def _resolve_manifest_bridge(source: str) -> Path:
 #: types, and :func:`validate_fetch_hints` checks every value against its
 #: row.  The key set is read off the rows.
 FETCH_HINT_ROWS = key_rows(
+    KeyRow("fetch_max_connections", "integer", None,
+           "box-wide connection cap for engine fetches; default 30, or WOOF_FETCH_MAX_CONNECTIONS"),
     KeyRow("source", "string", None,
            "the source to acquire, a registry id or alias", required=True),
+    KeyRow("initial_source", "string", None,
+           "separate mapped analysis source at the forecast start; go fetches its analysis"),
+    KeyRow("boundary_cycle_offset_hours", "integer", 0,
+           "boundary cycle offset from the nominal forecast cycle"),
+    KeyRow("boundary_lead_offset_hours", "integer", 0,
+           "boundary start lead offset; cancels the boundary cycle offset"),
     KeyRow("cycle", "string", None,
            "the forcing cycle, YYYY-MM-DDTHH or 'latest'; absent means "
            "any cycle the source publishes"),
@@ -7657,11 +9015,19 @@ FETCH_HINT_ROWS = key_rows(
            "ERA5 only: 'cds' (Copernicus, keyed) or 'arco' (public store)"),
     KeyRow("era5_product", "string", "reanalysis",
            "ERA5 only: 'reanalysis' or 'ensemble_members'"),
+    KeyRow("reuse_fetch", "string", None,
+           "a completed generated fetch root to verify and reuse when it covers this request"),
     KeyRow("member", ("string", "integer"), None,
            "the ensemble member to fetch; absent is the route's control"),
     KeyRow("retrieve", "boolean", False,
            "ERA5 only: download and verify now instead of writing a "
            "retrieval template"),
+    KeyRow("mode", "string", None,
+           "the byte transport, the value `woof fetch --mode` takes: "
+           "'full-file', 'idx-subset' or 'auto'; absent keeps the fetch "
+           "default (whole files).  Lets the preparation route's own fetch "
+           "take the .idx-selected records, as `woof fetch --mode "
+           "idx-subset` does"),
     KeyRow("transport", "string", None,
            "the one host of the source's endpoint ladder to download "
            "from, the value `woof fetch --transport` takes; absent walks "
@@ -7674,6 +9040,14 @@ FETCH_HINT_ROWS = key_rows(
            "how far past its scheduled time a lead may be before the run "
            "stops with exit 75; absent takes the source table's posting "
            "late_after_minutes"),
+    KeyRow("runtime_surface", "string", None,
+           "comma-separated runtime surface fields (e.g. 'VEGFRA') the "
+           "start must read from the cycle itself; absent, a field the "
+           "source table declares starts from its recorded fallback when "
+           "a cycle publishes no record for it"),
+    *(KeyRow(*hint) for hint in dict.fromkeys(
+        hint for adapter in source_adapters.source_adapters()
+        for hint in adapter.acquisition_hints)),
 )
 FETCH_HINT_KEYS = frozenset(FETCH_HINT_ROWS)
 
@@ -7708,14 +9082,14 @@ def transport_refusal(source: str, transport: object) -> str | None:
         return (f"transport: {name} has no host to choose between, so there "
                 "is nothing to pin. what to do: remove transport.")
     if name in GFS_CONTAINER_SOURCES:
-        if fetch_endpoints.policy_uses_aws(name):
-            fetch_endpoints.endpoint_named(name, transport)
+        try:
+            endpoint = fetch_endpoints.endpoint_named(name, transport)
+        except ValueError as error:
+            return str(error)
+        if endpoint.layouts or fetch_endpoints.policy_uses_aws(name):
             return None
-        return (f"transport pins the host of whole {name} archive objects, "
-                f"which only `woof fetch --source {name} --mode full-file` "
-                "downloads; a [fetch] table fetches the NOMADS grib-filter "
-                "crop, which has exactly one transport, and `woof fetch` "
-                "refuses --transport for it. what to do: remove transport.")
+        return ("transport pins whole archive objects; choose an archive "
+                "host declared in the source table or remove transport.")
     if name == "hrrr":
         if transport not in HRRR_TRANSPORTS:
             return (f"unknown HRRR transport {transport!r}; expected one of "
@@ -7785,6 +9159,11 @@ def validate_fetch_hints(table: dict, *, source: str) -> None:
     unknown = sorted(set(table) - FETCH_HINT_KEYS)
     if unknown:
         raise ValueError(f"unknown key(s) {unknown} in {prefix}; known keys: {sorted(FETCH_HINT_KEYS)}")
+    if table.get("mode") is not None and table["mode"] not in FETCH_MODES:
+        raise ValueError(f"mode = {table['mode']!r} in {prefix} is not a fetch mode; "
+                         f"what to do: write one of {', '.join(repr(m) for m in FETCH_MODES)}.")
+    from woof.initial_source import boundary_fetch_request
+    table = boundary_fetch_request(table)
     # Common spellings precede every source, product and local-input branch.
     for key, minimum in (("hours", 0), ("forecast_start_hour", 0), ("cadence", 1)):
         value = table.get(key)
@@ -7804,6 +9183,20 @@ def validate_fetch_hints(table: dict, *, source: str) -> None:
     # the rows are what a front end is told these keys take.
     for key, value in table.items():
         FETCH_HINT_ROWS[key].check(value, where=prefix)
+    if table.get("fetch_max_connections") is not None:
+        from woof.fetch_connections import max_connections
+        max_connections(table["fetch_max_connections"])
+    if table.get("runtime_surface") is not None and isinstance(table.get("source"), str):
+        from woof.runtime_surface_fetch import declared_runtime_surface_fields
+        from woof.source_adapters import get_source_adapter
+        try:
+            adapter = get_source_adapter(table["source"])
+        except (KeyError, ValueError):
+            adapter = None
+        try:
+            declared_runtime_surface_fields(table["runtime_surface"], adapter)
+        except ValueError as error:
+            raise ValueError(f"{prefix}: {error}") from None
     late = table.get("late_after_minutes")
     if late is not None and not (math.isfinite(float(late)) and float(late) > 0):
         # A zero budget fails every lead a second late (DESIGN A136 2.1).
@@ -7819,13 +9212,32 @@ def validate_fetch_hints(table: dict, *, source: str) -> None:
     if isinstance(table.get("source"), str):
         from woof.source_drivability import local_input_requested
         local_source = local_input_requested(table)
+        # An unregistered name is refused below with the hint table's own
+        # "not one of" list; resolving it here raised the registry's
+        # lookup error first, so the [fetch] table's refusal never fired.
+        try:
+            owner = source_adapters.get_source_adapter(table["source"]).acquisition_owner
+        except ValueError:
+            owner = None
+        # An owner can author an acquisition request and still prepare an
+        # existing local directory. Only explicit local tables prohibit crops.
+        if owner and not table.get("source_root"):
+            local_source = False
     if "source" not in table:
         raise ValueError(f"{prefix} must carry source = {'|'.join(known)}")
-    name = (fetch_routes.canonical_source(str(table["source"]))
-            if local_source else table["source"])
+    name = fetch_routes.canonical_source(str(table["source"]))
     if name not in known or (name not in fetch_front_door_sources() and not local_source):
         raise ValueError(f"source = {name!r} in {prefix} is not one of {known}")
     try:
+        model = table.get("model")
+        adapter = source_adapters.get_source_adapter(name)
+        if model is not None:
+            from importlib import import_module
+            resolve = (getattr(import_module(adapter.acquisition_owner), "acquisition_hints", None)
+                       if adapter.acquisition_owner else None)
+            if resolve is None:
+                raise ValueError("model requires a registry acquisition owner with model selection")
+            resolve(str(table["source"]), model)
         cadence = table.get("cadence")
         for key in ("cycle", "area", "point", "out", "source_root"):
             if key in table and not table[key].strip():
@@ -7850,7 +9262,19 @@ def validate_fetch_hints(table: dict, *, source: str) -> None:
         elif name in fetch_routes.route_ids():
             fetch_routes.resolve_member(fetch_routes.route_for(name), table.get("member"))
         elif "member" in table:
-            raise ValueError(f"{name} has no acquisition member axis. Omit member or select an ensemble product.")
+            adapter = source_adapters.get_source_adapter(name)
+            if adapter.acquisition_owner:
+                from importlib import import_module
+                validator = getattr(import_module(adapter.acquisition_owner), "validate_member", None)
+            else:
+                validator = None
+            if validator is None:
+                raise ValueError(f"{name} has no acquisition member axis. Omit member or select an ensemble product.")
+            selection = adapter.selection_owner
+            if selection and table.get("earth2_members"):
+                getattr(import_module(selection), "validate_member")(table["member"], cycle=cycle)
+            else:
+                validator(name, table["member"])
 
         area, point, radius = (table.get(key) for key in ("area", "point", "radius_km"))
         crop_keys = sorted(key for key in ("area", "point", "radius_km") if key in table)
@@ -7899,12 +9323,18 @@ def validate_fetch_hints(table: dict, *, source: str) -> None:
             # deliberately left to acquisition, when a real cycle is selected.
             cycles = ((cycle,) if cycle is not None else
                       fetch_routes.planning_cycles(route))
+            # A table that names no start opens at the route's first
+            # published lead: the GEFSv12 reforecast (first_lead = 3,
+            # lane/cap-gefs-archive) publishes no f000, so checking f000
+            # refused every bare [fetch] source of it.
+            route_start = (start if "forecast_start_hour" in table
+                           else max(start or 0, route.first_lead))
             errors = []
             for candidate in cycles:
                 try:
                     fetch_routes.resolve_cycle(route, candidate)
                     fetch_routes.resolve_leads(route, candidate, 0 if hours is None else hours,
-                                               cadence=cadence, start_hour=start)
+                                               cadence=cadence, start_hour=route_start)
                     break
                 except ValueError as error:
                     errors.append(error)
@@ -7952,7 +9382,14 @@ def source_argument(value: str) -> str:
     except ValueError:
         source_id = name
     if source_id in fetch_routes.all_fetchable_sources():
-        return source_id
+        return source_adapters.canonical_source_token(value)
+    try:
+        if source_adapters.get_source_adapter(source_id).acquisition_owner:
+            # Its bytes are produced by running something (a model), not
+            # downloaded; the row's owner module is the door.
+            return source_id
+    except ValueError:
+        pass
     try:
         fetch_routes.route_for(source_id)
     except ValueError as error:
@@ -7968,6 +9405,21 @@ def register_cli(subparsers) -> None:
              "source with public bytes; native GDAS uses its mapped preparation "
              "profile; retrieve ERA5 from the public ARCO store without a key, "
              "or from Copernicus CDS with configured credentials")
+    parser.add_argument("--reuse-fetch", default=None, metavar="DIR",
+        help="reuse a verified completed generated fetch covering this request before loading its model")
+    parser.add_argument("--model", default=None, metavar="MODEL",
+        help="--source earth2: which NVIDIA Earth-2 model to run through "
+             "earth2studio (fcn3, sfno, pangu, aurora, fengwu, graphcast, aifs: "
+             "a row of woof/authorities/earth2-models.v1.json); the forecast "
+             "and the ERA5 analysis at --cycle are written to --out")
+    parser.add_argument("--earth2-members", help="complete comma-separated Earth-2 noise-id roster")
+    parser.add_argument("--earth2-batch-root", help="shared generated-member batch folder")
+    parser.add_argument("--earth2-batch-size", type=int, help="members per admitted GPU sub-batch")
+    parser.add_argument("--earth2-weights-package", help="local pinned Earth2Studio weight package")
+    parser.add_argument("--prepare-only", action="store_true",
+        help="Earth-2 sources: run only the CPU stage (weights, CPU model construction, initial "
+             "conditions, donor) with no GPU, so it can run outside a card lease; the same "
+             "command with a card then generates from it. Implied when CUDA devices are hidden")
     parser.add_argument("--retrieve", action="store_true",
         help="ERA5: download and validate with the selected provider (default CDS); otherwise write a CDS retrieval template")
     parser.add_argument("--era5-provider", choices=("cds", "arco"), default=None,
@@ -7999,6 +9451,12 @@ def register_cli(subparsers) -> None:
              "does not (a reanalysis published on a delay has a latest, "
              "and it is that delay).  A source that declares neither is "
              "refused by name")
+    parser.add_argument(
+        "--analyzed-aerosol", action="store_true",
+        help="the preparation reads the source's analyzed aerosol numbers "
+             "(QNWFA/QNIFA), so a subset fetch selects them too; implied by "
+             "the native forecast chain when an mp=28 domain asks for the "
+             "analyzed aerosol")
     parser.add_argument(
         "--wif", action="store_true",
         help="stage the SHA-256-verified monthly aerosol climatology in its "
@@ -8160,31 +9618,31 @@ def register_cli(subparsers) -> None:
         "--engine", default=None, choices=FETCH_ENGINES,
         help="hrrr, and gfs/gdas --mode full-file: which downloader "
              "moves the bytes.  'rust' is "
-             "the vendored rw_fetch backbone (16 MiB parallel range "
+             "the vendored rw_fetch backbone (parallel range "
              "GETs, .idx coalescing, the cross-process NOMADS rate "
              "governor, a disk cache); 'python' is the stdlib transport "
              "and always works; 'auto' (default) uses the backbone when "
              "it is built")
     parser.add_argument(
         "--mode", default=None, choices=FETCH_MODES,
-        help="the byte transport.  hrrr (--engine rust): "
+        help="the byte transport.  hrrr: "
              f"'{HRRR_DEFAULT_MODE}' "
-             "is the default -- the whole object in parallel range GETs, "
-             "which is the pipeline this product is built on; "
-             "'idx-subset' is the opt-in bandwidth saver: it selects "
-             "records instead of taking the file, saves transfer volume, "
-             "costs wall clock, and refuses rather than silently "
-             "degrading when the index cannot carry the selection; "
-             "'auto' is the probe rule -- take the whole file when the "
-             ".idx is absent, malformed, or provably shorter than the "
-             "object -- which is what an install without the rust "
-             "backbone falls back to.  gfs/gdas: 'full-file' takes the "
+             "is the default -- the .idx record subset the preparation "
+             "reads (about 40 %% of the bytes), and the whole object for "
+             "a file whose .idx is absent, malformed, or provably "
+             "shorter than the object, each file's line saying which; "
+             "'full-file' takes every object whole (--engine rust); "
+             "'idx-subset' takes only subsets and refuses rather than "
+             "degrading when the index cannot carry the selection "
+             "(--engine rust).  gfs/gdas: 'full-file' takes the "
              "whole pgrb2.0p25 objects from the S3 archive (either "
-             "engine); omitted or 'auto', the NOMADS grib-filter crop "
-             "remains the default (whole archive objects for a cycle the "
-             "crop host no longer keeps), and 'idx-subset' refuses -- .idx "
-             "record subsetting of the raw objects is not a certified GFS "
-             "route.  The other forecast sources take whole objects, and "
+             "engine); 'idx-subset' takes from those objects only the "
+             "records the grib-filter asks for, by their .idx byte ranges "
+             "(an object whose host keeps no index moves whole); omitted "
+             "or 'auto', the NOMADS grib-filter crop remains the default "
+             "(the archive's records for a cycle the crop host no longer "
+             "keeps, and under the hosted AWS policy).  The other "
+             "forecast sources take whole objects, and "
              "'auto' there is that same full-file default")
     parser.add_argument(
         "--cache-dir", type=Path, default=None, metavar="DIR",
@@ -8192,6 +9650,12 @@ def register_cli(subparsers) -> None:
              "wx-core disk cache root, keyed "
              "by URL and byte range, so a re-run or an overlapping "
              "window re-reads bytes instead of re-downloading them")
+    parser.add_argument(
+        "--fetch-max-connections", type=int, default=None, metavar="N",
+        help="total engine fetch connections on this box (default 30, or "
+             "WOOF_FETCH_MAX_CONNECTIONS). Shared across engine processes; "
+             "use the same cap for every process. File and range widths are "
+             "clipped to it; receipts record the cap and stream limits.")
     parser.add_argument(
         "--fetch-workers", type=int, default=None, metavar="N",
         help="how many FILES are in flight at once (default "
@@ -8208,6 +9672,13 @@ def register_cli(subparsers) -> None:
              "transport: a knob, not a workaround.  The manifest "
              "receipts files, bytes, workers, wall and the effective "
              "speedup under 'concurrency'")
+    parser.add_argument(
+        "--runtime-surface", default=None, metavar="FIELDS",
+        help="comma-separated runtime surface fields (e.g. VEGFRA) the "
+             "start must read from this cycle itself.  A field the source "
+             "table declares but this list omits starts from its recorded "
+             "fallback when the cycle publishes no record for it; a listed "
+             "field the cycle does not publish is refused by name")
     parser.add_argument(
         "--accept-inventory-change", action="store_true",
         help="proceed when the live provider inventory yields a "
@@ -8287,7 +9758,8 @@ __all__ = [
     "fetch_gfs_fullfile",
     "fetch_hrrr", "fetch_main", "gfs_forecast_hours", "gfs_object_url",
     "gfs_suggested_fetch_margin_deg",
-    "hrrr_forecast_hours", "hrrr_object_url", "parse_area", "parse_cycle",
+    "hrrr_forecast_hours", "hrrr_lead_products", "hrrr_lead_urls",
+    "hrrr_object_url", "parse_area", "parse_cycle",
     "read_grib1_records", "register_cli", "resolve_fetch_engine",
     "select_fetch_engine", "resolve_hrrr_transport",
     "cycle_probe_urls", "objects_published",

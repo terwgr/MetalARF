@@ -1,0 +1,76 @@
+{
+  "kernels": [
+    {
+      "name": "da_hotstart_height",
+      "module": "da_hotstart_height",
+      "source": "woof/metal/shaders/da_hotstart_height.metal",
+      "cuda_source": "woof/da/hotstart.py",
+      "cuda_symbol": "_height_agl",
+      "resources": [
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "height",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "php": [
+          [
+            "full_n"
+          ]
+        ],
+        "phb": [
+          [
+            "base_n"
+          ]
+        ],
+        "height": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "plane",
+          "int32"
+        ],
+        [
+          "full_n",
+          "int32"
+        ],
+        [
+          "base_n",
+          "int32"
+        ],
+        [
+          "base_column",
+          "int32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ]
+      ],
+      "arithmetic_policies": [
+        "default"
+      ],
+      "layout_version": 1,
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "kernels": [
+    {
+      "name": "strict_regional_kessler_finish",
+      "module": "strict_regional_kessler_finish",
+      "source": "woof/metal/shaders/strict_regional_kessler_finish.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "moist_physics_finish",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "saved",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "saved": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "limit",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "no_heating",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+#include "rrtmg_legacy_sw_driver_swdown_bindings.metalh"
+#include "rrtmg_legacy_sw_driver_tendency_bindings.metalh"
 #include <metal_stdlib>
 #include "rrtmg_legacy_sw_inatm_bindings.metalh"
 #include "rrtmg_legacy_sw_cldprmc_bindings.metalh"
@@ -352,4 +354,30 @@ kernel void rrtmg_legacy_sw_post(
     const ulong o1 = ulong(col) * ulong(p.nl + 1);
     rsw_post_body(i, p.nl, p.heatfac, r.pdp + o, r.pbbfu + o1,
         r.pbbfd + o1, r.pbbcu + o1, r.pbbcd + o1, r.swhr + o, r.swhrc + o);
+}
+
+// CUDA rla_driver_sw_tendency: recover diagnostic SW from rounded total.
+kernel void rrtmg_legacy_sw_driver_tendency(constant RrtmgLegacySwDriverTendencyResources& r [[buffer(0)]],
+                               constant RrtmgLegacySwDriverTendencyParams& p [[buffer(1)]],
+                               uint gid [[thread_position_in_grid]]) {
+    if (gid >= uint(p.n)) return;
+    const uint lw = as_type<uint>(r.lw[gid]);
+    const uint sw = as_type<uint>(r.sw[gid]);
+    r.sw[gid] = as_type<float>(soft32_sub(soft32_add(lw, sw), lw));
+}
+
+// CUDA rla_swdown: separate subtraction and division, then restore source NaNs.
+kernel void rrtmg_legacy_sw_driver_swdown(constant RrtmgLegacySwDriverSwdownResources& r [[buffer(0)]],
+                          constant RrtmgLegacySwDriverSwdownParams& p [[buffer(1)]],
+                          uint gid [[thread_position_in_grid]]) {
+    if (gid >= uint(p.n)) return;
+    const uint gsw = as_type<uint>(r.gsw[gid]);
+    const uint albedo = as_type<uint>(r.albedo[gid]);
+    uint result = soft32_div(gsw, soft32_sub(0x3f800000u, albedo));
+    if (soft32_is_nan(result)) {
+        if (soft32_is_nan(gsw)) result = soft32_quiet_nan(gsw);
+        else if (soft32_is_nan(albedo)) result = soft32_quiet_nan(albedo);
+        else result = 0xffc00000u;
+    }
+    r.swdown[gid] = as_type<float>(result);
 }

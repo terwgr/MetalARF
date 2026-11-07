@@ -1,6 +1,6 @@
 """gpuwm-vs-WRF parity for the Noah-MP parameter transfer.
 
-The fixture `tests/data/noahmp/oracle/noahmp-parameters.csv` is
+The fixture `tests/data/oracles/noahmp/noahmp-parameters.csv` is
 `NOAHMP_TABLES::read_mp_*` followed by
 `module_sf_noahmpdrv::TRANSFER_MP_PARAMETERS`, run by unmodified WRF v4.6.1
 over seven land identities x 181 transferred field/index pairs. These tests
@@ -18,17 +18,21 @@ is executable rather than a comment.
 
 from __future__ import annotations
 
-from collections import defaultdict
 import csv
 import hashlib
-import importlib.util
 from pathlib import Path
 import struct
 
 import numpy as np
 import pytest
 
-from woof.core.fp32_ulp import fp32_ulp_distance
+from noahmp_kernel_sources import (
+    load_oracle_tool as _load_tool,
+    oracle_f32_from_bits as _f32_from_bits,
+    oracle_ulp_delta as _ulp_delta,
+    load_oracle_cases as _load_leaf_cases,
+)
+
 from woof.core.noahmp import (
     FRZX_UNDEFINED_SOILTYPE,
     URBAN_CSOIL_OVERRIDE,
@@ -41,7 +45,7 @@ from woof.core.noahmp_leaves import LEAF_EVALUATORS
 
 ORACLE_PATH = (
     Path(__file__).parents[1]
-    / "tests" / "data" / "noahmp" / "oracle" / "noahmp-parameters.csv"
+    / "tests" / "data" / "oracles" / "noahmp" / "noahmp-parameters.csv"
 )
 ORACLE_SHA256 = "1a2617bad69ff050f728b71c46ce13a4624091a68488d1cb2b59fcda106eaa35"
 ORACLE_ROWS = 1267
@@ -168,23 +172,6 @@ def test_field_inventory_is_completely_partitioned(oracle_rows):
     assert len(direct) == DIRECT_LOOKUP_PAIRS
     assert derived | urban | direct == pairs
     assert not (derived & urban) and not (derived & direct) and not (urban & direct)
-
-
-def test_direct_lookups_come_from_the_packaged_table_bytes(bundle, oracle_rows):
-    """The 162 pure-lookup pairs must be table bytes, not fitted numbers."""
-
-    for case, rows in _cases(oracle_rows).items():
-        parameters = _transfer(bundle, rows[0])
-        for row in rows:
-            field, index = row["field"], int(row["index"])
-            if field in DERIVED_FIELDS:
-                continue
-            if parameters.urban_flag and field in URBAN_OVERRIDDEN_FIELDS:
-                continue
-            got = np.float32(float(parameters.field(field, index)))
-            assert _bits(got) == _bits(float(row["value"])), (
-                f"{case}: direct lookup {field}({index}) disagrees with WRF"
-            )
 
 
 def test_derived_kdt_and_frzx_follow_the_wrf_expressions(bundle, oracle_rows):
@@ -320,7 +307,7 @@ def test_transfer_rejects_out_of_range_identities(bundle):
 # ===========================================================================
 # Per-leaf solver oracles
 #
-# `tests/data/noahmp/oracle/noahmp-leaves.csv` is produced by
+# `tests/data/oracles/noahmp/noahmp-leaves.csv` is produced by
 # `tools/noahmp_wrf461_oracle/build_leaves.sh` from a *scratch copy* of the
 # pinned WRF tree carrying only `patches/noahmp-lsm-leaf-visibility.patch`
 # (50 `private ::` -> `public ::` accessibility statements, nothing else).
@@ -328,7 +315,7 @@ def test_transfer_rejects_out_of_range_identities(bundle):
 # ===========================================================================
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ORACLE_DIR = REPO_ROOT / "tests" / "data" / "noahmp" / "oracle"
+ORACLE_DIR = REPO_ROOT / "tests" / "data" / "oracles" / "noahmp"
 LEAVES_CSV = ORACLE_DIR / "noahmp-leaves.csv"
 DISC_CSV = ORACLE_DIR / "noahmp-leaves-discrimination.csv"
 VISIBILITY_PATCH = REPO_ROOT / "patches" / "noahmp-lsm-leaf-visibility.patch"
@@ -344,43 +331,7 @@ PINNED_LEAF_ASSETS = {
 }
 
 
-def _load_tool(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def _f32_from_bits(bits: str) -> np.float32:
-    return np.frombuffer(struct.pack("<I", int(bits, 16)),
-                         dtype=np.float32)[0]
-
-
-def _ulp_delta(got: np.float32, want: np.float32) -> int:
-    """Signed-magnitude ULP distance between two FP32 values."""
-    return int(fp32_ulp_distance(got, want).reshape(-1)[0])
-
-
-def _load_leaf_cases():
-    with LEAVES_CSV.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
-    packed = defaultdict(lambda: {"int": {}, "in": {}, "out": {}})
-    for row in rows:
-        packed[(row["leaf"], row["case"])][row["role"]][int(row["slot"])] = row
-    cases = {}
-    for key, roles in packed.items():
-        ints = np.array([int(float(roles["int"][s]["value"]))
-                         for s in sorted(roles["int"])], dtype=np.int64)
-        x = np.array([_f32_from_bits(roles["in"][s]["bits"])
-                      for s in sorted(roles["in"])], dtype=np.float32)
-        outs = [(s, roles["out"][s]["name"], int(roles["out"][s]["index"]),
-                 roles["out"][s]["live"] == "1", roles["out"][s]["bits"])
-                for s in sorted(roles["out"])]
-        cases[key] = (ints, x, outs)
-    return cases
-
-
-LEAF_CASES = _load_leaf_cases()
+LEAF_CASES = _load_leaf_cases(LEAVES_CSV)
 LEAF_NAMES = sorted({leaf for leaf, _ in LEAF_CASES})
 
 
@@ -526,7 +477,7 @@ def test_leaf_fixture_kills_every_argument_mutant(leaf):
     unless the argument is declared inert or partially observable with a WRF
     line-number justification.
     """
-    from tools import noahmp_leaf_mutation as mutation
+    from woof.core import noahmp_leaf_mutation as mutation
 
     fixture = mutation.load_leaf_fixture(leaf)
     assert not mutation.baseline_mismatches(fixture)

@@ -431,56 +431,49 @@ def advance_acoustic_step_v841(
     rdzw_a = np.asarray(rdzw, dtype=dtype)
 
     if small_step != 1:
-        for edge in range(nedges):
-            cell0, cell1 = cells_on_edge[edge]
-            if cell0 < 0 or cell1 < 0:
-                if spec_edge is None or spec_edge[edge] != one:
-                    raise ConfigurationRefusal(
-                        "regional_boundary_state",
-                        f"edge {edge}",
-                        "the acoustic pressure gradient needs both edge cells",
-                        "explicit lateral boundary cells before this substep",
-                    )
-                # Ring-7 one-cell edge: specZoneMaskEdge is 1.0, so native
-                # multiplies its garbage-gathered pgrad by exactly zero
-                # (F:3909) and the update is the driving tendency alone.
-                # ru/u at these edges are then overwritten from driving
-                # state after recover, so the lane is dead regardless.
-                out.ru_p[:, edge] = out.ru_p[:, edge] + dts_r * (
-                    forcing.tend_ru[:, edge]
-                )
-                out.ru_avg[:, edge] = out.ru_avg[:, edge] + out.ru_p[:, edge]
-                continue
-            pgrad = (
-                (out.rtheta_pp[:, cell1] - out.rtheta_pp[:, cell0])
-                * inv_dc_edge[edge]
-            ) / (half * (forcing.zz[:, cell1] + forcing.zz[:, cell0]))
-            pgrad = (
-                forcing.cqu[:, edge]
-                * half
-                * c2
-                * (forcing.exner[:, cell0] + forcing.exner[:, cell1])
-                * pgrad
+        valid = np.all(cells_on_edge >= 0, axis=1)
+        boundary = np.flatnonzero(~valid)
+        if boundary.size:
+            invalid = boundary if spec_edge is None else boundary[spec_edge[boundary] != one]
+            if invalid.size:
+                raise ConfigurationRefusal(
+                    "regional_boundary_state", f"edge {invalid[0]}",
+                    "the acoustic pressure gradient needs both edge cells",
+                    "explicit lateral boundary cells before this substep")
+            out.ru_p[:, boundary] = out.ru_p[:, boundary] + dts_r * forcing.tend_ru[:, boundary]
+            out.ru_avg[:, boundary] = out.ru_avg[:, boundary] + out.ru_p[:, boundary]
+        edge = np.flatnonzero(valid)
+        cell0, cell1 = cells_on_edge[edge].T
+        pgrad = (
+            (out.rtheta_pp[:, cell1] - out.rtheta_pp[:, cell0])
+            * inv_dc_edge[edge]
+        ) / (half * (forcing.zz[:, cell1] + forcing.zz[:, cell0]))
+        pgrad = (
+            forcing.cqu[:, edge]
+            * half
+            * c2
+            * (forcing.exner[:, cell0] + forcing.exner[:, cell1])
+            * pgrad
+        )
+        pgrad = pgrad + (
+            half
+            * forcing.zxu[:, edge]
+            * gravity_r
+            * (out.rho_pp[:, cell0] + out.rho_pp[:, cell1])
+        )
+        if spec_edge is None:
+            out.ru_p[:, edge] = out.ru_p[:, edge] + dts_r * (
+                forcing.tend_ru[:, edge] - pgrad
             )
-            pgrad = pgrad + (
-                half
-                * forcing.zxu[:, edge]
-                * gravity_r
-                * (out.rho_pp[:, cell0] + out.rho_pp[:, cell1])
+        else:
+            # F:3909: ru_p += dts*(tend_ru - (1-specZoneMaskEdge)*pgrad);
+            # a specified-zone edge integrates its driving tendency with
+            # the pressure gradient masked off.
+            out.ru_p[:, edge] = out.ru_p[:, edge] + dts_r * (
+                forcing.tend_ru[:, edge]
+                - (one - spec_edge[edge]) * pgrad
             )
-            if spec_edge is None:
-                out.ru_p[:, edge] = out.ru_p[:, edge] + dts_r * (
-                    forcing.tend_ru[:, edge] - pgrad
-                )
-            else:
-                # F:3909: ru_p += dts*(tend_ru - (1-specZoneMaskEdge)*pgrad);
-                # a specified-zone edge integrates its driving tendency with
-                # the pressure gradient masked off.
-                out.ru_p[:, edge] = out.ru_p[:, edge] + dts_r * (
-                    forcing.tend_ru[:, edge]
-                    - (one - spec_edge[edge]) * pgrad
-                )
-            out.ru_avg[:, edge] = out.ru_avg[:, edge] + out.ru_p[:, edge]
+        out.ru_avg[:, edge] = out.ru_avg[:, edge] + out.ru_p[:, edge]
     else:
         out.ru_p[:] = dts_r * forcing.tend_ru
         out.ru_avg[:] = out.ru_p
@@ -490,183 +483,142 @@ def advance_acoustic_step_v841(
     else:
         out.rtheta_pp_old[:] = out.rtheta_pp
 
-    batch_metal_solve = (
-        metal_context is not None and spec_cell is None
-        and dtype == np.dtype(np.float32)
+    if small_step == 1:
+        out.ww_avg.fill(dtype.type(0.0))
+        out.rho_pp.fill(dtype.type(0.0))
+        out.rtheta_pp.fill(dtype.type(0.0))
+        out.rw_p.fill(dtype.type(0.0))
+    if spec_cell is not None:
+        specified = np.flatnonzero(spec_cell != dtype.type(0.0))
+        out.rho_pp[:, specified] = out.rho_pp[:, specified] + dts_r * forcing.tend_rho[:, specified]
+        out.rtheta_pp[:, specified] = out.rtheta_pp[:, specified] + dts_r * forcing.tend_rt[:, specified]
+        out.rw_p[:nlev, specified] = out.rw_p[:nlev, specified] + dts_r * forcing.tend_rw[:nlev, specified]
+        out.ww_avg[:nlev, specified] = out.ww_avg[:nlev, specified] + ewp[:nlev, None] * out.rw_p[:nlev, specified]
+    cell = np.arange(ncells) if spec_cell is None else np.flatnonzero(spec_cell == dtype.type(0.0))
+    rs = np.zeros((nlev, len(cell)), dtype=dtype)
+    ts = np.zeros_like(rs)
+    # No reduction reassociation: each column consumes its original slot order.
+    for slot in range(edges_on_cell.shape[1]):
+        lanes = np.flatnonzero(n_edges_on_cell[cell] > slot)
+        selected = cell[lanes]
+        edge = edges_on_cell[selected, slot]
+        cell0, cell1 = cells_on_edge[edge].T
+        flux = signs[selected, slot] * dts_r * dv_edge[edge] * out.ru_p[:, edge] * inv_area_cell[selected]
+        rs[:, lanes] = rs[:, lanes] - flux
+        ts[:, lanes] = ts[:, lanes] - flux * half * (forcing.theta_m[:, cell1] + forcing.theta_m[:, cell0])
+    rs = (
+        out.rho_pp[:, cell]
+        + dts_r * forcing.tend_rho[:, cell]
+        + rs
+        - dts_r
+        * coefficients.cofrz[:, None]
+        * (
+            ewm[1:, None] * out.rw_p[1:, cell]
+            - ewm[:-1, None] * out.rw_p[:-1, cell]
+        )
     )
-    rs_all = np.zeros((nlev, ncells), dtype=dtype) if batch_metal_solve else None
-    ts_all = np.zeros((nlev, ncells), dtype=dtype) if batch_metal_solve else None
-    for cell in range(ncells):
-        if small_step == 1:
-            out.ww_avg[:, cell] = dtype.type(0.0)
-            out.rho_pp[:, cell] = dtype.type(0.0)
-            out.rtheta_pp[:, cell] = dtype.type(0.0)
-            out.rw_p[:, cell] = dtype.type(0.0)
-
-        if spec_cell is not None and spec_cell[cell] != dtype.type(0.0):
-            # F:4093-4103, the specified zone in regional_MPAS: no rs/ts
-            # fluxes, no vertically implicit solve: the driving tendencies
-            # integrate forward over rows k=1..nVertLevels only, and wwAvg
-            # accumulates ewp-weighted rw_p over the same rows (including
-            # row 1, unlike the interior branch).
-            out.rho_pp[:, cell] = out.rho_pp[:, cell] + dts_r * forcing.tend_rho[:, cell]
-            out.rtheta_pp[:, cell] = (
-                out.rtheta_pp[:, cell] + dts_r * forcing.tend_rt[:, cell]
-            )
-            out.rw_p[:nlev, cell] = (
-                out.rw_p[:nlev, cell] + dts_r * forcing.tend_rw[:nlev, cell]
-            )
-            out.ww_avg[:nlev, cell] = out.ww_avg[:nlev, cell] + (
-                ewp[:nlev] * out.rw_p[:nlev, cell]
-            )
-            continue
-
-        rs = np.zeros(nlev, dtype=dtype)
-        ts = np.zeros(nlev, dtype=dtype)
-        for slot in range(int(n_edges_on_cell[cell])):
-            edge = int(edges_on_cell[cell, slot])
-            cell0, cell1 = cells_on_edge[edge]
-            flux = (
-                signs[cell, slot]
-                * dts_r
-                * dv_edge[edge]
-                * out.ru_p[:, edge]
-                * inv_area_cell[cell]
-            )
-            rs = rs - flux
-            ts = ts - flux * half * (
-                forcing.theta_m[:, cell1] + forcing.theta_m[:, cell0]
-            )
-
-        rs = (
-            out.rho_pp[:, cell]
-            + dts_r * forcing.tend_rho[:, cell]
-            + rs
-            - dts_r
-            * coefficients.cofrz
+    ts = (
+        out.rtheta_pp[:, cell]
+        + dts_r * forcing.tend_rt[:, cell]
+        + ts
+        - dts_r
+        * rdzw_a[:, None]
+        * (
+            ewm[1:, None] * coefficients.coftz[1:, cell] * out.rw_p[1:, cell]
+            - ewm[:-1, None] * coefficients.coftz[:-1, cell] * out.rw_p[:-1, cell]
+        )
+    )
+    out.ww_avg[1:nlev, cell] = out.ww_avg[1:nlev, cell] + (
+        ewm[1:nlev, None] * out.rw_p[1:nlev, cell]
+    )
+    for level in range(1, nlev):
+        out.rw_p[level, cell] = out.rw_p[level, cell] + dts_r * (
+            forcing.tend_rw[level, cell]
+            - coefficients.cofwz[level, cell]
             * (
-                ewm[1:] * out.rw_p[1:, cell]
-                - ewm[:-1] * out.rw_p[:-1, cell]
+                (
+                    etp[level] * forcing.zz[level, cell] * ts[level]
+                    - etp[level - 1]
+                    * forcing.zz[level - 1, cell]
+                    * ts[level - 1]
+                )
+                + (
+                    etm[level]
+                    * forcing.zz[level, cell]
+                    * out.rtheta_pp[level, cell]
+                    - etm[level - 1]
+                    * forcing.zz[level - 1, cell]
+                    * out.rtheta_pp[level - 1, cell]
+                )
             )
-        )
-        ts = (
-            out.rtheta_pp[:, cell]
-            + dts_r * forcing.tend_rt[:, cell]
-            + ts
-            - dts_r
-            * rdzw_a
+            - coefficients.cofwr[level, cell]
             * (
-                ewm[1:] * coefficients.coftz[1:, cell] * out.rw_p[1:, cell]
-                - ewm[:-1] * coefficients.coftz[:-1, cell] * out.rw_p[:-1, cell]
-            )
-        )
-        out.ww_avg[1:nlev, cell] = out.ww_avg[1:nlev, cell] + (
-            ewm[1:nlev] * out.rw_p[1:nlev, cell]
-        )
-        for level in range(1, nlev):
-            out.rw_p[level, cell] = out.rw_p[level, cell] + dts_r * (
-                forcing.tend_rw[level, cell]
-                - coefficients.cofwz[level, cell]
-                * (
-                    (
-                        etp[level] * forcing.zz[level, cell] * ts[level]
-                        - etp[level - 1]
-                        * forcing.zz[level - 1, cell]
-                        * ts[level - 1]
-                    )
-                    + (
-                        etm[level]
-                        * forcing.zz[level, cell]
-                        * out.rtheta_pp[level, cell]
-                        - etm[level - 1]
-                        * forcing.zz[level - 1, cell]
-                        * out.rtheta_pp[level - 1, cell]
-                    )
+                (
+                    etp[level] * rs[level]
+                    + etp[level - 1] * rs[level - 1]
                 )
-                - coefficients.cofwr[level, cell]
-                * (
-                    (
-                        etp[level] * rs[level]
-                        + etp[level - 1] * rs[level - 1]
-                    )
-                    + (
-                        etm[level] * out.rho_pp[level, cell]
-                        + etm[level - 1] * out.rho_pp[level - 1, cell]
-                    )
-                )
-                + coefficients.cofwt[level, cell]
-                * (
-                    etp[level] * ts[level]
-                    + etm[level] * out.rtheta_pp[level, cell]
-                )
-                + coefficients.cofwt[level - 1, cell]
-                * (
-                    etp[level - 1] * ts[level - 1]
-                    + etm[level - 1] * out.rtheta_pp[level - 1, cell]
+                + (
+                    etm[level] * out.rho_pp[level, cell]
+                    + etm[level - 1] * out.rho_pp[level - 1, cell]
                 )
             )
+            + coefficients.cofwt[level, cell]
+            * (
+                etp[level] * ts[level]
+                + etm[level] * out.rtheta_pp[level, cell]
+            )
+            + coefficients.cofwt[level - 1, cell]
+            * (
+                etp[level - 1] * ts[level - 1]
+                + etm[level - 1] * out.rtheta_pp[level - 1, cell]
+            )
+        )
 
-        if batch_metal_solve:
-            rs_all[:, cell] = rs
-            ts_all[:, cell] = ts
-            continue
+    batch_metal_solve = (metal_context is not None and spec_cell is None
+                         and dtype == np.dtype(np.float32))
+    if batch_metal_solve:
+        from .metal_preview import submit_acoustic_solve_and_damping
+        out.rw_p[:] = submit_acoustic_solve_and_damping(
+            metal_context, rw_p=out.rw_p, a_tri=coefficients.a_tri,
+            alpha_tri=coefficients.alpha_tri, gamma_tri=coefficients.gamma_tri,
+            rw_save=forcing.rw_save, rw=forcing.rw, dss=forcing.dss,
+            w=forcing.w, rho_zz=forcing.rho_zz, zz=forcing.zz,
+            fzm=fzm_a, fzp=fzp_a, dts=dts, solve_scale=dtype.type(dts) ** 2)
+    else:
         solved = solve_vertical_system_v841(
-            out.rw_p[:, cell : cell + 1],
-            _coefficients_for_cell(coefficients, cell),
+            out.rw_p[:, cell],
+            VerticalImplicitCoefficientsV841(**{name: (value if value.ndim == 1 else value[:, cell])
+                for name in coefficients.__slots__ for value in (np.asarray(getattr(coefficients, name)),)}),
             dts=dts,
         )
-        out.rw_p[:, cell] = solved[:, 0]
+        out.rw_p[:, cell] = solved
         for level in range(1, nlev):
             delta_saved = forcing.rw_save[level, cell] - forcing.rw[level, cell]
             damping = forcing.dss[level, cell]
-            density_at_interface = (
+            zz_at_interface = (
                 fzm_a[level] * forcing.zz[level, cell]
                 + fzp_a[level] * forcing.zz[level - 1, cell]
-            ) * (
+            )
+            rho_at_interface = (
                 fzm_a[level] * forcing.rho_zz[level, cell]
                 + fzp_a[level] * forcing.rho_zz[level - 1, cell]
             )
             out.rw_p[level, cell] = (
                 out.rw_p[level, cell]
                 + delta_saved
-                - dts_r * damping * density_at_interface * forcing.w[level, cell]
+                - dts_r * damping * zz_at_interface * rho_at_interface * forcing.w[level, cell]
             ) / (one + dts_r * damping) - delta_saved
-        out.ww_avg[1:nlev, cell] = out.ww_avg[1:nlev, cell] + (
-            ewp[1:nlev] * out.rw_p[1:nlev, cell]
-        )
-        out.rho_pp[:, cell] = rs - dts_r * coefficients.cofrz * (
-            ewp[1:] * out.rw_p[1:, cell]
-            - ewp[:-1] * out.rw_p[:-1, cell]
-        )
-        out.rtheta_pp[:, cell] = ts - dts_r * rdzw_a * (
-            ewp[1:] * coefficients.coftz[1:, cell] * out.rw_p[1:, cell]
-            - ewp[:-1] * coefficients.coftz[:-1, cell] * out.rw_p[:-1, cell]
-        )
-    if batch_metal_solve:
-        from .metal_preview import submit_acoustic_solve_and_damping
-        out.rw_p[:] = submit_acoustic_solve_and_damping(
-            metal_context, rw_p=out.rw_p,
-            a_tri=coefficients.a_tri,
-            alpha_tri=coefficients.alpha_tri,
-            gamma_tri=coefficients.gamma_tri,
-            rw_save=forcing.rw_save, rw=forcing.rw,
-            dss=forcing.dss, w=forcing.w, rho_zz=forcing.rho_zz,
-            zz=forcing.zz, fzm=fzm_a, fzp=fzp_a, dts=dts,
-            solve_scale=dtype.type(dts) ** 2)
-        for cell in range(ncells):
-            rs = rs_all[:, cell]
-            ts = ts_all[:, cell]
-            out.ww_avg[1:nlev, cell] = out.ww_avg[1:nlev, cell] + (
-                ewp[1:nlev] * out.rw_p[1:nlev, cell]
-            )
-            out.rho_pp[:, cell] = rs - dts_r * coefficients.cofrz * (
-                ewp[1:] * out.rw_p[1:, cell]
-                - ewp[:-1] * out.rw_p[:-1, cell]
-            )
-            out.rtheta_pp[:, cell] = ts - dts_r * rdzw_a * (
-                ewp[1:] * coefficients.coftz[1:, cell] * out.rw_p[1:, cell]
-                - ewp[:-1] * coefficients.coftz[:-1, cell] * out.rw_p[:-1, cell]
-            )
+    out.ww_avg[1:nlev, cell] = out.ww_avg[1:nlev, cell] + (
+        ewp[1:nlev, None] * out.rw_p[1:nlev, cell]
+    )
+    out.rho_pp[:, cell] = rs - dts_r * coefficients.cofrz[:, None] * (
+        ewp[1:, None] * out.rw_p[1:, cell]
+        - ewp[:-1, None] * out.rw_p[:-1, cell]
+    )
+    out.rtheta_pp[:, cell] = ts - dts_r * rdzw_a[:, None] * (
+        ewp[1:, None] * coefficients.coftz[1:, cell] * out.rw_p[1:, cell]
+        - ewp[:-1, None] * coefficients.coftz[:-1, cell] * out.rw_p[:-1, cell]
+    )
     return out
 
 

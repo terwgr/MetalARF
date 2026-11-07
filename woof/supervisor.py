@@ -36,7 +36,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-import numpy as np
 
 from woof.certify.capsule import emit_run_capsule
 # The refusal half of a layered message.  A capsule records `str(exc)`
@@ -219,9 +218,9 @@ def _fsync_directory(path: Path) -> None:
 def fsync_file(path: str | Path) -> Path:
     """Flush an already closed file through the OS durability boundary."""
     path = Path(path)
-    # Windows' CRT ``_commit`` (used by os.fsync) rejects a read-only file
-    # descriptor with EBADF.  Reopen read/write without changing contents.
-    with path.open("r+b") as stream:
+    # Windows CRT _commit needs write access; POSIX accepts a read-only
+    # descriptor, so archived parent checkpoints need no write permission.
+    with path.open("r+b" if os.name == "nt" else "rb") as stream:
         os.fsync(stream.fileno())
     return path
 
@@ -257,9 +256,13 @@ def replace_file_with_retry(source: str | Path,
 
 def atomic_write_json(path: str | Path, payload: dict[str, Any], *,
                       _before_replace: Callable[[Path], None] | None = None,
-                      _quarantine_on_permission_error: bool = False
-                      ) -> Path:
+                      _quarantine_on_permission_error: bool = False,
+                      durable: bool = True) -> Path:
     """Publish JSON through tmp + flush + fsync + ``os.replace``.
+
+    ``durable=False`` keeps the atomic replace (a reader sees the old record
+    or the new one, never a torn one) and skips both fsyncs.  It is for a
+    record the very next step replaces anyway: the per-step heartbeat.
 
     ``_before_replace`` is a deterministic kill/fault-injection seam for the
     CPU atomicity test.  Production callers never pass it.
@@ -272,7 +275,8 @@ def atomic_write_json(path: str | Path, payload: dict[str, Any], *,
     with temp.open("wb") as stream:
         stream.write(encoded)
         stream.flush()
-        os.fsync(stream.fileno())
+        if durable:
+            os.fsync(stream.fileno())
     if _before_replace is not None:
         _before_replace(temp)
     try:
@@ -284,7 +288,8 @@ def atomic_write_json(path: str | Path, payload: dict[str, Any], *,
         # because a reader held run-progress.json open for >0.50 s.
         quarantine_file(temp, reason="heartbeat-sharing-violation")
         return path
-    _fsync_directory(path.parent)
+    if durable:
+        _fsync_directory(path.parent)
     return path
 
 
@@ -460,9 +465,11 @@ def read_heartbeat(path: str | Path) -> Heartbeat:
     return Heartbeat.from_mapping(payload)
 
 
-def write_heartbeat(path: str | Path, heartbeat: Heartbeat) -> Path:
+def write_heartbeat(path: str | Path, heartbeat: Heartbeat, *,
+                    durable: bool = True) -> Path:
     return atomic_write_json(
-        path, heartbeat.as_dict(), _quarantine_on_permission_error=True)
+        path, heartbeat.as_dict(), _quarantine_on_permission_error=True,
+        durable=durable)
 
 
 class RollingStepWall:
@@ -606,11 +613,7 @@ def _byte_words(count: int | None) -> str:
 
 
 def config_digest(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return _hash_file(Path(path))
 
 
 def _hash_file(path: Path) -> str:
@@ -1166,14 +1169,67 @@ def query_gpus() -> tuple[GPUIdentity, ...]:
     return tuple(identities)
 
 
+def _visible_single_gpu(identities, visibility: str | None) -> GPUIdentity | None:
+    """The one card ``CUDA_VISIBLE_DEVICES`` names, or None when it names none.
+
+    Named breakage: on a multi-GPU node (an 8-card H100 or a 4-card RTX
+    PRO 6000 box) ``CUDA_VISIBLE_DEVICES=<one card> woof run ...`` was
+    refused with "--gpu-uuid is required", because nvidia-smi lists every
+    card whatever the mask says, so the standard way to pin a job to one
+    card did not count.  A mask that names exactly one card is that
+    choice.  A numeric entry is CUDA's ordinal, which equals nvidia-smi's
+    index under ``CUDA_DEVICE_ORDER=PCI_BUS_ID`` and on a node of identical
+    cards (CUDA's fastest-first order ties them in bus order); on a mixed
+    node without PCI_BUS_ID the two can differ, so that case is refused
+    with the UUID spelling that cannot.
+    """
+
+    entries = [value.strip() for value in (visibility or "").split(",")
+               if value.strip()]
+    if not entries:
+        return None
+    if len(entries) != 1:
+        raise GPUPreflightError(
+            f"CUDA_VISIBLE_DEVICES={visibility!r} names {len(entries)} cards; "
+            "a single-card run needs one: set CUDA_VISIBLE_DEVICES to one "
+            "card or pass --gpu-uuid: "
+            + ", ".join(f"{gpu.index} {gpu.uuid}" for gpu in identities))
+    value = entries[0]
+    if value.isdigit():
+        ordered_by_bus = os.environ.get("CUDA_DEVICE_ORDER") == "PCI_BUS_ID"
+        if not ordered_by_bus and len({gpu.name for gpu in identities}) > 1:
+            raise GPUPreflightError(
+                f"CUDA_VISIBLE_DEVICES={value} is a CUDA ordinal on a node of "
+                "different card models, where CUDA's default fastest-first "
+                "order need not match nvidia-smi's index; name the card by "
+                "UUID (CUDA_VISIBLE_DEVICES=GPU-... or --gpu-uuid), or set "
+                "CUDA_DEVICE_ORDER=PCI_BUS_ID")
+        matches = [gpu for gpu in identities if gpu.index == int(value)]
+    elif value.startswith("GPU-"):
+        matches = [gpu for gpu in identities if gpu.uuid.startswith(value)]
+    else:
+        matches = []
+    if len(matches) != 1:
+        raise GPUPreflightError(
+            f"CUDA_VISIBLE_DEVICES={value!r} does not name exactly one card "
+            "nvidia-smi reports: "
+            + ", ".join(f"{gpu.index} {gpu.uuid}" for gpu in identities))
+    return matches[0]
+
+
 def select_gpu(requested_uuid: str | None = None) -> GPUIdentity:
     identities = query_gpus()
     if requested_uuid is None:
-        if len(identities) != 1:
+        if len(identities) == 1:
+            return identities[0]
+        visible = _visible_single_gpu(
+            identities, os.environ.get("CUDA_VISIBLE_DEVICES"))
+        if visible is None:
             raise GPUPreflightError(
-                "multiple GPUs are present; --gpu-uuid is required to avoid "
-                "ambiguous locking")
-        return identities[0]
+                "multiple GPUs are present; pass --gpu-uuid or set "
+                "CUDA_VISIBLE_DEVICES to one card to avoid ambiguous locking: "
+                + ", ".join(f"{gpu.index} {gpu.uuid}" for gpu in identities))
+        return visible
     matches = [gpu for gpu in identities if gpu.uuid == requested_uuid]
     if len(matches) != 1:
         raise GPUPreflightError(
@@ -1550,7 +1606,8 @@ def validate_manifest_checkpoint(path: str | Path) -> Path:
         if not isinstance(manifest, dict):
             raise CheckpointValidationError(
                 f"checkpoint {path} has no array_manifest object")
-        with np.load(path, allow_pickle=False) as archive:
+        from woof.io.restart_prefetch import restart_archive
+        with restart_archive(path) as archive:
             members = set(archive.files)
             payload_members = {name for name in members
                                if name != "__gpuwm_restart_header__"}
@@ -1733,7 +1790,15 @@ class RuntimeHeartbeat:
             self.model_elapsed_seconds, self.last_step, self.last_wrfout,
             self.last_checkpoint, work_bytes, wait,
             None if self.restart_record is None
-            else dict(self.restart_record)))
+            else dict(self.restart_record)),
+            # The per-step beat is liveness, replaced by the next step's: it
+            # is published atomically but not fsynced.  Breakage this
+            # prevents: two fsyncs (file and directory) on the stepping
+            # thread every step, 10-27 ms each on a box whose disk is busy
+            # with 16 GB history frames (V59, 8 x RTX 5090, 2026-10-21: the
+            # stepping thread sat in xlog_wait_on_iclog, the 26 ms per-step
+            # gap the step timer missed).  Every other status stays durable.
+            durable=status != "integrating")
 
     def __call__(self, *, model_elapsed_seconds: float, outer_step: int,
                  last_durable_wrfout: str | Path | None,
@@ -2034,6 +2099,32 @@ _SUPERVISOR_AUTHORED_CAPSULE_TYPES = frozenset({
 #: SupervisorError under itself.
 _CAPSULE_HEADLINE_CAP = 240
 
+#: An absolute path inside a refusal sentence (POSIX ``/a/b`` or Windows
+#: ``C:\a\b``), not the ``//`` of a URL and not a relative ``a/b``.
+_HEADLINE_PATH = re.compile(r"(?<![\w.:/\\])(?:[A-Za-z]:)?[\\/][^\s'\"]+")
+
+
+def _shorten_headline_paths(text: str, keep: int = 2) -> str:
+    """Each absolute path cut to ``.../<last keep components>``.
+
+    The loaders name the file they refused at the head of their sentence
+    and say what is wrong after it, so cutting an over-long headline at its
+    end dropped exactly the part the user acts on whenever the path was deep
+    (a CI runner's 120-character temporary root cut "must carry at least
+    one [[domain]] table" short, 2026-10-15).  The full path stays in the
+    capsule the message names.
+    """
+
+    def short(match: re.Match) -> str:
+        token = match.group(0)
+        parts = [part for part in re.split(r"[\\/]", token) if part]
+        if len(parts) <= keep + 1:
+            return token
+        sep = "\\" if "\\" in token else "/"
+        return "..." + sep + sep.join(parts[-keep:])
+
+    return _HEADLINE_PATH.sub(short, text)
+
 
 def _capsule_headline(payload: dict | None) -> str:
     """``"ValueError: the refusal sentence"``, or ``""`` if there is none.
@@ -2069,6 +2160,8 @@ def _capsule_headline(payload: dict | None) -> str:
     # period goes; an ellipsis is not a full stop and stays.
     if first.endswith(".") and not first.endswith(".."):
         first = first[:-1]
+    if len(first) > _CAPSULE_HEADLINE_CAP:
+        first = _shorten_headline_paths(first)
     if len(first) > _CAPSULE_HEADLINE_CAP:
         first = first[:_CAPSULE_HEADLINE_CAP - 3].rstrip() + "..."
     if kind and first:
@@ -2281,10 +2374,6 @@ def priced_reservation_bytes(configuration, *, source=None,
     return value if value > 0 else None
 
 
-#: The name this function carried while only one door called it.
-_priced_reservation_bytes = priced_reservation_bytes
-
-
 def supervise_experiment(
         config_path: str | Path, outdir: str | Path, *,
         restart: str | Path | None = None, gpu_uuid: str | None = None,
@@ -2414,6 +2503,14 @@ def supervise_experiment(
                 health_debug=health_debug,
                 preprocess_backend=preprocess_backend, members=members,
                 keep_member_files=keep_member_files)
+            # The worker dies with this supervisor (woof.parent_death):
+            # a `woof run` killed by pid must not leave its worker on the
+            # card as an orphan, as a killed `woof go` left its forecast
+            # holding 63.9 GB for 43 minutes on a rented box (2026-10-07).  The
+            # worker binds itself after exec; no preexec_fn (D-03).
+            from woof.parent_death import child_environment
+
+            env.update(child_environment())
             with stdout_path.open("wb") as stdout, stderr_path.open("wb") as stderr:
                 process = subprocess.Popen(
                     command, cwd=Path(__file__).resolve().parents[1], env=env,
@@ -2716,8 +2813,12 @@ def _success_receipts(outdir: Path, summary) -> dict[str, Any]:
     """
 
     floors = getattr(summary, "moisture_floor_receipts", None)
+    # The hydro decision/cost/products the run route stated, kept for the
+    # same reason (an ERA5 run's supervised capsule dropped them).
+    hydro = getattr(summary, "hydro_receipts", None)
     return {"run_progress": {"path": str((outdir / HEARTBEAT_NAME).resolve())},
-            **(dict(floors) if floors else {})}
+            **(dict(floors) if floors else {}),
+            **(dict(hydro) if hydro else {})}
 
 
 def _worker_main(args: argparse.Namespace) -> int:

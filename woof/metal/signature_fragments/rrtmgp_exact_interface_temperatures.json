@@ -1,0 +1,74 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_exact_interface_temperatures",
+      "module": "rrtmgp_exact_profile_prepare",
+      "source": "woof/metal/shaders/rrtmgp_exact_profile_prepare.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_optics",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "plev",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "tlev",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "plev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

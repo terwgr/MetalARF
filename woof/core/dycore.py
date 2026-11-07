@@ -32,18 +32,17 @@ from functools import lru_cache
 import math
 import os
 
-try:
-    import cupy as cp
-except ImportError:  # Metal-only setup and source discovery need no CUDA wheel.
-    cp = None
+from woof.core.state import cp
+from woof.forecast_gpu import require_forecast_gpu
 import numpy as np
 
 from woof.grid_requirements import FIFTH_ORDER_STENCIL_AXIS, boundary_axis
-from woof.config import RunConfig, validate_km_opt
+from woof.config import (KM_OPT_ZERO_ACK, RunConfig, constant_k_mixing_active,
+                          validate_km_opt, wrf_mixing_package_active, w_crit_cfl_refusal)
 from woof.wrf_exact import (ENABLED as WRF_EXACT, DIAGNOSTICS_ENABLED,
-                            BIGSTEP_ENABLED)
+                            ADVECTION_ENABLED, BIGSTEP_ENABLED, DIFFUSION_ENABLED)
 from woof.core import constants as c
-from woof.core.acoustic import (_mass_w_boundary_zone,
+from woof.core.acoustic import (_mass_w_boundary_zone, wrf_acoustic_muts,
                                  prepare_acoustic_coefficients,
                                  prepare_acoustic_substep_launch,
                                  prepare_moist_cq)
@@ -59,7 +58,6 @@ from woof.core.diff6_edge_workspace import (
     phb_values as diff6_edge_phb_values,
     plane_shapes as diff6_edge_plane_shapes,
     planes_values as diff6_edge_planes_values)
-from woof.core.diffusion import add_diffusion_tendencies
 from woof.core import ieva
 from woof.core.bandwidth_glue import (
     add_array, capture_theta_forcing, prepare_add_arrays,
@@ -71,14 +69,16 @@ from woof.core.microphysics import apply as apply_microphysics
 from woof.core.moist import (SPECIES, WRF_MOIST_ARRAY_SPECIES,
                               extra_moist_species, advance_scalars_stage)
 from woof.core.moist_n2_mutation import calc_n2_kernel
-from woof.core.physics import physics_enabled
+from woof.core.physics import (physics_enabled, _metal_strict_physics_profile,
+                               _metal_strict_terrain_coordinate)
 from woof.core import tke_budget
 from woof.core.state import (DTYPE, DomainState, mu_at_u_faces,
                               mu_at_v_faces)
 from woof.core.uh_diag import update_up_heli_max
 from woof.ingest.lateral_bc import (apply_state_boundary_values,
                                      apply_state_lateral_boundaries,
-                                     apply_specified_w_zero_gradient)
+                                     apply_specified_w_zero_gradient,
+                                     capture_folded_relaxation)
 
 _TPB = 128  # threads per block along i (i fastest)
 
@@ -169,7 +169,9 @@ def _prepare_bookkeeping(state, pairs, *, zero=False, field_names=None):
     rows[:len(pairs)] = [(src.data.ptr, dst.data.ptr, dst.size)
                         for src, dst in pairs]
     # A by-value parameter avoids device metadata allocation and upload.
-    table = rows.reshape(-1).view(np.dtype(('V', rows.nbytes)))[0]
+    # Keep a size-one ndarray: CuPy 14 bounds scalar arguments to its
+    # small CScalar buffer, while ndarray arguments use the full host bytes.
+    table = rows.reshape(-1).view(np.dtype(('V', rows.nbytes)))
     kernel = get_kernel('rk_bookkeeping',
                         'rk_zero_words' if zero else 'rk_copy_words')
     grid = (max(1, (max(dst.size for _, dst in pairs) + 4 * _TPB - 1)
@@ -192,12 +194,11 @@ def _save_time_t(state):
     names = list(_PROGNOSTICS)
     if state.qv is not None:
         names.extend(SPECIES)
-        if getattr(state, 'qi', None) is not None:
-            names.extend(extra_moist_species(state))
+    names.extend(extra_moist_species(state))
     if getattr(state, 'tke', None) is not None:
         names.append('tke')
     pairs = tuple((getattr(state, name), getattr(state, name + '0'))
-                  for name in names)
+                  for name in names) + _chem_time_pairs(state)
     launch = _prepare_bookkeeping(
         state, pairs, field_names=tuple(names))
     if launch is None:
@@ -382,7 +383,7 @@ def _couple_momentum_kernel(has_msf: bool, reciprocal: bool = False):
     if has_msf:
         params.append("raw T msf")
         if reciprocal:
-            body.append("v = __fmul_rn(v, __fdiv_rn(T(1), msf[col]));")
+            body.append("v = __fmul_rn(v, msf[col]);")
         else:
             body.append("v = __fdiv_rn(v, msf[col]);")
     params.append("int32 ncol")
@@ -392,7 +393,7 @@ def _couple_momentum_kernel(has_msf: bool, reciprocal: bool = False):
                                 options=("-fmad=false",))
 
 
-def stage_fluxes(state: DomainState, cfg: RunConfig
+def stage_fluxes(state: DomainState, cfg: RunConfig, *, first_stage: bool = False
                  ) -> tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
     """Public RK-stage transport surface (Task 5): ``(ru, rv, ww)``.
 
@@ -415,7 +416,7 @@ def stage_fluxes(state: DomainState, cfg: RunConfig
     touch them).
     """
     if getattr(state, "_metal_setup_state", False):
-        return build_metal_stage_fluxes(state, cfg)
+        return build_metal_stage_fluxes(state, cfg, first_stage=first_stage)
     nz, ny, nx = state.p.shape
     mu = state.total_mu()                              # (ny, nx) t* mass
     # Open boundaries: the boundary-face column mass is the boundary CELL's
@@ -431,9 +432,73 @@ def stage_fluxes(state: DomainState, cfg: RunConfig
             state.has_msf, WRF_EXACT and wind is state.v)
         args = [wind, state.c1h, state.c2h, muface.reshape(-1)]
         if state.has_msf:                              # U = C(mu)*u/msfu,
-            args.append(msf.reshape(-1))               # V = C(mu)*v/msfv
+            factor = state.msfv_inv if WRF_EXACT and wind is state.v else msf
+            args.append(factor.reshape(-1))            # V uses WRF's stored inverse
         kernel(*args, np.int32(muface.size), flux)
+    if WRF_EXACT:
+        return ru, rv, _omega_ref(state, cfg, *_calc_ww_cp_fluxes(
+            state, cfg, first_stage=first_stage))
     return ru, rv, _omega_ref(state, cfg, ru, rv)
+
+
+#: Strict mode: the outermost ring of mu_2 as WRF's halo holds it at the next
+#: step's start -- the acoustic loop's value, copied before spec_bdy_final
+#: installs the boundary mass (restart class: carried, woof/io/restart.py).
+WRF_MU_HALO_SLOT = "wrf_exact_mu_halo"
+
+
+def _calc_ww_cp_fluxes(state: DomainState, cfg: RunConfig, *,
+                       first_stage: bool = False):
+    """Strict mode: the coupled fluxes WRF ``calc_ww_cp`` forms for itself.
+
+    calc_ww_cp does not read ``ru``/``rv``: it builds its own face mass
+    ``MUU = 0.5*(MUP(i)+MUB(i)+MUP(i-1)+MUB(i-1))`` (base and perturbation
+    of one column first, unlike calc_mu_uv's ``MU(i)+MU(i-1)+MUB(i)+
+    MUB(i-1)``), reading the halo column at a non-periodic edge, which WRF
+    fills with the edge column, and couples ``(c1h*MUU+c2h)*u/msfuy`` and
+    ``(c1h*MUV+c2h)*v*msfvx_inv`` (module_big_step_utilities_em.F).  The
+    two face-mass orders agree on the time-t state of the round-3 pair and
+    then part: Omega differed in 27748 of 81600 words at the second RK
+    stage until it was formed this way.  Each CuPy operation below rounds
+    once, in WRF's order.
+    """
+    nz, ny, nx = state.p.shape
+    mup, mub = state.mup, state.mub2d
+
+    def faces(n, periodic):
+        idx = cp.arange(n + 1)
+        if periodic:
+            return idx % n, (idx - 1) % n
+        return cp.minimum(idx, n - 1), cp.maximum(idx - 1, 0)
+
+    right, left = faces(nx, not _boundary_x(cfg))
+    mup_r, mup_l = mup[:, right], mup[:, left]
+    north, south = faces(ny, not _boundary_y(cfg))
+    mup_n, mup_s = mup[north], mup[south]
+    halo = state.existing_scratch(WRF_MU_HALO_SLOT) if first_stage else None
+    if halo is not None:
+        # rk_step 1 reads the halo the previous step left: on the outermost
+        # faces the ring mass before spec_bdy_final installed its table
+        # value.  The two are usually the same word; at step 18 of the
+        # round-3 pair they were not, and Omega differed in one column.
+        if _boundary_x(cfg):
+            mup_l[:, 0] = halo[:, 0]
+            mup_r[:, nx] = halo[:, nx - 1]
+        if _boundary_y(cfg):
+            mup_s[0, :] = halo[0, :]
+            mup_n[ny, :] = halo[ny - 1, :]
+    muu = DTYPE(0.5) * (((mup_r + mub[:, right]) + mup_l) + mub[:, left])
+    muv = DTYPE(0.5) * (((mup_n + mub[north]) + mup_s) + mub[south])
+    c1h = state.c1h[:, None, None]
+    c2h = state.c2h[:, None, None]
+    fu = state.scratch((nz, ny, nx + 1), "rk_ww_ru")
+    fv = state.scratch((nz, ny + 1, nx), "rk_ww_rv")
+    fu[...] = ((c1h * muu[None]) + c2h) * state.u
+    fv[...] = ((c1h * muv[None]) + c2h) * state.v
+    if state.has_msf:
+        fu /= state.msfu[None]
+        fv *= state.msfv_inv[None]
+    return fu, fv
 
 
 def domain_mass_measure(state: DomainState) -> float:
@@ -710,9 +775,11 @@ def _launch_slow_buoyancy(state: DomainState, cfg: RunConfig) -> None:
             # q_total's modes are 0/1/2/3 with no "one ice mass" arm.  The
             # absent pair takes the shared zero plane rather than reopening
             # a frozen kernel; moist.absent_mass_plane argues the identity.
-            if getattr(state, "qs", None) is None:
+            if getattr(state, "qg", None) is None:
                 from woof.core.moist import absent_mass_plane
-                qs = qg = absent_mass_plane(state)
+                zero = absent_mass_plane(state)
+                qs = state.qs if getattr(state, "qs", None) is not None else zero
+                qg = zero
             else:
                 qs, qg = state.qs, state.qg
         else:
@@ -739,10 +806,6 @@ def _validate_geopotential_config(cfg: RunConfig, nx: int, ny: int, *,
         raise ValueError(
             f"h_sca_adv_order must be 2 or 5, got {cfg.h_sca_adv_order}")
     if cfg.h_sca_adv_order == 5:
-        if ((cfg.open_x or cfg.open_y) and not allow_radiative_open):
-            raise NotImplementedError(
-                "h_sca_adv_order=5 with radiative open boundaries is not "
-                "implemented by the CUDA caller")
         if nx < FIFTH_ORDER_STENCIL_AXIS or ny < FIFTH_ORDER_STENCIL_AXIS:
             raise ValueError(
                 f"h_sca_adv_order=5 needs nx, ny >= 7 (7-point stencil), "
@@ -760,6 +823,9 @@ def _launch_slow_geopotential(state: DomainState, cfg: RunConfig,
         from woof.metal.dycore import submit_slow_geopotential
         return submit_slow_geopotential(
             state, cfg, ww=ww, mode="fused", add_vertical=add_vertical)
+    if (cfg.open_x or cfg.open_y) and not _boundary_forced(cfg):
+        _launch_open_geopotential(state, cfg, ww, add_vertical=add_vertical)
+        return
     rdx, rdy = 1.0 / cfg.dx, 1.0 / cfg.dy
     kernel = get_kernel("dycore", "slow_geopotential")
     n = nz * ny * nx
@@ -789,6 +855,9 @@ def _launch_slow_geopotential_faces(state: DomainState, cfg: RunConfig,
         from woof.metal.dycore import submit_slow_geopotential
         return submit_slow_geopotential(
             state, cfg, mux=mux, muy=muy, mode="faces")
+    if (cfg.open_x or cfg.open_y) and not _boundary_forced(cfg):
+        _launch_open_geopotential(state, cfg, state.w, add_vertical=False, mux=mux, muy=muy)
+        return
     rdx, rdy = 1.0 / cfg.dx, 1.0 / cfg.dy
     kernel = get_kernel("dycore", "slow_geopotential_faces")
     n = nz * ny * nx
@@ -803,6 +872,21 @@ def _launch_slow_geopotential_faces(state: DomainState, cfg: RunConfig,
             np.int32(_boundary_y(cfg)), np.int32(_boundary_forced(cfg)),
             np.int32(cfg.h_sca_adv_order), np.int32(state.phb.ndim == 3),
             np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def _launch_open_geopotential(state, cfg, ww, *, add_vertical, mux=None, muy=None):
+    nz, ny, nx = state.p.shape
+    n = nz * ny * nx
+    supplied = mux is not None
+    get_kernel("dycore", "slow_geopotential_open")(((n + 255) // 256,), (256,),
+        (state.rph_t, ww, state.w, state.u, state.v, state.php, state.phb,
+         state.mup, state.mub2d, state.rdnw, state.fnm, state.fnp,
+         state.c1f, state.c2f, state.cfn, state.cfn1, state.msft, state.msfu, state.msfv,
+         mux if supplied else state.mup, muy if supplied else state.mup,
+         DTYPE(0.25 / cfg.dx), DTYPE(0.25 / cfg.dy), np.int32(state.has_msf),
+         np.int32(cfg.open_x), np.int32(cfg.open_y), np.int32(supplied),
+         np.int32(add_vertical), np.int32(cfg.h_sca_adv_order), np.int32(state.phb.ndim == 3),
+         np.int32(nz), np.int32(ny), np.int32(nx)))
 
 
 def _launch_slow_geopotential_vertical(state: DomainState,
@@ -855,10 +939,10 @@ def _add_slow_tendencies(state: DomainState, cfg: RunConfig,
     if implicit is not None:
         _add_slow_tendencies_ieva(state, cfg, ru, rv, ww, implicit, cq=cq)
         return
-    if getattr(state, "_metal_setup_state", False):
-        theta_transport = _glue_total_theta(state)
-    elif WRF_EXACT:
+    if WRF_EXACT:
         theta_transport = state.thp
+    elif getattr(state, "_metal_setup_state", False):
+        theta_transport = _glue_total_theta(state)
     elif type(state) is DomainState:
         theta_transport = _glue_total_theta(state)
     else:
@@ -905,6 +989,12 @@ def _add_slow_tendencies(state: DomainState, cfg: RunConfig,
 
     # Fused WRF rhs_ph vertical, g*w, and horizontal-advection terms.
     _launch_slow_geopotential(state, cfg, ww, add_vertical=True)
+
+    if WRF_EXACT:
+        # rk_tendency calls w_damp right after pg_buoy_w and before
+        # coriolis/curvature (module_em.F); the default path applies it
+        # after the held tendencies, another rounding of rw_tend.
+        apply_w_damping(state, cfg, ww)
 
     # --- Coriolis + curvature (Task 3; WRF rk_tendency's coriolis and
     # curvature calls, kernels/coriolis_map.cu): no-op unless rotation is
@@ -965,7 +1055,17 @@ def _add_slow_tendencies_ieva(state: DomainState, cfg: RunConfig,
     ieva.solve_u(state, cfg, ctx)
     ieva.solve_v(state, cfg, ctx)
     ieva.solve_theta(state, cfg, ctx)
-    ieva.add_theta_offset_flux(state, cfg, theta_t, ru, rv, ww, theta_flux)
+    if not WRF_EXACT:
+        # The default acoustic step transports FULL theta, so the t0
+        # share rejoins rth_t here.  Strict arithmetic transports WRF's
+        # t_2 = theta - t0 in the acoustic step (wrf_advance_mu_theta reads
+        # thp with thb = t0), exactly as the non-IEVA strict branch of
+        # _add_slow_tendencies advects thp alone: adding t0 * div(mass
+        # flux) there forced every column by 300 K times its mass-flux
+        # divergence (stock-WRF door, 20 s step: theta 0.080 K and MU
+        # 16 Pa off after one step, non-finite by step 9-11).
+        ieva.add_theta_offset_flux(state, cfg, theta_t, ru, rv, ww,
+                                   theta_flux)
     del theta_t
 
     try:
@@ -988,7 +1088,7 @@ def _add_slow_tendencies_ieva(state: DomainState, cfg: RunConfig,
         add_coriolis_curvature(state, cfg, ru, rv)
 
 
-def capture_advective_theta_forcing(state: DomainState) -> None:
+def capture_advective_theta_forcing(state: DomainState, *, cfg=None) -> None:
     """EXPORT the stage's pure advective theta rate as WRF ``RTHFTEN``.
 
     The exact inverse of :func:`add_h_diabatic_tendency`'s coupling:
@@ -1002,7 +1102,7 @@ def capture_advective_theta_forcing(state: DomainState) -> None:
     :func:`_add_slow_tendencies` returns -- where ``rth_t`` holds the flux
     divergence of theta and nothing else -- and before
     ``physics_tendencies.add_to_slow``, :func:`add_h_diabatic_tendency`,
-    :func:`add_diffusion_tendencies` and the lateral-boundary fold touch
+    :func:`add_fixed_dry_tendencies` and the lateral-boundary fold touch
     it.  WRF's ``module_cumulus_driver.F:867`` pre-folds
     ``RTHRATEN + RTHBLTEN`` into ``RTHFTEN`` for G3SCHEME and
     NTIEDTKESCHEME and NOT for GFSCHEME, which sums the lanes itself
@@ -1026,6 +1126,16 @@ def capture_advective_theta_forcing(state: DomainState) -> None:
     buffers are ``None``.
     """
     if getattr(state, "rthften", None) is None:
+        return
+    if WRF_EXACT and getattr(cfg, "cu_physics", 0) == 3:
+        # set_tend saves the last RK transport in coupled units. GF's
+        # next phy_prep_part2 decouples it with the carried acoustic mass.
+        if getattr(state, "_metal_setup_state", False) and state.has_msf:
+            from woof.metal.bandwidth_family import map_tendency
+            map_tendency(state.rth_t, state.msft, state.rthften, add=False)
+        else:
+            state.rthften[...] = (state.rth_t * state.msft[None]
+                                 if state.has_msf else state.rth_t)
         return
     if type(state) is DomainState and capture_theta_forcing(state):
         return
@@ -1183,9 +1293,6 @@ def launch_coriolis_curvature(ru, rv, u, v, w, mut, msft, msfu, msfv, f, e,
     except ImportError:  # The normal CUDA install has no Metal package.
         MetalArray = ()
     if isinstance(ru, MetalArray):
-        if WRF_EXACT:
-            raise NotImplementedError(
-                "Metal Coriolis/curvature currently supports ordinary arithmetic")
         if sina is None or cosa is None:
             raise ValueError(
                 "Metal Coriolis/curvature requires explicit sina/cosa arrays")
@@ -1207,8 +1314,9 @@ def launch_coriolis_curvature(ru, rv, u, v, w, mut, msft, msfu, msfv, f, e,
             "nz": nz, "ny": ny, "nx": nx,
         }
         ru.buffer.context.submit_kernel(
-            "coriolis_curvature", arrays, parameters,
-            exact_policy=False, grid_size=nz * (ny + 1) * (nx + 1))
+            ("wrf_exact_coriolis_on" if BIGSTEP_ENABLED else "wrf_exact_coriolis_off")
+            if WRF_EXACT else "coriolis_curvature", arrays, parameters,
+            exact_policy=WRF_EXACT, grid_size=nz * (ny + 1) * (nx + 1))
         return
     nz, ny, nxp1 = ru.shape
     nx = nxp1 - 1
@@ -1231,9 +1339,6 @@ def add_coriolis_curvature(state: DomainState, cfg: RunConfig,
                            ru: cp.ndarray, rv: cp.ndarray) -> None:
     """State-level wrapper: add Coriolis + curvature to the slow tendencies
     (the WRF ``rk_tendency`` coriolis/curvature slot)."""
-    if getattr(state, "_metal_setup_state", False) and WRF_EXACT:
-        raise NotImplementedError(
-            "Metal Coriolis/curvature currently supports ordinary arithmetic")
     launch_coriolis_curvature(
         ru, rv, state.u, state.v, state.w, state.total_mu(),
         state.msft, state.msfu, state.msfv, state.f, state.e,
@@ -1360,9 +1465,13 @@ def launch_wrf_smag2d_km(state: DomainState, cfg: RunConfig,
         d12 = _wrf_smag_prefix_view(
             state, (nz, ny + 1, nx), mass_shape, "smag_rv")
         submit_wrf_smag_deform(state, cfg, d11, d22, d12, time_t=time_t)
-        submit_wrf_smag2d_km(
-            state, cfg, d11, d22, d12, xkmh, xkhh,
-            c_s=cfg.c_s, prandtl=_PRANDTL, time_t=time_t)
+        if cfg.diff_opt == 1:
+            from woof.metal.diff_opt1 import coefficients
+            coefficients(state, cfg, d11, d22, d12, xkmh, xkhh, _PRANDTL)
+        else:
+            submit_wrf_smag2d_km(
+                state, cfg, d11, d22, d12, xkmh, xkhh,
+                c_s=cfg.c_s, prandtl=_PRANDTL, time_t=time_t)
         if _boundary_x(cfg) or _boundary_y(cfg):
             submit_wrf_smag_km_bc(
                 xkmh, xkhh, boundary_x=_boundary_x(cfg),
@@ -1406,6 +1515,79 @@ def launch_wrf_smag2d_km(state: DomainState, cfg: RunConfig,
             grid, (_TPB, 1, 1),
             (xkmh, xkhh, np.int32(nz), np.int32(ny), np.int32(nx),
              np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg))))
+    return d11, d22, d12
+
+
+def isotropic_km_constants(khdif: float, kvdif: float,
+                           prandtl: float = _PRANDTL):
+    """WRF ``isotropic_km``'s four coefficients as float32 words.
+
+    module_diffusion_em.F:1756-1767: ``khdif3 = khdif/prandtl`` and
+    ``kvdif3 = kvdif/prandtl`` in default REAL with ``prandtl = 1./3.0``
+    (share/module_model_constants.F:86), then xkmh = khdif, xkmv = kvdif,
+    xkhh = khdif3, xkhv = kvdif3.  The division is one IEEE binary32
+    division of the namelist words; ``3*khdif`` (WRF's commented-out
+    form, and the old constant-K utility's statement) is a different word
+    for some inputs.  ``prandtl`` is :attr:`RunConfig.constant_k_prandtl`
+    (WRF's 1/3 by default).  Returns ``(xkmh, xkmv, xkhh, xkhv)``.
+    """
+    prandtl = np.float32(prandtl)
+    kh = np.float32(khdif)
+    kv = np.float32(kvdif)
+    return kh, kv, np.float32(kh / prandtl), np.float32(kv / prandtl)
+
+
+def launch_wrf_isotropic_km(state: DomainState, cfg: RunConfig,
+                            xkmh, xkhh, *, time_t: bool):
+    """WRF km_opt=1: ``cal_deform_and_div`` + ``isotropic_km`` on device.
+
+    The deformation tensors are WRF's (the same ``wrf_smag_deform`` kernel
+    as the Smagorinsky launchers), because ``horizontal_diffusion_2`` builds
+    the u/v/w stresses from them for every km_opt.  D11 borrows the w
+    carrying buffer's prefix as there, but D22 and D12 borrow the x/y face
+    workspaces instead of the u/v carrying buffers, so the vertical package
+    can fill u and v first (:func:`_compute_wrf_constant_k_tendencies`).  The four exchange coefficients are the namelist
+    constants (:func:`isotropic_km_constants`) at EVERY mass point:
+    isotropic_km writes its whole tile (its..min(ite,ide-1)), so unlike
+    smag2d_km there is no cold-zero outer row to preserve at a physical
+    boundary and ``wrf_smag_km_bc`` is not called.  ``xkmv``/``xkhv`` go to
+    the ``smag_kmv``/``smag_khv`` slots the km_opt=2/3 launchers fill.
+    Returns the (d11, d22, d12) deformation triple.
+    """
+    nz, ny, nx = xkmh.shape
+    n_mass = nz * ny * nx
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.smag2d_family import submit_wrf_smag_deform
+        d11 = state.scratch((nz + 1, ny, nx), "smag_rw").view((nz, ny, nx))
+        d22 = state.scratch((nz, ny, nx + 1), "diff6_x").view((nz, ny, nx))
+        d12 = state.scratch((nz, ny + 1, nx), "diff6_y").view((nz, ny, nx))
+        submit_wrf_smag_deform(state, cfg, d11, d22, d12, time_t=time_t)
+        kmh, kmv, khh, khv = isotropic_km_constants(
+            cfg.khdif, cfg.kvdif, cfg.constant_k_prandtl)
+        xkmh.fill(kmh)
+        xkhh.fill(khh)
+        state.scratch((nz, ny, nx), "smag_kmv").fill(kmv)
+        state.scratch((nz, ny, nx), "smag_khv").fill(khv)
+        return d11, d22, d12
+    d11 = state.scratch((nz + 1, ny, nx), "smag_rw").reshape(-1)[:n_mass]
+    d22 = state.scratch((nz, ny, nx + 1), "diff6_x").reshape(-1)[:n_mass]
+    d12 = state.scratch((nz, ny + 1, nx), "diff6_y").reshape(-1)[:n_mass]
+    d11 = d11.reshape((nz, ny, nx))
+    d22 = d22.reshape((nz, ny, nx))
+    d12 = d12.reshape((nz, ny, nx))
+    common = _wrf_smag_grid_args(state, cfg, time_t=time_t)
+    dims = [np.int32(nz), np.int32(ny), np.int32(nx),
+            np.int32(state.phb.ndim == 3),
+            np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg))]
+    grid = ((nx + _TPB - 1) // _TPB, ny, nz)
+    get_kernel("smag2d", "wrf_smag_deform")(
+        grid, (_TPB, 1, 1), tuple(common + [d11, d22, d12] + dims))
+    kmh, kmv, khh, khv = isotropic_km_constants(
+        cfg.khdif, cfg.kvdif, cfg.constant_k_prandtl)
+    xkmh.fill(kmh)
+    xkhh.fill(khh)
+    state.scratch((nz, ny, nx), "smag_kmv").fill(kmv)
+    state.scratch((nz, ny, nx), "smag_khv").fill(khv)
     return d11, d22, d12
 
 
@@ -1522,10 +1704,15 @@ def launch_wrf_tke_km(state: DomainState, cfg: RunConfig,
         hfx = fields.get("hfx", dummy)
         rtke = state.scratch((nz, ny, nx), "smag_rtke")
         mut = state.scratch((ny, nx), "smag_mut")
-        mut[...] = state.mub2d
-        if not add_array(state.mup0 if time_t else state.mup, mut):
-            raise NotImplementedError(
-                "Metal TKE mass assembly requires contiguous FP32 arrays")
+        if WRF_EXACT:
+            from woof.metal.smag2d_family import submit_wrf_exact_tke_mass
+            submit_wrf_exact_tke_mass(
+                state.mub2d, state.mup0 if time_t else state.mup, mut)
+        else:
+            mut[...] = state.mub2d
+            if not add_array(state.mup0 if time_t else state.mup, mut):
+                raise NotImplementedError(
+                    "Metal TKE mass assembly requires contiguous FP32 arrays")
         budget_on = tke_budget.enabled(cfg)
         budget_terms = ([tke_budget.term(state, cfg, name)
                          for name in ("shear", "buoyancy", "dissipation",
@@ -1589,6 +1776,10 @@ def launch_wrf_tke_km(state: DomainState, cfg: RunConfig,
     budget_terms = [tke_budget.term(state, cfg, name)
                     for name in ("shear", "buoyancy", "dissipation",
                                  "limiter")] if budget_on else [rtke] * 4
+    if getattr(state, "_moving_frame_velocity", None):
+        # MARTA wall production uses ground wind, including prescribed Cd.
+        from woof.moving_frame import ground_relative_components
+        common[:2] = ground_relative_components(state, *common[:2])
     get_kernel("smag2d", "wrf_tke_rhs")(
         grid, (_TPB, 1, 1),
         tuple(common + [
@@ -1765,25 +1956,12 @@ def launch_wrf_smag2d_hd(state: DomainState, cfg: RunConfig, f, xk, tend,
             raise ValueError("v Smagorinsky stress requires deformation")
         _d11, d22, d12 = deformation
         payload = [xk, d22, d12, tend]
-    elif WRF_EXACT:
-        payload = [xk, tend]
     else:
-        flux_x = state.scratch((nz, ny, nx + 1), "diff6_x")
-        flux_y = state.scratch((nz, ny + 1, nx), "diff6_y")
-        # One W stress route on every GPU architecture (xnode-identity,
-        # 2026-10-04).  4d3c26f87 sent sm_120 through the stress kernels and
-        # every other target through wrf_smag_w_primitives/_hd_w_cached, a
-        # different operation order, so an RTX 4090 and an RTX 5090 left the
-        # same forecast at step 1's first acoustic stage.  The stress route is
-        # the sm_120 (Blackwell) answer and is now the only ordinary route.
-        stress_grid = ((nx + 1 + _TPB - 1) // _TPB, ny + 1, nz)
-        get_kernel("smag2d", "wrf_smag_w_stress")(
-            stress_grid, (_TPB, 1, 1),
-            tuple(common + [xk, flux_x, flux_y] + tail))
-        get_kernel("smag2d", "wrf_smag_hd_w_stress")(
-            grid, (_TPB, 1, 1),
-            tuple(common + [flux_x, flux_y, tend] + tail))
-        return
+        # W takes wrf_smag_hd_w in every mode.  449e3d697 made
+        # DIFFUSION_ENABLED true whenever WRF_EXACT is off, so the former
+        # wrf_smag_w_stress/wrf_smag_hd_w_stress route could no longer run
+        # and is retired.
+        payload = [xk, tend]
     kernel = (_wrf_smag_scalar_kernel(_WRF_SMAG_HD[stagger], nz, ny, nx)
               if stagger == "" else get_kernel("smag2d", _WRF_SMAG_HD[stagger]))
     kernel(
@@ -1793,7 +1971,8 @@ def launch_wrf_smag2d_hd(state: DomainState, cfg: RunConfig, f, xk, tend,
 def launch_wrf_smag2d_vertical(
         state: DomainState, cfg: RunConfig, km, *,
         ru, rv, rw, rth, rqv, time_t: bool,
-        kmv=None, khv=None, scalar_rows=None) -> None:
+        kmv=None, khv=None, scalar_rows=None, w_km=None,
+        surface: bool = True, interior: bool = True) -> None:
     """Add WRF v4.6.1 ``vertical_diffusion_2`` for the PBL-off diff_opt=2
     path (module_first_rk_step_part2.F:1011-1074).
 
@@ -1806,11 +1985,19 @@ def launch_wrf_smag2d_vertical(
 
     Declared divergence: WRF's ``vertical_diffusion_2`` passes ``xkmh``
     to ``vertical_diffusion_w_2`` (module_diffusion_em.F:4145-4155).
-    This launcher passes ``xkmv``: the tau33 flux contains the vertical
-    derivative of w and uses the vertical momentum coefficient, as do
-    the tau13/tau23 vertical stresses. The coefficients coincide for
-    km_opt=4. The compiled WRF leaf fixtures compare identical coefficient
-    inputs; the driver fixtures retain WRF's original coefficient choice.
+    This launcher passes ``xkmv`` unless the caller names ``w_km``: the
+    tau33 flux contains the vertical derivative of w and uses the vertical
+    momentum coefficient, as do the tau13/tau23 vertical stresses. The
+    coefficients coincide for km_opt=4. The compiled WRF leaf fixtures
+    compare identical coefficient inputs; the driver fixtures retain WRF's
+    original coefficient choice.  km_opt=1 passes ``w_km = xkmh`` and so
+    runs WRF's choice (tools/wrf_diffusion_oracle/km1_README.md).
+
+    A ``None`` target skips that row's interior launch, and ``surface =
+    False`` skips the surface arms; km_opt=1 uses both to keep WRF's
+    accumulation order (:func:`_compute_wrf_constant_k_tendencies`).
+    ``interior = False`` launches the surface arms alone, into k = 0
+    planes (:func:`_restore_open_ring_surface_fluxes`).
 
     Surface forcing follows WRF's ``SELECT CASE(isfflx)`` matrix:
     isfflx=0 takes the prescribed ``tke_drag_coefficient`` wall stress and
@@ -1827,14 +2014,19 @@ def launch_wrf_smag2d_vertical(
             submit_wrf_smag_vd_scalar,
         )
         vertical_km = km if kmv is None else kmv
-        for stagger, tendency in (("u", ru), ("v", rv), ("w", rw)):
-            submit_wrf_smag_vd(state, cfg, vertical_km, tendency,
-                               stagger=stagger, time_t=time_t)
-        if khv is not None and scalar_rows:
-            for field, tendency, full_theta in scalar_rows:
-                submit_wrf_smag_vd_scalar(
-                    state, cfg, field, khv, tendency,
-                    full_theta=full_theta, time_t=time_t)
+        if interior:
+            for stagger, tendency in (("u", ru), ("v", rv), ("w", rw)):
+                if tendency is not None:
+                    coefficient = w_km if stagger == "w" and w_km is not None else vertical_km
+                    submit_wrf_smag_vd(state, cfg, coefficient, tendency,
+                                       stagger=stagger, time_t=time_t)
+            if khv is not None and scalar_rows:
+                for field, tendency, full_theta in scalar_rows:
+                    submit_wrf_smag_vd_scalar(
+                        state, cfg, field, khv, tendency,
+                        full_theta=full_theta, time_t=time_t)
+        if not surface:
+            return
         fields = (state.physics.fields
                   if state.physics is not None
                   and hasattr(state.physics, "fields") else {})
@@ -1843,26 +2035,29 @@ def launch_wrf_smag2d_vertical(
         ustm = fields.get("ustm", state.mup0)
         hfx = fields.get("hfx", state.mup0)
         qfx = fields.get("qfx", state.mup0)
-        if cfg.isfflx == 0:
-            for kind, tendency in (("u_cd0", ru), ("v_cd0", rv)):
+        for kind, tendency in (("u", ru), ("v", rv)):
+            if tendency is None:
+                continue
+            if cfg.isfflx == 0:
                 submit_wrf_smag_surface(
-                    state, cfg, kind=kind, time_t=time_t, tend=tendency,
+                    state, cfg, kind=kind + "_cd0", time_t=time_t, tend=tendency,
                     cd0=cfg.tke_drag_coefficient)
-        else:
-            for kind, tendency in (("u", ru), ("v", rv)):
+            else:
                 submit_wrf_smag_surface(
                     state, cfg, kind=kind, time_t=time_t, tend=tendency,
                     ustm=ustm, active=active)
-        if cfg.isfflx in (0, 2):
+        if rth is not None and cfg.isfflx in (0, 2):
             submit_wrf_smag_surface(
                 state, cfg, kind="heat_const", time_t=time_t,
                 hfx=hfx, rth=rth, heat_flux=cfg.tke_heat_flux,
                 write_hfx="hfx" in fields)
-        submit_wrf_smag_surface(
-            state, cfg, kind="scalars", time_t=time_t, hfx=hfx, qfx=qfx,
-            rth=rth, rqv=rqv if rqv is not None else rth,
-            apply_heat=(cfg.isfflx == 1 and active),
-            apply_moist=(cfg.isfflx in (1, 2) and active))
+        if rth is not None or rqv is not None:
+            submit_wrf_smag_surface(
+                state, cfg, kind="scalars", time_t=time_t, hfx=hfx, qfx=qfx,
+                rth=rth if rth is not None else rqv,
+                rqv=rqv if rqv is not None else rth,
+                apply_heat=(rth is not None and cfg.isfflx == 1 and active),
+                apply_moist=(rqv is not None and cfg.isfflx in (1, 2) and active))
         return
     common = _wrf_smag_grid_args(state, cfg, time_t=time_t)
     tail = [np.int32(nz), np.int32(ny), np.int32(nx),
@@ -1870,21 +2065,26 @@ def launch_wrf_smag2d_vertical(
             np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg))]
     if kmv is None:
         kmv = km
+    if w_km is None:
+        w_km = kmv
     launches = (
         ("wrf_smag_vd_u", kmv, ru, (nx + 1, ny, nz)),
         ("wrf_smag_vd_v", kmv, rv, (nx, ny + 1, nz)),
-        # DIVERGENCE, deliberate.  WRF hands vertical_diffusion_w_2 xkmh
-        # (module_diffusion_em.F:4145-4155); woof hands it xkmv.  See
-        # this function's docstring and the compiled WRF driver fixtures.
-        ("wrf_smag_vd_w", kmv, rw, (nx, ny, nz + 1)),
+        # DIVERGENCE, deliberate, for km_opt=2/3.  WRF hands
+        # vertical_diffusion_w_2 xkmh (module_diffusion_em.F:4145-4155);
+        # woof hands it xkmv there.  See this function's docstring and the
+        # compiled WRF driver fixtures.  km_opt=1 passes w_km = xkmh.
+        ("wrf_smag_vd_w", w_km, rw, (nx, ny, nz + 1)),
     )
     for name, xk, tendency, (nxs, nys, nlev) in launches:
+        if tendency is None or not interior:
+            continue
         grid = ((nxs + _TPB - 1) // _TPB, nys, nlev)
         get_kernel("smag2d", name)(
             grid, (_TPB, 1, 1), tuple(common + [xk, tendency] + tail))
 
     mass_grid = ((nx + _TPB - 1) // _TPB, ny, nz)
-    if khv is not None and scalar_rows:
+    if interior and khv is not None and scalar_rows:
         for field, tendency, full_theta in scalar_rows:
             get_kernel("smag2d", "wrf_smag_vd_s")(
                 mass_grid, (_TPB, 1, 1),
@@ -1892,6 +2092,12 @@ def launch_wrf_smag2d_vertical(
                     field, state.thb, np.int32(bool(full_theta)),
                     np.int32(state.thb.ndim == 3), khv, tendency,
                 ] + tail))
+    if not surface:
+        return
+    if getattr(state, "_moving_frame_velocity", None):
+        # Interior mixing uses relative winds; the lower wall is ground-fixed.
+        from woof.moving_frame import ground_relative_components
+        common[:2] = ground_relative_components(state, *common[:2])
 
     fields = (
         state.physics.fields
@@ -1953,7 +2159,9 @@ def _horizontal_w_km(state: DomainState, cfg: RunConfig):
     anisotropic grid it is smaller than ``xkmh`` by (dz/dx)^2 -- the whole
     point of ``mix_isotropic = 0``.
     """
-    if cfg.km_opt not in (2, 3):
+    # km_opt=1's xkmv is kvdif (isotropic_km), live only while its package
+    # runs; a diff6-only km_opt=1 step must not allocate the slot.
+    if cfg.km_opt not in (2, 3) and not constant_k_mixing_active(cfg):
         return None
     return state.scratch(state.p.shape, "smag_kmv")
 
@@ -1990,10 +2198,40 @@ def _smag2d_specs(state: DomainState, km, kh, *, time_t: bool = False,
     if state.qv is not None:
         specs += [(field(name), None, kh, state.c1h, state.c2h,
                    "smag_r" + name, "") for name in SPECIES]
-        specs += [(field(name), None, kh, state.c1h, state.c2h,
-                   "smag_r" + name, "")
-                  for name in extra_moist_species(state)]
+    specs += [(field(name), None, kh, state.c1h, state.c2h,
+               "smag_r" + name, "")
+              for name in extra_moist_species(state)]
+    chem = getattr(state, "chem", None)
+    if chem is not None:
+        # WRF's chem array mixes like the scalar arrays: horizontal_diffusion_s
+        # (module_diffusion_em.F:3054-3070), vertical_diffusion_s under PBL
+        # off (:4409-4421) and the 6th-order filter in rk_scalar_tend
+        # (module_em.F:1421), each held once per step in chem_tend.
+        specs += [(getattr(state, row.time_attr if time_t
+                           else row.state_attr),
+                   None, kh, state.c1h, state.c2h,
+                   "smag_r" + row.state_attr, "")
+                  for row in chem.transported]
     return specs
+
+
+def _chem_time_pairs(state) -> tuple:
+    """The chem rows' ``(field, chem0_<row>)`` pairs for ``_save_time_t``.
+
+    Saved in the same one bookkeeping launch as the other time-t copies;
+    empty on a chem-off state, so its pair table and launch are unchanged.
+    """
+    chem = getattr(state, "chem", None)
+    return () if chem is None else chem.time_pairs(state)
+
+
+def chem_mix2_exempt_slots(state: DomainState, cfg: RunConfig
+                           ) -> frozenset[str]:
+    """Chem rows' carrying slots under ``chem_mix2_off`` (horizontal only)."""
+    chem = getattr(state, "chem", None)
+    if chem is None or not cfg.chem_mix2_off:
+        return frozenset()
+    return frozenset("smag_r" + row.state_attr for row in chem.transported)
 
 
 def diff6_exempt_slots(cfg: RunConfig) -> frozenset[str]:
@@ -2013,9 +2251,17 @@ def diff6_exempt_slots(cfg: RunConfig) -> frozenset[str]:
     whose field happens to share a shape with a moist one.
     """
 
-    if not cfg.moist_mix6_off:
-        return frozenset()
-    return frozenset("smag_r" + name for name in WRF_MOIST_ARRAY_SPECIES)
+    exempt = frozenset()
+    if cfg.moist_mix6_off:
+        exempt = frozenset("smag_r" + name for name in WRF_MOIST_ARRAY_SPECIES)
+    if getattr(cfg, "chem_mix6_off", False) and getattr(cfg, "chem_sets", ()):
+        # WRF's chem_mix6_off (Registry.EM_COMMON:2894) gates the chem array
+        # the same way, rk_scalar_tend's mix6_off argument for chem
+        # (solve_em.F:2497).
+        from woof.chem_table import load as load_chem_table
+        exempt |= frozenset("smag_r" + row.state_attr for row in
+                            load_chem_table(cfg).transported)
+    return exempt
 
 
 # The four rows WRF filters from ``rk_tendency`` (dyn_em/module_em.F:882,
@@ -2055,6 +2301,15 @@ def _diff6_factor(cfg: RunConfig, slot: str) -> float:
     """
     if not diff6_fork(cfg) or slot in _DIFF6_FACTOR1_SLOTS:
         return _clock_scaled_diff6_factor(cfg)
+    if getattr(cfg, "chem_sets", "") and slot.startswith("smag_rchem_"):
+        from woof.chem_table import catalog
+
+        row = catalog().species.get(slot[len("smag_rchem_"):])
+        if row is not None and row.wrf_array == "tracer":
+            # The fork passes factor1 to rk_scalar_tend for its tracer
+            # array (solve_em.F:2831), while chem takes factor2. Shared
+            # arena storage does not merge those Registry array semantics.
+            return _clock_scaled_diff6_factor(cfg)
     factor2 = (DIFF6_FACTOR2_FORK_DEFAULT if cfg.diff_6th_factor2 is None
                else float(cfg.diff_6th_factor2))
     return _clock_scale_factor(cfg, factor2, "diff_6th_factor2")
@@ -2075,15 +2330,15 @@ def refresh_saved_wind_fluxes(state, cfg, ru, rv):
         nz, ny, nx = state.p.shape
         context = state._array_module.context
         context.submit_kernel(
-            "couple_ru",
+            "wrf_exact_couple_ru" if WRF_EXACT else "couple_ru",
             {"u": state.u, "c1h": state.c1h, "c2h": state.c2h,
              "mux": mux, "msfu": state.msfu, "ru": ru},
             {"has_msf": int(state.has_msf), "nz": nz, "ny": ny, "nx": nx},
             exact_policy=WRF_EXACT, grid_size=ru.size)
         context.submit_kernel(
-            "couple_rv",
+            "wrf_exact_couple_rv" if WRF_EXACT else "couple_rv",
             {"v": state.v, "c1h": state.c1h, "c2h": state.c2h,
-             "muy": muy, "msfv": state.msfv, "rv": rv},
+             "muy": muy, "msfv": state.msfv_inv if WRF_EXACT else state.msfv, "rv": rv},
             {"has_msf": int(state.has_msf), "reciprocal": int(WRF_EXACT),
              "nz": nz, "ny": ny, "nx": nx},
             exact_policy=WRF_EXACT, grid_size=rv.size)
@@ -2094,7 +2349,8 @@ def refresh_saved_wind_fluxes(state, cfg, ru, rv):
             state.has_msf, WRF_EXACT and wind is state.v)
         args = [wind, state.c1h, state.c2h, muface.reshape(-1)]
         if state.has_msf:
-            args.append(msf.reshape(-1))
+            factor = state.msfv_inv if WRF_EXACT and wind is state.v else msf
+            args.append(factor.reshape(-1))
         kernel(*args, np.int32(muface.size), flux)
 
 
@@ -2164,15 +2420,15 @@ def _couple_dry_mixing_map_factor(state: DomainState, specs) -> None:
             if tend is None:
                 continue
             submit_wrf_smag_map_factor(
-                state.scratch(f0.shape, slot), msf[stag],
+                state.scratch(f0.shape, slot),
+                state.msfv_inv if BIGSTEP_ENABLED and stag == "y" else msf[stag],
                 nz=nz, ny=ny, nx=nx, stagger=stag,
                 multiply_reciprocal=bool(BIGSTEP_ENABLED and stag == "y"))
         return
     for f0, tend, _xk, _c1, _c2, slot, stag in specs:
         if tend is not None:
             if BIGSTEP_ENABLED and stag == "y":
-                state.scratch(f0.shape, slot)[:] *= (DTYPE(1.0)
-                                                    / msf[stag][None])
+                state.scratch(f0.shape, slot)[:] *= state.msfv_inv[None]
             else:
                 state.scratch(f0.shape, slot)[:] /= msf[stag][None]
 
@@ -2186,10 +2442,17 @@ def launch_coordinate_horizontal(field, xk, mut, c1, c2, msft, msfu,
     ``theta_initial`` selects ``horizontal_diffusion_3dmp``. WRF uses
     that initial thermal field for both values of mix_full_fields.
     """
+    from woof.metal.array import MetalArray
+    if isinstance(field, MetalArray):
+        from woof.metal.diff_opt1 import horizontal
+        horizontal(field, xk, mut, c1, c2, msft, msfu, msfv, dx, dy, tendency,
+                   stagger=stagger, boundary_x=boundary_x, boundary_y=boundary_y,
+                   theta_initial=theta_initial)
+        return
     nz, ny, nx = xk.shape
     nlev, nys, nxs = field.shape
     stag = {"": 0, "x": 1, "y": 2, "z": 3}[stagger]
-    get_kernel("diff_opt1", "wrf_diff_opt1_horizontal")(
+    get_kernel("diff_opt1", "wrf_diff_opt1_horizontal", (nz, ny, nx))(
         ((nxs + _TPB - 1) // _TPB, nys, nlev), (_TPB, 1, 1),
         (field, xk, mut, c1, c2,
          theta_initial if theta_initial is not None else field,
@@ -2213,9 +2476,31 @@ def initialize_coordinate_reference(state, cfg) -> None:
             "diff1_theta_initial; reconstructing it from evolved theta "
             "would change coordinate diffusion")
     initial = state.scratch(state.thp.shape, "diff1_theta_initial")
-    initial[...] = state.thp + (state.thb.reshape((-1, 1, 1))
-                               if state.thb.ndim == 1 else state.thb)
-    initial -= c.T0
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.diff_opt1 import prepare_theta
+        prepare_theta(state, state.thp, initial)
+    else:
+        initial[...] = state.thp + (state.thb.reshape((-1, 1, 1))
+                                   if state.thb.ndim == 1 else state.thb)
+        initial -= c.T0
+
+
+def _coordinate_theta_field(state, thp):
+    """Keep canonical strict theta words at the coordinate-mixing boundary."""
+    if WRF_EXACT:
+        # Native exact initialization and the strict RK kernels keep thp in
+        # WRF's theta - 300 basis. Adding 300 and subtracting it again loses
+        # evolved perturbation bits before horizontal_diffusion_3dmp.
+        return thp
+    theta = state.scratch(thp.shape, "diff1_theta_work")
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.diff_opt1 import prepare_theta
+        prepare_theta(state, thp, theta)
+        return theta
+    base = state.thb.reshape((-1, 1, 1)) if state.thb.ndim == 1 else state.thb
+    theta[...] = thp + base
+    theta -= c.T0
+    return theta
 
 
 def _compute_coordinate_tendencies(state, cfg, km, kh, specs, *, time_t):
@@ -2232,17 +2517,24 @@ def _compute_coordinate_tendencies(state, cfg, km, kh, specs, *, time_t):
     else:
         launch_wrf_smag2d_km(state, cfg, km, kh, time_t=time_t)
     mut = state.scratch(state.mup.shape, "smag_mut")
-    mut[...] = state.mub2d + (state.mup0 if time_t else state.mup)
+    metal = getattr(state, "_metal_setup_state", False)
+    if metal:
+        mut[...] = state.mub2d
+        add_array(state.mup0 if time_t else state.mup, mut)
+    else:
+        mut[...] = state.mub2d + (state.mup0 if time_t else state.mup)
     suffix = "0" if time_t else ""
     thp = getattr(state, "thp" + suffix)
-    theta = state.scratch(thp.shape, "diff1_theta_work")
-    theta[...] = thp + state.thb.reshape((-1, 1, 1)) if state.thb.ndim == 1 else thp + state.thb
-    theta -= c.T0
+    theta = _coordinate_theta_field(state, thp)
     initialize_coordinate_reference(state, cfg)
     initial = state._scratch["diff1_theta_initial"]
     for f, _tend, _xk, c1, c2, slot, stag in specs:
         buf = state.scratch(f.shape, slot)
         buf[...] = 0
+        if WRF_EXACT and time_t and _tend is None:
+            # rk_scalar_tend runs after the first acoustic loop, with
+            # grid%muts as its mass. The physics slot is folded below.
+            continue
         is_theta = slot == "smag_rth"
         launch_coordinate_horizontal(
             theta if is_theta else f, km if stag else kh,
@@ -2250,7 +2542,8 @@ def _compute_coordinate_tendencies(state, cfg, km, kh, specs, *, time_t):
             cfg.dx, cfg.dy, buf, stagger=stag,
             boundary_x=_boundary_x(cfg), boundary_y=_boundary_y(cfg),
             theta_initial=initial if is_theta else None)
-    if cfg.km_opt == 2 and not getattr(cfg, "tke_mix2_off", False):
+    if (cfg.km_opt == 2 and not getattr(cfg, "tke_mix2_off", False)
+            and not (WRF_EXACT and time_t)):
         tke = getattr(state, "tke" + suffix)
         buf = state.scratch(tke.shape, "smag_rtke")
         buf[...] = 0
@@ -2261,6 +2554,40 @@ def _compute_coordinate_tendencies(state, cfg, km, kh, specs, *, time_t):
         budget = tke_budget.term(state, cfg, "diffusion_h")
         if budget is not None:
             budget[...] = buf
+
+
+def add_scalar_coordinate_wrf(state: DomainState, cfg: RunConfig) -> None:
+    """Add coordinate scalar mixing at rk_scalar_tend's mass boundary.
+
+    Dry coordinate mixing uses the stage-start mass. Moisture, TKE and
+    chem use the first acoustic loop's MUTS, before scalar sixth order
+    and lateral relaxation. Their coefficient remains the time-t Kh.
+    """
+    if not (WRF_EXACT and cfg.diff_opt == 1 and cfg.km_opt in (2, 3, 4)):
+        return
+    rows = [row for row in _smag2d_specs(state, None, None, time_t=True)
+            if row[1] is None]
+    exempt = chem_mix2_exempt_slots(state, cfg)
+    rows = [row for row in rows if row[5] not in exempt]
+    if cfg.km_opt == 2 and not getattr(cfg, "tke_mix2_off", False):
+        rows.append((state.tke0, None, None, state.c1h, state.c2h,
+                     "smag_rtke", ""))
+    if not rows:
+        return
+    mut = _wrf_muts(state)
+    if mut is None:
+        raise RuntimeError("strict coordinate scalar mixing needs the acoustic loop's muts")
+    kh = state._scratch["smag_kh"]
+    for field, _tend, _xk, c1, c2, slot, _stag in rows:
+        target = state._scratch[slot]
+        launch_coordinate_horizontal(
+            field, kh, mut, c1, c2, state.msft, state.msfu, state.msfv,
+            cfg.dx, cfg.dy, target,
+            boundary_x=_boundary_x(cfg), boundary_y=_boundary_y(cfg))
+        if slot == "smag_rtke":
+            budget = tke_budget.term(state, cfg, "diffusion_h")
+            if budget is not None:
+                budget[...] = target
 
 
 def _compute_wrf_smag_tendencies(state: DomainState, cfg: RunConfig,
@@ -2277,6 +2604,10 @@ def _compute_wrf_smag_tendencies(state: DomainState, cfg: RunConfig,
     if cfg.diff_opt == 1:
         _compute_coordinate_tendencies(state, cfg, km, kh, specs,
                                       time_t=time_t)
+        return
+    if cfg.km_opt == 1:
+        _compute_wrf_constant_k_tendencies(state, cfg, km, kh, specs,
+                                           time_t=time_t)
         return
     if cfg.km_opt == 2:
         deformation = launch_wrf_tke_km(
@@ -2303,20 +2634,31 @@ def _compute_wrf_smag_tendencies(state: DomainState, cfg: RunConfig,
 
     # D11 occupied smag_rw; it is dead after both horizontal-momentum calls.
     # Scalars use fresh H1/H2 fluxes in diff6_x/y for each field.
+    # chem_mix2_off drops the chem array's HORIZONTAL mixing only
+    # (module_diffusion_em.F:3054); vertical_diffusion_2's chem loop
+    # (:4409-4421) has no such gate, so the rows stay in the vertical pass.
+    mix2_exempt = chem_mix2_exempt_slots(state, cfg)
     for f, _tend, xk, _c1, _c2, slot, stag in specs[2:]:
         buf = state.scratch(f.shape, slot)
         buf[...] = 0
+        if slot in mix2_exempt:
+            continue
         launch_wrf_smag2d_hd(state, cfg, f, xk, buf, stagger=stag,
                              time_t=time_t,
                              full_theta=(slot == "smag_rth"))
         _zero_open_strips(buf, cfg, 1)
 
     if cfg.km_opt == 2:
-        def add_twice(src, dst):
-            if not add_array(src, dst):
-                dst += src
-            if not add_array(src, dst):
-                dst += src
+        metal_tke = bool(getattr(state, "_metal_setup_state", False))
+
+        def add_doubled(src, dst):
+            # Upstream forms 2*src before adding to the retained tendency.
+            # The scratch row may be doubled in place after its producer.
+            if metal_tke:
+                if not add_array(src, src) or not add_array(src, dst):
+                    raise TypeError("Metal TKE diffusion requires contiguous FP32 rows")
+            else:
+                dst += DTYPE(2.0) * src
 
         # TKE self-diffusion: horizontal with 2*Km_h regardless of the PBL
         # (module_diffusion_em.F:3020-3032, doubling :3988-3996 -- WRF's
@@ -2330,11 +2672,10 @@ def _compute_wrf_smag_tendencies(state: DomainState, cfg: RunConfig,
             launch_wrf_smag2d_hd(state, cfg, tke_t, km, tmp, stagger="",
                                  time_t=time_t, full_theta=False)
             _zero_open_strips(tmp, cfg, 1)
-            add_twice(tmp, rtke)
+            add_doubled(tmp, rtke)
             budget_h = tke_budget.term(state, cfg, "diffusion_h")
             if budget_h is not None:
-                budget_h[...] = 0
-                add_twice(tmp, budget_h)
+                budget_h[...] = tmp if metal_tke else DTYPE(2.0) * tmp
 
     if cfg.bl_pbl_physics == 0:
         buffers = {
@@ -2394,28 +2735,174 @@ def _compute_wrf_smag_tendencies(state: DomainState, cfg: RunConfig,
                         np.int32(state.thb.ndim == 3), kmv, tmp,
                     ] + tail))
             _zero_open_strips(tmp, cfg, 1)
-            add_twice(tmp, rtke)
+            add_doubled(tmp, rtke)
             budget_v = tke_budget.term(state, cfg, "diffusion_v")
             if budget_v is not None:
-                budget_v[...] = 0
-                add_twice(tmp, budget_v)
+                budget_v[...] = tmp if metal_tke else DTYPE(2.0) * tmp
         for f, _tend, _xk, _c1, _c2, slot, _stag in specs:
             _zero_open_strips(
                 buffers[slot], cfg, 1)
+        _restore_open_ring_surface_fluxes(
+            state, cfg, km, ru=buffers["smag_ru"], rv=buffers["smag_rv"],
+            rth=buffers["smag_rth"], rqv=buffers.get("smag_rqv"),
+            time_t=time_t)
 
 
-def prepare_fixed_tendencies(state: DomainState, cfg: RunConfig) -> None:
+def _add_open_ring(target, plane, cfg: RunConfig) -> None:
+    """``target += plane`` on the width-1 outer ring ``_zero_open_strips``
+    clears at radiative open boundaries; each ring word once (no corner is
+    added twice), in place on views."""
+    from woof.metal.array import MetalArray
+    if isinstance(target, MetalArray):
+        from woof.metal.smag2d_family import submit_add_open_ring
+        submit_add_open_ring(target, plane, cfg)
+        return
+    if cfg.open_x:
+        target[:, :1] += plane[:, :1]
+        target[:, -1:] += plane[:, -1:]
+    if cfg.open_y:
+        lo, hi = (1, -1) if cfg.open_x else (None, None)
+        target[:1, lo:hi] += plane[:1, lo:hi]
+        target[-1:, lo:hi] += plane[-1:, lo:hi]
+
+
+def _restore_open_ring_surface_fluxes(state: DomainState, cfg: RunConfig,
+                                      km, *, ru, rv, rth, rqv,
+                                      time_t: bool) -> None:
+    """Put WRF's surface-flux words back on the open-boundary ring.
+
+    ``vertical_diffusion_2``'s surface arms (vflux, hflux, qflux) loop
+    i = its..min(ite,ide-1) (u faces to ite, v faces to jte) with NO open
+    trim (module_diffusion_em.F:4100-4110, :4161-4400), while its interior
+    operators and ``horizontal_diffusion_2`` skip the outer row/column at an
+    open boundary.  So at an open boundary WRF's lowest-level ``*_tendf`` on
+    the outer ring is exactly ``0 + surface flux``, and ``advance_mu_t`` /
+    ``rk_update_scalar`` / ``advance_uv`` advance that ring from it (their
+    bounds trim only specified/nested domains, module_small_step_em.F:
+    1048-1060, module_em.F:1657-1673).  The mixing package clears the ring
+    after the vertical pass (:func:`_zero_open_strips`), which dropped the
+    surface momentum, heat and moisture fluxes on the outermost ring of
+    every PBL-off open-boundary run (km1 column oracle, 2026-10-07).  This
+    re-adds them: the surface arms alone into k = 0 planes borrowed from
+    the face workspaces (free between the mixing package and diff6), then
+    ``+=`` on the cleared ring, which is WRF's ``0 + S`` word for word.
+    Specified and nested rings are overwritten by the boundary update in
+    both models and are left cleared.
+    """
+    if _boundary_forced(cfg) or not (cfg.open_x or cfg.open_y):
+        return
+    nz, ny, nx = km.shape
+    from woof.metal.array import MetalArray
+
+    face_x = state.scratch((nz, ny, nx + 1), "diff6_x")
+    face_y = state.scratch((nz, ny + 1, nx), "diff6_y")
+    if isinstance(face_x, MetalArray):
+        # Metal's surface kernels bind whole (nz, ...) buffers and write k = 0.
+        planes = {"u": face_x, "v": face_y,
+                  "th": state.scratch((nz, ny, nx), "openbc_ring_th"),
+                  "qv": state.scratch((nz, ny, nx), "openbc_ring_qv")}
+    else:
+        flat_x, flat_y = face_x.reshape(-1), face_y.reshape(-1)
+        nu, nv, nm = ny * (nx + 1), (ny + 1) * nx, ny * nx
+        planes = {
+            "u": flat_x[:nu].reshape(1, ny, nx + 1),
+            "v": flat_y[:nv].reshape(1, ny + 1, nx),
+            "th": flat_x[nu:nu + nm].reshape(1, ny, nx),
+            "qv": flat_y[nv:nv + nm].reshape(1, ny, nx),
+        }
+    for plane in planes.values():
+        plane[...] = 0
+    launch_wrf_smag2d_vertical(
+        state, cfg, km, ru=planes["u"], rv=planes["v"], rw=None,
+        rth=planes["th"], rqv=planes["qv"] if rqv is not None else None,
+        time_t=time_t, interior=False)
+    for target, plane in ((ru, planes["u"]), (rv, planes["v"]),
+                          (rth, planes["th"]), (rqv, planes["qv"])):
+        if target is None:
+            continue
+        _add_open_ring(target[0], plane[0], cfg)
+
+
+def _compute_wrf_constant_k_tendencies(state: DomainState, cfg: RunConfig,
+                                       km, kh, specs, *, time_t: bool) -> None:
+    """km_opt=1's diff_opt=2 package in module_first_rk_step_part2.F order.
+
+    WRF adds ``vertical_diffusion_2`` (interior stresses and fluxes, then
+    the surface arms) into the zeroed ``*_tendf`` before
+    ``horizontal_diffusion_2`` adds its one term per point (:1011-1100).
+    At the surface level that is a three-term sum, which is not
+    associative, so the order is kept rather than commuted: the tensors
+    live in the face workspaces (:func:`launch_wrf_isotropic_km`), the
+    vertical u/v/scalar package and its surface arms go into the zeroed
+    carrying buffers first, and the horizontal operators then add into
+    them.  w has no surface arm (vertical + horizontal commute), so its
+    buffer, which holds D11 until the u/v stresses are built, is zeroed and
+    filled after them.
+
+    The vertical w stress takes WRF's own coefficient here, xkmh = khdif
+    (vertical_diffusion_2 hands xkmh to vertical_diffusion_w_2), the same K
+    as the tau11/tau22 normal stresses, so the constant-K stress tensor
+    stays trace-free when khdif != kvdif.  (km_opt=2/3 keep their declared
+    xkmv choice; see :func:`launch_wrf_smag2d_vertical`.)
+    """
+    deformation = launch_wrf_isotropic_km(state, cfg, km, kh, time_t=time_t)
+    buffers = {slot: state.scratch(f.shape, slot)
+               for f, _tend, _xk, _c1, _c2, slot, _stag in specs}
+    for slot, buf in buffers.items():
+        if slot != "smag_rw":                  # D11 lives in its prefix
+            buf[...] = 0
+    pbl_off = cfg.bl_pbl_physics == 0
+    kmv = state.scratch(km.shape, "smag_kmv")
+    khv = state.scratch(km.shape, "smag_khv")
+    mix2_exempt = chem_mix2_exempt_slots(state, cfg)
+    if pbl_off:
+        launch_wrf_smag2d_vertical(
+            state, cfg, km,
+            ru=buffers["smag_ru"], rv=buffers["smag_rv"], rw=None,
+            rth=buffers["smag_rth"], rqv=buffers.get("smag_rqv"),
+            time_t=time_t, kmv=kmv, khv=khv,
+            scalar_rows=[(f, buffers[slot], slot == "smag_rth")
+                         for f, _tend, _xk, _c1, _c2, slot, stag in specs
+                         if stag == ""])
+    for f, _tend, xk, _c1, _c2, slot, stag in specs[:2]:
+        launch_wrf_smag2d_hd(state, cfg, f, xk, buffers[slot], stagger=stag,
+                             time_t=time_t, deformation=deformation)
+    # D11/D22/D12 are dead: the w buffer and the face workspaces are free.
+    f, _tend, xk, _c1, _c2, slot, stag = specs[2]
+    rw = buffers[slot]
+    rw[...] = 0
+    launch_wrf_smag2d_hd(state, cfg, f, xk, rw, stagger=stag, time_t=time_t)
+    if pbl_off:
+        launch_wrf_smag2d_vertical(
+            state, cfg, km, ru=None, rv=None, rw=rw, rth=None, rqv=None,
+            time_t=time_t, kmv=kmv, w_km=km, surface=False)
+    for f, _tend, xk, _c1, _c2, slot, stag in specs[3:]:
+        if slot in mix2_exempt:
+            continue
+        launch_wrf_smag2d_hd(state, cfg, f, xk, buffers[slot], stagger=stag,
+                             time_t=time_t, full_theta=(slot == "smag_rth"))
+    for buf in buffers.values():
+        _zero_open_strips(buf, cfg, 1)
+    if pbl_off:
+        _restore_open_ring_surface_fluxes(
+            state, cfg, km, ru=buffers["smag_ru"], rv=buffers["smag_rv"],
+            rth=buffers["smag_rth"], rqv=buffers.get("smag_rqv"),
+            time_t=time_t)
+
+
+def prepare_fixed_tendencies(state: DomainState, cfg: RunConfig,
+                             physics_tendencies=None) -> None:
     """Build fixed tendencies with repeated Metal kernels in bounded batches."""
     if getattr(state, "_metal_setup_state", False):
         context = state._array_module.context
         with context.defer_kernel_submissions("fixed tendencies and diffusion"):
-            _prepare_fixed_tendencies_impl(state, cfg)
+            _prepare_fixed_tendencies_impl(state, cfg, physics_tendencies)
         return
-    _prepare_fixed_tendencies_impl(state, cfg)
+    _prepare_fixed_tendencies_impl(state, cfg, physics_tendencies)
 
 
 def _prepare_fixed_tendencies_impl(state: DomainState,
-                                   cfg: RunConfig) -> None:
+                                   cfg: RunConfig, physics_tendencies=None) -> None:
     """Build WRF's time-t ``*_tendf``/``scalar_tends`` once per step.
 
     ``module_first_rk_step_part2`` computes km_opt=4 mixing and sixth-order
@@ -2427,9 +2914,10 @@ def _prepare_fixed_tendencies_impl(state: DomainState,
     retaining a second full set of per-species buffers.
     """
     nz, ny, nx = state.p.shape
-    include_smag = cfg.km_opt in (2, 3, 4)
+    include_smag = wrf_mixing_package_active(cfg)
     include_diff6 = cfg.diff_6th_opt > 0
-    if not (include_smag or include_diff6):
+    fold = _wrf_relaxation_fold(cfg)
+    if not (include_smag or include_diff6 or fold or WRF_EXACT):
         return
 
     # The K arrays are needed only by Smagorinsky.  Scalar placeholders let
@@ -2460,6 +2948,8 @@ def _prepare_fixed_tendencies_impl(state: DomainState,
     if include_smag:
         _compute_wrf_smag_tendencies(
             state, cfg, km, kh, specs, time_t=True)
+    if WRF_EXACT and physics_tendencies is not None:
+        _fold_physics_wrf(state, specs, physics_tendencies)
 
     if include_diff6:
         to_edge = diff6_to_edge(cfg)
@@ -2476,40 +2966,222 @@ def _prepare_fixed_tendencies_impl(state: DomainState,
                                state.c2h, "smag_rtke", ""))
         # launch_diff6 takes the state for its Metal launch; the fork's
         # edge-to-edge form takes its work buffer instead.
-        edge = ({"work": _diff6_edge_work(state, cfg), "state": state} if to_edge
+        edge = ({"work": _diff6_edge_work(state, cfg), "state": state}
+                if to_edge or (WRF_EXACT and getattr(state, "_metal_setup_state", False))
                 else {"state": state})
         for f0, _tend, _xk, c1, c2, slot, stag in diff6_rows:
-            tmp = state.scratch(f0.shape, temp_slot[stag])
-            tmp[...] = 0
-            launch = launch_diff6_to_edge if to_edge else launch_diff6
-            launch(f0, tmp, mu_t, c1, c2, _diff6_factor(cfg, slot),
-                   _diff6_dt(cfg, slot),
-                   cfg.diff_6th_opt, stagger=stag,
-                   phb=state.phb, msfu=state.msfu, msfv=state.msfv,
-                   msft=state.msft,
-                   slopeopt=cfg.diff_6th_slopeopt,
-                   thresh=cfg.diff_6th_thresh,
-                   dx=cfg.dx, dy=cfg.dy,
-                   # Boundary-aware reads: the outermost computed
-                   # staggered face takes WRF's accurate boundary
-                   # datum (u ide-3 / v jde-3); the width-3 mask
-                   # below is then exactly WRF's loop exclusion.  The
-                   # fork's edge-to-edge form needs neither.
-                   bnd_x=_boundary_x(cfg), bnd_y=_boundary_y(cfg), **edge)
-            if not to_edge:
-                _zero_open_strips(tmp, cfg, 3)
-            target = state.scratch(f0.shape, slot)
-            if not add_array(tmp, target):
-                target[:] += tmp
+            if _tend is None and _strict_defers_scalar_diff6(cfg):
+                continue
+            maps = dict(phb=state.phb, msfu=state.msfu, msfv=state.msfv,
+                        msft=state.msft)
             if slot == "smag_rtke":
                 budget_6 = tke_budget.term(state, cfg, "diffusion_6th")
                 if budget_6 is not None:
+                    # The budget records the filter's own increment, so
+                    # it is formed on a zero tendency of its own.
+                    tmp = state.scratch(f0.shape, temp_slot[stag])
+                    tmp[...] = 0
+                    add_diff6_row(cfg, slot, f0, tmp, mu_t, c1, c2, stag,
+                                  edge=edge, **maps)
                     budget_6[...] = tmp
+            add_diff6_row(cfg, slot, f0, state.scratch(f0.shape, slot),
+                          mu_t, c1, c2, stag, edge=edge, **maps)
 
     # rk_addtend_dry's 1/msf, taken once over the sum both packages left in
     # the dry slots, after diff6 has accumulated (WRF divides ru_tendf etc.
-    # once, module_em.F:1043, :1054, :1065, :1078).
+    # once, module_em.F:1043, :1054, :1065, :1078).  In strict mode on a
+    # boundary-forced domain the stage-1 relaxation joins the sum first, so
+    # the division waits for fold_lateral_relaxation.
+    if not fold:
+        _couple_dry_mixing_map_factor(state, specs)
+
+
+#: Strict mode: WRF's ``grid%muts`` as the last acoustic loop left it,
+#: ``MUT + MU''`` (advance_mu_t), which every later calc_p_rho_phi reads
+#: until the next acoustic loop (restart class: carried, woof/io/restart.py).
+from woof.state_serialization_contract import WRF_MUTS_SLOT
+
+
+def _wrf_muts(state: DomainState):
+    """The carried strict ``muts``, or ``None`` (default mode, first step)."""
+    return state.existing_scratch(WRF_MUTS_SLOT) if WRF_EXACT else None
+
+
+def _init_wrf_acoustic_muts(state: DomainState, istage: int) -> None:
+    """small_step_prep's MUTS: ``MUB+MU_2`` on rk_step 1, ``MUB+MU_1`` after.
+
+    MU_1 is the time-t mass (state.mup0); MU_2 the stage reference.
+    """
+    from woof.core.acoustic import init_wrf_acoustic_muts
+    init_wrf_acoustic_muts(state, state.mup if istage == 0 else state.mup0)
+
+
+def _capture_wrf_muts(state: DomainState, cfg: RunConfig) -> None:
+    """WRF's grid%muts after the acoustic loop, for every later diagnosis.
+
+    ``MUT + MU''`` where advance_mu_t integrates; on the specified ring the
+    spec_bdyupdate carrier the strict ring kernel advanced.  A domain with
+    no ring has no carrier to keep.
+    """
+    muts = state.scratch(state.mup.shape, WRF_MUTS_SLOT)
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.da_state import binary
+        full = binary(binary(state.mub2d, state.mup), state.mu_pp)
+    else:
+        full = cp.add(cp.add(state.mub2d, state.mup), state.mu_pp)
+    if _mass_w_boundary_zone(cfg):
+        muts[...] = wrf_acoustic_muts(state)
+    else:
+        muts[...] = full
+        wrf_acoustic_muts(state)[...] = full
+
+
+def _wrf_relaxation_fold(cfg: RunConfig) -> bool:
+    """Strict mode folds the lateral relaxation into the held tendency."""
+    return WRF_EXACT and bool(cfg.specified or cfg.nested)
+
+
+#: Held dry slot and the map factor WRF's rk_addtend_dry scales each folded
+#: relaxation row by before dividing the sum (module_em.F: u_save*msfuy,
+#: v_save*msfvx, w_save*msfty, t_save unscaled).
+_FOLD_ROWS = {"u": ("smag_ru", "msfu"), "v": ("smag_rv", "msfv"),
+              "w": ("smag_rw", "msft"), "theta": ("smag_rth", None)}
+
+
+def fold_lateral_relaxation(state: DomainState, cfg: RunConfig) -> None:
+    """Strict mode: WRF ``rk_addtend_dry`` on rk_step 1, before any stage adds.
+
+    ``relax_bdy_dry`` writes the stage-1 relaxation into ``u_save`` etc.,
+    and ``rk_addtend_dry`` folds it into the held tendency before dividing:
+    ``ru_tendf = ru_tendf + u_save*msfuy`` then ``ru_tend + ru_tendf/msfuy``
+    on every stage (module_em.F).  The default path adds the relaxation to
+    each stage's tendency on its own, a different rounding in the
+    relaxation zone (combo-sweep round 2, LOCALIZE.md item 5).  Here the
+    held slots, still undivided (:func:`prepare_fixed_tendencies`), take
+    the relaxation in WRF's order and then the one division.
+    """
+    specs = _smag2d_specs(state, None, None, time_t=True)
+    shapes = {row[5]: row[0].shape for row in specs}
+    for name, relax in capture_folded_relaxation(state, cfg).items():
+        slot_name, msf_name = _FOLD_ROWS[name]
+        slot = state.scratch(shapes[slot_name], slot_name)
+        if getattr(state, "_metal_setup_state", False):
+            if msf_name is not None and state.has_msf:
+                from woof.metal.bandwidth_family import map_tendency
+                map_tendency(relax, getattr(state, msf_name), slot, add=True)
+            elif not add_array(relax, slot):
+                raise TypeError("Metal relaxation needs matching FP32 arrays")
+        elif msf_name is not None and state.has_msf:
+            slot += relax * getattr(state, msf_name)[None]
+        else:
+            slot += relax
     _couple_dry_mixing_map_factor(state, specs)
+
+
+def _fold_physics_wrf(state: DomainState, specs, physics_tendencies) -> None:
+    """Strict mode: update_phy_ten's terms in the held ``*_tendf``.
+
+    WRF adds the coupled physics tendencies into ``ru_tendf``/``rv_tendf``/
+    ``t_tendf``/``moist_tend`` in first_rk_step_part2 (update_phy_ten,
+    radiation then PBL then cumulus), and the km_opt mixing then adds onto
+    them; rk_addtend_dry divides the whole held sum by the map factor once
+    on every stage.  The default path keeps the physics apart, already
+    divided, and adds it to each stage's tendency, a different rounding in
+    21197 u, 21510 v and 45430 theta words of the first RK stage
+    (combo-sweep round 3, A088).  The mixing slot holds the horizontal
+    term alone here, so this one add is WRF's (commutative) single add.
+    """
+    rows = {"smag_ru": physics_tendencies.ru, "smag_rv": physics_tendencies.rv,
+            "smag_rth": physics_tendencies.rtheta,
+            "smag_rw": physics_tendencies.rw}
+    for f0, _tend, _xk, _c1, _c2, slot, _stag in specs:
+        if slot in rows:
+            add = rows[slot]
+        else:
+            add = physics_tendencies.scalar_for(slot[len("smag_r"):])
+        if add is not None:
+            target = state.scratch(f0.shape, slot)
+            if getattr(state, "_metal_setup_state", False):
+                if not add_array(add, target):
+                    raise TypeError("Metal physics folding needs matching FP32 arrays")
+            else:
+                target[...] += add
+
+
+def _strict_defers_scalar_diff6(cfg: RunConfig) -> bool:
+    """Strict mode moves the scalar rows' sixth order to RK stage 1's end."""
+    return WRF_EXACT and cfg.diff_6th_opt > 0 and not diff6_to_edge(cfg)
+
+
+def add_scalar_diff6_wrf(state: DomainState, cfg: RunConfig) -> None:
+    """Strict mode: ``rk_scalar_tend``'s sixth-order filter, WRF's timing.
+
+    WRF filters moisture, TKE and chem inside ``rk_scalar_tend`` on
+    rk_step 1 (module_em.F), which solve_em calls AFTER the first acoustic
+    loop with ``grid%muts`` as the routine's ``mut`` (solve_em.F,
+    moist_scalar_advance).  So the scalar filter couples its fluxes with
+    the post-acoustic mass ``MUT + MU''``, not the time-t mass the dry
+    rows use.  Computed with the time-t mass it differed from WRF's held
+    qv tendency in 35282 of 80000 words, by about mu''/mu (combo-sweep
+    round 3, case p1).  The field is still the time-t scalar.  Each row is
+    accumulated into its held slot in WRF's in-place order, after the
+    km_opt mixing that first_rk_step_part2 left there.
+    """
+    if not _strict_defers_scalar_diff6(cfg):
+        return
+    muts = _wrf_muts(state)
+    if muts is None:
+        raise RuntimeError(
+            "strict scalar sixth order needs the acoustic loop's muts")
+    specs = _smag2d_specs(state, None, None, time_t=True)
+    exempt = diff6_exempt_slots(cfg)
+    rows = [row for row in specs if row[1] is None and row[5] not in exempt]
+    if cfg.km_opt == 2:
+        rows.append((state.tke0, None, None, state.c1h, state.c2h,
+                     "smag_rtke", ""))
+    for f0, _tend, _xk, c1, c2, slot, stag in rows:
+        tmp = state.scratch(f0.shape, "diff6_m")
+        _accumulate_diff6_wrf_order(state, cfg, f0, tmp, muts, c1, c2, slot,
+                                    stag)
+
+
+def _diff6_launch_kwargs(state: DomainState, cfg: RunConfig, slot: str,
+                         stag: str) -> dict:
+    return dict(stagger=stag, phb=state.phb, msfu=state.msfu, msfv=state.msfv,
+                msft=state.msft, slopeopt=cfg.diff_6th_slopeopt,
+                thresh=cfg.diff_6th_thresh, dx=cfg.dx, dy=cfg.dy,
+                bnd_x=_boundary_x(cfg), bnd_y=_boundary_y(cfg))
+
+
+def _accumulate_diff6_wrf_order(state: DomainState, cfg: RunConfig, f0, tmp,
+                                mu_t, c1, c2, slot: str, stag: str) -> None:
+    """Strict mode: add the 6th-order filter into the held tendency in WRF's order.
+
+    WRF ``sixth_order_diffusion`` updates the held tendency in place,
+    ``tendency = tendency + tendency_x + tendency_y``
+    (module_big_step_utilities_em.F:6624), so the held value enters the
+    first addition.  The default path forms ``(0 + tendency_x) +
+    tendency_y`` in a temporary and adds that, a different rounding in
+    ~3 % of words (combo-sweep round2 LOCALIZE.md, cause 3).  Here the
+    temporary starts as a copy of the held tendency, the kernel and the
+    seam face accumulate into it, and WRF's skipped open strip keeps the
+    held value untouched (WRF's loop bounds never write it).
+    """
+    target = state.scratch(f0.shape, slot)
+    tmp[...] = target
+    launch_diff6(f0, tmp, mu_t, c1, c2, _diff6_factor(cfg, slot),
+                 _diff6_dt(cfg, slot), cfg.diff_6th_opt, seam_base=target,
+                 state=state, **_diff6_launch_kwargs(state, cfg, slot, stag))
+    _restore_open_strips(tmp, target, cfg, 3)
+    target[...] = tmp
+    if slot == "smag_rtke":
+        budget_6 = tke_budget.term(state, cfg, "diffusion_6th")
+        if budget_6 is not None:
+            budget_6[...] = 0
+            launch_diff6(f0, budget_6, mu_t, c1, c2, _diff6_factor(cfg, slot),
+                         _diff6_dt(cfg, slot), cfg.diff_6th_opt, state=state,
+                         **_diff6_launch_kwargs(state, cfg, slot, stag))
+            _zero_open_strips(budget_6, cfg, 3)
 
 
 def add_fixed_dry_tendencies(state: DomainState, cfg: RunConfig) -> None:
@@ -2523,7 +3195,7 @@ def add_fixed_dry_tendencies(state: DomainState, cfg: RunConfig) -> None:
     mixing package and diff6 left in the shared carrying buffer, both of
     which carry WRF's map factor into it.
     """
-    if cfg.km_opt not in (2, 3, 4) and cfg.diff_6th_opt <= 0:
+    if not wrf_mixing_package_active(cfg) and cfg.diff_6th_opt <= 0:
         return
     # K values are not consumed here; the specs provide shapes/targets.
     pairs = tuple((state.scratch(f0.shape, slot), tend)
@@ -2539,10 +3211,10 @@ def add_fixed_dry_tendencies(state: DomainState, cfg: RunConfig) -> None:
 
 def fixed_scalar_tendencies(state: DomainState, cfg: RunConfig):
     """Return held scalar forward tendencies by Registry field name."""
-    if state.qv is None or (cfg.km_opt not in (2, 3, 4)
+    if (state.qv is None and getattr(state, "qke_adv", None) is None) or (not wrf_mixing_package_active(cfg)
                             and cfg.diff_6th_opt <= 0):
         return None
-    names = list(SPECIES)
+    names = [name for name in SPECIES if getattr(state, name, None) is not None]
     names += list(extra_moist_species(state))
     shape = state.p.shape
     return {name: state.scratch(shape, "smag_r" + name) for name in names}
@@ -2628,7 +3300,7 @@ def _prepare_small_step_init_launch(state: DomainState, cfg: RunConfig,
         from woof.metal.dycore import submit_small_step_init
 
         def launch_metal() -> None:
-            submit_small_step_init(state, cfg)
+            submit_small_step_init(state, cfg, rk_step=rk_step)
 
         return launch_metal
     nz, ny, nx = state.p.shape
@@ -2639,7 +3311,7 @@ def _prepare_small_step_init_launch(state: DomainState, cfg: RunConfig,
     uv_args = (
         state.u_pp, state.v_pp, state.u0, state.v0, state.u, state.v,
         state.mup0, state.mup, state.mub2d, state.c1h, state.c2h,
-        state.msfu, state.msfv, np.int32(state.has_msf),
+        state.msfu, state.msfv_inv if WRF_EXACT else state.msfv, np.int32(state.has_msf),
         np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg)),
         np.int32(nz), np.int32(ny), np.int32(nx),
     )
@@ -2708,7 +3380,7 @@ def _prepare_small_step_finish_launch(state: DomainState, cfg: RunConfig,
         np.int32(state.has_msf),
         np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg)),
         np.int32(nz), np.int32(ny), np.int32(nx),
-    )
+    ) + ((wrf_acoustic_muts(state),) if WRF_EXACT else ())
 
     h_diabatic = state.h_diabatic if hdiab_dt else state.p
     column_grid = ((ny * nx + 255) // 256,)
@@ -2720,7 +3392,7 @@ def _prepare_small_step_finish_launch(state: DomainState, cfg: RunConfig,
         DTYPE(hdiab_dt), np.int32(bool(hdiab_dt)),
         np.int32(state.has_msf), np.int32(state.thb.ndim == 3),
         np.int32(nz), np.int32(ny), np.int32(nx),
-    )
+    ) + ((wrf_acoustic_muts(state),) if WRF_EXACT else ())
 
     def launch() -> None:
         uv_kernel(uv_grid, block, uv_args)
@@ -2843,12 +3515,68 @@ def _advance_stage(state: DomainState, dt_eff: float) -> None:
                      + dt_eff * rwt) / (c1f * mu[None] + c2f))
 
 
+def add_diff6_row(cfg: RunConfig, slot: str, f0, target, mut, c1, c2,
+                  stagger: str, *, phb, msfu, msfv, msft,
+                  edge: dict | None = None) -> None:
+    """Add one field's sixth-order tendency onto its carrying slot, in place.
+
+    This is the production row of :func:`prepare_fixed_tendencies`: the
+    row's factor and dt (:func:`_diff6_factor`, :func:`_diff6_dt`), the
+    run's slope taper, boundary flags and form.  WRF accumulates onto
+    everything its ``*_tendf`` already holds (sixth_order_diffusion :6626,
+    ``tendency = tendency + tendency_x + tendency_y``), so ``target`` is
+    the slot itself, never a separately formed increment added later: that
+    rounds ``T0 + (tx + ty)`` instead of WRF's ``(T0 + tx) + ty``, which the
+    WRF 4.6.1 column oracle (tools/wrf_diffusion_oracle/diff6_wrf461_*)
+    measured on 127,083 of 1,101,792 words, up to 32,768 ULP away.
+    """
+    launch = (launch_diff6_to_edge if edge is not None and "work" in edge
+              else launch_diff6)
+    launch(f0, target, mut, c1, c2, _diff6_factor(cfg, slot),
+           _diff6_dt(cfg, slot), cfg.diff_6th_opt, stagger=stagger,
+           phb=phb, msfu=msfu, msfv=msfv, msft=msft,
+           slopeopt=cfg.diff_6th_slopeopt, thresh=cfg.diff_6th_thresh,
+           dx=cfg.dx, dy=cfg.dy,
+           # Boundary-aware reads and WRF's loop bounds: the outermost
+           # computed staggered face takes WRF's accurate boundary datum
+           # (u ide-3 / v jde-3) and the points WRF's loops skip keep their
+           # incoming tendency.  The fork's edge form needs neither.
+           bnd_x=_boundary_x(cfg), bnd_y=_boundary_y(cfg),
+           **({} if edge is None else edge))
+
+
+def diff6_loop_bounds(nx: int, ny: int, nxs: int, nys: int,
+                      bnd_x: bool, bnd_y: bool) -> tuple[int, int, int, int]:
+    """The diff6 main kernel's inclusive stored-index bounds (i_lo, i_hi,
+    j_lo, j_hi): WRF sixth_order_diffusion's loop bounds.
+
+    On a periodic axis every stored point (the redundant staggered
+    column/row included).  On a forced or open axis WRF computes from
+    ids+3 to ide-4 on mass-like positions and to ide-3 on the
+    boundary-normal staggered faces (module_big_step_utilities_em.F
+    :6327-6440); the main kernel takes 3..n-4 on both, and the staggered
+    face n-3, whose stencil reads the true boundary datum field(ide), is
+    computed by the seam kernel.  Points outside keep their incoming
+    tendency, as the Fortran's loops leave them.
+
+    One deliberate difference: WRF's 'v' branch also trims the y bounds
+    when only open_xs is set (``IF ( config_flags%open_xs .or. specified
+    )`` at :6378, where the u, w and mass branches test ``specified``
+    alone).  That makes an open-x, periodic-y run skip v's three edge rows
+    on each side of a PERIODIC axis.  It is a WRF defect and is not copied:
+    a periodic axis here is always computed in full.
+    """
+    i_lo, i_hi = (3, nx - 4) if bnd_x else (0, nxs - 1)
+    j_lo, j_hi = (3, ny - 4) if bnd_y else (0, nys - 1)
+    return i_lo, i_hi, j_lo, j_hi
+
+
 def launch_diff6(f, tend, mut, c1, c2, factor: float, dt: float, opt: int,
                  stagger: str = "", *, phb=None, msfu=None, msfv=None,
                  slopeopt: int = 0, thresh: float = 0.10,
                  dx: float = 0.0, dy: float = 0.0,
                  bnd_x: bool = False, bnd_y: bool = False, msft=None,
-                 state: DomainState | None = None) -> None:
+                 state: DomainState | None = None, seam_base=None) -> None:
     """ADD the WRF 6th-order horizontal diffusion coupled tendency for one
     field into ``tend`` (kernels/diff6.cu; float64 mirror
     ``tests.physics_reference.npref.np_diff6``).
@@ -2876,24 +3604,27 @@ def launch_diff6(f, tend, mut, c1, c2, factor: float, dt: float, opt: int,
     Constants and face-mass arithmetic retain compiled WRF REAL rounding.
 
     ``bnd_x``/``bnd_y`` (callers pass ``_boundary_x(cfg)``/``_boundary_y``:
-    open or specified/nested forcing on that axis) enable the seam
-    post-pass for the staggered field on that axis: the outermost
-    computed staggered face -- WRF's u(ide-3)/v(jde-3), which the
-    specified/nested and open loop bounds INCLUDE -- is recomputed by
+    open or specified/nested forcing on that axis) apply WRF's loop
+    bounds on that axis (:func:`diff6_loop_bounds`): points WRF's loops
+    skip keep the incoming ``tend`` untouched, and the outermost computed
+    staggered face -- WRF's u(ide-3)/v(jde-3), which the specified/nested
+    and open loop bounds INCLUDE -- is computed by
     ``kernels/diff6_seam.cu`` with WRF's accurate read of the stored true
     boundary datum ``field(ide)``/``field(jde)``
     (module_big_step_utilities_em.F:6354-6358/:6381-6385 bounds,
-    :6465-6467/:6547-6549 reads), replacing the periodic-wrap kernel's
-    corrupt value there.  ``tend`` must enter zeroed when a flag is set
-    (both production callers zero it): the seam face's prior
-    accumulation is discarded by the replacement. The compiled WRF
-    fixture grades the interior and the two seam faces word for word
-    (tests/test_diff6_wrf471_parity.py).
+    :6465-6467/:6547-6549 reads) instead of by the periodic-wrap main
+    kernel.  ``tend`` may hold any incoming tendency: every computed point
+    becomes ``(tend + tendency_x) + tendency_y``, the Fortran's in-place
+    association, so production passes the carrying ``*_tendf`` slot
+    itself.  The compiled WRF fixtures grade the interior and the two
+    seam faces word for word (tests/test_diff6_wrf471_parity.py,
+    tests/test_diff6_wrf461_column_oracle.py).
     """
     nlev, nys, nxs = f.shape
     nx = nxs - 1 if stagger == "x" else nxs
     ny = nys - 1 if stagger == "y" else nys
     variant = 1 if stagger == "x" else (2 if stagger == "y" else 0)
+    bounds = diff6_loop_bounds(nx, ny, nxs, nys, bnd_x, bnd_y)
     coef = DTYPE(factor) * DTYPE(0.015625) / (DTYPE(2.0) * DTYPE(dt))
     slope = int(slopeopt) >= 1 and phb is not None and phb.ndim == 3
     if slope and (dx <= 0.0 or dy <= 0.0):
@@ -2933,32 +3664,33 @@ def launch_diff6(f, tend, mut, c1, c2, factor: float, dt: float, opt: int,
           dzthr_x, dzthr_y,
           np.int32(nlev), np.int32(ny), np.int32(nys),
           np.int32(nx), np.int32(nxs), np.int32(variant),
-          np.int32(1 if stagger == "z" else 0)))
+          np.int32(1 if stagger == "z" else 0),
+          *(np.int32(b) for b in bounds)))
     if bnd_x and stagger == "x":
         _launch_diff6_seam("diff6_seam_u", f, tend, mut, c1, c2, phb_arg,
                            msfu_arg, msfv_arg, msft_arg, coef, opt, slope,
-                           dzthr_x, dzthr_y, nlev, ny, nx, bnd_y)
+                           dzthr_x, dzthr_y, nlev, ny, nx, bnd_y,
+                           base=seam_base)
     if bnd_y and stagger == "y":
         _launch_diff6_seam("diff6_seam_v", f, tend, mut, c1, c2, phb_arg,
                            msfu_arg, msfv_arg, msft_arg, coef, opt, slope,
-                           dzthr_x, dzthr_y, nlev, ny, nx, bnd_x)
+                           dzthr_x, dzthr_y, nlev, ny, nx, bnd_x,
+                           base=seam_base)
 
 
 def _launch_diff6_seam(name, f, tend, mut, c1, c2, phb_arg, msfu_arg,
                        msfv_arg, msft_arg, coef, opt, slope, dzthr_x, dzthr_y,
-                       nlev, ny, nx, bnd_cross) -> None:
-    """Recompute the WRF-computed high-side staggered face (kernels/
+                       nlev, ny, nx, bnd_cross, base=None) -> None:
+    """Compute the WRF-computed high-side staggered face (kernels/
     diff6_seam.cu): u's east column nx-3 / v's north row ny-3, whose
     dflux_p1 reads the stored true boundary datum field(ide)/field(jde).
 
-    The main periodic-wrap kernel's value on that face is corrupt (it
-    wraps to the OPPOSITE boundary), so the face is zeroed here and the
-    seam kernel writes WRF's accurate arithmetic over WRF's own index range
-    -- the cross-axis range [3, n-4] when the cross axis is also forced
-    (``bnd_cross``), the full periodic range otherwise, matching the
-    caller's subsequent width-3 ``_zero_open_strips`` exactly.  Callers
-    zero ``tend`` before ``launch_diff6``, so replacing this face's
-    accumulation is exact (documented in ``launch_diff6``).
+    The main periodic-wrap kernel would read the OPPOSITE boundary there,
+    so its loop bounds (:func:`diff6_loop_bounds`) leave the face out and
+    the seam kernel adds WRF's accurate arithmetic onto the incoming
+    tendency over WRF's own index range -- the cross-axis range [3, n-4]
+    when the cross axis is also forced (``bnd_cross``), the full periodic
+    range otherwise.
     """
     seam_u = name == "diff6_seam_u"
     n_along, n_cross = (nx, ny) if seam_u else (ny, nx)
@@ -2967,10 +3699,11 @@ def _launch_diff6_seam(name, f, tend, mut, c1, c2, phb_arg, msfu_arg,
     h0, h1 = (3, n_cross - 4) if bnd_cross else (0, n_cross - 1)
     if h1 < h0:
         return
-    if seam_u:
-        tend[:, :, nx - 3] = 0         # drop the wrapped-read value
-    else:
-        tend[:, ny - 3, :] = 0
+    if not DIFFUSION_ENABLED:
+        if seam_u:                         # drop the wrapped-read value
+            tend[:, :, nx - 3] = 0 if base is None else base[:, :, nx - 3]
+        else:
+            tend[:, ny - 3, :] = 0 if base is None else base[:, ny - 3, :]
     kern = get_kernel("diff6_seam", name)
     span = h1 - h0 + 1
     kern(((span + _TPB - 1) // _TPB, 1, nlev), (_TPB, 1, 1),
@@ -3076,14 +3809,16 @@ def launch_diff6_to_edge(f, tend, mut, c1, c2, factor, dt, opt, stagger="",
     the halo, which ``set_physical_bc3d`` fills with zero-gradient copies
     of the edge under specified and nested boundaries (share/module_bc.F,
     ``open_xs``/``open_xe`` and the y analogues).  WRF v4.6.1 instead
-    stops three points short (:6327-6440), which :func:`launch_diff6`
-    plus the width-3 strip mask reproduces.
+    stops three points short (:6327-6440), which :func:`launch_diff6`'s
+    loop bounds reproduce.
 
     The arithmetic per point is :func:`launch_diff6`'s unchanged kernel:
     every input is padded with three edge copies on each side (one more
-    on the high side), the kernel runs on the padded core, and the real
-    points are added into ``tend``.  No real point's stencil reaches the
-    padded core's periodic wrap, so the result is the fork's halo read.
+    on the high side), the incoming ``tend`` is copied into the padded
+    core, the kernel accumulates there in place, and the real points are
+    copied back, so ``tend`` receives the fork's own in-place sum.  No
+    real point's stencil reaches the padded core's periodic wrap, so the
+    result is the fork's halo read.
     ``bnd_x``/``bnd_y`` are accepted for the common call signature; the
     edge form needs no seam pass.  Callers use this form only on a domain
     whose two axes are both forced (see :func:`diff6_to_edge`).
@@ -3117,6 +3852,9 @@ def launch_diff6_to_edge(f, tend, mut, c1, c2, factor, dt, opt, stagger="",
     fp = _edge_pad_into(_edge_take(work["field"], pshape), f)
     tp = _edge_take(work["tend"], pshape)
     tp.fill(0)
+    # The incoming tendency enters the padded core, so every real point
+    # becomes (tend + tendency_x) + tendency_y, the fork's in-place sum.
+    tp[:, h:h + nys, h:h + nxs] = tend
     padded = []
     offset = 0
     for src, shape in zip((mut, msfu, msfv, msft),
@@ -3138,7 +3876,7 @@ def launch_diff6_to_edge(f, tend, mut, c1, c2, factor, dt, opt, stagger="",
                  phb=phbp, msfu=msfup, msfv=msfvp, msft=msftp,
                  slopeopt=slopeopt, thresh=thresh, dx=dx, dy=dy,
                  bnd_x=False, bnd_y=False)
-    tend += tp[:, h:h + nys, h:h + nxs]
+    tend[...] = tp[:, h:h + nys, h:h + nxs]
 
 
 def diff6_to_edge(cfg: RunConfig) -> bool:
@@ -3247,9 +3985,9 @@ def apply_diff6(state: DomainState, cfg: RunConfig) -> None:
                slopeopt=cfg.diff_6th_slopeopt,
                thresh=cfg.diff_6th_thresh, dx=cfg.dx, dy=cfg.dy,
                bnd_x=_boundary_x(cfg), bnd_y=_boundary_y(cfg), **edge)
-        if not to_edge:
-            _zero_open_strips(tendf, cfg, 3)    # WRF sixth_order_diffusion
-        f += DTYPE(cfg.dt) * tendf / chmf       # non-periodic loop bounds
+        # tendf entered zeroed; the kernel's own loop bounds leave WRF's
+        # non-periodic exclusions at zero (diff6_loop_bounds).
+        f += DTYPE(cfg.dt) * tendf / chmf
 
 
 def _prepare_emdiv_filter_launch(state: DomainState, cfg: RunConfig,
@@ -3280,8 +4018,12 @@ def _prepare_emdiv_filter_launch(state: DomainState, cfg: RunConfig,
     kernel = get_kernel("acoustic", "apply_emdiv")
     args = (
         state.u_pp, state.v_pp, mudf, state.mu_pp, mu_prev_arg, state.c1h,
-        state.msfu, state.msfv, DTYPE(-cfg.emdiv * cfg.dx),
-        DTYPE(-cfg.emdiv * cfg.dy), np.int32(state.has_msf),
+        state.msfu, state.msfv,
+        # Strict mode adds the increment inside advance_uv in WRF's order
+        # (acoustic._uv_emdiv_args); this launch then only saves mu''.
+        DTYPE(0.0) if WRF_EXACT else DTYPE(-cfg.emdiv * cfg.dx),
+        DTYPE(0.0) if WRF_EXACT else DTYPE(-cfg.emdiv * cfg.dy),
+        np.int32(state.has_msf),
         np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg)),
         np.int32(_boundary_forced(cfg)), np.int32(cfg.spec_zone),
         np.int32(save), np.int32(nz), np.int32(ny), np.int32(nx),
@@ -3290,6 +4032,7 @@ def _prepare_emdiv_filter_launch(state: DomainState, cfg: RunConfig,
     def launch() -> None:
         kernel(grid, block, args)
 
+    launch.args = args          # what a joined u/v substep binds by name
     return launch
 
 
@@ -3394,9 +4137,10 @@ def _zero_open_strips(buf: cp.ndarray, cfg: RunConfig, width: int,
     """Zero a coupled mixing tendency over the strip WRF's loop bounds skip
     at open lateral boundaries (no-op when periodic).
 
-    ``width = 3`` mirrors ``sixth_order_diffusion`` and ``width = 1``
-    mirrors ``horizontal_diffusion``.  On a non-staggered axis the outer
-    ``width`` entries on each side are exactly the points WRF's bounds
+    ``width = 1`` mirrors ``horizontal_diffusion``; ``width = 3`` was
+    the sixth-order exclusion, which the diff6 kernel now applies as its
+    own loop bounds (:func:`diff6_loop_bounds`).  On a non-staggered
+    axis the outer ``width`` entries on each side are exactly the points WRF's bounds
     exclude (e.g. mass fields under open_x: WRF computes ids+3..ide-4 of
     the ids..ide-1 cells, so 3 columns go to zero per side); without this
     the wrapped stencils couple the two open boundaries.  On the
@@ -3410,8 +4154,8 @@ def _zero_open_strips(buf: cp.ndarray, cfg: RunConfig, width: int,
     ``bnd_x``/``bnd_y`` mode and the smag2d u/v kernels both make the
     accurate boundary-datum read themselves (WRF computes u face ide-3
     reading field(i+3) = u(ide); smag2d.cu ``open_x``/``open_y``,
-    diff6.cu ``bndx``/``bndy``), so ``width = 3`` (diff6) and ``width =
-    1`` (smag2d) are exactly WRF's exclusions for every stagger.  The
+    diff6.cu loop bounds), so ``width = 1`` (smag2d) and the diff6
+    bounds are exactly WRF's exclusions for every stagger.  The
     parameter is retained for reconstructing the historical pre-fix mask
     (tests/test_diff6_boundary_face.py's 4d2ce99 capture)."""
     from woof.metal.array import MetalArray
@@ -3432,6 +4176,25 @@ def _zero_open_strips(buf: cp.ndarray, cfg: RunConfig, width: int,
         # emdiv mudf strip is the live 2-D caller.
         buf[..., :width, :] = 0
         buf[..., -y_hi:, :] = 0
+
+
+def _restore_open_strips(buf: cp.ndarray, saved: cp.ndarray, cfg: RunConfig,
+                         width: int) -> None:
+    """Copy ``saved`` back over the strip :func:`_zero_open_strips` zeroes.
+
+    The strict 6th-order path accumulates into a copy of the held tendency;
+    WRF's loop bounds never touch the strip, so it keeps the held value.
+    """
+    from woof.metal.array import MetalArray
+    if isinstance(buf, MetalArray):
+        # The Metal stencils leave the excluded strips of the copied input untouched.
+        return
+    if _boundary_x(cfg):
+        buf[..., :width] = saved[..., :width]
+        buf[..., -width:] = saved[..., -width:]
+    if _boundary_y(cfg):
+        buf[..., :width, :] = saved[..., :width, :]
+        buf[..., -width:, :] = saved[..., -width:, :]
 
 
 def set_w_surface(state: DomainState, cfg: RunConfig) -> None:
@@ -3518,12 +4281,11 @@ def apply_open_radiative_bc(state: DomainState, cfg: RunConfig) -> None:
     keeps (u's vertical advection when only x is open).  No-op with the
     periodic defaults.
     """
+    if not cfg.open_x and not cfg.open_y:
+        return
     nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
     has_msf = bool(getattr(state, "has_msf", False))
     if getattr(state, "_metal_setup_state", False):
-        if WRF_EXACT:
-            raise NotImplementedError(
-                "Metal open radiative tendencies currently support ordinary arithmetic")
         context = state._array_module.context
         shared = {
             "mup": state.mup, "mub2d": state.mub2d,
@@ -3535,16 +4297,16 @@ def apply_open_radiative_bc(state: DomainState, cfg: RunConfig) -> None:
             params = {"rdx": float(DTYPE(1.0 / cfg.dx)),
                       "cb": float(DTYPE(OPEN_CB)), "nz": nz, "ny": ny,
                       "nx": nx, "has_msf": int(has_msf)}
-            context.submit_kernel("open_u_radiative", arrays, params,
-                                  exact_policy=False, grid_size=nz * ny)
+            context.submit_kernel("wrf_exact_open_u_radiative" if WRF_EXACT else "open_u_radiative", arrays, params,
+                                  exact_policy=WRF_EXACT, grid_size=nz * ny)
         if cfg.open_y:
             arrays = {**shared, "rv_t": state.rv_t, "v": state.v,
                       "msfv": state.msfv}
             params = {"rdy": float(DTYPE(1.0 / cfg.dy)),
                       "cb": float(DTYPE(OPEN_CB)), "nz": nz, "ny": ny,
                       "nx": nx, "has_msf": int(has_msf)}
-            context.submit_kernel("open_v_radiative", arrays, params,
-                                  exact_policy=False, grid_size=nz * nx)
+            context.submit_kernel("wrf_exact_open_v_radiative" if WRF_EXACT else "open_v_radiative", arrays, params,
+                                  exact_policy=WRF_EXACT, grid_size=nz * nx)
         return
     if cfg.open_x:
         kernel = get_kernel("openbc", "open_u_radiative")
@@ -3597,9 +4359,6 @@ def apply_w_damping(state: DomainState, cfg: RunConfig,
         return
     nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
     if getattr(state, "_metal_setup_state", False):
-        if WRF_EXACT:
-            raise NotImplementedError(
-                "Metal w_damping currently supports ordinary arithmetic")
         arrays = {
             "rw_t": state.rw_t, "ww": ww, "w": state.w,
             "mup": state.mup, "mub2d": state.mub2d,
@@ -3612,7 +4371,8 @@ def apply_w_damping(state: DomainState, cfg: RunConfig,
             "nz": nz, "ny": ny, "nx": nx,
         }
         state._array_module.context.submit_kernel(
-            "w_damp", arrays, params, exact_policy=False,
+            "wrf_exact_w_damp" if WRF_EXACT else "w_damp",
+            arrays, params, exact_policy=WRF_EXACT,
             grid_size=(nz - 1) * ny * nx)
         return
     kernel = get_kernel("openbc", "w_damp")
@@ -3639,9 +4399,20 @@ def _env_flag(name: str) -> bool:
     return value.strip().lower() not in ("", "0", "false", "no", "off")
 
 
-# WRF eta-coordinate CFL reductions used by the adaptive timestep controller.
-_WRF_CFL_ENABLED = False
+_WRF_CFL_PROBE = _env_flag("GPUWM_WRF_CFL_PROBE")
+#: Force a device->host readback at the end of every model step, which is
+#: what a REAL controller must do: it has to know this step's CFL on the
+#: host before it can choose the next dt.  The reduction itself is free
+#: (measured), but the readback is a synchronisation point, and woof
+#: otherwise queues work asynchronously -- so this is the one cost that
+#: could make an adaptive dt SLOWER than the steps it saves.  Separate
+#: env var precisely so it can be A/B'd against the reduction alone.
+_WRF_CFL_PROBE_SYNC = _env_flag("WOOF_WRF_CFL_PROBE_SYNC")
+#: Grid primary ring; (grid, card) keys hold additional device rings.
 _WRF_CFL_STAT: dict[int | tuple[int, int], object] = {}
+_WRF_CFL_LABEL: dict[int, str] = {}
+#: Last read-back CFL per domain, populated only under the sync probe.
+_WRF_CFL_LAST: dict[int, float] = {}
 
 
 #: Per-step slots, used as a RING.  One row per model step per domain,
@@ -3662,11 +4433,23 @@ _WRF_CFL_STAT: dict[int | tuple[int, int], object] = {}
 #: is what makes out[0] THIS step's maximum and stops out[1]/out[2]
 #: accumulating without bound in a uint32.
 from woof.core.cfl_inventory import (
-    WRF_CFL_SLOTS as _WRF_CFL_SLOTS,
+    WRF_CFL_SLOTS as _WRF_CFL_SLOTS, CFL_HIST_BINS as _CFL_HIST_BINS,
     WRF_CFL_WORDS as _WRF_CFL_WORDS,
 )
 
+#: Histogram bins in ``w_cfl_stat``.  MUST match CFL_HIST_BINS and
+#: CFL_HIST_SCALE in kernels/openbc.cu -- bin b covers vert_cfl in
+#: [b/SCALE, (b+1)/SCALE), and the top bin absorbs >= BINS/SCALE and NaN.
+#: There is no way for NVRTC to check that agreement, so
+#: :func:`wrf_cfl_histogram_edges` is asserted against the kernel's own
+#: arithmetic in tests/test_wrf_cfl_histogram.py rather than trusted.
+_CFL_HIST_SCALE = 16.0
+#: 4 scalar words + the histogram.  32768 rows x 36 words x 4 B = 4.7 MB
+#: per domain, ~14 MB for a three-domain tree.  Against standing rule 3
+#: (do not raise VRAM) that is under the 50 MiB bar a change has to earn,
+#: and it is diagnostic memory that buys the distribution behind out[0].
 _WRF_CFL_CALLS: dict[int, int] = {}
+
 
 
 # A tile sweep owns one diagnostic row, just as a resident dycore step does.
@@ -3705,7 +4488,7 @@ def _wrf_cfl_bank(name):
 def _wrf_cfl_recording_enabled():
     from woof.core.cfl_member import current_cfl_member
     owner = current_cfl_member()
-    return _WRF_CFL_ENABLED if owner is None else owner.enabled
+    return _WRF_CFL_PROBE if owner is None else owner.enabled
 
 
 def _wrf_cfl_buffers(grid_id):
@@ -3714,19 +4497,20 @@ def _wrf_cfl_buffers(grid_id):
     buffers = [] if primary is None else [primary]
     buffers.extend(buf for key, buf in _wrf_cfl_bank("_WRF_CFL_STAT").items()
                    if isinstance(key, tuple) and key[0] == int(grid_id))
+    if primary is not None and hasattr(primary, "to_numpy"):
+        return buffers
     return sorted(buffers, key=lambda buf: int(buf.device.id))
 
 
 def _wrf_cfl_buffer(cfg, state=None):
     grid = int(cfg.grid_id)
     if state is not None and getattr(state, "_metal_setup_state", False):
-        # One Metal device per process: the ring is keyed on grid alone.
         buf = _wrf_cfl_bank("_WRF_CFL_STAT").get(grid)
         if buf is None:
-            buf = state._array_module.zeros(
-                (_WRF_CFL_SLOTS, _WRF_CFL_WORDS), np.uint32)
+            buf = state._array_module.zeros((_WRF_CFL_SLOTS, _WRF_CFL_WORDS), np.uint32)
             _wrf_cfl_bank("_WRF_CFL_STAT")[grid] = buf
             _wrf_cfl_bank("_WRF_CFL_CALLS").setdefault(grid, 0)
+            _wrf_cfl_bank("_WRF_CFL_LABEL")[grid] = f"d{grid:02d} {cfg.nx}x{cfg.ny}x{cfg.nz} dx={cfg.dx:g}"
         return buf
     dev = int(cp.cuda.runtime.getDevice())
     primary = _wrf_cfl_bank("_WRF_CFL_STAT").get(grid)
@@ -3736,6 +4520,7 @@ def _wrf_cfl_buffer(cfg, state=None):
         buf = cp.zeros((_WRF_CFL_SLOTS, _WRF_CFL_WORDS), dtype=cp.uint32)
         _wrf_cfl_bank("_WRF_CFL_STAT")[key] = buf
         _wrf_cfl_bank("_WRF_CFL_CALLS").setdefault(grid, 0)
+        _wrf_cfl_bank("_WRF_CFL_LABEL")[grid] = f"d{grid:02d} {cfg.nx}x{cfg.ny}x{cfg.nz} dx={cfg.dx:g}"
     return buf
 
 
@@ -3816,6 +4601,8 @@ def finish_wrf_cfl_domain_step(grid_id, *, commit=True) -> None:
                     stream.wait_event(event)
     if commit:
         _wrf_cfl_bank("_WRF_CFL_CALLS")[key] += 3
+        if _WRF_CFL_PROBE_SYNC:
+            _wrf_cfl_bank("_WRF_CFL_LAST")[key] = take_wrf_cfl(key)[0]
 
 def record_wrf_vertical_cfl(state: DomainState, cfg: RunConfig,
                             ww: cp.ndarray) -> None:
@@ -3831,6 +4618,10 @@ def record_wrf_vertical_cfl(state: DomainState, cfg: RunConfig,
     buf = _wrf_cfl_buffer(cfg, state)
     if getattr(state, "_metal_setup_state", False):
         _record_wrf_vertical_cfl_metal(state, cfg, ww, buf, key)
+        if (_WRF_CFL_PROBE_SYNC
+                and _wrf_cfl_bank("_WRF_CFL_CALLS")[key] % 3 == 0):
+            slot = ((_wrf_cfl_bank("_WRF_CFL_CALLS")[key] - 1) // 3) % _WRF_CFL_SLOTS
+            _wrf_cfl_bank("_WRF_CFL_LAST")[key] = float(buf[slot].to_numpy()[0].view(np.float32))
         return
     ctx = _wrf_cfl_bank("_WRF_CFL_DOMAIN_STEP").get(key)
     calls = _wrf_cfl_bank("_WRF_CFL_CALLS")[key]
@@ -3857,6 +4648,12 @@ def record_wrf_vertical_cfl(state: DomainState, cfg: RunConfig,
     if window is not None:
         args += tuple(np.int32(v) for v in window)
     kernel((blocks,), (_BC_THREADS,), args)
+    if ctx is None and _WRF_CFL_PROBE_SYNC and (calls + 1) % 3 == 0:
+        # End of a model step: read this step's CFL back the way a
+        # controller would have to.  float() on a device scalar is a
+        # blocking copy, which is the whole point of measuring it.
+        _wrf_cfl_bank("_WRF_CFL_LAST")[key] = float(
+            np.uint32(int(buf[slot][0])).view(np.float32))
 
 
 def _record_wrf_vertical_cfl_metal(state, cfg, ww, buf, key) -> None:
@@ -3914,8 +4711,7 @@ def take_wrf_cfl(grid_id: int) -> tuple[float, float]:
     rows = []
     if hasattr(buf, "to_numpy"):
         words = buf[slot].to_numpy()
-        return (float(np.uint32(words[0]).view(np.float32)),
-                float(np.uint32(words[3]).view(np.float32)))
+        return float(words[0].view(np.float32)), float(words[3].view(np.float32))
     for device_buf in _wrf_cfl_buffers(grid_id):
         with cp.cuda.Device(device_buf.device.id):
             rows.append(cp.asnumpy(device_buf[slot]))
@@ -3926,30 +4722,181 @@ def take_wrf_cfl(grid_id: int) -> tuple[float, float]:
 
 
 def enable_wrf_cfl_recording() -> None:
-    """Enable the CFL reduction for the active adaptive run."""
-    global _WRF_CFL_ENABLED
+    """Turn the CFL fold on for a run that is not using the env probe.
+
+    The adaptive controller needs the same reduction the probe reads, so
+    it switches it on rather than carrying a second copy of the kernel.
+    """
+    global _WRF_CFL_PROBE
     from woof.core.cfl_member import current_cfl_member
     owner = current_cfl_member()
     if owner is None:
-        _WRF_CFL_ENABLED = True
+        _WRF_CFL_PROBE = True
     else:
         owner.enabled = True
 
 
 def reset_wrf_cfl_recording() -> None:
-    """Disable the reduction and release this run's per-domain state."""
-    global _WRF_CFL_ENABLED
+    """Put the fold back where the environment left it and free its rows.
+
+    Prevents a SECOND experiment in the same process inheriting the
+    first's: the enable above is a module global and the accumulators are
+    module dicts keyed on grid_id, so without this a chained run that
+    never asked for the probe kept launching w_cfl_stat every RK stage,
+    held 4.72 MB per domain for nothing, and -- because grid_ids repeat
+    across experiments -- read the PREVIOUS run's row until its own first
+    three folds had landed.
+    """
+    global _WRF_CFL_PROBE
     from woof.core.cfl_member import current_cfl_member
     owner = current_cfl_member()
     if owner is None:
-        _WRF_CFL_ENABLED = False
+        _WRF_CFL_PROBE = _env_flag("GPUWM_WRF_CFL_PROBE")
     else:
-        owner.enabled = False
+        owner.enabled = _env_flag("GPUWM_WRF_CFL_PROBE")
     _wrf_cfl_bank("_WRF_CFL_DOMAIN_STEP").clear()
     _wrf_cfl_bank("_WRF_CFL_EVENTS").clear()
     _WRF_CFL_THREAD.windows = {}
     _wrf_cfl_bank("_WRF_CFL_STAT").clear()
     _wrf_cfl_bank("_WRF_CFL_CALLS").clear()
+    _wrf_cfl_bank("_WRF_CFL_LABEL").clear()
+    _wrf_cfl_bank("_WRF_CFL_LAST").clear()
+
+
+def wrf_cfl_histogram_edges() -> list[float]:
+    """Lower edge of each vert_cfl histogram bin, matching openbc.cu.
+
+    The kernel computes ``bin = (int)(vert_cfl * CFL_HIST_SCALE)``, so bin
+    ``b`` starts at ``b / CFL_HIST_SCALE``.  Exposed as a function rather
+    than a literal table because the two constants live in a .cu file that
+    nothing type-checks against this module.
+    """
+    return [b / _CFL_HIST_SCALE for b in range(_CFL_HIST_BINS)]
+
+
+def _hist_quantile(cum: np.ndarray, total: np.ndarray, q: float) -> np.ndarray:
+    """Per-step upper bound on the ``q`` quantile of vert_cfl.
+
+    Returns each bin's UPPER edge, which bounds the true quantile from
+    above -- the conservative direction for anything that sizes a
+    timestep off it.  The top bin is open-ended (it absorbs >= 2.0, and
+    NaN, by construction in the kernel), so a quantile landing there is
+    reported as ``inf`` rather than as a number the histogram cannot
+    support.  Steps that folded nothing give NaN, not a spurious 0.
+    """
+    target = q * total
+    idx = (cum < target[:, None]).sum(axis=1)          # first bin reaching q
+    edge = (idx + 1).astype(float) / _CFL_HIST_SCALE
+    edge[idx >= _CFL_HIST_BINS - 1] = float("inf")
+    edge[total <= 0] = float("nan")
+    return edge
+
+
+def wrf_vertical_cfl_report() -> list[dict]:
+    """Per-domain WRF vertical-CFL series, one entry per model step."""
+    out = []
+    from woof.core.cfl_inventory import fold_cfl_words
+    for key in (k for k in _wrf_cfl_bank("_WRF_CFL_STAT") if not isinstance(k, tuple)):
+        arrays = []
+        for buf in _wrf_cfl_buffers(key):
+            if hasattr(buf, "to_numpy"):
+                arrays.append(buf.to_numpy())
+            else:
+                with cp.cuda.Device(buf.device.id):
+                    arrays.append(cp.asnumpy(buf))
+        words = arrays[0] if len(arrays) == 1 else fold_cfl_words(arrays)
+        steps = max(1, (_wrf_cfl_bank("_WRF_CFL_CALLS").get(key, 0) + 2) // 3)
+        steps = min(steps, _WRF_CFL_SLOTS)
+        rows = words[:steps]
+        series = rows[:, 0].view(np.float32).astype(float).tolist()
+        hseries = rows[:, 3].view(np.float32).astype(float).tolist()
+        damped = rows[:, 1].astype(np.int64)
+        visited = rows[:, 2].astype(np.int64)
+
+        # The distribution behind the max.  out[0] is an order statistic:
+        # one cell sets it, and a controller reading it cannot separate
+        # "the flow sped up" from "one column is having a moment".  The
+        # ratio max/p99.99 is the number that settles whether a quantile
+        # controller is worth building -- near 1.0 and the max IS the
+        # distribution, so the idea is dead and this says so.
+        hist = rows[:, 4:].astype(np.int64)
+        cum = np.cumsum(hist, axis=1)
+        total = cum[:, -1] if cum.shape[1] else np.zeros(len(rows), np.int64)
+        p999 = _hist_quantile(cum, total, 0.999)
+        p9999 = _hist_quantile(cum, total, 0.9999)
+        vmax = np.asarray(series, dtype=float)
+        # np.isfinite on p9999 decides the branch, not defends it.  A quantile
+        # landing in the open top bin is +inf, and vmax/inf is 0.0 -- which
+        # is FINITE, so it would survive the filter below and drag the
+        # median toward zero, reporting "the max is the distribution" for
+        # exactly the saturated steps where it is least true.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.where(np.isfinite(p9999) & (p9999 > 0),
+                             vmax / p9999, np.nan)
+        ratio = ratio[np.isfinite(ratio)]
+        finite = [v for v in series if math.isfinite(v)]
+        mean = (sum(finite) / len(finite)) if finite else float("nan")
+        if len(finite) > 1:
+            var = sum((v - mean) ** 2 for v in finite) / (len(finite) - 1)
+            se = (var / len(finite)) ** 0.5
+        else:
+            se = 0.0
+        out.append({"domain": _wrf_cfl_bank("_WRF_CFL_LABEL").get(key, "?"),
+                    "steps": int(steps),
+                    "mean_vert_cfl": mean,
+                    "se_vert_cfl": se,
+                    "max_vert_cfl_wrf": max(finite) if finite else float("nan"),
+                    "min_vert_cfl_wrf": min(finite) if finite else float("nan"),
+                    "damped_cells": int(damped.sum()),
+                    "cells_visited": int(visited.sum()),
+                    "steps_with_damping": int((damped > 0).sum()),
+                    "max_horiz_cfl_wrf": max(
+                        (h for h in hseries if math.isfinite(h)),
+                        default=float("nan")),
+                    # How far the max sits above the bulk.  A median ratio
+                    # near 1 kills the quantile-controller idea outright.
+                    "median_max_over_p9999": (
+                        float(np.median(ratio)) if ratio.size
+                        else float("nan")),
+                    "hist_edges": wrf_cfl_histogram_edges(),
+                    "hist_total": hist.sum(axis=0).tolist(),
+                    "p999_series": p999.tolist(),
+                    "p9999_series": p9999.tolist(),
+                    "series": series,
+                    "horiz_series": hseries})
+    return out
+
+
+if _WRF_CFL_PROBE:                       # dump on exit; probe-only path
+    import atexit as _atexit
+    import json as _json
+
+    @_atexit.register
+    def _dump_wrf_cfl_report() -> None:
+        try:
+            rows = wrf_vertical_cfl_report()
+        except Exception:                # a probe must never fail a run
+            return
+        if not rows:
+            return
+        # stdout gets the SUMMARY; the per-step arrays go to the file.
+        # "series" was the only name filtered here, which was already
+        # letting horiz_series print 900+ floats into a run log, and the
+        # quantile series would have made that four such arrays.
+        bulky = {"series", "horiz_series", "p999_series", "p9999_series",
+                 "hist_edges"}
+        text = _json.dumps([{k: v for k, v in row.items() if k not in bulky}
+                            for row in rows], indent=2, sort_keys=True)
+        path = os.environ.get("WOOF_WRF_CFL_PROBE_OUT")
+        if path:
+            try:
+                io_open = open(path, "w", encoding="utf-8")
+            except OSError:
+                io_open = None
+            if io_open is not None:
+                with io_open as handle:      # the FULL series goes to file
+                    handle.write(_json.dumps(rows, indent=1, sort_keys=True))
+        print("WRF_VERT_CFL_PROBE " + text, flush=True)
 
 
 def apply_open_zero_gradient(state: DomainState, cfg: RunConfig) -> None:
@@ -3975,9 +4922,6 @@ def apply_open_zero_gradient(state: DomainState, cfg: RunConfig) -> None:
     if getattr(state, "_metal_setup_state", False):
         if not cfg.open_x and not cfg.open_y:
             return
-        if WRF_EXACT:
-            raise NotImplementedError(
-                "Metal open zero-gradient updates currently support ordinary arithmetic")
         from woof.core.moist import moist_species
 
         present_moist = tuple(
@@ -3998,25 +4942,25 @@ def apply_open_zero_gradient(state: DomainState, cfg: RunConfig) -> None:
         if cfg.open_x:
             for scalar_arrays in scalar_arrays_x:
                 context.submit_kernel(
-                    "open_zero_gradient_scalar_x", scalar_arrays,
+                    ("wrf_exact_open_zero_gradient_scalar_x" if WRF_EXACT else "open_zero_gradient_scalar_x"), scalar_arrays,
                     {"nz": nz, "ny": ny, "nx": nx},
-                    exact_policy=False, grid_size=nz * ny)
+                    exact_policy=WRF_EXACT, grid_size=nz * ny)
             context.submit_kernel(
-                "open_zero_gradient_x", arrays,
+                ("wrf_exact_open_zero_gradient_x" if WRF_EXACT else "open_zero_gradient_x"), arrays,
                 {"nz": nz, "ny": ny, "nx": nx,
                  "boundary_y": int(_boundary_y(cfg))},
-                exact_policy=False, grid_size=nz * (ny + 1))
+                exact_policy=WRF_EXACT, grid_size=nz * (ny + 1))
         if cfg.open_y:
             for scalar_arrays in scalar_arrays_y:
                 context.submit_kernel(
-                    "open_zero_gradient_scalar_y", scalar_arrays,
+                    ("wrf_exact_open_zero_gradient_scalar_y" if WRF_EXACT else "open_zero_gradient_scalar_y"), scalar_arrays,
                     {"nz": nz, "ny": ny, "nx": nx},
-                    exact_policy=False, grid_size=nz * nx)
+                    exact_policy=WRF_EXACT, grid_size=nz * nx)
             context.submit_kernel(
-                "open_zero_gradient_y", arrays,
+                ("wrf_exact_open_zero_gradient_y" if WRF_EXACT else "open_zero_gradient_y"), arrays,
                 {"nz": nz, "ny": ny, "nx": nx,
                  "boundary_x": int(_boundary_x(cfg))},
-                exact_policy=False, grid_size=nz * (nx + 1))
+                exact_policy=WRF_EXACT, grid_size=nz * (nx + 1))
         return
     if cfg.open_x:
         uw = state.u[:, :, 0]                          # (nz, ny) west face
@@ -4027,7 +4971,7 @@ def apply_open_zero_gradient(state: DomainState, cfg: RunConfig) -> None:
                 continue
             q[:, :, 0] = cp.where(outw, q[:, :, 1], q[:, :, 0])
             q[:, :, -1] = cp.where(oute, q[:, :, -2], q[:, :, -1])
-        if getattr(state, "qi", None) is not None:
+        if extra_moist_species(state):
             for name in extra_moist_species(state):
                 q = getattr(state, name)
                 q[:, :, 0] = cp.where(outw, q[:, :, 1], q[:, :, 0])
@@ -4070,7 +5014,7 @@ def apply_open_zero_gradient(state: DomainState, cfg: RunConfig) -> None:
                 continue
             q[:, 0, :] = cp.where(outs, q[:, 1, :], q[:, 0, :])
             q[:, -1, :] = cp.where(outn, q[:, -2, :], q[:, -1, :])
-        if getattr(state, "qi", None) is not None:
+        if extra_moist_species(state):
             for name in extra_moist_species(state):
                 q = getattr(state, name)
                 q[:, 0, :] = cp.where(outs, q[:, 1, :], q[:, 0, :])
@@ -4149,9 +5093,203 @@ def close_periodic_alias(state: DomainState, cfg: RunConfig) -> None:
         state.v[..., -1, :] = state.v[..., 0, :]
 
 
+def strict_metal_fixed_nest_config(cfg):
+    """Operator profiles checked through complete fixed resident nest trees."""
+    flat = cfg.terrain_opt == 0 and cfg.km_opt == 1
+    terrain = (cfg.terrain_opt == 1 and cfg.moist and cfg.km_opt == 0
+               and cfg.km_opt_zero_acknowledgement == KM_OPT_ZERO_ACK)
+    return (cfg.mp_physics == 0 and not physics_enabled(cfg) and (flat or terrain)
+            and (not cfg.moist or (cfg.moist_cq and cfg.moist_adv_opt == 1))
+            and not (cfg.open_x or cfg.open_y or cfg.use_adaptive_time_step)
+            and cfg.hybrid_opt == 0 and cfg.hypsometric_opt == 1 and cfg.top_lid
+            and cfg.diff_opt == 2
+            and cfg.khdif == cfg.kvdif == 0 and cfg.isfflx == 1
+            and cfg.diff_6th_opt == cfg.w_damping == cfg.damp_opt == 0
+            and cfg.zadvect_implicit == cfg.emdiv == 0
+            and (cfg.h_sca_adv_order, cfg.v_sca_adv_order, cfg.v_mom_adv_order) == (2, 3, 3)
+            and (cfg.spec_bdy_width, cfg.spec_zone, cfg.relax_zone) == (5, 1, 4)
+            and not cfg.relax_w and cfg.spec_exp == cfg.relax_timescale_s == 0
+            and not (cfg.nwp_diagnostics or cfg.output_diagnostics
+                     or cfg.prec_acc_dt or cfg.prec_acc_dt1))
+
+
+def _strict_metal_dry_periodic_supported(state, cfg, *, acoustic,
+                                         mass_flux_observer, mass_flux_accumulator):
+    """The independently checked flat strict dynamics scope."""
+    if not (WRF_EXACT and DIAGNOSTICS_ENABLED and ADVECTION_ENABLED
+            and BIGSTEP_ENABLED and DIFFUSION_ENABLED and acoustic):
+        return False
+    from woof.metal.climate_diagnostics import clock_refusal
+    driver = getattr(state, "physics", None)
+    from woof.metal.strict_regional_kessler_profile import admits as admits_kessler, paired_radiation
+    from woof.core.physics import _metal_radiation_adapter_matches
+    from woof.metal.strict_regional_wsm6_profile import admits as admits_wsm6
+    radiation = getattr(driver, "radiation_callable", None)
+    strict_microphysics = ((admits_kessler(cfg) or admits_wsm6(cfg)) and driver is not None
+        and (not state.has_msf or (not cfg.specified and radiation is None))
+        and getattr(driver, "state", None) is state
+        and getattr(driver, "mp_physics", None) == cfg.mp_physics
+        and getattr(driver, "microphysics", None) is not None
+        and (radiation is None
+             if not paired_radiation(cfg) else
+             _metal_radiation_adapter_matches(cfg, radiation))
+        and getattr(driver, "cumulus_callable", None) is None
+        and getattr(driver, "cam_ozone", None) is None)
+    damped_ieva = (cfg.zadvect_implicit == 1 and cfg.w_damping == 1
+                   and cfg.terrain_opt == 0 and not cfg.moist
+                   and not cfg.specified and not state.has_msf)
+    unmixed = (
+        (cfg.ny == 1 or cfg.zadvect_implicit == 1) and not physics_enabled(cfg)
+        and driver is None and not cfg.open_x
+        and not cfg.open_y and not cfg.nested
+        and cfg.khdif == 0 and cfg.kvdif == 0
+        and cfg.isfflx == 1 and cfg.top_lid
+        and not wrf_mixing_package_active(cfg)
+        and cfg.hybrid_opt == 0 and cfg.hypsometric_opt == 1
+        and cfg.diff_opt == 2 and cfg.diff_6th_opt == 0
+        and cfg.h_sca_adv_order == 2 and cfg.v_sca_adv_order == 3
+        and cfg.v_mom_adv_order == 3 and (cfg.w_damping == 0 or damped_ieva)
+        and cfg.damp_opt == 0 and cfg.emdiv == 0
+        and not cfg.output_diagnostics and not cfg.nwp_diagnostics
+        and cfg.prec_acc_dt == 0 and cfg.prec_acc_dt1 == 0)
+    flat_unmixed = unmixed and cfg.terrain_opt == 0 and cfg.km_opt == 1
+    terrain_ieva = (unmixed and cfg.terrain_opt == 1 and cfg.km_opt == 0
+                    and cfg.moist and cfg.moist_adv_opt == 1
+                    and not cfg.specified and not state.has_msf)
+    one_row = (cfg.ny == 1 and not cfg.moist and not cfg.specified
+               and cfg.w_damping == 0 and flat_unmixed)
+    strict_ieva = (
+        cfg.zadvect_implicit == 1
+        and cfg.zadvect_implicit_variant in ("wrf_471", "wrf_legacy")
+        and (flat_unmixed or terrain_ieva) and cfg.ny >= 7
+        and 5 <= cfg.nz < ieva.IEVA_LEVEL_TIERS[-1])
+    strict_radiation = (driver is not None
+        and getattr(driver, "radiation_callable", None) is not None
+        and _metal_strict_physics_profile(
+        cfg, radiation=driver.radiation_callable,
+        cumulus=getattr(driver, "cumulus_callable", None),
+        cam_ozone=getattr(driver, "cam_ozone", None)))
+    strict_mixing = (cfg.km_opt in (1, 2, 3, 4) and cfg.isfflx in (0, 1, 2)
+           and math.isfinite(cfg.tke_heat_flux)
+           and math.isfinite(cfg.tke_drag_coefficient) and cfg.tke_drag_coefficient >= 0
+           and (cfg.km_opt != 1 or (math.isfinite(cfg.khdif) and cfg.khdif >= 0
+                                    and math.isfinite(cfg.kvdif) and cfg.kvdif >= 0))
+           and (cfg.terrain_opt == 0
+                or (cfg.terrain_opt == 1 and cfg.moist and cfg.km_opt in (2, 3, 4)
+                    and (cfg.diff_opt == 2 or (strict_radiation and _metal_strict_terrain_coordinate(cfg)))
+                    and (strict_radiation or (not physics_enabled(cfg) and driver is None))))
+           and (strict_radiation or (not physics_enabled(cfg) and driver is None)))
+    open_profile = (cfg.open_x and cfg.open_y and not cfg.specified
+                    and cfg.terrain_opt == 0 and cfg.km_opt == 0
+                    and cfg.diff_6th_opt == 0 and not physics_enabled(cfg)
+                    and driver is None and cfg.w_damping == 0 and cfg.damp_opt == 0
+                    and not cfg.output_diagnostics and cfg.prec_acc_dt == 0
+                    and cfg.prec_acc_dt1 == 0)
+    rolling = getattr(state, "_lateral_boundary_device", None)
+    nested_profile = (cfg.nested and not cfg.specified and not state.has_msf
+                      and strict_metal_fixed_nest_config(cfg)
+                      and rolling is not None and rolling.rolling and rolling.valid
+                      and rolling.strict_resident_nest)
+    coordinate = (strict_mixing and cfg.km_opt in (2, 4) and cfg.isfflx == 1
+                   and cfg.khdif == 0 and cfg.kvdif == 0)
+    if (bool(cfg.moist) != bool(state.qv is not None)
+            or ((physics_enabled(cfg) or driver is not None) and not (strict_radiation or strict_microphysics))
+            or (bool(getattr(state, "tke", None) is not None) != (cfg.km_opt == 2))
+            or any(getattr(state, name, None) is not None for name in
+                   ("chem", "qke_adv", "_iau_forcing", "_ensemble_stochastic"))
+            or cfg.terrain_opt not in (0, 1)
+            or ((cfg.open_x or cfg.open_y) and not open_profile)
+            or (cfg.nested and not nested_profile)
+            or (cfg.zadvect_implicit and not strict_ieva)
+            or (cfg.diff_opt != 2 and not (cfg.diff_opt == 1 and coordinate))
+            or (wrf_mixing_package_active(cfg) and not strict_mixing)
+            or cfg.diff_6th_opt not in (0, 1, 2)
+            or (cfg.diff_6th_opt == 1 and cfg.moist)
+            or (cfg.diff_6th_opt in (1, 2) and (
+                cfg.diff_6th_form not in ("wrf_461", "noaa_wrf39")
+                or (diff6_fork(cfg) and cfg.diff_6th_factor2 is not None and (
+                    isinstance(cfg.diff_6th_factor2, bool)
+                    or not math.isfinite(cfg.diff_6th_factor2) or cfg.diff_6th_factor2 < 0))
+                or not math.isfinite(cfg.diff_6th_factor) or cfg.diff_6th_factor < 0
+                or cfg.diff_6th_slopeopt not in (0, 1)
+                or not math.isfinite(cfg.diff_6th_thresh) or cfg.diff_6th_thresh <= 0))
+            or not math.isfinite(cfg.emdiv) or cfg.emdiv < 0
+            or cfg.w_damping not in (0, 1)
+            or (cfg.w_damping == 1 and w_crit_cfl_refusal(
+                cfg.w_crit_cfl, w_damping=1, zadvect_implicit=cfg.zadvect_implicit) is not None)
+            or cfg.damp_opt not in (0, 3)
+            or (cfg.damp_opt == 3 and (cfg.upper_wind_limiter_form not in ("wrf_461", "noaa_wrf39")
+                or not math.isfinite(cfg.dampcoef) or cfg.dampcoef < 0
+                or not math.isfinite(cfg.zdamp) or not 0 < cfg.zdamp < cfg.ztop))
+            or (cfg.nwp_diagnostics not in (0, 1) or (cfg.nwp_diagnostics == 1 and not cfg.specified))
+            or cfg.gsd_diagnostics or cfg.lightning_option
+            or (cfg.output_diagnostics and clock_refusal(
+                cfg.dt, cfg.diag_int, cfg.wind_int) is not None)
+            or any(not math.isfinite(value) or value < 0
+                   for value in (cfg.prec_acc_dt, cfg.prec_acc_dt1))
+            or cfg.hailcast_opt == 1
+            or mass_flux_observer is not None or mass_flux_accumulator is not None
+            or cfg.h_sca_adv_order not in (2, 5) or cfg.v_sca_adv_order not in (3, 5)
+            or cfg.v_mom_adv_order not in (3, 5)
+            or cfg.nx < 7 or (cfg.ny < 7 and not one_row) or cfg.nz < 5):
+        return False
+    if one_row and any(not np.all(getattr(state, name).to_numpy() == value)
+                       for name, value in (("msft", 1), ("msfu", 1), ("msfv", 1),
+                                           ("f", 0), ("e", 0))):
+        return False
+    if cfg.moist and ((cfg.mp_physics != 0 and not strict_microphysics)
+                      or not cfg.moist_cq or cfg.moist_adv_opt not in (0, 1)
+                      or any(getattr(state, name, None) is None for name in SPECIES)
+                      or (cfg.mp_physics == 6 and extra_moist_species(state) != ("qi", "qs", "qg"))
+                      or (cfg.mp_physics != 6 and extra_moist_species(state))):
+        return False
+    if cfg.specified:
+        boundaries = getattr(state, "lateral_boundaries", None)
+        resident = getattr(state, "_lateral_boundary_device", None)
+        if (boundaries is None or resident is None or resident.clock is None
+                or resident.clock.dt_fp32 != np.float32(cfg.clock_dt if cfg.clock_dt > 0 else cfg.dt)
+                or cfg.relax_w or cfg.spec_exp != 0 or cfg.relax_timescale_s != 0
+                or (cfg.spec_bdy_width, cfg.spec_zone, cfg.relax_zone) != (5, 1, 4)
+                or (boundaries.spec_bdy_width, boundaries.spec_zone,
+                    boundaries.relax_zone) != (5, 1, 4)
+                or boundaries.seam_sides or any(
+                side.time_law is not None
+                for interval in boundaries.intervals
+                for boundary in interval.fields.values()
+                for side in (boundary.west, boundary.east,
+                             boundary.south, boundary.north))):
+            return False
+    # Exact diagnostics and transport interpret thp as theta minus 300 K.
+    # Moist terrain is restricted to the checked physics-off source chains.
+    moist_terrain = (cfg.terrain_opt == 1 and cfg.moist
+                     and (cfg.km_opt == 0 or (cfg.km_opt in (2, 3, 4) and cfg.diff_opt == 2)
+                          or (strict_radiation and _metal_strict_terrain_coordinate(cfg)))
+                     and (strict_radiation or (not physics_enabled(cfg) and driver is None)))
+    # Validate the live carrier and base fields on the host each step.
+    # This synchronizes the device, including when the fields are unchanged.
+    ht = state.ht.to_numpy()
+    if (state.thb.ndim != (1 if cfg.terrain_opt == 0 else 3)
+            or not np.all(state.thb.to_numpy() == np.float32(300.0))
+            or (not np.all(np.isfinite(ht)) if moist_terrain
+                else not np.all(ht == np.float32(0.0)))):
+        return False
+    mub = state.mub2d.to_numpy()
+    if (not np.all(np.isfinite(mub)) if moist_terrain
+            else not np.all(mub == mub[0, 0])):
+        return False
+    if cfg.terrain_opt == 1:
+        for name in ("phb", "pb", "alb", "dphb_resid"):
+            field = getattr(state, name).to_numpy()
+            if (field.ndim != 3 or
+                    (not np.all(np.isfinite(field)) if moist_terrain
+                     else not np.all(field == field[:, :1, :1]))):
+                return False
+    return True
+
+
 def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
          mass_flux_observer=None, mass_flux_accumulator=None,
-         refl_10cm_due: bool = False) -> None:
+         refl_10cm_due: bool = False, fire_history_due: bool = False) -> None:
     """Advance ``state`` one full RK3 step of length ``cfg.dt``.
 
     ``acoustic=True`` (default) runs the full ARW split-explicit loop: per
@@ -4171,10 +5309,13 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
     ``refl_10cm_due`` is the history-step flag threaded to microphysics;
     the active scheme computes and stashes radar reflectivity before its
     finish-stage theta writeback and the post-microphysics EOS refresh.
+    ``fire_history_due`` is the independent history alarm for firebrand
+    landing likelihood and counters, including vapor-only fire cases.
 
-    Config-gated physics (no-ops with the defaults): with ``km_opt=1``,
-    constant-K diffusion joins every stage's slow tendencies when
-    ``cfg.khdif/kvdif > 0``;
+    Config-gated physics (no-ops with the defaults): ``km_opt=1`` with
+    ``cfg.khdif/kvdif > 0`` runs WRF's diff_opt=2 mixing package with the
+    isotropic constant coefficients (:func:`launch_wrf_isotropic_km`;
+    computed once per step from the time-t fields like km_opt 2-4);
     ``cfg.km_opt=4`` adds the WRF 2-D Smagorinsky horizontal mixing
     (:func:`add_smag2d_tendencies` -- computed once per step on stage 1,
     applied every stage; moisture via :func:`apply_smag2d_moisture`); and
@@ -4218,14 +5359,18 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
     stays periodic.
 
     Unsupported combinations fail loudly here (and, for the config-only
-    parts, in ``woof.config.load_config``): constant-K diffusion
-    (``khdif/kvdif > 0``) with radiative-open or specified boundaries
-    raises ``NotImplementedError`` because its remaining stencils/bounds
-    are periodic-only.  Terrain slope stencils clamp their exterior donors
-    on open boundaries.  The non-monotonic
+    parts, in ``woof.config.load_config``): terrain (``terrain_opt != 0``
+    or any nonzero ``state.ht``) with radiative-open boundaries raises
+    ``NotImplementedError`` because its remaining stencils/bounds are
+    periodic-only.  The non-monotonic
     ``diff_6th_opt = 1`` with moisture raises ``ValueError`` (unlimited
     fluxes bypass the PD limiter).  Coriolis/curvature is boundary-aware.
     """
+    if cp is None and not getattr(state, "_metal_setup_state", False):
+        require_forecast_gpu()
+    if getattr(cfg, "umove", 0.0) or getattr(cfg, "vmove", 0.0) or getattr(state, "_moving_frame_velocity", None):
+        from woof.moving_frame import initialize_moving_frame
+        initialize_moving_frame(state, cfg)
     if mass_flux_observer is not None and mass_flux_accumulator is not None:
         raise ValueError(
             "mass_flux_observer and mass_flux_accumulator are mutually "
@@ -4246,17 +5391,11 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
     if getattr(state, "_metal_setup_state", False):
         # Dynamics-only gate.  Physics admission is PhysicsDriver's
         # (METAL_FAMILY_CAPS); nothing here restates a physics profile.
-        physics_driver = getattr(state, "physics", None)
-        metal_sase_profile = bool(
-            getattr(physics_driver, "sase_active", False)
-            and int(cfg.bl_pbl_physics) == 900
-            and int(cfg.km_opt) == 0
-            and int(cfg.diff_6th_opt) == 0
-            and int(cfg.sf_sfclay_physics) in (1, 91)
-            and int(getattr(cfg, "sf_urban_physics", 0) or 0) == 0
-            and physics_driver.cam_ozone is None)
         unsupported = []
-        if WRF_EXACT:
+        if WRF_EXACT and not _strict_metal_dry_periodic_supported(
+                state, cfg, acoustic=acoustic,
+                mass_flux_observer=mass_flux_observer,
+                mass_flux_accumulator=mass_flux_accumulator):
             unsupported.append("WRF-exact arithmetic")
         if not acoustic:
             unsupported.append("acoustic=False mode")
@@ -4309,25 +5448,10 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 if extra:
                     unsupported.append(
                         "specified scalar fields " + ", ".join(sorted(extra)))
-        metal_km_diff6_pairs = {
-            (km_opt, diff6_opt)
-            for km_opt in (1, 2, 3, 4)
-            for diff6_opt in (0, 1, 2)
-        }
-        if metal_sase_profile:
-            metal_km_diff6_pairs.add((0, 0))
-        if (cfg.km_opt, cfg.diff_6th_opt) not in metal_km_diff6_pairs:
-            unsupported.append(
-                "Smagorinsky/sixth-order diffusion pair "
-                f"(km_opt={cfg.km_opt}, diff_6th_opt="
-                f"{cfg.diff_6th_opt}) has no Metal kernel pair")
-        if int(cfg.diff_opt) == 1:
-            unsupported.append("diff_opt=1 has no Metal kernels")
-        if int(getattr(cfg, "tke_budget", 0)) != 0:
-            unsupported.append("tke_budget=1 has no Metal implementation")
-        if ((cfg.khdif > 0.0 or cfg.kvdif > 0.0)
-                and getattr(state.phb, "ndim", None) != 1):
-            unsupported.append("constant-K diffusion on a non-flat base")
+        # validate_km_opt below owns the physical km_opt combinations,
+        # including explicit no-horizontal-mixing research controls.  At
+        # km_opt=0 the existing mixing dispatcher skips exchange mixing;
+        # the sixth-order filter remains selected independently.
         if cfg.damp_opt not in (0, 3):
             unsupported.append(
                 f"damp_opt={cfg.damp_opt} (only the implicit w damper "
@@ -4349,38 +5473,11 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         raise RuntimeError(
             "CUDA dycore.step requires CuPy; this host has no CUDA backend")
     validate_km_opt(cfg)
-    if cfg.km_opt in (2, 3, 4) and (cfg.khdif > 0.0 or cfg.kvdif > 0.0):
-        raise ValueError(
-            f"km_opt={cfg.km_opt} selects WRF Smagorinsky mixing; "
-            "khdif/kvdif are constant-K controls for km_opt=1 and cannot "
-            "also be active")
     if cfg.mp_physics != 0 and getattr(state, "h_diabatic", None) is None:
         raise ValueError(
             f"mp_physics={cfg.mp_physics} requires cfg.moist=True: the "
             "state carries no h_diabatic array for the retained "
             "microphysics heating")
-    if cfg.open_x or cfg.open_y:
-        # On Metal, the base-state loader already checked that a flat config
-        # received 1-D profiles and uploaded zero terrain. Avoid an implicit
-        # scalar operation on MetalArray; only CPU/CUDA states need the
-        # legacy value check for callers that directly mutate state.ht.
-        terrain_active = int(cfg.terrain_opt) != 0
-        if (not getattr(state, "_metal_setup_state", False)
-                and state.ht is not None):
-            terrain_active = terrain_active or bool((state.ht != 0).any())
-        if terrain_active and not getattr(state, "_metal_setup_state", False):
-            raise NotImplementedError(
-                "terrain + open lateral boundaries is not wired for this "
-                "backend: the Metal route uses boundary-clamped terrain "
-                "slopes")
-    if ((cfg.open_x or cfg.open_y or _boundary_forced(cfg))
-            and (cfg.khdif > 0.0 or cfg.kvdif > 0.0)):
-        raise NotImplementedError(
-            "constant-K diffusion (khdif/kvdif > 0) + open or specified "
-            "lateral boundaries is not wired: launch_add_diff2 has no "
-            "boundary-aware path, so its stencils would wrap across the "
-            "domain; use km_opt=4 and/or diff_6th_opt=2 for boundary "
-            "dissipation")
     if cfg.diff_6th_opt == 1 and state.qv is not None:
         raise ValueError(
             "diff_6th_opt=1 (non-monotonic) with moisture is not allowed: "
@@ -4391,6 +5488,13 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         raise NotImplementedError(
             "non-timesplit physics requires the acoustic RK3 path "
             "(step(acoustic=False) is the Phase-1 dry advection test path)")
+    if getattr(state, '_host_setup_state', False):
+        from woof.forecast_gpu import ForecastGPURequired
+
+        raise ForecastGPURequired(
+            'a NumPy setup state was passed to step; construct a CUDA forecast state')
+    if not getattr(state, "_metal_setup_state", False):
+        require_forecast_gpu()
     _save_time_t(state)
     zero_tendencies = _prepare_tendency_zero(state)
 
@@ -4407,17 +5511,39 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
             raise RuntimeError(
                 "physics is enabled but the state has no PhysicsDriver; "
                 "call woof.core.physics.initialize_physics first")
-        update_diagnostics(state, cfg.hypsometric_opt)
+        if not _wrf_reuse_diagnostics(state):
+            update_diagnostics(state, cfg.hypsometric_opt,
+                               muts=_wrf_muts(state))
         physics_tendencies = state.physics.compute(state, cfg)
+        # WRF rk_update_scalar saves scalar_old from the post-physics
+        # carrier on stage 1 (module_em.F:1679,1722). Preserve the MYNN solve.
+        if getattr(state, "qke_adv", None) is not None:
+            state.qke_adv0[...] = state.qke_adv
     elif getattr(getattr(state, "physics", None), "cam_ozone", None) is not None:
         # A nested consumer can require root CAM ozone even with all local
         # schemes disabled. Run its common cadence, adding no tendencies.
-        update_diagnostics(state, cfg.hypsometric_opt)
+        update_diagnostics(state, cfg.hypsometric_opt,
+                           muts=_wrf_muts(state))
         state.physics.compute(state, cfg)
 
     if stochastic_binding is not None:
         physics_tendencies = stochastic_binding.after_nonmicrophysics(
             state, cfg, physics_tendencies)
+    if getattr(state, "chem", None) is not None:
+        # Native SFIRE emits into tracers before RK transport. The common
+        # chem driver owns its source ledger and refreshes affected time-t
+        # copies, which native rk_update_scalar copies after fire on RK1.
+        from woof.core.chem_driver import chem_pre_transport
+        chem_pre_transport(state, cfg, cfg.dt)
+
+    # DA incremental analysis update (woof.da.iau.IauForcing): the analysis
+    # increment as held coupled tendencies beside the physics', every RK
+    # stage, like WRF's analysis-nudging slot.  A state without an attached
+    # forcing takes the same object back and the step is unchanged.
+    if getattr(state, "_iau_forcing", None) is not None:
+        from woof.da.iau import fold_step_tendencies
+        physics_tendencies = fold_step_tendencies(state, cfg,
+                                                  physics_tendencies)
 
     if not acoustic:
         if state.qv is not None:
@@ -4425,18 +5551,17 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 "moist transport requires the acoustic dycore path "
                 "(step(acoustic=False) is the Phase-1 dry advection test "
                 "path)")
-        if cfg.km_opt in (2, 3, 4):
+        if wrf_mixing_package_active(cfg):
             raise NotImplementedError(
-                f"km_opt={cfg.km_opt} Smagorinsky mixing requires the "
-                "acoustic dycore path (step(acoustic=False) is the "
-                "Phase-1 dry advection test path)")
+                f"km_opt={cfg.km_opt} mixing requires the acoustic dycore "
+                "path (step(acoustic=False) is the Phase-1 dry advection "
+                "test path, and WRF's once-per-step mixing package reads "
+                "the time-t copies only the acoustic path keeps)")
         for istage, dt_eff in enumerate((cfg.dt / 3.0, cfg.dt / 2.0,
                                          cfg.dt)):
             zero_tendencies()
             update_diagnostics(state, cfg.hypsometric_opt)
             add_advection_tendencies(state, cfg)
-            if cfg.km_opt == 1:
-                add_diffusion_tendencies(state, cfg)
             apply_state_lateral_boundaries(state, cfg, rk_stage=istage)
             _advance_stage(state, dt_eff)
         set_w_surface(state, cfg)
@@ -4453,10 +5578,19 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
     # loading, rho=(1+qv)/alt (exactly 1/alt for a dry state).  A freshly
     # initialized state has not otherwise run phy_prep/EOS yet, so refresh
     # the time-t diagnostics before evaluating K and its forward tendencies.
-    if cfg.km_opt in (2, 3, 4):
-        update_diagnostics(state, cfg.hypsometric_opt)
-    prepare_fixed_tendencies(state, cfg)
+    if wrf_mixing_package_active(cfg) and not _wrf_reuse_diagnostics(state):
+        update_diagnostics(state, cfg.hypsometric_opt,
+                           muts=_wrf_muts(state))
+    if cfg.gsd_diagnostics:
+        from woof.core.gsd_diagnostics import update_helicity
+        update_helicity(state, cfg, history_due=refl_10cm_due)
+    prepare_fixed_tendencies(state, cfg, physics_tendencies)
     fixed_scalars = fixed_scalar_tendencies(state, cfg)
+    if WRF_EXACT:
+        # Folded into the held tendencies (_fold_physics_wrf); nothing adds
+        # them again, per stage or per scalar.
+        stage_tendencies = getattr(physics_tendencies, "strict_stage_tendencies", None)
+        physics_tendencies = stage_tendencies() if stage_tendencies is not None else None
 
     ns = cfg.time_step_sound
     stages = ((1, cfg.dt / 3.0),
@@ -4481,8 +5615,10 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         launch_small_step_finish_final)
     for istage, (nsub, dtau) in enumerate(stages):
         zero_tendencies()
-        update_diagnostics(state, cfg.hypsometric_opt)  # p, al, alt at t*
-        ru, rv, ww = stage_fluxes(state, cfg)
+        if not (istage == 0 and _wrf_reuse_diagnostics(state)):
+            update_diagnostics(state, cfg.hypsometric_opt,
+                               muts=_wrf_muts(state))  # p, al, alt at t*
+        ru, rv, ww = stage_fluxes(state, cfg, first_stage=(istage == 0))
         # WRF calc_cq is fixed at the RK-stage reference state and shared by
         # horizontal_pressure_gradient plus every acoustic substep.
         stage_cq = prepare_moist_cq(state, cfg)
@@ -4493,7 +5629,7 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                                      state, cfg, ww))
         else:
             _add_slow_tendencies(state, cfg, ru, rv, ww, cq=stage_cq)
-        if istage == 0:
+        if istage == 0 or (WRF_EXACT and cfg.cu_physics == 3):
             # WRF RTHFTEN for the cumulus schemes that take it.  THIS LINE
             # is the whole contract: rth_t holds the stage reference
             # fluxes' theta advection and nothing else until the next
@@ -4501,22 +5637,43 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
             # docstring for the GFSCHEME double-count trap).  Stage 1
             # matches the once-per-step capture convention h_diabatic and
             # the qv lateral tendency already use.
-            capture_advective_theta_forcing(state)
+            capture_advective_theta_forcing(state, cfg=cfg)
             if getattr(state, "_metal_setup_state", False):
                 _clear_metal_forcing_ring(state, cfg, state.rthften)
-        if physics_tendencies is not None:
-            physics_tendencies.add_to_slow(state)
-        if cfg.mp_physics != 0:                       # WRF rk_addtend_dry's
-            add_h_diabatic_tendency(state)            # h_diabatic slot, every
-        if cfg.km_opt == 1:
-            add_diffusion_tendencies(state, cfg)      # RK stage
-        add_fixed_dry_tendencies(state, cfg)           # held Smag/diff6 tendf
-        apply_w_damping(state, cfg, ww)               # w_damping=1 only
-        record_wrf_vertical_cfl(state, cfg, ww)      # probe; off by default
-        apply_state_lateral_boundaries(state, cfg, rk_stage=istage)
+        if WRF_EXACT:
+            # WRF solve_em order: rk_tendency (w_damp inside, see
+            # _add_slow_tendencies), relax_bdy_dry folded into the held
+            # *_tendf on rk_step 1, rk_addtend_dry's tend + tendf/msf and
+            # then its h_diabatic term in the same statement, spec_bdy_dry.
+            implicit_stage = ieva.active_stage(cfg, istage, len(stages))
+            if implicit_stage:
+                apply_w_damping(state, cfg, ww)
+            if istage == 0 and _wrf_relaxation_fold(cfg):
+                fold_lateral_relaxation(state, cfg)
+            add_fixed_dry_tendencies(state, cfg)
+            if physics_tendencies is not None:
+                physics_tendencies.add_to_slow(state)
+            if cfg.mp_physics != 0:
+                add_h_diabatic_tendency(state)
+            record_wrf_vertical_cfl(state, cfg, ww)
+            apply_state_lateral_boundaries(state, cfg, rk_stage=istage)
+        else:
+            if physics_tendencies is not None:
+                physics_tendencies.add_to_slow(state)
+            if cfg.mp_physics != 0:                   # WRF rk_addtend_dry's
+                add_h_diabatic_tendency(state)        # h_diabatic slot, every
+            add_fixed_dry_tendencies(state, cfg)       # held Smag/diff6 tendf
+            apply_w_damping(state, cfg, ww)           # w_damping=1 only
+            record_wrf_vertical_cfl(state, cfg, ww)  # probe; off by default
+            apply_state_lateral_boundaries(state, cfg, rk_stage=istage)
         apply_open_radiative_bc(state, cfg)           # open_x/open_y only
         if WRF_EXACT:
             exact_small_step_inits[istage]()
+            if cfg.cu_physics in (3, 6):
+                # Stock leaves reference WW in the ring that advance_mu_th
+                # does not overwrite. sumflux still reads that ring.
+                state.ww_pp[...] = ww
+            _init_wrf_acoustic_muts(state, istage)
         else:
             launch_small_step_init()                 # additive stage seed
         acoustic_coefficients = prepare_acoustic_coefficients(
@@ -4543,10 +5700,6 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 # the previous stage's final column-mass tendency so emdiv
                 # acts on 6 of 7 acoustic iterations, not 4 of 7.
                 mudf[...] = 0
-        launch_acoustic_substep = prepare_acoustic_substep_launch(
-            state, cfg, dtau, acoustic_coefficients, mudf=mudf,
-            label=f"RK stage {istage + 1}",
-            prefix_calls=acoustic_prefix_calls)
         # WRF sumflux (module_small_step_em.F:1473, called every acoustic
         # iteration, solve_em.F:1561): accumulate the small-timestep
         # time-averaged mass fluxes ru_m/rv_m/ww_m -- "needed for
@@ -4557,11 +5710,31 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         # time-averaged mass fluxes as the moist scalars (WRF
         # rk_scalar_tend for tke, solve_em.F:2362-2399), so a dry TKE run
         # accumulates sumflux too.
-        scalars = moist or getattr(state, "tke", None) is not None
+        chem = getattr(state, "chem", None)
+        # Chem species advect with the same acoustic time-averaged fluxes
+        # (WRF rk_scalar_tend for chem, solve_em.F:2476-2500), so a chem run
+        # accumulates sumflux even on a dry state.
+        scalars = (moist or getattr(state, "tke", None) is not None
+                   or chem is not None or getattr(state, "qke_adv", None) is not None)
         if scalars:
             ru_m = state.scratch((nzs, nys, nxs + 1), "rk_ru_m")
             rv_m = state.scratch((nzs, nys + 1, nxs), "rk_rv_m")
             ww_m = state.scratch((nzs + 1, nys, nxs), "rk_ww_m")
+        # The joined substep launches (woof/core/acoustic_fusion.py) submit
+        # the emdiv increment and the sumflux zero/accumulation themselves
+        # where they cover this configuration; ``absorbs`` names which.
+        launch_acoustic_substep = prepare_acoustic_substep_launch(
+            state, cfg, dtau, acoustic_coefficients, mudf=mudf,
+            emdiv_args=(launch_emdiv_filter.args
+                        if emdiv and not getattr(state, "_metal_setup_state", False)
+                        else None),
+            sumflux=(ru_m, rv_m, ww_m) if scalars else None,
+            label=f"RK stage {istage + 1}",
+            prefix_calls=acoustic_prefix_calls)
+        absorbed = getattr(launch_acoustic_substep, "absorbs", frozenset())
+        separate_sumflux = scalars and "sumflux" not in absorbed
+        launch_sumflux_accumulation = None
+        if separate_sumflux:
             _sumflux_launch(                          # sumflux iteration==1
                 "zero_sumflux", (ru_m, rv_m, ww_m))
             if fused_metal_acoustic:
@@ -4581,8 +5754,9 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 label=f"RK stage {istage + 1}",
                 prefix_calls=acoustic_prefix_calls,
                 suffix_calls=acoustic_suffix_calls)
+        separate_emdiv = emdiv and "emdiv" not in absorbed
         for i in range(nsub):
-            if emdiv and launch_emdiv_filter is not None:
+            if separate_emdiv and launch_emdiv_filter is not None:
                 launch_emdiv_filter()                 # previous substep's
                                                       # mudf (zero only on
                                                       # step's 1st substep)
@@ -4604,7 +5778,12 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         if (scalars and cfg.damp_opt == 3
                 and getattr(cfg, "upper_wind_limiter_form", "wrf_461") == "noaa_wrf39"):
             refresh_saved_wind_fluxes(state, cfg, ru, rv)
+        if WRF_EXACT:
+            _capture_wrf_muts(state, cfg)
         small_step_finishes[istage]()
+        if istage == 0:
+            add_scalar_coordinate_wrf(state, cfg)     # strict coordinate branch
+            add_scalar_diff6_wrf(state, cfg)          # strict mode only
         if scalars:                                   # stage length nsub*dtau
             # WRF sumflux (iteration == number_of_small_timesteps): the
             # substep mean plus the stage-reference coupled fluxes --
@@ -4623,7 +5802,7 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
             if ieva.active_stage(cfg, istage, len(stages)):
                 scalar_implicit["implicit"] = ieva.split_scalar_omega(
                     state, cfg, ww_m, state.total_mu(), nsub * dtau)
-            if moist:
+            if moist or getattr(state, "qke_adv", None) is not None:
                 advance_scalars_stage(
                     state, cfg, ru_m, rv_m, ww_m, nsub * dtau,
                     final=(istage == len(stages) - 1),
@@ -4643,6 +5822,16 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                     fixed_tendency=state.scratch(
                         state.p.shape, "smag_rtke"),
                     **scalar_implicit)
+            if chem is not None:
+                # WRF chem_scalar_advance (solve_em.F:2466-2616), after the
+                # moist and TKE scalars exactly as WRF orders them.
+                from woof.core.chem_transport import (
+                    advance_chem_stage, chem_fixed_tendencies)
+                advance_chem_stage(
+                    state, cfg, ru_m, rv_m, ww_m, nsub * dtau,
+                    final=(istage == len(stages) - 1),
+                    fixed_tendencies=chem_fixed_tendencies(state, cfg),
+                    **scalar_implicit)
         apply_open_zero_gradient(state, cfg)          # radiative-open BCs
         apply_specified_w_zero_gradient(state, cfg)    # specified d01 w
     # km_opt=2 budget: one device reduction over the completed step, taken
@@ -4650,6 +5839,46 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
     # divided by.  Report-only (woof/core/tke_budget.py); a no-op unless
     # cfg.tke_budget is on.
     tke_budget.accumulate(state, cfg)
+    # The opt-in analysis operator owns one captured graph. All arithmetic,
+    # field masks, cadence and the forcing clock remain on the device.
+    nudging_graph = getattr(state, "_spectral_nudging_graph", None)
+    if nudging_graph is not None:
+        nudging_graph.launch()
+    # Whether this step ends on a history time: the streamed/ranked post-step
+    # hook builds the chem history fields (the GOCART 550 nm optics among
+    # them) only then (woof/core/streaming.py refl_handoff_hook).
+    # Held on the chem object, not the state: a state attribute would join
+    # the carrier inventory the rank seam plan is built from.
+    if getattr(state, "chem", None) is not None:
+        state.chem.history_due = bool(refl_10cm_due)
+    if WRF_EXACT:
+        _wrf_step_epilogue(state, cfg, refl_10cm_due)
+    else:
+        _step_epilogue(state, cfg, refl_10cm_due)
+    fire = getattr(getattr(state, "physics", None), "fire", None)
+    spotting = getattr(fire, "spotting", None)
+    if spotting is not None:
+        # Native solve_em calls spotting after its completed atmosphere and
+        # tracer solve/halos; the external chemistry operator follows it.
+        spotting.advance_atmosphere(state, cfg, fire, dt=cfg.dt,
+                                     history_alarm=fire_history_due)
+    if getattr(state, "chem", None) is not None:
+        # WRF calls chem_driver after solve_em (share/solve_interface.F),
+        # i.e. after the whole dynamics and microphysics step and before
+        # the clock advances; tiles and nests reach it through this step.
+        from woof.core.chem_driver import chem_step
+        chem_step(state, cfg, cfg.dt)
+    close_periodic_alias(state, cfg)
+    state.elapsed_seconds += cfg.dt
+
+
+def _step_epilogue(state: DomainState, cfg: RunConfig,
+                   refl_10cm_due: bool) -> None:
+    """The default step end: boundary values, surface w and diagnosis,
+    then the nwp diagnostics and the microphysics adjustment."""
+    finish = getattr(state.physics, "finish_history_mass", None)
+    if finish is not None:  # stand-in PBL/physics drivers carry no history rows
+        finish(state, cfg)
     apply_state_boundary_values(state, cfg,
                                 state.elapsed_seconds + cfg.dt)
     set_w_surface(state, cfg)                         # WRF solve_em epilogue
@@ -4663,6 +5892,12 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         # diagnostic's own scratch slots -- inertness is pinned by
         # tests/test_uh_lifecycle.py.
         update_up_heli_max(state, cfg)
+    # WRF lightning diagnostics (lightning_option): off touches nothing here.
+    lightning_refl_due = False
+    if cfg.lightning_option:
+        from woof.core.lightning import lightning_due, update_lightning
+        lightning_refl_due = (cfg.lightning_option in (1, 2)
+                              and lightning_due(state, cfg))
     if cfg.mp_physics != 0:                           # post-RK3 adjustment
         # h_diabatic capture cadence: once per INTERNAL step with cfg.dt.
         # Under the reference case compatibility integrator (dt = clock_dt/8) this
@@ -4671,13 +5906,89 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         # capture dt and apply window are the same internal step; the
         # native dt=60 path restores WRF cadence with no code change).
         microphysics_result = apply_microphysics(     # (WRF microphysics
-            state, cfg, cfg.dt, refl_10cm_due=refl_10cm_due)
+            state, cfg, cfg.dt, refl_10cm_due=(refl_10cm_due or lightning_refl_due))
         if state.physics is not None:
             state.physics.accept_microphysics(
                 microphysics_result, dt=cfg.dt)
         update_diagnostics(state, cfg.hypsometric_opt)  # after the RK loop)
-    close_periodic_alias(state, cfg)
-    state.elapsed_seconds += cfg.dt
+    if cfg.lightning_option:
+        update_lightning(state, cfg, history_reflectivity_due=refl_10cm_due)
+    from woof.core.gsd_diagnostics import reset_interval, update as update_gsd
+    reset_interval(state, cfg)
+    from woof.core.hail import update as update_hail
+    update_hail(state, cfg)
+    update_gsd(state, cfg, history_due=refl_10cm_due)
+    from woof.core.output_diagnostics import update_precipitation
+    update_precipitation(state, cfg)
+    from woof.core.climate_diagnostics import update as update_climate
+    update_climate(state, cfg)
+
+
+def _wrf_step_epilogue(state: DomainState, cfg: RunConfig,
+                       refl_10cm_due: bool) -> None:
+    """Strict mode: WRF solve_em's order after the RK loop.
+
+    calc_p_rho_phi runs at the end of the last RK stage, after its scalar
+    update; then the microphysics and its own calc_p_rho_phi; only then
+    spec_bdy_final and set_w_surface.  The history P is therefore the
+    pre-spec_bdy_final diagnosis on the specified ring, and rk_step 1 of
+    the next step reads these p/al without diagnosing again
+    (:func:`_wrf_reuse_diagnostics`).  The default order -- boundary
+    values first, then the diagnosis -- moved P on the ring (337 words at
+    the first step of the round-3 pair).
+    """
+    finish = getattr(state.physics, "finish_history_mass", None)
+    if finish is not None:  # stand-in PBL/physics drivers carry no history rows
+        finish(state, cfg, muts=_wrf_muts(state))
+    update_diagnostics(state, cfg.hypsometric_opt, muts=_wrf_muts(state))
+    # WRF lightning diagnostics (lightning_option): off touches nothing here.
+    lightning_refl_due = False
+    if cfg.lightning_option:
+        from woof.core.lightning import lightning_due, update_lightning
+        lightning_refl_due = (cfg.lightning_option in (1, 2)
+                              and lightning_due(state, cfg))
+    if cfg.mp_physics != 0:
+        microphysics_result = apply_microphysics(
+            state, cfg, cfg.dt, refl_10cm_due=(refl_10cm_due or lightning_refl_due))
+        if state.physics is not None:
+            state.physics.accept_microphysics(
+                microphysics_result, dt=cfg.dt)
+        update_diagnostics(state, cfg.hypsometric_opt,
+                           muts=_wrf_muts(state))
+    if cfg.specified or cfg.nested:
+        state.scratch(state.mup.shape, WRF_MU_HALO_SLOT)[...] = state.mup
+    apply_state_boundary_values(state, cfg,
+                                state.elapsed_seconds + cfg.dt)
+    set_w_surface(state, cfg)
+    if cfg.nwp_diagnostics == 1:
+        update_up_heli_max(state, cfg)
+    # Passive diagnostic (its inertness receipts hash every serialized
+    # field): the same place in the step as the default epilogue.
+    if cfg.lightning_option:
+        update_lightning(state, cfg, history_reflectivity_due=refl_10cm_due)
+    from woof.core.gsd_diagnostics import reset_interval, update as update_gsd
+    reset_interval(state, cfg)
+    from woof.core.hail import update as update_hail
+    update_hail(state, cfg)
+    update_gsd(state, cfg, history_due=refl_10cm_due)
+    from woof.core.output_diagnostics import update_precipitation
+    update_precipitation(state, cfg)
+    from woof.core.climate_diagnostics import update as update_climate
+    update_climate(state, cfg)
+
+
+def _wrf_reuse_diagnostics(state: DomainState) -> bool:
+    """Strict mode: rk_step 1 reads the previous step's p/al as they are.
+
+    True once an acoustic loop has left WRF's muts in this process (the
+    previous step's end diagnosed them); a resumed or freshly initialized
+    state diagnoses as start_em does.  A WRF-file nest's first step reads
+    the p/al its start_domain left, before press_adj moved MU and the first
+    force round-tripped its prognostics
+    (woof.ingest.wrfinput_nest_initial.finish_strict_nest_start).
+    """
+    return WRF_EXACT and (_wrf_muts(state) is not None or bool(
+        getattr(state, "_wrf_start_diagnostics_carried", False)))
 
 
 def run_steps(state: DomainState, cfg: RunConfig, n: int, *,

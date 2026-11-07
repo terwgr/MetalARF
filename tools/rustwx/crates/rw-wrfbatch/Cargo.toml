@@ -9,11 +9,18 @@
 
 [package]
 name = "rw-wrfbatch"
+autobins = false
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
+
+[features]
+default = []
+# Retained for older build scripts. Original NextGen products are available in
+# every renderer build; this compatibility feature does not change capability.
+private-hydro = []
 
 [lib]
 name = "rw_wrfbatch"
@@ -28,7 +35,13 @@ path = "src/main.rs"
 # volume is not a forecast, so neither is a flag on it.
 [[bin]]
 name = "rw_ensbatch"
-path = "src/bin/ensbatch.rs"
+path = "src/launcher.rs"
+
+# A precomputed probability (a post-processed ML severe probability) on a fixed ladder: not a model field, so the
+# stored-variable lane could only draw it on an auto-ranged ramp.
+[[bin]]
+name = "rw_probgrid"
+path = "src/bin/probgrid.rs"
 
 [[bin]]
 name = "rw_obsgrid"
@@ -37,15 +50,47 @@ path = "src/bin/obsgrid.rs"
 # A run's products beside a reference model's own fields for the same
 # cycle and lead: two inputs of two formats on one grid and one colour
 # scale, which is neither one run's frames nor N members of one ensemble.
+# Soundings and meteograms at named points straight off MPAS native
+# history (the gpuwm-hex product door's third binary). Its own program, not
+# one of the renderer launchers; bundled since 2.9.0 (gpuwm.bridge_assets).
+[[bin]]
+name = "rw_hex_points"
+path = "src/bin/hex_points.rs"
+
 [[bin]]
 name = "rw_compare"
-path = "src/bin/compare.rs"
+path = "src/launcher.rs"
+
+# A reference model's native-level state written into a run's wrfout
+# shape, so wrf-rust's own diagnostics run on both sides of a comparison
+# (the post-processor half of a WOOF-vs-HRRR difference removed).
+[[bin]]
+name = "rw_native_wrfout"
+path = "src/bin/native_wrfout.rs"
+
 
 [[bin]]
 name = "rw_verify"
-path = "src/bin/verify.rs"
+path = "src/launcher.rs"
+
+[[bin]]
+name = "rw_scorecard"
+path = "src/launcher.rs"
+
+# A 2D reflectivity NetCDF file (a nowcast runner's output) written out as
+# the `gpuwm-obs.nowcast-frames.v1` contract, which is the only form the
+# `frames:` panel above and the heating adapter read.  Not a flag on
+# `rw_compare`: a conversion that writes a root for every later reader is
+# not a render.
+[[bin]]
+name = "rw_nowcast_frames"
+path = "src/launcher.rs"
 
 [dependencies]
+static-fields = { path = "../static-fields" }
+rw-mlexport = { path = "../rw-mlexport" }
+netcdf-writer = { path = "../netcdf-writer" }
+rw-scoreboard = { path = "../rw-scoreboard" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 grib-core = { path = "../../../grib1_bridge/vendor/grib-core", default-features = false }
 netcrust = { path = "../../vendor/netcrust" }
@@ -58,6 +103,7 @@ sha2 = "0.10"
 thiserror = { workspace = true }
 wrf-core = { git = "https://github.com/FahrenheitResearch/wrf-rust.git", rev = "93bd2ca670c13fec35bcfc27a58108e6fd71c627", package = "wrf-core", default-features = false, features = ["pure-rust-reader"] }
 rustwx-core = { path = "../rustwx-core" }
+rustwx-calc = { path = "../rustwx-calc" }
 # The GRIB2 selector extraction and the indexed public-bucket fetch
 # `rw_compare` reads its reference model's own messages with.  Already in
 # this crate's graph through rustwx-products; named here because the
@@ -69,6 +115,9 @@ rustwx-cross-section = { path = "../rustwx-cross-section" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 rustwx-ensemble = { path = "../rustwx-ensemble" }
 rustwx-render = { path = "../rustwx-render" }
+# Point columns (soundings, meteograms) off an MPAS history, interpolated with
+# the same linear map the product remap draws maps with.
+rw-mpas = { path = "../rw-mpas" }
 rustwx-models = { path = "../rustwx-models" }
 rustwx-products = { path = "../rustwx-products" }
 rusty-weather = { path = "../rusty-weather" }
@@ -84,6 +133,10 @@ wx-core = { path = "../../vendor/wx-core" }
 # reader (see src/obs_grid.rs).
 wx-radar = { path = "../../vendor/wx-radar" }
 
+[[bin]]
+name = "rw_points"
+path = "src/bin/points.rs"
+
 # Test scope only; the shipped binaries do not link it.  The stored-plane
 # tests need a wrfout to exist before they can assert anything about
 # importing one, and `netcdf-writer` is this workspace's classic-NetCDF
@@ -92,3 +145,11 @@ wx-radar = { path = "../../vendor/wx-radar" }
 [dev-dependencies]
 netcdf-writer = { path = "../netcdf-writer" }
 rw-store = { path = "../rw-store" }
+
+[[bin]]
+name = "rw_refsnow"
+path = "src/bin/refsnow.rs"
+
+[[bin]]
+name = "rw_tc_fields"
+path = "src/bin/tc_fields.rs"

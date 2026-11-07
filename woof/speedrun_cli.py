@@ -27,11 +27,9 @@ compile included), render -- is on the clock.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import platform
-import shutil
 import socket
 import subprocess
 import sys
@@ -443,7 +441,7 @@ def walls_by_phase(events: list[Mapping[str, Any]]) -> dict[str, float]:
     """``{phase: wall_seconds}`` from a replayed ``stage_finished`` stream.
 
     Filed under the PHASE, not the stage, and summed rather than
-    overwritten.  Both matter, and both were measured on a development machine's five
+    overwritten.  Both matter, and both were measured on test host A's five
     records: run-plan calls the render stage ``finalize`` (so a record's
     render cell read 0:00), and it emits ``prepare`` twice -- once for
     the authority phase, once for the manifest phase -- so a dict keyed
@@ -512,7 +510,7 @@ def _kernel_compile_seconds(run_root: Path) -> tuple[float | None, str]:
 #: are the paths `woof go` really writes -- ``plan["run"]`` is
 #: ``<root>/run`` and ``plan["render"]`` is ``<root>/png`` -- and getting
 #: them wrong is not a crash, it is a VOID verdict on a run that did all
-#: the work.  MEASURED 2026-08-20: a a development machine run wrote seven wrfout frames
+#: the work.  MEASURED 2026-08-20: a test host A run wrote seven wrfout frames
 #: and fifty-six pictures and was voided for having none, because this
 #: reader looked for ``<root>/wrfout``, one level up.
 FORECAST_SUBDIR = "run"

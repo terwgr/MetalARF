@@ -1,0 +1,402 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "advance_uv",
+      "layout_version": 1,
+      "module": "acoustic",
+      "name": "wrf_exact_acoustic_advance_uv",
+      "parameters": [
+        [
+          "moist_cq",
+          "int32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "top_lid",
+          "int32"
+        ],
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dtau",
+          "float32"
+        ],
+        [
+          "smdiv",
+          "float32"
+        ],
+        [
+          "spec_zone",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "radiative_x",
+          "int32"
+        ],
+        [
+          "radiative_y",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "xscale",
+          "float32"
+        ],
+        [
+          "yscale",
+          "float32"
+        ],
+        [
+          "use_emdiv",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "u_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "v_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "ru_t",
+          "float",
+          "read"
+        ],
+        [
+          "rv_t",
+          "float",
+          "read"
+        ],
+        [
+          "p_pp",
+          "float",
+          "read"
+        ],
+        [
+          "p_pp_old",
+          "float",
+          "read"
+        ],
+        [
+          "ph_pp",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "al_pp",
+          "float",
+          "read"
+        ],
+        [
+          "pb",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "cqu",
+          "float",
+          "read"
+        ],
+        [
+          "cqv",
+          "float",
+          "read"
+        ],
+        [
+          "mudf",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "al_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "cqu": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cqv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_pp_old": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "ru_t": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv_t": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "u_pp": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v_pp": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mudf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_acoustic_advance_uv.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

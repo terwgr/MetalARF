@@ -1,0 +1,52 @@
+#ifndef WOOF_GODDARD_SUPPORT_METALH
+#define WOOF_GODDARD_SUPPORT_METALH
+#include "thompson_aerosol_soft8.metalh"
+#pragma clang fp contract(off)
+
+static inline Soft8 plm_exp(Soft8 x) { return Soft8::fromBits(soft64_plm_exp(x.bits)); }
+static inline Soft8 plm_log(Soft8 x) { return Soft8::fromBits(soft64_plm_log(x.bits)); }
+static inline Soft8 plm_pow(Soft8 x, Soft8 y) { return Soft8::fromBits(soft64_plm_pow(x.bits,y.bits)); }
+
+struct GddArena {
+    device ulong *words;
+    ulong used;
+    template<class T> device T *alloc(int count) thread {
+        device T *result = (device T *)(words + used);
+        used += (ulong(count) * sizeof(T) + 7ul) / 8ul;
+        return result;
+    }
+};
+struct GddScope {
+    thread GddArena &arena;
+    ulong start;
+    GddScope(thread GddArena &value) : arena(value), start(value.used) {}
+    ~GddScope() { arena.used = start; }
+};
+template<class T,int R,class P=thread T*> struct GArray {
+    P data;
+    int lower[R],extent[R];
+    template<int S> operator GArray<T,S,P>() const thread {
+        GArray<T,S,P> out;
+        out.data=data;
+        for(int i=0;i<S;++i){out.lower[i]=lower[i];out.extent[i]=extent[i];}
+        return out;
+    }
+    template<class... I> auto operator()(I... i) const thread -> decltype(*data) {
+        static_assert(sizeof...(I)==R,"Fortran array rank mismatch");
+        int index[R]={int(i)...};int off=0,step=1;
+        for(int d=0;d<R;++d){off+=(index[d]-lower[d])*step;step*=extent[d];}
+        return data[off];
+    }
+};
+template<int R,class T,int S,class P> static inline GArray<T,R,P> gdd_rank(GArray<T,S,P> a) {
+    GArray<T,R,P> out;
+    out.data=a.data;
+    for(int i=0;i<R;++i){out.lower[i]=a.lower[i];out.extent[i]=a.extent[i];}
+    return out;
+}
+template<class A> static inline Soft8 gdd_sum_range(A a,int first,int last) {
+    Soft8 total(0);
+    for(int i=first;i<=last;++i)total+=a(i);
+    return total;
+}
+#endif

@@ -35,6 +35,7 @@ from contextvars import ContextVar
 import os
 from pathlib import Path
 from threading import RLock
+import time
 import weakref
 from typing import Final
 
@@ -78,21 +79,34 @@ _ERRORS = {
     9: "input file is not the declared intermediate format",
     10: "target point escapes the source grid",
     11: "unknown WPS interpolation operator",
+    12: "coastal matching support reaches an open source-window edge",
     30: "a lake target's search found no source water anywhere",
     31: "a bilinear corner lies outside the source grid",
     32: "a water-body label is negative or above the bodies declared",
     127: "native CPU backend panicked",
 }
 
+class OpenSourceWindowEdge(ValueError):
+    """Coastal matching support reached an edge of the decoded window that is
+    not an edge of the source grid (native code 12)."""
+
+
 #: The masked-chain entry, and the code of each WPS operator it runs.  A
 #: name this table does not hold travels as 255 and is refused by name
 #: when a waiting target reaches it, never before (NumPy's order).
 WPS_MASKED_CHAIN_ENTRY: Final[str] = "gpuwm_wps_masked_chain_f64"
+#: The same chain with the inland-water source reach (skin mode): every
+#: call goes through it, with no reach unless the caller gives one.
+WPS_MASKED_REACH_ENTRY: Final[str] = "gpuwm_wps_masked_chain_reach_f64"
+WPS_MASKED_CHAIN_IMPLEMENTATION: Final[str] = "rust-wps-masked-chain-f64-v3"
 WPS_LAND_UNIT_SCAN_ENTRY: Final[str] = "gpuwm_wps_land_unit_scan_f64"
-WPS_MASKED_CHAIN_IMPLEMENTATION: Final[str] = "rust-wps-masked-chain-f64-v2"
+SURFACE_MATCH_ENTRY: Final[str] = "gpuwm_surface_match_f32"
+SURFACE_MATCH_COUNT_KEYS: Final[tuple[str, ...]] = (
+    "mixed_surface", "matched_surface", "no_matching_surface",
+    "search", "search_past_unusable", "inactive_surface_fill",
+)
 #: The native HRRR route's soil stencil (build, then apply).
 MASKED_STENCIL_ENTRY: Final[str] = "gpuwm_masked_bilinear_stencil_f64"
-MASKED_STENCIL_APPLY_ENTRY: Final[str] = "gpuwm_masked_stencil_apply_f32"
 MASKED_STENCIL_IMPLEMENTATION: Final[str] = "rust-masked-bilinear-stencil-f64-v1"
 #: Count slots of the stencil entry's report.
 MASKED_STENCIL_COUNT_SLOTS: Final[int] = 10
@@ -120,7 +134,6 @@ WATER_ENTRIES: Final[tuple[str, ...]] = (
     LAKE_WATER_NEAREST_ENTRY, WATER_BLEND_ENTRY, COMPONENT_FILL_ENTRY,
     OVERLAY_SAMPLE_ENTRY, LABEL_COMPONENTS_ENTRY, WATER_REPAIR_ENTRY,
     WATER_BODIES_ENTRY, COMPONENT_OWNER_ENTRY)
-WATER_BLEND_IMPLEMENTATION: Final[str] = "rust-water-blend-f64-v3"
 #: ``surface`` codes of the surface-nearest entry.
 _NEAREST_SURFACES = {"match": 0, "land": 1, "water": 2}
 #: Count slots per body of the per-body assembly entry.
@@ -207,22 +220,35 @@ def resolve_cpu_bridge(path: Path | str | None = None) -> Path:
         + rendered + "\n" + cpu_bridge_remedy(filename))
 
 
-#: The reference width of the saved host-RAM calibration. Runtime uses
-#: the CPU and memory budget, with extra worker scratch priced in preflight.
-AUTOMATIC_PREPARATION_WORKERS: Final[int] = 8
-
-
 def available_cpu_count() -> int:
     """The CPU capacity allowed by affinity and every cgroup quota."""
     from woof.ingest.preparation_workers import cpu_budget
     return cpu_budget()["available_cpus"]
 
 
+#: How long :func:`automatic_workers` reuses its answer.  The answer reads
+#: affinity, /proc/self/cgroup, every ancestor's CPU quota, /proc/meminfo and
+#: every ancestor's memory files.  The forecast's host math
+#: (woof.core.portable_math) asks it on every main-thread call, which a
+#: 6 h Boston run measured at about 2 ms of file reads per domain step.  A
+#: thread count never changes an element (portable_math.worker_limit), so a
+#: short reuse window moves wall time only; it is short so a preparation still
+#: follows a memory squeeze within seconds.
+AUTOMATIC_WORKERS_REUSE_SECONDS = 5.0
+_AUTOMATIC_WORKERS: dict[str, tuple[float, int]] = {}
+
+
 def automatic_workers() -> int:
     """Threads a CPU preparation uses when no count was given."""
     from woof.ingest.preparation_workers import PREPARATION_THREADS_ENV, effective_workers
     configured = os.environ.get(PREPARATION_THREADS_ENV, "")
-    return effective_workers(int(configured)) if configured.isdecimal() and int(configured) > 0 else effective_workers()
+    now = time.monotonic()
+    cached = _AUTOMATIC_WORKERS.get(configured)
+    if cached is not None and now - cached[0] < AUTOMATIC_WORKERS_REUSE_SECONDS:
+        return cached[1]
+    value = effective_workers(int(configured)) if configured.isdecimal() and int(configured) > 0 else effective_workers()
+    _AUTOMATIC_WORKERS[configured] = (now, value)
+    return value
 
 
 def host_step_workers(backend=None) -> int:
@@ -502,6 +528,103 @@ class CpuPreprocessBackend:
         self._library = ctypes.CDLL(str(self.path))
         self._configure_abi()
 
+    def _chem_symbol(self, name, argtypes):
+        try:
+            symbol = getattr(self._library, name)
+        except AttributeError as exc:
+            raise RuntimeError(f"CPU preprocessing bridge is missing {name}; rebuild tools/grib1_bridge") from exc
+        symbol.argtypes = argtypes
+        symbol.restype = ctypes.c_int32
+        return symbol
+
+    def grib2_stack(self, input_file, spec_path, output_dir):
+        """Run generic GRIB2 stacking in the loaded Rust library, without a fallback."""
+        fn = self._chem_symbol("gpuwm_grib2_stack", [ctypes.c_char_p] * 3)
+        last_error = self._chem_symbol(
+            "gpuwm_bridge_last_error", [ctypes.c_void_p, ctypes.c_size_t])
+        last_error.restype = ctypes.c_size_t
+        paths = []
+        for value in (input_file, spec_path, output_dir):
+            encoded = str(Path(value).resolve()).encode("utf-8")
+            if b"\0" in encoded:
+                raise ValueError("gpuwm_grib2_stack paths must not contain NUL bytes")
+            paths.append(encoded)
+        code = fn(*paths)
+        if code:
+            buffer = ctypes.create_string_buffer(8192)
+            count = last_error(buffer, len(buffer))
+            message = buffer.raw[:count].decode("utf-8", errors="replace")
+            raise ValueError(message or f"gpuwm_grib2_stack: {_ERRORS.get(code, str(code))}")
+
+    def hybrid_full_pressure(self, a_half, b_half, levels, surface_pressure):
+        a = np.ascontiguousarray(a_half, dtype=np.float64)
+        b = np.ascontiguousarray(b_half, dtype=np.float64)
+        raw_levels = np.asarray(levels)
+        if raw_levels.ndim != 1 or not np.all(np.isfinite(raw_levels)) or not np.all(raw_levels == raw_levels.astype(np.int32)):
+            raise ValueError("levels must be one-dimensional integer model level numbers")
+        lev = np.ascontiguousarray(raw_levels, dtype=np.int32)
+        ps = np.ascontiguousarray(surface_pressure, dtype=np.float32)
+        if a.ndim != 1 or b.shape != a.shape:
+            raise ValueError("a_half and b_half must have matching one-dimensional shapes")
+        out = np.empty((lev.size, *ps.shape), dtype=np.float32)
+        ptr = ctypes.c_void_p
+        fn = self._chem_symbol("gpuwm_hybrid_full_pressure_f32",
+            [ptr, ptr, ctypes.c_size_t, ptr, ctypes.c_size_t, ptr, ctypes.c_size_t, ptr, ctypes.c_size_t])
+        code = fn(a.ctypes.data, b.ctypes.data, a.size, lev.ctypes.data, lev.size,
+                  ps.ctypes.data, ps.size, out.ctypes.data, host_step_workers(self))
+        if code:
+            raise ValueError(f"gpuwm_hybrid_full_pressure_f32: {_ERRORS.get(code, str(code))}")
+        return out
+
+    def aerosol_numbers(self, fields, terms, nifa, nwfa, *, scale,
+                        nifa_f64=None, nwfa_f64=None):
+        """Diagnose source aerosol numbers with the native GSL operator."""
+        if not terms:
+            return
+        shape = nifa.shape
+        arrays = [fields[t.name] for t in terms]
+        for value in [*arrays, nifa, nwfa]:
+            if value.dtype != np.float32 or value.shape != shape or not value.flags.c_contiguous:
+                raise ValueError("aerosol numbers require contiguous FP32 fields of one shape")
+        for value in (nifa_f64, nwfa_f64):
+            if value is not None and (value.dtype != np.float64 or value.shape != shape or not value.flags.c_contiguous):
+                raise ValueError("aerosol double outputs require contiguous FP64 fields of one shape")
+        pointers = np.array([v.ctypes.data for v in arrays], dtype=np.uintp)
+        conv = np.array([t.to_kg_per_kg for t in terms], dtype=np.float64)
+        den = np.array([t.denominator for t in terms], dtype=np.float64)
+        tgt = np.array([t.target for t in terms], dtype=np.int32)
+        grp = np.array([t.group for t in terms], dtype=np.int32)
+        fac = np.array([t.group_factor for t in terms], dtype=np.float64)
+        ptr = ctypes.c_void_p
+        fn = self._chem_symbol("gpuwm_aerosol_numbers_f32",
+            [ptr] * 6 + [ctypes.c_size_t] * 2 + [ctypes.c_double] + [ptr] * 4 + [ctypes.c_size_t])
+        code = fn(pointers.ctypes.data, conv.ctypes.data, den.ctypes.data,
+                  tgt.ctypes.data, grp.ctypes.data, fac.ctypes.data,
+                  len(terms), nifa.size, scale, nifa.ctypes.data, nwfa.ctypes.data,
+                  None if nifa_f64 is None else nifa_f64.ctypes.data,
+                  None if nwfa_f64 is None else nwfa_f64.ctypes.data,
+                  host_step_workers(self))
+        if code:
+            raise ValueError(f"gpuwm_aerosol_numbers_f32: {_ERRORS.get(code, str(code))}")
+
+    def weighted_combination(self, fields, weights, *, scale=1.0, humidity=None):
+        f = np.ascontiguousarray(fields, dtype=np.float32)
+        w = np.ascontiguousarray(weights, dtype=np.float64)
+        if f.ndim < 2 or w.ndim != 1 or f.shape[0] != w.size:
+            raise ValueError("fields must have a leading field axis matching weights")
+        q = None if humidity is None else np.ascontiguousarray(humidity, dtype=np.float32)
+        if q is not None and q.shape != f.shape[1:]:
+            raise ValueError("humidity must match the field shape")
+        out = np.empty(f.shape[1:], dtype=np.float32)
+        ptr = ctypes.c_void_p
+        fn = self._chem_symbol("gpuwm_weighted_combination_f32",
+            [ptr, ptr, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_double, ptr, ptr, ctypes.c_size_t])
+        code = fn(f.ctypes.data, w.ctypes.data, w.size, out.size, scale,
+                  None if q is None else q.ctypes.data, out.ctypes.data, host_step_workers(self))
+        if code:
+            raise ValueError(f"gpuwm_weighted_combination_f32: {_ERRORS.get(code, str(code))}; humidity must be finite and in [0, 1)")
+        return out
+
     def _configure_abi(self) -> None:
         library = self._library
         library.gpuwm_preprocess_cpu_abi_version.argtypes = []
@@ -567,7 +690,7 @@ class CpuPreprocessBackend:
         # (require_wps_masked_chain) instead of being a capability answer.
         self.wps_masked_chain_entry = False
         try:
-            chain = library.gpuwm_wps_masked_chain_f64
+            chain = library.gpuwm_wps_masked_chain_reach_f64
             scan = library.gpuwm_wps_land_unit_scan_f64
         except AttributeError:
             pass
@@ -576,7 +699,9 @@ class CpuPreprocessBackend:
                 pointer, pointer, pointer, pointer, pointer, pointer,
                 pointer, size, ctypes.c_int32, ctypes.c_double,
                 ctypes.c_int32, ctypes.c_double, ctypes.c_double,
-                pointer, pointer, pointer, size, size, size, size, size,
+                pointer, ctypes.c_double,
+                pointer, pointer, pointer, pointer, size, size, size, size,
+                size,
             ]
             chain.restype = ctypes.c_int32
             scan.argtypes = [
@@ -585,6 +710,21 @@ class CpuPreprocessBackend:
             ]
             scan.restype = ctypes.c_int32
             self.wps_masked_chain_entry = True
+
+        self.surface_match_entry = False
+        try:
+            surface_match = library.gpuwm_surface_match_f32
+        except AttributeError:
+            pass
+        else:
+            surface_match.argtypes = [
+                pointer, pointer, pointer, pointer, pointer,
+                pointer, pointer, pointer, pointer, pointer, pointer, size,
+                ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_uint32,
+                pointer, pointer, pointer, size, size, size, size, size,
+            ]
+            surface_match.restype = ctypes.c_int32
+            self.surface_match_entry = True
 
         # The native HRRR route's soil stencil: looked up the same way and
         # required the same way (require_masked_stencil).
@@ -733,12 +873,16 @@ class CpuPreprocessBackend:
             raise ValueError(reason or f"WRF eta generation failed with native code {code}")
         return out
 
-    def surface_pressure_from_sea_level(self, pressure, height, terrain, slp, *, workers=1):
+    def surface_pressure_from_sea_level(self, pressure, height, terrain, slp, *, workers=1,
+                                        level_order=None, row_offset=0):
         """WRF sfcprs3, parallel by column with strict REAL arithmetic.
 
         Accept setup's existing f64 storage. The native routine casts each
         scalar in place and follows an index permutation, avoiding two full
         f32 copies and a reordered copy of both atmospheric profiles.
+        ``level_order`` is that permutation read from the whole domain's
+        first column, for a caller handing in one row block of it, and
+        ``row_offset`` that block's first row, for the refusal's position.
         """
         pressure, height, terrain, slp = (
             np.require(value, dtype=np.float64, requirements=("C", "A"))
@@ -756,7 +900,8 @@ class CpuPreprocessBackend:
         pointer, size = ctypes.c_void_p, ctypes.c_size_t
         call.argtypes = [pointer] * 6 + [size] * 3 + [pointer]
         call.restype = ctypes.c_int32
-        order = np.argsort(-pressure[:, 0, 0]).astype(np.uint64)
+        order = (np.argsort(-pressure[:, 0, 0]) if level_order is None
+                 else np.asarray(level_order)).astype(np.uint64)
         out = np.empty(terrain.shape, dtype=np.float32)
         failed_column = size()
         code = int(call(height.ctypes.data, pressure.ctypes.data, terrain.ctypes.data,
@@ -766,7 +911,7 @@ class CpuPreprocessBackend:
         if code:
             if failed_column.value < terrain.size:
                 row, column = divmod(failed_column.value, terrain.shape[1])
-                position = f" at row {row}, column {column}"
+                position = f" at row {row + int(row_offset)}, column {column}"
             else:
                 position = ""
             reason = _ERRORS.get(code, f"native error {code}")
@@ -958,15 +1103,40 @@ class CpuPreprocessBackend:
 
         raise MaskedChainUnavailable(
             f"the CPU preprocessing library at {self.path} predates "
-            f"{WPS_MASKED_CHAIN_ENTRY}, which maps every masked surface "
+            f"{WPS_MASKED_CHAIN_ENTRY} or {WPS_MASKED_REACH_ENTRY}, "
+            "which map every masked surface "
             "field (soil moisture and temperature, snow, skin temperature "
             "and sea ice), so no source with a land-sea mask can be "
             "prepared with it; rebuild or re-fetch it\n"
             + cpu_bridge_remedy(self.path.name))
 
+    def missing_value_chain(self, layers, valid, target_y, target_x, *, workers=None):
+        """Rust METGRID donor chain using each layer's original source bitmap."""
+        try:
+            entry = self._library.gpuwm_missing_value_chain_f32
+        except AttributeError as error:
+            raise RuntimeError("the CPU bridge lacks gpuwm_missing_value_chain_f32; using repaired zeros as source donors would bypass the requested METGRID aerosol donor chain; rebuild tools/grib1_bridge") from error
+        layers = np.ascontiguousarray(layers, dtype=np.float32)
+        valid = np.ascontiguousarray(valid, dtype=np.uint8)
+        yy = np.ascontiguousarray(target_y, dtype=np.float64)
+        xx = np.ascontiguousarray(target_x, dtype=np.float64)
+        if layers.ndim != 3 or valid.shape != layers.shape or yy.shape != xx.shape:
+            raise ValueError("missing-value chain dimensions disagree")
+        nlayer, ny, nx = layers.shape
+        output = np.empty((nlayer, yy.size), dtype=np.float32)
+        counts = np.empty((nlayer, 4), dtype=np.uint64)
+        entry.argtypes = [ctypes.c_void_p] * 6 + [ctypes.c_size_t] * 5
+        entry.restype = ctypes.c_int
+        code = entry(layers.ctypes.data, valid.ctypes.data, yy.ctypes.data, xx.ctypes.data,
+                     output.ctypes.data, counts.ctypes.data, nlayer, ny, nx, yy.size,
+                     int(available_cpu_count() if workers is None else workers))
+        self._raise_native(int(code), "masked nearest/four-point/average interpolation")
+        return output.reshape((nlayer,) + yy.shape), counts
+
     def wps_masked_chain(self, layers, donors, partial, target_y, target_x,
                          target_mask, chain, *, mode: str, fill_value,
-                         physical_range=None, workers: int | None = None):
+                         physical_range=None, workers: int | None = None,
+                         reach=None):
         """WPS metgrid's masked chain over every layer of one field.
 
         ``layers`` is ``(nlayer, ny, nx)`` float64; ``donors`` and
@@ -979,6 +1149,13 @@ class CpuPreprocessBackend:
         ``(values, counts)``: ``values`` is ``(nlayer, ntarget)`` float64,
         ``counts`` ``(nlayer, 8)`` in the slot order of
         ``tools/grib1_bridge/src/wps_masked.rs``.
+
+        ``reach`` is ``(targets, cells)`` in the ``skin`` mode: the water
+        pass's search takes no source water farther than ``cells`` source
+        cells from a target flagged in ``targets`` (a mask like
+        ``target_mask``), and such a target comes back NaN for the caller's
+        fallback.  Given, the call returns ``(values, counts, beyond)``
+        with ``beyond`` the per-layer count of those targets.
         """
 
         self.require_wps_masked_chain()
@@ -1032,14 +1209,27 @@ class CpuPreprocessBackend:
             return ctypes.c_void_p(
                 None if array is None else array.ctypes.data)
 
-        code = int(self._library.gpuwm_wps_masked_chain_f64(
+        reach_mask, reach_cells = None, float("inf")
+        if reach is not None:
+            limited, reach_cells = reach
+            reach_cells = float(reach_cells)
+            reach_mask = np.ascontiguousarray(
+                np.asarray(limited, dtype=np.bool_).ravel())
+            if reach_mask.shape != ty.shape:
+                raise ValueError("reach targets shape does not match target grid")
+            if np.isnan(reach_cells):
+                raise ValueError("reach must be a number of source cells")
+        beyond = np.zeros(nlayer, dtype=np.uint64)
+        code = int(self._library.gpuwm_wps_masked_chain_reach_f64(
             address(layers), address(donor_mask.view(np.uint8)),
             address(None if partial_mask is None
                     else partial_mask.view(np.uint8)),
             address(ty), address(tx), address(mask.view(np.uint8)),
             address(codes if codes.size else None), int(codes.size),
             _WPS_CHAIN_MODES[mode], float(fill_value), has_range,
-            float(low), float(high), address(output), address(counts),
+            float(low), float(high),
+            address(None if reach_mask is None else reach_mask.view(np.uint8)),
+            reach_cells, address(output), address(counts), address(beyond),
             ctypes.byref(position), nlayer, ny, nx, ntarget, count,
         ))
         if code == 11:
@@ -1047,6 +1237,95 @@ class CpuPreprocessBackend:
                 "unknown WPS interpolation operator "
                 f"{chain[int(position.value)]!r}")
         self._raise_native(code, "masked surface interpolation")
+        if reach is not None:
+            return output, counts, beyond
+        return output, counts
+
+    def surface_match(self, source, original, source_land,
+                      donor_y, donor_x, fraction_y, fraction_x, target_land,
+                      chain, *, method="parabolic", land_only=False,
+                      fill_value=0.0, closed_edges=15,
+                      nearest_y=None, nearest_x=None,
+                      workers: int | None = None):
+        """Preserve the original FP32 result outside mixed surface support.
+
+        Exact integer donors and FP32 fractions are the original operator's
+        geometry. Mixed targets take the matching WPS masked chain; a surface
+        analysis with no reachable matching donor retains its original value.
+        Land-only fields take their declared fill on mixed water support or where
+        no matching answer exists. All selection and blending run in Rust.
+        """
+        if not self.surface_match_entry:
+            from woof.bridges import cpu_bridge_remedy
+            raise MaskedChainUnavailable(
+                f"the CPU preprocessing library at {self.path} predates "
+                f"{SURFACE_MATCH_ENTRY}, which prevents coastal surface "
+                "analyses from mixing land and water donors; rebuild or "
+                "re-fetch it\n" + cpu_bridge_remedy(self.path.name))
+        if method not in {"nearest", "bilinear", "parabolic"}:
+            raise ValueError("surface matching method must be nearest, bilinear or parabolic")
+        source = _host_f32(source)
+        original = _host_f32(original)
+        if source.ndim < 2 or min(source.shape[-2:]) < 1:
+            raise ValueError("surface matching source must end in (y, x)")
+        shape = source.shape[:-2]
+        nlayer = int(np.prod(shape, dtype=np.int64)) or 1
+        ny, nx = source.shape[-2:]
+        source = np.ascontiguousarray(source.reshape((nlayer, ny, nx)))
+        land = np.ascontiguousarray(source_land, dtype=np.bool_)
+        targets = np.ascontiguousarray(target_land, dtype=np.bool_)
+        if land.shape != (ny, nx):
+            raise ValueError("source land flag shape does not match source")
+        if original.shape != (*shape, *targets.shape) or targets.size == 0:
+            raise ValueError("original surface result shape does not match target")
+        arrays = []
+        for value, dtype in ((donor_y, np.int32), (donor_x, np.int32),
+                             (fraction_y, np.float32), (fraction_x, np.float32)):
+            array = np.asarray(value)
+            if array.shape != targets.shape:
+                raise ValueError("surface matching geometry shape does not match target")
+            arrays.append(np.ascontiguousarray(array, dtype=dtype))
+        nearest = [None, None]
+        if method == "nearest":
+            for slot, value in enumerate((nearest_y, nearest_x)):
+                array = np.asarray(value)
+                if array.shape != targets.shape:
+                    raise ValueError("exact nearest donor shape does not match target")
+                nearest[slot] = np.ascontiguousarray(array, dtype=np.int32)
+        chain = tuple(chain)
+        codes = np.ascontiguousarray([
+            _WPS_OPERATOR_CODES.get(op, _WPS_UNKNOWN_OPERATOR) for op in chain
+        ], dtype=np.uint8)
+        ntarget = targets.size
+        output = np.empty(original.shape, dtype=np.float32)
+        counts = np.zeros((nlayer, len(SURFACE_MATCH_COUNT_KEYS)), dtype=np.uint64)
+        unknown = ctypes.c_uint64(0)
+        count = available_cpu_count() if workers is None else int(workers)
+        if count < 1:
+            raise ValueError("workers must be positive")
+
+        def address(array):
+            return ctypes.c_void_p(None if array is None else array.ctypes.data)
+
+        code = int(self._library.gpuwm_surface_match_f32(
+            address(source), address(original), address(land.view(np.uint8)),
+            *(address(array) for array in arrays),
+            *(address(array) for array in nearest), address(targets.view(np.uint8)),
+            address(codes if codes.size else None), codes.size,
+            {"nearest": 0, "bilinear": 1, "parabolic": 2}[method], int(bool(land_only)),
+            float(fill_value), int(closed_edges), address(output), address(counts),
+            ctypes.byref(unknown), nlayer, ny, nx, ntarget, count,
+        ))
+        if code == 11:
+            raise ValueError(f"unknown WPS interpolation operator {chain[int(unknown.value)]!r}")
+        if code == 12:
+            target = np.unravel_index(int(unknown.value), targets.shape)
+            raise OpenSourceWindowEdge(
+                f"coastal matching support at target {target} reaches an "
+                "open source-window edge; expand the decoded source window "
+                "so the matching-surface search and interpolation halo "
+                "are fully covered")
+        self._raise_native(code, "coastal surface interpolation")
         return output, counts
 
     def land_unit_scan(self, layers, land, partial, physical_range, *,
@@ -1881,6 +2160,7 @@ __all__ = [
     "WATER_ENTRIES",
     "WATER_REPAIR_ENTRY",
     "WPS_MASKED_CHAIN_ENTRY",
+    "WPS_MASKED_REACH_ENTRY",
     "automatic_workers",
     "available_cpu_count",
     "host_step_workers",

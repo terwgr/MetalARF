@@ -34,9 +34,8 @@ def coupled_device_fields(state) -> dict[str, MetalArray]:
     """
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("coupled Metal boundary snapshots require a Metal DomainState")
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal coupled boundary snapshots currently refuse WRF exact arithmetic")
+    if WRF_EXACT and getattr(state, "_moving_frame_velocity", None):
+        raise NotImplementedError("strict Metal boundary snapshots need nonmoving winds")
 
     xp = state._array_module
     context = xp.context
@@ -68,6 +67,11 @@ def coupled_device_fields(state) -> dict[str, MetalArray]:
         target = getattr(state, name, None)
         if not isinstance(target, MetalArray):
             raise ValueError(f"analysis boundary field {name!r} has no Metal state array")
+        if WRF_EXACT:
+            from woof.ingest.lateral_bc import _is_chem_field
+            if _is_chem_field(name):
+                result[name] = target
+                continue
         fields[name] = (target, 5)
 
     for name, (target, kind) in fields.items():
@@ -105,8 +109,9 @@ def coupled_device_fields(state) -> dict[str, MetalArray]:
             "mny": mny,
             "mnx": mnx,
         }
-        context.submit_kernel("coupled_boundary_field", bound, params,
-                              exact_policy=False, grid_size=out.size)
+        context.submit_kernel(
+            "strict_coupled_boundary_field" if WRF_EXACT else "coupled_boundary_field",
+            bound, params, exact_policy=WRF_EXACT, grid_size=out.size)
         result[name] = out
     return result
 

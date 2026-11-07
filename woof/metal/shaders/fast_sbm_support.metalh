@@ -1,0 +1,61 @@
+#ifndef WOOF_FAST_SBM_SUPPORT_METALH
+#define WOOF_FAST_SBM_SUPPORT_METALH
+
+// What the FAST_SBM CUDA unit takes from its support headers. Binary32 values
+// are F words and binary64 values Soft8; the unit mixes them as C++ does, so
+// the conversions are implicit and every mixed operator promotes to binary64.
+
+#include "thompson_aerosol_soft8.metalh"
+#define WOOF_SOFT8 1
+#define WOOF_F_IMPLICIT 1
+#include "soft_word32.metalh"
+#pragma clang fp contract(off)
+
+static inline Soft8 fsbm_d(F a) { return Soft8(as_type<float>(a.bits)); }
+
+#define FSBM_ARITH(OP) \
+static inline Soft8 operator OP(F a, Soft8 b) { return fsbm_d(a) OP b; } \
+static inline Soft8 operator OP(Soft8 a, F b) { return a OP fsbm_d(b); } \
+static inline F operator OP(F a, int b) { return a OP F(float(b)); } \
+static inline F operator OP(int a, F b) { return F(float(a)) OP b; } \
+static inline F operator OP(F a, float b) { return a OP F(b); } \
+static inline F operator OP(float a, F b) { return F(a) OP b; }
+#define FSBM_COMPARE(OP) \
+static inline bool operator OP(F a, Soft8 b) { return fsbm_d(a) OP b; } \
+static inline bool operator OP(Soft8 a, F b) { return a OP fsbm_d(b); } \
+static inline bool operator OP(F a, int b) { return a OP F(float(b)); } \
+static inline bool operator OP(int a, F b) { return F(float(a)) OP b; } \
+static inline bool operator OP(F a, float b) { return a OP F(b); } \
+static inline bool operator OP(float a, F b) { return F(a) OP b; }
+FSBM_ARITH(+)
+FSBM_ARITH(-)
+FSBM_ARITH(*)
+FSBM_COMPARE(<)
+FSBM_COMPARE(>)
+FSBM_COMPARE(<=)
+FSBM_COMPARE(>=)
+FSBM_COMPARE(==)
+FSBM_COMPARE(!=)
+#undef FSBM_ARITH
+#undef FSBM_COMPARE
+
+static inline Soft8 operator+(Soft8 a) { return a; }
+static inline device Soft8 &operator+=(device Soft8 &a, Soft8 b) { a = a + b; return a; }
+static inline device Soft8 &operator-=(device Soft8 &a, Soft8 b) { a = a - b; return a; }
+static inline device Soft8 &operator*=(device Soft8 &a, Soft8 b) { a = a * b; return a; }
+static inline device Soft8 &operator/=(device Soft8 &a, Soft8 b) { a = a / b; return a; }
+static inline F operator+(F a) { return a; }
+
+static inline thread F &operator+=(thread F &a, F b) { a = a + b; return a; }
+static inline thread F &operator-=(thread F &a, F b) { a = a - b; return a; }
+static inline thread F &operator*=(thread F &a, F b) { a = a * b; return a; }
+static inline thread F &operator/=(thread F &a, F b) { a = F(aa_div_impl(a, b)); return a; }
+static inline device F &operator+=(device F &a, F b) { a = a + b; return a; }
+static inline device F &operator-=(device F &a, F b) { a = a - b; return a; }
+static inline device F &operator*=(device F &a, F b) { a = a * b; return a; }
+static inline device F &operator/=(device F &a, F b) { a = F(aa_div_impl(a, b)); return a; }
+
+// A default-REAL literal of the Fortran source, in the build's REAL kind.
+template <class R> static inline R fsbm_rl(Soft8, float f) { return R(f); }
+
+#endif

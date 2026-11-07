@@ -75,13 +75,15 @@ OBS_SCHEMA = OBS_SCHEMAS[0]
 #: Provenance stamp for the adaptation itself.
 ADAPTER_SCHEMA = "gpuwm-da.radar-obs-adapter.v1"
 
-#: Accepted reductions for the reflectivity observation.  ``z_obs`` is the
-#: file's own chosen reduction (``superob_params.z_reduce``, ``max`` by
-#: default); ``z_max`` is the in-cell maximum regardless of that choice.
-#: ``z_mean`` is deliberately absent: it is a linear-Z mean expressed in
-#: dBZ, so assimilating it against a dBZ forward operator is a units trap
-#: of exactly the kind this lane exists to avoid making silently.
-Z_SOURCES = ("z_obs", "z_max")
+#: Accepted reductions for the reflectivity observation.  ``z_mean`` is the
+#: in-cell mean in LINEAR Z, expressed in dBZ: the counterpart of the
+#: model's H(x), which is the logarithm of a volume reflectivity, and the
+#: default since the 2026-10-05 measurement (woof.da.radar_classes: the
+#: maximum sat 6.6 dB above it and put 8.1 times MRMS's 35 dBZ area into the
+#: observations).  ``z_obs`` is the file's own chosen reduction
+#: (``superob_params.z_reduce``, ``max`` in files written so far); ``z_max``
+#: is the in-cell maximum, kept as a diagnostic arm.
+Z_SOURCES = ("z_mean", "z_obs", "z_max")
 
 #: Name given to the reflectivity batch.  Reflectivity is merged across
 #: radars by the writer (max of maxima, count-weighted linear mean), so
@@ -110,8 +112,21 @@ CLEAR_AIR_NAME = "z0"
 #: it as clear air would assimilate "no echo" into cells that have one.
 #: Sources are refused by allow-list precisely so that adding such a regime
 #: has to be a deliberate edit here rather than a value that slips through.
+#:
+#: The third entry is that deliberate edit (2026-10-12).  It is ODIM's
+#: ``undetect``: the national processor's value for "this gate was looked at
+#: and held no echo" (:data:`woof.obs.superob.CLEAR_AIR_SOURCE_ODIM`), the
+#: same claim as the RDA's below-threshold code from another instrument.
+#: ODIM's ``nodata`` and a file whose ``nodata`` and ``undetect`` share one
+#: raw value are never clear air and never reach a product under any regime
+#: (the superob refuses and counts both).  Until this entry the gridder
+#: wrote the regime and no consumer read it: a European volume gridded with
+#: its clear air was refused by the filter, the precipitation analysis and
+#: the heating builder alike, so the documented European route ended at the
+#: file.
 CLEAR_AIR_SOURCES = ("finite_below_floor",
-                     "below_threshold_and_finite_below_floor")
+                     "below_threshold_and_finite_below_floor",
+                     "undetect_and_finite_below_floor")
 
 #: Backwards-compatible alias for the measurement-only regime.
 CLEAR_AIR_SOURCE = CLEAR_AIR_SOURCES[0]
@@ -235,6 +250,65 @@ def simulated_radial_velocity(u_east, v_north, w_up, beam):
             f"wind components {u_east.shape}/{v_north.shape}/{w_up.shape} "
             f"and beam vectors {east.shape} must share the mass-point shape")
     return u_east * east + v_north * north + w_up * up
+
+
+def velocity_operator_points(document, radar_index: int):
+    """Where one radar's velocity batch observes, and its beam there.
+
+    Returns ``(window, mask, (east, north, up))``: ``window`` is
+    :func:`_radar_window`'s answer, ``mask`` the batch's own mask on that
+    extent (exactly the array :func:`radar_grid_to_gridded_obs` builds the
+    batch with), and the three beam components are float64 values at the
+    mask's points, in ``np.nonzero`` order -- the same numbers
+    :func:`beam_unit_vectors` holds there.
+
+    A forward operator evaluated at these points alone is the batch's
+    ``H(x)`` wherever the batch carries an observation, which is the only
+    place the filter, the innovation statistics and the dispersion gate
+    read it.
+    """
+    from woof.obs.radar_grid import radar_plane      # noqa: PLC0415
+
+    shape = observation_shape(document)
+    window = _radar_window(document, radar_index, shape)
+    if window is None:
+        mask = np.asarray(
+            radar_plane(document, "vr_mask", radar_index)).astype(bool)
+        crop = (Ellipsis,)
+    else:
+        j0, j1, i0, i1 = window
+        nj, ni = j1 - j0 + 1, i1 - i0 + 1
+        mask = np.asarray(document["variables"]["vr_mask"][radar_index])[
+            :, :nj, :ni].astype(bool)
+        crop = (slice(None), slice(j0, j1 + 1), slice(i0, i1 + 1))
+    beam = tuple(
+        np.asarray(radar_plane(document, name, radar_index),
+                   dtype=np.float64)[crop][mask]
+        for name in ("vr_beam_east", "vr_beam_north", "vr_beam_up"))
+    return window, mask, beam
+
+
+def observed_radial_velocity(document, radar_index: int, winds):
+    """``(R, *batch extent)`` radial-velocity H(x) at the batch's points.
+
+    ``winds`` is one ``(u_east, v_north, w_up)`` triple of whole-domain
+    mass-point arrays per member, in member order (``w_up`` net of any
+    fall speed, as for :func:`simulated_radial_velocity`).  The result is
+    on the batch's own extent (its window, or the domain), carries
+    :func:`simulated_radial_velocity`'s value at every observed point and
+    zero elsewhere -- where the filter zeroes H(x) anyway.
+    """
+    window, mask, beam = velocity_operator_points(document, radar_index)
+    kk, jj, ii = np.nonzero(mask)
+    if window is not None:
+        jj = jj + int(window[0])
+        ii = ii + int(window[2])
+    out = np.zeros((len(winds),) + mask.shape, dtype=np.float64)
+    for slot, (u_east, v_north, w_up) in enumerate(winds):
+        out[slot][mask] = simulated_radial_velocity(
+            np.asarray(u_east)[kk, jj, ii], np.asarray(v_north)[kk, jj, ii],
+            np.asarray(w_up)[kk, jj, ii], beam)
+    return out
 
 
 def _radar_window(document, index, shape):
@@ -377,9 +451,7 @@ def radar_grid_to_gridded_obs(
 
     if z_source not in Z_SOURCES:
         raise RadarObsAdapterError(
-            f"z_source must be one of {Z_SOURCES}, got {z_source!r}; "
-            "'z_mean' is excluded on purpose -- it is a linear-Z mean "
-            "expressed in dBZ and does not difference against a dBZ H(x)")
+            f"z_source must be one of {Z_SOURCES}, got {z_source!r}")
     document = read_document(
         source, expected_grid=expected_grid,
         expected_grid_identity=expected_grid_identity)

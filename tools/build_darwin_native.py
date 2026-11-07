@@ -44,21 +44,22 @@ ARTIFACT_MARKERS = {
     "gpuwm_preprocess_cpu": b"gpuwm_masked_nearest_f32",
     "rw_fetch": b"usage: rw_fetch <fetch|probe|latest> [OPTIONS]",
     "rw_asos": b"usage: rw_asos",
-    "rw_compare": b"rw_compare --store-root DIR --out-dir DIR --reference NAME[,NAME...]",
-    "rw_verify": b"rw_verify --request REQUEST.json --json RECEIPT.json",
+    "rw_compare": b"gpuwm.reference-input.v1",
+    "rw_verify": b"gpuwm.verify-visuals.request.v1",
     "rw_simradar": b"rw_simradar --request REQUEST.json schema=simulated-radar.request/v1",
-    "rw_nexrad": b"usage: rw_nexrad <list|fetch|live-list|live-fetch|decode|verify|sites> [OPTIONS]",
+    "rw_nexrad": b"gpuwm-obs.nexrad-fetch.v1",
     "rw_wrfbatch": b"rw_wrfbatch --help | --abi",
     "rw_netcdf": b"usage: rw_netcdf inventory FILE",
     "rw_stage4": b"usage: rw_stage4 <list|fetch|decode|grid|verify> [OPTIONS]",
-    "rw_mrms": b"usage: rw_mrms <list|nearest|fetch|decode|grid|verify> [OPTIONS]",
+    "rw_mrms": b"gpuwm-obs.mrms-fetch.v1",
     "rw_odim": b"gpuwm-obs.odim-pack.v1",
     "rw_opera": b"usage: rw_opera <coverage|nearest|fetch|decode|grid|verify> [OPTIONS]",
     "rw_ndbc": b"usage: rw_ndbc <fetch|table|verify> [OPTIONS]",
     "rw_igra2": b"usage: rw_igra2 <list|fetch|table|verify> [OPTIONS]",
     "rw_amv": b"usage: rw_amv <list|fetch|table|verify> [OPTIONS]",
     "rw_gnssro": b"usage: rw_gnssro <cdaac-fetch|list|fetch|table|verify> [OPTIONS]",
-    "rw_atms": b"usage: rw_atms",
+    "rw_mpas_physics_pool": b"gpuwm-rw-mpas-physics-pool-v1",
+    "rw_mpas_stream": b"mpas-native-stream/v1",
     "rw_mpas_mesh": b"rw_mpas_mesh --out GRID.nc [--spec SPEC.json | --background-km KM | --from-centres GRID.nc]",
     "rw_mpas_static": b"rw_mpas_static --grid GRID.nc --out STATIC.nc",
     "rw_mpas_init": b"rw_mpas_init --met MET --static STATIC.nc --capsule CAPSULE.nc",
@@ -69,22 +70,45 @@ ARTIFACT_MARKERS = {
                    b"--start-time YYYY-MM-DD_HH:MM:SS --stop-time YYYY-MM-DD_HH:MM:SS",
     "rw_mlexport": b"rw_mlexport --request REQUEST.json schema=ml-export.request/v1 " \
                     b"modes=run,append,finalize progress=jsonl",
-    "rw_goes": b"usage: rw_goes <list|fetch|cwp|cloud-top|bt|colocate|quicklook|forward|verify> [OPTIONS]",
+    "rw_goes": b"gpuwm-obs.goes-fetch.v1",
     "rw_wis2": b"usage: rw_wis2 <subscribe|probe> [OPTIONS]",
-    "gpuwm_mapped_engine": b"gpuwm-mapped-engine-abi frameset=gpuwm-mapped-frameset-v1 " \
-                           b"height-interfaces=1 grib2-drt=0,2,3,4,40,41,42,50,51,61,200",
+    "gpuwm_mapped_engine": bridge_assets.bridges.BRIDGE_ABI_MARKERS["gpuwm_mapped_engine"],
     "netcdf_writer": b"gpuwm_ncwrite_scan_nonfinite",
     "static_fields": b"gpuwm_static_sampling_portable_v1",
     "obs_regrid": b"gpuwm_obsregrid_build_plan",
     "obs_score": b"gpuwm_obsscore_abi_version",
     "rw_isobaric": b"gpuwm_isobaric_abi_version",
     "region_global_dealias": b"bw_dealias_rift_v1",
-    "rw_zarr": b"http transfer failed after ",
+    "rw_zarr": bridge_assets.bridges.BRIDGE_ABI_MARKERS["rw_zarr"],
 }
+# Upstream's bundle roster is the authority for the added 1.1.3 artifacts.
+# Reuse its existing bridge contracts where available.
+_EXTRA_MARKERS = {
+    "rw_nextgen_output": b"rw_nextgen_output_abi_version",
+    "rw_hydro_world": b"usage: rw_hydro_world",
+    "rw_hydro_params": b"usage: rw_hydro_params",
+    "rw_hydrofabric": b"usage: rw_hydrofabric inspect GPKG",
+    "nextgen-reservoir-prepare": b"usage: nextgen-reservoir-prepare",
+    "rw_hydro_init": b"usage: rw_hydro_init",
+    "rw_hail": b"gpuwm-obs.hail.v1",
+    "rw_airnow": b"gpuwm-obs.airnow-fetch.v1",
+    "rw_prepbufr": b"gpuwm-obs.prepbufr-fetch.v1",
+    "rw_madis": b"gpuwm-obs.madis-fetch.v1",
+    "rw_radar_feeds": b"gpuwm-obs.radar-feeds.v1",
+    "rw-wind-table": b"usage: rw-wind-table DATABASES.json SOURCE CLASSES.json",
+}
+for _artifact in bridge_assets.BUNDLED_ARTIFACTS:
+    if _artifact.name not in ARTIFACT_MARKERS:
+        ARTIFACT_MARKERS[_artifact.name] = (
+            bridge_assets.bridges.BRIDGE_ABI_MARKERS.get(_artifact.name)
+            or _EXTRA_MARKERS[_artifact.name])
+
 LIBRARY_ARTIFACTS = {
     "gpuwm_preprocess_cpu", "netcdf_writer", "static_fields", "obs_regrid",
     "obs_score", "rw_isobaric", "region_global_dealias",
 }
+LIBRARY_ARTIFACTS.update(
+    a.name for a in bridge_assets.BUNDLED_ARTIFACTS if a.kind == "library")
 VENDORED_ARTIFACTS = {"region_global_dealias"}
 VENDORED_SOURCE_COMMITS = {
     "region_global_dealias": "a7d4baf6b8a11ca5602fe44a533efd8200ef6cea",
@@ -104,10 +128,13 @@ PACKAGES = {
     "rw_igra2": "rw-obs",
     "rw_amv": "rw-obs",
     "rw_gnssro": "rw-obs",
-    "rw_atms": "rw-atms",
+    "rw_mpas_physics_pool": "rw-mpas",
+    "rw_mpas_stream": "rw-mpas",
     "rw_mpas_mesh": "rw-mpas",
     "rw_mpas_static": "rw-mpas",
     "rw_mpas_init": "rw-mpas",
+    "rw_mpas_init_v831": "rw-mpas",
+    "rw_mpas_gsl_oro": "rw-mpas",
     "rw_mpas_geometry": "rw-mpas",
     "rw_mpas_hostprep": "rw-mpas",
     "rw_mpas_convert": "rw-mpas",
@@ -125,14 +152,35 @@ PACKAGES = {
     "obs_score": "obs-score",
     "rw_isobaric": "rw-isobaric",
 }
+PACKAGES.update({
+    "rw_fire_indices": "fire-indices", "rw_globe_pack": "rw-globe-pack",
+    "rw_grib2export": "rw-grib2export", "rw_radar_feeds": "rw-radar-feeds",
+    "rw_scoreboard": "rw-scoreboard", "rw_soundings": "rw-soundings",
+    "rw_superob": "rw-superob", "rw_tempo": "rw-tempo",
+    "rw_projected_intermediate": "projected-intermediate",
+    **{name: "rw-obs" for name in
+       ("rw_airnow", "rw_hail", "rw_ice_verify", "rw_madis",
+        "rw_ocean_verify", "rw_prepbufr")},
+    **{name: "rw-wrfbatch" for name in
+       ("rw_ensbatch", "rw_probgrid", "rw_hex_points", "rw_scorecard",
+        "rw_nowcast_frames", "rw_tc_fields")},
+})
 ARTIFACT_WORKSPACES = {name: RUSTWX_WORKSPACE for name in PACKAGES
                        if name != "gpuwm_mapped_engine"}
 ARTIFACT_WORKSPACES["gpuwm_mapped_engine"] = MAPPED_WORKSPACE
 ARTIFACT_WORKSPACES["region_global_dealias"] = ROOT / "tools" / "region_global_dealias"
 ARTIFACT_WORKSPACES["rw_zarr"] = ROOT / "tools" / "zarr_bridge"
+# Every bundle artifact declares its source workspace in the shared roster.
+ARTIFACT_WORKSPACES.update(
+    {a.name: ROOT / a.crate for a in bridge_assets.BUNDLED_ARTIFACTS})
 TOOLCHAINS = {
+    **{name: "1.94.0-aarch64-apple-darwin"
+       for name, workspace in ARTIFACT_WORKSPACES.items() if workspace == RUSTWX_WORKSPACE},
+    **{name: "1.94.0-aarch64-apple-darwin"
+       for name in ("rw_hydro_init", "rw_nextgen_output", "rw_ocean", "rw_bathy")},
     "rw_zarr": "1.94.0-aarch64-apple-darwin",
-    "rw_simradar": "1.94.0-aarch64-apple-darwin",
+    "rw_icechunk": "1.94.0-aarch64-apple-darwin",
+    "rw-wind-table": "1.94.0-aarch64-apple-darwin",
 }
 
 

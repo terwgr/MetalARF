@@ -55,19 +55,78 @@ from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import contextlib
+import functools
+import json
+import math
+import os
+from pathlib import Path
 from dataclasses import dataclass
 import threading
 import time
 from typing import Callable
 from urllib.parse import urlsplit
 
-from woof import fetch_endpoints
+from woof import fetch_endpoints, fetch_connections
+
+
+@functools.lru_cache(maxsize=1)
+def _width_table():
+    table = json.loads(Path(__file__).with_name("fetch-width-rows.json").read_text(encoding="utf-8"))
+    if table.get("schema") != "gpuwm-fetch-width-rows-v1":
+        raise ValueError("fetch width table has an unknown schema; an unbounded transfer pool would exhaust connections")
+    ids = set()
+    for row in table["rows"]:
+        if row["id"] in ids or any(type(row[key]) is not int or row[key] < 1
+                                   for key in ("workers", "stream_budget")):
+            raise ValueError("fetch width table has duplicate ids or nonpositive budgets; the transfer pool cannot be scheduled")
+        ids.add(row["id"])
+    if table["default"] not in ids:
+        raise ValueError("fetch width table has no default row; the transfer pool cannot be scheduled")
+    return table
+
+
+def worker_profile() -> dict:
+    """Select a packaged row using optional deployment/network hints.
+
+    WOOF_FETCH_ROW pins a row. WOOF_FETCH_PROVIDER and WOOF_FETCH_BOX
+    match rows, and WOOF_FETCH_BANDWIDTH_MBPS is megabytes per second.
+    No metadata request or provider-specific adapter is involved.
+    """
+    table = _width_table()
+    pin = os.environ.get("WOOF_FETCH_ROW")
+    if pin:
+        matches = [row for row in table["rows"] if row["id"] == pin]
+        if not matches:
+            raise ValueError(f"WOOF_FETCH_ROW {pin!r} is not in fetch-width-rows.json; the requested transfer budget is unknown")
+        return dict(matches[0])
+    provider = os.environ.get("WOOF_FETCH_PROVIDER", "").lower()
+    box = os.environ.get("WOOF_FETCH_BOX", "").lower()
+    raw = os.environ.get("WOOF_FETCH_BANDWIDTH_MBPS")
+    bandwidth = None if raw is None else float(raw)
+    if bandwidth is not None and (not math.isfinite(bandwidth) or bandwidth < 0):
+        raise ValueError("WOOF_FETCH_BANDWIDTH_MBPS must be finite and nonnegative; an invalid link budget cannot size transfers")
+    matches = []
+    for row in table["rows"]:
+        if row["provider"] not in ("*", provider) or row["box"] not in ("*", box):
+            continue
+        bounded = "bandwidth_min_mbps" in row
+        if bounded and (bandwidth is None or bandwidth < row["bandwidth_min_mbps"]
+                        or (row.get("bandwidth_max_mbps") is not None
+                            and bandwidth >= row["bandwidth_max_mbps"])):
+            continue
+        # A measured link hint wins over an unmeasured provider fallback.
+        score = (int(row["box"] != "*"), int(bounded), int(row["provider"] != "*"))
+        matches.append((score, row))
+    row = max(matches, key=lambda item: item[0])[1] if matches else next(
+        row for row in table["rows"] if row["id"] == table["default"])
+    return dict(row)
 
 #: The engine default: how many file transfers are in flight at once.
 #: Chosen against the measured fetch shape -- per-file service latency
 #: dominates, so a handful of overlapped requests recovers most of the
 #: idle pipe without presenting as a burst to any provider.
-DEFAULT_FILE_WORKERS = 6
+DEFAULT_FILE_WORKERS = next(row["workers"] for row in _width_table()["rows"]
+                            if row["id"] == _width_table()["default"])
 
 #: Hosts with a politeness cap tighter than the pool size, and the cap
 #: each one gets.  TABLE DATA, read from ``host_policy`` in the packaged
@@ -87,21 +146,27 @@ NOMADS_FILE_WORKER_CAP = HOST_FILE_WORKER_CAPS["nomads.ncep.noaa.gov"]
 #: Schema of the receipt :func:`run_transfers` returns.
 POOL_RECEIPT_SCHEMA = "gpuwm-fetch-pool-receipt-v1"
 
-#: Chunk streams one fetch keeps open at once, across all of its files.
-#:
-#: A file the Rust backbone moves is itself split into 16 MiB chunks
-#: fetched over several connections.  Those were one per CPU thread per
-#: file: 24 x 6 = 144 connections from a 24-thread machine running the
-#: default pool (576 from a 96-thread one, each holding a chunk in
-#: memory), sharing one link so thinly that a chunk took minutes and ran
-#: into the backbone's old 300 s whole-request timeout.  The budget is
-#: split evenly over the files in flight, at least one stream each.
-#:
-#: 48 is measured, not guessed.  From a link about 100 ms from S3 one
-#: stream carries about 1 MB/s, and six HRRR files in flight moved at
-#: 6 MB/s on 6 streams, 12 MB/s on 12 and 24, and the link's 24 to 34 MB/s
-#: from 36 streams up to 144; 48 fills that link with room to spare.
-FETCH_STREAM_BUDGET = 48
+_COMPLETION_LOCAL = threading.local()
+
+
+@contextlib.contextmanager
+def completion_hook(callback):
+    """Caller-scoped handoff hook, including routes with an ordered callback.
+
+    This observes verified completions without changing their ordered
+    admission contract. Nested calls restore their caller's hook.
+    """
+    prior = getattr(_COMPLETION_LOCAL, "callback", None)
+    _COMPLETION_LOCAL.callback = callback
+    try:
+        yield
+    finally:
+        _COMPLETION_LOCAL.callback = prior
+
+#: Streams are table-driven, then clipped to the box connection cap.
+#: File workers are clipped too, including explicit --fetch-workers values.
+FETCH_STREAM_BUDGET = next(row["stream_budget"] for row in _width_table()["rows"]
+                            if row["id"] == _width_table()["default"])
 
 
 def chunk_streams_per_file(workers: int | None, *, files: int,
@@ -110,15 +175,20 @@ def chunk_streams_per_file(workers: int | None, *, files: int,
 
     ``workers`` is the pool size the route asked for, ``files`` how many
     it has to move and ``host`` the host they come from, whose own cap
-    may keep fewer in flight.  At least 1, so a pool wider than the
-    budget still moves every file.
+    may keep fewer in flight. File workers are clipped to this process's
+    share of the box cap (:func:`woof.fetch_connections.process_share`),
+    so other woof processes on the box still find slots; every admitted
+    file gets at least one stream.
     """
 
     pool = resolve_file_workers(workers)
     in_flight = min(pool, max(1, files))
     if host:
         in_flight = min(in_flight, host_worker_cap(host, pool))
-    return max(1, FETCH_STREAM_BUDGET // max(1, in_flight))
+    budget = min(worker_profile()["stream_budget"], fetch_connections.process_share())
+    if host and host.lower() == "nomads.ncep.noaa.gov":
+        return 1
+    return max(1, budget // max(1, in_flight))
 
 
 @dataclass(frozen=True)
@@ -186,13 +256,13 @@ def resolve_file_workers(requested: int | None) -> int:
     """
 
     if requested is None:
-        return DEFAULT_FILE_WORKERS
+        return min(worker_profile()["workers"], fetch_connections.process_share())
     workers = int(requested)
     if workers < 1:
         raise ValueError(
             f"--fetch-workers {requested} is not a schedulable pool; pass "
             "a positive count (1 is the serial transport)")
-    return workers
+    return min(workers, fetch_connections.process_share())
 
 
 class TransferCancelled(RuntimeError):
@@ -223,6 +293,8 @@ class _Stop:
         self._lock = threading.Lock()
         self._processes: set = set()
         self._conditions: set[threading.Condition] = set()
+        self.streams_used: dict[str, int] = {}
+        self.connection_slots: dict[str, int] = {}
         #: Submission index of the job whose failure fired the stop, or
         #: None (not fired, or fired by an interrupt on the caller's
         #: thread).  The first to fire wins.
@@ -346,7 +418,7 @@ class TransferContext:
     give up at its next chunk, once another file has failed the request.
     """
 
-    __slots__ = ("name", "_stop", "_shared")
+    __slots__ = ("name", "_stop", "_shared", "byte_relay")
 
     def __init__(self, name: str, stop: _Stop, *, shared: bool = True) -> None:
         self.name = name
@@ -355,6 +427,7 @@ class TransferContext:
         #: so another file's failure can stop it.  False on the serial
         #: transport, where a failure ends the request by raising.
         self._shared = shared
+        self.byte_relay = None
 
     @property
     def stopped(self) -> bool:
@@ -463,9 +536,19 @@ def sleep_unless_stopped(seconds: float, *,
     job.sleep(seconds, injected)
 
 
+def record_streams(streams: int, slots: int | None = None) -> None:
+    """Record the transport limits actually selected for this file."""
+    job = current_job()
+    if job is not None:
+        with job._stop._lock:
+            job._stop.streams_used[job.name] = max(streams, job._stop.streams_used.get(job.name, 1))
+            job._stop.connection_slots[job.name] = max(slots or streams, job._stop.connection_slots.get(job.name, 1))
+
+
 def _receipt(*, entries: list[dict], workers_requested: int,
              workers_effective: int, host_caps: dict[str, int],
-             wall_seconds: float, serial_seconds: float) -> dict:
+             wall_seconds: float, serial_seconds: float,
+             streams_used: dict, connection_slots: dict) -> dict:
     total_bytes = sum(
         entry["bytes"] for entry in entries
         if isinstance(entry.get("bytes"), int)
@@ -478,6 +561,11 @@ def _receipt(*, entries: list[dict], workers_requested: int,
         "bytes": total_bytes,
         "workers_requested": workers_requested,
         "workers_effective": workers_effective,
+        "worker_row": worker_profile()["id"],
+        "stream_budget": min(worker_profile()["stream_budget"], fetch_connections.max_connections()),
+        "max_connections": fetch_connections.max_connections(),
+        "streams_used": dict(streams_used),
+        "connection_slots_per_file": dict(connection_slots),
         "host_caps": dict(host_caps),
         "wall_seconds": round(wall_seconds, 6),
         "modeled_serial_seconds": round(serial_seconds, 6),
@@ -501,6 +589,8 @@ def _watch(monitor, job: TransferJob, stop: _Stop, index: int,
 
     def watched() -> dict:
         context = TransferContext(job.name, stop, shared=shared)
+        context.byte_relay = (None if monitor is None else
+                              lambda: monitor.relay(job.name))
         # Stopped while this job waited for a worker or a host slot: it
         # never started, so it is not announced either.
         context.raise_if_stopped()
@@ -570,6 +660,7 @@ def _raise_first_failure(futures, origin: int | None) -> None:
 
 def run_transfers(jobs, *, workers: int,
                   on_admitted: Callable[[int, dict], None] | None = None,
+                  on_completed: Callable[[int, dict], None] | None = None,
                   monitor=None) -> tuple[list[dict], dict]:
     """Run every job; return ``(entries, receipt)`` in submission order.
 
@@ -577,6 +668,10 @@ def run_transfers(jobs, *, workers: int,
     submission order, as each verified file joins the contiguous
     admitted prefix -- publish receipts there exactly as the serial
     loop did after each file.
+
+    ``on_completed`` fires on the caller's thread as verified jobs finish,
+    before ordered admission. It may bind supplements while earlier files
+    still land; it must not publish a complete forecast or an ordered prefix.
 
     ``monitor`` is a :class:`woof.progress.TransferMonitor` that hears
     the whole request up front and then the start and the end of every
@@ -617,6 +712,13 @@ def run_transfers(jobs, *, workers: int,
         monitor.begin(files=[(job.name, job.expected_bytes)
                              for job in jobs])
     started = time.perf_counter()
+    completion = getattr(_COMPLETION_LOCAL, "callback", None)
+
+    def completed(index, entry):
+        if completion is not None:
+            completion(index, entry)
+        if on_completed is not None:
+            on_completed(index, entry)
 
     def admit(index: int, entry: dict) -> None:
         entries.append(entry)
@@ -637,12 +739,14 @@ def run_transfers(jobs, *, workers: int,
                                     queued=len(jobs) - index - 1)
                 raise
             serial_seconds += time.perf_counter() - job_started
+            completed(index, entry)
             admit(index, entry)
         return entries, _receipt(
             entries=entries, workers_requested=workers,
             workers_effective=workers_effective, host_caps=host_caps,
             wall_seconds=time.perf_counter() - started,
-            serial_seconds=serial_seconds)
+            serial_seconds=serial_seconds, streams_used=stop.streams_used,
+            connection_slots=stop.connection_slots)
 
     turns = {
         host: _HostTurns(host_worker_cap(host, workers),
@@ -721,6 +825,10 @@ def run_transfers(jobs, *, workers: int,
         pending = set(futures)
         while pending and not stop.fired:
             _finished, pending = wait(pending, return_when=FIRST_COMPLETED)
+            if on_completed is not None or completion is not None:
+                for future in _finished:
+                    if not future.cancelled() and _failure(future) is None:
+                        completed(futures.index(future), future.result())
             admit_prefix()
         if stop.fired:
             # The failing worker fired the stop before its own future
@@ -747,7 +855,8 @@ def run_transfers(jobs, *, workers: int,
         entries=entries, workers_requested=workers,
         workers_effective=workers_effective, host_caps=host_caps,
         wall_seconds=time.perf_counter() - started,
-        serial_seconds=serial_seconds)
+        serial_seconds=serial_seconds, streams_used=stop.streams_used,
+        connection_slots=stop.connection_slots)
 
 
 __all__ = [

@@ -31,7 +31,8 @@ nz = 50
 # Nominal vertical scaffold height; the real path derives heights from
 # p_top/eta_levels.
 ztop = 20000.0
-p_top = 1500.0
+# The hrrr-prs pressure-level atmosphere stops at 50 hPa (5000 Pa).
+p_top = 5000.0
 eta_levels = [
     1.0, 0.998, 0.994, 0.987, 0.975,
     0.959, 0.939, 0.916, 0.892, 0.865,
@@ -102,6 +103,8 @@ relax_zone = 9
 terrain_opt = 1
 map_proj = 1
 sf_sfclay_physics = 5
+# The GSL surface layer the operational fork runs.
+mynn_sfclay_variant = "gsl_wrf39"
 sf_surface_physics = 3
 ruc_irrigation = "wrf_45"
 ruc_soilprop = "wrf_45"
@@ -111,6 +114,8 @@ ruc_2m_diagnostic = "log_profile"
 rdlai2d = true
 usemonalb = true
 bl_pbl_physics = 5
+# wrf.exe resolves scalar_pblmix = 1 for aerosol-aware Thompson with aerosol initial and boundary values; the HRRR route round-trips this file through that import.
+scalar_pblmix = 1
 bl_mynn_version = "gsd_41"
 bl_mynn_mixlength = 2
 ra_physics = 4

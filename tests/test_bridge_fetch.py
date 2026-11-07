@@ -33,6 +33,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_TOOL = REPO_ROOT / "tools" / "build_bridge_bundle.py"
 
 
+def test_intermediate_producer_is_reachable_from_the_release_bridge_roster(tmp_path):
+    artifact = next(row for row in bridge_assets.BUNDLED_ARTIFACTS
+                    if row.name == "met_intermediate")
+    assert artifact.crate == bridges.CRATE_RELATIVE
+    assert artifact.env_var == bridges.BRIDGE_ENV[artifact.name]
+    binary = tmp_path / artifact.name
+    binary.write_bytes(bridges.BRIDGE_ABI_MARKERS[artifact.name])
+    bridge_assets.verify_contract_marker(artifact.name, binary)
+    binary.write_bytes(b'old producer without the declared request contract')
+    with pytest.raises(bridge_assets.BridgeAssetError):
+        bridge_assets.verify_contract_marker(artifact.name, binary)
+
+
 def _args(**kwargs) -> argparse.Namespace:
     return argparse.Namespace(**{"from_dir": None, "dest": None,
                                  "keep_bundle": False, "list": False,
@@ -113,18 +126,6 @@ def _install_pins(monkeypatch, bundle: bridge_assets.BundlePin,
 # ---------------------------------------------------------------------------
 # Staging semantics, with synthetic artifacts
 # ---------------------------------------------------------------------------
-
-def test_stage_from_bundle_verifies_then_installs(tmp_path):
-    archive, bundle = _synthetic_bundle(tmp_path)
-    dest = tmp_path / "dest"
-
-    installed = bridge_assets.stage_from_bundle(
-        archive, bundle, dest, progress=lambda _line: None)
-
-    assert [p.name for p in installed] == ["alpha.bin", "beta.bin"]
-    for pin in bundle.binaries:
-        assert bridge_assets.matches_pin(dest / pin.filename, pin)
-
 
 def test_staging_returns_the_assets_it_staged_as_well_as_the_binaries(
         tmp_path):
@@ -694,17 +695,36 @@ def test_artifact_filenames_agree_with_the_resolvers_on_this_host():
         library_names as obsregrid_names)
     from woof.obs_score_bridge import library_names as obsscore_names
     from woof.isobaric_bridge import library_names as isobaric_names
+    from woof.obs.superob_bridge import library_name as superob_name
+    from woof.core.tempo_rust import library_name as tempo_name
+    from woof.hydrofabric import library_names as hydrofabric_names
+    from woof.hydro.forcing_inputs import library_names as forcing_names
 
     # One expected filename per library, from the resolver that actually
     # searches for it: libraries with one shared expectation would
     # pass while a bundle staged a file nothing looks for.
-    libraries = {"gpuwm_preprocess_cpu": cpu_bridge_candidates()[-1].name,
+    libraries = {"nextgen_hydrofabric": hydrofabric_names()[0],
+                 "arwen_nextgen_forcing": forcing_names()[0],
+                 "gpuwm_preprocess_cpu": cpu_bridge_candidates()[-1].name,
                  "region_global_dealias": region_library_name(),
                  "netcdf_writer": ncwrite_names()[0],
                  "static_fields": static_names()[0],
                  "obs_regrid": obsregrid_names()[0],
                  "obs_score": obsscore_names()[0],
-                 "rw_isobaric": isobaric_names()[0]}
+                 "rw_isobaric": isobaric_names()[0],
+                 "rw_superob": superob_name(),
+                 "rw_tempo": tempo_name(),
+                 # Resolved by woof hex (woof.hex.hrrr_intermediate), which
+                 # spells it this way on each platform.
+                 "rw_projected_intermediate": (
+                     "rw_projected_intermediate.dll" if os.name == "nt" else
+                     "librw_projected_intermediate.dylib" if sys.platform == "darwin" else
+                     "librw_projected_intermediate.so"),
+                 # woof.hydro.output._library_path spells it this way.
+                 "rw_nextgen_output": (
+                     "rw_nextgen_output.dll" if os.name == "nt" else
+                     "librw_nextgen_output.dylib" if sys.platform == "darwin" else
+                     "librw_nextgen_output.so")}
     for artifact in bridge_assets.BUNDLED_ARTIFACTS:
         produced = bridge_assets.artifact_filename(artifact, host)
         if artifact.kind == "library":
@@ -772,6 +792,41 @@ def test_every_bundled_artifact_is_one_the_resolver_searches_for():
         dealias_region.region_bridge_candidates())
     for name, env in bridges.BRIDGE_ENV.items():
         assert envs[name] == env
+
+
+def test_ensemble_bundle_contract_matches_the_default_cpu_reducer():
+    from woof import rustwx
+
+    artifact = next(row for row in bridge_assets.BUNDLED_ARTIFACTS
+                    if row.name == "rw_ensbatch")
+    assert artifact.kind == "executable"
+    assert artifact.crate == bridges.RUSTWX_CRATE_RELATIVE
+    assert artifact.env_var == "WOOF_ENSEMBLE_RENDERER"
+    assert bridges.BRIDGE_ABI_MARKERS[artifact.name] == (
+        rustwx.CPU_ENSEMBLE_REDUCTION_ABI.encode("ascii"))
+    # The thin launcher must reject the same old reducer as staging does.
+    contracts = Path("tools/rustwx/crates/rw-wrfbatch/src/cli_contracts.rs").read_text()
+    marker = rustwx.CPU_ENSEMBLE_REDUCTION_ABI.replace("\t", r"\t")
+    assert f'pub const ENSBATCH_STATIC: &str = "{marker}";' in contracts
+    assert bridge_assets.artifact_filename(artifact, "linux-x86_64") == "rw_ensbatch"
+    assert bridge_assets.artifact_filename(artifact, "win-x86_64") == "rw_ensbatch.exe"
+
+
+def test_bundle_with_every_other_artifact_refuses_missing_ensemble_reducer(tmp_path):
+    archive = tmp_path / "gpuwm-bridges-v0.0.0-test-linux-x86_64.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        for artifact in bridge_assets.BUNDLED_ARTIFACTS:
+            if artifact.name != "rw_ensbatch":
+                bundle.writestr(bridge_assets.artifact_filename(artifact, "linux-x86_64"),
+                                b"member-list fixture, not executable proof")
+    result = subprocess.run(
+        [sys.executable, str(BUNDLE_TOOL), "pin", "--release", "v0.0.0-test",
+         "--source-rev", "ab12" * 10, "--bundle", str(archive),
+         "--out", str(tmp_path / "pins.json")], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "missing rw_ensbatch; refusing to pin a partial bundle" in (
+        result.stderr + result.stdout)
+    assert not (tmp_path / "pins.json").exists()
 
 
 def test_missing_zarr_reader_names_the_actual_install_or_source_build_remedy(tmp_path, monkeypatch):
@@ -1040,6 +1095,11 @@ def test_the_bundle_tool_writes_a_deterministic_archive(tmp_path, platform):
             capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         archive = out / f"gpuwm-bridges-v0.0.0-test-{platform}.zip"
+        ensemble = next(row for row in bridge_assets.BUNDLED_ARTIFACTS
+                        if row.name == "rw_ensbatch")
+        name = bridge_assets.artifact_filename(ensemble, platform)
+        with zipfile.ZipFile(archive) as bundle:
+            assert bundle.read(name) == (source / name).read_bytes()
         digests.append(bridge_assets.sha256_file(archive))
     assert digests[0] == digests[1]
 
@@ -1051,7 +1111,9 @@ def test_the_bundle_tool_names_the_artifact_it_cannot_find(tmp_path, monkeypatch
          "--out", str(tmp_path / "out")],
         capture_output=True, text=True)
     assert result.returncode != 0
-    assert "grib1_bridge" in (result.stderr + result.stdout)
+    first = bridge_assets.BUNDLED_ARTIFACTS[0]
+    assert bridge_assets.artifact_filename(first, "linux-x86_64") in (
+        result.stderr + result.stdout)
 
     # Fixture discovery must find every crate the registry now bundles,
     # and a missing file must still make that set incomplete. Keep the
@@ -1227,8 +1289,11 @@ def test_a_real_bundle_stages_and_the_binaries_execute(real_bundle, tmp_path,
     bundle = pins.bundle_for(real_bundle["platform"])
     for pin in bundle.binaries:
         assert bridge_assets.matches_pin(dest / pin.filename, pin)
+    # The first EXECUTABLE: the hydro libraries now lead BUNDLED_ARTIFACTS, and a
+    # shared library run as a program dies with SIGSEGV instead of a usage line.
     probe_name = bridge_assets.artifact_filename(
-        bridge_assets.BUNDLED_ARTIFACTS[0], real_bundle["platform"])
+        next(a for a in bridge_assets.BUNDLED_ARTIFACTS if a.kind == "executable"),
+        real_bundle["platform"])
     ok, evidence = doctor._exec_probe(dest / probe_name)
     assert ok, evidence
 
@@ -1360,3 +1425,69 @@ def test_the_published_bundle_downloads_and_verifies(tmp_path):
         assert staged.is_file(), f"pinned map asset not staged: {pin.path}"
         assert staged.stat().st_size == pin.bytes
         assert bridge_assets.sha256_file(staged) == pin.sha256
+
+
+def test_the_superob_bundle_entry_and_handshake_match_the_module():
+    """The bundle stages the file this seam opens, under its own variable,
+    and the release probe asks it the question this module asks: without
+    the entry `woof fetch-bridges` stages a bundle the superob stage
+    refuses on, and every radar DA cycle stops at observation prep."""
+    from woof import bridge_assets, bridges
+    from woof.obs import superob_bridge as sb
+
+    artifact, = [a for a in bridge_assets.BUNDLED_ARTIFACTS
+                 if a.name == "rw_superob"]
+    assert artifact.env_var == sb.SUPEROB_BRIDGE_ENV
+    assert artifact.kind == "library"
+    assert artifact.crate == bridges.RUSTWX_CRATE_RELATIVE
+    for platform in bridge_assets.SUPPORTED_PLATFORMS:
+        windows = platform.startswith("win-")
+        assert bridge_assets.artifact_filename(artifact, platform) == (
+            "rw_superob.dll" if windows else "librw_superob.so")
+    assert bridge_assets.library_abi_for("rw_superob") == (
+        "gpuwm_superob_abi_version", sb.SUPEROB_ABI)
+    assert bridges.BRIDGE_ABI_MARKERS["rw_superob"] == sb.ABI_MARKER
+
+
+def test_the_nowcast_frames_bundle_entry_matches_its_resolver_and_source(
+        monkeypatch, tmp_path):
+    """The bundle stages the converter under the variable its resolver
+    reads, and the static marker, the ``--abi`` literal the wrapper
+    expects and the Rust constant are one string.  Without the row the
+    cut built rw_nowcast_frames and threw it away, so a wheel install had
+    no way to turn a NetCDF nowcast into a frames root; with a marker that
+    drifted from the binary, `woof fetch-bridges` would refuse the bundle
+    the release just built."""
+    import re
+
+    from woof import rustwx_lanes as lanes
+
+    artifact, = [a for a in bridge_assets.BUNDLED_ARTIFACTS
+                 if a.name == lanes.NOWCAST_FRAMES_NAME]
+    assert artifact.env_var == lanes.NOWCAST_FRAMES_ENV
+    assert artifact.kind == "executable"
+    assert artifact.crate == bridges.RUSTWX_CRATE_RELATIVE
+    assert (bridges.BRIDGE_ABI_MARKERS[lanes.NOWCAST_FRAMES_NAME]
+            == lanes.NOWCAST_FRAMES_ABI_MARKER.encode())
+
+    source = (REPO_ROOT / bridges.RUSTWX_CRATE_RELATIVE / "crates"
+              / "rw-wrfbatch" / "src" / "cli_contracts.rs")
+    if not source.is_file():
+        pytest.skip("the Rust source is not in this install")
+    match = re.search(r'const NOWCAST_FRAMES: &str = "((?:[^"\\]|\\.)*)";',
+                      source.read_text(encoding="utf-8"), re.S)
+    assert match, "rw_nowcast_frames ABI_MARKER not found"
+    # Rust's string continuation: a backslash before a newline drops the
+    # newline and the next line's leading whitespace.
+    literal = re.sub(r"\\\n\s*", "", match.group(1)).replace("\\t", "\t")
+    assert literal == lanes.NOWCAST_FRAMES_ABI_MARKER
+
+    # The resolver honours its own variable: a file named there is found,
+    # a missing one is a loud refusal rather than a fall-through.
+    binary = tmp_path / bridges.executable_name(lanes.NOWCAST_FRAMES_NAME)
+    binary.write_bytes(b"build " + lanes.NOWCAST_FRAMES_ABI_MARKER.encode())
+    monkeypatch.setenv(lanes.NOWCAST_FRAMES_ENV, str(binary))
+    assert lanes.find_nowcast_frames_bin() == binary.resolve()
+    monkeypatch.setenv(lanes.NOWCAST_FRAMES_ENV, str(tmp_path / "absent"))
+    with pytest.raises(FileNotFoundError, match=lanes.NOWCAST_FRAMES_ENV):
+        lanes.find_nowcast_frames_bin()

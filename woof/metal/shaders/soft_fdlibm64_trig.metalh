@@ -1,0 +1,232 @@
+#ifndef WOOF_SOFT_FDLIBM64_TRIG_METALH
+#define WOOF_SOFT_FDLIBM64_TRIG_METALH
+
+// Binary64 sin, cos, tan and atan on Soft8, transcribed from fdlibm 5.3
+// (k_sin.c, k_cos.c, k_tan.c, e_rem_pio2.c, s_sin.c, s_cos.c, s_tan.c,
+// s_atan.c). Copyright (C) 1993-2004 by Sun Microsystems, Inc. All rights
+// reserved. Developed at SunPro, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this software is freely
+// granted, provided that this notice is preserved.
+//
+// Argument reduction implements e_rem_pio2's medium path only
+// (|x| <= 2^19*pi/2); larger arguments return NaN rather than a wrong word.
+
+#include "thompson_aerosol_soft8.metalh"
+
+constant ulong fd64_T[13] = {
+        0x3FD5555555555563ul, 0x3FC111111110FE7Aul, 0x3FABA1BA1BB341FEul,
+        0x3F9664F48406D637ul, 0x3F8226E3E96E8493ul, 0x3F6D6D22C9560328ul,
+        0x3F57DBC8FEE08315ul, 0x3F4344D8F2F26501ul, 0x3F3026F71A8D1068ul,
+        0x3F147E88A03792A6ul, 0x3F12B80F32F0A7E9ul, 0xBEF375CBDB605373ul,
+        0x3EFB2A7074BF7AD4ul};
+constant uint fd64_npio2_hw[32] = {
+        0x3FF921FBu, 0x400921FBu, 0x4012D97Cu, 0x401921FBu, 0x401F6A7Au, 0x4022D97Cu,
+        0x4025FDBBu, 0x402921FBu, 0x402C463Au, 0x402F6A7Au, 0x4031475Cu, 0x4032D97Cu,
+        0x40346B9Cu, 0x4035FDBBu, 0x40378FDBu, 0x403921FBu, 0x403AB41Bu, 0x403C463Au,
+        0x403DD85Au, 0x403F6A7Au, 0x40407E4Cu, 0x4041475Cu, 0x4042106Cu, 0x4042D97Cu,
+        0x4043A28Cu, 0x40446B9Cu, 0x404534ACu, 0x4045FDBBu, 0x4046C6CBu, 0x40478FDBu,
+        0x404858EBu, 0x404921FBu};
+constant ulong fd64_atanhi[4] = {0x3FDDAC670561BB4Ful, 0x3FE921FB54442D18ul,
+                                0x3FEF730BD281F69Bul, 0x3FF921FB54442D18ul};
+constant ulong fd64_atanlo[4] = {0x3C7A2B7F222F65E2ul, 0x3C81A62633145C07ul,
+                                0x3C7007887AF0CBBDul, 0x3C91A62633145C07ul};
+constant ulong fd64_aT[11] = {
+        0x3FD555555555550Dul, 0xBFC999999998EBC4ul, 0x3FC24924920083FFul,
+        0xBFBC71C6FE231671ul, 0x3FB745CDC54C206Eul, 0xBFB3B0F2AF749A6Dul,
+        0x3FB10D66A0D03D51ul, 0xBFADDE2D52DEFD9Aul, 0x3FA97B4B24760DEBul,
+        0xBFA2B4442C6A6C2Ful, 0x3F90AD3AE322DA11ul};
+
+static inline uint fd64_hi(Soft8 x) { return uint(x.bits >> 32); }
+static inline uint fd64_lo(Soft8 x) { return uint(x.bits); }
+static inline Soft8 fd64_clear_lo(Soft8 x) { return SD8(x.bits & 0xffffffff00000000ul); }
+static inline Soft8 fd64_abs(Soft8 x) { return SD8(x.bits & 0x7ffffffffffffffful); }
+
+static inline Soft8 fd64_kernel_sin(Soft8 x, Soft8 y, int iy) {
+    const Soft8 S1 = SD8(0xBFC5555555555549ul), S2 = SD8(0x3F8111111110F8A6ul),
+                S3 = SD8(0xBF2A01A019C161D5ul), S4 = SD8(0x3EC71DE357B1FE7Dul),
+                S5 = SD8(0xBE5AE5E68A2B9CEBul), S6 = SD8(0x3DE5D93A5ACFD57Cul);
+    const uint ix = fd64_hi(x) & 0x7fffffffu;
+    if (ix < 0x3e400000u && int(x) == 0) return x;
+    const Soft8 z = x * x, v = z * x;
+    const Soft8 r = S2 + z * (S3 + z * (S4 + z * (S5 + z * S6)));
+    if (iy == 0) return x + v * (S1 + z * r);
+    return x - ((z * (SD8(0x3FE0000000000000ul) * y - v * r) - y) - v * S1);
+}
+
+static inline Soft8 fd64_kernel_cos(Soft8 x, Soft8 y) {
+    const Soft8 C1 = SD8(0x3FA555555555554Cul), C2 = SD8(0xBF56C16C16C15177ul),
+                C3 = SD8(0x3EFA01A019CB1590ul), C4 = SD8(0xBE927E4F809C52ADul),
+                C5 = SD8(0x3E21EE9EBDB4B1C4ul), C6 = SD8(0xBDA8FAE9BE8838D4ul);
+    const Soft8 one = SD8(0x3FF0000000000000ul), hlf = SD8(0x3FE0000000000000ul);
+    const uint ix = fd64_hi(x) & 0x7fffffffu;
+    if (ix < 0x3e400000u && int(x) == 0) return one;
+    const Soft8 z = x * x;
+    const Soft8 r = z * (C1 + z * (C2 + z * (C3 + z * (C4 + z * (C5 + z * C6)))));
+    if (ix < 0x3FD33333u) return one - (hlf * z - (z * r - x * y));
+    const Soft8 qx = ix > 0x3fe90000u ? SD8(0x3FD2000000000000ul)
+                                       : SD8(ulong(ix - 0x00200000u) << 32);
+    const Soft8 hz = hlf * z - qx, a = one - qx;
+    return a - (hz - (z * r - x * y));
+}
+
+static inline Soft8 fd64_kernel_tan(Soft8 x, Soft8 y, int iy) {
+    const Soft8 one = SD8(0x3FF0000000000000ul);
+    const Soft8 pio4 = SD8(0x3FE921FB54442D18ul), pio4lo = SD8(0x3C81A62633145C07ul);
+    const int hx = int(fd64_hi(x));
+    const uint ix = uint(hx) & 0x7fffffffu;
+    if (ix < 0x3e300000u && int(x) == 0) {
+        if (((ix | fd64_lo(x)) | uint(iy + 1)) == 0u) return one / fd64_abs(x);
+        if (iy == 1) return x;
+        const Soft8 w = x + y;
+        const Soft8 z = fd64_clear_lo(w);
+        const Soft8 v = y - (z - x);
+        const Soft8 a = -one / w;
+        const Soft8 t = fd64_clear_lo(a);
+        const Soft8 s = one + t * z;
+        return t + a * (s + t * v);
+    }
+    if (ix >= 0x3FE59428u) {
+        if (hx < 0) { x = -x; y = -y; }
+        const Soft8 z = pio4 - x, w = pio4lo - y;
+        x = z + w; y = Soft8();
+    }
+    Soft8 z = x * x, w = z * z;
+    Soft8 r = SD8(fd64_T[1]) + w * (SD8(fd64_T[3]) + w * (SD8(fd64_T[5]) + w * (SD8(fd64_T[7]) + w * (SD8(fd64_T[9]) + w * SD8(fd64_T[11])))));
+    Soft8 v = z * (SD8(fd64_T[2]) + w * (SD8(fd64_T[4]) + w * (SD8(fd64_T[6]) + w * (SD8(fd64_T[8]) + w * (SD8(fd64_T[10]) + w * SD8(fd64_T[12]))))));
+    Soft8 s = z * x;
+    r = y + z * (s * (r + v) + y);
+    r = r + SD8(fd64_T[0]) * s;
+    w = x + r;
+    if (ix >= 0x3FE59428u) {
+        v = Soft8(iy);
+        return Soft8(1 - ((hx >> 30) & 2)) * (v - Soft8(2) * (x - (w * w / (w + v) - r)));
+    }
+    if (iy == 1) return w;
+    z = fd64_clear_lo(w);
+    v = r - (z - x);
+    const Soft8 a = -one / w;
+    const Soft8 t = fd64_clear_lo(a);
+    s = one + t * z;
+    return t + a * (s + t * v);
+}
+
+// e_rem_pio2 medium path; returns n and y = x - n*pi/2 as y0 + y1.
+static inline int fd64_rem_pio2(Soft8 x, thread Soft8 &y0, thread Soft8 &y1) {
+    const Soft8 invpio2 = SD8(0x3FE45F306DC9C883ul), hlf = SD8(0x3FE0000000000000ul);
+    const Soft8 pio2_1 = SD8(0x3FF921FB54400000ul), pio2_1t = SD8(0x3DD0B4611A626331ul);
+    const Soft8 pio2_2 = SD8(0x3DD0B4611A600000ul), pio2_2t = SD8(0x3BA3198A2E037073ul);
+    const Soft8 pio2_3 = SD8(0x3BA3198A2E000000ul), pio2_3t = SD8(0x397B839A252049C1ul);
+    const int hx = int(fd64_hi(x));
+    const uint ix = uint(hx) & 0x7fffffffu;
+    if (ix <= 0x3fe921fbu) { y0 = x; y1 = Soft8(); return 0; }
+    if (ix < 0x4002d97cu) {
+        if (hx > 0) {
+            Soft8 z = x - pio2_1;
+            if (ix != 0x3ff921fbu) { y0 = z - pio2_1t; y1 = (z - y0) - pio2_1t; }
+            else { z = z - pio2_2; y0 = z - pio2_2t; y1 = (z - y0) - pio2_2t; }
+            return 1;
+        }
+        Soft8 z = x + pio2_1;
+        if (ix != 0x3ff921fbu) { y0 = z + pio2_1t; y1 = (z - y0) + pio2_1t; }
+        else { z = z + pio2_2; y0 = z + pio2_2t; y1 = (z - y0) + pio2_2t; }
+        return -1;
+    }
+    if (ix > 0x413921fbu) { y0 = SD8(soft64_qnan()); y1 = y0; return 0; }
+    Soft8 t = fd64_abs(x);
+    const int n = int(t * invpio2 + hlf);
+    const Soft8 fn = Soft8(n);
+    Soft8 r = t - fn * pio2_1;
+    Soft8 w = fn * pio2_1t;
+    if (n < 32 && ix != fd64_npio2_hw[n - 1]) {
+        y0 = r - w;
+    } else {
+        const int j = int(ix >> 20);
+        y0 = r - w;
+        int i = j - int((fd64_hi(y0) >> 20) & 0x7ffu);
+        if (i > 16) {
+            t = r; w = fn * pio2_2; r = t - w;
+            w = fn * pio2_2t - ((t - r) - w);
+            y0 = r - w;
+            i = j - int((fd64_hi(y0) >> 20) & 0x7ffu);
+            if (i > 49) {
+                t = r; w = fn * pio2_3; r = t - w;
+                w = fn * pio2_3t - ((t - r) - w);
+                y0 = r - w;
+            }
+        }
+    }
+    y1 = (r - y0) - w;
+    if (hx < 0) { y0 = -y0; y1 = -y1; return -n; }
+    return n;
+}
+
+static inline Soft8 fd64_sin(Soft8 x) {
+    const uint ix = fd64_hi(x) & 0x7fffffffu;
+    if (ix <= 0x3fe921fbu) return fd64_kernel_sin(x, Soft8(), 0);
+    if (ix >= 0x7ff00000u) return x - x;
+    Soft8 y0, y1;
+    const int n = fd64_rem_pio2(x, y0, y1);
+    switch (n & 3) {
+    case 0: return fd64_kernel_sin(y0, y1, 1);
+    case 1: return fd64_kernel_cos(y0, y1);
+    case 2: return -fd64_kernel_sin(y0, y1, 1);
+    default: return -fd64_kernel_cos(y0, y1);
+    }
+}
+
+static inline Soft8 fd64_cos(Soft8 x) {
+    const uint ix = fd64_hi(x) & 0x7fffffffu;
+    if (ix <= 0x3fe921fbu) return fd64_kernel_cos(x, Soft8());
+    if (ix >= 0x7ff00000u) return x - x;
+    Soft8 y0, y1;
+    const int n = fd64_rem_pio2(x, y0, y1);
+    switch (n & 3) {
+    case 0: return fd64_kernel_cos(y0, y1);
+    case 1: return -fd64_kernel_sin(y0, y1, 1);
+    case 2: return -fd64_kernel_cos(y0, y1);
+    default: return fd64_kernel_sin(y0, y1, 1);
+    }
+}
+
+static inline Soft8 fd64_tan(Soft8 x) {
+    const uint ix = fd64_hi(x) & 0x7fffffffu;
+    if (ix <= 0x3fe921fbu) return fd64_kernel_tan(x, Soft8(), 1);
+    if (ix >= 0x7ff00000u) return x - x;
+    Soft8 y0, y1;
+    const int n = fd64_rem_pio2(x, y0, y1);
+    return fd64_kernel_tan(y0, y1, 1 - ((n & 1) << 1));
+}
+
+static inline Soft8 fd64_atan(Soft8 x) {
+    const Soft8 one = SD8(0x3FF0000000000000ul);
+    const int hx = int(fd64_hi(x));
+    const uint ix = uint(hx) & 0x7fffffffu;
+    int id;
+    if (ix >= 0x44100000u) {
+        if (ix > 0x7ff00000u || (ix == 0x7ff00000u && fd64_lo(x) != 0u)) return x + x;
+        const Soft8 a = SD8(fd64_atanhi[3]) + SD8(fd64_atanlo[3]);
+        return hx > 0 ? a : -a;
+    }
+    if (ix < 0x3fdc0000u) {
+        if (ix < 0x3e200000u) return x;
+        id = -1;
+    } else {
+        x = fd64_abs(x);
+        if (ix < 0x3ff30000u) {
+            if (ix < 0x3fe60000u) { id = 0; x = (Soft8(2) * x - one) / (Soft8(2) + x); }
+            else { id = 1; x = (x - one) / (x + one); }
+        } else if (ix < 0x40038000u) {
+            id = 2; x = (x - SD8(0x3FF8000000000000ul)) / (one + SD8(0x3FF8000000000000ul) * x);
+        } else {
+            id = 3; x = -one / x;
+        }
+    }
+    const Soft8 z = x * x, w = z * z;
+    const Soft8 s1 = z * (SD8(fd64_aT[0]) + w * (SD8(fd64_aT[2]) + w * (SD8(fd64_aT[4]) + w * (SD8(fd64_aT[6]) + w * (SD8(fd64_aT[8]) + w * SD8(fd64_aT[10]))))));
+    const Soft8 s2 = w * (SD8(fd64_aT[1]) + w * (SD8(fd64_aT[3]) + w * (SD8(fd64_aT[5]) + w * (SD8(fd64_aT[7]) + w * SD8(fd64_aT[9])))));
+    if (id < 0) return x - x * (s1 + s2);
+    const Soft8 r = SD8(fd64_atanhi[id]) - ((x * (s1 + s2) - SD8(fd64_atanlo[id])) - x);
+    return hx < 0 ? -r : r;
+}
+
+#endif

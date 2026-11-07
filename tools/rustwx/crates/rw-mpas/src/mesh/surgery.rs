@@ -67,7 +67,8 @@ use crate::mesh::density::DensityField;
 use crate::mesh::derive::Rings;
 use crate::mesh::geom::{EARTH_RADIUS_M, V3, add, arc, circumcenter, cross, scale, tri_area, unit};
 use crate::mesh::hull::{
-    TriangulationMode, delaunay_rings, delaunay_triangulation, repair_or_rebuild,
+    Triangulation, TriangulationMode, apply_edits_or_rebuild, delaunay_rings,
+    delaunay_triangulation, repair_or_rebuild,
 };
 
 use serde::Serialize;
@@ -141,6 +142,21 @@ pub fn for_each_quad(points: &[V3], rings: &Rings, mut visit: impl FnMut(QuadRea
             }
         }
     }
+}
+
+/// Every quad reading below `floor`, in exactly the order [`for_each_quad`]
+/// visits them, computed in parallel (rayon's `collect` keeps order). THE
+/// BREAKAGE: the drain scanned every edge of the mesh on one thread, twice
+/// per round.
+pub fn quads_below(points: &[V3], rings: &Rings, floor: f64) -> Vec<QuadReading> {
+    (0..points.len())
+        .into_par_iter()
+        .flat_map_iter(|i| {
+            (0..rings.degree(i))
+                .filter_map(move |k| quad_reading(points, rings, i, k))
+                .filter(move |r| r.q < floor)
+        })
+        .collect()
 }
 
 /// The reading for cell `i`'s ring slot `k`, or `None` where the serial
@@ -327,7 +343,7 @@ pub struct SurgeryOptions {
     /// the fill ratio, then one with the op type FORCED to swap.
     pub site_op_cap: usize,
     /// Which arm keeps the triangulation across the polish sweeps. Defaults
-    /// to [`TriangulationMode::Rebuild`]; see that type.
+    /// to [`TriangulationMode::Maintained`]; see that type.
     pub triangulation: TriangulationMode,
 }
 
@@ -350,7 +366,7 @@ impl Default for SurgeryOptions {
             local_radius: 3,
             polish_sweeps: 8,
             site_op_cap: 3,
-            triangulation: TriangulationMode::Rebuild,
+            triangulation: TriangulationMode::Maintained,
         }
     }
 }
@@ -424,6 +440,66 @@ pub struct SurgeryLedger {
     /// The smallest cell coordination in the mesh at exit. Below
     /// [`MIN_COORDINATION`] is unreachable -- `drain` refuses instead.
     pub min_coordination_after: usize,
+    /// The first drain's stubborn-site refusal, when [`drain_with_retry`]
+    /// drained again at the ship floor and that second drain held. Absent
+    /// (and absent from every receipt) on a drain that held first time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retried_at_ship_floor: Option<String>,
+}
+
+/// The words a stubborn-site refusal starts with, so [`drain_with_retry`]
+/// can tell that refusal from every other one without a second spelling.
+pub const STUBBORN_REFUSAL: &str = "surgery leaves ";
+
+/// [`drain`], and when it leaves a stubborn site, ONE more drain from the
+/// same points with the flag floor lowered to the ship floor.
+///
+/// THE BREAKAGE THIS PREVENTS (hex shapes study, 2026-10-23). A 60 km global
+/// VR spec with a 100-vertex ellipse core was refused after 202 s: "surgery
+/// leaves 1 stubborn site(s) ... dv/dc = 3.289e-2 ... this drain's own floor
+/// is 0.03". Traced: the site entered the drain at dv/dc 0.031, ALREADY above
+/// the 0.03 ship floor, and was flagged only because it was under the 0.04
+/// hysteresis flag floor. Three operations took it to 0.011, its cavity
+/// resample left a 4-coordinated neighbour and a 2.5e-4 quad beside it, and
+/// the drain then refused a site it had made worse than it found it. The
+/// same ellipse at 48 vertices rolled no such site and built.
+///
+/// The second drain leaves alone every quad that already clears the floor
+/// the mesh is held to, so a site like that one is never touched; every
+/// other floor, budget and gate is the first drain's, the level gate after
+/// it still asserts the ship floor on the whole level, and a second
+/// refusal is reported with the first. Only a drain that REFUSED takes this
+/// path, so every mesh that built before builds to the same bytes.
+pub fn drain_with_retry<F: DensityField + Sync>(
+    points: &mut Vec<V3>,
+    field: &F,
+    opts: &SurgeryOptions,
+    drift_budget_points: usize,
+) -> MpasResult<(Rings, SurgeryLedger)> {
+    let before = points.clone();
+    match drain(points, field, opts, drift_budget_points) {
+        Err(MpasError::Refusal(first))
+            if first.starts_with(STUBBORN_REFUSAL) && opts.flag_floor > opts.ship_floor =>
+        {
+            *points = before;
+            let at_ship_floor = SurgeryOptions {
+                flag_floor: opts.ship_floor,
+                ..*opts
+            };
+            match drain(points, field, &at_ship_floor, drift_budget_points) {
+                Ok((rings, mut ledger)) => {
+                    ledger.retried_at_ship_floor = Some(first);
+                    Ok((rings, ledger))
+                }
+                Err(MpasError::Refusal(second)) => Err(MpasError::Refusal(format!(
+                    "{first}. Drained once more from the same points with the flag floor at the {} ship floor, so quads that already clear it are left alone, and that drain refused too: {second}",
+                    opts.ship_floor
+                ))),
+                Err(other) => Err(other),
+            }
+        }
+        other => other,
+    }
 }
 
 /// Site bookkeeping across rounds. Sites are POSITIONS, not indices: an
@@ -503,22 +579,17 @@ fn local_polish<F: DensityField + Sync>(
     seeds: &[V3],
     radius: usize,
     sweeps: usize,
-    mode: TriangulationMode,
+    tri: &mut Option<Triangulation>,
 ) -> MpasResult<Rings> {
     let _polish_timer = crate::mesh::profile::Span::new(
         &crate::mesh::profile::SURGERY_POLISH,
         points.len() as u64,
     );
     // The point set has just been EDITED by the operators above -- inserted,
-    // deleted, swap-removed -- so the entry triangulation is a build on both
-    // arms. What the maintained arm saves is the `sweeps` rebuilds after it,
-    // and the default `polish_sweeps` is 8: nine builds become one.
-    let mut tri = if mode.is_maintained() {
-        Some(delaunay_triangulation(points)?)
-    } else {
-        None
-    };
-    let mut rings = match &tri {
+    // deleted, swap-removed. On the maintained arm the caller has already
+    // applied that edit to `tri` (hull::apply_edits_or_rebuild), so no hull
+    // is built here at all; the rebuild arm builds one per sweep.
+    let mut rings = match &*tri {
         Some(t) => t.rings()?,
         None => delaunay_rings(points)?,
     };
@@ -543,13 +614,14 @@ fn local_polish<F: DensityField + Sync>(
             }
         }
         let moves: Vec<(usize, V3)> = (0..points.len())
+            .into_par_iter()
             .filter(|&i| active[i])
             .map(|i| (i, polish_step(points, &rings, field, i)))
             .collect();
         for (i, c) in moves {
             points[i] = c;
         }
-        rings = match &mut tri {
+        rings = match tri.as_mut() {
             Some(t) => {
                 repair_or_rebuild(points, t)?;
                 t.rings()?
@@ -662,32 +734,29 @@ pub fn drain<F: DensityField + Sync>(
     // operator takes over, and `max_rounds` bounds the whole thing, so the
     // clause halts by counting exactly like the rest of this loop.
     let mut coord_stall = 0usize;
-    let mut rings = delaunay_rings(points)?;
+    // One hull for the whole drain on the maintained arm: every round's edit
+    // is applied to it rather than rebuilt (see hull::apply_edits_or_rebuild).
+    let mut tri: Option<Triangulation> = if opts.triangulation.is_maintained() {
+        Some(delaunay_triangulation(points)?)
+    } else {
+        None
+    };
+    let mut rings = match &tri {
+        Some(t) => t.rings()?,
+        None => delaunay_rings(points)?,
+    };
     let (q0, _) = min_dv_over_dc(points, &rings);
     ledger.min_q_before = q0;
     {
-        let mut n = 0usize;
-        for_each_quad(points, &rings, |r| {
-            if r.q < opts.flag_floor {
-                n += 1;
-            }
-        });
-        ledger.flagged_initial = n;
+        ledger.flagged_initial = quads_below(points, &rings, opts.flag_floor).len();
     }
 
     for round in 0..opts.max_rounds {
         // ---- detect, worst first, canonical order ------------------------
-        let mut flagged: Vec<QuadReading> = Vec::new();
-        crate::mesh::profile::timed(
+        let mut flagged: Vec<QuadReading> = crate::mesh::profile::timed(
             &crate::mesh::profile::QUAD_SCAN,
             points.len() as u64,
-            || {
-                for_each_quad(points, &rings, |r| {
-                    if r.q < opts.flag_floor {
-                        flagged.push(r);
-                    }
-                });
-            },
+            || quads_below(points, &rings, opts.flag_floor),
         );
         // THE OTHER HALF OF "REPAIRED", AND THE HALF THIS LOOP USED TO MISS.
         // Every operator here is a point-set edit followed by exact
@@ -889,7 +958,7 @@ pub fn drain<F: DensityField + Sync>(
                 .min_by(|x, y| x.q.total_cmp(&y.q))
                 .expect("non-empty");
             return Err(MpasError::Refusal(format!(
-                "surgery leaves {} stubborn site(s): the worst, at unit vector [{:.6}, {:.6}, {:.6}], still reads dv/dc = {:.3e} after {} operations and its one cavity resample. The TRiSK tangential weights divide by dvEdge, so shipping this site would amplify the wind term across its edge by dc/dv = {:.0}x; the admission gate refuses below 0.02 and this drain's own floor is {}. A stubborn site is a refusal, not a waiver",
+                "{STUBBORN_REFUSAL}{} stubborn site(s): the worst, at unit vector [{:.6}, {:.6}, {:.6}], still reads dv/dc = {:.3e} after {} operations and its one cavity resample. The TRiSK tangential weights divide by dvEdge, so shipping this site would amplify the wind term across its edge by dc/dv = {:.0}x; the admission gate refuses below 0.02 and this drain's own floor is {}. A stubborn site is a refusal, not a waiver",
                 ledger.stubborn.len(),
                 worst.site[0],
                 worst.site[1],
@@ -964,6 +1033,7 @@ pub fn drain<F: DensityField + Sync>(
         }
         removed_set.sort_unstable();
         removed_set.dedup();
+        let before: Option<Vec<V3>> = tri.as_ref().map(|_| points.clone());
         for &idx in removed_set.iter().rev() {
             points.swap_remove(idx);
         }
@@ -972,6 +1042,9 @@ pub fn drain<F: DensityField + Sync>(
         // numbering is re-derived from positions at emit time.
         points.extend(cavity_new.iter().copied());
         points.extend(insert.iter().copied());
+        if let (Some(t), Some(old)) = (tri.as_mut(), before.as_ref()) {
+            apply_edits_or_rebuild(old, &removed_set, points, t)?;
+        }
 
         // Ledger drift accounting: S1 deletions and S2 insertions only.
         ledger.deleted = ledger
@@ -1016,7 +1089,7 @@ pub fn drain<F: DensityField + Sync>(
             &polish_seeds,
             opts.local_radius,
             opts.polish_sweeps,
-            opts.triangulation,
+            &mut tri,
         )?;
     }
 
@@ -1064,13 +1137,30 @@ fn site_quality(points: &[V3], rings: &Rings, site: V3) -> f64 {
     }
     zone.sort_unstable();
     zone.dedup();
+    // Only the edges touching the zone, each read from its canonical end
+    // (`i < j`) exactly as `for_each_quad` reads it. THE BREAKAGE: this used
+    // to scan every edge of the mesh on one thread for every tracked site.
+    // `min` is exact and order-free, so the value is the one the full scan
+    // gave.
     let mut worst = f64::INFINITY;
-    for_each_quad(points, rings, |r| {
-        if zone.binary_search(&(r.i as usize)).is_ok() || zone.binary_search(&(r.j as usize)).is_ok()
-        {
-            worst = worst.min(r.q);
+    for &c in &zone {
+        let ring = rings.ring(c);
+        for (k, &nb) in ring.iter().enumerate() {
+            let nb = nb as usize;
+            let reading = if c < nb {
+                quad_reading(points, rings, c, k)
+            } else {
+                rings
+                    .ring(nb)
+                    .iter()
+                    .position(|&x| x as usize == c)
+                    .and_then(|k2| quad_reading(points, rings, nb, k2))
+            };
+            if let Some(r) = reading {
+                worst = worst.min(r.q);
+            }
         }
-    });
+    }
     worst
 }
 
@@ -1430,6 +1520,8 @@ pub struct SurgerySummary {
     pub coordination_reanneal_rounds: usize,
     pub coordination_deletions: usize,
     pub min_coordination_after: usize,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub retried_at_ship_floor: bool,
 }
 
 impl From<&SurgeryLedger> for SurgerySummary {
@@ -1448,6 +1540,7 @@ impl From<&SurgeryLedger> for SurgerySummary {
             coordination_reanneal_rounds: l.coordination_reanneal_rounds,
             coordination_deletions: l.coordination_deletions,
             min_coordination_after: l.min_coordination_after,
+            retried_at_ship_floor: l.retried_at_ship_floor.is_some(),
         }
     }
 }

@@ -29,6 +29,7 @@ without a row refuses by name at construction.
 from __future__ import annotations
 
 import numbers
+from copy import deepcopy
 from datetime import datetime
 
 import numpy as np
@@ -184,7 +185,8 @@ class MetalMpasColumnBatchPhysics:
                  vegfra=50.0, tsk=300.0, tmn=285.0, xice=0.0, snow=0.0,
                  snow_depth=0.0, soil_temperature=285.0,
                  soil_moisture=0.30, xice_threshold=0.5,
-                 wsm6_hail_opt=0, array_module=None):
+                 wsm6_hail_opt=0, physics_mode=None, physics_correct_skip=(),
+                 pbl_scheme="ysu", array_module=None):
         if not isinstance(n_levels, numbers.Integral) or n_levels < 3:
             raise ValueError(
                 f"n_levels must be an integer >= 3, got {n_levels!r}")
@@ -200,6 +202,13 @@ class MetalMpasColumnBatchPhysics:
                 f"{microphysics_scheme!r}: each row names the exact "
                 "transported species set, and a scheme without a row "
                 "would run on substituted state")
+        if pbl_scheme not in ("ysu", None):
+            raise ValueError("pbl_scheme must be 'ysu' or None (external LES)")
+        self._pbl_scheme = pbl_scheme
+        from woof import correct_mode
+        correct = correct_mode.resolve(physics_mode, physics_correct_skip,
+                                      source="Metal column physics_mode")
+        self._correct_mode = correct
         cadences = resolve_column_batch_cadences(
             dt=dt, radiation_seconds=radiation_seconds,
             surface_pbl_seconds=surface_pbl_seconds,
@@ -215,11 +224,7 @@ class MetalMpasColumnBatchPhysics:
                 "wsm6_hail_opt is a WSM6 hail-mode knob; on a "
                 f"microphysics_scheme={microphysics_scheme!r} seam it "
                 "would be silently ignored.  Leave it 0 (the default)")
-        threshold = float(xice_threshold)
-        if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
-            raise ValueError(
-                "xice_threshold must be a finite fraction in [0, 1] "
-                f"(WRF Registry default 0.5), got {xice_threshold!r}")
+        threshold = self._ice_threshold(xice_threshold)
         if gf_ishallow is None:
             gf_ishallow = 1 if cumulus_scheme == "gf" else 0
         if gf_ishallow not in (0, 1):
@@ -262,7 +267,6 @@ class MetalMpasColumnBatchPhysics:
             z_interface_nominal_m, dtype=np.float64)[-1])
 
         from woof.config import RunConfig
-        from woof.physics_compat import RRTMG_VARIANT_LEGACY
         from woof.metal.array import MetalArrayModule
         mp_physics = _MP_PHYSICS_BY_SCHEME[microphysics_scheme]
         # As the CUDA seam: mp=28 names its data-free aerosol start.
@@ -273,10 +277,8 @@ class MetalMpasColumnBatchPhysics:
             ztop=top_nominal, dt=float(cadences["dt"]),
             run_seconds=0.0, moist=True, mp_physics=mp_physics,
             wsm6_hail_opt=int(wsm6_hail_opt),
-            **aerosol_source,
-            ra_physics=4, ra_rrtmg_variant=RRTMG_VARIANT_LEGACY,
-            sf_sfclay_physics=1, sf_surface_physics=4,
-            bl_pbl_physics=1,
+            **aerosol_source, **correct.settings,
+            **self._physics_settings(),
             cu_physics=cadences["cu_physics"],
             ishallow=int(gf_ishallow),
             radt=cadences["radt_minutes"],
@@ -293,7 +295,9 @@ class MetalMpasColumnBatchPhysics:
         self._species = _SPECIES_BY_SCHEME[microphysics_scheme]
         self._state_restart_fields = (
             _STATE_RESTART_FIELDS_BY_SCHEME[microphysics_scheme])
+        from woof.io.restart import _configuration_fingerprint
         self._identity = {
+            "configuration_sha256": _configuration_fingerprint(cfg),
             "schema": RESTART_SCHEMA,
             "n_levels": nz, "n_columns": ncol, "dt": self._dt,
             "stepra": cadences["stepra"], "stepbl": cadences["stepbl"],
@@ -308,10 +312,19 @@ class MetalMpasColumnBatchPhysics:
             "xice_threshold": threshold,
             "xland_source": ("native" if xland is not None
                              else "derived-from-landmask"),
+            "source_generations": {"solar": cfg.solar_generation,
+                                   "ysu": cfg.ysu_version,
+                                   "noahmp_snow_age": cfg.noahmp_snow_age},
+            "physics_mode": correct.mode,
         }
+        if pbl_scheme is None:
+            self._identity["pbl_scheme"] = None
         if microphysics_scheme != "wsm6":
             # As the CUDA seam: a cross-scheme restore refuses on identity.
             self._identity["microphysics"] = microphysics_scheme
+
+        if correct.applied:
+            self._identity["physics_correct"] = list(correct.applied)
 
         # ---- device construction from here on --------------------------
         xp = array_module if array_module is not None else MetalArrayModule()
@@ -320,8 +333,7 @@ class MetalMpasColumnBatchPhysics:
         self._xp = xp
         self._context = xp.context
 
-        state = _MetalColumnBatchState(cfg, fnm, fnp, p_top, terrain, xp,
-                                       species=self._species)
+        state = self._new_column_state(cfg, fnm, fnp, p_top, terrain, xp)
         self._state = state
         self._species_buffers = {
             name: getattr(state, name) for name in self._species}
@@ -344,7 +356,7 @@ class MetalMpasColumnBatchPhysics:
             values = np.asarray(values)
             return values.reshape(values.shape[0], 1, ncol)
 
-        self._driver = initialize_physics(
+        self._driver = self._initialize_column_driver(
             state, cfg,
             landmask=surface(landmask),
             xland=None if xland is None else surface(xland),
@@ -390,6 +402,26 @@ class MetalMpasColumnBatchPhysics:
         self._step_index = 0
         self._pending_phase = _PHASE1
         state.elapsed_seconds = 0.0
+
+    def _physics_settings(self):
+        # Match the upstream batch's explicit assignments; generation selectors
+        # resolve through the shared RunConfig defaults for this release.
+        return {"ra_physics": 4, "ra_rrtmg_variant": "rrtmg_legacy",
+                "sf_sfclay_physics": 1, "sf_surface_physics": 4,
+                "bl_pbl_physics": 1 if self._pbl_scheme == "ysu" else 0}
+
+    def _ice_threshold(self, value):
+        threshold = float(value)
+        if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+            raise ValueError("xice_threshold must be a finite fraction in [0, 1]")
+        return threshold
+
+    def _new_column_state(self, cfg, fnm, fnp, p_top, terrain, xp):
+        return _MetalColumnBatchState(cfg, fnm, fnp, p_top, terrain, xp,
+                                      species=self._species)
+
+    def _initialize_column_driver(self, state, cfg, **kwargs):
+        return initialize_physics(state, cfg, **kwargs)
 
     # ------------------------------------------------------------------
     def _supplied_atmosphere(self):
@@ -558,7 +590,7 @@ class MetalMpasColumnBatchPhysics:
                 out[name][...] = _F32(0.0)
             else:
                 out[name][...] = flat2(value)
-        last_ysu = driver.last_ysu
+        last_ysu = driver.last_ysu if int(cfg.bl_pbl_physics) == 1 else None
         if last_ysu is not None:
             out["du"][...] = flat2(last_ysu["du"])
             out["dv"][...] = flat2(last_ysu["dv"])
@@ -692,6 +724,29 @@ class MetalMpasColumnBatchPhysics:
                 "nwfa2d_source": nwfa2d_source}
 
     @property
+    def correct_mode_receipt(self):
+        from woof import correct_mode
+        block = correct_mode.run_receipt({1: self._cfg})["domains"]["1"]
+        # HN1 belongs to host input/boundary preparation. The column seam
+        # does not execute it, even when its configuration enables it.
+        key = "hydrometeor_handover_numbers"
+        external = correct_mode.FINDING_BY_KEY[key]
+        if key in block["in_effect"]["keys"]:
+            block["outside_column_seam"] = [external]
+            block["in_effect"]["keys"].remove(key)
+            block["in_effect"]["findings"].remove(external)
+            block["applied_findings"].remove(external)
+        return block
+
+    def settled_cloud(self):
+        existing = self._state.existing_scratch
+        total, current = existing("mp_cloudnc"), existing("mp_cloudncv")
+        if total is None or current is None:
+            return None
+        return {"CLOUDNC": total.view((self._ncol,)).copy(),
+                "CLOUDNCV": current.view((self._ncol,)).copy()}
+
+    @property
     def aerosol_init_receipt(self):
         return None if self._aerosol_init is None else dict(self._aerosol_init)
 
@@ -709,6 +764,11 @@ class MetalMpasColumnBatchPhysics:
         out["RAINC"] = (self._xp.zeros(ncol, dtype=_F32)
                         if rainc is None else rainc.view((ncol,)).copy())
         return out
+
+    @property
+    def configuration_identity(self) -> dict:
+        """Resolved scientific settings, without copying forecast arrays."""
+        return deepcopy(self._identity)
 
     @property
     def call_counts(self) -> dict:
@@ -815,6 +875,14 @@ class MetalMpasColumnBatchPhysics:
                     f"restart payload lacks {key!r} but this seam "
                     "already carries live state for it; restore into a "
                     "freshly constructed seam")
+        # As upstream, output-only WB1 totals absent from an older payload
+        # count from the resume. They never change prognostic state.
+        for key in ("scratch/mp_cloudnc", "scratch/mp_cloudncv"):
+            if key in live and key not in stored:
+                print(f"note: restart payload predates the settled-cloud "
+                      f"total {key.split('/', 1)[1]!r}; it counts from "
+                      "this resume")
+                stored[key] = np.zeros(live[key].shape, np.float32)
         missing = sorted(set(live) - set(stored))
         extra = sorted(set(stored) - set(live))
         if missing or extra:

@@ -1,12 +1,15 @@
 #include <metal_stdlib>
 #include "rrtmgp_cal_cldfra1_bindings.metalh"
+#include "rrtmgp_cal_cldfra2_bindings.metalh"
 #include "rrtmgp_mynn_cloud_supplied_bindings.metalh"
 #include "rrtmgp_mynn_cloud_merge_bindings.metalh"
 #include "rrtmgp_mynn_cloud_merge_gsd41_bindings.metalh"
 #include "rrtmgp_cloudy_background_radii_bindings.metalh"
 #include "rrtmgp_surface_emissivity_bindings.metalh"
+#include "rrtmgp_wsm3_phase_split_bindings.metalh"
 #include "rrtmgp_hydrometeor_paths_bindings.metalh"
 #include "rrtmgp_validate_call_bindings.metalh"
+#include "rrtmgp_mynn_phase.metalh"
 #include "soft_gfk_exp.metalh"
 #include "soft_gfk_pow.metalh"
 
@@ -20,6 +23,20 @@ inline float rrtmgp_cloud_exp(float value) {
 inline float rrtmgp_cloud_pow(float value, float exponent) {
     return as_type<float>(soft_gfk_pow_bits(as_type<uint>(value),
                                              as_type<uint>(exponent)));
+}
+
+// WRF's binary radiation cloud fraction (module_radiation_driver.F cal_cldfra2):
+// qc + qi above 1e-6, qc alone without ice, zero with neither flag.
+kernel void rrtmgp_cal_cldfra2(
+    constant RrtmgpCalCldfra2Resources &r [[buffer(0)]],
+    constant RrtmgpCalCldfra2Params &p [[buffer(1)]],
+    uint cell [[thread_position_in_grid]]) {
+    if (cell >= uint(p.ncell)) return;
+    float condensate;
+    if (p.f_qc && p.f_qi) condensate = r.qc[cell] + r.qi[cell];
+    else if (p.f_qc) condensate = r.qc[cell];
+    else { r.cldfra[cell] = 0.0f; return; }
+    r.cldfra[cell] = condensate > 1.0e-6f ? 1.0f : 0.0f;
 }
 
 kernel void rrtmgp_cal_cldfra1(
@@ -59,6 +76,7 @@ kernel void rrtmgp_cal_cldfra1(
         qcld = qi + qc;
         const float divisor = max(qcld, qcldmin);
         weight = qcld < qcldmin ? 0.0f : qi / divisor;
+        if (p.ferrier && qcld >= qcldmin && tc < -40.0f) weight = 1.0f;
     } else {
         qcld = qc;
         weight = qcld < qcldmin ? 0.0f
@@ -84,11 +102,21 @@ kernel void rrtmgp_mynn_cloud_supplied(
     constant RrtmgpMynnCloudSuppliedParams &p [[buffer(1)]],
     uint cell [[thread_position_in_grid]]) {
     if (cell >= uint(p.ncell)) return;
-    const bool cloudy_bl = r.cldfra_bl[cell] > 0.001f;
-    r.liquid_supplied[cell] = uint(
-        (r.qc[cell] < 1.0e-6f) && cloudy_bl && (r.qc_bl[cell] > 0.0f));
-    r.ice_supplied[cell] = uint(
-        (r.qi[cell] < 1.0e-8f) && cloudy_bl && (r.qi_bl[cell] > 0.0f));
+    const Exact32 qc(r.qc[cell]), qi(r.qi[cell]), fb(r.cldfra_bl[cell]);
+    const Exact32 qcb(r.qc_bl[cell]), qib(r.qi_bl[cell]);
+    const Exact32 zero(0.0f), one(1.0f);
+    const bool cloudy = fb > Exact32(0.001f);
+    const bool liquid_allowed = cloudy && soft32_less(qc.bits, Exact32(1.0e-6f).bits);
+    const bool ice_allowed = cloudy && soft32_less(qi.bits, Exact32(1.0e-8f).bits);
+    if (p.gsd41) {
+        const bool where = liquid_allowed && ice_allowed;
+        const Exact32 liquid = rrtmgp_mynn_liquid_fraction(Exact32(r.temperature[cell]));
+        r.liquid_supplied[cell] = uint(where && ((qcb * liquid) * fb > zero));
+        r.ice_supplied[cell] = uint(where && ((qcb * (one - liquid)) * fb > zero));
+    } else {
+        r.liquid_supplied[cell] = uint(liquid_allowed && qcb > zero);
+        r.ice_supplied[cell] = uint(ice_allowed && qib > zero);
+    }
 }
 
 kernel void rrtmgp_mynn_cloud_merge(
@@ -96,14 +124,7 @@ kernel void rrtmgp_mynn_cloud_merge(
     constant RrtmgpMynnCloudMergeParams &p [[buffer(1)]],
     uint cell [[thread_position_in_grid]]) {
     if (cell >= uint(p.ncell)) return;
-    const bool cloudy_bl = r.cldfra_bl[cell] > 0.001f;
-    if (p.has_cldfra && p.replace_cldfra) {
-        r.cldfra[cell] = r.cldfra_bl[cell];
-    }
-    const float qc = r.qc[cell];
-    const float qi = r.qi[cell];
-    if ((qc < 1.0e-6f) && cloudy_bl) r.qc[cell] = qc + r.qc_bl[cell];
-    if ((qi < 1.0e-8f) && cloudy_bl) r.qi[cell] = qi + r.qi_bl[cell];
+    rrtmgp_merge_mynn_legacy(r, p, cell);
 }
 
 // GSD MYNN v4.1 merge (bl_mynn_version = "gsd_41"): the carried QC_BL is
@@ -115,16 +136,7 @@ kernel void rrtmgp_mynn_cloud_merge_gsd41(
     constant RrtmgpMynnCloudMergeGsd41Params &p [[buffer(1)]],
     uint cell [[thread_position_in_grid]]) {
     if (cell >= uint(p.ncell)) return;
-    const float fb = r.cldfra_bl[cell];
-    if (p.has_cldfra && (!p.first_step || fb > 0.001f)) r.cldfra[cell] = fb;
-    const float qc = r.qc[cell];
-    const float qi = r.qi[cell];
-    if (qc < 1.0e-6f && qi < 1.0e-8f && fb > 0.001f) {
-        const float x = (r.tlay[cell] - 254.0f) / 15.0f;
-        const float liq = min(max(x, 0.0f), 1.0f);
-        r.qc[cell] = qc + (r.qc_bl[cell] * liq) * fb;
-        r.qi[cell] = qi + (r.qc_bl[cell] * (1.0f - liq)) * fb;
-    }
+    rrtmgp_merge_mynn_gsd41(r, p, cell);
 }
 
 kernel void rrtmgp_cloudy_background_radii(
@@ -135,7 +147,8 @@ kernel void rrtmgp_cloudy_background_radii(
     const float effc = r.effc[cell];
     const float cloudy = r.cldfra[cell];
     const float land_flag = r.xland[cell / uint(p.nlay)];
-    const bool is_cloudy = cloudy > 0.0f;
+    const bool is_cloudy = p.strict ? Exact32(cloudy) > Exact32(0.0f)
+                                    : cloudy > 0.0f;
     bool liquid_background = is_cloudy && (effc <= 2.5f);
     if (p.has_supplied_liquid) {
         liquid_background = liquid_background
@@ -153,6 +166,17 @@ kernel void rrtmgp_cloudy_background_radii(
     }
     const float tlay = r.tlay[cell];
     const float whole = trunc(tlay);
+    if (p.strict) {
+        const Exact32 temperature(tlay);
+        const float shifted = as_type<float>((temperature - Exact32(179.0f)).bits);
+        const int index = clamp(int(trunc(shifted)), 1, 75);
+        const Exact32 correction = temperature - Exact32(whole);
+        const Exact32 tabulated = Exact32(r.retab[index - 1])
+            * (Exact32(1.0f) - correction) + Exact32(r.retab[index]) * correction;
+        const Exact32 new_ice = exact_max(tabulated, Exact32(5.0f));
+        r.effi_out[cell] = redo_ice ? as_type<float>(new_ice.bits) : r.effi[cell];
+        return;
+    }
     const int index = clamp(int(trunc(tlay - 179.0f)), 1, 75);
     const float corr = tlay - whole;
     const float table_value = r.retab[index - 1] * (1.0f - corr)
@@ -173,6 +197,20 @@ kernel void rrtmgp_surface_emissivity(
     else if (p.layout == 2) source_index = band;
     else if (p.layout == 3) source_index = band * uint(p.ncol) + col;
     r.emissivity_out[index] = r.emissivity[source_index];
+}
+
+kernel void rrtmgp_wsm3_phase_split(
+    constant RrtmgpWsm3PhaseSplitResources &r [[buffer(0)]],
+    constant RrtmgpWsm3PhaseSplitParams &p [[buffer(1)]],
+    uint cell [[thread_position_in_grid]]) {
+    if (cell >= uint(p.ncell)) return;
+    const bool frozen = r.tlay[cell] < 273.15f;
+    const uint cloud = as_type<uint>(r.cloud[cell]);
+    const uint precipitation = as_type<uint>(r.precipitation[cell]);
+    r.qc[cell] = as_type<float>(frozen ? 0u : cloud);
+    r.qr[cell] = as_type<float>(frozen ? 0u : precipitation);
+    r.qi[cell] = as_type<float>(frozen ? cloud : 0u);
+    r.qs[cell] = as_type<float>(frozen ? precipitation : 0u);
 }
 
 kernel void rrtmgp_hydrometeor_paths(
@@ -269,14 +307,16 @@ kernel void rrtmgp_hydrometeor_paths(
     } else {
         const float play = r.play[cell];
         const float tlay = r.tlay[cell];
-        const float nc = r.nc[cell];
+        const float rho_air = play / (287.15f * tlay);
+        const bool written = !p.morrison_has_written_mask || r.radii_written[col] != 0;
+        const float nc = written ? r.nc[cell] : 250.0e6f / rho_air;
         const float nr = r.nr[cell];
         const float ni = r.ni[cell];
         const float ns = r.ns[cell];
         float re_c;
         float re_i;
         float re_s;
-        if (p.morrison_use_effective) {
+        if (p.morrison_use_effective && written) {
             re_c = r.effc[cell];
             // Morrison's supplied rain radius is accepted for the upstream
             // interface but intentionally does not enter cloud optics.
@@ -285,7 +325,6 @@ kernel void rrtmgp_hydrometeor_paths(
             re_i = r.effi[cell];
             re_s = r.effs[cell];
         } else {
-            const float rho_air = play / (287.15f * tlay);
             const float shape = 0.0005714f * (nc / 1.0e6f * rho_air)
                                 + 0.2714f;
             const float pgam = clamp(1.0f / (shape * shape) - 1.0f,

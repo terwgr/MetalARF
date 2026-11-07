@@ -1,0 +1,396 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_goddard_bands_columns",
+      "cuda_symbol": "goddard_bands_columns",
+      "module": "wrf_exact_goddard_family",
+      "source": "woof/metal/shaders/wrf_exact_goddard_family.metal",
+      "cuda_source": "woof/core/kernels/goddard.cu",
+      "resources": [
+        [
+          "input",
+          "float",
+          "read"
+        ],
+        [
+          "flags",
+          "int32",
+          "read"
+        ],
+        [
+          "optics",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ],
+        [
+          "workspace",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "input": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ],
+        "optics": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "np",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "workspace_words",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "wrf_exact_goddard_cloud_columns",
+      "cuda_symbol": "goddard_cloud_columns",
+      "module": "wrf_exact_goddard_family",
+      "source": "woof/metal/shaders/wrf_exact_goddard_family.metal",
+      "cuda_source": "woof/core/kernels/goddard.cu",
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "q",
+          "float",
+          "read"
+        ],
+        [
+          "re",
+          "float",
+          "read"
+        ],
+        [
+          "lut",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lut": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "np",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "wrf_exact_goddard_prepare_columns",
+      "cuda_symbol": "goddard_prepare_columns",
+      "module": "wrf_exact_goddard_family",
+      "source": "woof/metal/shaders/wrf_exact_goddard_family.metal",
+      "cuda_source": "woof/core/kernels/goddard.cu",
+      "resources": [
+        [
+          "raw",
+          "float",
+          "read"
+        ],
+        [
+          "band",
+          "float",
+          "read_write"
+        ],
+        [
+          "flags",
+          "int32",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ],
+        [
+          "q",
+          "float",
+          "read_write"
+        ],
+        [
+          "re",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "raw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "band": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "np",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "julday",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "wrf_exact_goddard_publish_columns",
+      "cuda_symbol": "goddard_publish_columns",
+      "module": "wrf_exact_goddard_family",
+      "source": "woof/metal/shaders/wrf_exact_goddard_family.metal",
+      "cuda_source": "woof/core/kernels/goddard.cu",
+      "resources": [
+        [
+          "band",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read"
+        ],
+        [
+          "raw",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "band": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "raw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "np",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "solcon",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "wrf_exact_goddard_interface_temperature",
+      "cuda_symbol": "goddard_interface_temperature",
+      "module": "wrf_exact_goddard_family",
+      "source": "woof/metal/shaders/wrf_exact_goddard_family.metal",
+      "cuda_source": "woof/core/kernels/goddard.cu",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "z",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "tw",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

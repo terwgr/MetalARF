@@ -29,6 +29,7 @@ state inventory and the scratch registry price those, not this one.
 from __future__ import annotations
 
 import json
+import math
 import sys
 import types
 
@@ -94,6 +95,21 @@ def cell_config(cell: tuple[int, int, int, float]):
 class _OnCard(np.ndarray):
     """An array the stand-in put on the card."""
 
+    def get(self, *args, **kwargs):
+        """cupy's device-to-host copy."""
+        return np.array(self).view(np.ndarray)
+
+
+class _OnCardRow(_OnCard):
+    """A 1-D card array whose elements index as 0-d card arrays, as cupy's do
+    (``float(ds[1].get())`` reads the solar constant that way)."""
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if isinstance(value, np.generic):
+            return np.asarray(value).view(_OnCard)
+        return value
+
 
 def _on_card(value):
     if isinstance(value, np.ndarray) and not isinstance(value, _OnCard):
@@ -148,6 +164,14 @@ def install_numpy_cupy() -> None:
     shim.ndarray = np.ndarray
     shim.asnumpy = lambda value, *args, **kwargs: np.array(value).view(
         np.ndarray)
+    class CensusDevice:
+        id = 0
+        compute_capability = "120"
+        def __init__(self, *args): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+    shim.cuda = types.SimpleNamespace(
+        Device=CensusDevice, runtime=types.SimpleNamespace(getDevice=lambda: 0))
     shim.RawModule = _RawModule
     shim.RawKernel = lambda *args, **kwargs: _Launch()
     sys.modules["cupy"] = shim
@@ -200,9 +224,10 @@ def _state_owned(state, driver) -> set[int]:
 def driver_arrays(driver, state) -> dict[str, tuple[tuple[int, ...], int]]:
     """Every distinct on-card buffer the driver holds and the state does not.
 
-    Keyed by the first path that reaches it (``fields/tke_myj``,
+    Keyed by the largest view that reaches it (``fields/tke_myj``,
     ``pbl_tendencies/ru``, ``rthratenlw``), which is the spelling the
-    inventory uses; an alias reached again by another path is one buffer.
+    inventory uses; equal-sized aliases keep the first path. A prefix view
+    must not hide the full backing shape of a shared zero buffer.
     """
     skip = _state_owned(state, driver)
     found: dict[int, tuple[str, tuple[int, ...], int]] = {}
@@ -214,10 +239,11 @@ def driver_arrays(driver, state) -> dict[str, tuple[tuple[int, ...], int]]:
         seen.add(id(obj))
         if isinstance(obj, np.ndarray):
             owner = _owner(obj)
-            if isinstance(obj, _OnCard) and id(owner) not in skip \
-                    and id(owner) not in found:
-                found[id(owner)] = (path, tuple(obj.shape),
-                                    int(owner.nbytes))
+            if isinstance(obj, _OnCard) and id(owner) not in skip:
+                prior = found.get(id(owner))
+                if prior is None or obj.size > math.prod(prior[1]):
+                    found[id(owner)] = (path, tuple(obj.shape),
+                                        int(owner.nbytes))
             return
         for key, value in _children(obj):
             visit(value, f"{path}/{key}" if path else str(key))
@@ -229,9 +255,38 @@ def driver_arrays(driver, state) -> dict[str, tuple[tuple[int, ...], int]]:
 def census() -> dict[str, dict]:
     import datetime
 
+    from woof.core import solar
     from woof.core.physics import initialize_physics
     from woof.core.preflight import physics_array_shapes
     from woof.core.state import DomainState
+
+    # The WRF solar geometry (radconst + calc_coszen, both generations) is a
+    # compiled unit reached through the device-keyed module cache, which the
+    # stand-in has no device for; Noah-MP's cold start asks it for COSZEN.
+    # Its launches are no-ops here like every other, so the stand-in returns
+    # the same three on-card buffers, zero-filled, with the same shapes.
+    def solar_geometry_device(julian, xtime, gmt, latitude, longitude, *,
+                              generation=solar.DEFAULT_SOLAR_GENERATION,
+                              declination=None):
+        import cupy as cp
+        solar.solar_generation(generation)
+        lat = cp.ascontiguousarray(cp.asarray(latitude, dtype=cp.float32))
+        return (cp.zeros(2, cp.float32).view(_OnCardRow),
+                cp.zeros_like(lat), cp.zeros_like(lat))
+
+    solar.solar_geometry_device = solar_geometry_device
+
+    # Noah-MP compiles at the direct-NVRTC boundary (woof.core.ieee_module)
+    # rather than through cp.RawModule; the stand-in compiles nothing there
+    # either, and its module launches nothing, exactly as _RawModule does.
+    from woof.core import ieee_module
+
+    def compile_module(source, options, module_key, log_stream=None):
+        module = _RawModule()
+        module.code, module.options = source, tuple(options)
+        return module
+
+    ieee_module.compile_module = compile_module
 
     report: dict[str, dict] = {}
     for cell in admitted_cells():

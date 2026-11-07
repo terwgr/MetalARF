@@ -22,9 +22,9 @@ kernel void urban_bep_bem_class_init_fragment(
     f[44 + c] = csw;
     f[55 + c] = csr;
     f[33 + c] = csg;
-    f[11 + c] = (t[11 + c] / csw) / conductivity_scale;
+    f[11 + c] = (t[c] / csw) / conductivity_scale;
     f[22 + c] = (t[22 + c] / csr) / conductivity_scale;
-    f[c] = (t[c] / csg) / conductivity_scale;
+    f[c] = (t[11 + c] / csg) / conductivity_scale;
     f[1287 + c] = t[1522 + c];
     f[1298 + c] = t[1566 + c];
     f[1309 + c] = t[1533 + c];

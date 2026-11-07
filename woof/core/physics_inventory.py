@@ -22,6 +22,38 @@ from __future__ import annotations
 from woof.config import (RunConfig, SASE_PBL_SCHEME, UW_PBL_SCHEME,
                           radiation_enabled)
 
+
+RADIATION_BOUNDARY_FLUXES = tuple(
+    side+suffix for side in ("sw","lw")
+    for suffix in ("upt","uptc","dnt","dntc","upb","upbc","dnb","dnbc"))
+
+# Registry.EM_COMMON:1565-1572, allocated by any_cu_used.
+CUMULUS_HISTORY_RATES = (
+    "rucuten", "rvcuten", "rthcuten", "rqvcuten", "rqrcuten",
+    "rqccuten", "rqscuten", "rqicuten")
+CUMULUS_HISTORY_SPECIES = {
+    "rqvcuten": "qv", "rqrcuten": "qr", "rqccuten": "qc",
+    "rqscuten": "qs", "rqicuten": "qi"}
+
+
+def radiation_boundary_flux_names(cfg):
+    """Boundary fluxes produced by the selected RRTMG-family radiation.
+
+    Selector 4 computes WRF's all-sky and clear-sky top/bottom fluxes on
+    both engines: the legacy RRTMG transcription as RRTMG_LWRAD/
+    RRTMG_SWRAD do, RTE+RRTMGP from its all-sky solve and a clear-sky solve
+    on the same gas optics.  Every other scheme computes none.
+    """
+    from woof.config import (RRTMG_VARIANT_LEGACY, RRTMG_VARIANT_RTE_RRTMGP,
+                              radiation_scheme_ids)
+    if cfg.ra_rrtmg_variant not in (RRTMG_VARIANT_LEGACY,
+                                    RRTMG_VARIANT_RTE_RRTMGP):
+        return ()
+    lw,sw=radiation_scheme_ids(cfg)
+    sides = {side for side,selector in (("lw",lw),("sw",sw))
+             if int(selector)==4}
+    return tuple(name for name in RADIATION_BOUNDARY_FLUXES if name[:2] in sides)
+
 #: HORIZONTAL EDDY-VISCOSITY DIAGNOSTIC (cfg.hmix_k_diag): the (momentum,
 #: scalar) history names each horizontal mixing producer publishes under.
 #:
@@ -61,8 +93,10 @@ def hmix_k_diag_names(cfg: RunConfig) -> tuple[str, ...]:
 def physics_enabled(cfg: RunConfig) -> bool:
     """Whether any non-timesplit physics scheme is configured."""
     return bool(radiation_enabled(cfg) or cfg.sf_sfclay_physics
-                or cfg.sf_surface_physics or cfg.bl_pbl_physics
-                or cfg.cu_physics)
+                or cfg.sf_surface_physics or getattr(cfg, "sf_ocean_physics", 0)
+                or cfg.bl_pbl_physics
+                or cfg.cu_physics or getattr(cfg, "ifire", 0) == 2
+                or getattr(cfg, "wind_farm_scheme", "off") != "off")
 
 
 def physics_driver_required(cfg: RunConfig) -> bool:
@@ -165,16 +199,84 @@ def physics_reuses_pbl_composition(cfg: RunConfig) -> bool:
 #: estimate prices) and ``preflight._materialize_physics`` (what the
 #: measurement constructs).  They used to be three literal tuples, and
 #: mp=16 reached production having moved only two of them.
-PBL_RQI_MICROPHYSICS = (6, 8, 9, 10, 16, 18, 28, 50)
+from woof.microphysics_schemes import NAMED_SCHEMES as _NAMED_MP_SCHEMES
+from woof.microphysics_schemes import SCHEMES_BY_ID as _NAMED_MP_SCHEMES_BY_ID
+PBL_RQI_MICROPHYSICS = (2, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 30, 50, 106) + tuple(
+    _s.mp_id for _s in _NAMED_MP_SCHEMES.values() if "qi" in _s.ice_mass_species)
 
 
 #: Microphysics producers with an output-due radar reflectivity carrier.
-REFL_10CM_MICROPHYSICS = (1, 6, 8, 9, 10, 16, 18, 28, 50)
+REFL_10CM_MICROPHYSICS = (1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 50, 106) + tuple(
+    _s.mp_id for _s in _NAMED_MP_SCHEMES.values())
+# Kessler has no stock microphysics reflectivity writer. The default
+# diagnostic remains available; strict forecast history retains the
+# initialized stock slot (module_mp_kessler.F, no REFL_10CM argument).
+WRF_INACTIVE_REFL_MICROPHYSICS = frozenset({1})
 
 
 #: The raw PBL fields needed to repeat mass coupling after a grid move.
 PBL_RAW_RATE_NAMES = ("du", "dv", "dtheta", "dqv", "dqc", "dqi")
 PBL_SHARED_FORCING = {"dtheta": "gf_rthblten", "dqv": "gf_rqvblten"}
+
+# surface_driver integrates the final land-surface flux once per due call,
+# with atmospheric DT rather than the longer land-surface integration DTBL.
+SURFACE_ENERGY_ACCUMULATORS = {"achfx": "hfx", "aclhf": "lh", "acgrdflx": "grdflx"}
+PBL_HISTORY_RATES = {"rublten": "du", "rvblten": "dv", "rthblten": "dtheta",
+                     "rqvblten": "dqv", "rqcblten": "dqc"}
+
+
+def history_tendency_rows() -> bool:
+    """Whether this process carries WRF's 3-D PBL and cumulus tendency rows.
+
+    RUBLTEN..RQCBLTEN (RQIBLTEN under MYNN) and the RxxCUTEN rates are WRF
+    Registry restart state, not default history; the exact chain carries them
+    so a strict (GPUWM_WRF_EXACT=1) wrfout can be compared word for word with a
+    recording that wrote them.  A default process allocates none of them.
+
+    THE BREAKAGE THIS PREVENTS (2.9.1 integration): carried in every process,
+    they added up to a dozen 3-D float32 planes per domain to the resident
+    envelope (+1.0 GB, 6.6 %, on the streamed-admission check case), and the
+    16 GB headline domain that fits resident in 2.9.0 no longer did.
+    """
+    from woof.wrf_exact import ENABLED
+    return bool(ENABLED)
+
+
+def pbl_history_rates(cfg) -> dict[str, str]:
+    """The selected PBL producer's raw history rates (strict processes only,
+    see :func:`history_tendency_rows`; a default process gets ``{}``).
+
+    MYNN's wrapper assigns RQIBLTEN independently of whether a prognostic
+    ice scalar consumes it (module_pbl_driver.F:1682). Keep its actual
+    producer record on the same mass-coupling clock as the other rates.
+    """
+    if not history_tendency_rows():
+        return {}
+    rates = dict(PBL_HISTORY_RATES)
+    if int(getattr(cfg, "bl_pbl_physics", 0)) == 5:
+        rates["rqiblten"] = "dqi"
+    return rates
+SCM_SURFACE_FORCING_FIELDS = (
+    "hfx_force", "lh_force", "tsk_force", "hfx_force_tend",
+    "lh_force_tend", "tsk_force_tend")
+
+
+def scm_forcing_fields() -> tuple[str, ...]:
+    """The SCM surface forcing scalars this process carries.
+
+    HFX_FORCE and its siblings are WRF single-column-model controls with no
+    admitted producer; the exact chain carries them, held at their initial
+    or restored words, so a strict (GPUWM_WRF_EXACT=1) wrfout lists every
+    record a recording wrote.  A default process carries none of them.
+
+    THE BREAKAGE THIS PREVENTS (2.9.1 GPU shard leg at e3e6b7dae): carried
+    in every process, the six 0-d scalars reached consumers that admit only
+    gridded arrays, so default ensembles refused at launch ("driver/fields/
+    hfx_force has no admitted member-column shape"), prepared-store scatter
+    and nest relocation raised on shape (), and wrfout gained six records
+    2.9.0 never wrote.
+    """
+    return SCM_SURFACE_FORCING_FIELDS if history_tendency_rows() else ()
 
 
 def pbl_raw_rate_names(cfg: RunConfig) -> tuple[str, ...]:
@@ -206,7 +308,24 @@ def microphysics_scratch_slots(
         return (("rainnc", "mp_rainnc"),
                 ("rainncv", "mp_rainncv"),
                 ("sr", "mp_kessler_sr"))
-    if mp_physics in (6, 8, 10, 16, 28):
+    if mp_physics == 5:
+        # Ferrier-Aligo.  THREE slots: the driver arm ``CASE
+        # (FER_MP_HIRES)`` binds RAINNC, RAINNCV and SR and nothing else
+        # (module_microphysics_driver.F:2613-2626).  FER_HIRES puts all
+        # surface precipitation into RAINNC and says how much of it fell
+        # frozen through SR (module_mp_fer_hires.F:967-974).
+        return (("rainnc", "mp_rainnc"),
+                ("rainncv", "mp_rainncv"),
+                ("sr", "mp_sr"))
+    if mp_physics == 3:
+        # WSM3: the driver arm binds RAINNC/RAINNCV, SNOWNC/SNOWNCV and SR
+        # and no graupel argument (module_microphysics_driver.F:2241-2245).
+        return (("rainnc", "mp_rainnc"),
+                ("rainncv", "mp_rainncv"),
+                ("sr", "mp_sr"),
+                ("snownc", "mp_snownc"),
+                ("snowncv", "mp_snowncv"))
+    if mp_physics in (2, 6, 8, 10, 16, 28, 30) or mp_physics in _NAMED_MP_SCHEMES_BY_ID:
         return (("rainnc", "mp_rainnc"),
                 ("rainncv", "mp_rainncv"),
                 ("sr", "mp_sr"),
@@ -214,7 +333,18 @@ def microphysics_scratch_slots(
                 ("snowncv", "mp_snowncv"),
                 ("graupelnc", "mp_graupelnc"),
                 ("graupelncv", "mp_graupelncv"))
-    if mp_physics in (9, 18):
+    if mp_physics == 106:
+        # WSM6R.  THREE slots: the driver arm ``CASE (WSM6RSCHEME)`` binds
+        # RAINNC and RAINNCV only (module_microphysics_driver.F:2362-2372);
+        # SR is the surface contract's zero (woof/core/wsm6.py), and
+        # microphysics_scheme_sr_available says 106 has none.
+        return (("rainnc", "mp_rainnc"),
+                ("rainncv", "mp_rainncv"),
+                ("sr", "mp_sr"))
+    if mp_physics in (9, 18, 24):
+        # WSM7 (mp=24) binds the same nine in CASE (WSM7SCHEME)
+        # (module_microphysics_driver.F:2401-2408: RAIN/RAINNCV, SNOW/
+        # SNOWNCV, SR, GRAUPEL/GRAUPELNCV, HAIL/HAILNCV).
         # Milbrandt-Yau shares NSSL's nine-slot row because its WRF driver
         # arm binds the same nine: RAINNC/RAINNCV (:1868-1869),
         # SNOWNC/SNOWNCV (:1870-1871), HAILNC/HAILNCV (:1872-1873),
@@ -229,6 +359,9 @@ def microphysics_scratch_slots(
                 ("hailnc", "mp_hailnc"),
                 ("hailncv", "mp_hailncv"),
                 ("sr", "mp_sr"))
+    from woof.core.column_schemes import COLUMN_SCHEMES
+    if mp_physics in COLUMN_SCHEMES:
+        return tuple((name.removeprefix("mp_"), name) for name in COLUMN_SCHEMES[mp_physics].surface)
     if mp_physics == 50:
         # P3 one-category.  FIVE slots, not mp=6/8's seven: the driver arm
         # ``CASE (P3_1CATEGORY)`` binds RAINNC/RAINNCV/SR/SNOWNC/SNOWNCV and
@@ -308,14 +441,15 @@ MYJ_SFCLAY_OUTPUTS = ("rmol", "ct", "pblh", "rib", "chs", "chs2", "cqs2",
 #: Every persistent 2-D surface field ``initialize_physics`` holds for the
 #: Eta layer, in allocation order: the kernel roster above plus the four
 #: Registry fields its driver path reads or publishes (``ustm``, ``wspd``,
-#: ``ch``, ``mixht``) and ``z0base``, the background roughness seeded from
-#: the cold-start ZNT.  The allocation and the VRAM estimate
+#: ``ch``, ``mixht``).  MYJSFC's Z0BASE is WRF's Registry ``Z0``, the
+#: land-surface field every run already carries, not a plane of its own.
+#: The allocation and the VRAM estimate
 #: (:func:`woof.core.preflight.physics_field_names_2d`) both read THIS
 #: tuple; while the estimate restated nothing for the selector, 17 of these
 #: planes were allocated and never priced.
 MYJ_SFCLAY_FIELDS_2D = tuple(dict.fromkeys((
     *MYJ_SFCLAY_INOUT, *MYJ_SFCLAY_OUTPUTS,
-    "ustm", "wspd", "ch", "mixht", "z0base")))
+    "ustm", "wspd", "ch", "mixht")))
 
 #: MYJ's carried 3-D PBL state (``bl_pbl_physics = 2``): WRF's TKE_MYJ and
 #: EL_MYJ, allocated once by ``initialize_physics`` for this selector only.
@@ -625,6 +759,7 @@ __all__ = [
     "MYNN_PBL_DIAGNOSTICS_2D", "MYNN_PBL_DIAGNOSTICS_INT_2D",
     "MYNN_PBL_STATE_3D", "MYNN_SURFACE_OUTPUTS",
     "PBL_RQI_MICROPHYSICS", "PHYSICS_SLOT_DISPATCH", "REFL_10CM_MICROPHYSICS",
+    "UnroutedPhysicsSelectorError", "resolve_physics_slot",
     "SFCLAY_OUTPUTS",
     "SHWS_SLOTS", "SHINHONG_BLOCK", "SHINHONG_TILE_BLOCKS_PER_SM",
     "shinhong_workspace_floats",
@@ -643,6 +778,10 @@ __all__ = [
 #: through to whichever scheme happens to be wired.  ``_run_sfclay``
 #: additionally re-dispatches on the exact value internally, so the two
 #: MM5 spellings and MYNN cannot be confused with each other either.
+PBL_OPTIONAL_TENDENCIES = {901: ("rqr",)}
+PBL_ADVECTED_SCALARS = {901: (("tke_edmf", 0.2),)}
+PBL_SCALAR_NAMES = tuple(name for rows in PBL_ADVECTED_SCALARS.values() for name, _ in rows)
+
 PHYSICS_SLOT_DISPATCH: dict[str, dict[int, str | None]] = {
     "sf_sfclay_physics": {
         0: None,
@@ -657,6 +796,7 @@ PHYSICS_SLOT_DISPATCH: dict[str, dict[int, str | None]] = {
         5: "_run_sfclay",     # MYNN surface layer
         91: "_run_sfclay",    # classic MM5
     },
+    "sf_ocean_physics": {0: None, 1: "_run_surface_ocean", 2: "_run_surface_ocean"},
     "sf_surface_physics": {
         0: None,
         2: "_run_noah",       # Noah LSM
@@ -694,5 +834,107 @@ PHYSICS_SLOT_DISPATCH: dict[str, dict[int, str | None]] = {
         # SASE: not a WRF scheme and deliberately outside WRF's selector
         # namespace, so it can never collide with one WRF adds later.
         SASE_PBL_SCHEME: "_run_sase",
+        901: "_run_satmedmf",
     },
 }
+
+
+class UnroutedPhysicsSelectorError(NotImplementedError):
+    """A configured surface/LSM/PBL selector VALUE has no routed scheme.
+
+    The driver used to branch on the truthiness of ``sf_surface_physics``
+    and ``bl_pbl_physics``, so *any* nonzero value ran Noah and YSU.
+    Unlocking a new selector without adding a routing row would therefore
+    have produced plausible numbers from the wrong scheme with no error.
+    This is that error.
+    """
+
+    def __init__(self, selector: str, value, routed):
+        self.selector = selector
+        self.value = value
+        self.routed = tuple(sorted(routed))
+        super().__init__(
+            f"{selector}={value!r} has no scheme routed to it in the woof "
+            "physics driver; refusing to substitute another scheme. Routed "
+            f"values: {list(self.routed)}. Adding the selector to "
+            "woof/config.py and woof/physics_compat.py is NOT sufficient: "
+            f"add a {selector} row to PHYSICS_SLOT_DISPATCH "
+            "(woof/core/physics_inventory.py) naming the PhysicsDriver method that "
+            "runs that exact scheme.")
+
+
+#: Land-surface schemes after which WRF's surface driver calls the ordinary
+#: ``SFCDIAGS`` (module_surface_driver.F:2983-2998).  RUC instead calls
+#: ``SFCDIAGS_RUCLSM`` in :func:`ruc_lsm_step`; Noah-MP unconditionally
+#: selects its water/ice flux diagnostic or its own vegetation/bare-ground
+#: 2-m fields in :func:`noahmp_lsm_step`.  This is a per-scheme decision, not
+#: a property of "an LSM ran", and all three post-LSM paths overwrite the
+#: surface layer's earlier T2/Q2/TH2 exactly where WRF does.
+LAND_SURFACE_SFCDIAGS_SCHEMES = frozenset({2})
+
+
+def sase_switch_value(cfg, name: str) -> bool:
+    """Read one SASE switch, falling back to RunConfig's SHIPPED default.
+
+    Every switch here is a per-run key whose default is declared once, in
+    :class:`~woof.config.RunConfig`.  A configuration object that does
+    not carry the key must land on that declared default and nothing
+    else: a literal fallback written at the call site is a second
+    declaration of the same default, and a second declaration drifts.
+    It already had.  ``sase_additive_dissipation`` ships ON, and the
+    driver read it with a literal ``False`` fallback, so any object
+    without the field would have dropped the dissipation channel without
+    saying so -- the opposite of what a default-on remedy means.  The
+    fallback is now read off the dataclass, so the call site cannot
+    disagree with ``woof/config.py`` about what ships.
+
+    RunConfig itself always carries all three keys, so for a RunConfig
+    this is ``getattr`` and nothing more.
+    """
+    return bool(getattr(cfg, name, getattr(RunConfig, name)))
+
+
+def resolve_physics_slot(selector: str, value) -> str | None:
+    """Resolve one selector VALUE to its runner method, or fail loudly."""
+    table = PHYSICS_SLOT_DISPATCH[selector]
+    try:
+        key = int(value)
+    except (TypeError, ValueError):
+        raise UnroutedPhysicsSelectorError(selector, value, table) from None
+    if key not in table:
+        raise UnroutedPhysicsSelectorError(selector, key, table)
+    return table[key]
+
+
+# WRF G3 restart carriers and convtrans_prep accumulators. Shape tokens
+# resolve through cfg; the same rows drive allocation and memory review.
+CUMULUS_STATE_LAYOUTS = {5: {
+    "g3_apr": ((8, "ny", "nx"), "f4", None),
+    "g3_xf_ens": (("ensdim", "ny", "nx"), "f4", None),
+    "g3_pr_ens": (("ensdim", "ny", "nx"), "f4", None),
+    "g3_lev": ((9, "nz", "ny", "nx"), "f4", None),
+    "g3_sfc": ((7, "ny", "nx"), "f4", None),
+    "g3_isfc": ((4, "ny", "nx"), "i4", None),
+    **{name: (("nz", "ny", "nx"), "f4", "cu_diag") for name in
+       ("gd_cloud_a", "qc_cu", "gd_cloud2_a", "qi_cu", "gd_cldfr")},
+    "raincv_a": (("ny", "nx"), "f4", "cu_diag"),
+    "raincv_b": (("ny", "nx"), "f4", "cu_diag"),
+    "g3_diag_clock": ((4,), "i4", "cu_diag"),
+}}
+CUMULUS_HISTORY_LAYOUT = {
+    "gd_cloud": ("g3_lev", 7), "gd_cloud2": ("g3_lev", 8),
+    **{name: (name, None) for name in
+       ("gd_cloud_a", "qc_cu", "gd_cloud2_a", "qi_cu", "gd_cldfr", "raincv_a", "raincv_b")},
+}
+
+def cumulus_state_layout(cfg):
+    return {name: (tuple(getattr(cfg, dim) if isinstance(dim,str) else dim for dim in dims), dtype)
+            for name,(dims,dtype,flag) in CUMULUS_STATE_LAYOUTS.get(cfg.cu_physics,{}).items()
+            if flag is None or getattr(cfg,flag)}
+
+
+def solar_split_history_expected(cfg):
+    """Schemes with a native surface split, or the model's SW interpolation."""
+    from woof.config import radiation_scheme_ids
+    shortwave = radiation_scheme_ids(cfg)[1]
+    return bool(shortwave and (shortwave in (4, 5) or cfg.swint_opt == 1))

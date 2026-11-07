@@ -1,0 +1,106 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_edmf_condensation_f32",
+      "module": "hexv842_mpas_bl_mynn_edmf_condensation_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_edmf_condensation_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_condensation_edmf",
+      "resources": [
+        [
+          "qt",
+          "float",
+          "read"
+        ],
+        [
+          "thl",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "zagl",
+          "float",
+          "read"
+        ],
+        [
+          "thv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zagl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "p1000mb",
+          "float32"
+        ],
+        [
+          "rcp",
+          "float32"
+        ],
+        [
+          "xlvcp",
+          "float32"
+        ],
+        [
+          "t0c",
+          "float32"
+        ],
+        [
+          "rvovrd",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

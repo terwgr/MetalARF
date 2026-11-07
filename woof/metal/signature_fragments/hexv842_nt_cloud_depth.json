@@ -1,0 +1,70 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_cloud_depth",
+      "module": "hexv842_nt",
+      "source": "woof/metal/shaders/hexv842_nt_cloud_depth.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cloud_depth",
+      "resources": [
+        [
+          "in",
+          "float32",
+          "read"
+        ],
+        [
+          "sf",
+          "int32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "sout",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sout": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

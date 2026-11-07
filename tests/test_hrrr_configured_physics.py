@@ -19,12 +19,18 @@ from woof.physics_compat import WSM6_PROFILE_ID, MYNN_RUC_PROFILE_ID, single_dom
 from tools import hrrr_single_domain_benchmark as benchmark
 
 
-def _case(tmp_path, changes=None):
+def _native_tables():
+    """Build a fresh native configuration for each route scenario."""
     vertical = VerticalConfig(eta_levels=tuple(float(x) for x in np.linspace(1, 0, 13)),
                               p_top=5000., hybrid_opt=2, etac=.2)
     target = replace(HrrrTargetDomain.legacy_500x500(), nx=50, ny=50, nz=12)
     raw, _ = benchmark._experiment_tables(vertical, run_seconds=3600, target=target,
                                           physics_profile=WSM6_PROFILE_ID)
+    return raw, target
+
+
+def _case(tmp_path, changes=None):
+    raw, target = _native_tables()
     if changes:
         raw["shared"].update(changes)
     exp = build_experiment(copy.deepcopy(raw), source="configured native control")
@@ -86,11 +92,7 @@ def test_the_root_of_a_mixed_sase_tree_prepares_with_a_shared_sase_selector(
     whole-tree load succeeds stopped at prepare.  The root now prepares
     with the values it runs in the tree; a SASE root keeps the selector.
     """
-    vertical = VerticalConfig(eta_levels=tuple(float(x) for x in np.linspace(1, 0, 13)),
-                              p_top=5000., hybrid_opt=2, etac=.2)
-    target = replace(HrrrTargetDomain.legacy_500x500(), nx=50, ny=50, nz=12)
-    raw, _ = benchmark._experiment_tables(vertical, run_seconds=3600, target=target,
-                                          physics_profile=WSM6_PROFILE_ID)
+    raw, target = _native_tables()
     raw["shared"]["sase_moist_n2"] = False
     raw["domain"][0].update(bl_pbl_physics=root_pbl, km_opt=0 if root_pbl == 900 else 4)
     raw["domain"].append({
@@ -113,11 +115,7 @@ def test_the_root_of_a_mixed_sase_tree_prepares_with_a_shared_sase_selector(
 def _grell_tree_tables(*, root_cu, child_cu, shared=None, root=None,
                        child=None):
     """A route tree whose root and nest run the given cumulus schemes."""
-    vertical = VerticalConfig(eta_levels=tuple(float(x) for x in np.linspace(1, 0, 13)),
-                              p_top=5000., hybrid_opt=2, etac=.2)
-    target = replace(HrrrTargetDomain.legacy_500x500(), nx=50, ny=50, nz=12)
-    raw, _ = benchmark._experiment_tables(vertical, run_seconds=3600, target=target,
-                                          physics_profile=WSM6_PROFILE_ID)
+    raw, target = _native_tables()
     raw["shared"].update(cu_physics=0, cudt_minutes=0.0, **(shared or {}))
     raw["domain"][0].update(cu_physics=root_cu, **(root or {}))
     raw["domain"].append({
@@ -219,11 +217,7 @@ def _storm_following_tables(mover_source):
     grandchild whose parent slides to keep it contained
     (``containment``).
     """
-    vertical = VerticalConfig(eta_levels=tuple(float(x) for x in np.linspace(1, 0, 13)),
-                              p_top=5000., hybrid_opt=2, etac=.2)
-    target = replace(HrrrTargetDomain.legacy_500x500(), nx=50, ny=50, nz=12)
-    raw, _ = benchmark._experiment_tables(vertical, run_seconds=3600, target=target,
-                                          physics_profile=WSM6_PROFILE_ID)
+    raw, target = _native_tables()
     root = raw["domain"][0]
     raw["domain"].append({
         "grid_id": 2, "parent_id": 1, "i_parent_start": 14, "j_parent_start": 14,
@@ -672,11 +666,7 @@ _NOISE_BUBBLE = {"bubbles": [{
 
 def _perturbed_config(tmp_path, *, tree):
     """A route configuration carrying a 0.01 K [perturbation] block."""
-    vertical = VerticalConfig(eta_levels=tuple(float(x) for x in np.linspace(1, 0, 13)),
-                              p_top=5000., hybrid_opt=2, etac=.2)
-    target = replace(HrrrTargetDomain.legacy_500x500(), nx=50, ny=50, nz=12)
-    raw, _ = benchmark._experiment_tables(vertical, run_seconds=3600, target=target,
-                                          physics_profile=WSM6_PROFILE_ID)
+    raw, target = _native_tables()
     raw["experiment"]["name"] = target.name
     if tree:
         raw["domain"].append({
@@ -722,19 +712,77 @@ def test_a_native_root_of_a_perturbed_tree_prepares_and_records_the_deferral(
     assert deferred == deferred_initial_perturbation(
         exp, "any route", announce=False)
     assert deferred["config"] == exp.perturbation.receipt()
-    assert "deferred to prepared-tree forecast initialization" in (
+    assert "deferred to prepared forecast initialization" in (
         capsys.readouterr().err)
     assert root_perturbation_deferral(None) is None
 
 
-def test_a_native_single_domain_perturbation_is_refused_before_the_decode(tmp_path):
-    """The prepared single-domain runner applies no bubble, so the root
-    preparer refuses the block by name where it first reads the
-    configuration, instead of publishing a bundle its forecast refuses."""
+def test_a_native_single_domain_perturbation_is_deferred_to_its_runner(tmp_path):
+    """The prepared single-domain runner applies the bubbles to its restored
+    state (fix/single-domain-perturbation), so the root preparer defers the
+    block, naming that runner, instead of refusing it."""
+    from woof.hrrr_configuration import root_perturbation_deferral
+
     exp, target, config = _perturbed_config(tmp_path, tree=False)
-    with pytest.raises(ValueError, match=(
-            r"single-domain native HRRR root preparation route does not "
-            r"apply \[perturbation\]")):
-        resolve_root_experiment(target=target, vertical=exp.vertical,
-            namelist_input=tmp_path / "namelist.input", start_time=exp.start_time,
-            run_seconds=exp.run_seconds, experiment_config=config)
+    actual, _raw = resolve_root_experiment(target=target, vertical=exp.vertical,
+        namelist_input=tmp_path / "namelist.input", start_time=exp.start_time,
+        run_seconds=exp.run_seconds, experiment_config=config)
+    assert actual.perturbation == exp.perturbation
+    deferred = root_perturbation_deferral(config, announce=False)
+    assert deferred["application_route"] == (
+        "woof.prepared_single_domain_forecast")
+
+
+@pytest.mark.parametrize("source", ["hrrr", "rap-native"])
+def test_the_root_preparation_fills_the_source_generations_before_splitting_fetch(
+        tmp_path, source):
+    """A bare operational-fork configuration prepares with the fork pair.
+
+    The root preparation splits ``[fetch]`` off before it loads, so the
+    load-time fill (woof.physics_source_defaults.GENERATION_SELECTORS)
+    never saw the source: a configuration naming an hrrr or rap source
+    under mp_physics = 28 with no generation key written resolved, and
+    recorded in its physics receipt, WRF v4.6.1's surface layer and
+    Thompson with the blend snow fall, while ``woof sim`` integrated the
+    fork pair from the same file.  The fill now runs before the split.
+    """
+    exp, target, config, namelist, wps = _case(tmp_path, {"mp_physics": 28})
+    assert exp.root.run.thompson_version == "wrf_461"
+    assert exp.root.run.thompson_fork_snow_fall == "blend"
+    # (The fixture authors its surface layer through the hrrr recipe, so
+    # only the two Thompson keys are bare here; the fill writes all three.)
+    config.write_text(config.read_text(encoding="utf-8")
+                      + f'\n[fetch]\nsource = "{source}"\n', encoding="utf-8")
+    actual, _ = resolve_root_experiment(target=target, vertical=exp.vertical,
+        namelist_input=namelist, start_time=exp.start_time, run_seconds=exp.run_seconds,
+        experiment_config=config, wps_namelist=wps)
+    assert actual.root.run.mp_physics == 28
+    assert actual.root.run.thompson_version == "wrf_39_noaa"
+    assert actual.root.run.thompson_fork_snow_fall == "wrf_39_noaa"
+    assert actual.root.run.mynn_sfclay_variant == "gsl_wrf39"
+    receipt = benchmark._configured_physics_receipt(actual.root.run)
+    assert receipt["resolved"]["thompson_version"] == "wrf_39_noaa"
+    assert receipt["resolved"]["thompson_fork_snow_fall"] == "wrf_39_noaa"
+    assert receipt["resolved"]["mynn_sfclay_variant"] == "gsl_wrf39"
+
+
+def test_the_root_preparation_keeps_a_written_generation_and_the_generic_default(tmp_path):
+    """A written ``thompson_version = "wrf_461"`` under a fork source is
+    kept (and the fork snow fall is then not filled, since woof.config
+    refuses it under wrf_461); a configuration with no [fetch] source
+    resolves the generic defaults as before."""
+    exp, target, config, namelist, wps = _case(
+        tmp_path, {"mp_physics": 28, "thompson_version": "wrf_461"})
+    config.write_text(config.read_text(encoding="utf-8")
+                      + '\n[fetch]\nsource = "hrrr"\n', encoding="utf-8")
+    actual, _ = resolve_root_experiment(target=target, vertical=exp.vertical,
+        namelist_input=namelist, start_time=exp.start_time, run_seconds=exp.run_seconds,
+        experiment_config=config, wps_namelist=wps)
+    assert actual.root.run.thompson_version == "wrf_461"
+    assert actual.root.run.thompson_fork_snow_fall == "blend"
+    assert actual.root.run.mynn_sfclay_variant == "gsl_wrf39"
+    exp, target, config, namelist, wps = _case(tmp_path, {"mp_physics": 28})
+    actual, _ = resolve_root_experiment(target=target, vertical=exp.vertical,
+        namelist_input=namelist, start_time=exp.start_time, run_seconds=exp.run_seconds,
+        experiment_config=config, wps_namelist=wps)
+    assert asdict(actual.root.run) == asdict(exp.root.run)

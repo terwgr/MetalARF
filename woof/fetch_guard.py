@@ -468,6 +468,52 @@ def hold(kind: str, target: str | Path, *, timeout_s: float | None = None,
                       holder_progress=holder_progress)
 
 
+class DirectoryProgress:
+    """A ``holder_progress`` probe of the bytes a writer stages in a folder.
+
+    The mark is every file's name, size and change time under ``root``
+    (``.part`` staging included), so a download whose bytes keep arriving
+    is a holder making progress.  The walk is redone at most every
+    ``every_s`` seconds; between walks the last mark stands, which can
+    only shorten a measured stall, never lengthen it.  The concrete
+    breakage it prevents: a 36-member HRRR ensemble's member 4 refused
+    after a flat 600 s wait on its sibling's download of the same cycle
+    into the shared folder, which was still arriving at about 1 MiB/s
+    (2026-10-24).
+    """
+
+    def __init__(self, root: str | Path, *, every_s: float = 2.0,
+                 clock=time.monotonic) -> None:
+        self.root = Path(root)
+        self.every_s = every_s
+        self._clock = clock
+        self._taken = None
+        self._mark: object = None
+
+    def _walk(self) -> tuple:
+        rows = []
+        for directory, _folders, files in os.walk(self.root):
+            for name in files:
+                try:
+                    stat = os.stat(os.path.join(directory, name))
+                except OSError:
+                    continue
+                rows.append((directory, name, stat.st_size, stat.st_mtime_ns))
+        return tuple(sorted(rows))
+
+    def __call__(self) -> object:
+        now = self._clock()
+        if self._taken is None:
+            # The first call is the uncontended acquire's own: no walk.
+            # A wait's first real mark counts once as progress.
+            self._taken = now
+            return None
+        if now - self._taken >= self.every_s:
+            self._taken = now
+            self._mark = self._walk()
+        return self._mark
+
+
 def active_writer(kind: str, target: str | Path) -> bool:
     """Inspect an existing writer lock without creating files or waiting.
 
@@ -650,23 +696,30 @@ class LocalWriteFailed(Exception):
         self.error = error
 
 
-def receive(response, dest: Path, mode: str, *, block_bytes: int) -> None:
+def receive(response, dest: Path, mode: str, *, block_bytes: int,
+            on_bytes=None) -> None:
     """Stream an HTTP ``response`` into ``dest``; a failed write is local.
 
     Only the writes are wrapped.  Reads stay outside, so a reset
     connection or a timeout still reaches the caller as the network.
+    ``on_bytes`` is called with the byte count written so far after each
+    block, for a caller that reports progress.
     """
 
     try:
         sink = dest.open(mode)
     except OSError as error:
         raise LocalWriteFailed(dest, error) from error
+    written = 0
     try:
         while block := response.read(block_bytes):
             try:
                 sink.write(block)
             except OSError as error:
                 raise LocalWriteFailed(dest, error) from error
+            if on_bytes is not None:
+                written += len(block)
+                on_bytes(written)
     finally:
         try:
             sink.close()
@@ -737,6 +790,7 @@ def quarantine(path: Path, *, tag: str = "rejected") -> Path:
 
 __all__ = [
     "DEFAULT_LOCK_TIMEOUT_S",
+    "DirectoryProgress",
     "FetchLockBusy",
     "LOCK_ROOT_ENV",
     "LOCK_TIMEOUT_ENV",

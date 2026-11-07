@@ -97,6 +97,10 @@ def test_no_direct_nvrtc_compile_bypasses_the_key():
     for rel in listed:
         if rel == "tests/test_nvrtc_cache_key.py":
             continue
+        if rel.startswith("woof/hex/"):
+        # The folded hex model compiles through its own KernelCache and compile contract
+        # (woof/hex/cuda_backend), held by its own tier-1 tests; this audit is the regional engine's.
+            continue
         text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
         for match in _DIRECT.finditer(text):
             line = text[:match.start()].count("\n") + 1

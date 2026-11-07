@@ -66,6 +66,7 @@ from pathlib import Path
 from typing import Mapping
 
 import numpy as np
+from woof.ensemble.state_sha import _host as _host
 
 #: Versioned contract label recorded in every increment receipt.
 INCREMENT_CONTRACT = "gpuwm-da-increments.v1"
@@ -77,10 +78,6 @@ SATURATION_CAP_SCHEMA = "gpuwm-da.saturation-cap.v1"
 #: inverse dry density and vapour give the background's temperature
 #: through the equation of state, so no setup array (``thb``) is needed.
 SATURATION_CAP_READS = ("p", "alt", "qv")
-
-#: The ledger stage a caller records the cap's removal under.
-SATURATION_CAP_STAGE = "saturation_cap"
-
 
 #: Cells per block of the cap's arithmetic (:func:`_saturation_cap`), so
 #: its float64 scratch is a few arrays of the moved cells of one block on
@@ -178,6 +175,13 @@ def _saturation_cap(read, staged, checked):
                       "reason": (f"the state carries no {missing}; the "
                                  "background temperature cannot be formed")}
     xp = _array_module(arrays["qv"])
+    if _is_metal(arrays["qv"]):
+        # The binary64 thermodynamic cap retains its shared host formula.
+        # Stage only the inputs it reads, rather than the full live state.
+        arrays = {name: _host(value) for name, value in arrays.items()}
+        staged = {name: _host(staged[name]) for name in ("qv",)
+                  if name in staged}
+        receipt["arithmetic_backend"] = "host"
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         return _saturation_cap_blocks(xp, arrays, staged, checked, receipt)
 
@@ -488,13 +492,6 @@ def _moment_guard(resulting: Mapping[str, object],
     return repaired, {**policy_receipt, **report}
 
 
-def _host(value) -> np.ndarray:
-    get = getattr(value, "get", None)
-    if callable(get) and hasattr(value, "__cuda_array_interface__"):
-        return np.ascontiguousarray(get())
-    return np.ascontiguousarray(np.asarray(value))
-
-
 def _array_sha256(value) -> str:
     host = _host(value)
     digest = hashlib.sha256()
@@ -512,7 +509,7 @@ def _validate(name: str, target, increment, *, where: str) -> np.ndarray:
             f"increment names field {name!r}, which {where} does not "
             "carry; the DA interface is keyed by prognostic field name "
             "and every key must resolve")
-    checked = np.asarray(increment)
+    checked = _host(increment)
     target_shape = tuple(np.shape(target))
     if checked.shape != target_shape:
         raise ValueError(
@@ -532,8 +529,16 @@ def _validate(name: str, target, increment, *, where: str) -> np.ndarray:
 
 def _nonfinite_count(value) -> int:
     """How many entries of ``value`` are not finite.  Backend-agnostic."""
+    if _is_metal(value):
+        return int(np.count_nonzero(~np.isfinite(_host(value))))
     module = _array_module(value)
     return int(module.count_nonzero(~module.isfinite(value)))
+
+
+def _is_metal(value):
+    from woof.metal.array import MetalArray
+
+    return isinstance(value, MetalArray)
 
 
 def _array_module(value):
@@ -621,7 +626,12 @@ def apply_increments(state, increments: Mapping[str, object], *,
         for name, increment in checked.items():
             target = getattr(state, name)
             addend = _as_target_array(target, increment)
-            updated = target + addend
+            if _is_metal(target):
+                from woof.metal.da_state import binary
+
+                updated = binary(target, addend)
+            else:
+                updated = target + addend
             _require_finite_result(name, target, addend, updated,
                                    where="the state")
             staged[name] = updated
@@ -636,7 +646,14 @@ def apply_increments(state, increments: Mapping[str, object], *,
         # The resulting vapour the writer owns: the staged sum, or a copy
         # of the state's when a theta increment alone made the cap write.
         vapour = staged["qv"] if "qv" in staged else target.copy()
+        metal_vapour = _is_metal(vapour)
+        if metal_vapour:
+            vapour = _host(vapour)
         change = cap.write(vapour)
+        if metal_vapour:
+            vapour = _as_target_array(target, vapour)
+            if "qv" in staged:
+                staged["qv"] = vapour
         if saturation_observer is not None:
             observed = np.zeros(int(np.prod(np.shape(target))),
                                 dtype=np.float64)
@@ -694,6 +711,10 @@ def apply_increments(state, increments: Mapping[str, object], *,
 def _as_target_array(target, increment: np.ndarray):
     """``increment`` cast to the target's dtype and memory space."""
     dtype = getattr(target, "dtype", None)
+    if _is_metal(target):
+        from woof.metal.array import MetalArrayModule
+
+        return MetalArrayModule(target.buffer.context).asarray(increment, dtype=dtype)
     if hasattr(target, "__cuda_array_interface__"):
         import cupy as cp
 

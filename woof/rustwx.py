@@ -53,8 +53,29 @@ from woof.bridges import (RUSTWX_CRATE_RELATIVE, artifact_remedy,
 #: Environment variable naming a prebuilt renderer executable.
 RENDERER_ENV = "WOOF_RW_WRFBATCH"
 
+#: Optional product metadata, matching rw_wrfbatch's CHEM_CORE_FIELD_CATALOG.
+#: The renderer inspects source presence; this table never plans a product.
+#: (slug, wrfout source, mass level or None, display units).
+CHEM_PRODUCT_ROWS = (
+    ("smoke_near_surface", "SMOKE_SFC", None, "ug/m^3"),
+    ("smoke_column", "SMOKE_COLUMN", None, "mg/m^2"),
+    ("pm25_near_surface", "PM2_5_DRY", 1, "ug/m^3"),
+    ("aod_550", "AOD5502D", None, "1"),
+    ("dust_near_surface", "DUST_SFC", None, "ug/m^3"),
+    ("ozone_near_surface", "o3", 1, "ppb"),
+)
+
 #: Executable base name of the vendored batch renderer.
 RENDERER_NAME = "rw_wrfbatch"
+
+#: The built-in render themes the shipped renderer resolves by name
+#: (rustwx-render theme.rs ``RenderTheme::builtin_names``), for a caller that
+#: picks a theme per run before anything renders.  ``woof-light-tc`` is the
+#: WOOF look with the tropical-cyclone wind ladder (bands on 34, 50, 64, 83,
+#: 96, 113 and 137 kt, to 180 kt) and isobars every 4 hPa from 880 hPa.  A
+#: caller names a theme only when it is listed here: an unknown name is a
+#: THEME_ERROR, and every map of the run falls back to the plain default look.
+RENDER_THEMES = ("default", "light", "dark", "woof-light", "woof-dark", "tc", "woof-light-tc")
 
 #: How a native renderer line opens when it tells the reader something
 #: about the pictures themselves -- a subtitle it had to cut, a record it
@@ -63,7 +84,7 @@ NATIVE_WARNING_PREFIXES = ("warning:", "WARNING ")
 
 SIMULATED_RADAR_ABI = (
     "rw_simradar --request REQUEST.json schema=simulated-radar.request/v1 "
-    "manifest=simulated-radar.manifest/v1 volume_paths=v1 scene_shapes=v1"
+    "manifest=simulated-radar.manifest/v1 volume_paths=v1 scene_shapes=v1 bands=v1"
 )
 CANONICAL_RADAR_ABI = (
     "native-atmosphere.columns/v1 temperature=temperature_k "
@@ -71,7 +92,6 @@ CANONICAL_RADAR_ABI = (
 )
 
 VERIFICATION_ENV = "WOOF_RW_VERIFY"
-VERIFICATION_ABI = "gpuwm.verify-visuals.request.v1"
 
 
 def find_verification_binary() -> Path | None:
@@ -135,6 +155,24 @@ def _verification_run(arguments: list[str], *, timeout: float) -> dict:
         record = json.loads(result.stdout)
     except ValueError as error:
         raise RuntimeError("native observation verification returned no JSON receipt") from error
+    return record
+
+
+def verify_lightning_counts(request: dict, *, receipt_path: Path, timeout=900) -> dict:
+    """Verify stored LTG1/2/3 and PR92 against native GLM total-flash counts.
+
+    The request declares contiguous observed coverage, its geographic footprint,
+    and the native invariant grid used for cell areas. Rust reads and scores it.
+    """
+    from woof.verification_visuals import _atomic_json
+
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    request_path = receipt_path.with_name(receipt_path.stem + ".request.json")
+    _atomic_json(request_path, request)
+    record = _verification_run(["--request", str(request_path)], timeout=timeout)
+    if record.get("schema") != "gpuwm.lightning-verification.receipt.v1":
+        raise RuntimeError("native lightning verification returned an incompatible receipt")
+    _atomic_json(receipt_path, record)
     return record
 
 
@@ -268,18 +306,8 @@ def _simulated_radar_remedy() -> str:
 
 def simulated_radar_binary() -> Path | None:
     """Resolve the native radar simulator through the standard artifact paths."""
-    filename = executable_name("rw_simradar")
     override = os.environ.get(SIMULATED_RADAR_ENV)
-    root = Path(__file__).resolve().parent.parent
-    candidates = ([Path(override)] if override else []) + [
-        crate_dir() / "target" / "release" / filename,
-        crate_dir() / "target" / "debug" / filename,
-        root / "libexec" / "bridges" / filename,
-        packaged_bridge_dir() / filename,
-        default_bridge_dir() / filename,
-        *legacy_bridge_candidates(filename),
-    ]
-    for candidate in candidates:
+    for candidate in _candidates(SIMULATED_RADAR_ENV, "rw_simradar"):
         if candidate.is_file():
             return bridges.accept_resolved(candidate.resolve())
         if override and candidate == Path(override):
@@ -299,10 +327,17 @@ def require_simulated_radar_binary() -> Path:
     stale binary otherwise surfaced only when the first history landed.
     """
     binary = simulated_radar_binary()
+    if (binary is None and not os.environ.get(SIMULATED_RADAR_ENV)
+            and bridges.fetch_on_demand("rw_simradar")):
+        # On demand since 2.9.11 (PyPI per-file limit): pinned in this
+        # release's bundle, staged by the first door that needs it.
+        binary = simulated_radar_binary()
     if binary is None:
+        failure = bridges.on_demand_failure("rw_simradar")
         raise SimulatedRadarRefusal(
             "rw_simradar is not installed, so [simulated_radar] cannot write "
-            "a radar volume.\n" + _simulated_radar_remedy())
+            "a radar volume" + (f" ({failure})" if failure else "") + ".\n"
+            + _simulated_radar_remedy())
     try:
         probe = subprocess.run([str(binary), "--abi"], capture_output=True, text=True,
                                timeout=60, env=renderer_env())
@@ -358,7 +393,7 @@ def canonical_radar_scene(source_path: Path, *, outdir: Path) -> Path:
 
 
 def simulate_radar(history_paths, *, outdir: Path, config: dict, volume_paths=None,
-                   binary: Path | None = None, started=None) -> dict:
+                   binary: Path | None = None, started=None, events=None) -> dict:
     """Pass durable histories to Rust and return its committed run inventory.
 
     All field reads, beam sampling, file encoding, hashing and PPI rendering
@@ -369,6 +404,8 @@ def simulate_radar(history_paths, *, outdir: Path, config: dict, volume_paths=No
     executable (:func:`require_simulated_radar_binary`), so a live forecast
     probes it once rather than per history. ``started`` is called with the
     native ``Popen`` so a forecast stopping early can terminate it.
+    ``events``, when supplied, collects the native JSON execution events,
+    including reused and newly committed domain-times for this call.
     """
     import json
     import tempfile
@@ -409,6 +446,11 @@ def simulate_radar(history_paths, *, outdir: Path, config: dict, volume_paths=No
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema") != "simulated-radar.manifest/v1" or manifest.get("simulated") is not True:
         raise RuntimeError("native radar command did not commit a simulated volume manifest")
+    if events is not None:
+        for line in _stdout.splitlines():
+            event = json.loads(line)
+            if isinstance(event, dict):
+                events.append(event)
     return manifest
 
 
@@ -512,9 +554,9 @@ RENDERER_ABI_MARKER = (
     "mesh:\tmeshdiff:\tselectable_slugs\t"
     "gpuwm-rw-wrfbatch-layout-v1\t--layout\tauto\tfixed\t"
     "--size-class\t--scale\t--pair-sheet\t"
-    "gpuwm-rw-wrfbatch-difference-v1\t--diff-against\t--diff-inputs-json\t"
+    "gpuwm-rw-wrfbatch-difference-v2\t--diff-against\t--diff-inputs-json\t"
     "--diff-label-a\t--diff-label-b\t--diff-labels\t"
-    "--diff-sheet\tDIFFERENCE")
+    "--diff-sheet\tDIFFERENCE\tdiffering_cells\tRUSTWX_DIFFERENCE_TABLE")
 
 #: The generic product families, read OUT of the pinned marker rather
 #: than listed again beside it.  The marker is the contract a built
@@ -837,12 +879,10 @@ def basemap_remedy() -> str:
     return companion_reinstall_command()
 
 
-def renderer_candidates() -> tuple[Path, ...]:
-    """Deterministic candidate paths for the renderer, best first."""
-
-    filename = executable_name(RENDERER_NAME)
+def _candidates(env_var: str, name: str) -> tuple[Path, ...]:
+    filename = executable_name(name)
     candidates: list[Path] = []
-    override = os.environ.get(RENDERER_ENV)
+    override = os.environ.get(env_var)
     if override:
         candidates.append(Path(override))
     root = Path(__file__).resolve().parent.parent
@@ -855,6 +895,15 @@ def renderer_candidates() -> tuple[Path, ...]:
         *legacy_bridge_candidates(filename),
     ))
     return tuple(candidates)
+
+
+def renderer_candidates() -> tuple[Path, ...]:
+    """Deterministic candidate paths for the renderer, best first."""
+
+    return _candidates(RENDERER_ENV, RENDERER_NAME)
+
+
+_ANNOUNCED_RENDERERS: set[Path] = set()
 
 
 def find_renderer() -> Path | None:
@@ -874,7 +923,11 @@ def find_renderer() -> Path | None:
     override = os.environ.get(RENDERER_ENV)
     for candidate in renderer_candidates():
         if candidate.is_file():
-            return bridges.accept_resolved(candidate.resolve())
+            selected = bridges.accept_resolved(candidate.resolve())
+            if selected not in _ANNOUNCED_RENDERERS:
+                print(f"renderer: selected {selected}", file=sys.stderr)
+                _ANNOUNCED_RENDERERS.add(selected)
+            return selected
         if override and candidate == Path(override):
             raise FileNotFoundError(
                 f"{RENDERER_ENV} names a missing file: {candidate}.  "
@@ -917,6 +970,46 @@ def renderer_env() -> dict[str, str]:
                 env["RUSTWX_BASEMAP_DIR"] = str(assets)
                 break
     return env
+
+
+def raster_device_env(env: dict[str, str]) -> tuple[dict[str, str], str]:
+    """Hand the renderer's CUDA raster fill an explicit card; say which.
+
+    The Rust renderer fills map rasters on a CUDA card
+    (``rustwx-render/src/rasterize_cuda.rs``) and on the CPU only when no
+    card opens or ``RUSTWX_RASTER_DEVICE=cpu`` is set. Left alone it took
+    CUDA's device 0 with nothing saying so. Here the card is the first one
+    ``CUDA_VISIBLE_DEVICES`` exposes (``RUSTWX_RASTER_DEVICE=<n>`` picks
+    another visible one); a card lease that names its cards only in
+    ``GPU_MUTEX_CARDS`` is turned into ``CUDA_VISIBLE_DEVICES``; with no
+    card visible the fill is pinned to the CPU. Returns the environment
+    and one line naming the choice.
+    """
+
+    env = dict(env)
+    explicit = env.get("RUSTWX_RASTER_DEVICE", "").strip()
+    if explicit.lower() == "cpu":
+        return env, "raster fills on the CPU (RUSTWX_RASTER_DEVICE=cpu)"
+    visible = env.get("CUDA_VISIBLE_DEVICES")
+    leased = env.get("GPU_MUTEX_CARDS", "").strip()
+    if visible is None and leased:
+        env["CUDA_VISIBLE_DEVICES"] = visible = leased
+        env.setdefault("CUDA_DEVICE_ORDER", "PCI_BUS_ID")
+    if visible is not None and visible.strip() in ("", "-1"):
+        env["RUSTWX_RASTER_DEVICE"] = "cpu"
+        return env, ("raster fills on the CPU (CUDA_VISIBLE_DEVICES exposes "
+                     "no card)")
+    ordinal = int(explicit) if explicit.isdigit() else 0
+    tail = ("; the CPU draws them if that card does not open, and "
+            "RUSTWX_RASTER_DEVICE=cpu keeps them there")
+    if visible is None:
+        return env, (f"raster fills on CUDA device {ordinal}: no card is "
+                     "assigned (CUDA_VISIBLE_DEVICES unset), so set "
+                     "CUDA_VISIBLE_DEVICES to choose one" + tail)
+    cards = [card.strip() for card in visible.split(",") if card.strip()]
+    card = cards[ordinal] if ordinal < len(cards) else f"#{ordinal}"
+    return env, (f"raster fills on CUDA card {card} (visible device "
+                 f"{ordinal} of CUDA_VISIBLE_DEVICES={visible})" + tail)
 
 
 def probe_renderer(path: Path) -> tuple[bool, str]:
@@ -976,8 +1069,14 @@ def probe_renderer(path: Path) -> tuple[bool, str]:
         return False, f"--abi did not run: {error}"
     except subprocess.TimeoutExpired:
         return False, (f"--abi did not exit within {_PROBE_TIMEOUT_S} s")
+    from woof import provenance_gate
+
     observed = (abi.stdout or "").strip()
-    if abi.returncode != 0 or observed != RENDERER_ABI_MARKER:
+    # A GPUWM_BRIDGE_SOURCE_REV line after the contract is not part of it
+    # (rw_ensbatch's whole-answer compare refused its own checkout's
+    # build); it is judged by the shared stamp check below.
+    contract, revision = provenance_gate.split_abi_answer(observed)
+    if abi.returncode != 0 or contract != RENDERER_ABI_MARKER:
         # A build predating the handshake answers `unknown option --abi`
         # on exit 2, so name that case for what it is rather than
         # reporting an empty string against a long expected line.
@@ -989,6 +1088,13 @@ def probe_renderer(path: Path) -> tuple[bool, str]:
             "checkout, so its product catalog is not this tree's; REBUILD "
             f"it, do not re-point {RENDERER_ENV} at another copy: "
             f"{rustwx_build_hint()}")
+    if revision is not None:
+        refusal = provenance_gate.abi_revision_refusal(
+            path, revision, env_var=RENDERER_ENV)
+        if refusal is not None:
+            return False, (
+                f"launches and --abi matches the render contract, but "
+                f"{refusal}; REBUILD it: {rustwx_build_hint()}")
     return True, ("probe --help exited 0 with its usage line; --abi matches "
                   "the render contract")
 
@@ -1016,7 +1122,8 @@ def list_products(renderer: Path, wrfout: Path, *, store_root: Path,
 
 
 def catalog_rows(renderer: Path, wrfouts, *, store_root: Path,
-                 heavy: bool = False, products: str | None = None
+                 heavy: bool = False, products: str | None = None,
+                 save_import: Path | None = None,
                  ) -> tuple[list[tuple[str, str, str, str, str]], str]:
     """The same listing, with each row's machine code: (rows, summary).
 
@@ -1033,7 +1140,7 @@ def catalog_rows(renderer: Path, wrfouts, *, store_root: Path,
     """
 
     return _catalog_listing(renderer, wrfouts, store_root=store_root,
-                            heavy=heavy, products=products)
+                            heavy=heavy, products=products, save_import=save_import)
 
 
 #: The longest command line a renderer is started with.  Windows starts
@@ -1046,9 +1153,21 @@ def catalog_rows(renderer: Path, wrfouts, *, store_root: Path,
 COMMAND_LINE_BUDGET = 32_000
 
 #: Options whose value is a path the renderer opens.
-_PATH_OPTIONS = ("--store-root", "--out-dir", "--overlays", "--annotate")
+_PATH_OPTIONS = ("--store-root", "--out-dir", "--overlays", "--annotate",
+                 "--save-import", "--from-import")
 #: Environment names whose value is a path the renderer opens.
-_PATH_ENV = ("RUSTWX_BASEMAP_DIR", "RUSTWX_ASSETS_DIR", "RUSTWX_THEME")
+_PATH_ENV = ("RUSTWX_BASEMAP_DIR", "RUSTWX_ASSETS_DIR", "RUSTWX_THEME",
+             "RUSTWX_DIFFERENCE_TABLE")
+
+#: The difference bars' table, by environment
+#: (``rustwx_render::difference::DIFFERENCE_TABLE_ENV``): ``table`` (the
+#: built-in table, the default), ``auto`` (every bar fitted to its own
+#: difference) or the path of a JSON file whose top-level keys replace the
+#: built-in table's.  ``woof render --diff-table`` sets it for the
+#: differences it draws.  Under every setting a table bar that would draw
+#: every cell in its neutral colour is fitted to the difference instead.
+DIFFERENCE_TABLE_ENV = "RUSTWX_DIFFERENCE_TABLE"
+DIFFERENCE_TABLE_CHOICES = ("table", "auto")
 
 #: The renderer's radar colour set, by environment: ``standard`` (the radar
 #: tables) or ``classic`` (the reflectivity ladder and blue-red velocity
@@ -1056,7 +1175,6 @@ _PATH_ENV = ("RUSTWX_BASEMAP_DIR", "RUSTWX_ASSETS_DIR", "RUSTWX_THEME")
 #: reads it (``rustwx_render::RADAR_COLORS_ENV``); ``woof render
 #: --radar-colors`` sets it for the renders it starts.
 RADAR_COLORS_ENV = "RUSTWX_RADAR_COLORS"
-RADAR_COLOR_SETS = ("standard", "classic")
 
 
 def _names_a_file(value: str) -> bool:
@@ -1164,7 +1282,8 @@ def list_products_series(renderer: Path, wrfouts, *, store_root: Path,
 
 
 def _catalog_listing(renderer: Path, wrfouts, *, store_root: Path,
-                     heavy: bool = False, products: str | None = None
+                     heavy: bool = False, products: str | None = None,
+                     save_import: Path | None = None,
                      ) -> tuple[list[tuple[str, str, str, str, str]], str]:
     """One parse of the renderer's catalog mode, for both accessors."""
     inputs = [Path(path) for path in wrfouts]
@@ -1182,6 +1301,8 @@ def _catalog_listing(renderer: Path, wrfouts, *, store_root: Path,
         command.append("--heavy")
     if products is not None:
         command.extend(["--products", products])
+    if save_import is not None:
+        command.extend(["--save-import", str(save_import)])
     command.extend(str(path) for path in inputs)
     try:
         with _series_command(command, len(inputs), renderer_env()) as fitted:
@@ -1297,7 +1418,7 @@ def catalog_verdict(rows, requested) -> tuple[str, list[tuple[str, str]]]:
     wanted = (product_spec_terms(requested) if isinstance(requested, str)
               else [str(token).strip() for token in requested])
     wanted = [token for token in wanted if token]
-    status = {row[0]: (row[2], row[3]) for row in rows}
+    status = {row[0]: (row[2], row[3], catalog_code(row)) for row in rows}
     # Whether this listing enumerated the store's 2-D variables at all,
     # which is what makes an absent row a reading rather than a silence.
     enumerated = any(row[1] == "generic"
@@ -1316,7 +1437,7 @@ def catalog_verdict(rows, requested) -> tuple[str, list[tuple[str, str]]]:
                 continue
             available.append(token)
             continue
-        if row[0] == "renderable":
+        if row[0] == "renderable" or row[2] == "invalid-active-fire-domain":
             available.append(token)
             continue
         excluded.append((token, row[1]))
@@ -1777,6 +1898,18 @@ PRESSURE_VOLUME_CEILING_CLAUSE = "host memory ceiling"
 PRESSURE_VOLUME_ABSENT_FIELD_CLAUSE = "variable not found"
 PRESSURE_LEVEL_FAMILY = "pressure-level products"
 
+#: The snowfall windows the engine accumulates over a frame's history
+#: (``PRODUCTS`` in ``rw-wrfbatch/src/snowfall.rs``), and how its note says
+#: one was not built.  Such a product leaves an ``all`` request without a
+#: ``SKIPPED`` line, like the pressure-level family.  THE BREAKAGE: a host
+#: removed earlier history frames to save disk, and the windows that need
+#: them vanished from the pictures with nothing in the render summary
+#: naming the frame they needed; the engine's note names it.
+SNOWFALL_WINDOW_SLUGS = frozenset((
+    "snowfall_window", "snow_10to1_window", "snow_kuchera_window",
+    "snowfall_liquid_equivalent", "snow_depth_total", "snow_depth_change"))
+SNOWFALL_UNAVAILABLE_CLAUSE = " unavailable: "
+
 
 def import_note_skip(note: str, inputs) -> tuple[str, str] | None:
     """An import note that took products out of the render, as a skip row.
@@ -1791,13 +1924,46 @@ def import_note_skip(note: str, inputs) -> tuple[str, str] | None:
     is a skip except one whose frame does not store the 3-D fields the
     volumes are built from: matching the ceiling's words alone left a
     panic in the volume builder as silent as the ceiling had been.
+    A snowfall window the engine could not build (its history lacks a
+    frame it needs) is a skip of that product, with the engine's note,
+    which names the missing frame, as its reason.
     ``None`` for every other note.
     """
 
+    slug, clause, _ = note.partition(SNOWFALL_UNAVAILABLE_CLAUSE)
+    if clause and slug in SNOWFALL_WINDOW_SLUGS:
+        return slug, frame_attributed(note, inputs)
     if (not note.startswith(PRESSURE_VOLUME_OMITTED_NOTE)
             or PRESSURE_VOLUME_ABSENT_FIELD_CLAUSE in note):
         return None
     return PRESSURE_LEVEL_FAMILY, frame_attributed(note, inputs)
+
+
+def run_cf_renderer(renderer: Path, source: Path, *, variable: str,
+                    out_dir: Path, valid: str | None = None,
+                    bounds: str | None = None, table: Path | None = None,
+                    contours: str | None = None, contour_file: Path | None = None,
+                    observation: Path | None = None,
+                    observation_variable: str | None = None,
+                    overlays: Path | None = None, size: tuple[int, int] | None = None,
+                    receipt: Path | None = None, theme: str | None = None) -> int:
+    """Native CF planes, overlays and observation sheets. All data work is Rust."""
+    command = [str(renderer), "--cf", str(source), "--variable", variable,
+               "--out-dir", str(out_dir)]
+    for flag, value in (("--valid", valid), ("--bounds", bounds),
+                        ("--cf-table", table), ("--contours", contours),
+                        ("--contour-file", contour_file),
+                        ("--observation", observation),
+                        ("--observation-variable", observation_variable),
+                        ("--overlays", overlays), ("--receipt", receipt)):
+        if value is not None:
+            command.extend((flag, str(value)))
+    if size is not None:
+        command.extend(("--width", str(size[0]), "--height", str(size[1])))
+    env = renderer_env()
+    if theme is not None:
+        env["RUSTWX_THEME"] = theme
+    return subprocess.run(command, env=env, check=False).returncode
 
 
 def run_renderer(renderer: Path, wrfout: Path, *, store_root: Path,
@@ -1815,6 +1981,7 @@ def run_renderer(renderer: Path, wrfout: Path, *, store_root: Path,
                  section_size: tuple[int, int] | None = None,
                  section_top_km: float | None = None,
                  fills: list | None = None,
+                 from_import: Path | None = None,
                  ) -> tuple[list[Path], list[str],
                             list[tuple[str, str]]]:
     """Render one wrfout file into ``out_dir``; (written, failures, skipped).
@@ -1848,14 +2015,14 @@ def run_renderer(renderer: Path, wrfout: Path, *, store_root: Path,
         annotate=annotate, streamlines=streamlines, theme=theme,
         section=section, isotherms=isotherms,
         section_across_km=section_across_km, section_size=section_size,
-        section_top_km=section_top_km, fills=fills)
+        section_top_km=section_top_km, fills=fills, from_import=from_import)
 
 
 RESIDENT_ENSEMBLE_ABI = (
     "gpuwm-rw-wrfbatch-resident-ensemble-v2\tCDF5\tmean\tspread\tmin\tmax\tprobability\tpaintball\tpostage\tfraction\ttyped-diagnostic\tRENDERED\tFAILED")
 
 CPU_ENSEMBLE_REDUCTION_ABI = (
-    "gpuwm-ensemble-diagnostic-reduce.v1\tf32-words\tf64-two-pass\tmember-order\tsha256")
+    "gpuwm-ensemble-diagnostic-reduce.v1\tf32-words\tf64-two-pass\tmember-order\tsha256\tmember-weights-v1")
 
 
 def find_ensemble_product_renderer(renderer: Path | None = None) -> Path | None:
@@ -1865,11 +2032,13 @@ def find_ensemble_product_renderer(renderer: Path | None = None) -> Path | None:
     this aggregate contract into the same Rust implementation, preserving
     typed diagnostic words and rendered bytes.
     """
-    override = os.environ.get("WOOF_ENSEMBLE_RENDERER")
+    override_name = ("WOOF_RW_ENSBATCH" if os.environ.get("WOOF_RW_ENSBATCH")
+                     else "WOOF_ENSEMBLE_RENDERER")
+    override = os.environ.get(override_name)
     if override:
         selected = Path(override)
         if not selected.is_file():
-            raise FileNotFoundError(f"WOOF_ENSEMBLE_RENDERER names a missing file: {selected}; "
+            raise FileNotFoundError(f"{override_name} names a missing file: {selected}; "
                 "point it at the built rw_ensbatch binary or unset the override")
         return bridges.accept_resolved(selected.resolve())
     filename = executable_name("rw_ensbatch")
@@ -1880,12 +2049,7 @@ def find_ensemble_product_renderer(renderer: Path | None = None) -> Path | None:
         sibling = renderer.with_name(filename)
         if sibling.is_file():
             return bridges.accept_resolved(sibling.resolve())
-    root = Path(__file__).resolve().parent.parent
-    for candidate in (crate_dir() / "target" / "release" / filename,
-            crate_dir() / "target" / "debug" / filename,
-            root / "libexec" / "bridges" / filename,
-            packaged_bridge_dir() / filename, default_bridge_dir() / filename,
-            *legacy_bridge_candidates(filename)):
+    for candidate in _candidates(override_name, "rw_ensbatch"):
         if candidate.is_file():
             return bridges.accept_resolved(candidate.resolve())
     return renderer
@@ -1906,9 +2070,45 @@ def require_ensemble_diagnostic_reducer(renderer: Path | None = None) -> Path:
     return renderer
 
 
+def product_source_label() -> str:
+    """``WOOF <executing version>``, the stamp woof.render.default_source_label
+    puts on a plot, built here without importing woof.render.
+
+    Breakage it prevents: this module ships in the RW-WPS preparation wheel,
+    which leaves woof.render out, so an import of it here made
+    tools/build_rw_wps_release.py refuse the wheel for an unresolved internal
+    import.  tests/test_provenance_gate.py holds the two labels equal.
+    """
+    from woof.provenance import UNKNOWN_VERSION
+    from woof.provenance_gate import executing_version
+
+    try:
+        version = executing_version()
+    except Exception:                                   # noqa: BLE001
+        return "WOOF"
+    if not version or version == UNKNOWN_VERSION:
+        return "WOOF"
+    return f"WOOF {version}"
+
+
+def run_cyclone_product_renderer(renderer: Path, manifest: Path):
+    """Native moving-grid tracks, stamps, animation and weighted wind swaths."""
+    import json
+    schema = json.loads(Path(manifest).read_text()).get("schema")
+    mode = "--tc-accumulator" if schema == "gpuwm.tc-accumulator.v1" else "--cyclone-products"
+    result = subprocess.run([str(renderer), mode, str(manifest)],
+                            capture_output=True, text=True, env=renderer_env())
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or 'Rust cyclone products failed')
+    written = [line.split('\t', 1)[1] for line in result.stdout.splitlines() if line.startswith('RENDERED\t')]
+    if not written or any(not Path(path).is_file() for path in written):
+        raise RuntimeError('Rust cyclone products returned no durable pictures')
+    return {'maps': written, 'manifest': str(manifest), 'renderer': str(renderer)}
+
+
 def run_ensemble_product_renderer(renderer: Path, product_frame: Path, *,
                                   out_dir: Path, fields=(), domain="d01",
-                                  width=1200, height=900, source_label="WOOF",
+                                  width=1200, height=900, source_label=None,
                                   products=("mean", "spread", "min", "max", "prob", "paintball", "postage")):
     """Draw pre-reduced resident probability planes without member histories.
 
@@ -1916,10 +2116,17 @@ def run_ensemble_product_renderer(renderer: Path, product_frame: Path, *,
     imports a fabricated WRF frame or recalculates ensemble reductions.
     """
     renderer = find_ensemble_product_renderer(renderer)
+    if source_label is None:
+        source_label = product_source_label()
     probe = subprocess.run([str(renderer), "--ensemble-products-abi"],
                            capture_output=True, text=True, timeout=_PROBE_TIMEOUT_S,
                            env=renderer_env())
-    if probe.returncode or probe.stdout.strip() != RESIDENT_ENSEMBLE_ABI:
+    advertised = probe.stdout.strip().split("\t")
+    required = RESIDENT_ENSEMBLE_ABI.split("\t")
+    # S2S renderers add window/projection capabilities to this same contract.
+    # Keep the version and every base capability mandatory, allowing extras.
+    if (probe.returncode or advertised[0] != required[0]
+            or not set(required[1:]).issubset(advertised[1:])):
         raise RuntimeError("the Rust renderer lacks the resident ensemble product contract; build rw_ensbatch from this source tree")
     command = [str(renderer), "--ensemble-products", str(product_frame),
                "--out-dir", str(out_dir), "--domain", str(domain),
@@ -1952,7 +2159,50 @@ def run_ensemble_product_renderer(renderer: Path, product_frame: Path, *,
         raise RuntimeError("; ".join(failures))
     if not written or any(not path.is_file() for path in written):
         raise RuntimeError("resident probability render completed without all reported map files")
+    _fold_ensemble_georefs(Path(out_dir), result.stdout)
     return written, result.stdout
+
+
+def _fold_ensemble_georefs(out_dir: Path, stdout: str) -> None:
+    """Each drawn map's transform (the renderer's ``GEOREF<TAB>path<TAB>json`` lines) into ``out_dir``'s
+    ``render-georef.json``, keyed by the map's path under ``out_dir``, as every other render door records it.
+    THE BREAKAGE THIS CLOSES: ensemble product maps carried no transform, so a click on one could not become a
+    latitude and longitude (no soundings on 2,016 maps of a 20-member branched ensemble). Best effort: a record
+    not written never fails the maps it describes."""
+    import json
+    from woof import render_georef
+    panels = {}
+    for line in stdout.splitlines():
+        if not line.startswith("GEOREF\t"):
+            continue
+        try:
+            _, path, text = line.split("\t", 2)
+            key = Path(os.path.abspath(path)).relative_to(Path(os.path.abspath(out_dir))).as_posix()
+            panels[key] = json.loads(text)
+        except (ValueError, OSError):
+            continue
+    if panels:
+        render_georef.fold(out_dir, {"schema": render_georef.GEOREF_SCHEMA, "panels": panels,
+                                     "without_georeference": []})
+
+
+def compose_ensemble_sheet(renderer: Path, rows, output: Path, *, title, valid_time):
+    """Compose already rendered panels with the Rust renderer's sheet layout."""
+    import json
+    import tempfile
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = {"rows": [[str(Path(p).resolve()) for p in row] for row in rows],
+                  "output": str(output.resolve()), "title": str(title),
+                  "valid_time": str(valid_time)}
+    with tempfile.TemporaryDirectory(prefix="ensemble-sheet-", dir=output.parent) as scratch:
+        request = Path(scratch) / "request.json"
+        request.write_text(json.dumps(descriptor))
+        result = subprocess.run([str(renderer), "--ensemble-sheet", str(request)],
+                                capture_output=True, text=True, env=renderer_env())
+    if result.returncode or not output.is_file():
+        raise RuntimeError(result.stderr.strip() or "Rust ensemble sheet produced no image")
+    return output
 
 
 def read_ensemble_diagnostic_rows(renderer: Path, path: Path, field: str, *, row: int, rows: int):
@@ -1988,7 +2238,7 @@ def read_ensemble_diagnostic_rows(renderer: Path, path: Path, field: str, *, row
 
 
 def reduce_ensemble_diagnostics(renderer: Path, *, packs, member_order, shape,
-                                valid_time, requests, inventory, scratch_directory):
+                                valid_time, requests, inventory, scratch_directory, member_weights=None):
     """Transport exact native CPU product words without Python field math."""
     import json
     import hashlib
@@ -2010,6 +2260,9 @@ def reduce_ensemble_diagnostics(renderer: Path, *, packs, member_order, shape,
                 "threshold_bits": np.asarray(item.thresholds, np.float32).view(np.uint32).tolist(),
                 "comparison": item.comparison, "paintball": item.paintball,
                 "spaghetti": item.spaghetti, "postage_stamp": item.postage_stamp} for item in requests]}
+        if member_weights is not None:
+            from woof.ensemble.member_weights import validate_weights
+            request["member_weights"] = list(validate_weights(member_weights, len(member_order)))
         request_path.write_text(json.dumps(request, allow_nan=False) + "\n", encoding="utf-8")
         buffers = directory / "buffers"
         environment = renderer_env()
@@ -2023,6 +2276,8 @@ def reduce_ensemble_diagnostics(renderer: Path, *, packs, member_order, shape,
         if (receipt.get("schema") != "gpuwm-ensemble-diagnostic-reduce.v1"
                 or receipt.get("members") != len(member_order) or receipt.get("shape") != list(shape)):
             raise RuntimeError("Rust CPU ensemble reduction returned an incompatible roster or grid")
+        if member_weights is not None and receipt.get("member_weights") != list(member_weights):
+            raise RuntimeError("Rust CPU ensemble reduction did not confirm the declared member weights")
         outputs = {}
         for row in receipt.get("buffers", ()):
             name = row.get("name")
@@ -2078,6 +2333,8 @@ def run_renderer_series(renderer: Path, wrfouts, *, store_root: Path,
                         section_size: tuple[int, int] | None = None,
                         section_top_km: float | None = None,
                         fills: list | None = None,
+                        from_import: Path | None = None,
+                        threads: int | None = None,
                         ) -> tuple[list[Path], list[str],
                                    list[tuple[str, str]]]:
     """One invocation over a whole wrfout SERIES, into ONE store.
@@ -2126,6 +2383,8 @@ def run_renderer_series(renderer: Path, wrfouts, *, store_root: Path,
         "--products", products,
         "--frames", frames,
     ]
+    if from_import is not None:
+        command.extend(("--from-import", str(from_import)))
     # The default canvas follows the domain's shape. Pixel dimensions
     # explicitly request a fixed canvas for callers that tile panels.
     if (width is None) != (height is None):
@@ -2188,7 +2447,12 @@ def run_renderer_series(renderer: Path, wrfouts, *, store_root: Path,
         command.extend(("--section-top-km", repr(float(section_top_km))))
     command.extend(str(path) for path in inputs)
     try:
-        with _series_command(command, len(inputs), renderer_env()) as fitted:
+        environment = renderer_env()
+        if threads is not None:
+            if type(threads) is not int or threads < 1:
+                raise ValueError("renderer threads must be a positive integer")
+            environment['RAYON_NUM_THREADS'] = str(threads)
+        with _series_command(command, len(inputs), environment) as fitted:
             command, cwd, env = fitted
             result = subprocess.run(
                 command, capture_output=True, text=True, errors="replace",
@@ -2304,6 +2568,7 @@ def run_renderer_difference(renderer: Path,
                             streamlines: bool | None = None,
                             width: int | None = None,
                             height: int | None = None,
+                            difference_table: str | None = None,
                             ) -> tuple[list[Path], list[str],
                                        list[tuple[str, str]], list[dict]]:
     """Draw products as run A minus run B for one valid time.
@@ -2313,6 +2578,8 @@ def run_renderer_difference(renderer: Path,
     the native renderer selects run B's matching valid time. Windowed
     products retain earlier frames on both sides. Return pictures,
     failures, skips and native difference range receipts.
+    ``difference_table`` is the :data:`DIFFERENCE_TABLE_ENV` value this
+    render alone draws with (``None`` leaves the caller's environment).
     """
 
     inputs_a = ([Path(wrfout_a)] if isinstance(wrfout_a, (str, os.PathLike))
@@ -2352,9 +2619,12 @@ def run_renderer_difference(renderer: Path,
         command.extend(("--annotate", str(annotate)))
     if streamlines is not None:
         command.append("--streamlines" if streamlines else "--barbs")
+    env = renderer_env()
+    if difference_table:
+        env[DIFFERENCE_TABLE_ENV] = difference_table
     try:
         with _difference_command(command, inputs_a, inputs_b,
-                                 renderer_env()) as fitted:
+                                 env) as fitted:
             command, env = fitted
             result = subprocess.run(
                 command, capture_output=True, text=True, errors="replace", env=env)
@@ -2392,8 +2662,9 @@ def run_renderer_difference(renderer: Path,
 
 
 __all__ = [
-    "CARGO_BUILD_HINT", "COMMAND_LINE_BUDGET", "RENDERER_ABI_MARKER",
+    "CARGO_BUILD_HINT", "COMMAND_LINE_BUDGET", "RENDERER_ABI_MARKER",  # noqa: F822 -- module __getattr__
     "DIFFERENCE_EVENT", "parse_difference_line", "run_renderer_difference",
+    "DIFFERENCE_TABLE_ENV", "DIFFERENCE_TABLE_CHOICES",
     "RENDERER_ENV", "fit_series_command",
     "NATIVE_WARNING_PREFIXES", "relay_native_warnings",
     "RENDERER_NAME", "basemap_dir",
@@ -2415,3 +2686,43 @@ __all__ = [
     "SECTION_MIN_LENGTH_KM",
     "SECTION_FILL_EVENT", "parse_section_fill",
 ]
+
+
+def run_hubwind_renderer(renderer: Path, manifest: Path):
+    """Native WRF columns, table power, time statistics, tower verification and maps."""
+    result = subprocess.run([str(renderer), '--hubwind-request', str(manifest)],
+                            capture_output=True, text=True, env=renderer_env())
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or 'Rust hubwind products failed')
+    maps = [line.split('\t', 1)[1] for line in result.stdout.splitlines()
+            if line.startswith('RENDERED\t')]
+    # A picture with no valid value (NO VALID TI / NO VALID DATA) is on disk
+    # so a reader sees why, and is reported apart: never counted as drawn.
+    undrawn = [tuple(line.split('\t', 2)[1:]) for line in result.stdout.splitlines()
+               if line.startswith('UNDRAWN\t')]
+    receipts = [line.split('\t', 1)[1] for line in result.stdout.splitlines()
+                if line.startswith('RECEIPT\t')]
+    if len(receipts) != 1 or not Path(receipts[0]).is_file():
+        raise RuntimeError('native hubwind renderer did not return its receipt')
+    if any(not Path(path).is_file() for path in maps):
+        raise RuntimeError('native hubwind renderer returned missing pictures')
+    if any(len(row) != 2 for row in undrawn):
+        raise RuntimeError('native hubwind renderer returned a malformed undrawn row')
+    return {'maps': maps, 'undrawn': [(path, reason) for path, reason in undrawn],
+            'receipt': receipts[0], 'renderer': str(renderer), 'request': str(manifest)}
+
+
+def run_solar_product_renderer(renderer: Path, request: Path):
+    """Native solar computation, NOAA verification and production maps."""
+    result = subprocess.run([str(renderer), "--solar-products", str(request)],
+                            capture_output=True, text=True, env=renderer_env())
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or 'Rust solar products failed')
+    specification = __import__('json').loads(request.read_text())
+    receipt = Path(specification['out']) / 'receipt.json'
+    if not receipt.is_file():
+        raise RuntimeError('Rust solar products returned no receipt')
+    maps = [line.split('\t', 1)[1] for line in result.stdout.splitlines() if line.startswith('RENDERED\t')]
+    if any(not Path(path).is_file() for path in maps):
+        raise RuntimeError('Rust solar products returned a missing picture')
+    return {'maps': maps, 'receipt': str(receipt), 'renderer': str(renderer)}

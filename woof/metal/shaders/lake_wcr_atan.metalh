@@ -1,0 +1,62 @@
+#ifndef WOOF_LAKE_WCR_ATAN_METALH
+#define WOOF_LAKE_WCR_ATAN_METALH
+#include "lake_wcr_log.metalh"
+constant ulong lw_atan_h[17]={
+0x0000000000000000ul,
+0x3faff55bb72cfdeaul,
+0x3fbfd5ba9aac2f6eul,
+0x3fc7b97b4bce5b02ul,
+0x3fcf5b75f92c80ddul,
+0x3fd362773707ebccul,
+0x3fd6f61941e4def1ul,
+0x3fda64eec3cc23fdul,
+0x3fddac670561bb4ful,
+0x3fe0657e94db30d0ul,
+0x3fe1e00babdefeb4ul,
+0x3fe345f01cce37bbul,
+0x3fe4978fa3269ee1ul,
+0x3fe5d58987169b18ul,
+0x3fe700a7c5784634ul,
+0x3fe819d0b7158a4dul,
+0x3fe921fb54442d18ul
+};
+constant ulong lw_atan_l[17]={
+0x0000000000000000ul,
+0xbc3c934d86d23f1dul,
+0xbc4cd37686760c17ul,
+0x3c5347b0b4f881caul,
+0x3c68ab6e3cf7afbdul,
+0xbc6963a544b672d8ul,
+0xbc7c63aae6f6e918ul,
+0xbc724dec1b50b7fful,
+0x3c7a2b7f222f65e2ul,
+0xbc7d5b495f6349e6ul,
+0xbc5928df287a668ful,
+0x3c81021137c71102ul,
+0x3c72419a87f2a458ul,
+0x3c60028e4bc5e7caul,
+0xbc78c34d25aadef6ul,
+0xbc7bf76229d3b917ul,
+0x3c81a62633145c07ul
+};
+
+static inline ulong lake_wcr_atan_bits(ulong bits){
+ W x=lw_bits(bits),zero=W(0),one=W(1);if(soft64_is_zero(bits)||soft64_is_nan(bits))return (x+x).bits;
+ W ax=lw_abs(x);if(soft64_is_infinite(ax.bits))return x>zero?0x3ff921fb54442d18ul:0xbff921fb54442d18ul;
+ bool inv=ax>one;LakeWcrDD z=inv?lw_div({one,zero},{ax,zero}):LakeWcrDD{ax,zero};
+ int j=soft64_to_i32_rz(soft64_rint_bits((z.h*W(16)).bits)).value;W c=W(j)*W(.0625f);LakeWcrDD t=z;
+ if(j)t=lw_div(lw_add(z,{-c,zero}),lw_add({one,zero},lw_mul_d(z,c)));
+ W th=t.h,q=th*th;
+ W tail=th*q*(-lw_bits(0x3fd5555555555555ul)+q*(lw_bits(0x3fc999999999999aul)+q*(-lw_bits(0x3fc2492492492492ul)+q*(lw_bits(0x3fbc71c71c71c71cul)+q*(-lw_bits(0x3fb745d1745d1746ul)+q*lw_bits(0x3fb3b13b13b13b14ul))))));
+ LakeWcrDD v=lw_sum(th,tail);v.l=v.l+t.l;
+ if(j)v=lw_add({lw_bits(lw_atan_h[j]),lw_bits(lw_atan_l[j])},v);
+ if(inv)v=lw_add({lw_bits(0x3ff921fb54442d18ul),lw_bits(0x3c91a62633145c07ul)},lw_neg(v));
+ if(x<zero)v=lw_neg(v);W out;
+ if(lw_round_ok(v,lw_bits(0x3c10000000000000ul),out))return out.bits;
+ LakeWcrDD t2=lw_mul(t,t),s=lw_odd(11,11);
+ for(int n=10;n>=0;--n)s=lw_add(lw_mul(s,t2),lw_odd(n,n));v=lw_mul(s,t);
+ if(j)v=lw_add({lw_bits(lw_atan_h[j]),lw_bits(lw_atan_l[j])},v);
+ if(inv)v=lw_add({lw_bits(0x3ff921fb54442d18ul),lw_bits(0x3c91a62633145c07ul)},lw_neg(v));
+ if(x<zero)v=lw_neg(v);return lw_round(v).bits;
+}
+#endif

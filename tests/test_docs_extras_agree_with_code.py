@@ -210,7 +210,7 @@ def _extras_named_by_code() -> dict[str, list[str]]:
     # distribution by name, never the checkout-relative `.[...]` form.
     found: dict[str, list[str]] = {}
     root = _repo_root()
-    pattern = re.compile(r"woof\[([a-z0-9,._-]+)\]")
+    pattern = re.compile(r"recast-woof\[([a-z0-9,._-]+)\]")
     for path in _code():
         try:
             text = path.read_text(encoding="utf-8")
@@ -525,6 +525,14 @@ def test_every_flag_the_docs_pass_is_defined_by_that_door():
                 continue
             name, body = resolved
             if name not in doors:
+                continue
+            if getattr(doors[name], "_forward_argv", False):
+                # A forwarding door (``woof obs <instrument>``) parses
+                # nothing: every token after its name goes verbatim to the
+                # binary, whose own grammar and --abi marker the door
+                # verifies. Its argparse defines no options by design, so
+                # holding a pasted `woof obs radar-feeds window --site ess`
+                # to that empty set reported working commands as broken.
                 continue
             defined = _door_options(doors[name])
             # The mode flag NAMES the door; it is the selector, not one

@@ -143,11 +143,15 @@ def test_the_registry_row_claims_no_more_than_was_measured():
     assert row["selectors"] == {"mp_physics": 50}
     evidence = row["warnings"][0]
     # The whole point of the label: it claims the measurement that was
-    # made and nothing past it.  The oracle campaign ran, so the warning
-    # must carry the measured result, disclose what is still open, and
-    # still refuse the forecast-skill claim that would justify a higher
-    # maturity rung.
+    # made and nothing past it.  The column oracle (tools/p3_wrf461_oracle)
+    # ran, so the warning must carry the measured result and its one
+    # declared divergence, and still refuse the forecast-skill claim that
+    # would justify a higher maturity rung.
     assert "4 of 12 bit-identical" in evidence
+    assert "2-7 ULP" in evidence
+    assert "829 ULP" in evidence
+    assert "mp_p3_wrapper_wrf" in evidence
+    assert "one-ULP nudge" in evidence
     assert "STILL OPEN" in evidence
     assert "no matched WRF forecast run" in evidence
     assert "not evidence of forecast skill" in evidence
@@ -631,6 +635,32 @@ def _background_radius_arms():
         if not seeds_effs:
             continue
         test = node.test
+        # The named-scheme arm (``_named_scheme(cfg.mp_physics) is not
+        # None``, woof.microphysics_schemes) is a registry lookup, not a
+        # literal tuple: its members are exactly the registry's ids.
+        if (isinstance(test, ast.Compare) and len(test.ops) == 1
+                and isinstance(test.ops[0], ast.IsNot)
+                and isinstance(test.left, ast.Call)
+                and isinstance(test.left.func, ast.Name)
+                and test.left.func.id == "_named_scheme"
+                and isinstance(test.comparators[0], ast.Constant)
+                and test.comparators[0].value is None):
+            from woof.microphysics_schemes import NAMED_MP_IDS
+            arms.append(tuple(NAMED_MP_IDS))
+            continue
+        if (isinstance(test, ast.Compare) and len(test.ops) == 1
+                and isinstance(test.ops[0], ast.Eq)
+                and isinstance(test.comparators[0], ast.Constant)
+                and isinstance(test.comparators[0].value, int)):
+            arms.append((test.comparators[0].value,))
+            continue
+        if (isinstance(test, ast.Compare) and len(test.ops) == 1
+                and isinstance(test.ops[0], ast.In)
+                and isinstance(test.comparators[0], ast.Name)
+                and test.comparators[0].id == "COLUMN_SCHEMES"):
+            from woof.core.column_schemes import COLUMN_SCHEMES
+            arms.append(tuple(COLUMN_SCHEMES))
+            continue
         assert (isinstance(test, ast.Compare)
                 and len(test.ops) == 1
                 and isinstance(test.ops[0], ast.In)

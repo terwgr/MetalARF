@@ -15,7 +15,7 @@ from woof.core.ruc_runtime import (
 )
 from woof.core.ruc_sfctmp_layout import _SFCTMP_CHECKS
 
-from .array import MetalArray
+from .array import MetalArray, overlaps
 from .ruc_driver_family import dispatch_full_chain, scatter_committed
 from .ruc_metal_workspace import RucMetalWorkspace
 
@@ -63,12 +63,6 @@ def _flat(value) -> MetalArray:
         raise TypeError("RUC Metal mosaic fractions must be contiguous MetalArrays")
     return MetalArray(value.buffer, (value.size,), value.dtype,
                       byte_offset=value.byte_offset)
-
-
-def _overlaps(left: MetalArray, right: MetalArray) -> bool:
-    return (left.buffer is right.buffer
-            and left.byte_offset < right.byte_offset + right.nbytes
-            and right.byte_offset < left.byte_offset + left.nbytes)
 
 
 def _parameter_tables(params, landusef=None, soilctop=None):
@@ -251,7 +245,7 @@ def step(fields, atmosphere, *, params, precipitation, dt, itimestep,
                     f"field_sf must be contiguous float32 Metal storage with shape {expected_shape}")
             if field_sf.buffer.context is not context:
                 raise ValueError("RUC Metal field_sf belongs to another context")
-            if _overlaps(field_sf, pattern_spp_lsm):
+            if overlaps(field_sf, pattern_spp_lsm):
                 raise ValueError("field_sf must not alias the read-only SPP pattern")
             has_field_sf = True
         spp_pattern = pattern_spp_lsm.view(
@@ -290,8 +284,8 @@ def step(fields, atmosphere, *, params, precipitation, dt, itimestep,
         raw_float = workspace.raw.view(
             (workspace.raw.size,), np.float32,
             byte_offset=workspace.raw.byte_offset)
-        if _overlaps(raw_float, spp_pattern) or (
-                spp_field is not None and _overlaps(raw_float, spp_field)):
+        if overlaps(raw_float, spp_pattern) or (
+                spp_field is not None and overlaps(raw_float, spp_field)):
             raise ValueError("RUC Metal SPP resources must not alias the packed workspace")
     offsets = workspace.upload_tables(tables)
 

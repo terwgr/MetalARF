@@ -175,7 +175,7 @@ from __future__ import annotations
 import queue
 import threading
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -229,13 +229,30 @@ class ShortFrameRefused(ValueError):
 #: Frame fields this module derives on the host, with the rule named.  Every
 #: other unmatched field is reported UNAVAILABLE rather than guessed at.
 _DERIVED_RULES = {
+    "FS_GEN_IDMAX": "firebrand control ID",
+    "FS_LAST_GEN_DT": "firebrand clock last_gen_dt",
+    "FS_COUNT_RESET": "firebrand clock count_reset",
+    "FMOIST_LASTTIME": "fire clock moisture_lasttime",
+    "FMOIST_NEXTTIME": "fire clock moisture_nexttime",
     "T": "(thb + thp) - 300",
+    "THM": "(thb + thp) - 300 (USE_THETA_M=0: the T record's words)",
     "P": "p - pb",
     "PB": "broadcast(pb)",
     "PHB": "broadcast(phb)",
     "PSFC": "z-extrapolated p (physics-free states only)",
     "P_TOP": "setup scalar",
+    # The coupled ocean's history rows publish the live diagnostic masked to
+    # NaN off the open ocean (woof.core.surface_ocean.ocean_history_diagnostic),
+    # a fresh array that no carrier identity can match.  Named breakage: every
+    # streamed or store-direct run with an ocean (PWP is the 48 h+ default)
+    # refused its first frame with ShortFrameRefused(['OCEAN_SST',
+    # 'OCEAN_SST_CHANGE']) (full-CONUS HRRR 48 h on the fold, V58 2026-10-21).
+    "OCEAN_SST": "fields/ocean_sst where xland > 1.5 and lakemask < 0.5, else NaN",
+    "OCEAN_SST_CHANGE": "fields/ocean_sst_change where xland > 1.5 and lakemask < 0.5, else NaN",
 }
+
+_OCEAN_DIAGNOSTIC_ROWS = {"OCEAN_SST": "fields/ocean_sst",
+                          "OCEAN_SST_CHANGE": "fields/ocean_sst_change"}
 
 #: WRF history rows woof emits UNCONDITIONALLY and fills with exact zeros
 #: when the producing scheme is absent.  ``RAINSH`` is always in this set --
@@ -271,6 +288,12 @@ class FramePlan:
     origin: dict[str, str]
     shape: dict[str, tuple[int, ...]]
     dtype: dict[str, Any]
+    #: ``name -> first-axis index`` for a carrier field that is ONE ROW of a
+    #: stacked store member rather than the whole member: the driver's
+    #: ``history_extension`` stack (SST, COSZEN, the radiation boundary
+    #: fluxes and the AC* accumulations) publishes each row as a view of
+    #: ``diag/history_extension``.  Absent for every whole-member carrier.
+    row: dict[str, int] = field(default_factory=dict)
 
     def names(self, kind: str) -> tuple[str, ...]:
         return tuple(n for n in self.order if self.source[n] == kind)
@@ -322,8 +345,8 @@ def _frame_plan_on_device(state, *, include_diagnostic_pressure,
     metal_sources = (wrfout._metal_state_frame_sources(
         state, include_diagnostic_pressure=include_diagnostic_pressure)
         if wrfout._is_metal_state(state) else {})
-    carriers = {id(value): key
-                for key, value in physinv.carrier_manifest(state).items()}
+    manifest = physinv.carrier_manifest(state)
+    carriers = {id(value): key for key, value in manifest.items()}
     extra = {str(key) for key in extra_available}
     setup = {}
     for name in STATE_SETUP_ARRAYS:
@@ -333,8 +356,33 @@ def _frame_plan_on_device(state, *, include_diagnostic_pressure,
 
     source: dict[str, str] = {}
     origin: dict[str, str] = {}
+    row: dict[str, int] = {}
     shape: dict[str, tuple[int, ...]] = {}
     dtype: dict[str, Any] = {}
+    from woof.io.sfire_schema import (SFIRE_GRID_FIELD_MAP, SFIRE_COARSE_FIELD_NAMES,
+                                       SFIRE_MOISTURE_FIELD_MAP, SFIRE_PARTICLE_FIELDS,
+                                       SFIRE_SPOTTING_COARSE_FIELDS)
+    fire_origins = {name: f"fire/grid.{key}" for name, key in SFIRE_GRID_FIELD_MAP.items()}
+    fire_origins.update(LFN_HIST="fire/grid.lfn_hist")
+    fire_origins.update(LFN_TIME="fire/lfn_time")
+    fire_origins.update({name: f"fire/{name.lower()}" for name in
+                         (*SFIRE_COARSE_FIELD_NAMES, "FZ0", "FXLAT", "FXLONG")})
+    fire_origins.update({name: f"fire/grid.moisture.{key}" for name, key in SFIRE_MOISTURE_FIELD_MAP.items()})
+    fire_origins.update({name: f"fire/spotting.{name.lower()}" for name in
+                         (*SFIRE_SPOTTING_COARSE_FIELDS, *SFIRE_PARTICLE_FIELDS, "FS_FIRE_ROSDT")})
+    if getattr(getattr(getattr(state, "physics", None), "fire", None), "spotting", None) is None:
+        fire_origins.update({name: f"fire/{name.lower()}" for name in SFIRE_SPOTTING_COARSE_FIELDS})
+    # The four admitted canopy planes (29fe0a4fb7) live in the fire grid
+    # when canopy inputs were admitted, so the carrier manifest holds them
+    # as fire/grid.<name> (restart._fire_manifest); a run without them
+    # writes zero planes (981de6d59b), which a streamed frame serves as
+    # structural zeros, asserted below.  The test is the manifest, not
+    # ``extra``: extra names diagnostic scatters and never holds fire keys.
+    from woof.fire_inputs import canopy_fields
+    canopy_names = frozenset(canopy_fields())
+    fire_origins.update({name: f"fire/grid.{name.lower()}" for name in canopy_names
+                         if f"fire/grid.{name.lower()}" in manifest})
+    chem_fields = getattr(getattr(state, 'chem', None), 'streamed_history', {})
     for name, value in fields.items():
         # Metal output snapshots are host NumPy arrays, so classify with
         # their original live references.  This keeps identity-based carrier
@@ -342,6 +390,9 @@ def _frame_plan_on_device(state, *, include_diagnostic_pressure,
         source_value = metal_sources.get(name, value)
         shape[name] = tuple(int(s) for s in np.shape(value))
         dtype[name] = np.dtype(getattr(value, "dtype", np.float32))
+        if name in fire_origins:
+            source[name], origin[name] = SOURCE_CARRIER, fire_origins[name]
+            continue
         key = carriers.get(id(source_value))
         if key is not None:
             source[name], origin[name] = SOURCE_CARRIER, key
@@ -349,6 +400,10 @@ def _frame_plan_on_device(state, *, include_diagnostic_pressure,
         attr = setup.get(id(source_value))
         if attr is not None:
             source[name], origin[name] = SOURCE_SETUP, attr
+            continue
+        chem_key = 'diag/chem/' + name
+        if name in chem_fields and chem_key in extra:
+            source[name], origin[name] = SOURCE_CARRIER, chem_key
             continue
         if name in _DERIVED_RULES:
             source[name], origin[name] = SOURCE_DERIVED, _DERIVED_RULES[name]
@@ -364,7 +419,15 @@ def _frame_plan_on_device(state, *, include_diagnostic_pressure,
                 break
         if name in source:
             continue
-        if name in _ZERO_ROWS:
+        # One row of a stacked carrier (the driver's history_extension
+        # stack): the frame holds a fresh view each time it is built, so
+        # identity cannot match it, but its memory is the carrier's own.
+        stacked = _stacked_row(manifest, value)
+        if stacked is not None:
+            source[name], origin[name] = SOURCE_CARRIER, stacked[0]
+            row[name] = stacked[1]
+            continue
+        if name in _ZERO_ROWS or name in canopy_names:
             # Assert rather than assume: the classification says "the driver
             # handed out a fresh _zero_accumulator() because its producer is
             # off", and a nonzero array here would mean the producer IS
@@ -379,7 +442,44 @@ def _frame_plan_on_device(state, *, include_diagnostic_pressure,
         source[name] = SOURCE_DRIVER_DIAGNOSTIC
         origin[name] = diagnostic_path
     return FramePlan(order=tuple(fields), source=source, origin=origin,
-                     shape=shape, dtype=dtype)
+                     shape=shape, dtype=dtype, row=row)
+
+
+def _data_pointer(array):
+    data = getattr(array, "data", None)
+    pointer = getattr(data, "ptr", None)              # cupy
+    if pointer is not None:
+        return int(pointer)
+    if isinstance(array, np.ndarray):
+        return int(array.__array_interface__["data"][0])
+    return None
+
+
+def _stacked_row(manifest, value):
+    """``(store key, index)`` when ``value`` is exactly ``carrier[index]``.
+
+    Exact: same array type and dtype, the row's shape and strides, and a
+    start address on a whole first-axis step inside the carrier.
+    """
+    ndim = getattr(value, "ndim", None)
+    pointer = _data_pointer(value)
+    if ndim is None or pointer is None:
+        return None
+    for key, carrier in manifest.items():
+        if (type(carrier) is not type(value)
+                or getattr(carrier, "ndim", 0) != ndim + 1
+                or carrier.dtype != value.dtype
+                or tuple(carrier.shape[1:]) != tuple(value.shape)
+                or tuple(carrier.strides[1:]) != tuple(value.strides)
+                or int(carrier.strides[0]) <= 0):
+            continue
+        base = _data_pointer(carrier)
+        if base is None:
+            continue
+        index, remainder = divmod(pointer - base, int(carrier.strides[0]))
+        if remainder == 0 and 0 <= index < int(carrier.shape[0]):
+            return key, int(index)
+    return None
 
 
 def _host(value) -> np.ndarray:
@@ -493,11 +593,17 @@ def domain_frame_plan(plan: FramePlan, store, cfg, *,
     template_hw = (int(template_shape[-2]), int(template_shape[-1]))
     domain_hw = (int(cfg.ny), int(cfg.nx))
     shape: dict[str, tuple[int, ...]] = {}
+    from woof.io.sfire_schema import sfire_history_shapes
+    fire_shapes = sfire_history_shapes(cfg)
     for name in plan.order:
+        if name in fire_shapes:
+            shape[name] = fire_shapes[name]
+            continue
         held = (arrays.get(plan.origin[name])
                 if plan.source[name] == SOURCE_CARRIER else None)
         if held is not None:
-            shape[name] = tuple(int(s) for s in np.shape(held))
+            held_shape = tuple(int(s) for s in np.shape(held))
+            shape[name] = held_shape[1:] if name in plan.row else held_shape
             continue
         try:
             shape[name] = _domain_row_shape(plan.shape[name], template_hw,
@@ -517,7 +623,7 @@ def domain_frame_plan(plan: FramePlan, store, cfg, *,
             shape[name] = tuple(int(s) for s in plan.shape[name])
     return FramePlan(order=plan.order, source=dict(plan.source),
                      origin=dict(plan.origin), shape=shape,
-                     dtype=dict(plan.dtype))
+                     dtype=dict(plan.dtype), row=dict(plan.row))
 
 
 def _domain_row_shape(shape, template_hw, domain_hw) -> tuple[int, ...]:
@@ -619,6 +725,12 @@ def diagnostic_members(obj) -> dict:
     if isinstance(obj, Mapping):
         return {}
     members: dict = {}
+    if getattr(obj, 'chem', None) is not None:
+        from woof.core.chem_history import (pointers_only, streaming_fields,
+                                             streaming_members)
+        read = streaming_members if pointers_only() else streaming_fields
+        members.update({'diag/chem/' + name: value
+                        for name, value in read(obj).items()})
     driver = getattr(obj, "physics", None)
     for attr in physinv.OUTPUT_ONLY_DRIVER_ATTRS:
         held = getattr(driver, attr, None)
@@ -743,10 +855,11 @@ class StoreFrame:
     """
 
     def __init__(self, plan: FramePlan, store, setup, cfg, *,
-                 overlap: bool = False, require_complete: bool = True):
+                 overlap: bool = False, require_complete: bool = True, scalars=None):
         self.plan = plan
         self.cfg = cfg
         self.overlap = bool(overlap)
+        self.scalars = scalars
         inner = getattr(store, "arrays", None)
         self._store = inner if isinstance(inner, dict) else store
         self.nz, self.ny, self.nx = int(cfg.nz), int(cfg.ny), int(cfg.nx)
@@ -804,8 +917,11 @@ class StoreFrame:
     #: the carriers' own origins.  Kept next to ``fields`` so the two cannot
     #: drift: a road that copies only a frame's members to the host
     #: (``tilestream.ranks.RankedRun.download``) copies exactly these.
-    _DERIVED_INPUTS = {"T": ("state/thp",), "P": ("state/p",),
-                       "PSFC": ("state/php", "state/p")}
+    _DERIVED_INPUTS = {"T": ("state/thp",), "THM": ("state/thp",), "P": ("state/p",),
+                       "PSFC": ("state/php", "state/p"),
+                       "FS_GEN_IDMAX": ("fire/spotting.control",),
+                       **{row: (key, "fields/xland", "fields/lakemask")
+                          for row, key in _OCEAN_DIAGNOSTIC_ROWS.items()}}
 
     def store_keys(self) -> tuple[str, ...]:
         """Every store member :meth:`fields` reads, in frame order."""
@@ -815,7 +931,9 @@ class StoreFrame:
             if kind == SOURCE_CARRIER:
                 keys.append(self.plan.origin[name])
             elif kind == SOURCE_DERIVED:
-                keys.extend(self._DERIVED_INPUTS.get(name, ()))
+                # An optional input (the lake mask) a run does not hold is not read.
+                keys.extend(key for key in self._DERIVED_INPUTS.get(name, ())
+                            if key != "fields/lakemask" or key in self._store)
         return tuple(dict.fromkeys(keys))
 
     def nbytes(self) -> int:
@@ -827,6 +945,13 @@ class StoreFrame:
 
     def _carrier(self, name):
         array = self._store[self.plan.origin[name]]
+        if name in self.plan.row:
+            array = array[self.plan.row[name]]
+        from woof.io.sfire_schema import SFIRE_FINE_FIELDS, SFIRE_SPOTTING_COARSE_FIELDS
+        if name in SFIRE_FINE_FIELDS and name != "FS_FIRE_ROSDT":
+            array = array[1:-1, 1:-1]
+        if name in SFIRE_SPOTTING_COARSE_FIELDS and self.plan.origin[name].startswith("fire/spotting."):
+            array = array[4:-4, 4:-4]
         array = _host(array)
         if not self.overlap:
             return array
@@ -855,11 +980,31 @@ class StoreFrame:
             elif kind == SOURCE_ZERO:
                 out[name] = self._dst[name]
             elif kind == SOURCE_DERIVED:
+                if name in ("FS_GEN_IDMAX", "FS_LAST_GEN_DT", "FS_COUNT_RESET"):
+                    if name == "FS_GEN_IDMAX":
+                        value = store["fire/spotting.control"][0]
+                    else:
+                        values = self.scalars() if callable(self.scalars) else self.scalars
+                        if values is None:
+                            raise ValueError("streamed firebrand history requires live domain clocks")
+                        metadata = values["fire_header"]["fire"]["spotting"]
+                        value = metadata["last_gen_dt" if name == "FS_LAST_GEN_DT" else "count_reset"]
+                    self._dst[name][...] = value
+                    out[name] = self._dst[name]
+                    continue
+                if name in ("FMOIST_LASTTIME", "FMOIST_NEXTTIME"):
+                    values = self.scalars() if callable(self.scalars) else self.scalars
+                    if values is None or "fire_clocks" not in values:
+                        raise ValueError("streamed fuel moisture history requires live fire clocks")
+                    key = "moisture_lasttime" if name == "FMOIST_LASTTIME" else "moisture_nexttime"
+                    self._dst[name][...] = np.float32(values["fire_clocks"][key])
+                    out[name] = self._dst[name]
+                    continue
                 if name in ("PB", "PHB", "P_TOP"):
                     out[name] = self._statics[name]
-                elif name == "T":
+                elif name in ("T", "THM"):
                     out[name] = derive_t(self._thb, store["state/thp"],
-                                         self._dst["T"])
+                                         self._dst[name])
                 elif name == "P":
                     pb3 = (self._pb if self._pb.ndim == 3
                            else self._pb[:, None, None])
@@ -869,6 +1014,19 @@ class StoreFrame:
                     out[name] = derive_psfc(self._phb, store["state/php"],
                                             store["state/p"],
                                             self._psfc_work)
+                elif name in _OCEAN_DIAGNOSTIC_ROWS:
+                    # ocean_history_diagnostic's own rule, on the host copy.
+                    wet = np.asarray(store["fields/xland"]) > 1.5
+                    if "fields/lakemask" in store:
+                        wet &= np.asarray(store["fields/lakemask"]) < 0.5
+                    dst = self._dst[name]
+                    dst.fill(np.float32("nan"))
+                    # Literal keys: test_store_frame_downloads_exactly_what_fields_reads
+                    # holds them to _DERIVED_INPUTS.
+                    source = (store["fields/ocean_sst"] if name == "OCEAN_SST"
+                              else store["fields/ocean_sst_change"])
+                    np.copyto(dst, source, where=wet)
+                    out[name] = dst
                 else:                                  # unreachable by _DERIVED_RULES
                     raise KeyError(f"no host rule for derived field {name}")
             else:
@@ -879,6 +1037,8 @@ class StoreFrame:
                 # up to 2.2.0.  Reachable only for the benches that price
                 # the unavailable set on purpose.
                 continue
+        from woof.core.gsd_diagnostics import finalize_history_fields
+        finalize_history_fields(out)
         return out
 
 
@@ -914,7 +1074,9 @@ class DeferredStoreFrame:
         if self.materialized:
             raise RuntimeError("a deferred frame is assembled once; this one already was")
         self.materialized = True
-        self._wait()
+        waited = self._wait()
+        #: Seconds the writer thread waited for this frame's D2H download.
+        self.wait_seconds = waited if isinstance(waited, (int, float)) else None
         return self._frame.fields()
 
 
@@ -1046,3 +1208,18 @@ class StoreHistoryWriter:
         else:
             self._queue.put(None)
             self._thread.join()
+
+
+def file_var_digests(path: Path) -> dict[str, str]:
+    """Per-variable SHA-256 of a wrfout, so timestamps cannot mask a diff."""
+    import hashlib
+    import netCDF4
+
+    out: dict[str, str] = {}
+    with netCDF4.Dataset(path, "r") as ds:
+        for name, var in ds.variables.items():
+            data = var[:]
+            arr = np.ascontiguousarray(
+                np.ma.getdata(data) if np.ma.isMaskedArray(data) else data)
+            out[name] = hashlib.sha256(arr.tobytes(order="C")).hexdigest()
+    return out

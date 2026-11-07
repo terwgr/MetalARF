@@ -1,6 +1,6 @@
 //! CfRadial 1.x decoder (classic-netCDF radar moments).
 //!
-//! Format reference: M. Dixon and W.-C. Lee, "CfRadial Data File Format:
+//! Format reference: M. Dixon and W.-C. Lee, "CfRadial Data File Format —
 //! CF-compliant netCDF Format for Moments Data for RADAR and LIDAR",
 //! NCAR/EOL, version 1.4 (2016) (versions 1.1–1.4 share the layout read
 //! here). CfRadial 1 files are classic netCDF (`CDF\x01`/`CDF\x02`) with:
@@ -16,7 +16,7 @@
 //!   (CF packing: physical = raw * scale_factor + add_offset).
 //!
 //! CfRadial 2 is netCDF-4 (HDF5 container) and is rejected by the routing
-//! layer with an explicit message: it never reaches this module.
+//! layer with an explicit message — it never reaches this module.
 //!
 //! Fields decode into F32 moment grids (NaN = fill); sweeps become
 //! elevation cuts. For RHI sweeps the fixed angle is the AZIMUTH and lands
@@ -61,7 +61,7 @@ pub fn decode_cfradial1_volume(bytes: &[u8]) -> Result<RadarVolume> {
     let dim = |name: &str| file.dims.iter().position(|(dim_name, _)| dim_name == name);
     let (Some(time_dim), Some(range_dim)) = (dim("time"), dim("range")) else {
         return Err(invalid(
-            "netCDF file lacks time/range dimensions, not CfRadial 1.x",
+            "netCDF file lacks time/range dimensions — not CfRadial 1.x",
         ));
     };
     let n_rays = file.dims[time_dim].1;

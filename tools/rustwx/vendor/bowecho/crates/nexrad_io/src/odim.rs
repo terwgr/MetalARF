@@ -11,13 +11,13 @@
 //!
 //! Decodes `PVOL` (polar volume) and `SCAN` (single sweep) objects into
 //! [`RadarVolume`]. Conventions honored from the spec:
-//! - physical = `gain * raw + offset` (Table 6 "what" group attributes):
+//! - physical = `gain * raw + offset` (Table 6 "what" group attributes) —
 //!   inverted into the moment grid's `(raw - offset) / scale` storage.
 //! - `nodata` and `undetect` both display as "no echo"; `undetect` cells
 //!   are remapped onto the `nodata` sentinel so compact storage keeps one
 //!   transparent code.
 //! - Doppler-velocity no-data recovery: some IRIS exporters (AEMET Spain,
-//!   IRIS 10.3) copy the REFLECTIVITY `what` group onto the velocity plane:
+//!   IRIS 10.3) copy the REFLECTIVITY `what` group onto the velocity plane —
 //!   the VRADH `nodata`/`undetect` carry the dBZ sentinels (e.g. 95.5 / -32)
 //!   while no-echo velocity gates are filled with the physical `offset`
 //!   (0 m/s for gain=1/offset=0). Those fill gates match neither declared
@@ -25,11 +25,11 @@
 //!   plane. `recover_copied_whatgroup_velocity_nodata` masks a velocity gate
 //!   sitting on `offset` when the co-located reflectivity gate is no-echo,
 //!   and only when the velocity sentinels equal the reflectivity sentinels
-//!   (the copied-what-group signature): genuine 0 m/s gates with echo, and
+//!   (the copied-what-group signature) — genuine 0 m/s gates with echo, and
 //!   conformant writers with distinct velocity sentinels, are untouched.
 //! - `rstart` is km to the start of the first bin; `rscale` is the bin
 //!   spacing in metres (Table 5 "where" for polar data). Implausibly large
-//!   `rstart` values are reinterpreted as metres: see
+//!   `rstart` values are reinterpreted as metres — see
 //!   `first_gate_m_from_rstart` for the writer quirk that requires it.
 //! - Rays are stored north-relative in scan order: ray `i` spans
 //!   `[i, i+1) * 360/nrays` degrees, so its center azimuth is
@@ -59,7 +59,7 @@ pub fn decode_odim_h5_volume(bytes: &[u8]) -> Result<RadarVolume> {
         .and_then(|attr| attr.as_str().map(str::to_owned))
         .ok_or_else(|| {
             invalid(
-                "HDF5 file has no /what 'object' attribute, not ODIM_H5 \
+                "HDF5 file has no /what 'object' attribute — not ODIM_H5 \
                  (CfRadial2/other HDF5 radar formats are not supported yet)",
             )
         })?;
@@ -322,14 +322,14 @@ const RSTART_SANE_MAX_KM: f64 = 20.0;
 /// ODIM_H5 defines `rstart` in km (Table 5, polar "where"), but AEMET Spain
 /// (IRIS 8.13/10.3 exports; all 11 sites surveyed on the OPERA ORD bucket,
 /// 2026-07-07) writes it in METRES: observed 125/167/200 across the network.
-/// Read as km those would start every ray 125–200 km downrange, past the
-/// 150 km extent of the very sweeps they describe (299 bins x 500 m), while
+/// Read as km those would start every ray 125–200 km downrange — past the
+/// 150 km extent of the very sweeps they describe (299 bins x 500 m) — while
 /// as metres they are classic IRIS range-start values on the same scale as
 /// the bin spacing. A physical-sanity rule beats sniffing the IRIS source
 /// string: other IRIS exports write conformant km, and any writer whose
 /// first bin "starts" > [`RSTART_SANE_MAX_KM`] out is reporting metres.
 /// (Metre-valued quirk output below the threshold is indistinguishable from
-/// km, but IRIS range starts sit at gate-size scale (hundreds of metres)
+/// km, but IRIS range starts sit at gate-size scale — hundreds of metres —
 /// and 0 reads identically in either unit.)
 fn first_gate_m_from_rstart(rstart: f64) -> i32 {
     if rstart > RSTART_SANE_MAX_KM {
@@ -376,8 +376,8 @@ const VELOCITY_OFFSET_EPS: f32 = 1.0e-6;
 /// 0 m/s reading and is preserved.
 ///
 /// Guarded by the copied-what-group signature (velocity sentinels equal the
-/// reflectivity sentinels) so conformant writers (which give velocity its own
-/// distinct sentinels, already masked by the base decode) are never touched.
+/// reflectivity sentinels) so conformant writers — which give velocity its own
+/// distinct sentinels, already masked by the base decode — are never touched.
 /// Also a no-op unless both planes share ray/gate geometry.
 fn recover_copied_whatgroup_velocity_nodata(
     cut: &mut radar_core::ElevationCut,
@@ -439,7 +439,7 @@ fn recover_copied_whatgroup_velocity_nodata(
 
 /// Set the given flat gate indices to the grid's transparent no-data code:
 /// NaN for float storage, the `nodata` sentinel for integer storage (integer
-/// grids with no sentinel are left unchanged, nothing transparent to write).
+/// grids with no sentinel are left unchanged — nothing transparent to write).
 fn mask_gates_no_data(grid: &mut MomentGrid, targets: &[usize]) {
     let sentinel = grid.nodata;
     match &mut grid.storage {
@@ -478,7 +478,7 @@ fn canonical_quantity(quantity: &str) -> Option<MomentType> {
         "WRADH" | "WRADV" | "WRAD" => Some(MomentType::SpectrumWidth),
         // The unfiltered dual-pol spellings come in both orders in the
         // wild: spec-style trailing U (ZDRU) and DWD's leading U (UZDR,
-        // URHOHV, live opendata.dwd.de sweep files, 2026-06-12).
+        // URHOHV — live opendata.dwd.de sweep files, 2026-06-12).
         "ZDR" | "ZDRU" | "UZDR" => Some(MomentType::DifferentialReflectivity),
         "RHOHV" | "RHOHVU" | "URHOHV" => Some(MomentType::CorrelationCoefficient),
         "PHIDP" | "PHIDPU" | "UPHIDP" => Some(MomentType::DifferentialPhase),
@@ -542,7 +542,7 @@ fn parse_site(file: &H5File<'_>) -> RadarSite {
 /// Pick site id + display name out of the `/what` `source` attribute:
 /// comma-separated "TYP:value" identifier pairs (spec Table 3), e.g.
 /// "WMO:02606,RAD:SE50,PLC:Karlskrona,NOD:sekkr". Preference is
-/// NOD > RAD > WMO regardless of pair order: operational files (RMI
+/// NOD > RAD > WMO regardless of pair order — operational files (RMI
 /// Belgium, met.no) list WMO first but NOD is the canonical OPERA site
 /// code (validated against bejab/norst sample volumes).
 fn site_identity_from_source(source: &str) -> (String, Option<String>) {

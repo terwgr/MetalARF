@@ -175,7 +175,7 @@ fn is_wxrhof_key(key: &str) -> bool {
 /// (the [`RecentFrames`] contract). Keys carry zero-padded UTC stamps, so
 /// lexicographic order is chronological order; non-matching keys (sidecar
 /// files, anything else under the prefix) are ignored. Identity is the file
-/// name, precisely what `latest` uses, so the newest plan is the live
+/// name — precisely what `latest` uses, so the newest plan is the live
 /// poll's dedupe key.
 fn recent_plans(keys: &[String], count: usize) -> Vec<FramePlan> {
     let mut keys: Vec<&str> = keys

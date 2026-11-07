@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from email.parser import Parser
+from functools import lru_cache
 import gzip
 import hashlib
 import json
@@ -88,6 +89,7 @@ REQUIRED_WHEEL_PAYLOADS = {
     "woof/core/nest_interp.py",
     "woof/core/noah.py",
     "woof/core/state.py",
+    "woof/core/physics_inventory.py",
     "woof/data/noah_tables/LANDUSE.TBL",
     "woof/data/noah_tables/VEGPARM.TBL",
     "woof/data/noah_tables/SOILPARM.TBL",
@@ -201,6 +203,12 @@ def _verify_wheel_matches_source(wheel: Path) -> dict[str, object]:
         forbidden.extend(sorted(
             name for name in wheel_names
             if name.startswith(FORBIDDEN_WHEEL_PREFIXES)
+            # These source-matched CPU harnesses generate pinned tables at
+            # first use; coefficient sets and oracle payloads remain excluded.
+            and name not in {
+                "woof/data/thompson/fork-build/generate_tables.F90",
+                "woof/data/thompson/fork-build/stub_wrf.F90",
+            }
         ))
         if forbidden:
             raise ValueError(
@@ -253,11 +261,18 @@ def _copy_file(source: Path, destination: Path, *, executable: bool = False) -> 
     destination.chmod(0o755 if executable else 0o644)
 
 
+@lru_cache(maxsize=None)
+def _tracked_source_paths(root: Path) -> frozenset[str]:
+    """Snapshot the staging checkout's tracked paths once per process."""
+    output = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z"])
+    return frozenset(os.fsdecode(path) for path in output.split(b"\0") if path)
+
+
 def _require_tracked(source: Path) -> None:
     relative = source.resolve().relative_to(REPO).as_posix()
-    subprocess.run(
-        ["git", "-C", str(REPO), "ls-files", "--error-unmatch", relative],
-        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if relative not in _tracked_source_paths(REPO):
+        raise subprocess.CalledProcessError(
+            1, ["git", "-C", str(REPO), "ls-files", "--error-unmatch", relative])
 
 
 def _require_lf_shell(source: Path) -> None:

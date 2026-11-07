@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from woof.wrf_exact import ENABLED as WRF_EXACT
 from woof.core.health import (
     GPU_INTEGER_EXCLUSIONS, MAX_HEALTH_FIELDS, HealthCheckError,
     StateHealthValidator,
@@ -14,6 +15,8 @@ from woof.core.health import (
     validate_state_cpu,
 )
 
+
+_SCALAR_CORRUPTION = np.nan if WRF_EXACT else None
 
 # Every uncovered class named by scout-robust-report.md.  Each fixture has
 # exactly one failing value so field attribution is unambiguous.
@@ -24,16 +27,22 @@ CORRUPTIONS = (
     ("p", 0.0),
     ("al", np.inf),
     ("alt", 0.0),
-    *((name, -1.0e-6) for name in ("qv", "qc", "qr", "qi", "qs", "qg")),
-    *((name, -1.0) for name in ("nc", "nr", "ni", "ns", "ng")),
-    *((name, -1.0e-12) for name in ("qvolg", "qvolh")),
+    # Strict mode (GPUWM_WRF_EXACT=1) keeps WRF's own below-zero scalar
+    # residuals (woof.core.health.rule_for_field), so there the transported
+    # scalars are corrupted through finiteness instead of their sign.
+    *((name, _SCALAR_CORRUPTION or -1.0e-6) for name in ("qv", "qc", "qr", "qi", "qs", "qg")),
+    *((name, _SCALAR_CORRUPTION or -1.0) for name in ("nc", "nr", "ni", "ns", "ng")),
+    *((name, _SCALAR_CORRUPTION or -1.0e-12) for name in ("qvolg", "qvolh")),
     *((name, -1.0) for name in ("effc", "effr", "effi", "effs")),
     ("held.pbl.ru", np.nan),
     ("lbc.d01.u.west.value", np.nan),
     ("nest.d02.theta.west.value", np.nan),
     ("surface.tsk", 401.0),
     ("surface.smois", 1.01),
-    ("surface.sh2o", -0.01),
+    # The soil-moisture floor was retired with the RUC refusal (2026-10-07
+    # combo sweep round 2: real.exe writes small negative deep-layer words
+    # that WRF integrates), so sh2o is corrupted through its ceiling.
+    ("surface.sh2o", 1.01),
     ("surface.tslb", 149.0),
 )
 
@@ -116,8 +125,9 @@ def test_aerosol_moment_bound_admits_an_emitting_surface_and_refuses_a_runaway()
     assert not runaway.ok
     assert runaway.first_bad_field == "nwfa"
     assert set(runaway.failing_classes) == {"moment"}
-    assert not negative.ok
-    assert negative.first_bad_field == "nifa"
+    if not WRF_EXACT:   # strict mode keeps WRF's below-zero scalar residuals
+        assert not negative.ok
+        assert negative.first_bad_field == "nifa"
 
 
 def test_health_error_is_terminal_and_carries_report():
@@ -160,47 +170,40 @@ def test_health_cuda_source_compiles_offline_with_nvrtc():
 
 
 _REAL_DRIVER_INVENTORY = tuple("""
-u v w thp php mup p al alt qv qc qr qi qs qg nc nr ni ns ng effc effr effi
-effs h_diabatic held.pbl.ru held.pbl.rv held.pbl.rtheta held.pbl.rqv
-held.pbl.rqc held.pbl.rqr held.pbl.rqi held.pbl.rqs
-held.radiation.ru held.radiation.rv held.radiation.rtheta
-held.radiation.rqv held.radiation.rqc held.cumulus.ru held.cumulus.rv
-held.cumulus.rtheta held.cumulus.rqv held.cumulus.rqc held.cumulus.rqr
-held.cumulus.rqi held.cumulus.rqs held.rthratenlw
-held.rthratensw held.cu_nca held.cu_pratec held.cu_raincv
-held.cu_rates.rqccuten held.cu_rates.rqicuten held.cu_rates.rqrcuten
-held.cu_rates.rqscuten held.cu_rates.rqvcuten held.cu_rates.rthcuten
-held._pending_rainbl surface.acsnom surface.acsnow
-surface.albbck surface.albedo surface.br surface.canwat surface.cd surface.cda
-surface.chklowq surface.chs surface.chs2 surface.ck surface.cka surface.cpm
-surface.cqs2 surface.dz8w1 surface.ebal surface.embck surface.emiss
-surface.exch_h surface.exch_m surface.fh surface.flhc surface.flqc surface.fm
-surface.glw surface.grdflx surface.gz1oz0 surface.hfx surface.isltyp
-surface.ivgtyp surface.kpbl surface.lai surface.lakemask surface.landmask
-surface.lh surface.mavail surface.mol surface.noahres surface.pblh
-surface.potevp surface.psfc surface.psih surface.psim surface.q2 surface.qfx
-surface.qgh surface.qsfc surface.qv1 surface.rainbl surface.regime
-surface.reslin surface.rib surface.rmol surface.sfcprs surface.sfcrunoff
-surface.sfctmp surface.sh2o surface.shdmax surface.shdmin surface.smcrel
-surface.smois surface.smstav surface.smstot surface.snoalb surface.snopcx
-surface.snotime surface.snow surface.snowc surface.snowh surface.sr
-surface.swdown surface.t2 surface.th2 surface.tmn surface.tsk surface.tslb
+u v w thp php mup
+p al alt qv qc qr
+qi qs qg nc nr ni
+ns ng effc effr effi effs
+h_diabatic held.pbl.ru held.pbl.rv held.pbl.rtheta held.pbl.rqv held.pbl.rqc
+held.pbl.rqr held.pbl.rqi held.pbl.rqs held.radiation.ru held.radiation.rv held.radiation.rtheta
+held.radiation.rqv held.radiation.rqc held.cumulus.ru held.cumulus.rv held.cumulus.rtheta held.cumulus.rqv
+held.cumulus.rqc held.cumulus.rqr held.cumulus.rqi held.cumulus.rqs held.rthratenlw held.rthratensw
+held.cu_nca held.cu_pratec held.cu_raincv held.cu_rates.rqccuten held.cu_rates.rqicuten held.cu_rates.rqrcuten
+held.cu_rates.rqscuten held.cu_rates.rqvcuten held.cu_rates.rthcuten held._pending_rainbl surface.acgrdflx surface.achfx
+surface.aclhf surface.acsnom surface.acsnow surface.albbck surface.albedo surface.br
+surface.canwat surface.cd surface.cda surface.chklowq surface.chs surface.chs2
+surface.ck surface.cka surface.cpm surface.cqs2 surface.dz8w1 surface.ebal
+surface.embck surface.emiss surface.exch_h surface.exch_m surface.fh surface.flhc
+surface.flqc surface.fm surface.glw surface.grdflx surface.gz1oz0 surface.hfx
+surface.hfx_force surface.hfx_force_tend surface.isltyp surface.ivgtyp surface.kpbl surface.lai
+surface.lakemask surface.landmask surface.lh surface.lh_force surface.lh_force_tend surface.mavail
+surface.mol surface.noahres surface.p_hyd surface.pblh surface.potevp surface.psfc
+surface.psih surface.psim surface.q2 surface.qfx surface.qgh surface.qsfc
+surface.qv1 surface.rainbl surface.refd_max surface.regime surface.reslin surface.rib
+surface.rmol surface.rqcblten surface.rqccuten surface.rqicuten surface.rqrcuten surface.rqscuten
+surface.rqvblten surface.rqvcuten surface.rthblten surface.rthcuten surface.rublten surface.rucuten
+surface.rvblten surface.rvcuten surface.sfcprs surface.sfcrunoff surface.sfctmp surface.sh2o
+surface.shdmax surface.shdmin surface.smcrel surface.smois surface.smstav surface.smstot
+surface.snoalb surface.snopcx surface.snotime surface.snow surface.snowc surface.snowh
+surface.sr surface.sst surface.sstsk surface.swdown surface.swnorm surface.t2
+surface.th2 surface.tmn surface.tsk surface.tsk_force surface.tsk_force_tend surface.tslb
 surface.u10 surface.udrunoff surface.ust surface.ustm surface.v10 surface.vegfra
-surface.wspd surface.xice surface.xland surface.z0 surface.znt surface.zol
-  surface.microphysics.rainnc surface.microphysics.rainncv
-  surface.microphysics.sr surface.microphysics.snownc
-  surface.microphysics.snowncv surface.microphysics.graupelnc
-  surface.microphysics.graupelncv held.scratch.cu_nca held.scratch.cu_pratec
-  held.scratch.cu_rainc held.scratch.cu_raincv held.scratch.cu_rqccuten
-  held.scratch.cu_rqicuten held.scratch.cu_rqrcuten held.scratch.cu_rqscuten
-  held.scratch.cu_rqvcuten held.scratch.cu_rthcuten
-  surface.microphysics.scratch.mp_graupelnc
-  surface.microphysics.scratch.mp_graupelncv
-  surface.microphysics.scratch.mp_rainnc
-  surface.microphysics.scratch.mp_rainncv
-  surface.microphysics.scratch.mp_snownc
-  surface.microphysics.scratch.mp_snowncv surface.microphysics.scratch.mp_sr
-  lbc.forcing_tables lbc.lbc_weights_0
+surface.wspd surface.xice surface.xicem surface.xland surface.z0 surface.znt
+surface.zol surface.microphysics.rainnc surface.microphysics.rainncv surface.microphysics.sr surface.microphysics.snownc surface.microphysics.snowncv
+surface.microphysics.graupelnc surface.microphysics.graupelncv held.scratch.cu_nca held.scratch.cu_pratec held.scratch.cu_rainc held.scratch.cu_raincv
+held.scratch.cu_rqccuten held.scratch.cu_rqicuten held.scratch.cu_rqrcuten held.scratch.cu_rqscuten held.scratch.cu_rqvcuten held.scratch.cu_rthcuten
+surface.microphysics.scratch.mp_graupelnc surface.microphysics.scratch.mp_graupelncv surface.microphysics.scratch.mp_rainnc surface.microphysics.scratch.mp_rainncv surface.microphysics.scratch.mp_snownc surface.microphysics.scratch.mp_snowncv
+surface.microphysics.scratch.mp_sr lbc.forcing_tables lbc.lbc_weights_0
 """.split())
 
 
@@ -482,3 +485,85 @@ def test_gpu_gate_scans_an_aliased_buffer_once_and_still_attributes_it(
     assert not report.ok
     assert report.first_bad_field == "held.cu_rates.rthcuten"
     assert report.first_bad_flat_index == 4
+
+
+def test_a_fast_sbm_domain_takes_the_fsbm_ceiling():
+    """A nested FAST_SBM (mp_physics=30) tree measured 2,889 descriptors
+    and stopped at its first validation against 1024.  A state carrying the
+    bins gets FSBM_HEALTH_FIELDS, the config rule preflight prices by
+    agrees, and every other state and config is unchanged."""
+    from woof.core.health import (FSBM_HEALTH_FIELDS,
+                                   health_field_ceiling,
+                                   health_field_ceiling_for_config)
+
+    one = np.ones((1,), dtype=np.float32)
+    fsbm = SimpleNamespace(fast_sbm_bins=one, physics=None,
+                           lateral_boundaries=None, _scratch={})
+    plain = SimpleNamespace(qvolg=one, physics=None, lateral_boundaries=None,
+                            _scratch={})
+    assert FSBM_HEALTH_FIELDS == 4096
+    assert health_field_ceiling(fsbm) == FSBM_HEALTH_FIELDS
+    assert health_field_ceiling(plain) == MAX_HEALTH_FIELDS
+    for mp, want in ((30, FSBM_HEALTH_FIELDS), (28, MAX_HEALTH_FIELDS),
+                     (8, MAX_HEALTH_FIELDS), (0, MAX_HEALTH_FIELDS)):
+        cfg = SimpleNamespace(mp_physics=mp)
+        assert health_field_ceiling_for_config(cfg) == want
+
+
+def test_successful_required_health_releases_replaced_array_generations(monkeypatch):
+    """A completed check must not keep old cadence carriers alive next step."""
+    import weakref
+    from woof.core.health import HealthField, ValidationReport, rule_for_field
+
+    state = SimpleNamespace(values=np.ones(8, dtype=np.float32),
+                            auxiliary=np.ones(8, dtype=np.float32),
+                            integers=np.ones(8, dtype=np.int32))
+    validator = StateHealthValidator.__new__(StateHealthValidator)
+    validator.state = state
+    reports = []
+
+    def scan(*, phase):
+        validator.fields = (HealthField('u', state.values, rule_for_field('u'),
+                                        auxiliary=state.auxiliary),)
+        validator.excluded_integer_fields = (
+            HealthField('surface.ivgtyp', state.integers, rule_for_field('u')),)
+        report = ValidationReport(not np.isnan(state.values).any(), 0, phase=phase)
+        reports.append(report)
+        return report
+
+    monkeypatch.setattr(validator, 'validate', scan)
+    old = tuple(weakref.ref(a) for a in (state.values, state.auxiliary, state.integers))
+    assert validator.require_healthy(phase='old') is reports[-1]
+    for name in ('values', 'auxiliary', 'integers'):
+        setattr(state, name, getattr(state, name).copy())
+    assert all(ref() is None for ref in old)
+    # Recollection still sees newly allocated carriers and preserves a failed
+    # scan's descriptors for inspection instead of weakening the gate.
+    state.values[3] = np.nan
+    with pytest.raises(HealthCheckError):
+        validator.require_healthy(phase='replacement')
+    assert validator.fields[0].values is state.values
+    assert validator.excluded_integer_fields[0].values is state.integers
+    assert reports[-1].phase == 'replacement'
+
+
+@pytest.mark.gpu
+def test_gpu_required_health_recollects_replaced_arrays_and_catches_corruption():
+    import weakref
+    import cupy as cp
+
+    state = _GPUState(cp, 'u', 1.0)
+    validator = StateHealthValidator(state)
+    old = weakref.ref(state.u)
+    assert validator.require_healthy(phase='original').ok
+    assert validator.fields == ()
+    state.u = state.u.copy()
+    assert old() is None
+    state.u.reshape(-1)[4] = cp.float32(cp.nan)
+    with pytest.raises(HealthCheckError) as failure:
+        validator.require_healthy(phase='replacement')
+    report = failure.value.report
+    assert report.first_bad_field == 'u'
+    assert report.first_bad_flat_index == 4
+    assert report.phase == 'replacement'
+    assert validator.fields[0].values is state.u

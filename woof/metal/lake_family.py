@@ -57,6 +57,10 @@ class MetalLakeModel:
         # only the mask when a caller explicitly asks for the census.
         return int(np.count_nonzero(self.lakemask.to_numpy() == np.float32(1)))
 
+    def invalidate_columns(self) -> None:
+        """Restart restores full-grid fields in place; there is no sparse cache."""
+        return
+
     def _check_errors(self) -> None:
         status = self.errors.to_numpy()
         bad = status[status != 0]
@@ -139,7 +143,7 @@ def initialize_lake_metal(
         fields, *, latitude, lake_depth=None, lake_depth_flag=None,
         use_lakedepth=LAKE_DEFAULT_USE_DEPTH,
         lakedepth_default=LAKE_DEFAULT_DEPTH, iswater=17,
-        xice_threshold: float = 0.5) -> MetalLakeModel:
+        xice_threshold: float = 0.5, initial_state=None) -> MetalLakeModel:
     """Initialize complete WRF lake state on the active Metal context."""
     if isinstance(use_lakedepth, (bool, np.bool_)) or use_lakedepth not in (0, 1):
         raise ValueError("use_lakedepth must be 0 or 1")
@@ -261,4 +265,26 @@ def initialize_lake_metal(
             "lake_init_columns", init_resources, params,
             exact_policy=False, grid_size=n, threads_per_group=32)
         owner._check_errors()
+        if initial_state:
+            from woof.ingest.lake_state import FIELDS
+            supplied = np.full((len(FIELDS), *shape), np.nan, np.float32)
+            for row, name in enumerate(FIELDS):
+                if name in initial_state:
+                    value = np.asarray(initial_state[name], np.float32)
+                    if value.shape != shape:
+                        raise ValueError(f"lake initial {name} must match the surface grid")
+                    supplied[row] = value
+            wet = fields["lakemask"].to_numpy() == np.float32(1)
+            equivalent_ice = supplied[4] * supplied[5]
+            if np.any(wet & np.isfinite(equivalent_ice)
+                      & (equivalent_ice > fields["lake_static"][0].to_numpy())):
+                raise ValueError("lake source equivalent ice thickness exceeds model bathymetry; binding would discard ice volume")
+            context.submit_kernel(
+                "lake_bind_source_columns",
+                {"lakemask": fields["lakemask"], "src": module.asarray(supplied),
+                 "lake_columns": fields["lake_columns"],
+                 "lake_static": fields["lake_static"]},
+                {"n": n, "ny": ny, "nx": nx, "state_words": LAKE_STATE_WORDS,
+                 "static_words": LAKE_STATIC_WORDS},
+                exact_policy=False, grid_size=n, threads_per_group=32)
     return owner

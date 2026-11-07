@@ -45,7 +45,7 @@ def test_actual_v4121_hrrr_wrf_namelist_selects_the_fork_ruc_forms():
 
 
 def _ruc_input(*, fork=False):
-    text = INPUT_TEXT.replace('mp_physics = 55, 55', 'mp_physics = 8, 8').replace(
+    text = INPUT_TEXT.replace('mp_physics = 10, 10', 'mp_physics = 8, 8').replace(
         'sf_sfclay_physics = 91, 91', 'sf_sfclay_physics = 5, 5').replace(
         'sf_surface_physics = 2, 2', 'sf_surface_physics = 3, 3').replace(
         'bl_pbl_physics = 11, 11', 'bl_pbl_physics = 5, 5').replace(
@@ -91,15 +91,32 @@ def test_actual_hrrr_ruc_setting_vectors_import_through_the_supported_door(tmp_p
         assert domain.run.ruc_irrigation == domain.run.ruc_snow == 'wrf_45'
         assert domain.run.ruc_qvg_cold_start == 'air'
         assert domain.run.ruc_2m_diagnostic == 'log_profile'
-    assert any(entry.key == 'gsd_diagnostics' for entry in report.dropped)
+    assert all(domain.run.gsd_diagnostics == 0 for domain in experiment.domains)
+    assert any(entry.key == 'gsd_diagnostics' for entry in report.translated)
+    assert not any(entry.key == 'gsd_diagnostics' for entry in report.dropped)
 
 
 def test_actual_hrrr_active_diagnostics_are_not_silently_imported(tmp_path):
     source = _actual_hrrr_sections()
     assert source['time_control']['gsd_diagnostics'] == [1]
     text = _supported_actual_ruc_input().replace('gsd_diagnostics = 0', 'gsd_diagnostics = 1')
-    with pytest.raises(ValueError, match='gsd_diagnostics'):
-        import_namelists(*_pair(tmp_path, inp=text))
+    # The ported output package must survive both the TOML and load doors.
+    _assert_declared_diagnostics(tmp_path, *import_namelists(*_pair(tmp_path, inp=text)))
+
+
+def _assert_declared_diagnostics(tmp_path, toml_text, report):
+    # This used to be an unported output difference. The output lane ports
+    # it, so keep the same regression IDs and witness its preserved setting.
+    raw = tomllib.loads(toml_text)
+    assert raw['shared']['gsd_diagnostics'] == 1
+    path = tmp_path / 'diagnostics.toml'
+    path.write_text(toml_text, encoding='utf-8')
+    experiment = load_experiment(path)
+    assert all(domain.run.gsd_diagnostics == 1 for domain in experiment.domains)
+    assert any(entry.key == 'gsd_diagnostics' for entry in report.translated)
+    assert not any(entry.key == 'gsd_diagnostics' for entry in report.dropped)
+    assert not any(entry.key == 'gsd_diagnostics' for entry in report.substitutions)
+    assert 'gsd_diagnostics' in report.format()
 
 
 def _import(tmp_path, *, fork, filename):
@@ -149,10 +166,9 @@ def test_the_fork_signature_does_not_change_a_non_ruc_configuration():
     assert operational_fork_ruc_defaults(sections) == {}
 
 
-def test_enabled_unported_fork_diagnostics_still_refuse(tmp_path):
+def test_enabled_unported_fork_diagnostics_are_declared(tmp_path):
     text = _ruc_input(fork=True).replace('gsd_diagnostics = 0', 'gsd_diagnostics = 1')
-    with pytest.raises(ValueError, match='gsd_diagnostics'):
-        import_namelists(*_pair(tmp_path, inp=text))
+    _assert_declared_diagnostics(tmp_path, *import_namelists(*_pair(tmp_path, inp=text)))
 
 
 @pytest.mark.parametrize('recipe', RECIPES, ids=lambda p: p.stem)

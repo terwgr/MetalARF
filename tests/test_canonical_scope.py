@@ -105,3 +105,54 @@ def test_production_digest_matches_ratified_verification_digest(
         _State(), _Clock(), scope=scope)
     actual = canonical_state_digest(_State(), _Clock(), scope=scope)
     assert actual == expected
+
+
+def test_gsd_history_reflectivity_is_output_not_trajectory():
+    """gsd_diagnostics' 1 km / 4 km AGL reflectivity is recomputed at every
+    history time; a whole HRRR-recipe forecast failed its final digest on it
+    (box D 2026-10-21: "'refl_10cm_1km' is inside an audited lazy prefix but
+    is not a concrete registered member")."""
+    from types import SimpleNamespace
+    from woof.state_digest import _canonical_extra_manifest
+    state = SimpleNamespace(_scratch={"refl_10cm_1km": object(),
+                                      "refl_10cm_4km": object()})
+    assert _canonical_extra_manifest(state) == {}
+
+
+def test_moving_nest_final_digest_includes_registered_placement_archive(monkeypatch):
+    """Real six-hour member: (63,74)->(63,72)->(64,70), 160x160, ratio 4.
+
+    All eight first-wave forecasts finished integration then failed on
+    nest_accumulation/mp_graupelnc while computing their final digest.
+    """
+    from woof.io import restart as restart_io
+    from woof import state_digest
+    from woof.core.nest_accumulation import META, PREFIX
+
+    state = _State()
+    state.elapsed_seconds = 21600.0
+    state._scratch = {
+        PREFIX + slot: np.zeros((176, 164), dtype=np.float32)
+        for slot in ('mp_graupelnc', 'mp_rainnc', 'mp_snownc')
+    }
+    state._scratch[META] = np.array([4, -16, 0, -16], dtype=np.int64)
+    # Keep the real restart scratch authority: only unrelated prognostics
+    # are replaced, since this is a CPU-only inventory regression.
+    monkeypatch.setattr(restart_io, 'state_manifest', lambda state: {})
+    initial = canonical_state_digest(state, _Clock())
+    assert set(initial['field_order']) == {f'scratch/{s}' for s in state._scratch}
+    assert initial == real74_d02.canonical_state_digest(state, _Clock())
+    for module in (state_digest, real74_d02):
+        assert module._canonical_extra_manifest(state) == {}
+        for slot in state._scratch:
+            assert module.lazy_inventory_member_class(f'scratch/{slot}') == (
+                'nest precipitation placement archive')
+    state._scratch[PREFIX + 'mp_graupelnc'][0, 0] = 1
+    changed_rain = canonical_state_digest(state, _Clock())
+    assert changed_rain['sha256'] != initial['sha256']
+    state._scratch[META][0] += 1
+    assert canonical_state_digest(state, _Clock())['sha256'] != changed_rain['sha256']
+    state._scratch[PREFIX + 'unregistered'] = np.zeros((1,), dtype=np.float32)
+    for module in (state_digest, real74_d02):
+        with pytest.raises(RuntimeError, match='not a concrete registered member'):
+            module.canonical_state_digest(state, _Clock())

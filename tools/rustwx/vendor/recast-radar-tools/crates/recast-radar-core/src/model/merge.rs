@@ -68,7 +68,7 @@ pub enum MergeError {
 ///   the first part supplies every volume-level item, its provenance
 ///   included. Parts of different source formats are rejected rather than
 ///   merged: the merged volume carries one `source_format`, and the readings
-///   that depend on it ([`Sweep::tilt_elevation_deg`] above all) would then
+///   that depend on it — [`Sweep::tilt_elevation_deg`] above all — would then
 ///   be taken under the first part's format for every sweep.
 /// - `time_reference` becomes the earliest part's; ray times of the other parts
 ///   are rebased onto it. `time_coverage` is the union.

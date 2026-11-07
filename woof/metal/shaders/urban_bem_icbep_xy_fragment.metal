@@ -1,7 +1,12 @@
 #include <metal_stdlib>
 #include "urban_bem_icbep_xy_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
 using namespace metal;
+#include "soft_glibc_solar_trig.metalh"
+static inline float ubix_atan_pinned(float x) { return as_type<float>(soft_glibc_solar_atanf(as_type<uint>(x))); }
+
 #pragma clang fp contract(off)
 
 static inline float ubix_add(float a, float b) {
@@ -16,16 +21,16 @@ static inline float ubix_mul(float a, float b) {
 static inline float ubix_div(float a, float b) {
     return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b)));
 }
-static inline float ubix_sqrt(float x) { return precise::sqrt(x); }
-static inline float ubix_log(float x) { return precise::log(x); }
-static inline float ubix_atan(float x) { return precise::atan(x); }
+static inline float ubix_sqrt(float x) { return as_type<float>(soft32_sqrt(as_type<uint>(x))); }
+static inline float ubix_pow_half(float x) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x),0x3f000000u)); }
+static inline float ubix_log(float x) { return as_type<float>(soft_gfk_log(as_type<uint>(x))); }
+static inline float ubix_atan(float x) { return ubix_atan_pinned(x); }
 
 // The CUDA bb_icbep_xy wrapper clears all factor arrays and calls
 // bb_view_factors once per direction through ndu. One thread handles a
 // (domain column, direction); fww is stored with source's iz-fast order in
-// the [column, direction, jz, iz] scratch layout. Its log/power/atan/sqrt
-// intrinsics use Metal precise math here; soft32 keeps every surrounding
-// FP32 operation source ordered and non-contracted.
+// the [column, direction, jz, iz] scratch layout. Pinned log/power/atan
+// bodies and soft32 square root preserve the source rounding graph.
 static inline float ubix_fprls(float a, float b, float c) {
     const float x = ubix_div(a, c);
     const float y = ubix_div(b, c);
@@ -35,9 +40,9 @@ static inline float ubix_fprls(float a, float b, float c) {
     const float numerator = ubix_mul(ubix_add(1.0f, x2),
                                      ubix_add(1.0f, y2));
     const float denominator = ubix_add(ubix_add(1.0f, x2), y2);
-    const float t1 = ubix_log(ubix_sqrt(ubix_div(numerator, denominator)));
-    const float sx = ubix_sqrt(ubix_add(1.0f, x2));
-    const float sy = ubix_sqrt(ubix_add(1.0f, y2));
+    const float t1 = ubix_log(ubix_pow_half(ubix_div(numerator, denominator)));
+    const float sx = ubix_pow_half(ubix_add(1.0f, x2));
+    const float sy = ubix_pow_half(ubix_add(1.0f, y2));
     const float t2 = ubix_mul(ubix_mul(y, sx), ubix_atan(ubix_div(y, sx)));
     const float t3 = ubix_mul(ubix_mul(x, sy), ubix_atan(ubix_div(x, sy)));
     const float v = ubix_sub(

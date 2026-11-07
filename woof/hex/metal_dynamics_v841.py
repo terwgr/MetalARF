@@ -480,31 +480,37 @@ def _recover_velocities(driver: Any, state: MetalPrognosticState) -> tuple[Any, 
 
 def _recover_candidate(driver: Any, saved_state: MetalPrognosticState,
                        saved_diag: MetalSavedDiagnostics, acoustic: Any,
-                       stage: int, acoustic_steps: int, scalars: Any):
+                       stage: int, acoustic_steps: int, scalars: Any, *,
+                       native_recovery=False, diabatic_theta=None, large_timestep=0.0):
     regional = getattr(driver, "regional_v841", None)
     arrays = driver.arrays
     atmosphere = driver.atmosphere
     mctx = _context(saved_state.rho)
-    rho = arrays.empty(saved_state.rho.shape, np.float32)
-    rtheta = arrays.empty(saved_state.rho_theta.shape, np.float32)
-    rho_p = arrays.empty(saved_state.rho.shape, np.float32)
-    rtheta_p = arrays.empty(saved_state.rho_theta.shape, np.float32)
-    theta = arrays.empty(saved_state.rho.shape, np.float32)
-    exner = arrays.empty(saved_diag.exner.shape, np.float32)
-    pressure_p = arrays.empty(saved_diag.pressure_perturbation.shape, np.float32)
-    reference = atmosphere.reference
-    _launch("recover_cells_f32", driver.ncells * driver.nlev, mctx,
-            dict(rho_p_saved=saved_diag.density_perturbation,
-                 rtheta_p_saved=saved_diag.rho_theta_perturbation,
-                 rho_pp=acoustic.rho_pp, rtheta_pp=acoustic.rtheta_pp,
-                 rho_base=reference.rho_base, rtheta_base=reference.rho_theta_base,
-                 exner_base=reference.exner_base, zz=atmosphere.vertical.zz,
-                 exner_saved=saved_diag.exner,
-                 pressure_p_saved=saved_diag.pressure_perturbation,
-                 rho=rho, rtheta=rtheta, rho_p=rho_p, rtheta_p=rtheta_p,
-                 theta=theta, exner=exner, pressure_p=pressure_p),
-            dict(nlev=_i(driver.nlev), ncells=_i(driver.ncells), stage=_i(stage),
-                 rgas=_f(287.0), cp=_f(1004.5), p0=_f(100_000.0)))
+    if native_recovery:
+        from .mpasphys.metal_lagged_v842 import recover_cells
+        rho, rtheta, rho_p, rtheta_p, theta, exner, pressure_p = recover_cells(
+            driver, saved_diag, acoustic, stage, diabatic_theta, large_timestep)
+    else:
+        rho = arrays.empty(saved_state.rho.shape, np.float32)
+        rtheta = arrays.empty(saved_state.rho_theta.shape, np.float32)
+        rho_p = arrays.empty(saved_state.rho.shape, np.float32)
+        rtheta_p = arrays.empty(saved_state.rho_theta.shape, np.float32)
+        theta = arrays.empty(saved_state.rho.shape, np.float32)
+        exner = arrays.empty(saved_diag.exner.shape, np.float32)
+        pressure_p = arrays.empty(saved_diag.pressure_perturbation.shape, np.float32)
+        reference = atmosphere.reference
+        _launch("recover_cells_f32", driver.ncells * driver.nlev, mctx,
+                dict(rho_p_saved=saved_diag.density_perturbation,
+                     rtheta_p_saved=saved_diag.rho_theta_perturbation,
+                     rho_pp=acoustic.rho_pp, rtheta_pp=acoustic.rtheta_pp,
+                     rho_base=reference.rho_base, rtheta_base=reference.rho_theta_base,
+                     exner_base=reference.exner_base, zz=atmosphere.vertical.zz,
+                     exner_saved=saved_diag.exner,
+                     pressure_p_saved=saved_diag.pressure_perturbation,
+                     rho=rho, rtheta=rtheta, rho_p=rho_p, rtheta_p=rtheta_p,
+                     theta=theta, exner=exner, pressure_p=pressure_p),
+                dict(nlev=_i(driver.nlev), ncells=_i(driver.ncells), stage=_i(stage),
+                     rgas=_f(287.0), cp=_f(1004.5), p0=_f(100_000.0)))
     ru = arrays.empty(saved_state.rho_u.shape, np.float32)
     flux_u = arrays.empty(saved_state.rho_u.shape, np.float32)
     _launch("recover_edges_f32", driver.nedges * driver.nlev, mctx,

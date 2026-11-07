@@ -463,17 +463,42 @@ def paced_urlopen(request: Request | str, *, timeout: float | None = None,
     """
 
     url = request if isinstance(request, str) else request.full_url
-    pace(url, sleeper=sleeper, max_wait_s=max_wait_s)
     started = _now_ms()
     kind = "get"
     if isinstance(request, Request) and request.get_method() == "HEAD":
         kind = "head"
     elif isinstance(request, Request) and request.has_header("Range"):
         kind = "get_range"
+    from woof.fetch_connections import lease, LeasedResponse
+    from woof.fetch_pool import record_streams
+    record_streams(1)
+    reservation = lease()
+    reservation.__enter__()
     try:
+        # Wait for a box slot BEFORE taking a host's pacing turn. A wait
+        # afterward could bunch several spaced requests at slot release.
+        pace(url, sleeper=sleeper, max_wait_s=max_wait_s)
+        started = _now_ms()
         response = (opener(request) if timeout is None
                     else opener(request, timeout=timeout))
-    except Exception as error:
+    except BaseException as error:
+        # HTTPError owns a response socket too. Close it before another
+        # worker can reuse this slot, including failed range requests.
+        try:
+            if isinstance(error, HTTPError):
+                if error.code in (429, 503):
+                    # Read the answer's error code (S3's <Code>SlowDown</Code>)
+                    # BEFORE closing: it is cached on the error, and a host's
+                    # throttle row is matched on it.  Named breakage: closing
+                    # first left the body unreadable, so ECMWF's AWS mirror's
+                    # 503 SlowDown never matched its 600 s throttle row and an
+                    # IFS 0.1-degree fetch gave up after 5 rounds in 30 s
+                    # (WOOF run_19793057ff2979e3, exit 75, 2026-10-29).
+                    from woof.fetch_endpoints import answer_code
+                    answer_code(error)
+                error.close()
+        finally:
+            reservation.__exit__(None, None, None)
         if _is_rate_limit(error):
             mark_rate_limited(url, type(error).__name__,
                               retry_after_s=retry_after_seconds(error))
@@ -482,7 +507,7 @@ def paced_urlopen(request: Request | str, *, timeout: float | None = None,
         raise
     log_event(url, kind, str(getattr(response, "status", "ok")),
               _now_ms() - started)
-    return response
+    return LeasedResponse(response, reservation)
 
 
 def governed_workers(url: str, requested: int) -> int:

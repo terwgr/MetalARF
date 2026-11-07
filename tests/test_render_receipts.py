@@ -17,6 +17,34 @@ def _publish(root, written, skipped=(), failures=(), spec="temperature,wind_gust
         written=written,failures=failures,skipped=skipped,layout="nested")
 
 
+def test_inactive_fire_empty_success_keeps_receipts_without_inventing_pngs(tmp_path):
+    source = tmp_path / "scratch"
+    target = tmp_path / "published"
+    _publish(source, [], [("fire_ros", "inactive-fire-domain: IFIRE=0 has no coupled fire outputs")],
+             spec="fire_ros")
+    assert receipts.preserve_inactive_fire_skip(source, target, 0)
+    summary = receipts.read_summary(target)
+    assert summary["rendered_png_count"] == 0
+    assert summary["skipped_count"] == 1
+    assert summary["invocation_count"] == 1
+    assert len(list((target / ".render-receipts/originals").glob("*.json"))) == 1
+
+
+@pytest.mark.parametrize("reason,returncode", [
+    ("inactive-fire-domain: IFIRE=0 has no coupled fire outputs", 1),
+    ("active fire lacks ROS_FRONT", 0),
+    ("missing T2", 0),
+])
+def test_empty_active_failure_or_missing_other_field_remains_incomplete(tmp_path, reason, returncode):
+    source = tmp_path / "scratch"
+    _publish(source, [], [("fire_ros", reason)], spec="fire_ros")
+    assert not receipts.preserve_inactive_fire_skip(source, tmp_path / "published", returncode)
+
+
+def test_missing_native_receipt_cannot_suppress_empty_render_warning(tmp_path):
+    assert not receipts.preserve_inactive_fire_skip(tmp_path / "missing", tmp_path / "published", 0)
+
+
 def test_early_and_final_render_counts_include_early_skips_and_exact_reasons(tmp_path):
     early=_png(tmp_path,"temperature","early")
     first=_publish(tmp_path,[early],[("wind_gust","first frame: not stored: wind_gust_10m_agl")])
@@ -42,6 +70,32 @@ def test_repeated_image_path_counts_once_and_changed_file_cannot_claim_success(t
     image.write_bytes(b"changed after receipt")
     with pytest.raises(ValueError,match="changed after its render receipt"):
         receipts.summarize(tmp_path)
+
+
+def test_undrawn_product_explains_the_reason_covering_most_frames(tmp_path):
+    """D4: F000's timing limit cannot explain missing UH at F001 onward."""
+    family = "uh_2to5km_1h_max"
+    timing = "1-h UH max requires forecast hour >= 1"
+    skipped = [(family, f"/frames/wrfout_00: F000: {timing}")]
+    for hour in range(1, 12):
+        lead = f"F{hour:03d}"
+        skipped.append((family,
+            f"/frames/wrfout_{hour:02d}: {lead}: stored hour {lead} has no "
+            "'uh_2to5km_max_1h' variable; hourly 'uh_2to5km' and wrfout-lane "
+            "'updraft_helicity_2to5km' fallbacks also unavailable: "
+            f"stored hour {lead} has no 'updraft_helicity_2to5km' variable"))
+    summary = _publish(tmp_path, [], skipped, spec=family)
+    row, = summary["undrawn_families"]
+    assert row["count"] == 12
+    assert len(row["reasons"]) == 2
+    assert row["reasons"][0].startswith("11 frame(s): ")
+    assert "'uh_2to5km_max_1h'" in row["reasons"][0]
+    assert "fallbacks also unavailable" in row["reasons"][0]
+    assert row["reasons"][1] == f"1 frame(s): {timing}"
+    headline, detail = receipts.undrawn_note(receipts.read_summary(tmp_path))
+    assert headline.index("11 frame(s):") < headline.index("1 frame(s):")
+    assert "fallbacks also unavailable" in headline and timing in headline
+    assert "skipped 12 time(s)" in detail
 
 
 def test_full_exact_reasons_survive_bounded_status_summary(tmp_path):

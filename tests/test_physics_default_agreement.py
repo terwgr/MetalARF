@@ -25,9 +25,11 @@ way on its 3 km and 750 m rungs, for every source it plans unaided.
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from functools import lru_cache
 import json
 from pathlib import Path
+import re
 
 import pytest
 
@@ -86,6 +88,52 @@ def _page_sources():
     return [source for source in wizard_planable_source_ids() if source in _menus()]
 
 
+def _served(source, when):
+    """``when``, or the same hour two days before the end of the source's last
+    publication era when ``when`` lies outside every era.
+
+    A dated publication row (the GEFS v11 archive layouts,
+    lane/cap-gefs-archive) serves only its own era, so a recent epoch asks it
+    for objects it never published.  Read from the route table, so the
+    next dated row needs no edit here.
+    """
+
+    from datetime import timedelta
+    from woof import fetch_routes
+
+    if source not in fetch_routes.route_ids():
+        return when
+    route = fetch_routes.route_for(source)
+    # A producer that runs fewer cycles (the reforecast's 00Z only) is read
+    # at its latest cycle at or before the hour.
+    hours = [hour for hour in route.cycle_hours if hour <= when.hour]
+    when = when.replace(hour=max(hours) if hours else min(route.cycle_hours))
+    if not route.publication_eras:
+        return when
+    naive = when.replace(tzinfo=None)
+    if any(era.valid_from <= naive and (era.valid_until is None or naive < era.valid_until)
+           for era in route.publication_eras):
+        return when
+    era = max(route.publication_eras, key=lambda era: era.valid_from)
+    if era.valid_until is None:
+        # An open era that began after the fixture's epoch (ECMWF's 0.1 degree
+        # open data, published from 2026-10-20) is read just inside its start.
+        moved = (era.valid_from + timedelta(days=2)).replace(hour=when.hour)
+    else:
+        moved = (era.valid_until - timedelta(days=2)).replace(hour=when.hour)
+    return moved.replace(tzinfo=when.tzinfo)
+
+
+def _first_lead(source):
+    """The first lead the source's route publishes (3 for the GEFSv12
+    reforecast, which has no f000), where a draft's window opens."""
+
+    from woof import fetch_routes
+
+    return (fetch_routes.route_for(source).first_lead
+            if source in fetch_routes.route_ids() else 0)
+
+
 def _draft(source, grid, profile=None):
     """New forecast's draft of a BOX_KM box inside the source's coverage."""
 
@@ -93,7 +141,7 @@ def _draft(source, grid, profile=None):
     from woof import cf_archive_fetch
 
     lat, lon = _point(source)
-    cycle = CYCLE
+    cycle = _served(source, datetime.fromisoformat(CYCLE)).strftime("%Y-%m-%dT%H")
     if source in cf_archive_fetch.sources():
         # A closed analysis archive needs a representative epoch inside
         # its declared coverage, including this fixture's final boundary.
@@ -105,7 +153,7 @@ def _draft(source, grid, profile=None):
         cycle = anchor.strftime("%Y-%m-%dT%H")
     return {"name": "agreement", "source": source, "cycle": cycle, "hours": 3, "card": "24gb",
             "lat": lat, "lon": lon, "width_km": BOX_KM, "height_km": BOX_KM,
-            "start_hour": 0, "products": None, "profile": profile,
+            "start_hour": _first_lead(source), "products": None, "profile": profile,
             "dx_km": grid.get("dx_km"), "ladder": grid.get("ladder"), "chain": grid.get("chain")}
 
 
@@ -150,13 +198,48 @@ def _held_to_the_run(plan, config: Path, source: str):
     return asserted
 
 
+def _named_licence_opt_in(source: str) -> tuple[str, ...]:
+    """The licence(s) a licence-gated row's own refusal names, else none.
+
+    Rows whose weights are not permissive refuse every default path and
+    name the exact ``--accept-licence`` value that opts in.  A sweep over
+    every planable row opts in with exactly that value, as a user would;
+    the refusal itself is held by the licensing tests.
+    """
+
+    import shlex
+
+    from woof.earth2_licensing import check_argv
+
+    try:
+        check_argv(["domain", "--source", source])
+    except ValueError as refusal:
+        match = re.search(r"--accept-licence (.+)$", str(refusal))
+        assert match, refusal
+        return tuple(shlex.split(match.group(1)))
+    return ()
+
+
+@pytest.fixture
+def licence_opt_in():
+    """Opt a test into a row's named licence for the test's duration."""
+
+    from woof.earth2_licensing import licence_scope
+
+    with ExitStack() as stack:
+        yield lambda source: stack.enter_context(
+            licence_scope(_named_licence_opt_in(source)))
+
+
 def _suite(profile):
     switches = single_domain_runtime_switches(profile)
     return tuple(int(switches[key]) for key in SUITE_KEYS)
 
 
 @pytest.mark.parametrize("source", _page_sources())
-def test_every_door_names_one_default_and_the_run_takes_every_suite_a_door_chooses(tmp_path, source):
+def test_every_door_names_one_default_and_the_run_takes_every_suite_a_door_chooses(
+        tmp_path, source, licence_opt_in):
+    licence_opt_in(source)
     from woof import physics_catalog as pc
     from woof.experiment import load_experiment
     from woof.gui.api import PhysicsMixin, draft_default_suite, draft_domains, draft_finest_dx_m
@@ -253,6 +336,7 @@ def test_the_local_da_door_binds_the_default_row_at_its_rungs_grid(source):
 
     # A settled cycle every catalogued source still serves: two days back, at 12Z.
     epoch = (datetime.now(timezone.utc) - timedelta(days=2)).replace(hour=12, minute=0, second=0, microsecond=0)
+    epoch = _served(source, epoch)
     below = []
     for scale in LOCAL_DA_SCALES:
         where = f"{source} at local DA rung {scale}"

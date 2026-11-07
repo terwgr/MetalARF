@@ -49,11 +49,12 @@ def submit_nssl2_radardd02(
     shape, n = _fields(context, fields)
     nz, ny, nx = shape
     _output(context, refl_10cm, "refl_10cm", shape)
+    from woof.wrf_exact import ENABLED
     return context.submit_kernel(
-        "nssl2_radardd02", {**fields, "refl_10cm": refl_10cm},
+        "nssl2_radardd02_exact" if ENABLED else "nssl2_radardd02", {**fields, "refl_10cm": refl_10cm},
         {"concentration_space": int(concentration_space), "n": n,
          "nz": nz, "ny": ny, "nx": nx},
-        exact_policy=False, grid_size=n, threads_per_group=_TPB)
+        exact_policy=ENABLED, grid_size=n, threads_per_group=_TPB)
 
 
 def submit_nssl2_effective_radius_concentration(
@@ -72,15 +73,16 @@ def submit_nssl2_effective_radius_concentration(
                          ("re_snow", re_snow)):
         _output(context, output, name, shape)
     parameters = {"n": n, "nz": nz, "ny": ny, "nx": nx}
-    kernel_name = "nssl2_effective_radius_concentration"
+    from woof.wrf_exact import ENABLED
+    kernel_name = "nssl2_effective_radius_concentration_exact" if ENABLED else "nssl2_effective_radius_concentration"
     if registry_unit_numbers:
-        kernel_name = "nssl2_effective_radius_registry_units"
+        kernel_name = "nssl2_effective_radius_registry_exact" if ENABLED else "nssl2_effective_radius_registry_units"
         parameters["registry_unit_numbers"] = 1
     return context.submit_kernel(
         kernel_name,
         {**fields, "re_cloud": re_cloud, "re_ice": re_ice,
          "re_snow": re_snow},
-        parameters, exact_policy=False,
+        parameters, exact_policy=ENABLED,
         grid_size=n, threads_per_group=_TPB)
 
 

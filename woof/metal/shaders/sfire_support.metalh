@@ -1,0 +1,158 @@
+#ifndef WOOF_SFIRE_SUPPORT_METALH
+#define WOOF_SFIRE_SUPPORT_METALH
+
+// Binary32 arithmetic for the SFIRE shaders translated from
+// woof/core/kernels/sfire_*.cu by tools/sfire_metal/generate.py. A value is
+// its IEEE word; every operator rounds once, RN-even, with gradual underflow
+// (the CUDA units compile with --ftz=false --fmad=false). Binary64 is Soft8.
+
+#include <metal_stdlib>
+#include "soft_binary32.metalh"
+#include "thompson_aerosol_soft8.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
+#include "soft_glibc_solar_trig.metalh"
+using namespace metal;
+
+#pragma clang fp contract(off)
+
+struct F {
+    uint bits;
+    constexpr F() : bits(0u) {}
+    F(float v) : bits(as_type<uint>(v)) {}
+    explicit F(Soft8 d) : bits(soft64_to_f32_bits(d.bits)) {}
+    static constexpr F lit(uint b) { F r; r.bits = b; return r; }
+#define SF_CONVERT(AS) \
+    explicit operator int() const AS { return to_int(bits); } \
+    explicit operator Soft8() const AS { return Soft8::fromBits(soft64_from_f32_bits(bits)); }
+    SF_CONVERT(thread)
+    SF_CONVERT(device)
+    SF_CONVERT(constant)
+#undef SF_CONVERT
+    // CUDA and arm64 conversions saturate and map NaN to zero.
+    static int to_int(uint b) {
+        const uint e = (b >> 23) & 0xffu;
+        if (e == 0xffu && (b & 0x7fffffu) != 0u) return 0;
+        if (e < 127u) return 0;
+        const int ex = int(e) - 127;
+        const bool neg = (b >> 31) != 0u;
+        if (ex >= 31) return neg ? int(0x80000000u) : 0x7fffffff;
+        const uint m = (b & 0x7fffffu) | 0x800000u;
+        const int v = ex >= 23 ? int(m << uint(ex - 23)) : int(m >> uint(23 - ex));
+        return neg ? -v : v;
+    }
+};
+#define SF(b) F::lit(b)
+
+static inline F operator+(F a, F b) { return F::lit(soft32_add(a.bits, b.bits)); }
+static inline F operator-(F a, F b) { return F::lit(soft32_sub(a.bits, b.bits)); }
+static inline F operator*(F a, F b) { return F::lit(soft32_mul(a.bits, b.bits)); }
+static inline F operator/(F a, F b) { return F::lit(soft32_div(a.bits, b.bits)); }
+static inline F operator-(F a) { return F::lit(soft32_negate_bits(a.bits)); }
+static inline bool operator<(F a, F b) { return soft32_less(a.bits, b.bits); }
+static inline bool operator>(F a, F b) { return soft32_greater(a.bits, b.bits); }
+static inline bool operator<=(F a, F b) { return soft32_less_equal(a.bits, b.bits); }
+static inline bool operator>=(F a, F b) { return soft32_greater_equal(a.bits, b.bits); }
+static inline bool operator==(F a, F b) { return soft32_equal(a.bits, b.bits); }
+static inline bool operator!=(F a, F b) { return !soft32_equal(a.bits, b.bits); }
+static inline thread F &operator+=(thread F &a, F b) { a = a + b; return a; }
+static inline thread F &operator-=(thread F &a, F b) { a = a - b; return a; }
+static inline thread F &operator*=(thread F &a, F b) { a = a * b; return a; }
+static inline thread F &operator/=(thread F &a, F b) { a = a / b; return a; }
+
+static inline F __fadd_rn(F a, F b) { return a + b; }
+static inline F __fsub_rn(F a, F b) { return a - b; }
+static inline F __fmul_rn(F a, F b) { return a * b; }
+static inline F __fdiv_rn(F a, F b) { return a / b; }
+static inline F sqrtf(F a) { return F::lit(soft32_sqrt(a.bits)); }
+static inline F __fsqrt_rn(F a) { return sqrtf(a); }
+static inline F fabsf(F a) { return F::lit(a.bits & 0x7fffffffu); }
+static inline F copysignf(F a, F b) { return F::lit((a.bits & 0x7fffffffu) | (b.bits & 0x80000000u)); }
+static inline bool isnan(F a) { return soft32_is_nan(a.bits); }
+static inline bool isfinite(F a) { return (a.bits & 0x7f800000u) != 0x7f800000u; }
+static inline F fmaxf(F a, F b)
+{
+    if (soft32_is_nan(a.bits)) return b;
+    if (soft32_is_nan(b.bits)) return a;
+    if (soft32_is_zero(a.bits) && soft32_is_zero(b.bits)) return F::lit(a.bits & b.bits);
+    return soft32_greater(a.bits, b.bits) ? a : b;
+}
+static inline F fminf(F a, F b)
+{
+    if (soft32_is_nan(a.bits)) return b;
+    if (soft32_is_nan(b.bits)) return a;
+    if (soft32_is_zero(a.bits) && soft32_is_zero(b.bits)) return F::lit(a.bits | b.bits);
+    return soft32_less(a.bits, b.bits) ? a : b;
+}
+static inline F floorf(F x)
+{
+    const uint b = x.bits, e = (b >> 23) & 0xffu;
+    if (e >= 150u) return x;
+    if (e < 127u) {
+        if ((b & 0x7fffffffu) == 0u) return x;
+        return (b >> 31) != 0u ? F::lit(0xbf800000u) : F::lit(0u);
+    }
+    const uint mask = 0x7fffffu >> (e - 127u);
+    if ((b & mask) == 0u) return x;
+    return F::lit(((b >> 31) != 0u ? b + mask : b) & ~mask);
+}
+static inline F ceilf(F x)
+{
+    const uint b = x.bits, e = (b >> 23) & 0xffu;
+    if (e >= 150u) return x;
+    if (e < 127u) {
+        if ((b & 0x7fffffffu) == 0u) return x;
+        return (b >> 31) != 0u ? F::lit(0x80000000u) : F::lit(0x3f800000u);
+    }
+    const uint mask = 0x7fffffu >> (e - 127u);
+    if ((b & mask) == 0u) return x;
+    return F::lit(((b >> 31) != 0u ? b : b + mask) & ~mask);
+}
+static inline int __float2int_rz(F x) { return int(x); }
+static inline F sf_int_as_float(int i) { return F::lit(uint(i)); }
+static inline F sf_int_as_float(uint i) { return F::lit(i); }
+static inline uint __float_as_uint(F x) { return x.bits; }
+static inline F sf_double2float_rn(Soft8 d) { return F(d); }
+
+// One rounding of a*b+c: the exact product is a double, and the sum is
+// rounded to odd in binary64 before the final binary32 rounding.
+static inline F __fmaf_rn(F a, F b, F c)
+{
+    const ulong A = soft64_from_f32_bits(a.bits), B = soft64_from_f32_bits(b.bits),
+                C = soft64_from_f32_bits(c.bits);
+    const bool finite = isfinite(a) && isfinite(b) && isfinite(c);
+    const ulong P = soft64_mul(A, B);
+    ulong S = soft64_add(P, C);
+    if (!finite || soft64_is_zero(S) || !soft64_is_finite(S))
+        return F::lit(soft64_to_f32_bits(soft64_fma(A, B, C)));
+    const ulong bb = soft64_sub(S, P);
+    const ulong err = soft64_add(soft64_sub(P, soft64_sub(S, bb)), soft64_sub(C, bb));
+    if (!soft64_is_zero(err) && (S & 1ul) == 0ul) {
+        const bool grow = soft64_sign(err) == soft64_sign(S);
+        S = grow ? S + 1ul : S - 1ul;
+    }
+    return F::lit(soft64_to_f32_bits(S));
+}
+
+static inline F gfk_exp(F x) { return F::lit(soft_gfk_exp(x.bits)); }
+static inline F gfk_log(F x) { return F::lit(soft_gfk_log(x.bits)); }
+static inline F gfk_pow(F x, F y) { return F::lit(soft_gfk_pow_bits(x.bits, y.bits)); }
+static inline F glibc_sinf(F x) { return F::lit(soft_glibc_solar_sinf(x.bits)); }
+static inline F glibc_cosf(F x) { return F::lit(soft_glibc_solar_cosf(x.bits)); }
+static inline F glibc_asinf(F x) { return F::lit(soft_glibc_solar_asinf(x.bits)); }
+
+static inline int atomicAdd(device int *p, int v)
+{ return atomic_fetch_add_explicit((device atomic_int *)p, v, memory_order_relaxed); }
+static inline int atomicExch(device int *p, int v)
+{ return atomic_exchange_explicit((device atomic_int *)p, v, memory_order_relaxed); }
+static inline F atomicAdd(device F *p, F v)
+{
+    device atomic_uint *a = (device atomic_uint *)p;
+    uint old = atomic_load_explicit(a, memory_order_relaxed);
+    while (!atomic_compare_exchange_weak_explicit(
+               a, &old, soft32_add(old, v.bits), memory_order_relaxed, memory_order_relaxed)) {}
+    return F::lit(old);
+}
+
+#endif

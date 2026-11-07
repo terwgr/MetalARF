@@ -1,0 +1,104 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_moist_capture",
+      "module": "moist",
+      "source": "woof/metal/shaders/wrf_exact_moist_capture.metal",
+      "cuda_source": "woof/core/moist.py",
+      "cuda_symbol": "_capture_advective_qv_forcing",
+      "resources": [
+        [
+          "tend",
+          "float",
+          "read"
+        ],
+        [
+          "mu0",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tend": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

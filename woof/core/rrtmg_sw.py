@@ -98,20 +98,23 @@ if tuple(int(part) for part in np.__version__.split(".")[:2]) < (2, 0):
         f"of its bitwise FP32 contract); found numpy {np.__version__}")
 
 
-from woof.core import noahmp_libm as _libm
+from woof.core.rrtmg_lw import (
+    _libm as _libm,
+    logf, expf,
+    _r512,
+    _lw_dev_chunk as _sw_dev_chunk,
+    _lw_dev_mcica as _sw_dev_mcica,
+)
 
 F = np.float32
-I4 = np.int32
 
 # ---------------------------------------------------------------------------
 # parrrsw constants (module parrrsw, WRF v4.6.1)
 # ---------------------------------------------------------------------------
-MG = 16
 NBNDSW = 14
 NGPTSW = 112
 MXMOL = 38
 NMOL = 7
-JPBAND = 29
 JPB1, JPB2 = 16, 29
 RRSW_SCON = F(1.36822e+03)
 # All layer arrays use caller-owned workspace; there is no fixed SW ceiling.
@@ -128,7 +131,6 @@ def _radiation_layer_count(value):
         raise ValueError("radiation layer count must be positive and fit the CUDA int32 layer/g-point index")
     return count
 
-NG_BAND = (16,) * 14                                   # ng(16:29)
 NSPA = (9, 9, 9, 9, 1, 9, 9, 1, 9, 1, 0, 1, 9, 1)      # nspa(16:29)
 NSPB = (1, 5, 1, 1, 1, 5, 1, 0, 1, 0, 0, 1, 5, 1)      # nspb(16:29)
 NGC = (6, 12, 8, 8, 10, 10, 2, 10, 8, 6, 6, 8, 6, 12)  # reduced g per band
@@ -154,16 +156,6 @@ GLIBC_VERSION = "2.39"
 # ===========================================================================
 
 
-def logf(x) -> np.float32:
-    """glibc 2.39 ``logf`` via the audited shared transcription."""
-    return F(_libm.logf(float(x)))
-
-
-def expf(x) -> np.float32:
-    """glibc 2.39 ``expf`` via the audited shared transcription."""
-    return F(_libm.expf(float(x)))
-
-
 # ===========================================================================
 # SECTION 2: coefficient tables container
 # ===========================================================================
@@ -186,6 +178,7 @@ class SWTables:
         "extice3", "ssaice3", "asyice3", "fdlice3",
         "abari", "bbari", "cbari", "dbari", "ebari", "fbari",
         "ngb", "wavenum1", "wavenum2", "rsrtaua", "rsrpiza", "rsrasya",
+        "aer1_climatology", "aer1_optics_sha256",
     )
 
 
@@ -2455,18 +2448,85 @@ def tables_from_coeffs(coeffs) -> SWTables:
     return t
 
 
-def load_sw_tables(path=None) -> SWTables:
-    """Production entry: load coefficients via woof.ingest.rrtmg_coeffs
-    (imported lazily; lands on the integration branch) and assemble tables.
+#: The aer_opt=1 climatology, ``woof/data``-relative.  It ships in the
+#: recast-woof-data companion (woof.data_assets.COMPANION_TREES): at 6.0 MB it
+#: was what put the 2.9.0 platform wheel at 101,425,913 bytes, over PyPI's
+#: 100,000,000-byte per-file limit.
+AER1_CLIMATOLOGY_ASSET = "wrf_radiation/rrtmg_aer1_climatology.npz"
+
+
+def encode_aer1_climatology(climatology) -> np.ndarray:
+    """The climatology's float32 words, stored losslessly and compactly.
+
+    Each word's bits as little-endian uint32, differenced along the last
+    (longitude) axis modulo 2**32, the four bytes of every word split into
+    four planes, then xz.  6,027,855 bytes as plain deflate become about 4.6
+    MB, which is what lets the companion wheel carry it under PyPI's per-file
+    limit.  :func:`decode_aer1_climatology` inverts it exactly; the
+    manifest's sha256 of the decoded words is what the loader checks.
     """
-    try:
-        from woof.ingest.rrtmg_coeffs import load_rrtmg_sw_coefficients
-    except ImportError as exc:                            # pragma: no cover
-        raise ImportError(
-            "woof.ingest.rrtmg_coeffs is not available on this branch; "
-            "it lands with the radiation foundation lane.  Tests use "
-            "tables_from_dump() on the oracle dump instead.") from exc
-    return tables_from_coeffs(load_rrtmg_sw_coefficients(path))
+    import lzma
+
+    words = np.ascontiguousarray(climatology, dtype="<f4").view("<u4")
+    delta = np.diff(words, axis=-1, prepend=np.zeros(
+        words.shape[:-1] + (1,), dtype="<u4")).astype("<u4")
+    planes = delta.reshape(-1).view(np.uint8).reshape(-1, 4).T.tobytes()
+    return np.frombuffer(
+        lzma.compress(planes, preset=9 | lzma.PRESET_EXTREME), dtype=np.uint8)
+
+
+def decode_aer1_climatology(payload, shape) -> np.ndarray:
+    """Inverse of :func:`encode_aer1_climatology`: the float32 climatology."""
+    import lzma
+
+    shape = tuple(int(n) for n in shape)
+    raw = np.frombuffer(lzma.decompress(np.asarray(payload, np.uint8).tobytes()),
+                        dtype=np.uint8)
+    if raw.size != 4 * int(np.prod(shape)):
+        raise ValueError("aer_opt=1 climatology payload has the wrong length for its shape")
+    delta = np.ascontiguousarray(raw.reshape(4, -1).T).view("<u4").reshape(shape)
+    return np.cumsum(delta, axis=-1, dtype="<u4").view("<f4")
+
+
+def load_sw_tables(path=None, *, aer_opt=0, data_dir=None) -> SWTables:
+    """Production entry: load coefficients via woof.ingest.rrtmg_coeffs
+    (imported lazily) and assemble tables.
+    """
+    from woof.ingest.rrtmg_coeffs import load_rrtmg_sw_coefficients
+    tables = tables_from_coeffs(load_rrtmg_sw_coefficients(path))
+    if aer_opt == 1:
+        from woof.ingest.rrtmg_coeffs import DATA_DIR
+        import hashlib
+        import json
+        from pathlib import Path
+        root = DATA_DIR if data_dir is None else Path(data_dir)
+        from woof.tables import table_path
+        manifest = json.loads(table_path("rrtmg-aer1", root / "rrtmg_aer1_manifest.json").read_text())
+        if data_dir is None:
+            from woof import data_assets
+            asset = data_assets.data_path(AER1_CLIMATOLOGY_ASSET)
+        else:
+            asset = root / Path(AER1_CLIMATOLOGY_ASSET).name
+        from woof.tables import CorruptTableAssets
+        try:
+            asset = table_path("rrtmg-aer1", asset)
+        except CorruptTableAssets as error:
+            raise CorruptTableAssets(f"aer_opt=1 climatology manifest hash mismatch: {error}") from error
+        if asset.stat().st_size != manifest["asset_size"] or hashlib.sha256(asset.read_bytes()).hexdigest() != manifest["asset_sha256"]:
+            raise ValueError("aer_opt=1 climatology manifest hash mismatch; altered aerosol values would change AODTOT and shortwave")
+        with np.load(asset, allow_pickle=False) as source:
+            tables.aer1_climatology = {
+                name: (decode_aer1_climatology(source["climatology_xz"],
+                                               manifest["arrays"][name]["shape"])
+                       if name == "climatology" else source[name])
+                for name in manifest["arrays"]}
+        for name, pin in manifest["arrays"].items():
+            value = tables.aer1_climatology[name]
+            if list(value.shape) != pin["shape"] or str(value.dtype) != pin["dtype"] or hashlib.sha256(value.tobytes()).hexdigest() != pin["sha256"]:
+                raise ValueError(f"aer_opt=1 {name} array manifest mismatch")
+        tables.aer1_optics_sha256 = manifest["optics_sha256"]
+        validate_aer1_optics_tables(tables)
+    return tables
 
 
 # ===========================================================================
@@ -2633,7 +2693,6 @@ def rrtmg_sw(tab: SWTables, nlay, icld, play, plev, tlay, tlev, tsfc,
     swdkdir/swdkdif/swdkdirc, and swuflxcln/swdflxcln (zeros; WRF_CHEM=0),
     all bottom-to-top like the Fortran.
     """
-    one = F(1.0)
     zepzen = F(1.0e-10)
     if aer_opt in (0, 2, 3):
         iaer = 10
@@ -2957,12 +3016,18 @@ class CudaSW:
         self.ngb_gpu = cp.asarray(np.asarray(tab.ngb, dtype=np.int32))
         self._laysolfr_spec_gpu = cp.asarray(
             np.asarray(self._laysolfr_band_spec(), dtype=np.int32))
+        # These immutable arrays are shared across member streams. Publish
+        # their readiness after all three uploads, before the cached engine
+        # can be borrowed by another stream. Recording does not drain the GPU.
+        self._tables_ready = cp.cuda.Event(disable_timing=True)
+        self._tables_ready.record()
+        self._table_streams = {}
         self.max_nlay = None  # retained API attribute: workspace has no fixed layer ceiling
         #: Per-chunk device workspace of the batched chain (Section 11):
         #: every slot is allocated once and reused across the chunks of a
-        #: call and across calls, and only the slots the kernels read
-        #: before writing are zeroed per chunk; release_scratch hands the
-        #: bytes back to the pool between radiation events.  ONE PER
+        #: call, and only the slots the kernels read before writing are
+        #: zeroed per chunk; the call itself hands the bytes back to the
+        #: pool when it returns (release_scratch stays for callers).  ONE PER
         #: STREAM (see :attr:`_scratch`): the compiled module and the packed
         #: tables are read-only and shared by every stream on this card,
         #: the workspace is written by every call and is not.
@@ -2973,6 +3038,14 @@ class CudaSW:
         self._chunk_by_nlayers = {}
 
     def _k(self, name):
+        current = self.cp.cuda.get_current_stream()
+        ptr = int(current.ptr)
+        if ptr not in self._table_streams:
+            current.wait_event(self._tables_ready)
+            # Keep the stream alive so a destroyed stream's pointer cannot be
+            # reused and mistaken for a queue that already waited. Each queue
+            # pays one wait, before its first scalar or batched SW kernel.
+            self._table_streams[ptr] = current
         return self.module.get_function(name)
 
     # ---- batched-chain workspace and chunk width ----------------------
@@ -3205,7 +3278,7 @@ class CudaSW:
                  inflgsw, iceflgsw, liqflgsw,
                  cldfmcl, taucmcl, ssacmcl, asmcmcl, fsfcmcl,
                  ciwpmcl, clwpmcl, cswpmcl, reicmcl, relqmcl, resnmcl,
-                 aer_opt=0):
+                 aer_opt=0, aerosol=None):
         """CUDA twin of :func:`rrtmg_sw` (zero-aerosol option-4 path).
 
         The campaign path always has zero aerosol arrays, so taua/ssaa/asma
@@ -3213,16 +3286,26 @@ class CudaSW:
         zero inputs.  Returns numpy arrays (downloaded once at the end).
         """
         cp = self.cp
+        if aer_opt in (1,2,3):
+            if aerosol is None or len(aerosol)!=3:
+                raise ValueError(f"aer_opt={aer_opt} needs caller-supplied aerosol optics; missing arrays would run clean shortwave")
+            columns=lambda a:cp.asarray(a,dtype=cp.float32).reshape(1,-1)
+            scalar=lambda a:np.asarray([a],np.float32)
+            mc=lambda a:cp.asarray(a,dtype=cp.float32)[:,None,:]
+            tau,ssa,asy=aerosol
+            optics=tuple(cp.ascontiguousarray(cp.asarray(a,dtype=cp.float32).T[None,:,:]) for a in (tau,asy,ssa))
+            result=self.rrtmg_sw_batched_device(
+                1,nlay,icld,*[columns(a) for a in (play,plev,tlay,tlev)],scalar(tsfc),
+                *[columns(a) for a in (h2ovmr,o3vmr,co2vmr,ch4vmr,n2ovmr,o2vmr)],
+                *[scalar(a) for a in (asdir,asdif,aldir,aldif,coszen,adjes)],dyofyr,scalar(scon),
+                inflgsw,iceflgsw,liqflgsw,
+                *[mc(a) for a in (cldfmcl,taucmcl,ssacmcl,asmcmcl,fsfcmcl,ciwpmcl,clwpmcl,cswpmcl)],
+                *[columns(a) for a in (reicmcl,relqmcl,resnmcl)],aer_opt=aer_opt,aerosol=optics)
+            return {key:value[0] for key,value in sw_batched_to_host(result).items()}
         if aer_opt != 0:
-            # SW-audit fail-closed gap: this composition builds
-            # taua/ssaa/asma as 0/1/0 -- an aer_opt=2/3 caller's nonzero
-            # aerosol optics would be silently DISCARDED here (the NumPy
-            # rrtmg_sw preserves them).  Reject until aerosols are
-            # implemented on-device.
-            raise NotImplementedError(
-                f"aer_opt={aer_opt!r}: the CUDA SW composition implements "
-                "the zero-aerosol option-4 path only; nonzero aerosol "
-                "optics would be silently discarded -- fails closed")
+            raise NotImplementedError(f"aer_opt={aer_opt!r} is not a WRF aerosol option this twin carries; clean air would replace its optics")
+        if aerosol is not None:
+            raise ValueError("caller-supplied optics with aer_opt=0 would be discarded")
         if int(dyofyr) > 0:
             earth_sun(dyofyr)
         nlayers = _radiation_layer_count(nlay)
@@ -3394,7 +3477,7 @@ class CudaSW:
         rsw_spcvmc_gpt_b's per-column band-major layout
         (woof.core.rrtmg_aerosol_optics builds them); RRTMG_SWRAD runs
         that branch with iaer = 10 and hands them to spcvmc unchanged
-        (module_ra_rrtmg_sw.F:9183, :9329-9331).  aer_opt = 1 and 2 stay
+        (module_ra_rrtmg_sw.F:9183, :9329-9331).  aer_opt = 1 stays
         refused (their aerosol inputs are not transcribed; the optics
         would be silently discarded, 2026-07-27 SW transcription audit,
         item 1).
@@ -3428,18 +3511,18 @@ class CudaSW:
         if mcica_layout not in ("gpoint", "column"):
             raise ValueError("mcica_layout must be gpoint or column")
         cp = self.cp
-        if aer_opt == 3:
+        if aer_opt in (1, 2, 3):
             if aerosol is None or len(aerosol) != 3:
                 raise ValueError(
-                    "aer_opt=3 needs the caller's per-band aerosol optics "
+                    f"aer_opt={aer_opt} needs the caller's per-band aerosol optics "
                     "aerosol=(ztaua, zasya, zomga); without them the "
-                    "batch would run zero aerosol under aer_opt=3")
+                    f"batch would run zero aerosol under aer_opt={aer_opt}")
         elif aer_opt != 0:
-            # The aer_opt = 1 and 2 inputs are not transcribed: running
-            # zero aerosol under them would be silently wrong.
+            # No other WRF aer_opt exists: running zero aerosol under an
+            # unknown value would be silently wrong.
             raise NotImplementedError(
                 f"aer_opt={aer_opt!r}: the CUDA SW composition implements "
-                "aer_opt 0 (zero aerosol) and 3 (caller-supplied per-band "
+                "aer_opt 0 (zero aerosol), 1, 2 and 3 (caller-supplied per-band "
                 "optics); this option's aerosol inputs are not "
                 "transcribed and would be silently discarded -- fails "
                 "closed")
@@ -3461,7 +3544,7 @@ class CudaSW:
                         or a.shape != (ncol, NBNDSW, nlayers)
                         or not a.flags.c_contiguous):
                     raise ValueError(
-                        f"aer_opt=3 {name} must be a C-contiguous float32 "
+                        f"aer_opt={aer_opt} {name} must be a C-contiguous float32 "
                         f"device array {(ncol, NBNDSW, nlayers)}, got "
                         f"{getattr(a, 'dtype', None)} "
                         f"{getattr(a, 'shape', None)}")
@@ -3478,26 +3561,42 @@ class CudaSW:
             h = cp.asnumpy(a) if isinstance(a, cp.ndarray) else a
             return np.asarray(h, f32).reshape(ncol)
 
-        # ---- day-columns-only contract (fail closed) --------------------
-        cz = hostf(coszen)
-        if not bool(np.all(cz > F(0.0))):
-            raise ValueError(
-                "batched SW is day-columns-only (every coszen must be "
-                "> 0); the WRF option-4 driver's night gate skips the SW "
-                "call entirely -- filter night columns before batching")
+        def _day_verdict(night):
+            if bool(night):
+                raise ValueError(
+                    "batched SW is day-columns-only (every coszen must be "
+                    "> 0); the WRF option-4 driver's night gate skips the SW "
+                    "call entirely -- filter night columns before batching")
 
-        # ---- per-column host scalar prep (same single-op FP32 chains as
-        # the per-column driver, elementwise; numpy f32 array ops are the
-        # identical IEEE single-rounded operations) -----------------------
-        cossza_h = np.where(cz <= F(1.0e-10), F(1.0e-10), cz)
-        adjflx_h = hostf(adjes)
-        solvar_h = hostf(scon) / RRSW_SCON        # F(F(scon) / RRSW_SCON)
+        # ---- per-column scalar prep (same single-op FP32 chains as the
+        # per-column driver, elementwise).  Device inputs stay on the
+        # device: a where, one IEEE division and one product, which CUDA
+        # rounds exactly as NumPy float32 does, and copies; reading them
+        # back each chunk drained the card before every SW chunk (A3).
+        device = all(isinstance(a, cp.ndarray) and a.dtype == cp.float32
+                     for a in (coszen, aldir, aldif, asdir, asdif))
+        xp = cp if device else np
+        if device:
+            cz = cp.ascontiguousarray(coszen.reshape(ncol))
+            # ---- day-columns-only contract (fail closed) ----------------
+            from woof.core.deferred_device_checks import check
+            check(cp.any(~(cz > F(0.0))), _day_verdict)
+            dev = lambda a: (cp.ascontiguousarray(a.reshape(ncol))
+                             if isinstance(a, cp.ndarray) and a.dtype == cp.float32
+                             else cp.asarray(hostf(a)))
+        else:
+            cz = hostf(coszen)
+            _day_verdict(not bool(np.all(cz > F(0.0))))
+            dev = hostf
+        cossza_h = xp.where(cz <= F(1.0e-10), F(1.0e-10), cz)
+        adjflx_h = dev(adjes)
+        solvar_h = dev(scon) / RRSW_SCON          # F(F(scon) / RRSW_SCON)
         adjb_h = adjflx_h * solvar_h              # F(adjflx * solvar[ib])
-        adjflux_h = np.repeat(adjb_h[:, None], NBNDSW, axis=1)
-        aldir_h, aldif_h = hostf(aldir), hostf(aldif)
-        asdir_h, asdif_h = hostf(asdir), hostf(asdif)
-        albdir_h = np.zeros((ncol, NBNDSW), f32)
-        albdif_h = np.zeros((ncol, NBNDSW), f32)
+        adjflux_h = xp.repeat(adjb_h[:, None], NBNDSW, axis=1)
+        aldir_h, aldif_h = dev(aldir), dev(aldif)
+        asdir_h, asdif_h = dev(asdir), dev(asdif)
+        albdir_h = xp.zeros((ncol, NBNDSW), f32)
+        albdif_h = xp.zeros((ncol, NBNDSW), f32)
         albdir_h[:, 0:9] = aldir_h[:, None]
         albdif_h[:, 0:9] = aldif_h[:, None]
         albdir_h[:, NBNDSW - 1] = aldir_h
@@ -3672,10 +3771,10 @@ class CudaSW:
                 zasya_d = aerosol[1][rows]
                 zomga_d = aerosol[2][rows]
 
-            albdif_d = cp.asarray(albdif_h[rows])
-            albdir_d = cp.asarray(albdir_h[rows])
-            adjflux_d = cp.asarray(adjflux_h[rows])
-            cossza_d = cp.asarray(cossza_h[rows])
+            albdif_d = cp.ascontiguousarray(cp.asarray(albdif_h[rows]))
+            albdir_d = cp.ascontiguousarray(cp.asarray(albdir_h[rows]))
+            adjflux_d = cp.ascontiguousarray(cp.asarray(adjflux_h[rows]))
+            cossza_d = cp.ascontiguousarray(cp.asarray(cossza_h[rows]))
 
             # ---- spcvmc ---------------------------------------------
             # wk: each thread owns RSW_SPCVMC_WK x n1 entries, plus
@@ -3754,11 +3853,17 @@ class CudaSW:
             # bound; data movement only).
             del acc, pdp_d, swhr_d, swhrc_d
 
-        self.cp.cuda.runtime.deviceSynchronize()
-        err = int(cp.asnumpy(err_d)[0])
-        if err:
-            raise ValueError(f"rsw_cldprmc device abort, code {err} "
-                             "(mirrors the Fortran STOPs)")
+        def _cldprmc_verdict(err):
+            err = int(err[0])
+            if err:
+                raise ValueError(f"rsw_cldprmc device abort, code {err} "
+                                 "(mirrors the Fortran STOPs)")
+
+        # Read now, or once per radiation call
+        # (woof.core.deferred_device_checks).  ``err`` is reused scratch
+        # the next call zeroes, so the deferred read takes its own copy.
+        from woof.core.deferred_device_checks import check
+        check(err_d.copy(), _cldprmc_verdict)
         O["swhr"] = swhr
         O["swhrc"] = swhrc
         # The clean-sky-no-aerosol pair IS zero by the aer_opt = 0
@@ -3768,6 +3873,16 @@ class CudaSW:
         # zeroed returned slabs.
         O["swuflxcln"] = cp.zeros((ncol, nl1), dtype=cp.float32)
         O["swdflxcln"] = cp.zeros((ncol, nl1), dtype=cp.float32)
+        # The workspace served every chunk of this call; hand it back now
+        # (memory census 2026-10-14, item 8).  A caller that never invoked
+        # release_scratch (the hex MPAS RRTMG wrapper) held 1.6 GiB of it
+        # through every non-radiation step at 120 km.  Releasing drops the
+        # Python references only: the kernels queued on this stream keep
+        # their blocks until they finish (CuPy's pool frees are ordered on
+        # the allocating stream), every ``take`` slot is written before it
+        # is read (SW_TAKE_SLOTS) and the constants are refilled with the
+        # same words, so the next call computes the same bits.
+        scratch.release()
         return O
 
     def rrtmg_sw_batched(self, *args, **kwargs):
@@ -3833,7 +3948,16 @@ def sw_batch_free_device_bytes(cp=None, scratch=None):
         if cp is None:
             import cupy as cp
         free = int(cp.cuda.runtime.memGetInfo()[0])
-        free += int(cp.get_default_memory_pool().free_bytes())
+        pool = cp.get_default_memory_pool()
+        free += int(pool.free_bytes())
+        # A card can have room that this process's allocator cannot use.
+        # Ignoring CUPY_GPU_MEMORY_LIMIT admitted a wide legacy radiation
+        # chunk that failed before step 1 on a shared card. Cached blocks
+        # count against the limit until reclaimed; live blocks cannot be.
+        get_limit = getattr(pool, "get_limit", None)
+        limit = int(get_limit()) if get_limit is not None else 0
+        if limit:
+            free = min(free, max(0, limit - int(pool.used_bytes())))
     except Exception:
         return None
     if scratch is not None:
@@ -4046,43 +4170,6 @@ SW_GPU_KERNEL_NAMES = (
 )
 
 
-def _r512(nbytes):
-    """Round up to CuPy's 512-byte pool allocation quantum."""
-    return (int(nbytes) + 511) & ~511
-
-
-def _sw_dev_chunk(cp, a, rows, cols=None):
-    """Contiguous float32 device copy of a leading-axis chunk of ``a``.
-
-    numpy in: host slice -> float32 cast (numpy semantics, same as the
-    per-column driver) -> upload.  cupy f32 in: device slice + copy
-    (pure data movement, bit-preserving).  cupy non-f32: host round-trip
-    cast so the conversion uses numpy semantics, never a CuPy ufunc.
-    """
-    sub = a[rows] if cols is None else a[(rows,) + cols]
-    if isinstance(sub, cp.ndarray):
-        if sub.dtype == cp.float32:
-            return cp.ascontiguousarray(sub)
-        sub = cp.asnumpy(sub)
-    return cp.asarray(np.ascontiguousarray(np.asarray(sub,
-                                                      dtype=np.float32)))
-
-
-def _sw_dev_mcica(cp, a, c0, c1, nl, layout="gpoint"):
-    """(NGPTSW, ncol, nlay) input -> (nc, nl, NGPTSW) contiguous device
-    chunk whose per-column slab is exactly the (NGPTSW, nl) F-order frame
-    the single-column kernels index (transpose is data movement only)."""
-    if layout == "column":
-        return _sw_dev_chunk(cp, a, slice(c0, c1), (slice(None, nl), slice(None)))
-    sub = a[:, c0:c1, :nl]
-    if isinstance(sub, cp.ndarray):
-        if sub.dtype == cp.float32:
-            return cp.ascontiguousarray(sub.transpose(1, 2, 0))
-        sub = cp.asnumpy(sub)
-    sub = np.asarray(sub, dtype=np.float32)
-    return cp.asarray(np.ascontiguousarray(sub.transpose(1, 2, 0)))
-
-
 def sw_batched_scratch_bytes(ncol_chunk, nlay):
     """Device bytes :class:`SWBatchScratch` holds once every slot has
     been taken at a chunk of ``ncol_chunk`` columns: the take slots and
@@ -4199,3 +4286,12 @@ def sw_batched_to_host(out):
     h["sibnirdif"] = h["pnifd"] - h["sibnirdir"]
     del h["puvfd"], h["pnifd"]
     return h
+
+
+def validate_aer1_optics_tables(tables):
+    """Check the existing rrsw_aer tables against the climatology manifest."""
+    import hashlib
+    for name in ("rsrtaua", "rsrpiza", "rsrasya"):
+        value = np.ascontiguousarray(getattr(tables, name), dtype=F)
+        if value.shape != (14, 6) or hashlib.sha256(value.tobytes()).hexdigest() != tables.aer1_optics_sha256[name]:
+            raise ValueError(f"aer_opt=1 rrsw_aer {name} manifest hash mismatch; altered optics would change shortwave flux and heating")

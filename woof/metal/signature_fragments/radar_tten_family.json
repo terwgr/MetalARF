@@ -492,6 +492,11 @@
           "read"
         ],
         [
+          "ext",
+          "int32",
+          "read"
+        ],
+        [
           "tten",
           "float64_bits",
           "read_write"
@@ -540,6 +545,12 @@
         "dp": [
           [
             12
+          ]
+        ],
+        "ext": [
+          [
+            "ny",
+            "nx"
           ]
         ]
       },
@@ -777,6 +788,11 @@
           "read"
         ],
         [
+          "ext",
+          "int32",
+          "read"
+        ],
+        [
           "probable",
           "int32",
           "read"
@@ -836,6 +852,12 @@
         "dp": [
           [
             2
+          ]
+        ],
+        "ext": [
+          [
+            "ny",
+            "nx"
           ]
         ]
       },
@@ -1066,12 +1088,397 @@
         [
           "nx",
           "int32"
+        ],
+        [
+          "j0",
+          "int32"
+        ],
+        [
+          "i0",
+          "int32"
+        ],
+        [
+          "gny",
+          "int32"
+        ],
+        [
+          "gnx",
+          "int32"
         ]
       ],
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
         "wrf-exact"
+      ]
+    },
+    {
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "rtt_observed_depth",
+      "cuda_symbol": "rtt_observed_depth",
+      "resources": [
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "ext",
+          "int32",
+          "read_write"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ext": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ]
+    },
+    {
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "rtt_strict_clear",
+      "cuda_symbol": "rtt_strict_clear",
+      "resources": [
+        [
+          "ges",
+          "float",
+          "read_write"
+        ],
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ges": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ]
+    },
+    {
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "lhn_observed_rate",
+      "cuda_symbol": "lhn_observed_rate",
+      "resources": [
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "h_agl",
+          "float",
+          "read"
+        ],
+        [
+          "rate",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_agl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rate": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "max_height_m",
+          "float32"
+        ],
+        [
+          "zr_a",
+          "float32"
+        ],
+        [
+          "zr_b",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ]
+    },
+    {
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "threads_per_group": 128,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "lhn_apply",
+      "cuda_symbol": "lhn_apply",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "thp_before",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "rate_obs",
+          "float",
+          "read"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read"
+        ],
+        [
+          "counts",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp_before": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rate_obs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "counts": [
+          [
+            4
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "alpha_min",
+          "float32"
+        ],
+        [
+          "alpha_max",
+          "float32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ],
+        [
+          "cap_k_per_s",
+          "float32"
+        ],
+        [
+          "thb_full",
+          "int32"
+        ],
+        [
+          "ring",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
       ]
     }
   ]

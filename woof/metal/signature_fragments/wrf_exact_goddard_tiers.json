@@ -1,0 +1,92 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_goddard_tiers_columns",
+      "cuda_symbol": "goddard_bands_columns",
+      "module": "wrf_exact_goddard_tiers",
+      "source": "woof/metal/shaders/wrf_exact_goddard_tiers.metal",
+      "cuda_source": "woof/core/kernels/goddard.cu",
+      "resources": [
+        [
+          "input",
+          "float",
+          "read"
+        ],
+        [
+          "flags",
+          "int32",
+          "read"
+        ],
+        [
+          "optics",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ],
+        [
+          "workspace",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "input": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ],
+        "optics": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "np",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "workspace_words",
+          "int32"
+        ],
+        [
+          "tier_mode",
+          "int32"
+        ],
+        [
+          "tier_band",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

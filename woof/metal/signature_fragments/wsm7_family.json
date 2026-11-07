@@ -1,0 +1,1620 @@
+{
+  "kernels": [
+    {
+      "name": "wsm7_column",
+      "cuda_symbol": "wsm7_column",
+      "module": "wsm7_family",
+      "source": "woof/metal/shaders/wsm7_family.metal",
+      "cuda_source": "woof/core/kernels/wsm7.cu",
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "den": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "effc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "delt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qh",
+          "float",
+          "read_write"
+        ],
+        [
+          "den",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ],
+        [
+          "coef",
+          "float",
+          "read"
+        ]
+      ]
+    },
+    {
+      "name": "wsm7_refl10cm_column",
+      "cuda_symbol": "wsm7_refl10cm_column",
+      "module": "wsm7_family",
+      "source": "woof/metal/shaders/wsm7_family.metal",
+      "cuda_source": "woof/core/kernels/wsm7.cu",
+      "shapes": {
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "coef",
+          "float",
+          "read"
+        ],
+        [
+          "rf",
+          "float",
+          "read"
+        ],
+        [
+          "rd",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "refl",
+          "float",
+          "read_write"
+        ]
+      ]
+    },
+    {
+      "name": "wsm7_column_deep",
+      "cuda_symbol": "wsm7_column",
+      "module": "wsm7_family",
+      "source": "woof/metal/shaders/wsm7_family.metal",
+      "cuda_source": "woof/core/kernels/wsm7.cu",
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "den": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "effc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "delt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qh",
+          "float",
+          "read_write"
+        ],
+        [
+          "den",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ],
+        [
+          "coef",
+          "float",
+          "read"
+        ]
+      ]
+    },
+    {
+      "name": "wsm7_refl10cm_column_deep",
+      "cuda_symbol": "wsm7_refl10cm_column",
+      "module": "wsm7_family",
+      "source": "woof/metal/shaders/wsm7_family.metal",
+      "cuda_source": "woof/core/kernels/wsm7.cu",
+      "shapes": {
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "coef",
+          "float",
+          "read"
+        ],
+        [
+          "rf",
+          "float",
+          "read"
+        ],
+        [
+          "rd",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "refl",
+          "float",
+          "read_write"
+        ]
+      ]
+    },
+    {
+      "name": "wsm7_column_cs",
+      "cuda_symbol": "wsm7_column",
+      "module": "wsm7_family",
+      "source": "woof/metal/shaders/wsm7_family.metal",
+      "cuda_source": "woof/core/kernels/wsm7.cu",
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "den": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "effc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "delt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qh",
+          "float",
+          "read_write"
+        ],
+        [
+          "den",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ],
+        [
+          "coef",
+          "float",
+          "read"
+        ]
+      ]
+    },
+    {
+      "name": "wsm7_column_deep_cs",
+      "cuda_symbol": "wsm7_column",
+      "module": "wsm7_family",
+      "source": "woof/metal/shaders/wsm7_family.metal",
+      "cuda_source": "woof/core/kernels/wsm7.cu",
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "den": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "effc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "delt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qh",
+          "float",
+          "read_write"
+        ],
+        [
+          "den",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ],
+        [
+          "coef",
+          "float",
+          "read"
+        ]
+      ]
+    }
+  ]
+}

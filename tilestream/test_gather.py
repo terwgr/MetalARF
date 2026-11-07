@@ -229,9 +229,9 @@ def _fill_unique(arrays, *, enforce_duplicates=True):
         vals = vals.astype(np.float32)
         base += n + 7.0
         if enforce_duplicates:
-            if arr.ndim >= 2 and name == "u":
+            if arr.ndim >= 2 and name in ("u", "nudging_tendency_u"):
                 vals[..., -1] = vals[..., 0]
-            if arr.ndim >= 2 and name == "v":
+            if arr.ndim >= 2 and name in ("v", "nudging_tendency_v"):
                 vals[..., -1, :] = vals[..., 0, :]
         if isinstance(arr, cp.ndarray):
             arr[...] = cp.asarray(vals)
@@ -319,11 +319,11 @@ def _synthetic_shapes(nz, ny, nx):
     two_d = {"mup", "nwfa2d", "nifa2d"}
     shapes = {}
     for name in G.serialized_attrs():
-        if name == "u":
+        if name in ("u", "nudging_tendency_u"):
             shapes[name] = (nz, ny, nx + 1)
-        elif name == "v":
+        elif name in ("v", "nudging_tendency_v"):
             shapes[name] = (nz, ny + 1, nx)
-        elif name in ("w", "php"):
+        elif name in ("w", "php", "nudging_tendency_geopotential"):
             shapes[name] = (nz + 1, ny, nx)
         elif name in two_d:
             shapes[name] = (ny, nx)
@@ -467,6 +467,52 @@ def test_layered_fields_gather_like_mass_fields():
           f"still refuses to guess nz")
 
 
+def test_rank4_carrier_gathers_and_scatters_every_plane():
+    """A (k, nz, ny, nx) carrier must move all k * nz planes, both ways.
+
+    Grell 3D carries ``fields/g3_lev`` at (9, nz, ny, nx).  The copy depth
+    used to be ``shape[0]``, so a gather moved its first 9 (ny, nx) planes
+    and a scatter wrote back only those: the streamed store's g3_lev
+    differed from the resident one in all 9 slots after one step.  Gather
+    against a modulo-indexed reference, then scatter every tile's interior
+    into a zeroed sink that must come back equal to the source.
+    """
+    import cupy as cp
+
+    from tilestream import spec as tspec
+
+    nz, ny, nx, halo, tile = 6, 40, 32, 8, 16
+    shapes = {"g3_lev": (9, nz, ny, nx), "thp": (nz, ny, nx), "mup": (ny, nx)}
+    dom = {n: cp.asarray(np.arange(int(np.prod(s)), dtype=np.float32)
+                         .reshape(s) + 1.0) for n, s in shapes.items()}
+    sink = {n: cp.zeros(s, dtype=cp.float32) for n, s in shapes.items()}
+    specs = tspec.plan_tiles(nx, ny, tile, tile, halo, True)
+    tspec.validate_plan(specs, ny, nx)
+    gy, gx = tile + 2 * halo, tile + 2 * halo
+    tiles = {n: cp.zeros(G.tile_shape_for(
+        G.classify(s, nz, ny, nx, layers_ok=True), s, gy, gx),
+        dtype=cp.float32) for n, s in shapes.items()}
+    assert tiles["g3_lev"].shape == (9, nz, gy, gx)
+    for spec in specs:
+        G.gather_tile(dom, tiles, spec, names=list(shapes), nz=nz)
+        cp.cuda.runtime.deviceSynchronize()
+        ys = np.arange(spec.cj0, spec.cj0 + gy) % ny
+        xs = np.arange(spec.ci0, spec.ci0 + gx) % nx
+        for name in shapes:
+            want = cp.asnumpy(dom[name])[..., ys[:, None], xs[None, :]]
+            got = cp.asnumpy(tiles[name])
+            assert np.array_equal(want, got), (
+                f"gather of {name} {shapes[name]} on tile {spec.index}: "
+                f"{int((want != got).sum())} elements differ")
+        G.scatter_tile(tiles, sink, spec, names=list(shapes), nz=nz)
+        cp.cuda.runtime.deviceSynchronize()
+    for name in shapes:
+        assert np.array_equal(cp.asnumpy(dom[name]), cp.asnumpy(sink[name])), (
+            f"scatter of {name} {shapes[name]} left "
+            f"{int((cp.asnumpy(dom[name]) != cp.asnumpy(sink[name])).sum())} "
+            "elements unwritten")
+
+
 def test_device_roundtrip_real_state():
     """Full-domain DomainState -> tiles -> zeroed DomainState, bitwise."""
     cfg = harness.make_config(NX, NY, NZ)
@@ -565,8 +611,72 @@ def test_host_roundtrip_pinned():
 #:                        Both are plain 3-D mass-point fields; the round
 #:                        trip below is the measurement that the default
 #:                        stagger is their stagger.
+#:   ``volg``             TEMPO's (mp_physics = "tempo") graupel volume
+#:                        moment, the scheme's discriminator: graupel density
+#:                        is qg / volg, so a resume that dropped it would
+#:                        restart graupel at a different density.  It joined
+#:                        the contract with the RRFS v2 hex + TEMPO preset; a
+#:                        plain 3-D mass-point field like qvolg.
+#:   ``qt``, ``f_ice``,   Ferrier-Aligo (mp_physics = 5, 2.9.0): WRF's
+#:   ``f_rain``,          fer_mp_hires package state (Registry.EM_COMMON
+#:   ``f_rimef``          :3019, restart stream).  F_RIMEF decides the
+#:                        trajectory: FER_HIRES keeps it for every ice cell
+#:                        between calls, so a streamed resume that re-set it
+#:                        to 1 would restore unrimed ice.  Plain 3-D
+#:                        mass-point fields.
+#:   ``qke_adv``          MYNN's advected TKE carrier (bl_mynn_tkeadvect,
+#:                        admitted in 2.9.0), a plain 3-D mass-point field.
+#: All five joined the contract in the 2.9.0 round-2 merge; the gate moved
+#: with them (192 -> 197) once this file reached the GPU shard there.
+#:   ``tke_edmf``         the CCPP sa-TKE-EDMF PBL's advected TKE (2.9.1,
+#:                        bl_pbl_physics = 901), a plain 3-D mass-point field
+#:                        carried so a streamed run does not cold-start it
+#:                        (197 -> 198).
+#:   ``p_perturbation``   the WRF exact chain's strict-diagnostics carrier
+#:                        (2.9.1 intake): WRF's perturbation-pressure words,
+#:                        which pressure force and history read across stage
+#:                        boundaries; rebuilt from rounded full pressure they
+#:                        lose their low bits.  Allocated only under the strict
+#:                        diagnostics build (None otherwise, so ordinary
+#:                        inventories do not carry it).  A plain 3-D
+#:                        mass-point field, p's own stagger (198 -> 199).
+#:   ``nudging_tendency_{u,v,temperature,geopotential,qv}``  analysis
+#:                        nudging's held FDDA tendencies (labs/nudging,
+#:                        2.9.11): they persist between nudging calculation
+#:                        times, so a resume that dropped them would nudge
+#:                        with zeros until the next calculation.  Attached
+#:                        only when nudging holds them (none otherwise), each
+#:                        the stagger of its target: u and v their faces,
+#:                        temperature and qv mass points, geopotential the
+#:                        w levels (199 -> 204).
 NEW_SINCE_41 = ("qir", "qib", "th_old", "qv_old", "nh", "nn",
-                "rthften", "rqvften")
+                "rthften", "rqvften", "volg",
+                "qt", "f_ice", "f_rain", "f_rimef", "qke_adv", "tke_edmf",
+                "p_perturbation",
+                "nudging_tendency_u", "nudging_tendency_v",
+                "nudging_tendency_temperature", "nudging_tendency_geopotential",
+                "nudging_tendency_qv")
+
+#: FAST_SBM (mp_physics = 30) spectral bins: ff1/ff5/ff6 at 33 bins each and
+#: ff8 at 43, 142 names (``woof.core.fast_sbm_contract.BIN_SPECIES``).  They
+#: joined the contract at 624bb29c4 ("fast-sbm: carry the spectral fields in
+#: native state and scalar transport", merged into 2.8.9 at b2b60eacb)
+#: without this gate moving, which is what turned the 2.8.9 cut gate red at
+#: a1388eae7 (192 names, gate knew 50).  WRF 4.6.1 Registry/registry.sbm
+#: declares all 142 with the restart flag (ff1i01 at line 3: IO "h3rusdf")
+#: and its line 318 package switches them on under mp_physics == 30, so
+#: they are in the restart stream: bin state is prognostic and cannot be
+#: rebuilt from the bulk mixing ratios, so a streamed resume that dropped
+#: them would restart the spectral scheme from empty bins.  Each is a 3-D
+#: mass-point view ``fast_sbm_bins[k]`` of one (nbin, nz, ny, nx) array
+#: (``DomainState`` mp30 arm), so the default stagger in _synthetic_shapes
+#: is their stagger; the round trip below is the measurement.  Spelled out
+#: here, not imported, so a change to the bin table moves this gate on
+#: purpose rather than silently.
+FSBM_BINS = tuple(f"{group}i{i:02d}"
+                  for group, count in (("ff1", 33), ("ff5", 33),
+                                       ("ff6", 33), ("ff8", 43))
+                  for i in range(1, count + 1))
 
 
 def test_all_49_names_device_and_host():
@@ -582,12 +692,14 @@ def test_all_49_names_device_and_host():
     set the product no longer serialized.
     """
     names = G.serialized_attrs()
-    assert len(names) == 49, (
-        f"STATE_SERIALIZED_ATTRS has {len(names)} names, this gate knows 49. "
+    assert len(names) == 204, (
+        f"STATE_SERIALIZED_ATTRS has {len(names)} names, this gate knows 204 "
+        "(62 bulk + 142 FAST_SBM bins). "
         "A new field joined (or left) the streamed serialization set: extend "
         "NEW_SINCE_41's justification block and this count TOGETHER, and "
         "check the new name's stagger against _synthetic_shapes")
-    for name in NEW_SINCE_41:
+    assert len(FSBM_BINS) == 142
+    for name in NEW_SINCE_41 + FSBM_BINS:
         assert name in names, (
             f"{name} left STATE_SERIALIZED_ATTRS; its restart consequence is "
             "documented above -- removing it needs an argument, not a tidy-up")
@@ -618,7 +730,7 @@ def test_all_49_names_device_and_host():
             # each was filled, gathered, scattered into a zeroed sink and
             # byte-compared -- the compare above walks all 47, and this pins
             # that the six were among them in both directions.
-            for name in NEW_SINCE_41:
+            for name in NEW_SINCE_41 + FSBM_BINS:
                 assert name in ref and name in sink, name
                 assert _bytes_of(sink[name]) == _bytes_of(ref[name]), name
             print(f"  [{key}] {len(names)}/{len(names)} fields, "
@@ -1087,6 +1199,7 @@ TESTS = [
     test_classify_derives_stagger_from_shape,
     test_extents_inferred_from_inventory,
     test_layered_fields_gather_like_mass_fields,
+    test_rank4_carrier_gathers_and_scatters_every_plane,
     test_device_roundtrip_real_state,
     test_host_roundtrip_pinned,
     test_all_49_names_device_and_host,

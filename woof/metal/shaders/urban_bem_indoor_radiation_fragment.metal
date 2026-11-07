@@ -2,7 +2,7 @@
 #include "urban_bem_indoor_radiation_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
 #include "soft_binary64.metalh"
-#include "soft_gfk_atan.metalh"
+#include "soft_glibc_solar_trig.metalh"
 #include "soft_gfk_log.metalh"
 using namespace metal;
 #pragma clang fp contract(off)
@@ -12,7 +12,7 @@ static inline float ubmir_sub(float a, float b) { return as_type<float>(soft32_s
 static inline float ubmir_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubmir_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubmir_sqrt(float a) { return as_type<float>(soft32_sqrt(as_type<uint>(a))); }
-static inline float ubmir_atan(float a) { return as_type<float>(soft_gfk_atanf(as_type<uint>(a))); }
+static inline float ubmir_atan(float a) { return as_type<float>(soft_glibc_solar_atanf(as_type<uint>(a))); }
 static inline float ubmir_log(float a) { return as_type<float>(soft_gfk_log(as_type<uint>(a))); }
 static inline float ubmir_pow4(float a) { const float h = ubmir_mul(a, a); return ubmir_mul(h, h); }
 
@@ -134,7 +134,7 @@ kernel void urban_bem_indoor_radiation_fragment(
     const int nl=nlev[ulong(col)*15ul+b]; if(nl<=int(lev))return;
     const int cls=utype[col]-1; if(cls<0||cls>=p.nurbm){error[item]=3811;return;}
     const float bw=bs[ulong(col)*2ul], bl=bs[ulong(col)*2ul+1ul], zw=p.dz_u;
-    const float albwal=cf[77+cls], albwin=cf[1052+cls], emwal=cf[110+cls], emwin=cf[1063+cls], pwin=cf[1085+cls];
+    const float albwal=0.3f, albwin=cf[1052+cls], emwal=0.9f, emwin=cf[1063+cls], pwin=cf[1085+cls];
     if(!(bw>0.0f&&bl>0.0f&&zw>0.0f)||!isfinite(bw)||!isfinite(bl)||!isfinite(zw)||!(pwin>=0.0f&&pwin<=1.0f)||!isfinite(pwin)){error[item]=3812;return;}
     const ulong base_tw=((((ulong(col)*15ul+b)*10ul)*18ul+lev)*4ul);
     const ulong base_twin=(((ulong(col)*15ul+b)*18ul+lev)*4ul);
@@ -145,13 +145,13 @@ kernel void urban_bem_indoor_radiation_fragment(
         area[0]=area[1]=ubmir_mul(zw,bw); area[2]=area[3]=ubmir_mul(zw,bl); area[4]=area[5]=ubmir_mul(bw,bl);
         const ulong base_tg=((ulong(col)*15ul+b)*10ul+9ul)*2ul+1ul;
         wall_t[4]=tglev[base_tg];
-        if(nl==1) wall_t[5]=tr[(ulong(col)*10ul)*18ul*2ul+1ul];
+        if(nl==1) wall_t[5]=tr[((ulong(col)*10ul)*18ul+uint(nl))*2ul+1ul];
         else wall_t[5]=tflev[((((ulong(col)*15ul+b)*10ul)*17ul)*2ul)+1ul];
     } else if(lev+1u==uint(nl)) {
         for(uint f=0;f<6;++f)area[f]=1.0f;
         area[0]=area[1]=ubmir_mul(zw,bw); area[2]=area[3]=ubmir_mul(zw,bl); area[4]=area[5]=ubmir_mul(bw,bl);
         const ulong floor_last=((((ulong(col)*15ul+b)*10ul+9ul)*17ul+(lev-1u))*2ul)+1ul;
-        wall_t[4]=tflev[floor_last]; wall_t[5]=tr[(ulong(col)*10ul)*18ul*2ul+1ul];
+        wall_t[4]=tflev[floor_last]; wall_t[5]=tr[((ulong(col)*10ul)*18ul+uint(nl))*2ul+1ul];
     } else {
         for(uint f=0;f<6;++f)area[f]=1.0f;
         area[0]=area[1]=ubmir_mul(zw,bw); area[2]=area[3]=ubmir_mul(zw,bl); area[4]=area[5]=ubmir_mul(bw,bl);

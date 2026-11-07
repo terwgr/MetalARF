@@ -1,0 +1,186 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_pblh_f32",
+      "module": "hexv842_mpas_bl_mynn_pblh_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_pblh_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_get_pblh",
+      "resources": [
+        [
+          "thetav1d",
+          "float",
+          "read"
+        ],
+        [
+          "qke1d",
+          "float",
+          "read"
+        ],
+        [
+          "zw1d",
+          "float",
+          "read"
+        ],
+        [
+          "dz1d",
+          "float",
+          "read"
+        ],
+        [
+          "landsea",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read_write"
+        ],
+        [
+          "kzi",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thetav1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zw1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "landsea": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kzi": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_bl_mynn_pblh_validate_f32",
+      "module": "hexv842_mpas_bl_mynn_pblh_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_pblh_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_get_pblh",
+      "resources": [
+        [
+          "thetav1d",
+          "float",
+          "read"
+        ],
+        [
+          "qke1d",
+          "float",
+          "read"
+        ],
+        [
+          "zw1d",
+          "float",
+          "read"
+        ],
+        [
+          "dz1d",
+          "float",
+          "read"
+        ],
+        [
+          "landsea",
+          "float",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thetav1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zw1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "landsea": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

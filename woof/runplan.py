@@ -113,6 +113,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from woof.explain import layered, split as _split_message
+from woof.stage_timing import (ledger_main, bind_ledger, ForecastLedger,
+                               register_ledger_observer, current_ledger, end_admission)
+from woof.timeline.ledger import Ledger
+from woof.timeline.taxonomy import RUN_STAGES, GO_STAGES
 
 
 #: The plan document a caller writes.
@@ -152,7 +156,9 @@ STAGES = ("fetch", "prepare", "initialize", "forecast", "finalize")
 EVENT_TAGS = (
     "plan_accepted", "resolved_plan", "stage_started", "stage_finished",
     "model_progress", "output_committed", "first_products_ready",
-    "live_products_ready",
+    "live_products_ready", "grib2_export_progress",
+    # The any-point column store (woof.live_columns): each frame written, then the total.
+    "columns_progress", "columns_written",
     "fetch_started", "fetch_progress", "fetch_completed",
     # Chained preparation: the prepared head is published (the forecast
     # starts beside the rest of the preparation), and later the seal.
@@ -231,6 +237,7 @@ def source_behind_fields(details: Mapping[str, Any]) -> dict[str, Any]:
 #: tags under this door's stream, so its codes are as open as
 #: :data:`EVENT_TAGS` itself.
 WARNING_CODES = {
+    "local_publish_failed": "rendered pictures could not be committed to the local static web root",
     "chain_stage_failed":
         "one stage of a chained run failed; the chain's own reader is "
         "told which stage before the run's terminal event",
@@ -278,6 +285,21 @@ WARNING_CODES = {
         "the early render did not finish within its wait, so the "
         "finalize stage stopped holding a finished forecast for it; that "
         "render was ended and publishes nothing",
+    "grib2_export_failed":
+        "native GRIB2 export failed; the message names the cause and "
+        "the GRIB2 output is incomplete",
+    "columns_not_armed":
+        "the any-point column store (woof.live_columns) could not start; "
+        "the run goes on and writes no store, and the message says why",
+    "columns_frames_unknown":
+        "the prepared runner could not read which frames carry the 3-D "
+        "state from the experiment (the message says why), so the "
+        "any-point column store tries every frame on the history cadence; "
+        "the run is unaffected",
+    "columns_not_written":
+        "one committed frame's any-point column store file was not "
+        "written (the frame is named); the run and its other frames are "
+        "unaffected, and soundings at that hour answer \"no column store\"",
     "live_products_empty":
         "a frame drawn as it landed produced no picture; the end-of-run "
         "render draws it with the rest",
@@ -505,8 +527,8 @@ _INTENT_DELIVERY = {
     # the [fetch].out hint the wizard wrote, so this has to travel as a
     # flag or it does not travel.
     "data_dir": "go:--data-dir",
-    # The static geography tree: [case_data].geog_root on the ERA5
-    # route, and a `woof go` flag on the prepared one.
+    # The wizard saves the geography root for every source. The plan
+    # also forwards its explicit root as a launch override.
     "geog_root": "go:--geog-root",
     # Read by the HRRR preparer as a flag; on the gfs chain the wizard
     # bakes the resulting physics into the config and `go` needs no
@@ -528,12 +550,6 @@ def intent_drivability() -> dict[str, dict[str, Any]]:
     from woof.source_drivability import intent_drivability as shared_drivability
     return shared_drivability()
 
-
-def _intent_sources_for(route: str) -> frozenset[str]:
-    """The source ids whose intent the named route drives, derived live."""
-
-    return frozenset(source for source, verdict in intent_drivability()
-                     .items() if route in verdict["routes"])
 
 #: ``woof run``'s own documented default output directory.  A plan that
 #: omits ``output_root`` lands where the command it wraps would have.
@@ -623,7 +639,6 @@ class PlanError(ValueError):
     geography tree never set up on the computer told the page to fix
     its plan document, which could not help.
     """
-
     memory: dict[str, Any] | None = None
 
     def __init__(self, message: object = "", *, remedy: str | None = None):
@@ -882,6 +897,8 @@ def build_plan(raw: Mapping[str, Any], *, source: str,
         fetch_arguments=fetch_arguments, output_root=output_root,
         run_options=resolved_options, sha256=sha256, source=source,
         automatic_resolutions=tuple(resolutions))
+    if resolved_options.get("grib2"):
+        _grib2_member_contract(plan, b"" if config_intent is not None else plan.config_bytes())
     if route == "prepared":
         if resolved_options.get("restart") and not resolved_options.get("prepared_root"):
             raise PlanError(
@@ -914,6 +931,19 @@ def build_plan(raw: Mapping[str, Any], *, source: str,
                                 "fetches; remove it to use that bundle")
             _validate_prepared_output(plan, require_empty=True)
     return plan
+
+
+def _grib2_member_contract(plan: RunPlan, payload: bytes) -> None:
+    """Refuse member-colliding archives before source or device work."""
+    if not plan.run_options.get("grib2"):
+        return
+    from woof.ensemble.door import request_for_payload
+    from woof.grib2_live import validate_member_contract
+    try:
+        request = request_for_payload(payload, override=plan.run_options.get("ensemble"))
+        validate_member_contract(True, request)
+    except ValueError as error:
+        raise PlanError(str(error)) from None
 
 
 def _section_refusal(options: Mapping[str, Any]) -> str | None:
@@ -986,7 +1016,6 @@ def _build_intent(intent: object, *, route: str,
 
     source = intent.get("source", "era5")
     _refuse_undrivable_intent_source(str(source), route=route)
-    from woof import fetch_routes
     from woof.fetch import validate_fetch_hints
     intent = _keyless_era5_default(intent, str(source))
     selection = {key: intent[key] for key in
@@ -1189,7 +1218,9 @@ _RUN_OPTION_DEFAULTS: dict[str, Any] = {
     "wps_namelist": None,
     "health_debug": False,
     "verify_visuals": True,
+    "grib2": False,
     "data_dir": None,
+    "initial_inputs": None,
     "geog_root": None,
     "physics_profile": None,
     "supplement": [],
@@ -1200,6 +1231,8 @@ _RUN_OPTION_DEFAULTS: dict[str, Any] = {
     # writes configs rather than pictures -- there is no --render-products
     # flag for it to mirror.
     "render_products": None,
+    "publish_root": None,
+    "publish_cmd": None,
     # `woof render --section`'s own value: the line every `xsec:` term
     # of `render_products` is cut along, carried to every render the run
     # draws.  A file is made absolute against the plan's directory.
@@ -1232,6 +1265,12 @@ _RUN_OPTION_DEFAULTS: dict[str, Any] = {
     # A concrete assertion for supplied inputs, checked after acquisition.
     # Unlike cycle, this never retimes a config or changes a fetch request.
     "input_cycle": None,
+    # `woof go --tiles` on a launch of an existing prepared bundle: the
+    # [tiles] mode its single-domain forecast runs under, relayed as the
+    # runner's own --tiles (the bundle's config is hash-bound and carries
+    # no [tiles]).  Absent: the launch config's enabled [tiles], else the
+    # one its --prepare-only launch recorded beside the bundle, else none.
+    "forecast_tiles": None,
 }
 
 
@@ -1261,7 +1300,7 @@ def _run_option(key: str, value: object, base: Path) -> Any:
             return bindings(value, base=base)
         except ValueError as error:
             raise PlanError(str(error)) from error
-    if key in ("dry_run", "health_debug", "verify_visuals"):
+    if key in ("dry_run", "health_debug", "grib2", "verify_visuals"):
         if not isinstance(value, bool):
             raise PlanError(f"{label} must be true or false")
         return value
@@ -1280,11 +1319,19 @@ def _run_option(key: str, value: object, base: Path) -> Any:
         raise PlanError(
             f"{label} must be a nonnegative GPU index or full GPU UUID, "
             f"got {selector!r}")
+    if key == "forecast_tiles":
+        if value is not None and value not in ("off", "auto", "on"):
+            raise PlanError(f"{label} must be 'off', 'auto' or 'on'")
+        return value
     if key == "keep_checkpoints":
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise PlanError(f"{label} must be a whole number of checkpoint "
                             "sets, 0 to keep every one")
         return value
+    if key == "publish_root":
+        return None if value is None else str(_absolute(_nonempty_string(value, label), base, label))
+    if key == "publish_cmd":
+        return None if value is None else _nonempty_string(value, label)
     if key == "render_products":
         return None if value is None else _nonempty_string(value, label)
     if key == "render_section":
@@ -1340,7 +1387,7 @@ def _run_option(key: str, value: object, base: Path) -> Any:
             raise PlanError(f"{label} = {value!r} is not a host `woof fetch "
                             f"--transport` takes; it takes one of {list(FETCH_TRANSPORTS)}")
         return value
-    if key in ("restart", "data_dir", "geog_root", "prepared_root", "wps_namelist"):
+    if key in ("restart", "data_dir", "geog_root", "prepared_root", "wps_namelist", "initial_inputs"):
         return None if value is None else str(_absolute(value, base, label))
     raise PlanError(f"{label} is not a run option this build understands")
 
@@ -1550,18 +1597,32 @@ def follow_statics_decision(exp, *, chain: str, source: str | None = None) -> di
         delivery = preparation_statics(chain, source=source)["delivery"]
     except ValueError as error:
         raise PlanError(str(error)) from None
-    from woof.static.corridor import moving_grid_ids
-    cohort = any(getattr(dc, "follow", None) is not None for dc in exp.domains)
+    from woof.static.corridor import declared_follow_subjects, moving_grid_ids
+
+    # THE DECLARATIONS, not the movers.  `moving_grid_ids` answers which
+    # grids move -- per-domain followers, the [relocation] mover AND its
+    # containment ancestor -- and a refusal built from it told the reader
+    # to delete a follow table from a domain that carries none.
+    subjects = declared_follow_subjects(exp)
+    followers = list(subjects["follower_grid_ids"])
+    cohort = bool(followers)
     grid_ids = sorted(moving_grid_ids(exp))
     grid_id = grid_ids[0] if cohort else int(exp.relocation.grid_id)
     return {
-        **({"follower_grid_ids": grid_ids} if cohort else {}),
+        **({"follower_grid_ids": followers} if cohort else {}),
         "chain": chain,
         "delivery": delivery,
         "relocation_grid_id": grid_id,
         "statics_corridor": delivery in {"statics_corridor", "retained_corridor"},
+        # The subject of the refusal is every table the CONFIG declares a
+        # follow source in, so the withdrawal it names withdraws all of
+        # them: either one left standing keeps the predicate True and
+        # brings the same refusal back word for word.
         "refusal": (None if delivery is not None
-                    else _follow_unsupported_refusal(chain, grid_id, source=source)),
+                    else _follow_unsupported_refusal(
+                        chain, follower_grid_ids=followers,
+                        relocation_grid_id=subjects["relocation_grid_id"],
+                        source=source)),
     }
 
 
@@ -1586,28 +1647,113 @@ _CORRIDOR_RESOLUTION_NOTE = {
 }
 
 
-def _follow_unsupported_refusal(chain: str, grid_id: int, *, source: str | None = None) -> str:
-    """Why this chain cannot run a moving nest, and what will."""
+def _follow_unsupported_refusal(chain: str, *, follower_grid_ids=(),
+                                relocation_grid_id: int | None = None,
+                                source: str | None = None) -> str:
+    """Why this chain cannot run a moving nest, and what will.
 
+    THE SUBJECT IS READ FROM THE DECLARATIONS, through
+    :func:`~woof.static.corridor.declared_follow_subjects`, and never
+    from the mover set.  A per-domain follower lives in
+    ``[[domain]].follow``, and the configuration that declares one may
+    carry no ``[relocation]`` table at all; naming that table sent the
+    reader to edit something their file has not got, and a sentence
+    built from the movers additionally named a follow table on the
+    containment ancestor, which declares nothing.
+
+    THE WAY OUT WITHDRAWS EVERY DECLARATION IT NAMES.  Both tables can
+    be live at once, and
+    :func:`~woof.static.corridor.config_declares_follow_source` stays
+    True while either remains, so a way out that retired one of two
+    cleared nothing and the refusal came back word for word.
+
+    ``follower_grid_ids`` are the grids whose ``[[domain]].follow`` the
+    config declares; ``relocation_grid_id`` is the grid a declared
+    ``[relocation]`` follow source moves, ``None`` when the config
+    declares none.
+    """
+    from woof.core.nest_lifecycle import FOLLOWER_TABLE
     from woof.source_cli import preparation_statics
 
     try:
         detail = preparation_statics(chain, source=source)["reason"]
     except ValueError:
         detail = "its preparation seals no child-resolution statics corridor and it holds no geography source at run time"
+    ids = tuple(int(gid) for gid in follower_grid_ids)
+    if not ids and relocation_grid_id is None:
+        raise ValueError(
+            "name the table this config declares its follow source in: "
+            "with neither a [[domain]].follow grid nor a [relocation] "
+            "grid there is no subject, and the sentence would describe a "
+            "table the reader cannot be told to edit")
+    where = " and ".join(f"d{gid:02d}" for gid in ids)
+    one = len(ids) == 1
+    delete_follow = (
+        f"delete the follow table from {where}, which leaves "
+        f"{'that nest' if one else 'those nests'} where this config places "
+        f"{'it' if one else 'them'} and needs no corridor")
+    drop_relocation = (
+        "drop the follow source for a bounds-only [relocation], which "
+        "does not move the nest and needs neither")
+    if ids and relocation_grid_id is not None:
+        # BOTH tables live.  Naming one of them would state as fact that
+        # the other is not there, and withdrawing one would clear
+        # nothing.
+        declares = (f"a {FOLLOWER_TABLE} on {where} AND a [relocation] "
+                    f"follow source on d{relocation_grid_id:02d}")
+        predicate = "same pair of follow declarations"
+        withdraw = (f"or withdraw BOTH declarations -- {delete_follow}, and "
+                    f"{drop_relocation} -- because either one left standing "
+                    "keeps this config a moving nest and brings this refusal "
+                    "back word for word")
+    elif ids:
+        declares = f"a {FOLLOWER_TABLE} on {where}"
+        predicate = "same follow declaration"
+        withdraw = (f"or {delete_follow} (a bounds-only [relocation] may "
+                    "stand in its place, but on its own it clears nothing "
+                    f"while any {FOLLOWER_TABLE} remains)")
+    else:
+        declares = f"a [relocation] follow source on d{relocation_grid_id:02d}"
+        predicate = "same [relocation] predicate"
+        withdraw = f"or {drop_relocation}"
     return (
-        f"this plan's config declares a [relocation] follow source on "
-        f"d{grid_id:02d}, and the {chain!r} chain cannot supply the "
-        f"statics a moving nest needs: {detail} -- so it is refused "
-        "here instead, before the fetch.\n"
+        f"this plan's config declares {declares}, and the {chain!r} chain "
+        f"cannot supply the statics a moving nest needs: {detail} -- so it "
+        "is refused here instead, before the fetch.\n"
         "  remedy: run this config on a prepared chain that seals a "
         "corridor; run-plan composes --statics-corridor for "
-        "itself, from this same [relocation] predicate; or run it on "
+        f"itself, from this {predicate}; or run it on "
         "the `experiment` route with a "
         "[case_data] block, which holds the geography source and "
-        "rebuilds each footprint's statics at move time; or drop the "
-        "follow source for a bounds-only [relocation], which does not "
-        "move the nest and needs neither.")
+        f"rebuilds each footprint's statics at move time; {withdraw}.")
+
+
+def follow_unsupported_refusal(chain: str, follower_grid_ids, *,
+                               source: str | None = None) -> str:
+    """The sentence the run door WILL raise, for an authoring door to quote.
+
+    An authoring door that emits a following nest on a chain sealing no
+    corridor has to say what the launch will say.  It asks for the
+    sentence here rather than writing a second one: the paraphrase that
+    used to stand in its place drifted from the refusal it paraphrased,
+    and offered a way out that this door's own configuration shape
+    cannot take.  ``follower_grid_ids`` are the grids whose
+    ``[[domain]].follow`` the authored configuration declares.
+
+    PER-DOMAIN FOLLOWERS ONLY, which is the shape every authoring door
+    in this package emits: a configuration that also carries a live
+    ``[relocation]`` follow source is a file someone has since edited,
+    and the run door reads its subjects off that file through
+    :func:`follow_statics_decision` rather than off this quote.
+    """
+    ids = tuple(int(gid) for gid in follower_grid_ids)
+    if not ids:
+        raise ValueError(
+            "name the grid ids whose [[domain]].follow the configuration "
+            "declares: an empty list would describe a [relocation] table "
+            "that configuration does not carry")
+    return _follow_unsupported_refusal(chain, follower_grid_ids=ids,
+                                       source=source)
 
 
 # ---------------------------------------------------------------------------
@@ -1649,6 +1795,22 @@ _STREAMING_DELIVERY: dict[str, str] = {
     "prepared:staged": "tree",
     "prepared:existing": "tree",
 }
+
+
+#: The chains whose fetch stage acquires the pinned monthly WIF aerosol
+#: dataset (``woof fetch --wif``) before any forcing byte, so plan review
+#: may defer that machine precondition to them rather than refuse it.
+#: ``prepared:hrrr`` and ``prepared:staged`` add ``wif`` to their fetch
+#: hints; ``prepared:go`` composes ``--wif`` in
+#: :func:`woof.go_cli.fetch_command` from the same
+#: :func:`woof.preparation_assets.wif_fetch_domains` answer.  Breakage the
+#: entry for ``prepared:go`` answers (2.8.8 acceptance D-01): every GFS,
+#: ECMWF and other global mp=28 config refused on a box without a
+#: hand-staged dataset, because only the two native chains were listed.
+#: ``prepared:existing`` prepares nothing and ``experiment`` fetches from
+#: the plan's own arguments, so neither is here.
+_WIF_ACQUIRING_CHAINS = frozenset({"prepared:go", "prepared:hrrr",
+                                   "prepared:staged"})
 
 
 def streaming_decision(exp, *, chain: str) -> dict[str, Any] | None:
@@ -2170,6 +2332,12 @@ class EventStream:
                 self._native_parent_listener(record, line + "\n")
         return record
 
+    @property
+    def closed(self) -> bool:
+        """Whether this stream's file is closed (its owner is done with it)."""
+
+        return self._stream.closed
+
     def close(self) -> None:
         with self._lock:
             try:
@@ -2278,6 +2446,11 @@ class RunObserver:
         #: lands (:mod:`woof.live_products`), on whenever the end of the
         #: run would draw pictures.
         self._live_products = None
+        self._grib2_export = None
+        self._grib2_base_out = None
+        self._grib2_attempt = 1
+        #: The any-point column store written as frames land (:mod:`woof.live_columns`), on by default.
+        self._columns = None
         #: The plan both were armed with, to arm them again when the
         #: hosted forecast restarts (:meth:`restarting`).
         self._render_plan = None
@@ -2299,6 +2472,34 @@ class RunObserver:
         #: tree runner does not publish it at all.
         self._last_model_seconds: float | None = None
         self._render_summary: dict[str, Any] | None = None
+        # An events sink without a file (an embedding caller, a test double)
+        # gets a ledger that records only when WOOF_TIME_LEDGER names one.
+        events_path = getattr(events, "path", None)
+        self._timeline = current_ledger(Ledger(
+            None if events_path is None else Path(events_path).parent / "timeline.jsonl"))
+        self._timeline_forecast = None
+        self._timeline_idle = False
+        self._timeline_closed = False
+        register_ledger_observer(self)
+
+    def close(self):
+        """C1 closes any failed stage and records the main-flow finish."""
+        if self._timeline_closed:
+            return
+        # The command's ledger closes every observer at exit, after the
+        # door that owns this observer's event stream may already have
+        # closed it (a preparation door's ``finally``).  A stage a failure
+        # left open is then ended on the timeline only: writing its
+        # ``stage_finished`` record to the closed file raised "I/O operation
+        # on closed file", which replaced the run's own error and exit code
+        # (a failed ensemble member preparation ended "woof ensemble: I/O
+        # operation on closed file." at exit 2 instead of its refusal at 1).
+        self.finish_stage(record=not getattr(self._events, "closed", False))
+        if self._timeline_idle:
+            self._timeline.emit("post.orchestration", "end")
+            self._timeline_idle = False
+        self._timeline.emit("finish", "mark")
+        self._timeline_closed = True
 
     # -- stage bookkeeping --------------------------------------------
 
@@ -2325,6 +2526,17 @@ class RunObserver:
         if stage == self._stage:
             return
         self.finish_stage()
+        if stage == "forecast":
+            # A hydro fabric preparing beside this launch's fetch and
+            # preparation (woof.hydro.runtime._Beside) is bound before any
+            # forecast runner starts; nothing pending, nothing waits.
+            hydro = sys.modules.get("woof.hydro.runtime")
+            if hydro is not None:
+                hydro.join_beside()
+        end_admission(self._timeline)
+        if self._timeline_idle:
+            self._timeline.emit("post.orchestration", "end")
+            self._timeline_idle = False
         self._stage = stage
         self._stage_phases = [] if phase is None else [phase]
         self._stage_started_wall = time.perf_counter()
@@ -2332,14 +2544,34 @@ class RunObserver:
         if phase is not None:
             payload["phase"] = phase
         self._events.emit("stage_started", **payload)
+        self._timeline.emit(RUN_STAGES[stage], "begin", attrs={"phase": phase, "role": "envelope"})
+        if stage == "forecast":
+            # Native prepared routes use <run>/chain/run. Hosted go uses
+            # its plan's run directory, attached by the main flow below.
+            forecast_dir = getattr(self, "_timeline_forecast_dir",
+                                   self._events.path.parent / "chain" / "run")
+            self._timeline_forecast = ForecastLedger(self._timeline, forecast_dir)
+            self._timeline_forecast.start(watch=False)
 
-    def finish_stage(self, **fields: Any) -> None:
-        """Close the open stage, if any."""
+    def finish_stage(self, *, record: bool = True, **fields: Any) -> None:
+        """Close the open stage, if any.
+
+        ``record=False`` ends it on the timeline without a ``stage_finished``
+        event, for a stream its owner has already closed (:meth:`close`).
+        """
 
         if self._stage is None:
             return
         stage = self._stage
         self._stage = None
+        if self._timeline_forecast is not None:
+            self._timeline_forecast.finish()
+            self._timeline_forecast = None
+        self._timeline.emit(RUN_STAGES[stage], "end", attrs={"phase": list(self._stage_phases), "role": "envelope"})
+        self._timeline.emit("post.orchestration", "begin")
+        self._timeline_idle = True
+        if not record:
+            return
         if stage == "finalize" and self._render_summary is not None:
             fields.setdefault("render_summary", self._render_summary)
         self._events.emit(
@@ -2441,9 +2673,34 @@ class RunObserver:
                     "forecast restart refused: a render is still reading "
                     "the previous attempt's history; refusing output rewind")
 
+        # The any-point column store, the same way.  THE BREAKAGE: left
+        # armed, its writer remembered every frame path it had written, so
+        # the new attempt's frames at the same paths were skipped and the
+        # store kept the failed attempt's columns for every rewound hour;
+        # and its writer could still be reading a frame the runner moves
+        # aside next (on Windows that move fails on the open file).  The
+        # queued frames are dropped, the frame in hand is waited for (its
+        # write is killed at its own timeout), and a fresh writer is armed
+        # on the same folder after the restart record.
+        columns = self._columns
+        if columns is not None:
+            summary = self.stop_columns(halt=True, timeout=columns.restart_wait_seconds)
+            if summary is not None and not summary.get("stopped", True):
+                raise RuntimeError(
+                    "forecast restart refused: the column store is still "
+                    "reading the previous attempt's history; refusing output rewind")
+
         hook = getattr(self._heartbeat, "restarting", None)
         if hook is not None:
             hook(reason)
+        if columns is not None:
+            self.arm_columns(columns.out, frames=columns.frames)
+        if self._grib2_export is not None:
+            self.stop_grib2(halt=True)
+            self._grib2_export = None
+            self._grib2_attempt += 1
+            base = self._grib2_base_out
+            self.arm_grib2(base.with_name(f"{base.name}-attempt-{self._grib2_attempt:02d}"))
         if live is not None or first is not None:
             self._first_products = None
             self._live_products = None
@@ -2467,6 +2724,8 @@ class RunObserver:
         self.source_behind_record = dict(details)
 
     def finalizing(self, phase: str, *, work_bytes: int | None = None) -> None:
+        if self._timeline_forecast is not None:
+            self._timeline_forecast.read()
         hook = getattr(self._heartbeat, "finalizing", None)
         if hook is not None:
             hook(phase, work_bytes=work_bytes)
@@ -2475,6 +2734,8 @@ class RunObserver:
                  last_durable_wrfout=None, last_checkpoint=None,
                  phase: str = "synchronized-step",
                  step_wall_seconds: float = 0.0, **extra: Any) -> None:
+        if self._timeline_forecast is not None:
+            self._timeline_forecast.poll()
         if self._heartbeat is not None:
             self._heartbeat(
                 model_elapsed_seconds=model_elapsed_seconds,
@@ -2582,6 +2843,60 @@ class RunObserver:
 
         return self._live_products
 
+    def arm_grib2(self, out) -> None:
+        """Start native output independently of the selected map products."""
+        if self._grib2_export is not None:
+            return
+        from woof.grib2_live import LiveGrib2Export
+        out = Path(out)
+        if self._grib2_base_out is None:
+            self._grib2_base_out = out
+        self._grib2_export = LiveGrib2Export(
+            out, report=self._grib2_progress, warn=self.warn)
+        self._grib2_progress({"event": "armed", "out": str(out), "attempt": self._grib2_attempt})
+
+    def arm_columns(self, out, *, experiment=None, frames=None) -> None:
+        """Write the run's any-point column store (rw-store v2) for every output hour as frames land.
+
+        ``experiment`` (or ``frames`` itself) names which frames carry the 3-D state
+        (:class:`woof.live_columns.StateFrames`); the others are not attempted."""
+        if self._columns is not None:
+            return
+        from woof.live_columns import LiveColumns, StateFrames
+        try:
+            if frames is None and experiment is not None:
+                frames = StateFrames.for_experiment(experiment)
+            self._columns = LiveColumns(Path(out), report=self._columns_progress, warn=self.warn,
+                                        frames=frames)
+        except Exception as error:  # noqa: BLE001 - a store that cannot start never stops the run
+            self.warn("columns_not_armed", f"no column store for this run: {type(error).__name__}: {error}")
+
+    def _columns_progress(self, event) -> None:
+        self._events.emit("columns_progress", progress=dict(event))
+
+    def stop_columns(self, *, halt: bool = False, timeout: float | None = None) -> dict | None:
+        """End the column store: ``halt`` drops what is queued (a stopped or restarting run), otherwise the queue
+        and each grid's last frame are written. Both waits are bounded (:meth:`woof.live_columns.LiveColumns.stop`)."""
+        columns, self._columns = self._columns, None
+        if columns is None:
+            return None
+        if halt:
+            summary = columns.halt() if timeout is None else columns.halt(timeout)
+        else:
+            summary = columns.stop(timeout)
+        self._events.emit("columns_written", files=summary["files"], bytes=summary["bytes"],
+                          seconds=summary["seconds"], failed=len(summary["failed"]), out=summary["out"])
+        return summary
+
+    def _grib2_progress(self, event) -> None:
+        self._events.emit("grib2_export_progress", progress=dict(event))
+
+    def stop_grib2(self, *, halt: bool = False) -> dict | None:
+        export = self._grib2_export
+        if export is None:
+            return None
+        return export.halt() if halt else export.stop()
+
     def stop_live_products(self, *, halt: bool = False) -> dict | None:
         """Stop drawing frames as they land.
 
@@ -2673,6 +2988,8 @@ class RunObserver:
 
         elapsed = round(time.perf_counter() - self._accepted_wall, 6)
         self._first_products_seconds = elapsed
+        if self._live_products is not None:
+            self._live_products.publish_first(receipt)
         self._events.emit(
             "first_products_ready",
             domain=receipt["domain"], valid_time=receipt["valid_time"],
@@ -2681,6 +2998,10 @@ class RunObserver:
             render_seconds=receipt["render_seconds"],
             seconds_from_plan_accepted=elapsed,
             complete=receipt.get("complete", True))
+
+    def frame_submitted(self, *, domain: int, valid_time) -> None:
+        if self._live_products is not None:
+            self._live_products.frame_submitted(domain=domain, valid_time=valid_time)
 
     def output_committed(self, *, domain: int, valid_time, path) -> None:
         """One wrfout is durable on disk.  Raised from the writer.
@@ -2705,6 +3026,18 @@ class RunObserver:
                         if isinstance(valid_time, datetime)
                         else str(valid_time)),
             path=str(path))
+        export = self._grib2_export
+        if export is not None:
+            try:
+                export.frame_committed(domain=int(domain), valid_time=valid_time, path=path)
+            except Exception as error:  # output callbacks must not stop stepping
+                self.warn("grib2_export_failed", f"committed frame could not be queued: {error}", frame=str(path))
+        columns = self._columns
+        if columns is not None:
+            try:
+                columns.frame_committed(domain=int(domain), valid_time=valid_time, path=path)
+            except Exception as error:  # noqa: BLE001 - output callbacks must not stop stepping
+                self.warn("columns_not_written", f"committed frame could not be queued: {error}", frame=str(path))
         trigger = self._first_products
         claimed = False
         if trigger is not None and int(domain) == self._root_domain:
@@ -2738,10 +3071,23 @@ class RunObserver:
                 "draws it", frame=str(path))
 
     def complete(self, model_elapsed_seconds: float) -> None:
+        self.stop_grib2()
+        try:
+            self.stop_columns()
+        except Exception as error:  # noqa: BLE001
+            self.warn("columns_not_written", str(error))
         if self._heartbeat is not None:
             self._heartbeat.complete(model_elapsed_seconds)
 
     def failed(self) -> None:
+        try:
+            self.stop_grib2()
+        except Exception as error:
+            self.warn("grib2_export_failed", str(error))
+        try:
+            self.stop_columns()
+        except Exception as error:  # noqa: BLE001
+            self.warn("columns_not_written", str(error))
         if self._heartbeat is not None:
             self._heartbeat.failed()
 
@@ -3073,6 +3419,7 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
                         if plan.config_path is not None
                         else plan.config_base_dir)
 
+        _grib2_member_contract(plan, payload)
         # Imported here rather than at module scope, on this file's own
         # convention for woof.core.streaming: the run-plan front door is
         # reached by every route, and the streaming module must stay a
@@ -3111,9 +3458,6 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
 
                     exp = experiment_from_text(
                         payload.decode("utf-8"), source=config_source)
-                    if plan.route == "prepared" and len(exp.domains) == 1:
-                        from woof.experiment import refuse_unrouted_perturbation
-                        refuse_unrouted_perturbation(exp, "single-domain prepared forecast")
                     data = None
         except StreamingRefused as refusal:
             # build_experiment refuses [tiles] mode = 'on' over a nested
@@ -3135,6 +3479,15 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
         from dataclasses import replace
         from woof.core.devices import override_device_count
         exp = replace(exp, devices=override_device_count(exp.devices, plan.run_options["devices"]))
+    # Before any stage runs: a multi-card split on an interpreter whose lock
+    # is on steps its ranks one at a time (woof.free_threading).
+    from woof.free_threading import refuse_multi_card_under_gil
+    try:
+        door = " ".join(str(plan.source).split()[:2])
+        refuse_multi_card_under_gil(
+            exp.devices.count, door if door.startswith("woof ") else "woof run-plan")
+    except ValueError as error:
+        raise PlanError(str(error)) from error
     source = config_source
     inputs = [] if data is None else declared_inputs(data)
     resolutions.extend(_schema_default_resolutions(raw))
@@ -3188,6 +3541,15 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
         except HrrrRouteInputError as refusal:
             raise PlanError(str(refusal)) from None
     if chain == "prepared:staged":
+        # The WPS namelist the staged chain runs from, asked of the same
+        # function the chain calls, so `woof go --dry-run` and plan
+        # review refuse a configuration the run could not render one for.
+        from woof.companion_domains import configuration_wps_namelist
+
+        try:
+            configuration_wps_namelist(Path(config_source), exp, raw=raw)
+        except ValueError as refusal:
+            raise PlanError(str(refusal)) from None
         from woof import fetch_routes
         hints = raw.get("fetch") or {}
         source_id = fetch_routes.canonical_source(str(hints.get("source", "")))
@@ -3201,7 +3563,6 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
                     "scope": "fetch", "key": "member",
                     "value": {"id": member, "token": token},
                     "basis": "route_default" if requested is None else "declared"})
-    local_verdict = drivability_for((raw.get("fetch") or {}).get("source"))
     from woof.source_drivability import local_input_requested
     if chain == "prepared:staged" and local_input_requested(raw.get("fetch") or {}):
         from woof.local_preparation import review_local_inputs
@@ -3297,7 +3658,7 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
         # Preparation and initialization still require the acquired dataset.
         fetch_hints = raw.get("fetch") or {}
         pending_wif = (wif_fetch_domains(exp, fetch_hints)
-                       if chain in ("prepared:hrrr", "prepared:staged")
+                       if chain in _WIF_ACQUIRING_CHAINS
                        and not local_input_requested(fetch_hints) else ())
         try:
             validate_experiment_preparation(exp, pending_wif_domains=pending_wif)
@@ -3436,7 +3797,8 @@ def resolve_plan(plan: RunPlan, *, generate_into: Path | None = None,
         # from the same projection execute_plan refuses on before its
         # download.
         "disk": _disk_projection(plan, exp, raw=raw, data=data,
-                                 fetch_arguments=plan.fetch_arguments),
+                                 fetch_arguments=plan.fetch_arguments,
+                                 base_dir=base_dir),
         "automatic_resolutions": resolutions,
         "warnings": warnings,
     }, exp, data
@@ -3492,7 +3854,7 @@ def _recipe_plan_refusal(plan: RunPlan, raw: Mapping[str, Any],
     """
 
     recipe = _plan_recipe(plan, raw)
-    if recipe is None:
+    if recipe is None or recipe == "wofs" and plan.route == "experiment":
         return None
     door = f"woof ensemble CONFIG --recipe {recipe}"
     if plan.route != "prepared":
@@ -3521,7 +3883,8 @@ def _recipe_plan_refusal(plan: RunPlan, raw: Mapping[str, Any],
 
 def _planned_download(plan: RunPlan, raw: Mapping[str, Any], data, *,
                       fetch_arguments: Sequence[str] | None,
-                      run_dir: Path | None = None
+                      run_dir: Path | None = None,
+                      base_dir: Path | None = None
                       ) -> tuple[dict[str, Any] | None, Path | None, bool]:
     """The request this plan's run downloads with, where it lands, and whether that folder is keyed to it.
 
@@ -3571,7 +3934,9 @@ def _planned_download(plan: RunPlan, raw: Mapping[str, Any], data, *,
         except (OSError, ValueError):
             return request, root / "downloads", False
     try:
-        arguments = declared_forcing_fetch(raw, data)
+        arguments = declared_forcing_fetch(
+            raw, data, base_dir=base_dir,
+            cache_root=run_dir if run_dir is not None else plan.run_dir)
     except PlanError:
         # The run refuses these inputs itself, before its fetch; the table
         # still says what would be downloaded.
@@ -3671,7 +4036,8 @@ def _present_download_bytes(request: Mapping[str, Any] | None, directory: Path |
 def _disk_projection(plan: RunPlan, exp, *, raw: Mapping[str, Any], data,
                      fetch_arguments: Sequence[str] | None,
                      run_dir: Path | None = None,
-                     download_keyed: bool | None = None) -> dict[str, Any]:
+                     download_keyed: bool | None = None,
+                     base_dir: Path | None = None) -> dict[str, Any]:
     """What this plan's run writes, from :func:`woof.disk_budget.projected_run_bytes`.
 
     ``download_keyed`` overrides whether the download folder is keyed to
@@ -3683,7 +4049,8 @@ def _disk_projection(plan: RunPlan, exp, *, raw: Mapping[str, Any], data,
 
     keep = int(plan.run_options.get("keep_checkpoints") or 0)
     request, directory, keyed = _planned_download(
-        plan, raw, data, fetch_arguments=fetch_arguments, run_dir=run_dir)
+        plan, raw, data, fetch_arguments=fetch_arguments, run_dir=run_dir,
+        base_dir=base_dir)
     if download_keyed is not None and directory is not None:
         keyed = bool(download_keyed)
     return dict(disk_budget.projected_run_bytes(
@@ -3739,6 +4106,7 @@ def disk_admission_refusal(plan: RunPlan, exp, *, raw: Mapping[str, Any], data,
                            download_keyed: bool | None = None,
                            prep_root: Path | None = None,
                            warn: Callable[[str, str, str | None], None] | None = None,
+                           hydro_config=None, hydro_args=None,
                            ) -> DiskRefusal | None:
     """The refusal for a run its disks cannot hold, or None: the one disk admission.
 
@@ -3773,9 +4141,32 @@ def disk_admission_refusal(plan: RunPlan, exp, *, raw: Mapping[str, Any], data,
 
     from woof import disk_budget
 
+    from woof.hydro.runtime import pending_launch_args
+    pending_hydro = pending_launch_args()
+    if hydro_config is None and pending_hydro is not None:
+        hydro_config = getattr(pending_hydro, "config", None)
+        hydro_args = pending_hydro
     projection = _disk_projection(
         plan, exp, raw=raw, data=data, fetch_arguments=fetch_arguments,
         run_dir=run_dir, download_keyed=download_keyed)
+    hydro_basis = None
+    if hydro_config is not None:
+        from woof.hydro.runtime import hydro_disk_estimate
+        from woof.hydro.door import cache_root
+        hydro_bytes, hydro_basis = hydro_disk_estimate(hydro_config, hydro_args)
+        hydro_root = cache_root(hydro_config)
+        if hydro_bytes and not disk_budget.same_disk(hydro_root, run_dir):
+            hydro_free = disk_budget.free_bytes(hydro_root)
+            if hydro_free is not None and hydro_bytes > hydro_free:
+                return DiskRefusal(layered(
+                    f"Hydro preparation would write about {hydro_bytes / 2**30:.1f} GiB "
+                    f"into {hydro_root}, which has {hydro_free / 2**30:.1f} GiB free, "
+                    "so it would stop partway when that disk fills.",
+                    "Refused before the download and before hydro preparation, so nothing was spent. "
+                    "Free some disk in the hydro cache. " + (hydro_basis or "")),
+                    folders=(str(hydro_root),))
+        else:
+            projection["preparation_bytes"] = int(projection.get("preparation_bytes") or 0) + hydro_bytes
     if (projection.get("compose_scratch") or {}).get("composes"):
         from woof.ingest.source_coverage import (COMPOSE_SCRATCH_ENV,
                                                   compose_scratch_override_refusal)
@@ -3803,10 +4194,13 @@ def disk_admission_refusal(plan: RunPlan, exp, *, raw: Mapping[str, Any], data,
     if refusal is not None:
         return DiskRefusal(layered(
             refusal[0].upper() + refusal[1:] + ".",
-            "Refused before the download, so nothing was spent.  "
+            ("Refused before the download and before hydro preparation, so nothing was spent.  "
+             if hydro_basis else "Refused before the download, so nothing was spent.  ")
+            +
             f"Download: {projection['download']['basis']}.  "
             f"Preparation: {projection['preparation']['basis']}.  "
             + stream_basis
+            + (f"Hydro: {hydro_basis}.  " if hydro_basis else "")
             + f"Bytes per cell: {disk_budget.MEASURED}."),
             folders=((str(scratch_folder),)
                      if scratch_folder is not None and str(scratch_folder) in refusal
@@ -3929,6 +4323,9 @@ def _execute_experiment_route(plan: RunPlan, *, exp, data, config_path,
     if products is not None and str(products).strip().lower() != "none":
         render_plan = {"run": plan.run_dir, "wrfout_dir": plan.run_dir,
                        "render": plan.run_dir / "png", "render_products": products,
+                       "publish_root": plan.run_options.get("publish_root") or plan.run_dir / "www",
+                       "publish_cmd": plan.run_options.get("publish_cmd"),
+                       "hydro": plan.run_options.get("hydro") or "auto",
                        "render_section": plan.run_options.get("render_section"),
                        **({"restart": plan.run_options["restart"]}
                           if plan.run_options.get("restart") is not None else {})}
@@ -3948,6 +4345,7 @@ def _execute_experiment_route(plan: RunPlan, *, exp, data, config_path,
         "completed_seconds": float(summary.completed_seconds),
         "nan_free": bool(summary.nan_free),
         "restarted": restart is not None,
+        "hydro": getattr(summary, "hydro_receipt", None),
     }
 
 
@@ -3980,6 +4378,7 @@ class _GoObserver:
 
     def __init__(self, observer: RunObserver, *, door: str = "go"):
         self._observer = observer
+        self._timeline = getattr(observer, "_timeline", Ledger())
         #: The command the reader typed, for the one warning below that
         #: quotes it.  `woof downscale` runs this same render stage,
         #: and a warning in ITS event stream naming `woof go` sends a
@@ -4000,7 +4399,14 @@ class _GoObserver:
 
     # -- woof go's chain hooks ---------------------------------------
 
+    def bind_timeline(self, run, ledger):
+        self._timeline = ledger
+        self._observer._timeline = ledger
+        self._observer._timeline_forecast_dir = Path(run)
+
     def stage_begin(self, *, label: str, command) -> None:
+        self._timeline.emit(GO_STAGES.get(label, "prep." + label.replace(" ", "_")),
+                                      "begin", attrs={"label": label})
         self.current_stage = label
         if label == "forecast":
             # From here the forecast says its own waits (its seams).
@@ -4123,6 +4529,8 @@ class _GoObserver:
 
     def stage_end(self, *, label: str, exit_code: int, ok: bool,
                   elapsed_seconds: float, progress) -> None:
+        self._timeline.emit(GO_STAGES.get(label, "prep." + label.replace(" ", "_")),
+                                      "end", attrs={"label": label, "ok": bool(ok), "exit_code": exit_code})
         if label == "render" and isinstance(progress, dict) and progress.get("schema") == "gpuwm.render-summary.v1":
             self._observer._render_summary = dict(progress)
         if label == "prepare" and ok and self._head_ready:
@@ -4208,6 +4616,9 @@ class _GoObserver:
         if hook is not None:
             hook(phase, work_bytes=work_bytes)
 
+    def frame_submitted(self, **fields) -> None:
+        self._observer.frame_submitted(**fields)
+
     def output_committed(self, **fields) -> None:
         self._observer.output_committed(**fields)
 
@@ -4234,7 +4645,8 @@ class _GoObserver:
         self._observer.failed()
 
 
-def _pinned_fetch_hints(plan: RunPlan, hints: Mapping[str, Any]) -> dict[str, Any]:
+def _pinned_fetch_hints(plan: RunPlan, hints: Mapping[str, Any], *,
+                        pin_cycle: bool = True) -> dict[str, Any]:
     """The config's ``[fetch]`` hints with ``run_options.transport`` over them.
 
     The run option is ``woof go --transport`` and wins over the table the
@@ -4258,6 +4670,8 @@ def _pinned_fetch_hints(plan: RunPlan, hints: Mapping[str, Any]) -> dict[str, An
     # executed with one runs a config re-timed to it (:func:`plan_at_cycle`),
     # and a query mode asks about the same window without writing one.
     for key in ("as_posted", "late_after_minutes", "cycle"):
+        if key == "cycle" and not pin_cycle:
+            continue
         value = plan.run_options.get(key)
         if value is not None:
             merged[key] = value
@@ -4277,6 +4691,8 @@ def _fetch_arguments_from_hints(hints: Mapping[str, Any],
     accepts exactly what `woof fetch` accepts and refuses the rest.
     """
 
+    from woof.initial_source import boundary_fetch_request
+    hints = boundary_fetch_request(hints)
     arguments: list[str] = []
     for key in sorted(hints):
         if key == "out":
@@ -4296,7 +4712,8 @@ def _fetch_arguments_from_hints(hints: Mapping[str, Any],
     from woof.fetch import GFS_CONTAINER_SOURCES
     if (fetch_endpoints.policy_uses_aws(str(hints.get("source", "")))
             and hints.get("source") in GFS_CONTAINER_SOURCES):
-        arguments += ["--mode", "full-file"]
+        from woof.fetch import GFS_RECORDS_MODE
+        arguments += ["--mode", GFS_RECORDS_MODE]
     return arguments + ["--out", str(out)]
 
 
@@ -4309,25 +4726,50 @@ def _config_for_declared_fetch(plan: RunPlan, resolution: Mapping[str, Any],
     plan's own bytes skipped every intent: an ERA5 intent on the
     config-driven route was accepted, wrote a [fetch] recipe naming its
     forcing, and then refused at the input gate for the file that recipe
-    was never asked to download.  The wizard writes the generated
-    [fetch].out relative to the directory the run was started from (unlike
-    [case_data], which is relative to the configuration), so it is anchored
-    there; anchoring it at the run directory put the download one "out"
-    level too deep and the input gate refused the run for a file that
-    had landed beside the one it named.
+    was never asked to download.  A relative [fetch].out is relative to
+    the configuration's folder, as [case_data] is (D-11), so it is
+    anchored there and returned absolute: the generated config of an
+    intent lives in the run directory, a named config in its own folder.
+    The working directory the run was started from does not decide where
+    the download lands.
     """
 
     if plan.config_intent is None:
-        return tomllib.loads(plan.config_bytes().decode("utf-8"))
-    document = tomllib.loads(str(resolution.get("generated_config") or ""))
+        document = tomllib.loads(plan.config_bytes().decode("utf-8"))
+        base_dir = (plan.config_path.parent if plan.config_path is not None
+                    else plan.config_base_dir)
+    else:
+        document = tomllib.loads(str(resolution.get("generated_config") or ""))
+        base_dir = run_dir
     hints = document.get("fetch")
-    if isinstance(hints, dict) and hints.get("out") and not Path(hints["out"]).is_absolute():
-        hints["out"] = str(Path.cwd() / hints["out"])
+    if isinstance(hints, dict) and hints.get("out"):
+        from woof.case_data import config_fetch_out
+        hints["out"] = str(config_fetch_out(document, base_dir=Path(base_dir)))
     return document
 
 
-def declared_forcing_fetch(payload: Mapping[str, Any], data) -> list[str] | None:
-    """Acquire missing declared forcing through the config's own fetch recipe."""
+def declared_forcing_fetch(payload: Mapping[str, Any], data, *,
+                           base_dir: Path | None,
+                           cache_root: Path | None = None) -> list[str] | None:
+    """Acquire missing declared forcing through the config's own fetch recipe.
+
+    ``base_dir`` is the configuration's folder, which a relative
+    ``[fetch].out`` is relative to (D-11).  It has no default, so no
+    caller can fall back to the working directory by omission; ``None``
+    is for a payload whose out the caller has already made absolute, and
+    a relative out with ``None`` is refused rather than guessed.
+
+    ``cache_root`` is the run's output root.  When the declared forcing
+    is not on disk, a run that has one downloads it into that root's
+    managed cache (``<root>/downloads/<request key>``, the folder the GFS
+    and HRRR routes use) rather than into ``[fetch].out`` beside the
+    configuration, and the run binds its forcing there
+    (:func:`rebind_fetched_forcing`).  The breakage it prevents: an ERA5
+    ``woof go CONFIG --outdir DIR`` wrote its 34 MB download into the
+    configuration's folder and nothing under DIR, so a read-only or shared
+    configuration folder failed or was written into.  Forcing already on
+    disk at the declared path is used where it is.
+    """
     if data is None:
         return None
     hints = payload.get("fetch")
@@ -4346,9 +4788,15 @@ def declared_forcing_fetch(payload: Mapping[str, Any], data) -> list[str] | None
                         + " or ".join(repr(name) for name in sorted(ERA5_COMBINED_NAMES)) + ".")
     if not hints.get("out"):
         raise PlanError("ERA5 data is missing. Set [fetch].out to the directory containing the declared forcing file.")
-    # fetch.out is relative to the launch working directory; the case-data
-    # loader has already resolved forcing relative to the configuration.
-    out = Path(hints["out"]).expanduser().resolve()
+    # A relative fetch.out is relative to the configuration's folder, as
+    # the forcing the case-data loader resolved is (D-11).
+    from woof.case_data import resolve_fetch_out
+    if base_dir is None and not Path(str(hints["out"])).expanduser().is_absolute():
+        raise PlanError("[fetch].out is relative, and this caller did not say which "
+                        "configuration it belongs to; resolve it against the "
+                        "configuration's folder before asking for the fetch.")
+    out = resolve_fetch_out(hints["out"], base_dir=Path(base_dir or "."),
+                            forcing=data.forcing)
     expected = (out / era5_combined_name(provider)).resolve()
     from woof.case_data import same_case_data_path
     if len(data.forcing) != 1 or not same_case_data_path(data.forcing[0], expected):
@@ -4368,6 +4816,12 @@ def declared_forcing_fetch(payload: Mapping[str, Any], data) -> list[str] | None
                f"names {[str(path) for path in data.forcing]}.")
             + " Re-author the configuration with `woof domain` to bind both "
               "to the same file.")
+    if cache_root is not None and not all(path.is_file() for path in data.forcing):
+        from woof.go_cli import GoRefusal, managed_download_dir
+        try:
+            out = managed_download_dir(Path(cache_root), dict(hints)).resolve()
+        except GoRefusal as error:
+            raise PlanError(str(error)) from None
     arguments = _fetch_arguments_from_hints(hints, out=out)
     from woof.cli import _join_negative_coordinates
     arguments = _join_negative_coordinates(arguments)
@@ -4375,6 +4829,37 @@ def declared_forcing_fetch(payload: Mapping[str, Any], data) -> list[str] | None
         arguments.append("--retrieve")
     _validate_fetch_arguments(arguments)
     return arguments
+
+
+def rebind_fetched_forcing(data, fetch_arguments: Sequence[str] | None):
+    """``data`` with missing declared forcing bound to where this run's fetch puts it.
+
+    :func:`declared_forcing_fetch` downloads missing forcing into the run's
+    own cache (``--out`` of ``fetch_arguments``), under the same file name
+    the configuration declares.  Returns ``(data, resolution)``; the
+    resolution is ``None`` when nothing was rebound (forcing on disk where
+    declared, several forcing files, or a fetch publishing to the declared
+    folder itself).
+    """
+
+    if data is None or not fetch_arguments or len(data.forcing) != 1:
+        return data, None
+    declared = Path(data.forcing[0])
+    arguments = [str(value) for value in fetch_arguments]
+    if declared.is_file() or "--out" not in arguments:
+        return data, None
+    index = arguments.index("--out")
+    if index + 1 >= len(arguments):
+        return data, None
+    target = (Path(arguments[index + 1]) / declared.name).resolve()
+    from woof.case_data import same_case_data_path
+    if same_case_data_path(declared, target):
+        return data, None
+    return dataclasses.replace(data, forcing=(target,)), {
+        "scope": "case_data", "key": "forcing", "value": [str(target)],
+        "basis": "run output root download cache",
+        "note": f"the declared forcing {str(declared)!r} is not on disk, so this "
+                "run downloads it under its own output root and reads it there"}
 
 
 def _prepare_stage(root: Path, *, arguments: Sequence[Any],
@@ -4558,14 +5043,57 @@ def _existing_prepared_bundle(plan: RunPlan) -> dict | None:
     return bundle
 
 
+def _prepared_launch_tiles(plan: RunPlan, exp, bundle: Mapping[str, Any]):
+    """The [tiles] an existing single-domain bundle's forecast runs under.
+
+    In order: ``run_options.forecast_tiles`` (``woof go --tiles``), the launch
+    config's own enabled [tiles], then the table a ``--prepare-only``
+    launch recorded beside the bundle (``woof.go_cli.LAUNCH_TILES_NAME``).
+    None of them enters the bundle's identity: the runner takes the mode
+    as its own ``--tiles``.  Breakage this closes: the two-step form
+    (``--prepare-only``, then ``--prepared-root``) of a domain the card
+    cannot hold resident was refused at the forecast with "[tiles] mode =
+    'auto'" as its remedy, and nothing on that launch could say it (a full
+    1800x1060 HRRR grid at 107 GiB on a 96 GiB card).  A tree bundle is
+    refused by name if a mode is asked of it (``stage_cli.streaming_flags``):
+    its [tiles] lives in its experiment table.
+    """
+
+    from woof.core.streaming import StreamingOptions
+
+    mode = plan.run_options.get("forecast_tiles")
+    if mode is not None:
+        return StreamingOptions.from_mapping({"mode": mode}, source="woof go --tiles")
+    if bundle.get("layout") != "single":
+        return None
+    declared = getattr(exp, "tiles", None)
+    if declared is not None and declared.enabled:
+        return declared
+    from woof.go_cli import LAUNCH_TILES_NAME
+
+    recorded = Path(bundle["document"]).parent / LAUNCH_TILES_NAME
+    if not recorded.is_file():
+        return None
+    try:
+        document = json.loads(recorded.read_text(encoding="utf-8"))
+        options = StreamingOptions.from_mapping(document["tiles"], source=str(recorded))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise PlanError(f"{recorded} is not a launch [tiles] record: {error}") from error
+    print(f"go: [tiles] mode = '{options.mode}' from {recorded} (the "
+          "--prepare-only launch's config); --tiles overrides it")
+    return options if options.enabled else None
+
+
 def _existing_prepared_forecast(plan: RunPlan, *, config_path: Path,
-                                observer: RunObserver, run_dir: Path) -> Mapping[str, Any]:
+                                observer: RunObserver, run_dir: Path,
+                                exp=None) -> Mapping[str, Any]:
     """Run the existing sim operation without a fetch or preparation retry."""
     from woof import stage_cli
 
     _validate_prepared_output(plan)
     bundle = _existing_prepared_bundle(plan)
     assert bundle is not None
+    tiles = _prepared_launch_tiles(plan, exp, bundle)
     restart = plan.run_options.get("restart")
     wps = plan.run_options.get("wps_namelist")
     forecast_dir = run_dir / "chain" / "run"
@@ -4577,7 +5105,8 @@ def _existing_prepared_forecast(plan: RunPlan, *, config_path: Path,
         state_backend=plan.run_options.get("state_backend"),
         **({"devices": plan.run_options["devices"]}
            if plan.run_options.get("devices") is not None else {}),
-        health_debug=bool(plan.run_options.get("health_debug")))
+        health_debug=bool(plan.run_options.get("health_debug")),
+        tiles=tiles)
     observer.arm_first_products(_chain_render_plan(
         plan, forecast_dir=forecast_dir, run_dir=run_dir))
     observer.enter_stage("forecast", phase="restore" if restart else "forecast")
@@ -4662,12 +5191,31 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
     # writes from the configuration into its own folder.  The same
     # function answered resolve_plan's question before anything was
     # fetched, so a configuration refused here was refused at the door.
+    route_report: dict[str, Any] = {}
     try:
         inputs = run_route_inputs(config_path, exp, raw=raw,
-                                  into=run_dir / "chain" / "route-inputs")
+                                  into=run_dir / "chain" / "route-inputs",
+                                  report=route_report)
     except HrrrRouteInputError as refusal:
         raise PlanError(str(refusal)) from None
     beside = route_input_paths(config_path)
+    disagreeing = route_report.get("disagreeing") or ()
+    if disagreeing:
+        # A set written before the configuration last changed: the root
+        # preparation reads the configuration, so the hierarchy would have
+        # refused this set after the fetch (WOOF canary run_0771cd8814b6e7f8,
+        # "[shared] gsd_diagnostics = 1" added after `woof domain`).
+        observer.warn(
+            "route_inputs_rendered",
+            f"the namelists beside {config_path.name} were written before "
+            f"it last changed: their d01 holds {', '.join(disagreeing)} "
+            f"differently from {config_path.name}, which the root "
+            "preparation reads, so the run wrote the whole set from the "
+            f"configuration into {inputs['namelist_input'].parent}. Next: "
+            "to keep a set in step, re-save the configuration through the "
+            "door that wrote it",
+            disagreeing=list(disagreeing),
+            written=str(inputs["namelist_input"].parent))
     # A partial set is not read: a namelist.input edited by hand beside a
     # configuration whose other companions are missing does not run, and
     # the run says so rather than leaving the edit to look applied.  The
@@ -4675,7 +5223,7 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
     unread = [path.name for role, path in beside.items()
               if role != "wps_namelist" and path.is_file()
               and inputs[role] != path]
-    if unread:
+    if unread and not disagreeing:
         missing = [path.name for path in beside.values() if not path.is_file()]
         observer.warn(
             "route_inputs_rendered",
@@ -4694,9 +5242,10 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
                     or intent.get("data_dir") or managed_download_dir(run_dir, hints))
     geog_root = plan.run_options.get("geog_root") or intent.get("geog_root")
     if geog_root is None:
-        from woof.geog_assets import default_geog_root
+        from woof.geog_assets import geog_root_from_tables
 
-        geog_root = default_geog_root()
+        geog_root = geog_root_from_tables(raw, base_dir=config_path.parent)
+    _stage_static_sources(raw, geog_root, base_dir=config_path.parent)
     # Not created here, and deliberately so: the preparer refuses an
     # --output-root that already exists ("refusing existing output
     # root"), which is its own create-only guarantee.  A re-run into the
@@ -4712,10 +5261,12 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
     # decodes each lead as its marker appears, publishes its head on the
     # first two leads and writes the source manifest at its seal.  The
     # fetch beside is ``None`` otherwise, and the window is fetched first.
-    from woof.preparation_assets import wif_fetch_domains
+    from woof.preparation_assets import (analyzed_aerosol_fetch_hints,
+                                          wif_fetch_domains)
 
     if wif_fetch_domains(exp, hints):
         hints = {**hints, "wif": True}
+    hints = analyzed_aerosol_fetch_hints(exp, hints)
     beside = _native_fetch_beside(plan, hints, exp, data_dir=data_dir,
                                   run_dir=run_dir, observer=observer,
                                   prepare_only=prepare_only)
@@ -4748,6 +5299,12 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
         observer.finish_stage(fetch={"arguments": beside.arguments,
                                      "as_posted": True,
                                      "posting": str(posting)})
+    # The chem sources (HRRR-Smoke's analysed and boundary smoke, the fire
+    # emissions) before preparation, as the staged chain does: preparation
+    # never downloads, so the packaged HRRR recipe on this chain stopped at
+    # its chem initial state with ChemSourceUnavailable 'hrrr-native-smoke'
+    # (a rented box, 2026-10-21 06Z).
+    _staged_chem_fetch(exp, observer)
 
     # -- prepare -------------------------------------------------------
     observer.enter_stage("prepare", phase="prepare")
@@ -4760,7 +5317,9 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
 
     cycle = parse_cycle(
         str(hints["cycle"]), "hrrr").strftime("%Y-%m-%d_%H:%M:%S")
-    cadence = int(exp.domains[0].history_interval_s)
+    # Preparation overrides the document's full-frame cadence, not the
+    # shorter alarm used to schedule its separate quick-look stream.
+    cadence = int(exp.root.full_history_interval_s or exp.root.history_interval_s)
     prepare = [
         sys.executable, "-m", "tools.prepare_hrrr_wrf",
         "--source-root", str(data_dir),
@@ -4835,6 +5394,9 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
             # reported as still does not.
             statics_corridor=config_declares_follow_source(exp),
             acknowledgements=tuple(exp.acknowledgements),
+            lifecycle_config=(config_path if any(
+                getattr(dc, name, None) is not None for dc in exp.domains
+                for name in ("spawn", "follow", "retire", "rearm")) else None),
             observe_stage=observe_stage)
 
     if len(exp.domains) == 1 and not prepare_only:
@@ -5001,6 +5563,11 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
     if getattr(getattr(exp, "simulated_radar", None), "enabled", False):
         from woof.simulated_radar_config import execution_flags
         argv += execution_flags(exp.simulated_radar)
+    # [radar_heating] crosses to the door the same way: beside the
+    # hash-bound experiment, so the preparation is the unheated control's.
+    if getattr(getattr(exp, "radar_heating", None), "enabled", False):
+        from woof.da.forecast_heating import execution_flags as heating_flags
+        argv += heating_flags(exp.radar_heating)
     observer.enter_stage("forecast", phase="forecast")
     from woof import prepared_single_domain_forecast as runner
 
@@ -5275,6 +5842,9 @@ def _hrrr_single_chain(*, prep_root: Path, preparation, forecast_dir: Path,
         if getattr(getattr(exp, "simulated_radar", None), "enabled", False):
             from woof.simulated_radar_config import execution_flags
             argv += execution_flags(exp.simulated_radar)
+        if getattr(getattr(exp, "radar_heating", None), "enabled", False):
+            from woof.da.forecast_heating import execution_flags as heating_flags
+            argv += heating_flags(exp.radar_heating)
         observer.enter_stage("forecast", phase="forecast")
         from woof import prepared_single_domain_forecast as runner
 
@@ -5403,6 +5973,7 @@ def _hrrr_hierarchy_stage(*, prep_root: Path, inputs: Mapping[str, Path],
                           observer: RunObserver,
                           statics_corridor: bool = False,
                           acknowledgements: Sequence[str] = (),
+                          lifecycle_config: Path | None = None,
                           observe_stage: bool = True) -> Path:
     """Build d02..dNN from the sealed root preparation.
 
@@ -5481,6 +6052,11 @@ def _hrrr_hierarchy_stage(*, prep_root: Path, inputs: Mapping[str, Path],
     # the fetch and the root preparation.
     for acknowledgement in acknowledgements:
         command += ["--ack", str(acknowledgement)]
+    if lifecycle_config is not None:
+        # The namelists cannot spell spawn/follow/retire/rearm, so the
+        # stage takes them from the config: a dormant storm slot's
+        # corridor must reach the whole parent, and a follower's its reach.
+        command += ["--lifecycle-config", str(lifecycle_config)]
     # Only when nonzero.  This stage raises on a negative lead, and
     # raises again if a lead is passed beside the deprecated
     # --valid-time; passing a bare 0 is legal but says nothing, and the
@@ -5600,10 +6176,42 @@ def _chain_render_plan(plan: RunPlan, *, forecast_dir: Path,
     """
 
     return {"run": forecast_dir, "render": forecast_dir.parent / "png",
+            "publish_root": plan.run_options.get("publish_root") or forecast_dir.parent / "www",
+            "publish_cmd": plan.run_options.get("publish_cmd"),
+            "hydro": plan.run_options.get("hydro") or "auto",
             "render_products": plan.run_options.get("render_products"),
             "render_section": plan.run_options.get("render_section"),
+            # The data source the run started from, as go's own plan
+            # carries it: the finalize render draws the run beside that
+            # source's model when the comparison engine knows it
+            # (go_cli._reference_compare_stage).  Without it a staged
+            # chain -- the route `woof go` takes for HRRR -- drew no
+            # comparison sheets at all.
+            **({"source": source}
+               if (source := _plan_fetch_source(plan)) is not None else {}),
             **({"restart": plan.run_options["restart"]}
                if plan.run_options.get("restart") is not None else {})}
+
+
+def _plan_fetch_source(plan: RunPlan) -> str | None:
+    """The config's ``[fetch] source``, or None when the plan names none.
+
+    An intent plan has no config bytes until the wizard has generated
+    them, and an unreadable config has already been refused by the
+    road that ran it; neither has a source to give here.
+    """
+
+    # A plan stand-in that carries only run options (the early render's
+    # callers and their fixtures) has no config to read a source from.
+    config_bytes = getattr(plan, "config_bytes", None)
+    if config_bytes is None:
+        return None
+    try:
+        raw = tomllib.load(io.BytesIO(config_bytes()))
+    except (PlanError, OSError, tomllib.TOMLDecodeError):
+        return None
+    source = (raw.get("fetch") or {}).get("source")
+    return str(source) if source else None
 
 
 def _chain_render(plan: RunPlan, *, forecast_dir: Path, run_dir: Path,
@@ -5635,6 +6243,33 @@ def _finish_render(render_plan: dict, *, observer: RunObserver,
             "Forecast completed, but requested pictures were not produced. "
             "Next: run woof setup, then render the saved forecast:\n  "
             + printable(render_command(render_plan)))
+
+
+def _stage_static_sources(raw, geog_root, *, base_dir) -> None:
+    """Fetch the published static files this run reads and is missing.
+
+    Called by each native chain before its forcing fetch, so a recipe
+    naming ``[static] source = "hrrr-conus-v4"`` (or a source whose
+    metadata selects it) gets the file through ``fetch-geog
+    --static-source``'s own fetch rather than a refusal at static
+    preparation after the download.  The lines go to stderr as notes, the
+    form a launch relays to the terminal, and never onto a stream a
+    run-plan consumer reads as events.
+    """
+
+    from woof.geog_assets import GeogFetchError
+    from woof.static.external_source import (StaticSourceError,
+                                              stage_required_static_sources)
+
+    def say(line: str) -> None:
+        line = line if line.startswith(("note:", "warning:")) else f"note: {line}"
+        print(line, file=sys.stderr, flush=True)
+
+    try:
+        stage_required_static_sources(raw, geog_root, base_dir=base_dir,
+                                      progress=say)
+    except (GeogFetchError, StaticSourceError) as error:
+        raise PlanError(str(error)) from None
 
 
 def _staged_prep_root(run_dir: Path) -> Path:
@@ -5698,34 +6333,54 @@ _POSTED_POLL_SECONDS = 0.2
 _POSTED_WAIT_SAY_SECONDS = 5.0
 
 
-def _staged_beside_refusal(hints: Mapping[str, Any], exp) -> str | None:
+def _staged_beside_refusal(hints: Mapping[str, Any], exp, *,
+                           separate_initial: bool = False) -> str | None:
     """Why the staged chain fetches this window whole before preparing, or ``None``.
 
     ``None``: the fetch runs beside the preparation, which starts on the
     window's start needs and waits for each later lead's marker
-    (``mapped_direct --as-posted``), and the forecast binds its head.  Each
-    reason names what reads the whole window first:
+    (``mapped_direct --as-posted``), and the forecast binds its head.  One
+    domain or a tree: an as-posted mapped tree's head prepares every child
+    under the input plan and its seal holds each child to that head
+    (``mapped_direct._prepare_chained_mapped_tree``,
+    ``boundary_stream.verify_as_posted_tree_children``).  Each reason names
+    what reads the whole window first:
 
     * the run asked for the whole cycle (``as_posted = false``);
     * the source's preparation reads a whole fetched window, or normalizes
       every input file before its decode
       (:func:`woof.source_cli.as_posted_refusal`);
-    * a domain tree: the as-posted mapped preparation prepares one domain,
-      because every child binds the input manifest at the tree's head;
     * an ensemble member: its member is verified over every input file
-      before the preparation (:func:`woof.forcing_member.verify_handoff`).
+      before the preparation (:func:`woof.forcing_member.verify_handoff`);
+    * a separate initial analysis (``--initial-inputs`` or the recipe's
+      ``[fetch] initial_source``): the mapped preparation checks it against
+      the complete forcing window before the start (``mapped_direct``).
     """
 
     if hints.get("as_posted") is False:
         return "the run asked for the whole cycle"
+    if separate_initial:
+        # Named breakage (2.9.4, HRRR recipe from NOAA's HRRR f00 + RAP
+        # boundaries): the default as-posted fetch either dropped the
+        # separate analysis (the run started from RAP's 13 km state: 2.4x
+        # the cloud water, f01 surface shortwave -23 W/m2 against NOAA) or,
+        # once the analysis reached the preparation, was refused there.
+        return ("its separate initial analysis is checked against the "
+                "complete forcing window before the start")
     from woof.source_cli import as_posted_refusal
 
     refusal = as_posted_refusal(str(hints.get("source")))
     if refusal is not None:
         return refusal
-    if len(exp.domains) > 1:
-        return ("a mapped domain tree prepares from the whole window: every "
-                "child binds the input manifest at the tree's head")
+    # Retired guard (2026-10-29, WOOF canary run_9498bc66b5fdd08c): a
+    # domain tree used to fetch its whole window first here, written
+    # 2026-09-30 when mapped_direct refused an as-posted tree.  That refusal
+    # was retired on 2026-10-02 (d7ab2f3d7f: the tree's head binds the input
+    # plan and its seal re-binds every child), but this one stayed, so every
+    # nested run on a mapped source waited for its cycle's LAST lead to post
+    # before preparing: the nyc-500m HRRR template launched 07:42Z on the
+    # still-posting 06Z cycle sat 14.5 min in fetch until f048 posted 07:57Z
+    # (19.1 min click to first map).
     from woof.forcing_member import member_contract
 
     try:
@@ -6025,9 +6680,72 @@ def _settle_posted_fetch(fetch: _PostedFetch, stopped: BaseException, *,
         raise failed from None
 
 
+def _staged_chem_fetch(exp, observer) -> None:
+    """Fetch the experiment's data-store chem sources over its own box and window."""
+    import subprocess
+    import sys
+
+    # The chem table read directly (go_cli is the GPU front door, which the
+    # standalone preparation package does not stage): the enabled sources a
+    # data store serves, as go_cli.chem_data_store_sources selects them.
+    from datetime import timedelta
+
+    from woof.chem_table import chem_names, load_sets
+    run = exp.domains[0].run
+    sets = chem_names(getattr(run, "chem_sets", None))
+    if not sets:
+        return
+    names = chem_names(getattr(run, "chem_sources", None), "chem_sources")
+    table = load_sets(sets, names)
+    from woof.data_store_fetch import is_listed_emission
+    # RAVE (a published-listing emission source) rides the same fetch, as
+    # go_cli.chem_data_store_sources selects it: the staged chain dropped it,
+    # so the HRRR recipe's fire hours were first fetched at the forecast's
+    # first fire step (a rented box, 2026-10-21 18:47Z, "chem fetch: rap-native-
+    # smoke, hrrr-native-smoke").
+    sources = tuple(name for name in names
+                    if name in table.sources
+                    and ((table.sources[name].acquisition is not None
+                          and table.sources[name].acquisition.get("kind") != "published_files")
+                         or is_listed_emission(table.sources[name])))
+    if not sources:
+        return
+    from woof.static.projection import grids_from_projection_config
+    lat, lon = grids_from_projection_config(exp)[0].latlon_mass()
+    margin = 0.5
+    area = ",".join(f"{value:.3f}" for value in (
+        float(lat.min()) - margin, float(lon.min()) - margin,
+        float(lat.max()) + margin, float(lon.max()) + margin))
+    start = exp.start_time.isoformat()
+    end = (exp.start_time + timedelta(seconds=float(exp.run_seconds))).isoformat()
+    from woof.chem_boundary_remap import boundary_rows
+    # Initial-only sources need one bracket. Fetching the full forecast
+    # otherwise decodes many gigabytes that no later frame consumes.
+    windows = {}
+    for name in sources:
+        initial = boundary_rows(table, name, available=names, frame="initial")
+        lateral = boundary_rows(table, name, available=names, frame="boundary")
+        emission = any(ref["source"] == name
+                       for row in table.rows for ref in row.emissions)
+        source_end = start if initial and not lateral and not emission else end
+        windows.setdefault(source_end, []).append(name)
+    for source_end, group in windows.items():
+        command = [sys.executable, "-m", "woof.data_store_fetch", "fetch"]
+        for name in group:
+            command.extend(("--source", name))
+        command.extend(("--area", area, "--start", start, "--end", source_end))
+        print(f"chem fetch: {', '.join(group)} over {area} through {source_end}", flush=True)
+        completed = subprocess.run(command, capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise PlanError(
+                f"the chem fetch for {', '.join(group)} failed (exit "
+                f"{completed.returncode}): {completed.stderr.strip()[-2000:]}")
+
+
 def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
                   observer: RunObserver, run_dir: Path,
-                  prepare_only: bool = False, reviewed_inputs=None) -> Mapping[str, Any]:
+                  prepare_only: bool = False, reviewed_inputs=None,
+                  defer_initial: bool = False) -> Mapping[str, Any]:
     """The staged route for a packaged mapped source: fetch, prep, sim.
 
     The documented per-stage chain for every packaged
@@ -6059,23 +6777,31 @@ def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
     # The [fetch] table plus the model top the config's ladder needs, when
     # the source's registry row says its fetch has to be asked for it, and
     # the host run_options.transport pins over the table's.
-    hints = _pinned_fetch_hints(plan, config_fetch_request(raw))
+    # Execution already retimed the config. Reapplying its nominal cycle
+    # here would erase the boundary source's resolved cycle offset.
+    hints = _pinned_fetch_hints(plan, config_fetch_request(raw), pin_cycle=False)
     intent = plan.config_intent or {}
     data_dir = Path(plan.run_options.get("data_dir")
                     or intent.get("data_dir") or managed_download_dir(run_dir, hints))
     geog_root = plan.run_options.get("geog_root") or intent.get("geog_root")
     if geog_root is None:
-        from woof.geog_assets import default_geog_root
+        from woof.geog_assets import geog_root_from_tables
 
-        geog_root = default_geog_root()
-    # The wizard writes the WPS namelist beside every emission, under
-    # the config's own stem; the mapped preparation binds it by digest.
-    namelist = config_path.with_name(f"{config_path.stem}.namelist.wps")
-    if not namelist.is_file():
-        raise PlanError(
-            f"the staged route reads {namelist.name} beside "
-            f"{config_path.name}, and `woof domain` writes it at "
-            "emission; this config was not emitted with one")
+        geog_root = geog_root_from_tables(raw, base_dir=config_path.parent)
+    _stage_static_sources(raw, geog_root, base_dir=config_path.parent)
+    # The WPS namelist the mapped preparation binds by digest: the one a
+    # door wrote beside the config under its own stem, or, where there is
+    # none (a shipped recipe, a hand-written or imported config), the one
+    # this run renders from the config into its own folder.  The same
+    # function answered resolve_plan's question before anything was
+    # fetched.
+    from woof.companion_domains import configuration_wps_namelist
+
+    try:
+        namelist = configuration_wps_namelist(
+            config_path, exp, raw=raw, into=run_dir / "chain" / "route-inputs")
+    except ValueError as refusal:
+        raise PlanError(str(refusal)) from None
     prep_root = _staged_prep_root(run_dir)
     forecast_dir = run_dir / "chain" / "run"
     #: The as-posted fetch running beside the preparation (_PostedFetch),
@@ -6084,9 +6810,28 @@ def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
     #: found) whole first.
     beside = posting = posted_handoff = posting_relay = None
 
+    # The analysis uses the same acquisition and handoff as every mapped
+    # source. An explicit inventory wins over the recipe's automatic fetch.
+    from woof.initial_source import initial_fetch_request, initial_inputs_from_fetch
+    initial_inputs = plan.run_options.get("initial_inputs")
+    initial_hints = initial_fetch_request(raw.get("fetch", {}))
+    if initial_inputs is None and initial_hints is not None and not defer_initial:
+        initial_hints = _pinned_fetch_hints(plan, initial_hints, pin_cycle=False)
+        # An analysis is one complete object set, never a streaming window.
+        initial_hints["as_posted"] = False
+        initial_hints.pop("late_after_minutes", None)
+        initial_dir = managed_download_dir(run_dir, initial_hints)
+        observer.enter_stage("fetch", phase="initial-fetch")
+        initial_report = _run_fetch(
+            _fetch_arguments_from_hints(initial_hints, out=initial_dir), run_dir,
+            events=getattr(observer, "events", None))
+        initial_inputs = initial_inputs_from_fetch(
+            initial_hints["source"], initial_dir,
+            run_dir / "chain" / "initial-inputs.json")
+        observer.finish_stage(fetch=initial_report, initial_inputs=str(initial_inputs))
+
     # -- fetch ---------------------------------------------------------
     observer.enter_stage("fetch", phase="fetch")
-    verdict = drivability_for(hints.get("source"))
     local_snapshot = None
     from woof.source_drivability import local_input_requested
     if local_input_requested(hints):
@@ -6128,17 +6873,20 @@ def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
                         "network_used": False, "input_sha256": snapshot["sha256"],
                         "file_count": len(snapshot["files"])}
     else:
-        from woof.preparation_assets import wif_fetch_domains
+        from woof.preparation_assets import (analyzed_aerosol_fetch_hints,
+                                              wif_fetch_domains)
 
         if wif_fetch_domains(exp, hints):
             hints = {**hints, "wif": True}
+        hints = analyzed_aerosol_fetch_hints(exp, hints)
         # Acquisition publishes complete extended paths on Windows. Keep the
         # same directory spelling when reading its handoff and writing the
         # verified member list, including cache roots beyond MAX_PATH.
         from woof.filesystem_paths import io_path
         data_dir = io_path(data_dir)
         fetch_arguments = _fetch_arguments_from_hints(hints, out=data_dir)
-        if _staged_beside_refusal(hints, exp) is None:
+        if _staged_beside_refusal(hints, exp,
+                                  separate_initial=initial_inputs is not None) is None:
             # AS POSTED (DESIGN A136 2.5): the fetch runs beside the
             # preparation, which starts on the window's start needs and
             # waits for each later lead's marker; its seal writes the input
@@ -6199,6 +6947,12 @@ def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
                 fetch_arguments, run_dir,
                 events=getattr(observer, "events", None), posting_relay=True)
         handoff_path = data_dir / fetch_routes.PREP_ARGUMENTS_NAME
+    # The data-store chem sources (HRRR-Smoke's analysed and boundary smoke)
+    # are fetched here as the prepared:go chain fetches them (go_cli
+    # chem_fetch_command): preparation never downloads, so the HRRR recipe
+    # on this staged chain stopped at "Initialize root forcing states" with
+    # ChemSourceUnavailable 'hrrr-native-smoke' (a rented box, 2026-10-21 16:32Z).
+    _staged_chem_fetch(exp, observer)
     # Sample at the first complete callback's exception, before run_chained
     # waits for a failed forecast's preparation to seal. A later fetch
     # timeout during that hold cannot become the run's primary failure.
@@ -6257,6 +7011,8 @@ def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
                 run_dir / "chain" / "inputs.json")
         arguments += [token for binding in supplements
                       for token in ("--supplement", binding)]
+        if initial_inputs is not None:
+            arguments += ["--initial-inputs", str(initial_inputs)]
         arguments += [
             # The four paths the handoff declares are the caller's.
             "--wps-namelist", str(namelist),
@@ -6453,6 +7209,8 @@ def _staged_chain(plan: RunPlan, *, config_path: Path, exp,
 def _prepared_chain_result(root: Path, config: Path, namelist: Path | None, *, bundle=None) -> dict:
     """Relay a prepared bundle and its authority paths without forecasting."""
     from woof.stage_cli import resolve_bundle
+    from woof.hydro.retention import pin_current
+    pin_current(root)
     bundle = resolve_bundle(root) if bundle is None else bundle
     return {'schema': 'gpuwm-preparation-result-v1', 'prepared_root': str(root.resolve()),
             'bundle': bundle, 'experiment_config': str(config.resolve()),
@@ -6469,6 +7227,9 @@ def _staged_forecast(argv: list[str], *, layout: str,
     reach the observer directly, so time-to-first-plot is real.
     """
 
+    from woof.hydro.retention import pin_current
+    if "--prepared-root" in argv:
+        pin_current(argv[argv.index("--prepared-root") + 1])
     if layout == "tree":
         from woof import prepared_domain_tree_forecast as runner
     else:
@@ -6705,7 +7466,8 @@ def _execute_prepared_route(plan: RunPlan, *, exp, data, config_path,
     run_dir = chain_io_root(plan.run_dir, downloads=False)
     if _existing_prepared_bundle(plan) is not None:
         return _existing_prepared_forecast(
-            plan, config_path=Path(config_path), observer=observer, run_dir=run_dir)
+            plan, config_path=Path(config_path), observer=observer, run_dir=run_dir,
+            exp=exp)
 
     from woof.go_cli import go_main
 
@@ -6773,9 +7535,12 @@ def _execute_prepared_route(plan: RunPlan, *, exp, data, config_path,
     # to `woof go` for it is a separate decision about that command's
     # surface, and this front door does not get to make it.
     args.render_products = plan.run_options.get("render_products")
+    args.publish_root = plan.run_options.get("publish_root")
+    args.publish_cmd = plan.run_options.get("publish_cmd")
     # The line the section products are cut along, stamped the same way;
     # `woof go --section` is the typed spelling of the same value.
     args.render_section = plan.run_options.get("render_section")
+    args.grib2 = bool(plan.run_options.get("grib2"))
     # No tree keyword any more: `woof go` itself dispatches a
     # multi-domain config to the tree runner, so this front door and
     # the interactive one now enter the same chain by the same call.
@@ -6842,7 +7607,11 @@ ROUTES: dict[str, Route] = {
                 "this process (what `woof run CONFIG` executes)",
         run_options=frozenset(_RUN_OPTION_DEFAULTS)
         - {"data_dir", "physics_profile", "prepared_root", "wps_namelist", "supplement",
-           "transport", "as_posted", "late_after_minutes", "cycle"},
+           "transport", "as_posted", "late_after_minutes", "cycle", "forecast_tiles",
+           # The staged chain's separately fetched analysis; this route reads
+           # its [case_data] inputs only, so a plan naming one is refused
+           # rather than silently ignored.
+           "initial_inputs"},
         execute=_execute_experiment_route),
 }
 
@@ -6909,6 +7678,8 @@ def manifest_physics(plan: RunPlan, *,
             from woof.physics_registry import registry_sha256
 
             document = experiment_physics(plan.config_bytes().decode("utf-8"))
+            from woof.smoke_receipts import config_receipt
+            document.update(config_receipt(plan.config_bytes().decode("utf-8")))
             document["stated_by"] = f"the {plan.config_kind} configuration's own switches"
             document["physics_registry_sha256"] = registry_sha256()
             return document
@@ -7053,6 +7824,17 @@ def write_manifest(plan: RunPlan, *, run_dir: Path, events_path: Path,
         "physics": manifest_physics(plan),
     }
     path = run_dir / MANIFEST_FILENAME
+    if plan.config_kind in ("path", "inline"):
+        from woof.smoke_receipts import config_receipt
+        try:
+            config_text = plan.config_bytes().decode("utf-8")
+        except PlanError:
+            # An absent configuration is the road's to class, inside its event
+            # boundary, as a plan defect (tests/test_runplan.py, the execution
+            # road); the manifest records no smoke receipt for a file it lacks.
+            config_text = None
+        if config_text is not None:
+            document.update(config_receipt(config_text))
     atomic_write_json(path, document)
     return path
 
@@ -7184,6 +7966,7 @@ def missing_inputs_refusal(missing: Sequence[Mapping[str, Any]], *,
                      remedy=remedy)
 
 
+@ledger_main
 def execute_plan(plan: RunPlan, *, events: EventStream) -> int:
     """Run one plan (:func:`_execute_plan`), leaving the process
     environment as it found it: the plan's ``state_backend`` is set for
@@ -7220,6 +8003,8 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
     run_id = hashlib.sha256(
         f"{plan.sha256}:{started_at_utc}:{os.getpid()}".encode("utf-8")
     ).hexdigest()[:16]
+    os.environ.setdefault("WOOF_RUN_ID", run_id)
+    bind_ledger(run_dir)
     manifest_path = write_manifest(
         plan, run_dir=run_dir, events_path=events.path, run_id=run_id,
         started_at_utc=started_at_utc)
@@ -7315,10 +8100,14 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
                                  resolution.get("generated_config"))
         if fetch_arguments is None:
             fetch_arguments = declared_forcing_fetch(
-                _config_for_declared_fetch(plan, resolution, run_dir), data)
+                _config_for_declared_fetch(plan, resolution, run_dir), data,
+                base_dir=None, cache_root=run_dir)
             if fetch_arguments is not None:
                 cycle_resolutions.append({"scope": "fetch", "key": "args",
                     "value": fetch_arguments, "basis": "configuration.fetch"})
+        data, rebound = rebind_fetched_forcing(data, fetch_arguments)
+        if rebound is not None:
+            cycle_resolutions.append(rebound)
         for warning in resolution["warnings"]:
             events.emit("warning", code="library_warning",
                         message=warning["action"], detail=warning["why"])
@@ -7382,6 +8171,10 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
                 error.folders = refusal.folders
             raise error
 
+        from woof.hydro.runtime import pending_launch_args, rebind_launch
+        if (hydro_args := pending_launch_args()) is not None:
+            rebind_launch(hydro_args, admitted=True)
+
         heartbeat = RuntimeHeartbeat(
             run_dir / HEARTBEAT_NAME, run_id=run_id,
             config_sha256=resolution["plan"]["config_sha256"],
@@ -7389,6 +8182,11 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
         observer = RunObserver(
             events, heartbeat=heartbeat, root_domain=exp.root.grid_id,
             accepted_wall=accepted_wall)
+        if plan.run_options.get("grib2"):
+            observer.arm_grib2(run_dir / "grib2")
+        from woof.live_columns import columns_enabled
+        if columns_enabled(plan.run_options):
+            observer.arm_columns(run_dir / "columns", experiment=exp)
         heartbeat.starting()
 
         if fetch_arguments is not None:
@@ -7461,6 +8259,9 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
 
         stage = "finalize"
         observer.enter_stage("finalize")
+        grib2_summary = observer.stop_grib2()
+        # Every grid's last frame too when the run ended off the hour; the files are already on disk.
+        observer.stop_columns()
         receipts = _receipts(run_dir)
         observer.finish_stage(receipts=receipts)
         heartbeat.complete(_finite_seconds(
@@ -7478,6 +8279,7 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
             # published no products early.
             first_products_seconds=observer.first_products_seconds,
             summary=dict(summary),
+            **({"grib2_summary": grib2_summary} if grib2_summary is not None else {}),
             **({"render_summary": observer._render_summary} if observer._render_summary is not None else {}))
         return 0
     except BaseException as error:  # noqa: BLE001 - every exit is an event
@@ -7490,7 +8292,15 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
             # could hold it for minutes, and the desktop kills it 5 s
             # after asking.
             try:
+                observer.stop_grib2(halt=interrupted)
+            except Exception:  # the failure is already carried by the event
+                pass
+            try:
                 observer.stop_live_products(halt=interrupted)
+            except Exception:  # noqa: BLE001 - the failure is the event
+                pass
+            try:
+                observer.stop_columns(halt=interrupted)
             except Exception:  # noqa: BLE001 - the failure is the event
                 pass
             observer.finish_stage(outcome="failed")
@@ -7535,6 +8345,15 @@ def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
             return INTERRUPT_EXIT_CODE
         if behind is not None:
             return SOURCE_BEHIND_EXIT_CODE
+        # A prepared forecast refused before integration is an argument/input
+        # refusal, not a failed forecast. Other chain failures keep their
+        # established exit 1; their stage status remains in the failed event.
+        if isinstance(error, StageExitError) and error.stage == "forecast" and exit_code == 2:
+            return 2
+        from woof.io.restart import RestartMismatchError
+
+        if isinstance(error, RestartMismatchError):
+            return 2
         return 1
 
 
@@ -7720,8 +8539,14 @@ def plan_at_cycle(plan: RunPlan, destination: Path) -> RunPlan:
     resolutions: list[dict[str, Any]] = []
     concrete = str(cycle)
     if concrete == "latest":
+        clock_hints = config_fetch_request(document)
+        if hints.get("initial_source"):
+            # The forecast clock follows its initial analysis, even when
+            # the lateral source has newer cycles available.
+            clock_hints = {"source": hints["initial_source"], "cycle": "latest",
+                           "hours": 0, "as_posted": False}
         arguments = _fetch_arguments_from_hints(
-            _pinned_fetch_hints(plan, config_fetch_request(document)),
+            _pinned_fetch_hints(plan, clock_hints),
             out=Path("latest"))
         arguments, resolutions, _warnings = resolve_fetch_cycle(arguments)
         concrete = _parse_fetch_arguments(arguments).cycle
@@ -7770,6 +8595,16 @@ def plan_readiness(plan: RunPlan, *, no_probe: bool = False
 
     from woof.fetch import readiness_for_fetch
 
+    if plan.run_options.get("prepared_root") is not None:
+        from woof.stage_cli import readiness_for_bundle
+
+        if plan.config_path is None:
+            raise PlanError("Prepared readiness requires its bound config file.")
+        return readiness_for_bundle(Path(plan.run_options["prepared_root"]),
+            experiment_config=plan.config_path,
+            wps_namelist=plan.run_options.get("wps_namelist"),
+            physics_profile=plan.run_options.get("physics_profile"),
+            restart=plan.run_options.get("restart"), devices=plan.run_options.get("devices"))
     arguments = (list(plan.fetch_arguments)
                  if plan.fetch_arguments is not None else None)
     cycle = plan.run_options.get("cycle")
@@ -7821,6 +8656,11 @@ def plan_readiness(plan: RunPlan, *, no_probe: bool = False
                 raise PlanError(f"--readiness: {error}") from error
         arguments = _fetch_arguments_from_hints(
             _pinned_fetch_hints(plan, hints), out=Path("readiness"))
+        from woof.go_cli import _local_input_readiness
+
+        local = _local_input_readiness(hints)
+        if local is not None:
+            return local
     parsed = _parse_fetch_arguments(arguments)
     try:
         return readiness_for_fetch(parsed, no_probe=no_probe)
@@ -8869,17 +9709,34 @@ def _source_coverage_facts(window: Any) -> dict[str, Any] | None:
     }
 
 
-def _source_fetch_facts(fetch_routes: Any, source_id: str) -> dict[str, Any]:
+def _source_fetch_facts(fetch_routes: Any, source_id: str,
+                        adapter: Any = None) -> dict[str, Any]:
     """Which transport, if any, can bring this source's bytes.
 
-    Three set memberships decide the answer, never a name: the route
-    table, the legacy-transport tuple, and the table's own named
-    refusals.  ``route_for`` is asked ONLY on the two arms that have no
+    The adapter acquisition owner, then three set memberships decide
+    the answer, never a name: the route table, legacy transports and
+    named refusals. ``route_for`` is asked ONLY on the two arms that have no
     transport, because it raises "has its own transport" for a legacy
     row -- true, and not a refusal.  Reporting that sentence as one
     would send a reader hunting for a fetch route that already works.
+
+    ``adapter`` is the registry row itself when the caller holds it (the
+    inventory does): a row appended to the registry has no entry in the
+    alias map built at import, so resolving it again by id refused the
+    very row the arbitrary acceptance test grafts on.
     """
 
+    from importlib import import_module
+    from woof.source_adapters import get_source_adapter
+
+    if adapter is None:
+        adapter = get_source_adapter(source_id)
+    if adapter.acquisition_owner:
+        owner = import_module(adapter.acquisition_owner)
+        return {"kind": "acquisition_owner", "route_id": None,
+                "refusal": None, "posting": None,
+                "acquisition_owner": adapter.acquisition_owner,
+                **owner.acquisition_facts(source_id)}
     if source_id in set(fetch_routes.route_ids()):
         return {"kind": "table_route", "route_id": source_id, "refusal": None,
                 "posting": _source_posting_facts(source_id)}
@@ -9056,7 +9913,8 @@ def source_inventory() -> dict[str, Any]:
                     "cadence_mapping": adapter.cadence_mapping,
                 },
                 "coverage": _source_coverage_facts(adapter.coverage_window),
-                "fetch": _source_fetch_facts(fetch_routes, adapter.source_id),
+                "fetch": _source_fetch_facts(fetch_routes, adapter.source_id,
+                                             adapter),
                 "run_plan": {
                     "intent_routes": sorted(verdict["routes"]),
                     "intent_supported": bool(verdict["routes"]),
@@ -9078,6 +9936,12 @@ def source_inventory() -> dict[str, Any]:
                 "source_id": getattr(adapter, "source_id", None),
                 "error": f"{type(error).__name__}: {error}",
             })
+    try:
+        from woof.composition_source import inventory_rows
+        document["composition_sources"] = inventory_rows()
+    except Exception as error:
+        document["composition_sources"] = []
+        document["composition_error"] = f"{type(error).__name__}: {error}"
     document["sources"] = rows
     return json.loads(json.dumps(document, default=_jsonable))
 
@@ -9544,6 +10408,7 @@ __all__ = [
     "declared_inputs", "disk_admission_refusal", "domain_size_floor",
     "missing_inputs_refusal",
     "estimate_plan", "execute_plan", "follow_statics_decision",
+    "follow_unsupported_refusal",
     "generate_intent_config", "physics_profile_menu", "render_catalog",
     "local_run_catalog", "plan_render_catalog", "LOCAL_RUN_CATALOG_BASIS",
     "source_inventory",

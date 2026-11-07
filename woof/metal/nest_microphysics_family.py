@@ -10,7 +10,8 @@ from .array import MetalArray, MetalArrayModule
 from .generated import kernel_specs
 
 
-_SYMBOLS = {"mp8_to_mp18_mass_diagnosed_field", "microphysics_edge_field"}
+_SYMBOLS = {"mp8_to_mp18_mass_diagnosed_field", "microphysics_edge_field",
+            "carry_number"}
 
 
 def my2_constants(context):

@@ -25,7 +25,7 @@ def compare(fixture_dir,output,diagnostic_no_fma=False,diagnostic_reference_metr
             source = reference_metric_source(source)
         if diagnostic_glibc_power:
             header = (Path(kernels.__file__).parent/"glibc_flt32.cuh").read_text()
-            source = source.replace("// woof/core/kernels/smag2d.cu",header+"\n// woof/core/kernels/smag2d.cu",1)
+            source = source.replace("// gpuwm/core/kernels/smag2d.cu",header+"\n// gpuwm/core/kernels/smag2d.cu",1)
             original_power = "chm * coefc * tketmp * sqrtf(tketmp) / l"
             if source.count(original_power)!=1:
                 raise ValueError("TKE dissipation power site changed")

@@ -60,6 +60,24 @@ requires_staged_real_inputs = pytest.mark.skipif(
 )
 
 
+def _as_windows(monkeypatch, pf):
+    """Price the card as Windows does, without breaking this host's TLS.
+
+    ``pf.sys`` is the interpreter's one ``sys``: under ``platform =
+    "win32"`` a first ``urllib`` opener on Linux reaches
+    ``ssl._load_windows_store_certs`` and dies (NameError
+    enum_certificates).  The keyless ERA5 default reads the ARCO store's
+    bounds document over HTTPS, so these tests answer that read the way an
+    unreadable document is answered (None: the declared publication delay
+    stands) instead of opening a socket under a faked platform.
+    """
+    from woof import source_availability
+
+    monkeypatch.setattr(source_availability, "published_stop",
+                        lambda window, **_kw: None)
+    monkeypatch.setattr(pf.sys, "platform", "win32")
+
+
 def _run_wizard(tmp_path, *extra, point="39.7,-96.6", card="16gb",
                 ladder="12-3", source="era5", cycle="1999-05-03T12"):
     out = tmp_path / "area.toml"
@@ -125,8 +143,6 @@ def _assert_refused(capsys, needle: str, rc: int) -> None:
     ("35.3", "lat,lon"),
     ("abc,-97.5", "decimal degrees"),
     ("95.0,-60.0", "[-90, 90]"),
-    ("90.0,-60.0", "pole itself"),
-    ("-90.0,10.0", "pole itself"),
     ("35.3,-400.0", "[-180, 180]"),
 ])
 def test_point_rejections(tmp_path, capsys, point, needle):
@@ -455,45 +471,20 @@ def test_tropical_points_get_the_halved_root_clock(tmp_path, capsys):
     assert "TROPICAL CLOCK" not in text
 
 
-def test_polar_fetch_box_stays_clear_of_the_pole(tmp_path, capsys):
-    """PP-11: the wizard suggested `--area ...,90.00,...` for Tromso.
-
-    The README refuses domains touching a pole; suggesting a forcing box
-    whose top edge IS the pole, with no comment, contradicts it -- and
-    `woof fetch` accepted the box and downloaded 89 MB.
-    """
-    from woof.domain_wizard import MAX_FETCH_ABS_LAT, POLE_CLEARANCE_DEG
-
-    assert 0.0 < POLE_CLEARANCE_DEG < 1.0
-    assert MAX_FETCH_ABS_LAT == pytest.approx(90.0 - POLE_CLEARANCE_DEG)
-
-    # A 32 GiB card, so the footprint is large enough to reach the pole
-    # in the first place -- on the small tiers the fitted domain now stops
-    # short of it and the clamp never fires, which proves nothing.
-    rc, out = _run_wizard(tmp_path, point="69.65,18.96", source="gfs",
-                          cycle="2026-07-29T18", card="32gb")
-    captured = capsys.readouterr()
-    printed = captured.out
-    assert rc == 0, printed
-    raw = tomllib.loads(out.read_text(encoding="utf-8"))
-    south, west, north, east = (
-        float(v) for v in raw["fetch"]["area"].split(","))
-    assert abs(north) <= MAX_FETCH_ABS_LAT + 1e-9
-    assert abs(south) <= MAX_FETCH_ABS_LAT + 1e-9
-    assert north < 90.0 and south > -90.0
-    # This particular point clamps, so it must say so rather than
-    # silently handing over a box it refuses elsewhere.  The clamp is
-    # a one-line warning now (stderr), with the mechanism on --explain.
-    assert "clear of the pole" in captured.err
-    from woof.fetch import parse_area
-    parse_area(raw["fetch"]["area"])  # still a valid fetch box
-
-
-def test_pole_containing_domain_refused(tmp_path, capsys):
-    # Genuine limit: the fitted footprint may not contain the pole.
-    rc, _ = _run_wizard(tmp_path, point="89.0,-100.0", ladder="12",
-                        source="gfs", cycle="2026-07-28T06")
-    _assert_refused(capsys, "pole", rc)
+@pytest.mark.parametrize("lat", [90.0, -90.0, 89.0])
+def test_pole_containing_polar_domain_roundtrips(tmp_path, capsys, lat):
+    rc, out = _run_wizard(tmp_path, point=f"{lat},0", ladder="12",
+                          source="gfs", cycle="2026-07-29T18")
+    assert rc == 0, capsys.readouterr().err
+    raw = tomllib.loads(out.read_text())
+    assert raw["projection"]["map_proj"] == "polar"
+    south, west, north, east = map(float, raw["fetch"]["area"].split(","))
+    assert (west, east) == (-180.0, 180.0)
+    assert (north if lat > 0 else south) == (90.0 if lat > 0 else -90.0)
+    exp = load_experiment(out)
+    assert exp.projection.map_proj == "polar"
+    grids = grids_from_wps_namelist(out.with_suffix(".namelist.wps"))
+    assert grids[0].map_proj == "polar"
 
 
 def test_margined_span_over_180_is_never_emitted_as_a_flipped_box():
@@ -760,7 +751,7 @@ def test_the_wizard_budgets_with_the_platform_envelope_factor(
     """
     import woof.core.preflight as pf
 
-    monkeypatch.setattr(pf.sys, "platform", "win32")
+    _as_windows(monkeypatch, pf)
     rc, out = _run_wizard(tmp_path / "win", "--explain", card="24gb")
     windows_out = capsys.readouterr().out
     assert rc == 0
@@ -814,7 +805,7 @@ def test_windows_12gib_sizes_under_the_measured_model(
     """
     import woof.core.preflight as pf
 
-    monkeypatch.setattr(pf.sys, "platform", "win32")
+    _as_windows(monkeypatch, pf)
     rc, out = _run_wizard(tmp_path / ladder, "--explain", card="12gb",
                           ladder=ladder)
     assert rc == 0, ladder
@@ -851,7 +842,7 @@ def test_every_windows_card_takes_the_one_measured_accounting(
     """Card size never selects a different formula (the #162 split)."""
     import woof.core.preflight as pf
 
-    monkeypatch.setattr(pf.sys, "platform", "win32")
+    _as_windows(monkeypatch, pf)
     rc, _ = _run_wizard(tmp_path / "sixteen", "--explain", card="16gb")
     assert rc == 0
     printed = capsys.readouterr().out
@@ -1045,8 +1036,72 @@ def test_children_are_centered_on_the_point(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# GFS/HRRR accuracy: no [case_data], actionable front-door messages
+# GFS/HRRR prepared routes and their saved geography inputs
 # ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("source", ["gfs", "hrrr"])
+def test_native_source_keeps_explicit_geography_root(
+        tmp_path, monkeypatch, capsys, source):
+    """D2: a root given to domain survives into check and bare go."""
+    import shlex
+    from woof import go_cli
+    from woof.geog_assets import config_geog_root, geog_datasets
+    from woof.static import terrain_autosmooth
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    for key in ("GPUWM_CASE_DATA_ROOT", "XDG_DATA_HOME", "CDSAPI_KEY", "CDSAPI_URL"):
+        monkeypatch.delenv(key, raising=False)
+    geog = tmp_path / "elsewhere" / "WPS_GEOG"
+    from _staged_geog import staged_geog_tree
+    staged_geog_tree(geog)
+    # These fixtures cover index discovery, not terrain sampling.
+    monkeypatch.setattr(terrain_autosmooth, "survey_domain_terrain",
+                        lambda *args, **kwargs: [])
+    checked_roots = []
+    geography_refusal = go_cli.geography_refusal
+
+    def check_geography(root, **kwargs):
+        checked_roots.append(Path(root))
+        return geography_refusal(root, **kwargs)
+
+    monkeypatch.setattr(go_cli, "geography_refusal", check_geography)
+    rc, out = _run_wizard(
+        tmp_path, "--geog-root", str(geog), "--hours", "1",
+        "--point-extent-km", "1500", point="37.5,-90", ladder="12",
+        source=source, cycle="2026-10-17T00")
+    assert rc == 0
+    printed = capsys.readouterr()
+    raw = tomllib.loads(out.read_text())
+    # The wizard writes the root with forward slashes (TOML-safe on every
+    # platform); the hosted Windows CI compared that text with str(Path)
+    # and refused 2.9.2's first publish.  Compare paths, not spellings.
+    assert Path(raw["static"]["geog_root"]) == geog.resolve()
+    assert "case_data" not in raw
+    assert config_geog_root(out) == geog.resolve()
+    assert "geography BLOCKER" not in printed.err
+    assert "geography staging is the next step" not in printed.out
+    command = printed.out.split("next:")[-1].strip().splitlines()[0]
+    assert "--geog-root" not in command
+    # The printed command spells the configuration with forward slashes
+    # (shlex-safe on Windows, where a backslash path would lose its
+    # separators); compare the path, not the spelling.
+    words = shlex.split(command)
+    assert words[:2] == ["woof", "go"] and len(words) == 3
+    assert Path(words[2]) == out
+
+    checked_roots.clear()
+    assert cli_main(["check", str(out), "--budget-gib", "20"]) == 0
+    assert checked_roots == [geog.resolve()]
+    assert "geography BLOCKER" not in capsys.readouterr().err
+    checked_roots.clear()
+    assert cli_main([*shlex.split(command)[1:], "--dry-run"]) == 0
+    assert checked_roots == [geog.resolve()]
+    preview = capsys.readouterr()
+    assert "missing geography indexes" not in preview.err
+    assert not (home / ".local/share/woof/WPS_GEOG").exists()
+
 
 @pytest.mark.parametrize("source", ["gfs", "hrrr"])
 def test_native_sources_omit_case_data(tmp_path, capsys, source):
@@ -1981,36 +2036,121 @@ def test_wizard_ends_with_three_numbered_commands_and_nothing_after(
     assert "after the fetch lands" in numbered[1]
 
 
-def test_the_era5_next_block_names_the_missing_cds_key_only_when_missing(
+def test_the_default_era5_provider_is_keyless_without_a_cds_key(
         tmp_path, capsys, monkeypatch):
-    """A first-run pointer that is a pointer, and only when it is true.
+    """No CDS key: the default reads the keyless ARCO store and says why.
 
-    Presence of ``~/.cdsapirc`` is the one prerequisite of the ERA5
-    route that lives entirely outside this project, and without it the
-    failure arrives several commands later as a cdsapi exception.  A
-    line that printed whether or not the key was there would be noise
-    on every subsequent run, so it is gated on the file.
+    Replaces test_the_era5_next_block_names_the_missing_cds_key_only_when_missing
+    (2.9.2, 003fe55ab): the next block no longer names a missing key because the
+    default needs none.
+
+    Breakage it prevents: the default `woof domain` wrote a CDS-only
+    [fetch] table, so the default `woof go` stopped at acquisition on a
+    computer with no ``~/.cdsapirc`` while `woof doctor` reported the
+    keyless ARCO store available.  With a key the CDS stays the default,
+    byte for byte the table it always was.
     """
 
     from woof import fetch
 
+    for name in ("CDSAPI_KEY", "CDSAPI_URL", "CDSAPI_RC"):
+        monkeypatch.delenv(name, raising=False)
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr(fetch.Path, "home", staticmethod(lambda: home))
 
-    rc, _ = _run_wizard(tmp_path / "no-key", source="era5")
+    rc, out = _run_wizard(tmp_path / "no-key", "--explain", source="era5")
     absent = capsys.readouterr().out
     assert rc == 0
-    assert "Copernicus CDS key" in absent
-    assert str(home / fetch.CDSAPIRC_NAME) in absent
+    config = tomllib.loads(out.read_text(encoding="utf-8"))
+    assert config["fetch"]["era5_provider"] == "arco"
+    assert config["case_data"]["forcing"][0].endswith(
+        fetch.era5_combined_name("arco"))
+    chosen = [line for line in absent.splitlines()
+              if line.startswith("source: ERA5 from Google's keyless ARCO store")]
+    assert len(chosen) == 1 and str(home / fetch.CDSAPIRC_NAME) in chosen[0]
+    step = next(line for line in absent.splitlines() if "1. woof fetch" in line)
+    assert "--era5-provider arco" in step
+    # No pointer telling a keyless user to go and register for a CDS key.
+    assert "Copernicus CDS key needed" not in absent
 
     (home / fetch.CDSAPIRC_NAME).write_text("url: x\nkey: y\n")
-    rc, _ = _run_wizard(tmp_path / "with-key", source="era5")
+    rc, out = _run_wizard(tmp_path / "with-key", "--explain", source="era5")
     present = capsys.readouterr().out
     assert rc == 0
-    assert "Copernicus CDS key" not in present
-    # The fetch step itself is unchanged either way.
+    config = tomllib.loads(out.read_text(encoding="utf-8"))
+    assert "era5_provider" not in config["fetch"]
+    assert config["case_data"]["forcing"][0].endswith(fetch.era5_combined_name("cds"))
+    assert "ARCO" not in present
     assert "1. woof fetch --source era5" in present
+    assert "--era5-provider" not in present
+
+    # A provider named on the command line is kept, key or no key.
+    (home / fetch.CDSAPIRC_NAME).unlink()
+    rc, out = _run_wizard(tmp_path / "named", "--era5-provider", "cds", source="era5")
+    named = capsys.readouterr().out
+    assert rc == 0
+    assert tomllib.loads(out.read_text(encoding="utf-8"))["fetch"]["era5_provider"] == "cds"
+    assert "keyless ARCO store" not in named
+    assert "Copernicus CDS key" in named
+
+
+def test_the_default_source_runs_on_gfs_when_the_keyless_store_lacks_the_window(
+        tmp_path, capsys, monkeypatch):
+    """No CDS key and a recent date: the default runs on GFS and says why.
+
+    Breakage it prevents: ERA5 is published about a week behind real
+    time, so a bare `woof domain` for yesterday's date wrote an ARCO
+    [fetch] table the store could not serve and the default `woof go`
+    failed outright at the fetch, after the plan had been accepted.  A
+    window the store holds stays on ERA5; `--source era5` named for a
+    window it lacks is refused here, naming the newest cycle it holds.
+    """
+
+    from datetime import datetime
+
+    from woof import fetch
+
+    for name in ("CDSAPI_KEY", "CDSAPI_URL", "CDSAPI_RC"):
+        monkeypatch.delenv(name, raising=False)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(fetch.Path, "home", staticmethod(lambda: home))
+    newest = datetime(2026, 10, 11, 12)
+
+    def fake_resolve(source, last_hour, **selection):
+        assert source == "era5" and selection.get("provider") == "arco"
+        return newest
+
+    monkeypatch.setattr(fetch, "resolve_latest_cycle", fake_resolve)
+
+    def bare(folder, cycle, *extra):
+        out = tmp_path / folder / "area.toml"
+        rc = cli_main(["domain", "--point=39.7,-96.6", "--card", "16gb",
+                       "--ladder", "12-3", "--cycle", cycle, "--out", str(out),
+                       "--explain", *extra])
+        captured = capsys.readouterr()
+        return rc, out, captured.out + captured.err
+
+    rc, out, text = bare("recent", "2026-10-16T00")
+    assert rc == 0
+    config = tomllib.loads(out.read_text(encoding="utf-8"))
+    assert config["fetch"]["source"] == "gfs"
+    assert "era5_provider" not in config["fetch"]
+    chosen = [line for line in text.splitlines() if line.startswith("source: GFS, because ERA5 for 2026-10-16T00Z")]
+    assert len(chosen) == 1 and "2026-10-11T12Z" in chosen[0] and "no Copernicus CDS key" in chosen[0]
+    assert "keyless ARCO store, because" not in text
+
+    rc, out, text = bare("held", "2026-10-10T00")
+    assert rc == 0
+    config = tomllib.loads(out.read_text(encoding="utf-8"))
+    assert config["fetch"]["source"] == "era5" and config["fetch"]["era5_provider"] == "arco"
+    assert "source: GFS" not in text and "keyless ARCO store, because" in text
+
+    rc, out, text = bare("named", "2026-10-16T00", "--source", "era5")
+    assert rc != 0 and not out.exists()
+    assert "not in Google's keyless ARCO store yet" in text
+    assert "2026-10-11T12Z" in text and "--source gfs" in text
 
 
 def test_the_next_block_credential_line_is_derived_from_the_registry_row(
@@ -2598,6 +2738,28 @@ def test_hrrr_emission_preserves_an_explicit_profile_beyond_the_default(
         assert getattr(default.root.run, key) == value, key
 
 
+def _named_licence_opt_in(source: str) -> tuple[str, ...]:
+    """The licence(s) a licence-gated row's own refusal names, else none.
+
+    Rows whose weights are not permissive refuse every default path and
+    name the exact ``--accept-licence`` value that opts in.  A sweep over
+    every planable row opts in with exactly that value, as a user would;
+    the refusal itself is held by the licensing tests.
+    """
+
+    import shlex
+
+    from woof.earth2_licensing import check_argv
+
+    try:
+        check_argv(["domain", "--source", source])
+    except ValueError as refusal:
+        match = re.search(r"--accept-licence (.+)$", str(refusal))
+        assert match, refusal
+        return tuple(shlex.split(match.group(1)))
+    return ()
+
+
 def _advised_lighter_profiles(message: str) -> list[str]:
     """The suite names a no-fit refusal advises, in printed order."""
 
@@ -2647,11 +2809,38 @@ def test_no_fit_advice_names_only_profiles_the_same_source_accepts(
     # Advice ranking needs a valid request to reach memory sizing, not a
     # 2026 window refused by the source's unchanged temporal guard.
     cycle = "1957-12-18T12" if source == "20crv3-cf" else "2026-08-12T00"
+    # The dated GEFS archive rows (lane/cap-gefs-archive, 11c73fea3b9 and
+    # 6a3b8fd50bf) are closed publication eras, and the GEFS reforecast
+    # publishes no f000: the request is placed inside the source's own
+    # declared era and starts at its own first published lead, both read
+    # from the route table.
+    start = []
+    from woof import fetch_routes
+    canonical = fetch_routes.canonical_source(source)
+    if canonical in fetch_routes.route_ids():
+        route = fetch_routes.route_for(canonical)
+        from datetime import datetime
+        asked = datetime.fromisoformat(cycle)
+        eras = route.publication_eras
+        if eras and not any(era.valid_from <= asked and (
+                era.valid_until is None or asked < era.valid_until)
+                for era in eras):
+            # The newest era the route prepares, at its own first cycle:
+            # fix/ifs-0p1-first-cycle (17d77cbbaa) gives ecmwf-open-data-0p1
+            # a first-cycle era with a prep_refusal and starts its 06/18Z
+            # era at 18Z, so midnight of that day predates the set.
+            preparable = [era for era in eras if not era.prep_refusal]
+            cycle = f"{preparable[-1].valid_from:%Y-%m-%dT%H}"
+        if route.first_lead:
+            start = ["--forecast-start-hour", str(route.first_lead)]
+
+    opt_in = [token for licence in _named_licence_opt_in(source)
+              for token in ("--accept-licence", licence)]
 
     def _argv(vram: str) -> list[str]:
         return ["domain", f"--point={point}", "--ladder", "12",
                 "--source", source, "--cycle", cycle,
-                "--hours", "6", "--vram-gib", vram]
+                "--hours", "6", "--vram-gib", vram, *start, *opt_in]
 
     # Force the fit loop's own refusal -- the one that ranks lighter
     # profiles.  The card size that reaches it depends on the source's
@@ -3287,9 +3476,14 @@ def test_the_minimum_layout_refusal_does_not_contradict_itself(
     # spacing table's heavier suite, whose kernel set alone overflows a
     # 4 GiB card (the no-layout-can-help arm, pinned in
     # tests/test_domain_wizard_memory_remedy.py).
+    # 5 GiB since 97e9a3ca061 (cap-hail): automatic HAILCAST's 7,392-B
+    # kernel frame lifted the grid-independent floor to 2.88 GiB, over the
+    # 4 GiB card's 2.75 GiB budget, so 4 GiB now answers with the
+    # no-layout-can-help arm; 5 GiB (3.75 GiB budget) sits between that
+    # floor and the minimum layout's 4.34 GiB envelope.
     from woof.physics_menu import default_profile_for
 
-    rc = cli_main(["domain", "--point=35.22,-97.44", "--vram-gib", "4",
+    rc = cli_main(["domain", "--point=35.22,-97.44", "--vram-gib", "5",
                    "--ladder", "12-3-1-0.5", "--source", "gfs",
                    "--physics-profile", default_profile_for("gfs"),
                    "--cumulus", "grid",
@@ -3621,8 +3815,20 @@ def test_the_cadence_advisory_fires_for_every_offered_suite(profile):
 
     switches = profile_switches(profile)
     lw, sw = radiation_scheme_ids(switches)
-    assert lw > 0 or sw > 0  # the premise above, pinned
+    if lw == sw == 0:
+        assert radiation_cadence_advisory(profile, 4) == []
+        assert radiation_cadence_advisory(profile, 1) == []
+        return
     notes = radiation_cadence_advisory(profile, 4)
     assert len(notes) == 1
     assert f"radt {float(switches['radt']):g}" in notes[0]
     assert radiation_cadence_advisory(profile, 1) == []
+
+
+@pytest.mark.parametrize("source", ["gfs", "ifs", "aifs", "gdas"])
+def test_polar_cap_full_longitude_uses_global_coverage_metadata(source):
+    from woof.domain_wizard import _projection_entries, fetch_area_hint
+    projection = _projection_entries(90.0, 0.0)
+    area = tuple(map(float, fetch_area_hint(
+        projection, 250, 200, source=source, root_dx_m=12000.0).split(',')))
+    assert area[1:] == (-180.0, 90.0, 180.0)

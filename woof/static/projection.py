@@ -101,6 +101,54 @@ def latlon_blocker() -> str:
             "the map_proj == 6 curvature branch")
 
 
+#: WRF's header code for the regular/rotated latitude-longitude grid.
+WRF_LATLON_MAP_PROJ = 6
+
+#: Every spelling of that grid a namelist or a door hands in, normalized
+#: (lower case, ``_`` -> ``-``).  WPS itself spells it 'lat-lon'.
+LATLON_SPELLINGS = frozenset({
+    "lat-lon", "latlon", "regular-ll", "rotated-lat-lon", "rotated-ll",
+})
+
+
+def is_latlon_map_proj(value) -> bool:
+    """Is ``value`` (a WPS string or a WRF MAP_PROJ code) the lat-lon grid?"""
+
+    if isinstance(value, str):
+        return value.strip().lower().replace("_", "-") in LATLON_SPELLINGS
+    try:
+        return int(float(value)) == WRF_LATLON_MAP_PROJ
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def latlon_refusal() -> str:
+    """The named refusal every door gives a lat-lon grid in this release.
+
+    It names what is unsupported and the breakage it prevents: the grid
+    would otherwise be read the way a conformal grid is, with ONE
+    isotropic map factor, where a lat-lon grid has distinct x and y map
+    factors (and, rotated, a pole), so its winds, pressure gradients and
+    geography would be placed wrong.
+    """
+
+    return ("map_proj lat-lon (WRF 6) is not supported in this release; "
+            "the grid would be read with conformal map factors (one "
+            "isotropic factor in place of lat-lon's separate x and y "
+            "factors, no rotated pole), so its winds, pressure gradients "
+            "and geography would be mis-placed")
+
+
+class LatLonProjectionRefusal(NotImplementedError, ValueError):
+    """A lat-lon grid refused by name.
+
+    A ``NotImplementedError`` (what an unimplemented projection has
+    always raised) that is ALSO a ``ValueError``, so the doors that turn
+    ``ValueError`` into a printed sentence print this one instead of
+    escaping with a traceback.
+    """
+
+
 def _free_rust_grid_handle(handle: int) -> None:
     """weakref.finalize target: release a crate grid handle, silently
     tolerating a bridge already torn down at interpreter exit."""
@@ -392,8 +440,30 @@ class ProjectedGrid:
             return None
         handle = self._rust_handle(bridge)
         ny, nx = self._stagger_shape(stagger)
+        if len(kinds) > 1:
+            return bridge.grid_arrays(handle, stagger, kinds, ny, nx)
         return tuple(bridge.grid_array(handle, stagger, kind, ny, nx)
                      for kind in kinds)
+
+    def native_static_geometry(self):
+        """Generate the static geometry using one mass-coordinate pass.
+
+        Respect subclasses overriding public fields. An unavailable native
+        seam retains the existing public-method fallback and its reporting.
+        """
+        methods = ("mapfac_m", "mapfac_u", "mapfac_v", "coriolis_m", "rotation_m")
+        if all(getattr(type(self), name) is getattr(ProjectedGrid, name)
+               and name not in self.__dict__ for name in methods):
+            mass = self._rust_arrays(0, (2, 3, 4, 5, 6))
+            if mass is not None:
+                return {"MAPFAC_M": mass[0], "MAPFAC_U": self.mapfac_u(),
+                        "MAPFAC_V": self.mapfac_v(), "F": mass[1], "E": mass[2],
+                        "SINALPHA": mass[3], "COSALPHA": mass[4]}
+        result = {"MAPFAC_M": self.mapfac_m(), "MAPFAC_U": self.mapfac_u(),
+                  "MAPFAC_V": self.mapfac_v()}
+        result["F"], result["E"] = self.coriolis_m()
+        result["SINALPHA"], result["COSALPHA"] = self.rotation_m()
+        return result
 
     # -- staggered coordinate arrays ----------------------------------------
 
@@ -787,23 +857,21 @@ def projection_class(map_proj: str) -> type[ProjectedGrid]:
                "polar": PolarStereoGrid}
     key = str(map_proj).lower()
     if key not in classes:
-        latlon = key in {
-            "lat-lon", "latlon", "regular_ll", "rotated-lat-lon",
-            "rotated_ll",
-        }
-        blocker = f"; {latlon_blocker()}" if latlon else ""
         named = ", ".join(repr(name) for name in implemented_projections())
+        if is_latlon_map_proj(key):
+            raise LatLonProjectionRefusal(
+                f"{latlon_refusal()} (map_proj {map_proj!r}; implemented: "
+                f"{named}); {latlon_blocker()}")
         raise NotImplementedError(
             f"map_proj {map_proj!r} not supported (implemented: "
-            f"{named}){blocker}")
+            f"{named})")
     return classes[key]
 
 
-#: Cells of clearance between a root domain's footprint and the
-#: projection pole.  A footprint that contains (or touches within this
-#: margin) the pole is refused: lat-lon source interpolation and
-#: static-tile windowing are not pole-capable, which is a property of
-#: the pipeline rather than of any one projection.
+#: Clearance from the Lambert cone tip, where longitude is singular.
+#: Polar stereographic is regular through its hemisphere's pole; the
+#: forcing and static windows keep periodic and reflected pole donors.
+#: The geometric predicate below also identifies those valid polar caps.
 POLE_CLEARANCE_CELLS = 2.0
 
 
@@ -933,6 +1001,18 @@ def grids_from_wps_namelist(path) -> list[ProjectedGrid]:
     max_dom = int(v.get("max_dom", [1])[0])
     from woof.wps_domain_ids import domain_ids_from_wps_text
     domain_ids_from_wps_text(Path(path).read_text(encoding="utf-8-sig"), max_dom)
+    # Absent keys are a refusal that names them, not a KeyError traceback:
+    # every door that reads the WPS twin (woof go --dry-run's geography
+    # check, fetch-geog --config) turns ValueError into a sentence and
+    # nothing else.
+    needed = ["e_we", "e_sn", "dx", "dy", "ref_lat", "ref_lon", "truelat1"]
+    if proj == "lambert":
+        needed += ["truelat2", "stand_lon"]
+    absent = [name for name in needed if name not in v]
+    if absent:
+        raise ValueError(
+            f"{path}: &geogrid names no {', '.join(absent)}; a WPS namelist "
+            f"declares {', '.join(needed)} for its grids.")
     e_we, e_sn = v["e_we"], v["e_sn"]
     # &share/max_dom and the &geogrid per-domain arrays are declared
     # independently in a namelist.wps, so nothing but this check stops

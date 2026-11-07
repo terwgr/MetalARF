@@ -1,26 +1,26 @@
-"""Constant-K diffusion and Rayleigh damping layer (kernels/diffusion.cu).
+"""Constant-K Laplacian utility and Rayleigh damping layer (kernels/diffusion.cu).
 
-``add_diffusion_tendencies`` adds simple constant-eddy-viscosity 2nd-order
-diffusion of u, v, w and theta' (WRF ``diff_opt=1`` style) to the coupled
-slow tendencies whenever ``cfg.khdif > 0 or cfg.kvdif > 0``.  The Laplacian
-is evaluated on coordinate surfaces horizontally and in physical space
-vertically, using per-level base-state dz.  Design choice (per plan): the
-mixing tendencies are recomputed on *every* RK stage from that stage's
-estimate, whereas WRF computes them ONCE per timestep on RK stage 1 (from
-the time-t fields, into the fixed ``*_tendf`` accumulators) and applies
-that same tendency on every stage, Straka's published setups use
-per-stage mixing and the benchmark tolerances absorb the difference.
-Theta is diffused in perturbation form (theta' = theta - thb) so the base
-stratification is not mixed; u, v, w have a zero (at-rest) base state, so
-perturbation and full fields coincide.
+``launch_add_diff2`` adds a simple constant-eddy-viscosity 2nd-order
+Laplacian ``kh*(f_xx + f_yy) + kv*(f_z)_z`` of one field into a tendency
+(uncoupled): coordinate-surface horizontal second differences with
+periodic wrap, physical-space vertical second differences on per-level
+base-state dz, and zero-flux top/bottom cell boundaries.  It is NOT WRF's
+``km_opt = 1``.  It keeps Straka's definition (the given K applies to every
+field exactly as given), it is measured against WRF's diff_opt=1 routines
+by tests/test_constant_diffusion_wrf471_parity.py as a declared different
+operator, and ``diffuse_only_test`` drives it for the 1-D analytic
+diffusion test.
 
-Comparison semantics (Straka investigation): woof's constant-K
-deliberately follows Straka's definition, the configured K applies to
-theta (and momentum) exactly as given, whereas WRF's ``km_opt=1`` gives
-scalars ``khdif/prandtl`` with prandtl = 1/3 (i.e. 3x the momentum
-diffusivity; v4.6.1 module_diffusion_em.F ``khdq = 3.*khdif`` and
-share/module_model_constants.F).  Cross-model comparisons must record the
-effective per-field diffusivities, not just the namelist K.
+``km_opt = 1`` in the model is WRF's own: ``isotropic_km`` constants
+(xkmh = khdif, xkmv = kvdif, xkhh = khdif/prandtl, xkhv = kvdif/prandtl
+with prandtl = 1/3) into WRF's diff_opt=2 ``horizontal_diffusion_2`` and,
+PBL off, ``vertical_diffusion_2``, once per step from the time-t fields
+(``woof.core.dycore.launch_wrf_isotropic_km``; column oracle in
+tools/wrf_diffusion_oracle/km1_README.md).  Until 2026-10-07 the model ran
+this Laplacian as ``km_opt = 1`` on every RK stage, with scalars at 1x
+instead of 3x the momentum K, no moisture or chem mixing, no surface
+fluxes, and refusals for terrain and open or specified boundaries; that
+operator is retired from the model step.
 
 ``apply_rayleigh_damping`` is a relaxational sponge utility (WRF
 ``damp_opt=2`` style, restricted to fields with a zero/at-rest reference):

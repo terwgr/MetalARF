@@ -50,6 +50,14 @@ from woof.core.thompson_aerosol_contract import (
     validate_ccn_activation_table,
 )
 from woof.core.thompson_aerosol_contract import GAMMA_MOMENTS
+from woof.core.thompson_runtime import (
+    DeviceTableSet,
+    _validate_device_table,
+    _payload_sha256,
+    _synchronize,
+    _synchronize_device,
+    _to_host_fortran,
+)
 
 
 #: The one table read from an external asset.  Everything else in the set is
@@ -106,80 +114,15 @@ def load_metal_gamma_moments(backend) -> Mapping[str, object]:
         return result
 
 
-def _payload_sha256(value: np.ndarray) -> str:
-    return hashlib.sha256(value.tobytes(order="F")).hexdigest()
-
-
-def _synchronize(backend) -> None:
-    """Wait for the uploads this thread queued, on the stream it queued them.
-
-    That is the CURRENT stream.  The legacy NULL stream was synchronized
-    here, which is the current stream on the resident road and waits for
-    nothing a split slab's non-blocking stream queued.
-    """
-    cuda = getattr(backend, "cuda", None)
-    current = getattr(cuda, "get_current_stream", None)
-    if current is not None:
-        current().synchronize()
-        return
-    stream = getattr(cuda, "Stream", None)
-    null = getattr(stream, "null", None)
-    synchronize = getattr(null, "synchronize", None)
-    if synchronize is not None:
-        synchronize()
-
-
-def _synchronize_device(backend) -> None:
-    """Wait for every stream on the current card (a replaced table's readers)."""
-    cuda = getattr(backend, "cuda", None)
-    device = getattr(cuda, "Device", None)
-    if device is not None and hasattr(device(), "synchronize"):
-        device().synchronize()
-
-
-def _to_host_fortran(backend, value) -> np.ndarray:
-    asnumpy = getattr(backend, "asnumpy", None)
-    if asnumpy is None:
-        result = np.array(value, dtype=np.float64, order="F", copy=True)
-    else:
-        try:
-            result = asnumpy(value, order="F")
-        except TypeError:
-            result = asnumpy(value)
-        result = np.array(result, dtype=np.float64, order="F", copy=False)
-    return result
-
-
 @dataclass(frozen=True)
-class DeviceAerosolTableSet:
+class DeviceAerosolTableSet(DeviceTableSet):
     """One verified, immutable mapping of aerosol tables on a device."""
 
-    root: Path
-    arrays: Mapping[str, object]
-    payload_bytes: int
-    array_sha256: Mapping[str, str]
-    identity_json: str
-    identity_sha256: str
-    device_id: int | None
-    upload_seconds: float
-    verification_seconds: float
-    roundtrip_verified: bool
     #: Where CCN_ACTIVATE.BIN was read from on this host.  Diagnostic only --
     #: it is not part of ``identity_json``, because the asset is content
     #: addressed and two byte-identical copies at different paths are the same
     #: numerical setup.
     ccn_path: Path | None = None
-
-    def __getattr__(self, name: str):
-        try:
-            return self.arrays[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-    @property
-    def identity(self) -> dict[str, object]:
-        """Return a detached JSON-compatible restart identity."""
-        return json.loads(self.identity_json)
 
     @property
     def ccn_activation_table(self) -> object:
@@ -308,6 +251,9 @@ def _upload_aerosol_table_set(
     return DeviceAerosolTableSet(
         root=table_set.root,
         arrays=MappingProxyType(device_arrays),
+        logical_shapes=MappingProxyType({
+            name: table_set.arrays[name].shape
+            for name in AEROSOL_DEVICE_TABLE_NAMES}),
         payload_bytes=payload_bytes,
         array_sha256=MappingProxyType(host_hashes),
         identity_json=identity_json,

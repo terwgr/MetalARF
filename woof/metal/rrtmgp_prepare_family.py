@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from woof.wrf_exact import ENABLED as WRF_EXACT
 from .array import MetalArray
 
 
@@ -136,11 +137,26 @@ def submit_interface_temperatures(play, plev, tlay):
     output = MetalArray(
         context.buffer(max(ncol * (nlay + 1) * 4, 4)),
         (ncol, nlay + 1), np.float32)
+    name = ("rrtmgp_exact_interface_temperatures" if WRF_EXACT
+            else "rrtmgp_prepare_interface_temperatures")
     context.submit_kernel(
-        "rrtmgp_prepare_interface_temperatures",
+        name,
         {"play": play, "plev": plev, "tlay": tlay, "tlev": output},
         {"ncol": ncol, "nlay": nlay},
-        exact_policy=False, grid_size=ncol * (nlay + 1))
+        exact_policy=WRF_EXACT, grid_size=ncol * (nlay + 1))
+    return output
+
+
+def submit_nonnegative_columns(columns):
+    """Clamp a strict radiation read without changing the prognostic field."""
+    _require_f32(columns, columns.shape, "radiation columns")
+    context = columns.buffer.context
+    n = columns.size
+    output = MetalArray(context.buffer(max(n * 4, 4)), columns.shape, np.float32)
+    context.submit_kernel(
+        "rrtmgp_exact_nonnegative_columns",
+        {"input": columns.view((n,)), "output": output.view((n,))},
+        {"n": n}, exact_policy=True, grid_size=n)
     return output
 
 
@@ -286,6 +302,9 @@ def submit_interpolation_metadata(tables, play, tlay):
 def submit_gas_vmr(qv, play, *, ngas, h2o_index, o3_index, trace,
                    out=None, h2o_scale=0.028964 / 0.018016):
     """Interpolate ozone in software binary64 and write the complete VMR cube."""
+    if WRF_EXACT:
+        raise NotImplementedError(
+            "Strict Metal RRTMGP requires CUDA-equivalent ozone interpolation")
     if (not isinstance(play, MetalArray) or not isinstance(qv, MetalArray)
             or play.dtype != np.dtype(np.float32)
             or qv.dtype != np.dtype(np.float32)

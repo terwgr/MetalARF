@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
+use rayon::prelude::*;
 
 const HYBRID_LEVEL_TYPE: u8 = 105;
 const SOIL_LEVEL_TYPE: u8 = 106;
@@ -67,6 +68,110 @@ const CLOUD_ICE_BEFORE_HRRR_V3: Parameter = Parameter {
     category: 6,
     number: 0,
 };
+
+/// The analyzed water- and ice-friendly aerosol number concentrations
+/// (kg-1), read only when the caller asks for them (`--analyzed-aerosol`:
+/// a configuration whose preparation reads the analyzed aerosol,
+/// gpuwm.preparation_assets.analyzed_aerosol_domains) and the file
+/// publishes the pair on all 50 hybrid levels. Masked values follow the
+/// operational missing-value chain at decode. Unrequested, the
+/// pair is never selected, 2.8.6's inventory: NCEP masks PMTF at some
+/// leads of some cycles (2026-10-04 06Z f06 and f07, clean at f00-f05 and
+/// f08), and an as-posted series that read the pair at its reference lead
+/// cannot withhold it at a later one, so reading it unasked stopped
+/// default-profile runs that never use it.
+/// NOAA's operational HRRR Vtable (parm/conus/hrrr_vtable) binds QNWFA and
+/// QNIFA to the NCEP local codes 0/13/193 and 0/13/192 on surface 105;
+/// indexes label them PMTF/PMTC (gpuwm/authorities/
+/// rw-wps-hrrr-native-grib2.provenance.json).  Optional: a file with
+/// neither publishes the same 561 records as before.  Without them an
+/// mp=28 tree on this route asking for the analyzed aerosol
+/// (use_rap_aero_icbc) refused, "missing QNIFA, QNWFA", although the
+/// HRRR file in hand carries both.
+const OPTIONAL_HYBRID_SPECS: [HybridSpec; 2] = [
+    HybridSpec {
+        name: "QNWFA",
+        parameter: Parameter {
+            discipline: 0,
+            category: 13,
+            number: 193,
+        },
+        earlier_parameters: &[],
+        nonnegative: true,
+        require_any_positive: false,
+    },
+    HybridSpec {
+        name: "QNIFA",
+        parameter: Parameter {
+            discipline: 0,
+            category: 13,
+            number: 192,
+        },
+        earlier_parameters: &[],
+        nonnegative: true,
+        require_any_positive: false,
+    },
+];
+
+/// Optional native-level records. Requests come from --extras, never defaults.
+///
+/// QNC/QNI/QNR are HRRR's own analyzed Thompson number concentrations (cloud
+/// droplets NCONCD 0/6/28, cloud ice NCCICE 0/6/29, rain SPNCR 0/1/100, all
+/// kg-1 on the 50 hybrid levels).  An HRRR start that carries HRRR's mass
+/// but diagnoses the numbers from it is not HRRR's state; the names are the
+/// WPS names the RRFS fork's case 7/9 read (mpas_init_atm_cases.F:5007-5009).
+const EXTRA_SPECS: [HybridSpec; 6] = [
+    HybridSpec { name: "MASSDEN", parameter: Parameter { discipline: 0, category: 20, number: 0 }, earlier_parameters: &[], nonnegative: true, require_any_positive: false },
+    HybridSpec { name: "PMTF", parameter: Parameter { discipline: 0, category: 13, number: 193 }, earlier_parameters: &[], nonnegative: true, require_any_positive: false },
+    HybridSpec { name: "PMTC", parameter: Parameter { discipline: 0, category: 13, number: 192 }, earlier_parameters: &[], nonnegative: true, require_any_positive: false },
+    HybridSpec { name: "QNC", parameter: Parameter { discipline: 0, category: 6, number: 28 }, earlier_parameters: &[], nonnegative: true, require_any_positive: false },
+    HybridSpec { name: "QNI", parameter: Parameter { discipline: 0, category: 6, number: 29 }, earlier_parameters: &[], nonnegative: true, require_any_positive: false },
+    HybridSpec { name: "QNR", parameter: Parameter { discipline: 0, category: 1, number: 100 }, earlier_parameters: &[], nonnegative: true, require_any_positive: false },
+];
+
+/// Optional single-level records, requested through the same --extras list.
+/// RH2 is HRRR's 2 m relative humidity (0/1/1 at 2 m above ground, percent),
+/// the record the RAP/HRRR Vtable maps to RH at 200100: MPAS case 7 forms
+/// its first-guess q2 from that record alone, so a start without it has
+/// q2 = 0 everywhere.
+const EXTRA_SURFACE_SPECS: [SurfaceSpec; 1] = [SurfaceSpec {
+    name: "RH2",
+    parameter: Parameter { discipline: 0, category: 1, number: 1 },
+    level_type: 103,
+    level_value: 2.0,
+    nonnegative: true,
+}];
+const EXTRA_SURFACE_UNITS: [&str; 1] = ["%"];
+
+#[cfg(test)]
+fn requested_extras(text: &str) -> Result<Vec<HybridSpec>, Box<dyn Error>> {
+    let (hybrid, surface) = requested_extra_sets(text)?;
+    if let Some(spec) = surface.first() {
+        return Err(format!("extra {} is a single-level record, not a hybrid one", spec.name).into());
+    }
+    Ok(hybrid)
+}
+
+/// The --extras list, split into the hybrid and the single-level tables.
+fn requested_extra_sets(text: &str) -> Result<(Vec<HybridSpec>, Vec<SurfaceSpec>), Box<dyn Error>> {
+    let mut hybrid: Vec<HybridSpec> = Vec::new();
+    let mut surface: Vec<SurfaceSpec> = Vec::new();
+    for name in text.split(',') {
+        if hybrid.iter().any(|item| item.name == name) || surface.iter().any(|item| item.name == name) {
+            return Err(format!("duplicate extra {name}: would duplicate the manifest inventory").into());
+        }
+        if let Some(spec) = EXTRA_SPECS.iter().find(|spec| spec.name == name) {
+            hybrid.push(*spec);
+        } else if let Some(spec) = EXTRA_SURFACE_SPECS.iter().find(|spec| spec.name == name) {
+            surface.push(*spec);
+        } else {
+            return Err(format!("unknown extra {name:?}: no numeric selector exists to prevent decoding the wrong tracer").into());
+        }
+    }
+    hybrid.sort_by_key(|spec| spec.name);
+    surface.sort_by_key(|spec| spec.name);
+    Ok((hybrid, surface))
+}
 
 const HYBRID_SPECS: [HybridSpec; 11] = [
     HybridSpec {
@@ -325,6 +430,56 @@ const SURFACE_SPECS: [SurfaceSpec; 11] = [
     },
 ];
 
+/// The PBL height the cycle's own forecast carried into this analysis
+/// (HPBL, WMO 0/3/18, surface), read when the wrfnat publishes it.  An HRRR
+/// f00 is a cycled state: its wrfinput holds the background forecast's
+/// PBLH, so NOAA's f00 products (the GUST message, every PBL-depth
+/// product) see a boundary layer.  A cold start that seeds zero, as real.exe
+/// does, wrote PBLH = 0 at every point of the initial history, so the f00
+/// gust was the bare 10 m wind (measured 2026-10-21 06Z: WOOF f00 gust
+/// 2.6 m/s weaker than the same wrf-rust gust on NOAA's own f00 state,
+/// where PBLH averaged 347 m).  Optional: a file without it selects exactly
+/// the records it always did, and the run keeps the stock zero.
+///
+/// The low, middle and high cloud cover the cycle carries (LCDC, MCDC,
+/// HCDC, WMO 0/6/3-5 on the layer surfaces 214/224/234, percent) seed the
+/// initial CLDFRA's cover the same way: the wrfnat publishes no 3-D cloud
+/// fraction, and HRRR's cover is mostly MYNN subgrid cloud that a start
+/// state does not hold (2026-10-21 06Z: the radiation's own cloud fraction
+/// of the start state gave a column-maximum mean of 6 % against NOAA's 54 %).
+const OPTIONAL_SURFACE_SPECS: [SurfaceSpec; 4] = [
+    SurfaceSpec {
+        name: "PBLH",
+        parameter: Parameter { discipline: 0, category: 3, number: 18 },
+        level_type: SURFACE_LEVEL_TYPE,
+        level_value: 0.0,
+        nonnegative: true,
+    },
+    SurfaceSpec {
+        name: "LCDC",
+        parameter: Parameter { discipline: 0, category: 6, number: 3 },
+        level_type: 214,
+        level_value: 0.0,
+        nonnegative: true,
+    },
+    SurfaceSpec {
+        name: "MCDC",
+        parameter: Parameter { discipline: 0, category: 6, number: 4 },
+        level_type: 224,
+        level_value: 0.0,
+        nonnegative: true,
+    },
+    SurfaceSpec {
+        name: "HCDC",
+        parameter: Parameter { discipline: 0, category: 6, number: 5 },
+        level_type: 234,
+        level_value: 0.0,
+        nonnegative: true,
+    },
+];
+/// Units the gate declares for each optional surface field, in table order.
+const OPTIONAL_SURFACE_UNITS: [&str; 4] = ["m", "%", "%", "%"];
+
 // Optional analyzed fields carried beside the soil subset. The fetch source
 // metadata declares which records it appends; selection is numeric here.
 const OPTIONAL_SOIL_SURFACE_SPECS: [SurfaceSpec; 1] = [SurfaceSpec {
@@ -350,6 +505,7 @@ struct AtmosInventory {
     reference_time: String,
     forecast_hour: u32,
     grid: GridFingerprint,
+
 }
 
 #[derive(Clone, Debug)]
@@ -433,6 +589,17 @@ fn level_matches(actual: f64, expected: f64) -> bool {
     (actual - expected).abs() <= 1.0e-9
 }
 
+/// HRRR's first grid point.  Current files publish it in microdegrees
+/// (21.138123, 237.280472); the 2016 archive files publish the same point
+/// rounded to millidegrees (21.138, 237.28) under an otherwise identical
+/// grid definition -- same 1799 x 1059, 3 km, 38.5/38.5/262.5 cone.  Both
+/// are this grid; any other corner is a different grid and stays refused,
+/// because the crop window is placed on the canonical grid's own geometry.
+fn canonical_corner(lat1: f64, lon1: f64) -> bool {
+    (level_matches(lat1, 21.138123) && level_matches(lon1, 237.280472))
+        || (level_matches(lat1, 21.138) && level_matches(lon1, 237.28))
+}
+
 fn validate_canonical_grid(grid: &GridDefinition) -> Result<(), Box<dyn Error>> {
     if grid.template != 30
         || grid.nx != 1799
@@ -440,8 +607,7 @@ fn validate_canonical_grid(grid: &GridDefinition) -> Result<(), Box<dyn Error>> 
         || grid.scan_mode != 0x40
         || grid.shape_of_earth != 6
         || grid.resolution_flags != 0x08
-        || !level_matches(grid.lat1, 21.138123)
-        || !level_matches(grid.lon1, 237.280472)
+        || !canonical_corner(grid.lat1, grid.lon1)
         || !level_matches(grid.dx, 3000.0)
         || !level_matches(grid.dy, 3000.0)
         || !level_matches(grid.latin1, 38.5)
@@ -481,7 +647,6 @@ fn validate_message_common(
         .into());
     }
     validate_native_packing(message)?;
-    validate_payload(message)?;
     validate_canonical_grid(&message.grid)
 }
 
@@ -497,16 +662,45 @@ fn validate_native_packing(message: &Grib2Message) -> Result<(), Box<dyn Error>>
 }
 
 fn validate_payload(message: &Grib2Message) -> Result<(), Box<dyn Error>> {
-    if message.bitmap.is_some() {
-        return Err("selected initialization field unexpectedly carries a bitmap".into());
-    }
     let expected_points = u64::from(message.grid.nx) * u64::from(message.grid.ny);
-    if u64::from(message.data_rep.section5_num_data_points) != expected_points {
-        return Err(format!(
-            "selected field declares {} packed points, expected {expected_points}",
-            message.data_rep.section5_num_data_points
-        )
-        .into());
+    let packed_points = if let Some(mask) = &message.bitmap {
+        if mask.len() as u64 != expected_points {
+            return Err(format!("selected field bitmap has {} cells, expected {expected_points}", mask.len()).into());
+        }
+        mask.iter().filter(|present| **present).count() as u64
+    } else { expected_points };
+    if u64::from(message.data_rep.section5_num_data_points) != packed_points {
+        return Err(format!("selected field declares {} packed points, expected {packed_points} present cells",
+            message.data_rep.section5_num_data_points).into());
+    }
+    Ok(())
+}
+
+fn payload_context(message: &Grib2Message, index: usize, variable: &str, window: Window) -> String {
+    let nx = message.grid.nx as usize;
+    let masked = message.bitmap.as_ref().map(|mask| {
+        mask.iter().enumerate().filter(|(cell, present)| {
+            !**present && nx != 0 && window.i_start <= cell % nx && cell % nx <= window.i_end
+                && window.j_start <= cell / nx && cell / nx <= window.j_end
+        }).count()
+    }).unwrap_or(0);
+    format!("{variable} level {} (level_type={}, message {index}, f{:02}) crop i={}..{} j={}..{} masked_inside_crop={masked}",
+        message.product.level_value, message.product.level_type, message.product.forecast_time,
+        window.i_start, window.i_end, window.j_start, window.j_end)
+}
+
+fn validate_crop_payload(message: &Grib2Message, index: usize, variable: &str, window: Window)
+    -> Result<(), Box<dyn Error>> {
+    let context = payload_context(message, index, variable, window);
+    validate_payload(message).map_err(|error| format!("{context}: {error}"))?;
+    if let Some(mask) = &message.bitmap {
+        let nx = message.grid.nx as usize;
+        let masked = (window.j_start..=window.j_end).flat_map(|j|
+            (window.i_start..=window.i_end).map(move |i| j * nx + i))
+            .filter(|cell| !mask[*cell]).count();
+        if masked != 0 && !OPTIONAL_HYBRID_NAMES.contains(&variable) {
+            return Err(format!("{context}: missing source cells prevent finite initialization; no missing-value donor policy is declared for this field").into());
+        }
     }
     Ok(())
 }
@@ -551,21 +745,76 @@ fn inventory_atmosphere(
     path: &str,
     expected_cycle: &str,
     forecast_hour: u32,
+    extras: &[HybridSpec],
+    surface_extras: &[SurfaceSpec],
+    analyzed_aerosol: bool,
 ) -> Result<AtmosInventory, Box<dyn Error>> {
     let file = Grib2File::open(path)?;
-    inventory_atmosphere_messages(&file.messages, expected_cycle, forecast_hour)
+    let mut inventory = inventory_atmosphere_with_extras(
+        &file.messages, expected_cycle, forecast_hour, extras, analyzed_aerosol)?;
+    select_surface_extras(&file.messages, expected_cycle, forecast_hour, surface_extras, &mut inventory)?;
+    Ok(inventory)
 }
 
+/// A requested single-level extra must be published exactly once, on the
+/// hybrid grid: requested and absent is a refusal, never a silent gap.
+fn select_surface_extras(
+    messages: &[Grib2Message], expected_cycle: &str, forecast_hour: u32,
+    surface_extras: &[SurfaceSpec], inventory: &mut AtmosInventory,
+) -> Result<(), Box<dyn Error>> {
+    for spec in surface_extras {
+        let description = format!("{} level type {} value {}", spec.name, spec.level_type, spec.level_value);
+        let index = unique_match(messages, &description, |message| {
+            parameter_matches(message, spec.parameter)
+                && message.product.template == 0
+                && message.product.level_type == spec.level_type
+                && level_matches(message.product.level_value, spec.level_value)
+        })?;
+        let message = &messages[index];
+        validate_message_common(message, expected_cycle, forecast_hour)?;
+        if inventory.grid != GridFingerprint::from_grid(&message.grid) {
+            return Err(format!("extra {description} grid differs from the hybrid grid").into());
+        }
+        inventory.selected.push(SelectedField {
+            index,
+            variable: spec.name,
+            level_value: spec.level_value,
+            parameter: spec.parameter,
+        });
+    }
+    Ok(())
+}
+
+/// A test inventory as a configuration that requests the analyzed aerosol
+/// pair takes it (`--analyzed-aerosol`).
+#[cfg(test)]
 fn inventory_atmosphere_messages(
     messages: &[Grib2Message],
     expected_cycle: &str,
     forecast_hour: u32,
 ) -> Result<AtmosInventory, Box<dyn Error>> {
-    let mut selected =
-        Vec::with_capacity(HYBRID_SPECS.len() * N_HYBRID_LEVELS + SURFACE_SPECS.len());
+    inventory_atmosphere_with_extras(messages, expected_cycle, forecast_hour, &[], true)
+}
+
+/// A test inventory as a configuration that does not request the pair
+/// (the default HRRR profile) takes it.
+#[cfg(test)]
+fn inventory_atmosphere_unrequested(
+    messages: &[Grib2Message],
+    expected_cycle: &str,
+    forecast_hour: u32,
+) -> Result<AtmosInventory, Box<dyn Error>> {
+    inventory_atmosphere_with_extras(messages, expected_cycle, forecast_hour, &[], false)
+}
+
+fn inventory_atmosphere_with_extras(
+    messages: &[Grib2Message], expected_cycle: &str, forecast_hour: u32,
+    extras: &[HybridSpec], analyzed_aerosol: bool,
+) -> Result<AtmosInventory, Box<dyn Error>> {
+    let mut selected = Vec::with_capacity((HYBRID_SPECS.len() + extras.len()) * N_HYBRID_LEVELS + SURFACE_SPECS.len());
     let mut common_grid: Option<GridFingerprint> = None;
-    for spec in HYBRID_SPECS {
-        let parameter = published_parameter(messages, &spec);
+    for spec in HYBRID_SPECS.iter().chain(extras.iter()) {
+        let parameter = published_parameter(messages, spec);
         for level in 1..=N_HYBRID_LEVELS {
             let description = format!("{} hybrid level {level}", spec.name);
             let index = unique_match(messages, &description, |message| {
@@ -594,6 +843,53 @@ fn inventory_atmosphere_messages(
             });
         }
     }
+    // The optional pair, only when requested: both on every hybrid level,
+    // or neither at all.  Unrequested, its records are never looked at.
+    let published: Vec<usize> = OPTIONAL_HYBRID_SPECS
+        .iter()
+        .filter(|_| analyzed_aerosol)
+        .map(|spec| {
+            messages
+                .iter()
+                .filter(|message| {
+                    parameter_matches(message, spec.parameter)
+                        && message.product.template == 0
+                        && message.product.level_type == HYBRID_LEVEL_TYPE
+                })
+                .count()
+        })
+        .collect();
+    if published.iter().any(|&count| count != 0) {
+        if published.iter().any(|&count| count < N_HYBRID_LEVELS) {
+            return Err(format!(
+                "analyzed aerosol numbers QNWFA/QNIFA are published on {published:?} hybrid \
+                 records of {N_HYBRID_LEVELS} each; the pair is read whole or not at all"
+            )
+            .into());
+        }
+        for spec in OPTIONAL_HYBRID_SPECS {
+            for level in 1..=N_HYBRID_LEVELS {
+                let description = format!("{} hybrid level {level}", spec.name);
+                let index = unique_match(messages, &description, |message| {
+                    parameter_matches(message, spec.parameter)
+                        && message.product.template == 0
+                        && message.product.level_type == HYBRID_LEVEL_TYPE
+                        && level_matches(message.product.level_value, level as f64)
+                })?;
+                let message = &messages[index];
+                validate_message_common(message, expected_cycle, forecast_hour)?;
+                if common_grid.as_ref() != Some(&GridFingerprint::from_grid(&message.grid)) {
+                    return Err(format!("{description} grid differs from the hybrid grid").into());
+                }
+                selected.push(SelectedField {
+                    index,
+                    variable: spec.name,
+                    level_value: level as f64,
+                    parameter: spec.parameter,
+                });
+            }
+        }
+    }
     for spec in SURFACE_SPECS {
         let description = format!(
             "{} level type {} value {}",
@@ -618,6 +914,30 @@ fn inventory_atmosphere_messages(
             parameter: spec.parameter,
         });
     }
+    for spec in OPTIONAL_SURFACE_SPECS {
+        let matches: Vec<usize> = messages.iter().enumerate().filter(|(_, message)| {
+            parameter_matches(message, spec.parameter)
+                && message.product.template == 0
+                && message.product.level_type == spec.level_type
+                && level_matches(message.product.level_value, spec.level_value)
+        }).map(|(index, _)| index).collect();
+        if matches.len() > 1 {
+            return Err(format!("duplicate optional surface {} in atmosphere input: indices {matches:?}", spec.name).into());
+        }
+        if let Some(&index) = matches.first() {
+            let message = &messages[index];
+            validate_message_common(message, expected_cycle, forecast_hour)?;
+            if common_grid.as_ref() != Some(&GridFingerprint::from_grid(&message.grid)) {
+                return Err(format!("optional surface {} grid differs from the hybrid grid", spec.name).into());
+            }
+            selected.push(SelectedField {
+                index,
+                variable: spec.name,
+                level_value: spec.level_value,
+                parameter: spec.parameter,
+            });
+        }
+    }
     Ok(AtmosInventory {
         source_grid: messages[selected[0].index].grid.clone(),
         selected,
@@ -626,6 +946,22 @@ fn inventory_atmosphere_messages(
         grid: common_grid.ok_or("empty atmosphere inventory")?,
     })
 }
+
+/// The requested pair is declared whole. Bitmap handling happens with the
+/// concrete crop at decode, including the operational missing-value chain.
+fn optional_hybrid_gate_lines(inventory: &AtmosInventory) -> Vec<String> {
+    let mut lines = Vec::new();
+    let optional_hybrid = optional_hybrid_fields(inventory);
+    if !optional_hybrid.is_empty() {
+        lines.push(format!("optional_hybrid_fields\t{}", optional_hybrid.join(",")));
+        let units = optional_hybrid.iter().map(|name| format!("{name}=kg-1"))
+            .collect::<Vec<_>>().join(",");
+        lines.push(format!("optional_hybrid_units\t{units}"));
+    }
+    lines
+}
+
+const OPTIONAL_HYBRID_NAMES: [&str; 2] = [OPTIONAL_HYBRID_SPECS[0].name, OPTIONAL_HYBRID_SPECS[1].name];
 
 fn inventory_soil(
     path: &str,
@@ -702,6 +1038,44 @@ fn inventory_soil(
         forecast_hour,
         grid: common_grid.ok_or("empty soil inventory")?,
     })
+}
+
+/// The optional surface fields an atmosphere inventory selected, in table order.
+fn optional_surface_fields(inventory: &AtmosInventory) -> Vec<&'static str> {
+    OPTIONAL_SURFACE_SPECS
+        .iter()
+        .filter(|spec| inventory.selected.iter().any(|field| field.variable == spec.name))
+        .map(|spec| spec.name)
+        .collect()
+}
+
+/// Declared with its unit, so the reader binds exactly what was written.
+fn optional_surface_gate_lines(inventory: &AtmosInventory) -> Vec<String> {
+    let fields = optional_surface_fields(inventory);
+    if fields.is_empty() {
+        return Vec::new();
+    }
+    let units = fields
+        .iter()
+        .map(|name| {
+            let index = OPTIONAL_SURFACE_SPECS.iter().position(|spec| spec.name == *name).unwrap();
+            format!("{name}={}", OPTIONAL_SURFACE_UNITS[index])
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    vec![
+        format!("optional_surface_fields\t{}", fields.join(",")),
+        format!("optional_surface_units\t{units}"),
+    ]
+}
+
+/// The optional hybrid fields an atmosphere inventory selected, in table order.
+fn optional_hybrid_fields(inventory: &AtmosInventory) -> Vec<&'static str> {
+    OPTIONAL_HYBRID_SPECS
+        .iter()
+        .filter(|spec| inventory.selected.iter().any(|field| field.variable == spec.name))
+        .map(|spec| spec.name)
+        .collect()
 }
 
 fn compare_atmosphere_inventory(
@@ -828,7 +1202,7 @@ fn validate_window(window: Window, grid: &GridFingerprint) -> Result<(), Box<dyn
 /// columns while this line did not, and nothing in the build noticed: a
 /// 13-column row shipped under an 11-column header, which is a receipt
 /// that reads wrong rather than one that fails loudly.
-const MANIFEST_HEADER: &str = "role\tindex\tvariable\tlevel_value\tlevel_type\tdrt\tbitmap\tdecoded_count\tminimum\tmaximum\tclamped\tmax_excursion\tfilename";
+const MANIFEST_HEADER: &str = "role\tindex\tvariable\tlevel_value\tlevel_type\tdrt\tbitmap\tdecoded_count\tminimum\tmaximum\tclamped\tmax_excursion\tfilename\tmasked_inside_crop\tnearest_neighbor\tfour_pt\taverage_4pt\tfill_zero";
 
 #[allow(clippy::too_many_arguments)]
 fn manifest_row(
@@ -843,12 +1217,14 @@ fn manifest_row(
     filename: &str,
 ) -> String {
     format!(
-        "{role}\t{index}\t{variable}\t{level_value}\t{level_type}\t{drt}\t{bitmap}\t{}\t{}\t{}\t{}\t{}\t{filename}",
+        "{role}\t{index}\t{variable}\t{level_value}\t{level_type}\t{drt}\t{bitmap}\t{}\t{}\t{}\t{}\t{}\t{filename}\t{}\t{}\t{}\t{}\t{}",
         stats.count,
         stats.minimum,
         stats.maximum,
         stats.clamped.clamps,
         stats.clamped.max_excursion,
+        stats.fill.masked, stats.fill.nearest_neighbor, stats.fill.four_pt,
+        stats.fill.average_4pt, stats.fill.zero,
     )
 }
 
@@ -856,10 +1232,17 @@ fn manifest_row(
 struct Stats {
     minimum: f64,
     maximum: f64,
+    /// Preserve the pre-crop hydrometeor completeness check over the source.
+    any_positive_in_source: bool,
     count: usize,
     /// Cells clamped back onto a physical bound they overshot by no more
     /// than this record's own packing step.
     clamped: ClampTally,
+    fill: gpuwm_preprocess_cpu::missing_value_chain::Counts,
+}
+
+impl Stats {
+    fn source_has_positive(&self) -> bool { self.any_positive_in_source }
 }
 
 /// The physical bounds a variable is held to, and how far past each the
@@ -896,13 +1279,50 @@ fn value_bounds(nonnegative: bool, unit_fraction: bool, scale: f64) -> Bounds {
 
 fn decode_crop_write(
     message: &Grib2Message,
+    message_index: usize,
     writer: &mut BufWriter<File>,
     window: Window,
     variable: &str,
     nonnegative: bool,
     unit_fraction: bool,
 ) -> Result<Stats, Box<dyn Error>> {
-    let mut values = unpack_message(message)?;
+    let (bytes, stats) =
+        decode_crop(message, message_index, window, variable, nonnegative, unit_fraction)?;
+    writer.write_all(&bytes)?;
+    Ok(stats)
+}
+
+/// One record decoded and cropped to the window's FP32 little-endian bytes.
+/// Pure in its inputs, so records decode on all cores at once and are then
+/// written in their fixed order: the bytes are the serial loop's bytes.
+/// The error is its text (`Send`), the same text the serial loop reported.
+fn decode_crop(
+    message: &Grib2Message,
+    message_index: usize,
+    window: Window,
+    variable: &str,
+    nonnegative: bool,
+    unit_fraction: bool,
+) -> Result<(Vec<u8>, Stats), String> {
+    let mut out = Vec::with_capacity(window.nx() * window.ny() * 4);
+    decode_crop_into(message, message_index, &mut out, window, variable, nonnegative, unit_fraction)
+        .map(|stats| (out, stats))
+        .map_err(|error| error.to_string())
+}
+
+fn decode_crop_into(
+    message: &Grib2Message,
+    message_index: usize,
+    writer: &mut Vec<u8>,
+    window: Window,
+    variable: &str,
+    nonnegative: bool,
+    unit_fraction: bool,
+) -> Result<Stats, Box<dyn Error>> {
+    validate_window(window, &GridFingerprint::from_grid(&message.grid))?;
+    validate_crop_payload(message, message_index, variable, window)?;
+    let context = payload_context(message, message_index, variable, window);
+    let mut values = unpack_message(message).map_err(|error| format!("{context}: {error}"))?;
     let nx = message.grid.nx as usize;
     let ny = message.grid.ny as usize;
     if values.len() != nx * ny {
@@ -913,15 +1333,22 @@ fn decode_crop_write(
         )
         .into());
     }
-    // Anchor first, judge second: the tolerance ceiling is a fraction of
-    // the magnitude this record's own data occupies, which is only known
-    // once the whole field has been read.
+    // Preserve the field-wide finite check and tolerance anchor. A crop-only
+    // scale could lower the packing tolerance in a dry window and refuse
+    // values the original decoder clamped. Only the bound verdict below is
+    // crop-local. The caller includes its remapping halo in this window;
+    // integer-lattice missing-value donors need no additional halo.
     let mut scale = 0.0f64;
-    for value in values.iter().copied() {
+    let mut any_positive_in_source = false;
+    for (cell, value) in values.iter().copied().enumerate() {
         if !value.is_finite() {
-            return Err(format!("{variable} contains a non-finite decoded value").into());
+            if message.bitmap.as_ref().map(|mask| !mask[cell]).unwrap_or(false) {
+                continue;
+            }
+            return Err(format!("{context}: non-finite present value at source row {}, column {}; bitmap does not mark it missing", cell / nx, cell % nx).into());
         }
         scale = scale.max(value.abs());
+        any_positive_in_source |= value > 0.0;
     }
     let bounds = value_bounds(nonnegative, unit_fraction, scale);
     let quantum = decode_quantum(
@@ -932,7 +1359,9 @@ fn decode_crop_write(
     let mut minimum = f64::INFINITY;
     let mut maximum = f64::NEG_INFINITY;
     let mut clamped = ClampTally::default();
-    for value in values.iter_mut() {
+    for row in values.chunks_exact_mut(nx).skip(window.j_start).take(window.ny()) {
+      for value in &mut row[window.i_start..=window.i_end] {
+        if !value.is_finite() { continue; }
         match bounds.check(*value, quantum) {
             BoundVerdict::Inside => {}
             BoundVerdict::Clamped {
@@ -957,12 +1386,32 @@ fn decode_crop_write(
         }
         minimum = minimum.min(*value);
         maximum = maximum.max(*value);
+      }
     }
+    let mut fill = gpuwm_preprocess_cpu::missing_value_chain::Counts::default();
+    // The output window lies on the native integer lattice. Preserve the
+    // original masked plane while each missing target exhausts the chain.
     for j in window.j_start..=window.j_end {
         for i in window.i_start..=window.i_end {
+            if !values[j * nx + i].is_finite() {
+                fill.masked += 1;
+                let (value, stage) = gpuwm_preprocess_cpu::missing_value_chain::interpolate(
+                    &values, nx, ny, i as f64, j as f64);
+                match stage {
+                    gpuwm_preprocess_cpu::missing_value_chain::Stage::NearestNeighbor => fill.nearest_neighbor += 1,
+                    gpuwm_preprocess_cpu::missing_value_chain::Stage::FourPt => fill.four_pt += 1,
+                    gpuwm_preprocess_cpu::missing_value_chain::Stage::Average4pt => fill.average_4pt += 1,
+                    gpuwm_preprocess_cpu::missing_value_chain::Stage::Zero => fill.zero += 1,
+                }
+                let value = value as f32;
+                minimum = minimum.min(value as f64);
+                maximum = maximum.max(value as f64);
+                writer.write_all(&value.to_le_bytes())?;
+                continue;
+            }
             let value = values[j * nx + i] as f32;
             if !value.is_finite() {
-                return Err(format!("{variable} overflows FP32 in output window").into());
+                return Err(format!("{context}: overflows FP32 in output window").into());
             }
             writer.write_all(&value.to_le_bytes())?;
         }
@@ -970,19 +1419,25 @@ fn decode_crop_write(
     Ok(Stats {
         minimum,
         maximum,
-        count: values.len(),
+        any_positive_in_source,
+        count: window.nx() * window.ny(),
         clamped,
+        fill,
     })
 }
 
 fn atmosphere_nonnegative(variable: &str) -> bool {
     HYBRID_SPECS
         .iter()
+        .chain(OPTIONAL_HYBRID_SPECS.iter())
+        .chain(EXTRA_SPECS.iter())
         .find(|spec| spec.name == variable)
         .map(|spec| spec.nonnegative)
         .or_else(|| {
             SURFACE_SPECS
                 .iter()
+                .chain(OPTIONAL_SURFACE_SPECS.iter())
+                .chain(EXTRA_SURFACE_SPECS.iter())
                 .find(|spec| spec.name == variable)
                 .map(|spec| spec.nonnegative)
         })
@@ -1008,28 +1463,65 @@ fn write_atmosphere(
 ) -> Result<(), Box<dyn Error>> {
     let file = Grib2File::open(input)?;
     fs::create_dir(output)?;
-    for spec in HYBRID_SPECS {
+    // The analyzed aerosol number pair (written when the file publishes it)
+    // and the --extras records a caller requested, each only when selected.
+    let optional = OPTIONAL_HYBRID_SPECS.iter().chain(EXTRA_SPECS.iter()).copied().filter(|spec| {
+        inventory.selected.iter().any(|field| field.variable == spec.name)
+    });
+    for spec in HYBRID_SPECS.into_iter().chain(optional) {
         let path = output.join(format!("{}.f32le", spec.name));
         let mut writer = BufWriter::new(File::create(&path)?);
+        let needs_mask = OPTIONAL_HYBRID_NAMES.contains(&spec.name);
+        let mut mask_writer = if needs_mask {
+            Some(BufWriter::new(File::create(output.join(format!("{}.mask", spec.name)))?))
+        } else { None };
         let mut any_positive = false;
-        for selected in inventory
+        // Every level of this variable decodes at once (one record per
+        // core); bytes and manifest rows are then written in level order.
+        let fields: Vec<&SelectedField> = inventory
             .selected
             .iter()
             .filter(|field| field.variable == spec.name)
-        {
-            let message = file
-                .messages
-                .get(selected.index)
-                .ok_or("selected atmosphere index disappeared on reopen")?;
-            let stats = decode_crop_write(
-                message,
-                &mut writer,
-                window,
-                spec.name,
-                spec.nonnegative,
-                unit_fraction(spec.name),
-            )?;
-            any_positive |= stats.maximum > 0.0;
+            .collect();
+        type DecodedHybrid = Result<(Vec<u8>, Option<Vec<u8>>, Stats), String>;
+        let decoded: Vec<DecodedHybrid> = fields
+            .par_iter()
+            .map(|selected| {
+                let message = file
+                    .messages
+                    .get(selected.index)
+                    .ok_or("selected atmosphere index disappeared on reopen")?;
+                let (bytes, stats) = decode_crop(
+                    message,
+                    selected.index,
+                    window,
+                    spec.name,
+                    spec.nonnegative,
+                    unit_fraction(spec.name),
+                )?;
+                let mask = needs_mask.then(|| {
+                    let nx = message.grid.nx as usize;
+                    let mut mask_bytes = Vec::with_capacity(window.nx() * window.ny());
+                    for j in window.j_start..=window.j_end {
+                        for i in window.i_start..=window.i_end {
+                            let present = message.bitmap.as_ref().map(|mask| mask[j * nx + i]).unwrap_or(true);
+                            mask_bytes.push(u8::from(present));
+                        }
+                    }
+                    mask_bytes
+                });
+                Ok((bytes, mask, stats))
+            })
+            .collect();
+        for (selected, result) in fields.into_iter().zip(decoded) {
+            let (bytes, mask, stats) = result?;
+            let message = &file.messages[selected.index];
+            writer.write_all(&bytes)?;
+            drop(bytes);
+            if let (Some(mask_writer), Some(mask)) = (&mut mask_writer, mask) {
+                mask_writer.write_all(&mask)?;
+            }
+            any_positive |= stats.source_has_positive();
             writeln!(
                 manifest,
                 "{}",
@@ -1047,6 +1539,7 @@ fn write_atmosphere(
             )?;
         }
         writer.flush()?;
+        if let Some(mask_writer) = &mut mask_writer { mask_writer.flush()?; }
         if spec.require_any_positive && !any_positive {
             return Err(format!(
                 "{role} {} is finite/nonnegative but zero on all 50 full-domain levels",
@@ -1055,26 +1548,38 @@ fn write_atmosphere(
             .into());
         }
     }
-    for spec in SURFACE_SPECS {
-        let selected = inventory
-            .selected
-            .iter()
-            .find(|field| field.variable == spec.name)
-            .ok_or_else(|| format!("selected surface {} disappeared", spec.name))?;
-        let message = file
-            .messages
-            .get(selected.index)
-            .ok_or("selected surface index disappeared on reopen")?;
+    // The surface records decode together, then are written in spec order.
+    type DecodedSurface<'a> = Result<(&'a SelectedField, Vec<u8>, Stats), String>;
+    let decoded: Vec<DecodedSurface<'_>> = SURFACE_SPECS
+        .par_iter()
+        .map(|spec| {
+            let selected = inventory
+                .selected
+                .iter()
+                .find(|field| field.variable == spec.name)
+                .ok_or_else(|| format!("selected surface {} disappeared", spec.name))?;
+            let message = file
+                .messages
+                .get(selected.index)
+                .ok_or("selected surface index disappeared on reopen")?;
+            let (bytes, stats) = decode_crop(
+                message,
+                selected.index,
+                window,
+                spec.name,
+                atmosphere_nonnegative(spec.name),
+                unit_fraction(spec.name),
+            )?;
+            Ok((selected, bytes, stats))
+        })
+        .collect();
+    for (spec, result) in SURFACE_SPECS.iter().zip(decoded) {
+        let (selected, bytes, stats) = result?;
+        let message = &file.messages[selected.index];
         let path = output.join(format!("{}.f32le", spec.name));
         let mut writer = BufWriter::new(File::create(&path)?);
-        let stats = decode_crop_write(
-            message,
-            &mut writer,
-            window,
-            spec.name,
-            atmosphere_nonnegative(spec.name),
-            unit_fraction(spec.name),
-        )?;
+        writer.write_all(&bytes)?;
+        drop(bytes);
         writer.flush()?;
         // Q2 keeps its post-hoc ceiling: one kg/kg of water vapour is a
         // plausibility limit, not a saturating one, so no quantization
@@ -1083,6 +1588,36 @@ fn write_atmosphere(
         if spec.name == "Q2" && stats.maximum > 1.0 {
             return Err(format!("{role} {} exceeds one: {}", spec.name, stats.maximum).into());
         }
+        writeln!(
+            manifest,
+            "{}",
+            manifest_row(
+                role,
+                selected.index,
+                spec.name,
+                selected.level_value,
+                message.product.level_type,
+                message.data_rep.template,
+                message.bitmap.is_some(),
+                stats,
+                &path.file_name().unwrap().to_string_lossy(),
+            )
+        )?;
+    }
+    for spec in OPTIONAL_SURFACE_SPECS.iter().chain(EXTRA_SURFACE_SPECS.iter()) {
+        let Some(selected) = inventory.selected.iter().find(|field| field.variable == spec.name) else {
+            continue;
+        };
+        let message = file
+            .messages
+            .get(selected.index)
+            .ok_or("selected optional surface index disappeared on reopen")?;
+        let (bytes, stats) = decode_crop(
+            message, selected.index, window, spec.name, spec.nonnegative, unit_fraction(spec.name))?;
+        let path = output.join(format!("{}.f32le", spec.name));
+        let mut writer = BufWriter::new(File::create(&path)?);
+        writer.write_all(&bytes)?;
+        writer.flush()?;
         writeln!(
             manifest,
             "{}",
@@ -1115,17 +1650,25 @@ fn write_soil(
     for variable in ["SOILT", "SOILW"] {
         let path = output.join(format!("{variable}.f32le"));
         let mut writer = BufWriter::new(File::create(&path)?);
-        for selected in inventory
+        let fields: Vec<&SelectedField> = inventory
             .selected
             .iter()
             .filter(|field| field.variable == variable)
-        {
-            let message = file
-                .messages
-                .get(selected.index)
-                .ok_or("selected soil index disappeared on reopen")?;
-            let stats =
-                decode_crop_write(message, &mut writer, window, variable, true, unit_fraction(variable))?;
+            .collect();
+        let decoded: Vec<Result<(Vec<u8>, Stats), String>> = fields
+            .par_iter()
+            .map(|selected| {
+                let message = file
+                    .messages
+                    .get(selected.index)
+                    .ok_or("selected soil index disappeared on reopen")?;
+                decode_crop(message, selected.index, window, variable, true, unit_fraction(variable))
+            })
+            .collect();
+        for (selected, result) in fields.into_iter().zip(decoded) {
+            let (bytes, stats) = result?;
+            let message = &file.messages[selected.index];
+            writer.write_all(&bytes)?;
             writeln!(
                 manifest,
                 "{}",
@@ -1144,13 +1687,21 @@ fn write_soil(
         }
         writer.flush()?;
     }
-    for selected in &inventory.optional_surface {
-        let message = file.messages.get(selected.index)
-            .ok_or("selected optional surface index disappeared on reopen")?;
+    let decoded: Vec<Result<(Vec<u8>, Stats), String>> = inventory
+        .optional_surface
+        .par_iter()
+        .map(|selected| {
+            let message = file.messages.get(selected.index)
+                .ok_or("selected optional surface index disappeared on reopen")?;
+            decode_crop(message, selected.index, window, selected.variable, true, false)
+        })
+        .collect();
+    for (selected, result) in inventory.optional_surface.iter().zip(decoded) {
+        let (bytes, stats) = result?;
+        let message = &file.messages[selected.index];
         let path = output.join(format!("{}.f32le", selected.variable));
         let mut writer = BufWriter::new(File::create(&path)?);
-        let stats = decode_crop_write(message, &mut writer, window,
-            selected.variable, true, false)?;
+        writer.write_all(&bytes)?;
         if stats.maximum > 100.0 {
             return Err(format!("{} exceeds 100 percent", selected.variable).into());
         }
@@ -1184,6 +1735,40 @@ fn write_atomic_signal(path: &Path, lines: &[String]) -> Result<(), Box<dyn Erro
     drop(writer);
     fs::rename(temporary, path)?;
     Ok(())
+}
+
+/// Replace `path` with `bytes` so a concurrent reader sees the old file or
+/// the new one, never a prefix: a unique temp beside it, flushed and synced,
+/// then renamed over it.  Windows refuses the rename while a reader holds
+/// the target open without delete sharing (Python's `open`), so it is
+/// retried for a few seconds there; a POSIX rename never waits.
+fn replace_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+    let name = path.file_name().ok_or("atomic replace target has no file name")?;
+    let temporary = path.with_file_name(format!(
+        ".{}.replace-{}",
+        name.to_string_lossy(),
+        std::process::id()
+    ));
+    {
+        let mut file = File::create(&temporary)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+    }
+    let mut attempts = 0u32;
+    loop {
+        match fs::rename(&temporary, path) {
+            Ok(()) => return Ok(()),
+            Err(error) if cfg!(windows) && attempts < 200
+                && error.kind() == std::io::ErrorKind::PermissionDenied => {
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&temporary);
+                return Err(error.into());
+            }
+        }
+    }
 }
 
 fn clone_tree_for_publish(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
@@ -1445,8 +2030,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     // proves a staged bridge by these bytes (see lib.rs).
     let _ = std::hint::black_box(gpuwm_preprocess_cpu::SOURCE_REV_STAMP);
     let process_started = Instant::now();
-    let args: Vec<String> = env::args().skip(1).collect();
-    let usage = "usage: hrrr_grib2_bridge WRFNAT_F00 WRFNAT_F01 SOIL_F00 SOIL_F01 OUTPUT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series SERIES_TSV OUTPUT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series-workers WORKERS SERIES_TSV OUTPUT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series-workers-ready WORKERS SERIES_TSV OUTPUT_DIR SIGNAL_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series-workers-posted WORKERS SERIES_TSV OUTPUT_DIR SIGNAL_DIR ADMIT_DIR EXPECTED_CYCLE I_START I_END J_START J_END";
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    let mut extras = Vec::new();
+    let mut surface_extras: Vec<SurfaceSpec> = Vec::new();
+    // --analyzed-aerosol: the caller's configuration reads the analyzed
+    // aerosol pair (gpuwm.preparation_assets.analyzed_aerosol_domains), so
+    // QNWFA/QNIFA are selected when published.  Absent, they never are.
+    let mut analyzed_aerosol = false;
+    loop {
+        match args.first().map(String::as_str) {
+            Some("--extras") if extras.is_empty() && surface_extras.is_empty() => {
+                if args.len() < 2 { return Err("--extras needs a comma-separated selector list to prevent an ambiguous inventory".into()); }
+                (extras, surface_extras) = requested_extra_sets(&args[1])?;
+                args.drain(..2);
+            }
+            Some("--analyzed-aerosol") if !analyzed_aerosol => {
+                analyzed_aerosol = true;
+                args.drain(..1);
+            }
+            _ => break,
+        }
+    }
+    let usage = "usage: hrrr_grib2_bridge WRFNAT_F00 WRFNAT_F01 SOIL_F00 SOIL_F01 OUTPUT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series SERIES_TSV OUTPUT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series-workers WORKERS SERIES_TSV OUTPUT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series-workers-ready WORKERS SERIES_TSV OUTPUT_DIR SIGNAL_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       hrrr_grib2_bridge --series-workers-posted WORKERS SERIES_TSV OUTPUT_DIR SIGNAL_DIR ADMIT_DIR EXPECTED_CYCLE I_START I_END J_START J_END\n       any form may be preceded by --analyzed-aerosol (select QNWFA/QNIFA when published) and --extras LIST";
     // As posted (A136 L7c): the first lead is inventoried up front and is
     // the reference; every later lead is inventoried, held to that
     // reference and decoded once the parent admits it (ADMIT_DIR).
@@ -1575,17 +2180,32 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut atmosphere_inventories = Vec::with_capacity(inventoried);
     let mut soil_inventories = Vec::with_capacity(inventoried);
-    for input in &inputs[..inventoried] {
-        atmosphere_inventories.push(inventory_atmosphere(
-            &input.atmosphere,
-            &expected_cycle,
-            input.forecast_hour,
-        )?);
-        soil_inventories.push(inventory_soil(
-            &input.soil,
-            &expected_cycle,
-            input.forecast_hour,
-        )?);
+    // Every lead's two files are read and inventoried at once; the results
+    // are taken in lead order, so the first failure reported is the one the
+    // serial loop reported.
+    let inventories: Vec<(Result<AtmosInventory, String>, Result<SoilInventory, String>)> =
+        inputs[..inventoried]
+            .par_iter()
+            .map(|input| {
+                rayon::join(
+                    || {
+                        inventory_atmosphere(
+                            &input.atmosphere,
+                            &expected_cycle,
+                            input.forecast_hour, &extras, &surface_extras, analyzed_aerosol,
+                        )
+                        .map_err(|error| error.to_string())
+                    },
+                    || {
+                        inventory_soil(&input.soil, &expected_cycle, input.forecast_hour)
+                            .map_err(|error| error.to_string())
+                    },
+                )
+            })
+            .collect();
+    for (atmosphere, soil) in inventories {
+        atmosphere_inventories.push(atmosphere?);
+        soil_inventories.push(soil?);
     }
     let atmosphere_reference = &atmosphere_inventories[0];
     let soil_reference = &soil_inventories[0];
@@ -1635,7 +2255,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .flat_map(|path| donor_files[path].iter().map(|(_, message)| message));
             let selected = select_pmsl(messages, &expected_cycle,
                 input.forecast_hour, &atmosphere.source_grid)?;
-            validate_payload(selected)?;
             let (path, message_index) = input.supplements.iter().find_map(|path| {
                 donor_files[path].iter().find_map(|(index, message)|
                     std::ptr::eq(message, selected).then_some((path, *index)))
@@ -1648,7 +2267,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             donor_rows.last_mut().unwrap().push_str(&format!("\t{}\t{:?}\t{:?}\t{:?}",
                 selected.product.template, selected.product.ensemble_type,
                 selected.product.perturbation_number, selected.product.num_forecasts_in_ensemble));
-            Some(selected.clone())
+            validate_crop_payload(selected, message_index, "PMSL", window)?;
+            Some((message_index, selected.clone()))
         };
         donors.push(message);
     }
@@ -1657,8 +2277,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     if supplemented != 0 && supplemented != inputs.len() {
         return Err("PMSL donor coverage must include every requested forcing time".into());
     }
-    let payload_files = 24 + usize::from(supplemented != 0)
-        + soil_reference.optional_surface.len();
+    let optional_hybrid = optional_hybrid_fields(atmosphere_reference);
+    let payload_files = 24 + extras.len() + surface_extras.len() + usize::from(supplemented != 0)
+        + soil_reference.optional_surface.len()
+        + optional_hybrid.len()
+        + optional_surface_fields(atmosphere_reference).len();
 
     let parent = output.parent().unwrap_or_else(|| Path::new("."));
     let stem = output
@@ -1674,6 +2297,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let result = (|| -> Result<(), Box<dyn Error>> {
         let mut gate = BufWriter::new(File::create(partial.join("gate.txt"))?);
         writeln!(gate, "status\tPASS")?;
+        writeln!(gate, "aerosol_missing_policy\tnearest_neighbor+four_pt+average_4pt;fill_missing=0;native_grid_coordinates;source_mask_preserved_for_target_mapping")?;
         writeln!(gate, "cycle\t{expected_cycle}")?;
         let valid_times = inputs
             .iter()
@@ -1704,7 +2328,25 @@ fn main() -> Result<(), Box<dyn Error>> {
             writeln!(gate, "supplement_alignment\texact_primary_grid_and_source_time")?;
             writeln!(gate, "supplement_units\tPMSL=Pa")?;
         }
+        if !extras.is_empty() || !surface_extras.is_empty() {
+            let names = extras.iter().map(|spec| spec.name).chain(surface_extras.iter().map(|spec| spec.name));
+            writeln!(gate, "extra_fields\t{}", names.collect::<Vec<_>>().join(","))?;
+            for spec in &extras {
+                writeln!(gate, "extra_{}\tPASS discipline={} category={} parameter={} level_type=105", spec.name, spec.parameter.discipline, spec.parameter.category, spec.parameter.number)?;
+            }
+            for spec in &surface_extras {
+                let unit = EXTRA_SURFACE_SPECS.iter().position(|item| item.name == spec.name)
+                    .map(|index| EXTRA_SURFACE_UNITS[index]).unwrap_or("");
+                writeln!(gate, "extra_{}\tPASS discipline={} category={} parameter={} level_type={} level_value={} units={unit}", spec.name, spec.parameter.discipline, spec.parameter.category, spec.parameter.number, spec.level_type, spec.level_value)?;
+            }
+        }
         writeln!(gate, "hybrid_levels\t{N_HYBRID_LEVELS}")?;
+        for line in optional_hybrid_gate_lines(atmosphere_reference) {
+            writeln!(gate, "{line}")?;
+        }
+        for line in optional_surface_gate_lines(atmosphere_reference) {
+            writeln!(gate, "{line}")?;
+        }
         if !soil_reference.optional_surface.is_empty() {
             let names = soil_reference.optional_surface.iter().map(|field| field.variable)
                 .collect::<Vec<_>>().join(",");
@@ -1810,7 +2452,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     .ok_or("a lead was not inventoried before decode")?;
                                 wait_admitted(directory, input, &cancelled)?;
                                 let atmosphere = inventory_atmosphere(
-                                    &input.atmosphere, &expected_cycle, hour)?;
+                                        &input.atmosphere, &expected_cycle, hour, &extras,
+                                        &surface_extras, analyzed_aerosol)?;
                                 let soil = inventory_soil(&input.soil, &expected_cycle, hour)?;
                                 compare_atmosphere_inventory(atmosphere_reference, &atmosphere, hour)?;
                                 compare_soil_inventory(soil_reference, &soil, hour)?;
@@ -1840,13 +2483,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                             window,
                             &mut fragment,
                         )?;
-                        if let Some(message) = &donors[index] {
+                        if let Some((message_index, message)) = &donors[index] {
                             let path = partial.join(&atmosphere_role).join("PMSL.f32le");
                             let mut writer = BufWriter::new(File::create(&path)?);
-                            let stats = decode_crop_write(message, &mut writer, window,
+                            let stats = decode_crop_write(message, *message_index, &mut writer, window,
                                 "PMSL", true, false)?;
                             writer.flush()?;
-                            writeln!(fragment, "{}", manifest_row(&atmosphere_role, 0,
+                            writeln!(fragment, "{}", manifest_row(&atmosphere_role, *message_index,
                                 "PMSL", message.product.level_value, message.product.level_type,
                                 message.data_rep.template, message.bitmap.is_some(), stats,
                                 "PMSL.f32le"))?;
@@ -1893,6 +2536,38 @@ fn main() -> Result<(), Box<dyn Error>> {
             fs::remove_file(fragment_path)?;
         }
         manifest.flush()?;
+        drop(manifest);
+        // Counters are reduced in lead order, after every decoder finished.
+        // Early streaming consumers see the policy; the completed gate and
+        // its sealed hash carry the final counts for all leads.
+        //
+        // The completed gate replaces the early one whole (temp + rename),
+        // never by appending in place.  A streaming consumer re-reads
+        // gate.txt for every lead while this runs; the unbuffered append
+        // issued one write per format piece, so a reader could see
+        // "aerosol_QNWFA_" with no tab yet and refuse "malformed gate.txt
+        // line 23/25" (36-member HRRR ensemble, members 13 and 33,
+        // 2026-10-24).  A reader now sees the early gate or the final one.
+        drop(gate);
+        let gate_path = partial.join("gate.txt");
+        let mut completed = fs::read_to_string(&gate_path)?;
+        let text = fs::read_to_string(partial.join("inventory.tsv"))?;
+        for variable in OPTIONAL_HYBRID_NAMES {
+            let mut total = gpuwm_preprocess_cpu::missing_value_chain::Counts::default();
+            for line in text.lines().skip(1) {
+                let columns: Vec<_> = line.split('\t').collect();
+                if columns[2] != variable { continue; }
+                total.add(gpuwm_preprocess_cpu::missing_value_chain::Counts {
+                    masked: columns[13].parse()?, nearest_neighbor: columns[14].parse()?,
+                    four_pt: columns[15].parse()?, average_4pt: columns[16].parse()?, zero: columns[17].parse()?,
+                });
+            }
+            for (stage, count) in [("masked", total.masked), ("nearest_neighbor", total.nearest_neighbor),
+                ("four_pt", total.four_pt), ("average_4pt", total.average_4pt), ("zero", total.zero)] {
+                completed.push_str(&format!("aerosol_{variable}_{stage}\t{count}\n"));
+            }
+        }
+        replace_file_atomically(&gate_path, completed.as_bytes())?;
         Ok(())
     })();
     if let Err(error) = result {
@@ -1962,19 +2637,209 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dry_crop_keeps_positive_source_guard_field_wide() {
+        let mut record = bitmap_record(None);
+        record.raw_data = vec![0, 0, 5, 0, 0, 0, 0, 0, 0];
+        let window = Window { i_start: 0, i_end: 1, j_start: 0, j_end: 0 };
+        let (bytes, stats) = decode_crop(&record, 0, window, "QG", true, false).unwrap();
+        assert_eq!(bytes, vec![0u8; 8]);
+        assert_eq!(stats.maximum, 0.0);
+        assert!(stats.source_has_positive());
+        record.raw_data.fill(0);
+        let (_, stats) = decode_crop(&record, 0, window, "QG", true, false).unwrap();
+        assert!(!stats.source_has_positive());
+    }
+
+    #[test]
+    #[ignore = "requires the retained public archive message"]
+    fn archived_graupel_dry_crop_has_positive_source() {
+        let path = env::var("HRRR_GRAUPEL_MESSAGE").expect("HRRR_GRAUPEL_MESSAGE");
+        let file = Grib2File::open(&path).unwrap();
+        let message = &file.messages[0];
+        let northeast = Window { i_start: 1314, i_end: 1792, j_start: 557, j_end: 1035 };
+        let (bytes, stats) = decode_crop(message, 0, northeast, "QG", true, false).unwrap();
+        assert!(bytes.iter().all(|v| *v == 0));
+        assert_eq!(stats.maximum, 0.0);
+        assert!(stats.source_has_positive());
+    }
+
+    #[test]
+    fn crop_bounds_excludes_unread_cells_and_keeps_included_refusal() {
+        let mut record = bitmap_record(None);
+        record.data_rep.decimal_scale = 2;
+        record.raw_data[0] = 101; // 1.01, outside physical unit-fraction bounds.
+        let window = Window { i_start: 1, i_end: 2, j_start: 0, j_end: 2 };
+        let (bytes, stats) = decode_crop(&record, 0, window, "SOILW", true, true).unwrap();
+        let expected: Vec<u8> = [0.02f32, 0.03, 0.05, 0.06, 0.08, 0.09]
+            .iter().flat_map(|v| v.to_le_bytes()).collect();
+        assert_eq!(bytes, expected);
+        assert_eq!(stats.count, 6);
+        assert_eq!(stats.maximum, 0.09);
+        let includes_bad = Window { i_start: 0, i_end: 1, j_start: 0, j_end: 1 };
+        let error = decode_crop(&record, 0, includes_bad, "SOILW", true, true).unwrap_err();
+        assert!(error.contains("SOILW value 1.01 outside [0,1]"), "{error}");
+    }
+
+    #[test]
+    fn dry_crop_preserves_field_anchored_quantization_clamp() {
+        let mut record = bitmap_record(None);
+        record.data_rep.bits_per_value = 16;
+        record.data_rep.reference_value = -1.0;
+        record.data_rep.decimal_scale = 6;
+        record.raw_data = [0u16, 2, 65535, 2, 2, 2, 2, 2, 2]
+            .iter().flat_map(|value| value.to_be_bytes()).collect();
+        let window = Window { i_start: 0, i_end: 1, j_start: 0, j_end: 0 };
+        let (bytes, stats) = decode_crop(&record, 0, window, "QCLOUD", true, false).unwrap();
+        let expected: Vec<u8> = [0.0f32, 1.0e-6]
+            .iter().flat_map(|value| value.to_le_bytes()).collect();
+        assert_eq!(bytes, expected);
+        assert_eq!(stats.clamped.clamps, 1);
+        assert_eq!(stats.count, 2);
+        // The dry crop alone would narrow the existing quantum tolerance.
+        assert!(matches!(value_bounds(true, false, 1.0e-6).check(-1.0e-6, 1.0e-6),
+            BoundVerdict::Refuse { .. }));
+    }
+
+    /// Real anonymous HRRR soil message, retained separately with URL and SHA256.
+    /// The native Northeast source window already includes the remapper halo.
+    /// Run with HRRR_SOIL_MESSAGE=/path/to/message.grib2 cargo test ... --ignored.
+    #[test]
+    #[ignore = "requires the retained public archive message"]
+    fn archived_crop_bounds_regression() {
+        let path = env::var("HRRR_SOIL_MESSAGE").expect("HRRR_SOIL_MESSAGE");
+        let file = Grib2File::open(&path).unwrap();
+        assert_eq!(file.messages.len(), 1);
+        let message = &file.messages[0];
+        let values = unpack_message(message).unwrap();
+        assert_eq!(values[921 * message.grid.nx as usize + 558], 1.01);
+        let northeast = Window { i_start: 1314, i_end: 1792, j_start: 557, j_end: 1035 };
+        let (bytes, stats) = decode_crop(message, 0, northeast, "SOILW", true, true).unwrap();
+        assert_eq!(bytes.len(), 479 * 479 * 4);
+        assert_eq!(stats.count, 479 * 479);
+        assert!(stats.minimum >= 0.0 && stats.maximum <= 1.0);
+        let reservoir = Window { i_start: 557, i_end: 559, j_start: 920, j_end: 922 };
+        let error = decode_crop(message, 0, reservoir, "SOILW", true, true).unwrap_err();
+        assert!(error.contains("SOILW value 1.01 outside [0,1]"), "{error}");
+        println!("Northeast {} cells PASS [{},{}]; included source cell REFUSED: {}",
+            stats.count, stats.minimum, stats.maximum, error);
+    }
+
+    #[test]
+    #[ignore = "requires the retained public archive roundoff message"]
+    fn archived_one_quantum_soil_roundoff_clamps() {
+        let path = env::var("HRRR_SOIL_ROUNDOFF_MESSAGE").expect("HRRR_SOIL_ROUNDOFF_MESSAGE");
+        let file = Grib2File::open(&path).unwrap();
+        assert_eq!(file.messages.len(), 1);
+        let message = &file.messages[0];
+        let values = unpack_message(message).unwrap();
+        assert_eq!(values[998 * message.grid.nx as usize + 1332], 1.0010000000000001);
+        let northeast = Window { i_start: 1314, i_end: 1792, j_start: 557, j_end: 1035 };
+        let (bytes, stats) = decode_crop(message, 0, northeast, "SOILW", true, true).unwrap();
+        assert_eq!(stats.clamped.clamps, 1);
+        assert_eq!(stats.maximum, 1.0);
+        let index = ((998 - 557) * 479 + (1332 - 1314)) * 4;
+        assert_eq!(f32::from_le_bytes(bytes[index..index + 4].try_into().unwrap()), 1.0);
+        assert!(matches!(value_bounds(true, true, 1.002).check(1.002, 0.001),
+            BoundVerdict::Refuse { .. }));
+        println!("Archived one-quantum SOILW cell clamps to 1; two quanta still refused");
+    }
+
+    fn bitmap_record(mask: Option<Vec<bool>>) -> Grib2Message {
+        let mut record = canonical_record(PMTF, HYBRID_LEVEL_TYPE, 1.0, 0);
+        record.grid.nx = 3;
+        record.grid.ny = 3;
+        record.data_rep.template = 0;
+        record.data_rep.bits_per_value = 8;
+        record.data_rep.section5_num_data_points = mask.as_ref()
+            .map(|m| m.iter().filter(|p| **p).count() as u32).unwrap_or(9);
+        record.raw_data = (1u8..=9).enumerate()
+            .filter(|(i, _)| mask.as_ref().map(|m| m[*i]).unwrap_or(true))
+            .map(|(_, v)| v).collect();
+        record.bitmap = mask;
+        record
+    }
+
+    fn bitmap_crop(record: &Grib2Message, variable: &str, window: Window)
+        -> Result<(Vec<u8>, Stats), String> {
+        let path = std::env::temp_dir().join(format!("bitmap-check-{}-{}.f32le",
+            std::process::id(), SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        let mut writer = BufWriter::new(File::create(&path).unwrap());
+        let result = decode_crop_write(record, 17, &mut writer, window, variable, true, false);
+        writer.flush().unwrap();
+        drop(writer);
+        let bytes = fs::read(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        result.map(|stats| (bytes, stats)).map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn bitmap_check_outside_crop_preserves_values() {
+        let window = Window { i_start: 1, i_end: 2, j_start: 0, j_end: 2 };
+        let masked = bitmap_record(Some(vec![false, true, true, true, true, true, true, true, true]));
+        validate_payload(&masked).unwrap();
+        assert_eq!(bitmap_crop(&masked, "TT", window).unwrap().0,
+            bitmap_crop(&bitmap_record(None), "TT", window).unwrap().0);
+    }
+
+    #[test]
+    fn bitmap_check_all_present_is_byte_identical() {
+        let window = Window { i_start: 0, i_end: 2, j_start: 0, j_end: 2 };
+        assert_eq!(bitmap_crop(&bitmap_record(Some(vec![true; 9])), "TT", window).unwrap().0,
+            bitmap_crop(&bitmap_record(None), "TT", window).unwrap().0);
+    }
+
+    #[test]
+    fn bitmap_check_named_non_aerosol_refusal() {
+        let window = Window { i_start: 0, i_end: 2, j_start: 0, j_end: 2 };
+        let masked = bitmap_record(Some(vec![false, true, true, true, true, true, true, true, true]));
+        let error = bitmap_crop(&masked, "TT", window).unwrap_err();
+        for required in ["TT", "level 1", "message", "i=0..2", "j=0..2", "masked_inside_crop=1"] {
+            assert!(error.contains(required), "missing {required}: {error}");
+        }
+    }
+
+    #[test]
+    fn bitmap_check_aerosol_donor_chain_and_counts() {
+        let window = Window { i_start: 0, i_end: 2, j_start: 0, j_end: 2 };
+        let masked = bitmap_record(Some(vec![false, true, true, true, true, true, true, true, false]));
+        let (bytes, stats) = bitmap_crop(&masked, "QNWFA", window).unwrap();
+        let expected: Vec<u8> = [0.0f32, 2., 3., 4., 5., 6., 7., 8., 0.]
+            .iter().flat_map(|v| v.to_le_bytes()).collect();
+        assert_eq!(bytes, expected);
+        let counts = format!("{stats:?}");
+        for required in ["masked: 2", "nearest_neighbor: 0", "four_pt: 0", "average_4pt: 0", "zero: 2"] {
+            assert!(counts.contains(required), "missing {required}: {counts}");
+        }
+    }
+
+    #[test]
+    fn bitmap_check_shape_and_packed_count() {
+        let mut record = bitmap_record(Some(vec![true; 9]));
+        record.data_rep.section5_num_data_points = 8;
+        assert!(validate_payload(&record).unwrap_err().to_string().contains("expected 9 present cells"));
+        record.bitmap = Some(vec![true; 8]);
+        assert!(validate_payload(&record).unwrap_err().to_string().contains("bitmap has 8 cells, expected 9"));
+        let window = Window { i_start: 0, i_end: 2, j_start: 0, j_end: 2 };
+        let error = bitmap_crop(&record, "TT", window).unwrap_err();
+        for required in ["TT", "level 1", "message 17", "i=0..2", "j=0..2", "masked_inside_crop=0", "bitmap has 8 cells"] {
+            assert!(error.contains(required), "{error}");
+        }
+    }
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    #[test]
-    fn completed_publication_retains_staging_and_canonical_survives_cleanup() {
+    fn publication_root(prefix: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "gpuwm-hrrr-publish-test-{}-{unique}",
-            std::process::id()
-        ));
+        std::env::temp_dir().join(format!("{prefix}-{}-{unique}", std::process::id()))
+    }
+
+    #[test]
+    fn completed_publication_retains_staging_and_canonical_survives_cleanup() {
+        let root = publication_root("gpuwm-hrrr-publish-test");
         let partial = root.join(format!(".native-bridge.partial-{}", std::process::id()));
         let nested = partial.join("atmosphere-f00");
         let output = root.join("native-bridge");
@@ -2004,14 +2869,7 @@ mod tests {
 
     #[test]
     fn non_streaming_publication_transfers_tree_without_hidden_leak() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "gpuwm-hrrr-direct-publish-test-{}-{unique}",
-            std::process::id()
-        ));
+        let root = publication_root("gpuwm-hrrr-direct-publish-test");
         let partial = root.join(format!(".native-bridge.partial-{}", std::process::id()));
         let output = root.join("native-bridge");
         fs::create_dir_all(partial.join("atmosphere-f00")).unwrap();
@@ -2030,14 +2888,7 @@ mod tests {
 
     #[test]
     fn publication_failure_cleans_direct_but_retains_streaming_owner_tree() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "gpuwm-hrrr-publish-failure-test-{}-{unique}",
-            std::process::id()
-        ));
+        let root = publication_root("gpuwm-hrrr-publish-failure-test");
         let output = root.join("native-bridge");
         fs::create_dir_all(&output).unwrap();
 
@@ -2174,6 +3025,26 @@ mod tests {
     }
 
     #[test]
+    fn a_2016_archive_corner_in_millidegrees_is_the_canonical_grid() {
+        // The 2016-05-24 wrfnat/wrfsfc files publish lat1 21.138 and lon1
+        // 237.28 for the same grid; the microdegree corner stays accepted
+        // and a corner that is neither is still refused.
+        let mut record = canonical_record(CICE, HYBRID_LEVEL_TYPE, 1.0, 0);
+        assert!(validate_canonical_grid(&record.grid).is_ok());
+        record.grid.lat1 = 21.138;
+        record.grid.lon1 = 237.28;
+        assert!(validate_canonical_grid(&record.grid).is_ok());
+        record.grid.lat1 = 21.139;
+        assert!(validate_canonical_grid(&record.grid).is_err());
+        record.grid.lat1 = 21.138;
+        record.grid.lon1 = 237.281;
+        assert!(validate_canonical_grid(&record.grid).is_err());
+        record.grid.lon1 = 237.28;
+        record.grid.nx = 1800;
+        assert!(validate_canonical_grid(&record.grid).is_err());
+    }
+
+    #[test]
     fn a_wrfnat_file_from_before_hrrr_v3_reads_its_cloud_ice_as_cice() {
         // HRRRv1 and v2 wrfnat files (2017-01-19 among them) publish cloud
         // ice as CICE, 0/6/0, on all 50 hybrid levels and no CIMIXR.  Read
@@ -2257,6 +3128,137 @@ mod tests {
         let same = inventory_atmosphere_messages(&wrfnat_records(CICE, 1), CYCLE, 1).unwrap();
         let first = inventory_atmosphere_messages(&wrfnat_records(CICE, 0), CYCLE, 0).unwrap();
         compare_atmosphere_inventory(&first, &same, 1).unwrap();
+    }
+
+    fn with_aerosol_numbers(mut records: Vec<Grib2Message>, specs: &[HybridSpec]) -> Vec<Grib2Message> {
+        for spec in specs {
+            for level in 1..=N_HYBRID_LEVELS {
+                records.push(canonical_record(spec.parameter, HYBRID_LEVEL_TYPE, level as f64, 0));
+            }
+        }
+        records
+    }
+
+    #[test]
+    fn a_file_publishing_the_aerosol_number_pair_has_it_selected_and_gated() {
+        let records = with_aerosol_numbers(wrfnat_records(CIMIXR, 0), &OPTIONAL_HYBRID_SPECS);
+        let inventory = inventory_atmosphere_messages(&records, CYCLE, 0).unwrap();
+        assert_eq!(optional_hybrid_fields(&inventory), vec!["QNWFA", "QNIFA"]);
+        assert_eq!(
+            inventory.selected.len(),
+            (HYBRID_SPECS.len() + 2) * N_HYBRID_LEVELS + SURFACE_SPECS.len()
+        );
+        // A file without the pair selects exactly the 561 it always did.
+        let plain = inventory_atmosphere_messages(&wrfnat_records(CIMIXR, 0), CYCLE, 0).unwrap();
+        assert!(optional_hybrid_fields(&plain).is_empty());
+        assert_eq!(plain.selected.len(), 561);
+    }
+
+    #[test]
+    fn a_file_publishing_layer_cloud_cover_has_it_selected_and_gated() {
+        let mut records = wrfnat_records(CIMIXR, 0);
+        for spec in OPTIONAL_SURFACE_SPECS {
+            records.push(canonical_record(spec.parameter, spec.level_type, spec.level_value, 0));
+        }
+        let inventory = inventory_atmosphere_messages(&records, CYCLE, 0).unwrap();
+        assert_eq!(optional_surface_fields(&inventory), vec!["PBLH", "LCDC", "MCDC", "HCDC"]);
+        assert_eq!(inventory.selected.len(), 565);
+        assert_eq!(optional_surface_gate_lines(&inventory), vec![
+            "optional_surface_fields\tPBLH,LCDC,MCDC,HCDC",
+            "optional_surface_units\tPBLH=m,LCDC=%,MCDC=%,HCDC=%"]);
+    }
+
+    #[test]
+    fn a_file_publishing_hpbl_has_it_selected_and_gated() {
+        let mut records = wrfnat_records(CIMIXR, 0);
+        let spec = OPTIONAL_SURFACE_SPECS[0];
+        records.push(canonical_record(spec.parameter, spec.level_type, spec.level_value, 0));
+        let inventory = inventory_atmosphere_messages(&records, CYCLE, 0).unwrap();
+        assert_eq!(optional_surface_fields(&inventory), vec!["PBLH"]);
+        assert_eq!(inventory.selected.len(), 562);
+        assert_eq!(optional_surface_gate_lines(&inventory), vec![
+            "optional_surface_fields\tPBLH", "optional_surface_units\tPBLH=m"]);
+        // Without it: the 561 records and no declaration, as before.
+        let plain = inventory_atmosphere_messages(&wrfnat_records(CIMIXR, 0), CYCLE, 0).unwrap();
+        assert!(optional_surface_fields(&plain).is_empty());
+        assert!(optional_surface_gate_lines(&plain).is_empty());
+        // Twice is refused rather than one silently chosen.
+        records.push(canonical_record(spec.parameter, spec.level_type, spec.level_value, 0));
+        let error = inventory_atmosphere_messages(&records, CYCLE, 0).unwrap_err().to_string();
+        assert!(error.contains("duplicate optional surface PBLH"), "{error}");
+    }
+
+    #[test]
+    fn half_the_aerosol_number_pair_is_refused() {
+        let records = with_aerosol_numbers(wrfnat_records(CIMIXR, 0), &OPTIONAL_HYBRID_SPECS[..1]);
+        let error = inventory_atmosphere_messages(&records, CYCLE, 0).unwrap_err().to_string();
+        assert!(error.contains("read whole or not at all"), "{error}");
+    }
+
+    const PMTF: Parameter = OPTIONAL_HYBRID_SPECS[0].parameter;
+    const POINTS: usize = 1799 * 1059;
+
+    /// A whole wrfnat lead with the aerosol pair, every record carrying a
+    /// real packed payload: simple packing at zero bits, so the decoder
+    /// expands the reference value over the grid exactly as it does a
+    /// constant field read from a file.
+    fn decodable_lead(forecast_hour: u32) -> Vec<Grib2Message> {
+        let mut records = wrfnat_records(CIMIXR, forecast_hour);
+        for spec in OPTIONAL_HYBRID_SPECS {
+            for level in 1..=N_HYBRID_LEVELS {
+                records.push(canonical_record(
+                    spec.parameter,
+                    HYBRID_LEVEL_TYPE,
+                    level as f64,
+                    forecast_hour,
+                ));
+            }
+        }
+        for record in &mut records {
+            record.data_rep.template = 0;
+            record.data_rep.bits_per_value = 0;
+            record.data_rep.reference_value = 0.5;
+        }
+        records
+    }
+
+    /// Mask two points of `parameter` on hybrid `level` as NCEP does PMTF
+    /// on level 1: a Section 6 bitmap and two fewer packed values.
+    fn mask(records: &mut [Grib2Message], parameter: Parameter, level: usize) -> usize {
+        let index = records
+            .iter()
+            .position(|record| {
+                parameter_matches(record, parameter)
+                    && record.product.level_type == HYBRID_LEVEL_TYPE
+                    && level_matches(record.product.level_value, level as f64)
+            })
+            .unwrap();
+        let mut bitmap = vec![true; POINTS];
+        bitmap[0] = false;
+        bitmap[POINTS - 1] = false;
+        records[index].bitmap = Some(bitmap);
+        records[index].data_rep.section5_num_data_points = (POINTS - 2) as u32;
+        index
+    }
+
+    #[test]
+    fn masked_pair_is_selected_whole_across_requested_leads() {
+        let mut first = decodable_lead(0);
+        mask(&mut first, PMTF, 1);
+        let reference = inventory_atmosphere_messages(&first, CYCLE, 0).unwrap();
+        assert_eq!(optional_hybrid_fields(&reference), vec!["QNWFA", "QNIFA"]);
+        assert_eq!(reference.selected.len(), 661);
+        for hour in [1, 6, 7, 8] {
+            let mut records = decodable_lead(hour);
+            mask(&mut records, PMTF, 1);
+            let candidate = inventory_atmosphere_messages(&records, CYCLE, hour).unwrap();
+            compare_atmosphere_inventory(&reference, &candidate, hour).unwrap();
+        }
+        let unrequested = inventory_atmosphere_unrequested(&first, CYCLE, 0).unwrap();
+        assert_eq!(unrequested.selected.len(), 561);
+        assert!(optional_hybrid_gate_lines(&unrequested).is_empty());
+        assert_eq!(optional_hybrid_gate_lines(&reference), vec![
+            "optional_hybrid_fields\tQNWFA,QNIFA", "optional_hybrid_units\tQNWFA=kg-1,QNIFA=kg-1"]);
     }
 
     #[test]
@@ -2383,11 +3385,13 @@ mod tests {
             Stats {
                 minimum: 0.0,
                 maximum: 1.0,
+                any_positive_in_source: true,
                 count: 4,
                 clamped: ClampTally {
                     clamps: 2,
                     max_excursion: 1.9073486328125e-9,
                 },
+                fill: Default::default(),
             },
             "SOILW.f32le",
         );
@@ -2409,13 +3413,16 @@ mod tests {
     }
 
     fn posted_test_root(name: &str) -> PathBuf {
+        // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+        static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "gpuwm-hrrr-posted-{name}-{}-{unique}",
-            std::process::id()
+            "gpuwm-hrrr-posted-{name}-{}-{unique}-{}",
+            std::process::id(),
+            NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         ));
         fs::create_dir_all(&root).unwrap();
         root
@@ -2478,4 +3485,49 @@ mod tests {
         assert!(wait_admitted(&root, &input, &open).is_err());
         fs::remove_dir_all(&root).unwrap();
     }
+
+    #[test]
+    fn hrrr_numbers_and_two_metre_humidity_are_requestable_extras() {
+        let (hybrid, surface) = requested_extra_sets("QNR,RH2,QNC,QNI").unwrap();
+        assert_eq!(hybrid.iter().map(|spec| spec.name).collect::<Vec<_>>(), vec!["QNC", "QNI", "QNR"]);
+        assert_eq!(hybrid[0].parameter, Parameter { discipline: 0, category: 6, number: 28 });
+        assert_eq!(hybrid[1].parameter, Parameter { discipline: 0, category: 6, number: 29 });
+        assert_eq!(hybrid[2].parameter, Parameter { discipline: 0, category: 1, number: 100 });
+        assert_eq!(surface.len(), 1);
+        assert_eq!((surface[0].name, surface[0].level_type, surface[0].level_value), ("RH2", 103, 2.0));
+        assert!(requested_extra_sets("RH2,RH2").is_err());
+        assert!(requested_extra_sets("QNC,RH3").is_err());
+        assert!(requested_extras("RH2").is_err());
+    }
+
+    #[test]
+    fn extra_table_is_explicit_and_numeric() {
+        assert!(requested_extras("NO_SUCH_FIELD").is_err());
+        assert!(requested_extras("MASSDEN,MASSDEN").is_err());
+        let specs = requested_extras("PMTF,MASSDEN,PMTC").unwrap();
+        assert_eq!(specs[0].name, "MASSDEN");
+        assert_eq!(specs[0].parameter, Parameter { discipline: 0, category: 20, number: 0 });
+        assert!(specs.iter().all(|spec| spec.nonnegative && !spec.require_any_positive));
+    }
+
+    #[test]
+    fn extras_require_fifty_matching_records_without_changing_default_inventory() {
+        let extras = requested_extras("MASSDEN").unwrap();
+        let mut records = wrfnat_records(CIMIXR, 0);
+        for level in 1..=50 {
+            records.push(canonical_record(extras[0].parameter, 105, level as f64, 0));
+        }
+        let default = inventory_atmosphere_messages(&records, CYCLE, 0).unwrap();
+        assert_eq!(default.selected.len(), 561);
+        let selected = inventory_atmosphere_with_extras(&records, CYCLE, 0, &extras, false).unwrap();
+        assert_eq!(selected.selected.len(), 611);
+        records.pop();
+        assert!(inventory_atmosphere_with_extras(&records, CYCLE, 0, &extras, false).unwrap_err().to_string().contains("MASSDEN hybrid level 50"));
+        records.push(canonical_record(Parameter { discipline: 0, category: 20, number: 1 }, 105, 50., 0));
+        assert!(inventory_atmosphere_with_extras(&records, CYCLE, 0, &extras, false).is_err());
+        records.push(canonical_record(extras[0].parameter, 105, 50., 0));
+        records.push(canonical_record(extras[0].parameter, 105, 50., 0));
+        assert!(inventory_atmosphere_with_extras(&records, CYCLE, 0, &extras, false).is_err());
+    }
+
 }

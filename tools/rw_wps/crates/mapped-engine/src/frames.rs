@@ -196,6 +196,11 @@ pub fn plan_frames_within(
         ));
     }
     let required_names: BTreeSet<String> = mapping.required_field_names()?.into_iter().collect();
+    for name in &required_names {
+        if mapping.field(name)?.optional()? {
+            return Err(mapping_invalid(format!("required field {name} cannot be optional")));
+        }
+    }
     // A required field held off the stream would be written nowhere while
     // every check that it was derived still passed, so the reader would
     // meet a frame without it.
@@ -577,19 +582,17 @@ fn validate_frame_axes(collection: &DecodedCollection, fields: &[CanonicalField]
                 field.name
             )));
         }
-        if let Some(levels) = shape.get("half_level") {
-            if *levels != collection.vertical_values.len() + 1 {
+        if let Some(levels) = shape.get("half_level")
+            && *levels != collection.vertical_values.len() + 1 {
                 return Err(frame_invalid(format!("{} does not bound the vertical coordinate", field.name)));
             }
-        }
-        if let Some(levels) = shape.get("vertical") {
-            if *levels != collection.vertical_values.len() {
+        if let Some(levels) = shape.get("vertical")
+            && *levels != collection.vertical_values.len() {
                 return Err(frame_invalid(format!(
                     "{} does not share the vertical coordinate",
                     field.name
                 )));
             }
-        }
     }
     Ok(())
 }
@@ -703,15 +706,40 @@ fn frame_header(
         }).collect()
     });
     let declaration = mapping.grid_declaration()?;
-    let grid = if declaration.family == GRID_FAMILY_LAMBERT {
+    let grid = source_grid(&declaration, &collection.latitude, &collection.longitude);
+    let policies = mapping
+        .target()?
+        .field("initialization_policies")
+        .map(crate::node::Node::to_value)
+        .unwrap_or_else(|| Value::Object(Map::new()));
+    Ok(json!({
+        "source_id": mapping.name()?,
+        "source_cycle": utc_isoformat(source_cycle),
+        "grid": grid,
+        "vertical_coordinates": Value::Object(vertical_coordinates),
+        "fields": field_descriptors,
+        "initialization_policies": policies,
+        "schema": SOURCE_FRAME_SCHEMA,
+    }))
+}
+
+/// The frame header's grid document for the declared source grid over the
+/// canonical axes: the same document whether it is written into a frame or
+/// sent ahead of the decode with an atmospheric window request.
+pub fn source_grid(
+    declaration: &crate::model::GridDeclaration,
+    latitude: &[f64],
+    longitude: &[f64],
+) -> Value {
+    if declaration.family == GRID_FAMILY_LAMBERT {
         let parameters = declaration
             .parameters
             .as_ref()
             .expect("lambert declarations carry parameters");
         let mut grid = json!({
             "projection": GRID_FAMILY_LAMBERT,
-            "nx": collection.longitude.len(),
-            "ny": collection.latitude.len(),
+            "nx": longitude.len(),
+            "ny": latitude.len(),
             "earth_shape": format!("grib_shape_of_earth:{}", parameters.shape_of_earth),
             "scan_order": "+x,+y",
             // Grid-relative sources were rotated to the earth basis at decode
@@ -739,22 +767,8 @@ fn frame_header(
         }
         grid
     } else {
-        regular_latlon_grid(&collection.latitude, &collection.longitude)
-    };
-    let policies = mapping
-        .target()?
-        .field("initialization_policies")
-        .map(crate::node::Node::to_value)
-        .unwrap_or_else(|| Value::Object(Map::new()));
-    Ok(json!({
-        "source_id": mapping.name()?,
-        "source_cycle": utc_isoformat(source_cycle),
-        "grid": grid,
-        "vertical_coordinates": Value::Object(vertical_coordinates),
-        "fields": field_descriptors,
-        "initialization_policies": policies,
-        "schema": SOURCE_FRAME_SCHEMA,
-    }))
+        regular_latlon_grid(latitude, longitude)
+    }
 }
 
 /// The frame header's grid document for a regular latitude/longitude
@@ -1368,12 +1382,50 @@ fn write_frameset_within(
     available: &(dyn Fn(&std::path::Path) -> Option<u64> + Sync),
     slice: impl FnMut(&(NaiveDateTime, Option<String>)) -> Result<DecodedCollection> + Send,
 ) -> Result<Value> {
+    write_frameset_within_overlap(directory, mapping, series, input_sha256, request_windows,
+        decode_window, available, false, slice)
+}
+
+/// [`write_frameset_within`], optionally writing each frame's bytes while
+/// the next valid time decodes (`overlap_write`, which the caller grants
+/// only when one more decoded frame fits in memory:
+/// [`crate::threads::overlap_write`]).
+#[allow(clippy::too_many_arguments)]
+fn write_frameset_within_overlap(
+    directory: &std::path::Path,
+    mapping: &Mapping,
+    series: &SeriesSummary,
+    input_sha256: &BTreeMap<String, String>,
+    request_windows: bool,
+    decode_window: Option<crate::window::Window>,
+    available: &(dyn Fn(&std::path::Path) -> Option<u64> + Sync),
+    overlap_write: bool,
+    slice: impl FnMut(&(NaiveDateTime, Option<String>)) -> Result<DecodedCollection> + Send,
+) -> Result<Value> {
     // One lane calls `slice` from this thread, in frameset order; the
     // lock only lets the one-lane and many-lane writers share one body.
     let slice = std::sync::Mutex::new(slice);
-    write_frameset_core(directory, mapping, series, input_sha256, request_windows,
-        decode_window.as_ref(), available, 1,
+    write_frameset_core_with(directory, mapping, series, input_sha256, request_windows,
+        decode_window.as_ref(), available, 1, overlap_write,
         &|_index, key| (slice.lock().unwrap_or_else(|poisoned| poisoned.into_inner()))(key))
+}
+
+/// The one-valid-time writer with the stream written behind the next
+/// valid time's decode when `overlap_write` (see
+/// [`write_frameset_within_overlap`]).
+#[allow(clippy::too_many_arguments)]
+pub fn write_frameset_one_lane(
+    directory: &std::path::Path,
+    mapping: &Mapping,
+    series: &SeriesSummary,
+    input_sha256: &BTreeMap<String, String>,
+    request_windows: bool,
+    decode_window: Option<crate::window::Window>,
+    overlap_write: bool,
+    slice: impl FnMut(&(NaiveDateTime, Option<String>)) -> Result<DecodedCollection> + Send,
+) -> Result<Value> {
+    write_frameset_within_overlap(directory, mapping, series, input_sha256, request_windows,
+        decode_window, &crate::space::available_bytes, overlap_write, slice)
 }
 
 type FrameKey = (NaiveDateTime, Option<String>);
@@ -1462,7 +1514,7 @@ fn plan_frame<'a>(
 #[allow(clippy::too_many_arguments)]
 fn field_work(
     fields: &FieldMaterializer<'_>,
-    id: usize,
+    field: CanonicalField,
     plan: &FramePlan,
     soil_count: Option<i64>,
     window: Option<&crate::window::Window>,
@@ -1470,7 +1522,6 @@ fn field_work(
     time: &Value,
     valid_time: NaiveDateTime,
 ) -> Result<FieldWork> {
-    let field = &fields.available[&id];
     let finite_required = plan.required_names.contains(&field.name)
         && field.name != "soil_temperature" && field.name != "volumetric_soil_moisture";
     if finite_required && field.values.iter().any(|value| !value.is_finite())
@@ -1479,8 +1530,8 @@ fn field_work(
         return Err(frame_invalid(format!(
             "required mapped field {} is not finite at {valid_time}", field.name)));
     }
-    if let Some(soil_count) = soil_count {
-        if ["soil_temperature", "volumetric_soil_moisture"].contains(&field.name.as_str()) {
+    if let Some(soil_count) = soil_count
+        && ["soil_temperature", "volumetric_soil_moisture"].contains(&field.name.as_str()) {
             let axis = field.axes.iter().position(|axis| axis == "soil")
                 .ok_or_else(|| frame_invalid(format!("{} has no soil axis", field.name)))?;
             let observed = field.values.shape()[axis] as i64;
@@ -1489,38 +1540,46 @@ fn field_work(
                     "{} has {observed} layers, target declares {soil_count}", field.name)));
             }
         }
-    }
     // A field the decode produced over the granted window alone: its y/x
     // are the window's and every value it has was checked above, so it
     // is published as decoded.
-    let decoded = decode_window.filter(|w| w.holds_decoded(field));
+    let decoded = decode_window.filter(|w| w.holds_decoded(&field));
     if let Some(w) = decoded {
-        w.validate_decoded(field, fields.collection.vertical_values.len())?;
+        w.validate_decoded(&field, fields.collection.vertical_values.len())?;
     } else {
-        validate_frame_axes(&fields.collection, std::slice::from_ref(field))?;
-        if let Some(window) = window { window.validate_field(field)?; }
+        validate_frame_axes(&fields.collection, std::slice::from_ref(&field))?;
+        if let Some(window) = window { window.validate_field(&field)?; }
     }
+    let original_shape = field.values.shape().to_vec();
     let original_flat = array::contiguous(&field.values);
     // Hash once over the complete source. The same digest enters
     // the original canonical header and the field descriptor.
     let field_sha256 = crate::digest::array_sha256(field.values.shape(), &original_flat);
-    let descriptor = field_descriptor(field, time, &field_sha256);
+    let descriptor = field_descriptor(&field, time, &field_sha256);
     let soil_levels = field.axes.iter().position(|axis| axis == "soil")
         .map(|axis| field.values.shape()[axis]);
     let retained = window.filter(|w| w.fields.contains(&field.name));
     let shape = retained.map_or_else(|| field.values.shape().to_vec(),
         |w| w.shape(field.values.shape()[0]).to_vec());
     let mut pressure_levels = None;
-    let values: Vec<f64> = if decoded.is_some() {
-        original_flat.into_owned()
-    } else if let Some(w) = retained {
+    if decoded.is_some() && field.name == "air_pressure" {
+        // Its whole planes were medianed as they were unpacked
+        // (`assemble::DecodedCollection::original_pressure_hpa`).
+        pressure_levels = Some(fields.collection.original_pressure_hpa.clone().ok_or_else(|| {
+            frame_invalid("air_pressure was decoded over the atmospheric window                            without its whole-plane pressure ladder")
+        })?);
+    }
+    let values: Vec<f64> = if let Some(w) = retained.filter(|_| decoded.is_none()) {
         if field.name == "air_pressure" {
             pressure_levels = Some(crate::window::pressure_levels(
                 &original_flat, w.source_shape[0] * w.source_shape[1])?);
         }
         w.crop(&original_flat, shape[0])
     } else {
-        original_flat.into_owned()
+        match original_flat {
+            std::borrow::Cow::Owned(values) => values,
+            std::borrow::Cow::Borrowed(_) => array::into_contiguous(field.values),
+        }
     };
     let sha256 = if retained.is_some() && decoded.is_none() {
         crate::digest::array_sha256(&shape, &values)
@@ -1532,14 +1591,14 @@ fn field_work(
         // Nothing outside the window was decoded, so there is no
         // whole-field digest or missing count to state.
         Some(json!({
-            "shape": [field.values.shape()[0], w.source_shape[0], w.source_shape[1]],
+            "shape": [original_shape[0], w.source_shape[0], w.source_shape[1]],
             "sha256": Value::Null,
             "missing_count": Value::Null,
             "validation": crate::window::DECODED_VALIDATION,
         }))
     } else {
         retained.map(|_| json!({
-            "shape": field.values.shape(), "sha256": field_sha256,
+            "shape": original_shape, "sha256": field_sha256,
             "missing_count": field.missing_count,
             "validation": "complete-canonical-field-before-window-v1",
         }))
@@ -1592,13 +1651,19 @@ fn prepare_frame(plan: &FramePlan, planned: PlannedFrame<'_>,
         }
         ready.push(id);
     }
+    // All derivations have finished reading their inputs. Take each
+    // publication field in order so its worker can hand the allocation
+    // straight to the stream, rather than clone every complete array.
+    let ready: Vec<CanonicalField> = ready.into_iter()
+        .map(|id| fields.available.remove(&id).expect("materialized output exists"))
+        .collect();
     let works: Vec<Result<FieldWork>> = {
         let fields = &fields;
         let (time, window) = (&time, window.as_ref());
         crate::threads::install(|| {
             use rayon::prelude::*;
-            ready.par_iter()
-                .map(|id| field_work(fields, *id, plan, soil_count, window, decode_window, time,
+            ready.into_par_iter()
+                .map(|field| field_work(fields, field, plan, soil_count, window, decode_window, time,
                     valid_time))
                 .collect()
         })
@@ -1610,15 +1675,14 @@ fn prepare_frame(plan: &FramePlan, planned: PlannedFrame<'_>,
         match work {
             Ok(work) => {
                 descriptors.push(work.descriptor);
-                if header["vertical_coordinates"].get("soil").is_none() {
-                    if let Some(levels) = work.soil_levels {
+                if header["vertical_coordinates"].get("soil").is_none()
+                    && let Some(levels) = work.soil_levels {
                         header["vertical_coordinates"]["soil"] = json!({
                             "coordinate": "soil_depth", "level_count": levels,
                             "level_values": Vec::<f64>::new(), "a_coefficients": Vec::<f64>::new(),
                             "b_coefficients": Vec::<f64>::new(), "positive": "down", "units": "index",
                         });
                     }
-                }
                 if work.pressure_levels.is_some() {
                     pressure_levels = work.pressure_levels;
                 }
@@ -1668,15 +1732,13 @@ struct Committer<'w> {
     keys: &'w [FrameKey],
     count: usize,
     stream_path: std::path::PathBuf,
-    stream: std::io::BufWriter<std::fs::File>,
+    // The frame stream's bytes, and the whole-stream digest, go out on
+    // their own thread (`StreamWriter`), in frameset order.
+    stream: StreamWriter,
     offset: u64,
     // What the whole stream needs, once the first frame has said; kept
     // so a write that still meets a full disk can say how far it got.
     planned: Option<u64>,
-    // The whole-stream digest the reader re-computes before it trusts a
-    // single array.  Accumulated as the bytes go out rather than by
-    // re-reading the file: a real frameset is multi-gigabyte.
-    stream_digest: sha2::Sha256,
     frame_documents: Vec<Value>,
     windowed: bool,
     inventories: BTreeSet<Vec<String>>,
@@ -1718,8 +1780,8 @@ impl Committer<'_> {
                 frame.index, &self.series.grid_fingerprint)?
         } else { None };
         self.windowed |= window.is_some();
-        if frame.index == 0 {
-            if let Some(values) = frame.fields.planned_values(window.as_ref())? {
+        if frame.index == 0
+            && let Some(values) = frame.fields.planned_values(window.as_ref())? {
                 let frame_bytes = values.saturating_mul(8);
                 let needed = frame_bytes.saturating_mul(self.count as u64);
                 self.planned = Some(needed);
@@ -1735,38 +1797,22 @@ impl Committer<'_> {
                         self.count, bytes_and_gib(frame_bytes))));
                 }
             }
-        }
         self.inventories.insert(frame.names.clone());
         Ok(window)
     }
 
-    /// Stream one prepared frame's fields and document it.
+    /// Hand one prepared frame's fields to the stream writer and document
+    /// it.  The bytes go out on the writer's thread, in frameset order;
+    /// [`Self::drain`] waits for them.  A frame that carries a refusal is
+    /// drained here, so a write that fails ahead of that refusal is the
+    /// one reported, as when the bytes went out on this thread.
     fn commit(&mut self, frame: PreparedFrame) -> Result<()> {
         let (valid_time, member) = &self.keys[frame.index];
         let mut field_documents = Vec::with_capacity(frame.fields.len());
+        let mut payload = Vec::with_capacity(frame.fields.len());
         for field in frame.fields {
             let length = (field.values.len() * 8) as u64;
-            // Encoded, digested into the whole-stream hash, and
-            // written through a FIXED buffer, a chunk at a time.  One
-            // field of a 0.25-degree analysis is ~700 MB as f64;
-            // encoding a whole field into a second Vec first would
-            // double the peak of every decode this seam exists to make
-            // cheaper -- the same reason the reader streams its hash
-            // instead of reading the stream whole.  The field's OWN
-            // digest was taken from the full original values.
-            let mut chunk: Vec<u8> = Vec::with_capacity(STREAM_CHUNK * 8);
-            let mut field_written: u64 = 0;
-            for values in field.values.chunks(STREAM_CHUNK) {
-                chunk.clear();
-                for value in values {
-                    chunk.extend_from_slice(&value.to_le_bytes());
-                }
-                sha2::Digest::update(&mut self.stream_digest, &chunk);
-                if let Err(error) = self.stream.write_all(&chunk) {
-                    return Err(self.stream_failure(error, self.offset + field_written));
-                }
-                field_written += chunk.len() as u64;
-            }
+            payload.push(field.values);
             let mut field_document = json!({
                 "name": field.name,
                 "units": field.units,
@@ -1787,7 +1833,9 @@ impl Committer<'_> {
             field_documents.push(field_document);
             self.offset += length;
         }
+        self.stream.submit(payload);
         if let Some(refusal) = frame.failure {
+            self.drain()?;
             return Err(refusal);
         }
         // Every MappedSourceFrame scalar rides the frame, not the
@@ -1822,6 +1870,235 @@ impl Committer<'_> {
     }
 }
 
+impl Committer<'_> {
+    /// Wait until every frame handed to the writer is written, and report
+    /// the first write that failed as the serial writer reported it.
+    fn drain(&mut self) -> Result<()> {
+        match self.stream.drain() {
+            Ok(()) => Ok(()),
+            Err((error, written)) => Err(self.stream_failure(error, written)),
+        }
+    }
+}
+
+/// The frame stream's writer: its own thread, fed frames in frameset
+/// order, writing each field's little-endian bytes at their offsets from
+/// a few threads while one more folds the same bytes, in order, into the
+/// whole-stream SHA-256 the reader re-computes before it trusts a single
+/// array.  Accumulated as the bytes go out rather than by re-reading the
+/// file: a real frameset is multi-gigabyte.
+///
+/// Both threads encode their own FIXED chunk at a time.  One field of a
+/// 0.25-degree analysis is ~700 MB as f64; encoding a whole field into a
+/// second Vec first would double the peak of every decode this seam
+/// exists to make cheaper -- the same reason the reader streams its hash
+/// instead of reading the stream whole.  The field's OWN digest was taken
+/// from the full original values.
+///
+/// Named breakage: the encode, the whole-stream digest and the write ran
+/// one after another on the thread that orders the frameset, so a 3 km
+/// CONUS native-level compose spent about 6 s of every valid time's
+/// 13 GB on one core while the pool and the cards waited.
+struct StreamWriter {
+    jobs: Option<std::sync::mpsc::Sender<Vec<Vec<f64>>>>,
+    done: std::sync::mpsc::Receiver<std::result::Result<(), (std::io::Error, u64)>>,
+    pending: usize,
+    failed: Option<(std::io::Error, u64)>,
+    broken: bool,
+    thread: Option<std::thread::JoinHandle<(std::fs::File, sha2::Sha256)>>,
+}
+
+/// Threads writing one field's chunks at their offsets.  Page-cache
+/// writes from one thread top out near 2 GB/s on the measured box, below
+/// the whole-stream digest's rate, so a few share each field.
+const STREAM_WRITERS: usize = 4;
+
+impl StreamWriter {
+    fn new(file: std::fs::File) -> Self {
+        let (jobs, inbox) = std::sync::mpsc::channel::<Vec<Vec<f64>>>();
+        let (report, done) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("mapped-engine-stream".into())
+            .spawn(move || {
+                let stream = file;
+                let mut digest = <sha2::Sha256 as sha2::Digest>::new();
+                let mut offset: u64 = 0;
+                let mut broken = false;
+                for fields in inbox {
+                    let mut outcome = Ok(());
+                    if !broken {
+                        for values in &fields {
+                            if let Err(failure) = stream_field(&stream, &mut digest, values, offset) {
+                                outcome = Err(failure);
+                                broken = true;
+                                break;
+                            }
+                            offset += (values.len() * 8) as u64;
+                        }
+                    }
+                    drop(fields);
+                    if report.send(outcome).is_err() { break; }
+                }
+                (stream, digest)
+            })
+            .expect("spawn the frame stream writer");
+        StreamWriter { jobs: Some(jobs), done, pending: 0, failed: None, broken: false, thread: Some(thread) }
+    }
+
+    /// A writer with no thread, left behind when the real one is closed.
+    fn closed() -> Self {
+        let (_jobs, done) = std::sync::mpsc::channel();
+        StreamWriter { jobs: None, done, pending: 0, failed: None, broken: false, thread: None }
+    }
+
+    fn submit(&mut self, fields: Vec<Vec<f64>>) {
+        if let Some(jobs) = &self.jobs
+            && jobs.send(fields).is_ok() {
+                self.pending += 1;
+            }
+    }
+
+    fn drain(&mut self) -> std::result::Result<(), (std::io::Error, u64)> {
+        while self.pending > 0 {
+            self.pending -= 1;
+            match self.done.recv() {
+                Ok(Ok(())) => {}
+                Ok(Err(failure)) => { self.failed.get_or_insert(failure); }
+                Err(_) => {
+                    self.failed.get_or_insert((std::io::Error::other("the frame stream writer stopped"), 0));
+                    self.pending = 0;
+                }
+            }
+        }
+        // The failed write's own error goes back the first time, so its
+        // OS code still classifies a full disk; the stream is broken from
+        // then on and every later wait says so.
+        match self.failed.take() {
+            Some(failure) => {
+                self.broken = true;
+                Err(failure)
+            }
+            None if self.broken => Err((std::io::Error::other(
+                "the frame stream writer stopped after a failed write"), 0)),
+            None => Ok(()),
+        }
+    }
+
+    /// Every frame written: the buffered stream and its digest back.
+    fn close(mut self) -> std::result::Result<(std::fs::File, sha2::Sha256), (std::io::Error, u64)> {
+        self.drain()?;
+        self.jobs = None;
+        let thread = self.thread.take().expect("the writer is joined once");
+        match thread.join() {
+            Ok(parts) => Ok(parts),
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+}
+
+impl Drop for StreamWriter {
+    /// A writer dropped on a refusal path still finishes and joins its
+    /// thread, so nothing writes into the scratch folder after the
+    /// engine has reported.
+    fn drop(&mut self) {
+        self.jobs = None;
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// One field's bytes into the stream and the digest, side by side; the
+/// error carries the stream offset the serial writer reported: the field's
+/// start plus every chunk before the FIRST chunk (in stream order) whose
+/// write failed.
+fn stream_field(
+    stream: &std::fs::File,
+    digest: &mut sha2::Sha256,
+    values: &[f64],
+    offset: u64,
+) -> std::result::Result<(), (std::io::Error, u64)> {
+    fn encode(chunk: &mut Vec<u8>, values: &[f64]) {
+        chunk.clear();
+        for value in values {
+            chunk.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    let chunks: Vec<&[f64]> = values.chunks(STREAM_CHUNK).collect();
+    let chunk_bytes = (STREAM_CHUNK * 8) as u64;
+    std::thread::scope(|scope| {
+        let hasher = {
+            let chunks = &chunks;
+            scope.spawn(move || {
+                let mut buffer: Vec<u8> = Vec::with_capacity(STREAM_CHUNK * 8);
+                for values in chunks {
+                    encode(&mut buffer, values);
+                    sha2::Digest::update(digest, &buffer);
+                }
+            })
+        };
+        let writers: Vec<_> = (0..STREAM_WRITERS.min(chunks.len().max(1))).map(|first| {
+            let chunks = &chunks;
+            scope.spawn(move || -> Option<(usize, std::io::Error)> {
+                let mut buffer: Vec<u8> = Vec::with_capacity(STREAM_CHUNK * 8);
+                let mut index = first;
+                while index < chunks.len() {
+                    encode(&mut buffer, chunks[index]);
+                    let at = offset + index as u64 * chunk_bytes;
+                    if let Err(error) = write_all_at(stream, &buffer, at) {
+                        return Some((index, error));
+                    }
+                    index += STREAM_WRITERS;
+                }
+                None
+            })
+        }).collect();
+        let mut failed: Option<(usize, std::io::Error)> = None;
+        for writer in writers {
+            match writer.join() {
+                Ok(Some((index, error))) => {
+                    if failed.as_ref().is_none_or(|(first, _)| index < *first) {
+                        failed = Some((index, error));
+                    }
+                }
+                Ok(None) => {}
+                Err(payload) => std::panic::resume_unwind(payload),
+            }
+        }
+        if let Err(payload) = hasher.join() {
+            std::panic::resume_unwind(payload);
+        }
+        match failed {
+            Some((index, error)) => Err((error, offset + index as u64 * chunk_bytes)),
+            None => Ok(()),
+        }
+    })
+}
+
+/// `buffer` written whole at byte `at` of `file`, from any thread.
+#[cfg(unix)]
+fn write_all_at(file: &std::fs::File, buffer: &[u8], at: u64) -> std::io::Result<()> {
+    std::os::unix::fs::FileExt::write_all_at(file, buffer, at)
+}
+
+/// `buffer` written whole at byte `at` of `file`, from any thread.
+#[cfg(windows)]
+fn write_all_at(file: &std::fs::File, mut buffer: &[u8], mut at: u64) -> std::io::Result<()> {
+    while !buffer.is_empty() {
+        match std::os::windows::fs::FileExt::seek_write(file, buffer, at) {
+            Ok(0) => return Err(std::io::Error::new(std::io::ErrorKind::WriteZero,
+                "failed to write whole buffer")),
+            Ok(written) => {
+                buffer = &buffer[written..];
+                at += written as u64;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
 /// What a pipeline job hands back to the thread that writes the stream.
 enum Stage<'a> {
     Planned(usize, Result<PlannedFrame<'a>>),
@@ -1832,7 +2109,29 @@ enum Stage<'a> {
     Panicked(Box<dyn std::any::Any + Send>),
 }
 
-/// The one writer body, for one lane or many.
+// Per-invocation test control for arrival order. It is absent from
+// production builds and cannot affect the decoded fields or stream bytes.
+//
+// Called on the ordered thread with each frame's index as its prepared
+// result arrives.  Returning true withholds that result, still counted
+// as in flight, until it is the only work in flight; the writer then
+// takes it as if it had just arrived.  That is a slow frame without a
+// slow job.  The control used to block inside the frame's pool job
+// instead, which deadlocks: a pool worker waiting on the stolen half of
+// a decode's parallel step runs queued jobs meanwhile, so the blocked
+// job could sit on top of the very decode it was waiting for (public CI
+// 37981479846, native windows-2025; 8 of 100 runs of the whole test
+// binary on four cores of a development machine).
+#[cfg(test)]
+type PipelinePreparedHook = std::sync::Arc<dyn Fn(usize) -> bool + Send + Sync>;
+#[cfg(test)]
+std::thread_local! {
+    static PIPELINE_PREPARED_HOOK: std::cell::RefCell<Option<PipelinePreparedHook>> =
+        std::cell::RefCell::new(None);
+}
+
+/// The one writer body, for one lane or many, writing each frame before
+/// the next valid time is decoded.
 #[allow(clippy::too_many_arguments)]
 fn write_frameset_core(
     directory: &std::path::Path,
@@ -1843,6 +2142,25 @@ fn write_frameset_core(
     decode_window: Option<&crate::window::Window>,
     available: &(dyn Fn(&std::path::Path) -> Option<u64> + Sync),
     lanes: usize,
+    slice: &(dyn Fn(usize, &FrameKey) -> Result<DecodedCollection> + Sync),
+) -> Result<Value> {
+    write_frameset_core_with(directory, mapping, series, input_sha256, request_windows,
+        decode_window, available, lanes, false, slice)
+}
+
+/// [`write_frameset_core`]; with one lane and `overlap_write`, a frame's
+/// bytes go out while the next valid time decodes.
+#[allow(clippy::too_many_arguments)]
+fn write_frameset_core_with(
+    directory: &std::path::Path,
+    mapping: &Mapping,
+    series: &SeriesSummary,
+    input_sha256: &BTreeMap<String, String>,
+    request_windows: bool,
+    decode_window: Option<&crate::window::Window>,
+    available: &(dyn Fn(&std::path::Path) -> Option<u64> + Sync),
+    lanes: usize,
+    overlap_write: bool,
     slice: &(dyn Fn(usize, &FrameKey) -> Result<DecodedCollection> + Sync),
 ) -> Result<Value> {
     use crate::refusal::write_error;
@@ -1865,10 +2183,9 @@ fn write_frameset_core(
         keys: &plan.keys,
         count: plan.keys.len(),
         stream_path,
-        stream: std::io::BufWriter::new(file),
+        stream: StreamWriter::new(file),
         offset: 0,
         planned: None,
-        stream_digest: <sha2::Sha256 as sha2::Digest>::new(),
         frame_documents: Vec::with_capacity(plan.keys.len()),
         windowed: false,
         inventories: BTreeSet::new(),
@@ -1886,11 +2203,22 @@ fn write_frameset_core(
         Some(outcome) => outcome?,
         None => {
             for index in 0..plan.keys.len() {
-                let collection = slice(index, &plan.keys[index])?;
-                let planned = plan_frame(mapping, &plan, index, collection)?;
+                // With `overlap_write`, the previous frame's bytes are
+                // still going out while this one decodes and plans; they
+                // are drained before anything else happens in frameset
+                // order (the window request, the next write), and a write
+                // that failed is reported ahead of this frame's refusal,
+                // where the serial writer would have stopped.
+                let planned = slice(index, &plan.keys[index])
+                    .and_then(|collection| plan_frame(mapping, &plan, index, collection));
+                committer.drain()?;
+                let planned = planned?;
                 let window = committer.window_for(&planned)?;
                 let prepared = prepare_frame(&plan, planned, window, decode_window);
                 committer.commit(prepared)?;
+                if !overlap_write {
+                    committer.drain()?;
+                }
             }
         }
     }
@@ -1936,6 +2264,10 @@ fn pipeline<'s>(
     let mut planned: BTreeMap<usize, Result<PlannedFrame<'s>>> = BTreeMap::new();
     let mut prepared: BTreeMap<usize, PreparedFrame> = BTreeMap::new();
     let mut halted: Option<(usize, crate::refusal::Refusal)> = None;
+    #[cfg(test)]
+    let prepared_hook = PIPELINE_PREPARED_HOOK.with(|hook| hook.borrow().clone());
+    #[cfg(test)]
+    let mut withheld: Option<Stage<'s>> = None;
     let outcome = loop {
         while halted.is_none() && started < count && decoded < lanes && started - committed < depth {
             let (index, sender) = (started, sender.clone());
@@ -1953,7 +2285,7 @@ fn pipeline<'s>(
         }
         let mut written = Ok(());
         while let Some(frame) = prepared.remove(&committed) {
-            written = committer.commit(frame);
+            written = committer.commit(frame).and_then(|()| committer.drain());
             if written.is_err() { break; }
             committed += 1;
         }
@@ -1963,11 +2295,35 @@ fn pipeline<'s>(
             break Err(halted.take().expect("just matched").1);
         }
         if outstanding == 0 {
+            // A complete prepared batch can free admission only after
+            // the start loop saw a full depth. Re-enter that loop before
+            // declaring a stall when there is now another frame to admit.
+            if halted.is_none() && started < count && decoded < lanes && started - committed < depth {
+                continue;
+            }
             break Err(frame_invalid(format!(
                 "the frame writer stalled at valid time {committed} of {count} with no work in flight")));
         }
-        let Ok(stage) = receiver.recv() else {
-            break Err(frame_invalid("the frame writer lost its workers"));
+        #[cfg(test)]
+        let released = if outstanding == 1 { withheld.take() } else { None };
+        #[cfg(not(test))]
+        let released = None;
+        #[cfg(test)]
+        let arriving = released.is_none();
+        let stage = match released {
+            Some(stage) => stage,
+            None => match receiver.recv() {
+                Ok(stage) => stage,
+                Err(_) => break Err(frame_invalid("the frame writer lost its workers")),
+            },
+        };
+        #[cfg(test)]
+        let stage = match (&prepared_hook, stage) {
+            (Some(hook), Stage::Prepared(frame)) if arriving && hook(frame.index) && withheld.is_none() => {
+                withheld = Some(Stage::Prepared(frame));
+                continue;
+            }
+            (_, stage) => stage,
         };
         outstanding -= 1;
         match stage {
@@ -2023,8 +2379,13 @@ impl Committer<'_> {
     /// ever handed on.
     fn finish(mut self) -> Result<Value> {
         use crate::refusal::write_error;
+        let writer = std::mem::replace(&mut self.stream, StreamWriter::closed());
+        let (mut stream, stream_digest) = match writer.close() {
+            Ok(parts) => parts,
+            Err((error, written)) => return Err(self.stream_failure(error, written)),
+        };
         require_one_inventory(&self.inventories)?;
-        if let Err(error) = self.stream.flush() {
+        if let Err(error) = stream.flush() {
             return Err(self.stream_failure(error, self.offset));
         }
         let document = json!({
@@ -2038,7 +2399,7 @@ impl Committer<'_> {
                 "path": "frames.f64",
                 "dtype": "<f8",
                 "bytes": self.offset,
-                "sha256": crate::digest::hex_digest(self.stream_digest),
+                "sha256": crate::digest::hex_digest(stream_digest),
             },
             "mapping_sha256": self.mapping.sha256,
             "mapping_path": self.mapping.path,
@@ -2111,8 +2472,9 @@ mod tests {
         output["units"]["scale"] = json!(3.0);
         let fields = if self_seed { json!({"source": middle}) }
             else { json!({"source": source, "middle": middle, "output": output}) };
-        let document = json!({"coordinates": {"vertical": {"kind": "pressure", "units": "Pa"}},
-            "fields": fields, "derivations": [
+        let document = json!({"name": "field-stream-test",
+            "coordinates": {"vertical": {"kind": "pressure", "units": "Pa"}},
+            "target": {}, "fields": fields, "derivations": [
                 {"name": "double", "operation": "copy", "source": "source"},
                 {"name": "triple", "operation": "copy", "source": "middle"}]});
         let payload = serde_json::to_vec(&document).unwrap();
@@ -2126,7 +2488,7 @@ mod tests {
         let collection = DecodedCollection { latitude: vec![1., 2.], longitude: vec![3., 4.],
             vertical_values: vec![100000.], direct: BTreeMap::from([((valid_time, None, "source".to_owned()), direct)]),
             source_cycles: BTreeMap::from([((valid_time, None), valid_time)]),
-            grid_fingerprint: "grid".to_owned(), hybrid_a: Vec::new(), hybrid_b: Vec::new() };
+            grid_fingerprint: "grid".to_owned(), hybrid_a: Vec::new(), hybrid_b: Vec::new(), original_pressure_hpa: None };
         let plan = FramePlan { keys: vec![(valid_time, None)],
             declared_names: if self_seed { vec!["source".to_owned()] }
                 else { ["source", "middle", "output"].map(str::to_owned).to_vec() },
@@ -2154,6 +2516,22 @@ mod tests {
         fields.consume(ids[2]);
         assert!(fields.available.is_empty());
         assert!(fields.remaining.iter().all(|uses| *uses == 0));
+    }
+
+    #[test]
+    fn frame_preparation_moves_outputs_after_their_derivations() {
+        let (mapping, collection, plan) = chain_fixture(false);
+        let pointer = collection.direct.values().next().unwrap().values.as_ptr();
+        let planned = plan_frame(&mapping, &plan, 0, collection).unwrap();
+        let prepared = prepare_frame(&plan, planned, None, None);
+        assert!(prepared.failure.as_ref().unwrap().message.contains(
+            "source frame is incomplete for WRF initialization"));
+        assert_eq!(prepared.fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
+                   ["source", "middle", "output"]);
+        assert_eq!(prepared.fields[0].values.as_ptr(), pointer);
+        assert_eq!(prepared.fields[0].values, [1., 2., 3., 4.]);
+        assert_eq!(prepared.fields[1].values, [2., 4., 6., 8.]);
+        assert_eq!(prepared.fields[2].values, [6., 12., 18., 24.]);
     }
 
     /// The chain fixture with `source` marked `dependency_only`, `required`
@@ -2245,7 +2623,7 @@ mod tests {
             vertical_values: vec![100000.], direct: BTreeMap::from([
                 column("soil_temperature", 9, 280.0), column("soil_water_column", 8, 50.0)]),
             source_cycles: BTreeMap::from([((valid_time, None), valid_time)]),
-            grid_fingerprint: "grid".to_owned(), hybrid_a: Vec::new(), hybrid_b: Vec::new() };
+            grid_fingerprint: "grid".to_owned(), hybrid_a: Vec::new(), hybrid_b: Vec::new(), original_pressure_hpa: None };
         let plan = FramePlan { keys: vec![(valid_time, None)],
             declared_names: ["soil_temperature", "soil_water_column", "soil_water_column_volumetric",
                 "volumetric_soil_moisture"].map(str::to_owned).to_vec(),
@@ -2401,7 +2779,8 @@ mod tests {
             for id in fields.output.clone() {
                 fields.materialize(id).unwrap();
                 if fields.available[&id].name == name {
-                    let result = field_work(&fields, id, &plan, None, None, None,
+                    let field = fields.available[&id].clone();
+                    let result = field_work(&fields, field, &plan, None, None, None,
                                             &json!({}), plan.keys[0].0);
                     assert_eq!(result.is_ok(), policy == "preserve_mask");
                 }
@@ -2434,10 +2813,12 @@ mod tests {
         (result, pulled)
     }
 
+    type PositionedGolden = (Mapping, SeriesSummary, BTreeMap<String, String>,
+                             Vec<std::sync::Mutex<Option<DecodedCollection>>>);
+
     /// The golden, carved into one collection per valid time, handed out
     /// by position to a many-lane writer.
-    fn golden_by_position() -> (Mapping, SeriesSummary, BTreeMap<String, String>,
-                                Vec<std::sync::Mutex<Option<DecodedCollection>>>) {
+    fn golden_by_position() -> PositionedGolden {
         let (mapping, collection, inputs) = netcdf_golden();
         let series = SeriesSummary { source_cycles: collection.source_cycles.clone(),
             grid_fingerprint: collection.grid_fingerprint.clone(), lead_batch: false };
@@ -2471,6 +2852,68 @@ mod tests {
             std::fs::remove_dir_all(&many).unwrap();
         }
         std::fs::remove_dir_all(&one).unwrap();
+    }
+
+    #[test]
+    fn a_full_prepared_batch_reopens_admission_after_its_last_commit() {
+        use std::sync::{Arc, Mutex};
+        let (mapping, mut collection, _) = netcdf_golden();
+        let first = collection.source_cycles.keys().next().unwrap().clone();
+        let template = crate::engine::carve_valid_time(&mut collection, &first);
+        let cycle = *template.source_cycles.values().next().unwrap();
+        let slices: Vec<_> = (0..13).map(|hour| {
+            let time = cycle + chrono::Duration::hours(hour * 6);
+            let mut collection = template.clone();
+            collection.source_cycles = BTreeMap::from([((time, None), cycle)]);
+            collection.direct = collection.direct.into_iter().map(|((_, member, name), mut value)| {
+                value.valid_time = time;
+                ((time, member, name), value)
+            }).collect();
+            Mutex::new(Some(collection))
+        }).collect();
+        let series = SeriesSummary {
+            source_cycles: slices.iter().flat_map(|slot| {
+                slot.lock().unwrap().as_ref().unwrap().source_cycles.clone()
+            }).collect(),
+            grid_fingerprint: template.grid_fingerprint.clone(), lead_batch: false,
+        };
+        let one = scratch("full-batch-one");
+        let many = scratch("full-batch-many");
+        let serial = |index: usize, _: &FrameKey| Ok(slices[index].lock().unwrap().as_ref().unwrap().clone());
+        write_frameset_core(&one, &mapping, &series, &BTreeMap::new(), false,
+            None, &|_| None, 1, &serial).unwrap();
+
+        // Four lanes allow six decoded/prepared frames in all. Withhold
+        // frame zero's prepared result until it is the only work in
+        // flight, so it arrives after frames one to five (four and five
+        // admitted while it was out) and the writer must commit a full
+        // batch with no work left in flight.  There are seven further
+        // frames to admit after that batch.  The writer does the
+        // withholding on its own thread; no pool job waits on another.
+        let arrivals = Arc::new(Mutex::new(Vec::new()));
+        let seen = arrivals.clone();
+        let hook: PipelinePreparedHook = Arc::new(move |index| {
+            seen.lock().unwrap().push(index);
+            index == 0
+        });
+        PIPELINE_PREPARED_HOOK.with(|slot| *slot.borrow_mut() = Some(hook));
+        let outcome = write_frameset_core(&many, &mapping, &series, &BTreeMap::new(), false,
+            None, &|_| None, 4, &|index, _| {
+                Ok(slices[index].lock().unwrap().take().expect("each frame is pulled once"))
+            });
+        PIPELINE_PREPARED_HOOK.with(|slot| *slot.borrow_mut() = None);
+        outcome.unwrap();
+        let mut arrived = arrivals.lock().unwrap().clone();
+        let batch: BTreeSet<usize> = arrived[..6].iter().copied().collect();
+        assert_eq!(batch, (0..6).collect(), "frames after the batch were admitted before it committed");
+        arrived.sort_unstable();
+        assert_eq!(arrived, (0..13).collect::<Vec<_>>(), "every frame's prepared result arrived once");
+        for name in ["frames.json", "frames.f64"] {
+            assert_eq!(std::fs::read(one.join(name)).unwrap(),
+                std::fs::read(many.join(name)).unwrap(), "{name} differs from serial output");
+        }
+        std::fs::remove_dir_all(one).unwrap();
+        std::fs::remove_dir_all(many).unwrap();
     }
 
     #[test]

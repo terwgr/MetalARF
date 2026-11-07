@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
+from types import SimpleNamespace
 
 from woof.ensemble.surface_controls import (
     KIND, OPTIONS as _OPTIONS, DEFAULTS as _DEFAULTS,
@@ -129,10 +130,17 @@ def _module(xp):
     key = (id(xp), device)
     if key not in _MODULES:
         options = ("--std=c++17", "--fmad=false", "--ftz=false")
-        module = xp.RawModule(code=_SOURCE, options=options)
+        # RawModule appends -ftz=true, which NVRTC refuses beside the
+        # explicitly unflushed policy. Compile directly, as the existing
+        # legacy radiation adapter does, retaining every requested option.
+        image, _ = xp.cuda.compiler.compile_using_nvrtc(
+            _SOURCE, options, None, "ensemble_surface.cu")
+        image = image.encode() if isinstance(image, str) else image
+        module = xp.cuda.function.Module()
+        module.load(image)
         from woof.certify.kernel_manifest import record_module
         record_module("woof.ensemble.surface_recipe", source=_SOURCE,
-                      options=options, module=module)
+                      options=options, module=SimpleNamespace(ptx=image))
         _MODULES[key] = module
     return _MODULES[key]
 
@@ -180,7 +188,7 @@ def _advanced(state):
 
 
 def apply_surface_recipe(state, *, value, member_id, seed, domain_id=None,
-                         array_module=None, realization=None):
+                         array_module=None, realization=None, at_checkpoint_branch=False):
     """Apply one member realization to one initialized physical domain."""
     options = validate_surface_recipe(value)
     identity = {"member_id": member_id, "seed": _seed(seed), "options": options}
@@ -189,7 +197,7 @@ def apply_surface_recipe(state, *, value, member_id, seed, domain_id=None,
         if previous["identity"] != identity:
             raise ValueError("surface-state domain was already initialized for another member, seed or recipe")
         return previous["receipt"]
-    if _advanced(state):
+    if _advanced(state) and not at_checkpoint_branch:
         return {**surface_recipe_descriptor(options, seed=seed), "member_id": member_id,
                 "domain_id": domain_id, "applied": False,
                 "reason": "continued or reconstructed domains retain their advanced surface state"}
@@ -306,7 +314,8 @@ def apply_surface_recipe(state, *, value, member_id, seed, domain_id=None,
                "changed_surface": before != after, "launches": launches,
                "soil_moisture_floor": (None if floor_table is None else
                     "ordinary Noah SMCDRY category floor; 0.005 m3 m-3 fallback where no positive category value exists"),
-               "phase": "initialized physics before first forecast step"}
+               "phase": ("restored checkpoint before first branch step" if at_checkpoint_branch else
+                         "initialized physics before first forecast step")}
     state._ensemble_surface_state = {"identity": identity, "receipt": receipt}
     return receipt
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 def _require_column(value, name, shape, context):
@@ -57,5 +58,6 @@ def submit_noah_sfcdiags(fields, qv1, *, rd, cp_air, p0, rcp,
         "ny": ny, "nx": nx, "ncol": ncol,
     }
     context.submit_kernel(
-        "noah_sfcdiags", arrays, parameters, exact_policy=False,
+        "wrf_exact_noah_sfcdiags" if WRF_EXACT else "noah_sfcdiags",
+        arrays, parameters, exact_policy=WRF_EXACT,
         grid_size=ncol, threads_per_group=128)

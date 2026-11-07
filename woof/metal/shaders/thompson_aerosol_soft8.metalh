@@ -1,0 +1,217 @@
+#ifndef WOOF_THOMPSON_AEROSOL_SOFT8_METALH
+#define WOOF_THOMPSON_AEROSOL_SOFT8_METALH
+
+// Support for the mp=28 source networks translated from
+// woof/core/kernels/thompson_aerosol_{cold,warm,sat}.cu by
+// tools/mp28_metal/generate.py. The translated statements are the CUDA
+// ones: binary64 is Soft8 on the integer soft64 helpers, float division
+// runs on the soft32 divider, and the rounded-operation intrinsics are the
+// plain IEEE operations of a build with contraction off.
+
+#include <metal_stdlib>
+#include "soft_binary32.metalh"
+#include "soft_binary64.metalh"
+#include "soft_libm64.metalh"
+#include "soft_glibc_pow64.metalh"
+using namespace metal;
+
+#pragma clang fp contract(off)
+
+struct Soft8 {
+    ulong bits;
+    constexpr Soft8() : bits(0ul) {}
+    static constexpr Soft8 fromBits(ulong b) { Soft8 r; r.bits = b; return r; }
+    Soft8(float v) : bits(soft64_from_f32_bits(as_type<uint>(v))) {}
+    Soft8(int v) : bits(soft64_from_i32(v)) {}
+    Soft8(uint v) : bits(soft64_from_u32(v)) {}
+    Soft8(long v) : bits(soft64_from_i64_value(v)) {}
+    Soft8(ulong v) : bits(soft64_from_u64(v)) {}
+    static ulong soft64_from_i64_value(long v) {
+        return v < 0 ? (soft64_from_u64(ulong(0 - v)) | 0x8000000000000000ul)
+                     : soft64_from_u64(ulong(v));
+    }
+#define SOFT8_CONVERT(AS) \
+    operator float() const AS { return as_type<float>(soft64_to_f32_bits(bits)); } \
+    explicit operator int() const AS { return soft64_to_i32_rz(bits).value; } \
+    explicit operator uint() const AS { return soft64_to_u32_rz(bits).value; } \
+    explicit operator long() const AS { return to_long(); } \
+    explicit operator ulong() const AS { return ulong(to_long()); } \
+    explicit operator bool() const AS { return !soft64_is_zero(bits); }
+    SOFT8_CONVERT(thread)
+    SOFT8_CONVERT(device)
+    SOFT8_CONVERT(constant)
+#undef SOFT8_CONVERT
+    long to_long() const thread { return to_long_bits(bits); }
+    long to_long() const device { return to_long_bits(bits); }
+    long to_long() const constant { return to_long_bits(bits); }
+    static long to_long_bits(ulong bits) {
+        const ulong mag = bits & 0x7ffffffffffffffful;
+        const int e = int(mag >> 52) - 1023;
+        long v;
+        if (e < 0) v = 0;
+        else if (e >= 63) v = 0;
+        else {
+            const ulong sig = (mag & 0x000ffffffffffffful) | 0x0010000000000000ul;
+            v = long(e >= 52 ? (sig << uint(e - 52)) : (sig >> uint(52 - e)));
+        }
+        return (bits >> 63) != 0ul ? -v : v;
+    }
+};
+#define SD8(b) Soft8::fromBits(b)
+
+static inline Soft8 operator+(Soft8 a, Soft8 b) { return Soft8::fromBits(soft64_add(a.bits, b.bits)); }
+static inline Soft8 operator-(Soft8 a, Soft8 b) { return Soft8::fromBits(soft64_sub(a.bits, b.bits)); }
+static inline Soft8 operator*(Soft8 a, Soft8 b) { return Soft8::fromBits(soft64_mul(a.bits, b.bits)); }
+static inline Soft8 operator/(Soft8 a, Soft8 b) { return Soft8::fromBits(soft64_div(a.bits, b.bits)); }
+static inline Soft8 operator-(Soft8 a) { return Soft8::fromBits(soft64_negate_bits(a.bits)); }
+static inline bool operator<(Soft8 a, Soft8 b) { return soft64_less(a.bits, b.bits); }
+static inline bool operator>(Soft8 a, Soft8 b) { return soft64_greater(a.bits, b.bits); }
+static inline bool operator<=(Soft8 a, Soft8 b) { return soft64_less_equal(a.bits, b.bits); }
+static inline bool operator>=(Soft8 a, Soft8 b) { return soft64_greater_equal(a.bits, b.bits); }
+static inline bool operator==(Soft8 a, Soft8 b) { return soft64_equal(a.bits, b.bits); }
+static inline bool operator!=(Soft8 a, Soft8 b) { return !soft64_equal(a.bits, b.bits) ; }
+#define SOFT8_MIXED(T) \
+static inline Soft8 operator+(Soft8 a, T b) { return a + Soft8(b); } \
+static inline Soft8 operator+(T a, Soft8 b) { return Soft8(a) + b; } \
+static inline Soft8 operator-(Soft8 a, T b) { return a - Soft8(b); } \
+static inline Soft8 operator-(T a, Soft8 b) { return Soft8(a) - b; } \
+static inline Soft8 operator*(Soft8 a, T b) { return a * Soft8(b); } \
+static inline Soft8 operator*(T a, Soft8 b) { return Soft8(a) * b; } \
+static inline Soft8 operator/(Soft8 a, T b) { return a / Soft8(b); } \
+static inline Soft8 operator/(T a, Soft8 b) { return Soft8(a) / b; } \
+static inline bool operator<(Soft8 a, T b) { return a < Soft8(b); } \
+static inline bool operator<(T a, Soft8 b) { return Soft8(a) < b; } \
+static inline bool operator>(Soft8 a, T b) { return a > Soft8(b); } \
+static inline bool operator>(T a, Soft8 b) { return Soft8(a) > b; } \
+static inline bool operator<=(Soft8 a, T b) { return a <= Soft8(b); } \
+static inline bool operator<=(T a, Soft8 b) { return Soft8(a) <= b; } \
+static inline bool operator>=(Soft8 a, T b) { return a >= Soft8(b); } \
+static inline bool operator>=(T a, Soft8 b) { return Soft8(a) >= b; } \
+static inline bool operator==(Soft8 a, T b) { return a == Soft8(b); } \
+static inline bool operator==(T a, Soft8 b) { return Soft8(a) == b; } \
+static inline bool operator!=(Soft8 a, T b) { return a != Soft8(b); } \
+static inline bool operator!=(T a, Soft8 b) { return Soft8(a) != b; }
+SOFT8_MIXED(float)
+SOFT8_MIXED(int)
+SOFT8_MIXED(uint)
+SOFT8_MIXED(long)
+SOFT8_MIXED(ulong)
+#undef SOFT8_MIXED
+static inline thread Soft8 &operator+=(thread Soft8 &a, Soft8 b) { a = a + b; return a; }
+static inline thread Soft8 &operator-=(thread Soft8 &a, Soft8 b) { a = a - b; return a; }
+static inline thread Soft8 &operator*=(thread Soft8 &a, Soft8 b) { a = a * b; return a; }
+static inline thread Soft8 &operator/=(thread Soft8 &a, Soft8 b) { a = a / b; return a; }
+
+// ---- division: float on the soft32 divider, binary64 and integers exact.
+static inline float aa_div_impl(float a, float b)
+{ return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
+static inline Soft8 aa_div_impl(Soft8 a, Soft8 b) { return a / b; }
+static inline int aa_div_impl(int a, int b) { return a / b; }
+static inline uint aa_div_impl(uint a, uint b) { return a / b; }
+static inline long aa_div_impl(long a, long b) { return a / b; }
+static inline ulong aa_div_impl(ulong a, ulong b) { return a / b; }
+template <class A, class B>
+static inline auto aa_div(A a, B b) -> decltype(a + b)
+{ using T = decltype(a + b); return aa_div_impl(T(a), T(b)); }
+
+// ---- float helpers
+static inline float aa_sqrtf(float x) { return as_type<float>(soft32_sqrt(as_type<uint>(x))); }
+static inline float aa_fmaxf(float a, float b)
+{
+    const uint ab = as_type<uint>(a), bb = as_type<uint>(b);
+    if (soft32_is_nan(ab)) return b;
+    if (soft32_is_nan(bb)) return a;
+    if (soft32_is_zero(ab) && soft32_is_zero(bb)) return (ab & 0x80000000u) != 0u ? b : a;
+    return soft32_greater(ab, bb) ? a : b;
+}
+static inline float aa_fminf(float a, float b)
+{
+    const uint ab = as_type<uint>(a), bb = as_type<uint>(b);
+    if (soft32_is_nan(ab)) return b;
+    if (soft32_is_nan(bb)) return a;
+    if (soft32_is_zero(ab) && soft32_is_zero(bb)) return (ab & 0x80000000u) != 0u ? a : b;
+    return soft32_less(ab, bb) ? a : b;
+}
+static inline int aa_lroundf(float x) { return int(round(x)); }
+
+// ---- binary64 math
+static inline Soft8 fabs(Soft8 a) { return Soft8::fromBits(soft64_abs_bits(a.bits)); }
+static inline Soft8 trunc(Soft8 a)
+{
+    const int e = int((a.bits >> 52) & 0x7fful) - 1023;
+    if (e < 0) return Soft8::fromBits(a.bits & 0x8000000000000000ul);
+    if (e >= 52) return a;
+    return Soft8::fromBits(a.bits & ~((1ul << uint(52 - e)) - 1ul));
+}
+static inline Soft8 floor(Soft8 a)
+{
+    const Soft8 t = trunc(a);
+    return (a < t) ? t - Soft8(1) : t;
+}
+static inline Soft8 ceil(Soft8 a)
+{
+    const Soft8 t = trunc(a);
+    return (a > t) ? t + Soft8(1) : t;
+}
+static inline Soft8 copysign(Soft8 a, Soft8 b)
+{ return Soft8::fromBits((a.bits & 0x7ffffffffffffffful) | (b.bits & 0x8000000000000000ul)); }
+static inline Soft8 round(Soft8 a)
+{
+    const Soft8 t = trunc(a);
+    const Soft8 d = fabs(a - t);
+    return (d >= SD8(0x3fe0000000000000ul)) ? t + copysign(Soft8(1), a) : t;
+}
+static inline Soft8 rint(Soft8 a) { return Soft8::fromBits(soft64_rint_bits(a.bits)); }
+static inline Soft8 sqrt(Soft8 a) { return Soft8::fromBits(soft64_sqrt(a.bits)); }
+static inline Soft8 fmin(Soft8 a, Soft8 b)
+{
+    if (soft64_is_nan(a.bits)) return b;
+    if (soft64_is_nan(b.bits)) return a;
+    return (b < a) ? b : a;
+}
+static inline Soft8 fmax(Soft8 a, Soft8 b)
+{
+    if (soft64_is_nan(a.bits)) return b;
+    if (soft64_is_nan(b.bits)) return a;
+    return (b > a) ? b : a;
+}
+static inline bool isfinite(Soft8 a) { return soft64_is_finite(a.bits); }
+static inline bool isnan(Soft8 a) { return soft64_is_nan(a.bits); }
+static inline bool isinf(Soft8 a) { return soft64_is_infinite(a.bits); }
+
+// The CUDA exp/log implementations are translated into each family.
+// The shared integer transcription supplies its binary64 pow.
+
+static inline Soft8 glibc_pow(Soft8 x, Soft8 y) { return Soft8::fromBits(soft_glibc_pow64(x.bits, y.bits)); }
+
+// ---- CUDA intrinsics (contraction off: each is one IEEE operation)
+static inline float __fadd_rn(float a, float b) { return a + b; }
+static inline float __fsub_rn(float a, float b) { return a - b; }
+static inline float __fmul_rn(float a, float b) { return a * b; }
+static inline float __fdiv_rn(float a, float b) { return aa_div_impl(a, b); }
+static inline float __frcp_rn(float a) { return aa_div_impl(1.0f, a); }
+static inline float __fsqrt_rn(float a) { return aa_sqrtf(a); }
+static inline float __fmaf_rn(float a, float b, float c) { return fma(a, b, c); }
+static inline Soft8 __dadd_rn(Soft8 a, Soft8 b) { return a + b; }
+static inline Soft8 __dsub_rn(Soft8 a, Soft8 b) { return a - b; }
+static inline Soft8 __dmul_rn(Soft8 a, Soft8 b) { return a * b; }
+static inline Soft8 __ddiv_rn(Soft8 a, Soft8 b) { return a / b; }
+static inline Soft8 __fma_rn(Soft8 a, Soft8 b, Soft8 c)
+{ return Soft8::fromBits(soft64_fma(a.bits, b.bits, c.bits)); }
+static inline Soft8 __dsqrt_rn(Soft8 a) { return sqrt(a); }
+static inline float __double2float_rn(Soft8 a) { return float(a); }
+static inline int __float2int_rn(float x) { return int(rint(x)); }
+static inline int __float2int_rz(float x) { return int(x); }
+static inline int __double2int_rn(Soft8 x) { return soft64_to_i32_rn(x.bits).value; }
+static inline float __uint_as_float(uint u) { return as_type<float>(u); }
+static inline uint __float_as_uint(float f) { return as_type<uint>(f); }
+static inline float __int_as_float(int i) { return as_type<float>(i); }
+static inline int __float_as_int(float f) { return as_type<int>(f); }
+static inline long __double_as_longlong(Soft8 d) { return as_type<long>(d.bits); }
+static inline Soft8 __longlong_as_double(long l) { return Soft8::fromBits(as_type<ulong>(l)); }
+static inline int __clzll(ulong x) { return int(clz(x)); }
+static inline ulong __umul64hi(ulong a, ulong b) { return mulhi(a, b); }
+
+#include "thompson_aerosol_libm64_fragment.metalh"
+
+#endif

@@ -2,20 +2,12 @@
 from dataclasses import asdict, replace
 import json
 
-import pytest
-
 from woof import experiment, physics_params as pp
 from woof.core.model import restart_identity_payload
 from woof.io.restart import configuration_echo
-from test_physics_params import _EXPERIMENT, _build
-
-
-@pytest.fixture(autouse=True)
-def fresh_binding(monkeypatch):
-    monkeypatch.delenv(pp.ENV_VAR, raising=False)
-    pp.reset_for_tests()
-    yield
-    pp.reset_for_tests()
+from test_physics_params import (
+    _EXPERIMENT, _build, _fresh_process_binding as fresh_binding,
+)
 
 
 def _bytes(document):
@@ -30,6 +22,12 @@ def test_absent_set_preserves_emitted_config_bytes_and_checkpoint_echo():
     # These current default-off controls predate this feature.
     previous.pop("devices")
     previous.pop("simulated_radar")
+    # [radar_heating] (e30746bd1) is a later default-off control that
+    # experiment_config_document drops when off, the same way.
+    previous.pop("radar_heating")
+    # [nudging] (labs/nudging, 2.9.11) is another default-off control the
+    # document drops when absent.
+    previous.pop("nudging", None)
     assert _bytes(experiment.experiment_config_document(exp)) == _bytes(previous)
     assert "physics_params" not in restart_identity_payload(exp)
     assert "physics_params" not in configuration_echo(exp.root.run)

@@ -1,0 +1,1261 @@
+template < class P_emiss , class P_pl , class P_ta , class P_wa , class P_oa , class P_fcld , class P_taucl , class P_ssacl , class P_asycl , class P_taual , class P_ssaal , class P_asyal , class P_flx_out , class P_acflxd_out , class P_acflxu_out > static inline void g_lwrad_tier ( thread GddArena & arena , int np , P_emiss emiss_arg , Soft8 tb , Soft8 ts , int ict , int icb , P_pl pl_arg , P_ta ta_arg , P_wa wa_arg , P_oa oa_arg , P_fcld fcld_arg , P_taucl taucl_arg , P_ssacl ssacl_arg , P_asycl asycl_arg , P_taual taual_arg , P_ssaal ssaal_arg , P_asyal asyal_arg , P_flx_out flx_out_arg , P_acflxd_out acflxd_out_arg , P_acflxu_out acflxu_out_arg , int irestrict , int tier_mode , int tier_band ) {
+
+GddScope gdd_scope ( arena ) ;
+auto emiss = gdd_rank < 1 > ( emiss_arg ) ;
+auto pl = gdd_rank < 1 > ( pl_arg ) ;
+auto ta = gdd_rank < 1 > ( ta_arg ) ;
+auto wa = gdd_rank < 1 > ( wa_arg ) ;
+auto oa = gdd_rank < 1 > ( oa_arg ) ;
+auto fcld = gdd_rank < 1 > ( fcld_arg ) ;
+auto taucl = gdd_rank < 2 > ( taucl_arg ) ;
+auto ssacl = gdd_rank < 2 > ( ssacl_arg ) ;
+auto asycl = gdd_rank < 2 > ( asycl_arg ) ;
+auto taual = gdd_rank < 2 > ( taual_arg ) ;
+auto ssaal = gdd_rank < 2 > ( ssaal_arg ) ;
+auto asyal = gdd_rank < 2 > ( asyal_arg ) ;
+auto flx_out = gdd_rank < 1 > ( flx_out_arg ) ;
+auto acflxd_out = gdd_rank < 1 > ( acflxd_out_arg ) ;
+auto acflxu_out = gdd_rank < 1 > ( acflxu_out_arg ) ;
+device Soft8 * flx_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > flx = {
+flx_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * acflxu_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > acflxu = {
+acflxu_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * acflxd_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > acflxd = {
+acflxd_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * flc_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > flc = {
+flc_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * dfdts_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dfdts = {
+dfdts_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+Soft8 sfcem ;
+GArray < Soft8 , 2 , constant Soft8 * > cb = {
+gdd_lwrad_cb , {
+1 , 1 }
+, {
+( ( 6 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 1 , constant Soft8 * > xkw = {
+gdd_lwrad_xkw , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 1 , constant Soft8 * > xke = {
+gdd_lwrad_xke , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 1 , constant Soft8 * > aw = {
+gdd_lwrad_aw , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 1 , constant Soft8 * > bw = {
+gdd_lwrad_bw , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 1 , constant Soft8 * > pm = {
+gdd_lwrad_pm , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > fkw = {
+gdd_lwrad_fkw , {
+1 , 1 }
+, {
+( ( 6 - 1 ) + 1 ) , ( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > gkw = {
+gdd_lwrad_gkw , {
+1 , 1 }
+, {
+( ( 6 - 1 ) + 1 ) , ( ( 3 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > aib = {
+gdd_lwrad_aib , {
+1 , 1 }
+, {
+( ( 3 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > awb = {
+gdd_lwrad_awb , {
+1 , 1 }
+, {
+( ( 4 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > aiw = {
+gdd_lwrad_aiw , {
+1 , 1 }
+, {
+( ( 4 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > aww = {
+gdd_lwrad_aww , {
+1 , 1 }
+, {
+( ( 4 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > aig = {
+gdd_lwrad_aig , {
+1 , 1 }
+, {
+( ( 4 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > awg = {
+gdd_lwrad_awg , {
+1 , 1 }
+, {
+( ( 4 - 1 ) + 1 ) , ( ( 10 - 1 ) + 1 ) }
+}
+;
+GArray < int , 1 , constant int * > ne = {
+gdd_lwrad_ne , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+GArray < int , 1 , constant int * > mw = {
+gdd_lwrad_mw , {
+1 }
+, {
+( ( 9 - 1 ) + 1 ) }
+}
+;
+const int nx2 = 26 ;
+const int no = 21 ;
+const int nc = 30 ;
+const int nh = 31 ;
+GArray < Soft8 , 2 , constant Soft8 * > c1 = {
+gdd_lwrad_c1 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nc - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > c2 = {
+gdd_lwrad_c2 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nc - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > c3 = {
+gdd_lwrad_c3 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nc - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > o1 = {
+gdd_lwrad_o1 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( no - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > o2 = {
+gdd_lwrad_o2 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( no - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > o3 = {
+gdd_lwrad_o3 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( no - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h11 = {
+gdd_lwrad_h11 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h12 = {
+gdd_lwrad_h12 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h13 = {
+gdd_lwrad_h13 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h21 = {
+gdd_lwrad_h21 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h22 = {
+gdd_lwrad_h22 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h23 = {
+gdd_lwrad_h23 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+Soft8 h71_storage [ ( ( ( nx2 - 1 ) + 1 ) ) * ( ( ( nh - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 2 , thread Soft8 * > h71 = {
+h71_storage , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+Soft8 h72_storage [ ( ( ( nx2 - 1 ) + 1 ) ) * ( ( ( nh - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 2 , thread Soft8 * > h72 = {
+h72_storage , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+Soft8 h73_storage [ ( ( ( nx2 - 1 ) + 1 ) ) * ( ( ( nh - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 2 , thread Soft8 * > h73 = {
+h73_storage , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h81 = {
+gdd_lwrad_h81 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h82 = {
+gdd_lwrad_h82 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+GArray < Soft8 , 2 , constant Soft8 * > h83 = {
+gdd_lwrad_h83 , {
+1 , 1 }
+, {
+( ( nx2 - 1 ) + 1 ) , ( ( nh - 1 ) + 1 ) }
+}
+;
+device Soft8 * pa_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > pa = {
+pa_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * dt_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dt = {
+dt_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * sh2o_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > sh2o = {
+sh2o_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * swpre_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > swpre = {
+swpre_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * swtem_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > swtem = {
+swtem_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * sco3_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > sco3 = {
+sco3_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * scopre_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > scopre = {
+scopre_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * scotem_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > scotem = {
+scotem_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * dh2o_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dh2o = {
+dh2o_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * dcont_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dcont = {
+dcont_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * dco2_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dco2 = {
+dco2_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * do3_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > do3 = {
+do3_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * dn2o_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dn2o = {
+dn2o_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * dch4_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dch4 = {
+dch4_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * df11_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > df11 = {
+df11_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * df12_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > df12 = {
+df12_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * df22_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > df22 = {
+df22_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+Soft8 th2o_storage [ ( ( ( 6 - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 1 , thread Soft8 * > th2o = {
+th2o_storage , {
+1 }
+, {
+( ( 6 - 1 ) + 1 ) }
+}
+;
+Soft8 tcon_storage [ ( ( ( 3 - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 1 , thread Soft8 * > tcon = {
+tcon_storage , {
+1 }
+, {
+( ( 3 - 1 ) + 1 ) }
+}
+;
+Soft8 tco2_storage [ ( ( ( 6 - 1 ) + 1 ) ) * ( ( ( 2 - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 2 , thread Soft8 * > tco2 = {
+tco2_storage , {
+1 , 1 }
+, {
+( ( 6 - 1 ) + 1 ) , ( ( 2 - 1 ) + 1 ) }
+}
+;
+Soft8 tn2o_storage [ ( ( ( 4 - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 1 , thread Soft8 * > tn2o = {
+tn2o_storage , {
+1 }
+, {
+( ( 4 - 1 ) + 1 ) }
+}
+;
+Soft8 tch4_storage [ ( ( ( 4 - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 1 , thread Soft8 * > tch4 = {
+tch4_storage , {
+1 }
+, {
+( ( 4 - 1 ) + 1 ) }
+}
+;
+Soft8 tcom_storage [ ( ( ( 6 - 1 ) + 1 ) ) ] ;
+GArray < Soft8 , 1 , thread Soft8 * > tcom = {
+tcom_storage , {
+1 }
+, {
+( ( 6 - 1 ) + 1 ) }
+}
+;
+Soft8 tf11 ;
+Soft8 tf12 ;
+Soft8 tf22 ;
+device Soft8 * h2oexp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) * ( ( ( 6 - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 2 , device Soft8 * > h2oexp = {
+h2oexp_storage , {
+1 , 1 }
+, {
+( ( np - 1 ) + 1 ) , ( ( 6 - 1 ) + 1 ) }
+}
+;
+device Soft8 * conexp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) * ( ( ( 3 - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 2 , device Soft8 * > conexp = {
+conexp_storage , {
+1 , 1 }
+, {
+( ( np - 1 ) + 1 ) , ( ( 3 - 1 ) + 1 ) }
+}
+;
+device Soft8 * co2exp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) * ( ( ( 6 - 1 ) + 1 ) ) * ( ( ( 2 - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 3 , device Soft8 * > co2exp = {
+co2exp_storage , {
+1 , 1 , 1 }
+, {
+( ( np - 1 ) + 1 ) , ( ( 6 - 1 ) + 1 ) , ( ( 2 - 1 ) + 1 ) }
+}
+;
+device Soft8 * n2oexp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) * ( ( ( 4 - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 2 , device Soft8 * > n2oexp = {
+n2oexp_storage , {
+1 , 1 }
+, {
+( ( np - 1 ) + 1 ) , ( ( 4 - 1 ) + 1 ) }
+}
+;
+device Soft8 * ch4exp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) * ( ( ( 4 - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 2 , device Soft8 * > ch4exp = {
+ch4exp_storage , {
+1 , 1 }
+, {
+( ( np - 1 ) + 1 ) , ( ( 4 - 1 ) + 1 ) }
+}
+;
+device Soft8 * comexp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) * ( ( ( 6 - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 2 , device Soft8 * > comexp = {
+comexp_storage , {
+1 , 1 }
+, {
+( ( np - 1 ) + 1 ) , ( ( 6 - 1 ) + 1 ) }
+}
+;
+device Soft8 * f11exp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > f11exp = {
+f11exp_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * f12exp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > f12exp = {
+f12exp_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * f22exp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > f22exp = {
+f22exp_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+device Soft8 * blayer_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 0 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > blayer = {
+blayer_storage , {
+0 }
+, {
+( ( ( np + 1 ) - 0 ) + 1 ) }
+}
+;
+device Soft8 * blevel_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > blevel = {
+blevel_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * dblayr_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dblayr = {
+dblayr_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+Soft8 dbs ;
+device Soft8 * dp_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > dp = {
+dp_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+Soft8 trant ;
+Soft8 tranal ;
+device Soft8 * transfc_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > transfc = {
+transfc_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * trantcr_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > trantcr = {
+trantcr_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * flxu_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > flxu = {
+flxu_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * flxd_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > flxd = {
+flxd_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * flcu_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > flcu = {
+flcu_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * flcd_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > flcd = {
+flcd_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * rflx_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > rflx = {
+rflx_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+device Soft8 * rflc_storage = arena . alloc < Soft8 > ( ( ( ( ( np + 1 ) - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > rflc = {
+rflc_storage , {
+1 }
+, {
+( ( ( np + 1 ) - 1 ) + 1 ) }
+}
+;
+int it ;
+int im ;
+int ib ;
+Soft8 cldhi ;
+Soft8 cldmd ;
+Soft8 cldlw ;
+device Soft8 * tcldlyr_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > tcldlyr = {
+tcldlyr_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+Soft8 fclr ;
+device Soft8 * taerlyr_storage = arena . alloc < Soft8 > ( ( ( ( np - 1 ) + 1 ) ) ) ;
+GArray < Soft8 , 1 , device Soft8 * > taerlyr = {
+taerlyr_storage , {
+1 }
+, {
+( ( np - 1 ) + 1 ) }
+}
+;
+int j ;
+int k ;
+int ip ;
+int iw ;
+int ibn ;
+int ik ;
+int iq ;
+int isb ;
+int k1 ;
+int k2 ;
+int ic = 1 ;
+Soft8 xx ;
+Soft8 yy ;
+Soft8 p1 ;
+Soft8 dwe ;
+Soft8 dpe ;
+Soft8 a1 ;
+Soft8 b1 ;
+Soft8 fk1 ;
+Soft8 a2 ;
+Soft8 b2 ;
+Soft8 fk2 ;
+Soft8 bu ;
+Soft8 bd ;
+Soft8 w1 ;
+Soft8 ww ;
+Soft8 gg ;
+Soft8 ff ;
+Soft8 taux ;
+Soft8 tauxa ;
+bool oznbnd ;
+bool co2bnd ;
+bool h2otbl ;
+bool conbnd ;
+bool n2obnd ;
+bool ch4bnd ;
+bool combnd ;
+bool f11bnd ;
+bool f12bnd ;
+bool f22bnd ;
+bool b10bnd ;
+device Soft8 * tier_sfcem = arena.alloc<Soft8>(1);
+if (tier_mode == 0) {
+
+for ( k = 1 ;
+k <= np ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+pa ( k ) = ( 0.5f * ( pl ( k ) + pl ( ( k + 1 ) ) ) ) ;
+dt ( k ) = ( ta ( k ) - 250.0f ) ;
+}
+}
+for ( k = 1 ;
+k <= np ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+dp ( k ) = ( pl ( ( k + 1 ) ) - pl ( k ) ) ;
+dh2o ( k ) = ( ( 1.02f * wa ( k ) ) * dp ( k ) ) ;
+dh2o ( k ) = g_max ( dh2o ( k ) , Soft8 ( SD8(0x39b4484bfeebc2a0ul) ) ) ;
+do3 ( k ) = ( ( 476.f * oa ( k ) ) * dp ( k ) ) ;
+do3 ( k ) = g_max ( do3 ( k ) , Soft8 ( SD8(0x39b4484bfeebc2a0ul) ) ) ;
+dco2 ( k ) = ( ( 789.f * co2 ) * dp ( k ) ) ;
+dco2 ( k ) = g_max ( dco2 ( k ) , Soft8 ( SD8(0x39b4484bfeebc2a0ul) ) ) ;
+dch4 ( k ) = ( ( 789.f * ch4 ) * dp ( k ) ) ;
+dn2o ( k ) = ( ( 789.f * n2o ) * dp ( k ) ) ;
+df11 ( k ) = ( ( 789.f * cfc11 ) * dp ( k ) ) ;
+df12 ( k ) = ( ( 789.f * cfc12 ) * dp ( k ) ) ;
+df22 ( k ) = ( ( 789.f * cfc22 ) * dp ( k ) ) ;
+xx = ( ( ( ( pa ( k ) * 0.001618f ) * wa ( k ) ) * wa ( k ) ) * dp ( k ) ) ;
+dcont ( k ) = ( ( xx * g_exp ( ( ( aa_div ( 1800.f , ta ( k ) ) ) - 6.081f ) ) ) + 1.e-10f ) ;
+}
+}
+if ( high ) {
+g_column ( arena , np , pa , dt , dh2o , sh2o , swpre , swtem , irestrict ) ;
+}
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+sfcem = 0.e0f ;
+transfc ( ( np + 1 ) ) = 1.e0f ;
+trantcr ( ( np + 1 ) ) = 1.e0f ;
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+flx ( g_i0 ) = 0.e0f ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+flc ( g_i0 ) = 0.e0f ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+dfdts ( g_i0 ) = 0.e0f ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+rflx ( g_i0 ) = 0.e0f ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+rflc ( g_i0 ) = 0.e0f ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+acflxu ( g_i0 ) = 0.e0f ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+acflxd ( g_i0 ) = 0.e0f ;
+}
+}
+
+tier_sfcem[0]=sfcem; return;
+}
+if (tier_mode == 1) {
+sfcem=tier_sfcem[0]; ibn=tier_band;
+
+h2otbl = ( high && ( ( ( ibn == 1 ) || ( ibn == 2 ) ) || ( ibn == 8 ) ) ) ;
+conbnd = ( ( ibn >= 3 ) && ( ibn <= 7 ) ) ;
+co2bnd = ( ibn == 3 ) ;
+oznbnd = ( ibn == 5 ) ;
+n2obnd = ( ( ibn == 6 ) || ( ibn == 7 ) ) ;
+ch4bnd = ( ( ibn == 6 ) || ( ibn == 7 ) ) ;
+combnd = ( ( ibn == 4 ) || ( ibn == 5 ) ) ;
+f11bnd = ( ( ibn == 4 ) || ( ibn == 5 ) ) ;
+f12bnd = ( ( ibn == 4 ) || ( ibn == 6 ) ) ;
+f22bnd = ( ( ibn == 4 ) || ( ibn == 6 ) ) ;
+b10bnd = ( ibn == 10 ) ;
+if ( ( ( ! b10bnd ) || trace ) ) {
+for ( k = 1 ;
+k <= np ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+blayer ( k ) = ( ( ta ( k ) * ( ( ta ( k ) * ( ( ta ( k ) * ( ( ta ( k ) * ( ( ta ( k ) * cb ( 6 , ibn ) ) + cb ( 5 , ibn ) ) ) + cb ( 4 , ibn ) ) ) + cb ( 3 , ibn ) ) ) + cb ( 2 , ibn ) ) ) + cb ( 1 , ibn ) ) ;
+}
+}
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+blayer ( ( np + 1 ) ) = ( ( ( ts * ( ( ts * ( ( ts * ( ( ts * ( ( ts * cb ( 6 , ibn ) ) + cb ( 5 , ibn ) ) ) + cb ( 4 , ibn ) ) ) + cb ( 3 , ibn ) ) ) + cb ( 2 , ibn ) ) ) + cb ( 1 , ibn ) ) * emiss ( ibn ) ) ;
+blayer ( 0 ) = 0.0f ;
+dbs = ( ( ( ts * ( ( ts * ( ( ts * ( ( ( ts * 5.f ) * cb ( 6 , ibn ) ) + ( 4.f * cb ( 5 , ibn ) ) ) ) + ( 3.f * cb ( 4 , ibn ) ) ) ) + ( 2.f * cb ( 3 , ibn ) ) ) ) + cb ( 2 , ibn ) ) * emiss ( ibn ) ) ;
+}
+for ( k = 1 ;
+k <= ( np + 1 ) ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+dblayr ( k ) = ( blayer ( ( k - 1 ) ) - blayer ( k ) ) ;
+}
+}
+for ( k = 2 ;
+k <= np ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+blevel ( k ) = ( aa_div ( ( ( blayer ( ( k - 1 ) ) * dp ( k ) ) + ( blayer ( k ) * dp ( ( k - 1 ) ) ) ) , ( dp ( ( k - 1 ) ) + dp ( k ) ) ) ) ;
+}
+}
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+blevel ( 1 ) = ( blayer ( 1 ) + ( aa_div ( ( ( blayer ( 1 ) - blayer ( 2 ) ) * dp ( 1 ) ) , ( dp ( 1 ) + dp ( 2 ) ) ) ) ) ;
+blevel ( ( np + 1 ) ) = ( ( tb * ( ( tb * ( ( tb * ( ( tb * ( ( tb * cb ( 6 , ibn ) ) + cb ( 5 , ibn ) ) ) + cb ( 4 , ibn ) ) ) + cb ( 3 , ibn ) ) ) + cb ( 2 , ibn ) ) ) + cb ( 1 , ibn ) ) ;
+}
+if ( ( high && co2bnd ) ) {
+g_column ( arena , np , pa , dt , dco2 , sco3 , scopre , scotem , irestrict ) ;
+}
+if ( oznbnd ) {
+g_column ( arena , np , pa , dt , do3 , sco3 , scopre , scotem , irestrict ) ;
+}
+for ( k = 1 ;
+k <= np ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+tcldlyr ( k ) = 1.0f ;
+taux = taucl ( k , ibn ) ;
+if ( ( ( taux > taux_min ) && ( fcld ( k ) > fcld_min ) ) ) {
+ww = ssaal ( k , ibn ) ;
+gg = asyal ( k , ibn ) ;
+ff = ( 0.5f + ( ( 0.3739f + ( ( 0.0076f + ( 0.1185f * gg ) ) * gg ) ) * gg ) ) ;
+taux = ( taux * ( 1.f - ( ww * ff ) ) ) ;
+tauxa = g_max ( Soft8 ( SD8(0x0000000000000000ul) ) , ( 1.66f * taux ) ) ;
+tcldlyr ( k ) = 0.f ;
+if ( ( tauxa < 80.f ) ) tcldlyr ( k ) = g_exp ( ( - tauxa ) ) ;
+}
+}
+}
+for ( k = 1 ;
+k <= np ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+taerlyr ( k ) = 1.0f ;
+if ( ( taual ( k , ibn ) > 0.01f ) ) {
+ff = ( 0.5f + ( ( 0.3739f + ( ( 0.0076f + ( 0.1185f * asyal ( k , ibn ) ) ) * asyal ( k , ibn ) ) ) * asyal ( k , ibn ) ) ) ;
+taux = ( taual ( k , ibn ) * ( 1.f - ( ssaal ( k , ibn ) * ff ) ) ) ;
+taerlyr ( k ) = g_exp ( ( ( - 1.66f ) * taux ) ) ;
+}
+}
+}
+if ( ( ( ! h2otbl ) && ( ! b10bnd ) ) ) {
+g_h2oexps ( arena , ibn , np , dh2o , pa , dt , xkw , aw , bw , pm , mw , h2oexp , irestrict ) ;
+}
+if ( conbnd ) {
+g_conexps ( arena , ibn , np , dcont , xke , conexp , irestrict ) ;
+}
+if ( ( ( ! high ) && co2bnd ) ) {
+g_co2exps ( arena , np , dco2 , pa , dt , co2exp , irestrict ) ;
+}
+if ( trace ) {
+if ( n2obnd ) {
+g_n2oexps ( arena , ibn , np , dn2o , pa , dt , n2oexp , irestrict ) ;
+}
+if ( ch4bnd ) {
+g_ch4exps ( arena , ibn , np , dch4 , pa , dt , ch4exp , irestrict ) ;
+}
+if ( combnd ) {
+g_comexps ( arena , ibn , np , dco2 , dt , comexp , irestrict ) ;
+}
+if ( f11bnd ) {
+a1 = 1.26610e-3f ;
+b1 = 3.55940e-6f ;
+fk1 = 1.89736e+1f ;
+a2 = 8.19370e-4f ;
+b2 = 4.67810e-6f ;
+fk2 = 1.01487e+1f ;
+g_cfcexps ( arena , ibn , np , a1 , b1 , fk1 , a2 , b2 , fk2 , df11 , dt , f11exp , irestrict ) ;
+}
+if ( f12bnd ) {
+a1 = 8.77370e-4f ;
+b1 = ( - 5.88440e-6f ) ;
+fk1 = 1.58104e+1f ;
+a2 = 8.62000e-4f ;
+b2 = ( - 4.22500e-6f ) ;
+fk2 = 3.70107e+1f ;
+g_cfcexps ( arena , ibn , np , a1 , b1 , fk1 , a2 , b2 , fk2 , df12 , dt , f12exp , irestrict ) ;
+}
+if ( f22bnd ) {
+a1 = 9.65130e-4f ;
+b1 = 1.31280e-5f ;
+fk1 = 6.18536e+0f ;
+a2 = ( - 3.00010e-5f ) ;
+b2 = 5.25010e-7f ;
+fk2 = 3.27912e+1f ;
+g_cfcexps ( arena , ibn , np , a1 , b1 , fk1 , a2 , b2 , fk2 , df22 , dt , f22exp , irestrict ) ;
+}
+if ( b10bnd ) {
+g_b10exps ( arena , np , dh2o , dcont , dco2 , dn2o , pa , dt , h2oexp , conexp , co2exp , n2oexp , irestrict ) ;
+}
+}
+for ( k = 1 ;
+k <= ( np + 1 ) ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+flxu ( k ) = 0.0f ;
+flxd ( k ) = 0.0f ;
+flcu ( k ) = 0.0f ;
+flcd ( k ) = 0.0f ;
+}
+}
+for ( k1 = 1 ;
+k1 <= np ;
+k1 += 1 ) {
+it = 0 ;
+im = 0 ;
+ib = 0 ;
+cldlw = 0.0f ;
+cldmd = 0.0f ;
+cldhi = 0.0f ;
+tranal = 1.0f ;
+if ( ( ! h2otbl ) ) {
+for ( ik = 1 ;
+ik <= 6 ;
+ik += 1 ) {
+th2o ( ik ) = 1.0f ;
+}
+}
+for ( iq = 1 ;
+iq <= 3 ;
+iq += 1 ) {
+tcon ( iq ) = 1.0f ;
+}
+if ( ( ( ! high ) && co2bnd ) ) {
+for ( isb = 1 ;
+isb <= 2 ;
+isb += 1 ) {
+for ( ik = 1 ;
+ik <= 6 ;
+ik += 1 ) {
+tco2 ( ik , isb ) = 1.0f ;
+}
+}
+}
+if ( trace ) {
+if ( n2obnd ) {
+for ( ik = 1 ;
+ik <= 4 ;
+ik += 1 ) {
+tn2o ( ik ) = 1.0f ;
+}
+}
+if ( ch4bnd ) {
+for ( ik = 1 ;
+ik <= 4 ;
+ik += 1 ) {
+tch4 ( ik ) = 1.0f ;
+}
+}
+if ( combnd ) {
+for ( ik = 1 ;
+ik <= 6 ;
+ik += 1 ) {
+tcom ( ik ) = 1.0f ;
+}
+}
+if ( f11bnd ) {
+tf11 = 1.0f ;
+}
+if ( f12bnd ) {
+tf12 = 1.0f ;
+}
+if ( f22bnd ) {
+tf22 = 1.0f ;
+}
+if ( b10bnd ) {
+for ( ik = 1 ;
+ik <= 5 ;
+ik += 1 ) {
+th2o ( ik ) = 1.0f ;
+}
+for ( ik = 1 ;
+ik <= 6 ;
+ik += 1 ) {
+tco2 ( ik , 1 ) = 1.0f ;
+}
+tcon ( 1 ) = 1.0f ;
+for ( ik = 1 ;
+ik <= 2 ;
+ik += 1 ) {
+tn2o ( ik ) = 1.0f ;
+}
+}
+}
+fclr = 1.0f ;
+for ( k2 = ( k1 + 1 ) ;
+k2 <= ( np + 1 ) ;
+k2 += 1 ) {
+trant = 1.0f ;
+if ( h2otbl ) {
+w1 = ( - 8.0f ) ;
+p1 = ( - 2.0f ) ;
+dwe = 0.3f ;
+dpe = 0.2f ;
+if ( ( ibn == 1 ) ) {
+g_tablup ( arena , k1 , k2 , np , nx2 , nh , sh2o , swpre , swtem , w1 , p1 , dwe , dpe , h11 , h12 , h13 , & ( trant ) , irestrict ) ;
+}
+if ( ( ibn == 2 ) ) {
+g_tablup ( arena , k1 , k2 , np , nx2 , nh , sh2o , swpre , swtem , w1 , p1 , dwe , dpe , h21 , h22 , h23 , & ( trant ) , irestrict ) ;
+}
+if ( ( ibn == 8 ) ) {
+g_tablup ( arena , k1 , k2 , np , nx2 , nh , sh2o , swpre , swtem , w1 , p1 , dwe , dpe , h81 , h82 , h83 , & ( trant ) , irestrict ) ;
+}
+}
+else {
+if ( ( ! b10bnd ) ) {
+g_h2okdis ( arena , ibn , np , ( k2 - 1 ) , fkw , gkw , ne , h2oexp , conexp , th2o , tcon , & ( trant ) , irestrict ) ;
+}
+}
+if ( co2bnd ) {
+if ( high ) {
+w1 = ( - 4.0f ) ;
+p1 = ( - 2.0f ) ;
+dwe = 0.3f ;
+dpe = 0.2f ;
+g_tablup ( arena , k1 , k2 , np , nx2 , nc , sco3 , scopre , scotem , w1 , p1 , dwe , dpe , c1 , c2 , c3 , & ( trant ) , irestrict ) ;
+}
+else {
+g_co2kdis ( arena , np , ( k2 - 1 ) , co2exp , tco2 , & ( trant ) , irestrict ) ;
+}
+}
+if ( oznbnd ) {
+w1 = ( - 6.0f ) ;
+p1 = ( - 2.0f ) ;
+dwe = 0.3f ;
+dpe = 0.2f ;
+g_tablup ( arena , k1 , k2 , np , nx2 , no , sco3 , scopre , scotem , w1 , p1 , dwe , dpe , o1 , o2 , o3 , & ( trant ) , irestrict ) ;
+}
+if ( trace ) {
+if ( n2obnd ) {
+g_n2okdis ( arena , ibn , np , ( k2 - 1 ) , n2oexp , tn2o , & ( trant ) , irestrict ) ;
+}
+if ( ch4bnd ) {
+g_ch4kdis ( arena , ibn , np , ( k2 - 1 ) , ch4exp , tch4 , & ( trant ) , irestrict ) ;
+}
+if ( combnd ) {
+g_comkdis ( arena , ibn , np , ( k2 - 1 ) , comexp , tcom , & ( trant ) , irestrict ) ;
+}
+if ( f11bnd ) {
+g_cfckdis ( arena , np , ( k2 - 1 ) , f11exp , & ( tf11 ) , & ( trant ) , irestrict ) ;
+}
+if ( f12bnd ) {
+g_cfckdis ( arena , np , ( k2 - 1 ) , f12exp , & ( tf12 ) , & ( trant ) , irestrict ) ;
+}
+if ( f22bnd ) {
+g_cfckdis ( arena , np , ( k2 - 1 ) , f22exp , & ( tf22 ) , & ( trant ) , irestrict ) ;
+}
+if ( b10bnd ) {
+g_b10kdis ( arena , np , ( k2 - 1 ) , h2oexp , conexp , co2exp , n2oexp , th2o , tcon , tco2 , tn2o , & ( trant ) , irestrict ) ;
+}
+}
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+tranal = ( tranal * taerlyr ( ( k2 - 1 ) ) ) ;
+trant = ( trant * tranal ) ;
+}
+if ( ( ! overcast ) ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+g_cldovlp ( arena , np , k2 , ict , icb , & ( it ) , & ( im ) , & ( ib ) , & ( cldhi ) , & ( cldmd ) , & ( cldlw ) , fcld , tcldlyr , & ( fclr ) , irestrict ) ;
+}
+}
+else {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+fclr = ( fclr * tcldlyr ( ( k2 - 1 ) ) ) ;
+}
+}
+if ( ( ! b10bnd ) ) {
+if ( ( k2 == ( k1 + 1 ) ) ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+yy = g_min ( Soft8 ( SD8(0x3feff7ced916872bul) ) , trant ) ;
+yy = g_max ( Soft8 ( SD8(0x3f50624dd2f1a9fcul) ) , yy ) ;
+xx = ( aa_div ( ( blevel ( k1 ) - blevel ( k2 ) ) , g_log ( yy ) ) ) ;
+bu = ( ( aa_div ( ( blevel ( k1 ) - ( blevel ( k2 ) * yy ) ) , ( 1.0f - yy ) ) ) + xx ) ;
+bd = ( ( aa_div ( ( blevel ( k2 ) - ( blevel ( k1 ) * yy ) ) , ( 1.0f - yy ) ) ) - xx ) ;
+flcu ( k1 ) = ( ( flcu ( k1 ) - bu ) + ( ( bu - blayer ( k2 ) ) * trant ) ) ;
+flcd ( k2 ) = ( ( flcd ( k2 ) + bd ) - ( ( bd - blayer ( ( k1 - 1 ) ) ) * trant ) ) ;
+flxu ( k1 ) = ( ( flxu ( k1 ) - bu ) + ( ( ( bu - blayer ( k2 ) ) * trant ) * fclr ) ) ;
+flxd ( k2 ) = ( ( flxd ( k2 ) + bd ) - ( ( ( bd - blayer ( ( k1 - 1 ) ) ) * trant ) * fclr ) ) ;
+}
+}
+else {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+xx = ( trant * dblayr ( k2 ) ) ;
+flcu ( k1 ) = ( flcu ( k1 ) + xx ) ;
+flxu ( k1 ) = ( flxu ( k1 ) + ( xx * fclr ) ) ;
+xx = ( trant * dblayr ( k1 ) ) ;
+flcd ( k2 ) = ( flcd ( k2 ) + xx ) ;
+flxd ( k2 ) = ( flxd ( k2 ) + ( xx * fclr ) ) ;
+}
+}
+}
+else {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+rflx ( k1 ) = ( rflx ( k1 ) + ( ( trant * fclr ) * dblayr ( k2 ) ) ) ;
+rflx ( k2 ) = ( rflx ( k2 ) + ( ( trant * fclr ) * dblayr ( k1 ) ) ) ;
+rflc ( k1 ) = ( rflc ( k1 ) + ( trant * dblayr ( k2 ) ) ) ;
+rflc ( k2 ) = ( rflc ( k2 ) + ( trant * dblayr ( k1 ) ) ) ;
+}
+}
+}
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+trantcr ( k1 ) = trant ;
+transfc ( k1 ) = ( trant * fclr ) ;
+}
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+dfdts ( k1 ) = ( dfdts ( k1 ) - ( dbs * transfc ( k1 ) ) ) ;
+}
+}
+if ( ( ! b10bnd ) ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+flcu ( ( np + 1 ) ) = ( - blayer ( ( np + 1 ) ) ) ;
+flxu ( ( np + 1 ) ) = ( - blayer ( ( np + 1 ) ) ) ;
+sfcem = ( sfcem - blayer ( ( np + 1 ) ) ) ;
+dfdts ( ( np + 1 ) ) = ( dfdts ( ( np + 1 ) ) - dbs ) ;
+}
+for ( k = 1 ;
+k <= ( np + 1 ) ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+flcu ( k ) = ( flcu ( k ) - ( ( flcd ( ( np + 1 ) ) * trantcr ( k ) ) * ( 1.f - emiss ( ibn ) ) ) ) ;
+flxu ( k ) = ( flxu ( k ) - ( ( flxd ( ( np + 1 ) ) * transfc ( k ) ) * ( 1.f - emiss ( ibn ) ) ) ) ;
+}
+}
+}
+for ( k = 1 ;
+k <= ( np + 1 ) ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+flc ( k ) = ( ( flc ( k ) + flcd ( k ) ) + flcu ( k ) ) ;
+flx ( k ) = ( ( flx ( k ) + flxd ( k ) ) + flxu ( k ) ) ;
+acflxu ( k ) = ( acflxu ( k ) + flxu ( k ) ) ;
+acflxd ( k ) = ( acflxd ( k ) + flxd ( k ) ) ;
+}
+}
+if ( b10bnd ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+rflc ( 1 ) = 0.e0f ;
+rflx ( 1 ) = 0.e0f ;
+}
+for ( k = 2 ;
+k <= ( np + 1 ) ;
+k += 1 ) {
+for ( ic = 1 ;
+ic <= irestrict ;
+ic += 1 ) {
+flc ( k ) = ( flc ( k ) + rflc ( k ) ) ;
+flx ( k ) = ( flx ( k ) + rflx ( k ) ) ;
+if ( ( rflx ( k ) >= 0.0f ) ) acflxd ( k ) = ( acflxd ( k ) + rflx ( k ) ) ;
+if ( ( rflx ( k ) < 0.0f ) ) acflxu ( k ) = ( acflxu ( k ) + rflx ( k ) ) ;
+}
+}
+}
+}
+
+tier_sfcem[0]=sfcem; return;
+}
+
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+flx_out ( g_i0 ) = F ( flx ( g_i0 ) ) ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+acflxu_out ( g_i0 ) = F ( acflxu ( g_i0 ) ) ;
+}
+for ( int g_i0 = 1 ;
+g_i0 <= ( np + 1 ) ;
+++ g_i0 ) {
+acflxd_out ( g_i0 ) = F ( acflxd ( g_i0 ) ) ;
+}
+
+}

@@ -12,13 +12,13 @@
 //! for GRIB2 distribution materials (JMA "Dissemination Technical
 //! Information" / 配信資料に関する技術情報 series, radar GPV):
 //!
-//! - Grid Definition Template 3.50120: azimuth-range polar grid (gate
+//! - Grid Definition Template 3.50120 — azimuth-range polar grid (gate
 //!   count, radial count, gate spacing, range start, scan direction, start
 //!   azimuth).
-//! - Product Definition Template 4.51022: radar site parameters (station
+//! - Product Definition Template 4.51022 — radar site parameters (station
 //!   id/number, latitude/longitude/altitude, antenna elevation angle,
 //!   per-ray elevation and PRF tables).
-//! - Data Representation Template 5.200: run-length packing against a
+//! - Data Representation Template 5.200 — run-length packing against a
 //!   table of level values with a decimal scale factor.
 //! - Parameters follow WMO Code table 4.2, discipline 0, category 15:
 //!   number 1 = reflectivity (dBZ), number 2 = radial velocity (m/s).
@@ -36,7 +36,7 @@
 //! station in the archive.
 //!
 //! Values are stored as physical `f32` planes (`MomentStorage::F32`, NaN =
-//! missing), exactly as the run-length level table dictates: the level
+//! missing), exactly as the run-length level table dictates — the level
 //! table is a lookup, not an affine raw-to-physical mapping, so compact
 //! u8/u16 storage does not apply. Nyquist velocity is left `None`: the
 //! per-ray PRF tables suggest staggered-PRF operation and a wrong Nyquist
@@ -97,7 +97,7 @@ pub fn looks_like_jma_tar_bytes(bytes: &[u8]) -> bool {
 }
 
 /// One radar station's identity, parsed from the GRIB2 product section
-/// without decoding any gate data: cheap enough to run over a whole tar
+/// without decoding any gate data — cheap enough to run over a whole tar
 /// for catalog building.
 #[derive(Clone, Debug, PartialEq)]
 pub struct JmaStationHeader {
@@ -153,7 +153,7 @@ pub fn jma_tar_station_headers(bytes: &[u8]) -> Result<Vec<JmaStationHeader>, St
 /// `site_filter` selects a single station by JMA id (e.g. `"ITOK"`,
 /// case-insensitive) or by station number (`"RS47937"` / `"47937"`); `None`
 /// decodes every station. Malformed members are skipped (the tar is network
-/// data; one corrupt station must not take down the other nineteen): the
+/// data; one corrupt station must not take down the other nineteen) — the
 /// first member error is returned only when nothing decodes. Never panics
 /// on malformed input.
 pub fn decode_jma_tar_volumes(
@@ -226,12 +226,12 @@ pub fn decode_jma_tar_volumes(
     Ok(volumes)
 }
 
-/// JMA packs sweeps in whatever order the GRIB member carries them,
+/// JMA packs sweeps in whatever order the GRIB member carries them —
 /// observed highest-tilt-first, so tilt 0 in the UI showed the ~25° cone
-/// (field report), and a station spanning several tar members restarts
+/// (field report) — and a station spanning several tar members restarts
 /// its sweep numbering per member. Sort each station's ladder lowest
-/// beam first (stable: repeated elevations (the 10-minute file's two
-/// 5-minute repetitions) keep their scan order) and renumber, matching
+/// beam first (stable: repeated elevations — the 10-minute file's two
+/// 5-minute repetitions — keep their scan order) and renumber, matching
 /// every other provider's cut order.
 fn sort_cuts_lowest_first(volume: &mut RadarVolume) {
     volume
@@ -242,7 +242,7 @@ fn sort_cuts_lowest_first(volume: &mut RadarVolume) {
     }
 }
 
-/// Decode only the FIRST station of a JMA tar: the shared byte router's
+/// Decode only the FIRST station of a JMA tar — the shared byte router's
 /// entry point, where the contract is one volume per buffer. Providers that
 /// need a specific station call [`decode_jma_tar_volumes`] with a
 /// `site_filter` instead.
@@ -590,7 +590,7 @@ fn push_sweep_cut(
 
     // Repeated elevations with different gate layouts are real here (the
     // 10-minute file carries two 5-minute scan repetitions), so every sweep
-    // becomes its own cut in scan order, never elevation-merged.
+    // becomes its own cut in scan order — never elevation-merged.
     let mut cut = ElevationCut::new(elevation_deg, elevation_number);
     cut.radials
         .try_reserve_exact(grid.radial_count)
@@ -991,7 +991,7 @@ fn run_length_decode(
         .checked_add(1)
         .ok_or_else(|| "run-length base overflow".to_owned())?;
     // checked_sub: a header declaring max_value >= 2^num_bits is malformed
-    // network data, not a panic (review finding, debug builds underflowed
+    // network data, not a panic (review finding — debug builds underflowed
     // here, release builds silently wrapped).
     let lngu = (1u32 << num_bits)
         .checked_sub(u32::from(rlbase))
@@ -1446,7 +1446,7 @@ mod tests {
         assert!(!looks_like_jma_tar_bytes(&[0u8; 1024]));
     }
 
-    /// Field report: tilt #00 on JMA radars showed the ~25° cone, the
+    /// Field report: tilt #00 on JMA radars showed the ~25° cone — the
     /// GRIB members carry sweeps high-tilt-first, and a station split
     /// across tar members restarted its sweep numbering. The ladder must
     /// come back lowest beam first with sequential numbering.

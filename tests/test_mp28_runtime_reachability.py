@@ -99,6 +99,25 @@ import pytest
 
 from conftest import requires_gpu
 
+# Consumer expectations come from the independent generated declarations.
+from woof.physics_registry import implemented_selector_values as _intake_selectors
+from woof.physics_registry import consumer_rows_by_selector as _intake_rows
+_INTAKE_MP = tuple(sorted(_intake_selectors("microphysics")))
+_INTAKE_REFL = tuple(mp for mp in _INTAKE_MP if mp)
+_INTAKE_EDGES = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "nest_transition").items()
+    if (row or {}).get("mixed_edge_ported")))
+_INTAKE_PRODUCERS = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "reflectivity_input_species").items()
+    if row is not None))
+_INTAKE_NATIVE = tuple(sorted(set(_INTAKE_REFL) - set(_INTAKE_PRODUCERS)))
+_INTAKE_SNOW = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qs" in (row or {}).get("state_fields", ())))
+_INTAKE_SIX = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qg" in (row or {}).get("state_fields", ())))
+
 #: The three driven-door tests below type `woof run` and `woof run-plan`
 #: and read the mp=28 dataset precondition off the door's own sentence.
 #: On an install with no cupy those doors refuse the install first, at plan
@@ -138,7 +157,13 @@ STALE_REFL_ADMISSION = frozenset({1, 6, 8, 10, 18})
 #: (nr1d, :2957) -- that is a producer-side difference (the port gives it its
 #: own kernel, woof/core/kernels/wdm6_refl.cu) and changes nothing about
 #: admission.
-REFL_ADMISSION = frozenset({1, 6, 8, 9, 10, 16, 18, 28, 50})
+#:
+#: The named schemes (woof.microphysics_schemes, TEMPO = 900 with the RRFS v2
+#: intake) join every admission gate through NAMED_MP_IDS: each computes its
+#: own 10 cm reflectivity (``native_reflectivity``), so the carrier is due on
+#: the same cadence.
+from woof.microphysics_schemes import NAMED_MP_IDS  # noqa: E402
+REFL_ADMISSION = frozenset({1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 50, 106} | set(NAMED_MP_IDS))
 
 #: The deliberate exceptions -- NONE remain.  This ledger is the census of
 #: sites that are stale ON PURPOSE, so it is the last place that may itself
@@ -199,12 +224,12 @@ DELIBERATE_STALE_SITES: set[tuple[str, str]] = set()
 #:   NAMED FOLLOW-UP for the restart lane, not a census suppression.
 #: * ``woof/wrf_physics_inventory.py`` ``_INVENTORIES`` omits 9 and 16
 #:   deliberately: it records EVIDENCED stock-WRF export contracts, which
-#:   exist for exactly (6, 8, 10, 18, 28, 50); the rw-wps consuming half
+#:   exist for exactly (6, 8, 10, 18, 24, 28, 50); the rw-wps consuming half
 #:   documents the same decision (tools/rw_wps/crates/rw-wps/src/
 #:   namelist.rs STOCK_WRF_INVENTORIED_MP_PHYSICS).
 #: * ``woof/core/preflight.py`` and ``woof/core/rrtmg_legacy.py`` key
 #:   all ten accepted selectors -- complete, nothing to judge.
-ACCEPTED_MP_PHYSICS = frozenset({0, 1, 6, 8, 9, 10, 16, 18, 28, 50})
+ACCEPTED_MP_PHYSICS = frozenset({0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 50, 106})
 
 #: Scheme-KEYED DICTS that omit 28, and the judgement for each.  A dict is a
 #: third shape the same defect comes in and the AST membership scan cannot
@@ -361,12 +386,18 @@ def test_no_new_scheme_keyed_dict_omits_28():
     from woof.core import microphysics_transition as mt
 
     # One row per refused selector, and EVERY refused selector has one.
-    # Both tables are EMPTY: 50, then 16 and 28, left them as each entry
-    # closure was ratified into PORTED_MP_PHYSICS -- the retired refusals
-    # died with their defect, per the guard-retirement law.
+    # 50, then 16 and 28, left these tables as each entry closure was
+    # ratified into PORTED_MP_PHYSICS -- the retired refusals died with their
+    # defect, per the guard-retirement law.  What remains is FAST_SBM (30),
+    # whose mixed edge would have to build 142 spectral distributions from
+    # another scheme's bulk moments with no validated closure, and the named
+    # schemes (TEMPO, 900): same-scheme nests run, and a mixed edge is
+    # refused by name because no cross-scheme closure for their moments
+    # (graupel number and volume) has been written or measured.
     assert (set(mt.UNVALIDATED_MIXED_EDGE_MOMENTS)
             == set(mt.UNVALIDATED_MIXED_EDGE_SELECTORS)
-            == set(mt._UNVALIDATED_MIXED_EDGE_REASONS) == set())
+            == set(mt._UNVALIDATED_MIXED_EDGE_REASONS)
+            == {3, 5, 30} | set(NAMED_MP_IDS))
     # WDM6 is double-moment in cloud AND rain and carries a CCN reservoir:
     # ncr(:,:,1)=nn, ncr(:,:,2)=nc, ncr(:,:,3)=nr (module_mp_wdm6.F:238-240),
     # all three prognostic scalars in the WRF Registry.  It has no ni/ns/ng.
@@ -447,10 +478,17 @@ def test_the_hrrr_route_admission_is_derived_not_respelled():
     # R-003 -- so the ported set is the stale admission plus 50 and 9.
     # 16 and 28 were APPENDED next, with their own entry closures, so the
     # ported set is the stale admission plus 50, 9, 16 and 28.
-    assert set(mt.PORTED_MP_PHYSICS) == STALE_REFL_ADMISSION | {50, 9, 16, 28}
-    assert not mt.UNVALIDATED_MIXED_EDGE_SELECTORS, (
-        "a selector is refused for a missing closure again; every mixed "
-        "edge in this release runs with its mapping named")
+    assert set(mt.PORTED_MP_PHYSICS) == STALE_REFL_ADMISSION | {50, 9, 16, 28, 2, 24}
+    # WSM3 (3, phase split), Ferrier-Aligo (5, rime factor) and FAST_SBM (30) are refused for a
+    # genuine missing closure (no
+    # bulk-to-spectrum entry closure is validated for a mixed edge), and the
+    # named schemes are refused by name; both are therefore outside
+    # PORTED_MP_PHYSICS and this route's admission.  Any other refused
+    # selector is a regression.
+    assert set(mt.UNVALIDATED_MIXED_EDGE_SELECTORS) == {3, 5, 30} | set(NAMED_MP_IDS), (
+        "a selector other than WSM3, Ferrier-Aligo, FAST_SBM or a named scheme is refused for a "
+        "missing closure again; every other mixed edge in this release runs "
+        "with its mapping named")
 
 
 def _unpreparable_mp28_config(tmp_path, monkeypatch):
@@ -582,12 +620,14 @@ def test_the_run_plan_door_refuses_before_it_fetches(tmp_path, monkeypatch,
               if line.strip()]
     assert not [event for event in events
                 if event.get("stage") == "fetch"], events
-    # Nothing under the run root but the front door's own two records:
-    # the event stream and the manifest that names it.  No fetch
-    # directory, no prepared root, no forecast output.
+    # Nothing under the run root but the front door's own records: the
+    # event stream, the manifest that names it, and the time ledger the
+    # run observer keeps beside the events.  No fetch directory, no
+    # prepared root, no forecast output.
     assert sorted(path.name for path in run_root.rglob("*")
                   if path.is_file()) == sorted(
-                      [runplan.EVENTS_FILENAME, runplan.MANIFEST_FILENAME]), (
+                      [runplan.EVENTS_FILENAME, runplan.MANIFEST_FILENAME,
+                       "timeline.jsonl"]), (
                           sorted(str(path) for path in run_root.rglob("*")))
     failed = [event for event in events if event.get("event") == "failed"]
     assert len(failed) == 1, events
@@ -823,9 +863,13 @@ def test_every_refl_10cm_admission_constant_admits_28():
     # the table; the asymmetry arithmetic below is unchanged.
     from woof.core.refl import REFL_10CM_INPUT_SPECIES
     producer = frozenset(REFL_10CM_INPUT_SPECIES)
-    assert producer == frozenset({1, 6, 8, 10, 16, 28})
+    assert producer == frozenset({1, 2, 3, 4, 6, 8, 10, 16, 28, 106})
     assert "cfg.mp_physics not in REFL_10CM_INPUT_SPECIES" in refl_source
-    assert REFL_ADMISSION - producer == {9, 18, 50}
+    # The named schemes stash their own native reflectivity (TEMPO's,
+    # ``native_reflectivity``), so they sit on 18's side as well.
+    from woof.microphysics_schemes import SCHEMES_BY_ID
+    assert REFL_ADMISSION - producer == {5, 9, 18, 24, 50} | {
+        mp for mp, scheme in SCHEMES_BY_ID.items() if scheme.native_reflectivity}
     assert "elif cfg.mp_physics in (8, 28):" in refl_source, (
         "mp=28 no longer shares mp=8's calc_refl10cm branch; WRF has ONE "
         "such routine with no aerosol-aware arm (module_mp_thompson.F:"
@@ -873,38 +917,42 @@ def test_the_runtime_refl_gates_are_reached_through_the_named_constant():
         assert "mp_physicsin(1,6,8,10,18)" not in normalized, relative
         assert "mp_physicsnotin(1,6,8,10,18)" not in normalized, relative
 
-    import ast
-    from collections import Counter
+    tree = ast.parse((REPO / "woof/runtime.py").read_text(encoding="utf-8"))
+    imports = [node for node in tree.body if isinstance(node, ast.ImportFrom)
+               and node.module == "woof.core.physics_inventory"
+               and any(alias.name == "REFL_10CM_MICROPHYSICS"
+                       for alias in node.names)]
+    assert len(imports) == 1
+    # Case output now has separate ensemble-capture, streamed, and ordinary
+    # resident consumers. Each uses the same admission inventory, along with
+    # the substep schedule and the tree history handoff.
+    gates = {}
+    for function in tree.body:
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        references = [node for node in ast.walk(function)
+                      if isinstance(node, ast.Name)
+                      and node.id == "REFL_10CM_MICROPHYSICS"]
+        if references:
+            gates[function.name] = len(references)
+            comparisons = [node for node in ast.walk(function)
+                           if isinstance(node, ast.Compare)
+                           and any(isinstance(value, ast.Name)
+                                   and value.id == "REFL_10CM_MICROPHYSICS"
+                                   for value in node.comparators)]
+            assert len(comparisons) == len(references), function.name
+            assert all(isinstance(node.left, ast.Attribute)
+                       and node.left.attr == "mp_physics"
+                       and len(node.ops) == 1
+                       and isinstance(node.ops[0], ast.In)
+                       for node in comparisons), function.name
+    # write_case_output's fourth gate (01402fcb1): the analysis frame
+    # writes WRF's initial all-zero REFL_10CM for a scheme that stashes one.
+    assert gates == {"write_case_output": 4, "integrate_prepared_case": 1,
+                     "_submit_tree_history_frame": 1}
 
-    class GateReads(ast.NodeVisitor):
-        def __init__(self):
-            self.functions = []
-            self.reads = Counter()
 
-        def visit_FunctionDef(self, node):
-            self.functions.append(node.name)
-            self.generic_visit(node)
-            self.functions.pop()
-
-        visit_AsyncFunctionDef = visit_FunctionDef
-
-        def visit_Name(self, node):
-            if node.id == "REFL_10CM_MICROPHYSICS":
-                self.reads[self.functions[-1] if self.functions else "<module>"] += 1
-
-    gates = GateReads()
-    gates.visit(ast.parse((REPO / "woof/runtime.py").read_text(encoding="utf-8")))
-    # Case output now has distinct capture, streamed and resident handoffs.
-    # Pin their owning functions instead of conflating the added handoffs
-    # with imports or string references in a whole-module occurrence count.
-    assert gates.reads == {
-        "write_case_output": 3,
-        "integrate_prepared_case": 1,
-        "_submit_tree_history_frame": 1,
-    }
-
-
-def test_the_prepared_runner_consumes_the_mp28_refl_handoff():
+def test_the_prepared_runner_consumes_the_mp28_refl_handoff(monkeypatch):
     """Behavioural, on the FOURTH site -- the one the old gap test missed.
 
     ``_consume_due_native_refl_10cm`` is a pure function of (ticks, state,
@@ -917,6 +965,10 @@ def test_the_prepared_runner_consumes_the_mp28_refl_handoff():
     from woof.prepared_single_domain_forecast import (
         _consume_due_native_refl_10cm)
 
+    from woof.core import refl
+    # This test owns handoff routing; the GPU diagnostic has its own check.
+    monkeypatch.setattr(refl, "analysis_refl_10cm",
+                        lambda state, *, shape: np.full(shape, 15, dtype=np.float32))
     sentinel = object()
     calls = []
 
@@ -929,7 +981,12 @@ def test_the_prepared_runner_consumes_the_mp28_refl_handoff():
             qv=np.zeros(1),
             physics=SimpleNamespace(mp_physics=mp_physics))
         assert _consume_due_native_refl_10cm(state, 1, consumer) is sentinel
-        assert _consume_due_native_refl_10cm(state, 0, consumer) is None
+        # Tick 0 takes no stash. It diagnoses the initial hydrometeors.
+        analysis = _consume_due_native_refl_10cm(state, 0, consumer,
+                                                 shape=(1, 1, 1))
+        assert analysis is not sentinel
+        assert np.asarray(analysis).shape == (1, 1, 1)
+        assert (np.asarray(analysis) == 15).all()
     assert len(calls) == len(REFL_ADMISSION)
 
     # A scheme with no native field must still take nothing.
@@ -969,27 +1026,35 @@ def test_the_runtime_tree_history_frame_consumes_the_mp28_refl_handoff():
         consume_refl_10cm = staticmethod(lambda state: field)
         refl_10cm_stash_is_due = staticmethod(refl.refl_10cm_stash_is_due)
         domain_start_ticks_of = staticmethod(refl.domain_start_ticks_of)
+        # The GPU diagnostic is checked separately; pin the routing here.
+        analysis_refl_10cm = staticmethod(
+            lambda state, *args, shape, **kw: np.full(shape, 15, dtype=np.float32))
 
     class _UhDiag:
         @staticmethod
         def reset_up_heli_max(state):
             return None
 
-    node = SimpleNamespace(state=SimpleNamespace(
-        qv=np.zeros(1), physics=SimpleNamespace(mp_physics=28)))
+    node = SimpleNamespace(
+        state=SimpleNamespace(qv=np.zeros(1),
+                              physics=SimpleNamespace(mp_physics=28)),
+        # The analysis frame sizes WRF's initial array off the domain's
+        # own run (01402fcb1).
+        cfg=SimpleNamespace(run=SimpleNamespace(nz=2, ny=3, nx=4)))
 
     monkey = pytest.MonkeyPatch()
     try:
         monkey.setitem(sys.modules, "woof.core.refl", _Refl)
         monkey.setitem(sys.modules, "woof.core.uh_diag", _UhDiag)
         runtime._submit_tree_history_frame(_Writers, node, ticks=6)
-        # tick 0 is not a period boundary: nothing was stashed, so nothing
-        # may be consumed.
+        # Tick 0 diagnoses the initial hydrometeors without consuming a stash.
         runtime._submit_tree_history_frame(_Writers, node, ticks=0)
     finally:
         monkey.undo()
 
-    assert submitted == [(6, field), (0, None)], submitted
+    assert [ticks for ticks, _ in submitted] == [6, 0], submitted
+    assert submitted[0][1] is field
+    assert submitted[1][1] is not field and (np.asarray(submitted[1][1]) == 15).all()
 
 
 def test_the_missing_28_refl_admission_was_a_crash_not_a_missing_field():
@@ -1132,8 +1197,17 @@ def test_the_restart_identity_names_the_scheme_and_its_provenance():
     # identity is its own string rather than a re-use, and every
     # pre-existing row is byte-unchanged -- the same two properties 16 and
     # 50 are held to below.
+    #
+    # RE-DERIVED with the RRFS v2 intake: the named schemes (TEMPO, 900)
+    # carry their own identity rows.  RE-DERIVED for 2.8.9: 30 (FAST_SBM)
+    # registered its own identity with the port, held to the same two
+    # properties below.  The WRF-numbered rows are otherwise unchanged.
     assert set(restart.MICROPHYSICS_ALGORITHM_IDENTITIES) == {
-        0, 1, 6, 8, 9, 10, 16, 18, 28, 50}
+        0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 30, 50, 106} | set(NAMED_MP_IDS)
+    fsbm_identity = restart.MICROPHYSICS_ALGORITHM_IDENTITIES[30]
+    assert fsbm_identity not in {
+        value for key, value in restart.MICROPHYSICS_ALGORITHM_IDENTITIES.items()
+        if key != 30}
     milbrandt_identity = restart.MICROPHYSICS_ALGORITHM_IDENTITIES[9]
     assert milbrandt_identity.startswith("milbrandt-yau-wrf-v4.6.1-")
     assert milbrandt_identity not in {
@@ -1150,8 +1224,9 @@ def test_the_restart_identity_names_the_scheme_and_its_provenance():
         value for key, value in restart.MICROPHYSICS_ALGORITHM_IDENTITIES.items()
         if key != 16}
     assert restart.MICROPHYSICS_ALGORITHM_IDENTITIES[8] == (
-        "classic-thompson-wrf-v4.6.1-v4-cloud-fallout-"
-        "refl10cm-ng-shadow-snow-rime-mass-number-velocity-rain-density-condensation-history")
+        "classic-thompson-wrf-v4.6.1-v5-cloud-fallout-"
+        "refl10cm-ng-shadow-snow-rime-mass-number-velocity-rain-density-condensation-history-"
+        "one-slab-rain-graupel-real-clamp-product")
 
 
 @requires_gpu
@@ -1780,8 +1855,7 @@ def test_the_offline_child_lane_converts_every_ported_edge():
     from woof.core import microphysics_transition as mt
 
     assert 28 in OFFLINE_CHILD_MP_PHYSICS
-    assert _CAPABILITIES["same_scheme_mp_physics"] == [
-        0, 1, 6, 8, 9, 10, 16, 18, 28, 50]
+    assert _CAPABILITIES["same_scheme_mp_physics"] == [0, 1, 2, 3, 4, 6, 8, 9, 10, 16, 18, 24, 28, 50, 106]
     assert _CAPABILITIES["cross_scheme_transitions"]["mp_physics"] == sorted(
         PARENT_SCHEME_CONTRACT)
     assert PARENT_SCHEME_CONTRACT == (

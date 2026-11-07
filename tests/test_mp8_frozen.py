@@ -57,7 +57,7 @@ thompson.cu, thompson.py and the adapter's launcher arguments, shipped
 its reading (quoted below), and did NOT re-freeze here, so seven
 assertions in this file were red on the 2.7.4 tip 7417342a8 and the
 2.7.5 tip c36f4c1f1 while the release contract set, which runs no GPU
-pin, never ran them.  Confirmed on a development machine at fc639c51f: 7 failed, 14
+pin, never ran them.  Confirmed on test host A at fc639c51f: 7 failed, 14
 passed, 1 skipped.  tools/release/precut_gpu_gate.py now runs this file
 before a cut.
 
@@ -133,10 +133,11 @@ tools/thompson_real_column_parity/README.md and
 docs/public/wrf-comparison/mp28-column-evidence.md say what closed and what
 remains.
 
-This module does not import cupy in its own source and opens no device: the
-loader capture replaces ``cupy.RawModule`` with a recorder before any
-compile can happen.
+The source-capture fixture opens no device. It uses the actual loader with
+recording compiler boundaries and a synthetic CUDA cache identity.
 """
+# Replaced in 2.9.1 (the WRF exact chain): test_clean_oracle_rebuild_matches_except_the_four_documented_files -> test_clean_oracle_rebuild_reproduces_the_committed_oracle.
+# Replaced in 2.9.1 (the WRF exact chain): test_rebuild_exception_list_is_exactly_four_named_files -> test_rebuild_exception_list_is_retired_and_the_libc_allowance_is_one_file.
 
 from __future__ import annotations
 
@@ -231,13 +232,24 @@ FROZEN_COMMIT_ORIGINAL = "789f61181fb0b198ace10775f3ea184eb5e786a3"
 #: raw output words against the unbounded source and former launch widths.
 #: Direct mixed and dense sweeps on RTX 4090 and RTX 5090 are byte-identical
 #: for the admitted bound. More aggressive bounds failed the RTX 5090 check.
+#: RE-FROZEN 2026-10-08 (gfix/288-thompson-classic): every classic
+#: rain-graupel table read goes through thompson_racg_index, the one slab WRF
+#: builds, instead of WRF v4.6.1's idx_bg1=5 subscript (+4*37*37 words, and
+#: zero rates where that left the table): the declared divergence mp=28
+#: already carries.  Reading: tests/test_thompson_real_column_host_parity.py
+#: grades the 42 real columns on WRF with only that index corrected
+#: (thompson_real_columns_wrf461_mp8_corrected_racg.npz) with no cell beyond
+#: the gate, and the unchanged stock fixture now shows exactly the
+#: rain-graupel footprint (74 prr_rcg, 80 pnr_rcg, 74 prg_rcg, 55 png_rcg,
+#: 7 prw_vcd cells, one final qg); on sm_89 only the six reading kernels'
+#: SASS moved.  Previously 1ab8d031/b3bbf88b (428981 chars).
 THOMPSON_CU_SHA256 = (
-    "1ab8d0319f471df3505b11591a67e7622f9dbeb022b23ac3179354befaa1443a")
+    "43f76b17febd32acdfe96e9cca4d9c932ce2d72c5a5378ed73b5f3eac33998d8")
 #: sha256 of ``_preamble() + thompson.cu`` -- the exact string nvrtc sees.
 #: THIS is the mp=8 numerics guarantee.
 THOMPSON_COMPILED_SOURCE_SHA256 = (
-    "b3bbf88b6231433036a8449593ff497e46909b145c7556579568a4d3dc64fbf2")
-THOMPSON_COMPILED_SOURCE_LEN = 428981
+    "35ac29fc801c66fc1eb64506267ded1efa2374f0998b0f80eea72f2afd5aa34a")
+THOMPSON_COMPILED_SOURCE_LEN = 428156
 
 COMMON_CUH_SHA256 = (
     "c78b17cb02ef67a2ad24d19e06e1129d7d5bcda74b972b38470fd33a6e58ff43")
@@ -273,11 +285,18 @@ CUDA_DEFINES_PIN = {
 #: RE-FROZEN 2026-10-01: the cold network uses 64-thread blocks; the warm
 #: network retains 256 on device architecture majors 9 and 10, and 64 on
 #: the others. tests/test_thompson_speed_blocks.py checks geometry and bits.
+#: RE-FROZEN 2026-10-08 (gfix/288-thompson-classic): launch_adapter_finish
+#: clamps at DTYPE(mp_tend_lim) * DTYPE(dt), the REAL product WRF forms
+#: (module_big_step_utilities_em.F:5706), not the rounded double product;
+#: a clamped cell's heating moved one float32 unit to WRF's word
+#: (tests/test_thompson_slab1_oracle_gpu.py), and launch_rain_graupel_
+#: collection's docstring names the one-slab read.  __all__ is unchanged.
+#: Previously 8b091e96.
 #: RE-PINNED for WOOF 1.0.0: the rename rewrote the package name on 7
 #: import lines of woof/core/thompson.py and nothing else, so no launcher and no
-#: keyword moved.  As the engine froze it: 8b091e96.
+#: keyword moved.  As the engine froze it: 00f661f0.
 THOMPSON_PY_SHA256 = (
-    "3f6592af617a321cde6d94eff9b2482e3d55867a08a471f740b38705410105f1")
+    "eff18d896df4bae1cfe1523255a4ccf67bf8f0810c4edfed4181fe69d3a37dae")
 
 #: ``woof/core/thompson.py::__all__`` verbatim, in declaration order.
 #: mp=28 launchers live in the new ``thompson_aerosol_*.py`` modules; not
@@ -364,11 +383,14 @@ THOMPSON_PY_ALL = (
 #: level-parallel fallout; counts 14 / 7 / 3 / 3, no site edited.
 #: RE-FROZEN 2026-10-01: the network bound adds seven lines above later
 #: sites. Literal counts and numerical values are unchanged.
+#: RE-FROZEN 2026-10-08: thompson_racg_index added 23 lines above the
+#: later sites and the six one-slab reads removed lines below them; counts
+#: 14 / 7 / 3 / 3 and no site edited.
 THOMPSON_CU_LITERAL_SITES = {
-    '100.0e6f': [416, 1136, 1265, 2572, 3446, 3513, 3739, 4419, 4699, 4822, 4954, 5374, 7672, 9645],
-    '2730.0f': [416, 1136, 1265, 4699, 4822, 5374, 9645],
-    '272.0f': [1142, 1273, 9653],
-    'cloud_number_bin = 65': [4627, 5040, 7754],
+    '100.0e6f': [416, 1136, 1265, 2572, 3446, 3513, 3762, 4437, 4717, 4840, 4972, 5392, 7658, 9631],
+    '2730.0f': [416, 1136, 1265, 4717, 4840, 5392, 9631],
+    '272.0f': [1142, 1273, 9639],
+    'cloud_number_bin = 65': [4645, 5058, 7740],
 }
 
 #: Every ``.cu`` translation unit present at the frozen commit, as
@@ -389,6 +411,9 @@ FROZEN_MODULE_DIGESTS = {
     # source identity metadata, not a new numerical or forecast result:
     # the named compiled-WRF and arithmetic-control tests retain that
     # authority. No kernel arithmetic moved in this re-anchoring.
+    # CONUS strict MF_VX_INV repair: imported inverse replaces a rebuilt reciprocal.
+    # Full native history at steps1/2/3: 0/265734210 words each, no missing rows;
+    # receipts conus-suite-exact/mp-rad-lsm/receipts/sol-continuation.
     # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
     # labels), proven equal with comments stripped; the preprocessor drops
     # comments, so the compiled binary does not move.
@@ -431,8 +456,23 @@ FROZEN_MODULE_DIGESTS = {
         # histories and canonical state remain byte-identical.
         # The small-step vertical and big-step momentum receipts
         # record the current assembled source and card evidence.
-        'dd772ca9b4c596e6443df6303090984a291cada1a7e0aed37801ecdc77967c03',
-        '3c71e027c197a6d4d7a2b96f6b1ae828cc249bc6312f1ff39c1325fa08bf2f1c'),
+        # Re-pinned for lane/verify-base4 (combo sweep round 3): strict-only
+        # operation order inside `#if GPUWM_WRF_EXACT` -- calc_coef_w's top row with rdnw(kde-1)**2 first, advance_uv's external-mode term inside the u/v statement, spec_bdyupdate_ph's (field*num)/den and WRF's muts carrier on the specified ring.
+        # Reading: with no selector the default acoustic PTX is byte-identical to
+        # bc2ce86b/2356c7c8 for compute_89/90/120 under both option sets
+        # (tools/kernel_ptx_identity/receipts/wrf-exact-round3-default.json); the
+        # strict words are graded in tests/test_wrf_exact_round3_gpu.py and against
+        # WRF's own dumped words (tools/wrf_exact_localize).  Previously
+        # bc2ce86b/2356c7c8.
+        # Re-pinned for the CONUS strict MF_VX_INV repair (paper/conus-suite-exact 0e21ecf29a, folded in
+        # 2.9.11): advance_uv's and apply_emdiv's GPUWM_WRF_EXACT branches and wrf_total_divergence take the
+        # imported MF_VX_INV instead of a rebuilt reciprocal.  The row moved the file pin and left the
+        # assembled-source pin at 22704608; this is the assembled digest of the same bytes.  Reading: the
+        # 2.9.11 assembled-legacy replay (base 2.9.10 b8165c59fe vs f5e393fb8c, RTX 5070 Ti) reproduces all
+        # 132 published acoustic arrays / 305,632 words and the coordinate and driver families with 0
+        # differing words on the default route; strict words are the row's own CONUS receipts.
+        '14f8d637ecfa54b7b8c19d80fc2bbf5ad5566f6fdc57b9671d0cfa8566f4331b',
+        '5c7205005dfa7457f8e27bc1f636a751a297f78710b03bfd5920256de3d2d57c'),
     # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
     # labels), proven equal with comments stripped; the preprocessor drops
     # comments, so the compiled binary does not move.
@@ -470,7 +510,7 @@ FROZEN_MODULE_DIGESTS = {
         # (tools/kernel_ptx_identity/receipts/, bw-advection-2.8.2-
         # nvrtc13.4.json and -nvrtc12.9.json).  Reading: the product default
         # suite (8 steps, 64x64x32) is byte-identical, canonical state digest
-        # and history file, on a development machine's RTX 5070 Ti at 9eee49ce0 against
+        # and history file, on test host D's RTX 5070 Ti at 9eee49ce0 against
         # 7486d241c; the lane's report (DYCORE-SPEED-282/advection-RESULT.md)
         # records forecast identity on B200, H100 and RTX PRO 6000 (3 km
         # CONUS) and on the RTX 4090 and RTX 5090 (default suite); and the
@@ -544,8 +584,26 @@ FROZEN_MODULE_DIGESTS = {
         # (tools/kernel_ptx_identity/receipts/,
         # wrf-exact-default-2.8.2-nvrtc13.4.json and -nvrtc12.9.json), so the
         # default build does not move.  Previously 384bf67c/eb691c93.
-        '7b348c87a5d25e6e731198167fb48e0223c1e0a6ce5ca3328dd8c0b52c8c32bb',
-        'f3da804ee5d4e686e044433a4366b3a4f2ed92f1421105dee1a98905818611ea'),
+        # Re-pinned for lane/verify-base4 (combo sweep round 3): strict-only
+        # operation order inside `#if GPUWM_WRF_EXACT` -- calc_p_rho_phi with the acoustic loop's grid%muts as an argument (a helper and a calc_p_alpha_carried_muts entry).
+        # Reading: with no selector the default diagnostics PTX is byte-identical to
+        # 7b348c87/f3da804e for compute_89/90/120 under both option sets
+        # (tools/kernel_ptx_identity/receipts/wrf-exact-round3-default.json); the
+        # strict words are graded in tests/test_wrf_exact_round3_gpu.py and against
+        # WRF's own dumped words (tools/wrf_exact_localize).  Previously
+        # 7b348c87/f3da804e.
+        # Re-pinned for c61736da9 (Pin nest preparation EOS to host FP32
+        # arithmetic, folded into 2.9.10 as eced9efd6c): calc_p_alpha's log1pf
+        # and powf are spelled EOS_LOG1P/EOS_POW, which become the pinned
+        # plm_log1pf/gfk_pow only under GPUWM_PREPARATION_EOS (the nest
+        # preparation loader) and stay log1pf/powf everywhere else.  Reading:
+        # the 2.9.10 GPU suite at a613224e3a (this edit included) kept all six
+        # default-forecast identity arms identical to the f0195d80ac1b
+        # reference, and CPU and CUDA nest preparation agree in 0 of
+        # 18,170,276 values on the 00Z ICON-EU moving-nest case.  Previously
+        # 38ee5c02/4418fe6f.
+        'f611da1651af581955fcb8bf3e0b2b12cd8c8f11058e555194c091bbb478b0b7',
+        '40e9e6cb687a54a8f1489aa6d92aa496ed6a646e3a506b4a34030dcbd5d00a16'),
     'diff6': (
         # Re-pinned for the compiled WRF v4.7.1 diffusion oracle (83fde6032,
         # merged dd4908a0f): sixth-order filtering supplies each field's
@@ -553,8 +611,8 @@ FROZEN_MODULE_DIGESTS = {
         # keeps WRF's REAL staging in the main and seam kernels.  Reading: zero
         # differing words over 376,160 against compiled WRF on the 4090 and 5090
         # (tests/test_diff6_wrf471_parity.py).  Previously 7dbcfb2d/563febbc.
-        'deb53522840d9d1bb9f0dcb43cd98fb4da5c4658714025a091d7c6f9ce461e12',
-        '7db172b01a10c9613b1475947c21703d0161844aed348cf029dcbb1199993148'),
+        '0e0de46ac99d264eef27a50ac74e6e92fd68374ebd42698aceb4e1a4808a7467',
+        'be41f8092a63933c6165f67e59f03afaa89bacbd6ffbf1a5ddcef367f38e4bcc'),
     'diff6_seam': (
         # Re-pinned for the compiled WRF v4.7.1 diffusion oracle (83fde6032,
         # merged dd4908a0f): sixth-order filtering supplies each field's
@@ -562,11 +620,14 @@ FROZEN_MODULE_DIGESTS = {
         # keeps WRF's REAL staging in the main and seam kernels.  Reading: zero
         # differing words over 376,160 against compiled WRF on the 4090 and 5090
         # (tests/test_diff6_wrf471_parity.py).  Previously 776ed705/7af0e3dd.
-        'e01ff6b6643c10cbda676a152b0d4c5c54da3afc4e116b9229a3e604e9914b63',
-        '4c00722a7e8e4fb84bd39dea09c2d84ef4b42cf839e088a21e05a0c8a73c55fb'),
+        'b693000a64ccfece2e2cdd45756091c7d200f55e1d136f5a79ab548fe22706e9',
+        '90c48b98a08fa87fc1cabfe41cb0ba7c6ef52e74817f4502c08d494ecacfb905'),
     'diffusion': (
         '00fb2e5d5550680fef154b4f67c7e282ad7ca1b170df59abdea89f888dad91ef',
         'f4958de3298bfcd764a5fd848aedfbb13938043ab91132db419408951c0a061e'),
+    # CONUS strict MF_VX_INV repair: imported inverse replaces a rebuilt reciprocal.
+    # Full native history at steps1/2/3: 0/265734210 words each, no missing rows;
+    # receipts conus-suite-exact/mp-rad-lsm/receipts/sol-continuation.
     'dycore': (
         # Re-pinned for the small-step lateral-boundary fix:
         # small_step_init_uv / small_step_finish_uv took WRF calc_mu_uv's
@@ -607,9 +668,49 @@ FROZEN_MODULE_DIGESTS = {
         # histories and canonical state remain byte-identical.
         # The small-step vertical and big-step momentum receipts
         # record the current assembled source and card evidence.
-        'd2ddad7b770758cdb6581e6f049db8cf68da292431b804bb1d6dcb7c3b555ca7',
-        '433ab4ba2ae49a20dc1c3abcf83753fd6d831f6267639bc1c9bbf812977fbdaf'),
+        # The SFIRE port (lane/ec-sfire, from lane/283-sfire 2d1de25d6)
+        # adds the compiled open-boundary geopotential kernel
+        # slow_geopotential_open, launched only for open, unforced lateral
+        # boundaries (woof/core/dycore.py _launch_open_geopotential); every
+        # other entry is unchanged. Native RHS controls and the coupled ideal
+        # timeline receipts are in tools/sfire_coupled_ideal/rhs_ph_open/receipts.
+        # Re-pinned for lane/sfire-do1-287 (2.8.7): slow_geopotential_open
+        # follows unmodified WRF v4.7.1 rhs_ph at the west top row, where WRF
+        # reads FNM/FNP(kde) and U(kde), which hold their zero allocation
+        # value at run time; the former min(k,kde-1) correction added a
+        # nonzero upwind term WRF never applies.  Reading: 0 differing words
+        # of 43,008 against compiled unmodified WRF (no allowed-difference
+        # mask), default and strict, RTX 5070 Ti; the previous kernel misses
+        # 192 (the west top row of the 16 open-x fixtures).  Previously
+        # a9567a3d/3d47bada.
+        # Re-pinned for lane/verify-base3 (combo sweep round 2): strict-only
+        # operation order inside `#if GPUWM_WRF_EXACT` -- calc_php's
+        # left-to-right half-level geopotential, pg_buoy_w's (1./msfty)*g
+        # scale, and small_step_finish's muus from muts = (mub+mu)+mu''.
+        # Reading: with no selector the default dycore PTX is byte-identical
+        # to dc89c74d/2b6f1337 for compute_89/90/120 under both option sets
+        # (tools/kernel_ptx_identity/receipts/
+        # wrf-exact-round2-dycore-default.json); the strict words are graded
+        # in tests/test_wrf_exact_operation_order_gpu.py.  Previously
+        # dc89c74d/2b6f1337.
+        # Re-pinned for lane/verify-base4 (combo sweep round 3): strict-only
+        # operation order inside `#if GPUWM_WRF_EXACT` -- calc_mu_uv's face mass in rhs_ph and horizontal_pressure_gradient, calc_cq's species-pair qtot in pg_buoy_w, and small_step_finish reading the muts carrier.
+        # Reading: with no selector the default dycore PTX is byte-identical to
+        # 6fac2471/af786cd2 for compute_89/90/120 under both option sets
+        # (tools/kernel_ptx_identity/receipts/wrf-exact-round3-default.json); the
+        # strict words are graded in tests/test_wrf_exact_round3_gpu.py and against
+        # WRF's own dumped words (tools/wrf_exact_localize).  Previously
+        # 6fac2471/af786cd2.
+        # Assembled pin re-read for 2.9.11 (paper/conus-suite-exact 0e21ecf29a): the row's strict MF_VX_INV
+        # edit sits inside `#if GPUWM_WRF_EXACT`; it moved the file pin above and left this one stale.
+        # Default route unchanged: the 2.9.11 assembled-legacy replay, 0 differing words in all three families.
+        '1983f89c3d44c723b8c322e8cccb611fade5ec3830c39d9002be60eda6ea8223',
+        '5d66c9b385d0fae7429db2786f9316322cf4993a2d260ca33b7a7cf849bc70b9'),
     'health': (
+        # The full-state scanner now carries specified-rim geometry. It
+        # changes a strict boundary residual's verdict only, never a model
+        # word. NumPy/native/CUDA corruption twins keep interior floors,
+        # finiteness and ceilings; NCAR default files stay byte-identical.
         # RECOMPUTED at the tilestream port, over the MERGED health.cu that
         # carries both re-pins below.  The pin that arrived with the port
         # was the integration side's alone and described a source that does
@@ -645,8 +746,11 @@ FROZEN_MODULE_DIGESTS = {
         # own proof is tilestream/test_obsfold.py; the whole-gate evidence is
         # that tilestream/test_gate.py passes 233/233 across the change,
         # negative controls included.
-        'c904e487cbf3cf0b6f6bbf6acad56158d2c3392d3c2a8a2e3ec6200d89f0cb03',
-        '5f01ec47943352f0239f690945ec20924a23a70bbba6b5ca2437724871314b0c'),
+        '7a49b886f883cc95453ac30ee4d4ebf30ef347968df5317991fadf141054da9c',
+        'a512b39fd3d468d2fbecdbbabc92a263e403e2fb0e826723ca15dea5e4bff7c7'),
+    # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
+    # labels), proven equal with comments stripped; the preprocessor drops
+    # comments, so the compiled binary does not move.
     'kessler': (
         # Re-pinned for A146 (a98f2482e): every float division by a compile-time
         # constant is spelled __fdiv_rn, because NVRTC compiles x / C as a
@@ -654,14 +758,31 @@ FROZEN_MODULE_DIGESTS = {
         # sm_89 unchanged (the compute_89 PTX with __fdiv_rn spelled '/' is
         # identical to the base's); Blackwell cards now round these quotients
         # IEEE-correctly.  Previously fecf2e80/530faef7.
-        '80856acab86330c9533a391ea4a30f612791e767a810c7df02cb757002991de2',
-        'f6f6aa8d6089cb6ead3935594abfc8079cdb75fbcaf41e5c1f05472c8d608e24'),
+        #
+        # RE-PINNED by lane/verify-kessler-mp1: the six REAL**REAL powers
+        # and the EXP call WOOF's own gfk_pow/gfk_exp (glibc_flt32.cuh now
+        # prepended by _EXTRA_HEADERS, which moves the compiled string), the
+        # unit compiles --fmad=false, and qr = (qr + prod - qr) is evaluated
+        # as the Fortran writes it.  Reading: bitwise against the
+        # byte-unmodified WRF v4.6.1 kessler on 104 columns x 25 calls,
+        # tests/test_kessler_wrf461_parity.py.  Not an mp=8 unit.
+        # Previously 80856aca/f6f6aa8d.
+        #
+        # RE-PINNED by lane/verify-kessler-mp1-refute: es is capped at
+        # 0.99 p before qvs (WOOF's guard for the WRF defect where es >= p
+        # makes qvs negative and the top layers heat without bound).
+        # Reading: bitwise against WRF v4.6.1 on every word where
+        # es <= 0.98 p across the lane's fixture and five new column sets,
+        # and bounded (WRF: 4,435 K) where it engages,
+        # tests/test_kessler_refute_columns.py.  Previously 864f27a2/dc6cd6a4.
+        '437e750df30338848cc44b6c4a386839ba910551a2093c356228702a87017a7e',
+        'cfa356099db905a10a2080a1dd9841c663ca1a4642fc8257898464d5d530df04'),
     # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
     # labels), proven equal with comments stripped; the preprocessor drops
     # comments, so the compiled binary does not move.
     'kf': (
         # Re-pinned for the column-workspace move (48ff6b813), measured
-        # on a development machine with its two declared bit-moving placements named in
+        # on test host A with its two declared bit-moving placements named in
         # the commit.  Not an mp=8 unit.
         #
         # RE-PINNED by the WRF-parity shallow-TIMEC repair (PAR-CU-KF-05).
@@ -692,14 +813,40 @@ FROZEN_MODULE_DIGESTS = {
         # / C as a multiply by the rounded reciprocal on Blackwell targets.
         # Reading: sm_89 unchanged; Blackwell cards now round these quotients
         # IEEE-correctly. Previously 30308b1b/7d81bfc9.
-        '9aacb2a0941882da4705e52265f1038b6c819500fe16d6a62689d6b8af51027d',
-        'fa65105d02ebcebce435a99d3017ce9333eaa8bede9399f9aaecdec4d05e382f'),
+        #
+        # RE-PINNED 2026-10-07 (lane/verify-kain-fritsch): kf.cu is now a
+        # line-for-line port of WRF v4.6.1 KF_eta_PARA and compiles on its
+        # own --fmad=false --ftz=false route with WOOF's own float32 libm
+        # (the assembled source gains glibc_flt32.cuh).  This MOVES ANSWERS
+        # on every convecting KF column: the re-derivation it replaces
+        # matched WRF's Fortran on none of 1,793 convecting columns; the
+        # port matches it on every output word of 4,326 columns (structured,
+        # sweep and ERA5 real74 sets), strict and default builds,
+        # tests/test_kf_wrf461_oracle.py and tools/kf_wrf461_oracle.  Not an
+        # mp=8 unit.  Previously 705dded6/0ef80d84.
+        #
+        # RE-PINNED 2026-10-12 (golden/parity): the port keeps d547dc8c3's
+        # floor on PPTFLX (fmaxf(TRPPT-TDER, 0)), the one statement where it
+        # leaves WRF on purpose.  Reading: no answer moves on any WRF oracle
+        # column -- the committed structured/real74 sets, the hex
+        # capped-downdraft set and the 4,096/32,768-column seeded sweeps have
+        # no negative PRATEC in WRF's own Fortran, and the GPU grade of the
+        # committed sets stays 0 differing words in both builds
+        # (tests/test_kf_wrf461_oracle.py, tests/test_kf.py).
+        # Previously 9eb33736/5e418a4f; then 78cf5577/0a8949d9 until one
+        # word of the header comment changed for the banned-word census
+        # (no statement moved).
+        'be4fadd73ce14d639552bc3584c82367a0e1207a82a27d98a0a5946c9a83e38e',
+        'f65f52d6b7464baefead86116ef88e269b347c9a4bd54771e8331e9316e26084'),
     'lbc_flow': (
         # 4febd041f supplies resolved WDM6/NSSL inflow concentrations.
         # docs/dev/qnn-specified-inflow.md records 4 CPU + 10 GPU
         # edge/corner, velocity and scalar transport controls.
         '68a743950e30e308676fada38f96ea3139d283447028edfeb85d2d64c36441fa',
         '233391c535605271d70b32dc5ce85321cb0ed633340dae3fe2cd3ebcf08ab6ba'),
+    # CONUS strict MF_VX_INV repair: imported inverse replaces a rebuilt reciprocal.
+    # Full native history at steps1/2/3: 0/265734210 words each, no missing rows;
+    # receipts conus-suite-exact/mp-rad-lsm/receipts/sol-continuation.
     'lbc_state': (
         # Re-pinned for parent-window and child-frame coupling enumeration.
         # Full-field entry points and per-element expressions stay intact.
@@ -743,12 +890,26 @@ FROZEN_MODULE_DIGESTS = {
         # receipts/, bw-advection-2.8.2-nvrtc13.4.json and -nvrtc12.9.json).
         # Reading: the product default suite (8 steps, 64x64x32) is
         # byte-identical, canonical state digest and history file, on
-        # a development machine's RTX 5070 Ti at 9eee49ce0 against 7486d241c, and the lane's
+        # test host D's RTX 5070 Ti at 9eee49ce0 against 7486d241c, and the lane's
         # report (DYCORE-SPEED-282/advection-RESULT.md) records forecast
         # identity on B200, H100 and RTX PRO 6000 (3 km CONUS) and on the
         # RTX 4090 and RTX 5090 (default suite).  Previously 05f074d8/c6c21f26.
-        '27ad19bef958c8b6768101ee06a7b4c9df05408b3be581171681ef235de13c27',
-        'e2e4f809c366e020eac3f1a05fd0577ff17e75c6a15852e74eb4cd7b61e274dd'),
+        # Re-pinned for lane/verify-base4 (combo sweep round 3): strict-only
+        # operation order inside `#if GPUWM_WRF_EXACT` -- relax_bdytend_core's (tend+fcx*f0)-gcx*(...) order, calc_mu_uv/couple_momentum coupling of ru/rv, and spec_bdy_final on the specified rows only from grid%muts.
+        # Reading: with no selector the default lbc_state PTX is byte-identical to
+        # 27ad19be/e2e4f809 for compute_89/90/120 under both option sets
+        # (tools/kernel_ptx_identity/receipts/wrf-exact-round3-default.json); the
+        # strict words are graded in tests/test_wrf_exact_round3_gpu.py and against
+        # WRF's own dumped words (tools/wrf_exact_localize).  Previously
+        # 27ad19be/e2e4f809.
+        # Assembled pin re-read for 2.9.11 (paper/conus-suite-exact 0e21ecf29a): the row's strict MF_VX_INV
+        # edit sits inside `#if GPUWM_WRF_EXACT`; it moved the file pin above and left this one stale.
+        # Default route unchanged: the 2.9.11 assembled-legacy replay, 0 differing words in all three families.
+        'b35120f7012a89b7e8b3a0da7e30ce434ae3867e1ff35fea4665e3f645a16949',
+        '1730a72093ba5b64c04aada3d8ebc94fc7c0a40ace6b1685e5fd3a04b405cdaf'),
+    # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
+    # labels), proven equal with comments stripped; the preprocessor drops
+    # comments, so the compiled binary does not move.
     'morrison': (
         # MOVER: the deposition-freezing cold-trap bound, carried to the
         # engine line from lane/level5-owner 0c54221d2.  UNLIKE the two
@@ -815,8 +976,51 @@ FROZEN_MODULE_DIGESTS = {
         # IEEE-correctly. Previously b0b9f1d2/506849c6.
         # Re-pinned again by the A146 review repair: cons15, a constant
         # numerator of powf calls over 4 * 720, the first pass missed.
-        '9d4aad5a012cf2751f3515d96dae48adc1765f65aaa934486e0a025bf8dca229',
-        '96bf1249e66ec76fccaf269b55f71f3a078910ef4a9db3ba6596a13d7a5bc536'),
+        # REPLACED by lane/parity-mp-libm (sweep row 19): morrison.cu is now
+        # the literal transcription of WRF v4.6.1 module_mp_morr_two_moment
+        # (driver, MICRO, POLYSVP, GAMMA, refl10cm_hm) with WOOF's own
+        # libm, WRF init's own words (morrison_constants.cuh) and
+        # --fmad=false.  Carried to lane/verify-morrison-mp10 off the
+        # verify base, comments reworded (WOOF's own libm); measured there
+        # by tools/morrison_wrf461_oracle (fixture, stress sets and the
+        # regime columns, regime_columns.py) on an RTX PRO 6000: with
+        # MORR_ROW37_OFF every returned word equals WRF's; the production
+        # build keeps the owner-ruled row-37 corrections (the cold-trap
+        # bound above and the wide non-finite freezing rates).
+        # Previously 9d4aad5a/96bf1249.
+        # RE-PINNED by lane/verify-morrison-mp10: mo_process, the sediment
+        # pair and mo_finalize take a column range (col0, ccols) and index
+        # WORK by the call's own cells, so a forecast step runs the scheme
+        # in ceil(ncol / NWORK)-column calls and WORK is one volume, not
+        # NWORK (+186 MB on the d01 itemization fixture otherwise).
+        # Indexing only; no arithmetic line moved.  Reading: the regime
+        # columns, whole-domain, forecast-chunked and one column a call,
+        # bitwise against WRF with MORR_ROW37_OFF (W1, RTX PRO 6000).
+        # Previously b602a938/3f94f09d.
+        # RE-PINNED by 04897aa077b (2.9.3, the WoFS ensemble lane):
+        # mo_sediment_impl bounds the per-level mass after its tendency
+        # (dmass = max(dmass, 0)) inside the production row-37 block
+        # (#ifndef MORR_ROW37_OFF), because a source tendency can cancel
+        # its category to a negative FP32 residue and the inherited fall
+        # speed then exported negative water (measured -1.54e-14 mm in a
+        # regional forecast; the negative SR floor it needed is retired).
+        # The MORR_ROW37_OFF oracle build is unchanged line for line, so
+        # the WRF bitwise reading above stands for it.
+        # Previously 5b518642/e6166236.
+        # RE-PINNED by fix/morrison-kf-speed (2026-10-23): mo_sediment_impl
+        # skips the still levels above KTOP (mo_still_level: +0 speeds,
+        # finite sign-clear moments, positive DZ/RHO, number tendency not
+        # -0, so every split step there adds or subtracts +0 and changes no
+        # word) and evaluates (RHOSU/RHO)**0.54 and **0.35 only for the
+        # categories and levels that read them.  No arithmetic line moved.
+        # Reading: captured real sedimentation inputs (150x150x49, step 60)
+        # 0 of 37,665,000 argument words differ, 0.91 -> 0.21 ms a call
+        # (an RTX 4090, shared card, 50 back-to-back launches); the 15-min
+        # whole forecast's wrfout 0 of 31,808,221 words differ.
+        # Previously 741d71ee/09b1d5a5.
+        '3fd84d25ccae3b3616be2f99e5f4ddc594256c2ecbb457aa0381f724db481054',
+        '7655b4e64f892082b0a0eecfee2db62fb566cf2bb24393976c23163ad822553c'),
+
     'mynn_pbl': (
         # RE-PINNED by the level-major MYNN layout (speed lane, 2.8.1):
         # every per-column kernel addresses level k of column c at
@@ -869,8 +1073,26 @@ FROZEN_MODULE_DIGESTS = {
         # 1e-12 initialization production floor under MYNN_GSD41 only.
         # All 96 predictor TKE words match unmodified source. Default PTX
         # is identical to staging cdf5a7dea at compute89 and compute120.
-        '3243ddcbb65e4cae69975840e177822ca3000507f07aef2e50fe10360001a554',
-        'ecf106fc09e1f3982a9fa8c2b277b3959dbc7af102cc1500b4e64dbad6fd6d25'),
+        # Previously 3243ddcb/ecf106fc.
+        # P23 (lane/ec-mynn-p23): the fork's closure level 2.5 diagnoses
+        # tsq, qsq and cov in mym_predict under MYNN_GSD41 only; eight
+        # columns match the unmodified predictor as FP32 bits
+        # (variance-gsd41.csv).  Default PTX is byte-identical to 534c6dea3
+        # at compute_89 (c9058bb3) and compute_120 (d5028fa7).
+        # RE-PINNED by lane/mynn-exact (the YSU recipe on MYNN), MOVES ANSWERS
+        # for bl_pbl_physics = 5: --fmad=false, glibc 2.39 expf/log10f and the
+        # FMA-ifunc logf/powf/expf in the unit, fdlibm tanhf at every site;
+        # under MYNN_GSD41 the fork's a2den algebra and 0.608 thetav.  Reading
+        # (RTX 5090 sm_120, NVRTC 12.9): every MYNN CUDA leaf and both drivers 0
+        # ULP against WRF v4.6.1, six column families x 12 steps free-running 0
+        # ULP (tests/test_mynn_wrf461_exact_gpu.py); gsd_41 0 ULP against the
+        # fork's driver (tests/test_mynn_gsd41_driver_exact_gpu.py). Previously
+        # 9d6b1bcc.
+        # Review: fork CASE(1) and its buoyancy flux now follow the fork.
+        # The stock preprocessed source is unchanged, checked by the sibling test.
+        # Wave3: export arm folded from sibling; default tokens unchanged.
+        '88d6909612543927aee364c6f0cbd905eabd808da2a9fe3f94b57c9fab743b49',
+        '1f5e6f64a206f602e4281d0d38bc8295b897a13050826f62d487ff5f0e61d871'),
     'mynn_surface': (
         # Re-pinned for A146 (a98f2482e): every float division by a compile-time
         # constant is spelled __fdiv_rn, because NVRTC compiles x / C as a
@@ -881,8 +1103,13 @@ FROZEN_MODULE_DIGESTS = {
         # The selectable GSL surface variant and explicit table rounding
         # coexist. The ordinary table retains the native Blackwell operation
         # order; the selected variant keeps its own stability solver.
-        'e7d9a055cb1226168d54b4416ef7435746219316b92bfdffc09127feda4203ea',
-        'dc759001e1fbb3886d0c8d066596d31a78b9c57cea51b2fbd62ecdad35ccd650'),
+        # RE-PINNED by lane/cap-waves-couple (8cd59d74c15): over water the
+        # wave-age momentum roughness replaces z0 before exchange, compiled
+        # in only under OCEAN_WAVE_ROUGHNESS (woof/core/mynn_sfclay.py
+        # defines it only with a coupled wave model); without it the
+        # preprocessed unit is the previous one.  Previously b8b5b9b5/2c93b3ba.
+        'f1a1b6c98704fa00ad35f4a3c81183f706509adf42bfba9022b2a882c395126a',
+        '5b294157fb4224d0aa2ce11ce4856dafeb9e9f0a0e8145694dd6e0c48acfe64f'),
     'nest': (
         # Re-pinned for a combined four-side boundary launch. The original
         # single-side entry point and SINT expression tree remain unchanged.
@@ -891,8 +1118,14 @@ FROZEN_MODULE_DIGESTS = {
         # Measured 8d317e5ec: 34 focused + 29 resident CUDA controls;
         # 295d6ec0a: public moving/restart, 137 exact arrays per domain.
         # Re-pinned with diagnostics for 88fdf60b9's parent smoothers.
-        'de9a5a8f6145f7f067f0b38a36e892eb3433b5aed8eaea665c1dc064391b9c31',
-        '060556616b23921f1733e17cbb26cd5dfa93b9e3bd821f67779c2d25b679b78c'),
+        # RE-PINNED by bf05966444a (2.9.3): relocation_nearest_donor, a
+        # new kernel appended after the existing entry points (one block
+        # per exposed cell, integer squared distances, first donor on
+        # ties) so a moving nest's relocation carry stays on CUDA; its
+        # reference is the NumPy argmin it replaced and no existing
+        # kernel line moved.  Previously de9a5a8f/06055661.
+        '6219f7071e8e54c8b491da4b394bdf5f23e70f18e53e8cb5861e2d4517953d9b',
+        '3171f8ea4367510c073206d9cdad2708881a6c05d225a62d33b90149d8903fb4'),
     'nest_microphysics': (
         # Re-pinned for the mp=9 (Milbrandt-Yau) mixed-edge ratification
         # (audit R-003): the generic microphysics_edge_field kernel gained
@@ -932,6 +1165,9 @@ FROZEN_MODULE_DIGESTS = {
         # IEEE-correctly.  Previously 6584d2be/ab4befec.
         'a00a3f6cd14622bb53d27152652df31889267ae83c160a4f97128051b99c539c',
         '02bb1a0d5607306d502eba8d7054272bbd6e8a0b3c64961e2e2922eca1efa057'),
+    # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
+    # labels), proven equal with comments stripped; the preprocessor drops
+    # comments, so the compiled binary does not move.
     'noah': (
         # RE-PINNED by the WRF-parity FRZX repair (NOAH-01).  WRF renames
         # this quantity twice on its way down and woof followed the NAME
@@ -957,7 +1193,7 @@ FROZEN_MODULE_DIGESTS = {
         # and WRF's pre-SFLX urban remap (module_sf_noahdrv.F:964-990) under
         # `urban_col`, which is false on every column when urban_opt == 0,
         # plus the rural hand-over writes on urban columns only.  The
-        # default path is unchanged: measured on a development machine (RTX 4090), all 216
+        # default path is unchanged: measured on test host A (RTX 4090), all 216
         # output arrays of the default-off call are byte-identical to the
         # pre-change kernel's (tests/test_urban_default_off_identity.py::
         # test_a_handover_with_no_urban_column_is_the_default_kernel), and
@@ -991,8 +1227,29 @@ FROZEN_MODULE_DIGESTS = {
         # merged file's.
         # Re-pinned 2026-10-01 for the ordinary-land register bound.
         # Direct before/after output words match on RTX 4090 and RTX 5090.
-        '2dcb1b598a16cd96a13fe1cc976d6244bc45e879d6ce02cebfafbd6e82802e68',
-        'd4dca1d07ce274991184b6f2f6cd48c1f04c84856950f5b4e08a208ffafc46ff'),
+        # Previously 2dcb1b59/d4dca1d0.
+        #
+        # RE-PINNED by golden/ports-pbl (2026-10-12), and this MOVES ANSWERS
+        # on land-ice columns only: SFLX_GLACIAL (glacial PENMAN, SNOPAC,
+        # HRTICE, SNOWZ0, the driver's ICE == -1 post-update) is ported where
+        # the column used to return untouched.  Reading (G1 RTX PRO 6000,
+        # sm_120, NVRTC 12.9.86 and 13.2 alike): the 41 ordinary land columns
+        # of all four switch fixtures are byte-identical to cd336e62d's
+        # kernel; case 28 and the 24-column land-ice fixtures sit at the
+        # GLACIAL_BASELINE_MAX_ULP of tests/test_noah_wrf461_parity.py (TSK,
+        # HFX and TSLB 0 ULP, worst flux SNOPCX 5).  Previously
+        # aaff81f7/de546677.
+        #
+        # RE-PINNED by lane/290-A5-fixes (2026-10-14), MOVES ANSWERS on
+        # sea-ice columns only: noah_seaice_column (WRF's seaice_noah,
+        # verify-noah-lsm 217a273cc) is appended, and the unit takes
+        # glibc_flt32.cuh for its gfk_exp/gfk_pow.  Reading (test host A RTX 4090,
+        # sm_89, NVRTC 12.9.86): tests/test_noah_seaice_wrf461_parity.py 0 ULP
+        # on its 24 x 3 oracle columns; the release short case (ICON-EU, two
+        # domains, Noah, no sea ice) is byte-identical to integrate/2.9.0
+        # 0bf505764 in all 21,885,246 history words.
+        '1a8b9c227ce0d68590c77a63f2f78bd8343fca633c9446ab9e1a0e47a0db6395',
+        '42d601c5a6af5b03ee7e3bb9127c42be635d0c5caa89405b273ce7101dcddb21'),
     'noahmp_bareflux': (
         '54fb5065e95b24d4cf676e2deda29bae44b3e9305d3d98cbc1abf5ed55f444ce',
         'fbb19fc8b5668ea2edbcc1270f8ffe367475124ffa0ce99d3bc34639f3f31e9f'),
@@ -1030,9 +1287,16 @@ FROZEN_MODULE_DIGESTS = {
     'noahmp_libm_slab': (
         '0144fa7d142a8d24f5f0f52bd0dade987312cd97c2a2efad9a6f33edb1a35fda',
         'c7cdc57aa7d3d507d2b57935df13e16dba87dd783384e28a7240b95a536f39a7'),
+    # RE-FROZEN by the WRF 4.7 Noah-MP night snow-aging port (golden/wrf-fixes,
+    # merge 170b65f7b of upstream-noahmp-night-snow-age47 f77be93ec): the
+    # unit gains the night-aging entry (noahmp_radiation_batch_night_age);
+    # the daylight entry's statements are unchanged.  Reading: both
+    # generations 0 of 19,614 words against WRF 4.7.0 / 4.6.1 full columns
+    # (tests/test_noahmp_snow_age_gpu.py) and 0 of 9,120 leaf words against
+    # each release's Fortran (tools/noahmp_snow_age_oracle/compare.py).
     'noahmp_radiation': (
-        'c26d7a68ed86bd7182ddbea5e2005fb4761805dd5eaf13c3115e640eb2234c22',
-        'a454d07fefa080f986423d2f74bf0fe1ecf85959638e02a7a447b44d68aea24a'),
+        'f7317dcf918a73ac014aaf2b81f19757afb152e5cbe50c538253bedaedd5aa0e',
+        '520df954dbfeb613997fd59cd4fde99ec7c3120fd361eefda553b1900a50dfca'),
     'noahmp_sflx': (
         '47f51fed351b3f720203c07ea2d5e5a8902f4162afe17b634f5196447728365f',
         'f17caed98ec58c4d9836778f3a9edea9e88cf13808dbe64d5e099fd81ffebc77'),
@@ -1045,15 +1309,34 @@ FROZEN_MODULE_DIGESTS = {
     'noahmp_thermal': (
         '2598ca76b7f9c0d6de35631d5113901d1e25f24a014c8ea4e0df490158d16c86',
         'f7eef131507a29def54e2387686f34a4807851354f446684deaf5322dc226753'),
+    # 300876fefd5: explicit libm-2.43 atan profile; default libm-2.39
+    # retained. Native 8-column witness is words-exact; see
+    # tools/noahowp_replay/ATAN-PROFILE.md and qualified_atan tests.
+    # RE-PINNED by de768fc2770 (2.9.3, the merge of lane/speed2's
+    # b3dd58fc9f3 with 300876fefd5 above): dev_vege_flux takes opt_stc
+    # and fsno (the WRF-lineage STC=3 ground-temperature blend, Noah-MP
+    # 848f54ad :4125-4136; STC=1, the Registry default, is the same reset
+    # as before), k_vegeflux_stc3 and k_vegeflux_masked are appended
+    # (fixed-width masked dispatch: an inactive column writes +0 and never
+    # enters the leaf), and the GLIBC243 atan branch joins the profile
+    # selector.  The default-route arithmetic is unchanged; the
+    # composed-unit frame row is re-read for it in
+    # kernel_frame_recordings.  Previously 295e9541/c3271c5a.
     'noahmp_vegeflux': (
-        '2178b13989853a7433869bb35e7974df004ddb9f441a96946672c03730472b3c',
-        '688723dc9eef069b5e82338a8023438636d61db2db1dfd583cd1ced03b923a19'),
+        'd55c402a21caf3f52e5aed05a0dd727df76b747906a3e0d082446e6a7bcab014',
+        '0d23b367d88497bb45a2e895e6d85abc826caf2f4467b8b47c7ba7be32d3a9b4'),
     'noahmp_vegprecip': (
         '9ce5667599d111be0efc7cb0871e5719d70259bb95b30fbe923e01964b75c26c',
         '599e85f0fe59a28ae5fd5437e47db7f41c31abd21783979f66b987b212f1f41a'),
+    # 485b468bdf4: parent runoff units and explicit drainage export,
+    # qualified by test_noahowp_coupling_cuda.py / NEXTGEN-NOAHOWP.md.
+    # This freezes that landed source, not a whole-forecast skill claim.
     'noahmp_water': (
-        '4154bace0d97235503d4ca9ed6cb4877c8543762f2f384dfc8883fe3b2ed429e',
-        '6cfeaef3fd00b8054d1761fd8bcfd6a920a6fb476f53986672ef300cbadd53ba'),
+        '7946fb6612767fac098ec92a0dbb1d0e4cc768657b1cb81b297344cd39aa54f3',
+        '46808ddb98445be32c5c8ab0a04527b919446081c33f7ef51c8b7a0ebed5b42a'),
+    # Wave 3 folds the default twin using math aliases; original default
+    # and strict arithmetic bytes remain independently pinned in
+    # test_exact_chain_default_sources.py. Assembled text changes only.
     'nssl2': (
         # RE-PINNED by the WRF-parity qxmin(lh) repair (NSSLA-01).  The Bigg
         # rain-freezing gate used the graupel minimum mixing ratio 1.e-7 set
@@ -1085,10 +1368,10 @@ FROZEN_MODULE_DIGESTS = {
         # Re-pinned again by the A146 review repair: the snow-melt
         # constant c1sw, a C math function divisor the first pass
         # missed.
-        '37173f1bcc9ec0fd6c6f4afe060c0d984bcd14abc5d4841d05aa62e6ac85d3ea',
-        '588d4ab74a57935ca1a7bab9abb195ab05150e67fbb753e7b360c50de4eb78e8'),
+        '1952dfec0483c0002d5addb45e1ff3f10a54c8c42450efe8acfb124e7b2dbe9d',
+        'f3f7f268018488f5cd076793c264ba36321743391ad6edcc87c494bc5fcd07fa'),
     'nssl2_diagnostics': (
-        'a95ae9e0bc3dd20a13865cfa6d1148d2a78ee5d7c17c9c1bca9a0c8dbdf19868',
+        'aea3a5b1157ca95b69c8df077680e27058b752d5e707f2134f408d0aa7f42bd2',
         '331b4a9734959260ab515216e24ee7100eac18d8e6d646b1e0e8bf21c0c23374'),
     # The three NSSL translation units below are re-pinned for the WRF
     # v4.6.1 variant family (nssl_hail_on / nssl_ccn_on).  Each gained one
@@ -1123,7 +1406,7 @@ FROZEN_MODULE_DIGESTS = {
         # / C as a multiply by the rounded reciprocal on Blackwell targets.
         # Reading: sm_89 unchanged; Blackwell cards now round these quotients
         # IEEE-correctly. Previously d56ab580/edda4361.
-        '12f193c6918056b995577930304867cd8369a46ab1facfcde589d244cbd6eca8',
+        'a5da944e7bcb5d63362265acef241a752ef835a080fa3a1a05b5eb5bd186ca35',
         'cfe99438d0ff9b7e7bc31c61daea9b33f0a77b82908807ee9b9c300719031320'),
     'nssl2_fused_gs': (
         # RE-PINNED by the WRF-parity vertical-velocity centering repair
@@ -1160,7 +1443,7 @@ FROZEN_MODULE_DIGESTS = {
         # hail fall speeds' / tgammaf(4.0f) and / tgammaf(5.0f), which
         # compute_120 folds to a reciprocal multiply and the first
         # pass's compute_89 census could not see, and c1sw.
-        '07dff4bf34509e89b75683a83d356c4691b6eab1aa96140af3e6fa5b00fe429b',
+        '76a0685f4860042d558feafca633a38cc41b498058ec9c6230d83669336bc6a4',
         '15ec0480c24de0c6694d66cd183cb05412aa518d19c33a3ed4e9936027266a7f'),
     'nssl2_nucond': (
         # RE-PINNED by the WRF-parity raw-w repair (N-02).  The low-T cnuc
@@ -1185,7 +1468,7 @@ FROZEN_MODULE_DIGESTS = {
         # sm_89 unchanged (the compute_89 PTX with __fdiv_rn spelled '/' is
         # identical to the base's); Blackwell cards now round these quotients
         # IEEE-correctly.  Previously 224e22e7/311068aa.
-        'b4819a1e912924fe2e30c33897585e3a46c32e89dcb3ab43eb1ee32b212b6db1',
+        'a57ed276737bafee3c31709423bdc9fb23ef7c74906840838a71a3a7b9523355',
         '40864b3a5080c27998d0346d719281a535a1b8aea92c969bbc2a156de342e181'),
     'nssl2_qvexcess': (
         '6906dcd9f8822d73d87ff3cb6e545a1b1ddef567c16c658435d4f669f1f369dc',
@@ -1252,7 +1535,7 @@ FROZEN_MODULE_DIGESTS = {
         # receipts/, bw-advection-2.8.2-nvrtc13.4.json and -nvrtc12.9.json).
         # Reading: the product default suite (8 steps, 64x64x32) is
         # byte-identical, canonical state digest and history file, on
-        # a development machine's RTX 5070 Ti at 9eee49ce0 against 7486d241c; the lane's
+        # test host D's RTX 5070 Ti at 9eee49ce0 against 7486d241c; the lane's
         # report (DYCORE-SPEED-282/advection-RESULT.md) records forecast
         # identity on B200, H100 and RTX PRO 6000 (3 km CONUS) and on the
         # RTX 4090 and RTX 5090 (default suite); and the compiled-WRF advect
@@ -1309,6 +1592,13 @@ FROZEN_MODULE_DIGESTS = {
         '104c3157451dc878e3f9d751db1cf01a4368b1a2892825678370c5159a787ff6',
         '56f315a0258d902c69f99abacbe5e53005f50ce478725c146647d3df26c71522'),
     'rrtmg_mcica_wrf': (
+        # Re-frozen for 6fe6e9a6d7 (lane/radiation-fusion via sweep/all-294:
+        # fused McICA column kernels rmcw_subcol_states/rmcw_walk_fill_column,
+        # the same RMCW_* operations in the same order).  Reading, 2.9.4 fold
+        # d61095cd3e on an RTX 5090: tests/test_rrtmg_mcica.py,
+        # test_rrtmg_mcica_overlap_boundary.py and test_rrtmg_lw_batched_layout.py
+        # 102 passed (bitwise against the certified NumPy port), and the R6
+        # identity arms judge the whole forecast.
         # Re-pinned for rmcw_fill_outputs_column (lane/speed-rrtmg-legacy,
         # the longwave McICA slabs written straight into the batched
         # engine's (column, layer, g-point) layout): an appended kernel,
@@ -1318,8 +1608,8 @@ FROZEN_MODULE_DIGESTS = {
         # prep decks) and tests/test_rrtmg_mcica.py green, and six
         # captured product-suite radiation calls uint32-identical to the
         # d6929cb8d forecast.  Not an mp=8 translation unit.
-        '80cd32a2feee70f1d0fe2db3eaf02386de4d970bfc9dc8e22d71fafbab5564b6',
-        '5a744048e817344ac573b98c2cc63644efdb03845abd07feb8c122fb41332b39'),
+        '321f3ff02dcef9108017c4b2510f85479135e9fa601d36b8601253e974e6b11e',
+        '5d0e7356e7bef98a6d7200ce7ac8d3204e3756761211343dacb9791eb459c488'),
     'rrtmg_sw': (
         # f7c2aadea removes an unused macro; host launch coverage now
         # includes every layer. Measured d8ef9d086: 156 CUDA controls
@@ -1357,7 +1647,7 @@ FROZEN_MODULE_DIGESTS = {
         # compile to identical PTX for compute_89, compute_90 and
         # compute_120 with NVRTC 13.4 and 12.9 (tools/kernel_ptx_identity/
         # receipts/, rrtmg-sw-sfluxzen-2.8.4-nvrtc13.4.json and
-        # -nvrtc12.9.json).  Reading, on a development machine's RTX 5070 Ti:
+        # -nvrtc12.9.json).  Reading, on test host D's RTX 5070 Ti:
         # tests/test_rrtmg_sw_no_upper_flux_gpu.py (the unmodified WRF
         # Fortran's fixtures_shallow.npz at max_ulp 0, per column and
         # batched through NaN, 1e30 and stale-flux scratch) fails 7 of 9 on
@@ -1377,7 +1667,7 @@ FROZEN_MODULE_DIGESTS = {
         # Exact-array gates and all five seeded digests match the base.
         # Re-pinned 2026-10-01 for aligned flavor weights and prefix padding.
         # Direct before/after output words match on RTX 4090 and RTX 5090.
-        'd13b914a28ad8b7ef88904977c7e33b9a7d7e800592473c0fb8debebca031edf',
+        'c3b14d451b0a3816c5bf7ecf6ea806034aeab3b7de5c4c12f15acff4421cf265',
         '3c85ba59159dadd97d6e5215cc0b552c4a017539d9c23b99bb77e1a788dee964'),
     'rrtmgp_mcica': (
         # Re-pinned for shared seeds, exact clear paths, SASS-matched FP64
@@ -1398,8 +1688,13 @@ FROZEN_MODULE_DIGESTS = {
         # Re-pinned 2026-10-01 for vector coefficient/adding storage.
         # The serial recurrence and fold order are unchanged; direct output
         # words match on RTX 4090 and RTX 5090.
-        'b9474494d0784a97f66742c3d8ab6788c6be09741a2b74a602b970149f0c579f',
-        '5d3c8dde2f5ce56f4e4be4afac840bf45476c9d5dc9021135e32eae870f23791'),
+        # Re-pinned 2026-10-19 (compiled string only; the .cu is unchanged):
+        # rad-history 29e917cbeb9 adds rrtmgp_planck_staged_default.cuh to the
+        # default rrtmgp_rte loader closure. Reading: Planck sources bitwise to
+        # the standalone kernel on 61,440,000 lay_source words; the A3 01Z
+        # history frame differs in 0 of 139 variables. Previously 5d3c8dde.
+        'fc10756eba4cc437572b3f141cd5746c6149b78b312b79d3386217144e8200d9',
+        '5c251aa2b5dfc420f4fd8f0dbacba3459aff0654c6f685246e5fbfcbf7c68b86'),
     'rrtmgp_validation': (
         'c3a2554827e7c39db269d0fa1d5ad594d1623d6974be859a1ae3a044d438951f',
         '36f7a4dccc8c66be225e16fdd6088f0fafa7a357ac1aba9b4a99f98af297c370'),
@@ -1492,8 +1787,22 @@ FROZEN_MODULE_DIGESTS = {
         # v4.6.1 snow scheme returning as the default, or either lineage
         # changing unseen.  tests/test_ruc_nzs_tier.py inverts the edits by
         # name before its historical digest.  Previously 844546e3/0af961d3.
-        'f2de42c4b47c26927d1c6097a6f5801a96ae12a96f84f0aede2ec4c45e4cad4a',
-        '32b762c0325b389415553e5a08f980128a1c2eb0096a7daf97fd692c52e95a73'),
+        #
+        # lane/verify-ruc-lsm, RUC's float32 libm words.  Every EXP, LOG,
+        # LOG10, TANH, COS and REAL**REAL the RUC column evaluates moved from
+        # a float64 evaluation rounded once (and CUDA's logf/cosf) to WOOF's
+        # float32 routines: gfk_pow/gfk_exp/gfk_log, glibc_cosf (the module
+        # now also takes glibc_trig_flt32.cuh) and the log10f/expm1f/tanhf
+        # reductions in ruc.cu.  The binary changes on purpose.  WHAT IT
+        # SHIPPED, measured by tools/ruc_lsm_gpu_oracle against unmodified
+        # WRF v4.6.1 on box W1 (102 columns, six configurations, 8-12 steps,
+        # strict and default arithmetic): 0 ULP on every compared word; before
+        # it, 1,309 of 78,744 words differed on the nine-level case.  The
+        # lsmruc.csv and sfctmp.csv residue maps (26 and 11 cells) are empty.
+        # tests/test_ruc_nzs_tier.py inverts the hunks by name before its
+        # historical digests.  Previously f2de42c4/48bb40b7.
+        'f435298be63975bee606873f5aba969e4faae0ed1a506a8da9a973cca9dc10e2',
+        '0b370cd9e57475cfb73718ead60784dd345d80e26f31c903e3ebacd7a0788af5'),
     'saxpy': (
         # 2.8.2: four values per thread with aligned vector loads/stores.
         # Scalar a*x+y and the default FMA policy are unchanged. The word
@@ -1502,6 +1811,9 @@ FROZEN_MODULE_DIGESTS = {
         # This infrastructure kernel has no dedicated WRF Fortran oracle.
         'a057d932a4547a865da5458b3c6d01ff1d7551a58554cbbe0e2198a53f46387c',
         'e3bf69cd521ed814b1d25350dc81a07c43b1bb8934d0a77197c261cd981b9d86'),
+    # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
+    # labels), proven equal with comments stripped; the preprocessor drops
+    # comments, so the compiled binary does not move.
     'sfclay': (
         # Re-pinned on the 1.6 release line for the sm_120 DAZ hardening.
         # A roughness small enough to overflow the FP32 quotient sent Inf
@@ -1541,8 +1853,36 @@ FROZEN_MODULE_DIGESTS = {
         # sm_89 unchanged (the compute_89 PTX with __fdiv_rn spelled '/' is
         # identical to the base's); Blackwell cards now round these quotients
         # IEEE-correctly.  Previously 1e068781/c26f5f05.
-        '20526ca8a9c151ab36a620ba198ee1f1072828c23480b6f9d761057c85c28964',
-        '64893145b9bb557e1c30b32b323cf8118c91f903893c4a5ba7668b4e04a5ee9e'),
+        # Revised MM5 flux-off carry and land scalar EXP overflow fixes:
+        # tests/test_sfclayrev_flux_disable_replay.py and
+        # tests/test_sfclayrev_nonfinite.py grade this surface-layer slice;
+        # tools/sfclayrev_wrf461_oracle/stress/check.py hashes every
+        # WRF-finite field word. PHYSICS.md declares the overflow divergence.
+        # Thompson's own translation unit is unchanged.
+        # 2.8.8 (gfix/288-gpu-shards): the composed unit's sfclay_classic.cuh
+        # keeps the incoming CHS/CHS2/CQS2 words when ISFFLX=0, as WRF and
+        # the revised scheme do (tests/test_sfclayrev_flux_disable_replay.py
+        # option 91); sfclay.cu is byte-unchanged.  Previously 650d6937.
+        # Re-pinned 2.9.2 (fix/292-box-sfclay-compile): sf_log/sf_exp/sf_pow
+        # are __noinline__ instead of __forceinline__, because inlining the
+        # glibc libm words at every call site made this one module take
+        # 114.6 s to compile on a cold cache (14.7 s now).  Reading: options
+        # 1 and 91 over the stored WRF 4.6.1 surface fixture (6 arms x 3
+        # steps x 110 columns x 34 outputs, 67,320 words each) are
+        # byte-identical to the previous source under GPUWM_NUMERICS=fast and
+        # =strict.  Previously 044c3246/45a053bb.
+        # Re-pinned 2.9.10 (fix/sfclayrev-strict-o2-squares): the four x**2.
+        # powers of psim/psih_unstable_full are products, as the pinned strict
+        # wrf.exe 4.6.1 (gfortran 13.3 -O2) folds them; as powf calls they put
+        # 1-ULP surface fluxes in 3 of 12,000 9 km columns after one
+        # physics-on step.  Graded against the strict-recipe oracle
+        # (tools/sfclayrev_wrf461_oracle/build_strict.sh).  sfclay is not an
+        # mp=8 translation unit.  Previously 09ff5be4/010efce3.
+        'fed06ed4694c174499788ed91079a3b7468d9ac43d86877d185d06140a33384a',
+        '75a77db489b6e00050b9996a1f12c79ad38b2f0036562a0a8c8c4ec9277164d3'),
+    # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
+    # labels), proven equal with comments stripped; the preprocessor drops
+    # comments, so the compiled binary does not move.
     'smag2d': (
         # Re-pinned on the 1.5 integration line: feature/les-integration's
         # verified km_opt=2/3 work edits smag2d.cu after this table was
@@ -1603,8 +1943,18 @@ FROZEN_MODULE_DIGESTS = {
         # and all 178,128 diff_opt=1 coordinate words reproduced on an RTX
         # 5090 at this source (tests/data/wrf471_diff_opt1/
         # measured-source-transition.json).  Previously 1c8c29c1/565ad5fa.
-        '932359b9f7685918fdd69e204ead1d2ac8369b792d64ff393e00b6b910dc84ad',
-        '400d89d032c13c4ed64be6cfd96e72483dc176fc83a933098b8cde85ac2a34a9'),
+        # Re-pinned for lane/verify-base4 (combo sweep round 3): strict-only
+        # operation order inside `#if GPUWM_WRF_EXACT` -- vertical_diffusion_u_2/_v_2's rdz = -g/dnw then tend - rdz*diff.
+        # Reading: with no selector the default smag2d PTX is byte-identical to
+        # 932359b9/400d89d0 for compute_89/90/120 under both option sets
+        # (tools/kernel_ptx_identity/receipts/wrf-exact-round3-default.json); the
+        # strict words are graded in tests/test_wrf_exact_round3_gpu.py and against
+        # WRF's own dumped words (tools/wrf_exact_localize).  Previously
+        # 932359b9/400d89d0.
+        '731d7f64e86af2d17344be7328fda2a3ecfd4f2e22371f6093128ca2f3192500',
+        # smag2d's default composition keeps 2.9.1's glibc_flt32 text
+        # (glibc_flt32_default.cuh); the exact chain's header is strict-only.
+        '2cdfe1e9b38cfd901a837460526bed5887285bb367593992fd95b95df15e3d24'),
     'spec_bdy': (
         'bcc7090fbbb8ea307bd6dd6c65ab9b8a3f56948c4752ae3d744127b450d20161',
         'bc03ed595bacc546d8e041fbb1d11b5bb3b3b90760ef06ea1dd1f0f18b4de931'),
@@ -1646,8 +1996,11 @@ FROZEN_MODULE_DIGESTS = {
         # Re-frozen again by the A146 review repair (see THOMPSON_CU_SHA256).
         # Re-pinned for the network occupancy change and raw-word checks
         # in tests/test_thompson_speed_blocks.py; see THOMPSON_CU_SHA256.
-        '1ab8d0319f471df3505b11591a67e7622f9dbeb022b23ac3179354befaa1443a',
-        'b3bbf88b6231433036a8449593ff497e46909b145c7556579568a4d3dc64fbf2'),
+        # RE-FROZEN 2026-10-08 for the one-slab rain-graupel reads
+        # (thompson_racg_index); see THOMPSON_CU_SHA256 for the reading.
+        # Previously 1ab8d031/b3bbf88b.
+        '43f76b17febd32acdfe96e9cca4d9c932ce2d72c5a5378ed73b5f3eac33998d8',
+        '35ac29fc801c66fc1eb64506267ded1efa2374f0998b0f80eea72f2afd5aa34a'),
     'uh_diag': (
         'cbfc98e8d025a4511fd7f8a41ca4bd163c261da4a48dec22bb979ec5a496b14e',
         '9dc88c6e14b2aaaa4249a9f844dc231f105431623375c988a2894e322de2f3ea'),
@@ -1697,19 +2050,52 @@ FROZEN_MODULE_DIGESTS = {
         # PTX and SASS operations, operands and predicates against the header
         # before c0ffc53b5. Reading: vert-interp-preservation.json.
         # Moved again with the file by 508691422 (above).
-        '5918c3f6b6572a5b3fbad923317bc2a55bd7ec7be712ae2d410d725eccd3bec7'),
-    'wsm6': (
-        # Re-pinned for A146 (a98f2482e): every float division by a compile-time
-        # constant is spelled __fdiv_rn, because NVRTC compiles x / C as a
-        # multiply by the rounded reciprocal on Blackwell targets.  Reading:
-        # sm_89 unchanged (the compute_89 PTX with __fdiv_rn spelled '/' is
-        # identical to the base's); Blackwell cards now round these quotients
-        # IEEE-correctly.  Previously 0526192b/1a6d20da.
-        '0028b0c2d88d6087095cd2d4afab27bb2cb76b2a5bf51e3e5e908e0fdf2f0886',
-        'd6798c079bbf2c6343d6d6575be2cd5fd67a128612c401b36e8ebfc3f1c10451'),
+        '7e9a3763bb02f7665250aa9687d2ee0398b2a9cd6cf0ffde4f5fc961dba47be3'),
     # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
     # labels), proven equal with comments stripped; the preprocessor drops
     # comments, so the compiled binary does not move.
+    'wsm6': (
+        # Re-pinned for the column-workspace move (memory census item 12,
+        # lane/292-mem-cuts 052440f32b4): the fifteen column arrays, the
+        # sedimentation arrays and the reflectivity kernel's arrays left the
+        # per-thread local frame for a launcher-owned global workspace,
+        # stride-32 lane indexing, tile offset col0.  Placement only, unit
+        # still --fmad=false: tests/test_wsm6_wrf461_column_exact.py 0
+        # mismatches at both tiers, and 0 of 128,567,124 words differ from
+        # integrate/2.9.2 on a 210,077-column state at the default tile and
+        # at a 1,024-column tile.  Previously 3ca83093/59764c7a.
+        # Compile string re-read at the 2.9.2 merge of lane/292-mem-cuts onto
+        # the 2.9.1 forward merge: the lane wsm6.cu under the 2.9.1 recipe
+        # (2.9.1 alone pinned ce5963f7); the file sha256 is the lane one.
+        # Before that, re-pinned for correct mode, finding WB5 (correct/mpas-water-budget-290):
+        # the WSM6_PLM_SURFACE arm books the below-ground part of the
+        # straddling sedimentation cell with the remap's own sloped profile.
+        # With the macro undefined (exact mode) the preprocessed unit is the
+        # c8e0db79 bytes and NVRTC returns the same image
+        # (tests/test_correct_mode_water_budget.py).  Previously c8e0db79:
+        # RE-PINNED by lane/verify-wsm6-mp6 (2026-10-07), and this MOVES
+        # ANSWERS on the default path: the kernel is rewritten as WRF
+        # v4.6.1's own WSM6 call chain (module_mp_wsm6.F wrapper, mp_wsm6_run,
+        # effectRad) plus refl10cm_wsm6 as a second kernel, with WRF's
+        # association, mp_wsm6_init's float32 words, WOOF's own float32 and
+        # binary64 libm words (glibc_flt32.cuh, glibc_flt64.cuh) and the unit
+        # compiled with --fmad=false (_NO_FMAD_MODULES).  Reading (W1 RTX PRO
+        # 6000, sm_120, NVRTC 12.9.86 and 13.4.92):
+        # tests/test_wsm6_wrf461_column_exact.py, 0 of 1,351,090 output
+        # words differ from gfortran WRF over 65 columns and six runs under
+        # GPUWM_WRF_EXACT=1; the default build differs only in the two
+        # columns whose WRF words are subnormal.  Previously 0028b0c2/d6798c07
+        # (A146, a98f2482e), before that 0526192b/1a6d20da.
+        'a4aa666e9d2011bd6fca29a9577978cbc66b3dd89a943c49af282cfd79e75dfc',
+        # Compile string re-pinned with the file (correct/mpas-water-budget-290
+        # repair, 2026-10-13): the WB5 commit above left the old file digest
+        # c8e0db79 in place as a third element, so the entry no longer
+        # unpacked.  The loader's string now carries the #ifdef
+        # WSM6_PLM_SURFACE block (218,504 characters); with the macro
+        # undefined the preprocessed unit and NVRTC's image are the
+        # c8e0db79/b31ff1ff ones (test_wb5_exact_mode_compiles_the_same_ptx_as_2_8_7).
+        # Previously b31ff1ff.
+        '93d94836eedf855f14a96029b5357c0facc498732c613d0123a2a31f409fc65f'),
     'ysu': (
         # Re-pinned for the column-workspace move (17cf943ef): per-thread
         # local arrays became a caller-sized global workspace, stride-32
@@ -1788,8 +2174,53 @@ FROZEN_MODULE_DIGESTS = {
         # loader's effective options), and tests/test_ysu_wrf461_parity.py's
         # ULP table did not move on either card.  The arm is graded against
         # WRF v4.7.1 by tests/test_terrain_drag_wrf471_parity.py.
-        '2ce2203aca80967d48843d1de9ffdb1c85c18fe3ab17a03f9a91fdeb4c3c94bc',
-        '01cd5d4c3967a5af0e38a5b7554a909dc4012a07ef7b3b8410a03825f95c8d29'),
+        # Previously 41b9a899/57842bb8.
+        #
+        # RE-PINNED by lane/parity-286 (WRF parity sweep rows 2 and 9), and
+        # this one MOVES ANSWERS on the default path.  (a) bl_ysu.F90:613
+        # `br > 0` is compared in double through the bit-decoding ysu_f2d
+        # (ysu_topo.cuh), because sm_120 DAZes a positive subnormal br in a
+        # float32 compare and the column took the convective arm where WRF
+        # takes the stable one.  (b) ysu_column and ysu_column_bep take WRF's
+        # ctopo surface-drag arm (bl_ysu.F90:1308) with ctopo = ctopo2 = 1,
+        # which module_bl_ysu.F:404 passes on every WRF run, instead of the
+        # ctopo-absent :1315 no WRF run reaches.  Reading (box F RTX 5090,
+        # sm_120, NVRTC 13.4): tests/test_ysu_wrf461_parity.py case 7 joins
+        # the arithmetic table (wstar/delta 0 as WRF, momentum 4.5e7 -> 1457
+        # ULP, theta 1.8e9 -> 0), du/dv graded against WRF's ctopo call with
+        # maxima unchanged at 1457/23302, case 9 dv 22 -> 0; the BEP table
+        # and the topo_wind arm's table did not move.
+        # Previously d95a63ea/2d0e714d.
+        #
+        # RE-PINNED by lane/parity-286 (sweep row 10), and this MOVES ANSWERS
+        # on the default path: glibc's powf/expf (gfk_pow/gfk_exp) in place
+        # of CUDA's, every real-exponent `**` spelled as gfortran's powf call,
+        # WRF's association for chi/temps/prnumfac, WRF's thx = (th*pi)/pi and
+        # (ttend*pi)/pi round trips (ysu_thx), and the unit compiled with
+        # --fmad=false (kernels/__init__.py _NO_FMAD_MODULES).  Reading (box K
+        # RTX PRO 6000, sm_120, NVRTC 13.4.92 and 12.9.86 identical):
+        # tests/test_ysu_wrf461_parity.py goes from du/dv 1457/23302, exch 7,
+        # hpbl/wstar/delta/dtheta 1 ULP to bitwise WRF on every lane but the
+        # 11 FTZ-flushed subnormal tendencies; the BEP table and the topo_wind
+        # table go to 0 the same way.
+        # Previously 46f4642c/bce0da68.
+        #
+        # RE-PINNED by golden/ports-pbl (2026-10-12), and this MOVES ANSWERS
+        # wherever ust = hfx = qfx = 0 (or ust flushes to zero on the
+        # card): the zero-flux short circuit is removed.  It returned zero
+        # tendencies, PBLH = dz(1) and KPBL = 1 where bl_ysu_run has no such
+        # branch and runs the whole scheme.  Reading (G1 RTX PRO 6000, sm_120,
+        # NVRTC 12.9): tests/test_ysu_wrf461_parity.py case 12 joins the
+        # arithmetic table at 0 ULP on every field (KPBL 9, PBLH 703.36 m, as
+        # WRF), case 13 is WRF's word on every lane WRF wrote a number with
+        # KPBL/PBLH exact, and the 23-column maxima did not move.  No other
+        # statement changed; every column with any nonzero flux compiles from
+        # the same statements as before.
+        # Slimming: the recorder follows the retained ysu_default.cu file.
+        # slimming-loader-source-replay.json proves identical compiler text.
+        'f56e3ec7646a111d07c5447383ae136b2959b5f4545441a598b51be16ccdc768',
+        # ysu_default.cu names a test host instead of a lab host since 2.9.1 (comment only).
+        '6261061b62ef15ca30cf3746baf9177cdc1a0eafc2544937f41c674e0fd5a932'),
 }
 
 # -- R2 --------------------------------------------------------------------
@@ -1852,6 +2283,9 @@ STATE_ARRAY_SHAPES_MP8 = {
     'msft': (6, 8),
     'msfu': (6, 9),
     'msfv': (7, 8),
+    # CONUS strict MF_VX_INV (paper/conus-suite-exact, 2.9.11): the stored v map-factor inverse WRF keeps,
+    # ones unless a WRF input supplies it; the default route reads it nowhere.
+    'msfv_inv': (7, 8),
     'mu_pp': (6, 8),
     'mub2d': (6, 8),
     'mup': (6, 8),
@@ -1930,6 +2364,9 @@ SCRATCH_SLOT_REGISTRY_MP8 = {
     'integration_health_partial': (1, 9),
     'integration_health_planes': (1024,),
     'integration_health_result': (8,),
+    # Read-only gate geometry, 12 KiB per domain; physics slots retain
+    # their shapes and lifetime aliases.
+    'integration_health_rim': (1024, 3),
     'integration_health_status_bits': (2048,),
     'integration_health_validation': (4,),
     'moist_pd_q0': (4, 6, 8),
@@ -1960,6 +2397,27 @@ SCRATCH_SLOT_REGISTRY_MP8 = {
     'pd_fyl': (4, 7, 8),
     'pd_fzc': (5, 6, 8),
     'pd_fzl': (5, 6, 8),
+    'hail_density': (4, 6, 8),
+    'hail_height': (4, 6, 8),
+    'hail_max2d': (6, 8),
+    'hail_max2d_run': (6, 8),
+    'hail_maxk1': (6, 8),
+    'hail_maxk1_run': (6, 8),
+    'hail_new_duration': (6, 8),
+    'hail_new_mask': (6, 8),
+    'hail_temperature': (4, 6, 8),
+    'hail_zero': (4, 6, 8),
+    'hailcast_dhail1': (6, 8),
+    'hailcast_dhail2': (6, 8),
+    'hailcast_dhail3': (6, 8),
+    'hailcast_dhail4': (6, 8),
+    'hailcast_dhail5': (6, 8),
+    'hailcast_diam_max': (6, 8),
+    'hailcast_diam_mean': (6, 8),
+    'hailcast_diam_std': (6, 8),
+    'hailcast_runmax': (6, 8),
+    'hailcast_wdur': (6, 8),
+    'hailcast_wup_mask': (6, 8),
     'physics_validation_status': (1,),
     'refl_10cm': (4, 6, 8),
     'refl_t': (4, 6, 8),
@@ -1974,8 +2432,9 @@ NEST_FIELD_KINDS_MP8 = (
     'u', 'v', 'w', 't', 'ph', 'mu',
     'qv', 'qc', 'qr', 'qi', 'qs', 'qg', 'nr', 'ni',
 )
+# 2.9.11: + msfv_inv (paper/conus-suite-exact, the stored MF_VX_INV). Previously 9bf52777.
 STATE_ARRAY_SHAPES_DIGEST = (
-    '9bf527776f97f6e401d5c8084b31a58015f36c388eabba5dc3cc4eaefbaa124c')
+    '242835fbbd30e4943471ca51c572e4e5ea53fe4e2673d0f776f14c1807a3b1e8')
 #: RE-PINNED 2026-09-24: one slot added by 217e84e18,
 #: ``mp_thompson_micro_columns`` (ny, nx), WRF's per-column no_micro flag
 #: (module_mp_thompson.F:1646, :2020).  _apply_thompson takes it from the
@@ -1990,8 +2449,14 @@ STATE_ARRAY_SHAPES_DIGEST = (
 # baseline and this lane reproduce the new 59-slot layout.  The numerical
 # kernel pins and every other allocation contract are preserved.  Was
 # f00b1b1748fba27988bdedfde16ed05f3559a5e0bbd33cad474d7bef35d41949.
+# Re-pinned for the scanner's 12 KiB geometry slot. Every physics slot
+# and alias retains its previous shape; the scanner never writes state.
+# RE-PINNED for lane/cap-hail (97e9a3ca061): the default-on hail and HAILCAST
+# diagnostics (hailcast_opt = -1, automatic) add 21 slots of their own
+# (woof/core/hail.py scratch_shapes), named hail_* / hailcast_*.  None aliases
+# a Thompson buffer; every existing slot keeps its shape.  Was 9cd991b5.
 SCRATCH_SLOT_REGISTRY_DIGEST = (
-    'c4f040d8b21dc81d64c9725c8b3e061580b359144f70c705b466ab8a4e4ef4c2')
+    'e1d103fdd69bed32117386bbf6b56910834f17798fa76b95fa0ffe59c566c0b2')
 ORACLE_FIXTURE_COUNT = 92
 #: RE-PINNED with the corrected oracle, not with an edit.  The Thompson
 #: oracle lane found that five committed fixtures were the output of a
@@ -2608,13 +3073,11 @@ ACOUSTIC_N_MASS = {
 
 # -- F2 --------------------------------------------------------------------
 
-ORACLE_REBUILD_EXCEPTION_FILES = frozenset({
-    "warm-column.csv", "ice-column.csv",
-    "mixed-column.csv", "mixed-surface.csv",
-})
-#: Levels (1-based) at which the three original fixtures' ``p_pa`` differs
-#: by one float32 ulp from the other 43 committed fixtures.
-ORACLE_PPA_DIVERGENT_LEVELS = (2, 3, 5, 6, 7, 8, 10, 14, 16, 17, 18, 19, 22)
+#: The retired four-file clean-rebuild exception set (warm/ice/mixed column
+#: and mixed-surface).  Empty: a clean rebuild reproduces all four.
+ORACLE_REBUILD_EXCEPTION_FILES: frozenset = frozenset()
+#: The one fixture a rebuild on a libc other than the receipt's may differ in.
+ORACLE_LIBC_SENSITIVE_FILES = frozenset({"cold-cloud-overlap-column.csv"})
 
 
 # ==========================================================================
@@ -2623,7 +3086,70 @@ ORACLE_PPA_DIVERGENT_LEVELS = (2, 3, 5, 6, 7, 8, 10, 14, 16, 17, 18, 19, 22)
 
 @pytest.fixture(scope="module")
 def r1():
-    return freeze.receipt_r1_sources()
+    import importlib
+    try:
+        # This fixture records compiler inputs with CUDA operations
+        # intercepted below. Keep the metadata dependency access from
+        # classifying the file's raw-source CPU checks as GPU work.
+        cp = importlib.import_module("cupy")
+    except ImportError:
+        # Preserve the receipt's existing no-CuPy fallback for raw-source
+        # checks; its compiler-capture assertions retain their own marker.
+        return freeze.receipt_r1_sources()
+    compiler = importlib.import_module("cupy.cuda.compiler")
+    from woof import nvrtc_ptx_cache
+    from woof.core import kernels
+
+    class SourceDevice:
+        id = 0
+
+        def __init__(self, *args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class SourceImage:
+        # A sentinel, never PTX/cubin bytes or a reported compiled image.
+        def startswith(self, *args):
+            return False
+
+    class SourceModule:
+        def load(self, image):
+            assert isinstance(image, SourceImage)
+
+    direct_inputs = []
+
+    def capture_nvrtc(source, options=(), *args, **kwargs):
+        # The receipt replaces RawModule per source. Feed that recorder
+        # the exact inputs passed at the new direct compiler boundary.
+        cp.RawModule(code=source, options=options)
+        direct_inputs.append((freeze._sha256_bytes(source.encode("utf-8")),
+                              tuple(options)))
+        return SourceImage(), {}
+
+    loaders = (kernels.load_module, kernels.load_module_int_defines,
+               kernels._load_diffusion_module, kernels.compile_diffusion_source)
+    for loader in loaders:
+        loader.cache_clear()
+    try:
+        with pytest.MonkeyPatch.context() as patch:
+            # Only CUDA ownership/loading and compiler calls are replaced;
+            # source assembly, options and production dispatch stay live.
+            patch.setattr(cp.cuda, "Device", SourceDevice)
+            patch.setattr(cp.cuda.function, "Module", SourceModule)
+            patch.setattr(compiler, "compile_using_nvrtc", capture_nvrtc)
+            patch.setattr(nvrtc_ptx_cache, "compile_using_nvrtc", capture_nvrtc)
+            receipt = freeze.receipt_r1_sources()
+        receipt["source_capture_direct_inputs"] = direct_inputs
+        return receipt
+    finally:
+        # A later numeric GPU check must construct its real modules.
+        for loader in loaders:
+            loader.cache_clear()
 
 
 def test_thompson_cu_is_byte_frozen(r1):
@@ -2719,17 +3245,48 @@ def test_loader_hook_is_inert_for_every_frozen_module(r1):
         Path(__file__).with_name("test_kernel_loader_inert.py"))
     _mod = _ilu.module_from_spec(_spec)
     _spec.loader.exec_module(_mod)
-    _EXPECTED_HEADERS = _mod._EXPECTED_HEADERS
+    # Selected Group A diffusion and surface sources extend the historical
+    # grant. Their raw headers and assembled source pairs are pinned above.
+    _EXPECTED_HEADERS = {
+        **_mod._EXPECTED_HEADERS,
+        "acoustic": ("glibc_trig_flt32.cuh",),
+        "myjsfc": ("glibc_flt32.cuh", "flt32_expf_fma.cuh"),
+        "mynn_surface": ("mynn_libm.cuh", "surface_subnormal.cuh"),
+        "sfclay": ("glibc_flt32.cuh", "sfclay_classic.cuh"),
+        "smag2d": ("glibc_flt32.cuh",),
+        "satmedmf": ("glibc_flt32.cuh", "glibc_flt64.cuh",
+                     "gfs_physcons.cuh", "satmedmf_common.cuh",
+                     "satmedmf_column.cuh"),
+        # WRF's ocean mixed layer (2.9.1): the glibc expf/logf the column
+        # module calls, pinned with oml.cu.
+        "oml": ("glibc_flt32.cuh",),
+    }
+
+    # New port headers have measured composed-source pins.
+    _EXPECTED_HEADERS.update({'fer_hires': ('glibc_flt32.cuh',)})
+    # lane/cap-hail (97e9a3ca061): WRF's HAILCAST support and column headers,
+    # prepended to the hail unit only, pinned in kernel_source_pins.json.
+    # fix/hailcast: the operational HRRR v4.1.21 HAILCAST column header
+    # (hailcast_version = "wrf_39_noaa"), pinned in kernel_source_pins.json.
+    _EXPECTED_HEADERS.update({'hail': ('hailcast_support.cuh', 'hailcast_wrf.cuh', 'hailcast_wrf39.cuh')})
+    # GSD output diagnostics (f80ac46aeb, 328ce7233b): raw sources and the
+    # helper-only helicity header are pinned in kernel_source_pins.json.
+    # uh_diag.cu remains its own frozen translation unit, never a header.
+    _EXPECTED_HEADERS.update({
+        'gsd_diagnostics': ('glibc_flt32.cuh', 'glibc_flt32_extra.cuh',
+                            'glibc_flt64.cuh', 'gsd_hail_bins.cuh'),
+        'gsd_helicity': ('gsd_helicity_helpers.cuh',),
+    })
 
     # The header grant stays a CLOSED literal: the loader's own allow-list
-    # must equal the mapping test_kernel_loader_inert pins, so a module
-    # cannot gain a header here without that gate moving too.
+    # must equal the historical mapping plus the selected literal grant,
+    # so a module cannot gain a header without its source gate moving too.
     granted = {name: tuple(headers) for name, headers
                in _kernels._EXTRA_HEADERS.items()}
     assert granted == {name: tuple(headers) for name, headers
                        in _EXPECTED_HEADERS.items()}, (
         "the kernel loader's _EXTRA_HEADERS drifted from the closed "
-        "mapping tests/test_kernel_loader_inert.py pins")
+        "historical mapping plus the selected Group A header pins")
     not_inert = sorted(
         name for name in FROZEN_MODULE_DIGESTS
         if name not in granted
@@ -2981,14 +3538,20 @@ def test_committed_mp8_oracle_fixtures_are_frozen():
 # F2 -- the documented four-file clean-rebuild exception
 # ==========================================================================
 
-def test_rebuild_exception_list_is_exactly_four_named_files():
-    """No file may be added to the exception list to make a gate pass.
+def test_rebuild_exception_list_is_retired_and_the_libc_allowance_is_one_file():
+    """No file may be added to an allowance to make a gate pass.
 
-    The exception is a recorded historical fact about four fixtures, not a
-    tolerance.  Everything else must rebuild byte-for-byte.
+    The four-file set (warm, ice and mixed column, mixed-surface) recorded
+    an older harness build; the fixtures were regenerated and a clean
+    rebuild on 2026-10-05 reproduced all four byte for byte, so the set is
+    empty.  What remains is the README's one measured libc sensitivity,
+    allowed only when the rebuild's libc is not the receipt's.
     """
     assert set(freeze.ORACLE_REBUILD_EXCEPTIONS) == (
-        ORACLE_REBUILD_EXCEPTION_FILES)
+        ORACLE_REBUILD_EXCEPTION_FILES) == set()
+    assert set(freeze.ORACLE_LIBC_SENSITIVE_FIXTURES) == (
+        ORACLE_LIBC_SENSITIVE_FILES)
+    assert freeze.ORACLE_LIBC_SENSITIVE_TABLES == {"freezeH2O.dat"}
 
 
 def test_the_committed_fixtures_now_share_one_pressure_profile():
@@ -3076,23 +3639,39 @@ def test_the_committed_fixtures_now_share_one_pressure_profile():
     not os.environ.get("WOOF_MP8_ORACLE_REBUILD_DIR"),
     reason="set WOOF_MP8_ORACLE_REBUILD_DIR to a completed "
            "tools/thompson_wrf461_oracle/build.sh output directory")
-def test_clean_oracle_rebuild_matches_except_the_four_documented_files():
-    """Opt-in empirical gate: 4/4 .dat SHAs and 88/92 CSVs, exactly.
+def test_clean_oracle_rebuild_reproduces_the_committed_oracle():
+    """Opt-in empirical gate: the committed oracle is a re-derivable build.
 
     Opt-in because it needs gfortran, the pristine WRF tree and ~380 MB of
-    regenerated coefficient tables.  Measured on gfortran 13.3.0 / glibc
-    2.39 / Ubuntu 24.04 during WP-00.
+    regenerated coefficient tables.  On the receipt's own libc every table
+    cache matches the receipt's [table_cache] and all 92 CSVs are
+    byte-exact.  On another libc, freezeH2O.dat and one qg cell of
+    cold-cloud-overlap-column.csv may move, by no more than measured
+    (gfortran 13.3.0 / glibc 2.39, 2026-10-05: 91 of 92 byte-exact).
+
+    The packaged CLASSIC_TABLE_ASSETS hashes are a different build from the
+    receipt's tables and are reported in ``dat_assets``, not asserted.
     """
     build_dir = Path(os.environ["WOOF_MP8_ORACLE_REBUILD_DIR"])
     result = freeze.compare_rebuilt_oracle(build_dir)
-    assert result["dat_all_match"] is True, result["dat_assets"]
     assert result["csv_missing"] == []
     assert result["csv_total"] == ORACLE_FIXTURE_COUNT
-    assert set(result["csv_differing"]) == ORACLE_REBUILD_EXCEPTION_FILES
-    assert result["csv_identical"] == (
-        ORACLE_FIXTURE_COUNT - len(ORACLE_REBUILD_EXCEPTION_FILES))
+    assert result["rebuilt_libc"] is not None, (
+        "the rebuild directory carries no build.sh PROVENANCE.txt")
+    if result["same_libc"]:
+        allowed_csv, allowed_tables = set(), set()
+    else:
+        allowed_csv = set(ORACLE_LIBC_SENSITIVE_FILES)
+        allowed_tables = set(freeze.ORACLE_LIBC_SENSITIVE_TABLES)
+    tables = result["receipt_tables"]
+    assert len(tables) == 4, tables
+    moved = {name for name, row in tables.items() if not row["matches"]}
+    assert moved <= allowed_tables, tables
+    assert set(result["csv_differing"]) <= allowed_csv, (
+        result["csv_differing"])
     for name, diff in result["csv_differences"].items():
-        pinned = freeze.ORACLE_REBUILD_EXCEPTIONS[name]
+        pinned = freeze.ORACLE_LIBC_SENSITIVE_FIXTURES[name]
+        assert set(diff["fields"]) <= set(pinned["fields"]), diff
         assert diff["max_relative_overall"] <= (
             pinned["max_relative_overall"] * 1.001), (
             f"{name} drifted beyond the recorded deviation")

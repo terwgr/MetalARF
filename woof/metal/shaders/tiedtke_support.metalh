@@ -1,0 +1,80 @@
+#ifndef WOOF_TIEDTKE_SUPPORT_METALH
+#define WOOF_TIEDTKE_SUPPORT_METALH
+// Metal counterpart of tiedtke_support.cuh: one thread owns one Fortran
+// column, array coordinates stay one-based and the storage is level-major in
+// device memory.
+#include "cumulus_support.metalh"
+#include "soft_glibc_solar_trig.metalh"
+
+static inline float tk_add(float a, float b) { return a + b; }
+static inline float tk_sub(float a, float b) { return a - b; }
+static inline float tk_mul(float a, float b) { return a * b; }
+static inline float tk_div(float a, float b) { return cu_div(a, b); }
+static inline float tk_abs(float a) { return metal::fabs(a); }
+static inline float glibc_tanf(float x) { return as_type<float>(soft_glibc_solar_tanf(as_type<uint>(x))); }
+static inline int tk_abs(int a) { return a < 0 ? -a : a; }
+template<class T> static inline T tk_min(T a, T b) { return a < b ? a : b; }
+template<class T> static inline T tk_max(T a, T b) { return a > b ? a : b; }
+
+template<class T> struct TkArray {
+    device T *data;
+    int stride;
+    int first;
+    int count;
+    device int *status;
+    device T &at(int index) const thread {
+        if (index < 0 || index >= count) {
+            // F:2282/2289 can write at jk-1=0 when the original cloud top
+            // reaches level 3; that undefined column is refused.
+            *status = -1;
+            return data[0];
+        }
+        return data[index * stride];
+    }
+    device T &operator()(int i) const thread { return at(i - 1); }
+    device T &operator()(int i, int k) const thread {
+        return at((k - 1) * first + i - 1);
+    }
+    TkArray<T> slice(int i) const thread {
+        TkArray<T> out = {data + (i - 1) * stride, stride, first, count - i + 1, status};
+        return out;
+    }
+};
+
+struct TkArena;
+template<class T> struct TkTake;
+
+struct TkArena {
+    device float *f;
+    device int *i;
+    device bool *b;
+    int nf, ni, nb, stride;
+    device int *status;
+    device int *activity;
+    bool force_continue;
+    template<class T> TkArray<T> take(int n, int first = 1) thread {
+        return TkTake<T>::run(*this, n, first);
+    }
+};
+template<> struct TkTake<float> {
+    static TkArray<float> run(thread TkArena &a, int n, int first) {
+        TkArray<float> r = {a.f + a.nf * a.stride, a.stride, first, n, a.status};
+        a.nf += n;
+        return r;
+    }
+};
+template<> struct TkTake<int> {
+    static TkArray<int> run(thread TkArena &a, int n, int first) {
+        TkArray<int> r = {a.i + a.ni * a.stride, a.stride, first, n, a.status};
+        a.ni += n;
+        return r;
+    }
+};
+template<> struct TkTake<bool> {
+    static TkArray<bool> run(thread TkArena &a, int n, int first) {
+        TkArray<bool> r = {a.b + a.nb * a.stride, a.stride, first, n, a.status};
+        a.nb += n;
+        return r;
+    }
+};
+#endif

@@ -21,7 +21,7 @@
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
-        "soft64-rn-bit-ops", "dependency-marked-unverified"
+        "soft64-rn-bit-ops", "wrf-exact"
       ]
     },
     {
@@ -55,7 +55,7 @@
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
-        "soft64-rn-bit-ops", "dependency-marked-unverified"
+        "soft64-rn-bit-ops", "wrf-exact"
       ]
     }
   ],

@@ -2,9 +2,9 @@
 
 The shaders (``shaders/terrain_drag_family.metal``) are the CUDA kernels of
 ``woof/core/kernels/terrain_drag.cu`` transcribed statement for statement;
-the pinned glibc scalar math becomes Metal's precise functions.  Mass-level
-heights are formed in the shader from the interface heights, as phy_prep
-forms them.  The optional diagnostic outputs are not carried.
+GSL uses the pinned scalar math and preserves gradual underflow through
+form drag and accumulation. Mass-level heights are formed in the shader
+from the interface heights, as phy_prep forms them.  The optional diagnostic outputs are not carried.
 """
 
 from __future__ import annotations
@@ -152,8 +152,11 @@ def submit_gwdo(atmosphere, du, dv, *, var, con, oa, ol, sina, cosa,
 
 
 def submit_gwdo_gsl(atmosphere, du, dv, *, ls, ss, sina, cosa, xland, br,
-                    pblh, kpbl, kpblmax, dx, dt, constants):
-    """gwd_opt = 3: add the GSL drag suite to ``du``/``dv`` in place."""
+                    pblh, kpbl, kpblmax, dx, dt, constants, rstoch=None):
+    """gwd_opt = 3: add the GSL drag suite to ``du``/``dv`` in place.
+
+    ``rstoch`` is the (ny, nx) lowest level of the SPP PBL pattern, or None.
+    """
     from .array import MetalArrayModule
 
     nz, ny, nx = du.shape
@@ -178,11 +181,13 @@ def submit_gwdo_gsl(atmosphere, du, dv, *, ls, ss, sina, cosa, xland, br,
         xland=_upload(xp, xland, shape2), br=_upload(xp, br, shape2),
         hpbl=_upload(xp, pblh, shape2),
         kpbl=_upload(xp, kpbl, shape2, dtype=np.int32), du=du, dv=dv)
+    arrays["rstoch"] = (arrays["hpbl"] if rstoch is None
+                        else _upload(xp, rstoch, shape2))
     g, cp_, rd, ep1, pi_ = constants
     context.submit_kernel(
         "gwdo_gsl_column", arrays,
         {"dxmeter": float(dx), "deltim": float(dt), "g": float(g),
          "cp": float(cp_), "rd": float(rd), "fv": float(ep1),
          "pi_c": float(pi_), "kpblmax": int(kpblmax), "nz": nz, "ny": ny,
-         "nx": nx, "nstat": _NSTAT},
+         "nx": nx, "nstat": _NSTAT, "has_rstoch": int(rstoch is not None)},
         exact_policy=False, grid_size=ny * nx)

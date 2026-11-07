@@ -1,6 +1,6 @@
 """Bitwise gate for the Noah-MP NOAHMP_SFLX composition.
 
-The whole-column fixture ``tests/data/noahmp/oracle/noahmp-sflx.csv`` is the
+The whole-column fixture ``tests/data/oracles/noahmp/noahmp-sflx.csv`` is the
 only artefact in this tree built by calling the **byte-unmodified**
 ``phys/module_sf_noahmplsm.F``: NOAHMP_SFLX is one of the module's two public
 entry points, so its harness needs no visibility lift at all.  Every other
@@ -58,7 +58,7 @@ from woof.core.noahmp_sflx import (EnergyBalanceError, NIGHT_ALBEDO,
                                     sflx_pre)
 
 REPO = Path(__file__).resolve().parent.parent
-ORACLE = REPO / "tests" / "data" / "noahmp" / "oracle"
+ORACLE = REPO / "tests" / "data" / "oracles" / "noahmp"
 SFLX_CSV = ORACLE / "noahmp-sflx.csv"
 ENERGY_CSV = ORACLE / "noahmp-energy.csv"
 
@@ -183,7 +183,7 @@ def _run_whole(case, **override):
     x = SF[(case, "input")]
     p = _params(x)
     col = _column(x)
-    r = sflx(p, col, _vec(x, "smc", 1, NSOIL),
+    r = sflx(p, col, _vec(x, "smc", 1, NSOIL), noahmp_snow_age="wrf_461",
              ficeold=_vec(x, "ficeold", -NSNOW + 1, 0),
              wa=x[("wa", 0)], wslake=x[("wslake", 0)],
              **_forcing(x, **override))

@@ -1,0 +1,118 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_cutypen",
+      "module": "hexv842_nt",
+      "source": "woof/metal/shaders/hexv842_nt_cutypen.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cutypen",
+      "resources": [
+        [
+          "inputs",
+          "float32",
+          "read"
+        ],
+        [
+          "surface",
+          "float32",
+          "read"
+        ],
+        [
+          "outs",
+          "float32",
+          "read_write"
+        ],
+        [
+          "iouts",
+          "int32",
+          "read_write"
+        ],
+        [
+          "scr",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scr_i",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "inputs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "iouts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scr_i": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

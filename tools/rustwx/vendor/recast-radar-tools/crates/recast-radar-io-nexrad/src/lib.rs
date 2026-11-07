@@ -643,7 +643,7 @@ pub(crate) fn builder_bzip_block_preview(
 ///
 /// For block-bzip Level II files, parsing streams behind the parallel block
 /// decompression, so the preview is emitted as soon as the first displayable
-/// sweep completes, without decompressing or parsing anything twice. Other
+/// sweep completes — without decompressing or parsing anything twice. Other
 /// compression formats fall back to a normal full decode.
 pub fn read_volume_from_bytes_with_bzip_preview<F>(
     raw: &[u8],
@@ -1001,7 +1001,7 @@ fn parse_record_stream(
     let mut cursor = VOLUME_HEADER_LEN;
     let mut record_index = 0usize;
     // GR2-style ".msg31" exports keep the AR2V header but carry only a few
-    // metadata records before variable-framed message 31s: well before the
+    // metadata records before variable-framed message 31s — well before the
     // standard 134 fixed records. Detected once at the first early message
     // 31 and latched for the rest of the file.
     let mut early_variable_msg31 = false;
@@ -1633,7 +1633,7 @@ impl<'a> BlockSlots<'a> {
     ///
     /// The caller participates in decompression while it waits (claims advance
     /// in parse order), so the pipeline makes progress even when no rayon
-    /// worker ever runs, e.g. on a single-threaded pool.
+    /// worker ever runs — e.g. on a single-threaded pool.
     fn take_block(&self, index: usize) -> Result<Vec<u8>> {
         loop {
             if let Some(result) = self.slots[index].get() {

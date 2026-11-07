@@ -1,0 +1,98 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_nucond.cu",
+      "cuda_symbol": "nssl2_nucond_supersaturation",
+      "layout_version": 1,
+      "module": "nssl2_reduce_exact",
+      "name": "nssl2_nucond_supersaturation_exact",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "full_theta",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_pa",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "supersaturation_percent",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "exner": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "full_theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure_pa": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "supersaturation_percent": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_reduce_exact.metal",
+      "threads_per_group": 256
+    }
+  ]
+}

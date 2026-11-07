@@ -104,6 +104,8 @@ def _allocate_result(shape, *, znt, ust, ustm, mol, hfx, qfx, qsfc, zol,
                "mol": mol.copy(), "hfx": hfx.copy(), "qfx": qfx.copy(),
                "qsfc": qsfc.copy(), "zol": zol.copy()}
     if metal_module is None:
+        initial.update({name: cp.zeros(shape, dtype=DTYPE)
+                        for name in ("chs", "chs2", "cqs2")})
         arrays = {name: initial.get(name, cp.empty(shape, dtype=DTYPE))
                   for name in SFCLAY_OUTPUTS}
     else:
@@ -122,8 +124,10 @@ def launch_sfclay(u, v, t, qv, p, dz8w, psfc, tsk, pblh, mavail, xland,
     """Launch into a preallocated :class:`SFClayResult`.
 
     All inputs and result fields must be contiguous FP32 arrays with the same
-    ``(ny,nx)`` shape.  The eight WRF inout values are already held in
-    ``result.znt/ust/ustm/mol/hfx/qfx/qsfc/zol``.
+    ``(ny,nx)`` shape.  WRF inout values are already held in
+    ``result.znt/ust/ustm/mol/hfx/qfx/qsfc/zol``.  With ``isfflx=False``,
+    ``result.chs/chs2/cqs2`` also retain their incoming values; HFX, QFX,
+    FLHC, FLQC and WOOF's defined LH are zero.
     """
     _validate_options(option, isftcflx, iz0tlnd)
     shape = u.shape

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+from concurrent.futures import ProcessPoolExecutor
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import platform
@@ -19,13 +21,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 
 REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from tools.build_native_wrf_distribution import build_distribution  # noqa: E402
+from tools.build_native_wrf_distribution import (  # noqa: E402
+    _tracked_source_paths,
+    build_distribution,
+)
 from woof.native_wrf_distribution import (  # noqa: E402
     BRIDGE_WORKSPACES,
     BUNDLED_BRIDGES,
@@ -58,12 +64,59 @@ _TOP_LEVEL_EXCLUDES = {
     # here, so staging it fails this builder's own unresolved-import
     # scan.  A preprocessing wheel has no domain to size.
     "domain_interactive.py",
+    # `woof domain --recipe --region` (2.9.0, box/country-recipe): its only
+    # importer is domain_wizard.py, excluded above, and it imports the wizard
+    # back, so staging it failed this builder's unresolved-import scan and
+    # every standalone-package test with it.  A preprocessing wheel lays out
+    # no domain.
+    "region_recipe.py",
+    # The versioned Python domain API (fix/ds-api, 2.9.11): it builds a
+    # DomainState and steps the dycore (woof.core.dycore), the forecast
+    # executor this wheel never carries; nothing staged imports it, and
+    # staging it failed this builder's unresolved-import scan.
+    "domain.py",
+    # `woof go --smoke-radiation` (labs/smoke-optics, 2.9.11): a go-door
+    # restatement that imports woof.go_cli; its one importer is go_cli.
+    "smoke_radiation.py",
+    # The warm-standby and race doors (2.9.4, `woof standby` / `woof
+    # race`): a standby process holds a prepared forecast warm and starts
+    # it the moment a source cycle posts; race drives standby (or `woof
+    # go`) against the operational product.  Their importers are woof.cli
+    # (excluded above), race_cli -> race -> standby_cli -> standby /
+    # standby_runtime -> boundary_prestage, and the forecast runner
+    # prepared_single_domain_forecast (not staged).  standby_cli reaches
+    # woof.region_recipe (excluded above), so staging it refused this
+    # builder's unresolved-import scan and every standalone-package test
+    # with it.  A preprocessing wheel holds no forecast warm and races
+    # nothing.
+    "race.py", "race_cli.py", "standby.py", "standby_cli.py",
+    "standby_runtime.py", "boundary_prestage.py",
+    # `woof go --storm-nests` / [storm_nests] (2.9.4): authoring of dormant
+    # storm-following nest slots, priced by the planner through the domain
+    # wizard and woof.core.preflight, both absent here; its only importer is
+    # go_cli.py (excluded below).  The forecast's nest-lives summary lives in
+    # woof/nest_lives.py, which stages.  A preprocessing wheel authors no
+    # nests.
+    "storm_nests.py",
     # `woof go` drives tools/prepared_single_domain_forecast.py through
     # the GPU forecast.  Its imports happen to resolve against what RW-WPS
     # stages, so the scan would not have caught it -- but the runner it
     # exists to call is not in this wheel, so shipping it would offer a
     # command that cannot run.
     "go_cli.py",
+    # Launch-time smoke capacity decisions rebuild forecast companion setups.
+    # Preparation shares only the CPU receipt helpers in smoke_receipts.py.
+    "smoke_execution.py",
+    # Hub-height wind products (cap-hubwind, 2.9.4): a render door that
+    # reaches woof.render (excluded below); its importers are render.py,
+    # go_cli.py and cli.py, all excluded.  A preprocessing wheel renders
+    # no forecast products.
+    "hubwind.py",
+    # The in-run tropical-cyclone tracker (cap-storm-tracks, 2.9.4): it binds
+    # to a forecast's output through woof.go_cli and the ensemble runtime
+    # context (woof.runtime); its only importer is go_cli.py, excluded
+    # above.  A preprocessing wheel tracks no running storm.
+    "tc_accumulator.py",
     # Input-cycle checks belong to go_cli/runplan, both excluded here.
     # Their checkpoint verification imports the forecast-only io.restart;
     # no standalone preparation door imports this module.
@@ -83,6 +136,9 @@ _TOP_LEVEL_EXCLUDES = {
     # three, and this builder's unresolved-import scan refused the whole
     # staging.  A preprocessing wheel runs no forecast to warm.
     "warm_kernels.py",
+    # Both commands execute coupled fire forecasts and require the omitted
+    # physics/dycore runners. Fire-static preparation stays in woof.static.
+    "fire_ideal.py", "sfire_debug.py",
     # The live renderer that draws each frame as a forecast writes it.  Its
     # importers are go_cli.py, first_products.py and runplan.py, all
     # excluded above, and it reaches for woof.first_products, woof.render,
@@ -90,6 +146,12 @@ _TOP_LEVEL_EXCLUDES = {
     # stages, so the unresolved-import scan refused the whole staging.  A
     # preprocessing wheel runs no forecast whose frames it could draw.
     "live_products.py",
+    # The any-point column store (rw-store v2) a forecast writes as its frames
+    # land.  Its importers are runplan.py, offline_child_run.py and
+    # woof/ensemble/batch_product_output.py, none staged here, and it reads
+    # resident frames through woof.io.wrfout, which this wheel excludes, so
+    # staging it refused the whole build.  Preparation writes no frames.
+    "live_columns.py",
     # Forecast-history comparison calls the excluded render front door.
     # Staging it leaves an unresolved woof.render import in a package
     # whose preparation commands do not create forecast history.
@@ -201,6 +263,14 @@ _TOP_LEVEL_EXCLUDES = {
     "offline_child_geography.py",
     "offline_child_run.py",
     "offline_child_smoke.py",
+    # Moving nest-downs (`woof downscale --follow`, `--warm-from`): the
+    # moving child orchestrator, its warm start from a parent restart and the
+    # follow-target detector.  Their only importers are downscale.py and
+    # offline_child_run.py (excluded above), and they reach woof.offline_child,
+    # woof.io.restart and woof.io.netcdf_serialization, none staged here.
+    "moving_downscale.py",
+    "offline_child_warm.py",
+    "setup_targets.py",
     # `woof resume` locates a forecast checkpoint and hands it to the
     # supervisor's `run --restart` dispatch.  It reached this staging
     # only because it is a top-level module: nothing RW-WPS ships
@@ -238,6 +308,53 @@ _TOP_LEVEL_EXCLUDES = {
     # Forecast input runners and terminal job/catalog entry points have no
     # standalone preprocessing command. Their readers remain staged below.
     "metem_forecast.py", "wrfinput_forecast.py",
+    # The resident member-leg server (2.9.2, woof/leg_server.py) runs
+    # WRF-input forecast legs in warm engine processes: it imports the
+    # excluded woof.wrfinput_forecast on both of its paths, nothing
+    # RW-WPS ships imports it, and a preprocessing wheel runs no leg.
+    # Staged, its import of the excluded executor refused this builder's
+    # own unresolved-import scan and with it the whole wheel staging.
+    "leg_server.py",
+    # The warm per-card leg executor (sweep 5, woof/leg_executor.py) is
+    # the same kind of process: started as its own worker, it runs each
+    # leg through the excluded woof.wrfinput_forecast's main.  No module
+    # imports it.  Staged, its wrfinput_forecast import refused this
+    # builder's unresolved-import scan and every standalone-package test.
+    # Its companion woof/checkpoint_schedule.py (`--checkpoint-at`
+    # instants and a worker's restart request) is imported only by the
+    # forecast runners wrfinput_forecast and prepared_domain_tree_forecast,
+    # both excluded.  A preprocessing wheel runs no leg and writes no
+    # checkpoint.
+    "leg_executor.py", "checkpoint_schedule.py",
+    # The physics-tuning campaign (sweep 5, woof/tuning*.py): it prepares
+    # member forecasts through woof.go_cli and woof.stage_cli, runs each
+    # member through woof.prepared_domain_tree_forecast in a
+    # `python -m woof.tuning_member` child, then collects, scores and
+    # reports.  Only the tuning modules import one another; staged,
+    # tuning_member's runner import refused this builder's
+    # unresolved-import scan and every standalone-package test.  A
+    # preprocessing wheel runs no tuning members.
+    "tuning.py", "tuning_collect.py", "tuning_member.py",
+    "tuning_observations.py", "tuning_prepare.py", "tuning_report.py",
+    "tuning_retention.py", "tuning_update.py",
+    # The kernel pre-warm (2.9.2, woof/kernel_prewarm.py) compiles a run's
+    # CUDA kernel set beside the fetch; its importers are the forecast
+    # runners (wrfinput_forecast, prepared_*_forecast) and warm_kernels,
+    # and it reaches woof.core.preflight, which is not staged and reads
+    # woof.io.restart (refused below).  A preprocessing wheel compiles no
+    # kernels.
+    "kernel_prewarm.py",
+    # The capability lanes' forecast/product doors (2.9.4): hub-height wind
+    # maps are a render product (lane/cap-hubwind; importers woof.render,
+    # woof.go_cli, woof.cli) and the tropical-cyclone accumulator is a
+    # `woof go` request loader (lane/cap-cyclone-go; importer woof.go_cli).
+    # Both reach excluded doors; a preprocessing wheel renders and runs
+    # nothing.
+    "hubwind.py", "tc_accumulator.py",
+    # mp_tend_radar's live attach (2.9.1): the dycore and the device kernel
+    # on running domains; preparation reads the tendency in
+    # woof/ingest/wrfinput_radar.py, which stays staged.
+    "wrfinput_radar_forcing.py",
     "launchpad_api.py", "tui_worker.py",
     # These forecast UI doors size research runs, dispatch remote workers,
     # select runtime products or validate starter run plans. They reach the
@@ -279,31 +396,47 @@ _TOP_LEVEL_EXCLUDES = {
     # points. Their shared source facts remain in source_drivability; the
     # standalone source_cli never invokes an analysis or a tracking setup.
     "background_contract.py", "regional_preparation.py",
+    # Ensemble orchestration binds member fetches before calling the native
+    # preparer. The standalone preparation wheel receives already fetched
+    # inputs and does not ship its run-plan or domain-wizard callers.
+    "era5_preparation.py",
     "local_da.py", "local_da_fetch.py", "local_da_observations.py",
     "local_da_runtime.py", "cyclone_seed.py", "cyclone_sources.py",
+    # This CLI-only trajectory selector launches cyclone forecasts through
+    # the excluded wizard/setup doors; standalone preprocessing never calls it.
+    "tc_strata.py",
+    # The Earth-2 job door runs tracking, forecasts and rendering. Fetch
+    # and the model inventory remain in earth2_run for input acquisition.
+    "earth2_door.py", "earth2_job.py", "earth2_diagnostics.py",
     # The rapid-cycling controller and the nowcast scorer belong to the same
     # analysis-cycle surface as the doors above, and both are reached only
     # from them (`woof/local_da.py` and `woof/local_da_runtime.py`, already
     # excluded here).  Each is unstageable on its own terms as well: the
-    # controller reaches woof.ensemble, gpuwm.mcp and woof.supervisor, none
+    # controller reaches woof.ensemble, woof.mcp and woof.supervisor, none
     # of which this wheel stages, and the scorer reaches woof.verify.obs
     # nine times -- the verification package this wheel omits by design.
     # Staging either put a module in the wheel that ImportErrors the moment
     # it is reached, and this builder's own staging scans refused outright.
     "local_da_controller.py", "local_da_score.py",
-    # The steep-terrain clock: the acoustic substep rule and the long step a
-    # domain's ground and crest-level wind allow.  Both set the time step a
-    # forecast integrates with, when the forecast starts, and besides each
-    # other their only importers are woof/runtime.py and the two prepared
-    # forecast runners, all excluded above. A preprocessing wheel takes
-    # no step and selects no terrain-dependent forecast clock. The shared
-    # adaptive-clock arithmetic is staged below because the namelist
-    # importer uses its acoustic count for a fixed step through WRF's
-    # adaptive clock; that does not call either terrain adaptation module.
-    "acoustic_adaptation.py", "terrain_clock.py",
+    # Terrain preparation now calls acoustic_adaptation.steepest_slope and
+    # terrain_clock_local.candidate_map through static.terrain_autosmooth.
+    # candidate_map also reads terrain_clock.measured_map. These CPU readers
+    # stay staged with their measured JSON tables; neither module executes a
+    # forecast, and the model, dycore and physics executors remain excluded.
 }
 _CORE_MODULES = {
     "__init__.py",
+    # The FAST_SBM (mp_physics=30) Registry state contract: tuples of bin,
+    # mass and number names transcribed from WRF registry.sbm:318, no
+    # imports at all.  device_inventory, wrf_direct, wrfinput, lateral_bc,
+    # state and the WRF physics inventory (all staged) read it at module
+    # scope; without it the wheel refused staging on ten unresolved imports.
+    "fast_sbm_contract.py",
+    # aer_opt = 2's option and value validation: woof.config and the
+    # namelist importer call validate_options when a namelist selects the
+    # user aerosol.  Module scope is stdlib and numpy; its device optics
+    # import the kernels only inside optics_device (recorded below).
+    "aer_opt2.py",
     # The namelist importer collapses equal adaptive-clock bounds using
     # wrf_num_sound_steps. Its module imports adaptive_timestep at module
     # scope; both use stdlib and numpy without initializing a forecast.
@@ -341,6 +474,51 @@ _CORE_MODULES = {
     # both staged here.
     "urban_tables.py",
     "microphysics_transition.py",
+    # The chem species arena (woof/core/chem_state.py) and the process
+    # interface it sizes process arrays from (chem_context.py).  DomainState
+    # (staged) allocates the chem_<row> fields when a run names chem sets,
+    # and a prepared chem state (smoke initial conditions) is built on the
+    # host by this package.  Both are CuPy-free: the array module is passed
+    # in, and a process module is imported only when a chem run names it.
+    "chem_state.py",
+    "chem_context.py",
+    # The chem processes' preparation-time arrays (dust statics sampled from
+    # the WPS geography, the sulfur chemistry's lat/lon): the staged real
+    # preparation routes (mapped_direct, era5_direct, gfs_direct) write them
+    # into a chem state before it is sealed.  Self-contained: numpy, the chem
+    # table, chem_context/chem_state above and woof.static (staged whole);
+    # no process module and no kernel.
+    "chem_statics.py",
+    # The process modules in this build, because attach_chem_state (and the
+    # device inventory pricing it) reads a named process's ALLOCATES when a
+    # prepared chem state names one: without them a preparation of any
+    # chem set with a process raised ModuleNotFoundError.  CuPy-free at
+    # import by the process interface's contract; the card path of step()
+    # is function-local and never reached by a preparation.
+    "chem_vertmx.py",
+    # The smoke set's processes (lane/aq-smoke), for the same reason: a
+    # preparation of the smoke set reads their ALLOCATES.  chem_plumerise
+    # imports its parameter and cadence module at module scope.
+    "chem_fire.py",
+    "chem_plumerise.py",
+    "chem_plumerise_cache.py",
+    "chem_wetdep.py",
+    # The GOCART process modules (lane/aq-gocart), for the same reason:
+    # a prepared GOCART state names them and attach_chem_state reads their
+    # ALLOCATES.  CuPy-free at import; each launcher and step() imports the
+    # card path inside the function, and chem_column holds their shared
+    # array checks.
+    "chem_ageing.py",
+    "chem_column.py",
+    "chem_drydep_aerosol.py",
+    "chem_drydep_gas.py",
+    "chem_dust.py",
+    "chem_inventory.py",
+    "chem_mp_coupling.py",
+    "chem_optics.py",
+    "chem_seasalt.py",
+    "chem_settling.py",
+    "chem_sulfur.py",
     # The Milbrandt-Yau constant table, reached by microphysics_transition
     # above when a mixed nest edge enters mp=9 and the kernel needs the
     # scheme's own ck vector.  Pure numpy, no kernels and no scheme: the
@@ -373,6 +551,8 @@ _CORE_MODULES = {
     # function-local, and preflight re-exports every name.  No CuPy, no
     # forecast executor.
     "device_inventory.py",
+    # Configuration-only prognostic names used by state and device inventory.
+    "physics_inventory.py",
     # The resident admission the prepared-cache restore, the wrfinput
     # restore and init_at_rest (all staged) take before their DomainState
     # constructor: the exact state inventory and the boundary tables
@@ -480,6 +660,9 @@ _CORE_MODULES = {
     "p3_tables.py",
     "sase_limits.py",
     "state.py",
+    # Shared clock bindings contain only scalar bookkeeping; state.py uses
+    # them when publishing a domain clock, including prepared host state.
+    "sfire_clock.py",
     "thompson_contract.py",
     # The mp=28 real-data cold start closes cloud droplet, rain and ice
     # number over the analyzed mass through the scheme's own entry block
@@ -512,6 +695,7 @@ _CORE_MODULES = {
     # scope; it is staged as that module's dependency, not on its own
     # account -- nothing else in this wheel names it.
     "wsm6_constants.py",
+    "wsm_family_constants.py",
 }
 #: `nest_spawn_init.py` and `relocation_init.py` are forecast-time child
 #: initializers, not preprocessing: one builds a nest that is born mid-run,
@@ -533,12 +717,15 @@ _INGEST_EXCLUDES = {"preflight.py", "nest_spawn_init.py",
 #: the radar front door `woof doctor` checks for is unaffected.
 # GOES window acquisition publishes cycle/ensemble manifests. The lower-level
 # observation decoders remain available to standalone preprocessing.
+# ``aq_airnow.py`` is the air-quality station source of the same scoring
+# seam: it builds the scorer's StationObsSet through woof.obs.sources, so it
+# stays behind with it (its Rust decoder rw_airnow is a verification tool).
 #: `precipitation.py` subclasses `woof.obs.sources._GriddedSource` at module
 #: scope, so it crosses the same verification boundary `sources.py` does and
 #: stays behind with it.  It is the scorer's precipitation timeline, and its
 #: only importer is the observation battery's scoring tool, which this wheel
 #: does not stage.
-_OBS_EXCLUDES = {"sources.py", "goes_window.py", "precipitation.py"}
+_OBS_EXCLUDES = {"sources.py", "goes_window.py", "precipitation.py", "aq_airnow.py"}
 #: The PREPARATION SIDE of ``woof/ensemble``, an allowlist like
 #: ``_IO_MODULES`` and for the same reason: the package is mostly member
 #: orchestration and the batched forecast, which this wheel exists not to
@@ -644,18 +831,33 @@ _ENSEMBLE_MODULES = {
 #: needs it.  Missing, that call raised ImportError in this package.
 #: Module scope is pathlib, typing and numpy, and its one internal lookup
 #: (``woof.io.nc_writer_bridge``) is function-local and staged.
+#:
+#: ``netcdf_serialization`` holds the deferred ``netCDF4`` handle and the
+#: process-wide netCDF4 session lock (D-10, 2.8.8).  The staged
+#: ``woof.wrf_direct`` imports it at module scope, so without it this
+#: package's staging refused ("unresolved internal imports") and an
+#: installed wheel could not import the domain-artifact reader.  Module
+#: scope is contextlib and threading; netCDF4 itself loads on first use.
 _IO_MODULES = {"__init__.py", "classic_product.py", "classic_tape.py",
                "history_selection.py", "nc_writer_bridge.py",
-               "wrf_output_schema.py"}
+               "netcdf_serialization.py",
+               "wrf_output_schema.py", "sfire_schema.py",
+               # Import-free WRF registry data used by input and output schemas.
+               "wrf_input_history_schema.py"}
 _ROOT_DATA = {
+    # woof.fetch_pool sizes its transfer pool from this table at import (2.8.9).
+    "fetch-width-rows.json",
     "native_wrf_support_v1.json",
     "physics_params_registry_v1.json",
     "physics_registry_v2.json",
     "wrf_direct_v461_contract.json",
+    "terrain_clock_map.json",
+    "terrain_clock_map_local_face.json",
+    "terrain_clock_adaptive_local_face.json",
 }
 _TOOL_FILES = {"__init__.py", *HRRR_HELPERS}
 _FORBIDDEN_STAGED_FILES = {
-    f"gpuwm/{name}" for name in _TOP_LEVEL_EXCLUDES
+    f"woof/{name}" for name in _TOP_LEVEL_EXCLUDES
 } | {
     "woof/core/model.py",
     "woof/core/dycore.py",
@@ -682,6 +884,17 @@ _FORBIDDEN_STAGED_FILES = {
     "woof/io/wrfout.py",
 }
 
+#: The forecast-only half of woof/ingest/wrfrst.py, shared by its six rows
+#: below: apply_warm_start_physics and apply_warm_start_clock overlay a WRF
+#: restart file onto a LIVE forecast state, driver and model clock
+#: (woof/wrfinput_forecast.py and woof/prepared_domain_tree_forecast.py,
+#: neither staged).  Preparation reads and checks a wrfrst
+#: (discover_restart_files, read_wrfrst, check_restart_physics) without
+#: building a state, so none of these imports runs here.
+_WRFRST_LIVE_OVERLAY = ("apply_warm_start_physics and apply_warm_start_clock "
+                        "overlay a WRF restart file onto a live forecast "
+                        "state; preparation only reads and checks the file")
+
 _OPTIONAL_STAGED_IMPORTS = {
     ("woof/core/microphysics_transition.py", "woof.metal.array"):
         "optional Metal type detection catches ImportError; standalone "
@@ -690,6 +903,89 @@ _OPTIONAL_STAGED_IMPORTS = {
         "resident Metal edge launches and donor copies, reached only after "
         "positive MetalArray detection; standalone preparation uses its "
         "existing CPU or CUDA path",
+    ("woof/ocean/seaice/__init__.py", "woof.core.physics"):
+        "capture_precipitation reads the live microphysics snow ratio inside a "
+        "forecast step; preparation stages the module only for its OUTPUT "
+        "history table, which woof.io.wrf_output_schema reads at import",
+    ("woof/eclipse_windows.py", "woof.core.physics"):
+        "EclipseRadiation.apply couples the dimmed shortwave heating into a live "
+        "forecast step; preparation reads only the pinned Besselian windows "
+        "(eclipses_during) to record the ra_sw_eclipse namelist decision",
+    ("woof/earth2_fetch_cache.py", "woof.domain_wizard"):
+        "check_domain_coverage sizes a forecast domain in earth2_job; "
+        "standalone preparation only receives completed input artifacts",
+    ("woof/cyclone_tracks.py", "woof.cyclone_sources"):
+        "select_track is a forecast setup operation; preparation only reads "
+        "validate_lineage and never selects a tracked forecast",
+    ("woof/cyclone_tracks.py", "woof.domain_wizard"):
+        "layout and placement_report author forecast domains; preparation "
+        "only validates the recorded track lineage",
+    ("woof/cyclone_tracks.py", "woof.cyclone_setup"):
+        "layout and placement_report author forecast domains; preparation "
+        "only validates the recorded track lineage",
+    ("woof/earth2_run.py", "woof.domain_wizard"):
+        "prepare_launch authors a forecast configuration for the woof go "
+        "door, which is excluded from the standalone preparation wheel; "
+        "fetch and verification never call this forecast-only function",
+    ("woof/certify/pins.py", "woof.supervisor"):
+        "the installed-code fingerprint is resolved only when a forecast "
+        "capsule asks resolve_pins; the preparation wheel imports the "
+        "certification package for CPU compiler identity, without resolving "
+        "a forecast's installed-code pins or importing its supervisor",
+    ("woof/certify/capsule.py", "woof.supervisor"):
+        "forecast capsule code_identity reads the enclosing checkout through "
+        "the supervisor. The CPU kernel pack needs certify.compile_platform's "
+        "compiler fingerprint, whose package initializer imports capsule, but "
+        "standalone preparation emits no forecast certification capsule and "
+        "never calls code_identity; importing the compiler helpers does not "
+        "import the supervisor",
+    ("woof/core/aer_opt2.py", "woof.core.kernels"):
+        "forecast-only aer_opt = 2 device optics (optics_device); standalone "
+        "configuration only validates the user-aerosol options and values",
+    ("woof/ingest/wrfrst.py", "woof.io.restart"):
+        "the checkpoint manifest carriers the overlay fills, inside apply_warm_start_physics; "
+        + _WRFRST_LIVE_OVERLAY,
+    ("woof/ingest/wrfrst.py", "woof.core.physics"):
+        "the held-tendency coupling and physics cadence, inside apply_warm_start_physics; "
+        + _WRFRST_LIVE_OVERLAY,
+    ("woof/ingest/wrfrst.py", "woof.core.physics_inventory"):
+        "the PBL composition predicate (apply_warm_start_physics) and the restart-instant REFL_10CM microphysics roster (apply_warm_start_clock); "
+        + _WRFRST_LIVE_OVERLAY,
+    ("woof/ingest/wrfrst.py", "woof.core.radiation_carriers"):
+        "the held radiation carriers, inside apply_warm_start_physics; "
+        + _WRFRST_LIVE_OVERLAY,
+    ("woof/ingest/wrfrst.py", "woof.core.model"):
+        "the model clock's period marker, inside apply_warm_start_clock; "
+        + _WRFRST_LIVE_OVERLAY,
+    ("woof/ingest/wrfrst.py", "woof.core.refl"):
+        "the restart-instant REFL_10CM frame, inside apply_warm_start_clock; "
+        + _WRFRST_LIVE_OVERLAY,
+    ("woof/ingest/lateral_bc.py", "woof.core.dycore"):
+        "WRF_MUTS_SLOT inside _wrf_final_muts_arg, called only by the CUDA "
+        "_launch_finalize_field forecast boundary finalizer in strict mode; "
+        "preparation reads or writes boundary forcing without stepping a "
+        "state boundary or running an acoustic loop",
+    ("woof/core/chem_ageing.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
+    ("woof/core/chem_drydep_aerosol.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
+    ("woof/core/chem_dust.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
+    ("woof/core/chem_optics.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
+    ("woof/core/chem_seasalt.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
+    ("woof/core/chem_settling.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
+    ("woof/core/chem_sulfur.py", "woof.core.kernels"):
+        "CUDA launch only; preparation reads process allocation rows "
+        "without compiling or stepping a chemistry kernel",
     ("woof/core/adaptive_clock.py", "woof.core.physics"):
         "the physics cadence helpers inside _refresh_physics_cadence, "
         "called by the executing adaptive driver. The function returns "
@@ -754,6 +1050,15 @@ _OPTIONAL_STAGED_IMPORTS = {
         "the [static] parser runs only when load_config admits child_static, "
         "which only the excluded offline child route requests; ordinary "
         "RunConfig loading refuses [static] before reaching this import",
+    ("woof/core/chem_plumerise_cache.py", "woof.certify.kernel_manifest"):
+        "the kernel manifest record written beside the plume unit's card "
+        "compile, which only a running forecast's plume process performs; "
+        "a preparation reads the smoke processes' ALLOCATES and never "
+        "compiles",
+    ("woof/core/chem_vertmx.py", "woof.core.kernels"):
+        "the card launch of the vertmx process's step(), which only a "
+        "running forecast's chem operator calls; a preparation allocates "
+        "the process's arrays and never steps it",
     ("woof/core/streaming.py", "woof.core.preflight"):
         "forecast tree admission and execution estimates; standalone preparation "
         "only reads StreamingOptions and does not call these planners",
@@ -834,6 +1139,12 @@ _OPTIONAL_STAGED_IMPORTS = {
         "decode_window, available_host_bytes, threads_available and "
         "gfs_decoded_lead_bytes, which price the window from the fetched "
         "files themselves and reach no preflight import",
+    ("woof/doctor.py", "woof.core.tempo_rust"):
+        "the TEMPO initialization library's doctor line (2.9.0), imported "
+        "function-locally inside _tempo_library_check, which returns no "
+        "line at all when the seam is absent.  TEMPO is forecast physics: "
+        "this wheel stages none of it and bundles no TEMPO library, so the "
+        "line belongs only to an install that can run the scheme",
     ("woof/ingest/boundary_stream.py", "woof.core.urban_state"):
         "the BEM workspace count reader in prepared_head_urban_columns; "
         "forecast_installed() is checked before this import, so a "
@@ -868,9 +1179,19 @@ _OPTIONAL_STAGED_IMPORTS = {
     ("woof/ingest/hrrr_physics.py", "woof.core.radiation_composition"):
         "GPU physics initialization after the standalone --prepare-only return, "
         "on the same boundary as this module's existing core.physics import",
+    ("woof/ingest/wrfinput.py", "woof.core.ruc_runtime"):
+        "initialize_wrfinput_physics performs RUC cold initialization only "
+        "after importing CuPy and creating the executing physics driver; "
+        "host input reading and preparation do not call this function",
     ("woof/ingest/wrfinput.py", "woof.core.physics"):
         "initialize_wrfinput_physics imports CuPy first and initializes an "
         "executing forecast; file reading and host state restoration do not call it",
+    ("woof/ingest/wrfinput.py", "woof.core.ruc_runtime"):
+        "RUC's cold start (ruc_cold_start, 2.9.0 aa76ba05b) inside "
+        "initialize_wrfinput_physics, on the same boundary as the "
+        "woof.core.physics import above: it runs on the forecast's "
+        "constructed physics driver after the native file's fields are "
+        "restored onto it; file reading and host state restoration do not call it",
     ("woof/experiment.py", "woof.spectral_ops.config"):
         "the [spectral_numerics] TABLE PARSER, imported function-locally "
         "and only when a config actually carries the table.  The "
@@ -905,6 +1226,11 @@ _OPTIONAL_STAGED_IMPORTS = {
         "inside the loader and only for a module whose name starts with "
         "noahmp_; RW-WPS stages no forecast executor and compiles no CUDA "
         "module, so the loader never takes that branch here",
+    ("woof/core/kernels/__init__.py", "woof.core.fast_sbm_cuda"):
+        "FAST_SBM's own direct NVRTC loader (709a2e078), reached only "
+        "after the CuPy import inside load_module and only when the name "
+        "is fast_sbm; RW-WPS stages no forecast executor and compiles no "
+        "CUDA module, so the loader never takes that branch here",
     ("woof/core/nest_interp.py", "woof.certify.kernel_manifest"):
         "certification kernel-manifest recording, reached only after the "
         "CuPy import inside the loader; RW-WPS stages no forecast executor "
@@ -964,6 +1290,18 @@ _OPTIONAL_STAGED_IMPORTS = {
         "the reflectivity stash the streamed history writer consumes, "
         "imported inside the publish path. Same reason as woof.core.dycore "
         "directly above: no config-loading path reaches it",
+    ("woof/core/streaming.py", "woof.core.chem_history"):
+        "completed forecast chemistry history, imported by the live tile "
+        "history hook; standalone preparation reads StreamingOptions and "
+        "does not publish a running tile's history",
+    ("woof/core/streaming.py", "woof.sfire_debug"):
+        "fire-only diagnostic forecast sweeps, imported only when the "
+        "live streamed runner executes fire_test_steps; preparation "
+        "validates tile options without stepping a fire domain",
+    ("woof/ingest/wrfinput.py", "woof.core.chem_sfire"):
+        "native smoke conversion in initialize_wrfinput's forecast state "
+        "constructor; preparation reads raw fire-static and smoke fields "
+        "without constructing the coupled CUDA forecast",
     ("woof/core/streaming.py", "woof.core.nest_stream"):
         "the NEST streamed transport, imported inside three functions that "
         "each require a forecast: prepared_domain_builder.build wires the "
@@ -1026,6 +1364,24 @@ _OPTIONAL_STAGED_IMPORTS = {
         "missing it",
     ("woof/ingest/hrrr_physics.py", "woof.core.physics"):
         "forecast-only physics setup after the public --prepare-only return",
+    # 399b3c5abe seeds the f00 cloud fraction with the radiation's own
+    # cal_cldfra / legacy cloud-fraction flags, in the same function as the
+    # woof.core.physics._prepare_atmosphere import directly above, so it is
+    # the same forecast-only branch.  Followed, the closure staged
+    # woof.core.rrtmgp, whose RadiationResult import reaches the forbidden
+    # woof.core.physics and refused the whole staging.
+    ("woof/ingest/hrrr_physics.py", "woof.core.rrtmgp"):
+        "forecast-only f00 cloud-fraction seeding beside the "
+        "woof.core.physics import of the same function",
+    ("woof/ingest/hrrr_physics.py", "woof.core.rrtmg_legacy"):
+        "forecast-only f00 cloud-fraction seeding beside the "
+        "woof.core.physics import of the same function",
+    # 8c8de91ad6 (restored in 2.9.4): the mapped route asks the standby
+    # door for a prestaged boundary handle; the standalone package has no
+    # standby door, and mapped_direct takes the ImportError as "none".
+    ("woof/mapped_direct.py", "woof.boundary_prestage"):
+        "standby's prestaged boundary handle; absent in the preparation "
+        "package, where mapped_direct reads it as no prestage",
     ("woof/source_availability.py", "woof.domain_wizard"):
         "availability() prices the download a run of a given length makes with "
         "the wizard's fetch_window; it answers the web page's calendar and the "
@@ -1073,7 +1429,7 @@ def _names_verify(module: str) -> bool:
     return module == "woof.verify" or module.startswith("woof.verify.")
 
 
-def _staged_verification_imports(destination: Path) -> list[dict[str, object]]:
+def _staged_verification_imports(destination: Path, *, scan=None) -> list[dict[str, object]]:
     """Return developer-only ``woof.verify`` imports in staged runtime code.
 
     RW-WPS intentionally excludes the verification package.  Scanning every
@@ -1081,10 +1437,13 @@ def _staged_verification_imports(destination: Path) -> list[dict[str, object]]:
     relying on a hand-maintained list of public entry points.  Direct imports
     and literal dynamic imports are both rejected.
     """
+    if scan is None:
+        with _StagedImportScan() as scan:
+            return _staged_verification_imports(destination, scan=scan)
+    scan.refresh(destination)
     violations: list[dict[str, object]] = []
     for source in sorted(destination.rglob("*.py")):
-        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        for node in ast.walk(tree):
+        for node in scan.facts[source][1]:
             candidates: list[tuple[str, str]] = []
             if isinstance(node, ast.Import):
                 candidates.extend((alias.name, "import") for alias in node.names)
@@ -1129,8 +1488,257 @@ def _is_source_module(source_root: Path, module: str) -> bool:
             or (path / "__init__.py").is_file())
 
 
+def _complete_staged_import_closure(destination: Path, derived_modules=None, *, scan=None) -> list[str]:
+    """Stage required package imports to a fixed point without importing code.
+
+    The existing manifest defines the preprocessing doors and their optional
+    forecast boundaries. New required modules follow their imports, including
+    imports inside functions and package aliases. An excluded executor, missing
+    source or verification dependency still refuses the build.
+    """
+    if scan is None:
+        with _StagedImportScan() as scan:
+            return _complete_staged_import_closure(destination, derived_modules, scan=scan)
+    derived_modules = set() if derived_modules is None else derived_modules
+    added: list[str] = []
+    requested_imports = _staged_internal_imports(destination, source_root=REPO, scan=scan)
+    while missing := _staged_internal_imports(
+            destination, source_root=REPO, derived_modules=derived_modules, scan=scan):
+        pending: dict[str, Path] = {}
+        for record in missing:
+            module = str(record["module"])
+            parts = module.split(".")
+            for count in range(1, len(parts) + 1):
+                path = REPO.joinpath(*parts[:count])
+                source = path / "__init__.py" if path.is_dir() else path.with_suffix(".py")
+                relative = source.relative_to(REPO).as_posix()
+                if relative in _FORBIDDEN_STAGED_FILES or _names_verify(module):
+                    raise RuntimeError(
+                        "RW-WPS wheel staging has unresolved internal imports: "
+                        f"excluded executor or verification module: {record}; "
+                        f"required by {requested_imports}")
+                if not source.is_file():
+                    raise RuntimeError(
+                        "RW-WPS wheel staging has unresolved internal imports: "
+                        f"no package source: {record}; required by {requested_imports}")
+                if not (destination / relative).is_file():
+                    pending[relative] = source
+        if not pending:
+            raise RuntimeError(f"RW-WPS import closure made no progress: {missing}")
+        for relative, source in sorted(pending.items()):
+            _copy_source(source, destination / relative)
+            added.append(relative)
+            if source.name != "__init__.py":
+                derived_modules.add(".".join(Path(relative).with_suffix("").parts))
+    return added
+
+
+def _analyze_staged_source(item):
+    """Parse one content version and retain compact import facts, in a worker."""
+    source, text, owner, is_package, keep_tree = item
+    tree = ast.parse(text, filename=str(source))
+    nodes = []
+    type_checking_nodes = set()
+    incoming = {}
+    package = owner if is_package else owner.rpartition(".")[0]
+
+    def retain(module, names=None):
+        if module not in incoming:
+            incoming[module] = names
+        elif incoming[module] is not None:
+            if names is None:
+                incoming[module] = None
+            else:
+                incoming[module].update(names)
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            nodes.append(node)
+        if isinstance(node, ast.If):
+            marker = node.test
+            if ((isinstance(marker, ast.Name) and marker.id == "TYPE_CHECKING")
+                    or (isinstance(marker, ast.Attribute) and marker.attr == "TYPE_CHECKING")):
+                for statement in node.body:
+                    type_checking_nodes.update(ast.walk(statement))
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                retain(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            resolved = node.module or ""
+            if node.level:
+                parts = package.split(".")
+                resolved = ".".join(parts[:len(parts) - node.level + 1]
+                                    + ([resolved] if resolved else []))
+            retain(resolved, None if any(alias.name == "*" for alias in node.names)
+                   else {alias.name for alias in node.names})
+            for alias in node.names:
+                retain(f"{resolved}.{alias.name}")
+        elif isinstance(node, ast.Call) and node.args:
+            argument = node.args[0]
+            # The symbol closure deliberately treats ANY literal module lookup
+            # conservatively, not only import_module and __import__ calls.
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                retain(argument.value)
+                function = node.func
+                if ((isinstance(function, ast.Name) and function.id == "__import__")
+                        or (isinstance(function, ast.Attribute)
+                            and function.attr == "import_module")):
+                    nodes.append(node)
+    # Only derived modules need function bodies for symbol reachability. Sending
+    # every original AST back would serialize the stage on Python unpickling.
+    return (tree if keep_tree else None, nodes,
+            type_checking_nodes.intersection(nodes), incoming)
+
+
+class _StagedImportScan:
+    """One stage's content cache and parallel parser, never shared across stages.
+
+    Only added or changed files are parsed. Importers can change a derived
+    module's reachable symbols at any iteration, so every pass rechecks the
+    compact facts against the current module set and importer index.
+    """
+
+    def __init__(self):
+        self.contents = {}
+        self.facts = {}
+        self.sources = []
+        self.incoming = {}
+        self.source_modules = {}
+        self.unreached = {}
+        self.pool = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        if self.pool is not None:
+            self.pool.shutdown()
+
+    def refresh(self, destination, derived_modules=()):
+        sources = []
+        changed = []
+        for source in sorted(destination.rglob("*.py")):
+            parts = list(source.relative_to(destination).with_suffix("").parts)
+            is_package = parts[-1] == "__init__"
+            if is_package:
+                parts.pop()
+            owner = ".".join(parts)
+            sources.append((source, owner, is_package))
+            text = source.read_text(encoding="utf-8")
+            keep_tree = owner in (derived_modules or ())
+            if (self.contents.get(source) != text
+                    or (keep_tree and self.facts[source][0] is None)):
+                self.contents[source] = text
+                changed.append((source, text, owner, is_package, keep_tree))
+        if changed:
+            if self.pool is None and len(changed) > 1:
+                cores = (len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity")
+                         else os.cpu_count() or 1)
+                workers = min(cores, len(changed))
+                if os.name == "nt":
+                    # ProcessPoolExecutor's Windows wait API admits at most 61 workers.
+                    workers = min(workers, 61)
+                # spawn on every platform: forkserver binds an AF_UNIX socket
+                # under the temporary directory, and a long TMPDIR (CI runner
+                # work trees, HPC scratch paths) exceeds the 107-byte socket
+                # path limit ("AF_UNIX path too long").
+                self.pool = ProcessPoolExecutor(
+                    max_workers=workers,
+                    mp_context=multiprocessing.get_context("spawn"))
+            results = (self.pool.map(_analyze_staged_source, changed)
+                       if self.pool is not None else map(_analyze_staged_source, changed))
+            for item, facts in zip(changed, results):
+                self.facts[item[0]] = facts
+        self.sources = [(source, owner, package) for source, owner, package in sources if owner]
+        self.incoming = {}
+        for source, owner, is_package in self.sources:
+            relative = owner.replace(".", "/") + ("/__init__.py" if is_package else ".py")
+            for module, names in self.facts[source][3].items():
+                if (relative, module) in _OPTIONAL_STAGED_IMPORTS:
+                    continue
+                if module not in self.incoming:
+                    self.incoming[module] = None if names is None else set(names)
+                elif self.incoming[module] is not None:
+                    if names is None:
+                        self.incoming[module] = None
+                    else:
+                        self.incoming[module].update(names)
+
+    def unreached_function_nodes(self, module, tree):
+        """Cache reachability by AST identity and the current imported symbols."""
+        imported = self.incoming.get(module)
+        key = (id(tree), module, None if imported is None else frozenset(imported))
+        hit = self.unreached.get(key)
+        if hit is None or hit[0] is not tree:
+            hit = (tree, _unreached_function_nodes(module, tree, self.incoming))
+            self.unreached[key] = hit
+        return hit[1]
+
+    def is_source_module(self, source_root, module):
+        key = (source_root, module)
+        if key not in self.source_modules:
+            self.source_modules[key] = _is_source_module(source_root, module)
+        return self.source_modules[key]
+
+
+def _unreached_function_nodes(module, tree, incoming):
+    """Functions outside an added module's imported symbol closure.
+
+    A module import, star import or dynamic module lookup is conservative and
+    retains every function. Named imports retain module initialization and
+    all directly referenced local functions. Source bytes remain unchanged.
+    """
+    imported = incoming.get(module)
+    if imported is None:
+        return set()
+    names = set(imported)
+    if not names:
+        return set()
+    definitions = {node.name: node for node in tree.body
+                   if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    active = [node for node in tree.body if node not in definitions.values()]
+    for definition in definitions.values():
+        active.extend(definition.decorator_list)
+        if isinstance(definition, ast.ClassDef):
+            active.extend(definition.bases)
+            active.extend(definition.keywords)
+            active.extend(node for node in definition.body if not isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef)))
+            for method in definition.body:
+                if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    active.extend(method.decorator_list)
+                    active.extend(method.args.defaults)
+                    active.extend(value for value in method.args.kw_defaults
+                                  if value is not None)
+        else:
+            active.extend(definition.args.defaults)
+            active.extend(value for value in definition.args.kw_defaults if value is not None)
+    for name in names & definitions.keys():
+        active.append(definitions.pop(name))
+    while active:
+        node = active.pop()
+        for used in ast.walk(node):
+            if isinstance(used, ast.Call) and isinstance(used.func, ast.Name) and used.func.id in {
+                    "globals", "locals", "eval", "exec"}:
+                return set()
+            if isinstance(used, ast.Name):
+                names.add(used.id)
+        for name in names & definitions.keys():
+            active.append(definitions.pop(name))
+    unreached = set()
+    for definition in definitions.values():
+        functions = ([definition] if not isinstance(definition, ast.ClassDef)
+                     else [node for node in ast.walk(definition)
+                           if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))])
+        for function in functions:
+            for statement in function.body:
+                unreached.update(ast.walk(statement))
+    return unreached
+
+
 def _staged_internal_imports(
     destination: Path, *, source_root: Path, optional: bool = False,
+    derived_modules=None, scan=None,
 ) -> list[dict[str, object]]:
     """Return imports whose internal module is absent from wheel staging.
 
@@ -1144,40 +1752,23 @@ def _staged_internal_imports(
     tree (``source_root``) can say whether a name is a submodule or an
     attribute of its package, which is why the scan is given one.
     """
-    modules: set[str] = set()
-    sources: list[tuple[Path, str, bool]] = []
-    for source in sorted(destination.rglob("*.py")):
-        relative = source.relative_to(destination)
-        parts = list(relative.with_suffix("").parts)
-        is_package = parts[-1] == "__init__"
-        if is_package:
-            parts.pop()
-        module = ".".join(parts)
-        if module:
-            modules.add(module)
-            sources.append((source, module, is_package))
-
+    if scan is None:
+        with _StagedImportScan() as scan:
+            return _staged_internal_imports(
+                destination, source_root=source_root, optional=optional,
+                derived_modules=derived_modules, scan=scan)
+    scan.refresh(destination, derived_modules)
+    sources = scan.sources
+    modules = {module for _, module, _ in sources}
     violations: list[dict[str, object]] = []
     for source, current_module, is_package in sources:
-        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        type_checking_nodes = set()
-        for conditional in ast.walk(tree):
-            if not isinstance(conditional, ast.If):
-                continue
-            marker = conditional.test
-            is_type_checking = (
-                isinstance(marker, ast.Name) and marker.id == "TYPE_CHECKING"
-            ) or (
-                isinstance(marker, ast.Attribute)
-                and marker.attr == "TYPE_CHECKING"
-            )
-            if is_type_checking:
-                for statement in conditional.body:
-                    type_checking_nodes.update(ast.walk(statement))
+        tree, nodes, type_checking_nodes, _ = scan.facts[source]
+        unreached = (scan.unreached_function_nodes(current_module, tree)
+                     if current_module in (derived_modules or ()) else set())
         current_package = (
             current_module if is_package else current_module.rpartition(".")[0]
         )
-        for node in ast.walk(tree):
+        for node in nodes:
             if node in type_checking_nodes:
                 continue
             candidates: list[tuple[str, str]] = []
@@ -1204,7 +1795,7 @@ def _staged_internal_imports(
                         candidates.extend(
                             (f"{resolved}.{alias.name}", "from")
                             for alias in node.names
-                            if alias.name != "*" and _is_source_module(
+                            if alias.name != "*" and scan.is_source_module(
                                 source_root, f"{resolved}.{alias.name}"))
             elif isinstance(node, ast.Call) and node.args:
                 argument = node.args[0]
@@ -1225,10 +1816,18 @@ def _staged_internal_imports(
                 root = module.partition(".")[0]
                 if root not in {"woof", "tools"}:
                     continue
+                # The folded hex model is a component beside the preparation package, as gpuwm-hex is to
+                # the engine: its lazy doors (the woof hex store in woof/output_formats.py) never reach it.
+                if module == "woof.hex" or module.startswith("woof.hex."):
+                    continue
                 if module not in modules:
                     relative_path = source.relative_to(destination).as_posix()
                     reason = _OPTIONAL_STAGED_IMPORTS.get(
                         (relative_path, module))
+                    if reason is None and node in unreached:
+                        reason = (
+                            "function outside the named imports from staged preprocessing "
+                            "modules; module imports and dynamic lookup retain all functions")
                     if (reason is not None) != optional:
                         continue
                     record = {
@@ -1284,6 +1883,7 @@ geog = ["rasterio>=1.3", "pyproj>=3.6"]
 
 [project.scripts]
 rw-wps = "woof.source_cli:main"
+gpuwm-sfire-static = "woof.static.sfire:main"
 woof-wrf-init = "woof.source_cli:main"
 woof-wrf-runtime-check = "woof.native_wrf_distribution:main"
 woof-mapped-inspect = "woof.mapped_source:main"
@@ -1297,12 +1897,26 @@ woof = [
   "physics_params_registry_v1.json",
   "physics_registry_v2.json",
   "wrf_direct_v461_contract.json",
+  "terrain_clock_map.json",
+  "terrain_clock_map_local_face.json",
+  "terrain_clock_adaptive_local_face.json",
   "authorities/*.json",
   "core/kernels/*.cu",
   "core/kernels/*.cuh",
   "data/noah_tables/*.TBL",
   "data/noah_tables/*.md",
+  "data/surface_ocean.json",
+  "data/output_formats.json",
+  "data/chem/*.json",
+  "data/chem/*.md",
+  "data/chem/species/*.json",
+  "data/chem/sets/*.json",
+  "data/chem/sources/*.json",
+  "data/chem/diagnostics/*.json",
+  "data/chem/wesely/*.json",
+  "data/chem/wesely/*.md",
   "data/thompson/fork-build/*.F90",
+  "data/wsm_family/schemes.json",
 ]
 tools = ["*.sh"]
 """
@@ -1363,12 +1977,9 @@ def _require_tracked(source: Path) -> None:
             "tracked files only; run it from a clone (CI's "
             "actions/checkout leaves one), not from an extracted "
             "archive")
-    subprocess.run(
-        ["git", "-C", str(REPO), "ls-files", "--error-unmatch", relative],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if relative not in _tracked_source_paths(REPO):
+        raise subprocess.CalledProcessError(
+            1, ["git", "-C", str(REPO), "ls-files", "--error-unmatch", relative])
 
 
 def _copy_source(source: Path, destination: Path) -> None:
@@ -1403,6 +2014,10 @@ def _stage_rw_wps_python_project(destination: Path) -> dict[str, object]:
         # observation files is preprocessing, which is what this wheel is.
         ("obs", _OBS_EXCLUDES),
         ("static", set()),
+        # The rental time ledger (2.8.9): fetch, geography, table and
+        # composition stages emit timing records through it. Stdlib only;
+        # the waterfall's matplotlib import is function-local.
+        ("timeline", set()),
     ):
         for source in sorted((REPO / "woof" / subpackage).glob("*.py")):
             if source.name not in excludes:
@@ -1439,6 +2054,39 @@ def _stage_rw_wps_python_project(destination: Path) -> dict[str, object]:
                 source,
                 package / "data" / "noah_tables" / source.name,
             )
+    _copy_source(REPO / "woof/data/wsm_family/schemes.json",
+                 package / "data/wsm_family/schemes.json")
+    # Configuration loads the ocean selector/default table before any
+    # forecast allocation, including in the preparation-only package.
+    _copy_source(REPO / "woof" / "data" / "surface_ocean.json",
+                 package / "data" / "surface_ocean.json")
+    # The output format table (Icechunk, 2.9.10): woof.io.history_selection
+    # reads it through woof.output_formats at import, so every config load
+    # does; without it the staged package could not load a configuration.
+    _copy_source(REPO / "woof" / "data" / "output_formats.json",
+                 package / "data" / "output_formats.json")
+    # The ocean product rows (2.9.4 ocean lanes): woof.io.wrf_output_schema
+    # merges them into the history vocabulary at import, so reading any
+    # config with an [output] block reads this file.
+    _copy_source(REPO / "woof" / "ocean" / "rows.json",
+                 package / "ocean" / "rows.json")
+    # The lake state and lake ice source tables (cap-lake, 2.9.4):
+    # woof.config.validate_run_config reads the lake-state rows on every
+    # run config, and woof.ingest.lake_ice reads the ice rows at preparation.
+    for source in sorted((REPO / "woof" / "data" / "surface_obs").glob("*.toml")):
+        _copy_source(source, package / "data" / "surface_obs" / source.name)
+    # The chem table (woof.chem_table, staged with the top-level modules):
+    # its schema, rows, sets, sources and diagnostics, which a chem
+    # preparation loads by name.  Not the oracle fixtures, which only the
+    # engine's tests read.
+    chem_root = REPO / "woof" / "data" / "chem"
+    for pattern in ("*.json", "*.md", "species/*.json", "sets/*.json",
+                    "sources/*.json", "diagnostics/*.json",
+                    "wesely/*.json", "wesely/*.md"):
+        for source in sorted(chem_root.glob(pattern)):
+            if source.is_file():
+                _copy_source(source, package / "data" / "chem"
+                             / source.relative_to(chem_root))
     # Fork tables are generated from pinned public inputs at actual first use.
     # Ship only the small original CPU harness, never the 345 MB coefficient set.
     for source in sorted((REPO / "woof" / "data" / "thompson" / "fork-build").glob("*.F90")):
@@ -1456,39 +2104,43 @@ def _stage_rw_wps_python_project(destination: Path) -> dict[str, object]:
         newline="\n",
     )
 
-    files = sorted(
-        path.relative_to(destination).as_posix()
-        for path in destination.rglob("*") if path.is_file()
-    )
-    forbidden = sorted(_FORBIDDEN_STAGED_FILES & set(files))
-    if forbidden:
-        raise RuntimeError(
-            f"RW-WPS wheel staging contains forecast executors: {forbidden}"
+    with _StagedImportScan() as scan:
+        derived_modules = set()
+        import_closure_files = _complete_staged_import_closure(destination, derived_modules, scan=scan)
+        files = sorted(
+            path.relative_to(destination).as_posix()
+            for path in destination.rglob("*") if path.is_file()
         )
-    verification_imports = _staged_verification_imports(destination)
-    if verification_imports:
-        raise RuntimeError(
-            "RW-WPS wheel staging imports omitted developer verification "
-            f"modules: {verification_imports}"
-        )
-    internal_imports = _staged_internal_imports(
-        destination, source_root=REPO)
-    if internal_imports:
-        raise RuntimeError(
-            "RW-WPS wheel staging has unresolved internal imports: "
-            f"{internal_imports}"
-        )
-    optional_internal_imports = _staged_internal_imports(
-        destination, source_root=REPO, optional=True)
-    return {
-        "distribution": PYTHON_DISTRIBUTION,
-        "file_count": len(files),
-        "files": files,
-        "forecast_executor_files": forbidden,
-        "verification_imports": verification_imports,
-        "unresolved_internal_imports": internal_imports,
-        "optional_internal_imports": optional_internal_imports,
-    }
+        forbidden = sorted(_FORBIDDEN_STAGED_FILES & set(files))
+        if forbidden:
+            raise RuntimeError(
+                f"RW-WPS wheel staging contains forecast executors: {forbidden}"
+            )
+        verification_imports = _staged_verification_imports(destination, scan=scan)
+        if verification_imports:
+            raise RuntimeError(
+                "RW-WPS wheel staging imports omitted developer verification "
+                f"modules: {verification_imports}"
+            )
+        internal_imports = _staged_internal_imports(
+            destination, source_root=REPO, derived_modules=derived_modules, scan=scan)
+        if internal_imports:
+            raise RuntimeError(
+                "RW-WPS wheel staging has unresolved internal imports: "
+                f"{internal_imports}"
+            )
+        optional_internal_imports = _staged_internal_imports(
+            destination, source_root=REPO, optional=True, derived_modules=derived_modules, scan=scan)
+        return {
+            "distribution": PYTHON_DISTRIBUTION,
+            "file_count": len(files),
+            "files": files,
+            "import_closure_files": import_closure_files,
+            "forecast_executor_files": forbidden,
+            "verification_imports": verification_imports,
+            "unresolved_internal_imports": internal_imports,
+            "optional_internal_imports": optional_internal_imports,
+        }
 
 
 def _run(
@@ -1535,6 +2187,35 @@ def _cargo_release_environment(
     environment["CARGO_TARGET_DIR"] = str(target_dir)
     environment["SOURCE_DATE_EPOCH"] = source_date_epoch
     return environment
+
+
+def _stage_decoder_cargo_registry(destination: Path) -> None:
+    """Copy the standalone decoder's locked registry closure for its build."""
+    registry = REPO / "tools/rustwx/vendor/crates-io"
+    lock = tomllib.loads((REPO / "tools/grib1_bridge/Cargo.lock").read_text())
+    selected = {}
+    for package in lock["package"]:
+        if not package.get("source", "").startswith("registry+"):
+            continue
+        source = registry / f"{package['name']}-{package['version']}"
+        if not source.is_dir():
+            source = registry / package["name"]
+        metadata = tomllib.loads((source / "Cargo.toml").read_text())["package"]
+        checksum = json.loads((source / ".cargo-checksum.json").read_text())["package"]
+        if ((metadata["name"], metadata["version"]) != (package["name"], package["version"])
+                or checksum != package["checksum"]):
+            raise ValueError(f"{source}: registry identity or checksum differs from the decoder lock")
+        selected[source.relative_to(REPO).as_posix()] = source.name
+    # Copy tracked members only: an ignored target or cache must not become
+    # part of a standalone build merely because it exists in the checkout.
+    for relative in sorted(_tracked_source_paths(REPO)):
+        parent = Path(relative).parts[:5]
+        name = selected.get("/".join(parent))
+        if name is not None:
+            source = REPO / relative
+            target = destination / name / Path(relative).relative_to("/".join(parent))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
 
 
 def build_release(args: argparse.Namespace) -> dict[str, object]:
@@ -1593,6 +2274,8 @@ def build_release(args: argparse.Namespace) -> dict[str, object]:
             target_dir=cargo_target,
             source_date_epoch=source_date_epoch,
         )
+        decoder_registry = temporary / "decoder-registry"
+        _stage_decoder_cargo_registry(decoder_registry)
         # One build per workspace the bundle's declaration names, into
         # one target directory, which is the shape the release bridge
         # builder already uses.  Reading the workspaces off the table
@@ -1606,7 +2289,7 @@ def build_release(args: argparse.Namespace) -> dict[str, object]:
                 raise FileNotFoundError(
                     f"the standalone bundle declares bridges from "
                     f"{workspace} and this checkout has no {manifest}")
-            _run([
+            command = [
                 "cargo",
                 "build",
                 "--manifest-path",
@@ -1614,7 +2297,11 @@ def build_release(args: argparse.Namespace) -> dict[str, object]:
                 "--release",
                 "--locked",
                 "--offline",
-            ], cwd=manifest.parent, env=environment)
+            ]
+            if workspace == "tools/grib1_bridge":
+                command += ["--config", "source.vendored-sources.directory="
+                            + json.dumps(str(decoder_registry))]
+            _run(command, cwd=manifest.parent, env=environment)
         native = cargo_target / "release"
         distribution_args = argparse.Namespace(
             wheel=wheels[0],

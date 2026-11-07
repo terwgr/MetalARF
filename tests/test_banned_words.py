@@ -66,7 +66,10 @@ def first_party_text_files() -> list[Path]:
             directory = stack.pop()
             for entry in sorted(directory.iterdir()):
                 if entry.is_dir():
-                    if entry.name not in SKIPPED_DIRECTORY_NAMES:
+                    # Recast WOOF: woof/hex is the hex model folded in, whose own
+                    # text and word rules come with it.
+                    if (entry.name not in SKIPPED_DIRECTORY_NAMES
+                            and entry != REPOSITORY_ROOT / "woof" / "hex"):
                         stack.append(entry)
                 elif entry.suffix in TEXT_SUFFIXES:
                     found.append(entry)

@@ -33,3 +33,27 @@ def submit_linear_boundary(state, value, tendency, out_value, out_tendency,
         "evaluate_linear_boundary", flat,
         {"seconds": float(np.float32(seconds)), "count": int(count)},
         exact_policy=False, grid_size=count)
+
+
+def submit_rational_boundary(state, value, tendency, quadratic, rate,
+                             out_value, out_tendency, seconds):
+    """Evaluate one resident FP32 rational-time-law boundary side."""
+    if not getattr(state, "_metal_setup_state", False):
+        raise TypeError("Metal boundary evaluation requires a Metal DomainState")
+    names = ("value", "tendency", "quadratic", "rate", "out_value",
+             "out_tendency")
+    arrays = (value, tendency, quadratic, rate, out_value, out_tendency)
+    if any(not isinstance(array, MetalArray) for array in arrays):
+        raise TypeError("Metal boundary evaluation requires MetalArray resources")
+    if any(array.dtype != np.dtype(np.float32) for array in arrays):
+        raise TypeError("Metal boundary evaluation requires FP32 resources")
+    count = value.size
+    if count == 0:
+        return None
+    if any(array.size != count for array in arrays[1:]):
+        raise ValueError("boundary evaluation arrays must have equal size")
+    flat = {name: array.view((count,)) for name, array in zip(names, arrays)}
+    return state._array_module.context.submit_kernel(
+        "evaluate_rational_boundary", flat,
+        {"seconds": float(np.float32(seconds)), "count": int(count)},
+        exact_policy=False, grid_size=count)

@@ -48,6 +48,7 @@ what WRF does:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import sys
 from typing import Mapping
 
 import numpy as np
@@ -541,6 +542,16 @@ class RucSoilState:
     #: as :class:`woof.ingest.soil.NoahSoilState`'s; EMPTY when no land
     #: column needed it.
     soil_temperature_repair: Mapping[str, object] = field(default_factory=dict)
+    #: real.exe's ``SMOIS = MAX(SMOIS, 0.005)`` for a layer source
+    #: (:func:`account_for_zero_ruc_soil_moisture`); EMPTY when nothing was
+    #: below it.
+    soil_moisture_floor: Mapping[str, object] = field(default_factory=dict)
+    #: The sea-ice cells of the Noah surface call, spelled as
+    #: :class:`woof.ingest.soil.NoahSoilState`'s ``sea_ice_cells``.
+    sea_ice_cells: np.ndarray | None = None
+    #: :mod:`woof.ingest.land_state`'s receipt (soil-moisture index remap
+    #: and same-model donor), spelled as NoahSoilState's.
+    land_state: Mapping[str, object] = field(default_factory=dict)
 
 
 def _midpoint_cm(name: str, prefix: str) -> int:
@@ -675,6 +686,7 @@ def preprocess_ruc_soil(
     soil_mesh=None,
     route=None,
     fractional_seaice: bool = False,
+    seaice_threshold: float = 100.0,
 ) -> RucSoilState:
     """Build a RUC initial soil state, in ``preprocess_noah_soil``'s signature.
 
@@ -773,6 +785,7 @@ def preprocess_ruc_soil(
     surface = preprocess_noah_soil(
         fields,
         **({"fractional_seaice": True} if fractional_seaice else {}),
+        **_threshold_keyword(seaice_threshold),
             soil_type=soil_type,
         deep_soil_temperature=deep_soil_temperature,
         lake_mask=lake_mask, lake_skin_temperature=lake_skin_temperature,
@@ -874,8 +887,9 @@ def preprocess_ruc_soil(
             surface.deep_soil_temperature)[:, rebuilt_columns].astype(
                 soil_temperature.dtype)
 
-    soil_moisture = columns.soil_moisture
-    liquid_moisture = np.array(columns.soil_moisture, copy=True)
+    soil_moisture, moisture_floor = account_for_zero_ruc_soil_moisture(
+        columns.soil_moisture, geometry)
+    liquid_moisture = np.array(soil_moisture, copy=True)
     tsk = surface.tsk
     if fractional_seaice:
         sea_water = None
@@ -886,6 +900,7 @@ def preprocess_ruc_soil(
         tsk, soil_temperature, soil_moisture, liquid_moisture = (
             fractional_sea_ice_post(
                 xice=surface.xice, tsk=tsk, sst=sea_water,
+                ice=surface.sea_ice_cells,
                 deep_soil_temperature=surface.deep_soil_temperature,
                 soil_temperature=soil_temperature,
                 soil_moisture=soil_moisture,
@@ -906,11 +921,84 @@ def preprocess_ruc_soil(
         level_thicknesses=columns.level_thicknesses,
         soil_texture_downscale=downscale_receipt,
         soil_temperature_repair=temperature_repair,
+        soil_moisture_floor=moisture_floor,
+        sea_ice_cells=surface.sea_ice_cells,
     )
 
 
+def _threshold_keyword(seaice_threshold) -> dict:
+    """``seaice_threshold`` for a soil call, empty at WRF's 100 K default
+    so a default call is the call it was before the field existed."""
+    if float(seaice_threshold) == 100.0:
+        return {}
+    return {"seaice_threshold": float(seaice_threshold)}
+
+
+#: real.exe's floor for a RUC column built from a LAYER source
+#: (``dyn_em/module_initialize_real.F`` v4.6.1 :3435-3446,
+#: ``account_for_zero_soil_moisture``, ``CASE ( RUCLSMSCHEME )``).
+_WRF_RUC_LAYER_MOISTURE_FLOOR = np.float32(0.005)
+
+
+def account_for_zero_ruc_soil_moisture(soil_moisture, geometry: str):
+    """WRF's ``account_for_zero_soil_moisture`` for ``sf_surface_physics=3``.
+
+    The linear surface anchor from a dry top layer can be negative even
+    when the input layer samples are within 0..1. The remapped 0 and 1 cm
+    nodes then fail cold-start admission without real.exe's layer floor.
+
+    real.exe never hands RUC that column: after the soil remap,
+    ``module_initialize_real.F`` :3435-3446 takes, for a
+    ``flag_soil_layers`` source, ``SMOIS = MAX(SMOIS, 0.005)`` on every
+    level of every column (the ``lqmi`` residual beside it is commented
+    out), and for a ``flag_soil_levels`` source does nothing.  This is that
+    branch, element for element, in float32.  Water columns already hold
+    1.0 and are unaffected.  It is announced with its count and minimum
+    rather than applied silently, and the receipt rides
+    :class:`RucSoilState`.  Returns ``(soil_moisture, receipt)``; the input
+    array is returned untouched (same object) when nothing is below.
+    """
+
+    if geometry != _LAYER_SOURCE:
+        return soil_moisture, {}
+    moisture = np.asarray(soil_moisture)
+    below = np.isfinite(moisture) & (moisture < _WRF_RUC_LAYER_MOISTURE_FLOOR)
+    if not below.any():
+        return soil_moisture, {}
+    per_level = {
+        f"SMOIS_L{level + 1}": int(np.count_nonzero(below[level]))
+        for level in range(moisture.shape[0]) if below[level].any()}
+    receipt = {
+        "policy": "wrf-ruc-layer-source-smois-max-0.005",
+        "wrf_citation": (
+            "dyn_em/module_initialize_real.F v4.6.1 :3435-3446 "
+            "account_for_zero_soil_moisture CASE (RUCLSMSCHEME), "
+            "flag_soil_layers arm"),
+        "floored_values": int(np.count_nonzero(below)),
+        "floored_columns": int(np.count_nonzero(below.any(axis=0))),
+        "per_level": per_level,
+        "min_pre_floor": float(np.min(moisture[below])),
+    }
+    from woof.static.rust_bridge import floor_ruc_layer_moisture
+    floored = floor_ruc_layer_moisture(moisture)
+    # "note:" on stderr: the prep door (woof.prep_output) puts only
+    # warning/note lines on screen, so a bare stdout line reached the
+    # details log alone and the floor was invisible at the door (2.8.8
+    # acceptance D-02).
+    print(
+        f"note: RUC soil moisture: {receipt['floored_values']} value(s) in "
+        f"{receipt['floored_columns']} column(s) below "
+        f"{float(_WRF_RUC_LAYER_MOISTURE_FLOOR):.3g} on {sorted(per_level)} "
+        f"(min {receipt['min_pre_floor']:.6g}, the layer source's "
+        "extrapolated surface anchor) raised to 0.005, as real.exe does for "
+        "RUC from a layer source (module_initialize_real.F:3441)",
+        file=sys.stderr)
+    return floored, receipt
+
+
 def fractional_sea_ice_post(*, xice, tsk, sst, deep_soil_temperature,
-                            soil_temperature, soil_moisture, liquid_moisture):
+                            soil_temperature, soil_moisture, liquid_moisture,
+                            ice=None):
     """real.exe's RUC sea-ice column under ``fractional_seaice = 1``.
 
     ``share/module_soil_pre.F`` adjust_for_seaice_post, the RUCLSMSCHEME arm
@@ -931,10 +1019,16 @@ def fractional_sea_ice_post(*, xice, tsk, sst, deep_soil_temperature,
     missing or outside 170..400 K blends with its own TSK, which is the
     ``flag_sst = 0`` arm for that cell.  Only called under
     ``fractional_seaice = 1``: at the default the binary arm is unchanged.
+
+    ``ice`` is the Noah call's ``sea_ice_cells``: the ``xice >= 0.02``
+    cells and the ``seaice_threshold`` cells (water colder than the
+    threshold, :341-342), which take this column with their XICE as
+    analysed -- possibly 0, so the blend is then the SST.  ``None`` keeps
+    the fraction-only decision ``xice > 0``.
     """
     f32 = np.float32
     xice = np.asarray(xice, dtype=f32)
-    ice = xice > f32(0.0)
+    ice = (xice > f32(0.0)) if ice is None else np.asarray(ice, dtype=bool)
     tsk = np.array(tsk, dtype=f32, copy=True)
     if sst is None:
         water = tsk
@@ -986,6 +1080,8 @@ def preprocess_land_surface_soil(
     route=None,
     fractional_seaice: bool = False,
     soil_no_source_land=None,
+    seaice_threshold: float = 100.0,
+    land_state=None,
 ):
     """Route a soil source to the selected land surface's own geometry.
 
@@ -1009,6 +1105,16 @@ def preprocess_land_surface_soil(
     :func:`woof.ingest.soil.island_soil_columns` instead, before either
     geometry reads its source profiles, so every scheme builds its levels
     from the same column.  ``None`` or an empty mask changes nothing.
+
+    ``land_state`` (:class:`woof.ingest.land_state.LandStateContext`) is
+    where and when the domain is.  Every call converts a source's soil
+    moisture to the target land model's hydraulics when their soil models
+    differ (the soil-moisture index remap, woof/data/soil/land-state.v1.json);
+    with a context, a same-model analysis that covers the domain (HRRR's RUC
+    soil for a RUC run over CONUS) then replaces it on the land it covers.
+    Named breakage: an ERA5 start put HTESSEL soil moisture into RUC as is,
+    0.36 against HRRR's 0.21, and T2 ran 1-2 C cold with no storms
+    (found 2026-10-26).
     """
 
     if not isinstance(fractional_seaice, bool):
@@ -1020,6 +1126,39 @@ def preprocess_land_surface_soil(
             fields, no_source_land=soil_no_source_land, soil_type=soil_type,
             landmask=landmask, lake_mask=lake_mask)
     scheme = int(sf_surface_physics)
+    from woof.ingest.land_state import (apply_land_state_donor,
+                                         convert_source_soil_moisture)
+
+    fields, land_receipt = convert_source_soil_moisture(
+        fields, sf_surface_physics=scheme, soil_type=soil_type,
+        landmask=landmask, lake_mask=lake_mask,
+        soil_layer_contract=soil_layer_contract)
+    state = _route_land_surface_soil(
+        fields, scheme=scheme, soil_type=soil_type,
+        deep_soil_temperature=deep_soil_temperature, lake_mask=lake_mask,
+        lake_skin_temperature=lake_skin_temperature,
+        soil_layer_contract=soil_layer_contract,
+        num_soil_layers=num_soil_layers, landmask=landmask, terrain=terrain,
+        source_orography=source_orography,
+        water_temperature=water_temperature,
+        water_temperature_policy=water_temperature_policy,
+        soil_mesh=soil_mesh, route=route,
+        fractional_seaice=fractional_seaice,
+        seaice_threshold=seaice_threshold)
+    state, land_receipt = apply_land_state_donor(
+        state, sf_surface_physics=scheme, context=land_state,
+        receipt=land_receipt, landmask=landmask, lake_mask=lake_mask)
+    import dataclasses
+    return dataclasses.replace(state, land_state=land_receipt)
+
+
+def _route_land_surface_soil(
+    fields, *, scheme, soil_type, deep_soil_temperature, lake_mask,
+    lake_skin_temperature, soil_layer_contract, num_soil_layers, landmask,
+    terrain, source_orography, water_temperature, water_temperature_policy,
+    soil_mesh, route, fractional_seaice, seaice_threshold,
+):
+    """The dispatch on the land-surface selector (see the caller)."""
     if scheme == RUCLSMSCHEME:
         # The landmask/terrain/source-orography seam is forwarded whole:
         # preprocess_ruc_soil implements it with preprocess_noah_soil's
@@ -1032,6 +1171,7 @@ def preprocess_land_surface_soil(
         return preprocess_ruc_soil(
             fields,
             **({"fractional_seaice": True} if fractional_seaice else {}),
+            **_threshold_keyword(seaice_threshold),
             soil_type=soil_type,
             deep_soil_temperature=deep_soil_temperature,
             lake_mask=lake_mask, lake_skin_temperature=lake_skin_temperature,
@@ -1053,6 +1193,7 @@ def preprocess_land_surface_soil(
         return preprocess_noah_soil(
             fields,
             **({"fractional_seaice": True} if fractional_seaice else {}),
+            **_threshold_keyword(seaice_threshold),
             soil_type=soil_type,
             deep_soil_temperature=deep_soil_temperature,
             lake_mask=lake_mask, lake_skin_temperature=lake_skin_temperature,

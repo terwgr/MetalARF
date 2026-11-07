@@ -92,3 +92,37 @@ def _arm() -> None:
 
 
 _arm()
+
+
+# Recast WOOF: a case that fails only because it read an input this tree leaves out is reported as a skip that
+# names the input and the rule (tests/_woof_snapshot.py says when, and why nothing else is skipped).  Here at the
+# root so the tests/ and tilestream/ suites both see it.
+_SNAPSHOT = pathlib.Path(__file__).resolve().parent / "tests" / "_woof_snapshot.py"
+_snapshot = None
+
+
+def _snapshot_module():
+    global _snapshot
+    if _snapshot is None and _SNAPSHOT.is_file():
+        spec = importlib.util.spec_from_file_location("_woof_snapshot", _SNAPSHOT)
+        _snapshot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_snapshot)
+    return _snapshot
+
+
+try:
+    import pytest
+except ImportError:  # imported outside a pytest run
+    pytest = None
+
+if pytest is not None:
+    @pytest.hookimpl(wrapper=True)
+    def pytest_runtest_makereport(item, call):
+        report = yield
+        if report.failed and call.excinfo is not None and _snapshot_module() is not None:
+            reason = _snapshot.skip_reason(call.excinfo.value)
+            if reason is not None:
+                _path, lineno, _name = item.location
+                report.outcome = "skipped"
+                report.longrepr = (str(item.path), (lineno or 0) + 1, f"Skipped: {reason}")
+        return report

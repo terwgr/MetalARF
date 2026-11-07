@@ -68,8 +68,40 @@ def _mapping_top_pa(profile_id: str) -> float | None:
     if vertical.get("kind") == "model_level":
         measured = json.loads((Path(__file__).parent / "fixtures" /
             "model-level-source-tops.json").read_text(encoding="utf-8"))["profiles"]
+        if profile_id not in measured:
+            # A generated atmosphere can splice into a measured donor's
+            # full pressure column. Require the pinned contributing mapping,
+            # the identical vertical coordinate and pressure selector, and a
+            # composition that actually supplies air_pressure from that donor.
+            from woof.source_authorities import packaged_contributing_mappings
+            authorities = packaged_authorities(profile_id)
+            donors = packaged_contributing_mappings(profile_id)
+            composition = json.loads(authorities["composition"].read_text())
+            inherited = []
+            for binding in composition.get("field_sources", {}).values():
+                if "air_pressure" not in binding.get("fields", ()):
+                    continue
+                donor = json.loads(donors[binding["mapping_role"]].read_text())
+                for candidate in measured:
+                    reference = json.loads(packaged_authorities(candidate)["mapping"].read_text())
+                    if (donor["coordinates"]["vertical"] == reference["coordinates"]["vertical"]
+                            and donor["fields"].get("air_pressure") == reference["fields"].get("air_pressure")
+                            and vertical.get("model_top_pressure_pa") == reference["coordinates"]["vertical"].get("model_top_pressure_pa")):
+                        inherited.append(candidate)
+            assert len(set(inherited)) == 1, f"{profile_id}: no unique measured pressure-column donor"
+            profile_id = inherited[0]
         assert profile_id in measured, f"{profile_id}: model-level pressure coverage needs a measured top"
         row = measured[profile_id]
+        if "model_top_pressure_pa" in vertical:
+            # 69a0baec1's native HRRR and RAP mappings: a hybrid coordinate
+            # that is pure pressure at its top, so the measured top-level
+            # pressure of real objects is the bound itself, with no
+            # height-to-pressure climatology between them.
+            assert row["coverage_rule"] == (
+                "measured top-level pressure of a pressure-based hybrid coordinate")
+            assert row["declared_model_top_pressure_pa"] == vertical["model_top_pressure_pa"]
+            assert float(row["measured_maximum_pa"]) >= float(vertical["model_top_pressure_pa"])
+            return float(row["measured_maximum_pa"])
         reference = row["warm_season_reference"]
         assert reference["coverage_rule"] == "lower altitude bracket pressure"
         return max(float(row["measured_maximum_pa"]), max(reference["pressure_pa"]))

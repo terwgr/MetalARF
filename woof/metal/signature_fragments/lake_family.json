@@ -537,6 +537,91 @@
       },
       "source": "woof/metal/shaders/lake_family.metal",
       "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/lake.cu",
+      "cuda_symbol": "lake_bind_source_columns",
+      "layout_version": 1,
+      "module": "lake_family",
+      "name": "lake_bind_source_columns",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "state_words",
+          "int32"
+        ],
+        [
+          "static_words",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "lakemask",
+          "float",
+          "read"
+        ],
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "lake_columns",
+          "float",
+          "read_write"
+        ],
+        [
+          "lake_static",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "lakemask": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "src": [
+          [
+            7,
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_columns": [
+          [
+            "state_words",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_static": [
+          [
+            "static_words",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/lake_family.metal",
+      "threads_per_group": 32
     }
   ]
 }

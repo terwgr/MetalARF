@@ -87,7 +87,7 @@ import numpy as np
 from woof.obs.superob import (CLEAR_AIR_SOURCE, CLEAR_AIR_SOURCE_CENSOR,
                               CLEAR_AIR_SOURCES, GriddedObservations,
                               MIN_BEAM_COHERENCE, SuperobParams)
-from woof.obs.target_grid import GridMismatchError, TargetGrid
+from woof.obs.target_grid import GridMismatchError, TargetGrid, _array_sha256
 
 #: The original contract: velocity stored as whole-domain planes, one per
 #: radar.  Still READ, always, and that is not politeness -- receipts
@@ -202,17 +202,6 @@ CLEAR_AIR_VARIABLES: dict[str, tuple[tuple[str, ...], str, str | None]] = {
     "z0_count": (_PLANE, "int32", "count"),
     "z0_err": (_PLANE, "float32", "dBZ"),
 }
-
-#: How the clear-air observations in a file were established, re-exported
-#: from :mod:`woof.obs.superob` where the two regimes are defined and
-#: documented.  Written as a file attribute so a consumer can tell what it
-#: is trusting: :data:`CLEAR_AIR_SOURCE` is the measurement-only regime, and
-#: :data:`CLEAR_AIR_SOURCE_CENSOR` is the one that additionally reads the
-#: Message-31 "below threshold" code the decoder now preserves.  A consumer
-#: that does not recognise the value it finds must refuse the file rather
-#: than assume either.
-__all_clear_air__ = (CLEAR_AIR_SOURCE, CLEAR_AIR_SOURCE_CENSOR,
-                     CLEAR_AIR_SOURCES)
 
 #: v2's table.  Every reflectivity and coordinate entry is v1's, unchanged
 #: -- the diff is exactly the velocity dimension tuple and the four window
@@ -484,7 +473,8 @@ def write_radar_grid(path: str | Path, observations: GriddedObservations,
                 "DY": np.float64(grid.dy_m),
                 "GRIDTYPE": "C",
                 "dealiasing": dealiasing_statement(params),
-                "superob_params": _canonical_json(params.to_payload()),
+                "superob_params": _canonical_json(
+                    _superob_params_payload(params, observations)),
                 "provenance": _canonical_json(
                     _provenance_payload(observations, params, provenance)),
             })
@@ -700,6 +690,14 @@ def read_radar_grid(path: str | Path, *,
     # deliberately, so handing them NaN would change what the DA side sees.
     with netcdf_bridge.open_dataset(path) as dataset:
         dataset.set_auto_mask(False)
+        # Every numeric variable is read below; decode them in one bridge
+        # run rather than one process per variable.  Same decode, same
+        # policy.  Measured on the recent case's slot-01 file: 6.4 s with a
+        # run per variable, 4.8 s with one run; the rest is rw_netcdf's
+        # own decode of the file, one variable after another.
+        if hasattr(dataset, "prefetch"):
+            dataset.prefetch([name for name in dataset.variables
+                              if name not in _CHARACTER_VARIABLES])
         # The schema the FILE declares, checked against every schema this
         # module can read rather than against the one it writes.  A v1 file
         # stays readable after v2 became the default: its contract did not
@@ -1298,22 +1296,8 @@ def _count_var(dataset, name, dims, values, description):
 
 
 def _digest(array, dtype) -> str:
-    """Digest an array with its dtype and shape, C-ordered.
-
-    Same construction as :func:`woof.obs.target_grid._array_sha256`, but
-    at the dtype the file actually stores rather than always float64: the
-    point here is to hash what is *on disk*, so that a reader can recompute
-    it without the writer's inputs.
-    """
-
-    contiguous = np.ascontiguousarray(np.asarray(array), dtype=dtype)
-    hasher = hashlib.sha256()
-    hasher.update(contiguous.dtype.str.encode("ascii"))
-    hasher.update(b";")
-    hasher.update(json.dumps(list(contiguous.shape)).encode("ascii"))
-    hasher.update(b";")
-    hasher.update(contiguous.tobytes(order="C"))
-    return hasher.hexdigest()
+    """Digest at the dtype on disk so readers can recompute the identity."""
+    return _array_sha256(np.asarray(array), dtype=dtype)
 
 
 def _coordinate_digests(grid: TargetGrid) -> dict:
@@ -1340,11 +1324,25 @@ def _canonical_json(payload) -> str:
                       allow_nan=False)
 
 
+def _superob_params_payload(params: SuperobParams,
+                            observations: GriddedObservations) -> dict:
+    """The parameters, plus the reduction ``z_obs`` carries when stated.
+
+    ``z_obs``'s own description sends a reader to ``z_reduce`` here; a set
+    assembled by hand that never stated one keeps the key set it had.
+    """
+    payload = params.to_payload()
+    z_reduce = getattr(observations, "z_reduce", None)
+    if z_reduce is not None:
+        payload["z_reduce"] = str(z_reduce)
+    return payload
+
+
 def _provenance_payload(observations: GriddedObservations,
                         params: SuperobParams,
                         extra: dict | None) -> dict:
     payload = {
-        "superob_params": params.to_payload(),
+        "superob_params": _superob_params_payload(params, observations),
         "volumes": list(observations.provenance),
         "counts": list(observations.counts),
         "radars": list(observations.radars),

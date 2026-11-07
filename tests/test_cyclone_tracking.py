@@ -8,7 +8,6 @@ import pytest
 from woof.core.track_boundary import boundary_reason
 from woof.core.storm_tracking import FollowConfig, NestFootprint, StormTracker
 from woof.core.storm_track_writer import TrackConfig, TrackWriter
-from woof.cyclone_sources import source_ids
 
 
 def low(ci, cj=20, n=41):
@@ -43,11 +42,10 @@ def test_nan_uniform_and_interior_tied_minima_do_not_claim_exit():
     assert boundary_reason(plane,box(),(0,20),extremum="minimum") is None
 
 
-@pytest.mark.parametrize("source", source_ids())
 @pytest.mark.parametrize("dx", [1000.,12000.,25000.])
-def test_tracking_uses_model_state_not_forcing_name(monkeypatch, source, dx):
+def test_tracking_uses_model_state_not_forcing_name(monkeypatch, dx):
     # The forcing name never reaches the tracker. The same forecast low must
-    # move and terminate identically at every initialization source.
+    # move and terminate identically at each physical grid spacing.
     import woof.core.storm_tracking as st
     cfg = FollowConfig(field="pressure",threshold=1010.,level_hpa=0,search_margin_cells=50,
                        radius_km=15*dx/1000., cooldown_seconds=0., min_shift_cells=1, max_shift_cells=6)
@@ -85,6 +83,38 @@ def test_missing_signal_alone_is_a_gap_not_domain_exit(tmp_path):
         assert writer.emit(SimpleNamespace(found=None,evidence={}),t=t,parent_state=None)["no_signal"]
     assert "termination" not in writer.close()
     assert len((tmp_path/"track.csv").read_text().splitlines()) == 4
+
+
+def test_mslp_minimum_motion_cap_and_restart(monkeypatch):
+    import woof.core.storm_tracking as st
+    cfg = FollowConfig(field="pressure", threshold=1010., level_hpa=0,
+                       search_margin_cells=50, cooldown_seconds=900.,
+                       min_shift_cells=1, max_shift_cells=6)
+    fp = NestFootprint(grid_id=2, i_parent_start=35, j_parent_start=35,
+                       child_nx=61, child_ny=61, parent_grid_ratio=3,
+                       parent_dx_m=3000.)
+    tracker = StormTracker(cfg)
+    tracker.move_interval_seconds = 900.
+    monkeypatch.setattr(st, "planes_for", lambda state, *a, **kw: [(None, state)])
+    # An asymmetric broad depression must not pull the eye off the minimum.
+    y, x = np.mgrid[:120, :120]
+    def pressure(ci):
+        p = 1012. - 8. * np.exp(-((x-ci-9)**2 + (y-44)**2)/120.)
+        p[44, ci] = 960.
+        return p
+    assert tracker.desired_shift(pressure(44), fp, 0.) is None
+    # 24 km in 15 min needs eight parent cells, beyond the old six cap.
+    assert tracker.desired_shift(pressure(52), fp, 900.) == (8, 0)
+    evidence = tracker.last_fix.evidence
+    assert tracker.last_fix.center_parent_ij == (52., 44.)
+    assert evidence["storm_speed_m_s"] == pytest.approx(24000./900.)
+    assert evidence["motion_cells"] == 8
+    resumed = StormTracker(cfg)
+    resumed.move_interval_seconds = 900.
+    resumed.restore_state(tracker.state_json())
+    assert resumed.desired_shift(pressure(60), fp, 1800.) == tracker.desired_shift(
+        pressure(60), fp, 1800.)
+    assert resumed.last_fix.evidence == tracker.last_fix.evidence
 
 
 def test_unavailable_steering_level_does_not_hide_boundary_exit(monkeypatch):

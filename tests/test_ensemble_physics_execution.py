@@ -32,17 +32,24 @@ def _cfg(**changes):
 
 def test_matrix_covers_every_implemented_registry_row_and_dispatch_selector():
     from woof.core.physics_inventory import PHYSICS_SLOT_DISPATCH
+    from woof.config import MP_PHYSICS_ACCEPTED
     registry = deepcopy(physics_registry())
     matrix = capability_matrix(registry=registry)
     expected = {(component, option_id) for component, item in registry["components"].items()
                 for option_id, option in item["options"].items() if option.get("implemented")}
     assert {(row.component, row.option_id) for row in matrix} == expected
     for selector, dispatch in PHYSICS_SLOT_DISPATCH.items():
+        if selector == "sf_ocean_physics":
+            # NAMED GAP (2.9.1): the ocean mixed layer is routed by the
+            # dispatch table but has no physics-registry component yet, so
+            # the capability matrix has no ocean rows.  Owner: the OML port's
+            # registry row (tools/build_registry.py); remove this skip with it.
+            continue
         values = {dict(row.selectors)[selector] for row in matrix if selector in dict(row.selectors)}
         assert values == set(dispatch)
     assert {dict(row.selectors)["mp_physics"] for row in matrix if row.component == "microphysics"} == {
-        0, 1, 6, 8, 9, 10, 16, 18, 28, 50}
-    assert {dict(row.selectors)["cu_physics"] for row in matrix if row.component == "cumulus"} == {0, 1, 3, 16}
+        0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 30, 50, 106, 900}
+    assert {dict(row.selectors)["cu_physics"] for row in matrix if row.component == "cumulus"} == {0, 1, 3, 5, 6, 16, 96}
     assert all(row.receipt()["fallback"] == "original_member_operation" for row in matrix)
 
 

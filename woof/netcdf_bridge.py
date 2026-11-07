@@ -33,6 +33,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
+from concurrent.futures import Future
 from typing import Mapping
 
 import numpy as np
@@ -386,6 +388,11 @@ class Variable:
     def _load(self) -> None:
         if self._values is not None:
             return
+        held = (_beside_values(self._dataset.path, self.name)
+                if (self._raw, self._scale) == _DEFAULT_POLICY else None)
+        if held is not None:
+            self._values, self._times = held
+            return
         self._values, self._times = self._dataset._decode(
             self.name, raw=self._raw, scale=self._scale)
 
@@ -424,11 +431,20 @@ class Variable:
         return values
 
     def read_sample_window(self, *, i0: float, ni: int, j0: float, nj: int,
-                           method: str) -> np.ndarray:
-        """Same-spacing nearest/bilinear sampling in Rust after CF decoding."""
+                           method: str, mask: str | None = None) -> np.ndarray:
+        """Same-spacing nearest/bilinear sampling in Rust after CF decoding.
+
+        ``bilinear-masked`` names a class field of the same file in
+        ``mask`` (a land mask): each output point averages only the source
+        points of its own class, as WPS interpolates land-only fields.
+        """
         sample = {"i0": float(i0), "ni": int(ni), "j0": float(j0),
                   "nj": int(nj), "method": method}
-        if (method not in {"nearest", "bilinear"}
+        if (method == "bilinear-masked") != bool(mask):
+            raise ValueError(f"{self.name}: bilinear-masked sampling and a mask go together")
+        if mask:
+            sample["mask"] = str(mask)
+        if (method not in {"nearest", "bilinear", "bilinear-masked"}
                 or not np.isfinite([sample["i0"], sample["j0"]]).all()
                 or min(sample["i0"], sample["j0"]) < 0
                 or min(sample["ni"], sample["nj"]) <= 0):
@@ -623,9 +639,12 @@ class Dataset:
                     raise ValueError("exact and sampled windows cannot be combined")
                 command += ["--sample-window={i0:.17g}:{ni},{j0:.17g}:{nj}".format(**sample_window),
                             f"--sample-method={sample_window['method']}"]
-            command += [os.fspath(self.path), os.fspath(out), name]
+                if sample_window.get("mask"):
+                    command.append(f"--sample-mask={sample_window['mask']}")
+            names = [name] if isinstance(name, str) else list(name)
+            command += [os.fspath(self.path), os.fspath(out), *names]
             _run(command,
-                 what=f"NetCDF decode failed for {name} in {self.path}",
+                 what=f"NetCDF decode failed for {', '.join(names)} in {self.path}",
                  file=self.path)
             document = json.loads((out / "metadata.json").read_text("utf-8"))
             if document.get("schema") != DUMP_SCHEMA:
@@ -633,51 +652,290 @@ class Dataset:
                     f"{NETCDF_NAME} answered dump schema "
                     f"{document.get('schema')!r}, expected {DUMP_SCHEMA!r}")
             records = document.get("variables") or []
-            if len(records) != 1:
+            if len(records) != len(names):
                 raise NetcdfDecodeError(
                     f"{NETCDF_NAME} dumped {len(records)} variables for "
-                    f"{name}; expected exactly one")
-            record = records[0]
-            if water_layer_thickness is not None:
-                conversion = record.get("water_layer_conversion")
-                if (not isinstance(conversion, dict)
-                        or conversion.get("thickness_variable") != water_layer_thickness
-                        or conversion.get("target_units") != "m3 m-3"):
-                    raise NetcdfDecodeError(
-                        f"{NETCDF_NAME} did not acknowledge layer water conversion; rebuild the reader")
-                if conversion_receipt is not None:
-                    conversion_receipt.update(conversion)
-            if unit_transform is not None and record.get("unit_transform") != list(unit_transform):
-                raise NetcdfDecodeError(
-                    f"{NETCDF_NAME} did not acknowledge the requested unit transform; rebuild the reader")
-            if window is not None and record.get("window") != list(window):
-                raise NetcdfDecodeError(
-                    f"{NETCDF_NAME} did not acknowledge the requested window; rebuild the reader")
-            if sample_window is not None and record.get("sample_window") != sample_window:
-                raise NetcdfDecodeError(
-                    f"{NETCDF_NAME} did not acknowledge the requested sampled window; rebuild the reader")
-            dtype = record.get("dtype", "<f8")
-            expected_dtype = "|S1" if self.variables[name].is_character else "<f8"
-            if dtype != expected_dtype:
-                raise NetcdfDecodeError(
-                    f"{name}: decoded dtype {dtype!r}, expected {expected_dtype!r}")
-            values = np.fromfile(out / str(record["filename"]), dtype=dtype)
-            shape = tuple(int(s) for s in record["shape"])
-            expected = int(np.prod(shape)) if shape else 1
-            if values.size != expected:
-                raise NetcdfDecodeError(
-                    f"{name}: decoded {values.size} values but shape {shape} "
-                    f"needs {expected}")
-            values = values.reshape(shape)
-            if not raw:
-                values = _mask_default_fill(
-                    self.variables[name], values, record.get("cf") or {},
+                    f"{names}; expected exactly {len(names)}")
+            if isinstance(name, str):
+                return self._decoded_record(
+                    out, name, records[0], raw=raw,
                     unit_transform=unit_transform,
-                    layer_water=water_layer_thickness is not None)
-            times = tuple(
-                _parse_instant(text, name) for text in (record.get("times") or ())
-            )
+                    water_layer_thickness=water_layer_thickness,
+                    conversion_receipt=conversion_receipt, window=window,
+                    sample_window=sample_window)
+            by_name = {str(record.get("name")): record for record in records}
+            if set(by_name) != set(names):
+                raise NetcdfDecodeError(
+                    f"{NETCDF_NAME} dumped {sorted(by_name)} for {sorted(names)}")
+            return {one: self._decoded_record(
+                        out, one, by_name[one], raw=raw,
+                        unit_transform=unit_transform,
+                        water_layer_thickness=water_layer_thickness,
+                        conversion_receipt=conversion_receipt, window=window,
+                        sample_window=sample_window)
+                    for one in names}
+
+    def _decoded_record(self, out: Path, name: str, record, *, raw: bool,
+                        unit_transform, water_layer_thickness,
+                        conversion_receipt, window, sample_window):
+        """``(values, times)`` of one dumped record, every check applied."""
+
+        if water_layer_thickness is not None:
+            conversion = record.get("water_layer_conversion")
+            if (not isinstance(conversion, dict)
+                    or conversion.get("thickness_variable") != water_layer_thickness
+                    or conversion.get("target_units") != "m3 m-3"):
+                raise NetcdfDecodeError(
+                    f"{NETCDF_NAME} did not acknowledge layer water conversion; rebuild the reader")
+            if conversion_receipt is not None:
+                conversion_receipt.update(conversion)
+        if unit_transform is not None and record.get("unit_transform") != list(unit_transform):
+            raise NetcdfDecodeError(
+                f"{NETCDF_NAME} did not acknowledge the requested unit transform; rebuild the reader")
+        if window is not None and record.get("window") != list(window):
+            raise NetcdfDecodeError(
+                f"{NETCDF_NAME} did not acknowledge the requested window; rebuild the reader")
+        if sample_window is not None and (
+                record.get("sample_window") != {k: v for k, v in sample_window.items() if k != "mask"}
+                or record.get("sample_mask") != sample_window.get("mask")):
+            raise NetcdfDecodeError(
+                f"{NETCDF_NAME} did not acknowledge the requested sampled window; rebuild the reader")
+        dtype = record.get("dtype", "<f8")
+        expected_dtype = "|S1" if self.variables[name].is_character else "<f8"
+        if dtype != expected_dtype:
+            raise NetcdfDecodeError(
+                f"{name}: decoded dtype {dtype!r}, expected {expected_dtype!r}")
+        values = np.fromfile(out / str(record["filename"]), dtype=dtype)
+        shape = tuple(int(s) for s in record["shape"])
+        expected = int(np.prod(shape)) if shape else 1
+        if values.size != expected:
+            raise NetcdfDecodeError(
+                f"{name}: decoded {values.size} values but shape {shape} "
+                f"needs {expected}")
+        values = values.reshape(shape)
+        if not raw:
+            values = _mask_default_fill(
+                self.variables[name], values, record.get("cf") or {},
+                unit_transform=unit_transform,
+                layer_water=water_layer_thickness is not None)
+        times = tuple(
+            _parse_instant(text, name) for text in (record.get("times") or ())
+        )
         return values, times
+
+    def stored_words(self, names) -> dict[str, np.ndarray]:
+        """Read stored numeric or character words in one Rust process.
+
+        Unlike promoted CF reads, this preserves integer bits and NaN payloads.
+        Python maps the bridge output using its declared dtype and shape only.
+        """
+        names = list(dict.fromkeys(names))
+        if not names:
+            return {}
+        with tempfile.TemporaryDirectory(prefix="gpuwm-netcdf-words-") as temporary:
+            out = Path(temporary)
+            _run([os.fspath(self._executable), "stored-words", os.fspath(self.path),
+                  os.fspath(out), *names], what=f"stored-word read failed for {self.path}", file=self.path)
+            document = json.loads((out / "metadata.json").read_text("utf-8"))
+            if document.get("schema") != "gpuwm-rw-netcdf-stored-words-v1":
+                raise NetcdfDecodeError("stored-word bridge schema mismatch; rebuild rw_netcdf")
+            records = document.get("variables", [])
+            if len(records) != len(names) or [r.get("name") for r in records] != names:
+                raise NetcdfDecodeError("stored-word bridge returned different variables")
+            arrays = {}
+            for record in records:
+                name = record["name"]
+                variable = self.variables[name]
+                dtype = np.dtype(record["dtype"])
+                shape = tuple(record["shape"])
+                expected_dtype = np.dtype("S1") if variable.is_character else variable.dtype
+                if dtype != expected_dtype or shape != variable.shape:
+                    raise NetcdfDecodeError(f"{name}: stored-word dtype or shape changed")
+                filename = str(record["filename"])
+                if Path(filename).name != filename:
+                    raise NetcdfDecodeError("stored-word filename leaves output directory")
+                data = np.fromfile(out / filename, dtype=dtype)
+                if data.size != variable.size:
+                    raise NetcdfDecodeError(f"{name}: stored-word extent changed")
+                arrays[name] = data.reshape(shape)
+            return arrays
+
+    def prefetch(self, names) -> int:
+        """Decode several variables in one ``rw_netcdf`` run and cache them.
+
+        Each variable is decoded under its own current mask/scale policy,
+        exactly as its first ``variable[...]`` would decode it; variables
+        sharing a policy share one run.  The bridge starts a process per
+        run, so a reader that is about to read a whole file pays one start
+        instead of one per variable.  Returns the number of runs made.
+        """
+
+        groups: dict[tuple[bool, bool], list[str]] = {}
+        for name in names:
+            variable = self.variables[name]
+            if variable._values is not None:
+                continue
+            groups.setdefault((variable._raw, variable._scale), []).append(name)
+        runs = 0
+        for (raw, scale), group in groups.items():
+            if (raw, scale) == _DEFAULT_POLICY and _BESIDE:
+                left = []
+                for name in group:
+                    held = _beside_values(self.path, name)
+                    if held is None:
+                        left.append(name)
+                    else:
+                        self.variables[name]._values, self.variables[name]._times = held
+                group = left
+                if not group:
+                    continue
+            decoded = self._decode(group, raw=raw, scale=scale)
+            runs += 1
+            for name in group:
+                variable = self.variables[name]
+                variable._values, variable._times = decoded[name]
+        return runs
+
+
+#: A variable's policy until a reader switches it: CF masking and scaling on (``(raw, scale)``).
+_DEFAULT_POLICY = (False, True)
+#: Whole-file decodes started beside other work (:func:`decode_beside`), by the file's state:
+#: a Future of ``{name: (values, times)}`` (None when the decode failed or the file moved).
+_BESIDE_LOCK = threading.Lock()
+_BESIDE: dict[tuple, Future] = {}
+
+
+def _file_state(path) -> tuple:
+    st = os.stat(path)
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def decode_beside(path: Path | str) -> None:
+    """Decode every variable of ``path`` under the default policy on a host thread, for a reader that will.
+
+    Breakage it prevents (single-core law, 2026-10-29: DA member legs on
+    woof 2.9.9 spent ~26 s at ~1 core before the engine started): a cycling-restart leg's worker decoded
+    its run's wrfinput (1.25 GB) and wrfbdy on its main thread only after the analysis door had finished,
+    although neither depends on anything the door writes.  Started at the leg's start
+    (``woof.leg_server``), the decode runs beside the door; a later default-policy read of the file in
+    the same state (:meth:`Dataset.prefetch`, :meth:`Variable._load`) takes each variable's decoded
+    values instead of decoding it again: the same decoder, flags and post-processing, so the same values.
+    Each variable is handed out once.  A file whose state moved (device, inode, size, modification or
+    change time) is never served; a decode that fails is forgotten and the reader decodes as before.
+    :func:`forget_beside` drops what nobody took."""
+
+    try:
+        state = _file_state(path)
+    except OSError:
+        return
+    with _BESIDE_LOCK:
+        if state in _BESIDE:
+            return
+        future: Future = Future()
+        _BESIDE[state] = future
+
+    def run():
+        try:
+            dataset = Dataset(path)
+            names = list(dataset.variables)
+            decoded = dict(dataset._decode(names, raw=False, scale=True)) if names else {}
+            if _file_state(path) != state:
+                decoded = None
+        except BaseException:  # noqa: BLE001 - the reader decodes the file itself and meets the error
+            decoded = None
+        future.set_result(decoded)
+
+    threading.Thread(target=run, name="netcdf-decode-beside", daemon=True).start()
+
+
+def _beside_values(path, name: str):
+    """``(values, times)`` of ``name`` from a :func:`decode_beside` of ``path`` in its current state (waiting
+    for it), handed out once; None otherwise."""
+
+    if not _BESIDE:
+        return None
+    try:
+        state = _file_state(path)
+    except OSError:
+        return None
+    with _BESIDE_LOCK:
+        future = _BESIDE.get(state)
+    if future is None:
+        return None
+    decoded = future.result()
+    if not decoded:
+        return None
+    with _BESIDE_LOCK:
+        return decoded.pop(name, None)
+
+
+def keep_only_beside(paths) -> None:
+    """Forget every :func:`decode_beside` result except those of ``paths`` in their current state: a leg's
+    start drops what an earlier leg kept (a failed or refused leg keeps its decodes for its retry)."""
+
+    keep = set()
+    for path in paths:
+        try:
+            keep.add(_file_state(path))
+        except OSError:
+            pass
+    with _BESIDE_LOCK:
+        for key in [key for key in _BESIDE if key not in keep]:
+            del _BESIDE[key]
+
+
+def forget_beside() -> None:
+    """Drop every :func:`decode_beside` result nobody took (a leg that ended)."""
+
+    with _BESIDE_LOCK:
+        _BESIDE.clear()
+
+
+#: Decoded float64 bytes one ``rw_netcdf`` run hands back to a reader that
+#: reads a whole file (the WRF restart and wrfinput importers).  One
+#: decoder process per variable cost 345 process starts on NCAR's 12 km
+#: restart; a run per batch lets the decoder work on a batch's variables
+#: concurrently.  The cap bounds the batch's temporary files and the
+#: decoder's working set (NCAR's 2.5 km restart is ~70 GB as float64).
+DECODE_BATCH_BYTES = 4 << 30
+
+
+class BatchedDecode:
+    """Decode a file's variables in read order, one decoder run per batch.
+
+    ``ready(name)`` is called before a variable is first read; when the
+    variable has not been decoded yet, it and the variables after it are
+    decoded together (up to :data:`DECODE_BATCH_BYTES`) and cached
+    on the dataset exactly as their first ``variable[...]`` would cache
+    them, under each variable's own mask/scale policy.
+    """
+
+    def __init__(self, dataset, names, *, batch_bytes=DECODE_BATCH_BYTES):
+        self._dataset = dataset
+        self._names = list(names)
+        self._position = {name: index for index, name in enumerate(self._names)}
+        self._next = 0
+        self._batch_bytes = int(batch_bytes)
+        self.runs = 0
+
+    def ready(self, name: str) -> None:
+        index = self._position.get(name)
+        if index is None or index < self._next:
+            return
+        if getattr(self._dataset, "prefetch", None) is None:
+            # A reader surface with no batch decode reads each variable on
+            # its first ``variable[...]``, as it always did.
+            self._next = len(self._names)
+            return
+        batch, nbytes = [], 0
+        for later in self._names[index:]:
+            size = 8 * int(getattr(self._dataset.variables[later], "size", 0))
+            if batch and nbytes + size > self._batch_bytes:
+                break
+            batch.append(later)
+            nbytes += size
+        self.runs += self._dataset.prefetch(batch)
+        self._next = index + len(batch)
 
 
 #: The NetCDF library's default fill per stored type (netcdf.h NC_FILL_*),

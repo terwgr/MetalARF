@@ -12,7 +12,7 @@ Fortran harnesses -- pin only VSGD == 0.  The live half of the branch was
 never compared against WRF at all, and every 12 km parent domain runs it on
 every column of every timestep.
 
-``tests/data/mynn/oracle/surface-layer-coarse.csv`` closes that: the same
+``tests/data/oracles/mynn/surface-layer-coarse.csv`` closes that: the same
 unmodified SFCLAY1D_mynn, the same ten columns as the widened fixture, swept
 across DX = 3000 / 5000 / 5001 / 12000 / 27000 m over the widened fixture's
 three stages -- (itimestep, isfflx) = (1, 1), (2, 1) and (1, 0)
@@ -41,12 +41,14 @@ import pytest
 
 from conftest import requires_gpu
 from _toolchain_rows import toolchain_row
+from test_mynn_surface import WIDE_ULP as _CPU_WIDE_ULP
+from test_mynn_surface_gpu import WIDE_ULP as _GPU_WIDE_ULP
 
 from woof.core.fp32_ulp import fp32_ulp_distance
 from woof.core.mynn_surface import mynn_surface_layer_default
 
 
-ORACLE_DIR = Path(__file__).parents[1] / "tests" / "data" / "mynn" / "oracle"
+ORACLE_DIR = Path(__file__).parents[1] / "tests" / "data" / "oracles" / "mynn"
 COARSE_ORACLE = ORACLE_DIR / "surface-layer-coarse.csv"
 WIDE_ORACLE = ORACLE_DIR / "surface-layer-wide.csv"
 HARNESS = (
@@ -181,60 +183,8 @@ DX_TABLE_ALIAS = {5000.0: 3000.0}
 #
 # These are ratchets: lower them as the FP32 shims are unified, never raise.
 CPU_ULP = {
-    (3000.0, 1): {
-        "zol": (1, 0, 0, 0, 1, 1, 0, 0, 0, 0),
-        "rmol": (0, 0, 0, 0, 1, 1, 0, 0, 0, 0),
-        "ust": (2, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "ustm": (2, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "psim": (1, 0, 0, 0, 1, 3, 0, 0, 1, 0),
-        "psih": (1, 0, 0, 0, 0, 1, 2, 0, 1, 0),
-        "chs": (1, 0, 0, 0, 0, 2, 0, 0, 0, 0),
-        "chs2": (1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "cqs2": (1, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "ch": (2, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "flhc": (2, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "flqc": (1, 0, 0, 0, 0, 2, 0, 0, 0, 0),
-        "qgh": (0, 0, 0, 0, 0, 1, 0, 1, 3, 0),
-        "qsfc": (0, 0, 0, 0, 0, 1, 0, 0, 1, 0),
-        "hfx": (2, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "qfx": (1, 0, 0, 0, 0, 2, 0, 0, 10, 0),
-        "lh": (1, 0, 0, 0, 0, 3, 0, 0, 6, 0),
-        "u10": (1, 0, 1, 0, 2, 1, 0, 0, 0, 0),
-        "v10": (1, 0, 1, 0, 2, 2, 0, 0, 0, 0),
-        # land_qsfc_unset: 0 on NumPy 2.2.6/2.4.3, 1 on 2.5.1.        +2.5.1
-        "ck": (0, 0, 1, 0, 2, 1, 0, 0, 0, 0),
-        "cka": (1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-        "cd": (0, 0, 2, 0, 3, 0, 0, 0, 0, 0),
-        "cda": (3, 0, 0, 0, 0, 2, 0, 0, 0, 0),
-        "qstar": (0, 0, 0, 0, 0, 0, 0, 0, 5, 0),
-    },
-    (3000.0, 2): {
-        "zol": (0, 0, 2, 0, 1, 2, 0, 0, 0, 0),
-        "rmol": (0, 0, 2, 0, 1, 3, 0, 0, 0, 0),
-        "ust": (0, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "ustm": (0, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "mol": (0, 0, 2, 0, 0, 1, 0, 0, 0, 0),
-        "psim": (0, 0, 2, 0, 1, 2, 0, 0, 1, 1),
-        "psih": (0, 0, 2, 0, 0, 2, 0, 0, 1, 0),
-        "chs": (0, 0, 1, 0, 0, 2, 0, 0, 0, 0),
-        "chs2": (0, 0, 1, 0, 0, 1, 1, 0, 0, 0),
-        "cqs2": (0, 0, 0, 0, 0, 1, 1, 0, 0, 0),
-        "ch": (0, 0, 2, 0, 0, 2, 0, 0, 0, 0),
-        "flhc": (0, 0, 2, 0, 0, 1, 0, 0, 0, 0),
-        "flqc": (0, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-        "qgh": (0, 0, 0, 0, 0, 1, 0, 1, 3, 0),
-        "qsfc": (0, 0, 0, 0, 0, 0, 0, 0, 1, 0),
-        "hfx": (0, 0, 3, 0, 0, 1, 0, 0, 0, 0),
-        "qfx": (0, 0, 0, 0, 0, 2, 0, 0, 8, 0),
-        "lh": (0, 0, 0, 0, 0, 3, 0, 0, 10, 0),
-        "u10": (0, 0, 0, 0, 1, 1, 0, 0, 2, 0),
-        "v10": (0, 0, 0, 0, 1, 1, 0, 0, 2, 0),
-        "ck": (0, 0, 0, 0, 2, 2, 0, 0, 0, 0),
-        "cka": (0, 0, 0, 0, 1, 1, 0, 0, 0, 0),
-        "cd": (0, 0, 0, 0, 2, 0, 0, 0, 0, 0),
-        "cda": (0, 0, 0, 0, 1, 1, 0, 0, 0, 0),
-        "qstar": (0, 0, 0, 0, 0, 1, 0, 0, 5, 0),
-    },
+    (3000.0, 1): dict(_CPU_WIDE_ULP[(1, 1)]),
+    (3000.0, 2): dict(_CPU_WIDE_ULP[(2, 1)]),
     (5001.0, 1): {
         "zol": (4, 0, 0, 0, 0, 2, 0, 0, 1, 0),
         "rmol": (3, 0, 0, 0, 0, 1, 0, 0, 1, 0),
@@ -413,71 +363,8 @@ CPU_ULP = {
 }
 
 GPU_ULP = {
-    (3000.0, 1): {
-        "zol": (2, 0, 3, 0, 1, 1, 1, 87, 1, 0),
-        "rmol": (2, 0, 3, 0, 1, 1, 2, 116, 1, 0),
-        "ust": (1, 0, 1, 1, 0, 1, 1, 21, 0, 0),
-        "ustm": (1, 0, 1, 1, 0, 1, 1, 21, 0, 0),
-        "mol": (0, 0, 0, 0, 0, 0, 0, 36, 0, 0),
-        "psim": (1, 0, 1, 0, 1, 2, 2, 118, 1, 0),
-        "psih": (1, 0, 0, 0, 0, 1, 1, 68, 1, 1),
-        "chs": (1, 0, 1, 2, 0, 1, 2, 77, 0, 0),
-        "chs2": (1, 0, 2, 2, 0, 1, 2, 69, 0, 0),
-        "cqs2": (1, 0, 2, 1, 0, 1, 1, 69, 0, 0),
-        "ch": (1, 0, 1, 1, 0, 2, 1, 77, 0, 0),
-        "flhc": (1, 0, 1, 1, 0, 2, 1, 44, 0, 0),
-        "flqc": (1, 0, 1, 0, 0, 1, 3, 45, 0, 0),
-        "qgh": (1, 1, 1, 1, 1, 1, 0, 1, 2, 1),
-        "qsfc": (0, 0, 0, 0, 0, 1, 0, 0, 1, 2),
-        "hfx": (1, 0, 1, 0, 0, 1, 1, 16, 0, 0),
-        "qfx": (1, 0, 0, 0, 0, 1, 3, 45, 5, 2),
-        "lh": (1, 0, 0, 0, 0, 2, 4, 54, 3, 1),
-        "u10": (1, 0, 0, 2, 1, 1, 0, 0, 0, 0),
-        "v10": (0, 0, 0, 0, 1, 2, 0, 0, 0, 0),
-        "th2": (0, 0, 0, 0, 0, 0, 0, 1, 0, 0),
-        "t2": (0, 0, 0, 0, 0, 0, 0, 1, 0, 0),
-        "gz1oz0": (1, 1, 1, 1, 0, 1, 0, 0, 0, 0),
-        "wspd": (0, 1, 0, 0, 0, 0, 0, 0, 0, 0),
-        "br": (0, 0, 0, 0, 0, 0, 0, 92, 0, 0),
-        "ck": (1, 0, 1, 0, 1, 1, 4, 62, 0, 0),
-        "cka": (1, 0, 1, 1, 0, 1, 1, 74, 0, 0),
-        "cd": (3, 0, 2, 0, 1, 0, 5, 70, 0, 0),
-        "cda": (2, 0, 1, 2, 0, 1, 2, 41, 0, 0),
-        "wstar": (0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
-        "qstar": (0, 0, 0, 0, 0, 0, 0, 0, 5, 3),
-    },
-    (3000.0, 2): {
-        "zol": (0, 0, 2, 0, 1, 2, 0, 87, 1, 0),
-        "rmol": (0, 0, 2, 0, 1, 3, 0, 116, 0, 0),
-        "ust": (0, 0, 2, 2, 0, 0, 0, 20, 0, 0),
-        "ustm": (0, 0, 2, 2, 0, 0, 0, 20, 0, 0),
-        "mol": (0, 0, 2, 0, 0, 0, 0, 36, 0, 0),
-        "psim": (0, 0, 2, 0, 2, 4, 0, 117, 2, 2),
-        "psih": (0, 0, 2, 0, 0, 1, 0, 69, 1, 0),
-        "chs": (0, 0, 2, 1, 0, 0, 0, 47, 0, 0),
-        "chs2": (0, 0, 2, 1, 0, 0, 0, 42, 0, 0),
-        "cqs2": (0, 0, 1, 1, 0, 0, 0, 42, 0, 0),
-        "ch": (0, 0, 4, 0, 0, 0, 0, 47, 0, 0),
-        "flhc": (0, 0, 4, 0, 0, 0, 0, 54, 0, 0),
-        "flqc": (0, 0, 2, 2, 0, 0, 0, 55, 0, 0),
-        "qgh": (1, 1, 1, 1, 1, 1, 0, 1, 2, 1),
-        "qsfc": (0, 0, 0, 0, 0, 0, 0, 0, 1, 2),
-        "hfx": (0, 0, 5, 0, 0, 0, 0, 20, 0, 0),
-        "qfx": (0, 0, 0, 0, 0, 0, 0, 55, 4, 1),
-        "lh": (0, 0, 0, 0, 0, 0, 0, 33, 5, 1),
-        "u10": (0, 0, 2, 2, 1, 0, 0, 0, 2, 0),
-        "v10": (0, 0, 1, 0, 1, 0, 0, 0, 2, 0),
-        "th2": (0, 0, 0, 0, 0, 0, 0, 1, 0, 0),
-        "t2": (0, 0, 0, 0, 0, 0, 0, 1, 0, 0),
-        "gz1oz0": (1, 1, 1, 1, 0, 1, 0, 0, 0, 0),
-        "wspd": (0, 1, 0, 0, 0, 0, 0, 0, 0, 0),
-        "br": (0, 0, 0, 0, 0, 0, 0, 92, 0, 0),
-        "ck": (0, 0, 0, 0, 1, 2, 1, 64, 0, 0),
-        "cka": (0, 0, 0, 1, 1, 0, 0, 72, 0, 0),
-        "cd": (0, 0, 0, 0, 2, 0, 3, 72, 0, 0),
-        "cda": (0, 0, 2, 2, 1, 0, 0, 39, 0, 0),
-        "qstar": (0, 0, 0, 0, 0, 0, 0, 0, 5, 2),
-    },
+    (3000.0, 1): dict(_GPU_WIDE_ULP[(1, 1)]),
+    (3000.0, 2): dict(_GPU_WIDE_ULP[(2, 1)]),
     (5001.0, 1): {
         "zol": (1, 0, 2, 0, 0, 1, 2, 87, 0, 1),
         "rmol": (1, 0, 2, 0, 0, 1, 3, 116, 0, 1),
@@ -788,6 +675,16 @@ GPU_ULP_BY_TOOLCHAIN = {
 #: integrate/2.8 9dbb4a2db.
 GPU_ULP_BY_TOOLCHAIN[("120", (12, 9))] = (
     GPU_ULP_BY_TOOLCHAIN[("120", (13, 4))])
+#: sm_89 reads the sm_120 row.  Since the cross-architecture rounding pins
+#: (xnode-identity, ecbd106a9 and the A146 __fdiv_rn spellings) the RTX 4090
+#: returns the RTX 5090's words for every output these gates compare:
+#: 16,518 words, zero differing, NVRTC 13.4, 2026-10-05.  The default row,
+#: recorded before those pins, no longer describes it: it failed 31 gates
+#: on the RTX 4090 with no kernel change.  MEASURED on a development machine's RTX 4090
+#: under NVRTC 12.9, 13.3 and 13.4: every gate passes on the sm_120 row.
+GPU_ULP_BY_TOOLCHAIN[("89", (12, 9))] = GPU_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+GPU_ULP_BY_TOOLCHAIN[("89", (13, 3))] = GPU_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+GPU_ULP_BY_TOOLCHAIN[("89", (13, 4))] = GPU_ULP_BY_TOOLCHAIN[("120", (13, 4))]
 
 
 def _inputs(fields):

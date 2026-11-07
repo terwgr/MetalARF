@@ -711,6 +711,7 @@ def _hand_built_compute_driver(monkeypatch, *, carriers):
     """
     from types import SimpleNamespace
     import woof.core.physics as physics
+    from woof.config import RRTMG_VARIANT_LEGACY
 
     monkeypatch.setattr(physics, "cp", np)
     atmosphere = {
@@ -723,16 +724,19 @@ def _hand_built_compute_driver(monkeypatch, *, carriers):
     state = SimpleNamespace(elapsed_seconds=0.0)
     cfg = SimpleNamespace(
         dt=60.0, bldt=0.0, ra_physics=0, sf_sfclay_physics=91,
-        sf_surface_physics=2, bl_pbl_physics=1, cu_physics=0)
+        sf_surface_physics=2, bl_pbl_physics=1, cu_physics=0,
+        # The 2.9.1 radiation boundary-flux accumulator reads the variant
+        # (radiation off: no fluxes either way).
+        ra_rrtmg_variant=RRTMG_VARIANT_LEGACY)
     driver = object.__new__(physics.PhysicsDriver)
+    driver.swint = None
     driver.state = state
     driver.fields = {
         name: np.full((1, 2), value, np.float32)
         for name, value in {
             "psfc": -123.0, "tsk": 290.0, "hfx": 0.0, "qfx": 0.0,
             "qsfc": 0.0, "chs2": 0.0, "cqs2": 0.0,
-            "t2": -999.0, "q2": -999.0, "th2": -999.0,
-            "xland": 1.0,
+            "t2": -999.0, "q2": -999.0, "th2": -999.0, "xland": 1.0,
         }.items()
     }
     driver.surface_enabled = True
@@ -936,10 +940,13 @@ def test_the_per_domain_submit_stamps_carrier_provenance_per_frame():
 
         def __init__(self):
             self.calls = []
+            self.completed_observers = []
 
         def submit(self, path, valid_time, state, *, extra_fields=None,
-                   refl_field=None, global_attrs=None, completed_observer=None):
+                   refl_field=None, global_attrs=None,
+                   completed_observer=None):
             self.calls.append(global_attrs)
+            self.completed_observers.append(completed_observer)
 
     contract = CarrierContract()
     contract.declare("glw", source=CARRIER_SOURCE_RADIATION_SCHEME,
@@ -967,6 +974,8 @@ def test_the_per_domain_submit_stamps_carrier_provenance_per_frame():
     assert attrs["TITLE"] == "held"            # base attrs kept
     assert attrs["GPUWM_CARRIER_GLW_SOURCE"] == \
         CARRIER_SOURCE_RADIATION_SCHEME
+    assert fake.completed_observers == [None]
+    assert writers._writers[1] is fake
 
     # A state without a driver stamps nothing: the ticket rides with the
     # writer's standing attribute set.
@@ -976,6 +985,8 @@ def test_the_per_domain_submit_stamps_carrier_provenance_per_frame():
         state=SimpleNamespace())
     writers.submit(bare, 1)
     assert fake.calls[-1] is None
+    assert fake.completed_observers == [None, None]
+    assert writers._writers[1] is fake
 
 
 # --------------------------------------------------------------------
@@ -994,7 +1005,7 @@ def test_carrier_provenance_survives_the_real_checkpoint_path(
     "just written" (and admit a producer that stopped).
     """
     from woof.io import restart
-    from tests.test_restart import _cfg, _fill_setup, _shim_driver_state
+    from test_restart import _cfg, _fill_setup, _shim_driver_state
 
     cfg = _cfg(moist=True, mp_physics=10, bl_pbl_physics=1, bldt=0.0)
     source, source_driver = _shim_driver_state(cfg, monkeypatch)
@@ -1027,7 +1038,7 @@ def test_a_pre_contract_checkpoint_forces_one_producer_refresh(
     import json
 
     from woof.io import restart
-    from tests.test_restart import _cfg, _fill_setup, _shim_driver_state
+    from test_restart import _cfg, _fill_setup, _shim_driver_state
 
     cfg = _cfg(moist=True, mp_physics=10, bl_pbl_physics=1, bldt=0.0)
     source, source_driver = _shim_driver_state(cfg, monkeypatch)
@@ -1057,7 +1068,7 @@ def test_a_resume_that_changed_the_policy_is_refused(
     import json
 
     from woof.io import restart
-    from tests.test_restart import _cfg, _fill_setup, _shim_driver_state
+    from test_restart import _cfg, _fill_setup, _shim_driver_state
 
     cfg = _cfg(moist=True, mp_physics=10, bl_pbl_physics=1, bldt=0.0)
     source, _ = _shim_driver_state(cfg, monkeypatch)

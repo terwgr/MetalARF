@@ -61,14 +61,25 @@ rates and final diagnostics. ``sedlevels`` also parallelises sedimentation
 substeps and is selected by ``cuda``. The sequential arms remain available
 as references; ``tests/test_p3_speed_levels.py`` compares their buffers.
 
-CONTRACTION
------------
+CONTRACTION AND SUBNORMALS
+--------------------------
 ``-fmad=false`` on every arm.  The Fortran reference arm was built with
 ``-ffp-contract=off``, so a contracted ``a*b+c`` on the device is a
 different number.  With contraction off, plain infix operators in the .cu
 are the ``__fmul_rn``/``__fadd_rn`` intrinsics; the kernel file carries a
 two-kernel probe and the test compiles the module both ways to show the
 equality holds under ``false`` and breaks under ``true``.
+
+``--ftz=false`` likewise, and it is why the unit compiles through the direct
+NVRTC route (:func:`woof.nvrtc_ptx_cache.compile_using_nvrtc`) and not
+``cupy.RawModule``: CuPy appends ``-ftz=true`` after the caller's options
+and NVRTC honours the last one, so through RawModule every float32 result
+that should be subnormal came back zero.  gfortran on x86 keeps them.
+MEASURED by the column oracle against WRF 4.6.1 (tools/p3_wrf461_oracle):
+with the flush, one snow column of the 30-step regime set left WRF at step
+4 and reached 19 ULP in the ice diagnostics by step 28; without it every
+field of every column is bit-identical to the Fortran in the default build,
+as it is under GPUWM_WRF_EXACT=1.
 """
 
 from __future__ import annotations
@@ -94,7 +105,8 @@ _P3_SOURCE = _KDIR / "p3.cu"
 #: NVRTC options.  ``-fmad=false`` is a correctness flag here, not a tuning
 #: knob: it is what makes the .cu's infix arithmetic equal the Fortran
 #: reference arm's ``-ffp-contract=off`` statement order.
-DEFAULT_OPTIONS: tuple[str, ...] = ("-std=c++17", "-fmad=false")
+DEFAULT_OPTIONS: tuple[str, ...] = ("-std=c++17", "-fmad=false",
+                                     "--ftz=false")
 
 #: Prognostic + input field slots.  MUST match the F_* defines in p3.cu;
 #: tests/test_p3_cuda.py parses the .cu and pins the two lists together.
@@ -171,19 +183,43 @@ def p3_source(*, kernel_dir: Path = _KDIR) -> str:
             + (kdir / _P3_SOURCE.name).read_text(encoding=_ENCODING))
 
 
-@lru_cache(maxsize=None)
+class _Image:
+    """The compiled image, offered to the kernel manifest's recorder."""
+
+    def __init__(self, ptx):
+        self.ptx = ptx
+
+
+def _load_image(ptx):
+    import cupy as cp
+
+    module = cp.cuda.function.Module()
+    module.load(ptx.encode() if isinstance(ptx, str) else ptx)
+    return module
+
+
 def p3_module(options: tuple[str, ...] = DEFAULT_OPTIONS,
               source: str | None = None):
-    """Compile (once per option set) the P3 translation unit.
+    """The P3 translation unit, compiled once per option set and device.
 
     ``source`` exists so a gate can compile a deliberately perturbed copy
-    and show the gate can fail; leave it ``None`` for the real thing.
+    and show the gate can fail; leave it ``None`` for the real thing.  A
+    loaded image belongs to one device's context, so the cache is keyed by
+    the current device as well (RawModule did that internally).
     """
     import cupy as cp
 
+    return _p3_module(int(cp.cuda.Device().id), tuple(options), source)
+
+
+@lru_cache(maxsize=None)
+def _p3_module(device: int, options: tuple[str, ...], source: str | None):
+    # The direct NVRTC route, so --ftz=false survives (see CONTRACTION).
+    from woof import nvrtc_ptx_cache as compiler
+
     code = source if source is not None else p3_source()
-    module = cp.RawModule(code=code, options=options)
-    module.compile()
+    ptx, _mapping = compiler.compile_using_nvrtc(code, options, None, "p3.cu")
+    module = _load_image(ptx)
     try:
         from woof.certify.kernel_manifest import record_module
     except Exception:                                   # pragma: no cover
@@ -191,7 +227,7 @@ def p3_module(options: tuple[str, ...] = DEFAULT_OPTIONS,
     else:
         record_module("woof.core.p3_device:p3"
                       + ("" if source is None else "(substituted-source)"),
-                      source=code, options=options, module=module)
+                      source=code, options=options, module=_Image(ptx))
     return module
 
 
@@ -392,3 +428,223 @@ def run_p3_device(fields: dict, diag: dict, surf: dict, *,
                 (level_block, groups), args)
         else:
             module.get_function(name)(grid, (block,), args)
+
+
+# ---------------------------------------------------------------------------
+# The radar observation operator H_Z(x): P3's reflectivity as a PURE function
+# of the state.  woof/core/kernels/p3_zdiag.cu carries the statement-level
+# account; this is its compile site and launcher, plus the host replay of
+# the same statements on the CPU authority's own helpers.
+# ---------------------------------------------------------------------------
+
+_ZDIAG_SOURCE = _KDIR / "p3_zdiag.cu"
+
+#: Fields the operator reads, in kernel argument order.  ``th`` is the FULL
+#: potential temperature and ``pres`` the full pressure, as the step reads
+#: them (woof/core/p3.py apply: ``mp_th = thb + thp``, ``pres = state.p``).
+REFLECTIVITY_FIELDS: tuple[str, ...] = (
+    "qr", "nr", "qi", "qir", "ni", "qib", "th", "pres")
+
+
+def _clear_air_dbz() -> float:
+    """``10*log10((1e-22 + 1e-22)*1e18)`` in the kernel's float32 order.
+
+    The two accumulator seeds of p3_final_level (WRF module_mp_p3.F
+    :2286-2287) with no species added: the scheme's own reflectivity of a
+    cell with no rain and no ice.  The device evaluates ``log10`` in double
+    and rounds once to float32 (``p3_log10``), which is what this does.
+    """
+    seed = np.float32(1.0e-22)
+    total = np.float32(np.float32(seed + seed) * np.float32(1.0e18))
+    return float(np.float32(np.float32(10.0)
+                            * np.float32(np.log10(np.float64(total)))))
+
+
+#: The operator's ONE clear-air value, dBZ: what every cell with no rain and
+#: no ice above QSMALL reads (-36.9897).  ``woof.da.obsop`` records it as
+#: P3's clear-air floor; tests/test_p3_reflectivity_gpu.py holds the kernel
+#: to it bit for bit.
+CLEAR_AIR_DBZ = _clear_air_dbz()
+
+
+def p3_reflectivity_source(*, kernel_dir: Path = _KDIR) -> str:
+    """The forecast unit (:func:`p3_source`) with the operator appended.
+
+    The forecast unit's bytes are unchanged, so the forecast module and its
+    receipts do not move; the operator compiles as its own module.
+    """
+    kdir = Path(kernel_dir)
+    return (p3_source(kernel_dir=kdir)
+            + (kdir / _ZDIAG_SOURCE.name).read_text(encoding=_ENCODING))
+
+
+def p3_reflectivity_module(options: tuple[str, ...] = DEFAULT_OPTIONS):
+    """The operator's translation unit, once per option set and device."""
+    import cupy as cp
+
+    return _p3_reflectivity_module(int(cp.cuda.Device().id), tuple(options))
+
+
+@lru_cache(maxsize=None)
+def _p3_reflectivity_module(device: int, options: tuple[str, ...]):
+    from woof import nvrtc_ptx_cache as compiler
+
+    code = p3_reflectivity_source()
+    ptx, _mapping = compiler.compile_using_nvrtc(code, options, None,
+                                                 "p3_reflectivity.cu")
+    module = _load_image(ptx)
+    try:
+        from woof.certify.kernel_manifest import record_module
+    except Exception:                                   # pragma: no cover
+        pass
+    else:
+        record_module("woof.core.p3_device:p3_reflectivity",
+                      source=code, options=options, module=_Image(ptx))
+    return module
+
+
+def run_p3_reflectivity(fields: dict, out, *,
+                        tables: P3DeviceTables | None = None,
+                        block: int = 256,
+                        options: tuple[str, ...] = DEFAULT_OPTIONS):
+    """Write P3's reflectivity of ``fields`` into ``out`` (dBZ, float32).
+
+    ``fields`` maps :data:`REFLECTIVITY_FIELDS` to float32 cupy arrays of
+    one common size; ``out`` is a contiguous float32 cupy array of that
+    size.  The inputs are read only.
+    """
+    import cupy as cp
+
+    if tables is None:
+        tables = device_tables()
+    size = int(out.size)
+    arrays = []
+    for name in REFLECTIVITY_FIELDS:
+        if name not in fields:
+            raise ValueError(
+                f"P3 reflectivity needs field {name!r}; it reads "
+                f"{REFLECTIVITY_FIELDS}")
+        value = fields[name]
+        if int(value.size) != size:
+            raise ValueError(
+                f"P3 reflectivity field {name!r} has {value.size} elements, "
+                f"the output has {size}")
+        if value.dtype != np.float32:
+            raise TypeError(
+                f"P3 reflectivity field {name!r} is {value.dtype}; the "
+                "operator runs the scheme's float32 statements")
+        arrays.append(cp.ascontiguousarray(value).reshape(-1))
+    if out.dtype != np.float32 or not out.flags.c_contiguous:
+        raise TypeError("P3 reflectivity output must be contiguous float32")
+    module = p3_reflectivity_module(options)
+    module.get_function("p3k_reflectivity")(
+        ((size + block - 1) // block,), (block,),
+        (*arrays, tables.itab, out.reshape(-1), np.int32(size)))
+    return out
+
+
+def p3_reflectivity_host(fields: dict) -> np.ndarray:
+    """The same statements on the host, on the CPU authority's helpers.
+
+    ``woof.core.p3`` is the float32 transcription the device port is
+    measured against; this replays p3_final_level's Z half per cell with
+    its ``get_rain_dsd2``, ``impose_max_total_Ni``, ``calc_bulkRhoRime``,
+    ``find_lookupTable_indices_1a`` and ``access_lookup_table`` on local
+    values.  One Python iteration per cell holding rain or ice: a
+    reference and a small-domain path, not a production one.
+    """
+    from woof.core import p3 as P
+
+    f32 = np.float32
+    host = {name: np.asarray(fields[name], dtype=np.float32)
+            for name in REFLECTIVITY_FIELDS}
+    shape = host["qr"].shape
+    out = np.full(shape, f32(CLEAR_AIR_DBZ), dtype=np.float32)
+    active = (host["qr"] >= P.QSMALL) | (host["qi"] >= P.QSMALL)
+    if not active.any():
+        return out
+    itab = P.p3_init().itab
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        for index in zip(*np.nonzero(active)):
+            pres = host["pres"][index]
+            tm = f32((pres * f32(1.0e-5)) ** (P.RD * P.INV_CP))
+            t = f32(host["th"][index] * tm)
+            rho = f32(pres / (P.RD * t))
+            inv_rho = f32(f32(1.0) / rho)
+            ze_rain = ze_ice = f32(1.0e-22)
+            qr = host["qr"][index]
+            if qr >= P.QSMALL:
+                nr, mu_r, lamr, _c, _l = P.get_rain_dsd2(
+                    qr, host["nr"][index], f32(1.0))
+                lam2 = f32(lamr * lamr)
+                lam6 = f32(f32(lam2 * lam2) * lam2)
+                ze_rain = f32(rho * nr * (mu_r + f32(6.0))
+                              * (mu_r + f32(5.0)) * (mu_r + f32(4.0))
+                              * (mu_r + f32(3.0)) * (mu_r + f32(2.0))
+                              * (mu_r + f32(1.0)) / lam6)
+                ze_rain = max(ze_rain, f32(1.0e-22))
+            ni = P.impose_max_total_Ni(host["ni"][index], inv_rho)
+            qi = host["qi"][index]
+            if qi >= P.QSMALL:
+                ni = max(ni, P.NSMALL)
+                qir, _bir, rhop = P.calc_bulkRhoRime(
+                    qi, host["qir"][index], host["qib"][index])
+                dumi, dumjj, dumii, d1, d4, d5 = \
+                    P.find_lookupTable_indices_1a(qi, ni, qir, rhop)
+                f1pr09 = P.access_lookup_table(itab, dumjj, dumii, dumi, 7,
+                                               d1, d4, d5)
+                f1pr10 = P.access_lookup_table(itab, dumjj, dumii, dumi, 8,
+                                               d1, d4, d5)
+                f1pr13 = P.access_lookup_table(itab, dumjj, dumii, dumi, 9,
+                                               d1, d4, d5)
+                ni = min(ni, f32(f1pr09 * qi))
+                ni = max(ni, f32(f1pr10 * qi))
+                ze_ice = f32(ze_ice + f32(0.1892) * f1pr13 * ni * rho)
+                ze_ice = max(ze_ice, f32(1.0e-22))
+            out[index] = f32(f32(10.0) * f32(np.log10(
+                np.float64(f32((ze_rain + ze_ice) * f32(1.0e18))))))
+    return out
+
+
+def reflectivity(state, *, temperature=None, pressure=None):
+    """H_Z(x) for a P3 state: ``(nz, ny, nx)`` dBZ, the state untouched.
+
+    The state's own fields: ``qr``, ``nr``, ``qi``, ``qir``, ``ni``,
+    ``qib``, full theta ``thb + thp`` and full pressure ``p``, exactly the
+    arrays the forecast step reads (woof/core/p3.py ``apply``).  The step
+    diagnoses no t1d/p1d pair of its own, so ``temperature``/``pressure``
+    are refused rather than half honoured.  On a CuPy state the result is
+    the state's ``refl_10cm`` scratch slot (copy it to keep it, as for the
+    other device routes); on a NumPy state a fresh float32 array.
+    """
+    if temperature is not None or pressure is not None:
+        raise ValueError(
+            "the P3 reflectivity operator forms its temperature from the "
+            "state's full theta and pressure, as the P3 step does; it takes "
+            "no temperature/pressure pair")
+    missing = [name for name in ("qr", "nr", "qi", "qir", "ni", "qib")
+               if getattr(state, name, None) is None]
+    if missing:
+        raise ValueError(
+            "the P3 reflectivity operator needs the scheme's prognostic "
+            f"fields; this state carries no {missing}")
+    thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
+    shape = tuple(state.p.shape)
+    species = {name: getattr(state, name) for name in REFLECTIVITY_FIELDS
+               if name not in ("th", "pres")}
+    if not hasattr(state.p, "get"):
+        species["th"] = np.broadcast_to(
+            np.asarray(thb, np.float32) + np.asarray(state.thp, np.float32),
+            shape)
+        species["pres"] = state.p
+        return p3_reflectivity_host(species)
+    import cupy as cp
+
+    theta = cp.empty(shape, dtype=cp.float32)
+    theta[...] = thb + state.thp
+    species["th"] = theta
+    species["pres"] = state.p
+    out = state.scratch(shape, "refl_10cm")
+    run_p3_reflectivity(species, out)
+    del theta
+    return out

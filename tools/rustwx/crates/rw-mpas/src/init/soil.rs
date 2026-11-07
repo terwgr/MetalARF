@@ -1,34 +1,49 @@
 //! Soil layers and the surface companions, from `mpas_atmphys_initialize_real.F`.
 //!
 //! Everything here is counts, not flags: the first-guess sanity check, the
-//! dry-land floor, the water fill and the unbracketed-layer divergence all
+//! dry-land floor, the water fill and the unbracketed-layer count all
 //! reach the receipt as numbers a reader can weigh.
 //!
-//! ## Two things this module does on purpose that the Fortran does not
+//! Native cold-start fields are zero-initialized by the framework. An
+//! unbracketed NOAH layer retains those words, as does landmask outside 0/1.
+//! Sources: v8.4.2 Registry.xml:1298-1312, tools/registry/gen_inc.c:615-622,
+//! framework/mpas_field_routines.F:538-575 and physics/
+//! mpas_atmphys_initialize_real.F:453-488. There is no undefined local soil
+//! output array to repair or refuse.
 //!
-//! 1. **Unbracketed layers refuse.**  When no first-guess pair brackets a NOAH
-//!    layer's mid-depth, the Fortran's inner loop simply runs out and the
-//!    layer keeps whatever was in the array: uninitialised memory on the
-//!    first cell, the previous cell's value afterwards.  That is undefined
-//!    behaviour, not intended behaviour, and this port refuses on a non-zero
-//!    count naming cells and depths.  The rule is the standing one: where the
-//!    reference is undefined, implement the defined behaviour and document the
-//!    divergence rather than reproduce a bug bit for bit.
-//!
-//! 2. **The deep-moisture off-by-one is switchable.**  The Fortran seeds the
-//!    3.0 m bottom of the augmented column with `sm_input(nFGSoilLevels)`.
-//!    `sm_input` is offset one from `sm_fg`, so that index is the
-//!    *second-deepest* first-guess level, not the deepest.  [`DeepMoisture`]
-//!    reproduces it for the comparison arm and offers the corrected choice
-//!    beside it, and the run counts the cells where the two differ so the size
-//!    of the artefact is known rather than assumed.
-
-#![allow(clippy::needless_range_loop)]
+//! The deep-moisture comparison arm reproduces sm_input(nFGSoilLevels),
+//! the native second-deepest first-guess anchor. The pre-existing corrected
+//! arm remains available; this lane does not change its selection default.
 
 use crate::error::{MpasError, MpasResult};
 
 /// NOAH's four layer thicknesses, in metres.  MPAS refuses any other count.
 pub const NOAH_LAYER_THICKNESS: [f32; 4] = [0.10, 0.30, 0.60, 1.00];
+
+/// WRF real.exe, module_initialize_real.F:3108-3131. Soil and vegetation
+/// maps are independent at shorelines. Keep the land-use classification and
+/// give a land cell with water soil the defined silty-clay-loam category.
+pub fn reconcile_soil_category(xland: &[f32], soil: &mut [i32]) -> usize {
+    assert_eq!(xland.len(), soil.len());
+    let mut changed = 0;
+    for (&surface, category) in xland.iter().zip(soil) {
+        let wanted = if surface >= 1.5 { 14 } else if *category == 14 { 8 } else { *category };
+        if *category != wanted { *category = wanted; changed += 1; }
+    }
+    changed
+}
+
+#[cfg(test)]
+mod category_tests {
+    #[test]
+    fn wrf_shoreline_categories_are_consistent_and_idempotent() {
+        let xland = [1., 2., 1., 1., 2.];
+        let mut soil = [14, 6, 8, 16, 14];
+        assert_eq!(super::reconcile_soil_category(&xland, &mut soil), 2);
+        assert_eq!(soil, [8, 14, 8, 16, 14]);
+        assert_eq!(super::reconcile_soil_category(&xland, &mut soil), 0);
+    }
+}
 
 /// Which first-guess level seeds the bottom of the augmented soil column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,25 +54,6 @@ pub enum DeepMoisture {
     /// The deepest first-guess level, which is what the line reads as if it
     /// meant.  Opt-in, with its own receipt entry.
     Corrected,
-}
-
-/// Everything the soil step produces, plus the counts that qualify it.
-#[derive(Debug, Default)]
-pub struct SoilState {
-    /// `(nSoilLevels, nCells)`, indexed `[cell][layer]`.
-    pub tslb: Vec<[f32; 4]>,
-    pub smois: Vec<[f32; 4]>,
-    pub sh2o: Vec<[f32; 4]>,
-    pub smcrel: Vec<[f32; 4]>,
-    pub tmn: Vec<f32>,
-    pub xland: Vec<f32>,
-    pub sfc_albbck: Vec<f32>,
-    pub vegfra: Vec<f32>,
-    pub shdmin: Vec<f32>,
-    pub shdmax: Vec<f32>,
-    pub snowc: Vec<f32>,
-    pub snowh: Vec<f32>,
-    pub counts: SoilCounts,
 }
 
 /// The numbers a reader needs to know whether to trust the soil column.
@@ -73,7 +69,7 @@ pub struct SoilCounts {
     /// Land cells raised to the 0.005 dry floor.  A large count is a
     /// decode-side finding, not a soil-side one.
     pub dry_floor_applied: usize,
-    /// NOAH layers no first-guess pair bracketed.  Non-zero refuses.
+    /// NOAH layers no first-guess pair bracketed; native cold words retained.
     pub unbracketed_layers: usize,
     /// Cells where the reproduced and corrected deep-moisture choices differ
     /// by more than [`DEEP_MOISTURE_REPORTING_THRESHOLD`].
@@ -98,6 +94,13 @@ pub struct SoilCounts {
     /// ever brackets against the anchor and the quirk is unreachable, however
     /// large `deep_moisture_max_difference` looks.
     pub deep_moisture_anchor_reached: usize,
+    /// RUC from a layer source: values raised to real.exe's 0.005 floor
+    /// (`module_initialize_real.F:3441`), the columns holding them, and the
+    /// smallest value before the floor (null when none).  The extrapolated
+    /// 0 m anchor off a dry top layer is what goes below.
+    pub ruc_layer_floor_values: usize,
+    pub ruc_layer_floor_columns: usize,
+    pub ruc_layer_floor_min: Option<f32>,
 }
 
 /// Differences below this are round-off in the first-guess field itself and
@@ -123,6 +126,7 @@ pub const LAND_MOISTURE_FLOOR: f32 = 0.001;
 /// reach the receipt, where a large repair count is legible as the decode-side
 /// finding it is.  Reproducing the repair itself is required, without it the
 /// run this port is compared against would not have started.
+/// MPAS v8.4.2 mpas_init_atm_cases.F:4780-4800.
 pub fn first_guess_consistency_pass(
     landmask: &[i32],
     st_fg: &[Vec<f32>],
@@ -149,21 +153,9 @@ pub fn first_guess_consistency_pass(
     (bad_temperature, repaired_moisture)
 }
 
-/// The first-guess soil column as the horizontal interpolation left it.
-pub struct SoilFirstGuess<'a> {
-    pub n_cells: usize,
-    pub n_fg_soil_levels: usize,
-    /// `[cell][level]`, kelvin.
-    pub st_fg: &'a mut Vec<Vec<f32>>,
-    /// `[cell][level]`, m3/m3.
-    pub sm_fg: &'a Vec<Vec<f32>>,
-    /// Layer thicknesses in centimetres, `[level]`, uniform over cells as the
-    /// dispatch sets them.
-    pub dzs_fg_cm: &'a Vec<f32>,
-}
-
 /// `adjust_input_soiltemps`: move the deep and skin temperatures, and every
 /// first-guess soil level, onto the model's own terrain.
+/// MPAS v8.4.2 mpas_atmphys_initialize_real.F:217-270.
 pub fn adjust_input_soiltemps(
     landmask: &[i32],
     ter: &[f32],
@@ -182,7 +174,7 @@ pub fn adjust_input_soiltemps(
             for v in st_fg[c].iter_mut() {
                 *v -= shift;
             }
-        } else {
+        } else if landmask[c] == 0 {
             tmn[c] = skintemp[c];
         }
     }
@@ -190,6 +182,7 @@ pub fn adjust_input_soiltemps(
 }
 
 /// Cumulative mid-depths, in centimetres, from the layer thicknesses.
+/// MPAS v8.4.2 mpas_atmphys_initialize_real.F:273-336.
 pub fn first_guess_mid_depths_cm(dzs_fg_cm: &[f32]) -> Vec<f32> {
     let mut zs = vec![0.0f32; dzs_fg_cm.len()];
     if zs.is_empty() {
@@ -209,6 +202,7 @@ pub fn first_guess_mid_depths_cm(dzs_fg_cm: &[f32]) -> Vec<f32> {
 /// `0.05 + 0.05 + 0.15 = 0.25`.  The note's 0.30 was the layer *interface*, not
 /// its midpoint.  This is checked by test rather than asserted in prose
 /// because the second NOAH layer's temperature and moisture both hang off it.
+/// MPAS v8.4.2 mpas_atmphys_initialize_real.F:273-336.
 pub fn noah_mid_depths() -> [f32; 4] {
     let mut zs = [0.0f32; 4];
     zs[0] = 0.5 * NOAH_LAYER_THICKNESS[0];
@@ -230,6 +224,7 @@ pub type SoilLayers = (
 
 /// Interpolate the first-guess soil column onto NOAH's four layers.
 #[allow(clippy::too_many_arguments)]
+/// MPAS v8.4.2 mpas_atmphys_initialize_real.F:339-513.
 pub fn init_soil_layers_properties(
     landmask: &[i32],
     skintemp: &[f32],
@@ -277,10 +272,8 @@ pub fn init_soil_layers_properties(
     let mut sh2o = vec![[0.0f32; 4]; n_cells];
     let mut smcrel = vec![[0.0f32; 4]; n_cells];
 
-    let mut unbracketed: Vec<(usize, usize, f32)> = Vec::new();
-
     for c in 0..n_cells {
-        if landmask[c] != 1 {
+        if landmask[c] == 0 {
             counts.water_cells_filled += 1;
             for l in 0..4 {
                 tslb[c][l] = skintemp[c];
@@ -290,6 +283,10 @@ pub fn init_soil_layers_properties(
             }
             continue;
         }
+
+        // MPAS v8.4.2 mpas_atmphys_initialize_real.F:453-495 handles
+        // only landmask 1 and 0; other values retain the cold-start arrays.
+        if landmask[c] != 1 {continue;}
 
         // The augmented column: skin at depth zero, the first-guess levels at
         // their mid-depths in metres, and tmn at 3.0 m.
@@ -347,25 +344,8 @@ pub fn init_soil_layers_properties(
             }
             if !assigned {
                 counts.unbracketed_layers += 1;
-                if unbracketed.len() < 8 {
-                    unbracketed.push((c, l, zs[l]));
-                }
             }
         }
-    }
-
-    if counts.unbracketed_layers > 0 {
-        let sample: Vec<String> = unbracketed
-            .iter()
-            .map(|(c, l, z)| format!("cell {c} layer {} at {z} m", l + 1))
-            .collect();
-        return Err(MpasError::Refusal(format!(
-            "{} NOAH soil layer(s) were bracketed by no first-guess pair.  The Fortran leaves \
-             those layers holding whatever was in the array, which is undefined behaviour, not \
-             a fill; this port refuses instead.  First offenders: {}",
-            counts.unbracketed_layers,
-            sample.join(", ")
-        )));
     }
 
     // The dry-land floor.
@@ -410,7 +390,8 @@ pub struct SeaiceCounts {
 /// rather than a sea-ice one: `tslb`, `smois`, `sh2o`, `tmn` and `xland` all
 /// come out of the soil step correct and are then legitimately rewritten here.
 #[allow(clippy::too_many_arguments)]
-pub fn physics_init_seaice(
+/// MPAS v8.4.2 mpas_atmphys_initialize_real.F:586-729.
+pub fn physics_init_seaice<T: std::ops::IndexMut<usize, Output=f32> + AsRef<[f32]>>(
     frac_seaice: bool,
     tsk_seaice_threshold: f32,
     isice_lu: i32,
@@ -427,10 +408,10 @@ pub fn physics_init_seaice(
     isltyp: &mut [i32],
     xland: &mut [f32],
     tmn: &mut [f32],
-    tslb: &mut [[f32; 4]],
-    smois: &mut [[f32; 4]],
-    sh2o: &mut [[f32; 4]],
-    smcrel: &mut [[f32; 4]],
+    tslb: &mut [T],
+    smois: &mut [T],
+    sh2o: &mut [T],
+    smcrel: &mut [T],
 ) -> SeaiceCounts {
     let mut counts = SeaiceCounts::default();
     let threshold = if frac_seaice {
@@ -443,7 +424,7 @@ pub fn physics_init_seaice(
         0.5
     };
     counts.xice_threshold = threshold;
-    let n_soil = 4usize;
+    let n_soil = tslb.first().map(|v| v.as_ref().len()).unwrap_or(4);
 
     for c in 0..landmask.len() {
         if xice[c] >= threshold
@@ -489,12 +470,44 @@ pub fn physics_init_seaice(
     counts
 }
 
+/// Surface companions at the real-physics driver boundary.
+pub struct SurfaceState {
+    pub albedo:Vec<f32>,pub vegetation:Vec<f32>,pub minimum:Vec<f32>,pub maximum:Vec<f32>,
+    pub snow_cover:Vec<f32>,pub snow_height:Vec<f32>,pub land:Vec<f32>,
+}
+/// MPAS v8.4.2 physics/mpas_atmphys_initialize_real.F:131-178.
+pub fn init_surface_companions(land:&[i32],snow:&[f32],albedo:&[Vec<f32>],green:&[Vec<f32>],
+    year:i32,month:u32,day:u32)->SurfaceState {
+    let mut background=monthly_interp_to_date(albedo,year,month,day);
+    for (i,v) in background.iter_mut().enumerate() {*v= *v/100.;if land[i]==0 {*v=0.08;}}
+    let vegetation=monthly_interp_to_date(green,year,month,day);
+    let (minimum,maximum)=monthly_min_max(green);
+    SurfaceState {albedo:background,vegetation,minimum,maximum,
+        snow_cover:snow.iter().map(|&v|if v>=10. {1.} else {0.}).collect(),
+        snow_height:snow.iter().map(|&v|v*5./1000.).collect(),
+        land:land.iter().map(|&v|if v==1 {1.} else if v==0 {2.} else {0.}).collect()}
+}
+
 /// Interpolate a twelve-month field to the start date, the way
 /// `monthly_interp_to_date` does: mid-month anchors on day 15, linear in the
 /// Julian day, wrapping through December and January.
+/// MPAS v8.4.2 physics/mpas_atmphys_date_time.F:50-83,125-219.
 pub fn monthly_interp_to_date(monthly: &[Vec<f32>], year: i32, month: u32, day: u32) -> Vec<f32> {
-    let n = monthly[0].len();
     let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    monthly_interp_with_february(monthly, year, month, day, leap)
+}
+
+/// MPAS: src/core_atmosphere/physics/mpas_atmphys_date_time.F:51-84,148-219.
+/// Aerosol LBC replay retains the native saved mmd(2)=29 after a leap-year call.
+/// Other existing callers retain their calendar contract.
+pub(crate) fn monthly_interp_with_february(
+    monthly: &[Vec<f32>],
+    year: i32,
+    month: u32,
+    day: u32,
+    leap: bool,
+) -> Vec<f32> {
+    let n = monthly[0].len();
     let mmd = [
         31,
         if leap { 29 } else { 28 },
@@ -528,11 +541,13 @@ pub fn monthly_interp_to_date(monthly: &[Vec<f32>], year: i32, month: u32, day: 
     for l in 0..=12usize {
         if middle[l] < target && middle[l + 1] >= target {
             let (m1, m2) = if l == 0 || l == 12 { (12, 1) } else { (l, l + 1) };
-            for i in 0..n {
-                out[i] = (monthly[m2 - 1][i] * (target - middle[l]) as f32
+            // Element by element, on every core (pure per element).
+            use rayon::prelude::*;
+            out.par_iter_mut().enumerate().for_each(|(i, slot)| {
+                *slot = (monthly[m2 - 1][i] * (target - middle[l]) as f32
                     + monthly[m1 - 1][i] * (middle[l + 1] - target) as f32)
                     / (middle[l + 1] - middle[l]) as f32;
-            }
+            });
             break;
         }
     }
@@ -540,6 +555,7 @@ pub fn monthly_interp_to_date(monthly: &[Vec<f32>], year: i32, month: u32, day: 
 }
 
 /// Annual minimum and maximum of a twelve-month field.
+/// MPAS v8.4.2 physics/mpas_atmphys_date_time.F:222-255.
 pub fn monthly_min_max(monthly: &[Vec<f32>]) -> (Vec<f32>, Vec<f32>) {
     let n = monthly[0].len();
     let mut lo = monthly[0].clone();

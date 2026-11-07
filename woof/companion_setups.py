@@ -329,11 +329,11 @@ def save_setup(*, config_path, library, name):
     raw = copy.deepcopy(original)
     extra_files = {}
     if raw.get("fetch", {}).get("out"):
-        # [fetch].out is relative to the folder the wizard ran in, not to
-        # the TOML, so a verbatim copy would name a different place once
-        # the file sits in the library. Its meaning at save time is what
-        # is preserved.
-        raw["fetch"]["out"] = str(Path(raw["fetch"]["out"]).expanduser().resolve())
+        # [fetch].out is relative to the TOML (D-11), so a verbatim copy
+        # would name a different place once the file sits in the library.
+        # Its meaning at save time is what is preserved.
+        from woof.case_data import config_fetch_out
+        raw["fetch"]["out"] = str(config_fetch_out(original, base_dir=authority.base_dir))
     if resolved_case_data is not None:
         if raw["case_data"].get("wps_namelist"):
             raw["case_data"]["wps_namelist"] = SETUP_WPS
@@ -775,9 +775,10 @@ def retime_to_cycle(config_path, cycle: datetime, out) -> dict:
             f"{new_start:%Y-%m-%dT%H}. Regenerate the config for that cycle "
             "with `woof domain --cycle`.")
     if retimed["fetch"].get("out"):
-        # [fetch].out is relative to the folder the wizard ran in; its
-        # meaning is kept, as saving a setup keeps it.
-        retimed["fetch"]["out"] = str(Path(retimed["fetch"]["out"]).expanduser().resolve())
+        # [fetch].out is relative to the TOML (D-11); its meaning is
+        # kept, as saving a setup keeps it.
+        from woof.case_data import config_fetch_out
+        retimed["fetch"]["out"] = str(config_fetch_out(original, base_dir=authority.base_dir))
     _guard(original, retimed, {"fetch.cycle", "fetch.out", *moved},
            "Moving the cycle changed a setting it must keep: {field}.")
     timed = [{"field": field, "before": str(before), "after": str(after)}
@@ -796,10 +797,14 @@ def retime_to_cycle(config_path, cycle: datetime, out) -> dict:
         # A cycle the route does not publish (a 00Z-only product at 06Z) or
         # a window its ladder does not carry at that cycle is refused here,
         # in the route's words, before anything is written.
-        fetch_routes.resolve_cycle(route, cycle)
+        from woof.initial_source import boundary_fetch_request
+        boundary = boundary_fetch_request(raw["fetch"])
+        boundary_cycle = fetch.parse_cycle(boundary["cycle"], source)
+        fetch_routes.resolve_cycle(route, boundary_cycle)
         fetch_routes.resolve_leads(
-            route, cycle, int(math.ceil(float(raw["fetch"].get("hours", 0)))),
-            cadence=int(_cadence_hours(raw["fetch"], source)), start_hour=lead)
+            route, boundary_cycle, int(math.ceil(float(boundary.get("hours", 0)))),
+            cadence=int(_cadence_hours(boundary, source)),
+            start_hour=boundary.get("forecast_start_hour", 0))
     exp = _build(raw, out)
     text = CYCLE_HEADER.format(source=authority.source.name,
                                cycle=raw["fetch"]["cycle"]) + emit_experiment_toml(raw)

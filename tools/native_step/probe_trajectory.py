@@ -1,0 +1,77 @@
+"""Four parent intervals with independent native host updates, pinned AC diagnostic only."""
+import argparse,hashlib,json,os,sys,time
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[2]
+p=argparse.ArgumentParser();p.add_argument('--arm',choices=('python','native'),required=True);p.add_argument('--numerics',choices=('strict','fast'),required=True)
+a=p.parse_args();binding=json.loads((ROOT/'receipts/local-binding.json').read_text())
+mask=os.environ['CUDA_VISIBLE_DEVICES'];os.environ.update(binding['runtime_env'])
+os.environ.update(CUDA_VISIBLE_DEVICES=mask,GPUWM_NUMERICS=a.numerics)
+for key,relative in {'TMPDIR':'tmp','XDG_CACHE_HOME':'cache','CUPY_CACHE_DIR':'cache/cupy','CUDA_CACHE_PATH':'cache/cuda','WOOF_GENERATED_TABLE_ROOT':'cache/generated'}.items():
+ path=ROOT/relative;path.mkdir(parents=True,exist_ok=True);os.environ[key]=str(path)
+sys.path[:0]=binding['runtime_env']['PYTHONPATH'].split(':')
+import cupy as cp
+import numpy as np
+from woof.core import dycore
+from woof.prepared_domain_tree_forecast import main as run
+from woof.native_step import Plan
+from host_annotations import annotate,inventory,host_inventory,phase,finish_trajectory
+from time_slots import Frame,frame_for,capture_slots,bind_slots
+class Complete(BaseException):pass
+receipt={'purpose':__doc__,'pid':os.getpid(),'numerics':a.numerics,'binding':binding,'cases':[], 'arm':a.arm, 'source':{},'completed_forecast':False}
+for name in ('woof/core/dycore.py','woof/core/physics.py','woof/core/noahmp_column_slab.py','woof/core/noahmp_flux_slab.py','woof/core/kernels/noahmp_vegeflux.cu','woof/native_step/recorder.c','woof/native_step/__init__.py','tools/native_step/host_annotations.py','tools/native_step/probe_trajectory.py','tools/native_step/time_slots.py','woof/ingest/lateral_bc.py'):
+ receipt['source'][name]=hashlib.sha256((ROOT/name).read_bytes()).hexdigest()
+
+original=dycore.step;counts={};plans={};states={}
+def finish():
+    finish_trajectory(states,receipt,Complete)
+
+def step(state,cfg,**kwargs):
+    key=(cfg.nx,cfg.ny,cfg.nz);states[key]=state;counts[key]=counts.get(key,0)+1
+    if key==(120,70,44) and counts[key]==5:finish()
+    capture_at={(120,70,44):2,(267,117,44):4}.get(key)
+    assert capture_at is not None,key
+    entry={'shape':list(key),'call':counts[key],'start_seconds':state.elapsed_seconds}
+    if a.arm=='python' or counts[key]<capture_at:
+        original(state,cfg,**kwargs);entry['path']='python'
+    elif counts[key]==capture_at:
+        marker=phase(state,cfg,kwargs);assert marker[:2]==(False,True),marker
+        plan=Plan();plan.trace_failures();slots=[];annotations=[]
+        with plan.record(state,cfg):
+            with capture_slots(plan,slots),annotate(plan,annotations,layout_guard=True):
+                original(state,cfg,**kwargs)
+        cp.cuda.get_current_stream().synchronize()
+        bound=bind_slots(plan,slots)
+        plans[key]=(plan,marker,inventory(state))
+        entry.update(path='capture',bindings=bound,operations=plan.describe()['operations'])
+    else:
+        plan,marker,captured=plans[key]
+        assert phase(state,cfg,kwargs)==marker,'cadence or call arguments changed'
+        current=inventory(state)
+        old_by_name={x['label']:k for k,x in captured.items()}
+        new_by_name={x['label']:k for k,x in current.items()}
+        assert old_by_name==new_by_name,'reachable array identity/layout changed'
+        plan.submit(frame_for(state,cfg))
+        # Diagnostic publishes only after completion. General asynchronous
+        # model admission/error semantics have not been implemented.
+        cp.cuda.get_current_stream().synchronize()
+        for name in ('sfclay','noah','ysu'):state.physics.call_counts[name]+=1
+        state.physics.microphysics_updates+=1
+        state.elapsed_seconds+=cfg.dt
+        entry['path']='native';entry['submissions']=1
+    entry['end_seconds']=state.elapsed_seconds
+    receipt['cases'].append(entry)
+
+dycore.step=step
+command=['--prepared-root',binding['prepared_root'],binding['proof_option'],binding['prepared_head_sha256'],'--experiment-config',binding['config'],'--experiment-config-sha256',binding['config_sha256'],'--progress-format','jsonl','--render-products','none','--io-mode','none','--outdir',str(ROOT/('trajectory-check-'+str(time.time_ns())))]
+receipt['argv']=command;started=time.perf_counter()
+try:
+    run(command);raise RuntimeError('did not reach four complete parent intervals')
+except Complete:receipt['status']='FOUR_INTERVALS_COMPLETE_UNCOMPARED'
+except BaseException as error:
+    receipt.update(status='FAILED',error=repr(error));raise
+finally:
+    for plan,*rest in plans.values():
+        cp.cuda.get_current_stream().synchronize();plan.close()
+    receipt['wall_s']=time.perf_counter()-started
+    (ROOT/f'receipts/trajectory-{a.numerics}-{a.arm}.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    print(receipt['status'],flush=True)

@@ -1,0 +1,1328 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_dmp_f32",
+      "module": "hexv842_mpas_bl_mynn_dmp_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_dmp_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_dmp_mf",
+      "resources": [
+        [
+          "packed",
+          "float",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "float",
+          "read_write"
+        ],
+        [
+          "intscratch",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "flt",
+          "float",
+          "read"
+        ],
+        [
+          "fltv",
+          "float",
+          "read"
+        ],
+        [
+          "flq",
+          "float",
+          "read"
+        ],
+        [
+          "flqv",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "dx",
+          "float",
+          "read"
+        ],
+        [
+          "landsea",
+          "float",
+          "read"
+        ],
+        [
+          "ts",
+          "float",
+          "read"
+        ],
+        [
+          "psig_shcu",
+          "float",
+          "read"
+        ],
+        [
+          "kpbl",
+          "int32",
+          "read"
+        ],
+        [
+          "maxwidth",
+          "float",
+          "read_write"
+        ],
+        [
+          "maxmf",
+          "float",
+          "read_write"
+        ],
+        [
+          "ztop",
+          "float",
+          "read_write"
+        ],
+        [
+          "ktop",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "packed": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scratch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "intscratch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ust": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fltv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pblh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "landsea": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psig_shcu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "maxwidth": [
+          [
+            "any_1d"
+          ]
+        ],
+        "maxmf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktop": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "p1000mb",
+          "float32"
+        ],
+        [
+          "rcp",
+          "float32"
+        ],
+        [
+          "xlvcp",
+          "float32"
+        ],
+        [
+          "t0c",
+          "float32"
+        ],
+        [
+          "rvovrd",
+          "float32"
+        ],
+        [
+          "r_v",
+          "float32"
+        ],
+        [
+          "ep_2",
+          "float32"
+        ],
+        [
+          "ep_3",
+          "float32"
+        ],
+        [
+          "cice",
+          "float32"
+        ],
+        [
+          "cliq",
+          "float32"
+        ],
+        [
+          "cpv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "p608",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "ep1",
+          "float32"
+        ],
+        [
+          "momentum_opt",
+          "int32"
+        ],
+        [
+          "tke_opt",
+          "int32"
+        ],
+        [
+          "scalar_opt",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_bl_mynn_dmp_pack0_f32",
+      "module": "hexv842_mpas_bl_mynn_dmp_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_dmp_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_dmp_mf",
+      "resources": [
+        [
+          "packed",
+          "float",
+          "read_write"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read"
+        ],
+        [
+          "thl",
+          "float",
+          "read"
+        ],
+        [
+          "thv",
+          "float",
+          "read"
+        ],
+        [
+          "tk",
+          "float",
+          "read"
+        ],
+        [
+          "qt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qke",
+          "float",
+          "read"
+        ],
+        [
+          "qnc",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qnwfa",
+          "float",
+          "read"
+        ],
+        [
+          "qnifa",
+          "float",
+          "read"
+        ],
+        [
+          "qnbca",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "vt",
+          "float",
+          "read"
+        ],
+        [
+          "vq",
+          "float",
+          "read"
+        ],
+        [
+          "sgm",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_a",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "packed": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qnwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qnifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qnbca": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sgm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_a": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_bl_mynn_dmp_pack1_f32",
+      "module": "hexv842_mpas_bl_mynn_dmp_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_dmp_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_dmp_mf",
+      "resources": [
+        [
+          "packed",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_w",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_qt",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_thl",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_ent",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_qc",
+          "float",
+          "read"
+        ],
+        [
+          "s_aw",
+          "float",
+          "read"
+        ],
+        [
+          "s_awthl",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqt",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqv",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqc",
+          "float",
+          "read"
+        ],
+        [
+          "s_awu",
+          "float",
+          "read"
+        ],
+        [
+          "s_awv",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqke",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqnc",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqni",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqnwfa",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqnifa",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqnbca",
+          "float",
+          "read"
+        ],
+        [
+          "sub_thl",
+          "float",
+          "read"
+        ],
+        [
+          "sub_sqv",
+          "float",
+          "read"
+        ],
+        [
+          "sub_u",
+          "float",
+          "read"
+        ],
+        [
+          "sub_v",
+          "float",
+          "read"
+        ],
+        [
+          "det_thl",
+          "float",
+          "read"
+        ],
+        [
+          "det_sqv",
+          "float",
+          "read"
+        ],
+        [
+          "det_sqc",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "packed": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_qt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_ent": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_aw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awthl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnbca": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_sqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_sqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_sqc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_bl_mynn_dmp_pack2_f32",
+      "module": "hexv842_mpas_bl_mynn_dmp_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_dmp_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_dmp_mf",
+      "resources": [
+        [
+          "packed",
+          "float",
+          "read_write"
+        ],
+        [
+          "det_u",
+          "float",
+          "read"
+        ],
+        [
+          "det_v",
+          "float",
+          "read"
+        ],
+        [
+          "qc_bl1d",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl1d",
+          "float",
+          "read"
+        ],
+        [
+          "qc_bl1d_old",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl1d_old",
+          "float",
+          "read"
+        ],
+        [
+          "rstoch_col",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "packed": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc_bl1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfra_bl1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc_bl1d_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfra_bl1d_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rstoch_col": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_bl_mynn_dmp_scatter_f32",
+      "module": "hexv842_mpas_bl_mynn_dmp_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_dmp_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_dmp_mf",
+      "resources": [
+        [
+          "packed",
+          "float",
+          "read"
+        ],
+        [
+          "vt",
+          "float",
+          "read_write"
+        ],
+        [
+          "vq",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_w",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_qt",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_thl",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_ent",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_aw",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awthl",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqt",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awu",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqke",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqni",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnbca",
+          "float",
+          "read_write"
+        ],
+        [
+          "sub_thl",
+          "float",
+          "read_write"
+        ],
+        [
+          "sub_sqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sub_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "sub_v",
+          "float",
+          "read_write"
+        ],
+        [
+          "det_thl",
+          "float",
+          "read_write"
+        ],
+        [
+          "det_sqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "det_sqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "det_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "det_v",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl1d",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra_bl1d",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "packed": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_qt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_ent": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edmf_qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_aw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awthl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnwfa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnifa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqnbca": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_sqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_sqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_sqc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "det_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc_bl1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfra_bl1d": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

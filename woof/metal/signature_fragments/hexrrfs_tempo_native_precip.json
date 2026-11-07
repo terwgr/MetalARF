@@ -1,0 +1,278 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_tail",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_tail.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_precip",
+      "cuda_symbol": "tempo_precip",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "prepared",
+          "float",
+          "read"
+        ],
+        [
+          "s_rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_frainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_max_hail_diameter_sfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_max_hail_diameter_column",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_precipw",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_frainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_max_hail_diameter_sfc_acc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr_max_hail_diameter_column_acc",
+          "float",
+          "read_write"
+        ],
+        [
+          "counter",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "prepared": [
+          [
+            "20",
+            "nz",
+            "nc"
+          ]
+        ],
+        "s_rainncv": [
+          [
+            "nc"
+          ]
+        ],
+        "s_rainnc": [
+          [
+            "nc"
+          ]
+        ],
+        "s_snowncv": [
+          [
+            "nc"
+          ]
+        ],
+        "s_snownc": [
+          [
+            "nc"
+          ]
+        ],
+        "s_graupelncv": [
+          [
+            "nc"
+          ]
+        ],
+        "s_graupelnc": [
+          [
+            "nc"
+          ]
+        ],
+        "s_sr": [
+          [
+            "nc"
+          ]
+        ],
+        "s_frainnc": [
+          [
+            "nc"
+          ]
+        ],
+        "s_max_hail_diameter_sfc": [
+          [
+            "nc"
+          ]
+        ],
+        "s_max_hail_diameter_column": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_precipw": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_rainncv": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_rainnc": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_snowncv": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_snownc": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_graupelncv": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_graupelnc": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_sr": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_frainnc": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_max_hail_diameter_sfc_acc": [
+          [
+            "nc"
+          ]
+        ],
+        "pr_max_hail_diameter_column_acc": [
+          [
+            "nc"
+          ]
+        ],
+        "counter": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "finish",
+          "int32"
+        ],
+        [
+          "accrue",
+          "int32"
+        ],
+        [
+          "bucket",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

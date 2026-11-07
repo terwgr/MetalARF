@@ -1,7 +1,9 @@
 // Generated complete WRF driver column entry points.
-extern "C" __global__ void lake_init_columns(int n,const float* seed,float* columns,float* statics,int use_depth,int depth_flag,float default_depth,float xice_threshold_run,int* errors) {
+extern "C" __global__ void lake_init_columns(int n,const float* seed,float* columns,float* statics,int use_depth,int depth_flag,float default_depth,float xice_threshold_run,int* errors,int col0,int count,char* arena) {
 #ifdef __CUDACC__
-int col = blockDim.x*blockIdx.x+threadIdx.x; if(col>=n)return;
+int slot = blockDim.x*blockIdx.x+threadIdx.x; if(slot>=count)return;
+int col = col0+slot; if(col>=n)return;
+lake_arena_begin(arena,count,slot);
 #else
 for(int col=0;col<n;++col) {
 #endif
@@ -335,9 +337,11 @@ statics[70*n+col]=tksatu3d.data[9];
 }
 #endif
 }
-extern "C" __global__ void lake_step_columns(int n,const float* forcing,float* columns,const float* statics,float* output,float dt,float xice_threshold_run,int* errors) {
+extern "C" __global__ void lake_step_columns(int n,const float* forcing,float* columns,const float* statics,float* output,float dt,float xice_threshold_run,int* errors,int col0,int count,char* arena) {
 #ifdef __CUDACC__
-int col = blockDim.x*blockIdx.x+threadIdx.x; if(col>=n)return;
+int slot = blockDim.x*blockIdx.x+threadIdx.x; if(slot>=count)return;
+int col = col0+slot; if(col>=n)return;
+lake_arena_begin(arena,count,slot);
 #else
 for(int col=0;col<n;++col) {
 #endif
@@ -867,4 +871,44 @@ output[8*n+col]=albedo.data[0];
 #ifndef __CUDACC__
 }
 #endif
+}
+
+// Canonical observed/reanalysis fields to CLM restart layers. One independent
+// thread per column. Horizontal fractional ice conserves equivalent volume.
+extern "C" __global__ void lake_bind_source_columns(int n, const float* src,
+    float* columns, const float* statics) {
+    int q=blockIdx.x*blockDim.x+threadIdx.x; if(q>=n) return;
+    float water=src[q], bottom=src[n+q], mixed=src[2*n+q], shape=src[3*n+q];
+    float ice=src[4*n+q], fraction=src[5*n+q], ice_t=src[6*n+q];
+    bool has_water=isfinite(water)&&water>=270.f&&water<=330.f;
+    bool profile=has_water&&isfinite(bottom)&&bottom>=270.f&&bottom<=330.f
+        &&isfinite(mixed)&&mixed>=0.f&&isfinite(shape)&&shape>0.f&&shape<1.f;
+    float depth=statics[q];
+    bool has_fraction=isfinite(fraction)&&fraction>=0.f&&fraction<=1.f;
+    bool has_ice=has_fraction&&isfinite(ice)&&ice>=0.f;
+    // A column the source did not cover keeps lakeini's state.  It used to
+    // fall through to the surface word below and take the top layer's
+    // temperature as T_GRND, so an unobserved lake's start depended on
+    // whether some OTHER lake in the same call was observed: the resident
+    // 5 km CONUS run (GLSEA covers the Great Lakes) and its slab-built
+    // streamed twin disagreed in every lake column outside the Great Lakes
+    // (X12).
+    if(!has_water&&!has_fraction) return;
+    float remaining=has_ice?ice*fraction:0.f;
+    for(int k=0;k<10;k++) {
+        float t=columns[(5+k)*n+q];
+        float z=statics[(1+k)*n+q],dz=statics[(11+k)*n+q];
+        if(profile) {
+            float r=fminf(1.f,fmaxf(0.f,(z-mixed)/fmaxf(depth-mixed,1.e-6f)));
+            t=water+(bottom-water)*powf(r,1.f/shape-1.f);
+        } else if(has_water&&k==0) t=water;
+        if(has_ice) {
+            float volume=fminf(fmaxf(remaining,0.f),dz);
+            columns[(15+k)*n+q]=volume/dz;
+            remaining-=volume;
+            if(volume>0.f) t=isfinite(ice_t)?fminf(ice_t,273.15f):273.15f;
+        } else if(has_fraction&&fraction==0.f) columns[(15+k)*n+q]=0.f;
+        columns[(5+k)*n+q]=t;
+    }
+    columns[4*n+q]=has_fraction&&fraction>0.f&&isfinite(ice_t)?fminf(ice_t,273.15f):columns[5*n+q];
 }

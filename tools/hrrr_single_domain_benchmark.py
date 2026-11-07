@@ -32,6 +32,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from woof import runtime_manifest  # noqa: E402
+from woof.ingest.hrrr import _read_gate, aerosol_fill_receipt  # noqa: E402
 from woof.ingest.preprocess_backend import preprocess_math_call
 from woof.aerosol_source_receipt import (  # noqa: E402
     AEROSOL_SOURCE_KEY,
@@ -846,6 +847,16 @@ def _configured_soil_mesh(grid, experiment_tables):
     from woof.ingest.soil_downscale import soil_mesh_plan_from_case
     return soil_mesh_plan_from_case(
         None, grid, experiment_tables, source_grid=hrrr_source_grid())
+
+
+def _fetch_receipt_path(args):
+    """The fetch receipt beside the source files, where ``woof fetch``
+    records each runtime surface row (appended, or its fallback)."""
+    from woof.fetch import FETCH_MANIFEST_NAME
+    root = getattr(args, "source_root", None)
+    if root is not None:
+        return Path(root) / FETCH_MANIFEST_NAME
+    return getattr(args, "source_manifest", None)
 
 
 def _source_identity() -> dict[str, object]:
@@ -1824,6 +1835,9 @@ def _configured_physics_receipt(cfg, profile=None, *, acknowledgements=()):
     receipt = {
         "schema": "gpuwm-prepared-physics-profile-v1", "profile": profile,
         "front_door_selection": selection, "selection": "configured d01",
+        # The registry's 4/4 radiation option names the spectral pair
+        # ('rte-rrtmgp'); the engine that computes it is ra_rrtmg_variant.
+        "radiation_engine": getattr(cfg, "ra_rrtmg_variant", None),
         "resolved": resolved,
         "hrrr_initialization_contract": {
             "analyzed_mass_fields": ["QC", "QR", "QI", "QS", "QG"],
@@ -2107,10 +2121,17 @@ def _validate_native_hrrr_physics_profile(
 #: switch this map does not name is now a named refusal here rather than
 #: a silent default three layers down.
 _PROFILE_SWITCH_HOMES = MappingProxyType({
+    'oml_gamma': "shared",
+    'oml_hml0': "shared",
+    'oml_relaxation_time': "shared",
+    'sf_ocean_physics': "shared",
     "aer_init_opt": "shared",
     "alb_sol": "shared",
     "bl_mynn_gsd41_unsquared_qtke": "shared",
     "bl_mynn_mixlength": "shared",
+    # Admitted with the MYNN TKE-advection port (QKE_ADV scalar transport);
+    # the HRRR profiles declare it false, as the operational namelists do.
+    "bl_mynn_tkeadvect": "shared",
     "bl_mynn_version": "shared",
     "bl_pbl_physics": "shared",
     "cu_physics": "shared",
@@ -2283,7 +2304,8 @@ def _experiment_tables(
                 raise ValueError(f"{name} override must be boolean")
             raw["shared"][name] = value
     from woof.physics_source_defaults import (
-        recipe_physics_defaults, recipe_root_defaults, with_recipe_root_defaults)
+        MP_SCOPED_RECIPE_SETTINGS, recipe_physics_defaults,
+        recipe_root_defaults, with_recipe_root_defaults)
     defaults = recipe_physics_defaults("hrrr")
     for name, value in defaults.items():
         if name in ("usemonalb", "rdlai2d"):
@@ -2292,6 +2314,10 @@ def _experiment_tables(
             # declared controls, including explicit false.
             if int(switches["sf_surface_physics"]) in (2, 3):
                 raw["shared"].setdefault(name, value)
+        elif name in MP_SCOPED_RECIPE_SETTINGS:
+            # The fork Thompson generation exists for mp_physics = 28 only.
+            if int(switches["mp_physics"]) in MP_SCOPED_RECIPE_SETTINGS[name]:
+                raw["shared"][name] = value
         else:
             raw["shared"][name] = value
     with_recipe_root_defaults(
@@ -2687,10 +2713,26 @@ def _initial_hrrr_microphysics_receipt(
     seeded_numbers = cold_start_seeded_numbers(cfg)
     closure = (initialization.get("cold_start_moment_closure")
                if seeded_numbers else None)
+    from woof.ingest.handover_numbers import closure_active as _hn1_active
+    morrison_hn1 = int(cfg.mp_physics) == 10 and _hn1_active(cfg)
     for name, raw_expected in defaults.items():
         value = getattr(state, name, None)
         expected = np.float32(raw_expected)
         dtype = None if value is None else np.dtype(value.dtype)
+        if morrison_hn1 and name == "nc":
+            # Correct-mode HN1 (woof.ingest.handover_numbers): Morrison's
+            # droplet number starts at the scheme's own NDCNST diagnostic
+            # everywhere (morrison.cu nc3d = NDCNST*1e6/rho), not zero.
+            if (value is None or dtype != np.dtype(np.float32)
+                    or not bool(scalar(((value > 0) & (value < np.inf)).all()))):
+                raise ValueError(
+                    f"native HRRR selection {selection_label!r} Morrison nc must be "
+                    "the finite, positive NDCNST droplet number under correct-mode "
+                    "hydrometeor_handover_numbers")
+            exact_fields[name] = {"ndcnst_droplet_number": True,
+                                  "all_finite_above_zero": True}
+            numbers[name] = {"ndcnst_droplet_number": True}
+            continue
         if name in seeded_numbers:
             mass_name, seed_key = seeded_numbers[name]
             label = (f"native HRRR selection {selection_label!r} Thompson "
@@ -2766,7 +2808,12 @@ def _initial_hrrr_microphysics_receipt(
                     "all_exact_expected": True,
                 }
             )
-    if seeded_numbers:
+    if morrison_hn1:
+        number_policy = (
+            "correct-mode HN1 Morrison: nc at the NDCNST droplet number; "
+            "QNRAIN/QNICE/QNSNOW/QNGRAUPEL exact zero where the paired mass "
+            "is zero and closed from it where it is above zero")
+    elif seeded_numbers:
         makers = {"nc": "make_DropletNumber", "nr": "make_RainNumber",
                   "ni": "make_IceNumber"}
         number_policy = (
@@ -2951,7 +2998,8 @@ def _crop_horizontal_snapshot(snapshot, *, y0, y1, x0, x1,
     return SimpleNamespace(
         valid_time=snapshot.valid_time,
         levels_hpa=np.array(snapshot.levels_hpa, copy=True),
-        fields=cropped)
+        fields=cropped,
+        withheld_fields=dict(getattr(snapshot, "withheld_fields", None) or {}))
 
 
 def _crop_boundary_static(static, *, y0, y1, x0, x1, full_shape):
@@ -3038,13 +3086,25 @@ def _detach_mapped_snapshot(met):
     return SimpleNamespace(
         valid_time=met.valid_time,
         levels_hpa=np.array(met.levels_hpa, copy=True),
-        fields=fields)
+        fields=fields,
+        # A boundary strip that asks for a withheld field is refused with
+        # the decoder's reason, as the start state is.
+        withheld_fields=dict(getattr(met, "withheld_fields", None) or {}))
 
 
 def _map_boundary_snapshot(
         snapshot, targets, mapping_report, *,
-        surface_fallback_radius: int = 8, preprocess_backend="cuda"):
-    """Map only four boundary strips, avoiding a disposable full-domain hour."""
+        surface_fallback_radius: int = 8, preprocess_backend="cuda",
+        domain_grid=None):
+    """Map only four boundary strips, avoiding a disposable full-domain hour.
+
+    ``domain_grid`` is the domain the strips were cut from.  Each strip is
+    mapped with it as its lattice parent, so the strips of a domain that
+    IS the native HRRR grid take the identity route its start state took;
+    without it they were interpolated and their edge points refused
+    (acceptance D-05, 2.8.8: the full 1800 x 1060 grid died in its first
+    boundary hour, "HRRR bridge window lacks the bilinear donor cell").
+    """
     from woof.ingest.hrrr import interpolate_hrrr_to_lambert
 
     started = time.perf_counter()
@@ -3060,7 +3120,8 @@ def _map_boundary_snapshot(
             # Four strips are mapped independently here, so a soil
             # refusal that named only "soil mapping" left a coastal
             # domain's owner with four identical-looking suspects.
-            target_name=f"the {side} boundary strip of domain 1")
+            target_name=f"the {side} boundary strip of domain 1",
+            lattice_parent=domain_grid)
         compact[side] = _detach_mapped_snapshot(met)
         side_reports[side] = side_report
         del met
@@ -3081,8 +3142,18 @@ def _map_boundary_snapshot(
     return compact, time.perf_counter() - started
 
 
-def _compact_boundary_static(static, run_cfg, *, width):
-    """Copy the four static side rectangles once for worker initialization."""
+def _compact_boundary_static(static, run_cfg, *, width, latlon_mass=None):
+    """Copy the four static side rectangles once for worker initialization.
+
+    ``latlon_mass`` is the domain's mass-point ``(lat2d, lon2d)``; each
+    side then carries its own rectangle of it as ``XLAT_M``/``XLONG_M``,
+    the geodesy :func:`woof.ingest.real.initialize_real` reads (through
+    ``grid=``) to build an mp=28 strip's aerosol from the monthly WIF
+    climatology.  Without it an mp=28 tree on this route asking for the
+    climatology refused in every boundary worker ("could not derive the
+    model mass-point latitudes/longitudes"), although the start state
+    beside it had them.
+    """
     ny, nx = run_cfg.ny, run_cfg.nx
     rectangles = {
         "west": (0, ny, 0, width),
@@ -3090,7 +3161,7 @@ def _compact_boundary_static(static, run_cfg, *, width):
         "south": (0, width, 0, nx),
         "north": (ny - width, ny, 0, nx),
     }
-    return {
+    sides = {
         side: {
             name: np.ascontiguousarray(value)
             for name, value in _crop_boundary_static(
@@ -3099,6 +3170,36 @@ def _compact_boundary_static(static, run_cfg, *, width):
         }
         for side, (y0, y1, x0, x1) in rectangles.items()
     }
+    if latlon_mass is not None:
+        latitude, longitude = (np.asarray(value, dtype=np.float64)
+                               for value in latlon_mass)
+        if latitude.shape != (ny, nx) or longitude.shape != (ny, nx):
+            raise ValueError(
+                "boundary strip geodesy must be the mass grid "
+                f"({ny} x {nx}); got {latitude.shape} and {longitude.shape}")
+        for side, (y0, y1, x0, x1) in rectangles.items():
+            sides[side]["XLAT_M"] = np.ascontiguousarray(latitude[y0:y1, x0:x1])
+            sides[side]["XLONG_M"] = np.ascontiguousarray(longitude[y0:y1, x0:x1])
+    return sides
+
+
+def _boundary_static_sides(static, grid, run_cfg, *, width):
+    """The controller's boundary strip statics, geodesy included.
+
+    The coordinates come from ``grid``, never from ``static``: a root whose
+    statics come from a static source (``[static] source =
+    "hrrr-conus-v4"``) carries no ``XLAT_M``/``XLONG_M`` in its field set,
+    so a strip that looked there found nothing.  With no coordinates every
+    mp=28 boundary worker refused the WIF climatology at forecast start
+    ("could not derive the model mass-point latitudes/longitudes"),
+    blocking every plain HRRR regional run on 2.8.6.  Only an mp=28 domain
+    reads strip geodesy (its aerosol climatology); other schemes keep the
+    small payload.
+    """
+    return _compact_boundary_static(
+        static, run_cfg, width=width,
+        latlon_mass=(grid.latlon_mass() if int(run_cfg.mp_physics) == 28
+                     else None))
 
 
 @preprocess_math_call
@@ -3161,60 +3262,26 @@ def _initialize_boundary_sides(
             coord = make_vertical_coord(
                 strip_cfg.nz, hybrid_opt=strip_cfg.hybrid_opt,
                 etac=strip_cfg.etac, eta_levels=eta)
-            # NO ``grid=`` HERE, AND THAT IS THE DECISION, not an
-            # omission.  Every full-domain real route passes the mp=28
-            # aerosol front door; this one must not, for three reasons
-            # that all point the same way.
-            #
-            #  * NOTHING READS WHAT IT WOULD FILL.  These four states are
-            #    built to be thrown away: the only thing taken out of them
-            #    is ``extract_lateral_side(_coupled_device_fields(...))``,
-            #    and that dict is u, v, theta, phi, mu, qv and the analysed
-            #    hydrometeors with their seeded numbers
-            #    (woof.boundary_fields).  nwfa/nifa are deliberately absent
-            #    from it (woof/ingest/lateral_bc.py:639-646, the
-            #    registered mp=28 boundary deviation whose full argument
-            #    is in woof/core/moist.py).  Wiring here would resolve,
-            #    read and interpolate a 225 MB global dataset to populate
-            #    fields that this function's one consumer is documented
-            #    never to look at.
-            #  * THE COST IS PER STRIP, PER HOUR, PER PROCESS.  This runs
-            #    four times per forcing hour inside SPAWNED preparation
-            #    workers (_prepare_boundary_hour), so the load and the
-            #    monthly + vertical interpolation would be paid 4 x hours
-            #    x workers over for a result nobody reads.
-            #  * IT HAS NO GEODESY TO PASS.  ``_crop_boundary_static``
-            #    ships eight named fields and no XLAT/XLONG, on purpose --
-            #    the crop exists to keep the per-worker payload small.
-            #    Wiring would mean widening that payload too.
-            #
-            # WHAT MAKES THIS SAFE rather than a silent gap.  The f00 /
-            # reference state that actually becomes the forecast IS wired
-            # (``_initialize_state`` below passes ``grid=grid``) and the
-            # report this runner writes names THAT state's aerosol source,
-            # so the run's answer is recorded and no second answer exists
-            # to disagree with it.  And this runner cannot reach the mp=28
-            # block at all today: its physics selection is the closed
-            # ``_NATIVE_HRRR_RUNTIME_SWITCHES`` registry, whose profiles
-            # resolve mp_physics 1, 6, 8, 10, 18 and 50 and nothing else
-            # -- none of them aerosol-aware.  (50 joined with the P3
-            # profile row and changes nothing here: P3 carries no aerosol
-            # scalars either.)
-            #
-            # IF AN AEROSOL-AWARE PROFILE IS EVER ADDED TO THAT REGISTRY,
-            # this is the line to revisit -- not by pasting ``grid=`` in,
-            # but by deciding what a boundary strip's aerosol scope IS.
-            # As written it would emit the synthetic-fallback warning four
-            # times per forcing hour per worker, and under
-            # ``mp28_aerosol_source='climatology'`` it would RAISE, because
-            # a strip carries no mass-point geodesy for the resolver to
-            # honour the request with.
+            # The strip's own mass-point geodesy, when the controller
+            # shipped it (``_compact_boundary_static(latlon_mass=...)``):
+            # an mp=28 domain's boundary rows carry nwfa/nifa
+            # (woof.boundary_fields.AEROSOL_BOUNDARY_FIELDS), and under the
+            # monthly WIF climatology initialize_real builds them from this
+            # lat/lon, lazily and only on its mp=28 climatology branch, the
+            # same door the start state takes with ``grid=grid``.  Every
+            # other scheme reads none of it.
+            strip_geodesy = (
+                {"XLAT_M": strip_static["XLAT_M"],
+                 "XLONG_M": strip_static["XLONG_M"]}
+                if "XLAT_M" in strip_static else None)
             result = initialize_real(
                 strip_met, strip_cfg, coord, strip_static["HGT_M"],
                 landmask=strip_static["LANDMASK"],
+                **({} if strip_geodesy is None else {"grid": strip_geodesy}),
                 p_top=p_top, sfcp_to_sfcp=sfcp_to_sfcp,
                 preprocess_backend=preprocess,
                 state_backend="preprocess",
+                boundary_only=True,
                 flag_sh_surface_fallback=(
                     strip_met.flag_sh_surface_fallback),
                 boundary_species=_native_boundary_species())
@@ -3251,6 +3318,32 @@ def _initialize_boundary_sides(
 _PREPARE_WORKER_CONTEXT = None
 
 
+def _exit_with_parent():
+    """End this spawned worker the moment its parent process dies.
+
+    Breakage it prevents (Updraft factory, Vast V8X, 2026-10-27): when the
+    preparation process was killed (cgroup OOM killer, a pool child barrier,
+    a restart), its boundary workers blocked forever on the executor's call
+    queue, because each worker holds a copy of that queue's write end, so no
+    EOF ever arrives.  Two such workers kept 866 MiB CUDA contexts each on a
+    card for 8.5 h, invisible to the card pool.  The parent sentinel is the
+    pipe multiprocessing gives every spawned child for exactly this; it reads
+    EOF only when the parent is gone.  No-op outside a spawned child.
+    """
+    import multiprocessing.connection
+    import threading
+
+    parent = multiprocessing.parent_process()
+    if parent is None or parent.sentinel is None:
+        return
+
+    def watch(sentinel=parent.sentinel):
+        multiprocessing.connection.wait([sentinel])
+        os._exit(70)
+
+    threading.Thread(target=watch, name="exit-with-parent", daemon=True).start()
+
+
 def _prepare_worker_init(
         run_cfg, static_sides, eta, p_top, width,
         preprocess_backend, cpu_preprocess_bridge, sfcp_to_sfcp=True,
@@ -3266,6 +3359,7 @@ def _prepare_worker_init(
     backend carries for the same reason.
     """
     global _PREPARE_WORKER_CONTEXT
+    _exit_with_parent()
     _PREPARE_WORKER_CONTEXT = (
         run_cfg, static_sides, tuple(float(value) for value in eta),
         float(p_top), int(width), preprocess_backend,
@@ -3699,8 +3793,13 @@ def _write_chained_head(
     writer.write_head(
         initial_result=root_result, met=root_met,
         surface=root_surface.fields, metadata=metadata,
+        # The configuration's zones, which the forecast door compares
+        # against this head (prepared_single_domain_forecast: "prepared
+        # cache LBC width differs from experiment"); a literal 1/4 refused
+        # every HRRR-route tree on other zones, HRRR v4's own 1/9 among them.
         lbc={"spec_bdy_width": int(dc.run.spec_bdy_width),
-             "spec_zone": 1, "relax_zone": 4,
+             "spec_zone": int(dc.run.spec_zone),
+             "relax_zone": int(dc.run.relax_zone),
              "schedule": [[float(k * 3600), float((k + 1) * 3600)]
                           for k in range(len(requested_hours) - 1)],
              "fields": sorted(boundary_sides["west"])},
@@ -3798,7 +3897,7 @@ def _await_admitted(admitter, producer, lead, *, poll_seconds=1.0,
     fail first (it exits at once on a series it cannot read).  The decoder
     is looked at between waits, so its failure is raised now, not once the
     lead posts: the breakage this prevents is a preparation that sat out a
-    lead's whole budget beside a decoder that had already died (a development machine,
+    lead's whole budget beside a decoder that had already died (test host D,
     HRRR 2026-10-01T06, 30 minutes).  ``between`` is called between waits
     too (the build loop writes the intervals already built).
     """
@@ -4035,8 +4134,13 @@ def _write_posted_head(
     writer.write_head(
         initial_result=root_result, met=root_met,
         surface=root_surface.fields, metadata=metadata,
+        # The configuration's zones, which the forecast door compares
+        # against this head (prepared_single_domain_forecast: "prepared
+        # cache LBC width differs from experiment"); a literal 1/4 refused
+        # every HRRR-route tree on other zones, HRRR v4's own 1/9 among them.
         lbc={"spec_bdy_width": int(dc.run.spec_bdy_width),
-             "spec_zone": 1, "relax_zone": 4,
+             "spec_zone": int(dc.run.spec_zone),
+             "relax_zone": int(dc.run.relax_zone),
              "schedule": [[float(k * 3600), float((k + 1) * 3600)]
                           for k in range(len(requested_hours) - 1)],
              "fields": sorted(boundary_sides["west"])},
@@ -4235,6 +4339,18 @@ def _carry_vertical_routes(expected, actual, context):
                 f"{route!r}, the controller as {known[0]!r}")
 
 
+def _within_worker_allocation(count, allocation):
+    """Whether a job's native worker count is a positive count within its
+    allocation (see :func:`_require_preprocess_receipt`)."""
+
+    def whole(value):
+        return (isinstance(value, (int, np.integer))
+                and not isinstance(value, (bool, np.bool_)))
+
+    return (whole(count) and whole(allocation)
+            and 1 <= int(count) <= int(allocation))
+
+
 def _require_preprocess_receipt(
         controller_receipt, observed, context, *,
         expected_native_workers=None):
@@ -4248,6 +4364,21 @@ def _require_preprocess_receipt(
     as part of the receipt, where the controller's names the whole
     budget and a slot's its share, so a CPU preparation with two or more
     boundary hours was refused at its first boundary hour.
+
+    A count is held to AT MOST its allocation, not to equality with it.
+    The bound is the breakage this check prevents (d31071e093, "bound
+    preprocess workers"): a job on more than its share, such as a slot
+    on the controller's whole budget, oversubscribes the host while the
+    other slots run.  A job on fewer is the backend's own answer to the
+    host: :func:`woof.ingest.preparation_workers.effective_workers`
+    caps every count by the CPU and memory headroom it measures when the
+    job's backend is built, and work splits only across independent
+    columns, so the count moves no byte.  Equality turned load into a
+    failure: on a busy host the CPU preparation was refused with
+    "f00 mapping used 20 native workers; expected 24": the host narrowed
+    the running scope's CPUs from 0-23 to 4-23 after
+    :func:`woof.ingest.cpu_backend.automatic_workers` had taken (and
+    cached) its 24-CPU budget and before the backend counted its own.
 
     The vertical routes are the other place: a spawned boundary worker
     keeps its own route record, one entry per source level count it
@@ -4273,10 +4404,11 @@ def _require_preprocess_receipt(
         expected.pop("parallelism", None)
         actual.pop("parallelism", None)
         observed_workers = actual.pop("workers", None)
-        if observed_workers != expected_native_workers:
+        if not _within_worker_allocation(
+                observed_workers, expected_native_workers):
             raise RuntimeError(
                 f"{context} used {observed_workers!r} native workers; "
-                f"expected {expected_native_workers!r}")
+                f"its allocation is at most {expected_native_workers!r}")
         expected_chain = expected.get("masked_surface_chain")
         if isinstance(expected_chain, dict):
             expected["masked_surface_chain"] = {
@@ -4286,11 +4418,12 @@ def _require_preprocess_receipt(
         if isinstance(observed_chain, dict):
             observed_chain = dict(observed_chain)
             chain_workers = observed_chain.pop("workers", None)
-            if chain_workers != expected_native_workers:
+            if not _within_worker_allocation(
+                    chain_workers, expected_native_workers):
                 raise RuntimeError(
                     f"{context} ran the masked surface fields on "
-                    f"{chain_workers!r} native workers; expected "
-                    f"{expected_native_workers!r}")
+                    f"{chain_workers!r} native workers; its allocation is "
+                    f"at most {expected_native_workers!r}")
             actual["masked_surface_chain"] = observed_chain
     elif expected_native_workers is not None:
         raise RuntimeError(
@@ -4328,10 +4461,18 @@ def _budgeted_preprocess_backend(args, price=None):
         cpu_bridge=args.cpu_preprocess_bridge, price=price)
     if getattr(preprocess, "name", None) == "cuda":
         return preprocess, None
+    # The count the backend itself will run, through the same budget its
+    # constructor applies (affinity, cgroup CPU quota, memory headroom,
+    # WOOF_PREPROCESS_THREADS).  os.cpu_count() ignores the first three,
+    # so on a host whose cgroup grants fewer CPUs than it has cores every
+    # CPU preparation was refused at f00 ("used 245 native workers;
+    # expected 256") by its own receipt check.
+    from woof.ingest.cpu_backend import automatic_workers
+    from woof.ingest.preparation_workers import effective_workers
     effective_preprocess_workers = (
-        int(args.preprocess_workers)
+        effective_workers(int(args.preprocess_workers))
         if args.preprocess_workers is not None
-        else int(os.cpu_count() or 1))
+        else automatic_workers())
     if getattr(preprocess, "workers", None) != effective_preprocess_workers:
         chosen = getattr(preprocess, "selection", None)
         preprocess = resolve_preprocess_backend(
@@ -4500,6 +4641,14 @@ def run(args):
     seal_started = None
 
     requested_hours = model_forcing_hours
+    # The decoder reads HRRR's analyzed aerosol pair only for a
+    # configuration that uses it (use_rap_aero_icbc, or
+    # mp28_aerosol_source = "analysis"), the rule the fetch's record
+    # subset already follows.  Read unasked, a pair NCEP masks with a
+    # GRIB2 bitmap at a later lead stopped an as-posted default-profile
+    # preparation that never used it.
+    from woof.preparation_assets import analyzed_aerosol_domains
+    decoder_reads_analyzed_aerosol = bool(analyzed_aerosol_domains(exp))
     source_identity = {
         **_source_identity(),
         "source_cycle": requested_cycle.isoformat(),
@@ -4600,6 +4749,11 @@ def run(args):
     restore_cached = args.prepared_cache is not None \
         and args.prepared_cache.exists()
     chain = None if restore_cached else _chained_bundle(args)
+    nudging_writer = None
+    if getattr(exp, "nudging", None) is not None and not restore_cached:
+        from woof.spectral_nudging.prepared import analysis_writer_from_request
+        nudging_writer = analysis_writer_from_request(args, exp, chain,
+            tuple(model_start_time + timedelta(hours=hour) for hour in requested_hours))
     sealed_leads = _SealedBridgeLeads()
     #: As posted: the lead admission, the fetch's lead wait, and each lead's
     #: decoded-file record by lead (_decoded_lead_record).
@@ -4708,6 +4862,9 @@ def run(args):
     # ...]` while the answer sat in surface/.  None on the fresh road,
     # which holds the native pair and no surface yet.
     root_surface = None
+    # Recorded runtime surface fallbacks (fetch receipt rows); empty on a
+    # restored cache, whose own prepare receipt already carries them.
+    runtime_surface_fallbacks: dict = {}
     last_valid_time = None
     boundaries = None
     if restore_cached:
@@ -4795,7 +4952,8 @@ def run(args):
             window=source_window.bridge_tuple(),
             workers=args.pipeline_workers,
             log=args.pipeline_signals.with_suffix(".decoder.log"),
-            admissions=admitter.admissions)
+            admissions=admitter.admissions,
+            analyzed_aerosol=decoder_reads_analyzed_aerosol)
         started = time.perf_counter()
         pipeline_producer.start()
         admitter.start()
@@ -4844,7 +5002,8 @@ def run(args):
             cycle=requested_cycle.strftime("%Y-%m-%d %H:%M:%S"),
             window=source_window.bridge_tuple(),
             workers=args.pipeline_workers,
-            log=args.pipeline_signals.with_suffix(".decoder.log"))
+            log=args.pipeline_signals.with_suffix(".decoder.log"),
+            analyzed_aerosol=decoder_reads_analyzed_aerosol)
         started = time.perf_counter()
         pipeline_producer.start()
         pipeline_producer.wait_preflight()
@@ -4965,8 +5124,8 @@ def run(args):
         valid_time_by_hour = {}
         setup_record_by_hour = {}
         width = int(dc.run.spec_bdy_width)
-        static_sides = _compact_boundary_static(
-            static, dc.run, width=width)
+        static_sides = _boundary_static_sides(
+            static, grid, dc.run, width=width)
         boundary_targets = _boundary_mapping_targets(
             grid, static, dc.run, width=width)
         try:
@@ -4991,13 +5150,24 @@ def run(args):
                     shared_posted.context.physical_stream.times[0])
                 root_surface = shared_surface(shared_posted.checked,
                     base_met=base_store.read(0), member_met=initial_physical.read(0))
+            # THE START STATE TAKES THE HOST'S COLUMN THREADS, NOT THE JOB
+            # SLOTS.  --prepare-workers counts the forcing times prepared at
+            # once (default 2); f00 runs alone before any of them, so handing
+            # it that count left a 1262 x 1224 1 km start state at 1.1-1.6
+            # busy cores for 108 s while the card waited. The column helpers are slab-exact
+            # (tests/test_real_init.py), so the count moves no byte; the
+            # backend's own host-step budget bounds the threads and their RAM.
+            from woof.ingest.real import (
+                _column_worker_count, _default_column_workers)
+            f00_column_workers = _column_worker_count(
+                _default_column_workers(f00_preprocess, f00_native_workers))
             with _prep_step(args, "root_initialize",
                             label="Initialize the start state"):
                 result, met, horizontal, vertical, state_timing = _initialize_state(
                     snapshot, dc, grid, static, eta, mapping,
                     p_top=p_top, sfcp_to_sfcp=case_policy["sfcp_to_sfcp"],
                     water_temperature_statics=water_statics,
-                    column_workers=args.prepare_workers,
+                    column_workers=f00_column_workers,
                     surface_fallback_radius=(
                         target.surface_fallback_radius_cells),
                     preprocess_backend=f00_preprocess,
@@ -5019,6 +5189,8 @@ def run(args):
             from woof.ingest.prepared_cache import select_prepared_met_fields
 
             root_result = result
+            if nudging_writer is not None:
+                nudging_writer.write(0, root_result)
             root_aerosol_initialization = dict(
                 getattr(result, "aerosol_initialization", {}) or {})
             # Physics setup/cache writing need only this detached host subset.
@@ -5043,7 +5215,7 @@ def run(args):
                 "horizontal_seconds": horizontal,
                 "state_seconds": vertical,
                 "state_timing_seconds": state_timing,
-                "column_workers": int(args.prepare_workers),
+                "column_workers": int(f00_column_workers),
                 "preprocess_worker_slot": f00_worker_slot,
                 "effective_native_workers": f00_native_workers,
                 "completed_seconds_from_startup": (
@@ -5139,6 +5311,19 @@ def run(args):
                 mapping = {}
                 mapping_started = time.perf_counter()
                 hour_physical = resolve_physical_hour(hour, hour_snapshot.valid_time)
+                if nudging_writer is not None:
+                    # The ordinary boundary path keeps its exact strip arrays.
+                    # A selected analysis additionally needs the full domain;
+                    # it uses the same native mapper and column initializer.
+                    analysis, analysis_met, _, _, _ = _initialize_state(
+                        hour_snapshot, dc, grid, static, eta, {}, p_top=p_top,
+                        sfcp_to_sfcp=case_policy['sfcp_to_sfcp'],
+                        water_temperature_statics=water_statics,
+                        column_workers=f00_column_workers,
+                        surface_fallback_radius=target.surface_fallback_radius_cells,
+                        preprocess_backend=hour_preprocess, state_backend='preprocess')
+                    nudging_writer.write(requested_hours.index(hour), analysis)
+                    del analysis, analysis_met
                 if hour_physical is not None:
                     met = hour_physical.read(0 if physical_provider is not None else hour)
                     if met.valid_time != hour_snapshot.valid_time:
@@ -5156,7 +5341,8 @@ def run(args):
                         hour_snapshot, boundary_targets, mapping,
                         surface_fallback_radius=(
                             target.surface_fallback_radius_cells),
-                        preprocess_backend=hour_preprocess)
+                        preprocess_backend=hour_preprocess,
+                        domain_grid=grid)
                     if physical_output is not None:
                         # Capture is observational: the ordinary boundary strips
                         # above remain the exact arrays the initializer consumes.
@@ -5361,7 +5547,7 @@ def run(args):
                             # awaited, so each interval is written once its
                             # two hours are built: collected only when its
                             # slot came round again, interval k waited for
-                            # lead k + slots, not k + 1 (a development machine, HRRR
+                            # lead k + slots, not k + 1 (test host D, HRRR
                             # 2026-10-01T08, two slots: interval 3 waited for
                             # f005 although f004 was in at 09:02Z).  Collection
                             # order moves no byte (segments are written in
@@ -5465,6 +5651,16 @@ def run(args):
 
         _verify_preparation_overlay(overlay_series, physical_input=physical_input,
                                     binding=water_overlay_binding)
+        # Every preparation road (posted bundle, sealed bridge, prepared
+        # cache) checks the source-declared runtime surface fields here and
+        # carries any fallback its fetch receipt recorded into the report.
+        from woof.static.external_source import static_source_for
+        from woof.runtime_surface_fetch import require_runtime_surface_fields
+        from woof.source_adapters import get_source_adapter
+        runtime_surface_fallbacks = require_runtime_surface_fields(
+            root_met, get_source_adapter("hrrr"),
+            source_manifest=_fetch_receipt_path(args),
+            refuse_dropped=static_source_for(static_highres) is not None)
         posted_proof = None
         if writer is not None and (admitter is not None or shared_posted is not None):
             try:
@@ -5541,11 +5737,6 @@ def run(args):
                 seal_process = None
 
             from woof.ingest.prepared_cache import write_prepared_cache
-            from woof.static.external_source import static_source_for
-            if static_source_for(static_highres) is not None:
-                from woof.runtime_surface_fetch import require_runtime_surface_fields
-                from woof.source_adapters import get_source_adapter
-                require_runtime_surface_fields(root_met, get_source_adapter("hrrr"))
             from woof.ingest.hrrr_physics import resolve_prepared_noah_surface
             from woof.ingest.preprocess_backend import (
                 preprocess_reports_identity)
@@ -5677,8 +5868,14 @@ def run(args):
             },
             "input": {
                 "bridge": str(args.bridge.resolve()),
+                "aerosol_missing": aerosol_fill_receipt(_read_gate(args.bridge)),
                 "bridge_manifest_sha256": args.manifest_sha256,
                 "source_manifest_sha256": args.source_manifest_sha256,
+                # Present only when a runtime surface field started from its
+                # fallback because the cycle publishes no record for it; the
+                # rows are the fetch receipt's own (id, reason, cycle).
+                **({"runtime_surface_fallback": runtime_surface_fallbacks}
+                   if runtime_surface_fallbacks else {}),
                 "source_cycle": requested_cycle.isoformat(),
                 "model_start_time": model_start_time.isoformat(),
                 "source_forecast_hours": list(source_forecast_hours),
@@ -5726,10 +5923,12 @@ def run(args):
 
     started = time.perf_counter()
     from woof.static.external_source import static_source_for
-    if static_source_for(static_highres) is not None:
-        from woof.runtime_surface_fetch import require_runtime_surface_fields
-        from woof.source_adapters import get_source_adapter
-        require_runtime_surface_fields(root_met, get_source_adapter("hrrr"))
+    from woof.runtime_surface_fetch import require_runtime_surface_fields
+    from woof.source_adapters import get_source_adapter
+    runtime_surface_fallbacks = require_runtime_surface_fields(
+        root_met, get_source_adapter("hrrr"),
+        source_manifest=_fetch_receipt_path(args),
+        refuse_dropped=static_source_for(static_highres) is not None)
     driver = initialize_hrrr_physics(
         root_result, dc.run, root_met, static, attrs, grid,
         initial_snapshot.valid_time,
@@ -6047,8 +6246,14 @@ def run(args):
         },
         "input": {
             "bridge": str(args.bridge.resolve()),
+                "aerosol_missing": aerosol_fill_receipt(_read_gate(args.bridge)),
             "bridge_manifest_sha256": args.manifest_sha256,
             "source_manifest_sha256": args.source_manifest_sha256,
+            # Present only when a runtime surface field started from its
+            # fallback because the cycle publishes no record for it; the
+            # rows are the fetch receipt's own (id, reason, cycle).
+            **({"runtime_surface_fallback": runtime_surface_fallbacks}
+               if runtime_surface_fallbacks else {}),
             "source_cycle": requested_cycle.isoformat(),
             "model_start_time": model_start_time.isoformat(),
             "source_forecast_hours": list(source_forecast_hours),

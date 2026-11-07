@@ -3,6 +3,7 @@
 #include "rrtmgp_lw_noscat_bindings.metalh"
 #include "rrtmgp_lw_flux_reduce_bindings.metalh"
 #include "rrtmgp_sw_2stream_bindings.metalh"
+#include "rrtmgp_sw_2stream_workspace_bindings.metalh"
 #include "rrtmgp_sw_flux_reduce_bindings.metalh"
 #include "rrtmgp_fluxes_to_radiation_bindings.metalh"
 
@@ -298,6 +299,111 @@ kernel void rrtmgp_sw_2stream(
     const float min_mu=3.4526698300124393e-4f;
     float4 optics[RRTMGP_MAX_LAYERS]; float direct[RRTMGP_MAX_LAYERS+1];
     float2 adding[RRTMGP_MAX_LAYERS+1];
+    const int spec=col*p.ngpt+gpt, base=gl*nlev;
+    direct[top]=r.inc_flux[spec]*r.mu0[col*p.nlay+top_lay];
+    for(int j=0;j<p.nlay;++j){
+        const int lay=p.top_at_1?j:p.nlay-j-1;
+        const int ilev_in=p.top_at_1?lay:lay+1, ilev_out=p.top_at_1?lay+1:lay;
+        const int idx=(col*p.nlay+lay)*p.ngpt+gpt;
+        float ts,ws,gs;
+        if(p.fz_on){
+            const int fzb=(col*p.nlay+lay)*p.fz_nband+rte_i(r.fz_gpt_bands,gpt);
+            float fztc=r.fz_cld_tau[fzb];
+            if(p.fz_have_mask) fztc=rte_mul(fztc,r.fz_mask[idx]);
+            const float fw=r.fz_cld_ssa[fzb], fg=r.fz_cld_asy[fzb];
+            const float floorv=3.0f*1.17549435e-38f;
+            const float total_tau=rte_add(r.tau[idx],fztc);
+            const float gas_sc=rte_mul(r.tau[idx],r.ssa[idx]);
+            const float cld_sc=rte_mul(fztc,fw);
+            const float scatter=rte_add(gas_sc,cld_sc);
+            const float total_ssa=rte_div(scatter,max(floorv,total_tau));
+            const float cloud_g=rte_mul(cld_sc,fg);
+            const float total_g=rte_div(cloud_g,max(floorv,scatter));
+            const float f=total_g*total_g, wf=total_ssa*f;
+            ts=(1.0f-wf)*total_tau;
+            ws=(total_ssa-wf)/max(floorv,1.0f-wf);
+            gs=(total_g-f)/max(floorv,1.0f-f);
+        }else{ts=r.tau[idx];ws=r.ssa[idx];gs=p.zero_g?0.0f:r.asym[idx];}
+        const float gamma1=(8.0f-ws*(5.0f+3.0f*gs))*0.25f;
+        const float gamma2=3.0f*ws*(1.0f-gs)*0.25f;
+        const float kval=sqrt(max((gamma1-gamma2)*(gamma1+gamma2),min_k));
+        const float ex=exp(-ts*kval), ex2=ex*ex;
+        float rt=1.0f/(kval*(1.0f+ex2)+gamma1*(1.0f-ex2));
+        const float rdif=rt*gamma2*(1.0f-ex2), tdif=rt*2.0f*kval*ex;
+        const float mu=max(min_mu,r.mu0[col*p.nlay+lay]), kmu=kval*mu;
+        float dterm=1.0f-kmu*kmu; if(abs(dterm)<eps)dterm=eps;
+        rt=ws*rt/dterm;
+        const float gamma3=(2.0f-3.0f*mu*gs)*0.25f, gamma4=1.0f-gamma3;
+        const float alpha1=gamma1*gamma4+gamma2*gamma3;
+        const float alpha2=gamma1*gamma3+gamma2*gamma4;
+        const float kg3=kval*gamma3,kg4=kval*gamma4,tnoscat=exp(-ts/mu);
+        float rdir=rt*((1.0f-kmu)*(alpha2+kg3)
+             -(1.0f+kmu)*(alpha2-kg3)*ex2
+             -2.0f*(kg3-alpha2*kmu)*ex*tnoscat);
+        float tdir=-rt*((1.0f+kmu)*(alpha1+kg4)*tnoscat
+             -(1.0f-kmu)*(alpha1-kg4)*ex2*tnoscat
+             -2.0f*(kg4+alpha1*kmu)*ex);
+        rdir=max(0.0f,min(rdir,1.0f-tnoscat));
+        tdir=max(0.0f,min(tdir,1.0f-tnoscat-rdir));
+        float src_up=rdir*direct[ilev_in],src_dn=tdir*direct[ilev_in];
+        direct[ilev_out]=tnoscat*direct[ilev_in];
+        if(r.mu0[col*p.nlay+lay]<=0.0f)src_up=src_dn=0.0f;
+        optics[lay]=float4(rdif,tdif,src_dn,src_up);
+    }
+    const float source_sfc=r.mu0[col*p.nlay+sfc_lay]>0.0f
+        ? direct[sfc]*r.sfc_alb_dir[spec]:0.0f;
+    float dnv,upv;
+    if(p.top_at_1){
+        adding[p.nlay]=float2(r.sfc_alb_dif[spec],source_sfc);
+        for(int lev=p.nlay-1;lev>=0;--lev){
+            const float4 c=optics[lev];const float dn_=1.0f/(1.0f-c.x*adding[lev+1].x);
+            adding[lev].x=c.x+c.y*c.y*adding[lev+1].x*dn_;
+            adding[lev].y=c.w+c.y*dn_*(adding[lev+1].y+adding[lev+1].x*c.z);
+        }
+        dnv=0.0f;upv=dnv*adding[0].x+adding[0].y;
+        r.part_up[base*p.ncol+col]=upv;r.part_dn[base*p.ncol+col]=dnv+direct[0];
+        r.part_dir[base*p.ncol+col]=direct[0];
+        for(int lev=1;lev<nlev;++lev){const int lay=lev-1;const float4 c=optics[lay];
+            const float dn_=1.0f/(1.0f-c.x*adding[lev].x);
+            dnv=(c.y*dnv+c.x*adding[lev].y+c.z)*dn_;upv=dnv*adding[lev].x+adding[lev].y;
+            r.part_up[(base+lev)*p.ncol+col]=upv;r.part_dn[(base+lev)*p.ncol+col]=dnv+direct[lev];
+            r.part_dir[(base+lev)*p.ncol+col]=direct[lev];}
+    }else{
+        adding[0]=float2(r.sfc_alb_dif[spec],source_sfc);
+        for(int lev=0;lev<p.nlay;++lev){const float4 c=optics[lev];const float dn_=1.0f/(1.0f-c.x*adding[lev].x);
+            adding[lev+1].x=c.x+c.y*c.y*adding[lev].x*dn_;
+            adding[lev+1].y=c.w+c.y*dn_*(adding[lev].y+adding[lev].x*c.z);}
+        dnv=0.0f;upv=dnv*adding[p.nlay].x+adding[p.nlay].y;
+        r.part_up[(base+p.nlay)*p.ncol+col]=upv;r.part_dn[(base+p.nlay)*p.ncol+col]=dnv+direct[p.nlay];
+        r.part_dir[(base+p.nlay)*p.ncol+col]=direct[p.nlay];
+        for(int lev=p.nlay-1;lev>=0;--lev){const float4 c=optics[lev];const float dn_=1.0f/(1.0f-c.x*adding[lev].x);
+            dnv=(c.y*dnv+c.x*adding[lev].y+c.z)*dn_;upv=dnv*adding[lev].x+adding[lev].y;
+            r.part_up[(base+lev)*p.ncol+col]=upv;r.part_dn[(base+lev)*p.ncol+col]=dnv+direct[lev];
+            r.part_dir[(base+lev)*p.ncol+col]=direct[lev];}
+    }
+}
+
+// The taller-column route keeps the same arithmetic and recurrence as the
+// local-frame solver. Only its per-thread layer storage moves into disjoint
+// device workspace, reused after each g-point tile and column slab.
+kernel void rrtmgp_sw_2stream_workspace(
+    constant RrtmgpSw2StreamWorkspaceResources &r [[buffer(0)]],
+    constant RrtmgpSw2StreamWorkspaceParams &p [[buffer(1)]],
+    uint tid [[thread_position_in_grid]]) {
+    if (p.warp_fold != 0 || tid >= uint(p.ncol * p.gpt_tile)) return;
+    const int col=int(tid)/p.gpt_tile, gl=int(tid)-col*p.gpt_tile;
+    if(col>=p.ncol) return;
+    const int gpt=p.gpt0+gl; if(gpt>=p.ngpt) return;
+    const int nlev=p.nlay+1, top=p.top_at_1?0:p.nlay;
+    const int top_lay=p.top_at_1?0:p.nlay-1, sfc=p.top_at_1?p.nlay:0;
+    const int sfc_lay=p.top_at_1?p.nlay-1:0;
+    const float eps=1.1920928955078125e-7f, min_k=1.0e4f*eps;
+    const float min_mu=3.4526698300124393e-4f;
+    device float4 *optics = reinterpret_cast<device float4 *>(r.work_optics)
+                            + tid * uint(p.nlay);
+    device float *direct = r.work_direct + tid * uint(nlev);
+    device float2 *adding = reinterpret_cast<device float2 *>(r.work_adding)
+                            + tid * uint(nlev);
     const int spec=col*p.ngpt+gpt, base=gl*nlev;
     direct[top]=r.inc_flux[spec]*r.mu0[col*p.nlay+top_lay];
     for(int j=0;j<p.nlay;++j){

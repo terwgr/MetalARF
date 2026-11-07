@@ -186,6 +186,10 @@
         [
           "nx",
           "int32"
+        ],
+        [
+          "strict",
+          "int32"
         ]
       ],
       "threads_per_group": 128,
@@ -367,6 +371,10 @@
         [
           "nx",
           "int32"
+        ],
+        [
+          "stored_inverse",
+          "int32"
         ]
       ],
       "threads_per_group": 128,
@@ -403,6 +411,10 @@
         ],
         [
           "nx",
+          "int32"
+        ],
+        [
+          "strict",
           "int32"
         ]
       ],

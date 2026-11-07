@@ -1,0 +1,116 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_transport_handoff_f32",
+      "module": "hexv842_mpas_transport_handoff_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_transport_handoff_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "mpas_transport_handoff_v842_f32",
+      "resources": [
+        [
+          "before",
+          "float",
+          "read"
+        ],
+        [
+          "after",
+          "float",
+          "read_write"
+        ],
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "rqvdynten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rthdynten",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "before": [
+          [
+            "any_1d"
+          ]
+        ],
+        "after": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthdynten": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "nspecies",
+          "int32"
+        ],
+        [
+          "iqv",
+          "int32"
+        ],
+        [
+          "handoff",
+          "int32"
+        ],
+        [
+          "monotonic",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

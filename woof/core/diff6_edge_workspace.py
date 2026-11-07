@@ -1,4 +1,4 @@
-"""The declared working set of the fork's edge-to-edge sixth-order filter.
+"""Declared workspaces for padded sixth-order filters.
 
 ``diff_6th_form = "noaa_wrf39"`` (the NOAA WRFV3.9 fork, the request default
 of every HRRR recipe source and of ``hrrr_wrf.nl`` namelists in
@@ -18,6 +18,10 @@ its memory check and still allocate them on top.  They are now
 ``DomainState.scratch`` slots priced by
 :func:`woof.core.preflight.scratch_slot_registry` (and so by the ensemble
 plans that read it), with a write-before-read row in the lifetime audit.
+
+Strict mode also declares these slots for WOOF's padded dry-row caller in
+the WRF form. Pricing metadata is shared across backends; the Metal caller
+uses these declared buffers instead of temporary padding arrays.
 
 This module imports no cupy: the preflight prices it on CPU-only installs.
 Shapes are flat element counts; the launcher takes a shaped prefix of each,
@@ -44,14 +48,15 @@ DIFF6_EDGE_SLOTS = (SLOT_FIELD, SLOT_TEND, SLOT_PLANES, SLOT_PHB)
 def diff6_edge_active(cfg) -> bool:
     """True when production runs the edge form on this domain.
 
-    Mirrors :func:`woof.core.dycore.diff6_to_edge` (fork form and both
-    horizontal axes forced, specified or nested) and adds the filter's own
-    switch, without importing the cupy-backed dycore.
+    Ordinary mode prices the fork form on forced domains. Strict mode also
+    prices the padded WOOF dry caller, which uses this workspace whenever
+    the filter is enabled. No cupy-backed dycore import is needed.
     """
+    from woof.wrf_exact import ENABLED as WRF_EXACT
     return bool(getattr(cfg, "diff_6th_opt", 0)
-                and getattr(cfg, "diff_6th_form", "wrf_461") == "noaa_wrf39"
-                and (getattr(cfg, "specified", False)
-                     or getattr(cfg, "nested", False)))
+                and (WRF_EXACT or (getattr(cfg, "diff_6th_form", "wrf_461") == "noaa_wrf39"
+                     and (getattr(cfg, "specified", False)
+                          or getattr(cfg, "nested", False)))))
 
 
 def diff6_edge_slope(cfg) -> bool:

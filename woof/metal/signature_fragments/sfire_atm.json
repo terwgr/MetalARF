@@ -1,0 +1,668 @@
+{
+  "kernels": [
+    {
+      "name": "sfire_sum_cells",
+      "cuda_symbol": "sfire_sum_cells",
+      "module": "sfire_atm",
+      "source": "woof/metal/shaders/sfire_atm.metal",
+      "cuda_source": "woof/core/kernels/sfire_atm.cu",
+      "resources": [
+        [
+          "fine",
+          "float",
+          "read"
+        ],
+        [
+          "coarse",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "fine": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coarse": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "rx",
+          "int32"
+        ],
+        [
+          "ry",
+          "int32"
+        ],
+        [
+          "mean",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_interpolate_2d",
+      "cuda_symbol": "sfire_interpolate_2d",
+      "module": "sfire_atm",
+      "source": "woof/metal/shaders/sfire_atm.metal",
+      "cuda_source": "woof/core/kernels/sfire_atm.cu",
+      "resources": [
+        [
+          "coarse",
+          "float",
+          "read"
+        ],
+        [
+          "fine",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coarse": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fine": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "fx",
+          "int32"
+        ],
+        [
+          "fy",
+          "int32"
+        ],
+        [
+          "rx",
+          "int32"
+        ],
+        [
+          "ry",
+          "int32"
+        ],
+        [
+          "cx",
+          "float32"
+        ],
+        [
+          "cy",
+          "float32"
+        ],
+        [
+          "ox",
+          "float32"
+        ],
+        [
+          "oy",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_log_wind",
+      "cuda_symbol": "sfire_log_wind",
+      "module": "sfire_atm",
+      "source": "woof/metal/shaders/sfire_atm.metal",
+      "cuda_source": "woof/core/kernels/sfire_atm.cu",
+      "resources": [
+        [
+          "wind",
+          "float",
+          "read"
+        ],
+        [
+          "height",
+          "float",
+          "read"
+        ],
+        [
+          "rough",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "wind": [
+          [
+            "any_1d"
+          ]
+        ],
+        "height": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rough": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "target",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_tg_dist",
+      "cuda_symbol": "sfire_tg_dist",
+      "module": "sfire_atm",
+      "source": "woof/metal/shaders/sfire_atm.metal",
+      "cuda_source": "woof/core/kernels/sfire_atm.cu",
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "z",
+          "float",
+          "read"
+        ],
+        [
+          "terrain",
+          "float",
+          "read"
+        ],
+        [
+          "prop",
+          "float",
+          "read_write"
+        ],
+        [
+          "status",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "terrain": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "status": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "peak",
+          "float32"
+        ],
+        [
+          "upper",
+          "float32"
+        ],
+        [
+          "ext",
+          "float32"
+        ],
+        [
+          "active",
+          "int32"
+        ],
+        [
+          "xl",
+          "int32"
+        ],
+        [
+          "xh",
+          "int32"
+        ],
+        [
+          "yl",
+          "int32"
+        ],
+        [
+          "yh",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_fire_tendency",
+      "cuda_symbol": "sfire_fire_tendency",
+      "module": "sfire_atm",
+      "source": "woof/metal/shaders/sfire_atm.metal",
+      "cuda_source": "woof/core/kernels/sfire_atm.cu",
+      "resources": [
+        [
+          "hg",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "hc",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "terrain",
+          "float",
+          "read"
+        ],
+        [
+          "z",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "mu",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "prop",
+          "float",
+          "read"
+        ],
+        [
+          "prop_crown",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "hg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "terrain": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prop_crown": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "extg",
+          "float32"
+        ],
+        [
+          "extc",
+          "float32"
+        ],
+        [
+          "crown",
+          "float32"
+        ],
+        [
+          "scheme",
+          "int32"
+        ],
+        [
+          "xl",
+          "int32"
+        ],
+        [
+          "xh",
+          "int32"
+        ],
+        [
+          "yl",
+          "int32"
+        ],
+        [
+          "yh",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_smoke_emissions",
+      "cuda_symbol": "sfire_smoke_emissions",
+      "module": "sfire_atm",
+      "source": "woof/metal/shaders/sfire_atm.metal",
+      "cuda_source": "woof/core/kernels/sfire_atm.cu",
+      "resources": [
+        [
+          "tracer",
+          "float",
+          "read_write"
+        ],
+        [
+          "burnt",
+          "float",
+          "read"
+        ],
+        [
+          "fuel",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "prop",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "tracer": [
+          [
+            "any_1d"
+          ]
+        ],
+        "burnt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fuel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prop": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "rx",
+          "int32"
+        ],
+        [
+          "ry",
+          "int32"
+        ],
+        [
+          "yield",
+          "float32"
+        ],
+        [
+          "scheme",
+          "int32"
+        ],
+        [
+          "xl",
+          "int32"
+        ],
+        [
+          "xh",
+          "int32"
+        ],
+        [
+          "yl",
+          "int32"
+        ],
+        [
+          "yh",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    }
+  ]
+}

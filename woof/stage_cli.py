@@ -58,7 +58,6 @@ the documented boundary, and it is a real one.
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import importlib.machinery
 import json
@@ -68,6 +67,7 @@ from pathlib import Path
 from typing import Mapping, NamedTuple
 
 from woof import run_stamp
+from woof.file_digest import sha256_file
 
 #: The two runner modules, as importable module names.  A wheel has no
 #: ``tools/`` directory, so a script path would be a promise only a git
@@ -269,12 +269,7 @@ class StageRefusal(ValueError):
 
 def _sha256(path: Path) -> str:
     """``sha256`` of one file, streamed."""
-
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(_DIGEST_CHUNK), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    return sha256_file(path, block_bytes=_DIGEST_CHUNK)
 
 
 # ---------------------------------------------------------------------------
@@ -479,6 +474,9 @@ def resolve_bundle(prepared_root: Path) -> dict:
         if document.is_file():
             break
     else:
+        continued = _continuation_head_bundle(root)
+        if continued is not None:
+            return continued
         raise StageRefusal(_unbindable_root_refusal(root))
     try:
         payload = json.loads(document.read_text(encoding="utf-8"))
@@ -512,6 +510,45 @@ def resolve_bundle(prepared_root: Path) -> dict:
         "domains": domains,
         "payload": payload,
     }
+
+
+def _continuation_head_bundle(root: Path) -> dict | None:
+    """A restored forcing prefix, bound at the head its descriptor pins.
+
+    A checkpoint taken while the boundaries were still streaming stores a
+    forcing PREFIX (``woof.ingest.stream_resume seal-prefix``): the head,
+    every interval the restart needs, and ``continuation.json``, which pins
+    the head digest and every file's digest.  It has no seal document yet:
+    the continuation producer relays the later intervals into it and copies
+    the seal in last.  So it is bound exactly as the original chained
+    forecast was, at its head (``--prepared-head-sha256``).
+
+    THE BREAKAGE (run_515470d250a1060a, 2026-10-26, GFS streamed 3 km,
+    woof 2.9.7): ``go --prepared-root PREFIX --restart`` refused such a
+    prefix as "carries none of proof.json, receipt.json", so a forecast
+    that failed mid-run, or a spot resume on a new box, could not continue
+    from its checkpoint.  The refusal's teeth are kept where they belong:
+    the prefix must pass its descriptor and file digests, and
+    :func:`resolve_head_bundle` (``bind_head``) still refuses a head whose
+    producer failed, was stopped or is silent, so a partial tree that no
+    live continuation is finishing is never run.
+
+    ``None`` when ``root`` carries no continuation descriptor.
+    """
+
+    from woof.ingest.boundary_stream import BoundaryStreamError
+    from woof.ingest.stream_resume import DESCRIPTOR_NAME, verify_prefix
+
+    if not (root / DESCRIPTOR_NAME).is_file():
+        return None
+    try:
+        descriptor, _head = verify_prefix(root)
+    except (BoundaryStreamError, OSError, ValueError, KeyError) as error:
+        raise StageRefusal(
+            f"{root} is a restored forcing prefix whose "
+            f"{DESCRIPTOR_NAME} does not verify ({error}), so its bytes are "
+            "not the ones the checkpoint bound and it must not be run") from None
+    return resolve_head_bundle(root, str(descriptor["head_sha256"]))
 
 
 def resolve_head_bundle(prepared_root: Path, head_sha256: str) -> dict:
@@ -1040,6 +1077,78 @@ def sim_command(bundle: dict, *, experiment_config: Path,
 _RUN_ARTIFACTS = ("report.json", "wrfout", "progress.jsonl", "receipts")
 
 
+def preflight_bundle(bundle: dict, *, experiment_config: Path,
+                     wps_namelist: Path | None = None, physics_profile=None,
+                     restart: Path | None = None, devices=None):
+    """The forecast's actual CPU validation, before a query or a launch.
+
+    Compose the shipped command and use its parser to keep digest bindings
+    identical to sim. This performs no output allocation or device contact.
+    """
+    command = sim_command(bundle, experiment_config=experiment_config,
+                          wps_namelist=wps_namelist, physics_profile=physics_profile,
+                          restart=restart, devices=devices,
+                          outdir=Path(bundle["document"]).parent / ".readiness-unused")
+    if bundle["layout"] == "tree":
+        from woof import prepared_domain_tree_forecast as runner
+
+        args = runner.build_parser().parse_args(command[3:])
+        inputs = runner.preflight_prepared_tree(
+            prepared_root=args.prepared_root,
+            preparation_receipt_sha256=args.preparation_receipt_sha256,
+            prepared_head_sha256=args.prepared_head_sha256,
+            experiment_config=args.experiment_config,
+            experiment_config_sha256=args.experiment_config_sha256,
+            physics_profile=args.physics_profile, devices=args.devices)
+    else:
+        from woof import prepared_single_domain_forecast as runner
+
+        args = runner.build_parser().parse_args(command[3:])
+        # Defect: parser defaults are None, while the normal forecast main
+        # resolves omitted clock flags from its bound config before preflight.
+        runner._resolve_clock_arguments(args)
+        inputs = runner.preflight_prepared_forecast(
+            source=args.source, prepared_root=args.prepared_root,
+            proof_sha256=args.proof_sha256,
+            source_manifest_sha256=args.source_manifest_sha256,
+            prepared_content_sha256=args.prepared_content_sha256,
+            prepared_head_sha256=args.prepared_head_sha256,
+            experiment_config=args.experiment_config, wps_namelist=args.wps_namelist,
+            physics_profile=args.physics_profile,
+            expert_acknowledgements=tuple(args.ack),
+            run_seconds=args.run_seconds, history_interval_seconds=args.history_interval_seconds,
+            domain_bundle=args.domain_bundle, devices=args.devices)
+    if restart is not None:
+        # The standalone preparation package intentionally carries no
+        # restart/forecast runtime. Keep that dependency on its optional runner.
+        single = runner if bundle["layout"] == "single" else runner.prepared_single
+        single.preflight_restart_algorithms(restart, inputs.experiment.root.run)
+    return inputs
+
+
+def readiness_for_bundle(prepared_root: Path, *, experiment_config: Path,
+                         wps_namelist=None, physics_profile=None, restart=None,
+                         devices=None) -> tuple[dict, int]:
+    from datetime import datetime, timezone
+    from woof import source_readiness as readiness
+
+    source, why = "prepared", None
+    try:
+        bundle = resolve_bundle(Path(prepared_root))
+        source = str(bundle["source"])
+        preflight_bundle(bundle, experiment_config=experiment_config,
+                         wps_namelist=wps_namelist, physics_profile=physics_profile,
+                         restart=restart, devices=devices)
+    except (ValueError, OSError) as refused:
+        why = str(refused)
+    document = readiness._refusal_document(source, None, "prepared-inputs", None,
+                                         False, why or "", datetime.now(timezone.utc))
+    if why is None:
+        document.update(state="ready", ready=True, refusal=None)
+    document["prepared_root"] = str(prepared_root)
+    return document, readiness.REFUSED_EXIT if why else readiness.READY_EXIT
+
+
 def _occupied_by(outdir: Path) -> list[str]:
     """Which run artifacts already sit in ``outdir``."""
 
@@ -1276,6 +1385,8 @@ def register_cli(subparsers) -> None:
                     "runner makes is unchanged.  --print-command emits "
                     "the exact runner line so you can drive it "
                     "yourself.")
+    from woof.output_formats import add_arguments
+    add_arguments(sim)
     sim.add_argument("prepared_root", type=Path, metavar="PREPARED_ROOT",
                      help="a prepared tree written by `woof prep "
                           "--output-root`, by the rw-wps console script, "

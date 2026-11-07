@@ -1,0 +1,49 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_aa_exner",
+      "module": "thompson_aerosol_exner",
+      "source": "woof/metal/shaders/thompson_aerosol_exner.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_exner",
+      "resources": [
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "pii_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure": [
+          [
+            "n"
+          ]
+        ],
+        "pii_out": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default",
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "aerosol-fma-powf"
+      ]
+    }
+  ]
+}

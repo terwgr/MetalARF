@@ -35,8 +35,7 @@ from woof.mapped_engine_bridge import (
     MAPPED_ROUTE_SUBCOMMAND as _MAPPED_ROUTE_SUBCOMMAND,
     resolve_engine as _resolve_mapped_engine,
 )
-from woof.mapped_source import (_load_json_document, _mapped_engine_choice,
-                                 read_input_list)
+from woof.mapped_source import _mapped_engine_choice, read_input_list
 from woof.hrrr_forecast import hrrr_source_window
 
 
@@ -71,6 +70,24 @@ def reads_as_a_sentence(detail: str) -> bool:
     return " " in head
 _SUPPORT_MATRIX = Path(__file__).with_name("native_wrf_support_v1.json")
 _HRRR_DOMAIN_VALIDATION_SCHEMA = "gpuwm-hrrr-domain-validation-v1"
+
+
+#: The console scripts that enter at :func:`main` (pyproject.toml).
+_CONSOLE_SCRIPTS = frozenset({"rw-wps", "woof-wrf-init"})
+
+
+def _wrf_stamp(text: str) -> str:
+    """Accept ``YYYY-MM-DDTHH`` (every other door's cycle form) beside the
+    WRF ``YYYY-MM-DD_HH:MM:SS`` stamp, and hand on the WRF stamp.
+
+    Anything else passes through unchanged so the run checks below name
+    the flag and the accepted forms.
+    """
+
+    try:
+        return f"{datetime.strptime(text, '%Y-%m-%dT%H'):%Y-%m-%d_%H:%M:%S}"
+    except ValueError:
+        return text
 
 
 def _parser(*, prog: str = "woof-wrf-init", add_help: bool = True,
@@ -178,6 +195,8 @@ def _parser(*, prog: str = "woof-wrf-init", add_help: bool = True,
         ),
     )
     parser.add_argument("--source", metavar="MODEL", help="native source adapter id")
+    from woof.earth2_licensing import add_licence_argument
+    add_licence_argument(parser)
     parser.add_argument(
         "--initial-inputs", type=Path, metavar="JSON",
         help="separate packaged analysis inventory for the initial state; "
@@ -396,7 +415,9 @@ def _parser(*, prog: str = "woof-wrf-init", add_help: bool = True,
     )
     parser.add_argument(
         "--valid-time",
-        help="initial UTC time in WRF form YYYY-MM-DD_HH:MM:SS.  On "
+        type=_wrf_stamp,
+        help="initial UTC time, YYYY-MM-DDTHH or WRF form "
+             "YYYY-MM-DD_HH:MM:SS.  On "
              "--source hrrr this is the CYCLE; model time zero is cycle + "
              "--forecast-start-hour and is derived for every stage",
     )
@@ -488,13 +509,16 @@ def _parser(*, prog: str = "woof-wrf-init", add_help: bool = True,
         ),
     )
     era5.add_argument("--experiment-config", type=Path)
+    era5.add_argument("--experiment-config-suite", action="store_true",
+                      help="bind the explicitly configured physics suite in the native export")
     gfs = parser.add_argument_group("GFS pgrb2.0p25 adapter")
     gfs.add_argument(
         "--gfs-series",
         type=Path,
         help="tab-separated HOUR and GFS GRIB2 path inventory",
     )
-    gfs.add_argument("--cycle", help="GFS cycle in YYYY-MM-DD_HH:MM:SS form")
+    gfs.add_argument("--cycle", type=_wrf_stamp,
+                     help="GFS cycle, YYYY-MM-DDTHH or YYYY-MM-DD_HH:MM:SS")
     gfs.add_argument(
         "--state-backend", choices=("preprocess", "cuda", "cpu", "metal"),
         default=None,
@@ -847,7 +871,7 @@ def _required_hrrr_args(args: argparse.Namespace) -> list[str]:
             try:
                 parsed = datetime.strptime(args.valid_time, "%Y-%m-%d_%H:%M:%S")
             except ValueError:
-                errors.append("--valid-time must use YYYY-MM-DD_HH:MM:SS")
+                errors.append("--valid-time must use YYYY-MM-DDTHH or YYYY-MM-DD_HH:MM:SS")
             else:
                 if parsed.minute != 0 or parsed.second != 0:
                     errors.append("--valid-time must be an exact hourly HRRR cycle")
@@ -920,7 +944,12 @@ def _required_hrrr_args(args: argparse.Namespace) -> list[str]:
         "--grib2-dump": args.grib2_dump,
         "--hierarchy-workers": args.hierarchy_workers,
         "--mapped-engine": args.mapped_engine,
-        "--no-stock-wrf-export": args.no_stock_wrf_export or None,
+        # NOT here any more: --no-stock-wrf-export (U-E6).  Both HRRR
+        # preparers take it (tools/prepare_hrrr_wrf.py spells it
+        # --skip-stock-wrf-export; the hierarchy stage spells it as
+        # here), and _hrrr_command relays it.  Refusing it left the
+        # single-domain route, whose requested export is fail-closed, no
+        # way through `woof prep` to a forecast-only preparation.
         "--statics-corridor": args.statics_corridor,
     }
     try:
@@ -937,7 +966,7 @@ def _required_hrrr_args(args: argparse.Namespace) -> list[str]:
         try:
             parsed = datetime.strptime(args.valid_time, "%Y-%m-%d_%H:%M:%S")
         except ValueError:
-            errors.append("--valid-time must use YYYY-MM-DD_HH:MM:SS")
+            errors.append("--valid-time must use YYYY-MM-DDTHH or YYYY-MM-DD_HH:MM:SS")
         else:
             if parsed.minute != 0 or parsed.second != 0:
                 errors.append("--valid-time must be an exact hourly HRRR cycle")
@@ -1254,7 +1283,7 @@ def _required_gfs_args(args: argparse.Namespace) -> list[str]:
         try:
             parsed = datetime.strptime(args.cycle, "%Y-%m-%d_%H:%M:%S")
         except ValueError:
-            errors.append("--cycle must use YYYY-MM-DD_HH:MM:SS")
+            errors.append("--cycle must use YYYY-MM-DDTHH or YYYY-MM-DD_HH:MM:SS")
         else:
             if (
                 parsed.minute != 0
@@ -1438,12 +1467,19 @@ def _apply_packaged_profile(
                                           packaged_provenance_files)
 
     try:
-        profile = packaged_profile(str(adapter.packaged_profile))
-        authorities = packaged_authorities(str(adapter.packaged_profile))
+        profile_id = adapter.packaged_profile
+        owner = getattr(adapter, "acquisition_owner", None)
+        if owner:
+            from importlib import import_module
+            selector = getattr(import_module(owner), "preparation_profile", None)
+            if selector:
+                profile_id = selector(args, adapter)
+        profile = packaged_profile(str(profile_id))
+        authorities = packaged_authorities(str(profile_id))
         contributing = packaged_contributing_mappings(
-            str(adapter.packaged_profile))
-        provenance_files = packaged_provenance_files(str(adapter.packaged_profile))
-    except (KeyError, FileNotFoundError, RuntimeError) as error:
+            str(profile_id))
+        provenance_files = packaged_provenance_files(str(profile_id))
+    except (KeyError, ValueError, FileNotFoundError, RuntimeError) as error:
         return [f"packaged source profile: {error}"]
 
     overridden = [
@@ -1508,6 +1544,22 @@ def _apply_packaged_profile(
         else:
             bound.append(f"{role}={text}")
     args.supplement = bound
+    # A composition that declares a companion (a run of the same grid and
+    # cycle that completes a subset the primary alone cannot initialize
+    # from) is refused here, in the row's own words, when none of the
+    # companion's files were supplied: the decode would otherwise refuse
+    # later as a bare role-inventory mismatch, which names no breakage.
+    supplied_roles = {text.split("=", 1)[0] for text in bound}
+    for binding_name, binding in sorted(field_sources.items()):
+        if "companion" in binding and binding["data_role"] not in supplied_roles:
+            return [
+                f"--supplement {binding['data_role']}=PATH: the packaged "
+                f"{adapter.source_id} composition declares "
+                f"{binding_name!r} as its companion and none of its files "
+                "were supplied. "
+                + (adapter.composition_requirement
+                   or "Without them the start would be incomplete.")
+            ]
     return []
 
 
@@ -1885,19 +1937,9 @@ def _hrrr_command(args: argparse.Namespace) -> list[str]:
             command.extend(("--ack", str(acknowledgement)))
         if args.cpu_preprocess_bridge is not None:
             command.extend(("--cpu-preprocess-bridge", str(args.cpu_preprocess_bridge)))
-        if args.statics_corridor is not None:
-            # Forwarded, not dropped.  The hierarchy takes this flag
-            # (``--statics-corridor [GRID_IDS]``) and it is what seals
-            # child-resolution statics for a moving nest; the front door
-            # accepted it, composed a command without it, and exited 0,
-            # so a corridor-declaring tree prepared through `woof prep`
-            # reached the tree runner with no corridor set and was
-            # refused there -- one stage after the flag that would have
-            # prevented it was typed.
-            if args.statics_corridor == "all":
-                command.append("--statics-corridor")
-            else:
-                command.extend(("--statics-corridor", args.statics_corridor))
+        _append_statics_corridor_option(command, args)
+        if args.no_stock_wrf_export:
+            command.append("--no-stock-wrf-export")
         return command
 
     tools = Path(__file__).resolve().parent.parent / "tools"
@@ -1943,13 +1985,7 @@ def _hrrr_command(args: argparse.Namespace) -> list[str]:
         command.extend(("--wps-namelist", str(args.wps_namelist)))
     if args.prepare_workers is not None:
         command.extend(("--prepare-workers", str(args.prepare_workers)))
-    if args.preprocess_backend is not None:
-        command.extend(("--preprocess-backend", args.preprocess_backend))
-    if args.preprocess_workers is not None:
-        command.extend(("--preprocess-workers", str(args.preprocess_workers)))
-    if args.cpu_preprocess_bridge is not None:
-        command.extend((
-            "--cpu-preprocess-bridge", str(args.cpu_preprocess_bridge)))
+    _append_preprocess_options(command, args)
     if args.sealed_prepared_cache:
         command.append("--sealed-prepared-cache")
     if args.extend_root_preparation is not None:
@@ -1963,6 +1999,8 @@ def _hrrr_command(args: argparse.Namespace) -> list[str]:
     for flag, path in physical_options:
         if path is not None:
             command.extend((flag, str(path)))
+    if args.no_stock_wrf_export:
+        command.append("--skip-stock-wrf-export")
     return command
 
 
@@ -1988,6 +2026,8 @@ def _era5_command(args: argparse.Namespace) -> list[str]:
         "--output-root",
         str(args.output_root),
     ]
+    if getattr(args, "experiment_config_suite", False):
+        command.append("--experiment-config-suite")
     if args.source_orography is not None:
         command.extend(("--source-orography", str(args.source_orography)))
         command.extend((
@@ -2004,15 +2044,7 @@ def _era5_command(args: argparse.Namespace) -> list[str]:
         command.extend(("--domain-source-orography", binding))
     if args.hierarchy_workers is not None:
         command.extend(("--hierarchy-workers", str(args.hierarchy_workers)))
-    if args.statics_corridor is not None:
-        # Forwarded in the caller's own spelling, for the reason the GFS
-        # and mapped builders carry: re-expanding a bare flag here would
-        # let this door and `run-plan --estimate` resolve one argv to two
-        # different corridor sets.
-        if args.statics_corridor == "all":
-            command.append("--statics-corridor")
-        else:
-            command.extend(("--statics-corridor", args.statics_corridor))
+    _append_statics_corridor_option(command, args)
     return command
 
 
@@ -2058,11 +2090,7 @@ def _gfs_command(args: argparse.Namespace) -> list[str]:
         command.extend(("--state-backend", args.state_backend))
     if args.no_stock_wrf_export:
         command.append("--no-stock-wrf-export")
-    if args.statics_corridor is not None:
-        if args.statics_corridor == "all":
-            command.append("--statics-corridor")
-        else:
-            command.extend(("--statics-corridor", args.statics_corridor))
+    _append_statics_corridor_option(command, args)
     if args.static_input is not None:
         command.extend(("--static-input", str(args.static_input)))
         command.extend(("--static-receipt", str(args.static_receipt)))
@@ -2123,10 +2151,7 @@ def _twentycr_command(args: argparse.Namespace) -> list[str]:
         command.extend(("--grib2-dump", str(args.grib2_dump)))
     if args.mapped_engine is not None:
         command.extend(("--mapped-engine", args.mapped_engine))
-    if args.statics_corridor is not None:
-        command.append("--statics-corridor")
-        if args.statics_corridor != "all":
-            command.append(args.statics_corridor)
+    _append_statics_corridor_option(command, args)
     _append_preprocess_options(command, args)
     if args.hierarchy_workers is not None:
         command.extend(("--hierarchy-workers", str(args.hierarchy_workers)))
@@ -2219,16 +2244,7 @@ def _mapped_command(args: argparse.Namespace) -> list[str]:
                 str(args.hierarchy_workers),
             )
         )
-    if args.statics_corridor is not None:
-        # Forwarded in the caller's own spelling -- bare for every child,
-        # the id list otherwise -- because the corridor SET is what the
-        # forecast runner checks the mover against, and re-expanding a
-        # bare flag here would let this door and `run-plan --estimate`
-        # resolve the same argv to two different sets.
-        if args.statics_corridor == "all":
-            command.append("--statics-corridor")
-        else:
-            command.extend(("--statics-corridor", args.statics_corridor))
+    _append_statics_corridor_option(command, args)
     # The one thing the generic runner cannot know: which registered
     # source id this preparation is FOR.  It is what the prepared
     # forecast binds to, so without it the mapped route could finish and
@@ -2237,7 +2253,26 @@ def _mapped_command(args: argparse.Namespace) -> list[str]:
     # hand lands on proof.json's `proof_content_sha256`, which is the
     # one value --proof-sha256 never accepts.
     command.extend(("--prepared-forecast-source", str(args.source)))
+    # The source row's inland-water air-temperature window (table data).
+    from woof.source_adapters import get_source_adapter
+    try:
+        hours = get_source_adapter(args.source).inland_air_mean_hours
+    except (KeyError, ValueError):
+        hours = None
+    if hours is not None:
+        command.extend(("--inland-air-mean-hours", repr(float(hours))))
     return command
+
+
+def _append_statics_corridor_option(command: list[str], args: argparse.Namespace):
+    # Forward the caller's spelling: bare means every child, otherwise keep
+    # the id list. Dropping this flag left moving nests without sealed child
+    # statics; expanding a bare flag here could disagree with run-plan.
+    if args.statics_corridor is not None:
+        if args.statics_corridor == "all":
+            command.append("--statics-corridor")
+        else:
+            command.extend(("--statics-corridor", args.statics_corridor))
 
 
 def _append_preprocess_options(command: list[str], args: argparse.Namespace):
@@ -2453,6 +2488,69 @@ def _apply_configuration_preprocess_default(args: argparse.Namespace) -> None:
               f"{reason}.", file=sys.stderr)
 
 
+def _apply_configuration_statics_default(args: argparse.Namespace) -> None:
+    """Seal the statics that the configured following nests require."""
+    if getattr(args, "statics_corridor", None) is not None:
+        return
+    path = getattr(args, "experiment_config", None)
+    if path is None:
+        return
+    from woof.experiment import load_experiment
+    try:
+        experiment = load_experiment(path)
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+        # Preserve the preparation route's own configuration diagnostics.
+        return
+    if (experiment.relocation.follow is not None
+            or any(domain.follow is not None for domain in experiment.domains)):
+        args.statics_corridor = "all"
+        print("prep: sealing statics corridors required by the configured "
+              "following nests (--statics-corridor).", file=sys.stderr)
+
+
+def _stage_configuration_wif(args: argparse.Namespace) -> None:
+    """Stage the mp=28 WIF aerosol climatology a configured domain needs.
+
+    THE BREAKAGE THIS PREVENTS (box L, 2026-10-24): a convection-permitting
+    hex-global child runs aerosol-aware Thompson (the HRRR-shape suite), and
+    prep refused it -- "mp_physics=28 on a domain with external lateral
+    boundaries (specified) needs WRF's monthly WIF aerosol climatology" --
+    on a box where nobody had run `woof fetch-tables --wif`.  The dataset is
+    a pinned table asset, not forecast input: it is staged into the table
+    cache by the same SHA-256-verified routine `woof fetch-tables --wif`
+    runs, and a staged, valid copy costs one hash.  A named file or root, a
+    synthetic or analyzed aerosol source, and `[fetch] wif = false` are left
+    as they are (``woof.preparation_assets.wif_fetch_domains``).  A failed
+    acquisition is left to the preparation's own refusal, which names the
+    ways out.
+    """
+    path = getattr(args, "experiment_config", None)
+    source = getattr(args, "source", None)
+    if path is None or source is None:
+        return
+    import tomllib
+    from woof.config_authority import read_config_authority
+    from woof.experiment import load_experiment
+    from woof.preparation_assets import wif_fetch_domains
+
+    try:
+        experiment = load_experiment(path)
+        tables = tomllib.loads(
+            read_config_authority(path).payload.decode("utf-8-sig"))
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+        return
+    hints = {**(tables.get("fetch") or {}), "source": source}
+    domains = wif_fetch_domains(experiment, hints)
+    if not domains:
+        return
+    from woof.table_assets import stage_wif_dataset
+
+    labels = ", ".join(f"d{int(d):02d}" for d in domains)
+    print(f"prep: staging the WIF aerosol climatology mp_physics=28 needs "
+          f"on {labels}", file=sys.stderr)
+    stage_wif_dataset()
+
+
 def _experiment_coverage_refusal(args: argparse.Namespace,
                                  adapter) -> str | None:
     """Why ``--source`` cannot force the ``--experiment-config`` root.
@@ -2488,8 +2586,26 @@ def main(argv: list[str] | None = None) -> int:
     # (UX finding N10).  `woof prep` comes through `woof.cli.main`,
     # which has already set it; calling it twice costs nothing.
     line_buffer_stdout()
-    parser = _parser()
-    return dispatch(parser.parse_args(argv), parser=parser)
+    from woof.earth2_licensing import check_argv, licence_scope, _values
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    import tomllib
+    try:
+        check_argv(["prep", *tokens])
+    except tomllib.TOMLDecodeError as error:
+        configs = ", ".join(_values(tokens, "--experiment-config"))
+        print(f"--experiment-config {configs} is not valid TOML: {error}", file=sys.stderr)
+        return EXIT_USAGE
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return EXIT_CONFIG
+    # The console script the reader typed names itself in usage and
+    # errors: `rw-wps` and `woof-wrf-init` share this entry point, and a
+    # hardcoded prog made `rw-wps --help` print "usage: woof-wrf-init".
+    invoked = Path(sys.argv[0]).stem if sys.argv and sys.argv[0] else ""
+    parser = (_parser(prog=invoked) if invoked in _CONSOLE_SCRIPTS
+              else _parser())
+    with licence_scope(_values(tokens, "--accept-licence")):
+        return dispatch(parser.parse_args(tokens), parser=parser)
 
 
 @dataclass(frozen=True)
@@ -2631,10 +2747,13 @@ def as_posted_refusal(source: str) -> str | None:
         row = posting(adapter.source_id)
     except (KeyError, ValueError):
         row = None
-    if row is None:
+    produced_here = row is None and bool(getattr(adapter, "local_posting", None))
+    if row is None and not produced_here:
         return (f"--source {source} declares no posting row, so nothing "
                 "says when a lead of it posts")
-    if not row.streams:
+    # A source produced on this machine (its row's local_posting) posts lead
+    # by lead through woof.local_posting, which writes the posting folder.
+    if not produced_here and not row.streams:
         return (f"--source {source} does not post lead by lead (its "
                 f"posting shape is {row.shape}), so there is no lead to "
                 "prepare as it posts")
@@ -2858,6 +2977,24 @@ def preparation_statics(chain: str, *, source: str | None = None) -> dict[str, s
 def dispatch(args: argparse.Namespace, *,
              parser: argparse.ArgumentParser,
              program: str = "rw-wps") -> int:
+    """Run the preprocessing stage inside its input-digest scope.
+
+    Inside it a file the fetch or this preparation already hashed is not
+    read again on the critical path, and the full re-reads of the inputs run
+    beside the work across the cores; the prepared cache waits for them
+    before it seals, and so does the end of this call
+    (:mod:`woof.authority_digests`).
+    """
+
+    from woof import authority_digests
+
+    with authority_digests.deferred_checks():
+        return _dispatch(args, parser=parser, program=program)
+
+
+def _dispatch(args: argparse.Namespace, *,
+              parser: argparse.ArgumentParser,
+              program: str = "rw-wps") -> int:
     """Run the preprocessing stage from an already-parsed namespace.
 
     Split out of :func:`main` so the stage has ONE body behind TWO front
@@ -2874,6 +3011,11 @@ def dispatch(args: argparse.Namespace, *,
     the usage line of the command they typed.
     """
 
+    from woof.earth2_licensing import check_namespace
+    try:
+        check_namespace(args)
+    except ValueError as error:
+        parser.error(str(error))
     # Which tree is executing, before any source bytes are read; and a
     # refusal when this install's version claims contradict each other.
     from woof.provenance_gate import announce_for_main
@@ -3424,6 +3566,8 @@ def dispatch(args: argparse.Namespace, *,
 
     try:
         _apply_configuration_preprocess_default(args)
+        _apply_configuration_statics_default(args)
+        _stage_configuration_wif(args)
     except (OSError, ValueError, RuntimeError) as error:
         print(f"Cannot resolve preprocessing from --experiment-config: {error}",
               file=sys.stderr)
@@ -3610,7 +3754,35 @@ _ADAPTER_OUTPUT = command_output.ADAPTER_OUTPUT
 redirect_adapter_output = command_output.redirect_adapter_output
 
 
+from contextvars import ContextVar as _ContextVar
+from contextlib import contextmanager as _contextmanager
+
+_IN_PROCESS_ADAPTERS = _ContextVar("source_adapters_in_process", default=False)
+
+
+@_contextmanager
+def in_process_adapters():
+    """Retain a hosting standby's resident preparation objects and context.
+
+    The ordinary CLI keeps its subprocess isolation. A resident host instead
+    executes the same composed module/argv on its preparation thread.
+    """
+    token = _IN_PROCESS_ADAPTERS.set(True)
+    try:
+        yield
+    finally:
+        _IN_PROCESS_ADAPTERS.reset(token)
+
+
 def _run_adapter_command(command):
+    if _IN_PROCESS_ADAPTERS.get():
+        import importlib
+        from types import SimpleNamespace
+        if len(command) < 3 or command[1] != "-m" or not command[2].startswith("woof."):
+            raise ValueError("resident preparation requires a packaged Python adapter; "
+                             "a child process would discard its resident boundary handle")
+        module = importlib.import_module(command[2])
+        return SimpleNamespace(returncode=module.main(command[3:]))
     if "--preprocess-workers" in command:
         from woof.ingest.preparation_workers import worker_environment
         requested = int(command[command.index("--preprocess-workers") + 1])

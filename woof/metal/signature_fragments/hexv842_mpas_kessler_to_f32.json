@@ -1,0 +1,272 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_kessler_to_f32",
+      "module": "hexv842_mpas_kessler_to_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_kessler_to_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/kessler_v842.py",
+      "cuda_symbol": "kessler_to_mpas",
+      "resources": [
+        [
+          "theta_m",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner_b",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_b",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_b",
+          "float",
+          "read_write"
+        ],
+        [
+          "zgrid",
+          "float",
+          "read_write"
+        ],
+        [
+          "surface_pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "tend_sfc_pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "rt_diabatic_tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "dtheta_dt_mp",
+          "float",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qrp",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_b": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_b": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_b": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zgrid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_sfc_pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_diabatic_tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dtheta_dt_mp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qrp": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rvord",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcv",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "dt_dyn",
+          "float32"
+        ],
+        [
+          "mp_top",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

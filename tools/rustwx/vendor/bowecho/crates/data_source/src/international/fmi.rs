@@ -11,7 +11,7 @@
 //! Site discovery: a delimited listing of today's UTC date prefix yields
 //! one `CommonPrefix` per radar; around midnight (or after an outage) the
 //! provider falls back to the previous UTC day. Newest frame: the
-//! lexicographic maximum `*_PVOL.h5` key under `{date}/{site}/`:
+//! lexicographic maximum `*_PVOL.h5` key under `{date}/{site}/` —
 //! zero-padded stamps make that the chronological maximum. Probed live
 //! 2026-06-12: 12 sites listed, per-site pages under one 1000-key page.
 
@@ -150,7 +150,7 @@ impl RecentFrames for FmiProvider {
         // Oldest listed day first so the combined key list stays
         // chronological (keys embed the date path + timestamp, so sort
         // order is time order). A missing day folder is skipped, not
-        // fatal: the midnight window legitimately 404s.
+        // fatal — the midnight window legitimately 404s.
         let mut keys: Vec<String> = Vec::new();
         let mut dates = candidate_utc_dates();
         dates.reverse();

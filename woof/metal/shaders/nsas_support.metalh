@@ -1,0 +1,23 @@
+#ifndef WOOF_NSAS_SUPPORT_METALH
+#define WOOF_NSAS_SUPPORT_METALH
+// Metal counterpart of the NsasCol accessor in nsas.cu: slot s, level k of
+// the column on tile thread t lives at ws[(s*(nz+2) + k)*nthr + t].
+#include "cumulus_support.metalh"
+
+// Float division is the correctly rounded soft binary32 divide; integer
+// division keeps the machine operation.
+static inline float aa_div(float a, float b) { return cu_div(a, b); }
+static inline float aa_div(float a, int b) { return cu_div(a, float(b)); }
+static inline float aa_div(int a, float b) { return cu_div(float(a), b); }
+static inline int aa_div(int a, int b) { return a / b; }
+
+struct NsasCol {
+    device float *ws;
+    int nz;
+    int nthr;
+    int t;
+    device float &a(int s, int k) const thread {
+        return ws[(ulong(s) * ulong(nz + 2) + ulong(k)) * ulong(nthr) + ulong(t)];
+    }
+};
+#endif

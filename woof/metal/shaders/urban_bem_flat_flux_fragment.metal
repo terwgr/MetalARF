@@ -73,7 +73,8 @@ kernel void urban_bem_flat_flux_fragment(
         ubf_sub(ubf_mul(0.01f, pr), ubf_mul(0.378f, es)));
     float fm, fh;
     if (ric > 0.0f) {
-        fm = ubf_div(1.0f, ubf_pow(ubf_add(1.0f, ubf_mul(ubf_mul(0.5f, 9.4f), ric)), 2.0f));
+        const float stable = ubf_add(1.0f, ubf_mul(ubf_mul(0.5f, 9.4f), ric));
+        fm = ubf_div(1.0f, ubf_mul(stable, stable));
         fh = fm;
     } else {
         float c = ubf_mul(ubf_mul(ubf_mul(ubf_mul(9.4f, 7.4f), aa), aa),

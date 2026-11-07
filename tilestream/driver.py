@@ -584,7 +584,7 @@ def geography_inventory(obj, names=None) -> dict:
         if drag is not None:
             for name in ("ctopo", "ctopo2"):
                 value = getattr(drag, name, None)
-                if isinstance(value, (cp.ndarray, np.ndarray)):
+                if _gather._is_array(value):
                     out[f"terrain_drag/{name}"] = value
             for name, value in (getattr(drag, "gwd", None) or {}).items():
                 out[f"terrain_drag/gwd/{name}"] = value
@@ -1553,7 +1553,7 @@ class TiledRun:
                  graph_key: str = "cadence", graph_scalars: bool = True,
                  graph_verify_host: bool = True,
                  graph_verify_topology: bool = False,
-                 on_sweep=None) -> None:
+                 on_sweep=None, global_keys=()) -> None:
         from woof.core.dycore import (step, begin_wrf_cfl_domain_step,
             set_wrf_cfl_tile_window, finish_wrf_cfl_tile,
             finish_wrf_cfl_domain_step)
@@ -1619,6 +1619,17 @@ class TiledRun:
                  else bool(chain_compute))
 
         home = _arrays_of(store, names, inventory_fn)
+        global_keys = tuple(global_keys)
+        if not global_keys:
+            # The 0-d domain-owned carriers (tilestream.global_inventory:
+            # the SCM forcing scalars) when the caller names none.
+            from tilestream.global_inventory import global_keys as _owned
+            global_keys = tuple(key for key in _owned(home)
+                                if getattr(home[key], "ndim", 1) == 0)
+        if global_keys:
+            from tilestream.global_inventory import global_keys as domain_global_keys
+            if set(global_keys) != set(domain_global_keys(home)):
+                raise TiledRunError("global transfer keys differ from the domain owners' complete inventory")
         if not home:
             raise TiledRunError("store holds none of the persisted attributes")
         first_home = next(iter(home.values()))
@@ -1776,6 +1787,7 @@ class TiledRun:
                 assert_geography_gathered(tiles[0], keys=geography_names)
 
         ring = None
+        fire_shadow = None
         if write_mode == "inplace":
             warnings.warn(
                 "write_mode='inplace' feeds each tile's NEW interior into the "
@@ -1785,20 +1797,31 @@ class TiledRun:
             other = None
         elif write_mode == "ring":
             from tilestream import rings as _rings
+            from tilestream.fire_inventory import fire_field_layout
 
             other = None
+            fire_home = {name: arr for name, arr in home.items()
+                         if fire_field_layout(name, arr.shape, cfg.ny, cfg.nx) is not None}
+            ring_home = {name: arr for name, arr in home.items()
+                         if name not in fire_home and name not in global_keys}
+            if fire_home:
+                # Preserve a complete old-time fire plane. Atmospheric rings
+                # carry periodic staggered geometry; SFIRE instead continues
+                # its physical boundary halo. Both read the same old step.
+                fire_shadow = _empty_like_store(fire_home, poison=False)
             kinds = sorted({k for _n, k, _d, _i
-                            in _rings.field_geometry(home, nz=nz)})
+                            in _rings.field_geometry(ring_home, nz=nz)})
             ring_plan = _rings.build_ring_plan(specs, kinds,
                                                margin_mode=ring_margin)
-            ring = _rings.RingArena(ring_plan, home, tiles, nz=nz, names=names,
+            ring = _rings.RingArena(ring_plan, ring_home, tiles, nz=nz, names=names,
                                     inventory_fn=inventory_fn,
                                     allow_pageable=allow_pageable)
         else:
             other = shadow if shadow is not None else _empty_like_store(
-                home, poison=poison)
+                {name: arr for name, arr in home.items() if name not in global_keys}, poison=poison)
             if not isinstance(other, dict):
                 other = _arrays_of(other, names, inventory_fn)
+            other.update({name: home[name] for name in global_keys})
             for name, arr in home.items():
                 if (name not in other
                         or tuple(other[name].shape) != tuple(arr.shape)):
@@ -2003,7 +2026,7 @@ class TiledRun:
         # list: ``_advance_clock`` reads host-side counters the step's own
         # host code maintains at issue time, measured at 0.011 ms/step --
         # see OVERLAP-ATTRIBUTION.md, which exonerated it.
-        defer_seam = (chained
+        defer_seam = (chained and fire_shadow is None
                       and graph_steppers is None
                       and health is None
                       and not timeline
@@ -2142,7 +2165,9 @@ class TiledRun:
                 gathered += _gather.gather_tile(
                     src, tiles[b], tspec, stream,
                     allow_pageable=allow_pageable, names=names,
-                    inventory_fn=inventory_fn, nz=nz).nbytes
+                    inventory_fn=inventory_fn, nz=nz, global_keys=global_keys).nbytes
+                from tilestream.sfire import configure_tile
+                configure_tile(tiles[b], tspec)
                 if ring is not None and sched is None:
                     # Taken FRESH, after whatever step this buffer last served.
                     # PhysicsDriver replaces whole tendency bundles when their
@@ -2210,7 +2235,7 @@ class TiledRun:
 
         sweep_sequence = 0
 
-        def _sweep(nsteps, step_kwargs, report, progress, physics_control):
+        def _sweep(nsteps, step_kwargs, report, progress, physics_control, step_function=None):
             nonlocal sweep_sequence
             # The byte counters are nonlocal AND reset here: they live in
             # __init__ because _gather_into writes them, and they are
@@ -2251,14 +2276,26 @@ class TiledRun:
             sweep_seconds: list[float] = []
             sweep_clocks: list[dict] = []
             stochastic = getattr(self, "_ensemble_stochastic_lease", None)
-            execution_graphs = None if stochastic is not None else graph_steppers
+            # The domain's IAU (woof.da.iau.IauSweepLease): each window's
+            # step folds the forcing cut to it, and a door's post-step acts
+            # reach the window before its scatter.  A captured graph has no
+            # place for a per-window forcing, so it steps ordinarily.
+            iau = getattr(self, "_iau_sweep_lease", None)
+            execution_graphs = (None if stochastic is not None or iau is not None
+                                else graph_steppers)
             if stochastic is not None and graph_steppers is not None:
                 self._ensemble_stochastic_graph_fallback = "ordinary window step preserves the live full-domain stochastic pattern"
             for istep in range(nsteps):
+                fire_records = []
+                if fire_shadow is not None:
+                    _copy_into(fire_shadow, home)
+                    src = {**home, **fire_shadow}
                 sweep_sequence += 1
                 _t_sweep = _time.perf_counter()
                 if stochastic is not None:
                     stochastic.begin(cfg, windows=len(specs))
+                if iau is not None:
+                    iau.begin(windows=len(specs))
                 begin_wrf_cfl_domain_step(cfg)
                 if execution_graphs is not None:
                     # Under graph_reuse="sweep" the sweep index IS the cache
@@ -2313,6 +2350,11 @@ class TiledRun:
                             stream.wait_event(compute_done)
                         if stochastic is not None:
                             stochastic.bind_window(tiles[b], tile_cfg, tspec, itile, stream=stream)
+                        if iau is not None:
+                            iau.bind_window(tiles[b], tspec, itile)
+                        elif "_iau_forcing" in vars(tiles[b]):
+                            # a released lease's last window forcing
+                            del tiles[b]._iau_forcing
                         set_wrf_cfl_tile_window(cfg.grid_id, tspec)
                         if timeline:
                             began = cp.cuda.Event()
@@ -2368,7 +2410,9 @@ class TiledRun:
                         # ``reflectivity_run_kwargs`` puts ``refl_10cm_due``
                         # in it so every tile writes the ``refl_10cm`` slot
                         # its store carries.
-                        if execution_graphs is None:
+                        if step_function is not None:
+                            step_function(tiles[b], tile_cfg, **step_kwargs)
+                        elif execution_graphs is None:
                             step(tiles[b], tile_cfg, **step_kwargs)
                         else:
                             # REFUSED rather than dropped.  ``GraphStepper
@@ -2394,6 +2438,10 @@ class TiledRun:
                                     "step that takes them.")
                             execution_graphs[b].run(tiles[b], stream)
                         finish_wrf_cfl_tile(cfg.grid_id)
+                        fire = getattr(getattr(tiles[b], "physics", None), "fire", None)
+                        if fire is not None:
+                            from tilestream.sfire import GRID_DIAGNOSTICS
+                            fire_records.append({key: getattr(fire.grid, key) for key in GRID_DIAGNOSTICS})
                         if timeline:
                             ended = cp.cuda.Event()
                             ended.record(stream)
@@ -2426,6 +2474,12 @@ class TiledRun:
                             # the buffer's own stream; the tile's INTERIOR is
                             # exactly what the scatter below will write.
                             health.tile(tiles[b], tspec, itile)
+                        if iau is not None:
+                            # After the readers above, as the resident door
+                            # acts after the step's health checks: the
+                            # window's share of a post-step increment, ahead
+                            # of the scatter (ev_stepped below orders it).
+                            iau.after_window(tiles[b], tspec, itile, stream=stream)
                         if post_step_hook is not None:
                             # The WRITER at the same instant: it clears the
                             # tile's one-frame REFL_10CM handoff, after the
@@ -2444,7 +2498,7 @@ class TiledRun:
                             splan = _gather.scatter_tile(
                                 tiles[b], dst, tspec, stream,
                                 allow_pageable=allow_pageable, names=names,
-                                inventory_fn=inventory_fn, nz=nz)
+                                inventory_fn=inventory_fn, nz=nz, global_keys=global_keys)
                     if sched is not None:
                         # The scatter rides the copy-out stream: after the
                         # step that wrote the interior, and after the READS
@@ -2460,7 +2514,7 @@ class TiledRun:
                             splan = _gather.scatter_tile(
                                 tiles[b], dst, tspec, cout,
                                 allow_pageable=allow_pageable, names=names,
-                                inventory_fn=inventory_fn, nz=nz)
+                                inventory_fn=inventory_fn, nz=nz, global_keys=global_keys)
                             if chained:
                                 ev_scatter[itile].record(cout)
                     scattered += splan.nbytes
@@ -2468,9 +2522,16 @@ class TiledRun:
                         progress(istep, itile, tspec)
                 finish_wrf_cfl_domain_step(cfg.grid_id)
                 if stochastic is not None:
-                    for stream in streams:
-                        stream.synchronize()
+                    if metal_context is not None:
+                        metal_context._wait_submissions()
+                    else:
+                        for stream in streams:
+                            stream.synchronize()
                     stochastic.finish()
+                if iau is not None:
+                    # host bookkeeping only: the step is booked once, after
+                    # every window issued it
+                    iau.finish()
                 if defer_seam:
                     # THE DEFERRED SEAM: nothing here waits.  The last
                     # tiles' scatters drain UNDER the next step's gathers
@@ -2513,7 +2574,7 @@ class TiledRun:
                     # agreement check.
                     used = min(nbuffers, len(specs))
                     clock = _advance_clock(clock, tiles[:used], last_b,
-                                           _physics)
+                                           _physics, fire_records=fire_records)
                 if on_sweep is not None:
                     # THE SWEEP SEAM.  Called after every tile of sweep
                     # ``istep`` has been scattered and synchronized and after
@@ -2524,8 +2585,8 @@ class TiledRun:
                     # output write -- from inside a multi-step sweep.  (A
                     # caller that drives one model step per call already has
                     # that seam for free: it is the return of ``sweep``.  This
-                    # is for the callers that do not, and tilestream/
-                    # run_case_hrrr.py is one.)  Before the shadow swap, so
+                    # is for callers driving multi-step sweeps.)
+                    # Before the shadow swap, so
                     # ``dst`` is the generation just written in every
                     # write_mode.
                     on_sweep(istep, dst, clock)
@@ -2852,7 +2913,7 @@ class TiledRun:
 
     def sweep(self, nsteps: int = 1, *, step_kwargs=None,
               report: dict | None = None, progress=None,
-              live_config=None, physics_control=None) -> None:
+              live_config=None, physics_control=None, step_function=None) -> None:
         """Advance the store by ``nsteps`` model steps, in place.
 
         ``step_kwargs`` is forwarded verbatim to every tile's
@@ -2903,7 +2964,11 @@ class TiledRun:
                 self.drain()
                 self._set_live_config(live_config)
             try:
-                self._sweep(nsteps, step_kwargs, report, progress, physics_control)
+                if step_function is None:
+                    self._sweep(nsteps, step_kwargs, report, progress, physics_control)
+                else:
+                    self._sweep(nsteps, step_kwargs, report, progress, physics_control,
+                                step_function=step_function)
             finally:
                 from woof.core.dycore import finish_wrf_cfl_domain_step
                 finish_wrf_cfl_domain_step(self.cfg.grid_id, commit=False)
@@ -3002,7 +3067,7 @@ def run_tiled(store, cfg, tile_nx, tile_ny, halo: int = 16,
         # Drain on both success and failure, then release only our references.
         run.close()
 
-def _advance_clock(clock, tiles, last_b, _physics) -> dict:
+def _advance_clock(clock, tiles, last_b, _physics, *, fire_records=()) -> dict:
     """The domain's scalar carriers after ONE sweep, cross-checked per buffer.
 
     Every tile in a sweep starts from the same ``clock`` and takes the same
@@ -3035,7 +3100,7 @@ def _advance_clock(clock, tiles, last_b, _physics) -> dict:
     for got in per_buffer:
         fires += int(got.get("ysu_nan_guard_fires", 0)) \
             - int(clock.get("ysu_nan_guard_fires", 0))
-        for key in ("elapsed_seconds", "call_counts", "microphysics_updates"):
+        for key in ("elapsed_seconds", "call_counts", "microphysics_updates", "fire_clocks", "pbl_raw_available", "swdd_from_scheme"):
             if key in ref and got.get(key) != ref[key]:
                 raise TiledRunError(
                     f"tile buffers disagree on the scalar carrier {key!r} "
@@ -3044,6 +3109,9 @@ def _advance_clock(clock, tiles, last_b, _physics) -> dict:
                     "and must take the same cadence branches; a disagreement "
                     "means they integrated different physics.")
     out = dict(ref)
+    if "fire_header" in out:
+        from tilestream.sfire import fold_diagnostics
+        fold_diagnostics(fire_records, out)
     if "ysu_nan_guard_fires" in out:
         out["ysu_nan_guard_fires"] = \
             int(clock.get("ysu_nan_guard_fires", 0)) + fires

@@ -18,6 +18,12 @@ _MOSAIC_TILE = tuple(n + "_mosaic" for n in
     "hfx qfx lh grdflx snotime".split())
 _MOSAIC_SOIL = ("tslb_mosaic", "smois_mosaic", "sh2o_mosaic")
 _PACKED_STATE = {}
+_UCM_BUNDLES = {}
+_UCM_STATUS = {}
+_URBAN_TILE = tuple(n + "_urb2d_mosaic" for n in
+                    "tr tb tg tc qc uc ts sh lh g rn".split())
+_URBAN_TILE = _URBAN_TILE[:7] + ("ts_rul2d_mosaic",) + _URBAN_TILE[7:]
+_URBAN_SOIL = tuple(n + "_urb3d_mosaic" for n in ("trl", "tbl", "tgl"))
 
 
 def _require(value, name, shape, dtype, context):
@@ -33,12 +39,16 @@ def _require(value, name, shape, dtype, context):
 def submit_noah_mosaic_column(dev, params, dt, dzs, *, mosaic_cat,
                               categories, xice_threshold, frpcpn,
                               usemonalb, rdlai2d, opt_thcnd, itimestep,
-                              urban=None):
+                              urban=None, atmosphere=None, solar=None,
+                              use_wudapt_lcz=0, urban_water_balance=None):
     """Run one thread per cell while retaining CUDA's descending tile order.
 
     The shader owns the tile-local Noah state and the weighted cell reduction;
     the caller passes the full tile planes without materializing host copies.
     """
+    from woof.wrf_exact import ENABLED as WRF_EXACT
+    if WRF_EXACT:
+        raise NotImplementedError("strict Metal Noah mosaic solver is not supported")
     if "tsk" not in dev or not isinstance(dev["tsk"], MetalArray):
         raise TypeError("Metal Noah mosaic requires MetalArray tile state")
     if int(mosaic_cat) < 1:
@@ -47,8 +57,6 @@ def submit_noah_mosaic_column(dev, params, dt, dzs, *, mosaic_cat,
         raise ValueError("Metal Noah mosaic requires four soil layers")
     if int(itimestep) < 1:
         raise ValueError("Noah mosaic itimestep must be positive")
-    if urban is not None:
-        raise NotImplementedError("Metal Noah mosaic UCM is not registered")
     ny, nx = dev["tsk"].shape
     context = dev["tsk"].buffer.context
     from .noah_family import _device_tables
@@ -108,9 +116,19 @@ def submit_noah_mosaic_column(dev, params, dt, dzs, *, mosaic_cat,
         else:
             shape, dtype = (ny, nx), np.float32
         _require(value, name, shape, dtype, context)
+    urban_in = urban_out = ()
+    entry = "noah_mosaic_column"
+    extra = {}
+    if urban is not None:
+        entry = "noah_mosaic_ucm_column"
+        urban_in, urban_out, extra, ucm_arrays, check = _urban_inputs(
+            dev, urban, atmosphere, solar, use_wudapt_lcz,
+            urban_water_balance, categories, mosaic_cat, ny, nx, context)
+        arrays.update(ucm_arrays)
+        context.submit_bookkeeping(urban_in)
     context.submit_kernel(
-        "noah_mosaic_column", arrays,
-        {"dt": float(np.float32(dt)), "lucats": int(params.lucats),
+        entry, arrays,
+        {**extra, "dt": float(np.float32(dt)), "lucats": int(params.lucats),
          "slcats": int(params.slcats), "isurban": int(categories.isurban),
          "isice": int(categories.isice),
          "xice_threshold": float(np.float32(xice_threshold)),
@@ -120,6 +138,9 @@ def submit_noah_mosaic_column(dev, params, dt, dzs, *, mosaic_cat,
          "nlcz": len(categories.lcz), "ntile_soil": 4 * int(mosaic_cat),
          "nstate": 65, "ny": ny, "nx": nx},
         exact_policy=False, grid_size=ncol, threads_per_group=64)
+    if urban is not None:
+        context.submit_bookkeeping(urban_out)
+        check()
     unpack_arrays = {f"{n}_a": value for n, value in
                      (*grid_state.items(), *soil_state.items())}
     unpack_arrays["state_fields"] = packed
@@ -129,11 +150,75 @@ def submit_noah_mosaic_column(dev, params, dt, dzs, *, mosaic_cat,
         grid_size=ncol, threads_per_group=128)
 
 
-def require_noah_mosaic_metal_supported(cuda_symbol: str, *, urban=False) -> None:
-    """Keep only the separately unported urban pointer-table ABI gated."""
-    if cuda_symbol != "noah_mosaic_column":
-        raise NotImplementedError(
-            f"Metal {cuda_symbol} has no typed entry point in this caller")
-    if urban:
-        raise NotImplementedError(
-            "Metal Noah mosaic UCM still needs the UCM state pointer-table ABI")
+def _urban_inputs(dev, urban, atmosphere, solar, use_wudapt_lcz,
+                  urban_water_balance, categories, mosaic_cat, ny, nx,
+                  context):
+    """The UCM state bundle, tile planes and parameters of the urban column.
+
+    CUDA hands the grid UCM state as a pointer table; Metal copies the planes
+    into one bundle (device to device) in the same order and copies them back
+    after the launch.
+    """
+    from woof.core.urban_ucm import (
+        UCM_STATE_PLANES, _get, _jmonth, _describe_status,
+        water_balance_params)
+    module = MetalArrayModule(context)
+    for name in _URBAN_TILE:
+        _require(dev[name], name, (mosaic_cat, ny, nx), np.float32, context)
+    for name in _URBAN_SOIL:
+        _require(dev[name], name, (4 * mosaic_cat, ny, nx), np.float32,
+                 context)
+    nplanes = sum(1 if layers == 0 else layers for _, layers in UCM_STATE_PLANES)
+    key = (id(context), ny, nx)
+    held = _UCM_BUNDLES.get(key)
+    if held is None or held[0] is not context:
+        held = (context, module.empty((nplanes, ny, nx), dtype=np.float32))
+        _UCM_BUNDLES[key] = held
+    bundle = held[1]
+    pairs_in, pairs_out, offset = [], [], 0
+    for name, layers in UCM_STATE_PLANES:
+        shape = (ny, nx) if layers == 0 else (layers, ny, nx)
+        target = _require(_get(urban, name), name, shape, np.float32, context)
+        view = bundle.view(shape, byte_offset=offset)
+        pairs_in.append((target, view))
+        pairs_out.append((view, target))
+        offset += target.nbytes
+    params = water_balance_params(urban.params, urban_water_balance)
+    pkey = (id(context), id(params))
+    cached = _UCM_BUNDLES.get(pkey)
+    if cached is None or cached[0] is not params:
+        table = np.asarray(params.table, dtype=np.float32).reshape(-1)
+        glob = np.asarray(params.globals_, dtype=np.float32).reshape(-1)
+        cached = (params, module.asarray(np.concatenate((table, glob))),
+                  module.asarray(np.asarray(params.switches, dtype=np.int32)))
+        _UCM_BUNDLES[pkey] = cached
+
+    def plane0(name):
+        value = atmosphere[name]
+        return _require(value.view((ny, nx), byte_offset=value.byte_offset),
+                        name, (ny, nx), np.float32, context)
+
+    status = _UCM_STATUS.get(id(urban))
+    if status is None or status[0] is not urban:
+        status = (urban, module.zeros((1,), dtype=np.uint32))
+        _UCM_STATUS[id(urban)] = status
+    status[1].fill(0)
+    arrays = {n: dev[n] for n in (*_URBAN_TILE, *_URBAN_SOIL)}
+    arrays.update({
+        "urban_state": bundle, "float_bundle": cached[1], "isw": cached[2],
+        "frc": _require(urban.fields["frc_urb2d"], "frc_urb2d", (ny, nx),
+                        np.float32, context),
+        "u1": plane0("u"), "v1": plane0("v"),
+        "hrang": _require(solar.hrang, "hrang", (ny, nx), np.float32, context),
+        "ust": _require(dev["ust"], "ust", (ny, nx), np.float32, context),
+        "err": status[1]})
+    extra = {"nurban_state": nplanes, "n_utype": int(params.table.shape[0]),
+             "float_bundle_size": int(cached[1].size),
+             "natural": int(categories.natural),
+             "use_lcz": int(use_wudapt_lcz), "jmonth": int(_jmonth(solar))}
+
+    def check():
+        flags = int(status[1].to_numpy()[0])
+        if flags:
+            _describe_status(flags)
+    return tuple(pairs_in), tuple(pairs_out), extra, arrays, check

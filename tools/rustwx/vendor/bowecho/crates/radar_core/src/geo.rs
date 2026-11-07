@@ -1,6 +1,6 @@
 //! Shared map projection: the azimuthal-equidistant forward/inverse pair
 //! both frontends project through (tiles.rs assumes exactly this projection
-//! for tile quad corners). Free pure functions: no app state.
+//! for tile quad corners). Free pure functions — no app state.
 
 /// Forward azimuthal-equidistant: (lat, lon) → (east, north) km from center.
 /// Spherical earth, R chosen so 1° latitude = 111.32 km (matches the radar
@@ -80,7 +80,7 @@ mod aeqd_tests {
 
     #[test]
     fn east_west_distance_shrinks_with_latitude() {
-        // 1° of longitude at 60°N ≈ 55.66 km (cos 60 = 0.5): the error class
+        // 1° of longitude at 60°N ≈ 55.66 km (cos 60 = 0.5) — the error class
         // the equirectangular mapping got wrong away from the center latitude.
         let (e, n) = aeqd_forward_km(60.0, -100.0, 60.0, -99.0);
         assert!(

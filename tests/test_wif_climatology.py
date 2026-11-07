@@ -439,3 +439,76 @@ def test_default_config_takes_the_climatology_when_it_resolves():
     assert (cfg.aer_init_opt, cfg.wif_input_opt) == (0, 0)
     assert cfg.mp28_aerosol_source == "auto"
     validate_aerosol_source_options(cfg)
+
+
+def test_the_receipt_statement_names_no_working_or_home_directory(tmp_path):
+    """THE BREAKAGE: the namelist import wrote the search's absolute cwd and
+    home paths into the WRF-input door's preparation receipt, so a
+    ``--restart`` launched from another directory hashed a different receipt
+    and was refused as "written for a different run" (5 km radar DA,
+    2026-10-23).  The statement the receipt binds is the same from any
+    directory; the run's own warning keeps the paths."""
+    import shutil
+
+    from woof.ingest.wif_climatology import (
+        WIF_CLIMATOLOGY_FILE, portable_wif_statement, resolve_wif_climatology)
+
+    def resolve(where, home):
+        where.mkdir(parents=True, exist_ok=True)
+        return resolve_wif_climatology(
+            cwd=where, env={"WOOF_WIF_DATA_ROOT": str(home)})
+
+    a = resolve(tmp_path / "a", tmp_path / "home-a")
+    b = resolve(tmp_path / "b", tmp_path / "home-b")
+    assert not a.resolved and not b.resolved
+    assert a.fallback_reason != b.fallback_reason
+    assert str(tmp_path / "a") in a.fallback_reason
+    assert portable_wif_statement(a) == portable_wif_statement(b)
+    assert str(tmp_path) not in portable_wif_statement(a)
+
+    # Found in the working directory: the same bytes state the same
+    # sentence from either directory, other bytes do not.
+    source, _ = _synthetic_dat(tmp_path)
+    for where in ("a", "b"):
+        shutil.copyfile(source, tmp_path / where / WIF_CLIMATOLOGY_FILE)
+    a = resolve(tmp_path / "a", tmp_path / "home-a")
+    b = resolve(tmp_path / "b", tmp_path / "home-b")
+    assert a.resolved and b.resolved and a.path != b.path
+    assert portable_wif_statement(a) == portable_wif_statement(b)
+    assert str(tmp_path) not in portable_wif_statement(a)
+    with open(tmp_path / "b" / WIF_CLIMATOLOGY_FILE, "ab") as extra:
+        extra.write(b"\0")
+    b = resolve(tmp_path / "b", tmp_path / "home-b")
+    assert portable_wif_statement(a) != portable_wif_statement(b)
+
+
+def test_one_decode_and_one_horizontal_interpolation_serve_every_forcing_time(tmp_path, monkeypatch):
+    """Breakage: a GFS preparation decoded the WIF file and interpolated all 12 months onto the
+    same grid once per forcing time (13x for a 36 h window, ~12 s of a 50 s preparation)."""
+    from woof.ingest import wif_climatology as wif
+
+    path, _ = _synthetic_dat(tmp_path)
+    clim = load_wif_climatology(path, backend="numpy")
+    assert load_wif_climatology(path, backend="numpy") is clim
+    assert not clim.qnwfa.flags.writeable
+    calls = []
+    real = wif.four_pt_bilinear
+    monkeypatch.setattr(wif, "four_pt_bilinear", lambda *a: calls.append(1) or real(*a))
+    target_lat = np.array([[10.0, 10.0], [20.0, 20.0]])
+    target_lon = np.array([[-100.0, -90.0], [-100.0, -90.0]])
+    pd = np.stack([np.full((2, 2), 9.0e4), np.full((2, 2), 6.0e4),
+                   np.full((2, 2), 2.0e4)]).astype(np.float32)
+    phb = np.zeros((4, 2, 2), dtype=np.float32)
+    phb[1] = 9.81 * 50.0
+    dates = ("2026-08-25_18:00:00", "2026-08-25_21:00:00", "2026-09-02_00:00:00")
+    cached = [wif_fields_for_grid(clim, target_lat, target_lon, d, pd, phb, backend="numpy")[0]
+              for d in dates]
+    assert len(calls) == 3  # three species, once
+    for d, held in zip(dates, cached):
+        wif._HORIZONTAL.clear()  # each date against an uncached interpolation
+        fresh = wif_fields_for_grid(clim, target_lat, target_lon, d, pd, phb, backend="numpy")[0]
+        for name in fresh:
+            assert held[name].tobytes() == fresh[name].tobytes()
+    # Another grid is interpolated afresh.
+    wif_fields_for_grid(clim, target_lat + 1.0, target_lon, dates[0], pd, phb, backend="numpy")
+    assert len(calls) == 3 + 3 * len(dates) + 3

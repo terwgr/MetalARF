@@ -1,6 +1,6 @@
 #include <metal_stdlib>
 #include "thompson_cloud_sediment_with_density_and_masks_bindings.metalh"
-#include "soft_binary64.metalh"
+#include "wsm_support.metalh"
 
 using namespace metal;
 #pragma clang fp contract(off)
@@ -48,7 +48,7 @@ kernel void thompson_cloud_sediment_with_density_and_masks(
             p.dt, column, uint(p.nz), uint(p.ny), uint(p.nx))) {
         for (uint k = 0; k < uint(p.nz); ++k) {
             const uint idx = k * uint(p.ny) * uint(p.nx) + column;
-            r.qc[idx] = r.qc[idx] + 0.0f * p.dt;
+            r.qc[idx] = Sf(r.qc[idx]) + Sf(0.0f) * Sf(p.dt);
         }
         return;
     }
@@ -58,15 +58,15 @@ kernel void thompson_cloud_sediment_with_density_and_masks(
     float mass_flux[256];
     float qc_tendency[256];
     const uint nz = uint(p.nz), ny = uint(p.ny), nx = uint(p.nx);
-    const float am_r = 3.1415926536f * 1000.0f / 6.0f;
-    const float rho_not = 101325.0f / (287.05f * 298.0f);
+    const float am_r = aa_div(3.1415926536f * 1000.0f, 6.0f);
+    const float rho_not = aa_div(101325.0f, 287.05f * 298.0f);
     const bool rain_refreshes_rhof = r.rain_active_columns[column] != 0.0f;
 
     for (uint k = 0; k < nz; ++k) {
         const uint idx = k * ny * nx + j * nx + i;
         const float qvk = fmax(1.0e-10f, r.qv[idx]);
-        density[k] = 0.622f * r.pressure[idx]
-            / (287.04f * r.temperature[idx] * (qvk + 0.622f));
+        density[k] = aa_div(0.622f * r.pressure[idx],
+            287.04f * r.temperature[idx] * (qvk + 0.622f));
         qc_tendency[k] = 0.0f;
         cloud_mass[k] = r.qc[idx] > 1.0e-12f
             ? r.qc[idx] * r.reference_density[idx] : 1.0e-12f;
@@ -86,17 +86,17 @@ kernel void thompson_cloud_sediment_with_density_and_masks(
         const uint idx = uint(k) * ny * nx + j * nx + i;
         if (cloud_mass[k] > 1.0e-12f
                 && r.vertical_velocity[idx] < 1.0e-1f) {
-            const float lambda_arg = 100.0e6f * am_r * 2730.0f
-                / cloud_mass[k];
+            const float lambda_arg = aa_div(100.0e6f * am_r * 2730.0f,
+                cloud_mass[k]);
             // CUDA widens the FP32 powf result, computes the reciprocal and
             // two products in binary64, then rounds back to FP32.
-            const float lambda_f = precise::pow(lambda_arg, 1.0f / 3.0f);
+            const float lambda_f = gfk_pow(lambda_arg, aa_div(1.0f, 3.0f));
             const ulong lambda = cs64(lambda_f);
             const ulong inverse_lambda = soft64_div(0x3ff0000000000000ul,
                                                      lambda);
             const float velocity_density = rain_refreshes_rhof
                 ? density[k] : r.reference_density[idx];
-            const float prefix = precise::sqrt(rho_not / velocity_density)
+            const float prefix = aa_sqrtf(aa_div(rho_not, velocity_density))
                 * 0.316946e8f * 272.0f;
             const ulong velocity_wide = soft64_mul(
                 soft64_mul(cs64(prefix), inverse_lambda), inverse_lambda);
@@ -110,14 +110,14 @@ kernel void thompson_cloud_sediment_with_density_and_masks(
     for (int k = sediment_top; k >= 0; --k) {
         const uint idx = uint(k) * ny * nx + j * nx + i;
         const float divergence = mass_flux[k + 1] - mass_flux[k];
-        const float inv_dz = 1.0f / r.dz[idx];
-        qc_tendency[k] += divergence * inv_dz / density[k];
+        const float inv_dz = aa_div(1.0f, r.dz[idx]);
+        qc_tendency[k] += aa_div(divergence * inv_dz, density[k]);
         cloud_mass[k] = fmax(1.0e-12f,
             cloud_mass[k] + divergence * inv_dz * p.dt);
     }
 
     for (uint k = 0; k < nz; ++k) {
         const uint idx = k * ny * nx + j * nx + i;
-        r.qc[idx] = r.qc[idx] + qc_tendency[k] * p.dt;
+        r.qc[idx] = Sf(r.qc[idx]) + Sf(qc_tendency[k]) * Sf(p.dt);
     }
 }

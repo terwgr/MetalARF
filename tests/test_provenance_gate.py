@@ -219,7 +219,7 @@ def test_the_diagnostic_commands_are_never_refused(tmp_path):
 #: The modules ``import woof`` and this gate's verdict run, copied into a
 #: throwaway checkout so the verdict is measured on a real interpreter
 #: with nothing of this machine's own installs in play.
-_GATE_MODULES = ("__init__.py", "cupy_windows_warning.py", "explain.py",
+_GATE_MODULES = ("__init__.py", "_env.py", "cupy_windows_warning.py", "numerics.py", "explain.py",
                  "provenance.py", "provenance_gate.py", "runtime_manifest.py")
 
 
@@ -572,6 +572,10 @@ def test_the_plot_label_carries_the_executing_version():
     label = default_source_label()
     assert label.startswith(f"{DEFAULT_SOURCE_LABEL} ")
     assert label.endswith(provenance_gate.executing_version())
+    # The ensemble product door builds the same stamp without importing
+    # woof.render (the RW-WPS wheel ships rustwx.py, not render.py).
+    from woof.rustwx import product_source_label
+    assert product_source_label() == label
 
 
 def test_the_wrfout_producer_stamp_is_the_executing_version():
@@ -664,3 +668,68 @@ def test_announce_for_main_returns_the_refusal_instead_of_raising(
     assert "[[explain]]" not in message
     assert "rw-wps --explain" in message
     provenance_gate.reset_announcement()
+
+
+# ---------------------------------------------------------------------------
+# Companion packages from another release (D4, 2026-10-05)
+# ---------------------------------------------------------------------------
+
+
+def _installed_tilestream(site: Path, version: str) -> Path:
+    (site / "tilestream").mkdir(parents=True)
+    (site / "tilestream" / "__init__.py").write_text("", encoding="utf-8")
+    info = site / f"recast_woof-{version}.dist-info"
+    info.mkdir()
+    (info / "RECORD").write_text(
+        "woof/__init__.py,,\ntilestream/__init__.py,sha256=x,0\n",
+        encoding="utf-8")
+    return site
+
+
+def _roots(monkeypatch, gpuwm_root: Path, tilestream_root: Path) -> None:
+    roots = {"woof": gpuwm_root, "tilestream": tilestream_root}
+    monkeypatch.setattr(provenance_gate, "_companion_root", roots.get)
+
+
+def test_a_base_venv_tilestream_of_another_release_refuses(tmp_path,
+                                                           monkeypatch):
+    """The box venv shape: 2.8.6 source woof, 2.8.5 wheel tilestream."""
+
+    prov = _checkout(tmp_path, declared="2.8.6")
+    site = _installed_tilestream(tmp_path / "gvenv" / "site-packages",
+                                 "2.8.5")
+    _roots(monkeypatch, Path(prov.source_root), site)
+    refusal = provenance_gate.companion_identity_refusal(prov)
+    assert refusal is not None and "REFUSING" in refusal
+    assert "2.8.5" in refusal and "2.8.6" in refusal and str(site) in refusal
+    with pytest.raises(ValueError, match="mixed releases"):
+        provenance_gate.require_consistent_version("run", prov)
+    provenance_gate.require_consistent_version("doctor", prov)
+
+
+def test_a_companion_from_the_same_root_is_silent(tmp_path, monkeypatch):
+    prov = _checkout(tmp_path, declared="2.8.6")
+    _roots(monkeypatch, Path(prov.source_root), Path(prov.source_root))
+    assert provenance_gate.companion_identity_refusal(prov) is None
+
+
+def test_a_companion_of_the_same_release_elsewhere_is_silent(tmp_path,
+                                                            monkeypatch):
+    prov = _checkout(tmp_path, declared="2.8.6")
+    site = _installed_tilestream(tmp_path / "shared" / "site-packages",
+                                 "2.8.6")
+    _roots(monkeypatch, Path(prov.source_root), site)
+    assert provenance_gate.companion_identity_refusal(prov) is None
+
+
+def test_a_companion_whose_release_cannot_be_read_is_silent(tmp_path,
+                                                           monkeypatch):
+    prov = _checkout(tmp_path, declared="2.8.6")
+    loose = tmp_path / "loose"
+    (loose / "tilestream").mkdir(parents=True)
+    _roots(monkeypatch, Path(prov.source_root), loose)
+    assert provenance_gate.companion_identity_refusal(prov) is None
+
+
+def test_the_live_process_has_no_companion_split():
+    assert provenance_gate.companion_identity_refusal() is None

@@ -25,7 +25,9 @@ def submit_warm_source_network(
         tnr_sacr1: MetalArray, tnr_sacr2: MetalArray,
         tcg_racg: MetalArray, tmr_racg: MetalArray,
         tcr_gacr: MetalArray, tnr_racg: MetalArray,
-        tnr_gacr: MetalArray, dt: float, size: int, *, wrf39: bool = False):
+        tnr_gacr: MetalArray, dt: float, size: int, *, wrf39: bool = False,
+        qcten=None, qrten=None, nrten=None, qvten=None, tten=None,
+        qsten=None, qgten=None, ngten=None):
     """Submit Thompson's warm source network over the supplied flat fields."""
     float_fields = {
         "qc": qc, "qr": qr, "nr": nr, "qs": qs, "qg": qg,
@@ -36,6 +38,16 @@ def submit_warm_source_network(
         "nwfa_entry": nwfa_entry, "nifa_entry": nifa_entry,
         "ncten": ncten, "nwfaten": nwfaten, "nifaten": nifaten,
     }
+    optional = {"qcten": qcten, "qrten": qrten, "nrten": nrten,
+                "qvten": qvten, "tten": tten, "qsten": qsten,
+                "qgten": qgten, "ngten": ngten}
+    for group in (("qrten", "nrten"), ("qvten", "tten"),
+                  ("qsten", "qgten", "ngten")):
+        present = sum(optional[name] is not None for name in group)
+        if present not in (0, len(group)):
+            raise ValueError(f"{group} must be supplied together")
+    float_fields.update({name: array for name, array in optional.items()
+                         if array is not None})
     table_fields = {
         "rain_cloud_efficiency": rain_cloud_efficiency,
         "snow_cloud_efficiency": snow_cloud_efficiency,
@@ -91,7 +103,7 @@ def submit_warm_source_network(
         ranges.append((name, array, name in {
             "qc", "qr", "nr", "qs", "qg", "graupel_number_per_kg",
             "graupel_melt_marker", "snow_melt_marker", "temperature", "qv",
-            "ncten", "nwfaten", "nifaten"}))
+            "ncten", "nwfaten", "nifaten"} or name in optional))
 
     table_shapes = {
         "rain_cloud_efficiency": (100, 100),
@@ -138,10 +150,16 @@ def submit_warm_source_network(
                     f"{right_name} overlap")
     if size == 0:
         return None
+    for name, array in optional.items():
+        if array is None:
+            flat[name] = flat["pressure"]
+    parameters = {"dt": dt, "size": size}
+    parameters.update({"has_" + name: int(array is not None)
+                       for name, array in optional.items()})
     return context.submit_kernel(
-        "thompson_aa_warm_source_network", flat,
-        {"dt": dt, "n": size, "wrf39": int(bool(wrf39))},
-        exact_policy=True, grid_size=size, threads_per_group=128)
+        "thompson_aa_warm_source_network" + ("_wrf39" if wrf39 else ""),
+        flat, parameters, exact_policy=False,
+        grid_size=size, threads_per_group=32)
 
 
 def submit_ncten_balance(
@@ -216,8 +234,8 @@ def submit_ncten_balance(
     if size == 0:
         return None
     return context.submit_kernel(
-        "thompson_aa_ncten_balance", flat, {"dt": dt, "n": size},
-        exact_policy=True, grid_size=size, threads_per_group=128)
+        "thompson_aa_ncten_balance", flat, {"dt": dt, "size": size},
+        exact_policy=False, grid_size=size, threads_per_group=32)
 
 
 __all__ = ["submit_ncten_balance", "submit_warm_source_network"]

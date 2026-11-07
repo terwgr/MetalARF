@@ -88,6 +88,8 @@ pub struct LambertGrid {
 
 impl LambertGrid {
     /// `ProjectedGrid.__init__` + `LambertGrid._setup`.
+    // Keep the WPS reference projection's numeric inputs in their audited order.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         ref_lat: f64,
         ref_lon: f64,
@@ -141,6 +143,16 @@ impl LambertGrid {
         )
     }
 
+    /// Inverse of ij_to_latlon, in one-based grid coordinates.
+    pub fn latlon_to_ij(&self, latitude: f64, longitude: f64) -> (f64, f64) {
+        let rs = self.rebydx * (self.truelat1 * RAD_PER_DEG).cos() / self.cone
+            * (((90.0 * self.hemi - latitude) * RAD_PER_DEG / 2.0).tan()
+                / ((90.0 * self.hemi - self.truelat1) * RAD_PER_DEG / 2.0).tan()).powf(self.cone);
+        let arg = self.cone * wrap180(longitude - self.stand_lon) * RAD_PER_DEG;
+        (self.hemi * self.polei + rs * arg.sin(),
+         self.hemi * (self.polej - rs * arg.cos()))
+    }
+
     /// `ijll_lc` (module_llxy.F:1174) at one projection coordinate.
     pub fn ij_to_latlon(&self, x: f64, y: f64) -> (f64, f64) {
         let chi1 = (90.0 - self.hemi * self.truelat1) * RAD_PER_DEG;
@@ -173,25 +185,54 @@ impl LambertGrid {
 /// Source-grid `(SINALPHA, COSALPHA)` over a declared Lambert grid, row
 /// major in (y, x): `mapped_source._declared_grid_rotation`.
 pub fn declared_grid_rotation(parameters: &crate::model::LambertParameters) -> (Vec<f64>, Vec<f64>) {
+    declared_grid_rotation_within(
+        parameters, [0, parameters.ny as usize], [0, parameters.nx as usize])
+}
+
+/// [`declared_grid_rotation`] over rows `rows` and columns `columns` of the
+/// declared grid alone: the same per-cell arithmetic, so each value is the
+/// whole grid's value at that cell (a record decoded over an atmospheric
+/// window is rotated with these).
+pub fn declared_grid_rotation_within(
+    parameters: &crate::model::LambertParameters,
+    rows: [usize; 2],
+    columns: [usize; 2],
+) -> (Vec<f64>, Vec<f64>) {
     let grid = LambertGrid::from_declaration(parameters);
-    let nx = parameters.nx as usize;
-    let ny = parameters.ny as usize;
-    let mut sina = Vec::with_capacity(nx * ny);
-    let mut cosa = Vec::with_capacity(nx * ny);
-    for row in 0..ny {
-        for column in 0..nx {
-            let (_latitude, longitude) =
-                grid.ij_to_latlon((column + 1) as f64, (row + 1) as f64);
-            let mut difference = grid.stand_lon - longitude;
-            if difference > 180.0 {
-                difference -= 360.0;
-            } else if difference < -180.0 {
-                difference += 360.0;
+    // Each cell is its own projection inverse, so the rows run on every
+    // core and are joined in row order: the same arithmetic per cell, the
+    // same values.  Named breakage: one thread inverted all 1.9 million
+    // cells of the 3 km CONUS grid for every decoded object, about 0.3 s
+    // each with the pool idle.
+    let out: Vec<(Vec<f64>, Vec<f64>)> = crate::threads::install(|| {
+        use rayon::prelude::*;
+        (rows[0]..rows[1]).into_par_iter().map(|row| {
+            let width = columns[1].saturating_sub(columns[0]);
+            let mut sina = Vec::with_capacity(width);
+            let mut cosa = Vec::with_capacity(width);
+            for column in columns[0]..columns[1] {
+                let (_latitude, longitude) =
+                    grid.ij_to_latlon((column + 1) as f64,
+                        row as f64 * parameters.dy_m / parameters.dx_m + 1.0);
+                let mut difference = grid.stand_lon - longitude;
+                if difference > 180.0 {
+                    difference -= 360.0;
+                } else if difference < -180.0 {
+                    difference += 360.0;
+                }
+                let alpha = grid.hemi * grid.cone * std::f64::consts::PI / 180.0 * difference;
+                sina.push(alpha.sin());
+                cosa.push(alpha.cos());
             }
-            let alpha = grid.hemi * grid.cone * std::f64::consts::PI / 180.0 * difference;
-            sina.push(alpha.sin());
-            cosa.push(alpha.cos());
-        }
+            (sina, cosa)
+        }).collect()
+    });
+    let cells = rows[1].saturating_sub(rows[0]) * columns[1].saturating_sub(columns[0]);
+    let mut sina = Vec::with_capacity(cells);
+    let mut cosa = Vec::with_capacity(cells);
+    for (row_sina, row_cosa) in out {
+        sina.extend_from_slice(&row_sina);
+        cosa.extend_from_slice(&row_cosa);
     }
     (sina, cosa)
 }
@@ -292,6 +333,26 @@ mod tests {
         let (sina, cosa) = declared_grid_rotation(&awips_212_style());
         for (sine, cosine) in sina.iter().zip(cosa.iter()) {
             assert!((sine * sine + cosine * cosine - 1.0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn a_window_rotation_is_the_whole_rotation_at_those_cells_bit_for_bit() {
+        // Winds decoded over an atmospheric window are rotated with these;
+        // the published values must be the whole decode's, cropped.
+        let parameters = awips_212_style();
+        let nx = parameters.nx as usize;
+        let (sina, cosa) = declared_grid_rotation(&parameters);
+        let (rows, columns) = ([3, 17], [5, 29]);
+        let (wsin, wcos) = declared_grid_rotation_within(&parameters, rows, columns);
+        assert_eq!(wsin.len(), (rows[1] - rows[0]) * (columns[1] - columns[0]));
+        let mut position = 0;
+        for row in rows[0]..rows[1] {
+            for column in columns[0]..columns[1] {
+                assert_eq!(wsin[position].to_bits(), sina[row * nx + column].to_bits());
+                assert_eq!(wcos[position].to_bits(), cosa[row * nx + column].to_bits());
+                position += 1;
+            }
         }
     }
 }

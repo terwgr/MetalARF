@@ -1,0 +1,232 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_slotscatter_f32",
+      "module": "hexv842_mpas_rrtmg_lw_slotscatter_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_slotscatter_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_lw_v842.py",
+      "cuda_symbol": "radiation_lw_slot",
+      "resources": [
+        [
+          "indices",
+          "int32",
+          "read"
+        ],
+        [
+          "tendency",
+          "float",
+          "read"
+        ],
+        [
+          "radii",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read"
+        ],
+        [
+          "tend_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_cloud_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_ice_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_snow_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "glw",
+          "float",
+          "read_write"
+        ],
+        [
+          "olr",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwcf",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwupt",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwuptc",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwdnt",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwdntc",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwupb",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwupbc",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwdnb",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwdnbc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ],
+        "radii": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_cloud_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_ice_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_snow_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "glw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "olr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwcf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwupt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwuptc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwdnt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwdntc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwupb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwupbc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwdnb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lwdnbc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ng",
+          "int32"
+        ],
+        [
+          "nm",
+          "int32"
+        ],
+        [
+          "write_radii",
+          "int32"
+        ],
+        [
+          "radii",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -83,10 +83,13 @@ def submit_gf_gfdrv_stage(resources: dict, parameters: dict, *, ncol: int):
         raise ValueError("GF ncol parameter does not match launch width")
     if int(scalar_values["nz"]) <= 0:
         raise ValueError("GF nz must be positive")
+    from woof.core.gf import GF_METAL_KMAX
+    kernel = ("gf_gfdrv_stage" if int(scalar_values["nz"]) <= GF_METAL_KMAX
+              else "gf_gfdrv_stage_k256")
     result = None
     for col0 in range(0, ncol, GF_COLUMNS_PER_SUBMIT):
         result = context.submit_kernel(
-            "gf_gfdrv_stage", arrays, {**scalar_values, "col0": col0},
+            kernel, arrays, {**scalar_values, "col0": col0},
             exact_policy=False,
             grid_size=min(GF_COLUMNS_PER_SUBMIT, ncol - col0),
             threads_per_group=64)
@@ -95,10 +98,10 @@ def submit_gf_gfdrv_stage(resources: dict, parameters: dict, *, ncol: int):
 
 def gf_metal_scratch_bytes(nz, columns, *, spp_enabled=False):
     """Peak bounded workspace and resident packing buffers for one call."""
-    from woof.core.gf import GF_METAL_KMAX, gf_workspace_floats
+    from woof.core.gf import gf_metal_capacity, gf_workspace_floats
 
     tile = min(int(columns), GF_COLUMNS_PER_SUBMIT)
-    workspace = gf_workspace_floats(nz, tile, capacity=GF_METAL_KMAX) * 4
+    workspace = gf_workspace_floats(nz, tile, capacity=gf_metal_capacity(nz)) * 4
     packed = sum(_planes(name, nz, spp_enabled)
                  for name, _, _ in _ENTRY["resources"] if name != "workspace") * tile * 4
     return workspace + (packed if columns > tile else 0)
@@ -106,7 +109,7 @@ def gf_metal_scratch_bytes(nz, columns, *, spp_enabled=False):
 
 def submit_gf_tiled(resources, parameters, *, ncol, column_limit=GF_COLUMNS_PER_SUBMIT):
     """Pack independent columns into one bounded, reused per-call arena."""
-    from woof.core.gf import GF_METAL_KMAX, gf_workspace_floats
+    from woof.core.gf import GF_METAL_KMAX_WIDE, gf_metal_capacity, gf_workspace_floats
 
     if type(column_limit) is not int or not 1 <= column_limit <= GF_COLUMNS_PER_SUBMIT:
         raise ValueError("GF tile must lie within the column submission limit")
@@ -120,7 +123,7 @@ def submit_gf_tiled(resources, parameters, *, ncol, column_limit=GF_COLUMNS_PER_
         raise ValueError("the tiled GF resources must match the ABI without workspace")
     context = resources["rainc"].buffer.context
     nz = int(parameters["nz"])
-    if not 0 < nz <= GF_METAL_KMAX:
+    if not 0 < nz <= GF_METAL_KMAX_WIDE:
         raise ValueError("GF level count exceeds its compiled workspace capacity")
     rows = {name: _planes(name, nz, bool(parameters["spp_enabled"])) for name in resources}
     for name, array in resources.items():
@@ -132,7 +135,7 @@ def submit_gf_tiled(resources, parameters, *, ncol, column_limit=GF_COLUMNS_PER_
     module = MetalArrayModule(context)
     tile = min(int(ncol), column_limit)
     workspace = module.empty(
-        (gf_workspace_floats(nz, tile, capacity=GF_METAL_KMAX),),
+        (gf_workspace_floats(nz, tile, capacity=gf_metal_capacity(nz)),),
         dtype=np.float32)
     if tile == ncol:
         workspace.fill(0)

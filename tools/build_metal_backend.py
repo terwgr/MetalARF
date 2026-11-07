@@ -32,12 +32,18 @@ from woof.metal.bundle_integrity import BUNDLE_SCHEMA, metal_source_provenance
 SHADER = ROOT / "woof" / "metal" / "shaders" / "rk_bookkeeping.metal"
 CASE_BOUNDARY_MASS_FLUX_SHADER = ROOT / "woof" / "metal" / "shaders" / "case_boundary_mass_flux.metal"
 GABLS_COLUMN_SHADER = ROOT / "woof" / "metal" / "shaders" / "gabls_column.metal"
+EXACT_SMALL_STEP_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_small_step.metal"
+EXACT_ACOUSTIC_WPHI_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_acoustic_advance_w_phi.metal"
+EXACT_ACOUSTIC_MU_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_acoustic_advance_mu_th.metal"
+EXACT_ACOUSTIC_UV_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_acoustic_advance_uv.metal"
+EXACT_ACOUSTIC_COEFS_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_acoustic_calc_coefs.metal"
 ACOUSTIC_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_coefficients.metal"
 ACOUSTIC_CALC_CQ_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_calc_cq.metal"
 ACOUSTIC_UV_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_advance_uv.metal"
 ACOUSTIC_MU_TH_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_advance_mu_th.metal"
 ACOUSTIC_W_PHI_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_advance_w_phi.metal"
 ACOUSTIC_BOUNDARY_FRAME_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_boundary_frame.metal"
+EXACT_ACOUSTIC_EMDIV_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_acoustic_emdiv.metal"
 ACOUSTIC_EMDIV_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_emdiv.metal"
 ADVECTION_SCALAR_SHADER = ROOT / "woof" / "metal" / "shaders" / "advection_flux_div_scalar.metal"
 ADVECTION_U_SHADER = ROOT / "woof" / "metal" / "shaders" / "advection_flux_div_u.metal"
@@ -47,13 +53,19 @@ ADVECTION_SCALAR_VORDER_SHADER = ROOT / "woof" / "metal" / "shaders" / "advectio
 ADVECTION_U_VORDER_SHADER = ROOT / "woof" / "metal" / "shaders" / "advection_flux_div_u_vorder.metal"
 ADVECTION_V_VORDER_SHADER = ROOT / "woof" / "metal" / "shaders" / "advection_flux_div_v_vorder.metal"
 ADVECTION_W_VORDER_SHADER = ROOT / "woof" / "metal" / "shaders" / "advection_flux_div_w_vorder.metal"
+EXACT_DIAGNOSTICS_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_diagnostics.metal"
 DIAGNOSTICS_CALC_SHADER = ROOT / "woof" / "metal" / "shaders" / "diagnostics_calc_p_alpha.metal"
+EXACT_STAGE_MASS_FLUXES_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_stage_mass_fluxes.metal"
 STAGE_MASS_FLUXES_SHADER = ROOT / "woof" / "metal" / "shaders" / "stage_mass_fluxes.metal"
 ADVECTION_PREPARE_SHADER = ROOT / "woof" / "metal" / "shaders" / "advection_prepare.metal"
 DYCORE_ADVANCE_STAGE_SHADER = ROOT / "woof" / "metal" / "shaders" / "dycore_advance_stage.metal"
+EXACT_SLOW_PGF_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_slow_pgf.metal"
+EXACT_CALC_CQ_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_calc_cq.metal"
 SLOW_PGF_SHADER = ROOT / "woof" / "metal" / "shaders" / "slow_pgf.metal"
 DIFFUSION_SHADER = ROOT / "woof" / "metal" / "shaders" / "diffusion.metal"
+EXACT_SLOW_BUOYANCY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_slow_buoyancy.metal"
 SLOW_BUOYANCY_SHADER = ROOT / "woof" / "metal" / "shaders" / "slow_buoyancy.metal"
+EXACT_SLOW_GEOPOTENTIAL_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_slow_geopotential.metal"
 SLOW_GEOPOTENTIAL_SHADER = ROOT / "woof" / "metal" / "shaders" / "slow_geopotential.metal"
 SURFACE_W_SHADER = ROOT / "woof" / "metal" / "shaders" / "surface_w.metal"
 SMALL_STEP_SHADER = ROOT / "woof" / "metal" / "shaders" / "small_step.metal"
@@ -61,7 +73,12 @@ CLOSE_PERIODIC_ALIAS_SHADER = ROOT / "woof" / "metal" / "shaders" / "close_perio
 OPENBC_RADIATIVE_SHADER = ROOT / "woof" / "metal" / "shaders" / "openbc_radiative.metal"
 RK_TOTAL_THETA_SHADER = ROOT / "woof" / "metal" / "shaders" / "rk_total_theta.metal"
 CORIOLIS_CURVATURE_SHADER = ROOT / "woof" / "metal" / "shaders" / "coriolis_curvature.metal"
+EXACT_PD_ON_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_pd_on.metal"
+EXACT_PD_OFF_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_pd_off.metal"
 MOIST_PD_SHADER = ROOT / "woof" / "metal" / "shaders" / "moist_pd.metal"
+EXACT_MOIST_CAPTURE_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_moist_capture.metal"
+EXACT_MOIST_TENDENCY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_moist_tendency.metal"
+EXACT_MOIST_SCALAR_UPDATE_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_moist_scalar_update.metal"
 MOIST_SCALAR_UPDATE_SHADER = ROOT / "woof" / "metal" / "shaders" / "moist_scalar_update.metal"
 NEST_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "nest_family.metal"
 NEST_INTERP_FRAGMENT_SHADER = ROOT / "woof" / "metal" / "shaders" / "nest_interp_fragment.metal"
@@ -76,6 +93,7 @@ SPECTRAL_SCALAR_SHADER = ROOT / "woof" / "metal" / "shaders" / "spectral_scalar.
 SFCLAY_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "sfclay_family.metal"
 MYNN_SURFACE_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "mynn_surface_family.metal"
 YSU_COLUMN_SHADER = ROOT / "woof" / "metal" / "shaders" / "ysu_column.metal"
+YSU_480_COLUMN_SHADER = ROOT / "woof" / "metal" / "shaders" / "ysu_480_column.metal"
 SHINHONG_COLUMN_SHADER = ROOT / "woof" / "metal" / "shaders" / "shinhong_column.metal"
 MOIST_PD_SOURCE_FOLD_SHADER = ROOT / "woof" / "metal" / "shaders" / "moist_pd_source_fold.metal"
 THOMPSON_COLD_START_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "thompson_cold_start_family.metal"
@@ -97,7 +115,25 @@ SPEC_ZONE_RING_SHADER = ROOT / "woof" / "metal" / "shaders" / "spec_zone_ring.me
 PHYSICS_ATMOSPHERE_PREPARE_SHADER = ROOT / "woof" / "metal" / "shaders" / "physics_atmosphere_prepare.metal"
 COUPLED_BOUNDARY_FIELD_SHADER = ROOT / "woof" / "metal" / "shaders" / "coupled_boundary_field.metal"
 LBC_TIME_SHADER = ROOT / "woof" / "metal" / "shaders" / "lbc_time.metal"
+EXACT_NEST_UNCOUPLE_ON_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_uncouple_on.metal"
+EXACT_NEST_UNCOUPLE_OFF_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_uncouple_off.metal"
+EXACT_MYNN_RADIATION_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_mynn_radiation.metal"
+EXACT_DUDHIA_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_dudhia_shortwave.metal"
+EXACT_HELD_HEATING_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_held_heating.metal"
+EXACT_NEST_SMOOTH_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_smooth.metal"
+EXACT_NEST_INTERP_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_interp.metal"
+EXACT_NEST_FEEDBACK_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_feedback.metal"
+EXACT_NEST_COUPLE_ON_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_couple_on.metal"
+EXACT_NEST_COUPLE_OFF_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_nest_couple_off.metal"
+EXACT_NEST_ROUNDTRIP_SHADER = ROOT / "woof/metal/shaders/strict_nest_roundtrip_family.metal"
+EXACT_LBC_FINAL_ON_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_lbc_final_on.metal"
+EXACT_LBC_FINAL_OFF_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_lbc_final_off.metal"
+EXACT_LBC_INSTALL_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_install_mu_boundary.metal"
+EXACT_LBC_INTERIOR_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_lbc_interior.metal"
+EXACT_LBC_ON_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_lbc_on.metal"
+EXACT_LBC_OFF_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_lbc_off.metal"
 LBC_STATE_SHADER = ROOT / "woof" / "metal" / "shaders" / "lbc_state.metal"
+EXACT_LBC_FLOW_SHADER = ROOT / "woof" / "metal" / "shaders" / "wrf_exact_lbc_flow.metal"
 LBC_FLOW_SHADER = ROOT / "woof" / "metal" / "shaders" / "lbc_flow.metal"
 SURFACE_HUMIDITY_SHADER = ROOT / "woof" / "metal" / "shaders" / "surface_humidity.metal"
 SURFACE_DIAGNOSTICS_SEED_SHADER = ROOT / "woof" / "metal" / "shaders" / "surface_diagnostics_seed.metal"
@@ -129,9 +165,13 @@ RUC_SFCTMP_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "ruc_sfctmp_fam
 RUC_DRIVER_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "ruc_driver_family.metal"
 RUC_SFCLAY_SEAICE_SHADER = ROOT / "woof" / "metal" / "shaders" / "ruc_sfclay_seaice.metal"
 LAKE_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "lake_family.metal"
+HAIL_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "hail_family.metal"
 SASE_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "sase_family.metal"
 DUDHIA_SHORTWAVE_SHADER = ROOT / "woof" / "metal" / "shaders" / "dudhia_shortwave.metal"
 KESSLER_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "kessler_family.metal"
+STRICT_REGIONAL_KESSLER_PREP_SHADER = ROOT / "woof" / "metal" / "shaders" / "strict_regional_kessler_prep.metal"
+STRICT_REGIONAL_KESSLER_COLUMN_SHADER = ROOT / "woof" / "metal" / "shaders" / "strict_regional_kessler.metal"
+STRICT_REGIONAL_KESSLER_FINISH_SHADER = ROOT / "woof" / "metal" / "shaders" / "strict_regional_kessler_finish.metal"
 WSM6_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wsm6_family.metal"
 WDM6_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wdm6_family.metal"
 MP_ZERO_OUT_SHADER = ROOT / "woof" / "metal" / "shaders" / "mp_zero_out_fragment.metal"
@@ -273,6 +313,11 @@ def build(output: Path) -> dict:
     with tempfile.TemporaryDirectory(prefix="woof-metal-build-") as temporary:
         temp = Path(temporary)
         rk_air = temp / "rk_bookkeeping.air"
+        exact_small_step_air = temp / "wrf_exact_small_step.air"
+        exact_acoustic_wphi_air = temp / "wrf_exact_acoustic_advance_w_phi.air"
+        exact_acoustic_mu_air = temp / "wrf_exact_acoustic_advance_mu_th.air"
+        exact_acoustic_uv_air = temp / "wrf_exact_acoustic_advance_uv.air"
+        exact_acoustic_coefs_air = temp / "wrf_exact_acoustic_calc_coefs.air"
         acoustic_default_air = temp / "acoustic_default.air"
         acoustic_exact_air = temp / "acoustic_exact.air"
         acoustic_calc_cq_air = temp / "acoustic_calc_cq.air"
@@ -301,16 +346,24 @@ def build(output: Path) -> dict:
         diagnostics_default_air = temp / "diagnostics_default.air"
         diagnostics_exact_air = temp / "diagnostics_exact.air"
         stage_mass_fluxes_air = temp / "stage_mass_fluxes.air"
+        exact_stage_mass_fluxes_air = temp / "wrf_exact_stage_mass_fluxes.air"
         advection_prepare_air = temp / "advection_prepare.air"
         advance_stage_air = temp / "dycore_advance_stage.air"
         slow_pgf_air = temp / "slow_pgf.air"
+        exact_slow_pgf_air = temp / "wrf_exact_slow_pgf.air"
+        exact_calc_cq_air = temp / "wrf_exact_calc_cq.air"
+        exact_diagnostics_air = temp / "wrf_exact_diagnostics.air"
         diffusion_air = temp / "diffusion.air"
         slow_buoyancy_air = temp / "slow_buoyancy.air"
+        exact_slow_buoyancy_air = temp / "wrf_exact_slow_buoyancy.air"
         slow_geopotential_air = temp / "slow_geopotential.air"
+        exact_slow_geopotential_air = temp / "wrf_exact_slow_geopotential.air"
         acoustic_boundary_frame_air = temp / "acoustic_boundary_frame.air"
         surface_w_air = temp / "surface_w.air"
+        exact_surface_w_air = temp / "wrf_exact_surface_w.air"
         small_step_air = temp / "small_step.air"
         close_periodic_alias_air = temp / "close_periodic_alias.air"
+        exact_acoustic_emdiv_air = temp / "wrf_exact_acoustic_emdiv.air"
         acoustic_emdiv_air = temp / "acoustic_emdiv.air"
         openbc_radiative_air = temp / "openbc_radiative.air"
         rk_total_theta_air = temp / "rk_total_theta.air"
@@ -393,12 +446,29 @@ def build(output: Path) -> dict:
                   "-DGPUWM_WRF_EXACT=" + exact,
                   "-DGPUWM_WRF_EXACT_C_ADVECTION=" + exact,
                   "-c", str(source), "-o", str(air_path)])
+        exact_advection_air = []
+        for mode in ("on", "off"):
+            stem = f"wrf_exact_advection_{mode}"
+            air = temp / (stem + ".air")
+            exact_advection_air.append(air)
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(ROOT / "woof/metal/shaders" / (stem + ".metal")),
+                  "-o", str(air)])
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(STAGE_MASS_FLUXES_SHADER), "-o",
               str(stage_mass_fluxes_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_STAGE_MASS_FLUXES_SHADER), "-o",
+              str(exact_stage_mass_fluxes_air)])
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
@@ -420,6 +490,46 @@ def build(output: Path) -> dict:
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_SLOW_PGF_SHADER), "-o", str(exact_slow_pgf_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_ACOUSTIC_COEFS_SHADER), "-o", str(exact_acoustic_coefs_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_ACOUSTIC_UV_SHADER), "-o", str(exact_acoustic_uv_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_ACOUSTIC_MU_SHADER), "-o", str(exact_acoustic_mu_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_ACOUSTIC_WPHI_SHADER), "-o", str(exact_acoustic_wphi_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_SMALL_STEP_SHADER), "-o", str(exact_small_step_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_CALC_CQ_SHADER), "-o", str(exact_calc_cq_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_DIAGNOSTICS_SHADER), "-o", str(exact_diagnostics_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(DIFFUSION_SHADER), "-o", str(diffusion_air)])
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -431,8 +541,20 @@ def build(output: Path) -> dict:
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_SLOW_BUOYANCY_SHADER), "-o",
+              str(exact_slow_buoyancy_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(SLOW_GEOPOTENTIAL_SHADER), "-o",
               str(slow_geopotential_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_SLOW_GEOPOTENTIAL_SHADER), "-o",
+              str(exact_slow_geopotential_air)])
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
@@ -444,6 +566,12 @@ def build(output: Path) -> dict:
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(SURFACE_W_SHADER), "-o", str(surface_w_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_surface_w.metal"),
+              "-o", str(exact_surface_w_air)])
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
@@ -461,6 +589,12 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(ACOUSTIC_EMDIV_SHADER), "-o",
               str(acoustic_emdiv_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_ACOUSTIC_EMDIV_SHADER), "-o",
+              str(exact_acoustic_emdiv_air)])
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
@@ -495,6 +629,15 @@ def build(output: Path) -> dict:
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(MOIST_PD_SHADER), "-o", str(moist_pd_air)])
+        exact_pd_on_air = temp / "wrf_exact_pd_on.air"
+        exact_pd_off_air = temp / "wrf_exact_pd_off.air"
+        for shader, air in ((EXACT_PD_ON_SHADER, exact_pd_on_air),
+                            (EXACT_PD_OFF_SHADER, exact_pd_off_air)):
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(shader), "-o", str(air)])
         moist_pd_source_fold_air = temp / "moist_pd_source_fold.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -509,6 +652,27 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(MOIST_SCALAR_UPDATE_SHADER), "-o",
               str(moist_scalar_update_air)])
+        exact_moist_scalar_update_air = temp / "wrf_exact_moist_scalar_update.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_MOIST_SCALAR_UPDATE_SHADER), "-o",
+              str(exact_moist_scalar_update_air)])
+        exact_moist_tendency_air = temp / "wrf_exact_moist_tendency.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_MOIST_TENDENCY_SHADER), "-o",
+              str(exact_moist_tendency_air)])
+        exact_moist_capture_air = temp / "wrf_exact_moist_capture.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_MOIST_CAPTURE_SHADER), "-o",
+              str(exact_moist_capture_air)])
         # Exact-policy nesting and IEVA preparation entrypoints. Their typed
         # signatures admit only the supported FP32 operators in each module.
         nest_family_air = temp / "nest_family.air"
@@ -615,14 +779,22 @@ def build(output: Path) -> dict:
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(YSU_COLUMN_SHADER), "-o", str(ysu_column_air)])
+        ysu_480_column_air = temp / "ysu_480_column.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(YSU_480_COLUMN_SHADER), "-o", str(ysu_480_column_air)])
         # Ordinary Noah and the WRF Smagorinsky family use default-policy
         # arithmetic only. Exact-policy callers remain refused by their
         # Python submitters.
         physics_family_airs = []
         for name, source in (("noah_family", NOAH_FAMILY_SHADER),
+                             ("noah_chklowq_myj", ROOT / "woof/metal/shaders/noah_chklowq_myj.metal"),
                              ("noah_forcing_family", NOAH_FORCING_FAMILY_SHADER),
                              ("smag2d_family", SMAG2D_FAMILY_SHADER),
-                             ("lake_family", LAKE_FAMILY_SHADER)):
+                             ("lake_family", LAKE_FAMILY_SHADER),
+                             ("hail_family", HAIL_FAMILY_SHADER)):
             air_path = temp / f"{name}.air"
             _run([str(metal), f"-fmodules-cache-path={module_cache}",
                   "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -630,6 +802,18 @@ def build(output: Path) -> dict:
                   "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
                   "-c", str(source), "-o", str(air_path)])
             physics_family_airs.append(air_path)
+        # The strict regional coefficient and tendency stages store binary32 as integer
+        # words and is linked only into the exact-policy library.
+        exact_smag_airs = []
+        for stem in ("wrf_exact_smag_coefficients", "wrf_exact_smag_tendencies",
+                     "wrf_exact_smag_vertical", "wrf_exact_smag_turbulence"):
+            exact_smag_airs.append(temp / (stem + ".air"))
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(ROOT / "woof/metal/shaders" / (stem + ".metal")),
+                  "-o", str(exact_smag_airs[-1])])
         noah_sfcdiags_air = temp / "noah_sfcdiags.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -650,6 +834,20 @@ def build(output: Path) -> dict:
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(DIFF6_FAMILY_SHADER), "-o", str(diff6_family_air)])
+        exact_diff6_air = temp / "wrf_exact_diff6.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_diff6.metal"),
+              "-o", str(exact_diff6_air)])
+        exact_openbc_air = temp / "wrf_exact_openbc.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_openbc.metal"),
+              "-o", str(exact_openbc_air)])
         # The UH column integral and its running-max fold retain the CUDA
         # exact expression order and are shipped only in the exact library.
         uh_diag_family_air = temp / "uh_diag_family.air"
@@ -659,6 +857,59 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-DGPUWM_WRF_EXACT=1", "-c", str(UH_DIAG_FAMILY_SHADER),
               "-o", str(uh_diag_family_air)])
+        exact_uh_diag_air = temp / "wrf_exact_uh_diag.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_uh_diag.metal"),
+              "-o", str(exact_uh_diag_air)])
+        exact_noah_seam_air = temp / "wrf_exact_noah_seam.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_noah_seam.metal"),
+              "-o", str(exact_noah_seam_air)])
+        exact_noah_land_air = temp / "wrf_exact_noah_land.air"
+        exact_cldfra1_air = temp / "wrf_exact_cldfra1.air"
+        exact_goddard_airs = []
+        for name in ("wrf_exact_goddard_family", "wrf_exact_goddard_grid", "wrf_exact_goddard_tiers",
+                     "wrf_exact_direct_normal_flux"):
+            air = temp / (name + ".air")
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(ROOT / "woof/metal/shaders" / (name + ".metal")),
+                  "-o", str(air)])
+            exact_goddard_airs.append(air)
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_cldfra1.metal"),
+              "-o", str(exact_cldfra1_air)])
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_noah_land.metal"),
+              "-o", str(exact_noah_land_air)])
+        exact_noah_init_air = temp / "wrf_exact_noah_init.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_noah_init.metal"),
+              "-o", str(exact_noah_init_air)])
+        exact_noah_seaice_air = temp / "wrf_exact_noah_seaice.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_noah_seaice.metal"),
+              "-o", str(exact_noah_seaice_air)])
         physics_atmosphere_prepare_air = temp / "physics_atmosphere_prepare.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -666,13 +917,24 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(PHYSICS_ATMOSPHERE_PREPARE_SHADER), "-o",
               str(physics_atmosphere_prepare_air)])
-        coupled_boundary_field_air = temp / "coupled_boundary_field.air"
+        exact_physics_atmosphere_air = temp / "wrf_exact_physics_atmosphere.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
-              "-c", str(COUPLED_BOUNDARY_FIELD_SHADER), "-o",
-              str(coupled_boundary_field_air)])
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_physics_atmosphere.metal"),
+              "-o", str(exact_physics_atmosphere_air)])
+        coupled_boundary_field_air = temp / "coupled_boundary_field.air"
+        strict_coupled_boundary_field_air = temp / "strict_coupled_boundary_field.air"
+        for shader, air in (
+                (COUPLED_BOUNDARY_FIELD_SHADER, coupled_boundary_field_air),
+                (ROOT / "woof/metal/shaders/strict_coupled_boundary_field.metal",
+                 strict_coupled_boundary_field_air)):
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(shader), "-o", str(air)])
         surface_humidity_air = temp / "surface_humidity.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -692,12 +954,57 @@ def build(output: Path) -> dict:
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(LBC_STATE_SHADER), "-o", str(lbc_state_air)])
+        exact_lbc_on_air = temp / "wrf_exact_lbc_on.air"
+        exact_lbc_off_air = temp / "wrf_exact_lbc_off.air"
+        exact_lbc_interior_air = temp / "wrf_exact_lbc_interior.air"
+        exact_lbc_install_air = temp / "wrf_exact_install_mu_boundary.air"
+        exact_lbc_final_on_air = temp / "wrf_exact_lbc_final_on.air"
+        exact_lbc_final_off_air = temp / "wrf_exact_lbc_final_off.air"
+        exact_nest_uncouple_on_air = temp / "wrf_exact_nest_uncouple_on.air"
+        exact_nest_uncouple_off_air = temp / "wrf_exact_nest_uncouple_off.air"
+        exact_mynn_radiation_air = temp / "wrf_exact_mynn_radiation.air"
+        exact_dudhia_air = temp / "wrf_exact_dudhia_shortwave.air"
+        exact_held_heating_air = temp / "wrf_exact_held_heating.air"
+        exact_nest_smooth_air = temp / "wrf_exact_nest_smooth.air"
+        exact_nest_interp_air = temp / "wrf_exact_nest_interp.air"
+        exact_nest_feedback_air = temp / "wrf_exact_nest_feedback.air"
+        exact_nest_couple_on_air = temp / "wrf_exact_nest_couple_on.air"
+        exact_nest_couple_off_air = temp / "wrf_exact_nest_couple_off.air"
+        exact_nest_roundtrip_air = temp / "strict_nest_roundtrip_family.air"
+        for shader, air in ((EXACT_MYNN_RADIATION_SHADER, exact_mynn_radiation_air),
+                            (EXACT_DUDHIA_SHADER, exact_dudhia_air),
+                            (EXACT_HELD_HEATING_SHADER, exact_held_heating_air),
+                            (EXACT_NEST_SMOOTH_SHADER, exact_nest_smooth_air),
+                            (EXACT_NEST_INTERP_SHADER, exact_nest_interp_air),
+                            (EXACT_NEST_FEEDBACK_SHADER, exact_nest_feedback_air),
+                            (EXACT_NEST_UNCOUPLE_ON_SHADER, exact_nest_uncouple_on_air),
+                            (EXACT_NEST_UNCOUPLE_OFF_SHADER, exact_nest_uncouple_off_air),
+                            (EXACT_NEST_COUPLE_ON_SHADER, exact_nest_couple_on_air),
+                            (EXACT_NEST_COUPLE_OFF_SHADER, exact_nest_couple_off_air),
+                            (EXACT_NEST_ROUNDTRIP_SHADER, exact_nest_roundtrip_air),
+                            (EXACT_LBC_FINAL_ON_SHADER, exact_lbc_final_on_air),
+                            (EXACT_LBC_FINAL_OFF_SHADER, exact_lbc_final_off_air),
+                            (EXACT_LBC_INSTALL_SHADER, exact_lbc_install_air),
+                            (EXACT_LBC_ON_SHADER, exact_lbc_on_air),
+                            (EXACT_LBC_OFF_SHADER, exact_lbc_off_air),
+                            (EXACT_LBC_INTERIOR_SHADER, exact_lbc_interior_air)):
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(shader), "-o", str(air)])
         lbc_flow_air = temp / "lbc_flow.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
               "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(LBC_FLOW_SHADER), "-o", str(lbc_flow_air)])
+        exact_lbc_flow_air = temp / "wrf_exact_lbc_flow.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(EXACT_LBC_FLOW_SHADER), "-o", str(exact_lbc_flow_air)])
         surface_diagnostics_seed_air = temp / "surface_diagnostics_seed.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -726,6 +1033,104 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(RRTMGP_PREPARE_SHADER), "-o",
               str(rrtmgp_prepare_air)])
+        exact_rrtm_t8w_air = temp / "wrf_exact_rrtm_t8w.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_t8w.metal"),
+              "-o", str(exact_rrtm_t8w_air)])
+        exact_rrtm_mm5atm_air = temp / "wrf_exact_rrtm_mm5atm.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_mm5atm.metal"),
+              "-o", str(exact_rrtm_mm5atm_air)])
+        exact_rrtm_setcoef_air = temp / "wrf_exact_rrtm_setcoef.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_setcoef.metal"),
+              "-o", str(exact_rrtm_setcoef_air)])
+        exact_rrtm_band12_air = temp / "wrf_exact_rrtm_band12.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band12.metal"),
+              "-o", str(exact_rrtm_band12_air)])
+        exact_rrtm_band03_air = temp / "wrf_exact_rrtm_band03.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band03.metal"),
+              "-o", str(exact_rrtm_band03_air)])
+        exact_rrtm_band0405_air = temp / "wrf_exact_rrtm_band0405.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band0405.metal"),
+              "-o", str(exact_rrtm_band0405_air)])
+        exact_rrtm_band06_air = temp / "wrf_exact_rrtm_band06.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band06.metal"),
+              "-o", str(exact_rrtm_band06_air)])
+        exact_rrtm_band07_air = temp / "wrf_exact_rrtm_band07.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band07.metal"),
+              "-o", str(exact_rrtm_band07_air)])
+        exact_rrtm_band08_air = temp / "wrf_exact_rrtm_band08.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band08.metal"),
+              "-o", str(exact_rrtm_band08_air)])
+        exact_rrtm_band09_air = temp / "wrf_exact_rrtm_band09.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band09.metal"),
+              "-o", str(exact_rrtm_band09_air)])
+        exact_rrtm_band1011_air = temp / "wrf_exact_rrtm_band1011.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band1011.metal"),
+              "-o", str(exact_rrtm_band1011_air)])
+        exact_rrtm_band1216_air = temp / "wrf_exact_rrtm_band1216.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_band1216.metal"),
+              "-o", str(exact_rrtm_band1216_air)])
+        exact_rrtm_itr_air = temp / "wrf_exact_rrtm_itr.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_itr.metal"),
+              "-o", str(exact_rrtm_itr_air)])
+        exact_rrtm_rtrn_air = temp / "wrf_exact_rrtm_rtrn.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_rrtm_rtrn.metal"),
+              "-o", str(exact_rrtm_rtrn_air)])
         rrtm_lw_family_air = temp / "rrtm_lw_family.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -759,8 +1164,17 @@ def build(output: Path) -> dict:
                 ("rrtmgp_cloud_family", RRTMGP_CLOUD_SHADER),
                 ("rrtmgp_rte_family", RRTMGP_RTE_SHADER),
                 ("kessler_family", KESSLER_FAMILY_SHADER),
+                ("strict_regional_kessler_prep", STRICT_REGIONAL_KESSLER_PREP_SHADER),
+                ("strict_regional_kessler", STRICT_REGIONAL_KESSLER_COLUMN_SHADER),
+                ("strict_regional_kessler_finish", STRICT_REGIONAL_KESSLER_FINISH_SHADER),
+                ("wrf_exact_glue_add_positive", ROOT / "woof/metal/shaders/wrf_exact_glue_add_positive.metal"),
+                ("strict_regional_wsm6_prep", ROOT / "woof/metal/shaders/strict_regional_wsm6_prep.metal"),
+                ("strict_regional_wsm6", ROOT / "woof/metal/shaders/strict_regional_wsm6.metal"),
+                ("strict_regional_wsm6_deep", ROOT / "woof/metal/shaders/strict_regional_wsm6_deep.metal"),
                 ("wsm6_family", WSM6_FAMILY_SHADER),
-                ("wdm6_family", WDM6_FAMILY_SHADER)):
+                ("wdm6_family", WDM6_FAMILY_SHADER),
+                ("physics_correct_mode", ROOT / "woof/metal/shaders/physics_correct_mode.metal"),
+                ("nssl2_reduce_exact", ROOT / "woof/metal/shaders/nssl2_reduce_exact.metal")):
             air_path = temp / f"{name}.air"
             _run([str(metal), f"-fmodules-cache-path={module_cache}",
                   "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -768,6 +1182,20 @@ def build(output: Path) -> dict:
                   "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
                   "-c", str(source), "-o", str(air_path)])
             rrtmgp_family_airs.append(air_path)
+        climate_exact_air = temp / "climate_diagnostics_exact.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/climate_diagnostics_exact.metal"),
+              "-o", str(climate_exact_air)])
+        sfclay_exact_air = temp / "sfclay_exact.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/sfclay_exact.metal"),
+              "-o", str(sfclay_exact_air)])
         kf_w0avg_air = temp / "kf_w0avg_update.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -790,6 +1218,7 @@ def build(output: Path) -> dict:
                 ("wsm6_reflectivity", WSM6_REFLECTIVITY_SHADER),
                 ("refl_family", REFL_FAMILY_SHADER),
                 ("noah_mosaic_family", NOAH_MOSAIC_SHADER),
+                ("noah_mosaic_ucm_family", ROOT / "woof/metal/shaders/noah_mosaic_ucm_family.metal"),
                 ("milbrandt2_family", MILBRANDT2_FAMILY_SHADER),
                 ("milbrandt2_fields", MILBRANDT2_FIELDS_SHADER),
                 ("milbrandt2_zet", MILBRANDT2_ZET_SHADER),
@@ -816,9 +1245,23 @@ def build(output: Path) -> dict:
                 ("ntiedtke_family", NTIEDTKE_FAMILY_SHADER),
                 ("shinhong_column", SHINHONG_COLUMN_SHADER),
                 ("gf_family", GF_FAMILY_SHADER),
+                ("gf_family_k256", ROOT / "woof/metal/shaders/gf_family_k256.metal"),
                 ("nssl2_fused_gs", NSSL2_FUSED_GS_SHADER),
                 ("nssl2_nucond", NSSL2_NUCOND_SHADER),
                 ("nssl2_driver_transport", NSSL2_DRIVER_TRANSPORT_SHADER),
+                ("analytic_radiation", ROOT / "woof/metal/shaders/analytic_radiation.metal"),
+                ("diff_opt1", ROOT / "woof/metal/shaders/diff_opt1.metal"),
+                ("da_state", ROOT / "woof/metal/shaders/da_state.metal"),
+                ("da_masked_wind", ROOT / "woof/metal/shaders/da_masked_wind.metal"),
+                ("hexrrfs_w_boundary", ROOT / "woof/metal/shaders/hexrrfs_w_boundary.metal"),
+                ("da_hydrostatic", ROOT / "woof/metal/shaders/da_hydrostatic.metal"),
+                ("da_hotstart_pointwise", ROOT / "woof/metal/shaders/da_hotstart_pointwise.metal"),
+                ("da_hotstart_height", ROOT / "woof/metal/shaders/da_hotstart_height.metal"),
+                ("da_hotstart_ramp", ROOT / "woof/metal/shaders/da_hotstart_ramp.metal"),
+                ("da_iau_rate", ROOT / "woof/metal/shaders/da_iau_rate.metal"),
+                ("da_iau_couple", ROOT / "woof/metal/shaders/da_iau_couple.metal"),
+                ("da_child_positivity", ROOT / "woof/metal/shaders/da_child_positivity.metal"),
+                ("tke_budget", ROOT / "woof/metal/shaders/tke_budget.metal"),
                 ("nssl2_sedimentation", NSSL2_SEDIMENTATION_SHADER),
                 ("nssl2_diagnostics", NSSL2_DIAGNOSTICS_SHADER),
                 ("nssl2_runtime", NSSL2_RUNTIME_SHADER),
@@ -855,6 +1298,9 @@ def build(output: Path) -> dict:
               str(global_spectral_diffusion_air)])
         integration_fragment_airs = []
         for name, source in (
+                ("wrf_exact_tke_budget", ROOT / "woof/metal/shaders/wrf_exact_tke_budget.metal"),
+                ("wrf_exact_diff_opt1", ROOT / "woof/metal/shaders/wrf_exact_diff_opt1.metal"),
+                ("solar_geometry", ROOT / "woof/metal/shaders/solar_geometry.metal"),
                 ("ensemble_surface_recipe_fragment", ROOT / "woof/metal/shaders/ensemble_surface_recipe_fragment.metal"),
                 ("hex_solve_vertical_system_fragment", HEX_SOLVE_VERTICAL_SYSTEM_SHADER),
                 ("hex_acoustic_edge_update_fragment", ROOT / "woof/metal/shaders/hex_acoustic_edge_update_fragment.metal"),
@@ -993,7 +1439,42 @@ def build(output: Path) -> dict:
                 ("hex_fct_apply_fragment", ROOT / "woof/metal/shaders/hex_fct_apply_fragment.metal"),
                 ("hex_fct_edge_flux_fragment", ROOT / "woof/metal/shaders/hex_fct_edge_flux_fragment.metal"),
                 ("hex_interface_velocity_recovery_fragment", ROOT / "woof/metal/shaders/hex_interface_velocity_recovery_fragment.metal"),
+                ("wrf_exact_rrtmg_lw_transfer", ROOT / "woof/metal/shaders/wrf_exact_rrtmg_lw_transfer.metal"),
+                ("rrtmgp_exact_lw", ROOT / "woof/metal/shaders/rrtmgp_exact_lw.metal"),
+                ("rrtmgp_exact_sw", ROOT / "woof/metal/shaders/rrtmgp_exact_sw.metal"),
+                ("rrtmgp_exact_interpolation", ROOT / "woof/metal/shaders/rrtmgp_exact_interpolation.metal"),
+                ("rrtmgp_exact_gas_optics", ROOT / "woof/metal/shaders/rrtmgp_exact_gas_optics.metal"),
+                ("rrtmgp_exact_cloud_optics", ROOT / "woof/metal/shaders/rrtmgp_exact_cloud_optics.metal"),
+                ("rrtmgp_exact_outputs", ROOT / "woof/metal/shaders/rrtmgp_exact_outputs.metal"),
+                ("rrtmgp_exact_profile_prepare", ROOT / "woof/metal/shaders/rrtmgp_exact_profile_prepare.metal"),
+                ("rrtmgp_exact_hydrometeor_paths", ROOT / "woof/metal/shaders/rrtmgp_exact_hydrometeor_paths.metal"),
+                ("hexrrfs_mynnsfc_v600", ROOT / "woof/metal/shaders/hexrrfs_mynnsfc_v600.metal"),
+                ("hexrrfs_mynnsfc_coupling", ROOT / "woof/metal/shaders/hexrrfs_mynnsfc_coupling.metal"),
+                ("hexrrfs_mynnedmf_columns", ROOT / "woof/metal/shaders/hexrrfs_mynnedmf_columns.metal"),
+                ("hexrrfs_mynnedmf_old_columns", ROOT / "woof/metal/shaders/hexrrfs_mynnedmf_old_columns.metal"),
+                ("hexrrfs_mpas_monthly_surface_f32", ROOT / "woof/metal/shaders/hexrrfs_mpas_monthly_surface_f32.metal"),
+                ("hexrrfs_tempo_columns", ROOT / "woof/metal/shaders/hexrrfs_tempo_columns.metal"),
+                ("hexrrfs_tempo_native_prep", ROOT / "woof/metal/shaders/hexrrfs_tempo_native_prep.metal"),
+                ("hexrrfs_tempo_native_tail", ROOT / "woof/metal/shaders/hexrrfs_tempo_native_tail.metal"),
+                ("hexrrfs_tempo_native_diagnostics", ROOT / "woof/metal/shaders/hexrrfs_tempo_native_diagnostics.metal"),
+                ("hexrrfs_tempo_native_init", ROOT / "woof/metal/shaders/hexrrfs_tempo_native_init.metal"),
+                ("hexrrfs_ruc_boundaries", ROOT / "woof/metal/shaders/hexrrfs_ruc_boundaries.metal"),
+                ("hexrrfs_ruc_tbq", ROOT / "woof/metal/shaders/hexrrfs_ruc_tbq.metal"),
+                ("hexrrfs_ruc_ice", ROOT / "woof/metal/shaders/hexrrfs_ruc_ice.metal"),
+                ("hexrrfs_ruc_diagnostics", ROOT / "woof/metal/shaders/hexrrfs_ruc_diagnostics.metal"),
+                ("hexrrfs_ruc_initialize", ROOT / "woof/metal/shaders/hexrrfs_ruc_initialize.metal"),
+                ("hexrrfs_ruc_land_preflight", ROOT / "woof/metal/shaders/hexrrfs_ruc_land_preflight.metal"),
+                ("hexrrfs_ruc_land", ROOT / "woof/metal/shaders/hexrrfs_ruc_land.metal"),
+                ("hexrrfs_init_pools", ROOT / "woof/metal/shaders/hexrrfs_init_pools.metal"),
+                ("hexrrfs_cloudiness", ROOT / "woof/metal/shaders/hexrrfs_cloudiness.metal"),
+                ("hexrrfs_ugwp_oro", ROOT / "woof/metal/shaders/hexrrfs_ugwp_oro.metal"),
+                ("wrf_exact_rrtmg_lw_inatm", ROOT / "woof/metal/shaders/wrf_exact_rrtmg_lw_inatm.metal"),
+                ("wrf_exact_rrtmg_lw_setcoef", ROOT / "woof/metal/shaders/wrf_exact_rrtmg_lw_setcoef.metal"),
+                ("wrf_exact_rrtmg_lw_cldprmc", ROOT / "woof/metal/shaders/wrf_exact_rrtmg_lw_cldprmc.metal"),
+                ("rrtmg_legacy_lw_strict_gas", ROOT / "woof/metal/shaders/rrtmg_legacy_lw_strict_gas.metal"),
                 ("urban_ucm_noahmp_after_lsm_fragment", ROOT / "woof/metal/shaders/urban_ucm_noahmp_after_lsm_fragment.metal"),
+                ("urban_ucm480_family", ROOT / "woof/metal/shaders/urban_ucm480_family.metal"),
+                ("urban_ucm_columns_fragment", ROOT / "woof/metal/shaders/urban_ucm_columns_fragment.metal"),
                 ("urban_bep_family", ROOT / "woof/metal/shaders/urban_bep_family.metal"),
                 ("urban_bep_couple_family", ROOT / "woof/metal/shaders/urban_bep_couple_family.metal"),
                 ("urban_bep_radiation_fragment", ROOT / "woof/metal/shaders/urban_bep_radiation_fragment.metal"),
@@ -1043,6 +1524,10 @@ def build(output: Path) -> dict:
                 ("urban_bep_bem_upward_rad_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_upward_rad_fragment.metal"),
                 ("urban_bep_bem_wall_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_wall_fragment.metal"),
                 ("urban_bep_bem_class_init_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_class_init_fragment.metal"),
+                ("urban_bep_bem_green_roof_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal"),
+                ("urban_bem_material_solve_green_roof_fragment", ROOT / "woof/metal/shaders/urban_bem_material_solve_green_roof_fragment.metal"),
+                ("urban_bep_bem_pv_solve_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_pv_solve_fragment.metal"),
+                ("urban_bep_bem_finalize_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_finalize_fragment.metal"),
                 ("urban_bep_bem_class_profile_pack_fragment", ROOT / "woof/metal/shaders/urban_bep_bem_class_profile_pack_fragment.metal")):
             air_path = temp / f"{name}.air"
             _run([str(metal), f"-fmodules-cache-path={module_cache}",
@@ -1051,7 +1536,7 @@ def build(output: Path) -> dict:
                   "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
                   "-c", str(source), "-o", str(air_path)])
             integration_fragment_airs.append(air_path)
-        for source in sorted((ROOT / "woof/metal/shaders").glob("hexv841_*.metal")):
+        for source in sorted((ROOT / "woof/metal/shaders").glob("hexv84[12]_*.metal")):
             air_path = temp / f"{source.stem}.air"
             _run([str(metal), f"-fmodules-cache-path={module_cache}",
                   "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -1070,13 +1555,55 @@ def build(output: Path) -> dict:
         for name, source in (
                 ("thompson_family", THOMPSON_FAMILY_SHADER),
                 ("thompson_aerosol_state_family", THOMPSON_AEROSOL_STATE_SHADER),
+                ("thompson_aerosol_refl_family", ROOT / "woof/metal/shaders/thompson_aerosol_refl_family.metal"),
+                ("thompson_aerosol_wrf39_refl_family", ROOT / "woof/metal/shaders/thompson_aerosol_wrf39_refl_family.metal"),
+                ("thompson_aerosol_exner", ROOT / "woof/metal/shaders/thompson_aerosol_exner.metal"),
+                ("thompson_aerosol_graupel_init", ROOT / "woof/metal/shaders/thompson_aerosol_graupel_init.metal"),
+                ("thompson_aerosol_cloud_tendency", ROOT / "woof/metal/shaders/thompson_aerosol_cloud_tendency.metal"),
                 ("thompson_aerosol_sat_family", THOMPSON_AEROSOL_SAT_SHADER),
+                ("thompson_column_family", ROOT / "woof/metal/shaders/thompson_column_family.metal"),
+                ("tempo_family", ROOT / "woof/metal/shaders/tempo_family.metal"),
+                ("tempo_family_deep", ROOT / "woof/metal/shaders/tempo_family_deep.metal"),
+                ("thompson_column_adapter", ROOT / "woof/metal/shaders/thompson_column_adapter.metal"),
                 ("topo_radiation_family", TOPO_RADIATION_SHADER),
                 ("terrain_drag_family", TERRAIN_DRAG_SHADER),
                 ("rrtmg_legacy_sw_family", ROOT / "woof/metal/shaders/rrtmg_legacy_sw_family.metal"),
                 ("swint_fragment", ROOT / "woof/metal/shaders/swint_fragment.metal"),
                 ("rrtmg_aer3_sw_optics", ROOT / "woof/metal/shaders/rrtmg_aer3_sw_optics.metal"),
                 ("wrf_w_cfl_stat", ROOT / "woof/metal/shaders/wrf_w_cfl_stat.metal"),
+                ("precipitation_buckets", ROOT / "woof/metal/shaders/precipitation_buckets.metal"),
+                ("lightning_family", ROOT / "woof/metal/shaders/lightning_family.metal"),
+                ("gsd_diagnostics_family", ROOT / "woof/metal/shaders/gsd_diagnostics_family.metal"),
+                ("add_open_ring", ROOT / "woof/metal/shaders/add_open_ring.metal"),
+                ("lbc_time_rational", ROOT / "woof/metal/shaders/lbc_time_rational.metal"),
+                ("goddard_family", ROOT / "woof/metal/shaders/goddard_family.metal"),
+                ("tiedtke_family", ROOT / "woof/metal/shaders/tiedtke_family.metal"),
+                ("nsas_family", ROOT / "woof/metal/shaders/nsas_family.metal"),
+                ("g3_family", ROOT / "woof/metal/shaders/g3_family.metal"),
+                ("goddard_grid", ROOT / "woof/metal/shaders/goddard_grid.metal"),
+                ("eclipse_family", ROOT / "woof/metal/shaders/eclipse_family.metal"),
+                ("ocean_family", ROOT / "woof/metal/shaders/ocean_family.metal"),
+                ("seaice_family", ROOT / "woof/metal/shaders/seaice_family.metal"),
+                ("sfire_core", ROOT / "woof/metal/shaders/sfire_core.metal"),
+                ("sfire_phys", ROOT / "woof/metal/shaders/sfire_phys.metal"),
+                ("sfire_moisture", ROOT / "woof/metal/shaders/sfire_moisture.metal"),
+                ("sfire_wind", ROOT / "woof/metal/shaders/sfire_wind.metal"),
+                ("sfire_atm", ROOT / "woof/metal/shaders/sfire_atm.metal"),
+                ("sfire_coupling", ROOT / "woof/metal/shaders/sfire_coupling.metal"),
+                ("sfire_spotting", ROOT / "woof/metal/shaders/sfire_spotting.metal"),
+                ("sfire_ideal", ROOT / "woof/metal/shaders/sfire_ideal.metal"),
+                ("sfire_ideal_atmos", ROOT / "woof/metal/shaders/sfire_ideal_atmos.metal"),
+                ("pwp_family", ROOT / "woof/metal/shaders/pwp_family.metal"),
+                ("lin_family", ROOT / "woof/metal/shaders/lin_family.metal"),
+                ("lin_refl_family", ROOT / "woof/metal/shaders/lin_refl_family.metal"),
+                ("fer_hires_family", ROOT / "woof/metal/shaders/fer_hires_family.metal"),
+                ("wsm5_family", ROOT / "woof/metal/shaders/wsm5_family.metal"),
+                ("wsm3_family", ROOT / "woof/metal/shaders/wsm3_family.metal"),
+                ("wsm6r_family", ROOT / "woof/metal/shaders/wsm6r_family.metal"),
+                ("wsm7_family", ROOT / "woof/metal/shaders/wsm7_family.metal"),
+                ("fast_sbm_family", ROOT / "woof/metal/shaders/fast_sbm_family.metal"),
+                ("fast_sbm_pack", ROOT / "woof/metal/shaders/fast_sbm_pack.metal"),
+                ("satmedmf_family", ROOT / "woof/metal/shaders/satmedmf_family.metal"),
                 ("thompson_aerosol_warm_family", THOMPSON_AEROSOL_WARM_SHADER),
                 ("thompson_aerosol_cold_family", THOMPSON_AEROSOL_COLD_SHADER),
                 ("thompson_aerosol_sed_family", THOMPSON_AEROSOL_SED_SHADER),
@@ -1090,6 +1617,7 @@ def build(output: Path) -> dict:
                 ("thompson_snow_sedimentation", THOMPSON_SNOW_SEDIMENTATION_SHADER),
                 ("thompson_graupel_sedimentation", THOMPSON_GRAUPEL_SEDIMENTATION_SHADER),
                 ("thompson_final_phase_cleanup", THOMPSON_FINAL_PHASE_CLEANUP_SHADER),
+                ("thompson_vapour_fill", ROOT / "woof/metal/shaders/thompson_vapour_fill.metal"),
                 ("thompson_effective_radius", THOMPSON_EFFECTIVE_RADIUS_SHADER),
                 ("thompson_reflectivity", THOMPSON_REFLECTIVITY_SHADER),
                 ("spec_zone_ring", SPEC_ZONE_RING_SHADER),
@@ -1118,6 +1646,59 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-c", str(ROOT / "woof/metal/shaders/bandwidth_family.metal"),
               "-o", str(bandwidth_air)])
+        exact_glue_add_air = temp / "wrf_exact_glue_add.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_glue_add.metal"),
+              "-o", str(exact_glue_add_air)])
+        exact_tendency_glue_air = temp / "wrf_exact_tendency_glue.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_tendency_glue.metal"),
+              "-o", str(exact_tendency_glue_air)])
+        exact_upper_wind_air = temp / "wrf_exact_upper_wind_limiter.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_upper_wind_limiter.metal"),
+              "-o", str(exact_upper_wind_air)])
+        exact_w_damp_air = temp / "wrf_exact_w_damp.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_w_damp.metal"),
+              "-o", str(exact_w_damp_air)])
+        exact_coriolis_airs = []
+        for mode in ("on", "off"):
+            stem = f"wrf_exact_coriolis_{mode}"
+            air = temp / (stem + ".air")
+            exact_coriolis_airs.append(air)
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(ROOT / "woof/metal/shaders" / (stem + ".metal")),
+                  "-o", str(air)])
+        exact_total_theta_air = temp / "wrf_exact_total_theta.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_total_theta.metal"),
+              "-o", str(exact_total_theta_air)])
+        exact_smag_map_air = temp / "wrf_exact_smag_map_factor.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-c", str(ROOT / "woof/metal/shaders/wrf_exact_smag_map_factor.metal"),
+              "-o", str(exact_smag_map_air)])
         urban_ucm_air = temp / "urban_ucm.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -1144,23 +1725,26 @@ def build(output: Path) -> dict:
               str(advection_v_vorder_default_air),
               str(advection_w_vorder_default_air),
               str(diagnostics_default_air),
-              str(stage_mass_fluxes_air), str(advection_prepare_air),
-              str(advance_stage_air), str(slow_pgf_air), str(diffusion_air),
-              str(slow_buoyancy_air),
-              str(slow_geopotential_air),
+              str(stage_mass_fluxes_air), str(exact_stage_mass_fluxes_air), str(advection_prepare_air),
+              str(advance_stage_air), str(slow_pgf_air), str(exact_slow_pgf_air),
+              str(exact_acoustic_coefs_air), str(exact_acoustic_uv_air),
+              str(exact_acoustic_mu_air), str(exact_acoustic_wphi_air),
+              str(exact_calc_cq_air), str(exact_diagnostics_air), str(diffusion_air),
+              str(slow_buoyancy_air), str(exact_slow_buoyancy_air),
+              str(slow_geopotential_air), str(exact_slow_geopotential_air),
               str(acoustic_boundary_frame_air),
               str(surface_w_air),
-              str(small_step_air),
+              str(small_step_air), str(exact_small_step_air),
               str(close_periodic_alias_air),
-              str(acoustic_emdiv_air),
+              str(acoustic_emdiv_air), str(exact_acoustic_emdiv_air),
               str(openbc_radiative_air),
               str(rk_total_theta_air),
               str(coriolis_curvature_air),
               str(rayleigh_air),
               str(bandwidth_air),
-              str(held_heating_air), str(moist_pd_air),
+              str(held_heating_air), str(moist_pd_air), str(exact_pd_on_air), str(exact_pd_off_air),
               str(moist_pd_source_fold_air),
-              str(moist_scalar_update_air),
+              str(moist_scalar_update_air), str(exact_moist_scalar_update_air), str(exact_moist_tendency_air), str(exact_moist_capture_air),
               str(face_mass_air),
               str(urban_ucm_air),
               str(tendency_coupling_air),
@@ -1172,11 +1756,12 @@ def build(output: Path) -> dict:
               str(coupled_boundary_field_air),
               str(surface_humidity_air),
               str(lbc_time_air),
-              str(lbc_state_air),
-              str(lbc_flow_air),
+              str(lbc_state_air), str(exact_lbc_on_air), str(exact_lbc_off_air), str(exact_lbc_interior_air), str(exact_lbc_install_air), str(exact_lbc_final_on_air), str(exact_lbc_final_off_air), str(exact_nest_couple_on_air), str(exact_nest_couple_off_air), str(exact_nest_uncouple_on_air), str(exact_nest_uncouple_off_air), str(exact_nest_feedback_air), str(exact_nest_interp_air), str(exact_nest_smooth_air),
+              str(lbc_flow_air), str(exact_lbc_flow_air),
               str(surface_diagnostics_seed_air),
               str(acoustic_sumflux_air),
               str(real_total_geopotential_air), str(ysu_column_air),
+              str(ysu_480_column_air),
               str(noah_sfcdiags_air),
               str(health_family_air),
               *map(str, physics_family_airs),
@@ -1193,7 +1778,8 @@ def build(output: Path) -> dict:
               *map(str, rrtmgp_family_airs),
               *map(str, thompson_airs),
               "-o", str(default_library_path)])
-        _run([str(metallib), str(rk_air), str(acoustic_exact_air),
+        _run([str(metallib), str(exact_rrtm_t8w_air), str(climate_exact_air), str(rk_air), str(acoustic_exact_air), str(sfclay_exact_air), str(exact_rrtm_mm5atm_air), str(exact_rrtm_setcoef_air), str(exact_rrtm_band0405_air), str(exact_rrtm_band03_air), str(exact_rrtm_band12_air), str(exact_rrtm_band06_air), str(exact_rrtm_band08_air), str(exact_rrtm_band07_air), str(exact_rrtm_band1011_air), str(exact_rrtm_band09_air), str(exact_rrtm_band1216_air), str(exact_rrtm_itr_air), str(exact_rrtm_rtrn_air),
+              *map(str, exact_smag_airs), str(exact_diff6_air), str(exact_openbc_air),
               str(acoustic_calc_cq_air),
               str(uv_exact_air), str(mu_exact_air), str(wphi_exact_air),
               str(advection_exact_air),
@@ -1204,20 +1790,44 @@ def build(output: Path) -> dict:
               str(advection_u_vorder_exact_air),
               str(advection_v_vorder_exact_air),
               str(advection_w_vorder_exact_air),
+              *(str(path) for path in exact_advection_air),
               str(diagnostics_exact_air),
-              str(stage_mass_fluxes_air), str(advection_prepare_air),
-              str(advance_stage_air), str(slow_pgf_air), str(diffusion_air),
-              str(slow_buoyancy_air),
-              str(slow_geopotential_air),
+              str(stage_mass_fluxes_air), str(exact_stage_mass_fluxes_air), str(advection_prepare_air),
+              str(advance_stage_air), str(slow_pgf_air), str(exact_slow_pgf_air),
+              str(exact_acoustic_coefs_air), str(exact_acoustic_uv_air),
+              str(exact_acoustic_mu_air), str(exact_acoustic_wphi_air),
+              str(exact_calc_cq_air), str(exact_diagnostics_air), str(diffusion_air),
+              str(slow_buoyancy_air), str(exact_slow_buoyancy_air),
+              str(slow_geopotential_air), str(exact_slow_geopotential_air),
               str(acoustic_boundary_frame_air),
               str(surface_w_air),
-              str(small_step_air),
+              str(exact_surface_w_air),
+              str(small_step_air), str(exact_small_step_air),
               str(close_periodic_alias_air),
-              str(acoustic_emdiv_air),
+              str(acoustic_emdiv_air), str(exact_acoustic_emdiv_air),
               str(openbc_radiative_air),
               str(rk_total_theta_air),
               str(coriolis_curvature_air),
+              str(exact_glue_add_air),
+              str(exact_tendency_glue_air),
+              str(exact_w_damp_air), str(exact_upper_wind_air),
+              *(str(path) for path in exact_coriolis_airs),
+              str(exact_total_theta_air),
+              str(exact_smag_map_air),
               str(tendency_coupling_air),
+              str(exact_moist_scalar_update_air), str(exact_moist_tendency_air),
+              str(exact_moist_capture_air), str(exact_pd_on_air), str(exact_pd_off_air),
+              str(exact_lbc_on_air), str(exact_lbc_off_air),
+              str(exact_lbc_interior_air), str(exact_lbc_install_air),
+              str(exact_lbc_final_on_air), str(exact_lbc_final_off_air),
+              str(exact_lbc_flow_air),
+              str(exact_nest_couple_on_air), str(exact_nest_couple_off_air),
+              str(exact_nest_roundtrip_air),
+              str(exact_nest_uncouple_on_air), str(exact_nest_uncouple_off_air),
+              str(exact_nest_feedback_air),
+              str(exact_nest_interp_air),
+              str(exact_nest_smooth_air),
+              str(exact_held_heating_air), str(exact_dudhia_air), str(exact_mynn_radiation_air),
               str(nest_family_air), str(nest_interp_fragment_air),
               str(nest_stream_transfer_fragment_air), str(ieva_family_air),
               str(radar_tten_family_air),
@@ -1226,15 +1836,16 @@ def build(output: Path) -> dict:
               str(complex64_exact_air),
               str(jacobi_eigh_fp64_exact_air),
               str(sfclay_family_air), str(mynn_surface_family_air),
-              str(physics_atmosphere_prepare_air),
+              str(physics_atmosphere_prepare_air), str(exact_physics_atmosphere_air),
               str(temp / "ruc_family.air"),
               str(temp / "ruc_sfctmp_family.air"),
               str(temp / "ruc_driver_family.air"),
               str(coupled_boundary_field_air),
+              str(strict_coupled_boundary_field_air),
               str(surface_humidity_air),
               str(lbc_time_air),
               str(surface_diagnostics_seed_air),
-              str(uh_diag_family_air),
+              str(uh_diag_family_air), str(exact_uh_diag_air), str(exact_noah_seam_air), str(exact_noah_land_air), str(exact_cldfra1_air), *map(str, exact_goddard_airs), str(exact_noah_init_air), str(exact_noah_seaice_air),
               str(acoustic_sumflux_air),
               str(real_total_geopotential_air),
               str(rrtmgp_prepare_air), str(rrtm_lw_family_air),
@@ -1291,7 +1902,9 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True,
                         help="directory for the dylib, metallib, and manifest")
     args = parser.parse_args()
-    print(json.dumps(build(args.output.resolve()), indent=2, sort_keys=True))
+    manifest = build(args.output.resolve())
+    # The full manifest is METAL_BUNDLE.json; report only where it went.
+    print(json.dumps({"output": str(args.output), "keys": sorted(manifest)}))
     return 0
 
 

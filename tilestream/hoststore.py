@@ -393,14 +393,24 @@ class FieldSpec:
     #: does not scale with ``nz``, which is why it needs its own slot rather
     #: than an abused ``has_z``.
     layers: int | None = None
+    refinement_y: int = 1
+    refinement_x: int = 1
+    padding_y: int = 0
+    padding_x: int = 0
+    fixed_shape: tuple[int, ...] | None = None
+    #: Non-spatial axes before the vertical/layer axis (e.g. species).
+    leading_shape: tuple[int, ...] = ()
 
     def shape(self, nz: int, ny: int, nx: int) -> tuple[int, ...]:
-        horiz = (ny + int(self.y_stagger), nx + int(self.x_stagger))
+        if self.fixed_shape is not None:
+            return self.fixed_shape
+        horiz = (ny * self.refinement_y + int(self.y_stagger) + 2 * self.padding_y,
+                 nx * self.refinement_x + int(self.x_stagger) + 2 * self.padding_x)
         if self.layers is not None:
-            return (int(self.layers),) + horiz
+            return self.leading_shape + (int(self.layers),) + horiz
         if not self.has_z:
-            return horiz
-        return (nz + int(self.z_stagger),) + horiz
+            return self.leading_shape + horiz
+        return self.leading_shape + (nz + int(self.z_stagger),) + horiz
 
     def nbytes(self, nz: int, ny: int, nx: int) -> int:
         return int(np.prod(self.shape(nz, ny, nx))) * self.dtype.itemsize
@@ -423,6 +433,9 @@ class FieldSpec:
 
 def _classify(shape: tuple[int, ...], name: str) -> FieldSpec | None:
     """Turn a probed shape into a :class:`FieldSpec`, or raise."""
+    if len(shape) > 3:
+        return dataclasses.replace(_classify(shape[-3:], name),
+                                   leading_shape=shape[:-3])
     axes = {
         _PROBE_NZ: (True, False), _PROBE_NZ + 1: (True, True),
     }
@@ -449,7 +462,7 @@ def _classify(shape: tuple[int, ...], name: str) -> FieldSpec | None:
                          horiz_y[y], horiz_x[x])
     raise HostStoreError(
         f"persisted attribute {name!r} has unexpected rank {len(shape)} "
-        f"(shape {shape}); the store only models 2-D and 3-D fields")
+        f"(shape {shape}); a field needs two trailing horizontal axes")
 
 
 def build_manifest(cfg_like,
@@ -505,9 +518,10 @@ def manifest_from_arrays(arrays: Mapping[str, Any], nz: int, ny: int, nx: int,
     from a state that has ALREADY RUN A STEP, at its real extents.
 
     The derivation is positional and total: the last two axes are horizontal
-    and must equal ``ny``/``ny+1`` and ``nx``/``nx+1``; a leading axis is
+    and must equal ``ny``/``ny+1`` and ``nx``/``nx+1``; the preceding axis is
     vertical when it equals ``nz`` or ``nz+1`` and a fixed LAYER count
-    otherwise.  Anything else raises rather than being guessed at, because
+    otherwise. Any earlier axes (species, process slots) retain their fixed
+    extents. Anything else raises rather than being guessed at, because
     the alternative is a store field of the wrong shape and a transport that
     copies the wrong bytes into it.
 
@@ -529,6 +543,19 @@ def manifest_from_arrays(arrays: Mapping[str, Any], nz: int, ny: int, nx: int,
     specs: list[FieldSpec] = []
     for name, value in arrays.items():
         shape = tuple(int(s) for s in value.shape)
+        from tilestream.global_inventory import global_keys
+        if global_keys((name,)):
+            specs.append(FieldSpec(name, np.dtype(value.dtype), False, False, False, False,
+                                   fixed_shape=shape))
+            continue
+        from tilestream.fire_inventory import fire_field_layout
+        fire_layout = fire_field_layout(name, shape, ny, nx)
+        if fire_layout is not None:
+            ry, rx, py, px = fire_layout
+            specs.append(FieldSpec(name, np.dtype(value.dtype), False, False,
+                                   False, False, refinement_y=ry, refinement_x=rx,
+                                   padding_y=py, padding_x=px))
+            continue
         if len(shape) < 2:
             raise HostStoreError(
                 f"carrier {name!r} has shape {shape}: no horizontal extent, "
@@ -542,9 +569,15 @@ def manifest_from_arrays(arrays: Mapping[str, Any], nz: int, ny: int, nx: int,
         if len(shape) == 2:
             spec = FieldSpec(name, np.dtype(value.dtype), False, False,
                              y_stag, x_stag)
-        elif len(shape) == 3:
-            lead = shape[0]
-            if lead == nz:
+        elif len(shape) >= 3:
+            lead = shape[-3]
+            if name in ("fire/grid.moisture.fmc_gc", "fire/grid.moisture.fmc_equi",
+                        "fire/grid.moisture.fmc_lag", "fire/grid.moisture.fmep"):
+                # Native moisture-class/parameter axes retain their declared
+                # allocation even when their length equals the weather nz.
+                spec = FieldSpec(name, np.dtype(value.dtype), False, False,
+                                 y_stag, x_stag, layers=lead)
+            elif lead == nz:
                 spec = FieldSpec(name, np.dtype(value.dtype), True, False,
                                  y_stag, x_stag)
             elif lead == nz + 1:
@@ -553,10 +586,7 @@ def manifest_from_arrays(arrays: Mapping[str, Any], nz: int, ny: int, nx: int,
             else:
                 spec = FieldSpec(name, np.dtype(value.dtype), False, False,
                                  y_stag, x_stag, layers=lead)
-        else:
-            raise HostStoreError(
-                f"carrier {name!r} has rank {len(shape)} (shape {shape}); the "
-                "store models 2-D and 3-D fields only")
+            spec = dataclasses.replace(spec, leading_shape=shape[:-3])
         specs.append(spec)
     if not specs:
         raise HostStoreError("inventory is empty; nothing to stream")
@@ -751,14 +781,7 @@ def _host_memory_uncapped() -> dict[str, int]:
     try:
         info = _meminfo()
     except FileNotFoundError:
-        try:
-            import psutil
-        except ImportError:
-            raise HostStoreError(
-                f"no host-memory source on this platform ({sys.platform}): "
-                "no /proc/meminfo, not Windows, and psutil is not installed."
-                "  The pinned-store guards refuse to run on a guess; "
-                "`pip install psutil` gives them a real reading.") from None
+        import psutil  # a base dependency since 2.9.3
         vm = psutil.virtual_memory()
         return {"total": int(vm.total), "available": int(vm.available),
                 "free": int(getattr(vm, "free", vm.available))}
@@ -1414,7 +1437,7 @@ class HostDomainStore:
                 stop.synchronize()
                 elapsed_ms = cp.cuda.get_elapsed_time(start, stop)
                 samples.append(total / (elapsed_ms * 1e-3) / 1e9)
-        del buf
+        buf = None  # rebound, not deleted: a closure above reads it
         return {"accurate": True, "bytes": total, "fields": selected,
                 "n_transfers": len(selected),
                 "gb_per_s": max(samples), "gb_per_s_median": float(
@@ -1426,30 +1449,6 @@ class HostDomainStore:
 # capacity planning
 # --------------------------------------------------------------------------
 
-def capacity_report(cfg_like, budget_bytes: int, *, nz: int | None = None,
-                    attrs: Sequence[str] = STATE_SERIALIZED_ATTRS,
-                    ) -> dict[str, Any]:
-    """What domain fits in ``budget_bytes`` for ``cfg_like``'s inventory?
-
-    Allocates NOTHING.  The per-cell figure is computed from the real probed
-    manifest and the exact staggered shapes, so it supersedes the headline
-    232 B/cell (which describes the full moist inventory, not whatever this
-    config actually allocates).
-    """
-    manifest = build_manifest(cfg_like, attrs)
-    nz = int(cfg_like.nz) if nz is None else int(nz)
-    best = max_square_domain(budget_bytes, manifest, nz)
-    return {
-        "fields": [s.name for s in manifest],
-        "n_fields": len(manifest),
-        "nz": nz,
-        "budget_bytes": int(budget_bytes),
-        "max_square": best,
-        "bytes_per_cell_at_max": best["bytes_per_cell"],
-        "bytes_per_cell_asymptotic": _asymptotic_bytes_per_cell(manifest, nz),
-    }
-
-
 def _asymptotic_bytes_per_cell(manifest: Iterable[FieldSpec],
                                nz: int) -> float:
     """B/cell in the large-domain limit (staggering ``+1``s amortised away).
@@ -1459,11 +1458,14 @@ def _asymptotic_bytes_per_cell(manifest: Iterable[FieldSpec],
     """
     total = 0.0
     for spec in manifest:
+        if spec.fixed_shape is not None:
+            continue  # Domain vectors do not scale with horizontal area.
+        planes = int(np.prod(spec.leading_shape))
         if spec.has_z:
             zext = nz + int(spec.z_stagger)
-            total += spec.dtype.itemsize * zext / nz
+            total += planes * spec.dtype.itemsize * zext / nz
         else:
-            total += spec.dtype.itemsize / nz
+            total += planes * (spec.layers or 1) * spec.dtype.itemsize / nz
     return total
 
 
@@ -1474,7 +1476,7 @@ __all__ = [
     "HostMemoryExhausted", "HostStoreError", "InventoryMismatch",
     "MIN_ACCURATE_BANDWIDTH_BYTES", "PINNED_CEILING_FRACTION", "PinnedBlock",
     "alloc_pinned_array", "build_manifest", "bytes_per_cell",
-    "capacity_report", "check_allocatable", "domain_bytes", "host_memory",
+    "check_allocatable", "domain_bytes", "host_memory",
     "manifest_from_arrays",
     "max_square_domain", "owning_block", "PinnedAllocationFailed",
     "pinned_ceiling_bytes", "pinned_ledger",

@@ -165,7 +165,7 @@ pub(crate) fn decode(file: &Nc4File<'_>, mut budget: DecodeBudget) -> Result<Vol
     let sweep_paths = sweep_groups(file, &root);
     if sweep_paths.is_empty() {
         return Err(invalid(
-            "netCDF-4 file has no sweep groups, not CfRadial 2",
+            "netCDF-4 file has no sweep groups — not CfRadial 2",
         ));
     }
     check_sweep_count(sweep_paths.len(), "CfRadial 2 sweep groups")

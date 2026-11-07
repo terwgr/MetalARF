@@ -1,0 +1,2430 @@
+// Generated from woof/core/kernels/lin_wrf.cuh by tools/lin_metal/generate.py; do not edit.
+#include "lin_support.metalh"
+#pragma clang fp contract(off)
+namespace lin128 {
+template < typename P_x > static inline F lin_ggamma ( P_x x ) {
+const F b [ 8 ] = {
+- 5.77191650867462158203125e-1f , 9.8820590972900390625e-1f , - 8.9705693721771240234375e-1f , 9.18206870555877685546875e-1f , - 7.567040920257568359375e-1f , 4.821994006633758544921875e-1f , - 1.9352781772613525390625e-1f , 3.58683429658412933349609375e-2f }
+;
+F g1to2 ;
+int j ;
+int k1 ;
+F pf ;
+F temp ;
+F __result_ggamma ;
+pf = 1.0e+0f ;
+temp = * x ;
+j = 1 ;
+bool g___label_000020 = false ;
+while ( 1 ) {
+{
+bool D_4844 ;
+D_4844 = j > 200 ;
+if ( D_4844 ) break ;
+if ( temp <= 2.0e+0f ) {
+g___label_000020 = true ;
+break ;
+}
+;
+temp = lin_sub ( temp , 1.0e+0f ) ;
+;
+pf = lin_mul ( pf , temp ) ;
+;
+j = j + 1 ;
+}
+}
+if ( ! g___label_000020 ) {
+;
+return 0.0f ;
+}
+;
+g1to2 = 1.0e+0f ;
+temp = lin_sub ( temp , 1.0e+0f ) ;
+k1 = 1 ;
+while ( 1 ) {
+{
+bool D_4853 ;
+D_4853 = k1 > 8 ;
+if ( D_4853 ) break ;
+;
+{
+F D_4855 ;
+D_4855 = temp ;
+g1to2 = lin_add ( lin_mul ( b [ ( ( long ) k1 ) + ( - 1 ) ] , lin_powi ( D_4855 , k1 ) ) , g1to2 ) ;
+}
+;
+k1 = k1 + 1 ;
+}
+}
+;
+__result_ggamma = lin_mul ( pf , g1to2 ) ;
+return __result_ggamma ;
+}
+
+template < typename P_temp > static inline F lin_parama1 ( P_temp temp ) {
+const F a1 [ 32 ] = {
+9.999999960041972002500187954865396022796630859375e-12f , 7.938999857515227631665766239166259765625e-8f , 7.8409999559880816377699375152587890625e-7f , 3.369000069142202846705913543701171875e-6f , 4.33600007454515434801578521728515625e-6f , 5.2850000429316423833370208740234375e-6f , 3.727999910552171058952808380126953125e-6f , 1.85199996849405579268932342529296875e-6f , 2.9910000876043341122567653656005859375e-7f , 4.24799992515545454807579517364501953125e-7f , 7.4339999400763190351426601409912109375e-7f , 1.8120000504495692439377307891845703125e-6f , 4.393999915919266641139984130859375e-6f , 9.145000149146653711795806884765625e-6f , 1.7250000382773578166961669921875e-5f , 3.3479998819530010223388671875e-5f , 1.7250000382773578166961669921875e-5f , 9.1749998318846337497234344482421875e-6f , 4.41200018030940555036067962646484375e-6f , 2.252000058433623053133487701416015625e-6f , 9.115000239034998230636119842529296875e-7f , 4.876000048170681111514568328857421875e-7f , 3.472999878795235417783260345458984375e-7f , 4.757999931825906969606876373291015625e-7f , 6.3060002730708220042288303375244140625e-7f , 8.5729999454997596330940723419189453125e-7f , 7.86800001151277683675289154052734375e-7f , 7.19199988452601246535778045654296875e-7f , 6.5130001303259632550179958343505859375e-7f , 5.955999995421734638512134552001953125e-7f , 5.3330001037465990521013736724853515625e-7f , 4.8340001512769958935678005218505859375e-7f }
+;
+int i1 ;
+int i1p1 ;
+F ratio ;
+F __result_parama1 ;
+i1 = ( ( int ) ( - ( * temp ) ) ) + 1 ;
+i1p1 = i1 + 1 ;
+ratio = lin_sub ( - ( * temp ) , ( F ) ( i1 + ( - 1 ) ) ) ;
+__result_parama1 = lin_add ( a1 [ ( ( long ) i1 ) + ( - 1 ) ] , lin_mul ( lin_sub ( a1 [ ( ( long ) i1p1 ) + ( - 1 ) ] , a1 [ ( ( long ) i1 ) + ( - 1 ) ] ) , ratio ) ) ;
+return __result_parama1 ;
+}
+
+template < typename P_temp > static inline F lin_parama2 ( P_temp temp ) {
+const F a2 [ 32 ] = {
+9.99999977648258209228515625e-3f , 4.005999863147735595703125e-1f , 4.83099997043609619140625e-1f , 5.32000005245208740234375e-1f , 5.30700027942657470703125e-1f , 5.31899988651275634765625e-1f , 5.24900019168853759765625e-1f , 4.88799989223480224609375e-1f , 3.849000036716461181640625e-1f , 4.047000110149383544921875e-1f , 4.3180000782012939453125e-1f , 4.7710001468658447265625e-1f , 5.18299996852874755859375e-1f , 5.46299993991851806640625e-1f , 5.65100014209747314453125e-1f , 5.813000202178955078125e-1f , 5.655000209808349609375e-1f , 5.47800004482269287109375e-1f , 5.20299971103668212890625e-1f , 4.9059998989105224609375e-1f , 4.447000026702880859375e-1f , 4.126000106334686279296875e-1f , 3.959999978542327880859375e-1f , 4.14900004863739013671875e-1f , 4.320000112056732177734375e-1f , 4.505999982357025146484375e-1f , 4.4830000400543212890625e-1f , 4.460000097751617431640625e-1f , 4.433000087738037109375e-1f , 4.413000047206878662109375e-1f , 4.381999969482421875e-1f , 4.36100006103515625e-1f }
+;
+int i1 ;
+int i1p1 ;
+F ratio ;
+F __result_parama2 ;
+i1 = ( ( int ) ( - ( * temp ) ) ) + 1 ;
+i1p1 = i1 + 1 ;
+ratio = lin_sub ( - ( * temp ) , ( F ) ( i1 + ( - 1 ) ) ) ;
+__result_parama2 = lin_add ( a2 [ ( ( long ) i1 ) + ( - 1 ) ] , lin_mul ( lin_sub ( a2 [ ( ( long ) i1p1 ) + ( - 1 ) ] , a2 [ ( ( long ) i1 ) + ( - 1 ) ] ) , ratio ) ) ;
+return __result_parama2 ;
+}
+
+template < typename P_qvz , typename P_qlz , typename P_qiz , typename P_prez , typename P_theiz , typename P_thz , typename P_tothz , typename P_kts , typename P_kte , typename P_k , typename P_xlvocp , typename P_xlfocp , typename P_episp0k , typename P_ep2 , typename P_svp1 , typename P_svp2 , typename P_svp3 , typename P_svpt0 > static inline void lin_satadj ( P_qvz qvz , P_qlz qlz , P_qiz qiz , P_prez prez , P_theiz theiz , P_thz thz , P_tothz tothz , P_kts kts , P_kte kte , P_k k , P_xlvocp xlvocp , P_xlfocp xlfocp , P_episp0k episp0k , P_ep2 ep2 , P_svp1 svp1 , P_svp2 svp2 , P_svp3 svp3 , P_svpt0 svpt0 ) {
+F absft ;
+F denom1 ;
+F denom2 ;
+F dftsat ;
+F dqvsbar ;
+F es ;
+F ftsat ;
+int n ;
+F qlpqi ;
+F qpz ;
+F qsat_noliqice ;
+F qsiz [ 128 + 1 ] ;
+F qswz [ 128 + 1 ] ;
+F qvsbar [ 128 + 1 ] ;
+F ratqi ;
+F ratql ;
+F t0 ;
+F t1 ;
+F tem [ 128 + 1 ] ;
+F tem_noliqice ;
+F tmp1 ;
+F tsat ;
+thz [ ( long ) ( * k ) ] = lin_sub ( theiz [ ( long ) ( * k ) ] , lin_div ( lin_sub ( lin_mul ( * xlvocp , qvz [ ( long ) ( * k ) ] ) , lin_mul ( * xlfocp , qiz [ ( long ) ( * k ) ] ) ) , tothz [ ( long ) ( * k ) ] ) ) ;
+tem [ ( long ) ( * k ) ] = lin_mul ( tothz [ ( long ) ( * k ) ] , thz [ ( long ) ( * k ) ] ) ;
+tem_noliqice = lin_sub ( lin_sub ( tem [ ( long ) ( * k ) ] , lin_mul ( * xlvocp , qlz [ ( long ) ( * k ) ] ) ) , lin_mul ( lin_add ( * xlvocp , * xlfocp ) , qiz [ ( long ) ( * k ) ] ) ) ;
+if ( tem_noliqice > 2.73149993896484375e+2f ) {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( * svp2 , lin_sub ( tem_noliqice , * svpt0 ) ) , lin_sub ( tem_noliqice , * svp3 ) ) ) ) ;
+qsat_noliqice = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) ( * k ) ] , es ) ) ;
+}
+else {
+qsat_noliqice = lin_mul ( lin_div ( * episp0k , prez [ ( long ) ( * k ) ] ) , gfk_exp ( lin_div ( lin_mul ( lin_sub ( tem_noliqice , 2.73149993896484375e+2f ) , 2.18745574951171875e+1f ) , lin_sub ( tem_noliqice , 7.659999847412109375e+0f ) ) ) ) ;
+}
+;
+qpz = lin_add ( lin_add ( qvz [ ( long ) ( * k ) ] , qlz [ ( long ) ( * k ) ] ) , qiz [ ( long ) ( * k ) ] ) ;
+if ( qpz < qsat_noliqice ) {
+qvz [ ( long ) ( * k ) ] = qpz ;
+qiz [ ( long ) ( * k ) ] = 0.0f ;
+qlz [ ( long ) ( * k ) ] = 0.0f ;
+return ;
+}
+;
+qlpqi = lin_add ( qlz [ ( long ) ( * k ) ] , qiz [ ( long ) ( * k ) ] ) ;
+if ( qlpqi >= 9.99999974737875163555145263671875e-6f ) {
+ratql = lin_div ( qlz [ ( long ) ( * k ) ] , qlpqi ) ;
+ratqi = lin_div ( qiz [ ( long ) ( * k ) ] , qlpqi ) ;
+}
+else {
+t0 = 2.73149993896484375e+2f ;
+t1 = 2.48149993896484375e+2f ;
+tmp1 = lin_div ( lin_sub ( t0 , tem [ ( long ) ( * k ) ] ) , lin_sub ( t0 , t1 ) ) ;
+{
+F M_155 ;
+M_155 = 1.0e+0f ;
+M_155 = lin_min ( tmp1 , M_155 ) ;
+tmp1 = M_155 ;
+}
+{
+F M_156 ;
+M_156 = 0.0f ;
+M_156 = lin_max ( tmp1 , M_156 ) ;
+tmp1 = M_156 ;
+}
+ratqi = tmp1 ;
+ratql = lin_sub ( 1.0e+0f , tmp1 ) ;
+}
+;
+tsat = tem [ ( long ) ( * k ) ] ;
+absft = 1.0e+0f ;
+n = 1 ;
+while ( 1 ) {
+{
+bool D_4954 ;
+D_4954 = n > 20 ;
+if ( D_4954 ) break ;
+denom1 = lin_div ( 1.0e+0f , lin_sub ( tsat , * svp3 ) ) ;
+denom2 = lin_div ( 1.0e+0f , lin_sub ( tsat , 7.659999847412109375e+0f ) ) ;
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_mul ( lin_mul ( * svp2 , denom1 ) , lin_sub ( tsat , * svpt0 ) ) ) ) ;
+qswz [ ( long ) ( * k ) ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) ( * k ) ] , es ) ) ;
+if ( tem [ ( long ) ( * k ) ] < 2.73149993896484375e+2f ) {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_mul ( lin_mul ( denom2 , 2.18745574951171875e+1f ) , lin_sub ( tsat , 2.73149993896484375e+2f ) ) ) ) ;
+qsiz [ ( long ) ( * k ) ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) ( * k ) ] , es ) ) ;
+if ( tem [ ( long ) ( * k ) ] < 2.33149993896484375e+2f ) {
+qswz [ ( long ) ( * k ) ] = qsiz [ ( long ) ( * k ) ] ;
+}
+;
+}
+else {
+qsiz [ ( long ) ( * k ) ] = qswz [ ( long ) ( * k ) ] ;
+}
+;
+qvsbar [ ( long ) ( * k ) ] = lin_add ( lin_mul ( qswz [ ( long ) ( * k ) ] , ratql ) , lin_mul ( qsiz [ ( long ) ( * k ) ] , ratqi ) ) ;
+if ( absft < 9.99999977648258209228515625e-3f ) break ;
+;
+dqvsbar = lin_add ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( qswz [ ( long ) ( * k ) ] , ratql ) , * svp2 ) , 2.435e+2f ) , denom1 ) , denom1 ) , lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( qsiz [ ( long ) ( * k ) ] , ratqi ) , 2.18745574951171875e+1f ) , 2.655e+2f ) , denom2 ) , denom2 ) ) ;
+ftsat = lin_sub ( lin_sub ( lin_add ( lin_mul ( lin_add ( * xlvocp , lin_mul ( * xlfocp , ratqi ) ) , qvsbar [ ( long ) ( * k ) ] ) , tsat ) , lin_mul ( tothz [ ( long ) ( * k ) ] , theiz [ ( long ) ( * k ) ] ) ) , lin_mul ( lin_mul ( * xlfocp , ratqi ) , lin_add ( lin_add ( qvz [ ( long ) ( * k ) ] , qlz [ ( long ) ( * k ) ] ) , qiz [ ( long ) ( * k ) ] ) ) ) ;
+dftsat = lin_add ( lin_mul ( lin_add ( * xlvocp , lin_mul ( * xlfocp , ratqi ) ) , dqvsbar ) , 1.0e+0f ) ;
+tsat = lin_sub ( tsat , lin_div ( ftsat , dftsat ) ) ;
+absft = fabs ( ftsat ) ;
+;
+;
+n = n + 1 ;
+}
+}
+;
+;
+if ( qvsbar [ ( long ) ( * k ) ] < qpz ) {
+qvz [ ( long ) ( * k ) ] = qvsbar [ ( long ) ( * k ) ] ;
+qiz [ ( long ) ( * k ) ] = lin_mul ( lin_sub ( qpz , qvz [ ( long ) ( * k ) ] ) , ratqi ) ;
+qlz [ ( long ) ( * k ) ] = lin_mul ( lin_sub ( qpz , qvz [ ( long ) ( * k ) ] ) , ratql ) ;
+}
+else {
+qvz [ ( long ) ( * k ) ] = qpz ;
+qiz [ ( long ) ( * k ) ] = 0.0f ;
+qlz [ ( long ) ( * k ) ] = 0.0f ;
+}
+;
+;
+}
+
+template < typename P_dt , typename P_qvz , typename P_qlz , typename P_qrz , typename P_qiz , typename P_qsz , typename P_qgz , typename P_qndropz , typename P_flag_qndrop , typename P_thz , typename P_tothz , typename P_rho , typename P_orho , typename P_sqrho , typename P_prez , typename P_zz , typename P_dzw , typename P_zsfc , typename P_preclw , typename P_precrz , typename P_preciz , typename P_precsz , typename P_precgz , typename P_pptrain , typename P_pptsnow , typename P_pptgraul , typename P_pptice , typename P_grav , typename P_cp , typename P_rair , typename P_rvapor , typename P_gindex , typename P_xls , typename P_xlv , typename P_xlf , typename P_rhowater , typename P_rhosnow , typename P_ep2 , typename P_svp1 , typename P_svp2 , typename P_svp3 , typename P_svpt0 , typename P_kts , typename P_kte , typename P_i , typename P_j > static inline void lin_clphy1d ( P_dt dt , P_qvz qvz , P_qlz qlz , P_qrz qrz , P_qiz qiz , P_qsz qsz , P_qgz qgz , P_qndropz qndropz , P_flag_qndrop flag_qndrop , P_thz thz , P_tothz tothz , P_rho rho , P_orho orho , P_sqrho sqrho , P_prez prez , P_zz zz , P_dzw dzw , P_zsfc zsfc , P_preclw preclw , P_precrz precrz , P_preciz preciz , P_precsz precsz , P_precgz precgz , P_pptrain pptrain , P_pptsnow pptsnow , P_pptgraul pptgraul , P_pptice pptice , P_grav grav , P_cp cp , P_rair rair , P_rvapor rvapor , P_gindex gindex , P_xls xls , P_xlv xlv , P_xlf xlf , P_rhowater rhowater , P_rhosnow rhosnow , P_ep2 ep2 , P_svp1 svp1 , P_svp2 svp2 , P_svp3 svp3 , P_svpt0 svpt0 , P_kts kts , P_kte kte , P_i i , P_j j ) {
+F a1 ;
+F a2 ;
+F abg ;
+F abi ;
+F abr ;
+F alpha1 ;
+F alpha2 ;
+F ap ;
+F araut ;
+F beta ;
+F bp ;
+F bp3 ;
+F bp5 ;
+F bp6 ;
+F capn ;
+F consta ;
+F constc ;
+F constg ;
+F constg2 ;
+F cpor ;
+F cwoxlf ;
+F del_tv ;
+F delrs ;
+F delta2 ;
+F delta3 ;
+F delta4 ;
+F diffwv [ 128 + 1 ] ;
+F dis ;
+F dp3 ;
+F dp5 ;
+F dp5o2 ;
+F dtb ;
+F egi ;
+F egr ;
+F egs ;
+F egw ;
+F eiw ;
+F episp0k ;
+F eri ;
+F erw ;
+F es ;
+F esi ;
+F esr ;
+F esw ;
+F factor ;
+F flux ;
+F fluxin ;
+F fluxout ;
+F g1sdelt4 ;
+F gam2pt75 ;
+F gam3pt5 ;
+F gam4pt5 ;
+F gambp3 ;
+F gambp4 ;
+F gambp5o2 ;
+F gambp6 ;
+F gamdp3 ;
+F gamdp4 ;
+F gamdp5o2 ;
+F gdelta4 ;
+int k ;
+F kappa ;
+F liqconc ;
+int max_q ;
+int min_q ;
+bool notlast ;
+F obp4 ;
+F ocdrag ;
+F ocp ;
+F odp4 ;
+F odtb ;
+F odtberg ;
+F olambdag [ 128 + 1 ] ;
+F olambdar [ 128 + 1 ] ;
+F olambdas [ 128 + 1 ] ;
+F oprez [ 128 + 1 ] ;
+F oxlf ;
+F oxmi ;
+F p0 ;
+F pcli [ 128 + 1 ] ;
+F pclw [ 128 + 1 ] ;
+F pdry [ 128 + 1 ] ;
+F pgaci [ 128 + 1 ] ;
+F pgacip [ 128 + 1 ] ;
+F pgacr [ 128 + 1 ] ;
+F pgacrp [ 128 + 1 ] ;
+F pgacs [ 128 + 1 ] ;
+F pgacsp [ 128 + 1 ] ;
+F pgacw [ 128 + 1 ] ;
+F pgaut [ 128 + 1 ] ;
+F pgdep [ 128 + 1 ] ;
+F pgfr [ 128 + 1 ] ;
+F pgmlt [ 128 + 1 ] ;
+F pgmltevp [ 128 + 1 ] ;
+F pgraupel [ 128 + 1 ] ;
+F pgsub [ 128 + 1 ] ;
+F pgwet [ 128 + 1 ] ;
+F pi ;
+F piacr [ 128 + 1 ] ;
+F piadj [ 128 + 1 ] ;
+F pidw [ 128 + 1 ] ;
+F pihom [ 128 + 1 ] ;
+F pimlt [ 128 + 1 ] ;
+F pio4 ;
+F pio6 ;
+F pladj [ 128 + 1 ] ;
+F praci [ 128 + 1 ] ;
+F pracs [ 128 + 1 ] ;
+F pracw [ 128 + 1 ] ;
+F prain [ 128 + 1 ] ;
+F praut [ 128 + 1 ] ;
+F prevp [ 128 + 1 ] ;
+F psaci [ 128 + 1 ] ;
+F psacr [ 128 + 1 ] ;
+F psacw [ 128 + 1 ] ;
+F psaut [ 128 + 1 ] ;
+F psdep [ 128 + 1 ] ;
+F psfi [ 128 + 1 ] ;
+F psfw [ 128 + 1 ] ;
+F psmlt [ 128 + 1 ] ;
+F psmltevp [ 128 + 1 ] ;
+F psnow [ 128 + 1 ] ;
+F pssub [ 128 + 1 ] ;
+F pvapor [ 128 + 1 ] ;
+F qgchg [ 128 + 1 ] ;
+F qgzodt [ 128 + 1 ] ;
+F qic ;
+F qizodt [ 128 + 1 ] ;
+F qlpqi ;
+F qlzodt [ 128 + 1 ] ;
+F qrzodt [ 128 + 1 ] ;
+F qschg [ 128 + 1 ] ;
+F qsiz [ 128 + 1 ] ;
+F qswz [ 128 + 1 ] ;
+F qszodt [ 128 + 1 ] ;
+const F qvmin = 9.9999996826552253889678874634872052240552875446155667305e-21f ;
+F qvoqsiz [ 128 + 1 ] ;
+F qvoqswz [ 128 + 1 ] ;
+F qvsbar [ 128 + 1 ] ;
+F qvzodt [ 128 + 1 ] ;
+F rhocgs ;
+F rs0 [ 128 + 1 ] ;
+F rsat ;
+F save1 ;
+F save2 ;
+F schmidt [ 128 + 1 ] ;
+F t_del_tv ;
+F tem [ 128 + 1 ] ;
+F temc1 ;
+F temcc [ 128 + 1 ] ;
+F term0 ;
+F term1 ;
+F theiz [ 128 + 1 ] ;
+F tmp ;
+F tmp0 ;
+F tmp1 ;
+F tmp2 ;
+F tmp3 ;
+F tmp4 ;
+F tmp_g ;
+F tmp_r ;
+F tmp_s ;
+F tmp_tem ;
+F tmp_temcc ;
+F tmpa ;
+F tmpb ;
+F tmpc ;
+F tmpd ;
+F tmpqrz ;
+F vf1r ;
+F vf2r ;
+F visc [ 128 + 1 ] ;
+F viscmu [ 128 + 1 ] ;
+F vtg [ 128 + 1 ] ;
+F vtgold [ 128 + 1 ] ;
+F vti50 ;
+F vtiold [ 128 + 1 ] ;
+F vtr [ 128 + 1 ] ;
+F vtrold [ 128 + 1 ] ;
+F vts [ 128 + 1 ] ;
+F vtsold [ 128 + 1 ] ;
+F xc ;
+F xka [ 128 + 1 ] ;
+F xlambdag [ 128 + 1 ] ;
+F xlambdar [ 128 + 1 ] ;
+F xlambdas [ 128 + 1 ] ;
+F xlfocp ;
+F xlvocp ;
+F xni50 ;
+F xni50mx ;
+F xnin ;
+dtb = * dt ;
+odtb = lin_div ( 1.0e+0f , dtb ) ;
+pi = 3.1415927410125732421875e+0f ;
+pio4 = 7.85398185253143310546875e-1f ;
+pio6 = 5.2359879016876220703125e-1f ;
+ocp = lin_div ( 1.0e+0f , * cp ) ;
+oxlf = lin_div ( 1.0e+0f , * xlf ) ;
+xlvocp = lin_div ( * xlv , * cp ) ;
+xlfocp = lin_div ( * xlf , * cp ) ;
+consta = 8.419967041015625e+2f ;
+constc = 4.836070537567138671875e+0f ;
+ocdrag = 1.66666662693023681640625e+0f ;
+episp0k = lin_mul ( lin_mul ( * ep2 , 1.0e+3f ) , * svp1 ) ;
+{
+const F C_5695 = 4.80000019073486328125e+0f ;
+gambp4 = lin_ggamma ( & C_5695 ) ;
+}
+{
+const F C_5696 = 4.25e+0f ;
+gamdp4 = lin_ggamma ( & C_5696 ) ;
+}
+{
+const F C_5697 = 4.5e+0f ;
+gam4pt5 = lin_ggamma ( & C_5697 ) ;
+}
+cpor = lin_div ( * cp , * rair ) ;
+oxmi = 2.386634735616e+12f ;
+{
+const F C_5698 = 3.7999999523162841796875e+0f ;
+gambp3 = lin_ggamma ( & C_5698 ) ;
+}
+{
+const F C_5699 = 3.25e+0f ;
+gamdp3 = lin_ggamma ( & C_5699 ) ;
+}
+{
+const F C_5700 = 6.80000019073486328125e+0f ;
+gambp6 = lin_ggamma ( & C_5700 ) ;
+}
+{
+const F C_5701 = 3.5e+0f ;
+gam3pt5 = lin_ggamma ( & C_5701 ) ;
+}
+{
+const F C_5702 = 2.75e+0f ;
+gam2pt75 = lin_ggamma ( & C_5702 ) ;
+}
+{
+const F C_5703 = 2.900000095367431640625e+0f ;
+gambp5o2 = lin_ggamma ( & C_5703 ) ;
+}
+{
+const F C_5704 = 2.625e+0f ;
+gamdp5o2 = lin_ggamma ( & C_5704 ) ;
+}
+cwoxlf = lin_div ( 4.187e+3f , * xlf ) ;
+delta2 = 0.0f ;
+delta3 = 0.0f ;
+delta4 = 0.0f ;
+obp4 = 2.0833332836627960205078125e-1f ;
+bp3 = 3.7999999523162841796875e+0f ;
+bp5 = 5.80000019073486328125e+0f ;
+bp6 = 6.80000019073486328125e+0f ;
+odp4 = 2.3529411852359771728515625e-1f ;
+dp3 = 3.25e+0f ;
+dp5 = 5.25e+0f ;
+dp5o2 = 2.625e+0f ;
+{
+int D_5705 ;
+int D_5706 ;
+D_5705 = * kts ;
+D_5706 = * kte ;
+k = D_5705 ;
+while ( 1 ) {
+{
+bool D_5709 ;
+D_5709 = k > D_5706 ;
+if ( D_5709 ) break ;
+oprez [ ( long ) k ] = lin_div ( 1.0e+0f , prez [ ( long ) k ] ) ;
+;
+k = k + 1 ;
+}
+}
+;
+}
+{
+int D_5710 ;
+int D_5711 ;
+D_5710 = * kts ;
+D_5711 = * kte ;
+k = D_5710 ;
+while ( 1 ) {
+{
+bool D_5714 ;
+D_5714 = k > D_5711 ;
+if ( D_5714 ) break ;
+{
+F M_549 ;
+F D_5716 ;
+M_549 = 0.0f ;
+D_5716 = qlz [ ( long ) k ] ;
+M_549 = lin_max ( D_5716 , M_549 ) ;
+qlz [ ( long ) k ] = M_549 ;
+}
+{
+F M_550 ;
+F D_5718 ;
+M_550 = 0.0f ;
+D_5718 = qiz [ ( long ) k ] ;
+M_550 = lin_max ( D_5718 , M_550 ) ;
+qiz [ ( long ) k ] = M_550 ;
+}
+{
+F M_551 ;
+F D_5720 ;
+M_551 = qvmin ;
+D_5720 = qvz [ ( long ) k ] ;
+M_551 = lin_max ( D_5720 , M_551 ) ;
+qvz [ ( long ) k ] = M_551 ;
+}
+{
+F M_552 ;
+F D_5722 ;
+M_552 = 0.0f ;
+D_5722 = qsz [ ( long ) k ] ;
+M_552 = lin_max ( D_5722 , M_552 ) ;
+qsz [ ( long ) k ] = M_552 ;
+}
+{
+F M_553 ;
+F D_5724 ;
+M_553 = 0.0f ;
+D_5724 = qrz [ ( long ) k ] ;
+M_553 = lin_max ( D_5724 , M_553 ) ;
+qrz [ ( long ) k ] = M_553 ;
+}
+{
+F M_554 ;
+F D_5726 ;
+M_554 = 0.0f ;
+D_5726 = qgz [ ( long ) k ] ;
+M_554 = lin_max ( D_5726 , M_554 ) ;
+qgz [ ( long ) k ] = M_554 ;
+}
+{
+F M_555 ;
+F D_5728 ;
+M_555 = 0.0f ;
+D_5728 = qndropz [ ( long ) k ] ;
+M_555 = lin_max ( D_5728 , M_555 ) ;
+qndropz [ ( long ) k ] = M_555 ;
+}
+tem [ ( long ) k ] = lin_mul ( thz [ ( long ) k ] , tothz [ ( long ) k ] ) ;
+temcc [ ( long ) k ] = lin_sub ( tem [ ( long ) k ] , 2.73149993896484375e+2f ) ;
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( * svp2 , temcc [ ( long ) k ] ) , lin_sub ( tem [ ( long ) k ] , * svp3 ) ) ) ) ;
+qswz [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+if ( tem [ ( long ) k ] < 2.73149993896484375e+2f ) {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( lin_sub ( tem [ ( long ) k ] , 2.73160003662109375e+2f ) , 2.18745574951171875e+1f ) , lin_sub ( tem [ ( long ) k ] , 7.659999847412109375e+0f ) ) ) ) ;
+qsiz [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+if ( temcc [ ( long ) k ] < ( - 4.0e+1f ) ) {
+qswz [ ( long ) k ] = qsiz [ ( long ) k ] ;
+}
+;
+}
+else {
+qsiz [ ( long ) k ] = qswz [ ( long ) k ] ;
+}
+;
+qvoqswz [ ( long ) k ] = lin_div ( qvz [ ( long ) k ] , qswz [ ( long ) k ] ) ;
+qvoqsiz [ ( long ) k ] = lin_div ( qvz [ ( long ) k ] , qsiz [ ( long ) k ] ) ;
+theiz [ ( long ) k ] = lin_add ( thz [ ( long ) k ] , lin_div ( lin_sub ( lin_mul ( qvz [ ( long ) k ] , xlvocp ) , lin_mul ( qiz [ ( long ) k ] , xlfocp ) ) , tothz [ ( long ) k ] ) ) ;
+;
+k = k + 1 ;
+}
+}
+;
+}
+{
+int D_5731 ;
+int D_5732 ;
+D_5731 = * kts ;
+D_5732 = * kte ;
+k = D_5731 ;
+while ( 1 ) {
+{
+bool D_5735 ;
+D_5735 = k > D_5732 ;
+if ( D_5735 ) break ;
+psnow [ ( long ) k ] = 0.0f ;
+psaut [ ( long ) k ] = 0.0f ;
+psfw [ ( long ) k ] = 0.0f ;
+psfi [ ( long ) k ] = 0.0f ;
+praci [ ( long ) k ] = 0.0f ;
+piacr [ ( long ) k ] = 0.0f ;
+psaci [ ( long ) k ] = 0.0f ;
+psacw [ ( long ) k ] = 0.0f ;
+psdep [ ( long ) k ] = 0.0f ;
+pssub [ ( long ) k ] = 0.0f ;
+pracs [ ( long ) k ] = 0.0f ;
+psacr [ ( long ) k ] = 0.0f ;
+psmlt [ ( long ) k ] = 0.0f ;
+psmltevp [ ( long ) k ] = 0.0f ;
+prain [ ( long ) k ] = 0.0f ;
+praut [ ( long ) k ] = 0.0f ;
+pracw [ ( long ) k ] = 0.0f ;
+prevp [ ( long ) k ] = 0.0f ;
+pvapor [ ( long ) k ] = 0.0f ;
+pclw [ ( long ) k ] = 0.0f ;
+preclw [ ( long ) k ] = 0.0f ;
+pladj [ ( long ) k ] = 0.0f ;
+pcli [ ( long ) k ] = 0.0f ;
+pimlt [ ( long ) k ] = 0.0f ;
+pihom [ ( long ) k ] = 0.0f ;
+pidw [ ( long ) k ] = 0.0f ;
+piadj [ ( long ) k ] = 0.0f ;
+;
+k = k + 1 ;
+}
+}
+;
+}
+{
+int D_5736 ;
+int D_5737 ;
+D_5736 = * kts ;
+D_5737 = * kte ;
+k = D_5736 ;
+while ( 1 ) {
+{
+bool D_5740 ;
+D_5740 = k > D_5737 ;
+if ( D_5740 ) break ;
+pgraupel [ ( long ) k ] = 0.0f ;
+pgaut [ ( long ) k ] = 0.0f ;
+pgfr [ ( long ) k ] = 0.0f ;
+pgacw [ ( long ) k ] = 0.0f ;
+pgaci [ ( long ) k ] = 0.0f ;
+pgacr [ ( long ) k ] = 0.0f ;
+pgacs [ ( long ) k ] = 0.0f ;
+pgacip [ ( long ) k ] = 0.0f ;
+pgacrp [ ( long ) k ] = 0.0f ;
+pgacsp [ ( long ) k ] = 0.0f ;
+pgwet [ ( long ) k ] = 0.0f ;
+pdry [ ( long ) k ] = 0.0f ;
+pgsub [ ( long ) k ] = 0.0f ;
+pgdep [ ( long ) k ] = 0.0f ;
+pgmlt [ ( long ) k ] = 0.0f ;
+pgmltevp [ ( long ) k ] = 0.0f ;
+qschg [ ( long ) k ] = 0.0f ;
+qgchg [ ( long ) k ] = 0.0f ;
+;
+k = k + 1 ;
+}
+}
+;
+}
+{
+int D_5741 ;
+int D_5742 ;
+D_5741 = * kts ;
+D_5742 = * kte ;
+k = D_5741 ;
+while ( 1 ) {
+{
+bool D_5745 ;
+D_5745 = k > D_5742 ;
+if ( D_5745 ) break ;
+rs0 [ ( long ) k ] = lin_div ( lin_mul ( lin_mul ( * ep2 , 1.0e+3f ) , * svp1 ) , lin_sub ( prez [ ( long ) k ] , lin_mul ( * svp1 , 1.0e+3f ) ) ) ;
+;
+k = k + 1 ;
+}
+}
+;
+}
+t_del_tv = 0.0f ;
+del_tv = dtb ;
+notlast = 1 ;
+while ( 1 ) {
+if ( ! notlast ) break ;
+min_q = * kte ;
+max_q = ( * kts ) + ( - 1 ) ;
+{
+int D_5748 ;
+int D_5749 ;
+D_5748 = * kts ;
+D_5749 = ( * kte ) + ( - 1 ) ;
+k = D_5748 ;
+while ( 1 ) {
+{
+bool D_5752 ;
+D_5752 = k > D_5749 ;
+if ( D_5752 ) break ;
+if ( qrz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+{
+int M_556 ;
+M_556 = min_q ;
+M_556 = lin_min ( k , M_556 ) ;
+min_q = M_556 ;
+}
+{
+int M_557 ;
+M_557 = max_q ;
+M_557 = lin_max ( k , M_557 ) ;
+max_q = M_557 ;
+}
+tmp1 = aa_sqrtf ( lin_div ( lin_div ( lin_mul ( lin_mul ( * rhowater , pi ) , 8.0e6f ) , rho [ ( long ) k ] ) , qrz [ ( long ) k ] ) ) ;
+tmp1 = aa_sqrtf ( tmp1 ) ;
+{
+F D_5756 ;
+D_5756 = tmp1 ;
+vtrold [ ( long ) k ] = lin_div ( lin_mul ( lin_mul ( lin_mul ( consta , 1.6666667163372039794921875e-1f ) , gambp4 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5756 , 8.00000011920928955078125e-1f ) ) ;
+}
+if ( k == 1 ) {
+{
+F M_558 ;
+F D_5759 ;
+M_558 = del_tv ;
+D_5759 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , * zsfc ) , 8.9999997615814208984375e-1f ) , vtrold [ ( long ) k ] ) ;
+M_558 = lin_min ( D_5759 , M_558 ) ;
+del_tv = M_558 ;
+}
+}
+else {
+{
+F M_559 ;
+F D_5761 ;
+M_559 = del_tv ;
+D_5761 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , zz [ ( long ) ( k + ( - 1 ) ) ] ) , 8.9999997615814208984375e-1f ) , vtrold [ ( long ) k ] ) ;
+M_559 = lin_min ( D_5761 , M_559 ) ;
+del_tv = M_559 ;
+}
+}
+;
+}
+else {
+vtrold [ ( long ) k ] = 0.0f ;
+}
+;
+;
+k = k + 1 ;
+}
+}
+;
+}
+if ( max_q >= min_q ) {
+t_del_tv = lin_add ( t_del_tv , del_tv ) ;
+if ( t_del_tv >= dtb ) {
+notlast = 0 ;
+del_tv = lin_sub ( lin_add ( dtb , del_tv ) , t_del_tv ) ;
+}
+;
+fluxin = 0.0f ;
+{
+int D_5764 ;
+int D_5765 ;
+D_5764 = max_q ;
+D_5765 = min_q ;
+k = D_5764 ;
+while ( 1 ) {
+{
+bool D_5768 ;
+D_5768 = k < D_5765 ;
+if ( D_5768 ) break ;
+fluxout = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtrold [ ( long ) k ] ) , qrz [ ( long ) k ] ) ;
+flux = lin_div ( lin_div ( lin_sub ( fluxin , fluxout ) , rho [ ( long ) k ] ) , dzw [ ( long ) k ] ) ;
+tmpqrz = qrz [ ( long ) k ] ;
+qrz [ ( long ) k ] = lin_add ( qrz [ ( long ) k ] , lin_mul ( del_tv , flux ) ) ;
+fluxin = fluxout ;
+;
+k = k + ( - 1 ) ;
+}
+}
+;
+}
+if ( min_q == 1 ) {
+* pptrain = lin_add ( * pptrain , lin_mul ( fluxin , del_tv ) ) ;
+}
+else {
+qrz [ ( long ) ( min_q + ( - 1 ) ) ] = lin_add ( qrz [ ( long ) ( min_q + ( - 1 ) ) ] , lin_div ( lin_div ( lin_mul ( del_tv , fluxin ) , rho [ ( long ) ( min_q + ( - 1 ) ) ] ) , dzw [ ( long ) ( min_q + ( - 1 ) ) ] ) ) ;
+}
+;
+}
+else {
+notlast = 0 ;
+}
+;
+;
+}
+;
+t_del_tv = 0.0f ;
+del_tv = dtb ;
+notlast = 1 ;
+while ( 1 ) {
+if ( ! notlast ) break ;
+min_q = * kte ;
+max_q = ( * kts ) + ( - 1 ) ;
+{
+int D_5772 ;
+int D_5773 ;
+D_5772 = * kts ;
+D_5773 = ( * kte ) + ( - 1 ) ;
+k = D_5772 ;
+while ( 1 ) {
+{
+bool D_5776 ;
+D_5776 = k > D_5773 ;
+if ( D_5776 ) break ;
+if ( qsz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+{
+int M_560 ;
+M_560 = min_q ;
+M_560 = lin_min ( k , M_560 ) ;
+min_q = M_560 ;
+}
+{
+int M_561 ;
+M_561 = max_q ;
+M_561 = lin_max ( k , M_561 ) ;
+max_q = M_561 ;
+}
+tmp1 = aa_sqrtf ( lin_div ( lin_div ( lin_mul ( lin_mul ( * rhosnow , pi ) , 3.0e+6f ) , rho [ ( long ) k ] ) , qsz [ ( long ) k ] ) ) ;
+tmp1 = aa_sqrtf ( tmp1 ) ;
+{
+F D_5780 ;
+D_5780 = tmp1 ;
+vtsold [ ( long ) k ] = lin_div ( lin_mul ( lin_mul ( lin_mul ( constc , 1.6666667163372039794921875e-1f ) , gamdp4 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5780 , 2.5e-1f ) ) ;
+}
+if ( k == 1 ) {
+{
+F M_562 ;
+F D_5783 ;
+M_562 = del_tv ;
+D_5783 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , * zsfc ) , 8.9999997615814208984375e-1f ) , vtsold [ ( long ) k ] ) ;
+M_562 = lin_min ( D_5783 , M_562 ) ;
+del_tv = M_562 ;
+}
+}
+else {
+{
+F M_563 ;
+F D_5785 ;
+M_563 = del_tv ;
+D_5785 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , zz [ ( long ) ( k + ( - 1 ) ) ] ) , 8.9999997615814208984375e-1f ) , vtsold [ ( long ) k ] ) ;
+M_563 = lin_min ( D_5785 , M_563 ) ;
+del_tv = M_563 ;
+}
+}
+;
+}
+else {
+vtsold [ ( long ) k ] = 0.0f ;
+}
+;
+;
+k = k + 1 ;
+}
+}
+;
+}
+if ( max_q >= min_q ) {
+t_del_tv = lin_add ( t_del_tv , del_tv ) ;
+if ( t_del_tv >= dtb ) {
+notlast = 0 ;
+del_tv = lin_sub ( lin_add ( dtb , del_tv ) , t_del_tv ) ;
+}
+;
+fluxin = 0.0f ;
+{
+int D_5788 ;
+int D_5789 ;
+D_5788 = max_q ;
+D_5789 = min_q ;
+k = D_5788 ;
+while ( 1 ) {
+{
+bool D_5792 ;
+D_5792 = k < D_5789 ;
+if ( D_5792 ) break ;
+fluxout = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtsold [ ( long ) k ] ) , qsz [ ( long ) k ] ) ;
+flux = lin_div ( lin_div ( lin_sub ( fluxin , fluxout ) , rho [ ( long ) k ] ) , dzw [ ( long ) k ] ) ;
+qsz [ ( long ) k ] = lin_add ( qsz [ ( long ) k ] , lin_mul ( del_tv , flux ) ) ;
+{
+F M_564 ;
+F D_5794 ;
+M_564 = 0.0f ;
+D_5794 = qsz [ ( long ) k ] ;
+M_564 = lin_max ( D_5794 , M_564 ) ;
+qsz [ ( long ) k ] = M_564 ;
+}
+fluxin = fluxout ;
+;
+k = k + ( - 1 ) ;
+}
+}
+;
+}
+if ( min_q == 1 ) {
+* pptsnow = lin_add ( * pptsnow , lin_mul ( fluxin , del_tv ) ) ;
+}
+else {
+qsz [ ( long ) ( min_q + ( - 1 ) ) ] = lin_add ( qsz [ ( long ) ( min_q + ( - 1 ) ) ] , lin_div ( lin_div ( lin_mul ( del_tv , fluxin ) , rho [ ( long ) ( min_q + ( - 1 ) ) ] ) , dzw [ ( long ) ( min_q + ( - 1 ) ) ] ) ) ;
+}
+;
+}
+else {
+notlast = 0 ;
+}
+;
+;
+}
+;
+t_del_tv = 0.0f ;
+del_tv = dtb ;
+notlast = 1 ;
+while ( 1 ) {
+if ( ! notlast ) break ;
+min_q = * kte ;
+max_q = ( * kts ) + ( - 1 ) ;
+{
+int D_5798 ;
+int D_5799 ;
+D_5798 = * kts ;
+D_5799 = ( * kte ) + ( - 1 ) ;
+k = D_5798 ;
+while ( 1 ) {
+{
+bool D_5802 ;
+D_5802 = k > D_5799 ;
+if ( D_5802 ) break ;
+if ( qgz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+{
+int M_565 ;
+M_565 = min_q ;
+M_565 = lin_min ( k , M_565 ) ;
+min_q = M_565 ;
+}
+{
+int M_566 ;
+M_566 = max_q ;
+M_566 = lin_max ( k , M_566 ) ;
+max_q = M_566 ;
+}
+tmp1 = aa_sqrtf ( lin_div ( lin_div ( lin_mul ( lin_mul ( pi , 4.0e+2f ) , 4.0e+6f ) , rho [ ( long ) k ] ) , qgz [ ( long ) k ] ) ) ;
+tmp1 = aa_sqrtf ( tmp1 ) ;
+term0 = aa_sqrtf ( lin_div ( lin_div ( lin_mul ( lin_mul ( lin_mul ( * grav , 4.0e+0f ) , 4.0e+2f ) , 3.33339989185333251953125e-1f ) , rho [ ( long ) k ] ) , 6.0000002384185791015625e-1f ) ) ;
+vtgold [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( gam4pt5 , 1.6666667163372039794921875e-1f ) , term0 ) , aa_sqrtf ( lin_div ( 1.0e+0f , tmp1 ) ) ) ;
+if ( k == 1 ) {
+{
+F M_567 ;
+F D_5808 ;
+M_567 = del_tv ;
+D_5808 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , * zsfc ) , 8.9999997615814208984375e-1f ) , vtgold [ ( long ) k ] ) ;
+M_567 = lin_min ( D_5808 , M_567 ) ;
+del_tv = M_567 ;
+}
+}
+else {
+{
+F M_568 ;
+F D_5810 ;
+M_568 = del_tv ;
+D_5810 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , zz [ ( long ) ( k + ( - 1 ) ) ] ) , 8.9999997615814208984375e-1f ) , vtgold [ ( long ) k ] ) ;
+M_568 = lin_min ( D_5810 , M_568 ) ;
+del_tv = M_568 ;
+}
+}
+;
+}
+else {
+vtgold [ ( long ) k ] = 0.0f ;
+}
+;
+;
+k = k + 1 ;
+}
+}
+;
+}
+if ( max_q >= min_q ) {
+t_del_tv = lin_add ( t_del_tv , del_tv ) ;
+if ( t_del_tv >= dtb ) {
+notlast = 0 ;
+del_tv = lin_sub ( lin_add ( dtb , del_tv ) , t_del_tv ) ;
+}
+;
+fluxin = 0.0f ;
+{
+int D_5813 ;
+int D_5814 ;
+D_5813 = max_q ;
+D_5814 = min_q ;
+k = D_5813 ;
+while ( 1 ) {
+{
+bool D_5817 ;
+D_5817 = k < D_5814 ;
+if ( D_5817 ) break ;
+fluxout = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtgold [ ( long ) k ] ) , qgz [ ( long ) k ] ) ;
+flux = lin_div ( lin_div ( lin_sub ( fluxin , fluxout ) , rho [ ( long ) k ] ) , dzw [ ( long ) k ] ) ;
+qgz [ ( long ) k ] = lin_add ( qgz [ ( long ) k ] , lin_mul ( del_tv , flux ) ) ;
+{
+F M_569 ;
+F D_5819 ;
+M_569 = 0.0f ;
+D_5819 = qgz [ ( long ) k ] ;
+M_569 = lin_max ( D_5819 , M_569 ) ;
+qgz [ ( long ) k ] = M_569 ;
+}
+fluxin = fluxout ;
+;
+k = k + ( - 1 ) ;
+}
+}
+;
+}
+if ( min_q == 1 ) {
+* pptgraul = lin_add ( * pptgraul , lin_mul ( fluxin , del_tv ) ) ;
+}
+else {
+qgz [ ( long ) ( min_q + ( - 1 ) ) ] = lin_add ( qgz [ ( long ) ( min_q + ( - 1 ) ) ] , lin_div ( lin_div ( lin_mul ( del_tv , fluxin ) , rho [ ( long ) ( min_q + ( - 1 ) ) ] ) , dzw [ ( long ) ( min_q + ( - 1 ) ) ] ) ) ;
+}
+;
+}
+else {
+notlast = 0 ;
+}
+;
+;
+}
+;
+t_del_tv = 0.0f ;
+del_tv = dtb ;
+notlast = 1 ;
+while ( 1 ) {
+if ( ! notlast ) break ;
+min_q = * kte ;
+max_q = ( * kts ) + ( - 1 ) ;
+{
+int D_5823 ;
+int D_5824 ;
+D_5823 = * kts ;
+D_5824 = ( * kte ) + ( - 1 ) ;
+k = D_5823 ;
+while ( 1 ) {
+{
+bool D_5827 ;
+D_5827 = k > D_5824 ;
+if ( D_5827 ) break ;
+if ( qiz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+{
+int M_570 ;
+M_570 = min_q ;
+M_570 = lin_min ( k , M_570 ) ;
+min_q = M_570 ;
+}
+{
+int M_571 ;
+M_571 = max_q ;
+M_571 = lin_max ( k , M_571 ) ;
+max_q = M_571 ;
+}
+{
+F D_5831 ;
+D_5831 = lin_mul ( rho [ ( long ) k ] , qiz [ ( long ) k ] ) ;
+vtiold [ ( long ) k ] = lin_mul ( gfk_pow ( D_5831 , 1.599999964237213134765625e-1f ) , 3.28999996185302734375e+0f ) ;
+}
+if ( k == 1 ) {
+{
+F M_572 ;
+F D_5834 ;
+M_572 = del_tv ;
+D_5834 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , * zsfc ) , 8.9999997615814208984375e-1f ) , vtiold [ ( long ) k ] ) ;
+M_572 = lin_min ( D_5834 , M_572 ) ;
+del_tv = M_572 ;
+}
+}
+else {
+{
+F M_573 ;
+F D_5836 ;
+M_573 = del_tv ;
+D_5836 = lin_div ( lin_mul ( lin_sub ( zz [ ( long ) k ] , zz [ ( long ) ( k + ( - 1 ) ) ] ) , 8.9999997615814208984375e-1f ) , vtiold [ ( long ) k ] ) ;
+M_573 = lin_min ( D_5836 , M_573 ) ;
+del_tv = M_573 ;
+}
+}
+;
+}
+else {
+vtiold [ ( long ) k ] = 0.0f ;
+}
+;
+;
+k = k + 1 ;
+}
+}
+;
+}
+if ( max_q >= min_q ) {
+t_del_tv = lin_add ( t_del_tv , del_tv ) ;
+if ( t_del_tv >= dtb ) {
+notlast = 0 ;
+del_tv = lin_sub ( lin_add ( dtb , del_tv ) , t_del_tv ) ;
+}
+;
+fluxin = 0.0f ;
+{
+int D_5839 ;
+int D_5840 ;
+D_5839 = max_q ;
+D_5840 = min_q ;
+k = D_5839 ;
+while ( 1 ) {
+{
+bool D_5843 ;
+D_5843 = k < D_5840 ;
+if ( D_5843 ) break ;
+fluxout = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtiold [ ( long ) k ] ) , qiz [ ( long ) k ] ) ;
+flux = lin_div ( lin_div ( lin_sub ( fluxin , fluxout ) , rho [ ( long ) k ] ) , dzw [ ( long ) k ] ) ;
+qiz [ ( long ) k ] = lin_add ( qiz [ ( long ) k ] , lin_mul ( del_tv , flux ) ) ;
+{
+F M_574 ;
+F D_5845 ;
+M_574 = 0.0f ;
+D_5845 = qiz [ ( long ) k ] ;
+M_574 = lin_max ( D_5845 , M_574 ) ;
+qiz [ ( long ) k ] = M_574 ;
+}
+fluxin = fluxout ;
+;
+k = k + ( - 1 ) ;
+}
+}
+;
+}
+if ( min_q == 1 ) {
+* pptice = lin_add ( * pptice , lin_mul ( fluxin , del_tv ) ) ;
+}
+else {
+qiz [ ( long ) ( min_q + ( - 1 ) ) ] = lin_add ( qiz [ ( long ) ( min_q + ( - 1 ) ) ] , lin_div ( lin_div ( lin_mul ( del_tv , fluxin ) , rho [ ( long ) ( min_q + ( - 1 ) ) ] ) , dzw [ ( long ) ( min_q + ( - 1 ) ) ] ) ) ;
+}
+;
+}
+else {
+notlast = 0 ;
+}
+;
+;
+}
+;
+{
+int D_5847 ;
+int D_5848 ;
+D_5847 = * kts ;
+D_5848 = ( * kte ) + ( - 1 ) ;
+k = D_5847 ;
+while ( 1 ) {
+{
+bool D_5851 ;
+D_5851 = k > D_5848 ;
+if ( D_5851 ) break ;
+precrz [ ( long ) k ] = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtrold [ ( long ) k ] ) , qrz [ ( long ) k ] ) ;
+preciz [ ( long ) k ] = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtiold [ ( long ) k ] ) , qiz [ ( long ) k ] ) ;
+precsz [ ( long ) k ] = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtsold [ ( long ) k ] ) , qsz [ ( long ) k ] ) ;
+precgz [ ( long ) k ] = lin_mul ( lin_mul ( rho [ ( long ) k ] , vtgold [ ( long ) k ] ) , qgz [ ( long ) k ] ) ;
+;
+k = k + 1 ;
+}
+}
+;
+}
+precrz [ ( long ) ( * kte ) ] = 0.0f ;
+preciz [ ( long ) ( * kte ) ] = 0.0f ;
+precsz [ ( long ) ( * kte ) ] = 0.0f ;
+precgz [ ( long ) ( * kte ) ] = 0.0f ;
+{
+int D_5852 ;
+int D_5853 ;
+D_5852 = * kts ;
+D_5853 = * kte ;
+k = D_5852 ;
+while ( 1 ) {
+{
+bool D_5856 ;
+D_5856 = k > D_5853 ;
+if ( D_5856 ) break ;
+{
+F M_575 ;
+F D_5858 ;
+M_575 = 0.0f ;
+D_5858 = lin_mul ( qvz [ ( long ) k ] , odtb ) ;
+M_575 = lin_max ( D_5858 , M_575 ) ;
+qvzodt [ ( long ) k ] = M_575 ;
+}
+{
+F M_576 ;
+F D_5860 ;
+M_576 = 0.0f ;
+D_5860 = lin_mul ( qlz [ ( long ) k ] , odtb ) ;
+M_576 = lin_max ( D_5860 , M_576 ) ;
+qlzodt [ ( long ) k ] = M_576 ;
+}
+{
+F M_577 ;
+F D_5862 ;
+M_577 = 0.0f ;
+D_5862 = lin_mul ( qiz [ ( long ) k ] , odtb ) ;
+M_577 = lin_max ( D_5862 , M_577 ) ;
+qizodt [ ( long ) k ] = M_577 ;
+}
+{
+F M_578 ;
+F D_5864 ;
+M_578 = 0.0f ;
+D_5864 = lin_mul ( qsz [ ( long ) k ] , odtb ) ;
+M_578 = lin_max ( D_5864 , M_578 ) ;
+qszodt [ ( long ) k ] = M_578 ;
+}
+{
+F M_579 ;
+F D_5866 ;
+M_579 = 0.0f ;
+D_5866 = lin_mul ( qrz [ ( long ) k ] , odtb ) ;
+M_579 = lin_max ( D_5866 , M_579 ) ;
+qrzodt [ ( long ) k ] = M_579 ;
+}
+{
+F M_580 ;
+F D_5868 ;
+M_580 = 0.0f ;
+D_5868 = lin_mul ( qgz [ ( long ) k ] , odtb ) ;
+M_580 = lin_max ( D_5868 , M_580 ) ;
+qgzodt [ ( long ) k ] = M_580 ;
+}
+tmp = lin_add ( lin_add ( lin_add ( lin_add ( qiz [ ( long ) k ] , qlz [ ( long ) k ] ) , qsz [ ( long ) k ] ) , qrz [ ( long ) k ] ) , lin_mul ( qgz [ ( long ) k ] , * gindex ) ) ;
+bool g___label_002000 = false ;
+if ( ( lin_add ( lin_add ( qvz [ ( long ) k ] , qlz [ ( long ) k ] ) , qiz [ ( long ) k ] ) < qsiz [ ( long ) k ] ) && ( tmp == 0.0f ) ) g___label_002000 = true ;
+if ( ! g___label_002000 ) {
+;
+if ( qrz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+tmp1 = aa_sqrtf ( lin_div ( lin_mul ( lin_mul ( lin_mul ( * rhowater , pi ) , 8.0e6f ) , orho [ ( long ) k ] ) , qrz [ ( long ) k ] ) ) ;
+xlambdar [ ( long ) k ] = aa_sqrtf ( tmp1 ) ;
+olambdar [ ( long ) k ] = lin_div ( 1.0e+0f , xlambdar [ ( long ) k ] ) ;
+{
+F D_5872 ;
+D_5872 = olambdar [ ( long ) k ] ;
+vtrold [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( lin_mul ( consta , 1.6666667163372039794921875e-1f ) , gambp4 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5872 , 8.00000011920928955078125e-1f ) ) ;
+}
+}
+else {
+vtrold [ ( long ) k ] = 0.0f ;
+olambdar [ ( long ) k ] = 0.0f ;
+}
+;
+if ( qrz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+tmp1 = aa_sqrtf ( lin_div ( lin_mul ( lin_mul ( lin_mul ( * rhowater , pi ) , 8.0e6f ) , orho [ ( long ) k ] ) , qrz [ ( long ) k ] ) ) ;
+xlambdar [ ( long ) k ] = aa_sqrtf ( tmp1 ) ;
+olambdar [ ( long ) k ] = lin_div ( 1.0e+0f , xlambdar [ ( long ) k ] ) ;
+{
+F D_5874 ;
+D_5874 = olambdar [ ( long ) k ] ;
+vtr [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( lin_mul ( consta , 1.6666667163372039794921875e-1f ) , gambp4 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5874 , 8.00000011920928955078125e-1f ) ) ;
+}
+}
+else {
+vtr [ ( long ) k ] = 0.0f ;
+olambdar [ ( long ) k ] = 0.0f ;
+}
+;
+if ( qsz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+tmp1 = aa_sqrtf ( lin_div ( lin_mul ( lin_mul ( lin_mul ( * rhosnow , pi ) , 3.0e+6f ) , orho [ ( long ) k ] ) , qsz [ ( long ) k ] ) ) ;
+xlambdas [ ( long ) k ] = aa_sqrtf ( tmp1 ) ;
+olambdas [ ( long ) k ] = lin_div ( 1.0e+0f , xlambdas [ ( long ) k ] ) ;
+{
+F D_5876 ;
+D_5876 = olambdas [ ( long ) k ] ;
+vtsold [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( lin_mul ( constc , 1.6666667163372039794921875e-1f ) , gamdp4 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5876 , 2.5e-1f ) ) ;
+}
+}
+else {
+vtsold [ ( long ) k ] = 0.0f ;
+olambdas [ ( long ) k ] = 0.0f ;
+}
+;
+if ( qsz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+tmp1 = aa_sqrtf ( lin_div ( lin_mul ( lin_mul ( lin_mul ( * rhosnow , pi ) , 3.0e+6f ) , orho [ ( long ) k ] ) , qsz [ ( long ) k ] ) ) ;
+xlambdas [ ( long ) k ] = aa_sqrtf ( tmp1 ) ;
+olambdas [ ( long ) k ] = lin_div ( 1.0e+0f , xlambdas [ ( long ) k ] ) ;
+{
+F D_5878 ;
+D_5878 = olambdas [ ( long ) k ] ;
+vts [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( lin_mul ( constc , 1.6666667163372039794921875e-1f ) , gamdp4 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5878 , 2.5e-1f ) ) ;
+}
+}
+else {
+vts [ ( long ) k ] = 0.0f ;
+olambdas [ ( long ) k ] = 0.0f ;
+}
+;
+if ( qgz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+tmp1 = aa_sqrtf ( lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 4.0e+2f ) , 4.0e+6f ) , orho [ ( long ) k ] ) , qgz [ ( long ) k ] ) ) ;
+xlambdag [ ( long ) k ] = aa_sqrtf ( tmp1 ) ;
+olambdag [ ( long ) k ] = lin_div ( 1.0e+0f , xlambdag [ ( long ) k ] ) ;
+term0 = aa_sqrtf ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( * grav , 4.0e+0f ) , 4.0e+2f ) , 3.33339989185333251953125e-1f ) , orho [ ( long ) k ] ) , ocdrag ) ) ;
+vtgold [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( gam4pt5 , 1.6666667163372039794921875e-1f ) , term0 ) , aa_sqrtf ( olambdag [ ( long ) k ] ) ) ;
+}
+else {
+vtgold [ ( long ) k ] = 0.0f ;
+olambdag [ ( long ) k ] = 0.0f ;
+}
+;
+if ( qgz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+tmp1 = aa_sqrtf ( lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 4.0e+2f ) , 4.0e+6f ) , orho [ ( long ) k ] ) , qgz [ ( long ) k ] ) ) ;
+xlambdag [ ( long ) k ] = aa_sqrtf ( tmp1 ) ;
+olambdag [ ( long ) k ] = lin_div ( 1.0e+0f , xlambdag [ ( long ) k ] ) ;
+term0 = aa_sqrtf ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( * grav , 4.0e+0f ) , 4.0e+2f ) , 3.33339989185333251953125e-1f ) , orho [ ( long ) k ] ) , ocdrag ) ) ;
+vtg [ ( long ) k ] = lin_mul ( lin_mul ( lin_mul ( gam4pt5 , 1.6666667163372039794921875e-1f ) , term0 ) , aa_sqrtf ( olambdag [ ( long ) k ] ) ) ;
+}
+else {
+vtg [ ( long ) k ] = 0.0f ;
+olambdag [ ( long ) k ] = 0.0f ;
+}
+;
+{
+F D_5881 ;
+D_5881 = tem [ ( long ) k ] ;
+viscmu [ ( long ) k ] = lin_div ( lin_mul ( gfk_pow ( D_5881 , 1.5e+0f ) , 1.496279992352356202900409698486328125e-6f ) , lin_add ( tem [ ( long ) k ] , 1.2e+2f ) ) ;
+}
+visc [ ( long ) k ] = lin_mul ( viscmu [ ( long ) k ] , orho [ ( long ) k ] ) ;
+{
+F D_5882 ;
+D_5882 = tem [ ( long ) k ] ;
+diffwv [ ( long ) k ] = lin_mul ( lin_mul ( gfk_pow ( D_5882 , 1.809999942779541015625e+0f ) , 8.76019985298626124858856201171875e-5f ) , oprez [ ( long ) k ] ) ;
+}
+schmidt [ ( long ) k ] = lin_div ( visc [ ( long ) k ] , diffwv [ ( long ) k ] ) ;
+xka [ ( long ) k ] = lin_mul ( viscmu [ ( long ) k ] , 1.413199951171875e+3f ) ;
+if ( tem [ ( long ) k ] < 2.73149993896484375e+2f ) {
+alpha1 = lin_mul ( gfk_exp ( lin_mul ( temcc [ ( long ) k ] , 2.500000037252902984619140625e-2f ) ) , 1.000000047497451305389404296875e-3f ) ;
+if ( temcc [ ( long ) k ] < ( - 2.0e+1f ) ) {
+{
+F D_5885 ;
+D_5885 = lin_sub ( fabs ( temcc [ ( long ) k ] ) , 2.0e+1f ) ;
+tmp1 = lin_sub ( lin_mul ( gfk_exp ( - lin_mul ( gfk_pow ( D_5885 , 2.4549999237060546875e+0f ) , 2.44299997575581073760986328125e-4f ) ) , 4.0e+0f ) , 7.599999904632568359375e+0f ) ;
+}
+qic = lin_mul ( lin_mul ( gfk_exp ( tmp1 ) , 1.000000047497451305389404296875e-3f ) , orho [ ( long ) k ] ) ;
+}
+else {
+qic = 1.000000047497451305389404296875e-3f ;
+}
+;
+tmp1 = lin_mul ( lin_mul ( lin_sub ( qiz [ ( long ) k ] , qic ) , odtb ) , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( alpha1 , dtb ) ) ) ) ;
+{
+F M_581 ;
+M_581 = 0.0f ;
+M_581 = lin_max ( tmp1 , M_581 ) ;
+psaut [ ( long ) k ] = M_581 ;
+}
+if ( qlz [ ( long ) k ] > 1.00000001335143196001808973960578441619873046875e-10f ) {
+{
+F M_582 ;
+F D_5889 ;
+M_582 = - 3.09899997711181640625e+1f ;
+D_5889 = temcc [ ( long ) k ] ;
+M_582 = lin_max ( D_5889 , M_582 ) ;
+temc1 = M_582 ;
+}
+a1 = lin_parama1 ( & temc1 ) ;
+a2 = lin_parama2 ( & temc1 ) ;
+tmp1 = lin_sub ( 1.0e+0f , a2 ) ;
+a1 = lin_mul ( gfk_pow ( 1.000000047497451305389404296875e-3f , tmp1 ) , a1 ) ;
+odtberg = lin_div ( lin_mul ( a1 , tmp1 ) , lin_sub ( gfk_pow ( 4.79999984204226848305552266538143157958984375e-10f , tmp1 ) , gfk_pow ( 2.4599999814967077327310107648372650146484375e-10f , tmp1 ) ) ) ;
+vti50 = lin_mul ( lin_mul ( constc , 1.00000001490116119384765625e-1f ) , sqrho [ ( long ) k ] ) ;
+eiw = 1.0e+0f ;
+save1 = lin_mul ( gfk_pow ( 4.79999984204226848305552266538143157958984375e-10f , a2 ) , a1 ) ;
+save2 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , 2.5e-1f ) , eiw ) , rho [ ( long ) k ] ) , 9.99999974737875163555145263671875e-5f ) , 9.99999974737875163555145263671875e-5f ) , vti50 ) ;
+tmp2 = lin_add ( lin_mul ( qlz [ ( long ) k ] , save2 ) , save1 ) ;
+xni50mx = lin_div ( qlzodt [ ( long ) k ] , tmp2 ) ;
+xni50 = lin_div ( lin_mul ( qiz [ ( long ) k ] , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( dtb , odtberg ) ) ) ) , 4.79999984204226848305552266538143157958984375e-10f ) ;
+{
+F M_583 ;
+M_583 = xni50 ;
+M_583 = lin_min ( xni50mx , M_583 ) ;
+xni50 = M_583 ;
+}
+tmp3 = lin_mul ( lin_div ( lin_mul ( odtb , tmp2 ) , save2 ) , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( lin_mul ( save2 , xni50 ) , dtb ) ) ) ) ;
+{
+F M_584 ;
+F D_5892 ;
+M_584 = tmp3 ;
+D_5892 = qlzodt [ ( long ) k ] ;
+M_584 = lin_min ( D_5892 , M_584 ) ;
+psfw [ ( long ) k ] = M_584 ;
+}
+tmp1 = lin_sub ( lin_mul ( xni50 , 4.79999984204226848305552266538143157958984375e-10f ) , psfw [ ( long ) k ] ) ;
+{
+F M_585 ;
+F D_5894 ;
+M_585 = tmp1 ;
+D_5894 = qizodt [ ( long ) k ] ;
+M_585 = lin_min ( D_5894 , M_585 ) ;
+psfi [ ( long ) k ] = M_585 ;
+}
+}
+;
+bool g___label_001000 = false ;
+if ( qrz [ ( long ) k ] <= 0.0f ) g___label_001000 = true ;
+if ( ! g___label_001000 ) {
+;
+eri = 1.0e+0f ;
+save1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( pio4 , eri ) , 8.0e6f ) , consta ) , sqrho [ ( long ) k ] ) ;
+{
+F D_5897 ;
+D_5897 = olambdar [ ( long ) k ] ;
+tmp1 = lin_mul ( lin_mul ( save1 , gambp3 ) , gfk_pow ( D_5897 , bp3 ) ) ;
+}
+praci [ ( long ) k ] = lin_mul ( qizodt [ ( long ) k ] , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( tmp1 , dtb ) ) ) ) ;
+{
+F D_5898 ;
+D_5898 = olambdar [ ( long ) k ] ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( qiz [ ( long ) k ] , save1 ) , rho [ ( long ) k ] ) , pio6 ) , * rhowater ) , gambp6 ) , oxmi ) , gfk_pow ( D_5898 , bp6 ) ) ;
+}
+{
+F M_586 ;
+F D_5900 ;
+M_586 = tmp2 ;
+D_5900 = qrzodt [ ( long ) k ] ;
+M_586 = lin_min ( D_5900 , M_586 ) ;
+piacr [ ( long ) k ] = M_586 ;
+}
+}
+;
+bool g___label_001200 = false ;
+if ( qsz [ ( long ) k ] <= 0.0f ) g___label_001200 = true ;
+if ( ! g___label_001200 ) {
+;
+esi = gfk_exp ( lin_mul ( temcc [ ( long ) k ] , 2.500000037252902984619140625e-2f ) ) ;
+{
+F D_5903 ;
+D_5903 = olambdas [ ( long ) k ] ;
+save1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pio4 , 3.0e+6f ) , constc ) , gamdp3 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5903 , dp3 ) ) ;
+}
+tmp1 = lin_mul ( esi , save1 ) ;
+psaci [ ( long ) k ] = lin_mul ( qizodt [ ( long ) k ] , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( tmp1 , dtb ) ) ) ) ;
+esw = 1.0e+0f ;
+tmp1 = lin_mul ( esw , save1 ) ;
+psacw [ ( long ) k ] = lin_mul ( qlzodt [ ( long ) k ] , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( tmp1 , dtb ) ) ) ) ;
+tmpa = lin_mul ( lin_mul ( lin_mul ( * rvapor , xka [ ( long ) k ] ) , tem [ ( long ) k ] ) , tem [ ( long ) k ] ) ;
+tmpb = lin_mul ( lin_mul ( lin_mul ( lin_mul ( * xls , * xls ) , rho [ ( long ) k ] ) , qsiz [ ( long ) k ] ) , diffwv [ ( long ) k ] ) ;
+tmpc = lin_mul ( lin_mul ( qsiz [ ( long ) k ] , tmpa ) , diffwv [ ( long ) k ] ) ;
+abi = lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , lin_sub ( qvoqsiz [ ( long ) k ] , 1.0e+0f ) ) , tmpc ) , lin_add ( tmpa , tmpb ) ) ;
+{
+F D_5904 ;
+D_5904 = olambdas [ ( long ) k ] ;
+tmp1 = lin_div ( lin_mul ( lin_mul ( sqrho [ ( long ) k ] , constc ) , gfk_pow ( D_5904 , dp5 ) ) , visc [ ( long ) k ] ) ;
+}
+{
+F D_5905 ;
+D_5905 = schmidt [ ( long ) k ] ;
+tmp2 = lin_mul ( lin_mul ( abi , 3.0e+6f ) , lin_add ( lin_mul ( lin_mul ( olambdas [ ( long ) k ] , 7.799999713897705078125e-1f ) , olambdas [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5905 , 3.33339989185333251953125e-1f ) , 3.10000002384185791015625e-1f ) , gamdp5o2 ) , aa_sqrtf ( tmp1 ) ) ) ) ;
+}
+tmp3 = lin_mul ( lin_sub ( qvz [ ( long ) k ] , qsiz [ ( long ) k ] ) , odtb ) ;
+if ( tmp3 <= 0.0f ) {
+{
+F M_587 ;
+M_587 = tmp2 ;
+M_587 = lin_max ( tmp3 , M_587 ) ;
+tmp2 = M_587 ;
+}
+{
+F M_588 ;
+F D_5909 ;
+F M_589 ;
+M_588 = tmp2 ;
+D_5909 = - qszodt [ ( long ) k ] ;
+M_588 = lin_max ( D_5909 , M_588 ) ;
+M_589 = 0.0f ;
+M_589 = lin_min ( M_588 , M_589 ) ;
+pssub [ ( long ) k ] = M_589 ;
+}
+psdep [ ( long ) k ] = 0.0f ;
+}
+else {
+{
+F M_590 ;
+M_590 = tmp2 ;
+M_590 = lin_min ( tmp3 , M_590 ) ;
+psdep [ ( long ) k ] = M_590 ;
+}
+pssub [ ( long ) k ] = 0.0f ;
+}
+;
+if ( qrz [ ( long ) k ] <= 0.0f ) g___label_001200 = true ;
+}
+if ( ! g___label_001200 ) {
+;
+esr = 1.0e+0f ;
+tmpa = lin_mul ( olambdar [ ( long ) k ] , olambdar [ ( long ) k ] ) ;
+tmpb = lin_mul ( olambdas [ ( long ) k ] , olambdas [ ( long ) k ] ) ;
+tmpc = lin_mul ( olambdar [ ( long ) k ] , olambdas [ ( long ) k ] ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , pi ) , esr ) , 8.0e6f ) , 3.0e+6f ) , fabs ( lin_sub ( vtr [ ( long ) k ] , vts [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( tmpb , tmpb ) , olambdar [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpb , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpa , 5.0e-1f ) ) ) ;
+tmp3 = lin_mul ( lin_mul ( * rhosnow , tmp1 ) , tmp2 ) ;
+{
+F M_591 ;
+F D_5914 ;
+M_591 = tmp3 ;
+D_5914 = qszodt [ ( long ) k ] ;
+M_591 = lin_min ( D_5914 , M_591 ) ;
+pracs [ ( long ) k ] = M_591 ;
+}
+tmp3 = lin_mul ( lin_mul ( lin_mul ( tmpa , tmpa ) , olambdas [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpa , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpb , 5.0e-1f ) ) ) ;
+tmp4 = lin_mul ( lin_mul ( * rhowater , tmp1 ) , tmp3 ) ;
+{
+F M_592 ;
+F D_5916 ;
+M_592 = tmp4 ;
+D_5916 = qrzodt [ ( long ) k ] ;
+M_592 = lin_min ( D_5916 , M_592 ) ;
+psacr [ ( long ) k ] = M_592 ;
+}
+}
+;
+}
+else {
+bool g___label_001400 = false ;
+if ( qsz [ ( long ) k ] <= 0.0f ) g___label_001400 = true ;
+if ( ! g___label_001400 ) {
+;
+esw = 1.0e+0f ;
+{
+F D_5919 ;
+D_5919 = olambdas [ ( long ) k ] ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( esw , pio4 ) , 3.0e+6f ) , constc ) , gamdp3 ) , sqrho [ ( long ) k ] ) , gfk_pow ( D_5919 , dp3 ) ) ;
+}
+psacw [ ( long ) k ] = lin_mul ( qlzodt [ ( long ) k ] , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( tmp1 , dtb ) ) ) ) ;
+esr = 1.0e+0f ;
+tmpa = lin_mul ( olambdar [ ( long ) k ] , olambdar [ ( long ) k ] ) ;
+tmpb = lin_mul ( olambdas [ ( long ) k ] , olambdas [ ( long ) k ] ) ;
+tmpc = lin_mul ( olambdar [ ( long ) k ] , olambdas [ ( long ) k ] ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , pi ) , esr ) , 8.0e6f ) , 3.0e+6f ) , fabs ( lin_sub ( vtr [ ( long ) k ] , vts [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( tmpa , tmpa ) , olambdas [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpa , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpb , 5.0e-1f ) ) ) ;
+tmp3 = lin_mul ( lin_mul ( * rhowater , tmp1 ) , tmp2 ) ;
+{
+F M_593 ;
+F D_5921 ;
+M_593 = tmp3 ;
+D_5921 = qrzodt [ ( long ) k ] ;
+M_593 = lin_min ( D_5921 , M_593 ) ;
+psacr [ ( long ) k ] = M_593 ;
+}
+delrs = lin_sub ( rs0 [ ( long ) k ] , qvz [ ( long ) k ] ) ;
+term1 = lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , orho [ ( long ) k ] ) , lin_sub ( lin_mul ( lin_mul ( lin_mul ( * xlv , diffwv [ ( long ) k ] ) , rho [ ( long ) k ] ) , delrs ) , lin_mul ( xka [ ( long ) k ] , temcc [ ( long ) k ] ) ) ) ;
+{
+F D_5922 ;
+D_5922 = olambdas [ ( long ) k ] ;
+tmp1 = lin_div ( lin_mul ( lin_mul ( sqrho [ ( long ) k ] , constc ) , gfk_pow ( D_5922 , dp5 ) ) , visc [ ( long ) k ] ) ;
+}
+{
+F D_5923 ;
+D_5923 = schmidt [ ( long ) k ] ;
+tmp2 = lin_mul ( lin_add ( lin_mul ( lin_mul ( olambdas [ ( long ) k ] , 7.799999713897705078125e-1f ) , olambdas [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5923 , 3.33339989185333251953125e-1f ) , 3.10000002384185791015625e-1f ) , gamdp5o2 ) , aa_sqrtf ( tmp1 ) ) ) , 3.0e+6f ) ;
+}
+tmp3 = lin_sub ( lin_mul ( lin_mul ( term1 , oxlf ) , tmp2 ) , lin_mul ( lin_mul ( temcc [ ( long ) k ] , cwoxlf ) , lin_add ( psacw [ ( long ) k ] , psacr [ ( long ) k ] ) ) ) ;
+{
+F M_594 ;
+M_594 = 0.0f ;
+M_594 = lin_min ( tmp3 , M_594 ) ;
+tmp4 = M_594 ;
+}
+{
+F M_595 ;
+F D_5926 ;
+M_595 = tmp4 ;
+D_5926 = - qszodt [ ( long ) k ] ;
+M_595 = lin_max ( D_5926 , M_595 ) ;
+psmlt [ ( long ) k ] = M_595 ;
+}
+tmpa = lin_mul ( lin_mul ( lin_mul ( * rvapor , xka [ ( long ) k ] ) , tem [ ( long ) k ] ) , tem [ ( long ) k ] ) ;
+tmpb = lin_mul ( lin_mul ( lin_mul ( lin_mul ( * xlv , * xlv ) , rho [ ( long ) k ] ) , qswz [ ( long ) k ] ) , diffwv [ ( long ) k ] ) ;
+tmpc = lin_mul ( lin_mul ( qswz [ ( long ) k ] , tmpa ) , diffwv [ ( long ) k ] ) ;
+{
+F M_596 ;
+F D_5928 ;
+M_596 = 0.0f ;
+D_5928 = lin_mul ( lin_mul ( lin_sub ( qvoqswz [ ( long ) k ] , 8.9999997615814208984375e-1f ) , qswz [ ( long ) k ] ) , odtb ) ;
+M_596 = lin_min ( D_5928 , M_596 ) ;
+tmpd = M_596 ;
+}
+abr = lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , lin_sub ( qvoqswz [ ( long ) k ] , 8.9999997615814208984375e-1f ) ) , tmpc ) , lin_add ( tmpa , tmpb ) ) ;
+{
+F D_5929 ;
+D_5929 = olambdas [ ( long ) k ] ;
+tmp1 = lin_div ( lin_mul ( lin_mul ( sqrho [ ( long ) k ] , constc ) , gfk_pow ( D_5929 , dp5 ) ) , visc [ ( long ) k ] ) ;
+}
+{
+F D_5930 ;
+D_5930 = schmidt [ ( long ) k ] ;
+tmp2 = lin_mul ( lin_mul ( abr , 3.0e+6f ) , lin_add ( lin_mul ( lin_mul ( olambdas [ ( long ) k ] , 7.799999713897705078125e-1f ) , olambdas [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5930 , 3.33339989185333251953125e-1f ) , 3.10000002384185791015625e-1f ) , gamdp5o2 ) , aa_sqrtf ( tmp1 ) ) ) ) ;
+}
+{
+F M_597 ;
+M_597 = 0.0f ;
+M_597 = lin_min ( tmp2 , M_597 ) ;
+tmp3 = M_597 ;
+}
+{
+F M_598 ;
+M_598 = tmp3 ;
+M_598 = lin_max ( tmpd , M_598 ) ;
+tmp3 = M_598 ;
+}
+{
+F M_599 ;
+F D_5934 ;
+M_599 = tmp3 ;
+D_5934 = - qszodt [ ( long ) k ] ;
+M_599 = lin_max ( D_5934 , M_599 ) ;
+psmltevp [ ( long ) k ] = M_599 ;
+}
+}
+;
+}
+;
+araut = 1.000000047497451305389404296875e-3f ;
+tmp1 = lin_mul ( lin_mul ( lin_sub ( qlz [ ( long ) k ] , 6.9999997504055500030517578125e-4f ) , odtb ) , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( araut , dtb ) ) ) ) ;
+{
+F M_600 ;
+M_600 = 0.0f ;
+M_600 = lin_max ( tmp1 , M_600 ) ;
+praut [ ( long ) k ] = M_600 ;
+}
+;
+erw = 1.0e+0f ;
+{
+F D_5940 ;
+D_5940 = olambdar [ ( long ) k ] ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pio4 , erw ) , 8.0e6f ) , consta ) , sqrho [ ( long ) k ] ) , gambp3 ) , gfk_pow ( D_5940 , bp3 ) ) ;
+}
+pracw [ ( long ) k ] = lin_mul ( qlzodt [ ( long ) k ] , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( tmp1 , dtb ) ) ) ) ;
+tmpa = lin_mul ( lin_mul ( lin_mul ( * rvapor , xka [ ( long ) k ] ) , tem [ ( long ) k ] ) , tem [ ( long ) k ] ) ;
+tmpb = lin_mul ( lin_mul ( lin_mul ( lin_mul ( * xlv , * xlv ) , rho [ ( long ) k ] ) , qswz [ ( long ) k ] ) , diffwv [ ( long ) k ] ) ;
+tmpc = lin_mul ( lin_mul ( qswz [ ( long ) k ] , tmpa ) , diffwv [ ( long ) k ] ) ;
+{
+F D_5941 ;
+F D_5942 ;
+D_5941 = tem [ ( long ) k ] ;
+D_5942 = lin_mul ( D_5941 , D_5941 ) ;
+tmpd = lin_div ( lin_mul ( qswz [ ( long ) k ] , * xlv ) , lin_mul ( * rvapor , D_5942 ) ) ;
+}
+{
+F M_601 ;
+F D_5944 ;
+M_601 = 0.0f ;
+D_5944 = lin_div ( lin_mul ( lin_mul ( odtb , 8.9999997615814208984375e-1f ) , lin_sub ( lin_add ( qvz [ ( long ) k ] , qlz [ ( long ) k ] ) , qswz [ ( long ) k ] ) ) , lin_add ( lin_mul ( xlvocp , tmpd ) , 1.0e+0f ) ) ;
+M_601 = lin_min ( D_5944 , M_601 ) ;
+tmpd = M_601 ;
+}
+abr = lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , lin_sub ( qvoqswz [ ( long ) k ] , 1.0e+0f ) ) , tmpc ) , lin_add ( tmpa , tmpb ) ) ;
+vf1r = 7.799999713897705078125e-1f ;
+vf2r = 3.10000002384185791015625e-1f ;
+{
+F D_5945 ;
+D_5945 = olambdar [ ( long ) k ] ;
+tmp1 = lin_div ( lin_mul ( lin_mul ( sqrho [ ( long ) k ] , consta ) , gfk_pow ( D_5945 , bp5 ) ) , visc [ ( long ) k ] ) ;
+}
+{
+F D_5946 ;
+D_5946 = schmidt [ ( long ) k ] ;
+tmp2 = lin_mul ( lin_mul ( abr , 8.0e6f ) , lin_add ( lin_mul ( lin_mul ( olambdar [ ( long ) k ] , vf1r ) , olambdar [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5946 , 3.33339989185333251953125e-1f ) , vf2r ) , gambp5o2 ) , aa_sqrtf ( tmp1 ) ) ) ) ;
+}
+{
+F M_602 ;
+M_602 = 0.0f ;
+M_602 = lin_min ( tmp2 , M_602 ) ;
+tmp3 = M_602 ;
+}
+{
+F M_603 ;
+M_603 = tmp3 ;
+M_603 = lin_max ( tmpd , M_603 ) ;
+tmp3 = M_603 ;
+}
+{
+F M_604 ;
+F D_5950 ;
+M_604 = tmp3 ;
+D_5950 = - qrzodt [ ( long ) k ] ;
+M_604 = lin_max ( D_5950 , M_604 ) ;
+prevp [ ( long ) k ] = M_604 ;
+}
+if ( tem [ ( long ) k ] < 2.73149993896484375e+2f ) {
+alpha2 = lin_mul ( gfk_exp ( lin_mul ( temcc [ ( long ) k ] , 9.00000035762786865234375e-2f ) ) , 1.000000047497451305389404296875e-3f ) ;
+tmp1 = lin_mul ( lin_mul ( lin_sub ( qsz [ ( long ) k ] , 6.00000028498470783233642578125e-4f ) , odtb ) , lin_sub ( 1.0e+0f , gfk_exp ( - lin_mul ( alpha2 , dtb ) ) ) ) ;
+{
+F M_605 ;
+M_605 = 0.0f ;
+M_605 = lin_max ( tmp1 , M_605 ) ;
+pgaut [ ( long ) k ] = M_605 ;
+}
+if ( qrz [ ( long ) k ] > 9.99999993922529029077850282192230224609375e-9f ) {
+bp = 1.0e+2f ;
+ap = 6.60000026226043701171875e-1f ;
+tmp1 = lin_mul ( lin_mul ( olambdar [ ( long ) k ] , olambdar [ ( long ) k ] ) , olambdar [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+1f ) , pi ) , bp ) , 8.0e6f ) , * rhowater ) , orho [ ( long ) k ] ) , lin_sub ( gfk_exp ( - lin_mul ( temcc [ ( long ) k ] , ap ) ) , 1.0e+0f ) ) , tmp1 ) , tmp1 ) , olambdar [ ( long ) k ] ) ;
+{
+F M_606 ;
+F D_5955 ;
+M_606 = tmp2 ;
+D_5955 = qrzodt [ ( long ) k ] ;
+M_606 = lin_min ( D_5955 , M_606 ) ;
+pgfr [ ( long ) k ] = M_606 ;
+}
+}
+else {
+pgfr [ ( long ) k ] = 0.0f ;
+}
+;
+bool g___label_004000 = false ;
+if ( qgz [ ( long ) k ] == 0.0f ) g___label_004000 = true ;
+if ( ! g___label_004000 ) {
+;
+egw = 1.0e+0f ;
+constg = aa_sqrtf ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( * grav , 4.0e+0f ) , 4.0e+2f ) , 3.33339989185333251953125e-1f ) , orho [ ( long ) k ] ) , ocdrag ) ) ;
+{
+F D_5958 ;
+D_5958 = olambdag [ ( long ) k ] ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( pio4 , 4.0e+6f ) , gam3pt5 ) , constg ) , gfk_pow ( D_5958 , 3.5e+0f ) ) ;
+}
+tmp2 = lin_mul ( lin_mul ( qlz [ ( long ) k ] , egw ) , tmp1 ) ;
+{
+F M_607 ;
+F D_5960 ;
+M_607 = tmp2 ;
+D_5960 = qlzodt [ ( long ) k ] ;
+M_607 = lin_min ( D_5960 , M_607 ) ;
+pgacw [ ( long ) k ] = M_607 ;
+}
+egi = 1.00000001490116119384765625e-1f ;
+tmp2 = lin_mul ( lin_mul ( qiz [ ( long ) k ] , egi ) , tmp1 ) ;
+{
+F M_608 ;
+F D_5962 ;
+M_608 = tmp2 ;
+D_5962 = qizodt [ ( long ) k ] ;
+M_608 = lin_min ( D_5962 , M_608 ) ;
+pgaci [ ( long ) k ] = M_608 ;
+}
+egs = gfk_exp ( lin_mul ( temcc [ ( long ) k ] , 9.00000035762786865234375e-2f ) ) ;
+tmpa = lin_mul ( olambdas [ ( long ) k ] , olambdas [ ( long ) k ] ) ;
+tmpb = lin_mul ( olambdag [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmpc = lin_mul ( olambdas [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , pi ) , 3.0e+6f ) , 4.0e+6f ) , fabs ( lin_sub ( vts [ ( long ) k ] , vtg [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( tmpa , tmpa ) , olambdag [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpa , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpb , 5.0e-1f ) ) ) ;
+tmp3 = lin_mul ( lin_mul ( lin_mul ( tmp1 , egs ) , * rhosnow ) , tmp2 ) ;
+{
+F M_609 ;
+F D_5964 ;
+M_609 = tmp3 ;
+D_5964 = qszodt [ ( long ) k ] ;
+M_609 = lin_min ( D_5964 , M_609 ) ;
+pgacs [ ( long ) k ] = M_609 ;
+}
+egr = 1.0e+0f ;
+tmpa = lin_mul ( olambdar [ ( long ) k ] , olambdar [ ( long ) k ] ) ;
+tmpb = lin_mul ( olambdag [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmpc = lin_mul ( olambdar [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , pi ) , 8.0e6f ) , 4.0e+6f ) , fabs ( lin_sub ( vtr [ ( long ) k ] , vtg [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( tmpa , tmpa ) , olambdag [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpa , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpb , 5.0e-1f ) ) ) ;
+tmp3 = lin_mul ( lin_mul ( lin_mul ( tmp1 , egr ) , * rhowater ) , tmp2 ) ;
+{
+F M_610 ;
+F D_5966 ;
+M_610 = tmp3 ;
+D_5966 = qrzodt [ ( long ) k ] ;
+M_610 = lin_min ( D_5966 , M_610 ) ;
+pgacr [ ( long ) k ] = M_610 ;
+}
+pdry [ ( long ) k ] = lin_add ( lin_add ( lin_add ( pgacw [ ( long ) k ] , pgaci [ ( long ) k ] ) , pgacs [ ( long ) k ] ) , pgacr [ ( long ) k ] ) ;
+tmp2 = lin_mul ( pgaci [ ( long ) k ] , 1.0e+1f ) ;
+{
+F M_611 ;
+F D_5968 ;
+M_611 = tmp2 ;
+D_5968 = qizodt [ ( long ) k ] ;
+M_611 = lin_min ( D_5968 , M_611 ) ;
+pgacip [ ( long ) k ] = M_611 ;
+}
+tmp3 = lin_div ( pgacs [ ( long ) k ] , egs ) ;
+{
+F M_612 ;
+F D_5970 ;
+M_612 = tmp3 ;
+D_5970 = qszodt [ ( long ) k ] ;
+M_612 = lin_min ( D_5970 , M_612 ) ;
+pgacsp [ ( long ) k ] = M_612 ;
+}
+if ( temcc [ ( long ) k ] > ( - 4.0e+1f ) ) {
+{
+F D_5972 ;
+D_5972 = olambdag [ ( long ) k ] ;
+term0 = lin_div ( lin_mul ( gfk_pow ( D_5972 , 5.5e+0f ) , constg ) , visc [ ( long ) k ] ) ;
+}
+delrs = lin_sub ( rs0 [ ( long ) k ] , qvz [ ( long ) k ] ) ;
+tmp0 = lin_div ( 1.0e+0f , lin_add ( * xlf , lin_mul ( temcc [ ( long ) k ] , 4.187e+3f ) ) ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , 4.0e+6f ) , lin_sub ( lin_mul ( lin_mul ( lin_mul ( rho [ ( long ) k ] , * xlv ) , diffwv [ ( long ) k ] ) , delrs ) , lin_mul ( xka [ ( long ) k ] , temcc [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) , tmp0 ) ;
+{
+F D_5973 ;
+D_5973 = schmidt [ ( long ) k ] ;
+constg2 = lin_add ( lin_mul ( lin_mul ( olambdag [ ( long ) k ] , 7.799999713897705078125e-1f ) , olambdag [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5973 , 3.33339989185333251953125e-1f ) , 3.10000002384185791015625e-1f ) , gam2pt75 ) , aa_sqrtf ( term0 ) ) ) ;
+}
+tmp3 = lin_add ( lin_mul ( tmp1 , constg2 ) , lin_mul ( lin_add ( pgacip [ ( long ) k ] , pgacsp [ ( long ) k ] ) , lin_sub ( 1.0e+0f , lin_mul ( lin_mul ( temcc [ ( long ) k ] , 2.093e+3f ) , tmp0 ) ) ) ) ;
+{
+F M_613 ;
+M_613 = 0.0f ;
+M_613 = lin_max ( tmp3 , M_613 ) ;
+tmp3 = M_613 ;
+}
+{
+F M_614 ;
+F D_5976 ;
+M_614 = tmp3 ;
+D_5976 = lin_add ( lin_add ( qlzodt [ ( long ) k ] , qszodt [ ( long ) k ] ) , qizodt [ ( long ) k ] ) ;
+M_614 = lin_min ( D_5976 , M_614 ) ;
+pgwet [ ( long ) k ] = M_614 ;
+}
+if ( pdry [ ( long ) k ] < pgwet [ ( long ) k ] ) {
+delta4 = 1.0e+0f ;
+}
+else {
+delta4 = 0.0f ;
+}
+;
+}
+else {
+delta4 = 1.0e+0f ;
+}
+;
+pgacrp [ ( long ) k ] = lin_sub ( lin_sub ( lin_sub ( pgwet [ ( long ) k ] , pgacw [ ( long ) k ] ) , pgacip [ ( long ) k ] ) , pgacsp [ ( long ) k ] ) ;
+tmpa = lin_mul ( lin_mul ( lin_mul ( * rvapor , xka [ ( long ) k ] ) , tem [ ( long ) k ] ) , tem [ ( long ) k ] ) ;
+tmpb = lin_mul ( lin_mul ( lin_mul ( lin_mul ( * xls , * xls ) , rho [ ( long ) k ] ) , qsiz [ ( long ) k ] ) , diffwv [ ( long ) k ] ) ;
+tmpc = lin_mul ( lin_mul ( qsiz [ ( long ) k ] , tmpa ) , diffwv [ ( long ) k ] ) ;
+abg = lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , lin_sub ( qvoqsiz [ ( long ) k ] , 1.0e+0f ) ) , tmpc ) , lin_add ( tmpa , tmpb ) ) ;
+{
+F D_5978 ;
+D_5978 = olambdag [ ( long ) k ] ;
+term0 = lin_div ( lin_mul ( gfk_pow ( D_5978 , 5.5e+0f ) , constg ) , visc [ ( long ) k ] ) ;
+}
+{
+F D_5979 ;
+D_5979 = schmidt [ ( long ) k ] ;
+constg2 = lin_add ( lin_mul ( lin_mul ( olambdag [ ( long ) k ] , 7.799999713897705078125e-1f ) , olambdag [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5979 , 3.33339989185333251953125e-1f ) , 3.10000002384185791015625e-1f ) , gam2pt75 ) , aa_sqrtf ( term0 ) ) ) ;
+}
+tmp2 = lin_mul ( lin_mul ( abg , 4.0e+6f ) , constg2 ) ;
+{
+F M_615 ;
+M_615 = 0.0f ;
+M_615 = lin_max ( tmp2 , M_615 ) ;
+pgdep [ ( long ) k ] = M_615 ;
+}
+{
+F M_616 ;
+M_616 = 0.0f ;
+M_616 = lin_min ( tmp2 , M_616 ) ;
+pgsub [ ( long ) k ] = M_616 ;
+}
+{
+F D_5982 ;
+F M_617 ;
+F D_5984 ;
+D_5982 = pgsub [ ( long ) k ] ;
+M_617 = D_5982 ;
+D_5984 = - qgzodt [ ( long ) k ] ;
+M_617 = lin_max ( D_5984 , M_617 ) ;
+pgsub [ ( long ) k ] = M_617 ;
+}
+}
+;
+}
+else {
+egw = 1.0e+0f ;
+constg = aa_sqrtf ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( * grav , 4.0e+0f ) , 4.0e+2f ) , 3.33339989185333251953125e-1f ) , orho [ ( long ) k ] ) , ocdrag ) ) ;
+{
+F D_5985 ;
+D_5985 = olambdag [ ( long ) k ] ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( pio4 , 4.0e+6f ) , gam3pt5 ) , constg ) , gfk_pow ( D_5985 , 3.5e+0f ) ) ;
+}
+tmp2 = lin_mul ( lin_mul ( qlz [ ( long ) k ] , egw ) , tmp1 ) ;
+{
+F M_618 ;
+F D_5987 ;
+M_618 = tmp2 ;
+D_5987 = qlzodt [ ( long ) k ] ;
+M_618 = lin_min ( D_5987 , M_618 ) ;
+pgacw [ ( long ) k ] = M_618 ;
+}
+egr = 1.0e+0f ;
+tmpa = lin_mul ( olambdar [ ( long ) k ] , olambdar [ ( long ) k ] ) ;
+tmpb = lin_mul ( olambdag [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmpc = lin_mul ( olambdar [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , pi ) , 8.0e6f ) , 4.0e+6f ) , fabs ( lin_sub ( vtr [ ( long ) k ] , vtg [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( tmpa , tmpa ) , olambdag [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpa , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpb , 5.0e-1f ) ) ) ;
+tmp3 = lin_mul ( lin_mul ( lin_mul ( tmp1 , egr ) , * rhowater ) , tmp2 ) ;
+{
+F M_619 ;
+F D_5989 ;
+M_619 = tmp3 ;
+D_5989 = qrzodt [ ( long ) k ] ;
+M_619 = lin_min ( D_5989 , M_619 ) ;
+pgacr [ ( long ) k ] = M_619 ;
+}
+delrs = lin_sub ( rs0 [ ( long ) k ] , qvz [ ( long ) k ] ) ;
+term1 = lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , orho [ ( long ) k ] ) , lin_sub ( lin_mul ( lin_mul ( lin_mul ( * xlv , diffwv [ ( long ) k ] ) , rho [ ( long ) k ] ) , delrs ) , lin_mul ( xka [ ( long ) k ] , temcc [ ( long ) k ] ) ) ) ;
+{
+F D_5990 ;
+D_5990 = olambdag [ ( long ) k ] ;
+term0 = lin_div ( lin_mul ( aa_sqrtf ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( * grav , 4.0e+0f ) , 4.0e+2f ) , 3.33339989185333251953125e-1f ) , orho [ ( long ) k ] ) , ocdrag ) ) , gfk_pow ( D_5990 , 5.5e+0f ) ) , visc [ ( long ) k ] ) ;
+}
+{
+F D_5991 ;
+D_5991 = schmidt [ ( long ) k ] ;
+constg2 = lin_add ( lin_mul ( lin_mul ( olambdag [ ( long ) k ] , 7.799999713897705078125e-1f ) , olambdag [ ( long ) k ] ) , lin_mul ( lin_mul ( lin_mul ( gfk_pow ( D_5991 , 3.33339989185333251953125e-1f ) , 3.10000002384185791015625e-1f ) , gam2pt75 ) , aa_sqrtf ( term0 ) ) ) ;
+}
+tmp2 = lin_mul ( constg2 , 4.0e+6f ) ;
+tmp3 = lin_sub ( lin_mul ( lin_mul ( term1 , oxlf ) , tmp2 ) , lin_mul ( lin_mul ( temcc [ ( long ) k ] , cwoxlf ) , lin_add ( pgacw [ ( long ) k ] , pgacr [ ( long ) k ] ) ) ) ;
+{
+F M_620 ;
+M_620 = 0.0f ;
+M_620 = lin_min ( tmp3 , M_620 ) ;
+tmp4 = M_620 ;
+}
+{
+F M_621 ;
+F D_5994 ;
+M_621 = tmp4 ;
+D_5994 = - qgzodt [ ( long ) k ] ;
+M_621 = lin_max ( D_5994 , M_621 ) ;
+pgmlt [ ( long ) k ] = M_621 ;
+}
+tmpa = lin_mul ( lin_mul ( lin_mul ( * rvapor , xka [ ( long ) k ] ) , tem [ ( long ) k ] ) , tem [ ( long ) k ] ) ;
+tmpb = lin_mul ( lin_mul ( lin_mul ( lin_mul ( * xlv , * xlv ) , rho [ ( long ) k ] ) , qswz [ ( long ) k ] ) , diffwv [ ( long ) k ] ) ;
+tmpc = lin_mul ( lin_mul ( qswz [ ( long ) k ] , tmpa ) , diffwv [ ( long ) k ] ) ;
+{
+F M_622 ;
+F D_5996 ;
+M_622 = 0.0f ;
+D_5996 = lin_mul ( lin_mul ( lin_sub ( qvoqswz [ ( long ) k ] , 8.9999997615814208984375e-1f ) , qswz [ ( long ) k ] ) , odtb ) ;
+M_622 = lin_min ( D_5996 , M_622 ) ;
+tmpd = M_622 ;
+}
+abg = lin_div ( lin_mul ( lin_mul ( lin_mul ( pi , 2.0e+0f ) , lin_sub ( qvoqswz [ ( long ) k ] , 8.9999997615814208984375e-1f ) ) , tmpc ) , lin_add ( tmpa , tmpb ) ) ;
+tmp2 = lin_mul ( lin_mul ( abg , 4.0e+6f ) , constg2 ) ;
+{
+F M_623 ;
+M_623 = 0.0f ;
+M_623 = lin_min ( tmp2 , M_623 ) ;
+tmp3 = M_623 ;
+}
+{
+F M_624 ;
+M_624 = tmp3 ;
+M_624 = lin_max ( tmpd , M_624 ) ;
+tmp3 = M_624 ;
+}
+{
+F M_625 ;
+F D_6000 ;
+M_625 = tmp3 ;
+D_6000 = - qgzodt [ ( long ) k ] ;
+M_625 = lin_max ( D_6000 , M_625 ) ;
+pgmltevp [ ( long ) k ] = M_625 ;
+}
+egs = 1.0e+0f ;
+tmpa = lin_mul ( olambdas [ ( long ) k ] , olambdas [ ( long ) k ] ) ;
+tmpb = lin_mul ( olambdag [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmpc = lin_mul ( olambdas [ ( long ) k ] , olambdag [ ( long ) k ] ) ;
+tmp1 = lin_mul ( lin_mul ( lin_mul ( lin_mul ( lin_mul ( pi , pi ) , 3.0e+6f ) , 4.0e+6f ) , fabs ( lin_sub ( vts [ ( long ) k ] , vtg [ ( long ) k ] ) ) ) , orho [ ( long ) k ] ) ;
+tmp2 = lin_mul ( lin_mul ( lin_mul ( tmpa , tmpa ) , olambdag [ ( long ) k ] ) , lin_add ( lin_add ( lin_mul ( tmpa , 5.0e+0f ) , lin_mul ( tmpc , 2.0e+0f ) ) , lin_mul ( tmpb , 5.0e-1f ) ) ) ;
+tmp3 = lin_mul ( lin_mul ( lin_mul ( tmp1 , egs ) , * rhosnow ) , tmp2 ) ;
+{
+F M_626 ;
+F D_6002 ;
+M_626 = tmp3 ;
+D_6002 = qszodt [ ( long ) k ] ;
+M_626 = lin_min ( D_6002 , M_626 ) ;
+pgacs [ ( long ) k ] = M_626 ;
+}
+}
+;
+;
+if ( temcc [ ( long ) k ] < 0.0f ) {
+gdelta4 = lin_mul ( * gindex , delta4 ) ;
+g1sdelt4 = lin_mul ( * gindex , lin_sub ( 1.0e+0f , delta4 ) ) ;
+tmp = lin_add ( psdep [ ( long ) k ] , lin_mul ( pgdep [ ( long ) k ] , * gindex ) ) ;
+if ( qvzodt [ ( long ) k ] < tmp ) {
+factor = lin_div ( qvzodt [ ( long ) k ] , tmp ) ;
+psdep [ ( long ) k ] = lin_mul ( psdep [ ( long ) k ] , factor ) ;
+pgdep [ ( long ) k ] = lin_mul ( lin_mul ( pgdep [ ( long ) k ] , factor ) , * gindex ) ;
+}
+;
+tmp = lin_add ( lin_add ( lin_add ( lin_add ( praut [ ( long ) k ] , psacw [ ( long ) k ] ) , psfw [ ( long ) k ] ) , pracw [ ( long ) k ] ) , lin_mul ( * gindex , pgacw [ ( long ) k ] ) ) ;
+if ( qlzodt [ ( long ) k ] < tmp ) {
+factor = lin_div ( qlzodt [ ( long ) k ] , tmp ) ;
+praut [ ( long ) k ] = lin_mul ( praut [ ( long ) k ] , factor ) ;
+psacw [ ( long ) k ] = lin_mul ( psacw [ ( long ) k ] , factor ) ;
+psfw [ ( long ) k ] = lin_mul ( psfw [ ( long ) k ] , factor ) ;
+pracw [ ( long ) k ] = lin_mul ( pracw [ ( long ) k ] , factor ) ;
+pgacw [ ( long ) k ] = lin_mul ( lin_mul ( pgacw [ ( long ) k ] , factor ) , * gindex ) ;
+}
+;
+tmp = lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( psaut [ ( long ) k ] , psaci [ ( long ) k ] ) , praci [ ( long ) k ] ) , psfi [ ( long ) k ] ) , lin_mul ( pgaci [ ( long ) k ] , gdelta4 ) ) , lin_mul ( pgacip [ ( long ) k ] , g1sdelt4 ) ) ;
+if ( qizodt [ ( long ) k ] < tmp ) {
+factor = lin_div ( qizodt [ ( long ) k ] , tmp ) ;
+psaut [ ( long ) k ] = lin_mul ( psaut [ ( long ) k ] , factor ) ;
+psaci [ ( long ) k ] = lin_mul ( psaci [ ( long ) k ] , factor ) ;
+praci [ ( long ) k ] = lin_mul ( praci [ ( long ) k ] , factor ) ;
+psfi [ ( long ) k ] = lin_mul ( psfi [ ( long ) k ] , factor ) ;
+pgaci [ ( long ) k ] = lin_mul ( lin_mul ( pgaci [ ( long ) k ] , factor ) , gdelta4 ) ;
+pgacip [ ( long ) k ] = lin_mul ( lin_mul ( pgacip [ ( long ) k ] , factor ) , g1sdelt4 ) ;
+}
+;
+tmp_r = lin_add ( lin_add ( lin_add ( lin_sub ( lin_sub ( lin_sub ( lin_add ( piacr [ ( long ) k ] , psacr [ ( long ) k ] ) , prevp [ ( long ) k ] ) , praut [ ( long ) k ] ) , pracw [ ( long ) k ] ) , lin_mul ( pgfr [ ( long ) k ] , * gindex ) ) , lin_mul ( pgacr [ ( long ) k ] , gdelta4 ) ) , lin_mul ( pgacrp [ ( long ) k ] , g1sdelt4 ) ) ;
+if ( qrzodt [ ( long ) k ] < tmp_r ) {
+factor = lin_div ( qrzodt [ ( long ) k ] , tmp_r ) ;
+piacr [ ( long ) k ] = lin_mul ( piacr [ ( long ) k ] , factor ) ;
+psacr [ ( long ) k ] = lin_mul ( psacr [ ( long ) k ] , factor ) ;
+prevp [ ( long ) k ] = lin_mul ( prevp [ ( long ) k ] , factor ) ;
+pgfr [ ( long ) k ] = lin_mul ( lin_mul ( pgfr [ ( long ) k ] , factor ) , * gindex ) ;
+pgacr [ ( long ) k ] = lin_mul ( lin_mul ( pgacr [ ( long ) k ] , factor ) , gdelta4 ) ;
+pgacrp [ ( long ) k ] = lin_mul ( lin_mul ( pgacrp [ ( long ) k ] , factor ) , g1sdelt4 ) ;
+}
+;
+if ( ( qrz [ ( long ) k ] < 9.99999974737875163555145263671875e-5f ) && ( qsz [ ( long ) k ] < 9.99999974737875163555145263671875e-5f ) ) {
+delta2 = 1.0e+0f ;
+}
+else {
+delta2 = 0.0f ;
+}
+;
+if ( qrz [ ( long ) k ] < 9.99999974737875163555145263671875e-5f ) {
+delta3 = 1.0e+0f ;
+}
+else {
+delta3 = 0.0f ;
+}
+;
+if ( ( * gindex ) == 0.0f ) {
+delta2 = 1.0e+0f ;
+delta3 = 1.0e+0f ;
+}
+;
+tmp_s = lin_sub ( lin_add ( lin_add ( lin_add ( lin_add ( lin_sub ( - pssub [ ( long ) k ] , lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( psaut [ ( long ) k ] , psaci [ ( long ) k ] ) , psacw [ ( long ) k ] ) , psfw [ ( long ) k ] ) , psfi [ ( long ) k ] ) , lin_mul ( praci [ ( long ) k ] , delta3 ) ) , lin_mul ( piacr [ ( long ) k ] , delta3 ) ) , psdep [ ( long ) k ] ) ) , lin_mul ( pgaut [ ( long ) k ] , * gindex ) ) , lin_mul ( pgacs [ ( long ) k ] , gdelta4 ) ) , lin_mul ( pgacsp [ ( long ) k ] , g1sdelt4 ) ) , lin_mul ( pracs [ ( long ) k ] , lin_sub ( 1.0e+0f , delta2 ) ) ) , lin_mul ( psacr [ ( long ) k ] , delta2 ) ) ;
+if ( qszodt [ ( long ) k ] < tmp_s ) {
+factor = lin_div ( qszodt [ ( long ) k ] , tmp_s ) ;
+pssub [ ( long ) k ] = lin_mul ( pssub [ ( long ) k ] , factor ) ;
+pracs [ ( long ) k ] = lin_mul ( pracs [ ( long ) k ] , factor ) ;
+pgaut [ ( long ) k ] = lin_mul ( lin_mul ( pgaut [ ( long ) k ] , factor ) , * gindex ) ;
+pgacs [ ( long ) k ] = lin_mul ( lin_mul ( pgacs [ ( long ) k ] , factor ) , gdelta4 ) ;
+pgacsp [ ( long ) k ] = lin_mul ( lin_mul ( pgacsp [ ( long ) k ] , factor ) , g1sdelt4 ) ;
+}
+;
+if ( delta4 < 5.0e-1f ) {
+pgwet [ ( long ) k ] = lin_add ( lin_add ( lin_add ( pgacrp [ ( long ) k ] , pgacw [ ( long ) k ] ) , pgacip [ ( long ) k ] ) , pgacsp [ ( long ) k ] ) ;
+}
+;
+tmp_g = lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( - pgaut [ ( long ) k ] , pgfr [ ( long ) k ] ) , lin_mul ( pgacw [ ( long ) k ] , delta4 ) ) , lin_mul ( pgaci [ ( long ) k ] , delta4 ) ) , lin_mul ( pgacr [ ( long ) k ] , delta4 ) ) , lin_mul ( pgacs [ ( long ) k ] , delta4 ) ) , lin_mul ( pgwet [ ( long ) k ] , lin_sub ( 1.0e+0f , delta4 ) ) ) , pgsub [ ( long ) k ] ) , pgdep [ ( long ) k ] ) , lin_mul ( psacr [ ( long ) k ] , lin_sub ( 1.0e+0f , delta2 ) ) ) , lin_mul ( pracs [ ( long ) k ] , lin_sub ( 1.0e+0f , delta2 ) ) ) , lin_mul ( praci [ ( long ) k ] , lin_sub ( 1.0e+0f , delta3 ) ) ) , lin_mul ( piacr [ ( long ) k ] , lin_sub ( 1.0e+0f , delta3 ) ) ) ;
+if ( qgzodt [ ( long ) k ] < tmp_g ) {
+factor = lin_div ( qgzodt [ ( long ) k ] , tmp_g ) ;
+pgsub [ ( long ) k ] = lin_mul ( pgsub [ ( long ) k ] , factor ) ;
+}
+;
+;
+pvapor [ ( long ) k ] = lin_sub ( lin_sub ( lin_sub ( lin_sub ( - pssub [ ( long ) k ] , psdep [ ( long ) k ] ) , prevp [ ( long ) k ] ) , lin_mul ( pgsub [ ( long ) k ] , * gindex ) ) , lin_mul ( pgdep [ ( long ) k ] , * gindex ) ) ;
+{
+F M_627 ;
+F D_6017 ;
+M_627 = qvmin ;
+D_6017 = lin_add ( qvz [ ( long ) k ] , lin_mul ( pvapor [ ( long ) k ] , dtb ) ) ;
+M_627 = lin_max ( D_6017 , M_627 ) ;
+qvz [ ( long ) k ] = M_627 ;
+}
+pclw [ ( long ) k ] = lin_sub ( lin_sub ( lin_sub ( lin_sub ( - praut [ ( long ) k ] , pracw [ ( long ) k ] ) , psacw [ ( long ) k ] ) , psfw [ ( long ) k ] ) , lin_mul ( pgacw [ ( long ) k ] , * gindex ) ) ;
+;
+{
+F M_629 ;
+F D_6023 ;
+M_629 = 0.0f ;
+D_6023 = lin_add ( qlz [ ( long ) k ] , lin_mul ( pclw [ ( long ) k ] , dtb ) ) ;
+M_629 = lin_max ( D_6023 , M_629 ) ;
+qlz [ ( long ) k ] = M_629 ;
+}
+pcli [ ( long ) k ] = lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( - psaut [ ( long ) k ] , psfi [ ( long ) k ] ) , psaci [ ( long ) k ] ) , praci [ ( long ) k ] ) , lin_mul ( pgaci [ ( long ) k ] , gdelta4 ) ) , lin_mul ( pgacip [ ( long ) k ] , g1sdelt4 ) ) ;
+{
+F M_630 ;
+F D_6025 ;
+M_630 = 0.0f ;
+D_6025 = lin_add ( qiz [ ( long ) k ] , lin_mul ( pcli [ ( long ) k ] , dtb ) ) ;
+M_630 = lin_max ( D_6025 , M_630 ) ;
+qiz [ ( long ) k ] = M_630 ;
+}
+tmp_r = lin_add ( lin_add ( lin_add ( lin_sub ( lin_sub ( lin_sub ( lin_add ( piacr [ ( long ) k ] , psacr [ ( long ) k ] ) , prevp [ ( long ) k ] ) , praut [ ( long ) k ] ) , pracw [ ( long ) k ] ) , lin_mul ( pgfr [ ( long ) k ] , * gindex ) ) , lin_mul ( pgacr [ ( long ) k ] , gdelta4 ) ) , lin_mul ( pgacrp [ ( long ) k ] , g1sdelt4 ) ) ;
+prain [ ( long ) k ] = - tmp_r ;
+{
+F M_631 ;
+F D_6027 ;
+M_631 = 0.0f ;
+D_6027 = lin_add ( qrz [ ( long ) k ] , lin_mul ( prain [ ( long ) k ] , dtb ) ) ;
+M_631 = lin_max ( D_6027 , M_631 ) ;
+qrz [ ( long ) k ] = M_631 ;
+}
+tmp_s = lin_sub ( lin_add ( lin_add ( lin_add ( lin_add ( lin_sub ( - pssub [ ( long ) k ] , lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( lin_add ( psaut [ ( long ) k ] , psaci [ ( long ) k ] ) , psacw [ ( long ) k ] ) , psfw [ ( long ) k ] ) , psfi [ ( long ) k ] ) , lin_mul ( praci [ ( long ) k ] , delta3 ) ) , lin_mul ( piacr [ ( long ) k ] , delta3 ) ) , psdep [ ( long ) k ] ) ) , lin_mul ( pgaut [ ( long ) k ] , * gindex ) ) , lin_mul ( pgacs [ ( long ) k ] , gdelta4 ) ) , lin_mul ( pgacsp [ ( long ) k ] , g1sdelt4 ) ) , lin_mul ( pracs [ ( long ) k ] , lin_sub ( 1.0e+0f , delta2 ) ) ) , lin_mul ( psacr [ ( long ) k ] , delta2 ) ) ;
+psnow [ ( long ) k ] = - tmp_s ;
+{
+F M_632 ;
+F D_6029 ;
+M_632 = 0.0f ;
+D_6029 = lin_add ( qsz [ ( long ) k ] , lin_mul ( psnow [ ( long ) k ] , dtb ) ) ;
+M_632 = lin_max ( D_6029 , M_632 ) ;
+qsz [ ( long ) k ] = M_632 ;
+}
+qschg [ ( long ) k ] = lin_add ( qschg [ ( long ) k ] , psnow [ ( long ) k ] ) ;
+qschg [ ( long ) k ] = psnow [ ( long ) k ] ;
+tmp_g = lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( lin_sub ( - pgaut [ ( long ) k ] , pgfr [ ( long ) k ] ) , lin_mul ( pgacw [ ( long ) k ] , delta4 ) ) , lin_mul ( pgaci [ ( long ) k ] , delta4 ) ) , lin_mul ( pgacr [ ( long ) k ] , delta4 ) ) , lin_mul ( pgacs [ ( long ) k ] , delta4 ) ) , lin_mul ( pgwet [ ( long ) k ] , lin_sub ( 1.0e+0f , delta4 ) ) ) , pgsub [ ( long ) k ] ) , pgdep [ ( long ) k ] ) , lin_mul ( psacr [ ( long ) k ] , lin_sub ( 1.0e+0f , delta2 ) ) ) , lin_mul ( pracs [ ( long ) k ] , lin_sub ( 1.0e+0f , delta2 ) ) ) , lin_mul ( praci [ ( long ) k ] , lin_sub ( 1.0e+0f , delta3 ) ) ) , lin_mul ( piacr [ ( long ) k ] , lin_sub ( 1.0e+0f , delta3 ) ) ) ;
+pgraupel [ ( long ) k ] = - tmp_g ;
+pgraupel [ ( long ) k ] = lin_mul ( pgraupel [ ( long ) k ] , * gindex ) ;
+{
+F M_633 ;
+F D_6031 ;
+M_633 = 0.0f ;
+D_6031 = lin_add ( qgz [ ( long ) k ] , lin_mul ( pgraupel [ ( long ) k ] , dtb ) ) ;
+M_633 = lin_max ( D_6031 , M_633 ) ;
+qgz [ ( long ) k ] = M_633 ;
+}
+qgchg [ ( long ) k ] = pgraupel [ ( long ) k ] ;
+qgz [ ( long ) k ] = lin_mul ( qgz [ ( long ) k ] , * gindex ) ;
+tmp = lin_mul ( lin_mul ( lin_div ( ocp , tothz [ ( long ) k ] ) , * xlf ) , lin_add ( qschg [ ( long ) k ] , qgchg [ ( long ) k ] ) ) ;
+theiz [ ( long ) k ] = lin_add ( theiz [ ( long ) k ] , lin_mul ( dtb , tmp ) ) ;
+thz [ ( long ) k ] = lin_sub ( theiz [ ( long ) k ] , lin_div ( lin_sub ( lin_mul ( qvz [ ( long ) k ] , xlvocp ) , lin_mul ( qiz [ ( long ) k ] , xlfocp ) ) , tothz [ ( long ) k ] ) ) ;
+tem [ ( long ) k ] = lin_mul ( thz [ ( long ) k ] , tothz [ ( long ) k ] ) ;
+temcc [ ( long ) k ] = lin_sub ( tem [ ( long ) k ] , 2.73149993896484375e+2f ) ;
+}
+else {
+tmp = lin_add ( lin_add ( lin_add ( praut [ ( long ) k ] , psacw [ ( long ) k ] ) , pracw [ ( long ) k ] ) , lin_mul ( pgacw [ ( long ) k ] , * gindex ) ) ;
+if ( qlzodt [ ( long ) k ] < tmp ) {
+factor = lin_div ( qlzodt [ ( long ) k ] , tmp ) ;
+praut [ ( long ) k ] = lin_mul ( praut [ ( long ) k ] , factor ) ;
+psacw [ ( long ) k ] = lin_mul ( psacw [ ( long ) k ] , factor ) ;
+pracw [ ( long ) k ] = lin_mul ( pracw [ ( long ) k ] , factor ) ;
+pgacw [ ( long ) k ] = lin_mul ( lin_mul ( pgacw [ ( long ) k ] , factor ) , * gindex ) ;
+}
+;
+tmp_s = lin_sub ( lin_mul ( pgacs [ ( long ) k ] , * gindex ) , lin_add ( psmlt [ ( long ) k ] , psmltevp [ ( long ) k ] ) ) ;
+if ( qszodt [ ( long ) k ] < tmp_s ) {
+factor = lin_div ( qszodt [ ( long ) k ] , tmp_s ) ;
+psmlt [ ( long ) k ] = lin_mul ( psmlt [ ( long ) k ] , factor ) ;
+psmltevp [ ( long ) k ] = lin_mul ( psmltevp [ ( long ) k ] , factor ) ;
+pgacs [ ( long ) k ] = lin_mul ( lin_mul ( pgacs [ ( long ) k ] , factor ) , * gindex ) ;
+}
+;
+tmp_g = lin_sub ( lin_sub ( - pgmlt [ ( long ) k ] , pgacs [ ( long ) k ] ) , pgmltevp [ ( long ) k ] ) ;
+if ( qgzodt [ ( long ) k ] < tmp_g ) {
+factor = lin_div ( qgzodt [ ( long ) k ] , tmp_g ) ;
+pgmltevp [ ( long ) k ] = lin_mul ( pgmltevp [ ( long ) k ] , factor ) ;
+pgmlt [ ( long ) k ] = lin_mul ( pgmlt [ ( long ) k ] , factor ) ;
+}
+;
+;
+tmp_r = lin_sub ( lin_add ( lin_sub ( - prevp [ ( long ) k ] , lin_sub ( lin_add ( lin_add ( praut [ ( long ) k ] , pracw [ ( long ) k ] ) , psacw [ ( long ) k ] ) , psmlt [ ( long ) k ] ) ) , lin_mul ( pgmlt [ ( long ) k ] , * gindex ) ) , lin_mul ( pgacw [ ( long ) k ] , * gindex ) ) ;
+if ( qrzodt [ ( long ) k ] < tmp_r ) {
+factor = lin_div ( qrzodt [ ( long ) k ] , tmp_r ) ;
+prevp [ ( long ) k ] = lin_mul ( prevp [ ( long ) k ] , factor ) ;
+}
+;
+pvapor [ ( long ) k ] = lin_sub ( lin_sub ( - psmltevp [ ( long ) k ] , prevp [ ( long ) k ] ) , lin_mul ( pgmltevp [ ( long ) k ] , * gindex ) ) ;
+{
+F M_634 ;
+F D_6038 ;
+M_634 = qvmin ;
+D_6038 = lin_add ( qvz [ ( long ) k ] , lin_mul ( pvapor [ ( long ) k ] , dtb ) ) ;
+M_634 = lin_max ( D_6038 , M_634 ) ;
+qvz [ ( long ) k ] = M_634 ;
+}
+pclw [ ( long ) k ] = lin_sub ( lin_sub ( lin_sub ( - praut [ ( long ) k ] , pracw [ ( long ) k ] ) , psacw [ ( long ) k ] ) , lin_mul ( pgacw [ ( long ) k ] , * gindex ) ) ;
+;
+{
+F M_636 ;
+F D_6044 ;
+M_636 = 0.0f ;
+D_6044 = lin_add ( qlz [ ( long ) k ] , lin_mul ( pclw [ ( long ) k ] , dtb ) ) ;
+M_636 = lin_max ( D_6044 , M_636 ) ;
+qlz [ ( long ) k ] = M_636 ;
+}
+pcli [ ( long ) k ] = 0.0f ;
+{
+F M_637 ;
+F D_6046 ;
+M_637 = 0.0f ;
+D_6046 = lin_add ( qiz [ ( long ) k ] , lin_mul ( pcli [ ( long ) k ] , dtb ) ) ;
+M_637 = lin_max ( D_6046 , M_637 ) ;
+qiz [ ( long ) k ] = M_637 ;
+}
+tmp_r = lin_sub ( lin_add ( lin_sub ( - prevp [ ( long ) k ] , lin_sub ( lin_add ( lin_add ( praut [ ( long ) k ] , pracw [ ( long ) k ] ) , psacw [ ( long ) k ] ) , psmlt [ ( long ) k ] ) ) , lin_mul ( pgmlt [ ( long ) k ] , * gindex ) ) , lin_mul ( pgacw [ ( long ) k ] , * gindex ) ) ;
+prain [ ( long ) k ] = - tmp_r ;
+tmpqrz = qrz [ ( long ) k ] ;
+{
+F M_638 ;
+F D_6048 ;
+M_638 = 0.0f ;
+D_6048 = lin_add ( qrz [ ( long ) k ] , lin_mul ( prain [ ( long ) k ] , dtb ) ) ;
+M_638 = lin_max ( D_6048 , M_638 ) ;
+qrz [ ( long ) k ] = M_638 ;
+}
+tmp_s = lin_sub ( lin_mul ( pgacs [ ( long ) k ] , * gindex ) , lin_add ( psmlt [ ( long ) k ] , psmltevp [ ( long ) k ] ) ) ;
+psnow [ ( long ) k ] = - tmp_s ;
+{
+F M_639 ;
+F D_6050 ;
+M_639 = 0.0f ;
+D_6050 = lin_add ( qsz [ ( long ) k ] , lin_mul ( psnow [ ( long ) k ] , dtb ) ) ;
+M_639 = lin_max ( D_6050 , M_639 ) ;
+qsz [ ( long ) k ] = M_639 ;
+}
+qschg [ ( long ) k ] = psnow [ ( long ) k ] ;
+tmp_g = lin_sub ( lin_sub ( - pgmlt [ ( long ) k ] , pgacs [ ( long ) k ] ) , pgmltevp [ ( long ) k ] ) ;
+pgraupel [ ( long ) k ] = - lin_mul ( * gindex , tmp_g ) ;
+{
+F M_640 ;
+F D_6052 ;
+M_640 = 0.0f ;
+D_6052 = lin_add ( qgz [ ( long ) k ] , lin_mul ( pgraupel [ ( long ) k ] , dtb ) ) ;
+M_640 = lin_max ( D_6052 , M_640 ) ;
+qgz [ ( long ) k ] = M_640 ;
+}
+qgchg [ ( long ) k ] = pgraupel [ ( long ) k ] ;
+qgz [ ( long ) k ] = lin_mul ( qgz [ ( long ) k ] , * gindex ) ;
+tmp = lin_mul ( lin_mul ( lin_div ( ocp , tothz [ ( long ) k ] ) , * xlf ) , lin_add ( qschg [ ( long ) k ] , qgchg [ ( long ) k ] ) ) ;
+theiz [ ( long ) k ] = lin_add ( theiz [ ( long ) k ] , lin_mul ( dtb , tmp ) ) ;
+thz [ ( long ) k ] = lin_sub ( theiz [ ( long ) k ] , lin_div ( lin_sub ( lin_mul ( qvz [ ( long ) k ] , xlvocp ) , lin_mul ( qiz [ ( long ) k ] , xlfocp ) ) , tothz [ ( long ) k ] ) ) ;
+tem [ ( long ) k ] = lin_mul ( thz [ ( long ) k ] , tothz [ ( long ) k ] ) ;
+temcc [ ( long ) k ] = lin_sub ( tem [ ( long ) k ] , 2.73149993896484375e+2f ) ;
+}
+;
+preclw [ ( long ) k ] = pclw [ ( long ) k ] ;
+tmp_tem = tem [ ( long ) k ] ;
+if ( lin_add ( qlz [ ( long ) k ] , qiz [ ( long ) k ] ) > 0.0f ) {
+tmp_tem = lin_sub ( lin_sub ( tem [ ( long ) k ] , lin_mul ( qlz [ ( long ) k ] , xlvocp ) ) , lin_mul ( lin_add ( xlvocp , xlfocp ) , qiz [ ( long ) k ] ) ) ;
+}
+;
+tmp_temcc = lin_sub ( tmp_tem , 2.73149993896484375e+2f ) ;
+if ( tmp_temcc < 0.0f ) {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( lin_sub ( tmp_tem , 2.73160003662109375e+2f ) , 2.18745574951171875e+1f ) , lin_sub ( tmp_tem , 7.659999847412109375e+0f ) ) ) ) ;
+}
+else {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( * svp2 , tmp_temcc ) , lin_sub ( tmp_tem , * svp3 ) ) ) ) ;
+}
+;
+qvsbar [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+rsat = lin_add ( lin_mul ( lin_mul ( lin_sub ( 5.0e+4f , prez [ ( long ) k ] ) , 5.0e-1f ) , 4.999999873689375817775726318359375e-5f ) , 1.0e+0f ) ;
+{
+F M_641 ;
+M_641 = 1.0e+0f ;
+M_641 = lin_max ( rsat , M_641 ) ;
+rsat = M_641 ;
+}
+{
+F M_642 ;
+M_642 = 1.5e+0f ;
+M_642 = lin_min ( rsat , M_642 ) ;
+rsat = M_642 ;
+}
+rsat = 1.0e+0f ;
+bool g___label_001800 = false ;
+if ( lin_add ( lin_add ( qvz [ ( long ) k ] , qlz [ ( long ) k ] ) , qiz [ ( long ) k ] ) < lin_mul ( qvsbar [ ( long ) k ] , rsat ) ) {
+qvz [ ( long ) k ] = lin_add ( lin_add ( qvz [ ( long ) k ] , qlz [ ( long ) k ] ) , qiz [ ( long ) k ] ) ;
+qlz [ ( long ) k ] = 0.0f ;
+qiz [ ( long ) k ] = 0.0f ;
+thz [ ( long ) k ] = lin_sub ( theiz [ ( long ) k ] , lin_div ( lin_sub ( lin_mul ( qvz [ ( long ) k ] , xlvocp ) , lin_mul ( qiz [ ( long ) k ] , xlfocp ) ) , tothz [ ( long ) k ] ) ) ;
+tem [ ( long ) k ] = lin_mul ( thz [ ( long ) k ] , tothz [ ( long ) k ] ) ;
+temcc [ ( long ) k ] = lin_sub ( tem [ ( long ) k ] , 2.73149993896484375e+2f ) ;
+g___label_001800 = true ;
+}
+else {
+pladj [ ( long ) k ] = qlz [ ( long ) k ] ;
+piadj [ ( long ) k ] = qiz [ ( long ) k ] ;
+lin_satadj ( qvz , qlz , qiz , prez , theiz , thz , tothz , kts , kte , & k , & xlvocp , & xlfocp , & episp0k , ep2 , svp1 , svp2 , svp3 , svpt0 ) ;
+pladj [ ( long ) k ] = lin_mul ( lin_sub ( qlz [ ( long ) k ] , pladj [ ( long ) k ] ) , odtb ) ;
+piadj [ ( long ) k ] = lin_mul ( lin_sub ( qiz [ ( long ) k ] , piadj [ ( long ) k ] ) , odtb ) ;
+pclw [ ( long ) k ] = lin_add ( pclw [ ( long ) k ] , pladj [ ( long ) k ] ) ;
+pcli [ ( long ) k ] = lin_add ( pcli [ ( long ) k ] , piadj [ ( long ) k ] ) ;
+pvapor [ ( long ) k ] = lin_sub ( pvapor [ ( long ) k ] , lin_add ( pladj [ ( long ) k ] , piadj [ ( long ) k ] ) ) ;
+thz [ ( long ) k ] = lin_sub ( theiz [ ( long ) k ] , lin_div ( lin_sub ( lin_mul ( qvz [ ( long ) k ] , xlvocp ) , lin_mul ( qiz [ ( long ) k ] , xlfocp ) ) , tothz [ ( long ) k ] ) ) ;
+tem [ ( long ) k ] = lin_mul ( thz [ ( long ) k ] , tothz [ ( long ) k ] ) ;
+temcc [ ( long ) k ] = lin_sub ( tem [ ( long ) k ] , 2.73149993896484375e+2f ) ;
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( * svp2 , temcc [ ( long ) k ] ) , lin_sub ( tem [ ( long ) k ] , * svp3 ) ) ) ) ;
+qswz [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+if ( tem [ ( long ) k ] < 2.73149993896484375e+2f ) {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( lin_sub ( tem [ ( long ) k ] , 2.73160003662109375e+2f ) , 2.18745574951171875e+1f ) , lin_sub ( tem [ ( long ) k ] , 7.659999847412109375e+0f ) ) ) ) ;
+qsiz [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+if ( temcc [ ( long ) k ] < ( - 4.0e+1f ) ) {
+qswz [ ( long ) k ] = qsiz [ ( long ) k ] ;
+}
+;
+}
+else {
+qsiz [ ( long ) k ] = qswz [ ( long ) k ] ;
+}
+;
+qlpqi = lin_add ( qlz [ ( long ) k ] , qiz [ ( long ) k ] ) ;
+if ( qlpqi == 0.0f ) {
+qvsbar [ ( long ) k ] = qsiz [ ( long ) k ] ;
+}
+else {
+qvsbar [ ( long ) k ] = lin_div ( lin_add ( lin_mul ( qiz [ ( long ) k ] , qsiz [ ( long ) k ] ) , lin_mul ( qlz [ ( long ) k ] , qswz [ ( long ) k ] ) ) , qlpqi ) ;
+}
+;
+}
+if ( ! g___label_001800 ) {
+;
+qlpqi = lin_add ( qlz [ ( long ) k ] , qiz [ ( long ) k ] ) ;
+if ( qlpqi <= 0.0f ) g___label_001800 = true ;
+}
+if ( ! g___label_001800 ) {
+;
+if ( temcc [ ( long ) k ] < ( - 4.0e+1f ) ) {
+pihom [ ( long ) k ] = lin_mul ( qlz [ ( long ) k ] , odtb ) ;
+}
+;
+if ( temcc [ ( long ) k ] > 0.0f ) {
+pimlt [ ( long ) k ] = lin_mul ( qiz [ ( long ) k ] , odtb ) ;
+}
+;
+if ( ( temcc [ ( long ) k ] < 0.0f ) && ( temcc [ ( long ) k ] > ( - 3.1e+1f ) ) ) {
+a1 = lin_parama1 ( & temcc [ ( long ) k ] ) ;
+a2 = lin_parama2 ( & temcc [ ( long ) k ] ) ;
+a1 = lin_mul ( gfk_pow ( 1.000000047497451305389404296875e-3f , lin_sub ( 1.0e+0f , a2 ) ) , a1 ) ;
+xnin = lin_mul ( gfk_exp ( - lin_mul ( temcc [ ( long ) k ] , 5.0e-1f ) ) , 9.99999977648258209228515625e-3f ) ;
+pidw [ ( long ) k ] = lin_mul ( lin_mul ( orho [ ( long ) k ] , xnin ) , lin_mul ( gfk_pow ( 1.05000001191523841483532915319631939610189874656498432159e-18f , a2 ) , a1 ) ) ;
+}
+;
+pcli [ ( long ) k ] = lin_add ( lin_sub ( lin_add ( pcli [ ( long ) k ] , pihom [ ( long ) k ] ) , pimlt [ ( long ) k ] ) , pidw [ ( long ) k ] ) ;
+pclw [ ( long ) k ] = lin_sub ( lin_add ( lin_sub ( pclw [ ( long ) k ] , pihom [ ( long ) k ] ) , pimlt [ ( long ) k ] ) , pidw [ ( long ) k ] ) ;
+{
+F M_643 ;
+F D_6067 ;
+M_643 = 0.0f ;
+D_6067 = lin_add ( qlz [ ( long ) k ] , lin_mul ( lin_sub ( lin_sub ( pimlt [ ( long ) k ] , pihom [ ( long ) k ] ) , pidw [ ( long ) k ] ) , dtb ) ) ;
+M_643 = lin_max ( D_6067 , M_643 ) ;
+qlz [ ( long ) k ] = M_643 ;
+}
+{
+F M_644 ;
+F D_6069 ;
+M_644 = 0.0f ;
+D_6069 = lin_add ( qiz [ ( long ) k ] , lin_mul ( lin_add ( lin_sub ( pihom [ ( long ) k ] , pimlt [ ( long ) k ] ) , pidw [ ( long ) k ] ) , dtb ) ) ;
+M_644 = lin_max ( D_6069 , M_644 ) ;
+qiz [ ( long ) k ] = M_644 ;
+}
+lin_satadj ( qvz , qlz , qiz , prez , theiz , thz , tothz , kts , kte , & k , & xlvocp , & xlfocp , & episp0k , ep2 , svp1 , svp2 , svp3 , svpt0 ) ;
+thz [ ( long ) k ] = lin_sub ( theiz [ ( long ) k ] , lin_div ( lin_sub ( lin_mul ( qvz [ ( long ) k ] , xlvocp ) , lin_mul ( qiz [ ( long ) k ] , xlfocp ) ) , tothz [ ( long ) k ] ) ) ;
+tem [ ( long ) k ] = lin_mul ( thz [ ( long ) k ] , tothz [ ( long ) k ] ) ;
+temcc [ ( long ) k ] = lin_sub ( tem [ ( long ) k ] , 2.73149993896484375e+2f ) ;
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( * svp2 , temcc [ ( long ) k ] ) , lin_sub ( tem [ ( long ) k ] , * svp3 ) ) ) ) ;
+qswz [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+if ( tem [ ( long ) k ] < 2.73149993896484375e+2f ) {
+es = lin_mul ( lin_mul ( * svp1 , 1.0e+3f ) , gfk_exp ( lin_div ( lin_mul ( lin_sub ( tem [ ( long ) k ] , 2.73160003662109375e+2f ) , 2.18745574951171875e+1f ) , lin_sub ( tem [ ( long ) k ] , 7.659999847412109375e+0f ) ) ) ) ;
+qsiz [ ( long ) k ] = lin_div ( lin_mul ( * ep2 , es ) , lin_sub ( prez [ ( long ) k ] , es ) ) ;
+if ( temcc [ ( long ) k ] < ( - 4.0e+1f ) ) {
+qswz [ ( long ) k ] = qsiz [ ( long ) k ] ;
+}
+;
+}
+else {
+qsiz [ ( long ) k ] = qswz [ ( long ) k ] ;
+}
+;
+qlpqi = lin_add ( qlz [ ( long ) k ] , qiz [ ( long ) k ] ) ;
+if ( qlpqi == 0.0f ) {
+qvsbar [ ( long ) k ] = qsiz [ ( long ) k ] ;
+}
+else {
+qvsbar [ ( long ) k ] = lin_div ( lin_add ( lin_mul ( qiz [ ( long ) k ] , qsiz [ ( long ) k ] ) , lin_mul ( qlz [ ( long ) k ] , qswz [ ( long ) k ] ) ) , qlpqi ) ;
+}
+;
+}
+;
+}
+;
+;
+k = k + 1 ;
+}
+}
+;
+}
+{
+int D_6073 ;
+int D_6074 ;
+D_6073 = ( * kts ) + 1 ;
+D_6074 = * kte ;
+k = D_6073 ;
+while ( 1 ) {
+{
+bool D_6077 ;
+D_6077 = k > D_6074 ;
+if ( D_6077 ) break ;
+if ( qvz [ ( long ) k ] < qvmin ) {
+qlz [ ( long ) k ] = 0.0f ;
+qiz [ ( long ) k ] = 0.0f ;
+{
+F M_645 ;
+F D_6080 ;
+M_645 = qvmin ;
+D_6080 = lin_add ( lin_add ( qvz [ ( long ) k ] , qlz [ ( long ) k ] ) , qiz [ ( long ) k ] ) ;
+M_645 = lin_max ( D_6080 , M_645 ) ;
+qvz [ ( long ) k ] = M_645 ;
+}
+}
+;
+;
+k = k + 1 ;
+}
+}
+;
+}
+}
+
+}

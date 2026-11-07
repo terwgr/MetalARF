@@ -19,32 +19,8 @@ use std::path::{Path, PathBuf};
 
 use rw_wrfbatch::wrf_process::{WrfProcessMessage, WrfProcessOptions, spawn_process_paths};
 
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(tag: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "rw-wrfbatch-stored-planes-{tag}-{}-{:?}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|value| value.as_nanos())
-                .unwrap_or_default()
-        ));
-        std::fs::create_dir_all(&dir).expect("create scratch dir");
-        Self(dir)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+mod support;
+use support::Scratch;
 
 struct Imported {
     variables: Vec<String>,
@@ -79,7 +55,7 @@ fn import(wrfout: &Path, store_root: &Path, options: WrfProcessOptions) -> Impor
 /// `--products var:...` resolves.
 #[test]
 fn user_added_two_d_plane_reaches_the_store_by_default() {
-    let scratch = Scratch::new("user-plane");
+    let scratch = Scratch::new("rw-wrfbatch-stored-planes", "user-plane");
     let wrfout = stored_plane_fixture::write(scratch.path());
     let store_root = scratch.path().join("store");
 
@@ -123,7 +99,7 @@ fn user_added_two_d_plane_reaches_the_store_by_default() {
 /// unit-checked field with a raw one.
 #[test]
 fn stored_plane_ingest_does_not_displace_the_science_suite() {
-    let scratch = Scratch::new("no-shadow");
+    let scratch = Scratch::new("rw-wrfbatch-stored-planes", "no-shadow");
     let wrfout = stored_plane_fixture::write(scratch.path());
     let store_root = scratch.path().join("store");
 
@@ -152,7 +128,7 @@ fn stored_plane_ingest_does_not_displace_the_science_suite() {
 /// a user who does not want them has a documented way to say so.
 #[test]
 fn stored_planes_answer_the_skip_filter() {
-    let scratch = Scratch::new("skip");
+    let scratch = Scratch::new("rw-wrfbatch-stored-planes", "skip");
     let wrfout = stored_plane_fixture::write(scratch.path());
     let store_root = scratch.path().join("store");
 

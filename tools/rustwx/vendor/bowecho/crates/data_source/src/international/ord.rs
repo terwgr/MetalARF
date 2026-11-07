@@ -22,7 +22,7 @@
 //! ```
 //!
 //! Every object is ODIM_H5 (EUMETNET OPERA Data Information Model;
-//! Michelson et al., OPERA WP 2.1/2.2, v2.2-2.3): `PVOL/` holds full or
+//! Michelson et al., OPERA WP 2.1/2.2, v2.2-2.3) — `PVOL/` holds full or
 //! per-moment polar volumes, `SCAN/` holds single-sweep files. National
 //! publishing shapes differ (all observed live 2026-06-12):
 //!
@@ -44,7 +44,7 @@
 //!
 //! Velocity caveat: per the ORD API overview, "Dealiasing of VRADH is not
 //! performed consistently at the national level, and is currently not
-//! applied centrally within OPERA": BowEcho's own region-based dealiaser
+//! applied centrally within OPERA" — BowEcho's own region-based dealiaser
 //! runs on decoded velocity moments, so aliased national feeds still
 //! display correctly here.
 //!
@@ -162,8 +162,8 @@ const ORD_ARCHIVE_COUNTRIES: &[(&str, &str, &str)] = &[
 /// Codes and coordinates: the ORD EDR locations catalog
 /// (`https://api.meteogate.eu/eu-eumetnet-weather-radar/collections/observations/locations`,
 /// fetched 2026-06-12; updated with BEHEL from the live 2026-06-16 bucket;
-/// the 11 ES/AEMET sites (WIGOS `0-724-0-{code}`, live in ORD since
-/// 2026-06-23) added from the same catalog fetched 2026-07-07).
+/// the 11 ES/AEMET sites — WIGOS `0-724-0-{code}`, live in ORD since
+/// 2026-06-23 — added from the same catalog fetched 2026-07-07).
 /// Labels left blank by
 /// the EDR catalog (CH, NO, PL, RO) come from the EUMETNET OPERA radar
 /// database, `OPERA_RADARS_DB.json` (fetched 2026-06-12) from
@@ -263,9 +263,9 @@ const ORD_SITES: &[(&str, &str, f32, f32, bool)] = &[
 /// Which object directory a site publishes under.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ObjectKind {
-    /// `PVOL/`: assembled (or per-moment) polar volumes.
+    /// `PVOL/` — assembled (or per-moment) polar volumes.
     Pvol,
-    /// `SCAN/`: one file per sweep, all moments bundled.
+    /// `SCAN/` — one file per sweep, all moments bundled.
     Scan,
 }
 
@@ -661,7 +661,7 @@ impl IntlProvider for OrdProvider {
                 // read as an empty hour: falling through to an older slot
                 // would plan a stale frame under a different identity, and
                 // the poller would install it, then flip back next tick
-                // (review finding, the identity-flap mechanism).
+                // (review finding — the identity-flap mechanism).
                 let keys = list_hour_keys(dir, site_id, kind, hour)
                     .map_err(|err| format!("ORD '{site_id}': {err}"))?;
                 if keys.is_empty() {
@@ -992,7 +992,7 @@ fn site_label(code: &str, country: &str) -> String {
 }
 
 /// `2026/06/12/FR/frtou/` -> site `frtou`, as [`IntlSite`]s (codes outside
-/// the enabled countries (and the `OPERA/` composite pseudo-station) are
+/// the enabled countries — and the `OPERA/` composite pseudo-station — are
 /// dropped by the country-prefix lookup).
 fn sites_from_prefixes(common_prefixes: &[String]) -> Vec<IntlSite> {
     common_prefixes
@@ -1044,11 +1044,11 @@ fn list_hour_keys_from_base(
     let url = s3_style_listing_url(bucket_base, &prefix, None, None, 1000);
     let listing = fetch_s3_style_listing(&url)?;
     if listing.is_truncated {
-        // S3 lists ascending, so truncation would hide the NEWEST keys:
+        // S3 lists ascending, so truncation would hide the NEWEST keys —
         // error rather than plan from a silently incomplete hour (live
         // max observed is ~120 keys/site-hour against the 1000 cap).
         return Err(format!(
-            "hour listing truncated at 1000 keys for {prefix}: refusing an incomplete plan"
+            "hour listing truncated at 1000 keys for {prefix} — refusing an incomplete plan"
         ));
     }
     Ok(listing.keys)
@@ -1131,7 +1131,7 @@ impl OrdFile {
         }
     }
 
-    /// Every moment token is unfiltered reflectivity (TH/TV): the only
+    /// Every moment token is unfiltered reflectivity (TH/TV) — the only
     /// shape the DBZH shadow rule may drop.
     fn is_unfiltered_reflectivity_only(&self) -> bool {
         self.moments
@@ -1150,9 +1150,9 @@ impl OrdFile {
 /// SCAN sweeps group per (elevation, moment set). A TH-only file whose
 /// elevation set is identical to a chosen DBZH file is dropped: a lone TH
 /// decodes as that part's reflectivity and collides with (and loses to)
-/// the DBZH merge base on every cut, observed live on Norway's split
+/// the DBZH merge base on every cut — observed live on Norway's split
 /// feed, where the TH file is also the largest part. Identity follows the
-/// DWD grammar (site, anchor stamp, part count, FNV-1a of the key set)
+/// DWD grammar — site, anchor stamp, part count, FNV-1a of the key set —
 /// a pure function of the listing per the [`FramePlan`] stability
 /// contract.
 #[cfg(test)]
@@ -1296,7 +1296,7 @@ fn plan_candidate_from_chosen_files(
     });
 
     // Reflectivity-bearing parts first (merge base), then by coverage and
-    // sweep elevation: deterministic for identity stability.
+    // sweep elevation — deterministic for identity stability.
     chosen.sort_by(|left, right| {
         left.moment_rank()
             .cmp(&right.moment_rank())
@@ -2008,7 +2008,7 @@ mod tests {
     fn split_pvol_window_pairs_offset_velocity_with_reflectivity() {
         // Norway offsets VRADH (T1456, 8 elevations) one minute after
         // DBZH/TH (T1455, 10 elevations) and alternates a 12-elevation
-        // scan strategy on the adjacent stamps: the trailing window must
+        // scan strategy on the adjacent stamps — the trailing window must
         // keep exactly the newest pair, with the TH file (shadowed by
         // DBZH over the identical elevations) dropped.
         let plan =
@@ -2347,7 +2347,7 @@ mod tests {
     fn fresh_reflectivity_only_candidate_outranks_hours_old_complete_frame() {
         // Velocity-lane outage: the newest lookback slot yields DBZH-only
         // cycles while the last complete DBZH+VRADH pair is three hours
-        // old. Freshness must win: completeness may not pin `latest` to
+        // old. Freshness must win — completeness may not pin `latest` to
         // hours-old data.
         let elevs = "0.5_1.5_2.5_3.5_5.4_9.1_15.0_23.8";
         let fresh_keys = vec![format!(
@@ -2614,7 +2614,7 @@ mod tests {
     #[test]
     fn dbzh_shadow_drops_only_literal_th_or_tv_sets() {
         // Review finding: a hypothetical TH_VRADH split shares the TH rank
-        // but carries velocity, the shadow rule must keep it.
+        // but carries velocity — the shadow rule must keep it.
         let elevs = "0.5_1.5_2.5";
         let keys = vec![
             format!("2026/06/12/NO/nohur/PVOL/nohur@20260612T1455@{elevs}@DBZH.h5"),
@@ -2816,7 +2816,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "live ORD full-day archive catalog probe: run manually with --ignored"]
+    #[ignore = "live ORD full-day archive catalog probe — run manually with --ignored"]
     fn ord_live_full_day_catalog_is_not_capped_at_twenty_scans() {
         let date = NaiveDate::from_ymd_opt(2026, 5, 30).unwrap();
         let cancel = AtomicBool::new(false);
@@ -2856,7 +2856,7 @@ mod tests {
     /// ODIM router, and (for split plans) merge. Network test; run with
     /// `cargo test -p data_source ord_live -- --ignored --nocapture`
     #[test]
-    #[ignore = "live ORD bucket probe: run manually with --ignored"]
+    #[ignore = "live ORD bucket probe — run manually with --ignored"]
     fn ord_live_roundtrip_lists_plans_downloads_and_decodes() {
         let provider = OrdProvider::new();
         let sites = provider.list_sites().expect("live ORD site list");
@@ -2909,11 +2909,11 @@ mod tests {
     /// Live decode of the LATEST volume from ALL 11 AEMET (Spain) sites
     /// through the full app path (plan → download → shared ODIM router).
     /// AEMET writes H5rad 2.4 with HDF5 version-2 object headers (OHDR) on
-    /// leaf metadata groups: the dialect hdf5lite gained for v0.30 after
+    /// leaf metadata groups — the dialect hdf5lite gained for v0.30 after
     /// the v0.30-RC1 live-poll regression on espdg. Network test; run with
     /// `cargo test -p data_source ord_live_spain -- --ignored --nocapture`
     #[test]
-    #[ignore = "live ORD bucket probe, run manually with --ignored"]
+    #[ignore = "live ORD bucket probe — run manually with --ignored"]
     fn ord_live_spain_decodes_all_11_aemet_sites() {
         let provider = OrdProvider::new();
         let sites = provider.list_sites().expect("live ORD site list");

@@ -53,6 +53,7 @@ from woof.core.thompson_aerosol_launch import aerosol_kernel
 from woof.core.thompson_aerosol_launch import (
     COLD_MODULE,
     launch_grid,
+    add_optional_fields,
     validate_fields,
     validate_fp64_fortran_table,
 )
@@ -130,7 +131,9 @@ def launch_aa_cold_network(
         ice_deposition_partition, ice_to_snow_mass, ice_to_snow_number,
         rain_snow_tables, rain_graupel_tables, rain_freezing_tables,
         rain_cloud_efficiency, cloud_freezing_tables,
-        dt: float) -> None:
+        dt: float, *, qcten=None, qrten=None, nrten=None, qiten=None,
+        niten=None, snow_cloud_efficiency=None, qvten=None,
+        tten=None, qsten=None, qgten=None, ngten=None) -> None:
     """Apply the complete aerosol-aware sub-freezing source group.
 
     Every array is float32, C-contiguous and of one common shape.  The
@@ -146,6 +149,29 @@ def launch_aa_cold_network(
     ``ng1d``; ``snow_velocity_boost`` is WRF's ``vts_boost`` and is reset to
     1.0 for **every** cell, including warm and hydrometeor-free ones,
     because the later column sedimentation kernel consumes the whole field.
+
+    ``qcten`` (keyword, optional) is WRF's per-kilogram-per-second cloud
+    water accumulator.  Given, ``qc`` is the read-only entry cloud and the
+    stage's cloud tendency is ADDED to ``qcten``, to be applied once with
+    every other cloud tendency (:3975); the production adapter passes it.
+    Left ``None``, the tendency is applied to ``qc`` in place.
+
+    ``snow_cloud_efficiency`` (keyword) is WRF's ``t_Efsw`` (100, 100), the
+    snow-collects-cloud-water efficiency table (:2407).  The v4.6.1
+    generation reads it and refuses to run without it: the breakage it
+    prevents is snow riming computed from no table at all.  The WRF 3.9
+    fork generation does not read it.
+
+    ``qvten``/``tten`` (keywords, both or neither) are WRF's vapour and
+    temperature accumulators.  Given, the sources are added to them in
+    WRF's form (:2982, :3164-3172), ``qv`` stays the entry vapour and
+    ``temperature`` becomes ``t1d + DT*tten``.
+
+    ``qsten``/``qgten``/``ngten`` (keywords, all three or none) are WRF's
+    snow, graupel and graupel-number accumulators.  Given, the sources are
+    added to them and ``qs``, ``qg`` and the graupel number stay the entry
+    state; the snow and graupel fallout add their own tendencies and apply
+    the sums once (:4054-4059).
     """
     from woof.metal.array import MetalArray
     if isinstance(qi, MetalArray):
@@ -162,10 +188,20 @@ def launch_aa_cold_network(
             *tuple(rain_snow_tables), *tuple(rain_graupel_tables),
             *tuple(rain_freezing_tables), rain_cloud_efficiency,
             *tuple(cloud_freezing_tables), dt, qi.size,
-            wrf39=(active_thompson_version() == "wrf_39_noaa"))
+            wrf39=(active_thompson_version() == "wrf_39_noaa"),
+            snow_cloud_efficiency=snow_cloud_efficiency,
+            qcten=qcten, qrten=qrten, nrten=nrten, qiten=qiten, niten=niten,
+            qvten=qvten, tten=tten, qsten=qsten, qgten=qgten, ngten=ngten)
         return
 
-    shape, size = validate_fields({
+    from woof.core.thompson_aerosol_launch import active_thompson_version
+    if snow_cloud_efficiency is None:
+        if active_thompson_version() != "wrf_39_noaa":
+            raise ValueError(
+                "the v4.6.1 cold network needs snow_cloud_efficiency "
+                "(t_Efsw); without it snow cannot rime")
+        snow_cloud_efficiency = rain_cloud_efficiency
+    fields = {
         "qi": qi,
         "ni": ni,
         "qs": qs,
@@ -184,7 +220,15 @@ def launch_aa_cold_network(
         "nifaten": nifaten,
         "graupel_number_shadow": graupel_number_shadow,
         "snow_velocity_boost": snow_velocity_boost,
-    })
+    }
+    if qcten is not None:
+        fields["qcten"] = qcten
+    # With rain and ice accumulators, qr/nr/qi/ni remain read-only.
+    add_optional_fields(fields, qrten=qrten, nrten=nrten,
+                        qiten=qiten, niten=niten)
+    add_optional_fields(fields, qvten=qvten, tten=tten)
+    add_optional_fields(fields, qsten=qsten, qgten=qgten, ngten=ngten)
+    shape, size = validate_fields(fields)
     del shape
 
     validate_fp64_fortran_table(
@@ -196,6 +240,9 @@ def launch_aa_cold_network(
         "ice_to_snow_number", ice_to_snow_number, ICE_PARTITION_SHAPE)
     validate_fp64_fortran_table(
         "rain_cloud_efficiency", rain_cloud_efficiency,
+        RAIN_CLOUD_EFFICIENCY_SHAPE)
+    validate_fp64_fortran_table(
+        "snow_cloud_efficiency", snow_cloud_efficiency,
         RAIN_CLOUD_EFFICIENCY_SHAPE)
 
     groups = (
@@ -239,6 +286,9 @@ def launch_aa_cold_network(
          *resolved["rain_freezing_tables"],
          rain_cloud_efficiency,
          *resolved["cloud_freezing_tables"],
+         snow_cloud_efficiency,
+         qcten, qrten, nrten, qiten, niten, qvten, tten,
+         qsten, qgten, ngten,
          np.float32(dt), np.int32(size)))
 
 
@@ -247,7 +297,9 @@ def launch_aa_cold_network_from_owner(
         nc_entry, nwfa_entry, nifa_entry,
         ncten, nwfaten, nifaten,
         graupel_number_shadow, snow_velocity_boost,
-        classic_table_owner, dt: float) -> None:
+        classic_table_owner, dt: float, *, qcten=None, qrten=None,
+        nrten=None, qiten=None, niten=None, qvten=None, tten=None,
+        qsten=None, qgten=None, ngten=None) -> None:
     """Launch the cold network from one verified classic table owner.
 
     Every coefficient this kernel needs already exists in the mp=8 table
@@ -282,6 +334,9 @@ def launch_aa_cold_network_from_owner(
         tables.rain_cloud_efficiency,
         tables.cloud_freezing_tables,
         dt,
+        qcten=qcten, qrten=qrten, nrten=nrten, qiten=qiten, niten=niten,
+        snow_cloud_efficiency=classic_table_owner.t_Efsw,
+        qvten=qvten, tten=tten, qsten=qsten, qgten=qgten, ngten=ngten,
     )
 
 

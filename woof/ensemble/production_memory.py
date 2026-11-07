@@ -10,6 +10,56 @@ from woof.ensemble.admission import (
 )
 
 
+def cyclone_swath_memory_components(experiments, collector):
+    """Reserve completed members' device swaths before admitting the roster.
+
+    Capture keeps its maps and six-word fix rows until finish_run, including
+    members from previous waves. They therefore belong to the full roster,
+    not just to the concurrently live forecast. Bounds include CuPy's
+    allocation granularity and the temporary final stack of fix rows.
+    """
+    request = getattr(collector, 'cyclone_request', None)
+    if request is None:
+        return ()
+    from woof.core.clock import resolve_clock
+    from woof.tc_accumulator import validate_swath_request
+    validate_swath_request(request)
+    grid = request['common_grid']
+    points = grid['nx'] * grid['ny']
+    gid = request.get('grid_id', 2)
+    native_points = native_columns = samples = 0
+    for experiment in experiments:
+        domain = next(d for d in experiment.domains if d.grid_id == gid)
+        clock = resolve_clock(experiment)
+        spec = clock.spec(gid)
+        # Fixed clocks commit exactly one row per domain step. Adaptive
+        # clocks may split at output/parent deadlines: one positive tick is
+        # the rigorous lower bound, deliberately conservative for admission.
+        step = (1 if any(d.run.use_adaptive_time_step for d in experiment.domains)
+                else spec.step_ticks)
+        samples = max(samples, clock.run_ticks // step + 1)
+        n = domain.run.nx * domain.run.ny
+        native_points = max(native_points, n)
+        native_columns = max(native_columns, n * (domain.run.nz + 1))
+    # CommonWind owns 85 bytes/cell with rain enabled, including float64
+    # interpolation/coast workspaces; Capture adds 10 bytes/cell. Round
+    # that to 96 and allow 40 separately rounded allocations. Native
+    # coordinates and rotation own four float32 planes. Each separate
+    # six-float64 fix row occupies a 512-byte pool block, not 48 bytes.
+    retained = 96 * points + 16 * native_points + 40 * 512 + samples * 512
+    # One active bind/observe has at most 32 double common-grid planes;
+    # pressure/gust diagnosis has four native 3-D float32 temporaries.
+    transient = 256 * points + 16 * native_columns + samples * 48
+    return (
+        MemoryComponent('cyclone_full_roster_swaths', 'products',
+            fixed_bytes=collector.members * retained, basis='envelope',
+            evidence='all member CommonWind/Capture retained arrays and 512-byte per-step fix rows, including previous waves'),
+        MemoryComponent('cyclone_swath_call_peak', 'products',
+            fixed_bytes=transient, basis='envelope',
+            evidence='one bind/diagnostic transient workspace and the final six-word fix stack; adaptive rows bounded by positive clock ticks'),
+    )
+
+
 def ordinary_output_memory_components(experiment, collector, *, other_experiments=()):
     """Declared collector buffers for every possible original domain shape.
 
@@ -38,9 +88,13 @@ def ordinary_output_memory_components(experiment, collector, *, other_experiment
         upload = BatchMemoryPlan(tuple(spec for spec in full.arrays if spec.name not in existing), reserved_bytes=0)
         uploads.append(upload.required_bytes(1))
         replay = replay_memory_plan_for_shape(collector.requests, shape,
-            members=collector.members, tile_rows=collector.tile_rows)
+            members=collector.members, tile_rows=collector.tile_rows,
+            member_weights=getattr(collector, "member_weights", None))
         replays.append(replay.required_bytes(collector.members))
-    return (
+    points = getattr(collector, "nextgen_points", None)
+    return cyclone_swath_memory_components((experiment,) + tuple(other_experiments), collector) + (() if points is None else (MemoryComponent("nextgen_reach_products", "products",
+        fixed_bytes=points.options["device_budget_bytes"],
+        evidence="private per-card CUDA pool hard limit; output-deadline integer counts, IDs and final merge"),)) + (
         MemoryComponent("ensemble_diagnostic_qpf_buffers", "products",
             plan=BatchMemoryPlan(tuple(retained), reserved_bytes=0),
             evidence="collector.memory_plan for every distinct domain shape, including initial/earlier and 1/3/6 h QPF surfaces"),
@@ -53,7 +107,7 @@ def ordinary_output_memory_components(experiment, collector, *, other_experiment
 
 def ordinary_ensemble_memory_model(estimate, experiment, collector, *, inventory_id,
                                    stochastic_provider=None, fft_workspace_bytes=0,
-                                   other_variants=()):
+                                   other_variants=(), initial_wind=False):
     """Add ensemble allocations to the original complete forecast envelope."""
     from woof.core.preflight import FORECAST_POOL_HEADROOM
     variants = ((estimate, experiment),) + tuple(other_variants)
@@ -72,6 +126,10 @@ def ordinary_ensemble_memory_model(estimate, experiment, collector, *, inventory
                       for _, exp in variants]
         external += max(stochastic, key=lambda components: sum(component.inventory(1)["required_bytes"]
                         for component in components))
+    if initial_wind:
+        external += (MemoryComponent("uniform_wind_initialization_seed", "stochastic",
+            fixed_bytes=512, basis="envelope",
+            evidence="one uint64 member seed rounded to the ordinary CuPy pool's 512-byte block; two in-place wind launches"),)
     # The forecast envelope already contains its original pool headroom,
     # context/kernel backing, health inventory and external minimum reserve.
     # Apply the same measured fractional headroom only to the new arrays.

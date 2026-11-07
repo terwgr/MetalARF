@@ -20,6 +20,8 @@ mod projected_map;
 mod projection;
 pub mod radar_tables;
 mod rasterize;
+#[cfg(any(windows, target_os = "linux"))]
+mod rasterize_cuda;
 mod render;
 mod request;
 mod text;
@@ -37,14 +39,11 @@ pub use layout_plan::{
 };
 pub use rasterize::{cuda_rasterize_stats, print_cuda_rasterize_stats_if_enabled};
 
-/// Always a no-op in this port (the upstream cuda feature was stripped);
-/// kept so downstream callers compile unchanged.
-pub fn print_cuda_rasterize_phase_timing_if_enabled() {}
 pub use features::{
     BasemapDetail, BasemapStyle, StyledLonLatLayer, StyledLonLatPolygonLayer,
-    checked_in_natural_earth_110m_root, load_styled_basemap_features,
-    load_styled_basemap_features_for, load_styled_basemap_features_for_detail,
-    load_styled_basemap_polygons, load_styled_basemap_polygons_for, load_styled_conus_features_for,
+    checked_in_natural_earth_110m_root, load_styled_basemap_features_for,
+    load_styled_basemap_features_for_detail,
+    load_styled_basemap_polygons_for, load_styled_conus_features_for,
     load_styled_conus_polygons_for,
 };
 pub use image::RgbaImage;
@@ -58,7 +57,7 @@ pub use projected_map::{
     GeographicBounds, ProjectedBasemap, ProjectedBasemapBuildOptions, ProjectedDomainBuildOptions,
     ProjectedFrameSource, ProjectedMap, ProjectedMapBuildOptions, build_projected_domain,
     build_projected_map, build_projected_map_with_options,
-    project_geographic_points_with_options,
+    project_geographic_points_with_options, project_geographic_rings_with_options,
 };
 pub use georeference::{
     PANEL_GEOREFERENCE_SCHEMA, PanelGeoReference, PlotRect, ResolvedProjection,
@@ -68,13 +67,11 @@ pub use render::{
     PngCompressionMode, PngWriteOptions, RenderImageTiming, RenderPngTiming,
     map_frame_aspect_ratio, map_frame_aspect_ratio_for_mode,
     map_frame_aspect_ratio_for_mode_with_chrome_scale,
-    map_frame_aspect_ratio_for_mode_with_domain_frame,
     map_frame_aspect_ratio_for_mode_with_domain_frame_and_chrome_scale, render_to_image_profile,
     render_to_png_profile as profile_render_to_png,
 };
 pub use request::{
     ChromeScale, Color, ColorScale, ContourLayer, ContourLinePattern, ContourStyle,
-    DifferenceSubject,
     DiscreteColorScale, DomainFrame, DomainFrameSource, ExtendMode, Field2D, GeographicClipBounds,
     GridShape, InverseRasterProjection, LatLonGrid, MapRenderRequest, ProductKey, ProductMaturity,
     ProductSemanticFlag, ProductSemantics, ProjectedDomain, ProjectedExtent,
@@ -118,6 +115,12 @@ pub use crate::text::{format_tick, format_tick_labels};
 // with (`rw_compare`): the same font owner and the same pixel sizes the
 // panels' own titles use, so a header band does not bring a second face.
 pub use crate::text::{draw_text, draw_text_bold, text_width, text_width_bold};
+// The stroke, fill and barb primitives a point product (sounding, meteogram)
+// draws with, so its lines and wind barbs are the maps' own.
+pub use crate::draw::{
+    draw_circle_fill_aa, draw_circle_stroke_aa, draw_line_aa_width, draw_polyline_aa,
+    draw_wind_barb, fill_polygon,
+};
 pub use crate::theme::{
     FooterTheme, MeshTheme, PresentationTheme, RenderTheme, RenderThemeFile, THEME_ENV,
     active_theme, install_theme,
@@ -735,14 +738,23 @@ impl RustRenderer {
         png_timing.png_write_ms = file_write_ms;
         let (georeference, georeference_absent_reason) =
             panel_georeference_for_save(request, &png_timing.image_timing);
-        Ok(RenderSaveTiming {
+        let timing = RenderSaveTiming {
             state_timing,
             png_timing,
             file_write_ms,
             total_ms: total_start.elapsed().as_millis(),
             georeference,
             georeference_absent_reason,
-        })
+        };
+        // Separate diagnostic runs can expose timers already collected by the
+        // renderer without adding timers or serialization to ordinary renders.
+        static TRACE_TIMING: OnceLock<bool> = OnceLock::new();
+        if *TRACE_TIMING.get_or_init(|| std::env::var_os("RUSTWX_TRACE_RENDER_TIMING").is_some()) {
+            eprintln!("RUSTWX_RENDER_TIMING {}", serde_json::json!({
+                "path": path, "timing": &timing, "cuda": cuda_rasterize_stats(),
+            }));
+        }
+        Ok(timing)
     }
 }
 
@@ -1008,7 +1020,14 @@ fn with_render_state_profile_with_style<T>(
                 } else {
                     plot_style.render_density(request.render_density)
                 },
-                legend: request.legend,
+                // A theme that names both a product's band edges and one
+                // colour per band (the tc wind ladder) draws those bands as
+                // listed, with a tick on every edge (34, 50, 64 ... kt).
+                legend: if theme::active_theme().product_has_banded_scale(&request.field.product) {
+                    LegendControls { mode: LegendMode::Thresholds, ..request.legend }
+                } else {
+                    request.legend
+                },
             },
         )
     };
@@ -1186,9 +1205,21 @@ fn with_render_state_profile_with_style<T>(
         let contour_prep_ms = contour_start.elapsed().as_millis();
 
         let barb_start = Instant::now();
+        let direction_projection = request.resolved_projection.zip(projected_domain)
+            .filter(|_| request.wind_barbs.iter().any(|layer| layer.direction_arrows))
+            .map(|(projection, domain)| {
+            std::sync::Arc::new(crate::overlay::DirectionProjection {
+                projection,
+                extent: MapExtent { x_min: domain.extent.x_min, x_max: domain.extent.x_max,
+                    y_min: domain.extent.y_min, y_max: domain.extent.y_max },
+                lat_lon: request.field.grid.lat_deg.iter().copied().zip(request.field.grid.lon_deg.iter().copied()).collect(),
+            })
+        });
         let mut barbs = Vec::with_capacity(request.wind_barbs.len());
         for layer in &request.wind_barbs {
             barbs.push(BarbOverlay {
+                direction_projection: if layer.direction_arrows { direction_projection.clone() } else { None },
+                direction_arrows: layer.direction_arrows,
                 u: layer.u.clone(),
                 v: layer.v.clone(),
                 ny: shape.ny,
@@ -1231,7 +1262,7 @@ fn with_render_state_profile_with_style<T>(
             colorbar: request.colorbar,
             // Product preparation has already converted this field. Its
             // own units describe the displayed values and legend scale.
-            colorbar_units: Some(request.field.units.clone()),
+            colorbar_units: legend_units_label(&request.field.units),
             title: request.title.clone().or(default_title),
             subtitle_left: request.subtitle_left.clone(),
             subtitle_center: request.subtitle_center.clone(),
@@ -1286,6 +1317,7 @@ fn with_render_state_profile_with_style<T>(
             barbs,
             streamlines,
             presentation,
+            empty_note: request.empty_note.clone(),
         };
 
         let state_timing = RenderStateTiming {
@@ -1334,6 +1366,23 @@ pub fn build_colormap(scale: &ColorScale, options: ColormapBuildOptions) -> Leve
 /// reproduce the production colorbar's numbers exactly.
 pub fn colorbar_ticks(cmap: &LeveledColormap, cbar_tick_step: Option<f64>) -> Vec<f64> {
     crate::render::legend_ticks(cmap, cbar_tick_step)
+}
+
+/// The unit label a colour bar carries for a field stored in `units`, or
+/// `None` for a dimensionless field.
+///
+/// WHAT BREAKAGE THIS PREVENTS (gate law): a dimensionless field (a flag, an
+/// index such as Haines, a 0/1 category) stores its units as `1` or `0/1`,
+/// and the bar printed that above itself, where it read as a tick value (R10
+/// look, 2.9.4). The title already names such a quantity; a bare number is
+/// not a unit.
+pub fn legend_units_label(units: &str) -> Option<String> {
+    let trimmed = units.trim();
+    let dimensionless = matches!(
+        trimmed.to_ascii_lowercase().as_str(),
+        "" | "1" | "0/1" | "-" | "none" | "dimensionless" | "unitless" | "(dimensionless)"
+    );
+    (!dimensionless).then(|| units.to_string())
 }
 
 const OVERLAY_ONLY_FILL_VALUE: f64 = 0.5;

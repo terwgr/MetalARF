@@ -16,6 +16,8 @@ use crate::model::FieldSpec;
 use crate::node::Node;
 use crate::refusal::{frame_invalid, mapping_invalid, Result};
 
+type DerivedField = (ArrayD<f64>, Vec<String>, Vec<String>);
+
 /// WRF `module_model_constants` Teten/Bolton saturation constants.
 const SVP1: f64 = 0.6112;
 const SVP2: f64 = 17.67;
@@ -81,7 +83,7 @@ pub fn complete_geopotential_height(
     operands: &impl CanonicalFields,
     name: &str,
     units: &str,
-) -> Result<Option<(ArrayD<f64>, Vec<String>, Vec<String>)>> {
+) -> Result<Option<DerivedField>> {
     let mut resolved: Vec<&CanonicalField> = Vec::with_capacity(HYPSOMETRIC_OPERANDS.len());
     for (operand, unit) in HYPSOMETRIC_OPERANDS {
         let Some(field) = operands.get_field(operand) else {
@@ -385,10 +387,26 @@ impl CanonicalField {
                 axes
             )));
         }
-        if values.iter().any(|value| value.is_infinite()) {
+        // One scan for both counts, over chunks on every core when the
+        // array is contiguous in memory (in any axis order): a whole/any
+        // answer, so neither the split nor the order can move it.  Named breakage: a 3 km CONUS native-level valid
+        // time's 762 MB fields were scanned twice each on one thread,
+        // about 1.3 s of every frame's plan with the pool idle.
+        let (infinite, nan) = match values.as_slice_memory_order() {
+            Some(flat) => crate::threads::install(|| {
+                use rayon::prelude::*;
+                flat.par_chunks(1 << 20)
+                    .map(|chunk| chunk.iter().fold((false, 0usize), |(infinite, nan), value| {
+                        (infinite || value.is_infinite(), nan + usize::from(value.is_nan()))
+                    }))
+                    .reduce(|| (false, 0), |a, b| (a.0 || b.0, a.1 + b.1))
+            }),
+            None => (values.iter().any(|value| value.is_infinite()), array::count_nan(values)),
+        };
+        if infinite {
             return Err(frame_invalid(format!("{} contains infinity", name)));
         }
-        if array::count_nan(values) != missing_count {
+        if nan != missing_count {
             return Err(frame_invalid(format!(
                 "{} missing count does not match its data",
                 name
@@ -424,7 +442,7 @@ pub fn derivation_dependencies(operation: &Node, vertical: &Node, name: &str) ->
     let kind = operation.get("operation").and_then(Node::as_str)
         .ok_or_else(|| mapping_invalid(format!("derivation for {name} has no operation")))?;
     let labels: &[&str] = match kind {
-        "copy" | "soil_surface_node_from_shallowest" | "height_from_interfaces" | "mass_fraction_rebase" => &["source"],
+        "copy" | "soil_surface_node_from_shallowest" | "height_from_interfaces" | "mass_from_interfaces" | "mass_fraction_rebase" => &["source"],
         "wind_speed" => &["u", "v"],
         "geopotential_height" => &["geopotential"],
         "pressure_from_vertical_coordinate" => &[],
@@ -433,6 +451,8 @@ pub fn derivation_dependencies(operation: &Node, vertical: &Node, name: &str) ->
         "relative_humidity_from_dewpoint" => &["dewpoint", "temperature"],
         "specific_humidity_from_rh" => &["temperature", "pressure", "relative_humidity"],
         "specific_humidity_from_dewpoint" => &["temperature", "pressure", "dewpoint"],
+        "air_temperature_from_potential_temperature" => &["potential_temperature", "pressure"],
+        "specific_humidity_from_mixing_ratio" => &["mixing_ratio"],
         "volumetric_soil_moisture_from_layer_mass" => &["layer_mass"],
         "surface_pressure_from_sea_level" =>
             &["sea_level_pressure", "level_height", "pressure", "surface_height"],
@@ -481,6 +501,8 @@ pub fn derivation_shape_operand(operation: &Node) -> Option<(&'static str, bool)
         "geopotential_height" => Some(("geopotential", false)),
         "relative_humidity_from_dewpoint" => Some(("dewpoint", false)),
         "specific_humidity_from_rh" | "specific_humidity_from_dewpoint" => Some(("temperature", false)),
+        "air_temperature_from_potential_temperature" => Some(("potential_temperature", false)),
+        "specific_humidity_from_mixing_ratio" => Some(("mixing_ratio", false)),
         "volumetric_soil_moisture_from_layer_mass" => Some(("layer_mass", false)),
         _ => None,
     }
@@ -649,7 +671,7 @@ pub fn evaluate_derivation(
     field: &FieldSpec<'_>,
     name: &str,
     vertical: &Node,
-) -> Result<Option<(ArrayD<f64>, Vec<String>, Vec<String>)>> {
+) -> Result<Option<DerivedField>> {
     let kind = operation
         .get("operation")
         .and_then(Node::as_str)
@@ -728,6 +750,24 @@ pub fn evaluate_derivation(
             }
             (&source.values / &denominator, source.axes.clone(), references)
         }
+        "mass_from_interfaces" => {
+            let Some(source) = dependency(operation, "source", available) else { return Ok(None); };
+            let nz = collection.vertical_values.len();
+            let ny = collection.latitude.len();
+            let nx = collection.longitude.len();
+            if source.axes != ["half_level", "y", "x"]
+                || source.units != field.raw.get("units").and_then(|u| u.get("source")).and_then(Node::as_str).unwrap_or("")
+                || source.values.shape() != [nz + 1, ny, nx]
+                || source.values.iter().any(|v| !v.is_finite()) {
+                return Err(frame_invalid(format!("{name} requires N+1 finite interface values with matching units on half_level,y,x")));
+            }
+            let input = array::contiguous(&source.values);
+            let plane = ny * nx;
+            let values = (0..nz * plane).map(|i| 0.5 * (input[i] + input[i + plane])).collect();
+            (ArrayD::from_shape_vec(vec![nz, ny, nx], values)
+                .map_err(|e| frame_invalid(e.to_string()))?,
+             vec!["vertical".into(), "y".into(), "x".into()], source.source_references.clone())
+        }
         "height_from_interfaces" => {
             let Some(source) = dependency(operation, "source", available) else { return Ok(None); };
             if source.axes != ["half_level", "y", "x"] || source.units != "m" {
@@ -794,7 +834,7 @@ pub fn evaluate_derivation(
                 return Err(mapping_invalid(format!("{name} declares invalid gravity")));
             }
             let values: Vec<f64> = array::contiguous(&geopotential.values)
-                .into_iter()
+                .iter()
                 .map(|value| value / gravity)
                 .collect();
             (
@@ -1038,6 +1078,86 @@ pub fn evaluate_derivation(
                     .expect("shape preserved elementwise"),
                 axes,
                 references,
+            )
+        }
+        "air_temperature_from_potential_temperature" => {
+            // T = theta * (p / p0) ** kappa with the PRODUCER's kappa and p0
+            // (`mapped_source._evaluate_derivation`, same defaults: WRF's 2/7
+            // and 1e5 Pa).
+            let (Some(theta), Some(pressure)) = (
+                dependency(operation, "potential_temperature", available),
+                dependency(operation, "pressure", available),
+            ) else {
+                return Ok(None);
+            };
+            if theta.axes != pressure.axes || theta.values.shape() != pressure.values.shape() {
+                return Err(frame_invalid(format!(
+                    "{name} potential temperature and pressure disagree in axes or shape"
+                )));
+            }
+            if theta.units != "K" || pressure.units != "Pa" {
+                return Err(frame_invalid(format!(
+                    "{name} requires potential temperature in K and pressure in Pa"
+                )));
+            }
+            let reference = operation
+                .field("reference_pressure_pa")
+                .and_then(Node::as_f64)
+                .unwrap_or(100000.0);
+            let kappa = operation
+                .field("kappa")
+                .and_then(Node::as_f64)
+                .unwrap_or(2.0 / 7.0);
+            if !reference.is_finite() || reference <= 0.0 || !kappa.is_finite() || kappa <= 0.0 || kappa >= 1.0 {
+                return Err(mapping_invalid(format!(
+                    "{name} declares an invalid reference pressure or kappa"
+                )));
+            }
+            let theta_flat = array::contiguous(&theta.values);
+            let pressure_flat = array::contiguous(&pressure.values);
+            let mut values = Vec::with_capacity(theta_flat.len());
+            for (t, p) in theta_flat.iter().copied().zip(pressure_flat.iter().copied()) {
+                if t.is_finite() && p.is_finite() && (t <= 0.0 || p <= 0.0) {
+                    return Err(frame_invalid(format!(
+                        "{name} requires positive potential temperature and pressure"
+                    )));
+                }
+                values.push(t * (p / reference).powf(kappa));
+            }
+            let mut references = theta.source_references.clone();
+            references.extend(pressure.source_references.iter().cloned());
+            (
+                ArrayD::from_shape_vec(IxDyn(theta.values.shape()), values)
+                    .expect("shape preserved elementwise"),
+                theta.axes.clone(),
+                references,
+            )
+        }
+        "specific_humidity_from_mixing_ratio" => {
+            // q = r / (1 + r); initialization's r = q / (1 - q) inverts it.
+            let Some(ratio) = dependency(operation, "mixing_ratio", available) else {
+                return Ok(None);
+            };
+            if ratio.units != "kg kg-1" {
+                return Err(frame_invalid(format!(
+                    "{name} requires a mixing ratio in kg kg-1"
+                )));
+            }
+            let flat = array::contiguous(&ratio.values);
+            let mut values = Vec::with_capacity(flat.len());
+            for r in flat.iter().copied() {
+                if r.is_finite() && r <= -1.0 {
+                    return Err(frame_invalid(format!(
+                        "{name} mixing ratio at or below -1 has no specific humidity"
+                    )));
+                }
+                values.push(r / (1.0 + r));
+            }
+            (
+                ArrayD::from_shape_vec(IxDyn(ratio.values.shape()), values)
+                    .expect("shape preserved elementwise"),
+                ratio.axes.clone(),
+                ratio.source_references.clone(),
             )
         }
         "volumetric_soil_moisture_from_layer_mass" => {
@@ -1565,6 +1685,7 @@ mod tests {
             grid_fingerprint: "fixture-grid".to_owned(),
             hybrid_a: Vec::new(),
             hybrid_b: Vec::new(),
+            original_pressure_hpa: None,
         };
         let mut available = std::collections::BTreeMap::new();
         let mut slp = constant_field("air_pressure_at_mean_sea_level", &["y", "x"], &[1, 2], 101_300.0);
@@ -1695,6 +1816,7 @@ mod tests {
             grid_fingerprint: "fixture-grid".to_owned(),
             hybrid_a: A_HALF.to_vec(),
             hybrid_b: B_HALF.to_vec(),
+            original_pressure_hpa: None,
         }
     }
 
@@ -1730,6 +1852,26 @@ mod tests {
                 "units": {"source": "Pa", "target": "Pa"},
                 "location": "mass", "missing": {"kind": "reject"}}"#,
         )
+    }
+
+    #[test]
+    fn interface_velocity_averages_signed_nonmonotonic_values() {
+        let collection = hybrid_collection();
+        let mut source = constant_field("w", &["half_level","y","x"], &[4,2,2],0.0);
+        source.units = "m s-1".into();
+        source.values = ArrayD::from_shape_vec(IxDyn(&[4,2,2]),
+            [0.0,10.0,-6.0,0.0].iter().flat_map(|v|[ *v;4 ]).collect()).unwrap();
+        let mut available = std::collections::BTreeMap::new();
+        available.insert("w".into(),source);
+        let operation = parse_node(r#"{"operation":"mass_from_interfaces","source":"w"}"#);
+        let node = parse_node(r#"{"source_axes":["vertical","y","x"],"target_axes":["vertical","y","x"],"units":{"source":"m s-1","target":"m s-1"}}"#);
+        let field = FieldSpec{name:"vertical_velocity".into(),raw:&node};
+        let vertical = parse_node(r#"{"kind":"model_level","units":"1"}"#);
+        let (values,axes,_) = evaluate_derivation(&operation,&available,&collection,&field,"vertical_velocity",&vertical).unwrap().unwrap();
+        assert_eq!(axes,["vertical","y","x"]);
+        assert_eq!(array::contiguous(&values),[5.0,2.0,-3.0].iter().flat_map(|v|[*v;4]).collect::<Vec<_>>());
+        available.get_mut("w").unwrap().values[[1,0,0]]=f64::NAN;
+        assert!(evaluate_derivation(&operation,&available,&collection,&field,"vertical_velocity",&vertical).is_err());
     }
 
     #[test]

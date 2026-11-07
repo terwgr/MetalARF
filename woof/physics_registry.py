@@ -332,16 +332,42 @@ def canonical_sha256(value: object) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
+#: The registry object this module loaded, serialised once in document order
+#: with its canonical hash.  The registry is JSON-origin data
+#: (:func:`_load_registry`), so re-parsing that text gives the same
+#: independent dicts, lists and scalars, in the same order, as a ``deepcopy``
+#: -- at a fraction of the cost.  Measured on one cell of
+#: tests/test_physics_combination_matrix.py (1,429 tuples): the 2,104
+#: deepcopies of the document were the bulk of the cell, which is what left
+#: one xdist worker on one core after the other seven had finished.  The
+#: fast path applies only while ``_REGISTRY`` is still this loaded object:
+#: a test or tool that installs an edited document in its place, and may go
+#: on editing it, gets the original deepcopy and per-call hash.
+_BUILTIN_REGISTRY = _REGISTRY
+_BUILTIN_REGISTRY_TEXT = json.dumps(_REGISTRY, ensure_ascii=False, allow_nan=False)
+_BUILTIN_REGISTRY_SHA256: str | None = None
+
+
 def physics_registry() -> dict[str, object]:
     """Return an independent copy of the immutable built-in registry."""
 
+    if _REGISTRY is _BUILTIN_REGISTRY:
+        return json.loads(_BUILTIN_REGISTRY_TEXT, parse_constant=_reject_json_constant)
     return deepcopy(_REGISTRY)
 
 
 def registry_sha256(registry: Mapping[str, object] | None = None) -> str:
     """Return the semantic hash of the selected registry document."""
 
-    return canonical_sha256(physics_registry() if registry is None else registry)
+    global _BUILTIN_REGISTRY_SHA256
+    if registry is not None:
+        return canonical_sha256(registry)
+    if _REGISTRY is not _BUILTIN_REGISTRY:
+        return canonical_sha256(_REGISTRY)
+    if _BUILTIN_REGISTRY_SHA256 is None:
+        # The built-in document never changes in-process; hash it once.
+        _BUILTIN_REGISTRY_SHA256 = canonical_sha256(_BUILTIN_REGISTRY)
+    return _BUILTIN_REGISTRY_SHA256
 
 
 # ------------------------------------------------ physics identity (A153)
@@ -422,6 +448,8 @@ REGISTRY_PHYSICS_IDENTITY_SCHEMA = "gpuwm-physics-registry-parts-v3"
 
 #: Top-level blocks no selection's physics identity binds.
 REGISTRY_BLOCKS_OUTSIDE_PHYSICS_IDENTITY: Mapping[str, str] = {
+    "diagnostic_packages": "passive package descriptions; selected parameters and compiled kernels bind the diagnostic identity",
+    "diagnostic_state": "WRF diagnostic field metadata; checkpoint inventory binds the actual fields",
     "template_aliases": "historical profile spellings, not executable settings",
     "authority": (
         "the registry's declarations of its own contracts and the WRF "
@@ -447,6 +475,12 @@ REGISTRY_BLOCKS_OUTSIDE_PHYSICS_IDENTITY: Mapping[str, str] = {
     "warning_policy": (
         "which maturity tiers print a warning; it decides what is said "
         "about a run, never what runs (maturity_never_blocks)"),
+    "system_suites": (
+        "rows describing another forecast system's suites in this engine's "
+        "terms (woof/system_suites.py): no template, route or default "
+        "resolves to one, so they decide nothing a selection runs; a "
+        "profile that imitates a suite carries the settings itself and is "
+        "bound through them"),
     "templates": (
         "bound per part: only the profile a receipt names "
         "(templates.<profile>)"),
@@ -473,6 +507,7 @@ REGISTRY_EVIDENCE_RECORDS: Mapping[str, str] = {
 #: string, a list of strings, or null).  A field of the same name that
 #: holds an object is walked, not dropped.
 REGISTRY_DOCUMENTATION_FIELDS: Mapping[str, str] = {
+    "implementation_origin": "implementation provenance for display; no numerical consumer reads it",
     # User-facing caveats.  They cite file:line and are re-pinned when the
     # cited code moves; both A153 cases were edits here.
     "warnings": "user-facing caveats with file:line citations",
@@ -874,6 +909,54 @@ def _selected_option_ids(options: Mapping[str, object] | None,
     return (wanted,) if isinstance(wanted, str) else tuple(wanted or ())
 
 
+def _unselected_identity_extensions(components, chosen):
+    """Additive option facts bind when that option enters the selection.
+
+    Established transition rows remain bound globally as in the prior schema;
+    adding an unused option must not invalidate an existing prepared proof.
+    """
+    excluded = {}
+    for component_id, component in components.items():
+        if not isinstance(component, Mapping):
+            continue
+        selected = set(chosen.get(component_id, ()))
+        excluded[component_id] = {
+            name: option for name, option in component.get("options", {}).items()
+            if name not in selected and isinstance(option, Mapping)
+            and option.get("physics_identity_extension", {}).get("transitions") is True}
+    return excluded
+
+
+def _transition_identity_scope(transitions, excluded):
+    if not isinstance(transitions, Mapping):
+        return transitions
+    return {name: {**policy, "cross_options": [
+        row for row in policy.get("cross_options", ())
+        if row.get("parent_option_id") not in excluded.get(policy.get("component_id"), {})
+        and row.get("child_option_id") not in excluded.get(policy.get("component_id"), {})]}
+        if isinstance(policy, Mapping) and "cross_options" in policy else policy
+        for name, policy in transitions.items()}
+
+
+def _option_identity_scope(option, excluded):
+    # MYNN's registry row carries a scheme-indexed F_QS table. Removing
+    # only unused additive IDs preserves the prior table and binds every
+    # established ID, including deliberate true/false changes to old IDs.
+    if not isinstance(option, Mapping):
+        return option
+    extension = option.get("extensions", {}).get("supplied_moisture_species")
+    if not isinstance(extension, Mapping):
+        return option
+    ids = {value for row in excluded.get("microphysics", {}).values()
+           for key, value in row.get("selectors", {}).items() if key == "mp_physics"}
+    if not ids:
+        return option
+    fields = {key: [value for value in values if value not in ids]
+              if key in {"flag_qs_true_microphysics_selectors", "flag_qs_false_microphysics_selectors"} else values
+              for key, values in extension.items()}
+    return {**option, "extensions": {**option["extensions"], "supplied_moisture_species": fields}}
+
+
 def registry_physics_part_sources(
         registry: Mapping[str, object] | None = None,
         *,
@@ -899,12 +982,13 @@ def registry_physics_part_sources(
         f"{component_id}.{option_id}"
         for component_id, chosen in chosen_by_component.items()
         for option_id in chosen}
+    excluded = {} if every else _unselected_identity_extensions(components, chosen_by_component)
     parts: dict[str, object] = {
         "document": {
             "schema": selected.get("schema"),
             "registry_version": selected.get("registry_version"),
         },
-        "transitions": selected.get("transitions"),
+        "transitions": _transition_identity_scope(selected.get("transitions"), excluded),
     }
     parameters = selected.get("parameters")
     if isinstance(parameters, Mapping):
@@ -931,7 +1015,7 @@ def registry_physics_part_sources(
             # An option the registry does not carry is a part of its own
             # (null), so a receipt that names one differs by name.
             parts[f"components.{component_id}.options.{option_id}"] = (
-                available.get(option_id))
+                _option_identity_scope(available.get(option_id), excluded))
     templates = selected.get("templates")
     templates = templates if isinstance(templates, Mapping) else {}
     for template_id in (tuple(templates) if every
@@ -1146,7 +1230,9 @@ def expert_template_ids_for_source(route: Mapping[str, object] | None,
 #: configuration whose resolved option violates it (a hand-edited JSON, a
 #: consumer added ahead of its rows).  Turbulence carries no identity row
 #: by design: ``configuration_sha256`` binds km_opt and its constants, and
-#: a row would be a sixth turbulence authority.
+#: a row would be a sixth turbulence authority; the operators'
+#: implementation is the one string
+#: ``woof.checkpoint_identity.DYCORE_MIXING_ALGORITHM_IDENTITY``.
 CONSUMER_ROW_CONTRACT: dict[str, dict[str, str]] = {
     "microphysics": {
         "restart_algorithm_identity": (
@@ -1206,6 +1292,10 @@ CONSUMER_ROW_CONTRACT: dict[str, dict[str, str]] = {
             "here"),
     },
     "pbl": {
+        "scalar_diffusion_exchange": (
+            "scalar_pblmix admission, the post-PBL diff4d coupling and VRAM "
+            "admission read the EXCH_H producer, its levels and the no-op "
+            "reason here"),
         "restart_algorithm_identity": (
             "the checkpoint writer names the PBL scheme at the first restart "
             "interval"),
@@ -1252,8 +1342,10 @@ CONSUMER_ROW_CONTRACT: dict[str, dict[str, str]] = {
     },
     "turbulence": {
         "restart_identity_binding": (
-            "records that km_opt is bound by configuration_sha256 and has no "
-            "identity table by design"),
+            "records that km_opt is bound by configuration_sha256, has no "
+            "per-option identity table by design, and that the mixing "
+            "operators' implementation is bound by the one "
+            "DYCORE_MIXING_ALGORITHM_IDENTITY string"),
     },
 }
 
@@ -1966,6 +2058,13 @@ def _parameter_error(spec: Mapping[str, object], value: object) -> str | None:
         reason = spec.get("unimplemented_reason")
         detail = f": {reason}" if isinstance(reason, str) and reason else ""
         return f"is declared but not implemented{detail}"
+    # A declared null default is the knob's "unset" value (diff_6th_factor2:
+    # null takes the scheme's own factor), and validate_run_config accepts
+    # it.  Refusing it made plan review refuse the registry's own default
+    # on every route that allows the key (tests/test_authority_agreement.py,
+    # 186 plans on tools.prepared_domain_tree_forecast).
+    if value is None and "default" in spec and spec["default"] is None:
+        return None
     expected = spec.get("type")
     if expected == "boolean":
         valid = isinstance(value, bool)
@@ -3163,6 +3262,15 @@ def validate_physics_plan(
                     )
                 )
 
+        # Parameters an option of a CHANGED component set: the override's
+        # own values, which the template layer re-applied below must not
+        # take back.  b9a01da37 re-applies the template over its UNCHANGED
+        # components' option defaults (the GSD MYNN 4.1 suite's pins); over
+        # a changed component it handed the replaced scheme's receipt token
+        # back to the replacement -- a radiation override away from the
+        # RRTMG 4/4 pair kept wrf_rrtmg_compatibility, passed plan review,
+        # and was refused at run start.
+        overridden: set[str] = set()
         for component_id in sorted(components):
             option_id = resolved_components.get(component_id)
             component = components.get(component_id)
@@ -3213,6 +3321,8 @@ def validate_physics_plan(
                     if (template_components.get(component_id) != option_id
                             or name not in template_parameters):
                         settings[name] = value
+                    if template_components.get(component_id) != option_id:
+                        overridden.add(name)
             requirements = option.get("asset_requirements", [])
             if isinstance(requirements, list):
                 for requirement in requirements:
@@ -3226,9 +3336,32 @@ def validate_physics_plan(
                     if index not in asset_domains[key][2]:
                         asset_domains[key][2].append(index)
 
-        # Template, then per-depth template columns, over component options;
-        # explicit domain parameters below still win over both.
-        settings.update(template_layer)
+        # Template, then per-depth template columns, over component options
+        # the template itself carries; explicit domain parameters below
+        # still win over both.
+        settings.update({name: value for name, value in template_layer.items()
+                         if name not in overridden})
+        # A template knob the overrides leave unread returns to its default
+        # (U-E4): the GSD MYNN 4.1 suite's thompson_version='wrf_39_noaa'
+        # under any microphysics but mp_physics=28, or its gsd_41 MYNN
+        # generation under another PBL, named a scheme the plan no longer
+        # runs and the run door refused it.  Only when a component is
+        # overridden, so a template as written resolves exactly as before.
+        if any(template_components.get(component_id) != option_id
+               for component_id, option_id in resolved_components.items()):
+            for _ in range(len(template_layer)):
+                reverted = False
+                for name in template_layer:
+                    spec = parameter_specs.get(name)
+                    if (name in overridden or not isinstance(spec, dict)
+                            or "default" not in spec
+                            or settings.get(name) == spec["default"]
+                            or registry_knob_is_read(name, settings, selected_registry)):
+                        continue
+                    settings[name] = spec["default"]
+                    reverted = True
+                if not reverted:
+                    break
 
         for name, value in domain_parameters.items():
             spec = parameter_specs.get(name)
@@ -3286,6 +3419,38 @@ def validate_physics_plan(
             if name in selector_owners and _is_json_scalar(value):
                 settings[name] = value
 
+        # Some scheme-only controls must stay at their declared default
+        # when their consumer is inactive, or the run would discard them.
+        for name, spec in parameter_specs.items():
+            if not isinstance(spec, dict) or spec.get("inactive_value_policy") != "require-default":
+                continue
+            if registry_knob_is_read(name, settings, selected_registry):
+                continue
+            value = _effective_setting(name, settings, parameter_specs)
+            if value != spec.get("default"):
+                errors.append(_issue(
+                    "parameter-value", f"{base_path}.parameters.{name}",
+                    f"{name}={value!r} needs {spec.get('read_when')}; "
+                    "the inactive consumer would discard its nondefault value"))
+        # A new parameter can declare the consumers that read a moved value.
+        # Defaults remain inert outside them, preserving existing identities.
+        for name, spec in parameter_specs.items():
+            if not isinstance(spec, dict):
+                continue
+            required = spec.get("nondefault_requires_components")
+            if not isinstance(required, dict):
+                continue
+            value = _effective_setting(name, settings, parameter_specs)
+            if _same_value(value, spec.get("default")):
+                continue
+            for component, allowed in required.items():
+                if resolved_components.get(component) not in allowed:
+                    errors.append(_issue(
+                        "parameter-consumer", f"{base_path}.parameters.{name}",
+                        f"{name}={value!r} would be ignored: it requires "
+                        f"{component} in {allowed!r}; leave it at its default "
+                        "or select a consuming option"))
+
         # Use the run door's coupling law after parameter values resolve.
         from types import SimpleNamespace
         from woof.config import validate_noah_mosaic_config
@@ -3299,6 +3464,62 @@ def validate_physics_plan(
                                                  "dominant")))
         except ValueError as exc:
             errors.append(_issue("noah-mosaic-pairing", base_path, str(exc)))
+        # The stochastic-pattern consumers, by the same law: spp_conv=1 and
+        # spp_pbl=1 are offered on routes whose templates select no Grell-
+        # Freitas or MYNN, and the run door refuses a pattern no scheme reads
+        # (woof.config.validate_spp_config).  Plan review called 340 such
+        # plans launchable (tests/test_authority_agreement.py).
+        from woof.config import validate_spp_config
+        try:
+            validate_spp_config(SimpleNamespace(
+                spp_conv=settings.get("spp_conv", 0),
+                spp_pbl=settings.get("spp_pbl", 0),
+                spp_lsm=settings.get("spp_lsm", 0),
+                cu_physics=settings.get("cu_physics", 0),
+                bl_pbl_physics=settings.get("bl_pbl_physics", 0),
+                sf_sfclay_physics=settings.get("sf_sfclay_physics", 0),
+                sf_surface_physics=settings.get("sf_surface_physics", 0)))
+        except ValueError as exc:
+            errors.append(_issue("spp-consumer", base_path, str(exc)))
+        # Two more run-door couplings on the same footing.  A template that
+        # writes scalar_pblmix=1 (the gsd41 HRRR template) offered every
+        # microphysics override as launchable although the scalar mixing
+        # reads Thompson-aerosol fields only, and offered spp_pbl=1 on its
+        # gsd_41 MYNN, which has no stochastic kernels; both were refused
+        # at the run door (36 plans, tests/test_authority_agreement.py).
+        from woof.config import (validate_mynn_generation_spp,
+                                  validate_scalar_pblmix_consumer)
+        coupled = SimpleNamespace(
+            scalar_pblmix=settings.get("scalar_pblmix", 0),
+            bl_pbl_physics=settings.get("bl_pbl_physics", 0),
+            mp_physics=settings.get("mp_physics", 0),
+            bl_mynn_version=settings.get("bl_mynn_version", "wrf_461"),
+            spp_pbl=settings.get("spp_pbl", 0))
+        for law in (validate_scalar_pblmix_consumer,
+                    validate_mynn_generation_spp):
+            try:
+                law(coupled)
+            except (ValueError, NotImplementedError) as exc:
+                errors.append(_issue("pbl-coupling", base_path, str(exc)))
+        # The lightning package's producers, by the same law: the nested
+        # route offers lightning_option as a free per-domain knob, and the
+        # run door refuses options 1 and 2 without do_radar_ref=1, 11 without
+        # a cumulus cloud top and 3 without a graupel scheme
+        # (woof.lightning_contract.validate_lightning).  Plan review called
+        # 602 such plans launchable on the 2.9.0 round-2 tree
+        # (tests/test_authority_agreement.py), so it asks the run door's own
+        # function rather than a copy of its producer tables.
+        from woof.lightning_contract import (LIGHTNING_DEFAULTS,
+                                              validate_lightning)
+        try:
+            validate_lightning(SimpleNamespace(
+                **{name: settings.get(name, default)
+                   for name, default in LIGHTNING_DEFAULTS.items()},
+                moist=settings.get("moist", True),
+                mp_physics=settings.get("mp_physics", 0),
+                cu_physics=settings.get("cu_physics", 0)))
+        except ValueError as exc:
+            errors.append(_issue("lightning-dependency", base_path, str(exc)))
 
         # AUDIT R-005, and it runs HERE -- after every source of a setting
         # and before the constraint battery below -- because the value it

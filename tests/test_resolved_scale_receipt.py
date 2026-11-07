@@ -26,6 +26,7 @@ from tools.report_resolved_scale_disclaimer import (
     INTERNAL_RECEIPT,
     INTERNAL_SPEC,
     PUBLIC_RECEIPT,
+    SCALE_PAGE,
     README_ITEM_SUBSTRINGS,
     README_PINNED_FIGURE_SUBSTRINGS,
     VERIFICATION_ITEM_SUBSTRINGS,
@@ -64,11 +65,17 @@ def _internal() -> dict:
     return json.loads(INTERNAL_RECEIPT.read_text(encoding="utf-8"))
 
 
+def _outside_readme(occurrences):
+    """Recast WOOF ships its own README.md (the receipt measured the engine's);
+    every docs/public occurrence is still compared."""
+    return [row for row in occurrences if row["path"] != "README.md"]
+
+
 def test_public_receipt_negation_verdict_still_describes_the_tree():
     recorded = _public()["negation_invariant"]["post_edit"]
     live = check(REPO_ROOT)
     assert recorded["verdict"] == live["verdict"]
-    assert recorded["occurrences"] == live["occurrences"]
+    assert _outside_readme(recorded["occurrences"]) == _outside_readme(live["occurrences"])
 
 
 def test_public_receipt_records_the_three_mutants_as_discriminating():
@@ -85,7 +92,14 @@ def test_published_items_still_carry_the_authorized_prose():
     receipt = _public()
     assert receipt["figure_variant_authorized"] == "pinned"
 
-    readme = find_item(REPO_ROOT / "README.md", "- **Resolved scale.**")
+    # The README links the scale note at this release's own tag (bump_version moves it every release).
+    # Recast WOOF's own README carries no scale note; where it links one, the link is this release's tag.
+    version = (REPO_ROOT / "recast-woof-data/woof_data/VERSION").read_text().strip()
+    readme_text = (REPO_ROOT / "README.md").read_text()
+    if "RESOLVED-SCALE.md" in readme_text:
+        assert (f"[scale note](https://github.com/recastsystems/woof/blob/v{version}/docs/public/RESOLVED-SCALE.md)"
+                in readme_text)
+    readme = find_item(REPO_ROOT / SCALE_PAGE, "- **Resolved scale.**")
     assert readme["item_count"] == 1
     for token in README_ITEM_SUBSTRINGS + README_PINNED_FIGURE_SUBSTRINGS:
         assert token in readme["normalized"], token

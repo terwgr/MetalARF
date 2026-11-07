@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_columns",
+      "source": "woof/metal/shaders/hexrrfs_tempo_columns.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_workspace_sizes",
+      "cuda_symbol": "tempo_sizes",
+      "threads_per_group": 1,
+      "resources": [
+        [
+          "sizes",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "sizes": [
+          [
+            "2"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+/* Correctly-rounded error function for binary32 value.
+
+Copyright (c) 2022-2024 Alexei Sibidanov.
+
+This file is part of the CORE-MATH project
+project (file src/binary32/erf/erff.c revision bc385c2).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+constant ulong rrfs_erf_coefficients[448]={
+0x3fdf86faa9428f9cul,0x3fecfc41e36c7dfaul,0xbfdb2c7dc53508b9ul,0xbfc5a9de93fa556eul,0x3fc731793dbb01b5ul,0x3f9133e06426cf18ul,0xbfaa12a6289cafd8ul,0x3f6717d6f1d6f557ul,
+0x3fe1855a5fd3dd50ul,0x3feb3aafcc27502ful,0xbfdcee5ac8e92bb2ul,0xbfbfa02983ca2d79ul,0x3fc77cd746cb1922ul,0xbf5fa6f277886487ul,0xbfa8de75458db416ul,0x3f800899c98551c9ul,
+0x3fe32a54cb8db67aul,0x3fe96164fafd8de5ul,0xbfde23a7ea0c9ad3ul,0xbfb3f5ee15671cf4ul,0x3fc70e468a3d72d9ul,0xbf93da68037cfc99ul,0xbfa69ed9ba1f9839ul,0x3f88cab9244a4ff4ul,
+0x3fe4b13713ad3513ul,0x3fe7791b886e7405ul,0xbfdecef423109bf5ul,0xbfa15c3c5cec6847ul,0x3fc5f688fc931ba6ul,0xbfa1da63ed190037ul,0xbfa38427ca63cca4ul,0x3f8fa00e52525e17ul,
+0x3fe61955607dd15dul,0x3fe58a445da7c74eul,0xbfdef6c246a0f66cul,0x3f7e83e0d9d61330ul,0x3fc44cc65535bc9ful,0xbfa87d3c4860435dul,0xbf9f90b10501169bul,0x3f922295856d427aul,
+0x3fe762870f720c6ful,0x3fe39ccc1b136d5cul,0xbfdea4feea4e4744ul,0x3fa715e5952ebfbaul,0x3fc22cdbd83c75c4ul,0xbfada50aa1d925b6ul,0xbf9754dc0a29b4ddul,0x3f9350b6bef9392cul,
+0x3fe88d1cd474a2e0ul,0x3fe1b7e98fe26219ul,0xbfdde65a22ce1419ul,0x3fb40686a3f16400ul,0x3fbf6b0cbb216b2bul,0xbfb09c7c903edd57ul,0xbf8da7529fde6410ul,0x3f9362a7a0588eabul,
+0x3fe999d4192a5717ul,0x3fdfc3ee5d1524b3ul,0xbfdcc990045b55c8ul,0x3fbb37338e68b37dul,0x3fba0d120c872ea7ul,0xbfb19bb2b07ecff6ul,0xbf7a110f5f593aaful,0x3f9272c15a57720eul,
+0x3fea89c850b7d54dul,0x3fdc40b0729ed54aul,0xbfdb5eaaef0a2346ul,0x3fc0847c7dacbae1ul,0x3fb47de0ba6d18fbul,0xbfb1d9de77a4b648ul,0x3f530ffbe56f0726ul,0x3f90a9cb99feea01ul,
+0x3feb5e62fce16096ul,0x3fd8eed36b886d95ul,0xbfd9b64a06e50705ul,0x3fc2bb6e2c744df5ul,0x3fadee3261ca61bcul,0xbfb16996004f7da5ul,0x3f7fdff37bae983eul,0x3f8c750083e65f9aul,
+0x3fec194b1d49a184ul,0x3fd5d4fd33729015ul,0xbfd7e0f4f045addbul,0x3fc444bc66c31a1bul,0x3fa356dbf16ec8f1ul,0xbfb0643de0906cd8ul,0x3f8b281af7bd3a2cul,0x3f86b97eaa2c6abdul,
+0x3fecbc54b476248eul,0x3fd2f7cc3fe6f423ul,0xbfd5ee8429e36de8ul,0x3fc52a8395f96177ul,0x3f9313761ba257dcul,0xbfadcf844d5fed8ful,0x3f91e1420f475fa9ul,0x3f8091c7dc1e18b2ul,
+0x3fed4970f9ce00d9ul,0x3fd059f59af7a905ul,0xbfd3eda354de36c3ul,0x3fc57b85ad439779ul,0x3f58e913b9778136ul,0xbfaa2893bd3435f4ul,0x3f94d3a90e37164aul,0x3f74ce7f6e19a902ul,
+0x3fedc29fb60715b0ul,0x3fcbf8e1b1ca2277ul,0xbfd1eb7095e5d6d2ul,0x3fc549ea6f7a64f4ul,0xbf8b10f12f3877a3ul,0xbfa61420c8f7156aul,0x3f9674f1f92a8812ul,0x3f625543ffd74d52ul,
+0x3fee29e22a89d767ul,0x3fc7bd5c7df3fe99ul,0xbfcfe674494077bful,0x3fc4a9feacf86578ul,0xbf9a008269076644ul,0xbfa1cf0e8fb4f1cbul,0x3f96e0d2ef105fb3ul,0xbf3367205fbd7876ul,
+0x3fee812fc64db36aul,0x3fc3fda6bc016991ul,0xbfcc1cb278627920ul,0x3fc3b10512314f1eul,0xbfa1e6457bb1b9a9ul,0xbf9b1f6474e2388cul,0x3f9640a5345f7ec7ul,0xbf63dae5a997fdb0ul,
+0x3feeca6ccd709544ul,0x3fc0b3f52ce8c380ul,0xbfc8885019f63c6dul,0x3fc274275fc91a05ul,0xbfa57f73699a8372ul,0xbf93076a305fc7ceul,0x3f94c6ae04843a41ul,0xbf70be5fcf5ecc91ul,
+0x3fef0762fde45ee7ul,0x3fbbb1c972f23e4aul,0xbfc5341e3c01b58dul,0x3fc107929f6f0b60ul,0xbfa7e1b34f976c02ul,0xbf873b62589c234aul,0x3f92a97ee1876486ul,0xbf7595f40a3150feul,
+0x3fef39bc242e43e6ul,0x3fb6c7e64e7281c5ul,0xbfc2274b86835fd3ul,0x3fbefb890e5c770dul,0xbfa92c7db16847e0ul,0xbf745477db5e2dd4ul,0x3f901fc6165fc866ul,0xbf78845509030c2cul,
+0x3fef62fe80272419ul,0x3fb297db960e4f5dul,0xbfbecb83b087c04ful,0x3fbbce18363ca3d1ul,0xbfa985aaf776482cul,0x3f3cd953efdae886ul,0x3f8ab9a0b89b54fful,0xbf79b5e576ccc31cul,
+0x3fef848acb544e95ul,0x3fae1d4cf1e24501ul,0xbfb9e12e1fde5552ul,0x3fb8a27806df3d1bul,0xbfa91674e5eb3319ul,0x3f73bc75595b2db8ul,0x3f851bc537ac61aful,0xbf796b23b19ea04dul,
+0x3fef9f9ba8d3c733ul,0x3fa83298d7172108ul,0xbfb58d101f905a75ul,0x3fb58f1456f8639bul,0xbfa808d1850b8231ul,0x3f80c1bd99c348a7ul,0x3f7f61e9d7bc48caul,0xbf77f07c13441774ul,
+0x3fefb54641aebbc9ul,0x3fa34ac36ad8dafaul,0xbfb1c8ec267f9405ul,0x3fb2a52c5d841848ul,0xbfa68541c02b3b6bul,0x3f85afe400196379ul,0x3f7565b2d6eda3d6ul,0xbf7596aaff29e739ul,
+0x3fefc67bcf2d7b8ful,0x3f9e85c449e377eful,0xbfad177f166c07c6ul,0x3fafe23b7584b504ul,0xbfa4b12109613313ul,0x3f88d9905c0acf7dul,0x3f69265032a669daul,0xbf72ac4a6dbcbf3eul,
+0x3fefd40bd6d7a785ul,0x3f97f5188610ddc7ul,0xbfa7954423f7c998ul,0x3faaf5baae33887ful,0xbfa2ad77c7cbc474ul,0x3f8a7b8c47ec2a51ul,0x3f546646ee094bccul,0xbf6ef19d8db86730ul,
+0x3fefdea6e062d0c9ul,0x3f92a875b5ffab58ul,0xbfa2f3178cd6dcd5ul,0x3fa68d1c45b94182ul,0xbfa09648ed3aeaeful,0x3f8ad8b150d38164ul,0xbf2e9a6023d9429ful,0xbf68722d19ee2e8eul,
+0x3fefe6e1742f7cf5ul,0x3f8cd5ec93c1243aul,0xbf9e2ff3aaacb386ul,0x3fa2aa4e5823cc89ul,0xbf9d049842dbe399ul,0x3f8a34edb21ab302ul,0xbf5676e5996c7f9bul,0xbf623b01a35140bful,
+0x3fefed37386190fbul,0x3f861beae53b72c2ul,0xbf97d6193f22c3c1ul,0x3f9e947279e3bb7dul,0xbf9906031b97ca97ul,0x3f88d14d62561755ul,0xbf61f245e7178882ul,0xbf59257d4eb47685ul,
+0x3feff20e0a7ba8c2ul,0x3f80d1d69569b839ul,0xbf92a8ca0dc02752ul,0x3f98cc071b709751ul,0xbf954a149f1b070cul,0x3f86e9137b13412cul,0xbf66577ed3d8e83bul,0xbf4e9c1a5178a289ul,
+0x3feff5b8fb26f5f6ul,0x3f79646f35a7663cul,0xbf8cf68ed9311b0bul,0x3f93e8735b5a694ful,0xbf91e1612d026fdful,0x3f84afd8e6ca636dul,0xbf68c375170ccb22ul,0xbf3c799443c4fd3bul,
+0x3feff87b1913e853ul,0x3f730499b5039596ul,0xbf864964201ec8baul,0x3f8fa73d7eafba98ul,0xbf8daa3022141fbbul,0x3f82509444c063b7ul,0xbf699482a2f8a0a1ul,0xbf0403d1f76c9454ul,
+0x3feffa89fe5b3625ul,0x3f6c4412bf4b8f35ul,0xbf8100f347126cf0ul,0x3f88ebda07671d40ul,0xbf8850c6a31c98c1ul,0x3f7fdac860c67d21ul,0xbf6927d03d2ba12cul,0x3f30ff620b4190feul,
+0x3feffc10194fcb64ul,0x3f64d78bba8ca621ul,0xbf79ba107a443e02ul,0x3f836f273fbc04ccul,0xbf83b38716ac7e6ful,0x3f7b3fe0181914acul,0xbf67d3fe7de98c5cul,0x3f3ea31f8e5317f7ul,
+0x3feffd2eae369a07ul,0x3f5e7f232d9e266cul,0xbf734c7442dd48d9ul,0x3f7e066bed070a0bul,0xbf7f914f3c42fc0dul,0x3f76f4664ed2260ful,0xbf65e59910761d24ul,0x3f439cbb6e84c126ul,
+0x3feffdff92db56e5ul,0x3f56235fbd7a4373ul,0xbf6cb5e029b9e56aul,0x3f76fa4c7ef274daul,0xbf7903a089a835f3ul,0x3f730f12e0ca1901ul,0xbf639d21b6957f99ul,0x3f45d3f8495a703cul,
+0x3feffe96a78a04a9ul,0x3f4fe41cd9bb4f2cul,0xbf652d7b28966c0cul,0x3f716c192d86a1a7ul,0xbf739bfce951100cul,0x3f6f376a7869f9e3ul,0xbf612e6cef999c4ful,0x3f466acd4d667b50ul,
+0x3fefff0312b010b5ul,0x3f46caa0d3583018ul,0xbf5efb729f4cf75bul,0x3f6a2da7cebe12acul,0xbf6e6c27a24bc759ul,0x3f693b1f4d8ea650ul,0xbf5d82050aa94a08ul,0x3f45cd7dc75d6cbaul,
+0x3fefff50456dab8cul,0x3f40295ef6591865ul,0xbf5679880e95a4daul,0x3f637d38e3a5c8ebul,0xbf675b3708aebb8ful,0x3f64231c4b4b0296ul,0xbf58e26476489318ul,0x3f445c3b570dd924ul,
+0x3fefff86cfd3e657ul,0x3f36be02102b353dul,0xbf502b157780d6aeul,0x3f5cc1d886861133ul,0xbf61bff6f12ec9abul,0x3f5fc0f77bd9c736ul,0xbf54a3320bd0959dul,0x3f4267f8b4f95d20ul,
+0x3fefffad0b901755ul,0x3f2fc0d55470cf5eul,0xbf47121aff5e820eul,0x3f5506d6992f7de5ul,0xbf5ab595d3ecd0d6ul,0x3f58bdd79daaf754ul,0xbf50d9b090f997c1ul,0x3f4031ab9fd1c7daul,
+0x3fefffc7a37857d2ul,0x3f25feada379d8a5ul,0xbf405304df58f3aaul,0x3f4e79c081b8600ful,0xbf53e5dbe33232e0ul,0x3f530eb208200729ul,0xbf4b1d493b147945ul,0x3f3bd587bbc071beul,
+0x3fefffd9fdeabcceul,0x3f1e3bcf436a1a49ul,0xbf36e953111ef0a1ul,0x3f45e3edf6768654ul,0xbf4d5be67c0547a4ul,0x3f4d07d9ffa1d435ul,0xbf458328f5f358caul,0x3f376d42d95c42c4ul,
+0x3fefffe68f4fa777ul,0x3f149e17724f4cddul,0xbf2fe48c44e229c1ul,0x3f3f2bd95d76f188ul,0xbf457388cb12d011ul,0x3f45decc25c5c079ul,0xbf40d7499d1b0d2dul,0x3f3359332c94ecdcul,
+0x3fefffef1960d85dul,0x3f0be6abbb10a4cdul,0xbf26040381a8c313ul,0x3f35fff1dde9ee9dul,0xbf3f0c933efa9971ul,0x3f404cbf4a5cd760ul,0xbf3a07f150af6dadul,0x3f2f68dd183426baul,
+0x3feffff4db27f146ul,0x3f02bb5cc22e5cd8ul,0xbf1e25894899f526ul,0x3f2ec8a8e5a72757ul,0xbf364256ae0a3cf9ul,0x3f380a836c18c46cul,0xbf33dea401af6775ul,0x3f2915ddff3fe0d1ul,
+0x3feffff8b500e77cul,0x3ef8f4ccca7fc769ul,0xbf1478cffe305946ul,0x3f2559f04adde504ul,0xbf2f9e1577d6961dul,0x3f318bda53c14716ul,0xbf2df8634c35541cul,0x3f23bb5c6b616337ul,
+0x3feffffb43555b5ful,0x3ef07ebd2a2d26c8ul,0xbf0b93e442a37f2bul,0x3f1d5cf15159ce28ul,0xbf263f5e1469c006ul,0x3f295a03acebac18ul,0xbf2656e5e2a1f8e2ul,0x3f1e98c437189bdeul,
+0x3feffffcf23ff5fcul,0x3ee5a2adfa0b492cul,0xbf026c88270759f0ul,0x3f140473572b99a8ul,0xbf1f057cbde578a5ul,0x3f222178d1c3c948ul,0xbf20765b61a0d859ul,0x3f1765b3ea03ddbeul,
+0x3feffffe0bd3e852ul,0x3edc282cd3957a72ul,0xbef86ad6dfa44faaul,0x3f0b0f313f03a029ul,0xbf156e44abecd255ul,0x3f19ad1ecfe34a89ul,0xbf17fe4033478618ul,0x3f11a8184e049fbful,
+0x3feffffec2641a9eul,0x3ed22df29821407eul,0xbef00c902a6cfd98ul,0x3f022234eb88671ful,0xbf0d57a181c9e6e1ul,0x3f1200c283b54a90ul,0xbf114b4c3295a7d0ul,0x3f0a4f966f713bdeul,
+0x3fefffff37d63a36ul,0x3ec74adc8f405eecul,0xbee4ed4228e44858ul,0x3ef81918baea92baul,0xbf03e81b17a0009cul,0x3f09004a36116436ul,0xbf08aa1ba400e076ul,0x3f035cd4e2340a9eul,
+0x3fefffff82cdcf1bul,0x3ebd9c73698fa87dul,0xbedb11017ec67115ul,0x3eefc0dfadf653f8ul,0xbefac4e03cd2dfc2ul,0x3f0131806b5abbc5ul,0xbf01672ef66fcaaful,0x3efc2882c7debed7ul,
+0x3fefffffb248c39dul,0x3eb2acee2f5ec66aul,0xbed15cc570408a36ul,0x3ee4be757bbb75a3ul,0xbef1d6aa5f8d2940ul,0x3ef76c5937d5105eul,0xbef84dffc3ca9302ul,0x3ef43c8315f2c30aul,
+0x3fefffffd01f36aful,0x3ea75fa8dbc840baul,0xbec6186da0133f5aul,0x3edae023231e1af5ul,0xbee790812f7ca394ul,0x3eef9c25656d0ef2ul,0xbef0cc66682e304cul,0x3eecc170a75d6f9cul,
+0x3fefffffe2ba0ea5ul,0x3e9d06ad6ecde88eul,0xbebbe46aa8edc9a1ul,0x3ed143860c7840b8ul,0xbededaba78fb1260ul,0x3ee52138a96ecee2ul,0xbee6fca538c4e2eeul,0x3ee434040640bceful,
+0x3fefffffee3cc32cul,0x3e91e1e857adb8ddul,0xbeb1769ce5f2a6e8ul,0x3ec5fe5d479b0543ul,0xbed405d865c94c2aul,0x3edbfc94feb96afcul,0xbedf245d5f3e8358ul,0x3edc142456acf443ul
+};
+constant ulong rrfs_erf_small[8]={0x3ff20dd750429b6dul,0xbfd812746b0375fbul,0x3fbce2f219fd6f45ul,0xbf9b82ce2cbf0838ul,0x3f7565bb655adb85ul,0xbf4c025bfc879c94ul,0x3f1f81718f61309cul,0xbeecc67bd88f5867ul};
+static inline Exact32 mynn_erf(Exact32 a) {
+    uint x=a.bits,ax=x&0x7fffffffu,sign=x&0x80000000u;
+    if(ax>0x407ad444u) {
+        if(ax>0x7f800000u)return Exact32::from_bits(x|0x00400000u);
+        uint one=sign|0x3f800000u;
+        if(ax==0x7f800000u)return Exact32::from_bits(one);
+        return Exact32::from_bits(soft32_sub(one,sign|0x33000000u));
+    }
+    ulong s=soft64_from_f32_bits(x),z=soft64_from_f32_bits(ax);
+    int i=soft64_to_i32_rz(soft64_mul(0x4030000000000000ul,z)).value;
+    ulong c0,c2,c4,c6,z2,z4;
+    if(ax<0x3ee00000u) {
+        z2=soft64_mul(s,s);z4=soft64_mul(z2,z2);ulong z8=soft64_mul(z4,z4);
+        c0=soft64_add(rrfs_erf_small[0],soft64_mul(z2,rrfs_erf_small[1]));
+        c2=soft64_add(rrfs_erf_small[2],soft64_mul(z2,rrfs_erf_small[3]));
+        c4=soft64_add(rrfs_erf_small[4],soft64_mul(z2,rrfs_erf_small[5]));
+        c6=soft64_add(rrfs_erf_small[6],soft64_mul(z2,rrfs_erf_small[7]));
+        c0=soft64_add(c0,soft64_mul(z4,c2));c4=soft64_add(c4,soft64_mul(z4,c6));
+        c0=soft64_add(c0,soft64_mul(z8,c4));
+        return Exact32::from_bits(soft64_to_f32_bits(soft64_mul(s,c0)));
+    }
+    z=soft64_sub(soft64_sub(z,0x3fa0000000000000ul),soft64_mul(0x3fb0000000000000ul,soft64_from_i32(i)));
+    int j=(i-7)*8;
+    z2=soft64_mul(z,z);z4=soft64_mul(z2,z2);
+    c0=soft64_add(rrfs_erf_coefficients[j],soft64_mul(z,rrfs_erf_coefficients[j+1]));
+    c2=soft64_add(rrfs_erf_coefficients[j+2],soft64_mul(z,rrfs_erf_coefficients[j+3]));
+    c4=soft64_add(rrfs_erf_coefficients[j+4],soft64_mul(z,rrfs_erf_coefficients[j+5]));
+    c6=soft64_add(rrfs_erf_coefficients[j+6],soft64_mul(z,rrfs_erf_coefficients[j+7]));
+    c0=soft64_add(c0,soft64_mul(z2,c2));c4=soft64_add(c4,soft64_mul(z2,c6));
+    c0=soft64_add(c0,soft64_mul(z4,c4));
+    return Exact32::from_bits(soft64_to_f32_bits((c0&0x7ffffffffffffffful)|(s&0x8000000000000000ul)));
+}

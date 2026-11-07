@@ -63,11 +63,21 @@ _LEGACY_HRRR_SOIL = frozenset({"SOILT", "SOILW"})
 _MET_OPTIONAL = frozenset({
     "SST", "XICE", "SEAICE", "SNOW", "SNOW_EC", "SNOWH",
     "VEGFRA",
+    # The source's own PBL height (HRRR wrfnat HPBL), when it publishes
+    # one: the initial physics state is seeded from it.
+    "PBLH",
+    # The source's low/middle/high cloud cover (HRRR wrfnat LCDC/MCDC/HCDC,
+    # percent): the initial CLDFRA's cover.
+    "LCDC", "MCDC", "HCDC",
 })
 _CANONICAL_SURFACE_REQUIRED = frozenset({
     "TSK", "TSLB", "SMOIS", "SH2O", "TMN", "SEAICE", "XLAND",
     "LANDMASK", "SNOW", "SNOWH",
 })
+
+
+def _creation_utc(directory):
+    return datetime.now(timezone.utc).isoformat()
 
 
 class PreparedCacheMismatchError(ValueError):
@@ -79,24 +89,27 @@ class PreparedCacheCorruptError(ValueError):
 
 
 class PreparedCacheResourceLimitError(OSError):
-    """Opening a prepared cache exhausted process or system file handles."""
+    """Opening a prepared cache exhausted file handles or mapping resources."""
 
 
 def _raise_if_resource_limit(error: BaseException, *, context: str) -> None:
-    """Preserve descriptor exhaustion instead of reporting damaged data."""
+    """Preserve resource exhaustion instead of reporting damaged data."""
     if isinstance(error, PreparedCacheResourceLimitError):
         raise error
     if not isinstance(error, OSError) or error.errno not in {
-            errno.EMFILE, errno.ENFILE}:
+            errno.EMFILE, errno.ENFILE, errno.ENOMEM}:
         return
-    if error.errno == errno.EMFILE:
-        reason = "process open-file resource limit (EMFILE)"
+    if error.errno == errno.ENOMEM:
+        reason = "memory or virtual-memory mapping resource limit (ENOMEM)"
+        remedy = ("release unused mappings; inspect available memory, address-space "
+                  "limits and Linux vm.max_map_count")
     else:
-        reason = "system open-file resource limit (ENFILE)"
-    remedy = ("check ulimit -n and raise the process open-file limit, or "
-              "close unused file descriptors before retrying")
-    if error.errno == errno.ENFILE:
-        remedy += "; also free system file handles or raise the system open-file limit"
+        reason = ("process open-file resource limit (EMFILE)" if error.errno == errno.EMFILE
+                  else "system open-file resource limit (ENFILE)")
+        remedy = ("check ulimit -n and raise the process open-file limit, or "
+                  "close unused file descriptors before retrying")
+        if error.errno == errno.ENFILE:
+            remedy += "; also free system file handles or raise the system open-file limit"
     raise PreparedCacheResourceLimitError(
         error.errno, f"{context}: {reason}; {remedy}",
         error.filename) from error
@@ -164,6 +177,14 @@ def prepared_domain_config_identity(domain_config) -> dict[str, object]:
         # scaled source words before interpolation. Those arrays remain
         # internally hash-consistent but produce different terrain drag.
         document["orographic_sampling_contract"] = OROGRAPHIC_MARKER
+    # A chem domain binds the chem table it was prepared with (schema, every
+    # row/set/source file, the selection), so an edited row can never serve
+    # a cache prepared under the old one.  Absent -- not null -- on a
+    # chem-off domain, so every existing identity is unchanged.
+    run = getattr(domain_config, "run", None)
+    if run is not None and getattr(run, "chem_sets", ()):
+        from woof.chem_table import load as load_chem_table
+        document["chem_table_identity"] = load_chem_table(run).identity
     return _json_copy(document)
 
 
@@ -177,7 +198,7 @@ def prepared_domain_config_identity(domain_config) -> dict[str, object]:
 #: existed, so after upgrading the wheel EVERY prepared tree in the
 #: field became unrunnable -- refused with "d01 cache domain config
 #: differs from experiment", a sentence that points at the user's
-#: experiment TOML when the cause was a package upgrade.  A a development machine
+#: experiment TOML when the cause was a package upgrade.  A test host G
 #: validation run diffed the two documents: exactly one added key, and
 #: zero value differences among the eleven shared keys and ~110 run
 #: fields.
@@ -227,6 +248,29 @@ def prepared_domain_config_identity(domain_config) -> dict[str, object]:
 #: the flag existed was prepared with, so "absent" and "default"
 #: describe the same prepared state provably rather than plausibly.
 DEFAULT_TOLERANT_IDENTITY_FIELDS = frozenset({
+    # 2.9.4 capability fields (lake state, mixed-layer ocean, sea-ice parameters; seaice_prognostic itself is
+    # PREPARATION_INERT_RUN_FIELDS).  Each is read by the
+    # forecast, not by the preparation that wrote an older tree, and its default is what such a tree was
+    # run with; a non-default value is refused against an older header, which re-prepares (the safe side).
+    "run.lake_state_accept_licence", "run.lake_state_path", "run.lake_state_source",
+    "run.ocean_analysis", "run.ocean_analysis_source", "run.ocean_config", "run.ocean_levels",
+    "run.ocean_mld_climatology", "run.ocean_s", "run.ocean_t", "run.ocean_z", "run.omdt",
+    "run.seaice_initial_thickness", "run.seaice_new_ice_thickness", "run.seaice_ocean_heat_flux",
+    # The operational HRRR output controls (2.9.4): interval precipitation
+    # buckets and the fork's gsd_diagnostics maxima (the history cadence
+    # change is a non-trajectory field).  Off (their defaults) is exactly
+    # what every older tree was prepared and run with; a stated value
+    # against an older header re-prepares (the safe side).
+    "run.prec_acc_dt", "run.prec_acc_dt1", "run.gsd_diagnostics", "run.reset_interval1",
+    "run.output_diagnostics", "run.diag_int", "run.wind_int",
+    # G3 controls are absent from older trees; only their declared defaults tolerate absence.
+    "run.maxiens",
+    "run.maxens",
+    "run.maxens2",
+    "run.maxens3",
+    "run.ensdim",
+    "run.cu_diag",
+    "run.convtrans_avglen_m",
     # 2.6.1's members: top-level DomainConfig declarations whose
     # off state is None.
     "start_time", "spawn", "tiles", "output", "retire", "rearm", "follow",
@@ -254,6 +298,25 @@ DEFAULT_TOLERANT_IDENTITY_FIELDS = frozenset({
     # exists to close, reopened by the merge that adopted its fix.
     "run.mp28_aerosol_source", "run.wif_climatology_path",
     "run.ntiedtke_tiedtke_closure",
+    # Correct-mode keys (woof/correct_mode.py, WB5/WB4): False is the
+    # matched arithmetic every prepared tree written before them describes.
+    # thompson_cloud_surface_booking (WB1) is output-only
+    # (correct_mode.OUTPUT_ONLY_KEYS) and so is ruled on once, in
+    # INERT_DIAGNOSTIC_IDENTITY_FIELDS through CONFIG_DIAGNOSTIC_FIELDS.
+    "run.wsm6_conservative_surface", "run.ntiedtke_dry_mass_coupling",
+    "run.wdm6_conservative_surface",
+    "run.wsm3_conservative_surface", "run.wsm5_conservative_surface",
+    "run.wsm7_conservative_surface",
+    # HN1 (2.9.7), read by preparation (the handover closure on every
+    # forcing frame).  An older tree was prepared with it off; as for the
+    # keys above, its absence is tolerated at the RunConfig default, and an
+    # exact-mode run (off) against an older header re-prepares.
+    "run.hydrometeor_handover_numbers",
+    # The New SAS knobs (cu_physics = 96 port), on the p3_backend argument
+    # below: scheme-scoped (woof.config refuses a non-default value under
+    # any other cumulus scheme), so a tree prepared before they existed
+    # could not have selected anything but their defaults.
+    "run.nsas_dx_factor", "run.sas_pgcon",
     # 2.6.1 added run.p3_backend to RunConfig without adding it here,
     # which refused EVERY tree prepared before it -- 16 of them on the
     # box that found this.  The FOURTH instance of this exact trap in
@@ -322,6 +385,7 @@ DEFAULT_TOLERANT_IDENTITY_FIELDS = frozenset({
     "run.bl_mynn_edmf", "run.bl_mynn_edmf_mom", "run.bl_mynn_edmf_tke",
     "run.bl_mynn_mixscalars", "run.scalar_pblmix", "run.bl_mynn_cloudmix", "run.bl_mynn_mixqt",
     "run.bl_mynn_output", "run.bl_mynn_tkeadvect", "run.icloud_bl",
+    "run.scalar_adv_opt",
     # MM5/MYNN surface layer (76cd7f18b):
     "run.isftcflx", "run.iz0tlnd",
     # Noah LSM selector (9fae17c50), admitted for RUC as well. Prescribed
@@ -330,6 +394,11 @@ DEFAULT_TOLERANT_IDENTITY_FIELDS = frozenset({
     # is absent-tolerant at its default 0. A stated 1 still binds: soil
     # preparation preserves the fraction and builds its ice column.
     "run.opt_thcnd", "run.fractional_seaice",
+    # real.exe's seaice_threshold rule is absent-tolerant at its default
+    # 100 K, which converts no water cell. A stated value still binds: soil
+    # preparation turns open water colder than it into sea ice
+    # (woof/ingest/soil.py preprocess_noah_soil).
+    "run.seaice_threshold",
     # Noah-MP (ab60dc8ab):
     "run.dveg", "run.opt_crs", "run.opt_btr", "run.opt_run", "run.opt_sfc",
     "run.opt_frz", "run.opt_inf", "run.opt_rad", "run.opt_alb",
@@ -421,6 +490,12 @@ DEFAULT_TOLERANT_IDENTITY_FIELDS = frozenset({
     # boundary table set are built ON the ladder, so a cache prepared for a
     # 49-level child cannot serve a 96-level one.
     "run.eta_levels",
+    # The chem door, on argument (b): empty (the default) means no chem
+    # species, which is exactly what every prepared state before the field
+    # carried.  A chem tree holds its sets (and its enabled sources) in its
+    # header and is compared strictly: its prepared state carries chem_<row>
+    # fields and chem boundary tables a chem-off cache does not.
+    "run.chem_sets", "run.chem_sources",
     # The downscaled child's relaxation time scale and w treatment, on
     # argument (c): both choose how the FORECAST applies the boundary
     # tables, and neither is read while the tables or the initial state
@@ -604,11 +679,21 @@ NON_TRAJECTORY_IDENTITY_FIELDS = frozenset({
     "tiles",
     "run.run_seconds",
     "run.output_interval_s",
+    "run.history_interval2_s", "run.history_interval_change_s",
     "run.restart_interval_s",
     "history_interval_s",
     # WRF's history_begin / history_end: when the forecast writes, like
     # the cadence beside them.
     "history_begin_s", "history_end_s",
+    # Which variables reach the history tape, per domain, and the
+    # quick-look stream's cadence and subset: output-only on the restart
+    # identity's own terms (woof.core.model drops all three).  Binding
+    # them refused a prepared tree whose d03 asked for a quick-look stream
+    # ("these identity fields differ: full_history_interval_s,
+    # quicklook_output"), and a per-domain `output = {...}` subset on a
+    # bundle prepared without one (WOOF run-controls feasibility, defect 7),
+    # although preparation reads none of them.
+    "output", "full_history_interval_s", "quicklook_output",
 })
 
 #: Output-only diagnostic toggles, on the same footing as the cadences
@@ -638,7 +723,81 @@ INERT_DIAGNOSTIC_IDENTITY_FIELDS = frozenset(
 #: controller ruling 2026-08-03 under ArWen's standing delegation,
 #: recorded in docs/superpowers/receipts/les/
 #: INFLOW-GENERATOR-ACCEPTANCE-V2.md item 10.
-PREPARATION_INERT_RUN_FIELDS = frozenset({
+
+# Explicit SFIRE v4.7.1 controls. Fire state and smoke emissions are initialized
+# by forecast physics after atmospheric cache restore. Native atmospheric
+# initialization and boundary preparation read none of these fields. This
+# closed list permits inactive prior headers and fire on/off cache reuse;
+# every control stays in forecast and restart identity.
+SFIRE_PREPARATION_INERT_RUN_FIELDS = frozenset({
+    "run.nfmc", "run.fmoist_run", "run.fmoist_interp", "run.fmoist_only",
+    "run.fmoist_freq", "run.fmoist_dt", "run.fmep_decay_tlag", "run.ifire",
+    "run.fire_boundary_guard", "run.fire_num_ignitions", "run.fire_ignition_ros1", "run.fire_ignition_start_lon1",
+    "run.fire_ignition_start_lat1", "run.fire_ignition_end_lon1", "run.fire_ignition_end_lat1", "run.fire_ignition_radius1",
+    "run.fire_ignition_start_time1", "run.fire_ignition_end_time1", "run.fire_ignition_ros2", "run.fire_ignition_start_lon2",
+    "run.fire_ignition_start_lat2", "run.fire_ignition_end_lon2", "run.fire_ignition_end_lat2", "run.fire_ignition_radius2",
+    "run.fire_ignition_start_time2", "run.fire_ignition_end_time2", "run.fire_ignition_ros3", "run.fire_ignition_start_lon3",
+    "run.fire_ignition_start_lat3", "run.fire_ignition_end_lon3", "run.fire_ignition_end_lat3", "run.fire_ignition_radius3",
+    "run.fire_ignition_start_time3", "run.fire_ignition_end_time3", "run.fire_ignition_ros4", "run.fire_ignition_start_lon4",
+    "run.fire_ignition_start_lat4", "run.fire_ignition_end_lon4", "run.fire_ignition_end_lat4", "run.fire_ignition_radius4",
+    "run.fire_ignition_start_time4", "run.fire_ignition_end_time4", "run.fire_ignition_ros5", "run.fire_ignition_start_lon5",
+    "run.fire_ignition_start_lat5", "run.fire_ignition_end_lon5", "run.fire_ignition_end_lat5", "run.fire_ignition_radius5",
+    "run.fire_ignition_start_time5", "run.fire_ignition_end_time5", "run.fire_ignition_start_x1", "run.fire_ignition_start_y1",
+    "run.fire_ignition_end_x1", "run.fire_ignition_end_y1", "run.fire_ignition_start_x2", "run.fire_ignition_start_y2",
+    "run.fire_ignition_end_x2", "run.fire_ignition_end_y2", "run.fire_ignition_start_x3", "run.fire_ignition_start_y3",
+    "run.fire_ignition_end_x3", "run.fire_ignition_end_y3", "run.fire_ignition_start_x4", "run.fire_ignition_start_y4",
+    "run.fire_ignition_end_x4", "run.fire_ignition_end_y4", "run.fire_ignition_start_x5", "run.fire_ignition_start_y5",
+    "run.fire_ignition_end_x5", "run.fire_ignition_end_y5", "run.fire_lat_init", "run.fire_lon_init",
+    "run.fire_ign_time", "run.fire_shape", "run.fire_sprd_mdl", "run.fire_crwn_hgt",
+    "run.fire_ext_grnd", "run.fire_ext_crwn", "run.fire_sfc_flx", "run.fire_heat_peak",
+    "run.fire_tg_ub", "run.fire_smk_scheme", "run.fire_smk_peak", "run.fire_smk_ext",
+    "run.fire_wind_height", "run.fire_fuel_read", "run.fire_fuel_cat", "run.fire_fmc_read",
+    "run.fire_print_msg", "run.fire_print_file", "run.fire_fuel_left_method", "run.fire_fuel_left_irl",
+    "run.fire_fuel_left_jrl", "run.fire_grows_only", "run.fire_upwinding", "run.fire_upwind_split",
+    "run.fire_viscosity", "run.fire_lfn_ext_up", "run.fire_topo_from_atm", "run.fire_advection",
+    "run.fire_test_steps", "run.fire_const_time", "run.fire_const_grnhfx", "run.fire_const_grnqfx",
+    "run.fire_atm_feedback", "run.fire_mountain_type", "run.fire_mountain_height", "run.fire_mountain_start_x",
+    "run.fire_mountain_start_y", "run.fire_mountain_end_x", "run.fire_mountain_end_y", "run.delt_perturbation",
+    "run.xrad_perturbation", "run.yrad_perturbation", "run.zrad_perturbation", "run.hght_perturbation",
+    "run.stretch_grd", "run.stretch_hyp", "run.z_grd_scale", "run.sfc_full_init",
+    "run.sfc_lu_index", "run.sfc_tsk", "run.sfc_tmn", "run.fire_read_lu",
+    "run.fire_read_tsk", "run.fire_read_tmn", "run.fire_read_atm_ht", "run.fire_read_fire_ht",
+    "run.fire_read_atm_grad", "run.fire_read_fire_grad", "run.sfc_vegfra", "run.sfc_canwat",
+    "run.sfc_ivgtyp", "run.sfc_isltyp", "run.fire_lsm_reinit", "run.fire_lsm_reinit_iter",
+    "run.fire_upwinding_reinit", "run.fire_is_real_perim", "run.fire_lsm_band_ngp", "run.fire_lsm_zcoupling",
+    "run.fire_lsm_zcoupling_ref", "run.fire_tracer_smoke", "run.fire_viscosity_bg", "run.fire_viscosity_band",
+    "run.fire_viscosity_ngp", "run.fire_slope_factor", "run.fs_array_maxsize", "run.fs_firebrand_gen_lim",
+    "run.fs_firebrand_gen_dt", "run.fs_firebrand_gen_levels", "run.fs_firebrand_gen_maxhgt", "run.fs_firebrand_gen_levrand",
+    "run.fs_firebrand_gen_levrand_seed", "run.fs_firebrand_gen_mom3d_dt", "run.fs_firebrand_gen_prop_diam", "run.fs_firebrand_gen_prop_effd",
+    "run.fs_firebrand_gen_prop_temp", "run.fs_firebrand_gen_prop_tvel", "run.fs_firebrand_dens", "run.fs_firebrand_dens_char",
+    "run.fs_firebrand_max_life_dt", "run.fs_firebrand_land_hgt", "run.fuel_crosswalk", "run.trackember",
+    "run.sr_x", "run.sr_y", "run.fire_static", "run.fire_fuel_namelist",
+    "run.fire_smoke",
+})
+
+# The earlier inactive fire configuration serialized an unused moisture
+# filename. Only its empty value is equivalent to the current absent key.
+RETIRED_INACTIVE_IDENTITY_FIELDS = {"run.fire_moisture_namelist": ""}
+
+PREPARATION_INERT_RUN_FIELDS = SFIRE_PREPARATION_INERT_RUN_FIELDS | frozenset({
+    # Turbine forcing attaches only in forecast initialize_physics; real
+    # initialization and boundary preparation never read these controls.
+    # Runtime overrides retain the original config bytes and record changes.
+    "run.wind_farm_scheme", "run.wind_farm_table", "run.wind_farm_max_dx_m", "run.wind_farms", "run.windfarm_tke_factor",
+    # The per-run smoke-off sentence (woof/smoke_execution.py): launch
+    # metadata for the receipts; chem_sets carries the physics it
+    # describes, so one prepared bundle serves either value.  It rides the
+    # HRRR route as a forecast-TOML field (hrrr_route_inputs): a run whose
+    # card could not hold the smoke envelope was refused at emission for it,
+    # and its native tree authority did not reload (a 4090 host and a rented box, 2026-10-21).
+    "run.smoke_off_reason",
+    # Eclipse attenuation is evaluated at forecast UTC; preparation never reads it.
+    "run.ra_sw_eclipse",
+    # The zero-layer sea ice model (woof/ocean/seaice) is seeded by the
+    # forecast's initialize_physics from the restored surface state; nothing
+    # under woof/ingest names it, so one prepared bundle serves either value.
+    # It stays in the restart identity (checkpoint_identity.SEAICE_RUN_KEYS).
+    "run.seaice_prognostic",
     # Stability policy is read only when the forecast advances: epssm by
     # core/acoustic.py and forecast-door acoustic_adaptation.py, and the
     # sixth-order selectors by core/dycore.py. initialize_real constructs
@@ -664,14 +823,29 @@ PREPARATION_INERT_RUN_FIELDS = frozenset({
     # start emission is recomputed after the prepared state is loaded.
     "run.thompson_version",
     "run.thompson_fork_snow_fall",
+    # The generation's table directory is read by the forecast's
+    # Thompson column only (woof/core/thompson_column.py); preparation
+    # computes nothing from the tables.
+    "run.thompson_table_dir",
     # Only the MYNN column solver reads its generation and the gsd_41 TKE
     # option; preparation computes nothing from either.
     "run.bl_mynn_version",
     "run.bl_mynn_gsd41_unsquared_qtke",
     "run.bl_mynn_cloud_tendency_form",
+    # cycling decides only what the first MYNN call keeps from the loaded
+    # start; preparation computes nothing from it.
+    "run.cycling",
     # Only the MYNN surface-layer column solver reads its generation;
     # preparation computes no surface exchange from it.
     "run.mynn_sfclay_variant",
+    # MYNN's split number-species mixing keys select which of the PBL
+    # solver's rates are coupled; preparation computes no PBL.
+    "run.bl_mynn_mixaerosols",
+    "run.bl_mynn_mixnumcon",
+    # TEMPO's optional coupling arms act inside the forecast's physics
+    # calls only; prepared fields and boundary tables do not read them.
+    "run.tempo_ml_for_bl_nc",
+    "run.tempo_surface_emission_before",
     # The sixth-order filter form and its second factor are read only by
     # the forecast's fixed tendencies (core/dycore.py), and mp_zero_out
     # only after the forecast's microphysics call (core/microphysics.py);
@@ -694,6 +868,24 @@ PREPARATION_INERT_RUN_FIELDS = frozenset({
     # Only LSMRUC and SFCTMP read the snow lineage (core/ruc_tier.py, the
     # fused prologue and sfctmp); preparation computes no snow from it.
     "run.ruc_snow",
+    # The WRF 4.7/4.8 upstream-fix generations and the urban canopy
+    # controls are read by the forecast's physics alone: the solar
+    # generation by the radiation/LSM COSZEN calls (core/solar.py), the YSU
+    # generation by the PBL kernel selection (woof/ysu_generations.py), the
+    # Noah-MP snow-age generation by the Noah-MP radiation/glacier units,
+    # and the urban water/canopy generations, tree and vegetation controls
+    # and table directory by the SLUCM/BEP column (core/urban_*); nothing
+    # under woof/ingest reads any of them, so one prepared bundle serves
+    # every value.  Checkpoints still bind them (io/restart.py).
+    "run.solar_generation",
+    "run.ysu_version",
+    "run.noahmp_snow_age",
+    "run.urban_water_balance",
+    "run.urban_ucm_generation",
+    "run.urban_treeoption",
+    "run.urban_ttscheme",
+    "run.urban_fvg",
+    "run.urban_table_dir",
     # The vertical advection ladder and the (declaration-only) horizontal
     # momentum order are read by the flux-divergence launchers alone; no
     # initial field or boundary table depends on them, so one prepared
@@ -735,12 +927,36 @@ PREPARATION_INERT_RUN_FIELDS = frozenset({
     # clock reads it, once per root step of the forecast, and the forecast
     # doors set it after the cache is read.
     "run.min_time_step_sound",
+    # Acoustic off-centering is used by the forecast dycore only. Refusing
+    # it here prevented a prepared steep-terrain nest from adopting the
+    # measured stable value without rebuilding identical initial arrays.
+    # It remains in experiment and restart identity because it changes
+    # the forecast trajectory.
+    "run.epssm",
     # Only the forecast clock reads this; prepared arrays do not change.
     "run.adaptive_nest_lattice",
     # WRF's slope_rad / topo_shading / shadlen: read only by the forecast's
     # radiation and surface calls (woof.core.topo_radiation), from the
     # prepared terrain; no prepared array depends on them.
     "run.slope_rad", "run.topo_shading", "run.shadlen",
+    # THE CHEM OPERATOR'S SWITCHES (smoke / GOCART-lite / CAMS program,
+    # woof/config.py after adaptive_nest_lattice).  Each is read by the
+    # forecast's chem step or chem transport and by nothing that builds a
+    # prepared array: which species a prepared state carries is decided by
+    # run.chem_sets (tolerant table above) and the chem table's own
+    # identity (prepared_domain_config_identity), never by these.
+    "run.chem_adv_opt", "run.chem_mix2_off", "run.chem_mix6_off",
+    "run.chemdt", "run.kemit", "run.biomass_burn_opt",
+    "run.plumerisefire_frq", "run.dust_opt", "run.seas_opt",
+    "run.dmsemis_opt", "run.wetscav_onoff", "run.chem_conv_tr",
+    "run.vertmix_onoff", "run.aer_ra_feedback", "run.aer_op_opt",
+    "run.dust_alpha", "run.dust_gamma", "run.dust_smtune", "run.dust_ustune",
+    "run.mynn_chem_vertmx", "run.fire_emission_mode",
+    "run.plume_fire_properties", "run.aerosol_mp_coupling",
+    # simple_dir_fdb: read by the radiation factory (transported smoke into
+    # the aer_opt = 3 shortwave), by nothing that builds a prepared array.
+    "run.simple_dir_fdb", "run.enh_vermix", "run.flam_part",
+    "run.aer_drydep_opt",
     # THE SASE CLOSURE'S SELECTORS, out of the tolerant table above for
     # the same reason as the adaptive targets: they have to be forgiven at
     # any value.  No WRF namelist spells them, so an HRRR hierarchy
@@ -763,7 +979,7 @@ PREPARATION_INERT_RUN_FIELDS = frozenset({
     # a Grell-Freitas root that runs clos_choice = 1, so binding them
     # refused a prepared domain for a key preparation never read.  They
     # stay in the experiment fingerprint and the restart identity.
-    "run.clos_choice", "run.ishallow",
+    "run.clos_choice", "run.ishallow", "run.cugd_avedx",
     # NOAH MOSAIC AND WHERE ITS URBAN CANOPY RUNS, on the same argument.
     # Preparation writes LANDUSEF whatever these say; the forecast's
     # initialization doors build the tiles from it after the cache is read
@@ -796,12 +1012,59 @@ PREPARATION_INERT_RUN_FIELDS = frozenset({
     # every value.  They stay in the experiment fingerprint and the
     # restart identity when moved.
     "run.swint_opt", "run.aer_opt",
+    # The aer_opt = 2 user-aerosol controls (woof/config.py
+    # AER_OPT2_RUN_KEYS), on the same argument: only the legacy RRTMG
+    # shortwave's aerosol optics read them, on each radiation call, and
+    # nothing under woof/ingest names any of them, so the prepared initial
+    # state and boundary tables are the same under every value.  They stay
+    # in the experiment fingerprint and the restart identity.
+    "run.aer_type", "run.aer_aod550_opt", "run.aer_angexp_opt",
+    "run.aer_ssa_opt", "run.aer_asy_opt", "run.aer_aod550_val",
+    "run.aer_angexp_val", "run.aer_ssa_val", "run.aer_asy_val",
+    "run.aer_auxinput15", "run.aer_auxinput15_interval",
+    # WRF's lightning diagnostic package (lightning_option and its controls,
+    # cd75865eb6e): off by default, read only by the forecast's diagnostic
+    # driver on its own cadence, and nothing under woof/ingest names any of
+    # them, so the prepared initial state and boundary tables are the same
+    # under every value.  They stay in the experiment fingerprint.
+    "run.lightning_option", "run.lightning_dt", "run.lightning_start_seconds",
+    "run.flashrate_factor", "run.iccg_method", "run.iccg_prescribed_num",
+    "run.iccg_prescribed_den", "run.cellcount_method", "run.cldtop_adjustment",
+    "run.do_radar_ref",
+    # WRF's one-dimensional ocean mixed layer (sf_ocean_physics and its
+    # namelist values, 27c2bab6456): off by default and read only by the
+    # forecast's surface step from the live state; nothing under
+    # woof/ingest names it, so preparation writes the same state under
+    # every value.  It stays in the experiment fingerprint and the restart
+    # identity.
+    "run.sf_ocean_physics", "run.oml_hml0", "run.oml_gamma",
+    "run.oml_relaxation_time",
     # Sun-angle albedo reads live solar geometry on radiation steps; it
     # changes no prepared state or boundary table.
     "run.alb_sol", "run.rrtmg_cloud_optics_form",
+    # The aer_opt=3 aerosol type reads xland on radiation calls only.
+    "run.rrtmg_aer3_type_source",
     # Prescribed smoke acts only in radiation after prepared-state restore.
     # Its full member identity remains in forecast and restart identities.
     "run.rrtmg_smoke_manifest",
+    # WRF's moisture pressure correction (calc_cq; no WRF namelist key).
+    # Only the forecast's acoustic and big-step drivers read it
+    # (woof/core/acoustic.py prepare_moist_cq and the ensemble batch
+    # twins); initialize_real builds the hydrostatic state and the
+    # boundary tables without an acoustic step.  The standing check
+    # holds: nothing under woof/ingest names it, and the prepare-side
+    # mentions are the HRRR hierarchy's per-domain override list and the
+    # nest-transition contract, which read the configuration, not a
+    # prepared array.  An HRRR hierarchy prepares from WRF namelists,
+    # which state the importer's True, so a verification counterfactual
+    # moist_cq = false was refused on that route for a value no prepared
+    # array depends on.  It stays in the experiment fingerprint and the
+    # restart identity.
+    "run.moist_cq",
+    # Placement rain history begins at forecast initialization. Neither
+    # prepared prognostics nor parent boundary tables depend on its policy.
+    # Forecast/restart identity still binds the policy and its archive.
+    "run.nest_accumulation_archive",
 })
 
 
@@ -854,6 +1117,10 @@ def effective_prepared_domain_config(document):
         section, _, key = path.partition(".")
         if section == "run" and key:
             run.pop(key, None)
+    for path, inactive in RETIRED_INACTIVE_IDENTITY_FIELDS.items():
+        _, _, key = path.partition(".")
+        if key in run and run[key] == inactive:
+            run.pop(key)
     if run.get("radt", 0.0) > 0.0:
         run["radt_minutes"] = run["radt"]
     if "radt" in run and "radt_minutes" in run:
@@ -985,6 +1252,21 @@ def compare_prepared_domain_config(cached, live, *, not_in_use=None
                     differing.append(path)
                 continue
             if key not in live_node:
+                if path in RETIRED_INACTIVE_IDENTITY_FIELDS and cached_node[key] == RETIRED_INACTIVE_IDENTITY_FIELDS[path]:
+                    continue
+                # The mirror of the absent-in-cache rule above: a tolerable
+                # field the CACHE states at its not-in-use value and the
+                # live document omits (an identity that drops a default)
+                # describes the same prepared state.  A nested HRRR-recipe
+                # tree prepared from the namelists states the 2.9.4 sea-ice
+                # parameters at their defaults while the config's identity
+                # omits them, and the tree forecast refused its own fresh
+                # preparation (box D, 2026-10-21 21:16Z).
+                if (path in DEFAULT_TOLERANT_IDENTITY_FIELDS
+                        and path in not_in_use
+                        and cached_node[key] == not_in_use[path]):
+                    tolerated.append(path)
+                    continue
                 differing.append(path)
                 continue
             old, new = cached_node[key], live_node[key]
@@ -1349,6 +1631,54 @@ def read_manifest_array(directory, key: str, spec) -> np.ndarray:
     return array
 
 
+def verify_manifest_arrays(read, keys, specs) -> None:
+    """Read and hash-check every array in ``keys``, across the host's cores.
+
+    Each array is checked exactly as :func:`read_manifest_array` checks it,
+    on a thread pool whose bytes in flight are bounded, and the failure
+    raised is the one the sorted serial walk would raise first.  Breakage
+    this prevents: the end-of-run verify read and hashed a full HRRR cache
+    one array at a time on one thread while the forecast's cards waited
+    (V59, 8 x RTX 5090, 2026-10-21: finalize 6.7 min on one core).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    keys = sorted(keys)
+    if len(keys) <= 1:
+        for key in keys:
+            read(key)
+        return
+    workers = max(1, min(len(keys), (os.cpu_count() or 1), 32))
+    budget = max(1 << 30, int(os.environ.get(
+        "GPUWM_VERIFY_INFLIGHT_BYTES", 8 << 30)))
+    errors: dict[str, BaseException] = {}
+    with ThreadPoolExecutor(max_workers=workers,
+                            thread_name_prefix="cache-verify") as pool:
+        pending = []
+        inflight = 0
+
+        def settle(item):
+            key, future, size = item
+            try:
+                future.result()
+            except BaseException as error:  # noqa: BLE001 - re-raised below
+                errors[key] = error
+            return size
+
+        for key in keys:
+            size = int(specs[key].get("nbytes", 0) or 0)
+            while pending and inflight + size > budget:
+                inflight -= settle(pending.pop(0))
+            pending.append((key, pool.submit(
+                lambda key=key: (read(key), None)[1]), size))
+            inflight += size
+        for item in pending:
+            settle(item)
+    for key in keys:
+        if key in errors:
+            raise errors[key]
+
+
 class PreparedCacheReader:
     """Validated cache manifest with checked, one-array-at-a-time reads."""
 
@@ -1477,8 +1807,7 @@ class PreparedCacheReader:
         return read_manifest_array(self.path, key, spec)
 
     def verify_all(self) -> dict[str, object]:
-        for key in sorted(self.arrays):
-            self.read_array(key)
+        verify_manifest_arrays(self.read_array, self.arrays, self.arrays)
         return {
             "schema": PREPARED_CACHE_SCHEMA,
             "status": "PASS",
@@ -1560,8 +1889,7 @@ class PreparedHeadReader:
         return read_manifest_array(self.path, key, spec)
 
     def verify_all(self) -> dict[str, object]:
-        for key in sorted(self.arrays):
-            self.read_array(key)
+        verify_manifest_arrays(self.read_array, self.arrays, self.arrays)
         return {
             "schema": PREPARED_CACHE_SCHEMA,
             "status": "HEAD_PASS",
@@ -1841,9 +2169,9 @@ class PreparedCacheStream:
         route, whose head record is then what it always was.
         """
         from woof.state_serialization_contract import (
-            STATE_SERIALIZED_ATTRS, _lateral_fingerprint_header,
+            _lateral_fingerprint_header,
             _update_lateral_fingerprint, _update_setup_core,
-            lateral_boundary_prefix_identity,
+            lateral_boundary_prefix_identity, serialized_state_attrs,
         )
 
         if self._metadata is not None:
@@ -1852,7 +2180,7 @@ class PreparedCacheStream:
         writer = self._writer
         with writer.immutable_batch():
             state_names = []
-            for name in STATE_SERIALIZED_ATTRS:
+            for name in serialized_state_attrs(initial_result.state):
                 value = getattr(initial_result.state, name, None)
                 if value is not None:
                     writer.add(f"state/{name}", value)
@@ -1958,6 +2286,15 @@ class PreparedCacheStream:
             getattr(initial_result, "aerosol_initialization", {}) or {})
         if aerosol_initialization:
             cache_metadata["aerosol_initialization"] = aerosol_initialization
+        # The start state's W, by the same emptiness contract: the row is
+        # written only when the source's vertical velocity was carried
+        # (policy "carried-from-source"), so a zero-W cache canonicalizes
+        # to the bytes it did before and its stored header digest stands.
+        vertical_velocity_initialization = _json_copy(
+            getattr(initial_result, "vertical_velocity_initialization", {}) or {})
+        if vertical_velocity_initialization.get("policy") == "carried-from-source":
+            cache_metadata["vertical_velocity_initialization"] = (
+                vertical_velocity_initialization)
         # The water surface's receipt, and the skin temperatures taken from
         # the other surface because the source held none of the target's
         # own, ride the bundle only when there is something to say, by the
@@ -2211,7 +2548,7 @@ class PreparedCacheStream:
         header = {
             **basis,
             "status": "READY",
-            "created_utc": datetime.now(timezone.utc).isoformat(),
+            "created_utc": _creation_utc(self.directory),
             # Outside `basis`, so the content digest of a cache means
             # exactly what it meant before this release.  Its job is to
             # let a refusal name the release that wrote the bundle
@@ -2662,7 +2999,7 @@ def extend_prepared_cache(path, *, predecessor, suffix, identity,
         header = {
             **basis,
             "status": "READY",
-            "created_utc": datetime.now(timezone.utc).isoformat(),
+            "created_utc": _creation_utc(temporary),
             CACHE_WRITER_KEY: {"gpuwm_version": __version__},
             "content_sha256": hashlib.sha256(
                 _canonical(basis).encode("utf-8")).hexdigest(),
@@ -2852,7 +3189,7 @@ def restore_prepared_cache(path, *, expected_identity, cfg, static,
         attach_lateral_boundaries, record_built_end_frame,
     )
     from woof.state_serialization_contract import (
-        STATE_SERIALIZED_ATTRS, lateral_boundary_prefix_identity,
+        lateral_boundary_prefix_identity, serialized_state_attrs,
         setup_core_fingerprint, setup_fingerprint,
     )
 
@@ -2908,9 +3245,9 @@ def restore_prepared_cache(path, *, expected_identity, cfg, static,
     state.set_map_coriolis(
         static["MAPFAC_M"], static["MAPFAC_U"], static["MAPFAC_V"],
         static["F"], static["E"], sina=static["SINALPHA"],
-        cosa=static["COSALPHA"])
+        cosa=static["COSALPHA"], msfv_inv=static.get("MF_VX_INV"))
     expected_state_names = [
-        name for name in STATE_SERIALIZED_ATTRS
+        name for name in serialized_state_attrs(state)
         if getattr(state, name, None) is not None]
     stored_state_names = reconcile_cached_state_inventory(
         metadata["state_names"], expected_state_names)
@@ -2922,6 +3259,9 @@ def restore_prepared_cache(path, *, expected_identity, cfg, static,
                 f"prepared cache state/{name} shape or dtype differs from "
                 "the active config")
         target[...] = xp.asarray(host)
+    # Strict mode reads theta as WRF's t = theta - 300; a no-op otherwise.
+    from woof.core.state import adopt_wrf_theta_carrier
+    adopt_wrf_theta_carrier(state)
 
     lbc_meta = metadata["lbc"]
     streamed = boundary_source is not None

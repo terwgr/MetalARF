@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_counts_f32",
+      "module": "hexv842_mpas_rrtmg_lw_counts_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_counts_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_lw_v842.py",
+      "cuda_symbol": "mpas_layer_counts",
+      "resources": [
+        [
+          "interfaces",
+          "float",
+          "read"
+        ],
+        [
+          "counts",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "interfaces": [
+          [
+            "any_1d"
+          ]
+        ],
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nm",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

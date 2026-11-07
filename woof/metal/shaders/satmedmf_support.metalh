@@ -1,0 +1,58 @@
+#ifndef WOOF_SATMEDMF_SUPPORT_METALH
+#define WOOF_SATMEDMF_SUPPORT_METALH
+#include "thompson_aerosol_soft8.metalh"
+#pragma clang fp contract(off)
+
+// The vocabulary of woof/core/kernels/satmedmf_common.cuh on soft binary64.
+static inline Soft8 sm_add(Soft8 a, Soft8 b) { return a + b; }
+static inline Soft8 sm_sub(Soft8 a, Soft8 b) { return a - b; }
+static inline Soft8 sm_mul(Soft8 a, Soft8 b) { return a * b; }
+static inline Soft8 sm_div(Soft8 a, Soft8 b) { return a / b; }
+template<class T> static inline T sm_max(T a, T b) { return (a > b || a != a) ? a : b; }
+template<class T> static inline T sm_min(T a, T b) { return (a < b || a != a) ? a : b; }
+static inline Soft8 sm_abs(Soft8 a) { return fabs(a); }
+static inline Soft8 sm_sqrt(Soft8 a) { return sqrt(a); }
+static inline Soft8 sm_exp(Soft8 a) { return glibc_exp(a); }
+static inline Soft8 sm_log(Soft8 a) { return glibc_log(a); }
+static inline Soft8 sm_pow(Soft8 a, Soft8 b) { return glibc_pow(a, b); }
+template<class T> static inline T sm_powi(T x, int m) {
+    uint n = m < 0 ? uint(-m) : uint(m);
+    T y = (n & 1u) ? x : T(1);
+    while (n >>= 1) { x = sm_mul(x, x); if (n & 1u) y = sm_mul(y, x); }
+    return m < 0 ? sm_div(T(1), y) : y;
+}
+static inline Soft8 sm_fpvs(Soft8 t, device const Soft8 *table) {
+    Soft8 xj = sm_min(sm_max(sm_add(Soft8(-8999.0f), sm_mul(Soft8(50.0f), t)), Soft8(1.0f)),
+                      Soft8(7501.0f));
+    int jx = int(sm_min(xj, Soft8(7500.0f)));
+    return sm_add(table[jx - 1], sm_mul(sm_sub(xj, Soft8(jx)), sm_sub(table[jx], table[jx - 1])));
+}
+struct SMWorkspace {
+    device Soft8 *base;
+    device const Soft8 *table;
+    int offset, capacity, highwater;
+    SMWorkspace(device Soft8 *p, device const Soft8 *t, int n)
+        : base(p), table(t), offset(0), capacity(n), highwater(0) {}
+    template<class T> device T *alloc(int n) thread {
+        device T *p = (device T *)(base + offset);
+        offset += n;
+        if (offset > highwater) highwater = offset;
+        return p;
+    }
+};
+struct SMFrame {
+    thread SMWorkspace &ws;
+    int mark;
+    SMFrame(thread SMWorkspace &w) : ws(w), mark(w.offset) {}
+    ~SMFrame() { ws.offset = mark; }
+};
+template<class T> struct SMView {
+    device T *p;
+    int n1, n2, n3, l1, l2, l3;
+    SMView(device T *q, int a, int b = 1, int c = 1, int x = 1, int y = 1, int z = 1)
+        : p(q), n1(a), n2(b), n3(c), l1(x), l2(y), l3(z) {}
+    device T &operator()(int i, int j = 1, int k = 1) const thread {
+        return p[(i - l1) + n1 * ((j - l2) + n2 * (k - l3))];
+    }
+};
+#endif

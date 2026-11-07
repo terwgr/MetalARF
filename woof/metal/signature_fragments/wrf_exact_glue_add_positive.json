@@ -1,0 +1,46 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_glue_add_positive",
+      "module": "wrf_exact_glue_add_positive",
+      "source": "woof/metal/shaders/wrf_exact_glue_add_positive.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "accept_microphysics",
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "n"
+          ]
+        ],
+        "dst": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

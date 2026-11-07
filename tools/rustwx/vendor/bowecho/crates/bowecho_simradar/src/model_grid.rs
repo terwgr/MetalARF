@@ -9,12 +9,12 @@ pub struct InverseLut {
     index: Vec<u32>,
 }
 
-/// Hard floor on the bin size: degenerate-data guard only (~11 m). The real
+/// Hard floor on the bin size — degenerate-data guard only (~11 m). The real
 /// lower bound comes from [`MAX_LUT_BINS`]; a fixed coarse floor here is what
 /// quantized 250 m WRF grids into ~3.3 km blocks (the old 0.03° floor made
 /// every gate in a bucket resolve to ONE model cell, and the sampler's local
 /// 3x3 stencil search could never reach the true cell from a seed ~7 cells
-/// away: giant constant wedges on the synthetic radar).
+/// away — giant constant wedges on the synthetic radar).
 const MIN_BIN_DEG: f32 = 0.0001;
 /// Total-bin budget for the inverse index (u32 each, ~64 MB worst case).
 /// Small fine grids (250 m WRF: ~0.7 M bins) index at native spacing; huge
@@ -58,15 +58,15 @@ impl InverseLut {
     /// boundary (WRF and similar regional model domains). Identical to
     /// [`Self::build_with_shape`] except the hole-fill dilation is confined
     /// to bins inside that perimeter polygon, so a query point outside the
-    /// curvilinear domain edge (but still inside the rectangular lat/lon
-    /// bbox the bins cover) returns `None` instead of the nearest edge
+    /// curvilinear domain edge — but still inside the rectangular lat/lon
+    /// bbox the bins cover — returns `None` instead of the nearest edge
     /// cell (the smeared ~3-bin ring on the synthetic radar's domain
     /// boundary). Seeded bins and interior dilation are untouched, so
     /// in-domain lookups resolve exactly as before.
     ///
     /// Satellite layers must keep [`Self::build_with_shape`]: a full-disk
     /// grid's valid data ends at the earth's limb (NaN regions INSIDE the
-    /// grid), not at the grid perimeter. Misuse still degrades safely: any
+    /// grid), not at the grid perimeter. Misuse still degrades safely — any
     /// non-finite perimeter point disables the mask and this build is then
     /// bin-for-bin identical to `build_with_shape`.
     pub fn build_with_shape_domain_bounded(
@@ -105,14 +105,14 @@ impl InverseLut {
         // Bin size adapts to the grid's spacing (HRRR ~0.03°, GFS 0.25°):
         // bins comparable to the spacing keep holes within one cell of a
         // sample, which the fill passes close. Median of non-degenerate
-        // consecutive steps: row-wrap jumps (tens of degrees between the
+        // consecutive steps — row-wrap jumps (tens of degrees between the
         // end of one row and the start of the next) are filtered out.
         let spacing = shape
             .and_then(|(nx, ny)| shaped_grid_spacing(lat, lon, nx, ny))
             .unwrap_or_else(|| consecutive_spacing(lat, lon).unwrap_or(MIN_BIN_DEG));
         // Bin = the grid's own spacing, floored by the total-bin budget so a
-        // huge domain cannot allocate an unbounded index. The budget floor
-        // (not a fixed degree floor) is what lets a 250 m grid index at native
+        // huge domain cannot allocate an unbounded index. The budget floor —
+        // not a fixed degree floor — is what lets a 250 m grid index at native
         // resolution while a full-disk satellite grid stays ~64 MB.
         let lat_span = lat_max - lat_min;
         let lon_span = lon_max - lon_min;
@@ -261,11 +261,11 @@ fn percentile_step(mut steps: Vec<f32>, percentile: f32) -> Option<f32> {
     steps.get(index).copied()
 }
 
-/// The grid's outer boundary as a closed (lon, lat) ring: south row W→E,
+/// The grid's outer boundary as a closed (lon, lat) ring — south row W→E,
 /// east column S→N, north row E→W, west column N→S in grid order. `None`
 /// when the grid is degenerate or ANY perimeter point is non-finite (a
 /// full-disk satellite grid, whose valid data ends at the earth's limb, not
-/// at the grid perimeter): callers then skip domain masking entirely.
+/// at the grid perimeter) — callers then skip domain masking entirely.
 fn perimeter_ring(lat: &[f32], lon: &[f32], nx: usize, ny: usize) -> Option<Vec<(f64, f64)>> {
     if nx < 2 || ny < 2 {
         return None;
@@ -292,7 +292,7 @@ fn perimeter_ring(lat: &[f32], lon: &[f32], nx: usize, ny: usize) -> Option<Vec<
 /// bins whose CENTER lies inside the polygon (even-odd scanline fill) plus
 /// every bin the boundary itself passes through (edges sampled at half-bin
 /// steps), so bins straddling the boundary stay fillable and the in-domain
-/// side never shrinks. O(bin rows × perimeter edges): a few ms for the
+/// side never shrinks. O(bin rows × perimeter edges) — a few ms for the
 /// largest WRF domains. `None` disables masking (see [`perimeter_ring`]).
 #[allow(clippy::too_many_arguments)]
 fn perimeter_bin_mask(

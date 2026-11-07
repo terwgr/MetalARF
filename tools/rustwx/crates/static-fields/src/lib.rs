@@ -27,6 +27,7 @@
 pub mod capi;
 pub mod corridor;
 pub mod error;
+pub mod extra;
 pub mod fields;
 pub mod geog;
 pub mod highres;
@@ -35,6 +36,10 @@ pub mod npz;
 pub mod projection;
 pub mod raster;
 pub mod sampler;
+pub mod sfire;
+pub mod landfire;
+pub mod sfire_debug;
+pub mod sfire_ideal;
 pub mod smooth;
 #[cfg(test)]
 pub(crate) mod testsupport;
@@ -56,3 +61,5 @@ pub const HALO: usize = 3;
 pub const GCELL_RATIO: f64 = 4.0;
 /// Metres per degree of a great circle on the WPS sphere.
 pub const M_PER_DEG: f64 = EARTH_RADIUS_M * std::f64::consts::PI / 180.0;
+
+pub mod fire_ignition;

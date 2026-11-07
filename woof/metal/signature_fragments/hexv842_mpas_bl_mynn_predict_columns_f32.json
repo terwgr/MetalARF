@@ -1,0 +1,270 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_predict_columns_f32",
+      "module": "hexv842_mpas_bl_mynn_predict_columns_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_predict_columns_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_mym_predict",
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "el",
+          "float",
+          "read"
+        ],
+        [
+          "dfq",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "s_aw",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqke",
+          "float",
+          "read"
+        ],
+        [
+          "pdk",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdt",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qke",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsq",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsq",
+          "float",
+          "read_write"
+        ],
+        [
+          "cov",
+          "float",
+          "read_write"
+        ],
+        [
+          "qwt1d",
+          "float",
+          "read_write"
+        ],
+        [
+          "qdiss1d",
+          "float",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "float",
+          "read_write"
+        ],
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "flt",
+          "float",
+          "read"
+        ],
+        [
+          "flq",
+          "float",
+          "read"
+        ],
+        [
+          "pmz",
+          "float",
+          "read"
+        ],
+        [
+          "phh",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "el": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dfq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_aw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s_awqke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cov": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qwt1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qdiss1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scratch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ust": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phh": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "closure",
+          "float32"
+        ],
+        [
+          "delt",
+          "float32"
+        ],
+        [
+          "karman",
+          "float32"
+        ],
+        [
+          "bl_mynn_edmf_tke",
+          "int32"
+        ],
+        [
+          "bl_mynn_tkebudget",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

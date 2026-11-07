@@ -1,0 +1,224 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_output_diagnostics_v842_f32",
+      "module": "hexv842_mpas_diagnostics_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_diagnostics_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/diagnostics_v842.py",
+      "cuda_symbol": "mpas_output_diagnostics_v842",
+      "resources": [
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_cold_thermodynamics_v842_f32",
+      "module": "hexv842_mpas_diagnostics_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_diagnostics_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/diagnostics_v842.py",
+      "cuda_symbol": "mpas_cold_thermodynamics_v842",
+      "resources": [
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_p",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_base",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcv",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

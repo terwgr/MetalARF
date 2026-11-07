@@ -7,6 +7,7 @@ using namespace metal;
 static inline float ubmf_add(float a,float b){return as_type<float>(soft32_add(as_type<uint>(a),as_type<uint>(b)));}
 static inline float ubmf_sub(float a,float b){return as_type<float>(soft32_sub(as_type<uint>(a),as_type<uint>(b)));}
 static inline float ubmf_mul(float a,float b){return as_type<float>(soft32_mul(as_type<uint>(a),as_type<uint>(b)));}
+static inline float ubmf_div(float a,float b){return as_type<float>(soft32_div(as_type<uint>(a),as_type<uint>(b)));}
 static inline float ubmf_pow4(float a){const float h=ubmf_mul(a,a);return ubmf_mul(h,h);}
 
 // WRF bem_bem source order after bem_int_rsrad/rlrad: exterior wall/window
@@ -21,7 +22,7 @@ kernel void urban_bem_indoor_fluxes_fragment(
     device const float *cf=r.class_float,*bs=r.bs,*rsw=r.rsw,*rlw=r.rlw;
     device const float *rsint=r.rsint,*rlint=r.rlint,*tw=r.tw,*twlev=r.twlev;
     device const float *tflev=r.tflev,*tglev=r.tglev,*tr=r.tr,*tlev=r.tlev;
-    device const float *tr_av=r.tr_av,*swdown=r.swdown,*glw=r.glw;
+    device const float *tr_av=r.tr_av,*tpv=r.tpv,*swdown=r.swdown,*glw=r.glw;
     device float *hrwalout=r.hrwalout,*hrwinout=r.hrwinout,*hrrof=r.hrrof;
     device float *hrwalins=r.hrwalins,*hrwinins=r.hrwinins;
     device float *hswalins=r.hswalins,*hswinins=r.hswinins,*surwal=r.surwal,*hscond=r.hscond;
@@ -40,7 +41,6 @@ kernel void urban_bem_indoor_fluxes_fragment(
     const float albw=cf[77+cls],emw=cf[110+cls],albr=cf[88+cls],emr=cf[121+cls];
     const float albwin=cf[1052+cls],emwin=cf[1063+cls],pvfrac=cf[1217+cls],pwin=cf[1085+cls];
     if(!(bw>0.0f&&bl>0.0f&&dz>0.0f)||!isfinite(bw)||!isfinite(bl)||!isfinite(dz)||!(pwin>=0.0f&&pwin<=1.0f)||!isfinite(pwin)){error[item]=3822;return;}
-    if(pvfrac!=0.0f){error[item]=3820;return;}
     const ulong base_tw=((((ulong(col)*15ul+b)*10ul)*18ul+lev)*4ul);
     const ulong base_outer=((((ulong(col)*15ul+b)*10ul+9ul)*18ul+lev)*4ul);
     const ulong base_twin=(((ulong(col)*15ul+b)*18ul+lev)*4ul);
@@ -61,24 +61,38 @@ kernel void urban_bem_indoor_fluxes_fragment(
     }
     if(lev==0u){
         wall_t[4]=tglev[((ulong(col)*15ul+b)*10ul+9ul)*2ul+1ul];
-        wall_t[5]=(levels==1)?tr[(ulong(col)*10ul)*18ul*2ul+1ul]:tflev[(((ulong(col)*15ul+b)*10ul)*17ul)*2ul+1ul];
+        wall_t[5]=(levels==1)?tr[((ulong(col)*10ul)*18ul+uint(levels))*2ul+1ul]:tflev[(((ulong(col)*15ul+b)*10ul)*17ul)*2ul+1ul];
     }else if(lev+1u==uint(levels)){
         wall_t[4]=tflev[(((ulong(col)*15ul+b)*10ul+9ul)*17ul+(lev-1u))*2ul+1ul];
-        wall_t[5]=tr[(ulong(col)*10ul)*18ul*2ul+1ul];
+        wall_t[5]=tr[((ulong(col)*10ul)*18ul+uint(levels))*2ul+1ul];
     }else{
         wall_t[4]=tflev[(((ulong(col)*15ul+b)*10ul+9ul)*17ul+(lev-1u))*2ul+1ul];
         wall_t[5]=tflev[(((ulong(col)*15ul+b)*10ul)*17ul+lev)*2ul+1ul];
     }
     area[4]=area[5]=ubmf_mul(bw,bl);surwal[b6+4ul]=area[4];surwal[b6+5ul]=area[5];
-    for(uint f=4;f<6;++f)
+    for(uint f=4;f<6;++f){
+        hrwalins[b6+f]=ubmf_sub(ubmf_add(ubmf_mul(0.7f,rsint[i6+f]),ubmf_mul(0.9f,rlint[i6+f])),ubmf_mul(ubmf_mul(0.9f,5.67e-8f),ubmf_pow4(wall_t[f])));
         hswalins[b6+f]=ubmf_mul(ubmf_mul(5.678f,1.09f),ubmf_sub(tlev[(ulong(col)*15ul+b)*18ul+lev],wall_t[f]));
+    }
     float cond=0.0f;
     for(uint f=0;f<4;++f){
         cond=ubmf_add(ubmf_add(cond,ubmf_mul(ubmf_mul(area[f],ubmf_sub(1.0f,pwin)),hswalins[b6+f])),ubmf_mul(ubmf_mul(area[f],pwin),hswinins[b4+f]));
     }
     for(uint f=4;f<6;++f)cond=ubmf_add(cond,ubmf_mul(area[f],hswalins[b6+f]));
     hscond[item]=ubmf_mul(-1.0f,cond);
-    const float roof_t=tr_av[(ulong(col)*18ul+17ul)*2ul];
-    if(lev==0u)hrrof[ulong(col)*15ul+b]=ubmf_sub(ubmf_add(ubmf_mul(ubmf_sub(1.0f,albr),swdown[col]),ubmf_mul(emr,glw[col])),ubmf_mul(ubmf_mul(emr,5.67e-8f),ubmf_pow4(roof_t)));
+    const float roof_t=tr_av[(ulong(col)*18ul+uint(levels))*2ul];
+    if(lev==0u){
+        float roof;
+        if(pvfrac==0.0f){
+            roof=ubmf_sub(ubmf_add(ubmf_mul(ubmf_sub(1.0f,albr),swdown[col]),ubmf_mul(emr,glw[col])),ubmf_mul(ubmf_mul(emr,5.67e-8f),ubmf_pow4(roof_t)));
+        }else{
+            // bem_radfluxspv
+            const float tpv_roof=tpv[(ulong(col)*18ul+uint(levels))*2ul];
+            const float hrad=ubmf_div(5.67e-8f,ubmf_add(ubmf_add(ubmf_div(ubmf_sub(1.0f,0.95f),0.95f),ubmf_div(1.0f,1.0f)),ubmf_div(ubmf_sub(1.0f,emr),emr)));
+            const float open=ubmf_sub(1.0f,pvfrac);
+            roof=ubmf_sub(ubmf_add(ubmf_add(ubmf_mul(ubmf_mul(ubmf_sub(1.0f,albr),open),swdown[col]),ubmf_mul(ubmf_mul(emr,open),glw[col])),ubmf_mul(ubmf_mul(pvfrac,hrad),ubmf_sub(ubmf_pow4(tpv_roof),ubmf_pow4(roof_t)))),ubmf_mul(ubmf_mul(ubmf_mul(emr,5.67e-8f),open),ubmf_pow4(roof_t)));
+        }
+        hrrof[ulong(col)*15ul+b]=roof;
+    }
     error[item]=0;
 }

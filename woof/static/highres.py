@@ -232,10 +232,23 @@ WATER_SPLIT_BY_BASELINE = "split-by-baseline"
 WATER_FROM_SOURCE = "from-source"
 WATER_RULES = (WATER_SPLIT_BY_BASELINE, WATER_FROM_SOURCE)
 
+#: NLCD 21, "Developed, Open Space", is under 20 % impervious and mostly
+#: lawn grass (parks, golf courses, airfield infields, large-lot homes,
+#: rural road margins), so without an urban canopy it is grassland, not
+#: ISURBAN.  As ISURBAN, Noah gave every such cell the bulk-urban soil
+#: (thermal conductivity 3.24 W/m/K, heat capacity 3e6 J/m3/K, 5 % green
+#: cover), and at 2.25 km the 21 pixels tipped airport, suburban and
+#: small-town cells into urban: on the 27 Oct 2026 12Z SF-template replay
+#: those cells held their surface at the lowest-level temperature all
+#: night, +5.4 F against ASOS at 03-12Z; as grassland, -0.3 F.
+#: With an urban
+#: canopy, ``landcover_legend`` still sends 21 to the low-density urban
+#: type and its area fraction comes from the impervious-class midpoint.
 NLCD_TO_MODIS21_INLAND = {
     11: 21,  # open water -> inland lake for the scoped CONUS pilot
     12: 15,  # perennial snow / ice
-    21: 13, 22: 13, 23: 13, 24: 13,  # developed intensity classes
+    21: 10,  # developed, open space (< 20 % impervious) -> grassland
+    22: 13, 23: 13, 24: 13,  # developed low / medium / high intensity
     31: 16,  # barren
     41: 4,   # deciduous broadleaf forest
     42: 1,   # evergreen needleleaf forest
@@ -267,6 +280,16 @@ CGLC_MODIS_LCZ_TO_MODIS21 = {
 NLCD_URBAN_TYPES = {21: 1, 22: 1, 23: 2, 24: 3}
 
 
+class _SlucmFractionLegend(dict):
+    """A crosswalk with SLUCM-only preparation metadata.
+
+    Dictionary items and serialized bytes are the established legend.
+    BEP/BEM retain their existing table fractions and ordinary mappings.
+    """
+
+    estimate_slucm_fraction = True
+
+
 def landcover_legend(source_id, *, sf_urban_physics=0, use_wudapt_lcz=0):
     """Crosswalk and NUM_LAND_CAT selected by the run's urban canopy."""
     mapping = (CGLC_MODIS_LCZ_TO_MODIS21 if source_id == "cglc-modis-lcz"
@@ -292,7 +315,83 @@ def landcover_legend(source_id, *, sf_urban_physics=0, use_wudapt_lcz=0):
         mapping = {**mapping, **{raw: categories.lcz[k - 1]
                                 for raw, k in NLCD_URBAN_TYPES.items()}}
     from woof.core.landuse import load_landuse_table
+    if sf_urban_physics == 1:
+        mapping = _SlucmFractionLegend(mapping)
     return mapping, load_landuse_table().lucats
+
+
+#: ``[static.highres] lcz_pervious``: what the unpaved part of a built
+#: Local Climate Zone pixel (CGLC-MODIS-LCZ 51-61) becomes when no urban
+#: canopy model runs.  ``"urban"`` (the default, and what WRF does): the
+#: whole pixel is ISURBAN, and plain Noah gives an ISURBAN tile no
+#: evaporation at all.  ``"split"``: the pixel's area goes FRC_URB of its
+#: LCZ type (URBPARM_LCZ.TBL) to ISURBAN and the rest to VEGPARM.TBL's
+#: NATURAL category, the class WRF's Noah driver runs the pervious part of
+#: a city cell as when an urban canopy is on (module_sf_noahdrv.F
+#: 964-990).  Under the Noah mosaic each part is its own tile: the paved
+#: tile keeps bulk-urban heat, the unpaved tile evaporates.  On the
+#: 28 Oct 2026 12Z NYC 750 m replay the "urban" legend left 51 % of the
+#: nest's land with zero latent heat at midday (HRRR 30-65 W/m2).
+LCZ_PERVIOUS_URBAN = "urban"
+LCZ_PERVIOUS_SPLIT = "split"
+LCZ_PERVIOUS_CHOICES = (LCZ_PERVIOUS_URBAN, LCZ_PERVIOUS_SPLIT)
+
+
+def lcz_pervious_split():
+    """``({raw LCZ class: built fraction}, natural category)``.
+
+    The built fractions are URBPARM_LCZ.TBL's FRC_URB rows, read through
+    the same table loader and category lookup the urban canopy uses, so
+    the split and SLUCM agree on how much of each LCZ type is paved.
+    """
+    from woof.core.urban_tables import load_urban_params, urban_category_set
+
+    categories = urban_category_set(isurban=MODIS21_ISURBAN)
+    lcz_raw = tuple(range(51, 62))
+    if tuple(categories.lcz) != lcz_raw:
+        raise ValueError(
+            f"VEGPARM.TBL numbers LCZ_1..LCZ_11 {categories.lcz}, not the "
+            f"CGLC-MODIS-LCZ raster's {lcz_raw[0]}..{lcz_raw[-1]}: the split "
+            "would give one LCZ type another type's built fraction")
+    params = load_urban_params(1, 1)
+    lookup = categories.utype_lookup(1)
+    built = {raw: float(params.FRC_URB_TBL[int(lookup[raw]) - 1])
+             for raw in lcz_raw}
+    return built, int(categories.natural)
+
+
+def resample_lcz_pervious_split(
+        source: BoundRaster, grid: ProjectedGrid,
+        mapping: Mapping[int, int], *, category_count: int) -> np.ndarray:
+    """Area fractions with each built LCZ pixel split paved / unpaved.
+
+    The LCZ classes are resampled as their own temporary planes past
+    ``category_count`` (the same Rust area average every other class
+    takes), then each plane is folded: FRC_URB of it to ISURBAN, the rest
+    to NATURAL.  A cell's fractions still sum to one, and uncovered cells
+    stay NaN in every plane.
+    """
+    if dict(mapping) != CGLC_MODIS_LCZ_TO_MODIS21:
+        raise ValueError(
+            "lcz_pervious = \"split\" needs the CGLC-MODIS-LCZ legend of a "
+            "run with no urban canopy: an urban canopy already runs the "
+            "unpaved share of its cells as NATURAL from FRC_URB2D, so a "
+            "split land use would count that share twice, and a source "
+            "with no LCZ classes would change nothing while its receipt "
+            "said split")
+    built, natural = lcz_pervious_split()
+    extra = {raw: category_count + n
+             for n, raw in enumerate(sorted(built), start=1)}
+    planes = resample_mapped_categories(
+        source, grid, {**mapping, **extra},
+        category_count=category_count + len(extra))
+    fractions = np.array(planes[:category_count], dtype=np.float64,
+                         copy=True)
+    for raw, plane in extra.items():
+        share = np.asarray(planes[plane - 1], dtype=np.float64)
+        fractions[MODIS21_ISURBAN - 1] += built[raw] * share
+        fractions[natural - 1] += (1.0 - built[raw]) * share
+    return fractions
 
 
 def expand_landuse_baseline(baseline, category_count):
@@ -410,10 +509,6 @@ def _grid_crs(grid):
         raise NotImplementedError(
             f"no CRS mapping for map_proj {map_proj!r}")
     return CRS.from_proj4(proj4)
-
-
-#: Backward-compatible name (predates the worldwide projections).
-_lambert_crs = _grid_crs
 
 
 def _raster_geometry(grid):
@@ -1164,6 +1259,8 @@ def build_highres_overrides(
         baseline: Mapping[str, np.ndarray] | None = None,
         landcover_water: str = WATER_SPLIT_BY_BASELINE,
         category_count: int = MODIS21_CATEGORY_COUNT,
+        soil_source: str = "soilgrids",
+        lcz_pervious: str = LCZ_PERVIOUS_URBAN,
         ) -> tuple[dict[str, np.ndarray], dict[str, object]]:
     """Build terrain, land-use, and soil fields for one projected domain.
 
@@ -1195,6 +1292,10 @@ def build_highres_overrides(
     exactly, so water stays water there.  ``terrain`` or ``landcover`` is
     ``None`` when its source publishes nothing over the footprint.  The
     per-field counts and bounds are in ``audit["coverage"]``.
+
+    ``lcz_pervious`` is one of :data:`LCZ_PERVIOUS_CHOICES`; ``"split"``
+    divides every built LCZ pixel into its paved and unpaved parts
+    (:func:`resample_lcz_pervious_split`) and is recorded in the audit.
     """
 
     baseline = expand_landuse_baseline(baseline, category_count)
@@ -1219,10 +1320,20 @@ def build_highres_overrides(
         raise ValueError(
             f"landcover_water {landcover_water!r} is not one of "
             f"{list(WATER_RULES)}")
+    if lcz_pervious not in LCZ_PERVIOUS_CHOICES:
+        raise ValueError(
+            f"lcz_pervious {lcz_pervious!r} is not one of "
+            f"{list(LCZ_PERVIOUS_CHOICES)}")
     landcover_id = _source_id(landcover)
     if landcover is None:
         covered_ext = np.zeros((ny + 2 * halo, nx + 2 * halo), dtype=bool)
         luf = np.zeros((category_count, ny, nx))
+    elif lcz_pervious == LCZ_PERVIOUS_SPLIT:
+        luf_extended = resample_lcz_pervious_split(
+            landcover, extended, landcover_mapping,
+            category_count=category_count)
+        covered_ext = np.all(np.isfinite(luf_extended), axis=0)
+        luf = np.array(luf_extended[(slice(None),) + crop], copy=True)
     else:
         luf_extended = resample_mapped_categories(
             landcover, extended, landcover_mapping,
@@ -1265,11 +1376,16 @@ def build_highres_overrides(
                      **_coverage_record(landcover_id, luf_weight, latlon)},
     }
 
+    if soil_source not in ("soilgrids", "wps-geog"):
+        raise ValueError(f"unknown high-resolution soil_source {soil_source!r}")
     soil_id = next((_source_id(source) for _, source
                     in sorted(soil_sources.items())), None)
     soil_fields: dict[str, np.ndarray] = {}
     soil_audit = {}
-    for layer_name, weights in SOILGRIDS_DEPTH_WEIGHTS.items():
+    if soil_source == "wps-geog":
+        soil_fields, soil_audit = selected_geog_soil(soil_fallback, landmask)
+    for layer_name, weights in (SOILGRIDS_DEPTH_WEIGHTS.items()
+                                if soil_source == "soilgrids" else ()):
         fractions_extended, layer_audit = soilgrids_category_fractions(
             soil_sources, weights, extended, category_count=16)
         fractions = fractions_extended[(slice(None),) + crop]
@@ -1348,10 +1464,85 @@ def build_highres_overrides(
             *[source.receipt() for _, source in sorted(soil_sources.items())],
         ],
     }
+    if lcz_pervious == LCZ_PERVIOUS_SPLIT and landcover is not None:
+        built, natural = lcz_pervious_split()
+        audit["lcz_pervious"] = {
+            "rule": "split",
+            "built_to_category": MODIS21_ISURBAN,
+            "unpaved_to_category": natural,
+            "built_fraction_by_class": {str(k): v for k, v in built.items()},
+            "table": "URBPARM_LCZ.TBL FRC_URB",
+        }
     if not terrain_smoothing.is_default:
         audit["method"] = audit["method"].replace("one WPS smooth-desmooth terrain pass",
             f"WPS terrain smoothing {terrain_smoothing.label()}")
+    if getattr(landcover_mapping, "estimate_slucm_fraction", False):
+        # The retained legend is selected only by an enabled canopy. Pick
+        # the same table as its existing source crosswalk, without inferring
+        # urban intensity from a different source's class numbers.
+        selected_lcz = None
+        for source_id, lcz in (("annual-nlcd", 0), ("cglc-modis-lcz", 1)):
+            selected, count = landcover_legend(
+                source_id, sf_urban_physics=1, use_wudapt_lcz=lcz)
+            if count == category_count and selected == landcover_mapping:
+                selected_lcz = lcz
+                break
+        if selected_lcz is None:
+            raise ValueError(
+                "the requested SLUCM area fraction has no registered URBPARM "
+                "crosswalk: its estimate would be missing or would use the "
+                "wrong urban class parameters")
+        from .urban_fraction import estimate_urban_fraction
+        fraction_source = {}
+        if selected_lcz == 0 and landcover is not None:
+            # Preserve the four NLCD developed intensities before 21/22
+            # collapse to one morphology type. All numerical resampling
+            # and weighting remains in Rust. URBPARM supplies morphology,
+            # while NLCD's imperviousness classes supply the built area.
+            raw_mapping = {raw: 1 for raw in NLCD_TO_MODIS21_INLAND}
+            raw_mapping.update({raw: n for n, raw in
+                                enumerate((21, 22, 23, 24), start=2)})
+            source_extended = resample_mapped_categories(
+                landcover, extended, raw_mapping, category_count=5)
+            fraction_source = {
+                "source_fractions": source_extended[(slice(None),) + crop],
+                "source_weight": luf_weight,
+            }
+        fields["FRC_URB2D"], audit["urban_fraction"] = estimate_urban_fraction(
+            fields, option=1, use_wudapt_lcz=selected_lcz, **fraction_source)
     return fields, audit
+
+
+def selected_geog_soil(soil_fallback, landmask):
+    """Carry selected WPS soil through the new land mask in Rust."""
+    import ctypes
+    from . import rust_bridge as bridge
+
+    library = bridge.load()
+    try:
+        entry = library.gpuwm_static_highres_baseline_soil
+    except AttributeError:
+        raise bridge.StaticBridgeError(
+            "the staged static-fields library cannot retain selected WPS "
+            "soil beneath high-resolution land cover; it would replace it "
+            "with SoilGrids. Rebuild the static-fields bridge.") from None
+    entry.argtypes = [ctypes.c_uint64, ctypes.c_uint64,
+                      ctypes.POINTER(ctypes.c_uint64)]
+    entry.restype = ctypes.c_int32
+    baseline_handle = _fieldset_new(bridge, soil_fallback or {})
+    mask_handle = _fieldset_new(bridge, {"LANDMASK": landmask})
+    output = ctypes.c_uint64(0)
+    try:
+        if entry(baseline_handle, mask_handle, ctypes.byref(output)) != 0:
+            raise ValueError(bridge.last_error(library))
+        return (bridge.fieldset_to_dict(output.value),
+                bridge.highres_audit_json(output.value))
+    finally:
+        bridge.fieldset_free(baseline_handle)
+        bridge.fieldset_free(mask_handle)
+        if output.value:
+            bridge.highres_audit_drop(output.value)
+            bridge.fieldset_free(output.value)
 
 
 #: How the warning and the receipt name each soil layer.
@@ -1678,6 +1869,7 @@ def merge_highres_overrides(
 
 __all__ = [
     "BoundRaster", "CGLC_MODIS_LCZ_TO_MODIS21", "COVERAGE_BLEND_CELLS",
+    "LCZ_PERVIOUS_CHOICES", "LCZ_PERVIOUS_SPLIT", "LCZ_PERVIOUS_URBAN",
     "MODIS21_CATEGORY_COUNT", "MODIS21_ISICE", "MODIS21_ISLAKE",
     "MODIS21_ISURBAN", "MODIS21_ISWATER",
     "NLCD_TO_MODIS21_INLAND", "SOILGRIDS_DEPTH_WEIGHTS",

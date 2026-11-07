@@ -1,0 +1,79 @@
+#ifndef WOOF_SOFT_WORD32_METALH
+#define WOOF_SOFT_WORD32_METALH
+
+// Binary32 values carried as raw IEEE words. Metal flushes binary32 subnormals
+// in arithmetic and in comparisons, while the CUDA units' host reference keeps
+// them; every operation and comparison on F therefore runs on the soft32
+// round-to-nearest words, and the pinned glibc float math on their soft64
+// translations. Define WOOF_SOFT8 after including thompson_aerosol_soft8.metalh
+// to add the binary64 conversions the units' casts use.
+
+#include "soft_binary32.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
+
+using namespace metal;
+#pragma clang fp contract(off)
+
+// A unit that converts between binary32 and binary64 implicitly, as C++ does,
+// defines WOOF_F_IMPLICIT and adds its mixed operators.
+#ifdef WOOF_F_IMPLICIT
+#define WOOF_F_EXPLICIT
+#else
+#define WOOF_F_EXPLICIT explicit
+#endif
+
+#ifdef WOOF_SOFT8
+#define WOOF_F_SOFT8(AS) WOOF_F_EXPLICIT operator Soft8() const AS { return Soft8(as_type<float>(bits)); }
+#else
+#define WOOF_F_SOFT8(AS)
+#endif
+#define WOOF_F_CONVERT(AS) \
+    WOOF_F_SOFT8(AS) \
+    explicit operator int() const AS { return int(as_type<float>(bits)); }
+
+struct F {
+    uint bits;
+    F() = default;
+    F(float value) { bits = as_type<uint>(value); }
+#ifdef WOOF_SOFT8
+    WOOF_F_EXPLICIT F(Soft8 value) { bits = soft64_to_f32_bits(value.bits); }
+#endif
+    WOOF_F_CONVERT(thread)
+#ifdef WOOF_F_IMPLICIT
+    WOOF_F_CONVERT(device)
+    WOOF_F_CONVERT(constant)
+#endif
+    explicit operator float() const { return as_type<float>(bits); }
+    F operator-() const { F r; r.bits = bits ^ 0x80000000u; return r; }
+};
+#undef WOOF_F_CONVERT
+#undef WOOF_F_SOFT8
+
+static inline F f32_word(uint bits) { F r; r.bits = bits; return r; }
+
+static inline bool operator<(F a, F b) { return soft32_less(a.bits, b.bits); }
+static inline bool operator>(F a, F b) { return soft32_greater(a.bits, b.bits); }
+static inline bool operator<=(F a, F b) { return soft32_less_equal(a.bits, b.bits); }
+static inline bool operator>=(F a, F b) { return soft32_greater_equal(a.bits, b.bits); }
+static inline bool operator==(F a, F b) { return soft32_equal(a.bits, b.bits); }
+static inline bool operator!=(F a, F b) { return !soft32_equal(a.bits, b.bits); }
+static inline F operator+(F a, F b) { return f32_word(soft32_add(a.bits, b.bits)); }
+static inline F operator-(F a, F b) { return f32_word(soft32_sub(a.bits, b.bits)); }
+static inline F operator*(F a, F b) { return f32_word(soft32_mul(a.bits, b.bits)); }
+static inline F aa_div_impl(F a, F b) { return f32_word(soft32_div(a.bits, b.bits)); }
+
+static inline F fabs(F x) { return f32_word(x.bits & 0x7fffffffu); }
+static inline bool isnan(F x) { return soft32_is_nan(x.bits); }
+static inline F aa_sqrtf(F x) { return f32_word(soft32_sqrt(x.bits)); }
+static inline F gfk_exp(F x) { return f32_word(soft_gfk_exp(x.bits)); }
+static inline F gfk_log(F x) { return f32_word(soft_gfk_log(x.bits)); }
+static inline F gfk_pow(F x, F y) { return f32_word(soft_gfk_pow_bits(x.bits, y.bits)); }
+static inline F __fadd_rn(F a, F b) { return a + b; }
+static inline F __fsub_rn(F a, F b) { return a - b; }
+static inline F __fmul_rn(F a, F b) { return a * b; }
+static inline F __fdiv_rn(F a, F b) { return aa_div_impl(a, b); }
+static inline F __fsqrt_rn(F a) { return aa_sqrtf(a); }
+
+#endif

@@ -1,95 +1,10 @@
-"""Stage the built Rust artifacts INTO the package, for a platform wheel.
+"""Stage every declared native artifact into a platform wheel.
 
-``pip install recast-woof`` used to land a Python half with no compiled Rust at
-all: every decoder, the fetch backbone, the renderer and the radar front
-door were downloaded afterwards by ``woof setup`` / ``woof
-fetch-bridges``.  That made the post-install step a failure surface on
-the one command every user runs first, and it made "the decode runs in
-Rust" unreachable on a bare install -- which is the whole point of doing
-the decode in Rust.
-
-This tool closes that by copying the artifacts
-:data:`woof.bridge_assets.BUNDLED_ARTIFACTS` declares out of the two
-Cargo workspaces and into :func:`woof.bridges.packaged_bridge_dir`
-(``woof/libexec/bridges``), which
-``[tool.setuptools.package-data]`` sweeps into the wheel.  Run it
-between ``cargo build --release`` and ``python -m build``; the resulting
-wheel is platform-tagged by ``setup.py`` because it now carries native
-code.
-
-It is deliberately NOT a build step: it copies bytes that already exist
-and refuses when they do not, so a wheel can never be built with a
-silently missing artifact and ship a door that dies at first use.
-
-    python tools/stage_wheel_bridges.py --platform win-x86_64
-    python tools/stage_wheel_bridges.py --clean
-
-``--dest DIR`` points the same table-driven copy at a directory other
-than the package, which is what completes a HOME from a build tree::
-
-    python tools/stage_wheel_bridges.py --dest ~/.woof/bridges
-
-That rung -- ``woof.bridges.default_bridge_dir`` -- is the last one
-every resolver searches, and it is the rung a wheel-less checkout user
-fills.  Filling it by hand is how a home came to carry sixteen of the
-declared artifacts, missing the NetCDF decoder and the NetCDF writer
-behind the default wrfout engine; a hand copy has no declaration to
-check itself against and this tool does.  Only the in-package
-destination is emptied first (a wheel carrying two platforms is both
-wrong and over PyPI's cap); any other destination keeps everything this
-tool did not stage.
-
-What is NOT staged, and why: the renderer's basemap shapefiles.  They
-are 21.1 MB compressed, and there is no room for them.  They are also
-DATA (Natural Earth coastlines and county polygons), not a processing
-path.  Since 2.8.0 they ship in the ``recast-woof-data`` companion, which
-every install pulls, and :func:`woof.rustwx.renderer_env` hands that
-copy to this wheel's renderer; before that they reached a wheel install
-only through ``woof fetch-bridges``, which no install text ran, and
-every picture came out with no coastlines, borders or state lines.
-
-Sizes, measured 2026-08-17 at the 2.5.0 integration tip, against
-PyPI's 100 MB per-file cap read strictly as 100,000,000 B::
-
-    pure wheel      gpuwm-2.5.0-py3-none-any.whl          91,926,618 B
-    pure sdist      gpuwm-2.5.0.tar.gz                    95,245,042 B
-    win-x86_64      gpuwm-2.5.0-py3-none-win_amd64.whl   108,695,109 B
-    linux-x86_64    ...-manylinux_2_28_x86_64.whl        111,697,820 B
-
-The pure pair is what ``.github/workflows/publish.yml`` ships (it runs
-``--clean`` first) and it fits, with 8.07 MB of headroom on the wheel
-and 4.75 MB on the sdist -- the sdist, not the wheel, is the binding
-constraint of the published pair.  The win and linux numbers are this
-Windows host and a development machine respectively; the linux one is from the
-2.5.0 Linux shakeout, everything else was measured together on one box.
-
-BOTH PLATFORM WHEELS ARE OVER THE CAP AT THIS TIP -- by 8.70 MB and
-11.70 MB.  The bridge payload has roughly doubled since these numbers
-were last written (compressed, it is now 16.77 MB on Windows and 19.77
-MB on Linux over the pure base), which is ``rw_netcdf``,
-``netcdf_writer`` and ``region_global_dealias`` joining
-:data:`woof.bridge_assets.BUNDLED_ARTIFACTS`.  Whatever this docstring
-claimed before, do not read a headroom number off it again without
-re-measuring: the figures it carried into this tip (96.66 MB win, 98.35
-MB linux, "1.65 MB of headroom on Linux") were 12-13 MB low and had the
-sign inverted -- the wheels were over the cap while the doc said they
-were under it, and the whole documented rationale for excluding the
-basemaps rested on that dead number.
-
-Nothing published is broken by this: the per-platform wheel is not a
-shape PyPI receives today.  The remedy for making it one is the
-companion split -- the payload moves into a companion distribution
-rather than a decoder being dropped -- and until that lands, a platform
-wheel built here is a local artifact, not an uploadable one.
-``tools/verify_release_artifacts.py`` measures every distribution file
-in the dist directory against the cap and refuses the ones a cut is
-about to publish, so this cannot be discovered at upload time with the
-tag already public.
-
-67 MB of the pure base is physics tables (Thompson and RRTMGP).  If the
-PURE pair ever runs out of room, the remedy is externalising another
-table through ``woof fetch-tables`` -- the route ``freezeH2O.dat`` and
-``qr_acr_qg_V4.dat`` already take -- rather than dropping a decoder.
+Run after the release Cargo builds and before ``python -m build``. The shared
+rw_wrfbatch executable and its five native launchers carry the old tool names.
+Both package staging and a user's bridge directory receive the full roster.
+Basemap assets stay in recast-woof-data and the downloadable bridge bundle.
+``tools.battery.wheel_size`` measures wheels before release gates.
 """
 
 from __future__ import annotations
@@ -121,6 +36,18 @@ MANIFEST_SCHEMA = "gpuwm-wheel-bridge-bundle-v1"
 
 #: Where each workspace puts its release build, by crate-relative path.
 _WORKSPACE_TARGET = {
+    "tools/rw_icechunk": "target/release",
+    "tools/nextgen_hydrofabric": "target/release",
+    "tools/nextgen_verify": "target/release",
+    "tools/nextgen_output": "target/release",
+    "tools/nextgen_forcing": "target/release",
+    "tools/hydro_world": "target/release",
+    "tools/hydro_world_params": "target/release",
+    "tools/nextgen_reservoir_prepare": "target/release",
+    "tools/hydro_world_init": "target/release",
+    "tools/ocean_prepare": "target/release",
+    "tools/rw-bathy": "target/release",
+    "tools/wind-table": "target/release",
     bridges.CRATE_RELATIVE: "target/release",
     bridges.RUSTWX_CRATE_RELATIVE: "target/release",
     "tools/region_global_dealias": "target/release",
@@ -223,8 +150,18 @@ def _is_packaged_destination(destination: Path) -> bool:
         return False
 
 
+def staged_artifacts(destination: Path) -> tuple[bridge_assets.BundledArtifact, ...]:
+    """What ``destination`` takes: the in-package directory gets what the
+    wheel carries (:func:`woof.bridge_assets.wheel_artifacts`, which leaves
+    out the on-demand artifacts so the wheel stays under PyPI's per-file
+    limit); any other destination, a user's bridge directory included, gets
+    the whole declared roster, on-demand artifacts and all."""
+    if _is_packaged_destination(destination):
+        return bridge_assets.wheel_artifacts()
+    return bridge_assets.BUNDLED_ARTIFACTS
+
 def stage(platform: str, *, destination: Path | None = None) -> Path:
-    """Copy every declared artifact into ``destination``, or refuse.
+    """Copy every artifact ``destination`` takes into it, or refuse.
 
     Fail closed and fail COMPLETE: every missing artifact is collected
     and reported at once, because a build operator who has to re-run
@@ -242,9 +179,10 @@ def stage(platform: str, *, destination: Path | None = None) -> Path:
     """
 
     destination = destination or bridges.packaged_bridge_dir()
+    roster = staged_artifacts(destination)
     missing: list[str] = []
     plan: list[tuple[bridge_assets.BundledArtifact, Path, Path]] = []
-    for artifact in bridge_assets.BUNDLED_ARTIFACTS:
+    for artifact in roster:
         origin = source_path(artifact, platform)
         if not origin.is_file():
             missing.append(f"  {artifact.name:24s} expected at {origin}")
@@ -254,14 +192,14 @@ def stage(platform: str, *, destination: Path | None = None) -> Path:
     if missing:
         raise SystemExit(
             f"stage_wheel_bridges: {len(missing)} of "
-            f"{len(bridge_assets.BUNDLED_ARTIFACTS)} declared artifacts are "
+            f"{len(roster)} declared artifacts are "
             f"not built for {platform}:\n" + "\n".join(missing) +
             "\n\nBuild them first, from the checkout root:\n"
             + "\n".join(
                 "  " + bridges.cargo_build_one_liner(crate)
                 for crate in dict.fromkeys(
                     artifact.crate
-                    for artifact in bridge_assets.BUNDLED_ARTIFACTS)))
+                    for artifact in roster)))
 
     if platform == bridge_assets.DARWIN_PLATFORM:
         for artifact, origin, _target in plan:
@@ -308,13 +246,12 @@ def stage_from_bundle(archive: Path, platform: str,
 
     Only the binaries are taken.  ``assets/`` members are the renderer's
     basemap shapefiles, deliberately not shipped in the wheel (see the
-    module docstring).
-    """
+    module docstring).    """
 
     destination = destination or bridges.packaged_bridge_dir()
     wanted = {
         bridge_assets.artifact_filename(artifact, platform): artifact
-        for artifact in bridge_assets.BUNDLED_ARTIFACTS
+        for artifact in staged_artifacts(destination)
     }
     purge_build_staging()
     if _is_packaged_destination(destination) and destination.exists():
@@ -354,7 +291,7 @@ def stage_from_bundle(archive: Path, platform: str,
 
 
 def stage_from_native_dir(native_root: Path, platform: str,
-                          *, destination: Path | None = None) -> Path:
+                          *, destination: Path | None = None, incremental: bool = False) -> Path:
     """Stage artifacts produced by ``tools/build_darwin_native.py``.
 
     Each artifact is built into ``<native-root>/<artifact>/`` and carries an
@@ -372,9 +309,55 @@ def stage_from_native_dir(native_root: Path, platform: str,
             artifact, platform))
         for artifact in bridge_assets.BUNDLED_ARTIFACTS
     }
-    plan: list[tuple[bridge_assets.BundledArtifact, Path, bytes]] = []
+    plan: list[tuple[bridge_assets.BundledArtifact, Path, bytes | None]] = []
     native_revisions: list[tuple[bridge_assets.BundledArtifact, str]] = []
+    existing = {}
+    existing_records = {}
+    replacements = set()
+    if incremental:
+        manifest_path = destination / MANIFEST_NAME
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        except (OSError, ValueError) as error:
+            raise SystemExit(f'stage_wheel_bridges: cannot read {manifest_path}: {error}') from None
+        if (not isinstance(manifest, dict) or manifest.get('schema') != MANIFEST_SCHEMA or manifest.get('platform') != platform
+                or not isinstance(manifest.get('artifacts'), list)):
+            raise SystemExit('stage_wheel_bridges: existing manifest schema or platform differs')
+        for record in manifest['artifacts']:
+            if not isinstance(record, dict):
+                raise SystemExit('stage_wheel_bridges: invalid staged artifact record')
+            name = record.get('artifact')
+            if not isinstance(name, str) or name not in wanted or name in existing:
+                raise SystemExit(f'stage_wheel_bridges: unknown or repeated staged artifact {name!r}')
+            artifact, filename = wanted[name]
+            path = destination / filename
+            if (record.get('filename') != filename or record.get('kind') != artifact.kind
+                    or not path.is_file() or path.stat().st_size != record.get('bytes')
+                    or _sha256(path) != record.get('sha256')):
+                raise SystemExit(f'stage_wheel_bridges: staged {name} differs from its manifest')
+            payload = path.read_bytes()
+            _validate_native_payload(platform, artifact, filename, payload)
+            if (native_root / name / 'artifact.json').is_file():
+                replacements.add(name)
+            else:
+                try:
+                    bridge_assets.verify_contract_marker(name, path)
+                except bridge_assets.BridgeAssetError as error:
+                    raise SystemExit(f'stage_wheel_bridges: {error}') from None
+                if not artifact.vendored:
+                    revisions = bridge_assets.embedded_source_revisions(payload)
+                    if len(revisions) != 1:
+                        raise SystemExit(f'stage_wheel_bridges: staged {name} lacks one source revision')
+                    native_revisions.append((artifact, revisions[0]))
+            existing[name] = (artifact, path, None)
+            existing_records[name] = record
+        staged_files = {p.name for p in destination.iterdir() if p.is_file() and p.name != MANIFEST_NAME}
+        if staged_files != {record['filename'] for record in manifest['artifacts']}:
+            raise SystemExit('stage_wheel_bridges: staged files differ from the existing manifest')
     for name, (artifact, filename) in wanted.items():
+        if name in existing and name not in replacements:
+            plan.append(existing[name])
+            continue
         source_dir = native_root / name
         receipt_path = source_dir / "artifact.json"
         payload_path = source_dir / filename
@@ -405,9 +388,9 @@ def stage_from_native_dir(native_root: Path, platform: str,
                 f"stage_wheel_bridges: {receipt_path} has no full checkout "
                 "revision")
         if artifact.vendored:
-            if (receipt.get("vendored") is not True
-                    or not isinstance(receipt.get("vendored_source_commit"), str)
-                    or len(receipt["vendored_source_commit"]) != 40):
+            from tools.build_darwin_native import VENDORED_SOURCE_COMMITS
+            if (name not in VENDORED_SOURCE_COMMITS or receipt.get("vendored") is not True
+                    or receipt.get("vendored_source_commit") != VENDORED_SOURCE_COMMITS.get(name)):
                 raise SystemExit(
                     f"stage_wheel_bridges: {receipt_path} has invalid vendored "
                     "source provenance")
@@ -424,6 +407,10 @@ def stage_from_native_dir(native_root: Path, platform: str,
                     f"recorded checkout revision {checkout_revision}")
             native_revisions.append((artifact, checkout_revision))
         _validate_native_payload(platform, artifact, filename, payload)
+        try:
+            bridge_assets.verify_contract_marker(name, payload_path)
+        except bridge_assets.BridgeAssetError as error:
+            raise SystemExit(f'stage_wheel_bridges: {error}') from None
         plan.append((artifact, payload_path, payload))
 
     current_revision = subprocess.run(
@@ -435,45 +422,33 @@ def stage_from_native_dir(native_root: Path, platform: str,
             + current_revision.stderr.strip())
     current_revision = current_revision.stdout.strip()
     checked_inputs: dict[tuple[str, str], str | None] = {}
-    for artifact, built_revision in native_revisions:
+    def input_difference(artifact, built_revision):
+        inputs = bridge_assets.NATIVE_BUILD_INPUTS.get(artifact.crate)
+        if inputs is None:
+            return f"no build inputs are declared for {artifact.crate}"
+        dirty = subprocess.run(
+            ["git", "-C", str(_REPO_ROOT), "status", "--porcelain",
+             "--untracked-files=all", "--", *inputs],
+            capture_output=True, text=True)
+        if dirty.returncode:
+            return "git could not check the wheel checkout inputs: " + dirty.stderr.strip()
+        if dirty.stdout.strip():
+            return f"the wheel checkout has modified native build inputs for {artifact.crate}"
         if built_revision == current_revision:
-            continue
+            return None
+        common_base = subprocess.run(
+            ["git", "-C", str(_REPO_ROOT), "merge-base", built_revision, current_revision],
+            capture_output=True, text=True)
+        if common_base.returncode:
+            return f"{built_revision} and {current_revision} have no common Git ancestor"
+        base = common_base.stdout.strip()
+        return (bridge_assets.native_input_difference(_REPO_ROOT, artifact.crate, base, built_revision)
+                or bridge_assets.native_input_difference(_REPO_ROOT, artifact.crate, base, current_revision))
+
+    for artifact, built_revision in native_revisions:
         key = (artifact.crate, built_revision)
         if key not in checked_inputs:
-            inputs = bridge_assets.NATIVE_BUILD_INPUTS.get(artifact.crate)
-            if inputs is None:
-                checked_inputs[key] = (
-                    f"no build inputs are declared for {artifact.crate}")
-                continue
-            dirty = subprocess.run(
-                ["git", "-C", str(_REPO_ROOT), "status", "--porcelain",
-                 "--untracked-files=all", "--", *inputs],
-                capture_output=True, text=True)
-            if dirty.returncode:
-                checked_inputs[key] = (
-                    "git could not check the wheel checkout inputs: "
-                    + dirty.stderr.strip())
-                continue
-            if dirty.stdout.strip():
-                checked_inputs[key] = (
-                    f"the wheel checkout has modified native build inputs for "
-                    f"{artifact.crate}")
-                continue
-            common_base = subprocess.run(
-                ["git", "-C", str(_REPO_ROOT), "merge-base",
-                 built_revision, current_revision],
-                capture_output=True, text=True)
-            if common_base.returncode:
-                checked_inputs[key] = (
-                    f"{built_revision} and {current_revision} have no "
-                    "common Git ancestor")
-                continue
-            base = common_base.stdout.strip()
-            build_difference = bridge_assets.native_input_difference(
-                _REPO_ROOT, artifact.crate, base, built_revision)
-            checkout_difference = bridge_assets.native_input_difference(
-                _REPO_ROOT, artifact.crate, base, current_revision)
-            checked_inputs[key] = build_difference or checkout_difference
+            checked_inputs[key] = input_difference(artifact, built_revision)
         reason = checked_inputs[key]
         if reason is not None:
             raise SystemExit(
@@ -483,11 +458,15 @@ def stage_from_native_dir(native_root: Path, platform: str,
 
     destination = destination.resolve()
     purge_build_staging()
-    if _is_packaged_destination(destination) and destination.exists():
-        shutil.rmtree(destination)
-    destination.mkdir(parents=True, exist_ok=True)
+    if not incremental:
+        if _is_packaged_destination(destination) and destination.exists():
+            shutil.rmtree(destination)
+        destination.mkdir(parents=True, exist_ok=True)
     records = []
     for artifact, _source, payload in plan:
+        if artifact.name in existing and artifact.name not in replacements:
+            records.append(existing_records[artifact.name])
+            continue
         filename = bridge_assets.artifact_filename(artifact, platform)
         target = destination / filename
         target.write_bytes(payload)
@@ -505,10 +484,24 @@ def stage_from_native_dir(native_root: Path, platform: str,
         "platform": platform,
         "artifacts": records,
     }
-    (destination / MANIFEST_NAME).write_text(
-        json.dumps(manifest, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    manifest_path = destination / MANIFEST_NAME
+    if incremental:
+        temporary = destination / (MANIFEST_NAME + '.pending')
+        temporary.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temporary, manifest_path)
+    else:
+        manifest_path.write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return destination
 
+def _staged_count(destination: Path) -> str:
+    """What was staged, as the count the destination's own record holds."""
+
+    staged = len(json.loads(
+        (destination / MANIFEST_NAME).read_text(encoding="utf-8"))["artifacts"])
+    declared = len(bridge_assets.BUNDLED_ARTIFACTS)
+    if staged == declared:
+        return f"{staged} artifacts"
+    return f"{staged} of {declared} artifacts"
 
 def clean(destination: Path | None = None) -> None:
     purge_build_staging()
@@ -533,6 +526,8 @@ def main(argv: list[str] | None = None) -> int:
         "--from-native-dir", type=Path, default=None, metavar="DIR",
         help="stage the complete set of build_darwin_native.py outputs from "
              "DIR/<artifact>/ (Darwin only; does not create release pins)")
+    parser.add_argument('--incremental', action='store_true',
+                        help='preserve validated staged artifacts and add or replace native builds')
     parser.add_argument(
         "--dest", type=Path, default=None, metavar="DIR",
         help="stage into DIR instead of the in-package directory.  "
@@ -546,6 +541,9 @@ def main(argv: list[str] | None = None) -> int:
         "--clean", action="store_true",
         help="remove the staged directory and exit (restores a pure wheel)")
     args = parser.parse_args(argv)
+
+    if args.incremental and (args.from_native_dir is None or args.clean):
+        raise SystemExit('--incremental requires --from-native-dir and cannot be combined with --clean')
 
     if args.clean:
         if args.dest is not None:
@@ -564,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.platform != bridge_assets.DARWIN_PLATFORM:
             raise SystemExit("--from-native-dir requires --platform darwin-arm64")
         destination = stage_from_native_dir(
-            args.from_native_dir, args.platform, destination=args.dest)
+            args.from_native_dir, args.platform, destination=args.dest, incremental=args.incremental)
         print(f"staged {len(bridge_assets.BUNDLED_ARTIFACTS)} Darwin artifacts "
               f"from native builds in {args.from_native_dir} into {destination}")
         return 0
@@ -577,7 +575,7 @@ def main(argv: list[str] | None = None) -> int:
                                         destination=args.dest)
         total = sum(path.stat().st_size for path in destination.iterdir()
                     if path.is_file())
-        print(f"staged {len(bridge_assets.BUNDLED_ARTIFACTS)} artifacts for "
+        print(f"staged {_staged_count(destination)} for "
               f"{args.platform} from {args.from_bundle} into {destination} "
               f"({total / 1e6:.2f} MB)")
         return 0
@@ -590,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
     destination = stage(args.platform, destination=args.dest)
     total = sum(path.stat().st_size for path in destination.iterdir()
                 if path.is_file())
-    print(f"staged {len(bridge_assets.BUNDLED_ARTIFACTS)} artifacts for "
+    print(f"staged {_staged_count(destination)} for "
           f"{args.platform} into {destination} ({total / 1e6:.2f} MB)")
     return 0
 

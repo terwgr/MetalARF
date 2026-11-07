@@ -35,10 +35,13 @@ WHAT THE ADAPTER OWES THE SCHEME THAT WSM6'S DOES NOT
   allocation from ``cfg.wdm6_ccn_conc`` (``woof/core/state.py``), which is
   the NSSL ``qnn`` precedent and is exactly equivalent for a cold start.
 
-EVIDENCE.  This is an implemented-unverified integration port.  No oracle
-comparison against the WRF Fortran has been run: the campaign that produced
-Shin-Hong's and Grell-Freitas's ULP numbers is the declared next stage for
-this scheme too.
+EVIDENCE.  The column oracle tools/wdm6_wrf461_oracle grades the kernel
+word for word against WRF v4.6.1's own module_mp_wdm6.F (with the three
+documented defined behaviours of docs/wdm6_oracle_known_deltas.md) on 84
+columns in seven configurations: every output word equal under the strict
+build (tests/test_wdm6_wrf461_oracle.py).  No forecast-trajectory
+comparison against WRF exists, so the registry keeps the option at
+implemented-unverified.
 """
 
 from __future__ import annotations
@@ -50,9 +53,10 @@ except Exception:  # Metal and host inspection do not require CuPy.
     cp = None
 
 from woof.config import RunConfig
-from woof.core import constants as c
 from woof.core.kernels import get_kernel, get_kernel_int_defines
 from woof.core.state import DTYPE, DomainState
+from woof.core.wsm_family import (check_surface, check_volume, finish_fields,
+                                    precipitation_surface)
 from woof.core.wdm6_constants import (WDM6_DEEP_KMAX, WDM6_NUMBER_SPECIES,
                                        WDM6_SHALLOW_KMAX,
                                        WDM6_VERTICAL_LEVEL_BOUNDS,
@@ -73,8 +77,18 @@ def launch_wdm6(theta, qv, qc, qr, qi, qs, qg, nn, nc, nr,
                 rho, pii, pressure, dz, xland,
                 rainnc, rainncv, snownc, snowncv,
                 graupelnc, graupelncv, sr, dt: float, *,
-                effc, effi, effs, hail_opt: int = 0, count_status=None) -> None:
-    """Launch one WDM6 call over contiguous FP32 ``(nz,ny,nx)`` fields."""
+                effc, effi, effs, hail_opt: int = 0, count_status=None,
+                conservative_surface: bool = False) -> None:
+    """Launch one WDM6 call over contiguous FP32 ``(nz,ny,nx)`` fields.
+
+    ``conservative_surface`` is correct-mode finding WB5
+    (``RunConfig.wdm6_conservative_surface``): its own unit compiled with
+    ``WDM6_PLM_SURFACE``.  False compiles exactly the unit this function
+    compiled before the key existed (the matched WRF arithmetic).
+    """
+    if not isinstance(conservative_surface, bool):
+        raise TypeError("conservative_surface must be a bool, got "
+                        f"{conservative_surface!r}")
     shape = theta.shape
     if len(shape) != 3:
         raise ValueError(f"WDM6 fields must be 3-D, got {shape}")
@@ -95,25 +109,13 @@ def launch_wdm6(theta, qv, qc, qr, qi, qs, qg, nn, nc, nr,
         "rho": rho, "pii": pii, "pressure": pressure, "dz": dz,
         "effc": effc, "effi": effi, "effs": effs,
     }
-    for name, value in volume.items():
-        if value.shape != shape:
-            raise ValueError(f"{name} must have shape {shape}, got {value.shape}")
-        if value.dtype != DTYPE:
-            raise TypeError(f"{name} must be float32, got {value.dtype}")
-        if not value.flags.c_contiguous:
-            raise ValueError(f"{name} must be C-contiguous")
-    surface_shape = (ny, nx)
-    for name, value in {
+    check_volume(volume, shape)
+    check_surface({
             "xland": xland,
             "rainnc": rainnc, "rainncv": rainncv,
             "snownc": snownc, "snowncv": snowncv,
             "graupelnc": graupelnc, "graupelncv": graupelncv,
-            "sr": sr}.items():
-        if value.shape != surface_shape or value.dtype != DTYPE:
-            raise ValueError(f"{name} must be float32 {surface_shape}, got "
-                             f"{value.dtype} {value.shape}")
-        if not value.flags.c_contiguous:
-            raise ValueError(f"{name} must be C-contiguous")
+            "sr": sr}, (ny, nx))
     ncol = ny * nx
     blocks = (ncol + _COLUMN_TPB - 1) // _COLUMN_TPB
     # The Metal ABI carries CUDA's uint32 status bits in an int32 resource
@@ -142,7 +144,8 @@ def launch_wdm6(theta, qv, qc, qr, qi, qs, qg, nn, nc, nr,
             snownc=snownc, snowncv=snowncv,
             graupelnc=graupelnc, graupelncv=graupelncv, sr=sr,
             effc=effc, effi=effi, effs=effs, dt=device_dt,
-            hail_opt=hail_opt, count_status=count_status)
+            hail_opt=hail_opt, count_status=count_status,
+            conservative_surface=conservative_surface)
         flags = int(count_status.to_numpy()[0]) & 0xFFFFFFFF
         if flags:
             describe = _wdm6_status_description
@@ -155,10 +158,16 @@ def launch_wdm6(theta, qv, qc, qr, qi, qs, qg, nn, nc, nr,
     if count_status.shape != (1,) or count_status.dtype != np.dtype('uint32'):
         raise ValueError('WDM6 count status must be one uint32 word')
     count_status.fill(cp.uint32(0))
-    kernel = (get_kernel("wdm6", "wdm6_column")
-              if capacity == _SHALLOW_KMAX else
-              get_kernel_int_defines(
-                  "wdm6", "wdm6_column", (("WDM6_KMAX", capacity),)))
+    if conservative_surface:
+        defines = (() if capacity == _SHALLOW_KMAX
+                   else (("WDM6_KMAX", capacity),))
+        kernel = get_kernel_int_defines(
+            "wdm6", "wdm6_column", defines + (("WDM6_PLM_SURFACE", 1),))
+    else:
+        kernel = (get_kernel("wdm6", "wdm6_column")
+                  if capacity == _SHALLOW_KMAX else
+                  get_kernel_int_defines(
+                      "wdm6", "wdm6_column", (("WDM6_KMAX", capacity),)))
     kernel(
         (blocks,), (_COLUMN_TPB,),
         (theta, qv, qc, qi, qr, qs, qg, nn, nc, nr,
@@ -229,50 +238,24 @@ def apply(state: DomainState, cfg: RunConfig, dt: float, *,
                             refl_10cm_due=refl_10cm_due)
     if cp is None:
         raise RuntimeError("CUDA WDM6 execution requires CuPy; use a Metal state")
-    thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
-    phb = state.phb if state.phb.ndim == 3 else state.phb[:, None, None]
-    theta = state.scratch((nz, ny, nx), "wdm6_theta")
-    rho = state.scratch((nz, ny, nx), "wdm6_rho")
-    pii = state.scratch((nz, ny, nx), "wdm6_pii")
-    dz = state.scratch((nz, ny, nx), "wdm6_dz")
-    z8w = state.scratch((nz + 1, ny, nx), "wdm6_z8w")
-    theta[...] = thb + state.thp
-    rho[...] = 1.0 / state.alt
-    pii[...] = cp.power(state.p / DTYPE(c.P0), DTYPE(c.RCP))
-    z8w[...] = (phb + state.php) / DTYPE(c.G)
-    dz[...] = z8w[1:] - z8w[:-1]
+    from woof.core.wsm6 import _wsm6_prepare
+    theta, rho, pii, dz = _wsm6_prepare(state, "wdm6")
 
-    surface = (ny, nx)
-    rainnc = state.scratch(surface, "mp_rainnc")
-    rainncv = state.scratch(surface, "mp_rainncv")
-    snownc = state.scratch(surface, "mp_snownc")
-    snowncv = state.scratch(surface, "mp_snowncv")
-    graupelnc = state.scratch(surface, "mp_graupelnc")
-    graupelncv = state.scratch(surface, "mp_graupelncv")
-    sr = state.scratch(surface, "mp_sr")
+    surface = precipitation_surface(state)
 
-    from woof.core.microphysics import (MicrophysicsDiagnostics,
-                                         moist_physics_finish,
-                                         save_pre_mp_theta)
+    from woof.core.microphysics import save_pre_mp_theta
     save_pre_mp_theta(state)
     launch_wdm6(
         theta, state.qv, state.qc, state.qr, state.qi, state.qs, state.qg,
         state.nn, state.nc, state.nr,
         rho, pii, state.p, dz, cp.ascontiguousarray(xland),
-        rainnc, rainncv, snownc, snowncv,
-        graupelnc, graupelncv, sr, dt, effc=state.effc,
+        dt=dt, **surface, effc=state.effc,
         effi=state.effi, effs=state.effs, hail_opt=cfg.wdm6_hail_opt,
-        count_status=state.scratch((1,), 'wdm6_count_status', dtype=cp.uint32))
-    if refl_10cm_due:
-        from woof.core.refl import compute_and_stash_refl_10cm
-        refl_t = state.scratch((nz, ny, nx), "refl_t")
-        refl_t[...] = theta * pii
-        compute_and_stash_refl_10cm(state, cfg, refl_t, state.p)
-    moist_physics_finish(state, cfg, theta, dt)
-    return MicrophysicsDiagnostics(
-        rainnc=rainnc, rainncv=rainncv, sr=sr,
-        snownc=snownc, snowncv=snowncv,
-        graupelnc=graupelnc, graupelncv=graupelncv)
+        count_status=state.scratch((1,), 'wdm6_count_status', dtype=cp.uint32),
+        conservative_surface=bool(
+            getattr(cfg, "wdm6_conservative_surface", False)))
+    return finish_fields(state, cfg, theta, pii, dt, surface,
+                         refl_10cm_due=refl_10cm_due)
 
 
 def _apply_metal(state: DomainState, cfg: RunConfig, dt: float, *, xland,

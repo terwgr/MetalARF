@@ -208,7 +208,7 @@ ce1c8d871e949b6057bd0b5bb8ff76c12abfed7e1439df8e7c7cdcb599e299f9  snowtemp_contr
 836295b3ff7c610bab7cbd2a93404d02a0c6c7f4a90cde38db657dc7ec4cc187  run_snowtemp_contract.F90
 a12bc1ba855f83105e92e0c9bea2ffd66b8229c028a53836da0d4d1d96f29fbf  validate_snowtemp_contract_oracle.py
 90e64e4132ab6bb171a003dd05232bffc4e76df6fc8f11c869710452f8e0c703  build_snowtemp_contract.sh
-32da6ce770988428d9a8c85f19c01e2ff4976f7a696dd8c2485e7b946b303b62  mutation_study_snowtemp.py
+0796279b26dd4817b9a1f1180bf27a22884f6e4ba0b52ab649edb0fd1162e76b  mutation_study_snowtemp.py
 ```
 
 `oracle/snowsoil.csv` drives `snowsoil`, the complete snow-covered land
@@ -357,7 +357,7 @@ to `run_snowseaice.F90`, so one reader serves both files.
 85283 bytes
 b3605132f784d1ac6e694bdc6aaff6dfc1f843c838be96fe3b5289489505e6e7  snowseaice_contract.csv
 70835b88cf9b91a79c22447095eb00570c933ddd67471e207ef841522db786dd  run_snowseaice_contract.F90
-eaf3f2f77a92f8f9a67816357324cf03c6927822e594df4a75835453f55963ce  validate_snowseaice_contract_oracle.py
+99251cc7b0d7d1c43836e8b82585bd45da1178530468cc4d35768be3c13bf699  validate_snowseaice_contract_oracle.py
 ```
 
 `oracle/sfctmp.csv` pins WRF `sfctmp` end to end -- the snow-preparation
@@ -546,10 +546,12 @@ get wrong -- the water arm's `continue` leaving `lh`, `qfx`, `hfx`, `sfcexc`,
 `z0`, `grdflx` and the runoff accumulators as pass-throughs, and
 `ruc_surface_parameters` preserving the caller's `znt` at the water category.
 
-**What the driver reproduces on purpose.**  `sfcevp` is accumulated twice per
-column, at `:1095` and again at `:1116`, with nothing in between changing
-`qfx`; the fixture shows `sfcevp` advancing by `2*qfx*dt` and the port does the
-same.  `rhosnf`, `precipfr` and `snowfallac` are declared `intent(out)` at
+**What the driver does not copy, and what it reproduces.**  WRF accumulates
+`sfcevp` twice per land column, at `:1095` and again at `:1116`, with nothing
+in between changing `qfx`; the fixture shows `sfcevp` advancing by
+`2*qfx*dt`.  That is a WRF defect, and since lane/verify-ruc-lsm WOOF
+accumulates it once; the fixture comparisons grade `sfcevp` against WRF's
+entry value plus `qfx*dt` once.  `rhosnf`, `precipfr` and `snowfallac` are declared `intent(out)` at
 `:344-347` but `rhosnf` is read at `:695` and `snowfallac` is read inside
 `SFCTMP` at `:1641`, so both are live inputs in practice and the port takes
 them as such.  `:1109-1141` (`wb`, `waterbudget`, `acwaterbudget`) and
@@ -811,3 +813,18 @@ sea-ice groups the switch moves, every word is WRF's bit for bit except one
 1-ULP `qsg` word that the rebuilt 0.5-threshold fixture also leaves on the same
 column.  `tests/test_ruc_lsmruc_hrrr_switches.py` pins the map and runs the two
 negative controls (the 0.5 pin and the table LAI each break the fixture).
+
+Rebuilt on box W1 (lane/verify-ruc-lsm) with `build_lsmruc_frac.sh` on the
+13.3.0 / glibc 2.39 toolchain `lsmruc.csv` was pinned on (sha256
+`8f9fea614ebc5b253773d149cc7dcfaf3aaaf8b260917bdbb3d3d60c030bc170`).  With
+RUC on WOOF's float32 libm words the port reproduces it bit for bit except
+SFCEVP, which WRF counts twice and WOOF once, so the pinned map is empty.
+`oracle/mosaic_surface.csv` and `oracle/mosaic_driver.csv` were rebuilt the
+same way (`tools/ruc_mosaic_wrf461_oracle/build.sh` in upstream WOOF; pins in
+`gpuwm.core.ruc_contract`): their gfortran 15.2 build carried that C
+library's words (grdflx 1-2 ULP) and the 2.39 build is matched bit for bit.
+The `oracle_fork/` CSVs are left as built; rebuilt on W1 their sfctmp case
+reproduces with no residue and the LSMRUC one differs only in `chklowq` and
+in run-2 `znt`/`z0` that the current harness seeds differently, so replacing
+them is a fixture regeneration for the fork lineage, not done here
+(`tests/test_ruc_fork_oracle.py` pins their measured maps).

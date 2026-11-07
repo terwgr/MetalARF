@@ -7,10 +7,29 @@ import numpy as np
 from .array import MetalArray
 
 
-def _submit(context, name, resources, params, n):
+def _submit(context, name, resources, params, n, *, exact_policy=False):
     if n:
-        context.submit_kernel(name, resources, params, exact_policy=False,
+        context.submit_kernel(name, resources, params, exact_policy=exact_policy,
                               grid_size=n, threads_per_group=256)
+
+
+def submit_nssl2_temperature_product(theta, pii, temperature):
+    """Publish strict NSSL temperature with gradual FP32 multiplication."""
+    shape = tuple(temperature.shape)
+    if len(shape) != 3 or any(not isinstance(value, MetalArray)
+            or value.shape != shape or value.dtype != np.dtype(np.float32)
+            or not value.flags.c_contiguous for value in (theta, pii, temperature)):
+        raise ValueError("NSSL temperature fields must be matching contiguous 3-D FP32 arrays")
+    context = temperature.buffer.context
+    if any(value.buffer.context is not context for value in (theta, pii)):
+        raise ValueError("NSSL temperature fields must share one Metal context")
+    from woof.wrf_exact import ENABLED
+    if not ENABLED:
+        raise RuntimeError("strict NSSL temperature publication requires WRF exact mode")
+    _submit(context, "nssl2_temperature_product_exact",
+        {"theta": theta, "pii": pii, "temperature": temperature},
+        {"nz": shape[0], "ny": shape[1], "nx": shape[2]},
+        temperature.size, exact_policy=True)
 
 
 def submit_nssl2_runtime_prepare(
@@ -68,10 +87,11 @@ def submit_nssl2_radius_microns(cloud, ice, snow):
     context = cloud.buffer.context
     if any(value.buffer.context is not context for value in (ice, snow)):
         raise ValueError("NSSL radius fields must share one MetalContext")
-    _submit(context, "nssl2_radius_microns", {
+    from woof.wrf_exact import ENABLED
+    _submit(context, "nssl2_radius_microns_exact" if ENABLED else "nssl2_radius_microns", {
         "cloud": cloud, "ice": ice, "snow": snow,
     }, {"n": cloud.size, "nz": shape[0],
-        "ny": shape[1], "nx": shape[2]}, cloud.size)
+        "ny": shape[1], "nx": shape[2]}, cloud.size, exact_policy=ENABLED)
 
 
 __all__ = ["submit_nssl2_radius_microns", "submit_nssl2_runtime_finish",

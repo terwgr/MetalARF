@@ -35,7 +35,7 @@ if _ROOT not in sys.path:
 
 from woof.core.kernels import get_kernel  # noqa: E402
 
-_DATA = os.path.join(_ROOT, "woof", "data", "noahmp", "oracle")
+_DATA = os.path.join(_ROOT, "tests", "data", "oracles", "noahmp")
 FIXTURE = os.path.join(_DATA, "noahmp-snow.csv")
 EXPF_FIXTURE = os.path.join(_DATA, "noahmp-snow-expf.csv")
 

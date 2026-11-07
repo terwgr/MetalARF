@@ -112,8 +112,8 @@ def levels_for_top(
     behaviour, byte for byte, for every caller that does not care.
 
     Otherwise the certified ladder is extended UPWARD along whatever the
-    product actually publishes until a level sits at or above the
-    requested top (i.e. at a pressure at or below it), because that is
+    product actually publishes until a level sits strictly above the
+    requested top (i.e. at a pressure below it), because that is
     the condition ``woof.vertical_contract`` enforces at ingest: the
     source atmosphere has to reach the model top, not stop under it.
     Extending rather than replacing keeps every level a certified run
@@ -132,7 +132,7 @@ def levels_for_top(
         raise ValueError(
             f"the requested model top must be a positive pressure in Pa, "
             f"got {top_pressure_pa!r}")
-    if min(ladder) * 100.0 <= top:
+    if min(ladder) * 100.0 < top:
         return ladder
     higher = sorted(
         (level for level in available if float(level) < min(ladder)),
@@ -140,15 +140,15 @@ def levels_for_top(
     extension: list[float] = []
     for level in higher:
         extension.append(float(level))
-        if float(level) * 100.0 <= top:
+        if float(level) * 100.0 < top:
             return tuple(sorted(extension)) + ladder
     deepest = min(available) if available else min(ladder)
     raise TopPressureUnavailable(
-        f"a model top of {top:g} Pa needs a GFS pgrb2.0p25 level at or "
+        f"a model top of {top:g} Pa needs a GFS pgrb2.0p25 level strictly "
         f"above it, and the deepest this product publishes for all of "
         f"{', '.join(PRESSURE_FIELDS)} is {deepest:g} hPa "
         f"({deepest * 100.0:g} Pa).  Raise --p-top-pa to "
-        f"{deepest * 100.0:g} Pa or above, or use a source whose "
+        f"{deepest * 100.0:g} Pa (strictly greater), or use a source whose "
         "atmosphere reaches higher.")
 
 
@@ -172,9 +172,37 @@ NOMADS_VARIABLES = (
 )
 
 
-def nomads_variables(model: str = "gfs") -> tuple[str, ...]:
-    """The native GDAS mapping consumes specific humidity, including 2 m."""
+def declared_variables(model: str = "gfs") -> tuple[str, ...]:
+    """The variables this module declares; GDAS takes specific humidity
+    (pressure levels and 2 m) where GFS takes relative humidity."""
     return tuple("var_SPFH" if model == "gdas" and name == "var_RH" else name for name in NOMADS_VARIABLES)
+
+
+def nomads_variables(model: str = "gfs") -> tuple[str, ...]:
+    """Every variable a ``model`` crop asks the grib-filter for.
+
+    The declared variables, then every variable the source's packaged
+    mapping binds that they do not name, read from the mapping table
+    itself (:func:`woof.fetch.mapped_record_levels`).  GDAS prepares
+    through its packaged mapping, which requires the five hydrometeor
+    mixing ratios since 2.9.9; a crop without CLMR/ICMR/RWMR/SNMR/GRLE was
+    refused at prepare ("mapped frame ... lacks required fields
+    ['cloud_ice_mixing_ratio', ...]", 2026-10-29).  GFS decodes
+    through ``gfs_grib2_bridge`` and binds no mapping, so its request is
+    the declared one.  The mapping's variables are ``.idx`` names; the
+    filter spells cloud mixing ratio ``CLWMR`` where the index says
+    ``CLMR`` (:data:`woof.fetch_bars.FILTER_TO_IDX_NAMES`).  A mapping
+    that cannot be named in an index adds nothing here, and the
+    preparation names what it lacks.
+    """
+
+    from woof.fetch import mapped_record_levels
+    from woof.fetch_bars import filter_variable
+
+    declared = declared_variables(model)
+    mapped = mapped_record_levels(model) or {}
+    extra = tuple(filter_variable(name) for name in sorted(mapped))
+    return declared + tuple(name for name in extra if name not in declared)
 
 
 def _sha256(path: Path) -> str:

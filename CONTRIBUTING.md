@@ -46,10 +46,20 @@ Practicalities:
   `Cargo.lock`), and `pip install -e '.[dev]'` installs the checkout with
   the `recast-woof-data` companion from PyPI. Reach packaged tables
   through `data_assets.data_path()` and never by joining onto `woof/data`.
-- After changing a shader, rebuild the Metal library with
+- Metal kernels: register each new or changed kernel ABI as a fragment in
+  `woof/metal/signature_fragments/` through
+  `tools/generate_metal_kernel_signatures.py --add-fragment` (or
+  `--replace-fragment`), then rebuild the bundle with
   `python tools/build_metal_backend.py --output woof/libexec/metal` and
-  commit the shader and the bundle together. See AGENTS.md for how the
-  Metal port is laid out.
+  commit the shader, fragment, registry and bundle together. See AGENTS.md
+  for how the Metal port is laid out.
+- A Metal port matches the CUDA source word for word. The reference is the
+  CUDA kernel compiled for the host without FP contraction
+  (`tools/thompson_real_column_parity/host_backend.py`); the per-family
+  compare tools are `tools/metal_*_word_probe.py` and the column probes in
+  `tools/*_metal/`. A tolerance is never relaxed and Metal is never compared
+  with itself. Anything not ported keeps an explicit refusal, and
+  METAL_FEATURES.md records what each comparison covers.
 - Run the focused tests for the changed surface first, then the broad
   CPU suite it touches. Rust changes must pass locked tests and strict
   formatting.

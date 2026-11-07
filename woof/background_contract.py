@@ -99,9 +99,15 @@ def capability(source: str) -> dict:
     # An analysis archive without a declared publication window can be
     # selected only from an inspected native time inventory, as plan()
     # requires below. A downloadable preparation chain alone does not
-    # make initialization without supplied inputs available.
-    automatic = (operation in preparation_chains()
-                 and (axis != "analysis_times" or grid is not None))
+    # make initialization without supplied inputs available.  Nor does a
+    # row whose valid times are only ever supplied (a generated forecast
+    # file, such as a model-table row): plan() binds a ladder only for
+    # declared forecast leads or a declared analysis window, so offering
+    # "automatic" there sent the local DA door into its refusal ("needs a
+    # supplied native time inventory rather than a fabricated forecast
+    # ladder") on every model-table row.
+    automatic = (operation in preparation_chains() and grid is not None
+                 and axis in ("forecast_leads", "analysis_times"))
     if axis == "analysis_times" and grid is None:
         obligations.append("Supply an inspected native time inventory; no analysis publication window is declared.")
     return dict(source=adapter.source_id, label=adapter.display_title, preparable=preparable,
@@ -142,6 +148,15 @@ def capability_fingerprint(source: str) -> str:
     # scientific selection. Authority pins and donor/file roles do.
     for key in ("label", "obligations", "record_subset_supported"):
         declaration.pop(key, None)
+    # Which records a file row (record_index) or donor (records) moves by its
+    # index is that same byte-range optimization: the decode reads the same
+    # records either way.  Named breakage: a background reviewed before a
+    # route took its records by .idx was refused as "the source preparation
+    # or acquisition contract changed after review".
+    contract = declaration.get("acquisition_contract") or {}
+    for key, rows in (("record_index", contract.get("files")), ("records", contract.get("donors"))):
+        for row in rows or ():
+            row.pop(key, None)
     encoded = json.dumps(declaration, sort_keys=True, separators=(",", ":"),
                          allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -364,7 +379,12 @@ def plan(source: str, *, init: datetime, now: datetime, run_seconds: float,
             # Table routes may need f000 invariants. Acquire the declared
             # prefix, separately from the integration window, until their
             # handoff can address invariant-only dependency closures.
-            fetch_leads = _leads(adapter, route, candidate, 0, end, cadence) if route else leads
+            # The prefix opens at the route's first published lead: a
+            # retrospective row with no f000 (the GEFSv12 reforecast,
+            # first_lead = 3, lane/cap-gefs-archive) has no invariant frame
+            # before it, and asking for f000 refused every window.
+            fetch_leads = (_leads(adapter, route, candidate, route.first_lead, end, cadence)
+                           if route else leads)
             basis = "declared publication timing; not a payload completeness probe"
             if probe is not None:
                 from woof.fetch import probe_cycle_window

@@ -36,6 +36,11 @@ use serde::Serialize;
 mod water_layer;
 mod soil_recovery;
 mod invariant_binding;
+mod compose_source;
+mod storm_diagnostics;
+mod composition_stack;
+mod aeronet_aod;
+mod stored_words;
 
 /// The contract marker. Printed by `--abi`, and -- because it is a
 /// literal in the binary -- readable straight out of the bytes by the
@@ -46,7 +51,10 @@ const ABI: &str = concat!(
     "\tdtype\t<f8\t|S1\twater_layer_conversion\tsource_soil_recovery",
     "\tdump_window_v1",
     "\tdump_sample_window_v1",
+    "\tdump_sample_window_masked_v1",
     "\tbind_published_invariants_v1",
+    "\tcompose_source_v1 storm_diagnostics_v1 composition_stack_v1 aeronet_aod_v1",
+    "\tstored_words_v1",
 );
 
 const INVENTORY_SCHEMA: &str = "gpuwm-rw-netcdf-inventory-v1";
@@ -62,9 +70,14 @@ pub static GPUWM_BRIDGE_SOURCE_REV_STAMP: &str =
 
 const USAGE: &str = "\
 usage: rw_netcdf inventory FILE
-       rw_netcdf dump [--raw|--no-mask] [--unit-scale=N] [--unit-offset=N] [--water-layer-thickness=VARIABLE] [--window=I0:NI,J0:NJ] [--sample-window=X0:NI,Y0:NJ --sample-method=nearest|bilinear] FILE OUTPUT_DIR VARIABLE [VARIABLE...]
+       rw_netcdf stored-words FILE OUTPUT_DIR VARIABLE [VARIABLE...]
+       rw_netcdf dump [--raw|--no-mask] [--unit-scale=N] [--unit-offset=N] [--water-layer-thickness=VARIABLE] [--window=I0:NI,J0:NJ] [--sample-window=X0:NI,Y0:NJ --sample-method=nearest|bilinear|bilinear-masked [--sample-mask=VARIABLE]] FILE OUTPUT_DIR VARIABLE [VARIABLE...]
        rw_netcdf recover-wrf-soil WRFINPUT MET_EM AUTHORITY_JSON OUTPUT_DIR
        rw_netcdf bind-invariants HEIGHT_FILE HEIGHT_VAR LAND_FILE LAND_VAR OUTPUT_FILE TIME_FILE [TIME_FILE...]
+       rw_netcdf storm-diagnostics OUTPUT_DIR HEIGHTS_CSV GRAVITY JOBS FILE...
+       rw_netcdf aeronet-aod MANIFEST OUTPUT_DIR JOBS
+       rw_netcdf composition-stack MANIFEST OUTPUT_DIR JOBS
+       rw_netcdf compose-source MANIFEST OUTPUT_DIR JOBS
        rw_netcdf --abi | --help
 
   inventory  print a JSON description of FILE; a classic file that ends
@@ -77,6 +90,12 @@ usage: rw_netcdf inventory FILE
              last two dimensions (x last, 0-based), after CF decoding; a
              window that leaves the variable, or a variable with fewer
              than two dimensions, is refused
+  --sample-mask=VARIABLE  with --sample-method=bilinear-masked: a 2-D
+             class field of FILE (a land mask); each output point
+             averages only the source points of its own class (the class
+             of its nearest source point), the masked interpolation WPS
+             applies to land-only fields so coast cells do not blend in
+             the other class's fill value
   --raw     skip CF decoding: no _FillValue/missing_value masking and no
              scale_factor/add_offset, so stored sentinels survive.  This
              is what netCDF4's set_auto_mask(False) asks for, and some
@@ -116,9 +135,12 @@ struct VariableRecord {
     attributes: BTreeMap<String, serde_json::Value>,
     /// True when this variable was recovered from the raw HDF5 index
     /// because the NetCDF-4 variable table omitted it -- see
-    /// [`recover_dimension_scales`].  Its attributes are limited to the
-    /// CF string attributes that can be read by name, so a consumer that
-    /// needs numeric attributes on it must say so rather than assume.
+    /// [`recover_dimension_scales`].  The reader lists coordinate
+    /// variables itself, so a record carries this only when a scale
+    /// with data was hidden from the table all the same.  Its
+    /// attributes are limited to the CF string attributes that can be
+    /// read by name, so a consumer that needs numeric attributes on it
+    /// must say so rather than assume.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     recovered_dimension_scale: bool,
 }
@@ -173,6 +195,9 @@ struct DumpRecord {
     window: Option<[usize; 4]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sample_window: Option<SampleWindow>,
+    /// The class field a `bilinear-masked` sample was restricted by.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sample_mask: Option<String>,
 }
 
 /// Same-spacing rectangular sampling in the last two axes. Origins are
@@ -188,7 +213,26 @@ struct SampleWindow {
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum SampleMethod { Nearest, Bilinear }
+enum SampleMethod {
+    Nearest,
+    Bilinear,
+    /// Bilinear over the source points that share the class (mask zero
+    /// or nonzero) of the output point's nearest source point.  A point
+    /// whose positive-weight neighbours are all of one class gets exactly
+    /// the `bilinear` bits; only class boundaries differ.
+    #[serde(rename = "bilinear-masked")]
+    BilinearMasked,
+}
+
+/// The class plane a masked sample reads: the last two dimensions of the
+/// mask variable, one plane.
+#[derive(Clone, Copy, Debug)]
+struct SampleMask<'a> {
+    name: &'a str,
+    values: &'a [f64],
+    ny: usize,
+    nx: usize,
+}
 
 impl SampleWindow {
     fn parse(text: &str, method: &str) -> Result<Self, String> {
@@ -201,7 +245,8 @@ impl SampleWindow {
             j0: j0.parse().map_err(|_| bad())?, nj: nj.parse().map_err(|_| bad())?,
             method: match method { "nearest" => SampleMethod::Nearest,
                 "bilinear" => SampleMethod::Bilinear,
-                _ => return Err(format!("--sample-method must be nearest or bilinear, got {method:?}")), },
+                "bilinear-masked" => SampleMethod::BilinearMasked,
+                _ => return Err(format!("--sample-method must be nearest, bilinear or bilinear-masked, got {method:?}")), },
         };
         if !parsed.i0.is_finite() || !parsed.j0.is_finite()
             || parsed.i0 < 0.0 || parsed.j0 < 0.0 || parsed.ni == 0 || parsed.nj == 0 {
@@ -210,8 +255,17 @@ impl SampleWindow {
         Ok(parsed)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn apply(&self, name: &str, values: &[f64], shape: &[usize])
              -> Result<(Vec<f64>, Vec<usize>), String> {
+        self.apply_masked(name, values, shape, None)
+    }
+
+    fn apply_masked(&self, name: &str, values: &[f64], shape: &[usize], mask: Option<SampleMask<'_>>)
+             -> Result<(Vec<f64>, Vec<usize>), String> {
+        if (self.method == SampleMethod::BilinearMasked) != mask.is_some() {
+            return Err(format!("{name}: bilinear-masked sampling and a sample mask go together"));
+        }
         if shape.len() < 2 {
             return Err(format!("{name}: sampling needs at least two dimensions, got {shape:?}"));
         }
@@ -235,6 +289,12 @@ impl SampleWindow {
             return Err(format!("{name}: sampling input shape differs from decoded value count"));
         }
         let lead = checked_product(&shape[..shape.len() - 2])?;
+        if let Some(mask) = mask {
+            if mask.ny != ny || mask.nx != nx || mask.values.len() != ny * nx {
+                return Err(format!("{name}: sample mask {} is {} x {}, the variable's plane {ny} x {nx}",
+                                   mask.name, mask.ny, mask.nx));
+            }
+        }
         let count = checked_product(&[lead, self.ni, self.nj])?;
         let mut out = Vec::new();
         out.try_reserve_exact(count).map_err(|_| format!("{name}: sampled output allocation is too large"))?;
@@ -250,23 +310,66 @@ impl SampleWindow {
                             Err(format!("{name}: non-finite source value needed for sampling at ({xx}, {yy})"))
                         } else { Ok(value) }
                     };
+                    let bilinear = || -> Result<f64, String> {
+                        let xx = x.floor() as usize;
+                        let yy = y.floor() as usize;
+                        let fx = x - xx as f64;
+                        let fy = y - yy as f64;
+                        let a = get(xx, yy)?;
+                        // Exact integer origins keep their original f64 bits and
+                        // do not read zero-weight neighbors at the source edge.
+                        let top = if fx == 0.0 { a } else {
+                            a * (1.0 - fx) + get(xx + 1, yy)? * fx };
+                        Ok(if fy == 0.0 { top } else {
+                            let c = get(xx, yy + 1)?;
+                            let bottom = if fx == 0.0 { c } else {
+                                c * (1.0 - fx) + get(xx + 1, yy + 1)? * fx };
+                            top * (1.0 - fy) + bottom * fy
+                        })
+                    };
                     let value = match self.method {
                         SampleMethod::Nearest => get((x + 0.5).floor() as usize, (y + 0.5).floor() as usize)?,
-                        SampleMethod::Bilinear => {
+                        SampleMethod::Bilinear => bilinear()?,
+                        SampleMethod::BilinearMasked => {
+                            let mask = mask.expect("checked above");
+                            let class = |xx: usize, yy: usize| -> Result<bool, String> {
+                                let flag = mask.values[yy * nx + xx];
+                                if !flag.is_finite() {
+                                    Err(format!("{name}: sample mask {} is non-finite at ({xx}, {yy})", mask.name))
+                                } else { Ok(flag != 0.0) }
+                            };
+                            let own = class((x + 0.5).floor() as usize, (y + 0.5).floor() as usize)?;
                             let xx = x.floor() as usize;
                             let yy = y.floor() as usize;
                             let fx = x - xx as f64;
                             let fy = y - yy as f64;
-                            let a = get(xx, yy)?;
-                            // Exact integer origins keep their original f64 bits and
-                            // do not read zero-weight neighbors at the source edge.
-                            let top = if fx == 0.0 { a } else {
-                                a * (1.0 - fx) + get(xx + 1, yy)? * fx };
-                            if fy == 0.0 { top } else {
-                                let c = get(xx, yy + 1)?;
-                                let bottom = if fx == 0.0 { c } else {
-                                    c * (1.0 - fx) + get(xx + 1, yy + 1)? * fx };
-                                top * (1.0 - fy) + bottom * fy
+                            // Positive-weight neighbours only: a zero weight never
+                            // reads past the source edge.  The nearest point is
+                            // always among them, so `own` carries weight.
+                            let mut corners = [(xx, yy, (1.0 - fx) * (1.0 - fy)), (0, 0, 0.0),
+                                               (0, 0, 0.0), (0, 0, 0.0)];
+                            let mut used = 1;
+                            if fx != 0.0 { corners[used] = (xx + 1, yy, fx * (1.0 - fy)); used += 1; }
+                            if fy != 0.0 {
+                                corners[used] = (xx, yy + 1, (1.0 - fx) * fy); used += 1;
+                                if fx != 0.0 { corners[used] = (xx + 1, yy + 1, fx * fy); used += 1; }
+                            }
+                            let mut mixed = false;
+                            for &(cx, cy, _) in &corners[..used] {
+                                mixed |= class(cx, cy)? != own;
+                            }
+                            if !mixed { bilinear()? } else {
+                                let (mut sum, mut weight) = (0.0_f64, 0.0_f64);
+                                for &(cx, cy, w) in &corners[..used] {
+                                    if w > 0.0 && class(cx, cy)? == own {
+                                        sum += w * get(cx, cy)?;
+                                        weight += w;
+                                    }
+                                }
+                                if weight <= 0.0 {
+                                    return Err(format!("{name}: no source point of the output point's own class carries weight"));
+                                }
+                                sum / weight
                             }
                         },
                     };
@@ -317,6 +420,40 @@ impl Window {
     /// it was asked for, under that grid's name.
     fn apply(&self, name: &str, values: &[f64], shape: &[usize])
              -> Result<(Vec<f64>, Vec<usize>), String> {
+        self.check(name, shape)?;
+        let nx = shape[shape.len() - 1];
+        let ny = shape[shape.len() - 2];
+        let lead: usize = shape[..shape.len() - 2].iter().product();
+        let mut out = Vec::with_capacity(lead * self.ni * self.nj);
+        for plane in 0..lead {
+            for row in 0..self.nj {
+                let start = plane * ny * nx + (self.j0 + row) * nx + self.i0;
+                out.extend_from_slice(&values[start..start + self.ni]);
+            }
+        }
+        let mut cut = shape[..shape.len() - 2].to_vec();
+        cut.push(self.nj);
+        cut.push(self.ni);
+        Ok((out, cut))
+    }
+
+    /// The hyperslab of a variable of `shape` this window covers: every
+    /// leading index, then the window's rows and columns.  Call after
+    /// [`Window::check`].
+    fn selection(&self, shape: &[usize]) -> netcrust::NcSliceInfo {
+        let mut selections: Vec<netcrust::NcSliceInfoElem> = shape[..shape.len() - 2]
+            .iter()
+            .map(|&n| netcrust::NcSliceInfoElem::Slice { start: 0, end: n as u64, step: 1 })
+            .collect();
+        selections.push(netcrust::NcSliceInfoElem::Slice {
+            start: self.j0 as u64, end: (self.j0 + self.nj) as u64, step: 1 });
+        selections.push(netcrust::NcSliceInfoElem::Slice {
+            start: self.i0 as u64, end: (self.i0 + self.ni) as u64, step: 1 });
+        netcrust::NcSliceInfo { selections }
+    }
+
+    /// Refuse, by name, a window this variable cannot supply whole.
+    fn check(&self, name: &str, shape: &[usize]) -> Result<(), String> {
         if shape.len() < 2 {
             return Err(format!("{name}: --window needs at least two dimensions, got shape {shape:?}"));
         }
@@ -333,18 +470,7 @@ impl Window {
                 "{name}: --window columns {}..{} rows {}..{} leave the variable's {ny} x {nx} plane",
                 self.i0, i_end, self.j0, j_end));
         }
-        let lead: usize = shape[..shape.len() - 2].iter().product();
-        let mut out = Vec::with_capacity(lead * self.ni * self.nj);
-        for plane in 0..lead {
-            for row in 0..self.nj {
-                let start = plane * ny * nx + (self.j0 + row) * nx + self.i0;
-                out.extend_from_slice(&values[start..start + self.ni]);
-            }
-        }
-        let mut cut = shape[..shape.len() - 2].to_vec();
-        cut.push(self.nj);
-        cut.push(self.ni);
-        Ok((out, cut))
+        Ok(())
     }
 }
 
@@ -386,6 +512,29 @@ fn main() {
         std::process::exit(2);
     }
     match args[0].as_str() {
+        "storm-diagnostics" => {
+            if args.len() < 6 { fail("storm-diagnostics takes OUTPUT_DIR HEIGHTS_CSV GRAVITY JOBS FILE..."); }
+            let heights = args[2].split(',').map(str::parse::<f64>).collect::<Result<Vec<_>,_>>().unwrap_or_else(|_|fail("invalid heights"));
+            let gravity = args[3].parse().unwrap_or_else(|_|fail("invalid gravity"));
+            let jobs = args[4].parse().unwrap_or_else(|_|fail("invalid jobs"));
+            let files = args[5..].iter().map(PathBuf::from).collect::<Vec<_>>();
+            if let Err(error) = storm_diagnostics::run(Path::new(&args[1]), &heights, gravity, jobs, &files) { fail(&error); }
+        }
+        "aeronet-aod" => {
+            if args.len()!=4 { fail("aeronet-aod takes MANIFEST OUTPUT_DIR JOBS"); }
+            let jobs=args[3].parse().unwrap_or_else(|_|fail("invalid jobs"));
+            if let Err(error)=aeronet_aod::run(Path::new(&args[1]),Path::new(&args[2]),jobs){fail(&error);}
+        }
+        "composition-stack" => {
+            if args.len()!=4 { fail("composition-stack takes MANIFEST OUTPUT_DIR JOBS"); }
+            let jobs=args[3].parse().unwrap_or_else(|_|fail("invalid jobs"));
+            if let Err(error)=composition_stack::run(Path::new(&args[1]),Path::new(&args[2]),jobs){fail(&error);}
+        }
+        "compose-source" => {
+            if args.len() != 4 { fail("compose-source takes MANIFEST OUTPUT_DIR JOBS"); }
+            let jobs = args[3].parse().unwrap_or_else(|_| { fail("JOBS must be an unsigned integer"); });
+            if let Err(error) = compose_source::compose(Path::new(&args[1]), Path::new(&args[2]), jobs) { fail(&error); }
+        }
         "bind-invariants" => {
             if args.len() < 7 { fail("bind-invariants takes HEIGHT_FILE HEIGHT_VAR LAND_FILE LAND_VAR OUTPUT_FILE TIME_FILE [TIME_FILE...]"); }
             let time_files: Vec<PathBuf> = args[6..].iter().map(PathBuf::from).collect();
@@ -400,6 +549,12 @@ fn main() {
         }
         "--help" | "-h" => {
             print!("{USAGE}");
+        }
+        "stored-words" => {
+            if args.len() < 4 { fail("stored-words takes FILE OUTPUT_DIR VARIABLE [VARIABLE...]"); }
+            if let Err(error) = stored_words::run(Path::new(&args[1]), Path::new(&args[2]), &args[3..]) {
+                fail(&error);
+            }
         }
         "inventory" => {
             if args.len() != 2 {
@@ -432,6 +587,10 @@ fn main() {
                 _ => fail("--sample-window and --sample-method must be specified together"),
             };
             if window.is_some() && sample_window.is_some() { fail("--window and --sample-window cannot be combined"); }
+            let sample_mask = args.iter().find_map(|a| a.strip_prefix("--sample-mask="));
+            if sample_mask.is_some() != sample_window.is_some_and(|s| s.method == SampleMethod::BilinearMasked) {
+                fail("--sample-mask goes with --sample-method=bilinear-masked, and only with it");
+            }
             if water_layer.is_some() && (raw || no_mask) {
                 fail("layer water conversion requires CF masking and unpacking");
             }
@@ -453,14 +612,14 @@ fn main() {
                     && !a.starts_with("--unit-scale=") && !a.starts_with("--unit-offset=")
                     && !a.starts_with("--water-layer-thickness=")
                     && !a.starts_with("--window=") && !a.starts_with("--sample-window=")
-                    && !a.starts_with("--sample-method="))
+                    && !a.starts_with("--sample-method=") && !a.starts_with("--sample-mask="))
                 .collect();
             if positional.len() < 3 {
                 fail("dump takes FILE, OUTPUT_DIR and at least one VARIABLE");
             }
             let names: Vec<String> =
                 positional[2..].iter().map(|s| (*s).clone()).collect();
-            if let Err(error) = dump_sampled(
+            if let Err(error) = dump_sampled_masked(
                 Path::new(positional[0]),
                 Path::new(positional[1]),
                 &names,
@@ -470,6 +629,7 @@ fn main() {
                 water_layer,
                 window,
                 sample_window,
+                sample_mask,
             ) {
                 fail(&error);
             }
@@ -501,7 +661,10 @@ fn attribute_json(value: &netcrust::AttributeValue) -> serde_json::Value {
         }
     }
     match value {
-        V::Chars(text) => serde_json::Value::String(text.clone()),
+        // NC_CHAR text as netCDF4-python and this tool returned it before the reader kept every declared
+        // byte: trailing NULs are padding, so "" stored as one NUL reads back "" (an empty attribute
+        // read as a lone NUL defeated every empty-value check; 2.9.4 final pass R5, test_obs_radar_grid).
+        V::Chars(text) => serde_json::Value::String(text.trim_end_matches('\0').to_string()),
         V::Strings(values) if values.len() == 1 => serde_json::Value::String(values[0].clone()),
         V::Strings(values) => serde_json::Value::Array(
             values
@@ -608,22 +771,26 @@ fn open(path: &Path) -> Result<(netcrust::File, MetadataProvenance), String> {
     ))
 }
 
-/// Add back the NetCDF-4 coordinate variables the variable table omits.
+/// Add back any NetCDF-4 dimension scale with data that the variable
+/// table omits.
 ///
 /// In NetCDF-4 a coordinate variable is stored as an HDF5 *dimension
-/// scale*, and the vendored reader's `variables()` does not report those
-/// -- so `latitude`, `longitude`, `pressure_level` and `valid_time` are
-/// simply absent from an ERA5 file, as are `time` and the `xh/yh/zh`
-/// axes of a CM1 history file.  Those are exactly the variables a
-/// coordinate contract resolves against, so without this the reader
-/// lists every field and none of the axes.
+/// scale*.  The vendored reader's `variables()` lists those itself, with
+/// their own dimensions, stored type and every attribute, and hides only
+/// the scales netCDF-C marks as dimension-only (no coordinate values):
+/// so `latitude`, `longitude`, `pressure_level` and `valid_time` of an
+/// ERA5 file, and `time` and the `xh/yh/zh` axes of a CM1 history file,
+/// come from the table like any field.  This pass is the fallback for
+/// a scale with data the table still hides (a stored type the reader
+/// cannot name, for one): those are exactly the variables a coordinate
+/// contract resolves against, so a reader that silently dropped one
+/// would list every field and not that axis.  A name already in the
+/// table is never recovered a second time.
 ///
 /// Recovery uses only public netcrust API -- `hdf5_root_datasets` for
 /// the names and shapes, `hdf5_dataset_attribute_string` for the CF
 /// string attributes, and `read_array_f64`, which already falls back to
-/// a raw-HDF5 read by name for values.  Nothing in the vendored tree is
-/// modified; this belongs upstream and is reported there, but a reader
-/// that silently drops the axes cannot be shipped in the meantime.
+/// a raw-HDF5 read by name for values.
 ///
 /// A 1-D dataset whose length matches a declared dimension is given that
 /// dimension. Ambiguity is not guessed at: a dataset whose own name is a
@@ -739,10 +906,9 @@ impl MetadataProvenance {
     }
 }
 
-fn inventory(path: &Path) -> Result<(), String> {
-    let (file, metadata) = open(path)?;
-    let extent_checked = check_classic_extent(&file)?;
-    let dimensions: Vec<DimensionRecord> = file
+/// The file's dimension table as the inventory reports it.
+fn dimension_table(file: &netcrust::File, path: &Path) -> Result<Vec<DimensionRecord>, String> {
+    Ok(file
         .dimensions()
         .map_err(|error| format!("cannot read dimensions of {}: {error}", path.display()))?
         .into_iter()
@@ -751,12 +917,17 @@ fn inventory(path: &Path) -> Result<(), String> {
             len: dimension.len(),
             unlimited: dimension.is_unlimited(),
         })
-        .collect();
-    let global_attributes = attributes_map(
-        &file
-            .attributes()
-            .map_err(|error| format!("cannot read global attributes: {error}"))?,
-    );
+        .collect())
+}
+
+/// The file's variable table as the inventory reports it: every variable
+/// the reader lists, with its dimension names, shape, stored type and
+/// attributes, then any dimension scale with data the reader hid.
+fn variable_table(
+    file: &netcrust::File,
+    path: &Path,
+    dimensions: &[DimensionRecord],
+) -> Result<Vec<VariableRecord>, String> {
     let mut variables: Vec<VariableRecord> = file
         .variables()
         .map_err(|error| format!("cannot read variables of {}: {error}", path.display()))?
@@ -774,7 +945,20 @@ fn inventory(path: &Path) -> Result<(), String> {
             recovered_dimension_scale: false,
         })
         .collect();
-    recover_dimension_scales(&file, &dimensions, &mut variables);
+    recover_dimension_scales(file, dimensions, &mut variables);
+    Ok(variables)
+}
+
+fn inventory(path: &Path) -> Result<(), String> {
+    let (file, metadata) = open(path)?;
+    let extent_checked = check_classic_extent(&file)?;
+    let dimensions = dimension_table(&file, path)?;
+    let global_attributes = attributes_map(
+        &file
+            .attributes()
+            .map_err(|error| format!("cannot read global attributes: {error}"))?,
+    );
+    let variables = variable_table(&file, path, &dimensions)?;
 
     let record = Inventory {
         schema: INVENTORY_SCHEMA,
@@ -852,14 +1036,40 @@ fn check_classic_extent(file: &netcrust::File) -> Result<bool, String> {
 /// Preserve fixed-width ASCII character arrays in their declared shape.
 /// Classic readers return one string per row; HDF5 NC_CHAR returns one
 /// string per byte. Neither packing nor CF masking applies to characters.
-fn character_bytes(file: &netcrust::File, variable: &netcrust::Variable) -> Result<Vec<u8>, String> {
+///
+/// `vlen` names an NC_STRING variable (NetCDF-4 variable-length text, one
+/// text per element and no character dimension in its shape, e.g. RFMIP's
+/// `expt_label`): its texts are padded to the widest one, and that width
+/// is returned so the caller can append it to the shape. Before this such
+/// a variable was refused as "does not fit its 1-byte slot", and one such
+/// variable failed every variable read beside it.
+fn character_bytes(file: &netcrust::File, variable: &netcrust::Variable, vlen: bool)
+                   -> Result<(Vec<u8>, Option<usize>), String> {
     let name = variable.name();
     let shape = variable.shape();
     let total = shape.iter().try_fold(1usize, |n, &size| n.checked_mul(size))
         .ok_or_else(|| format!("{name}: character shape overflows"))?;
     let width = shape.last().copied().unwrap_or(1);
     let strings = file.read_strings(name).map_err(|error| format!("cannot decode {name}: {error}"))?;
-    if total == 0 && strings.is_empty() { return Ok(Vec::new()); }
+    if total == 0 && strings.is_empty() { return Ok((Vec::new(), None)); }
+    // An HDF5 NC_CHAR array also answers as the string type, one text per
+    // byte (shape (19, 32) -> 608 one-character texts): that is the classic
+    // form below.  Variable-length text is the case where one text per
+    // element carries more than a character.
+    if vlen && strings.len() == total && strings.iter().any(|text| text.len() > 1) {
+        let chunk = strings.iter().map(|text| text.len()).max().unwrap_or(1);
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(total * chunk)
+            .map_err(|error| format!("{name}: cannot allocate {} character bytes: {error}", total * chunk))?;
+        for text in strings {
+            if !text.is_ascii() {
+                return Err(format!("{name}: expected ASCII text; decoded text is not ASCII"));
+            }
+            bytes.extend_from_slice(text.as_bytes());
+            bytes.resize(bytes.len() + chunk - text.len(), 0);
+        }
+        return Ok((bytes, Some(chunk)));
+    }
     let chunk = if width > 0 && strings.len() == total / width {
         width
     } else if strings.len() == total { 1 } else {
@@ -875,7 +1085,7 @@ fn character_bytes(file: &netcrust::File, variable: &netcrust::Variable) -> Resu
         bytes.extend_from_slice(text.as_bytes());
         bytes.resize(bytes.len() + chunk - text.len(), 0);
     }
-    Ok(bytes)
+    Ok((bytes, None))
 }
 
 #[cfg(test)]
@@ -922,11 +1132,24 @@ fn dump_windowed(path: &Path, out_dir: &Path, names: &[String], apply_mask: bool
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn dump_sampled(path: &Path, out_dir: &Path, names: &[String], apply_mask: bool,
                  apply_scale: bool, unit_transform: [f64; 2], water_layer: Option<&str>,
                  window: Option<Window>, sample_window: Option<SampleWindow>) -> Result<(), String> {
+    dump_sampled_masked(path, out_dir, names, apply_mask, apply_scale, unit_transform,
+                        water_layer, window, sample_window, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dump_sampled_masked(path: &Path, out_dir: &Path, names: &[String], apply_mask: bool,
+                 apply_scale: bool, unit_transform: [f64; 2], water_layer: Option<&str>,
+                 window: Option<Window>, sample_window: Option<SampleWindow>,
+                 sample_mask: Option<&str>) -> Result<(), String> {
     if window.is_some() && sample_window.is_some() {
         return Err("exact and sampled windows cannot be combined".into());
+    }
+    if sample_mask.is_some() != sample_window.is_some_and(|s| s.method == SampleMethod::BilinearMasked) {
+        return Err("a sample mask goes with bilinear-masked sampling, and only with it".into());
     }
     let transformed = unit_transform != [1.0, 0.0];
     if !unit_transform.iter().all(|v| v.is_finite()) || unit_transform[0] == 0.0 {
@@ -935,203 +1158,37 @@ fn dump_sampled(path: &Path, out_dir: &Path, names: &[String], apply_mask: bool,
     let (file, metadata) = open(path)?;
     fs::create_dir_all(out_dir)
         .map_err(|error| format!("cannot create {}: {error}", out_dir.display()))?;
+    // The class plane is decoded once and shared by every sampled variable.
+    let mask_plane = match sample_mask {
+        Some(mask_name) => {
+            let array = file.read_array_f64(mask_name)
+                .map_err(|error| format!("cannot decode sample mask {mask_name}: {error}"))?;
+            let shape = array.shape().to_vec();
+            if shape.len() < 2 || shape[..shape.len() - 2].iter().product::<usize>() != 1 {
+                return Err(format!("sample mask {mask_name} must be one plane, got shape {shape:?}"));
+            }
+            Some((mask_name, array.into_values(), shape[shape.len() - 2], shape[shape.len() - 1]))
+        }
+        None => None,
+    };
+    let sample_mask = mask_plane.as_ref().map(|(name, values, ny, nx)|
+        SampleMask { name: *name, values: values.as_slice(), ny: *ny, nx: *nx });
 
+    // Variables decode concurrently (each one's chunks are already
+    // decompressed in parallel underneath), gated by a byte budget so a
+    // file of many large variables does not hold all of them at once.
+    // Records and files keep the order and names the caller asked for,
+    // and the first refusal in that order is the one reported.
+    let options = DumpOptions { apply_mask, apply_scale, unit_transform, transformed,
+                                water_layer, window, sample_window, sample_mask };
+    let results = run_bounded(names.len(), |index| {
+        let estimate = estimated_dump_bytes(&file, &names[index]);
+        let _held = DUMP_BUDGET.acquire(estimate);
+        dump_one(path, &file, out_dir, index, &names[index], &options)
+    });
     let mut records = Vec::with_capacity(names.len());
-    for (index, name) in names.iter().enumerate() {
-        // A NetCDF-4 coordinate variable is an HDF5 dimension scale and
-        // is absent from `variable()` -- see `recover_dimension_scales`.
-        // `read_array_f64` already falls back to a raw-HDF5 read by
-        // name, so the values are reachable either way; only the
-        // attribute surface differs, which is why the CF lookups below
-        // go through a closure that knows which path it is on.
-        let variable = file.variable(name);
-        if let Some(variable) = variable.as_ref() {
-            if matches!(variable.dtype(), netcrust::DataType::Char | netcrust::DataType::String) {
-                if transformed || water_layer.is_some() {
-                    return Err(format!("{name}: unit conversion requires a numeric variable"));
-                }
-                if window.is_some() || sample_window.is_some() {
-                    return Err(format!("{name}: --window requires a numeric variable"));
-                }
-                let shape = variable.shape();
-                let values = character_bytes(&file, variable)?;
-                let filename = format!("{index:04}.chars");
-                fs::write(out_dir.join(&filename), values)
-                    .map_err(|error| format!("cannot write {name}: {error}"))?;
-                records.push(DumpRecord {
-                    name: name.clone(), filename, shape,
-                    dimensions: variable.dimensions().iter().map(|d| d.name().to_string()).collect(),
-                    dtype: "|S1", units: None, times: None, cf: CfApplied::default(),
-                    unit_transform: None,
-                    water_layer_conversion: None,
-                    window: None,
-                    sample_window: None,
-                });
-                continue;
-            }
-        } else if !file.has_hdf5_dataset(name) {
-            return Err(format!("variable not found in {}: {name}", path.display()));
-        }
-        let array = file
-            .read_array_f64(name)
-            .map_err(|error| format!("cannot decode {name}: {error}"))?;
-        let mut shape = array.shape().to_vec();
-        let mut values = array.into_values();
-
-        // CF unpacking, applied HERE so Python receives decoded numbers.
-        // Order matters and follows CF-1.x and netCDF4-python: a value is
-        // tested against the fill markers in its STORED representation,
-        // before scale_factor/add_offset are applied.  Applying the
-        // packing first would compare a physical quantity against a
-        // sentinel that was never in that space, which is how packed
-        // fields silently keep their fill values as real data.
-        // A recovered dimension scale exposes only the CF STRING
-        // attributes reachable by name, so numeric CF attributes are
-        // absent there rather than assumed to be zero/one.  Coordinate
-        // axes are not packed in any format this reads, so that is a
-        // real limitation and not a silent one: it is stated in the
-        // inventory by `recovered_dimension_scale`.
-        let number = |key: &str| -> Option<f64> {
-            variable
-                .as_ref()
-                .and_then(|v| v.attribute(key))
-                .and_then(|a| a.as_f64())
-        };
-        // `--raw` reports the attributes it did NOT act on, so the
-        // record still says what the file declares while `applied`
-        // says whether anything was done about it.
-        let fill_value = number("_FillValue");
-        let default_fill = match (&variable, fill_value) {
-            (Some(variable), None) => nc_default_fill(variable.dtype()),
-            _ => None,
-        };
-        let cf = CfApplied {
-            scale_factor: number("scale_factor"),
-            add_offset: number("add_offset"),
-            fill_value,
-            missing_value: number("missing_value"),
-            default_fill,
-            default_fill_rule: apply_mask,
-            missing_count: 0,
-            applied: apply_mask || apply_scale,
-        };
-        let mut missing_count = 0usize;
-        for value in values.iter_mut() {
-            if apply_mask {
-                let is_missing = cf.fill_value.is_some_and(|fill| *value == fill)
-                    || cf.default_fill.is_some_and(|fill| *value == fill)
-                    || cf.missing_value.is_some_and(|marker| *value == marker);
-                if is_missing || !value.is_finite() {
-                    if is_missing {
-                        missing_count += 1;
-                    }
-                    *value = f64::NAN;
-                    continue;
-                }
-            }
-            // Scaling is independent of masking, exactly as it is in
-            // netCDF4-python: with masking off the sentinel itself comes
-            // back, and it comes back scaled like every other element.
-            if apply_scale {
-                if let Some(scale) = cf.scale_factor {
-                    *value *= scale;
-                }
-                if let Some(offset) = cf.add_offset {
-                    *value += offset;
-                }
-            }
-        }
-        // Explicit quantity-unit conversion follows CF unpacking. Masked values
-        // stay NaN; overflow of a finite input is a named decoding refusal.
-        if transformed {
-            for value in &mut values {
-                if value.is_finite() {
-                    *value = *value * unit_transform[0] + unit_transform[1];
-                    if !value.is_finite() {
-                        return Err(format!("{name}: unit conversion overflowed a finite value"));
-                    }
-                }
-            }
-        }
-        let water_layer_conversion = match water_layer {
-            Some(thickness) => Some(water_layer::normalize(&file,
-                variable.as_ref().ok_or_else(|| format!("{name}: layer water needs complete variable metadata"))?,
-                &mut values, thickness)?),
-            None => None,
-        };
-        let cf = CfApplied {
-            missing_count,
-            ..cf
-        };
-        // The window is cut from the decoded values, so masking, unpacking
-        // and unit conversion are the same arithmetic with or without it;
-        // `missing_count` above still counts the whole variable.
-        let applied_window = match window {
-            Some(window) => {
-                let (cut, cut_shape) = window.apply(name, &values, &shape)?;
-                values = cut;
-                shape = cut_shape;
-                Some([window.i0, window.ni, window.j0, window.nj])
-            }
-            None => None,
-        };
-        if let Some(sample) = sample_window {
-            let (sampled, sampled_shape) = sample.apply(name, &values, &shape)?;
-            values = sampled;
-            shape = sampled_shape;
-        }
-
-        // The index prefix keeps the filename unique and filesystem-safe
-        // whatever the variable is called: NetCDF names may differ only
-        // by case, which collides on Windows and macOS.
-        let filename = format!("{index:04}.f64");
-        let target: PathBuf = out_dir.join(&filename);
-        let mut handle = fs::File::create(&target)
-            .map_err(|error| format!("cannot write {}: {error}", target.display()))?;
-        let mut buffer = Vec::with_capacity(values.len() * 8);
-        for value in &values {
-            buffer.extend_from_slice(&value.to_le_bytes());
-        }
-        handle
-            .write_all(&buffer)
-            .map_err(|error| format!("cannot write {}: {error}", target.display()))?;
-
-        let units = match variable.as_ref() {
-            Some(v) => v
-                .attribute("units")
-                .and_then(|attribute| attribute.as_string().map(str::to_string)),
-            None => file.hdf5_dataset_attribute_string(name, "units"),
-        };
-        let times = units
-            .as_deref()
-            .map(parse_cf_units)
-            .transpose()?
-            .flatten()
-            .map(|reference| decode_times(&reference, &values))
-            .transpose()?;
-
-        records.push(DumpRecord {
-            name: name.clone(),
-            filename,
-            shape,
-            dimensions: variable
-                .as_ref()
-                .map(|v| {
-                    v.dimensions()
-                        .iter()
-                        .map(|dimension| dimension.name().to_string())
-                        .collect()
-                })
-                .unwrap_or_default(),
-            dtype: "<f8",
-            units,
-            times,
-            cf,
-            unit_transform: transformed.then_some(unit_transform),
-            water_layer_conversion,
-            window: applied_window,
-            sample_window,
-        });
+    for result in results {
+        records.push(result?);
     }
 
     let metadata = DumpMetadata {
@@ -1145,6 +1202,341 @@ fn dump_sampled(path: &Path, out_dir: &Path, names: &[String], apply_mask: bool,
     fs::write(&target, text)
         .map_err(|error| format!("cannot write {}: {error}", target.display()))?;
     Ok(())
+}
+
+struct DumpOptions<'a> {
+    apply_mask: bool,
+    apply_scale: bool,
+    unit_transform: [f64; 2],
+    transformed: bool,
+    water_layer: Option<&'a str>,
+    window: Option<Window>,
+    sample_window: Option<SampleWindow>,
+    sample_mask: Option<SampleMask<'a>>,
+}
+
+/// Decode one variable into `out_dir/<index>` and describe it.
+fn dump_one(path: &Path, file: &netcrust::File, out_dir: &Path, index: usize, name: &str,
+            options: &DumpOptions<'_>) -> Result<DumpRecord, String> {
+    let DumpOptions { apply_mask, apply_scale, unit_transform, transformed, water_layer,
+                      window, sample_window, sample_mask } = *options;
+    // An HDF5 dataset the variable table does not list (a dimension
+    // scale the reader hides -- see `recover_dimension_scales`) is
+    // still reachable: `read_array_f64` falls back to a raw-HDF5 read
+    // by name, so the values come either way; only the attribute
+    // surface differs, which is why the CF lookups below go through a
+    // closure that knows which path it is on.
+    let variable = file.variable(name);
+    if let Some(variable) = variable.as_ref() {
+        if matches!(variable.dtype(), netcrust::DataType::Char | netcrust::DataType::String) {
+            if transformed || water_layer.is_some() {
+                return Err(format!("{name}: unit conversion requires a numeric variable"));
+            }
+            if window.is_some() || sample_window.is_some() {
+                return Err(format!("{name}: --window requires a numeric variable"));
+            }
+            let mut shape = variable.shape();
+            let mut dimensions: Vec<String> =
+                variable.dimensions().iter().map(|d| d.name().to_string()).collect();
+            let vlen = matches!(variable.dtype(), netcrust::DataType::String);
+            let (values, string_width) = character_bytes(&file, variable, vlen)?;
+            if let Some(width) = string_width {
+                // NC_STRING: the texts have no character dimension of their
+                // own, so the record gets one, the widest text, and the
+                // reader sees the same (..., width) S1 array a classic
+                // char variable gives it.
+                shape.push(width);
+                dimensions.push(format!("{name}_strlen"));
+            }
+            let filename = format!("{index:04}.chars");
+            fs::write(out_dir.join(&filename), values)
+                .map_err(|error| format!("cannot write {name}: {error}"))?;
+            return Ok(DumpRecord {
+                name: name.to_string(), filename, shape, dimensions,
+                dtype: "|S1", units: None, times: None, cf: CfApplied::default(),
+                unit_transform: None,
+                water_layer_conversion: None,
+                window: None,
+                sample_window: None,
+                sample_mask: None,
+            });
+        }
+    } else if !file.has_hdf5_dataset(name) {
+        return Err(format!("variable not found in {}: {name}", path.display()));
+    }
+    // An exact window of a listed variable reads only the chunks under
+    // the window (the decoded values are the same numbers the full read
+    // would cut out: masking, unpacking and unit conversion are
+    // elementwise).  Layer water reads its thickness over the whole
+    // variable and a sampled window needs neighbours past its edge, so
+    // both still read everything.
+    let window_read = match (window, variable.as_ref(), water_layer, sample_window) {
+        (Some(window), Some(variable), None, None) => {
+            let full: Vec<usize> = variable.shape();
+            window.check(name, &full)?;
+            Some(window.selection(&full))
+        }
+        _ => None,
+    };
+    let array = match window_read.as_ref() {
+        Some(selection) => file.read_array_f64_slice(name, selection),
+        None => file.read_array_f64(name),
+    }
+    .map_err(|error| format!("cannot decode {name}: {error}"))?;
+    let mut shape = array.shape().to_vec();
+    let mut values = array.into_values();
+
+    // CF unpacking, applied HERE so Python receives decoded numbers.
+    // Order matters and follows CF-1.x and netCDF4-python: a value is
+    // tested against the fill markers in its STORED representation,
+    // before scale_factor/add_offset are applied.  Applying the
+    // packing first would compare a physical quantity against a
+    // sentinel that was never in that space, which is how packed
+    // fields silently keep their fill values as real data.
+    // A recovered dimension scale exposes only the CF STRING
+    // attributes reachable by name, so numeric CF attributes are
+    // absent there rather than assumed to be zero/one.  Coordinate
+    // axes are not packed in any format this reads, so that is a
+    // real limitation and not a silent one: it is stated in the
+    // inventory by `recovered_dimension_scale`.
+    let number = |key: &str| -> Option<f64> {
+        variable
+            .as_ref()
+            .and_then(|v| v.attribute(key))
+            .and_then(|a| a.as_f64())
+    };
+    // `--raw` reports the attributes it did NOT act on, so the
+    // record still says what the file declares while `applied`
+    // says whether anything was done about it.
+    let fill_value = number("_FillValue");
+    let default_fill = match (&variable, fill_value) {
+        (Some(variable), None) => nc_default_fill(variable.dtype()),
+        _ => None,
+    };
+    let cf = CfApplied {
+        scale_factor: number("scale_factor"),
+        add_offset: number("add_offset"),
+        fill_value,
+        missing_value: number("missing_value"),
+        default_fill,
+        default_fill_rule: apply_mask,
+        missing_count: 0,
+        applied: apply_mask || apply_scale,
+    };
+    let mut missing_count = 0usize;
+    for value in values.iter_mut() {
+        if apply_mask {
+            let is_missing = cf.fill_value.is_some_and(|fill| *value == fill)
+                || cf.default_fill.is_some_and(|fill| *value == fill)
+                || cf.missing_value.is_some_and(|marker| *value == marker);
+            if is_missing || !value.is_finite() {
+                if is_missing {
+                    missing_count += 1;
+                }
+                *value = f64::NAN;
+                continue;
+            }
+        }
+        // Scaling is independent of masking, exactly as it is in
+        // netCDF4-python: with masking off the sentinel itself comes
+        // back, and it comes back scaled like every other element.
+        if apply_scale {
+            if let Some(scale) = cf.scale_factor {
+                *value *= scale;
+            }
+            if let Some(offset) = cf.add_offset {
+                *value += offset;
+            }
+        }
+    }
+    // Explicit quantity-unit conversion follows CF unpacking. Masked values
+    // stay NaN; overflow of a finite input is a named decoding refusal.
+    if transformed {
+        for value in &mut values {
+            if value.is_finite() {
+                *value = *value * unit_transform[0] + unit_transform[1];
+                if !value.is_finite() {
+                    return Err(format!("{name}: unit conversion overflowed a finite value"));
+                }
+            }
+        }
+    }
+    let water_layer_conversion = match water_layer {
+        Some(thickness) => Some(water_layer::normalize(&file,
+            variable.as_ref().ok_or_else(|| format!("{name}: layer water needs complete variable metadata"))?,
+            &mut values, thickness)?),
+        None => None,
+    };
+    let cf = CfApplied {
+        missing_count,
+        ..cf
+    };
+    // The window is cut from the decoded values, so masking, unpacking
+    // and unit conversion are the same arithmetic with or without it.
+    // `missing_count` counts the elements read: the window's when only
+    // the window was read, the whole variable's otherwise.
+    let applied_window = match window {
+        Some(window) if window_read.is_some() => Some([window.i0, window.ni, window.j0, window.nj]),
+        Some(window) => {
+            let (cut, cut_shape) = window.apply(name, &values, &shape)?;
+            values = cut;
+            shape = cut_shape;
+            Some([window.i0, window.ni, window.j0, window.nj])
+        }
+        None => None,
+    };
+    if let Some(sample) = sample_window {
+        let (sampled, sampled_shape) = sample.apply_masked(name, &values, &shape, sample_mask)?;
+        values = sampled;
+        shape = sampled_shape;
+    }
+
+    // The index prefix keeps the filename unique and filesystem-safe
+    // whatever the variable is called: NetCDF names may differ only
+    // by case, which collides on Windows and macOS.
+    let filename = format!("{index:04}.f64");
+    let target: PathBuf = out_dir.join(&filename);
+    let mut handle = fs::File::create(&target)
+        .map_err(|error| format!("cannot write {}: {error}", target.display()))?;
+    handle
+        .write_all(&le_bytes(&values))
+        .map_err(|error| format!("cannot write {}: {error}", target.display()))?;
+
+    let units = match variable.as_ref() {
+        Some(v) => v
+            .attribute("units")
+            .and_then(|attribute| attribute.as_string().map(str::to_string)),
+        None => file.hdf5_dataset_attribute_string(name, "units"),
+    };
+    let times = units
+        .as_deref()
+        .map(parse_cf_units)
+        .transpose()?
+        .flatten()
+        .map(|reference| decode_times(&reference, &values))
+        .transpose()?;
+
+    Ok(DumpRecord {
+        name: name.to_string(),
+        filename,
+        shape,
+        dimensions: variable
+            .as_ref()
+            .map(|v| {
+                v.dimensions()
+                    .iter()
+                    .map(|dimension| dimension.name().to_string())
+                    .collect()
+            })
+            .unwrap_or_default(),
+        dtype: "<f8",
+        units,
+        times,
+        cf,
+        unit_transform: transformed.then_some(unit_transform),
+        water_layer_conversion,
+        window: applied_window,
+        sample_window,
+        sample_mask: sample_mask.map(|mask| mask.name.to_string()),
+    })
+}
+
+/// Little-endian bytes of `values`, borrowed on a little-endian host.
+fn le_bytes(values: &[f64]) -> std::borrow::Cow<'_, [u8]> {
+    #[cfg(target_endian = "little")]
+    {
+        // SAFETY: f64 has no padding and any byte view of it is valid u8;
+        // the slice covers exactly the values' bytes.
+        std::borrow::Cow::Borrowed(unsafe {
+            std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), std::mem::size_of_val(values))
+        })
+    }
+    #[cfg(not(target_endian = "little"))]
+    {
+        std::borrow::Cow::Owned(values.iter().flat_map(|value| value.to_le_bytes()).collect())
+    }
+}
+
+/// Bytes of decoded data one dump may hold at once across the variables
+/// it decodes concurrently.  A single variable larger than this still
+/// runs, alone.  Breakage it prevents: decoding the 93 4D variables of
+/// NCAR's 2.5 km restart all at once would hold ~200 GB.
+const DUMP_BUDGET_BYTES: u64 = 8 << 30;
+
+static DUMP_BUDGET: ByteBudget = ByteBudget::new(DUMP_BUDGET_BYTES);
+
+/// Peak bytes one variable's decode holds: the stored array, its f64
+/// promotion and (on a window or sample) the cut copy.
+fn estimated_dump_bytes(file: &netcrust::File, name: &str) -> u64 {
+    file.variable(name)
+        .map(|variable| variable.shape().iter().map(|&n| n as u64).product::<u64>())
+        .unwrap_or(0)
+        .saturating_mul(24)
+}
+
+struct ByteBudget {
+    used: std::sync::Mutex<u64>,
+    freed: std::sync::Condvar,
+    cap: u64,
+}
+
+struct BudgetHold<'a> {
+    budget: &'a ByteBudget,
+    bytes: u64,
+}
+
+impl ByteBudget {
+    const fn new(cap: u64) -> Self {
+        Self { used: std::sync::Mutex::new(0), freed: std::sync::Condvar::new(), cap }
+    }
+
+    fn acquire(&self, bytes: u64) -> BudgetHold<'_> {
+        let mut used = self.used.lock().unwrap_or_else(|poison| poison.into_inner());
+        while *used > 0 && used.saturating_add(bytes) > self.cap {
+            used = self.freed.wait(used).unwrap_or_else(|poison| poison.into_inner());
+        }
+        *used = used.saturating_add(bytes);
+        BudgetHold { budget: self, bytes }
+    }
+}
+
+impl Drop for BudgetHold<'_> {
+    fn drop(&mut self) {
+        let mut used = self.budget.used.lock().unwrap_or_else(|poison| poison.into_inner());
+        *used = used.saturating_sub(self.bytes);
+        self.budget.freed.notify_all();
+    }
+}
+
+/// `work(0..count)` on up to 16 scoped threads, results in index order.
+fn run_bounded<T: Send>(count: usize, work: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(16).min(count);
+    if threads <= 1 {
+        return (0..count).map(&work).collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let slots: Vec<std::sync::Mutex<Option<T>>> =
+        (0..count).map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| loop {
+                let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if index >= count {
+                    break;
+                }
+                let value = work(index);
+                *slots[index].lock().unwrap_or_else(|poison| poison.into_inner()) = Some(value);
+            });
+        }
+    });
+    slots
+        .into_iter()
+        .map(|slot| {
+            slot.into_inner()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .expect("every index ran")
+        })
+        .collect()
 }
 
 /// A CF reference time: the unit the values are counted in, and the
@@ -1354,20 +1746,26 @@ fn decode_times(reference: &CfReference, values: &[f64]) -> Result<Vec<String>, 
             if !value.is_finite() {
                 return Err(format!("time coordinate is not finite: {value}"));
             }
-            // Nanosecond arithmetic keeps sub-second offsets exact for
-            // the fractional day/hour spellings that appear in the wild.
-            let nanos = match reference.unit {
-                CfUnit::Seconds => value * 1e9,
-                CfUnit::Minutes => value * 60.0 * 1e9,
-                CfUnit::Hours => value * 3600.0 * 1e9,
-                CfUnit::Days => value * 86_400.0 * 1e9,
+            // Split whole seconds from the fractional part. Converting the
+            // entire reference offset to i64 nanoseconds incorrectly excludes
+            // valid distant epochs such as hours since 0001-01-01.
+            let seconds = match reference.unit {
+                CfUnit::Seconds => value,
+                CfUnit::Minutes => value * 60.0,
+                CfUnit::Hours => value * 3600.0,
+                CfUnit::Days => value * 86_400.0,
             };
-            if nanos.abs() >= i64::MAX as f64 {
+            if !seconds.is_finite() || seconds.abs() >= i64::MAX as f64 {
                 return Err(format!("time coordinate out of representable range: {value}"));
             }
+            let whole = Duration::try_seconds(seconds.trunc() as i64)
+                .ok_or_else(|| format!("time coordinate out of representable range: {value}"))?;
+            let fraction = Duration::nanoseconds((seconds.fract() * 1e9).round() as i64);
+            let delta = whole.checked_add(&fraction)
+                .ok_or_else(|| format!("time coordinate out of representable range: {value}"))?;
             let instant = reference
                 .epoch
-                .checked_add_signed(Duration::nanoseconds(nanos.round() as i64))
+                .checked_add_signed(delta)
                 .ok_or_else(|| format!("time coordinate out of range: {value}"))?;
             Ok(instant.format("%Y-%m-%dT%H:%M:%S%.fZ").to_string())
         })
@@ -1401,6 +1799,19 @@ mod tests {
         let times = decode_times(&reference, &[0.0, 1.5]).expect("decoded");
         assert_eq!(times[0], "1970-01-01T00:00:00Z");
         assert_eq!(times[1], "1970-01-01T01:30:00Z");
+    }
+
+    #[test]
+    fn distant_reference_and_fractional_offsets_decode() {
+        let ancient = reference("hours since 0001-01-01 00:00:00.0");
+        assert_eq!(decode_times(&ancient, &[17_739_672.0]).unwrap(),
+                   vec!["2024-09-25T00:00:00Z"]);
+        let modern = reference("seconds since 2024-09-25 00:00:00");
+        assert_eq!(decode_times(&modern, &[-0.125, 0.125]).unwrap(),
+                   vec!["2024-09-24T23:59:59.875Z", "2024-09-25T00:00:00.125Z"]);
+        for value in [f64::INFINITY, f64::NAN, f64::MAX] {
+            assert!(decode_times(&modern, &[value]).is_err());
+        }
     }
 
     #[test]
@@ -2105,6 +2516,39 @@ mod tests {
     }
 
     #[test]
+    fn masked_bilinear_averages_only_the_output_points_own_class() {
+        // 2 x 3 plane; the right column is water (mask 0) holding a 0 fill.
+        let values = vec![280.0, 290.0, 0.0,
+                          300.0, 310.0, 0.0];
+        let mask_values = vec![1.0, 1.0, 0.0,
+                               1.0, 1.0, 0.0];
+        let mask = SampleMask { name: "LANDMASK", values: &mask_values, ny: 2, nx: 3 };
+        // Interior land point: every neighbour is land, so the bits are bilinear's.
+        let inner = SampleWindow::parse("0.25:1,0.5:1", "bilinear-masked").unwrap();
+        let plain = SampleWindow::parse("0.25:1,0.5:1", "bilinear").unwrap();
+        assert_eq!(inner.apply_masked("F", &values, &[2, 3], Some(mask)).unwrap().0[0].to_bits(),
+                   plain.apply("F", &values, &[2, 3]).unwrap().0[0].to_bits());
+        // A land point beside the water column: plain bilinear blends the
+        // 0 fill in; the masked sample keeps only the land neighbours.
+        let coast = SampleWindow::parse("1.25:1,0.5:1", "bilinear-masked").unwrap();
+        let blended = SampleWindow::parse("1.25:1,0.5:1", "bilinear").unwrap()
+            .apply("F", &values, &[2, 3]).unwrap().0[0];
+        assert!(blended < 250.0, "{blended}");
+        assert_eq!(coast.apply_masked("F", &values, &[2, 3], Some(mask)).unwrap().0[0], 300.0);
+        // A water point keeps the water class's own value.
+        let sea = SampleWindow::parse("1.75:1,0.5:1", "bilinear-masked").unwrap();
+        assert_eq!(sea.apply_masked("F", &values, &[2, 3], Some(mask)).unwrap().0[0], 0.0);
+        // Integer origins stay exact copies.
+        let exact = SampleWindow::parse("1:2,0:2", "bilinear-masked").unwrap();
+        assert_eq!(exact.apply_masked("F", &values, &[2, 3], Some(mask)).unwrap().0,
+                   vec![290.0, 0.0, 310.0, 0.0]);
+        // The method and the mask go together; a mask of another plane is refused.
+        assert!(coast.apply("F", &values, &[2, 3]).unwrap_err().contains("go together"));
+        let small = SampleMask { name: "LANDMASK", values: &mask_values[..4], ny: 2, nx: 2 };
+        assert!(coast.apply_masked("F", &values, &[2, 3], Some(small)).unwrap_err().contains("plane"));
+    }
+
+    #[test]
     fn sampled_windows_refuse_missing_neighbors_outside_and_overflow() {
         let sample = SampleWindow::parse("0.25:2,0.5:1", "bilinear").unwrap();
         let values = vec![1.0, 2.0, 3.0, 4.0, f64::NAN, 6.0];
@@ -2123,16 +2567,16 @@ mod tests {
         assert_eq!(one.apply("FIELD", &edge, &[2, 3]).unwrap().0[0].to_bits(), (-0.0_f64).to_bits());
     }
 
-    /// A recovered dimension scale has no entry in the variable table,
-    /// so its dump takes the raw-HDF5 path end to end: existence via
-    /// `has_hdf5_dataset`, units via the by-name attribute read, and an
-    /// empty dimension list rather than an invented one.
+    /// A NetCDF-4 coordinate variable is an HDF5 dimension scale; the
+    /// reader lists it, so its dump is an ordinary one: values, units
+    /// and the decoded times, over its OWN dimension rather than an
+    /// empty or invented list.
     #[test]
-    fn a_recovered_coordinate_dumps_through_the_raw_hdf5_path() {
-        let dir = scratch("dump-recovered");
+    fn a_coordinate_variable_dumps_over_its_own_dimension() {
+        let dir = scratch("dump-coordinate");
         let out = dir.join("out");
         dump(&fixture("axes.nc4"), &out, &["time".into()], true, true)
-            .expect("dump recovered scale");
+            .expect("dump coordinate variable");
 
         assert_eq!(read_f64_plane(&out.join("0000.f64")), &[0.0, 1.0, 2.0, 3.0]);
         let metadata = read_metadata(&out);
@@ -2147,7 +2591,53 @@ mod tests {
                 "2024-03-01T03:00:00Z",
             ])
         );
-        assert_eq!(time["dimensions"], serde_json::json!([]));
+        assert_eq!(time["dimensions"], serde_json::json!(["time"]));
+        assert_eq!(time["shape"], serde_json::json!([4]));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A multi-axis coordinate variable (a 2-D dimension scale) dumps
+    /// every element over every axis.  Describing it over its first
+    /// dimension alone, as a reader that treats a scale as 1-D does,
+    /// made this very read fail with "slice has 1 dimensions but
+    /// dataset has 2".
+    #[test]
+    fn a_two_dimensional_coordinate_dumps_every_element() {
+        let dir = scratch("dump-coordinate-2d");
+        let out = dir.join("out");
+        dump(&fixture("axes.nc4"), &out, &["corners".into()], true, true)
+            .expect("dump 2-D coordinate variable");
+        let values = read_f64_plane(&out.join("0000.f64"));
+        assert_eq!(values, (0..30).map(f64::from).collect::<Vec<_>>());
+        let metadata = read_metadata(&out);
+        let corners = record(&metadata, "corners");
+        assert_eq!(corners["shape"], serde_json::json!([5, 6]));
+        assert_eq!(corners["dimensions"], serde_json::json!(["corners", "zvals"]));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// An HDF5 dataset outside the variable table has no entry to
+    /// describe it, so its dump takes the raw-HDF5 path end to end:
+    /// existence via `has_hdf5_dataset`, values by name, and an empty
+    /// dimension list rather than an invented one.  `bnds` is such a
+    /// dataset: the scale netCDF-C writes for a dimension with no
+    /// coordinate variable, hidden from the table by its NAME marker
+    /// and never written to, so it reads as the library's zero fill.
+    #[test]
+    fn a_hidden_hdf5_dataset_dumps_through_the_raw_hdf5_path() {
+        let dir = scratch("dump-raw-hdf5");
+        let out = dir.join("out");
+        let (file, _) = open(&fixture("axes.nc4")).expect("open");
+        assert!(file.variable("bnds").is_none(), "bnds is a dimension-only scale");
+        assert!(file.has_hdf5_dataset("bnds"));
+        dump(&fixture("axes.nc4"), &out, &["bnds".into()], true, true)
+            .expect("dump hidden dataset");
+        assert_eq!(read_f64_plane(&out.join("0000.f64")), &[0.0, 0.0]);
+        let metadata = read_metadata(&out);
+        let bnds = record(&metadata, "bnds");
+        assert_eq!(bnds["shape"], serde_json::json!([2]));
+        assert_eq!(bnds["dimensions"], serde_json::json!([]));
+        assert_eq!(bnds["units"], serde_json::Value::Null);
 
         let missing = dump(&fixture("axes.nc4"), &out, &["absent".into()], true, true)
             .expect_err("unknown names are refused on HDF5 files too");
@@ -2253,124 +2743,166 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // Dimension-scale recovery against the checked-in NetCDF-4 fixture.
+    // The variable table against the checked-in NetCDF-4 fixtures:
+    // coordinate variables (HDF5 dimension scales) come from the reader
+    // like any field, and the recovery pass adds only what it hides.
 
-    fn recovered_axes() -> Vec<VariableRecord> {
-        let (file, provenance) = open(&fixture("axes.nc4")).expect("open");
+    /// The table exactly as `inventory` builds it, through the same
+    /// code path, for a fixture that must open strict.
+    fn strict_table(name: &str) -> (Vec<DimensionRecord>, Vec<VariableRecord>) {
+        let path = fixture(name);
+        let (file, provenance) = open(&path).expect("open");
         assert_eq!(provenance.mode, "strict", "{:?}", provenance.strict_error);
-        let dimensions: Vec<DimensionRecord> = file
-            .dimensions()
-            .expect("dimensions")
-            .into_iter()
-            .map(|dimension| DimensionRecord {
-                name: dimension.name().to_string(),
-                len: dimension.len(),
-                unlimited: dimension.is_unlimited(),
-            })
-            .collect();
-        let mut variables: Vec<VariableRecord> = file
-            .variables()
-            .expect("variables")
-            .into_iter()
-            .map(|variable| VariableRecord {
-                name: variable.name().to_string(),
-                dimensions: Vec::new(),
-                shape: variable.shape(),
-                dtype: String::new(),
-                attributes: BTreeMap::new(),
-                recovered_dimension_scale: false,
-            })
-            .collect();
-        assert_eq!(
-            variables.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(),
-            vec!["t2"],
-            "the reader's variable table must omit the dimension scales, \
-             or this fixture no longer tests the recovery at all"
-        );
-        recover_dimension_scales(&file, &dimensions, &mut variables);
-        variables
+        let dimensions = dimension_table(&file, &path).expect("dimensions");
+        let variables = variable_table(&file, &path, &dimensions).expect("variables");
+        (dimensions, variables)
+    }
+
+    fn axes_table() -> Vec<VariableRecord> {
+        strict_table("axes.nc4").1
     }
 
     #[test]
-    fn coordinate_variables_are_recovered_with_their_own_dimensions() {
-        let variables = recovered_axes();
-        let mut names: Vec<&str> = variables
-            .iter()
-            .filter(|v| v.recovered_dimension_scale)
-            .map(|v| v.name.as_str())
-            .collect();
+    fn coordinate_variables_are_listed_with_their_own_dimensions() {
+        let variables = axes_table();
+        let mut names: Vec<&str> = variables.iter().map(|v| v.name.as_str()).collect();
         names.sort_unstable();
-        assert_eq!(names, vec!["corners", "lat", "lon", "time", "zvals"]);
+        assert_eq!(names, vec!["corners", "lat", "lon", "t2", "time", "zvals"]);
+        assert!(
+            variables.iter().all(|v| !v.recovered_dimension_scale),
+            "the reader lists every coordinate variable, so nothing is \
+             left for the raw-HDF5 recovery"
+        );
 
-        // The name rule: lon and lat share length 3, so only the
-        // coordinate-variable convention can attach each scale to its
-        // OWN dimension rather than the first one of matching length.
+        // lon and lat share length 3, so only the scale's own identity
+        // (the reader resolves a scale by its dataset address, never by
+        // length) can attach each to its OWN dimension rather than the
+        // first one of matching length.
         for name in ["time", "lon", "lat", "zvals"] {
             let record = variables
                 .iter()
                 .find(|v| v.name == name)
-                .unwrap_or_else(|| panic!("{name} not recovered"));
+                .unwrap_or_else(|| panic!("{name} not listed"));
             assert_eq!(
                 record.dimensions,
                 vec![name.to_string()],
                 "{name} must resolve to its own dimension"
             );
-            assert_eq!(record.dtype, "Promoted");
+            assert_eq!(record.dtype, "F64", "{name} carries its stored type");
         }
 
         let time = variables.iter().find(|v| v.name == "time").expect("time");
         assert_eq!(time.shape, vec![4]);
         assert_eq!(
-            time.attributes.get("units"),
-            Some(&serde_json::json!("hours since 2024-03-01"))
+            time.attributes,
+            BTreeMap::from([
+                ("units".to_string(), serde_json::json!("hours since 2024-03-01")),
+                ("standard_name".to_string(), serde_json::json!("time")),
+                ("calendar".to_string(), serde_json::json!("standard")),
+                ("axis".to_string(), serde_json::json!("T")),
+            ]),
+            "every attribute the fixture wrote, none it did not, and \
+             no HDF5 bookkeeping (CLASS, NAME, REFERENCE_LIST)"
         );
-        assert_eq!(
-            time.attributes.get("standard_name"),
-            Some(&serde_json::json!("time"))
-        );
-        assert_eq!(
-            time.attributes.get("calendar"),
-            Some(&serde_json::json!("standard"))
-        );
-        assert_eq!(time.attributes.get("axis"), Some(&serde_json::json!("T")));
-        assert_eq!(
-            time.attributes.get("long_name"),
-            None,
-            "the fixture writes no long_name; inventing one would mean \
-             the probe list stopped being read by name"
-        );
+        let zvals = variables.iter().find(|v| v.name == "zvals").expect("zvals");
+        assert_eq!(zvals.attributes.get("units"), Some(&serde_json::json!("m")));
     }
 
-    /// The unique-length rule: a 2-D dataset can never take the name
-    /// rule, so each axis of `corners` (5 x 6) resolves only because
-    /// exactly one dimension has that length.
+    /// The unique-length rule for a scale from a producer that writes no
+    /// coordinate record: `corners` (5 x 6, made with h5py) is its own
+    /// first dimension, and its second axis resolves only because exactly
+    /// one dimension has length 6.
     #[test]
     fn a_two_dimensional_scale_resolves_axes_by_unique_length() {
-        let variables = recovered_axes();
+        let variables = axes_table();
         let corners = variables
             .iter()
             .find(|v| v.name == "corners")
-            .expect("corners recovered");
+            .expect("corners listed");
         assert_eq!(corners.shape, vec![5, 6]);
         assert_eq!(corners.dimensions, vec!["corners", "zvals"]);
+        assert_eq!(corners.dtype, "F64");
         assert_eq!(
             corners.attributes.get("long_name"),
             Some(&serde_json::json!("cell corner offsets"))
         );
     }
 
+    /// netCDF-C's own multi-axis coordinate variable: `station(station,
+    /// pair)` where `pair` and `other` both have length 2, so no length
+    /// rule can name the second axis; only the library's
+    /// `_Netcdf4Coordinates` record can, and the reader reads it.
     #[test]
-    fn phony_dimensions_and_known_variables_are_not_recovered() {
-        let variables = recovered_axes();
+    fn a_netcdf_c_multi_axis_coordinate_resolves_by_its_dimension_ids() {
+        let (dimensions, variables) = strict_table("coord2d.nc4");
+        let twos: Vec<&str> = dimensions
+            .iter()
+            .filter(|d| d.len == 2)
+            .map(|d| d.name.as_str())
+            .collect();
+        assert_eq!(twos, vec!["pair", "other"], "the fixture's ambiguity must stand");
+        let station = variables
+            .iter()
+            .find(|v| v.name == "station")
+            .expect("station listed");
+        assert_eq!(station.shape, vec![3, 2]);
+        assert_eq!(station.dimensions, vec!["station", "pair"]);
+        assert_eq!(
+            station.attributes.get("long_name"),
+            Some(&serde_json::json!("station corner"))
+        );
+        let temp = variables.iter().find(|v| v.name == "temp").expect("temp listed");
+        assert_eq!(temp.dimensions, vec!["station"]);
+        assert!(variables.iter().all(|v| !v.recovered_dimension_scale));
+    }
+
+    #[test]
+    fn phony_dimensions_are_not_listed_and_known_variables_are_not_doubled() {
+        let (dimensions, variables) = strict_table("axes.nc4");
+        assert!(dimensions.iter().any(|d| d.name == "bnds" && d.len == 2));
         assert!(
             !variables.iter().any(|v| v.name == "bnds"),
-            "bnds has no coordinate variable; recovering it would invent \
+            "bnds has no coordinate variable; listing it would invent \
              a variable netCDF4-python does not report"
         );
+        for name in ["t2", "time", "corners"] {
+            assert_eq!(
+                variables.iter().filter(|v| v.name == name).count(),
+                1,
+                "{name} is in the variable table once and must not be doubled"
+            );
+        }
+    }
+
+    /// The recovery pass adds only what the reader hides, and nothing
+    /// twice: run over the complete table it is a no-op, and run over a
+    /// table missing `time` it brings `time` back over its own dimension,
+    /// with the Promoted type and the by-name CF string attributes the
+    /// raw path can reach, flagged as recovered.
+    #[test]
+    fn recovery_adds_only_hidden_scales_and_never_doubles_a_listed_one() {
+        let path = fixture("axes.nc4");
+        let (file, _) = open(&path).expect("open");
+        let dimensions = dimension_table(&file, &path).expect("dimensions");
+        let mut complete = variable_table(&file, &path, &dimensions).expect("variables");
+        let before = complete.len();
+        recover_dimension_scales(&file, &dimensions, &mut complete);
+        assert_eq!(complete.len(), before, "a listed scale is never recovered again");
+
+        let mut hidden: Vec<VariableRecord> =
+            complete.into_iter().filter(|v| v.name != "time").collect();
+        recover_dimension_scales(&file, &dimensions, &mut hidden);
+        let time = hidden.iter().find(|v| v.name == "time").expect("time recovered");
+        assert!(time.recovered_dimension_scale);
+        assert_eq!(time.dimensions, vec!["time"]);
+        assert_eq!(time.shape, vec![4]);
+        assert_eq!(time.dtype, "Promoted");
         assert_eq!(
-            variables.iter().filter(|v| v.name == "t2").count(),
-            1,
-            "t2 is already in the variable table and must not be doubled"
+            time.attributes.get("units"),
+            Some(&serde_json::json!("hours since 2024-03-01"))
         );
+        assert_eq!(time.attributes.get("calendar"), Some(&serde_json::json!("standard")));
+        assert_eq!(time.attributes.get("axis"), Some(&serde_json::json!("T")));
+        assert!(!hidden.iter().any(|v| v.name == "bnds"), "a phony dimension stays hidden");
     }
 }

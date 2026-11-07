@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ruc_boundaries",
+      "source": "woof/metal/shaders/hexrrfs_ruc_boundaries.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/resident_ruc_rrfs.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ruc_soil_profile",
+      "cuda_symbol": "ResidentRucSlot._build",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "zs",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zs": [
+          [
+            "nsl",
+            "nc"
+          ]
+        ],
+        "output": [
+          [
+            "nsl",
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "nsl",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

@@ -87,7 +87,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "one wrfnat and one wrfprs object with their .idx per lead, posted in lead order: f000 from + 49 min, f018 from + 1 h 13 min (synoptic) or 1 h 24 min, f048 from + 1 h 46 min; the 30 Sep 06Z and 07Z runs posted 30 to 55 min late"
         },
         "refusal": null,
@@ -209,7 +209,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "one wrfprs object and its .idx per lead, posted in lead order: f000 from + 49 min, f018 from + 1 h 13 min (synoptic) or 1 h 24 min, f048 from + 1 h 46 min; the 30 Sep 06Z and 07Z runs posted 30 to 55 min late"
         },
         "refusal": null,
@@ -285,7 +285,7 @@
           "ready_check": "objects",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "about 175 single-message files per lead on dd.weather.gc.ca, no index, posted in lead order: f000 at + 3 h 50 min, f240 at + 4 h 49 min"
         },
         "refusal": null,
@@ -362,7 +362,7 @@
           "ready_check": "objects",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "about 116 per-field bz2 objects per lead on opendata.dwd.de, no index, posted in lead order over about 50 min: f000 at + 2 h 40 min, f180 at + 3 h 29 min (29 Sep 12Z to 30 Sep 06Z)"
         },
         "refusal": null,
@@ -471,7 +471,7 @@
           "ready_check": "objects",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "about 125 per-field bz2 objects per lead on opendata.dwd.de, no index, posted in lead order: f000 at + 2 h 40 min, f120 at + 3 h 33 min"
         },
         "refusal": null,
@@ -566,7 +566,7 @@
           "ready_check": "objects",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "about 675 per-field and per-level bz2 objects per lead on opendata.dwd.de, no index, posted in lead order at about 0.6 min per lead: f000 at + 44 min, f048 at + 1 h 12 min to 1 h 14 min (eight cycles)"
         },
         "refusal": null,
@@ -701,7 +701,7 @@
           "ready_check": "objects",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "one pgrb2.0p25 object per lead, posted in lead order: f000 at + 3 h 31 min, f384 at + 5 h 12 min; the .idx is the record-count bar after download"
         },
         "refusal": null,
@@ -776,7 +776,7 @@
           "ready_check": "objects",
           "shape": "whole_cycle",
           "streams": false,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "f000 to f009 post together, within about 16 min, from + 6 h 48 min after the cycle (the 30 Sep 00Z run from + 7 h 44 min); a run is capped at 9 h, so there is nothing to wait for inside a cycle"
         },
         "refusal": null,
@@ -860,7 +860,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "one pgrb2a/pgrb2b pair with their .idx per member and lead, posted in lead order: f000 at + 3 h 45 min, f384 at + 6 h 02 min; the 00Z extension past f384 a day later"
         },
         "refusal": null,
@@ -935,7 +935,7 @@
           "ready_check": "objects_and_index",
           "shape": "donor_gated",
           "streams": false,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "every AI lead is posted by + 4 h 13 min to 5 h 19 min, but the same-cycle GDAS donor lands at + 6 h 48 min to 7 h 44 min and the engine refuses a donor from another cycle, so the donor decides the start and nothing is left to wait for"
         },
         "refusal": null,
@@ -1010,7 +1010,7 @@
           "ready_check": "objects_and_index",
           "shape": "donor_gated",
           "streams": false,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "every AI lead is posted by + 4 h 29 min to 5 h 29 min, but the same-cycle GDAS donor lands at + 6 h 48 min to 7 h 44 min and the engine refuses a donor from another cycle, so the donor decides the start and nothing is left to wait for"
         },
         "refusal": null,
@@ -1152,7 +1152,7 @@
           "ready_check": "objects",
           "shape": "whole_cycle",
           "streams": false,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "the files only appear complete: every lead of a run posts within a minute, at + 7 h 34 min for 00/12Z and + 6 h 27 min for 06/18Z"
         },
         "refusal": null,
@@ -1227,7 +1227,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "Individual member records are selected from each posted object and its index; later leads are not needed to admit the verified prefix."
         },
         "refusal": null,
@@ -1302,7 +1302,7 @@
           "ready_check": "objects",
           "shape": "whole_cycle",
           "streams": false,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "every lead of a run lands within about 3 min, at + 5 h 27 min to 5 h 40 min on the AWS rung (nine runs, 28 to 30 Sep); data.ecmwf.int's per-lead Last-Modified is its dissemination schedule, not the posting"
         },
         "refusal": null,
@@ -1396,7 +1396,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "One native-level object and its index per lead; objects and index must be available before preparation."
         },
         "refusal": null,
@@ -1490,7 +1490,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "One native-level object and its index per lead; objects and index must be available before preparation."
         },
         "refusal": null,
@@ -1584,7 +1584,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "one awip32 object and its .idx per lead, posted in lead order: a whole cycle lands within about 20 min, f000 at + 47 min, f051 at + 1 h 07 min"
         },
         "refusal": null,
@@ -2048,7 +2048,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "one prslev and one 2dfld object with their .idx per lead, posted in lead order over about 1 h 40 min; its f000 alone spreads 36 min (+ 1 h 13 min to 1 h 49 min), so the budget is 90 min"
         },
         "refusal": null,
@@ -2143,7 +2143,7 @@
           "ready_check": "objects_and_index",
           "shape": "rolling",
           "streams": true,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "Each member pressure and surface pair is posted per lead; prefix completeness requires both products and their indexes."
         },
         "refusal": null,
@@ -2500,7 +2500,7 @@
           "ready_check": null,
           "shape": "brokered",
           "streams": false,
-          "table_sha256": "6e7155e6461fa9c9093d9c564cef498dc003849cc3a79f99c8aa40d58bd0b9b2",
+          "table_sha256": "e29085717ec57872f12dcbea255fda7068e4f567bd96f26b4d8136b947cdcd56",
           "why": "the default provider, the Copernicus CDS, is a keyed job API: the file exists only when the job finishes and there is no object to HEAD, so the fetch runs its job and a run starts when the job's file verifies"
         },
         "refusal": null,
