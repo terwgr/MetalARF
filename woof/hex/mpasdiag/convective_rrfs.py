@@ -629,7 +629,7 @@ class ConvectiveDiagnostics:
     COMPUTE_WORK_BYTES = 512 << 20
 
     def __init__(self, outputs, n_cells_solve: int, n_levels: int,
-                 output_stream_fields: Iterable[str]):
+                 output_stream_fields: Iterable[str], *, backend=None):
         """RRFSx/MPAS-Model@1d6e370e MPAS-Model-rrfs/src/core_atmosphere/diagnostics/mpas_convective_diagnostics.F:79-283 (setup).
 
         ``outputs`` is either one writable resident C float32 array (41, allocatedCells) or a sequence of 41
@@ -637,7 +637,15 @@ class ConvectiveDiagnostics:
         contain native initialization/restart values on entry. No implicit initialization occurs; lcl/lfc
         always retain those words.
         """
-        import cupy as cp
+        self.backend = backend
+        if backend is None:
+            import cupy as cp
+        else:
+            cp = backend.array_module
+        self.cp = cp
+        if backend is not None:
+            from functools import partial
+            self._array = partial(self._array, array_module=cp)
         self.n_solve = int(n_cells_solve)
         self.n_levels = int(n_levels)
         if isinstance(outputs, cp.ndarray):
@@ -666,8 +674,11 @@ class ConvectiveDiagnostics:
 
     def bind_outputs(self, rows):
         """Point the kernels' output table at these 41 row allocations (FIELDS order)."""
-        import cupy as cp
+        cp = self.cp
         rows = [self._array(row, (self.n_cells,), FIELDS[i]) for i, row in enumerate(rows)]
+        if self.backend is not None:
+            self._rows, self._table = rows, self.outputs
+            return self
         pointers = tuple(row.data.ptr for row in rows)
         if pointers != getattr(self, '_pointers', None):
             self._rows, self._pointers = rows, pointers
@@ -675,8 +686,11 @@ class ConvectiveDiagnostics:
         return self
 
     @staticmethod
-    def _array(array, shape, name, dtype=np.float32):
-        import cupy as cp
+    def _array(array, shape, name, dtype=np.float32, *, array_module=None):
+        if array_module is None:
+            import cupy as cp
+        else:
+            cp = array_module
         if not isinstance(array, cp.ndarray) or array.dtype != np.dtype(dtype):
             raise TypeError(f'{name} must be a resident {np.dtype(dtype)} CUDA array')
         if array.shape != shape or not array.flags.c_contiguous:
@@ -687,7 +701,7 @@ class ConvectiveDiagnostics:
         """A pool (level, cell) array the kernels read in place: (levels, >= nCellsSolve), unit cell stride.
 
         Returns the array and its row stride in words."""
-        import cupy as cp
+        cp = self.cp
         if not isinstance(array, cp.ndarray) or array.dtype != np.float32:
             raise TypeError(f'{name} must be a resident float32 CUDA array')
         if (array.ndim != 2 or array.shape[0] != levels or array.shape[1] < self.n_solve
@@ -697,7 +711,7 @@ class ConvectiveDiagnostics:
 
     def _cells(self, array, name, count=None, dtype=np.float32):
         """A per-cell vector the kernels index by cell: (>= count,) contiguous."""
-        import cupy as cp
+        cp = self.cp
         count = self.n_solve if count is None else count
         if not isinstance(array, cp.ndarray) or array.dtype != np.dtype(dtype):
             raise TypeError(f'{name} must be a resident {np.dtype(dtype)} CUDA array')
@@ -707,8 +721,11 @@ class ConvectiveDiagnostics:
 
     def _launch(self, name, count, args):
         if count:
-            import cupy as cp
-            _module(cp.cuda.Device().id).get_function(name)(((count+127)//128,), (128,), args)
+            cp = self.cp
+            if self.backend is not None:
+                self.backend.launch(name, count, args)
+            else:
+                _module(cp.cuda.Device().id).get_function(name)(((count+127)//128,), (128,), args)
 
     def compute(self, arrays: Mapping[str, object], fields_will_be_written: Iterable[str],
                 *, rvord: float = float(np.float32(461.6)/np.float32(287.0))):
@@ -718,7 +735,7 @@ class ConvectiveDiagnostics:
         moisture slot's (level, cell) view. relhum is unused by the pinned native routine and is not required.
         ``rvord`` can be supplied from MPAS's selected constants package.
         """
-        import cupy as cp
+        cp = self.cp
         mask = _mask(fields_will_be_written) & ((1 << 14)-1)
         if not mask or not self.n_solve:
             return self.outputs
@@ -732,13 +749,17 @@ class ConvectiveDiagnostics:
         n = min(self.n_solve, max(32, self.COMPUTE_WORK_BYTES // (4*rows) // 32 * 32))
         if self._compute_work is None or self._compute_work.shape != (rows, n):
             self._compute_work = cp.empty((rows, n), dtype=cp.float32)
-        kernel = _module(cp.cuda.Device().id).get_function('compute_diag_cols')
+        kernel = (None if self.backend is not None else
+                  _module(cp.cuda.Device().id).get_function('compute_diag_cols'))
         for c0 in range(0, self.n_solve, n):
             count = min(n, self.n_solve - c0)
             # 32-thread blocks: the ascent's FP64 libm chain is spread over as many SMs as there are warps.
-            kernel(((count+31)//32,), (32,),
-                   (np.int32(c0), np.int32(count), np.int32(self.n_levels), np.int32(self.CAPE_SUBSTEPS),
-                    np.uint64(mask), np.float32(rvord), *args, self._table, self._compute_work))
+            call_args = (np.int32(c0), np.int32(count), np.int32(self.n_levels), np.int32(self.CAPE_SUBSTEPS),
+                    np.uint64(mask), np.float32(rvord), *args, self._table, self._compute_work)
+            if self.backend is not None:
+                self.backend.launch("compute_diag_cols", count, call_args)
+            else:
+                kernel(((count+31)//32,), (32,), call_args)
         return self.outputs
 
     def update(self, arrays: Mapping[str, object], *, nsteps: int, convection: bool,
@@ -750,7 +771,7 @@ class ConvectiveDiagnostics:
         (cell, maxEdges); vorticity is native (level, vertex). Topology indices are one-based, including the
         nCells+1 sentinel.
         """
-        import cupy as cp
+        cp = self.cp
         if not self.update_mask or not self.n_solve:
             return self.outputs
         nc = self.n_cells if n_mesh_cells is None else int(n_mesh_cells)
@@ -778,7 +799,8 @@ class ConvectiveDiagnostics:
             if self._helicity_plan is None or self._helicity_plan[0] != key:
                 from .convective_v842 import helicity_plan
                 # Mesh connectivity is fixed for a run; build the gather once.
-                self._helicity_plan = (key, helicity_plan(cov, nc, order))
+                self._helicity_plan = (key, helicity_plan(cov, nc, order) if self.backend is None
+                                       else self.backend.helicity_plan(cov, nc, order))
             offsets, entries = self._helicity_plan[1]
             if self._helicity is None or self._helicity[0].shape != (nc+1, nl):
                 # Gather writes every word, split every cell, smooth the solve cells the update reads.
@@ -835,9 +857,16 @@ class ConvectiveDiagnosticsModule:
     copy-out of one stacked output array around each call.
     """
 
+    def __init__(self, *, backend=None):
+        self.backend = backend
+
     def setup(self, pools, clock, utils):
         """RRFSx/MPAS-Model@1d6e370e MPAS-Model-rrfs/src/core_atmosphere/diagnostics/mpas_convective_diagnostics.F:79-283."""
-        import cupy as cp
+        if self.backend is None:
+            import cupy as cp
+        else:
+            cp = self.backend.array_module
+        self.cp = cp
         from .utils import Direction
         self.pools,self.clock,self.utils = pools,clock,utils
         self.mesh,self.diag,self.physics = (pools[name] for name in ('mesh','diag','diag_physics'))
@@ -847,7 +876,9 @@ class ConvectiveDiagnosticsModule:
         self.in_place = callable(getattr(self.diag, 'view', None))
         rows = [self.diag[name] for name in FIELDS]
         self.driver = ConvectiveDiagnostics(rows if self.in_place else cp.stack(rows),
-                                            self.mesh['nCellsSolve'],self.mesh['nVertLevels'],included)
+                                            self.mesh['nCellsSolve'],self.mesh['nVertLevels'],included, backend=self.backend)
+        if self.backend is not None:
+            self.driver.COMPUTE_WORK_BYTES = self.backend.work_bytes
         self._mesh = None
 
     @staticmethod
@@ -862,7 +893,7 @@ class ConvectiveDiagnosticsModule:
             raise RuntimeError('convective output allocations changed after setup')
 
     def _arrays(self, *, compute=False, convection=False):
-        import cupy as cp
+        cp = self.cp
         m,d,p,s = self.mesh,self.diag,self.physics,self.pools['state']
         arrays = {}
         if compute:
@@ -895,12 +926,12 @@ class ConvectiveDiagnosticsModule:
         return arrays
 
     def _sync(self):
-        import cupy as cp
+        cp = self.cp
         if not self.in_place:
             for i,name in enumerate(FIELDS): cp.copyto(self.driver.outputs[i],self.diag[name])
 
     def _publish(self,names,all_cells=False):
-        import cupy as cp
+        cp = self.cp
         if self.in_place:
             return
         count = self.n_alloc if all_cells else self.driver.n_solve

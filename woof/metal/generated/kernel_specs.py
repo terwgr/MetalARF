@@ -14472,3 +14472,115 @@ HEXV842_WSM6_RELHUM_F32_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('nc', 'ctypes
 HEXV842_WSM6_RELHUM_F32_THREADS_PER_GROUP = 128
 HEXV842_WSM6_RELHUM_F32_LAYOUT_HASH = '4d3017215cfd845bf64ca3b630971264db23a86f38161f3116451178f253be7f'
 HEXV842_WSM6_RELHUM_F32_SHADER_HASH = '9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486'
+
+HEXV842_DECK_FIXED_PRESSURE_RESOURCES = (('p', 'float32', 'read'), ('f', 'float32', 'read'), ('po', 'float32', 'read'), ('out', 'float32', 'read_write'), ('upper', 'int32', 'read_write'))
+HEXV842_DECK_FIXED_PRESSURE_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
+HEXV842_DECK_FIXED_PRESSURE_SHAPES = (('p', (('any_1d',),)), ('f', (('any_1d',),)), ('po', (('any_1d',),)), ('out', (('any_1d',),)), ('upper', (('any_1d',),)))
+HEXV842_DECK_FIXED_PRESSURE_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('ni', 'ctypes.c_int32'), ('no', 'ctypes.c_int32')]
+HEXV842_DECK_FIXED_PRESSURE_THREADS_PER_GROUP = 32
+HEXV842_DECK_FIXED_PRESSURE_LAYOUT_HASH = '6e18f4010946582b0de1ece85a41cd9c5b328263b62131c6b16e6d5d7470535a'
+HEXV842_DECK_FIXED_PRESSURE_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_LAYER_MEAN_RESOURCES = (('f', 'float32', 'read'), ('p', 'float32', 'read'), ('out', 'float32', 'read_write'))
+HEXV842_DECK_LAYER_MEAN_ACCESS = ('read', 'read', 'read_write')
+HEXV842_DECK_LAYER_MEAN_SHAPES = (('f', (('any_1d',),)), ('p', (('any_1d',),)), ('out', (('any_1d',),)))
+HEXV842_DECK_LAYER_MEAN_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('p1', 'ctypes.c_float'), ('p2', 'ctypes.c_float'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_LAYER_MEAN_THREADS_PER_GROUP = 32
+HEXV842_DECK_LAYER_MEAN_LAYOUT_HASH = 'c5f8397722d84f685268491cf9a01dae522c572d7de874e927034c9a807ed628'
+HEXV842_DECK_LAYER_MEAN_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_SLP_COLUMNS_RESOURCES = (('p', 'float32', 'read'), ('temp', 'float32', 'read'), ('h', 'float32', 'read'), ('q', 'float32', 'read'), ('out', 'float32', 'read_write'), ('failed', 'int32', 'read_write'))
+HEXV842_DECK_SLP_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV842_DECK_SLP_COLUMNS_SHAPES = (('p', (('any_1d',),)), ('temp', (('any_1d',),)), ('h', (('any_1d',),)), ('q', (('any_1d',),)), ('out', (('any_1d',),)), ('failed', (('any_1d',),)))
+HEXV842_DECK_SLP_COLUMNS_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_SLP_COLUMNS_THREADS_PER_GROUP = 32
+HEXV842_DECK_SLP_COLUMNS_LAYOUT_HASH = '9b85883ad20a1a973bb90bfaece06d8ffc8440cc51f0d28a83c3a0bb8a8e4997'
+HEXV842_DECK_SLP_COLUMNS_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_SLP_FINISH_RESOURCES = (('out', 'float32', 'read_write'), ('failed', 'int32', 'read'))
+HEXV842_DECK_SLP_FINISH_ACCESS = ('read_write', 'read')
+HEXV842_DECK_SLP_FINISH_SHAPES = (('out', (('any_1d',),)), ('failed', (('any_1d',),)))
+HEXV842_DECK_SLP_FINISH_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('scale', 'ctypes.c_float'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_SLP_FINISH_THREADS_PER_GROUP = 32
+HEXV842_DECK_SLP_FINISH_LAYOUT_HASH = '25b57194b8fdfff107a9813e4c6f99496783e16abaad1d7d74294b3240a05eab'
+HEXV842_DECK_SLP_FINISH_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_PREPARE_MASS_RESOURCES = (('pp', 'float32', 'read'), ('pb', 'float32', 'read'), ('theta', 'float32', 'read'), ('exner', 'float32', 'read'), ('q', 'float32', 'read'), ('p', 'float32', 'read_write'), ('temp', 'float32', 'read_write'), ('dew', 'float32', 'read_write'))
+HEXV842_DECK_PREPARE_MASS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+HEXV842_DECK_PREPARE_MASS_SHAPES = (('pp', (('any_1d',),)), ('pb', (('any_1d',),)), ('theta', (('any_1d',),)), ('exner', (('any_1d',),)), ('q', (('any_1d',),)), ('p', (('any_1d',),)), ('temp', (('any_1d',),)), ('dew', (('any_1d',),)))
+HEXV842_DECK_PREPARE_MASS_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('stride', 'ctypes.c_int32'), ('thermo', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_PREPARE_MASS_THREADS_PER_GROUP = 32
+HEXV842_DECK_PREPARE_MASS_LAYOUT_HASH = 'fc6682dcec425a0cc4b96bc8f06388d107b99eb405ff04212647a86c9e9caa4a'
+HEXV842_DECK_PREPARE_MASS_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_PREPARE_INTERFACES_RESOURCES = (('p', 'float32', 'read'), ('h', 'float32', 'read'), ('pi', 'float32', 'read_write'))
+HEXV842_DECK_PREPARE_INTERFACES_ACCESS = ('read', 'read', 'read_write')
+HEXV842_DECK_PREPARE_INTERFACES_SHAPES = (('p', (('any_1d',),)), ('h', (('any_1d',),)), ('pi', (('any_1d',),)))
+HEXV842_DECK_PREPARE_INTERFACES_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('hs', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_PREPARE_INTERFACES_THREADS_PER_GROUP = 32
+HEXV842_DECK_PREPARE_INTERFACES_LAYOUT_HASH = '4cc50f23886b63fe806f4345cc1d371cdd1bf2fa88257ed9cbfeea271927deca'
+HEXV842_DECK_PREPARE_INTERFACES_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_PREPARE_VERTICES_RESOURCES = (('cov', 'int32', 'read'), ('kite', 'float32', 'read'), ('area', 'float32', 'read'), ('p', 'float32', 'read'), ('pv', 'float32', 'read_write'))
+HEXV842_DECK_PREPARE_VERTICES_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+HEXV842_DECK_PREPARE_VERTICES_SHAPES = (('cov', (('any_1d',),)), ('kite', (('any_1d',),)), ('area', (('any_1d',),)), ('p', (('any_1d',),)), ('pv', (('any_1d',),)))
+HEXV842_DECK_PREPARE_VERTICES_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nv', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('degree', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_PREPARE_VERTICES_THREADS_PER_GROUP = 32
+HEXV842_DECK_PREPARE_VERTICES_LAYOUT_HASH = '59c713c5bc865c420831900c64a51b1de1d68b867c5814960dea1d1cb5c0430c'
+HEXV842_DECK_PREPARE_VERTICES_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_COMPUTE_DIAG_COLS_RESOURCES = (('height', 'float32', 'read'), ('u', 'float32', 'read'), ('v', 'float32', 'read'), ('theta', 'float32', 'read'), ('qv', 'float32', 'read'), ('exner', 'float32', 'read'), ('pb', 'float32', 'read'), ('pp', 'float32', 'read'), ('outs', 'float32', 'read_write'), ('work', 'float32', 'read_write'))
+HEXV842_DECK_COMPUTE_DIAG_COLS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV842_DECK_COMPUTE_DIAG_COLS_SHAPES = (('height', (('any_1d',),)), ('u', (('any_1d',),)), ('v', (('any_1d',),)), ('theta', (('any_1d',),)), ('qv', (('any_1d',),)), ('exner', (('any_1d',),)), ('pb', (('any_1d',),)), ('pp', (('any_1d',),)), ('outs', (('any_1d',),)), ('work', (('any_1d',),)))
+HEXV842_DECK_COMPUTE_DIAG_COLS_PARAM_FIELDS = [('c0', 'ctypes.c_int32'), ('n', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('cap', 'ctypes.c_int32'), ('mask_lo', 'ctypes.c_int32'), ('mask_hi', 'ctypes.c_int32'), ('rvord', 'ctypes.c_float'), ('sz', 'ctypes.c_int32'), ('su', 'ctypes.c_int32'), ('sv', 'ctypes.c_int32'), ('st', 'ctypes.c_int32'), ('sq', 'ctypes.c_int32'), ('se', 'ctypes.c_int32'), ('sb', 'ctypes.c_int32'), ('sp', 'ctypes.c_int32'), ('no', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_COMPUTE_DIAG_COLS_THREADS_PER_GROUP = 32
+HEXV842_DECK_COMPUTE_DIAG_COLS_LAYOUT_HASH = 'eac593fd8f5cbe49cdc6c3d812e9f80dd3cbe0359f7c43ecc8809a0ce36f27ef'
+HEXV842_DECK_COMPUTE_DIAG_COLS_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_RESOURCES = (('offsets', 'int32', 'read'), ('entries', 'int32', 'read'), ('kite', 'float32', 'read'), ('vort', 'float32', 'read'), ('uh', 'float32', 'read_write'))
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_SHAPES = (('offsets', (('any_1d',),)), ('entries', (('any_1d',),)), ('kite', (('any_1d',),)), ('vort', (('any_1d',),)), ('uh', (('any_1d',),)))
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('degree', 'ctypes.c_int32'), ('sv', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_THREADS_PER_GROUP = 32
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_LAYOUT_HASH = 'bcc37584a18a462fe8516c9a622cff96295fa07ca5d542affed4b498bfa94e8d'
+HEXV842_DECK_VERTEX_HELICITY_GATHER_POOL_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_SPLIT_HELICITY_POOL_RESOURCES = (('w', 'float32', 'read'), ('area', 'float32', 'read'), ('positive', 'float32', 'read_write'), ('negative', 'float32', 'read_write'))
+HEXV842_DECK_SPLIT_HELICITY_POOL_ACCESS = ('read', 'read', 'read_write', 'read_write')
+HEXV842_DECK_SPLIT_HELICITY_POOL_SHAPES = (('w', (('any_1d',),)), ('area', (('any_1d',),)), ('positive', (('any_1d',),)), ('negative', (('any_1d',),)))
+HEXV842_DECK_SPLIT_HELICITY_POOL_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('sw', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_SPLIT_HELICITY_POOL_THREADS_PER_GROUP = 32
+HEXV842_DECK_SPLIT_HELICITY_POOL_LAYOUT_HASH = '4bf70928d51ec917a38bc65faea024afafe49816aee7d839db446f45f06391d6'
+HEXV842_DECK_SPLIT_HELICITY_POOL_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_SMOOTH_HELICITY_RESOURCES = (('bdy', 'int32', 'read'), ('nedges', 'int32', 'read'), ('edges', 'int32', 'read'), ('cells', 'int32', 'read'), ('dv', 'float32', 'read'), ('dc', 'float32', 'read'), ('positive', 'float32', 'read'), ('negative', 'float32', 'read'), ('spos', 'float32', 'read_write'), ('sneg', 'float32', 'read_write'))
+HEXV842_DECK_SMOOTH_HELICITY_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV842_DECK_SMOOTH_HELICITY_SHAPES = (('bdy', (('any_1d',),)), ('nedges', (('any_1d',),)), ('edges', (('any_1d',),)), ('cells', (('any_1d',),)), ('dv', (('any_1d',),)), ('dc', (('any_1d',),)), ('positive', (('any_1d',),)), ('negative', (('any_1d',),)), ('spos', (('any_1d',),)), ('sneg', (('any_1d',),)))
+HEXV842_DECK_SMOOTH_HELICITY_PARAM_FIELDS = [('ns', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('maxedges', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_SMOOTH_HELICITY_THREADS_PER_GROUP = 32
+HEXV842_DECK_SMOOTH_HELICITY_LAYOUT_HASH = '6784d8f0e9e4ad2dd7ec2453812a7182e9ecbe57d8d222a02f003cbed05b1b73'
+HEXV842_DECK_SMOOTH_HELICITY_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_UPDATE_DIAG_POOL_RESOURCES = (('z', 'float32', 'read'), ('w', 'float32', 'read'), ('u', 'float32', 'read'), ('v', 'float32', 'read'), ('pb', 'float32', 'read'), ('pp', 'float32', 'read'), ('refl', 'float32', 'read'), ('u10', 'float32', 'read'), ('v10', 'float32', 'read'), ('t2', 'float32', 'read'), ('rainc', 'float32', 'read'), ('rainnc', 'float32', 'read'), ('snow', 'float32', 'read'), ('uh', 'float32', 'read'), ('neg', 'float32', 'read'), ('tail', 'float32', 'read'), ('outs', 'float32', 'read_write'), ('work', 'float32', 'read_write'))
+HEXV842_DECK_UPDATE_DIAG_POOL_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV842_DECK_UPDATE_DIAG_POOL_SHAPES = (('z', (('any_1d',),)), ('w', (('any_1d',),)), ('u', (('any_1d',),)), ('v', (('any_1d',),)), ('pb', (('any_1d',),)), ('pp', (('any_1d',),)), ('refl', (('any_1d',),)), ('u10', (('any_1d',),)), ('v10', (('any_1d',),)), ('t2', (('any_1d',),)), ('rainc', (('any_1d',),)), ('rainnc', (('any_1d',),)), ('snow', (('any_1d',),)), ('uh', (('any_1d',),)), ('neg', (('any_1d',),)), ('tail', (('any_1d',),)), ('outs', (('any_1d',),)), ('work', (('any_1d',),)))
+HEXV842_DECK_UPDATE_DIAG_POOL_PARAM_FIELDS = [('ns', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('mask_lo', 'ctypes.c_int32'), ('mask_hi', 'ctypes.c_int32'), ('steps', 'ctypes.c_float'), ('convection', 'ctypes.c_int32'), ('sz', 'ctypes.c_int32'), ('sw', 'ctypes.c_int32'), ('su', 'ctypes.c_int32'), ('sv', 'ctypes.c_int32'), ('sb', 'ctypes.c_int32'), ('spr', 'ctypes.c_int32'), ('sr', 'ctypes.c_int32'), ('no', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_UPDATE_DIAG_POOL_THREADS_PER_GROUP = 32
+HEXV842_DECK_UPDATE_DIAG_POOL_LAYOUT_HASH = '16833e28327ab505e10d1f10e20a9413c50c3e51938ee048bab91334232aeced'
+HEXV842_DECK_UPDATE_DIAG_POOL_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_RESET_DIAG_POOL_RESOURCES = (('outs', 'float32', 'read_write'),)
+HEXV842_DECK_RESET_DIAG_POOL_ACCESS = ('read_write',)
+HEXV842_DECK_RESET_DIAG_POOL_SHAPES = (('outs', (('any_1d',),)),)
+HEXV842_DECK_RESET_DIAG_POOL_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('mask_lo', 'ctypes.c_int32'), ('mask_hi', 'ctypes.c_int32'), ('no', 'ctypes.c_int32'), ('dispatch_count', 'ctypes.c_int32')]
+HEXV842_DECK_RESET_DIAG_POOL_THREADS_PER_GROUP = 32
+HEXV842_DECK_RESET_DIAG_POOL_LAYOUT_HASH = '8d3fe856347306d6155eb0dc04dd6029909c3f57294d7c9f6584915c4e818a13'
+HEXV842_DECK_RESET_DIAG_POOL_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'
+
+HEXV842_DECK_SCALE_RESOURCES = (('src', 'float32', 'read'), ('dst', 'float32', 'read_write'))
+HEXV842_DECK_SCALE_ACCESS = ('read', 'read_write')
+HEXV842_DECK_SCALE_SHAPES = (('src', (('any_1d',),)), ('dst', (('any_1d',),)))
+HEXV842_DECK_SCALE_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('factor', 'ctypes.c_float')]
+HEXV842_DECK_SCALE_THREADS_PER_GROUP = 32
+HEXV842_DECK_SCALE_LAYOUT_HASH = '2ec0af64212b982da91278f1a19c6136b8af883934553fb16ce2afc2086d5258'
+HEXV842_DECK_SCALE_SHADER_HASH = 'c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e'

@@ -296071,6 +296071,1426 @@
       "arithmetic_policies": [
         "default"
       ]
+    },
+    {
+      "name": "hexv842_deck_fixed_pressure",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "fixed_pressure",
+      "resources": [
+        [
+          "p",
+          "float32",
+          "read"
+        ],
+        [
+          "f",
+          "float32",
+          "read"
+        ],
+        [
+          "po",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "upper",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "f": [
+          [
+            "any_1d"
+          ]
+        ],
+        "po": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "upper": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ni",
+          "int32"
+        ],
+        [
+          "no",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_layer_mean",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "layer_mean",
+      "resources": [
+        [
+          "f",
+          "float32",
+          "read"
+        ],
+        [
+          "p",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "f": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "p1",
+          "float32"
+        ],
+        [
+          "p2",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_slp_columns",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "slp_columns",
+      "resources": [
+        [
+          "p",
+          "float32",
+          "read"
+        ],
+        [
+          "temp",
+          "float32",
+          "read"
+        ],
+        [
+          "h",
+          "float32",
+          "read"
+        ],
+        [
+          "q",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "failed",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "failed": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_slp_finish",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "slp_finish",
+      "resources": [
+        [
+          "out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "failed",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "failed": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "scale",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_prepare_mass",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "prepare_mass",
+      "resources": [
+        [
+          "pp",
+          "float32",
+          "read"
+        ],
+        [
+          "pb",
+          "float32",
+          "read"
+        ],
+        [
+          "theta",
+          "float32",
+          "read"
+        ],
+        [
+          "exner",
+          "float32",
+          "read"
+        ],
+        [
+          "q",
+          "float32",
+          "read"
+        ],
+        [
+          "p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "temp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "dew",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dew": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ],
+        [
+          "thermo",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_prepare_interfaces",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "prepare_interfaces",
+      "resources": [
+        [
+          "p",
+          "float32",
+          "read"
+        ],
+        [
+          "h",
+          "float32",
+          "read"
+        ],
+        [
+          "pi",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "hs",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_prepare_vertices",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "prepare_vertices",
+      "resources": [
+        [
+          "cov",
+          "int32",
+          "read"
+        ],
+        [
+          "kite",
+          "float32",
+          "read"
+        ],
+        [
+          "area",
+          "float32",
+          "read"
+        ],
+        [
+          "p",
+          "float32",
+          "read"
+        ],
+        [
+          "pv",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cov": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nv",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "degree",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_compute_diag_cols",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "compute_diag_cols",
+      "resources": [
+        [
+          "height",
+          "float32",
+          "read"
+        ],
+        [
+          "u",
+          "float32",
+          "read"
+        ],
+        [
+          "v",
+          "float32",
+          "read"
+        ],
+        [
+          "theta",
+          "float32",
+          "read"
+        ],
+        [
+          "qv",
+          "float32",
+          "read"
+        ],
+        [
+          "exner",
+          "float32",
+          "read"
+        ],
+        [
+          "pb",
+          "float32",
+          "read"
+        ],
+        [
+          "pp",
+          "float32",
+          "read"
+        ],
+        [
+          "outs",
+          "float32",
+          "read_write"
+        ],
+        [
+          "work",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "height": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "c0",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "cap",
+          "int32"
+        ],
+        [
+          "mask_lo",
+          "int32"
+        ],
+        [
+          "mask_hi",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ],
+        [
+          "sz",
+          "int32"
+        ],
+        [
+          "su",
+          "int32"
+        ],
+        [
+          "sv",
+          "int32"
+        ],
+        [
+          "st",
+          "int32"
+        ],
+        [
+          "sq",
+          "int32"
+        ],
+        [
+          "se",
+          "int32"
+        ],
+        [
+          "sb",
+          "int32"
+        ],
+        [
+          "sp",
+          "int32"
+        ],
+        [
+          "no",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_vertex_helicity_gather_pool",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "vertex_helicity_gather_pool",
+      "resources": [
+        [
+          "offsets",
+          "int32",
+          "read"
+        ],
+        [
+          "entries",
+          "int32",
+          "read"
+        ],
+        [
+          "kite",
+          "float32",
+          "read"
+        ],
+        [
+          "vort",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "offsets": [
+          [
+            "any_1d"
+          ]
+        ],
+        "entries": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vort": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "degree",
+          "int32"
+        ],
+        [
+          "sv",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_split_helicity_pool",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "split_helicity_pool",
+      "resources": [
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "area",
+          "float32",
+          "read"
+        ],
+        [
+          "positive",
+          "float32",
+          "read_write"
+        ],
+        [
+          "negative",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "positive": [
+          [
+            "any_1d"
+          ]
+        ],
+        "negative": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "sw",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_smooth_helicity",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "smooth_helicity",
+      "resources": [
+        [
+          "bdy",
+          "int32",
+          "read"
+        ],
+        [
+          "nedges",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "cells",
+          "int32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "dc",
+          "float32",
+          "read"
+        ],
+        [
+          "positive",
+          "float32",
+          "read"
+        ],
+        [
+          "negative",
+          "float32",
+          "read"
+        ],
+        [
+          "spos",
+          "float32",
+          "read_write"
+        ],
+        [
+          "sneg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nedges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "positive": [
+          [
+            "any_1d"
+          ]
+        ],
+        "negative": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spos": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sneg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "maxedges",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_update_diag_pool",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "update_diag_pool",
+      "resources": [
+        [
+          "z",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "u",
+          "float32",
+          "read"
+        ],
+        [
+          "v",
+          "float32",
+          "read"
+        ],
+        [
+          "pb",
+          "float32",
+          "read"
+        ],
+        [
+          "pp",
+          "float32",
+          "read"
+        ],
+        [
+          "refl",
+          "float32",
+          "read"
+        ],
+        [
+          "u10",
+          "float32",
+          "read"
+        ],
+        [
+          "v10",
+          "float32",
+          "read"
+        ],
+        [
+          "t2",
+          "float32",
+          "read"
+        ],
+        [
+          "rainc",
+          "float32",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float32",
+          "read"
+        ],
+        [
+          "snow",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "neg",
+          "float32",
+          "read"
+        ],
+        [
+          "tail",
+          "float32",
+          "read"
+        ],
+        [
+          "outs",
+          "float32",
+          "read_write"
+        ],
+        [
+          "work",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u10": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v10": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "neg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tail": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "mask_lo",
+          "int32"
+        ],
+        [
+          "mask_hi",
+          "int32"
+        ],
+        [
+          "steps",
+          "float32"
+        ],
+        [
+          "convection",
+          "int32"
+        ],
+        [
+          "sz",
+          "int32"
+        ],
+        [
+          "sw",
+          "int32"
+        ],
+        [
+          "su",
+          "int32"
+        ],
+        [
+          "sv",
+          "int32"
+        ],
+        [
+          "sb",
+          "int32"
+        ],
+        [
+          "spr",
+          "int32"
+        ],
+        [
+          "sr",
+          "int32"
+        ],
+        [
+          "no",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_reset_diag_pool",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "reset_diag_pool",
+      "resources": [
+        [
+          "outs",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "outs": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "mask_lo",
+          "int32"
+        ],
+        [
+          "mask_hi",
+          "int32"
+        ],
+        [
+          "no",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
+    },
+    {
+      "name": "hexv842_deck_scale",
+      "module": "hexv842_mpas_output_deck",
+      "source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "cuda_source": "woof/hex/mpasdiag/isobaric.py",
+      "cuda_symbol": "IsobaricDiagnostics.interp_diagnostics",
+      "resources": [
+        [
+          "src",
+          "float32",
+          "read"
+        ],
+        [
+          "dst",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dst": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "factor",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

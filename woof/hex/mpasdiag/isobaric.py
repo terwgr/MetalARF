@@ -48,8 +48,11 @@ def _launch(name, count, args):
         _kernel(name)(((count + 127) // 128,), (128,), args)
 
 
-def _real(array, name, shape=None):
-    import cupy as cp
+def _real(array, name, shape=None, *, array_module=None):
+    if array_module is None:
+        import cupy as cp
+    else:
+        cp = array_module
     if not isinstance(array, cp.ndarray) or array.dtype != cp.float32:
         raise TypeError(f"{name} must be a CUDA float32 array (native RKIND)")
     if shape is not None and array.shape != shape:
@@ -57,24 +60,33 @@ def _real(array, name, shape=None):
     return cp.ascontiguousarray(array)
 
 
-def interp_tofixed_pressure(pres_in, field_in, pres_out):
+def interp_tofixed_pressure(pres_in, field_in, pres_out, *, backend=None):
     """MPAS v8.4.2 mpas_isobaric_diagnostics.F:1005-1091.
 
     Inputs are (column,level), increasing pressure. The native collective
     search is preserved even for unordered targets and nonmonotone inputs.
     """
-    import cupy as cp
+    if backend is None:
+        import cupy as cp
+        launch = _launch
+    else:
+        cp, launch, scale = backend
+    from functools import partial
+    real = partial(_real, array_module=cp)
     import numpy as np
-    p = _real(pres_in, "pres_in")
+    p = real(pres_in, "pres_in")
     if p.ndim != 2 or p.shape[1] < 2:
         raise ValueError("fixed-pressure interpolation requires at least two levels")
-    f = _real(field_in, "field_in", p.shape)
-    po = _real(pres_out, "pres_out")
+    f = real(field_in, "field_in", p.shape)
+    po = real(pres_out, "pres_out")
     if po.ndim != 2 or po.shape[0] != p.shape[0]:
         raise ValueError("pres_out column count must match pres_in")
     nc, ni = p.shape
     out = cp.empty_like(po)
     no = po.shape[1]
+    if backend is not None:
+        launch("fixed_pressure", 1, (nc, ni, no, p, f, po, out, cp.zeros(nc, dtype=cp.int32)))
+        return out
     if nc and no:
         # Whole-grid form of the one-block collective search (_kernels.py):
         # three short launches per output level instead of one 128-thread
@@ -94,44 +106,57 @@ def interp_tofixed_pressure(pres_in, field_in, pres_out):
     return out
 
 
-def compute_layer_mean(field_in, press_in, p1, p2):
+def compute_layer_mean(field_in, press_in, p1, p2, *, backend=None):
     """MPAS v8.4.2 mpas_isobaric_diagnostics.F:1245-1351."""
-    import cupy as cp
-    p = _real(press_in, "press_in")
+    if backend is None:
+        import cupy as cp
+        launch = _launch
+    else:
+        cp, launch, scale = backend
+    from functools import partial
+    real = partial(_real, array_module=cp)
+    p = real(press_in, "press_in")
     if p.ndim != 2 or p.shape[1] < 2:
         raise ValueError("layer mean requires at least two levels")
-    f = _real(field_in, "field_in", p.shape)
+    f = real(field_in, "field_in", p.shape)
     out = cp.empty(p.shape[0], dtype=cp.float32)
-    _launch("layer_mean", p.shape[0], (p.shape[0], p.shape[1], cp.float32(p1),
+    launch("layer_mean", p.shape[0], (p.shape[0], p.shape[1], cp.float32(p1),
                                      cp.float32(p2), f, p, out))
     return out
 
 
-def compute_slp(p, temperature, height, qv, *, pascals=False):
+def compute_slp(p, temperature, height, qv, *, pascals=False, backend=None):
     """MPAS v8.4.2 mpas_isobaric_diagnostics.F:1094-1227.
 
     Arrays are (column,level); p is hPa, height has one extra level.
     Failure of any column zeros every column, as in native MPAS.
     """
-    import cupy as cp
-    p = _real(p, "p")
+    if backend is None:
+        import cupy as cp
+        launch = _launch
+    else:
+        cp, launch, scale = backend
+    from functools import partial
+    real = partial(_real, array_module=cp)
+    p = real(p, "p")
     if p.ndim != 2 or p.shape[1] < 2:
         raise ValueError("SLP requires at least two levels")
     nc, nl = p.shape
-    temp = _real(temperature, "temperature", p.shape)
-    h = _real(height, "height", (nc, nl + 1))
-    q = _real(qv, "qv", p.shape)
+    temp = real(temperature, "temperature", p.shape)
+    h = real(height, "height", (nc, nl + 1))
+    q = real(qv, "qv", p.shape)
     out = cp.zeros(nc, dtype=cp.float32)
     failed = cp.zeros(1, dtype=cp.int32)
-    _launch("slp_columns", nc, (nc, nl, p, temp, h, q, out, failed))
-    _launch("slp_finish", nc, (nc, out, failed, cp.float32(100 if pascals else 1)))
+    launch("slp_columns", nc, (nc, nl, p, temp, h, q, out, failed))
+    launch("slp_finish", nc, (nc, out, failed, cp.float32(100 if pascals else 1)))
     return out
 
 
 class IsobaricDiagnostics:
-    def __init__(self, *, exchange_pressure_halo):
+    def __init__(self, *, exchange_pressure_halo, backend=None):
         # The exchange must complete on the launch stream before kernels run.
         self.exchange_pressure_halo = exchange_pressure_halo
+        self.backend = backend
 
     def setup(self, pools, simulation_clock, utils):
         """MPAS v8.4.2 mpas_isobaric_diagnostics.F:55-71."""
@@ -162,13 +187,20 @@ class IsobaricDiagnostics:
         # DECLARED NATIVE UNDEFINED: use the intended in-bounds temperature
         # formula for this request combination, per NATIVE-DEFECT-POLICY.md.
         thermo = thermo or bool(wanted & {"t_isobaric", "meanT_500_300"})
-        import cupy as cp
+        if self.backend is None:
+            import cupy as cp
+            launch = _launch
+            scale = lambda a, b: a * cp.float32(b)
+        else:
+            cp, launch, scale = self.backend
+        from functools import partial
+        real = partial(_real, array_module=cp)
         nc, nl, nv = m["nCells"], m["nVertLevels"], m["nVertices"]
         if nl < 2:
             raise ValueError("native interface pressure requires at least two mass levels")
         self.exchange_pressure_halo(d["pressure_p"])
         def mass(a, name):
-            return _real(a, name, (nl, nc + 1))
+            return real(a, name, (nl, nc + 1))
         pp, pb = mass(d["pressure_p"], "pressure_p"), mass(d["pressure_base"], "pressure_base")
         theta, exner = mass(s["theta_m"], "theta_m"), mass(d["exner"], "exner")
         padded_qv = getattr(s, "padded_qv", None)
@@ -177,32 +209,32 @@ class IsobaricDiagnostics:
             # of every scalar (resident_output_diagnostics_v842 _Pools.padded_qv).
             q = mass(padded_qv(), "qv")
         else:
-            scalars = _real(s["scalars"], "scalars")
+            scalars = real(s["scalars"], "scalars")
             if scalars.ndim != 3 or scalars.shape[1:] != (nl, nc + 1):
                 raise ValueError("scalars must have native (scalar,level,nCells+1) shape")
             q = mass(scalars[s["index_qv"] - 1], "qv")
-        h = _real(m["zgrid"], "zgrid", (nl + 1, nc + 1))
+        h = real(m["zgrid"], "zgrid", (nl + 1, nc + 1))
         p = cp.empty((nl, nc + 1), cp.float32)
         temp, dew = (cp.empty((nl, nc), cp.float32) for _ in range(2))
         pi = cp.empty((nl + 1, nc), cp.float32)
         pv = cp.empty((nl, nv), cp.float32)
-        _launch("prepare_mass", (nc + 1) * nl, (nc + 1, nl, nc + 1, int(thermo),
+        launch("prepare_mass", (nc + 1) * nl, (nc + 1, nl, nc + 1, int(thermo),
                 pp, pb, theta, exner, q, p, temp, dew))
-        _launch("prepare_interfaces", nc * (nl + 1), (nc, nl, nc + 1, p, h, pi))
+        launch("prepare_interfaces", nc * (nl + 1), (nc, nl, nc + 1, p, h, pi))
         cov = m["cellsOnVertex"]
         if not isinstance(cov, cp.ndarray) or cov.dtype != cp.int32 or cov.shape != (m["vertexDegree"], nv):
             raise ValueError("cellsOnVertex must be native one-based CUDA int32 (degree,vertex)")
         cov = cp.ascontiguousarray(cov)
-        kite = _real(m["kiteAreasOnVertex"], "kiteAreasOnVertex", cov.shape)
-        area = _real(m["areaTriangle"], "areaTriangle", (nv,))
-        _launch("prepare_vertices", nv * nl, (nc, nv, nl, m["vertexDegree"], cov, kite, area, p, pv))
+        kite = real(m["kiteAreasOnVertex"], "kiteAreasOnVertex", cov.shape)
+        area = real(m["areaTriangle"], "areaTriangle", (nv,))
+        launch("prepare_vertices", nv * nl, (nc, nv, nl, m["vertexDegree"], cov, kite, area, p, pv))
         targets = cp.broadcast_to(cp.asarray(LEVELS, dtype=cp.float32), (nc, 8)).copy()
         def columns(a):
             return cp.ascontiguousarray(a[::-1].T)
         pin = columns(p[:, :nc])
         def family(name, values, pressure=pin):
             result = interp_tofixed_pressure(pressure, columns(values), targets if name != "vorticity"
-                else cp.broadcast_to(cp.asarray(LEVELS, dtype=cp.float32), (nv, 8)).copy())
+                else cp.broadcast_to(cp.asarray(LEVELS, dtype=cp.float32), (nv, 8)).copy(), backend=self.backend)
             for j, level in enumerate(LEVELS):
                 d[f"{name}_{level}hPa"][:result.shape[0]] = result[:, j]
         for name, values in (("temperature", temp), ("dewpoint", dew)):
@@ -214,28 +246,28 @@ class IsobaricDiagnostics:
                 family(name, mass(d[key], key)[:, :nc])
         if need["height"] or need["w"]:
             family("height", h[:, :nc], columns(pi))
-            family("w", _real(s["w"], "w", h.shape)[:, :nc], columns(pi))
+            family("w", real(s["w"], "w", h.shape)[:, :nc], columns(pi))
         if need["vorticity"]:
-            vort = _real(d["vorticity"], "vorticity", (nl, nv + 1))
+            vort = real(d["vorticity"], "vorticity", (nl, nv + 1))
             family("vorticity", vort[:, :nv], columns(pv))
         if "mslp" in wanted:
             d["mslp"][:nc] = compute_slp(cp.ascontiguousarray(p[:, :nc].T),
                 cp.ascontiguousarray(temp.T), cp.ascontiguousarray(h[:, :nc].T),
-                cp.ascontiguousarray(q[:, :nc].T), pascals=True)
+                cp.ascontiguousarray(q[:, :nc].T), pascals=True, backend=self.backend)
         if wanted & {"t_isobaric", "meanT_500_300"}:
             # Native first divides Pa by 100, then multiplies by 100 again.
-            ppascals = pin * cp.float32(100)
+            ppascals = scale(pin, 100)
             if "t_isobaric" in wanted:
                 d["t_iso_levels"][:5] = cp.asarray((30000, 35000, 40000, 45000, 50000), cp.float32)
                 levels = cp.broadcast_to(d["t_iso_levels"], (nc, m["nIsoLevelsT"])).copy()
-                d["t_isobaric"][:, :nc] = interp_tofixed_pressure(ppascals, columns(temp), levels).T
+                d["t_isobaric"][:, :nc] = interp_tofixed_pressure(ppascals, columns(temp), levels, backend=self.backend).T
             if "meanT_500_300" in wanted:
-                d["meanT_500_300"][:nc] = compute_layer_mean(columns(temp), ppascals, 50000, 30000)
+                d["meanT_500_300"][:nc] = compute_layer_mean(columns(temp), ppascals, 50000, 30000, backend=self.backend)
         if "z_isobaric" in wanted:
             d["z_iso_levels"][:13] = cp.asarray(tuple(range(30000, 90001, 5000)), cp.float32)
             levels = cp.broadcast_to(d["z_iso_levels"], (nc, m["nIsoLevelsZ"])).copy()
-            d["z_isobaric"][:, :nc] = interp_tofixed_pressure(columns(pi) * cp.float32(100),
-                                                           columns(h[:, :nc]), levels).T
+            d["z_isobaric"][:, :nc] = interp_tofixed_pressure(scale(columns(pi), 100),
+                                                           columns(h[:, :nc]), levels, backend=self.backend).T
 
 
 def compute_output_diagnostics(mesh, state, diag):

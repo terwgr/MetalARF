@@ -69,8 +69,9 @@ Upstream 1.1.4 features on Metal:
   with MYNN TKE coupling and turbine and farm power in history, and Hex globe
   wind farms.
 - NOAA RRFS `hrrrv5` on Hex with its default monotonic scalar transport, on
-  regions and zoom globes; UGWP terrain statistics are built on the host when
-  the Rust generator is absent. Multi-card requests are refused.
+  regions and zoom globes, including the default isobaric and convective output
+  deck and checkpoint continuation; UGWP terrain statistics are built on the
+  host when the Rust generator is absent. Multi-card requests are refused.
 - The NOAA operational HAILCAST hail model by default, with `wrf_461` kept;
   Kain-Fritsch rain feeding Thompson without spurious drizzle echoes.
 - Simulated radar at C- and X-band on macOS, and Hex starts that carry the

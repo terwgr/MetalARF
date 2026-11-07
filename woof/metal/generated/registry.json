@@ -29616,6 +29616,258 @@
       "resource_count": 5,
       "shader_hash": "9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "fixed_pressure",
+      "layout_hash": "6e18f4010946582b0de1ece85a41cd9c5b328263b62131c6b16e6d5d7470535a",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_fixed_pressure",
+      "parameter_size": 12,
+      "resource_count": 5,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "layer_mean",
+      "layout_hash": "c5f8397722d84f685268491cf9a01dae522c572d7de874e927034c9a807ed628",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_layer_mean",
+      "parameter_size": 20,
+      "resource_count": 3,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "slp_columns",
+      "layout_hash": "9b85883ad20a1a973bb90bfaece06d8ffc8440cc51f0d28a83c3a0bb8a8e4997",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_slp_columns",
+      "parameter_size": 12,
+      "resource_count": 6,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "slp_finish",
+      "layout_hash": "25b57194b8fdfff107a9813e4c6f99496783e16abaad1d7d74294b3240a05eab",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_slp_finish",
+      "parameter_size": 12,
+      "resource_count": 2,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "prepare_mass",
+      "layout_hash": "fc6682dcec425a0cc4b96bc8f06388d107b99eb405ff04212647a86c9e9caa4a",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_prepare_mass",
+      "parameter_size": 20,
+      "resource_count": 8,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "prepare_interfaces",
+      "layout_hash": "4cc50f23886b63fe806f4345cc1d371cdd1bf2fa88257ed9cbfeea271927deca",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_prepare_interfaces",
+      "parameter_size": 16,
+      "resource_count": 3,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/_kernels.py",
+      "cuda_symbol": "prepare_vertices",
+      "layout_hash": "59c713c5bc865c420831900c64a51b1de1d68b867c5814960dea1d1cb5c0430c",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_prepare_vertices",
+      "parameter_size": 20,
+      "resource_count": 5,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "compute_diag_cols",
+      "layout_hash": "eac593fd8f5cbe49cdc6c3d812e9f80dd3cbe0359f7c43ecc8809a0ce36f27ef",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_compute_diag_cols",
+      "parameter_size": 68,
+      "resource_count": 10,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "vertex_helicity_gather_pool",
+      "layout_hash": "bcc37584a18a462fe8516c9a622cff96295fa07ca5d542affed4b498bfa94e8d",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_vertex_helicity_gather_pool",
+      "parameter_size": 20,
+      "resource_count": 5,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "split_helicity_pool",
+      "layout_hash": "4bf70928d51ec917a38bc65faea024afafe49816aee7d839db446f45f06391d6",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_split_helicity_pool",
+      "parameter_size": 16,
+      "resource_count": 4,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "smooth_helicity",
+      "layout_hash": "6784d8f0e9e4ad2dd7ec2453812a7182e9ecbe57d8d222a02f003cbed05b1b73",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_smooth_helicity",
+      "parameter_size": 16,
+      "resource_count": 10,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "update_diag_pool",
+      "layout_hash": "16833e28327ab505e10d1f10e20a9413c50c3e51938ee048bab91334232aeced",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_update_diag_pool",
+      "parameter_size": 60,
+      "resource_count": 18,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/convective_rrfs.py",
+      "cuda_symbol": "reset_diag_pool",
+      "layout_hash": "8d3fe856347306d6155eb0dc04dd6029909c3f57294d7c9f6584915c4e818a13",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_reset_diag_pool",
+      "parameter_size": 20,
+      "resource_count": 1,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "native-float32-no-contract",
+        "soft32-div-sqrt",
+        "soft64-glibc-libm"
+      ],
+      "cuda_source": "woof/hex/mpasdiag/isobaric.py",
+      "cuda_symbol": "IsobaricDiagnostics.interp_diagnostics",
+      "layout_hash": "2ec0af64212b982da91278f1a19c6136b8af883934553fb16ce2afc2086d5258",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_output_deck.metal",
+      "module": "hexv842_mpas_output_deck",
+      "name": "hexv842_deck_scale",
+      "parameter_size": 8,
+      "resource_count": 2,
+      "shader_hash": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+      "threads_per_group": 32
     }
   ],
   "schema": "woof-metal-registry-v1"
