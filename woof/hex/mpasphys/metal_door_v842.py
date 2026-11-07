@@ -86,6 +86,15 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
             return super()._capture(selected)
 
         def _start_reflectivity(self, snapshot):
+            try:
+                from .metal_refl_start_v842 import start_frame_reflectivity
+                pending = start_frame_reflectivity(self.layout.configs, snapshot,
+                                                   context=self.session.pools.arrays.context,
+                                                   constants=self.session.slot_pools['constants'])
+                if pending is not None:
+                    return pending
+            except Exception as error:
+                return _FailedStartReflectivity(error)
             return _FailedStartReflectivity(RuntimeError("start-frame reflectivity is not implemented on Metal"))
     from .. import metal_v841_launch
     if library is not None:
@@ -95,12 +104,14 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
     ysu = config.selectors['pbl'] == 'bl_ysu'
     outputs = [s for s in streams if 'output' in s.directions and s.output_interval != 'none']
     intervals = None
-    if (wsm6 or ysu) and any(s.name in ('output', 'diagnostics') for s in outputs):
-        if wsm6:
-            raise NotImplementedError('native Metal WSM6 output/diagnostics alarms require the unimplemented radar and relative humidity paths')
+    if ysu and any(s.name in ('output', 'diagnostics') for s in outputs):
         raise NotImplementedError('native Metal YSU/MM5 requires state streams without the MPAS diagnostic alarm')
     missing = _UNAVAILABLE_STREAM_FIELDS.intersection(
         name for s in outputs if s.name != 'restart' for name in s.fields)
+    microphysics_diagnostics = bool(missing) and config.selectors['microphysics'] in (
+        'mp_thompson', 'mp_thompson_aerosols', 'mp_wsm6')
+    if microphysics_diagnostics:
+        missing = frozenset()
     if kessler:
         if any(s.name == 'output' for s in outputs):
             raise NotImplementedError('native Metal Kessler uses the diagnostics stream for its MPAS alarm')
@@ -113,7 +124,7 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
     if missing:
         raise NotImplementedError(
             'native Metal output lacks computed authority for ' + ', '.join(sorted(missing)))
-    if wsm6 or ysu or kessler:
+    if wsm6 or ysu or kessler or microphysics_diagnostics:
         intervals = {s.name: (s.input_interval if s.name == 'surface' else s.output_interval)
                      for s in streams}
     if moving is not None:

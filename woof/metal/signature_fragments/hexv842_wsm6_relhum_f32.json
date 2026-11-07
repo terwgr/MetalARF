@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_wsm6_relhum_f32",
+      "module": "hexv842_wsm6_radar_f32",
+      "source": "woof/metal/shaders/hexv842_wsm6_radar_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/wsm6_v842.py",
+      "cuda_symbol": "wsm6_relhum",
+      "resources": [
+        [
+          "th",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "pres",
+          "float",
+          "read"
+        ],
+        [
+          "relhum",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "th": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pii": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres": [
+          [
+            "any_1d"
+          ]
+        ],
+        "relhum": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

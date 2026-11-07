@@ -166,7 +166,8 @@ fn read_array(file: &NcFile, v: &netcdf_reader::NcVariable, frame: usize) -> Res
         NcType::UInt64 => numeric!(u64, "uint64"),
         NcType::Byte => numeric!(i8, "int8"),
         NcType::UByte => numeric!(u8, "uint8"),
-        NcType::Char => {
+        // NetCDF-4 CHAR is reported as String; the byte reader rejects vlen strings.
+        NcType::Char | NcType::String => {
             let all = file.read_variable_char_bytes(&v.name)?;
             let n: usize = shape.iter().product();
             let offset = if v.dimensions.first().is_some_and(|d| is_time(&d.name)) {

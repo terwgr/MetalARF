@@ -13952,3 +13952,27 @@ WIND_WAKE_PARAM_FIELDS = [('nt', 'ctypes.c_int32'), ('kw', 'ctypes.c_float'), ('
 WIND_WAKE_THREADS_PER_GROUP = 128
 WIND_WAKE_LAYOUT_HASH = '779ddc7da6fb76075f37cfca7433464d3918d4c01bdf8d85d96bad73f44f2563'
 WIND_WAKE_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_RESOURCES = (('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('th', 'float', 'read'), ('pii', 'float', 'read'), ('p', 'float', 'read'), ('z', 'float', 'read'), ('dz', 'float', 'read'), ('refl', 'float', 'read_write'), ('refl_max', 'float', 'read_write'), ('refl_1km', 'float', 'read_write'), ('refl_1km_max', 'float', 'read_write'), ('ws_f', 'float', 'read_write'), ('ws_d', 'uint64', 'read_write'), ('ws_b', 'uint32', 'read_write'))
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_SHAPES = (('qv', (('any_1d',),)), ('qc', (('any_1d',),)), ('qr', (('any_1d',),)), ('nr', (('any_1d',),)), ('qs', (('any_1d',),)), ('qg', (('any_1d',),)), ('th', (('any_1d',),)), ('pii', (('any_1d',),)), ('p', (('any_1d',),)), ('z', (('any_1d',),)), ('dz', (('any_1d',),)), ('refl', (('any_1d',),)), ('refl_max', (('any_1d',),)), ('refl_1km', (('any_1d',),)), ('refl_1km_max', (('any_1d',),)), ('ws_f', (('any_1d',),)), ('ws_d', (('any_1d',),)), ('ws_b', (('any_1d',),)))
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('columns', 'ctypes.c_int32'), ('first', 'ctypes.c_int32'), ('count', 'ctypes.c_int32')]
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_THREADS_PER_GROUP = 32
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_LAYOUT_HASH = 'c2ffd2a54c0a836ffbfed2102ba10597ae9505e3893a2f703b1eb7cba3c2e9ea'
+HEXV842_MPAS_THOMPSON_COLUMN_RADAR_F32_SHADER_HASH = '9242d876f9252d81da04c99247edc796b30183ae431274043e776e2d158ace10'
+
+HEXV842_WSM6_RADAR_F32_RESOURCES = (('qv', 'float', 'read'), ('qr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('th', 'float', 'read'), ('pii', 'float', 'read'), ('p', 'float', 'read'), ('zgrid', 'float', 'read'), ('state', 'float', 'read'), ('constants', 'float', 'read'), ('refl', 'float', 'read_write'), ('refl_max', 'float', 'read_write'), ('refl_1km', 'float', 'read_write'), ('refl_1km_max', 'float', 'read_write'), ('ws_f', 'float', 'read_write'), ('ws_d', 'uint64', 'read_write'), ('ws_b', 'uint32', 'read_write'))
+HEXV842_WSM6_RADAR_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+HEXV842_WSM6_RADAR_F32_SHAPES = (('qv', (('any_1d',),)), ('qr', (('any_1d',),)), ('qs', (('any_1d',),)), ('qg', (('any_1d',),)), ('th', (('any_1d',),)), ('pii', (('any_1d',),)), ('p', (('any_1d',),)), ('zgrid', (('any_1d',),)), ('state', (('any_1d',),)), ('constants', (('any_1d',),)), ('refl', (('any_1d',),)), ('refl_max', (('any_1d',),)), ('refl_1km', (('any_1d',),)), ('refl_1km_max', (('any_1d',),)), ('ws_f', (('any_1d',),)), ('ws_d', (('any_1d',),)), ('ws_b', (('any_1d',),)))
+HEXV842_WSM6_RADAR_F32_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('nc', 'ctypes.c_int32'), ('first', 'ctypes.c_int32'), ('count', 'ctypes.c_int32'), ('state_stride', 'ctypes.c_int32'), ('running_max', 'ctypes.c_int32')]
+HEXV842_WSM6_RADAR_F32_THREADS_PER_GROUP = 32
+HEXV842_WSM6_RADAR_F32_LAYOUT_HASH = '2372b95ee0af6567290e2570656679382ac4181f1727aa5e64f1568c036737e0'
+HEXV842_WSM6_RADAR_F32_SHADER_HASH = '9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486'
+
+HEXV842_WSM6_RELHUM_F32_RESOURCES = (('th', 'float', 'read'), ('pii', 'float', 'read'), ('qv', 'float', 'read'), ('pres', 'float', 'read'), ('relhum', 'float', 'read_write'))
+HEXV842_WSM6_RELHUM_F32_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+HEXV842_WSM6_RELHUM_F32_SHAPES = (('th', (('any_1d',),)), ('pii', (('any_1d',),)), ('qv', (('any_1d',),)), ('pres', (('any_1d',),)), ('relhum', (('any_1d',),)))
+HEXV842_WSM6_RELHUM_F32_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('nc', 'ctypes.c_int32'), ('ns', 'ctypes.c_int32')]
+HEXV842_WSM6_RELHUM_F32_THREADS_PER_GROUP = 128
+HEXV842_WSM6_RELHUM_F32_LAYOUT_HASH = '4d3017215cfd845bf64ca3b630971264db23a86f38161f3116451178f253be7f'
+HEXV842_WSM6_RELHUM_F32_SHADER_HASH = '9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486'

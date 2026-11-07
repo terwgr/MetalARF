@@ -97,11 +97,42 @@ def relative_humidity(qv, th, pii, pressure, relhum):
             dict(qv=qv,th=th,pii=pii,pressure=pressure,relhum=relhum),dict(n=np.int32(n)))
 
 
+def launch_radar(fields, diagnostics):
+    """Run MPAS Thompson's radar operator on the supplied column state."""
+    from ..metal_dynamics_v841 import _arrays
+    nz, nc = fields['qv'].shape
+    if not 2 <= nz <= 256 or nc < 1:
+        raise ValueError('native Thompson radar requires 2..256 levels and nonempty columns')
+    context = _context(fields['qv'])
+    names = ('qv', 'qc', 'qr', 'nr', 'qs', 'qg', 'th', 'pii', 'p', 'z', 'dz')
+    resources = {name: fields[name] for name in names}
+    resources.update(dict(zip(('refl', 'refl_max', 'refl_1km', 'refl_1km_max'),
+        (diagnostics[name] for name in ('refl10cm', 'refl10cm_max', 'refl10cm_1km', 'refl10cm_1km_max')))))
+    for name, value in tuple(resources.items()):
+        shape = (nc,) if name in ('refl_max', 'refl_1km', 'refl_1km_max') else (nz, nc)
+        _require(name, value, np.float32, shape)
+        if _context(value) is not context:
+            raise ValueError('native radar arrays must share a Metal context')
+        resources[name] = value.view((value.size,))
+    available = context.recommended_working_set_size - sum(v.nbytes for v in resources.values())
+    chunk = min(nc, 32, (available - 3) // ((nz + 1) * (28 * 4 + 4 * 8 + 3)))
+    if chunk < 1:
+        raise MemoryError('native Thompson radar workspace exceeds the Metal working set')
+    xp = _arrays(context)
+    resources.update(ws_f=xp.empty((chunk * 28 * (nz + 1),), np.float32),
+                     ws_d=xp.empty((chunk * 4 * (nz + 1),), np.uint64),
+                     ws_b=xp.empty(((chunk * 3 * (nz + 1) + 3) // 4,), np.uint32))
+    for first in range(0, nc, chunk):
+        count = min(chunk, nc - first)
+        _launch('hexv842_mpas_thompson_column_radar_f32', count, context, resources,
+                dict(nz=np.int32(nz), columns=np.int32(nc), first=np.int32(first), count=np.int32(count)))
+
+
 def launch_slot(call):
-    """Run the native Thompson slot when radar diagnostics are not requested.
+    """Run the native Thompson slot and its requested radar diagnostics.
 
     The caller supplies the native prepared pools and manager substep values.
-    Radar and nest-look paths remain unavailable and are refused before writes.
+    Nest-look remains unavailable and is refused before writes.
     """
     from . import thompson_v842 as native
     from .driver_v842 import slot_corrections
@@ -109,8 +140,8 @@ def launch_slot(call):
     if (call.slot,call.scheme)!=('microphysics',native.SCHEME):
         raise ValueError('MPAS Metal Thompson requires its microphysics slot')
     p=call.pools['thompson_v842']
-    if call.flags.diagnostics or p.get('nest_look') is not None:
-        raise NotImplementedError('native Thompson radar diagnostics and nest look are not yet implemented on Metal')
+    if p.get('nest_look') is not None:
+        raise NotImplementedError('native Thompson nest look is not yet implemented on Metal')
     if type(p['n_microp']) is not int or p['n_microp']<1:
         raise ValueError('native manager must supply a positive integer microphysics substep count')
     fields=p['fields']
@@ -119,12 +150,17 @@ def launch_slot(call):
     launch_conversion('from',*conversion)
     for _ in range(p['n_microp']):
         step(fields,p['surface'],p['tables'],dt=p['dt_microp'],**{name:p[name] for name in ('has_reqc','has_reqi','has_reqs')})
+    if call.flags.diagnostics:
+        launch_radar(fields, p['diagnostics'])
+        n = fields['qv'].size
+        relative_humidity(*(fields[name].view((n,)) for name in ('qv', 'th', 'pii', 'p')),
+                          p['diagnostics']['relhum'].view((n,)))
     launch_precip('to',fields,p['surface'],p['precip'],l_acrain=p['l_acrain'],
                   bucket=call.options['config_bucket_rainnc'],corrections=slot_corrections(call,native.CORRECT_MODE_SOURCE))
     launch_conversion('to',*conversion,mp_top_level=p['mp_top_level'],dt_dyn=call.dt)
 
 
-def bind_session(session, tables):
+def bind_session(session, tables, *, diagnostics_requested=False):
     """Bind native solve-cell Registry and prepared views for a Thompson call."""
     from . import thompson_v842 as native
     pools=session.slot_pools; nz=session.layout.dimensions['nVertLevels']
@@ -140,6 +176,10 @@ def bind_session(session, tables):
     diagnostics['rt_diabatic_tend']=pools['tend']['rt_diabatic_tend']
     diagnostics['surface_pressure']=pools['diag']['surface_pressure']
     diagnostics['tend_sfc_pressure']=pools['tend']['tend_sfc_pressure']
+    if diagnostics_requested:
+        diagnostics['relhum'] = pools['diag']['relhum']
+        diagnostics.update({name: pools['diag_physics'][name] for name in
+                            ('refl10cm', 'refl10cm_max', 'refl10cm_1km', 'refl10cm_1km_max')})
     tendencies={name:pools['tend_physics'][name] for name in native.TENDENCY_ARGUMENTS}
     constants={name:pools['constants'][name] for name in native.CONVERSION_CONSTANTS}
     prepared=pools['prepared'];diag=pools['diag_physics']
@@ -168,7 +208,7 @@ class MetalMpasThompson:
         self.corrections=frozenset(CORRECT_MODE_SOURCE)
 
     def bind_pools(self,pools,call):
-        return {'thompson_v842':bind_session(pools.session,self.tables)}
+        return {'thompson_v842':bind_session(pools.session,self.tables, diagnostics_requested=call.flags.diagnostics)}
 
     launch_slot=staticmethod(launch_slot)
 

@@ -12,9 +12,9 @@ TENDENCIES = ('rncmpten', 'rnifampten', 'rnwfampten')
 EMISSIONS = ('nifa2d', 'nwfa2d')
 
 
-def bind_session(session, tables):
+def bind_session(session, tables, *, diagnostics_requested=False):
     """Bind existing common and aerosol native storage; numerical state stays owned by pools."""
-    p = bind_common(session, tables)
+    p = bind_common(session, tables, diagnostics_requested=diagnostics_requested)
     pools = session.slot_pools
     state = session.pools.field('state', 'scalars', level=2)
     model, before, prepared = {}, {}, {}
@@ -77,8 +77,8 @@ def launch_slot(call):
     if (call.slot, call.scheme) != ('microphysics', aerosol.SCHEME):
         raise ValueError('MPAS Metal aerosol Thompson requires its microphysics slot')
     p = call.pools['thompson_aero_v842']
-    if call.flags.diagnostics or p.get('nest_look') is not None:
-        raise NotImplementedError('native aerosol Thompson radar and nest look are not yet implemented on Metal')
+    if p.get('nest_look') is not None:
+        raise NotImplementedError('native aerosol Thompson nest look is not yet implemented on Metal')
     if type(p['n_microp']) is not int or p['n_microp'] < 1:
         raise ValueError('native manager must supply a positive integer microphysics substep count')
     microp_dt = np.float32(p['dt_microp'])
@@ -98,6 +98,12 @@ def launch_slot(call):
     for _ in range(p['n_microp']):
         step(fields, surface, p['tables'], dt=microp_dt, aerosol_aware=True,
                     **{name: p[name] for name in ('has_reqc', 'has_reqi', 'has_reqs')})
+    if call.flags.diagnostics:
+        from .metal_thompson_column_v842 import launch_radar, relative_humidity
+        launch_radar(fields, p['diagnostics'])
+        n = nz * nc
+        relative_humidity(*(fields[name].view((n,)) for name in ('qv', 'th', 'pii', 'p')),
+                          p['diagnostics']['relhum'].view((n,)))
     launch_precip('to', fields, surface, p['precip'], l_acrain=p['l_acrain'],
                   bucket=call.options['config_bucket_rainnc'], corrections=corrections)
     launch_conversion('to', *conversion, mp_top_level=p['mp_top_level'], dt_dyn=dt)
@@ -109,6 +115,6 @@ def launch_slot(call):
 class MetalMpasThompsonAerosol(MetalMpasThompson):
     """Native aerosol slot with checkpoint-owned physical pools."""
     def bind_pools(self, pools, call):
-        return {'thompson_aero_v842': bind_session(pools.session, self.tables)}
+        return {'thompson_aero_v842': bind_session(pools.session, self.tables, diagnostics_requested=call.flags.diagnostics)}
 
     launch_slot = staticmethod(launch_slot)

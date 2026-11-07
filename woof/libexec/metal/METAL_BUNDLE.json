@@ -6,17 +6,17 @@
       "size": 188592
     },
     "woof_default.metallib": {
-      "sha256": "9be762bb81b38264c9a293905d64265077148d2cc523bee7e26315275b800008",
-      "size": 38327463
+      "sha256": "88908c8109ea9b5895f8c8d7cbdab698ecfdd2491f997ad3a8e52e9272bf716e",
+      "size": 38585788
     },
     "woof_exact.metallib": {
-      "sha256": "84fbb5fb6df6f1b4060ae006a663f19baab5d544560f23b77c2c68f84cee37b5",
-      "size": 34846682
+      "sha256": "c079e04acc02e86b872c1165b71005207bb76ce1af13f9ad0626852d35e49b26",
+      "size": 35105007
     }
   },
-  "implementation_file_count": 2092,
-  "implementation_sha256": "850a74b686be2ac439e364c5fab98178f3bb93489317103d73de4bf1eba429b9",
-  "metal_inputs_sha256": "4e6a20f95ec2bd8a277a4c59fe378927e6dbb1405999d2b886cab2345788dc66",
+  "implementation_file_count": 2097,
+  "implementation_sha256": "a564230e76da0cdbc35e9266508982fe6856e79dc3559c65411868f57bee0509",
+  "metal_inputs_sha256": "524e564fa53b8726fe7135bd32e6f3db1f1518dfad63a1537bbeed8e183347aa",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "89280bc2ff9b616d2a08c73c0396d671a936eaaa683b880f17b3039eabf8684b",
-        "size": 4743458
+        "sha256": "fbab2d8313523e6bff2ec04fc5856e4ef2ea0fb74a9906ddb36b6df5240fdb4b",
+        "size": 4751763
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "747bce6352c82ea8f29eeb207e919428b8375a1281ff3033ecf543bc7ee2169b",
@@ -2027,6 +2027,10 @@
         "sha256": "37dd16548c8f5958c55c34911573f4a909fa87553fc782961c39686dbdc19a2a",
         "size": 4924
       },
+      "woof/metal/shaders/hexv842_mpas_thompson_column_radar_f32.metal": {
+        "sha256": "9242d876f9252d81da04c99247edc796b30183ae431274043e776e2d158ace10",
+        "size": 67149
+      },
       "woof/metal/shaders/hexv842_mpas_thompson_column_relhum_f32.metal": {
         "sha256": "6a3a0acd48caca2ca4967d0ccf0fd264c72e01c4bbde4604299c382dd18b081a",
         "size": 3392
@@ -2238,6 +2242,10 @@
       "woof/metal/shaders/hexv842_wsm6_from_f32.metal": {
         "sha256": "eb6c0870fe97d131651cdd61a786bd379594ba5213610e8c5996316940e19424",
         "size": 3326
+      },
+      "woof/metal/shaders/hexv842_wsm6_radar_f32.metal": {
+        "sha256": "9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486",
+        "size": 25053
       },
       "woof/metal/shaders/hexv842_wsm6_radii_f32.metal": {
         "sha256": "70bb53f559cafc501953eb2c751d488689a6540201e99cfd8d470cd2adfcad6c",
@@ -5651,6 +5659,10 @@
         "sha256": "122feb004cb3aa52b2f231196683df70d76839627ae47affb83b27283158f7b5",
         "size": 900
       },
+      "woof/metal/signature_fragments/hexv842_mpas_thompson_column_radar_f32.json": {
+        "sha256": "a593f61f27acf03a9c601c8f560409c685ec65f038845d836519edad12cc5302",
+        "size": 3543
+      },
       "woof/metal/signature_fragments/hexv842_mpas_thompson_column_relhum_f32.json": {
         "sha256": "c80fb36e9f23b348657a986120a91774c89d8820f4a7ef798594ba6fbfe5aea2",
         "size": 1347
@@ -5855,9 +5867,17 @@
         "sha256": "9159eff61d1bb2df481431a52cbb094b312b90746540f3f988c22bf84097c358",
         "size": 8611
       },
+      "woof/metal/signature_fragments/hexv842_wsm6_radar_f32.json": {
+        "sha256": "5b2588e7ba858a62c37af92830cdcc6869d8a56abe5e4b8dd9730b85ed400114",
+        "size": 3441
+      },
       "woof/metal/signature_fragments/hexv842_wsm6_radii_f32.json": {
         "sha256": "8868dcaa0f98737aea39bf62128ec54c2759c1d640840a12ab1c49202a229502",
         "size": 2285
+      },
+      "woof/metal/signature_fragments/hexv842_wsm6_relhum_f32.json": {
+        "sha256": "ebb87b271e0d9634c5910accbce928c1e7530c931e7d63cae8bb3f93324d88da",
+        "size": 1387
       },
       "woof/metal/signature_fragments/hexv842_wsm6_state_f32.json": {
         "sha256": "2363acc5264f98c78032bb733aa37c17a3aee891118d78b3fa9210793218f1fe",
@@ -7576,6 +7596,6 @@
         "size": 296
       }
     },
-    "sha256": "4e6a20f95ec2bd8a277a4c59fe378927e6dbb1405999d2b886cab2345788dc66"
+    "sha256": "524e564fa53b8726fe7135bd32e6f3db1f1518dfad63a1537bbeed8e183347aa"
   }
 }
