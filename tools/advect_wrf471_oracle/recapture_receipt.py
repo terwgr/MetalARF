@@ -427,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.native_fix:
         if fixture.name != "wrf_legacy_advect":
             parser.error("--native-fix applies only to the fork order-5 fixture")
-        gate_env = dict(os.environ, GPUWM_WRF_EXACT="1", GPUWM_WRF_EXACT_ADVECTION="1")
+        gate_env = dict(os.environ, GPUWM_WRF_EXACT="1", WOOF_WRF_EXACT_ADVECTION="1")
         gate = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
                 "--basetemp=" + str(scratch / "native-gate-tmp"),
                 "tests/test_advect_wrf_legacy_parity.py::test_exact_build_holds_the_fork_reference_bitwise_on_the_explicit_routines"]

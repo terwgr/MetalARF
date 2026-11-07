@@ -49,7 +49,13 @@ the explicit advection and the solve take ``(thb - t0) + theta'``
 (:func:`theta_minus_t0`, the kernel's ``shift``), exactly WRF's t_tend,
 and the constant then rejoins with the FULL mass flux
 (:func:`add_theta_offset_flux`), which is what the default path's full
-theta tendency carries for it.  A uniform column stays uniform.
+theta tendency carries for it.  A uniform column stays uniform.  Strict
+arithmetic (``GPUWM_WRF_EXACT``) is WRF's own convention end to end: the
+state holds ``t_2`` (thb = t0), the explicit substeps transport ``thp``
+alone and the strict acoustic kernels balance t0 themselves, so there the
+constant does not rejoin.  Adding it there too counted t0's flux
+divergence twice: 2.6 K of theta and 233 Pa of column mass off WRF after
+one step of a real HRRR start, non-finite by step 11.
 
 WHAT DIFFERS FROM WRF, declared.  (1) theta: woof's ``(thb - t0) +
 theta'`` is formed from its own two FP32 words where WRF stores ``t_2``
@@ -89,6 +95,7 @@ except ImportError:  # Callers that launch these kernels require CUDA explicitly
 import numpy as np
 
 from woof.core import constants as c
+from woof.core.acoustic import _boundary_forced as _forced
 from woof.wrf_exact import ENABLED as WRF_EXACT
 from woof.core.ieva_constants import IEVA_LEVEL_TIERS, level_tier  # noqa: F401
 from woof.core.kernels import get_kernel_int_defines
@@ -145,12 +152,6 @@ def _rdx_rdy(cfg) -> tuple[np.float32, np.float32]:
     # WRF solve_em: rdx = 1./dx in single precision.
     return (np.float32(1.0) / np.float32(cfg.dx),
             np.float32(1.0) / np.float32(cfg.dy))
-
-
-def _forced(cfg) -> bool:
-    """WRF ``specified_bdy``: external specified OR nested forcing."""
-    return bool(getattr(cfg, "specified", False)
-                or getattr(cfg, "nested", False))
 
 
 def _periodic_x(cfg) -> bool:
@@ -254,15 +255,16 @@ def column_mass_new(state, cfg, mut, mut_old, dt: float):
             state._array_module.context, u=state.u, v=state.v,
             muu=mux, muv=muy, c1h=state.c1h, c2h=state.c2h,
             rdnw=state.rdnw, mut_old=mut_old, msft=state.msft,
-            msfu=state.msfu, msfv=state.msfv, mut_new=out,
+            msfu=state.msfu, msfv=state.msfv_inv if WRF_EXACT else state.msfv,
+            mut_new=out,
             nz=nz, ny=ny, nx=nx, rdx=rdx, rdy=rdy, dt=dt,
-            has_msf=int(state.has_msf), one=1.0)
+            has_msf=int(state.has_msf), one=1.0, stored_inverse=WRF_EXACT)
         return out
     _kernel(nz, "ieva_mut_new")(
         _blocks(ny * nx), (_TPB,),
         (state.u, state.v, cp.ascontiguousarray(mux),
          cp.ascontiguousarray(muy), state.c1h, state.c2h, state.rdnw,
-         mut_old, state.msft, state.msfu, state.msfv,
+         mut_old, state.msft, state.msfu, state.msfv_inv if WRF_EXACT else state.msfv,
          rdx, rdy, DTYPE(dt), DTYPE(1.0), np.int32(state.has_msf),
          out, np.int32(nz), np.int32(ny), np.int32(nx)))
     return out
@@ -326,6 +328,7 @@ def theta_minus_t0(state) -> cp.ndarray:
              "out": out},
             {"t0": float(np.float32(THETA_OFFSET)),
              "base3d": int(state.thb.ndim == 3),
+             "strict": int(WRF_EXACT),
              "nz": int(nz), "ny": int(ny), "nx": int(nx)},
             exact_policy=True, grid_size=int(nz * ny * nx))
         return out

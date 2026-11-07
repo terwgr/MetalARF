@@ -39,6 +39,9 @@ def test_the_job_the_replay_runs_cannot_run_without_setuptools():
     carried as cargo.
     """
 
+    from _woof_snapshot import engine_workflow_reason
+    if (reason := engine_workflow_reason(".github/workflows/publish.yml")) is not None:
+        pytest.skip(reason)
     _marker, files = parse_test_job(WORKFLOW.read_text(encoding="utf-8"))
     needing = [
         name for name in files

@@ -50,8 +50,12 @@ one card. A split parent needs its nests split too (see the refusals below).
   (2.25 km 288 x 288 parent, 750 m 216 x 216 nest) it was 250 drains and 250
   copies back per grid over 2 h. Reading only the coupler's windows from the
   slabs is the next step for nested speed.
-- A split nest's halo also covers the boundary frame (`max(spec_zone,
-  relax_zone)`), as a specified root's does.
+- A split nest's halo covers the same seam fiction a specified root's does:
+  the dependency radius plus `spec_zone` (one cell at the standard
+  `spec_zone = 1`). The relaxation frame is masked on a seam side, so it is
+  not paid. Measured on a 3 km HRRR-lattice crop split 2x1: halo 20 against
+  the former 28 (and 22 and 19 as probes), every hourly history
+  byte-identical over 12 h across all four and the one-card run.
 
 Refused by name on a tree, before anything restores:
 
@@ -71,6 +75,26 @@ tree split: the plan names each grid's road (`d01 split 1x2, d02 split 1x2`, or
 download, and the count reaches the tree runner. `woof check TREE --devices N`
 prints the same per-card prices, grid by grid. A bundle already prepared runs
 split through `woof sim PREPARED --devices-table JSON`, as a single domain does.
+
+## What a card needs and what it is given
+
+Each card's admission line prices state, seams and the loader template at the
+narrowest MYNN workspace width (8,192 columns per rank). That price is the one
+that refuses a forecast. Room left on the card then goes to a wider MYNN
+workspace (up to 98,304 columns per rank), which makes the boundary layer
+faster and never changes a byte, and then to frame snapshots. The line names
+the widened part (`of which N GiB is MYNN workspace widened into free
+memory`). A closing `devices:` line gives both figures per model column:
+`required` for capacity planning and `admitted` for what this box holds. The
+receipt carries both as `footprint`. Measured for one 1 km grid (1800 x 1400 x
+50, HRRR physics), the required figure is 60.9, 65.6, 68.7 and 82.9 KB per
+column on 2, 3, 4 and 8 cards. On 8 x RTX 5090 the admitted figure is 101.8,
+because the MYNN workspace widens into the rest of each card. More cards cost
+more per column for three reasons: the halo cells each slab repeats (27 cells
+wide when those figures were taken; 6% extra columns on 3 cards, 13% on 8),
+the fixed per-card tables and allocator headroom, and the seam buffers. The
+halo no longer pays the relaxation frame (19 cells on that grid against the
+27, about 30% less halo), so the repeated columns and the price fall with it.
 
 ## Output
 
@@ -115,18 +139,26 @@ CUDA call, about 3,900 times per slab in an ordinary HRRR step and about
 140,000 in a radiation step, so adding cards adds lock traffic. On a two-socket
 4-card box the radiation steps took 13-25 s under the lock and 5-8 s without it.
 
-Run multi-card forecasts under a free-threaded Python 3.14 (`python3.14t`),
-for example `WOOF_PYTHON=python3.14t ./install.sh`, or a `uv venv --python
-3.14t` environment with `recast-woof[gpu-cu13]` installed. CuPy, NumPy and netCDF4
-publish free-threaded wheels; `cftime` 1.6.6 and the render extra's `wrf-rust`
-do not yet, so the install builds them from source and needs a C compiler and
-the Rust toolchain the installer already requires. The slab threads then run
-at once. Importing netCDF4 would switch the lock
-back on, so the `woof` command line and the prepared runner re-execute once
-with `PYTHON_GIL=0` on a free-threaded build (every netCDF4 session in the
-process is already serialized by its own lock). An explicit `PYTHON_GIL` in
+Run multi-card forecasts under a free-threaded Python 3.14 (`python3.14t`).
+`install.sh` and `install.ps1` make `.venv` on it by default: a `python3.14t`
+already on PATH, or one uv finds or installs (`--python` / `-Python` picks
+another interpreter). For a pip install, make the environment with
+`uv venv --seed --python 3.14t` and install into it with
+`pip install --prefer-binary 'recast-woof[gpu-cu13]'`. CuPy, NumPy and netCDF4
+publish free-threaded wheels. `cftime` publishes one for 1.6.5 but not 1.6.6,
+so the installers pass `--prefer-binary`, and a pip install needs it too:
+without it pip builds cftime 1.6.6 from source, which needs a C compiler. The render
+extra's `wrf-rust` publishes none, so it builds from source with the Rust
+toolchain the installers already require. The slab threads then run at once.
+Importing netCDF4 would switch the lock back on, so the `woof` command line
+and both prepared runners (single domain and domain tree) re-run once with
+`PYTHON_GIL=0` on a free-threaded build (every netCDF4 session in the
+process is already serialized by its own lock). On Windows, where `exec`
+cannot keep the process, the re-run is a child bound to the first process by
+a job object, so stopping either one stops both. An explicit `PYTHON_GIL` in
 the environment is respected, including `PYTHON_GIL=1`. A multi-card run on a
 locked interpreter prints one `[devices]` line saying so; the run continues.
+`woof doctor` reports which build the environment runs.
 
 On a host with more than one NUMA node, each slab thread is bound to the CPUs
 sysfs lists as local to its card. Nothing is bound on a one-node host or when

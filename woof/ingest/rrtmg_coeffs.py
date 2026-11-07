@@ -41,11 +41,12 @@ manifest ``woof/data/wrf_radiation/rrtmg_coeffs_oracle_manifest.json``.
 from __future__ import annotations
 
 from functools import lru_cache
-import hashlib
 from pathlib import Path
 import struct
 
 import numpy as np
+
+from woof.file_digest import sha256_file as _sha256
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "wrf_radiation"
@@ -64,8 +65,6 @@ RRTMG_COEFFS_LW_DUMP_SHA256 = \
 RRTMG_COEFFS_SW_DUMP_SHA256 = \
     "913059dc76a784d29c0be8b5a970f4f5c509a0ab27d2a15bbfeb2bb9fca9f9f7"
 
-LW_NBANDS = 16
-SW_NBANDS = 14
 _MG = 16
 
 # ---------------------------------------------------------------------------
@@ -237,14 +236,6 @@ def _reduce(raw: np.ndarray, name: str, band_index: int,
     return np.moveaxis(out, -1, axis)
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _read_fortran_record(stream, label: str, record_number: int) -> bytes:
     marker = stream.read(4)
     if len(marker) != 4:
@@ -356,6 +347,8 @@ def load_rrtmg_lw_coefficients(path: str | Path | None = None):
     enforced.
     """
     source = DATA_DIR / "RRTMG_LW_DATA" if path is None else Path(path)
+    from woof.tables import table_path
+    source = table_path("rrtmg-lw", source)
     return _load_side(source, "RRTMG_LW_DATA", _LW_SPEC,
                       _LW_NGC, _LW_NGN, _LW_NGM,
                       RRTMG_LW_DATA_SHA256, path is None)
@@ -371,6 +364,8 @@ def load_rrtmg_sw_coefficients(path: str | Path | None = None):
     enforced.
     """
     source = DATA_DIR / "RRTMG_SW_DATA" if path is None else Path(path)
+    from woof.tables import table_path
+    source = table_path("rrtmg-sw", source)
     return _load_side(source, "RRTMG_SW_DATA", _SW_SPEC,
                       _SW_NGC, _SW_NGN, _SW_NGM,
                       RRTMG_SW_DATA_SHA256, path is None)

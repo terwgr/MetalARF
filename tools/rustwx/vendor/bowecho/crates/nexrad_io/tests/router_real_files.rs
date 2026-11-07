@@ -40,7 +40,7 @@ fn assert_routed_matches_direct(
     assert_eq!(routed.site.id, expected_site, "{what} site id");
     assert!(!routed.cuts.is_empty(), "{what} decoded no cuts");
     // Float moment planes carry NaN fills, and `NaN != NaN` under PartialEq
-    // would fail even for byte-identical decodes, compare F32 storage
+    // would fail even for byte-identical decodes — compare F32 storage
     // bitwise, everything else structurally.
     assert_eq!(
         f32_plane_bits(&routed),
@@ -158,7 +158,7 @@ const RECORD_BYTES: usize = 2432;
 const MSG_31_HEADER_LEN: usize = 72;
 
 /// One uncompressed AR2V record holding a single Message 31 radial with REF
-/// and VEL moments: the same shape as `synthetic_archive(false)` in the
+/// and VEL moments — the same shape as `synthetic_archive(false)` in the
 /// crate's unit tests.
 fn synthetic_archive_ii() -> Vec<u8> {
     let mut bytes = Vec::new();

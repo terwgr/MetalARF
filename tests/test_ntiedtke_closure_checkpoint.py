@@ -50,7 +50,13 @@ import woof.io.restart as restart
 from woof.core.model import ADAPTIVE_TIMESTEP_RUN_FIELDS
 from test_restart import (_canonical_member_digest,
                                 _digest_without_config_keys,
+                                _PINNED_UNDER_MEASURED_CLOCK,
+                                _PRE_REAL_CLAMP_ALGORITHMS,
                                 _sealed_tree_fixture)
+
+#: Every anchor here predates 2.8.8's Kessler identity move
+#: (gfix/288-mp-clamp), so each reconstruction names v1 again.
+_HISTORICAL = dict(algorithm_overrides=_PRE_REAL_CLAMP_ALGORITHMS)
 
 #: The one RunConfig field the New Tiedtke closure lane appended.
 #:
@@ -100,12 +106,16 @@ _KEYS_APPENDED_SINCE: tuple[str, ...] = (
     ADAPTIVE_TIMESTEP_RUN_FIELDS
     + ("eta_levels", "relax_timescale_s", "relax_w",
        # the urban canopy keys (lane/urban-infra)
-       "sf_urban_physics", "use_wudapt_lcz", "num_urban_hi"))
+       "sf_urban_physics", "use_wudapt_lcz", "num_urban_hi",
+       # tc/nest's fixed-frame archive, echoed on a nested domain (2.9.7)
+       "nest_accumulation_archive"))
 
 
 def _write(monkeypatch, tmp_path):
     source, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        # These retained anchors precede the declared local_face default.
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
     root = restart.write_tree_restart(
         tmp_path, source, start + timedelta(seconds=3600))
     child = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
@@ -130,10 +140,12 @@ def test_unwinding_the_later_lanes_reaches_the_post_ntiedtke_digest(
     # e13fa45c0 / 59f7e280f changed the later moist_cq default. Keep
     # every historical anchor and reconstruct its disabled value explicitly.
     assert (_digest_without_config_keys(
-        root, _KEYS_APPENDED_SINCE, config_overrides={"moist_cq": False})
+        root, _KEYS_APPENDED_SINCE, config_overrides={"moist_cq": False},
+        **_HISTORICAL)
             == _POST_NTIEDTKE_ROOT_DIGEST)
     assert (_digest_without_config_keys(
-        child, _KEYS_APPENDED_SINCE, config_overrides={"moist_cq": False})
+        child, _KEYS_APPENDED_SINCE, config_overrides={"moist_cq": False},
+        **_HISTORICAL)
             == _POST_NTIEDTKE_CHILD_DIGEST)
 
 
@@ -154,10 +166,10 @@ def test_removing_the_flag_restores_the_pre_ntiedtke_digest(
     root, child = _write(monkeypatch, tmp_path)
     keys = NTIEDTKE_CLOSURE_RUN_FIELDS + tuple(_KEYS_APPENDED_SINCE)
     assert (_digest_without_config_keys(
-        root, keys, config_overrides={"moist_cq": False})
+        root, keys, config_overrides={"moist_cq": False}, **_HISTORICAL)
             == _PRE_NTIEDTKE_ROOT_DIGEST)
     assert (_digest_without_config_keys(
-        child, keys, config_overrides={"moist_cq": False})
+        child, keys, config_overrides={"moist_cq": False}, **_HISTORICAL)
             == _PRE_NTIEDTKE_CHILD_DIGEST)
 
 
@@ -173,9 +185,10 @@ def test_the_ntiedtke_anchors_moved_for_the_moist_cq_default_and_nothing_else(
                 (_KEYS_APPENDED_SINCE, post_digest),
                 (NTIEDTKE_CLOSURE_RUN_FIELDS + _KEYS_APPENDED_SINCE,
                  pre_digest)):
-            current = _digest_without_config_keys(path, keys)
+            current = _digest_without_config_keys(path, keys, **_HISTORICAL)
             restored = _digest_without_config_keys(
-                path, keys, config_overrides={"moist_cq": False})
+                path, keys, config_overrides={"moist_cq": False},
+                **_HISTORICAL)
             assert current != restored
             assert restored == historical_digest
 

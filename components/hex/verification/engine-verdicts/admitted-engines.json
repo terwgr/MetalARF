@@ -1,0 +1,6 @@
+{
+  "distribution": "gpuwm",
+  "engines": [],
+  "instrument": "tools/measure_engine_verdicts.py",
+  "schema": "gpuwm-hex.admitted-engines/v1"
+}

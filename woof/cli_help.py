@@ -23,9 +23,9 @@ Pictures
   woof render WRFOUT... --series --out DIR     Draw a run's products
   woof render --diff A_RUN B_RUN --out DIR     Run A minus run B
 
-The hex and global models (preview)
+The hex model (preview), regional and global
   woof hex --help               MPAS-style unstructured-mesh model
-  woof global --help            Global spectral model
+  woof hex global --help        Global forecasts on the hex model
 
 Set up or troubleshoot
   woof setup --with-geog        Install native tools, tables and geography

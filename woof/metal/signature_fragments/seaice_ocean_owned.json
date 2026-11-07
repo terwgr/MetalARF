@@ -1,0 +1,68 @@
+{
+  "kernels": [
+    {
+      "name": "seaice_ocean_owned",
+      "cuda_symbol": "surface_ocean._ice_owned",
+      "module": "seaice_family",
+      "source": "woof/metal/shaders/seaice_family.metal",
+      "cuda_source": "woof/core/surface_ocean.py",
+      "resources": [
+        [
+          "mask",
+          "float",
+          "read"
+        ],
+        [
+          "coupled",
+          "float",
+          "read"
+        ],
+        [
+          "land",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coupled": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "glibc-exp",
+        "soft32-rn-nonftz"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_init_pools",
+      "source": "woof/metal/shaders/hexrrfs_init_pools.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/driver_rrfs.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_init_microphysics_top",
+      "cuda_symbol": "rrfs_init_microphysics_top",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "rdzw",
+          "float",
+          "read"
+        ],
+        [
+          "dzu",
+          "float",
+          "read"
+        ],
+        [
+          "level",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rdzw": [
+          [
+            "levels"
+          ]
+        ],
+        "dzu": [
+          [
+            "levels"
+          ]
+        ],
+        "level": [
+          [
+            "1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "levels",
+          "int32"
+        ],
+        [
+          "top",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

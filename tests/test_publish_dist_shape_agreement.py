@@ -104,6 +104,9 @@ def command(steps, operation, project, phase):
 
 
 def test_index_visibility_gates_companion_then_native_then_universal_uploads():
+    from _woof_snapshot import engine_workflow_reason
+    if (reason := engine_workflow_reason(".github/workflows/publish.yml")) is not None:
+        pytest.skip(reason)
     workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
     steps = workflow["jobs"]["publish"]["steps"]
     phases = [("data", "recast-woof-data", "all", "all"), ("native", "woof", "native", "native"),

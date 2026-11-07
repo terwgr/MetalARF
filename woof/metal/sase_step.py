@@ -7,7 +7,6 @@ to the small FP64 reductions used by the closure's scalar ledger.
 
 from __future__ import annotations
 
-import math
 import numpy as np
 
 from .array import MetalArray, MetalArrayModule
@@ -21,9 +20,8 @@ from .sase_family import (
     submit_sase_split_e_update, submit_sase_thomas_scalar,
 )
 from woof.core.sase_math import (
-    BL89_MIX_EXP, BLACKADAR_LAMBDA, C_E, C_ED, C_ES, C_KS, C_KV,
-    CKS_BLEND_EXP, C_MOM_BG, C_S, CP_AIR, E_MIN, G_ACCEL, KARMAN,
-    LS_COEF, N2_SCREEN, NU_BLEND_EPS, PR_RANS, PR_LES, RIB_CRIT,
+    BLACKADAR_LAMBDA, C_E, C_ED, C_ES, C_KS, C_KV, CKS_BLEND_EXP, C_S,
+    E_MIN, G_ACCEL, KARMAN, LS_COEF, N2_SCREEN, NU_BLEND_EPS, RIB_CRIT,
     RIB_WSPD2_FLOOR, SFC_WSPD_FLOOR, SMAG_KM_CAP, _w_bound_tail,
     partition_cap, prandtl_blend,
 )

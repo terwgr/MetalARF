@@ -1028,7 +1028,7 @@
     "d61e8eb990a303e69dc5bfeddede086ab5774d681302f1567181b63387e7fcda",
     "47d4eb1fae1c10f6a6038d64aca27c65779fd89feea0aaa4fdd6a1dc27795193"
   ],
-  "mapping": "gpuwm/authorities/rw-wps-icon-eu-regular-grib2.mapping.json",
+  "mapping": "woof/authorities/rw-wps-icon-eu-regular-grib2.mapping.json",
   "mapping_sha256": "ae8075c069206c4f3917830aa769a2c4ef8f39a03ae31b3d7ee8c31c63f23cea",
   "materialization": {
     "verdict": "INCOMPLETE"

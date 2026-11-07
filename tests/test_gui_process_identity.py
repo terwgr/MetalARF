@@ -337,7 +337,7 @@ def test_a_launch_that_fails_to_spawn_leaves_the_card_free(tmp_path, monkeypatch
     def broken(*args, **kwargs):
         raise OSError("no interpreter")
 
-    monkeypatch.setattr("gpuwm.mcp.jobs.subprocess.Popen", broken)
+    monkeypatch.setattr("woof.mcp.jobs.subprocess.Popen", broken)
     with pytest.raises(OSError):
         manager.launch("sleep", SLEEP, cwd=tmp_path, gpu=True)
     assert not (root / "gpu.lock").exists() and manager.gpu_lock.refusal() is None
@@ -353,7 +353,7 @@ def test_the_card_mutex_is_reentrant_in_a_thread_and_exclusive_across_processes(
     held = tmp_path / "held"
     holder = subprocess.Popen([sys.executable, "-c", (
         "import sys, time, pathlib\n"
-        "from gpuwm.mcp.gpulock import GpuLock\n"
+        "from woof.mcp.gpulock import GpuLock\n"
         "with GpuLock(pathlib.Path(sys.argv[1])).mutex():\n"
         "    pathlib.Path(sys.argv[2]).write_text('x')\n"
         "    time.sleep(2.0)\n"), str(root), str(held)], stdin=subprocess.DEVNULL)

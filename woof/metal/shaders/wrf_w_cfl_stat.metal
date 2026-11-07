@@ -2,6 +2,7 @@
 // w_cfl_stat in woof/core/kernels/openbc.cu (whole-domain form).
 // out[0] = max vert_cfl bits, out[1] = cells above w_damp onset,
 // out[2] = cells folded, out[3] = max horiz_cfl bits.
+// out[4:36] = the upstream 32-bin vertical CFL histogram (top absorbs NaN).
 // The vertical CFL uses soft32 RN ops like the CUDA __f*_rn chain. Threads
 // past the tail carry no cell instead of returning, because every thread of
 // the threadgroup must reach the barriers.
@@ -32,6 +33,9 @@ kernel void wrf_w_cfl_stat(
     threadgroup atomic_uint block_hmax;
     threadgroup atomic_uint block_hits;
     threadgroup atomic_uint block_count;
+    threadgroup atomic_uint block_hist[32];
+    for (uint b = lid; b < 32u; b += tg_size)
+        atomic_store_explicit(&block_hist[b], 0u, memory_order_relaxed);
     if (lid == 0u) {
         atomic_store_explicit(&block_max, 0u, memory_order_relaxed);
         atomic_store_explicit(&block_hmax, 0u, memory_order_relaxed);
@@ -57,6 +61,8 @@ kernel void wrf_w_cfl_stat(
         if (vert > p.w_damp_on)
             atomic_fetch_add_explicit(&block_hits, 1u, memory_order_relaxed);
         atomic_fetch_add_explicit(&block_count, 1u, memory_order_relaxed);
+        const uint bin = vert < 2.0f ? uint(wcfl_mul(vert, 16.0f)) : 31u;
+        atomic_fetch_add_explicit(&block_hist[bin], 1u, memory_order_relaxed);
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
@@ -67,5 +73,9 @@ kernel void wrf_w_cfl_stat(
         atomic_fetch_add_explicit(out + 2, atomic_load_explicit(&block_count, memory_order_relaxed), memory_order_relaxed);
         atomic_fetch_max_explicit(out + 3, atomic_load_explicit(&block_hmax, memory_order_relaxed), memory_order_relaxed);
     }
-
+    for (uint b = lid; b < 32u; b += tg_size) {
+        const uint count = atomic_load_explicit(&block_hist[b], memory_order_relaxed);
+        if (count != 0u)
+            atomic_fetch_add_explicit(out + 4u + b, count, memory_order_relaxed);
+    }
 }

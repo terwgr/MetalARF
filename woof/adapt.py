@@ -14,10 +14,10 @@ import hashlib
 import json
 import math
 from pathlib import Path
-import sys
 import tempfile
 from typing import Mapping, Sequence
 
+from woof.docs_links import tree_url
 from woof.experiment import did_you_mean
 from woof.explain import layered, warn
 from woof.mapped_authoring import (
@@ -38,7 +38,6 @@ from woof.mapped_source import (
     _decode_netcdf,
     _grib2_inventory,
     _match_nc_variables,
-    _matching_nc_variables,
     _nc_selector_text,
     _nc_vocabulary,
     _selector_names,
@@ -690,9 +689,17 @@ def _check_group_inventory(
         axes = tuple(field["source_axes"])
         if "vertical" in axes:
             observed = [float(row["level_value"]) for row in matched]
+            # A field declared on part of the ladder (published_levels,
+            # woof.mapped_source) is required on those levels only; the
+            # decoder fills the others with zero.
+            published = field.get("published_levels")
+            required_levels = vertical_levels if published is None else tuple(
+                level for level in vertical_levels
+                if any(math.isclose(level, float(value), abs_tol=1e-9)
+                       for value in published["levels"]))
             missing = [
                 level
-                for level in vertical_levels
+                for level in required_levels
                 if not any(
                     math.isclose(level, value, abs_tol=1e-9)
                     for value in observed
@@ -1582,7 +1589,7 @@ def register_cli(subparsers) -> None:
             "each trusted row. docs/arbitrary-verified-adapters.md covers "
             "the descriptor schema, the battery, and refusal examples. "
             "Both are in the repository, under "
-            "https://github.com/recastsystems/woof/tree/main/docs, "
+            f"{tree_url('tree')}docs, "
             "if this is a wheel install without a checkout."
         ),
     )

@@ -441,6 +441,100 @@
       "arithmetic_policies": [
         "default"
       ]
+    },
+    {
+      "name": "nest_carry_number",
+      "module": "nest_microphysics_family",
+      "source": "woof/metal/shaders/nest_microphysics_family.metal",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c1h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c2h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mub2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "coupled",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/microphysics_transition.py",
+      "cuda_symbol": "_carry_number_field"
     }
   ]
 }

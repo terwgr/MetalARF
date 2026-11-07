@@ -2,6 +2,13 @@
 #include "urban_bem_shadow_mas_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
 using namespace metal;
+#include "soft_glibc_solar_trig.metalh"
+static inline float ubmsm_sin_pinned(float x) { return as_type<float>(soft_glibc_solar_sinf(as_type<uint>(x))); }
+static inline float ubmsm_cos_pinned(float x) { return as_type<float>(soft_glibc_solar_cosf(as_type<uint>(x))); }
+static inline float ubmsm_asin_pinned(float x) { return as_type<float>(soft_glibc_solar_asinf(as_type<uint>(x))); }
+static inline float ubmsm_acos_pinned(float x) { return as_type<float>(soft_glibc_solar_acosf(as_type<uint>(x))); }
+static inline float ubmsm_tan_pinned(float x) { return as_type<float>(soft_glibc_solar_tanf(as_type<uint>(x))); }
+
 #pragma clang fp contract(off)
 
 static inline float ubmsm_add(float a, float b) { return as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))); }
@@ -12,8 +19,8 @@ static inline float ubmsm_div(float a, float b) { return as_type<float>(soft32_d
 static inline float ubmsm_shade_wall(float z1, float z2, float hu,
                                      float elevation, float azimuth,
                                      float width) {
-    const float sine = precise::sin(azimuth);
-    const float tangent = precise::tan(elevation);
+    const float sine = ubmsm_sin_pinned(azimuth);
+    const float tangent = ubmsm_tan_pinned(elevation);
     const float x1 = min(ubmsm_mul(ubmsm_sub(hu, z1), tangent),
                          max(0.0f, ubmsm_div(width, sine)));
     const float x2 = max(ubmsm_mul(ubmsm_sub(hu, z2), tangent), 0.0f);
@@ -32,7 +39,7 @@ kernel void urban_bem_shadow_mas_fragment(
     device const int *active_cols = r.active_cols;
     device const int *utype = r.utype;
     device const int *class_int = r.class_int;
-    device const int *nzu_class = r.nzu_class;
+    device const int *nzurban = r.nzurban;
     device const float *z_u = r.z_u;
     device const float *ws = r.ws;
     device const float *drst = r.drst;
@@ -60,45 +67,45 @@ kernel void urban_bem_shadow_mas_fragment(
         error[col] = 5531;
         return;
     }
-    const int nzu = nzu_class[uint(type - 1)];
+    const int nzu = nzurban[col];
     const int nd = class_int[uint(type)];
     if (nzu < 1 || nzu > 18 || nd < 1 || nd > 2) {
         error[col] = 5532;
         return;
     }
     const float direct = swddir[col];
-    const float zr = precise::acos(cosz[col]);
-    const float sun_sine = precise::sin(zr);
+    const float zr = ubmsm_acos_pinned(cosz[col]);
+    const float sun_sine = ubmsm_sin_pinned(zr);
     if (direct == 0.0f || sun_sine == 1.0f) return;
     const float xlat_r = ubmsm_div(
         ubmsm_mul(latitude[col], 3.14159265358979323846f), 180.0f);
     float bbb = 0.0f;
     if (fabs(sun_sine) > 1.0e-10f) {
         const float ratio = ubmsm_div(
-            ubmsm_mul(precise::cos(p.declin), precise::sin(hour_angle[col])),
+            ubmsm_mul(ubmsm_cos_pinned(p.declin), ubmsm_sin_pinned(hour_angle[col])),
             sun_sine);
         if (ratio >= 1.0f) bbb = 1.57079632679489661923f;
         else if (ratio <= -1.0f) bbb = -1.57079632679489661923f;
         else {
-            bbb = precise::asin(ratio);
-            if (precise::sin(p.declin) <
-                ubmsm_mul(precise::cos(zr), precise::sin(xlat_r)))
+            bbb = ubmsm_asin_pinned(ratio);
+            if (ubmsm_sin_pinned(p.declin) <
+                ubmsm_mul(ubmsm_cos_pinned(zr), ubmsm_sin_pinned(xlat_r)))
                 bbb = ubmsm_sub(3.14159265358979323846f, bbb);
         }
     } else {
         const float product = ubmsm_mul(
-            precise::cos(p.declin), precise::sin(hour_angle[col]));
+            ubmsm_cos_pinned(p.declin), ubmsm_sin_pinned(hour_angle[col]));
         if (product >= 0.0f) bbb = 1.57079632679489661923f;
         else if (product < 0.0f) bbb = -1.57079632679489661923f;
     }
-    const float tangent = precise::tan(zr);
+    const float tangent = ubmsm_tan_pinned(zr);
     for (int dir = 0; dir < nd; ++dir) {
         const ulong direction = ulong(col) * 2ul + uint(dir);
         const float width = ws[direction];
         const float aae = ubmsm_sub(bbb, drst[direction]);
         const float aaw = ubmsm_add(aae, 3.14159265358979323846f);
-        const float sine_a = precise::sin(aae);
-        const float sine_b = precise::sin(aaw);
+        const float sine_a = ubmsm_sin_pinned(aae);
+        const float sine_b = ubmsm_sin_pinned(aaw);
         for (int iz = 0; iz < nzu; ++iz) {
             const int face_a = dir * 2;
             const int face_b = face_a + 1;

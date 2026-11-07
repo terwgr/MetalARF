@@ -8,17 +8,20 @@ The things that do the work do not:
   ``rw_wrfbatch``) are built from the woof ``tools/rustwx`` workspace
   and staged onto a machine -- ``woof fetch-bridges`` is the one
   command that does it;
-* the CUDA lane needs the CuPy wheel for CUDA 13 -- the major every GPU
-  door here refuses below -- and no pip extra can check what the box's
-  driver actually serves, so this module reads it and says;
+* the CUDA lane needs a CuPy wheel whose CUDA major the box's driver
+  serves (CUDA 12 or 13; the GPU doors refuse a runtime below 12000), and
+  no pip extra can check what the driver actually serves, so this module
+  reads it and says;
 * the card itself: every architecture this install's NVRTC compiles for
   runs, anchored or not, and this module names the card, its compute
   capability and its anchor status, or the one refusal a card can meet;
 * the meshes and their static fields are external assets with no fetch
   path in this distribution;
-* the forecast runs on the installed woof and records the digests of its
-  sixteen seam files, which every engine from 2.5.8 carries in
-  site-packages.
+* the forecast runs on the installed woof's sixteen pinned seam files,
+  which every engine from 2.5.8 carries in site-packages (measured
+  2026-08-28 against the wheel PyPI serves: checked=16, matched=16,
+  moved=(), absent=()); an older engine lacks ``docs/mpas-seam.md`` and
+  cannot satisfy the pin on its own.
 
 Every one of those is a place a fresh install meets a wall.  This module
 exists so the wall has a sign on it: each gap prints THE command that
@@ -34,17 +37,23 @@ context that is never a gap.
 Exit status is 1 when any REQUIRED finding is missing, 0 otherwise.
 Required means: a door this distribution advertises cannot open, or the
 install itself is wrong.  The three Python dependencies and the three
-engines are required in the first sense; an installed woof that lacks a
-seam file is required in the second.  CuPy, the card's architecture and
+engines are required in the first sense; an installed woof whose seam
+bytes are not the ones this port pins is required in the second, and that
+clause is new.  CuPy, the card's architecture, the seam-source note and
 the mesh assets are reported and do not fail the process, because a user
 who only wants the
 render door should not be told the install is broken by the absence of a
 mesh.
 
-Through 0.3.1 this report also compared the engine's seam bytes with a
-pinned engine, because a separately published engine could differ from the
-one this port was run with.  The engine now ships with this port and that
-comparison retired with the pin.
+THE BREAKAGE THE SECOND CLAUSE PREVENTS, measured on a real install on
+2026-08-27 (``evidence/userwalk-20260827/``): ``pip install woof hex``
+resolved woof 2.5.7, whose bytes the seam pin refuses; the forecast door
+then stopped with two SHA-256 digests and no version number, and THIS
+REPORT said ``Every check passed`` and exited 0 -- because its woof line
+compared a version against a floor and never looked at a byte.  Fifteen of
+the sixteen pinned paths are inside site-packages, so the drift was
+visible here, at install time, without a card and without a checkout.
+Nothing looked.
 """
 
 from __future__ import annotations
@@ -160,7 +169,7 @@ def check_interpreter() -> list[Finding]:
             status=INFO,
             detail=f"{DISTRIBUTION_NAME} {__version__}",
             evidence={
-                "import_package": __package__ or "hexcore",
+                "import_package": __package__ or "woof.hex",
                 "location": str(Path(__file__).resolve().parent),
             },
         ),
@@ -350,8 +359,8 @@ def check_gpu_runtime() -> list[Finding]:
     major.  ``render``'s compact view, which is what ``doctor`` prints by
     default, filters comment lines out and keeps the FIRST command, so the
     one line a user actually saw was ``pip install "recast-woof[gpu-cu12]"``.
-    On a CUDA-13 box that installs a CuPy every GPU door in this port
-    refuses: ``cuda.runtime_version=12090 < required 13000``.  Doctor then
+    Under the 13000 floor of the time, that installed a CuPy every GPU door
+    refused: ``cuda.runtime_version=12090 < required 13000``.  Doctor then
     reported ``verified`` on that same CuPy, because it imported.
 
     So this check reads three things instead of one: the runtime floor
@@ -361,12 +370,30 @@ def check_gpu_runtime() -> list[Finding]:
     forecast door would raise, before a card is ever opened, which is the
     difference between failing early by name and failing at the first real
     device call.
+
+    THE SECOND DEFECT, measured on an RTX PRO 6000 whose driver serves CUDA
+    12.8: ``[gpu]`` then installed cupy-cuda13x, which imports and reports
+    runtime 13020 -- above the floor -- so this check said ``verified`` and
+    doctor printed "Every check passed", while every device call on that box
+    stopped with ``cudaErrorInsufficientDriver``.  A CuPy whose CUDA major is
+    newer than the driver's is now a GAP naming that error, and every remedy
+    names the extra for the major the driver serves.
     """
 
     floor = cuda_runtime_floor()
     floor_major = None if floor is None else floor // 1000
     box_major = _driver_cuda_major()
-    matching = _GPU_EXTRA_BY_MAJOR.get(floor_major) if floor_major else None
+    # The extra for the major this driver serves; with the driver unread, the
+    # `gpu` alias, whose CUDA 12 wheel opens a card on a CUDA 12 or 13 driver.
+    if (
+        box_major is not None
+        and floor_major is not None
+        and box_major >= floor_major
+        and box_major in _GPU_EXTRA_BY_MAJOR
+    ):
+        matching = _GPU_EXTRA_BY_MAJOR[box_major]
+    else:
+        matching = "gpu"
     evidence: dict[str, object] = {
         "required_runtime_version": "unreadable" if floor is None else floor,
         "driver_cuda_major": "unknown" if box_major is None else box_major,
@@ -415,14 +442,16 @@ def check_gpu_runtime() -> list[Finding]:
                 )
             ]
         install = f'  pip install "{DISTRIBUTION_NAME}[{matching}]"'
-        why = (
-            f"  # this port's CUDA doors require runtime {floor}, so the CUDA-"
-            f"{floor_major}\n  # wheel is the only one they admit"
-        )
         if box_major is not None:
-            why += f"; this box's driver serves CUDA {box_major}\n"
+            why = (
+                f"  # this box's driver serves CUDA {box_major}, so the CUDA-"
+                f"{box_major} wheel\n"
+            )
         else:
-            why += "\n"
+            why = (
+                "  # the driver's CUDA major was not read; the CUDA 12 wheel "
+                "runs on a\n  # CUDA 12 or CUDA 13 driver\n"
+            )
         return [
             Finding(
                 subject="cupy (the CUDA lane)",
@@ -469,6 +498,36 @@ def check_gpu_runtime() -> list[Finding]:
                     f"required {floor}\n"
                     f"  # remove the wrong-major wheel FIRST -- pip will leave "
                     f"both\n"
+                    f"  # installed and import order, not intent, picks the "
+                    f"winner\n"
+                    f"{removal}\n"
+                    f'  pip install "{DISTRIBUTION_NAME}[{matching}]"'
+                ),
+                evidence=evidence,
+            )
+        ]
+    if box_major is not None and runtime // 1000 > box_major:
+        wheels = _installed_cupy_wheels()
+        evidence["installed_cupy_distributions"] = ", ".join(wheels) or "unknown"
+        removal = (
+            f"  pip uninstall -y {' '.join(wheels)}"
+            if wheels
+            else f"  pip uninstall -y cupy-cuda{runtime // 1000}x"
+        )
+        return [
+            Finding(
+                subject="cupy (the CUDA lane)",
+                status=MISSING,
+                detail=(
+                    f"cupy imports but carries CUDA runtime {runtime}, and this "
+                    f"box's driver serves CUDA {box_major}: every device call "
+                    f"stops with cudaErrorInsufficientDriver"
+                ),
+                remedy=(
+                    f"  # the wheel's CUDA major is newer than the driver's; "
+                    f"install the\n"
+                    f"  # wheel for CUDA {box_major}, removing this one FIRST -- "
+                    f"pip leaves both\n"
                     f"  # installed and import order, not intent, picks the "
                     f"winner\n"
                     f"{removal}\n"
@@ -660,83 +719,146 @@ def check_gpu_architecture() -> list[Finding]:
     ]
 
 
-#: The engine range the standalone distribution declares, spelled once in
-#: ``engine_identity``.
+#: The engine range, DERIVED rather than restated.  ``engine_pin`` computes
+#: it from a table of measured verdicts; the version numbers live there and
+#: nowhere else, because this constant used to be a second copy of a number
+#: the declaration also carried, and copies drift.
 def _requirement() -> str:
-    from . import engine_identity
+    from . import engine_pin
 
-    return engine_identity.ENGINE_REQUIREMENT
+    return engine_pin.gpuwm_requirement()
 
 
-_SEAM_SUBJECT = "woof seam files (the sixteen the forecast records)"
+_SEAM_SUBJECT = "woof seam bytes (the sixteen-file pin)"
 
 
 def _check_seam_bytes(installed: str) -> Finding:
-    """Does the installed engine carry every seam file the forecast names?
+    """Do the installed engine's bytes match the ones the port pins?
 
-    The engine ships with this port, so its seam bytes are recorded, not
-    compared with a pin.  What still stops a forecast is a missing seam
-    file: the run hashes each one into its receipts and refuses a tree that
-    does not carry them all.
+    A VERSION comparison cannot answer this and a byte comparison can: the
+    version is what the finding NAMES so a user can act, the bytes are what
+    it knows.  The two are kept apart deliberately, because the walk's
+    victim was a report that compared 2.5.7 against a floor of 2.5.5, found
+    it higher, and called the estate healthy.
     """
 
-    from . import engine_identity
+    from . import engine_pin
 
-    root = engine_identity.installed_root()
+    wanted = engine_pin.wanted_version()
+    root = engine_pin.installed_root()
     if root is None:
         return Finding(
             subject=_SEAM_SUBJECT,
             status=INFO,
             detail=(
                 "woof is installed but its files could not be located on "
-                "disk, so the seam files were not read.  The forecast reads "
-                "them again at launch and refuses by name."
+                "disk, so the seam bytes were not compared.  The forecast "
+                "hashes them at launch and records the result in its receipt."
             ),
         )
-    inspection = engine_identity.inspect_seam(root)
-    total = len(engine_identity.SEAM_PATHS)
-    if inspection.accepted:
+    try:
+        inspection = engine_pin.inspect_seam(root)
+    except Exception as error:  # pragma: no cover - a broken manifest module
+        return Finding(
+            subject=_SEAM_SUBJECT,
+            status=INFO,
+            detail=(
+                f"the seam manifest could not be read ({error}), so the "
+                "installed engine's bytes were not compared here"
+            ),
+        )
+
+    total = len(engine_pin.seam_manifest())
+    if inspection.misdeclared:
+        # INFO, not a blocking gap, since 2026-10-10: the byte match is
+        # evidence a receipt records (engine_pin.identity_of) and the
+        # forecast runs on this install.
+        return Finding(
+            subject=_SEAM_SUBJECT,
+            status=INFO,
+            detail=(
+                f"woof {installed} is installed and its {inspection.checked} "
+                f"seam files are, byte for byte, the measured row of the "
+                f"admitted engine woof {inspection.engine}.  An admitted "
+                "engine is keyed by its version string and its bytes "
+                "together, so a forecast on this install runs and its "
+                f"receipt names it as woof {installed} with no measured "
+                f"row, not as that engine and not as the pin ({wanted})."
+            ),
+            evidence={
+                "installed": installed,
+                "bytes_of": inspection.engine,
+                "wanted": wanted,
+                "root": str(root),
+            },
+        )
+    if not inspection.drifted:
+        row = (
+            f" -- the measured row of the admitted engine woof "
+            f"{inspection.engine}, not the public pin ({wanted})"
+            if inspection.admitted
+            else ""
+        )
         return Finding(
             subject=_SEAM_SUBJECT,
             status=VERIFIED,
             detail=(
-                f"woof {installed}: all {total} seam files are in this "
-                "install; the forecast records their digests"
+                f"woof {installed}: {inspection.checked} of {total} pinned "
+                f"files are in this install and all {inspection.checked} match"
+                f"{row}"
             ),
-            evidence={"root": str(root), "seam_files": inspection.checked},
+            evidence={
+                "root": str(root),
+                "matched": inspection.checked,
+                "not_in_site_packages": list(inspection.absent),
+                "wanted": wanted,
+                "engine": inspection.engine,
+                "admitted": inspection.admitted,
+            },
         )
+
+    named = installed or engine_pin.version_from_moved(inspection.moved) or "this"
+    # INFO, not a blocking gap, since 2026-10-10 (owner ruling): this finding used to say "the forecast lane
+    # refuses at launch", and it did.  A byte difference from the measured
+    # engine names no breakage, so the forecast runs and its receipt records
+    # the moved files (engine_pin.identity_of).
     return Finding(
         subject=_SEAM_SUBJECT,
-        status=MISSING,
+        status=INFO,
         detail=(
-            f"woof {installed} is installed and {len(inspection.absent)} of "
-            f"its {total} seam files are not in the install: "
-            + ", ".join(inspection.absent)
-            + ".  The forecast refuses at launch; the two front doors that "
-            "drive Rust binaries are unaffected."
+            f"woof {named} is installed and the engine this port was "
+            f"measured against is {wanted}: {len(inspection.moved)} of "
+            f"{inspection.checked} checkable seam files differ.  The "
+            "forecast runs on this install and its receipt records the "
+            "difference (arwen_engine_pin).  Moved: "
+            + ", ".join(inspection.moved)
         ),
-        remedy=engine_identity.remedy(),
-        required=True,
         evidence={
             "installed": installed,
+            "wanted": wanted,
             "declared": _requirement(),
-            "absent": list(inspection.absent),
+            "moved": list(inspection.moved),
             "root": str(root),
         },
     )
 
 
 def check_physics_seam() -> list[Finding]:
-    """woof: the installed distribution and its seam files.
+    """woof: the installed distribution, its BYTES, and the checkout the pin needs.
 
-    Two findings, because they are two different facts with two different
-    remedies: whether an engine is installed at all, and whether it carries
-    every seam file the forecast names in its receipts.  Hashing them costs
-    one read of sixteen small files and needs no card, no network and no
-    checkout.
+    Three findings, because they are three different facts with three
+    different remedies, and folding them into one is how "woof is
+    installed" got read as "the forecast lane will run".
+
+    The middle one is the check the 2026-08-27 walk found missing.  It is a
+    byte comparison, not a version comparison: the version is what the
+    report NAMES, and the bytes are what it knows.  Every pinned path the
+    installed engine carries is hashed here -- at 2.5.8 that is all sixteen,
+    at 2.5.7 and below fifteen -- so this costs one hash of small files and
+    needs no card, no network and no checkout.
     """
 
-    from . import engine_identity
+    from . import engine_pin
 
     findings: list[Finding] = []
     installed = _distribution_version("recast-woof")
@@ -746,7 +868,7 @@ def check_physics_seam() -> list[Finding]:
                 subject="woof (the physics seam)",
                 status=MISSING,
                 detail="no woof distribution is installed in this interpreter",
-                remedy=engine_identity.remedy(),
+                remedy=engine_pin.remedy(),
                 required=True,
             )
         )
@@ -760,11 +882,77 @@ def check_physics_seam() -> list[Finding]:
             )
         )
         findings.append(_check_seam_bytes(installed))
+    findings.append(_check_checkout_reach())
     return findings
 
 
+def _check_checkout_reach() -> Finding:
+    """Whether the installed woof can serve as the forecast's seam source.
+
+    THE BREAKAGE THIS SHAPE PREVENTS, measured 2026-08-28 on a virtualenv
+    holding only the published 2.5.8 wheels: this finding was a CONSTANT
+    string saying "an installed woof satisfies pip and does not satisfy the
+    pin", and it printed one line under an OK line reading "16 of 16 pinned
+    files are in this install and all 16 match".  Two adjacent lines, one of
+    them false, and the false one is the one that tells a user to go and
+    clone something.  A reason that is typed once and never re-measured
+    outlives the defect it was written for, so this one is DERIVED from the
+    same inspection the line above it prints.
+
+    Since 0.3.2 the driver's ``verify_arwen_checkout_git`` names an
+    install by its version and pip's RECORD digest where it names a clone by
+    its commit, so an install that carries all sixteen paths IS the seam
+    source and no clone is asked for.
+    """
+
+    from . import engine_pin
+
+    subject = "woof seam source (the forecast only)"
+    tail = (
+        "  The init and render doors need neither: they import no woof and "
+        "drive Rust binaries instead."
+    )
+    wanted = engine_pin.wanted_version()
+    root = engine_pin.installed_root()
+    absent: tuple[str, ...] = ()
+    total = len(engine_pin.seam_manifest())
+    if root is not None:
+        try:
+            absent = engine_pin.inspect_seam(root).absent
+        except Exception:  # pragma: no cover - a broken manifest module
+            absent = ()
+    if root is None or absent:
+        missing = ", ".join(absent) if absent else "the pinned paths"
+        count = len(absent) or total
+        return Finding(
+            subject=subject,
+            status=INFO,
+            detail=(
+                f"{count} of the {total} pinned paths "
+                f"{'is' if count == 1 else 'are'} not in this install "
+                f"({missing}), so the installed distribution "
+                "cannot satisfy the seam pin on its own.  Install woof "
+                f"{wanted}, or pass a git clone of woof at v{wanted} as "
+                "--gpuwm-checkout." + tail
+            ),
+            evidence={"absent": list(absent), "wanted": wanted},
+        )
+    return Finding(
+        subject=subject,
+        status=INFO,
+        detail=(
+            f"all {total} pinned paths resolve from this install, so the "
+            "forecast runs on it with no --gpuwm-checkout and its receipts "
+            "name the install by version and pip's RECORD digest.  A git "
+            f"clone of woof at v{wanted} passed as --gpuwm-checkout is "
+            "named by commit instead." + tail
+        ),
+        evidence={"absent": [], "wanted": wanted},
+    )
+
+
 def check_engines() -> list[Finding]:
-    """The three Rust binaries, and the one command that stages all of them."""
+    """Required Rust binaries and the command that stages them."""
 
     findings: list[Finding] = []
     # Asked once, of the INSTALLED woof, and reported plainly: whether the
@@ -817,7 +1005,23 @@ def check_engines() -> list[Finding]:
                 evidence={"resolution_order": engines.resolution_order(spec)},
             )
         )
+    findings.append(_check_observation_scorer())
     return findings
+
+
+def _check_observation_scorer() -> Finding:
+    """The observation scorer: absent only from a build of the sdist without a woof checkout."""
+
+    from . import observation_scorecard
+
+    subject = "hex_obs_scorecard (the observation scorer)"
+    try:
+        path = observation_scorecard.binary("hex_obs_scorecard")
+    except FileNotFoundError as error:
+        return Finding(subject=subject, status=MISSING, required=False,
+                       detail=f"{error}.  Forecasts still run; `woof hex score` and the forecast's "
+                              "automatic scorecard record NOT_MEASURED.")
+    return Finding(subject=subject, status=VERIFIED, detail=f"found: {path}", evidence={"path": path})
 
 
 def check_assets() -> list[Finding]:
@@ -840,6 +1044,58 @@ def check_assets() -> list[Finding]:
     ]
 
 
+def check_on_demand_assets() -> list[Finding]:
+    """Report pinned cache bytes without fetching or changing the cache."""
+    from . import assets
+    try:
+        return [Finding(subject=row['name'],
+                        status=MISSING if row['status'] == 'invalid' else VERIFIED if row['status'] == 'staged' else INFO,
+                        detail=row['detail'], required=row['status'] == 'invalid',
+                        remedy=f"woof hex fetch-assets --only {row['name']}" if row['status'] != 'staged' else None,
+                        evidence={'path': row['path'], 'sha256': row['sha256']})
+                for row in assets.staged_rows()]
+    except (OSError, ValueError, KeyError) as error:
+        return [Finding(subject='on-demand assets', status=MISSING, required=True,
+                        detail=str(error), remedy='reinstall woof hex')]
+
+
+def check_physics_resources() -> list[Finding]:
+    """Report MPAS cache readiness without fetching, compiling or opening a GPU."""
+    from .mpasphys import resources_build as resources
+    from .mpasphys import resources_fetch
+
+    remedy = 'woof hex physics-resources fetch'
+    subjects = {'thompson-tables': 'MPAS physics DATA (Thompson + upstream tables)',
+                'physics-resources': 'MPAS physics packet',
+                'pool-reader': 'MPAS physics pool reader'}
+    try:
+        installed = resources.read_installed()['resources']
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return [Finding(subject=subject, status=MISSING, required=True,
+                        detail=f'invalid physics resource record: {error}', remedy=remedy)
+                for subject in subjects.values()]
+    findings = []
+    for key, subject in subjects.items():
+        if key not in installed:
+            findings.append(Finding(subject=subject, status=INFO,
+                                    detail='not staged; the MPAS-physics route (the hex default) fetches it on first use',
+                                    remedy=remedy,
+                                    evidence={'installed_record': str(resources.installed_record_path())}))
+            continue
+        try:
+            path = resources.resolve_resource(key)
+            evidence = resources_fetch.verify_installed_data() if key == 'thompson-tables' else {
+                'path': str(path), 'sha256': installed[key]['sha256']}
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            findings.append(Finding(subject=subject, status=MISSING, required=True,
+                                    detail=str(error), remedy=remedy))
+        else:
+            findings.append(Finding(subject=subject, status=VERIFIED,
+                                    detail='installed bytes match their recorded SHA-256 pins',
+                                    evidence=evidence))
+    return findings
+
+
 def collect() -> list[Finding]:
     """Every finding, in the order a reader should meet them."""
 
@@ -851,6 +1107,8 @@ def collect() -> list[Finding]:
     findings.extend(check_gpu_architecture())
     findings.extend(check_engines())
     findings.extend(check_assets())
+    findings.extend(check_on_demand_assets())
+    findings.extend(check_physics_resources())
     return findings
 
 
@@ -945,7 +1203,9 @@ def add_doctor_parser(commands: argparse._SubParsersAction) -> None:
 
 
 def run_doctor(arguments: argparse.Namespace) -> int:
-    findings = collect()
+    from .assets import inspection_only
+    with inspection_only():
+        findings = collect()
     if getattr(arguments, "json", False):
         print(
             json.dumps(

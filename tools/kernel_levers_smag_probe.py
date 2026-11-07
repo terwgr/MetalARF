@@ -25,7 +25,7 @@ def compile_pair(baseline_path):
     from woof.core.kernels import module_source, module_source_int_defines
 
     ordinary = module_source("smag2d")
-    marker = "// woof/core/kernels/smag2d.cu"
+    marker = "// gpuwm/core/kernels/smag2d.cu"
     prefix = ordinary[:ordinary.index(marker)]
     baseline_unit = Path(baseline_path).read_text(encoding="utf-8")
     baseline = prefix + baseline_unit

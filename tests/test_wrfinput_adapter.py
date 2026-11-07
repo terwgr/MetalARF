@@ -16,15 +16,27 @@ def test_file_coordinate_is_retained_and_base_theta_is_absolute():
     names = ('znw', 'znu', 'dnw', 'rdnw', 'dn', 'rdn', 'fnp', 'fnm',
              'c1f', 'c2f', 'c3f', 'c4f', 'c1h', 'c2h', 'c3h', 'c4h')
     raw = {name.upper(): np.arange(3, dtype=np.float32) for name in names}
-    raw.update(P_TOP=np.float32(5000), T_INIT=np.array([-6., 168.], np.float32),
-               MUB=np.array([80000.]), PB=np.array([90000.]), ALB=np.array([1.]),
-               PHB=np.array([0., 1000.]), HGT=np.array([0.]))
+    raw.update(C3H=np.array([0.9, 0.5], np.float32), C4H=np.zeros(2, np.float32),
+               C3F=np.array([1.0, 0.7, 0.0], np.float32), C4F=np.zeros(3, np.float32),
+               P_TOP=np.float32(5000), T_INIT=np.array([[[-6.]], [[168.]]], np.float32),
+               MUB=np.array([[80000.]]), PB=np.array([[[90000.]], [[40000.]]]),
+               ALB=np.ones((2, 1, 1)), PHB=np.zeros((3, 1, 1)),
+               HGT=np.array([[300.]], np.float32),
+               P00=np.float32(1e5), T00=np.float32(290.), TLP=np.float32(50.),
+               TISO=np.float32(200.), TLP_STRAT=np.float32(-11.),
+               P_STRAT=np.float32(0.))
     coord, base = wrf_coordinate_and_base(SimpleNamespace(
         raw=raw, global_attributes={'HYBRID_OPT':2, 'ETAC':.2}))
-    np.testing.assert_array_equal(base.thb, [294., 468.])
     for name in names:
         assert getattr(coord, name) is raw[name.upper()]
-    assert base.pb is raw['PB']
+    # The base state is WRF's cold-start rebuild (start_em.F:554-680), not
+    # the file's words: test_wrfinput_start_base_wrf461 pins it against
+    # wrf.exe's own minute-0 history.
+    from woof.ingest.wrfinput import wrf_start_base_state
+    start = wrf_start_base_state(raw, 2)
+    np.testing.assert_array_equal(base.pb, start['PB'])
+    np.testing.assert_array_equal(base.thb, start['T_INIT'] + np.float32(300.))
+    assert not np.array_equal(base.pb, raw['PB'])
 
 
 def test_wrf_command_help_is_cpu_only_and_executable(tmp_path):
@@ -77,7 +89,12 @@ def test_actual_real_pair_and_wrong_pair_controls(real_pair, poison):
         with pytest.raises(ValueError, match='initial|pair'):
             read()
     else:
-        assert len(read().intervals) == 1
+        # A front door consumes every validated record since da2e1dd8fae
+        # (run_seconds no longer holds the read to the first interval), so
+        # the pair yields the whole wrfbdy coverage.
+        coverage = run.coverage
+        assert len(read().intervals) == round(
+            coverage.coverage_seconds / coverage.forcing_interval_seconds)
 
 
 def test_first_eos_and_cloud_preparation_match_real_file_physical_state(real_pair):
@@ -106,6 +123,24 @@ def test_first_eos_and_cloud_preparation_match_real_file_physical_state(real_pai
                           ('qv', 'qc', 'qi', 'qs', 'temperature', 'pressure')])
     assert bool(cp.isfinite(cloud).all())
     assert bool(((cloud >= 0) & (cloud <= 1)).all())
+
+
+@pytest.mark.gpu
+def test_strict_coordinate_diffusion_retains_the_real_cold_start_reference(real_pair):
+    cp=pytest.importorskip("cupy")
+    from woof.wrf_exact import ENABLED
+    if not ENABLED:
+        pytest.skip("the stock thermal reference is a strict arithmetic arm")
+    from woof.ingest.wrfinput import restore_domain_state,wrf_start_base_state
+    run,restored=real_pair
+    cfg=replace(run.experiment.root.run,diff_opt=1)
+    state=restore_domain_state(restored,cfg)
+    expected=wrf_start_base_state(restored.raw,cfg.hypsometric_opt)["T_INIT"]
+    cp.testing.assert_array_equal(state._scratch["diff1_theta_initial"].view(cp.uint32),
+                                  cp.asarray(expected).view(cp.uint32))
+    # A real atmospheric sounding must distinguish the base reference from
+    # the full initial state that made the first diffusion call zero.
+    assert bool(cp.any(state._scratch["diff1_theta_initial"] != state.thp).item())
 
 
 def test_noah_uses_requested_vegetation_table_with_same_soil_authority():
@@ -172,10 +207,13 @@ def test_translator_file_landuse_context_accepts_usgs_and_refuses_false_count(tm
     fixed = {row.key:row for row in report.fixed}
     assert fixed['num_land_cat'].fixed_value == 24
     assert 'USGS' in fixed['num_land_cat'].reason
-    # The adapter's land-use initialization consumes the namelist value;
-    # Noah's surface step runs WRF's 0.5 branch (only RUC carries 0.02).
-    assert fixed['fractional_seaice'].fixed_value == 1
-    assert 'land-use' in fixed['fractional_seaice'].reason
+    # Noah's surface step runs WRF's whole-cell 0.5 branch (only RUC carries
+    # 0.02), so fractional_seaice = 1 here is a declared divergence, not a
+    # fixed value (golden/namelist dbead7aef; test_namelist_import pins the
+    # same row).
+    assert 'fractional_seaice' not in fixed
+    (seaice,) = [s for s in report.substitutions if s.key == 'fractional_seaice']
+    assert (seaice.wrf_value, seaice.gpuwm_value) == (1, 0)
     with pytest.raises(ValueError, match='num_land_cat'):
         import_namelists(*paths, landuse_identity={'MMINLU':'MODIFIED_IGBP_MODIS_NOAH', 'NUM_LAND_CAT':21})
     with pytest.raises(ValueError, match='num_land_cat'):

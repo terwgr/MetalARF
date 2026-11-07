@@ -22,8 +22,10 @@ live in :mod:`woof.core.rrtm_taumol`; the coefficient tables in
 :mod:`woof.core.rrtm_tables`.
 
 Column layout follows Dudhia's adapter: woof state is bottom-to-top,
-WRF's 1-D radiation arrays are top-to-bottom, and the adapter owns that
-single packing boundary.  Inside, RRTM's own bottom-to-top ``1..NLAYERS``
+WRF's 1-D radiation arrays are top-to-bottom, and
+:func:`rrtmlwrad_columns` -- RRTMLWRAD's own packing, the seam the WRF
+column oracle grades (tools/rrtm_lw_wrf461_oracle,
+tests/test_rrtm_lw_wrf461_parity.py) -- owns that single packing boundary.  Inside, RRTM's own bottom-to-top ``1..NLAYERS``
 indexing is used, extended above the model top by the Cavallo buffer
 layers (``NLAYERS = kme + NINT(p_top_hPa/4) - 1``, ``rrtminit`` F:6783).
 
@@ -37,9 +39,12 @@ result:
   outside the table.  WRF guards only the surface value (``TBOUND`` is
   clamped to 339.99, F:3949-3953); level and layer temperatures are
   unguarded.  Here every one of the three is clamped into the 1-based
-  range ``[1, 180]`` before :func:`_planck_index` converts it to the
-  zero-based row, so the interpolation pair ``(row, row + 1)`` always
-  lands inside the 181 rows for any finite temperature.
+  range ``[1, 181]`` before :func:`_planck_index` converts it to the
+  zero-based row, and on the last row the upper neighbour is the row
+  itself, so the interpolation always lands inside the 181 rows for any
+  finite temperature.  At exactly 340 K (a legal TBOUND) that is WRF's
+  own value; above it WRF reads out of bounds and this port holds the
+  340 K row.
 * ``SETCOEF``'s round-off repair ``IF (JP(LAYSWTCH+1) .LE. 6)``
   (F:4363) reads one past the top layer when ``LAYSWTCH == NLAYERS``.
   The index is clamped to the last layer.
@@ -64,11 +69,12 @@ from functools import lru_cache
 
 import numpy as np
 
-from woof.core.rrtm import RRTM_DELTAP_HPA, rrtm_default_trace_gases
+from woof.core.rrtm import (RRTM_DELTAP_HPA, rrtm_default_trace_gases,
+                             rrtm_upper_layer_count)
 from woof.core.rrtm_tables import (RRTM_BPADE, RRTM_FLUXFAC, RRTM_NBANDS,
                                     RRTM_SECANG, RRTM_WTNUM,
                                     load_rrtm_lw_tables)
-from woof.core.rrtm_taumol import RRTM_NGPT, rrtm_taumol
+from woof.core.rrtm_taumol import RRTM_NGPT, _array_namespace, rrtm_taumol
 
 
 #: MM5ATM's molecular-weight ratios and cloud absorption coefficients,
@@ -168,12 +174,80 @@ def _device_constant(xp, dtype, key, build):
     return value
 
 
-def _array_namespace(*values):
-    """Return CuPy only when at least one input is a CUDA array."""
-    if any(hasattr(value, "__cuda_array_interface__") for value in values):
-        import cupy as cp
-        return cp
-    return np
+# ---------------------------------------------------------------------------
+# The float32 words gfortran's REAL arithmetic resolves to.
+#
+# WRF's LOG, EXP and ``**`` on REAL are the libm logf/expf/powf, which are
+# neither CUDA's device functions nor NumPy's float32 loops.  WOOF carries
+# its own float32 libm: on the host woof.core.noahmp_libm, on the device
+# the elementwise slab kernels of woof.core.noahmp_slab_libm, held bitwise
+# to the host one by tests/test_noahmp_slab_libm.py.  RRTM uses no other
+# transcendental.  The WRF column oracle (tools/rrtm_lw_wrf461_oracle)
+# measured CuPy's builtins against them here: PLOG, CO2MULT and the
+# rain/snow paths each moved by ULPs, which the band optical depths then
+# amplified.
+# ---------------------------------------------------------------------------
+
+def _logf(xp, x):
+    if xp is np:
+        from woof.core.noahmp_libm import logf_array
+        return logf_array(x)
+    from woof.core.noahmp_slab_libm import slab_logf
+    return slab_logf(x)
+
+
+def _expf(xp, x):
+    if xp is np:
+        from woof.core.noahmp_libm import expf
+        flat = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+        return np.fromiter((expf(v) for v in flat), dtype=np.float32,
+                           count=flat.size).reshape(np.shape(x))
+    from woof.core.noahmp_slab_libm import slab_expf
+    return slab_expf(x)
+
+
+def _powf(xp, x, exponent):
+    if xp is np:
+        from woof.core.noahmp_libm import powf_array
+        return powf_array(x, np.float32(exponent))
+    from woof.core.noahmp_slab_libm import slab_powf
+    return slab_powf(x, exponent)
+
+
+_SEQUENTIAL_SUM = None
+
+
+def _sequential_sum(xp, values):
+    """Sum over the last axis in index order, from +0.0, one rounding per add.
+
+    Every sum RRTM forms is a Fortran accumulation loop (O3DATA's
+    ``O3PROF(K)=O3PROF(K)+...`` over 31 climatology layers, RTRN's
+    ``DRAD = DRAD + RADLD(IPR)`` over 140 g-points), so its rounding
+    depends on the ORDER.  ``xp.sum`` is pairwise on NumPy and a tree
+    reduction on CuPy; neither is that order.  The oracle measured the
+    tree sum up to ~4e4 ULP off O3PROF.
+    """
+    if xp is np:
+        values = np.asarray(values)
+        total = np.zeros(values.shape[:-1], dtype=values.dtype)
+        for index in range(values.shape[-1]):
+            total = total + values[..., index]
+        return total
+    global _SEQUENTIAL_SUM
+    if _SEQUENTIAL_SUM is None:
+        # One thread per row.  Additions only, so there is nothing for
+        # NVRTC to contract into an FMA.
+        _SEQUENTIAL_SUM = xp.ElementwiseKernel(
+            "raw T x, int32 n", "T y",
+            "T acc = 0; const long long base = (long long)i * n; "
+            "for (int j = 0; j < n; ++j) { acc = acc + x[base + j]; } "
+            "y = acc;",
+            "gpuwm_rrtm_sequential_sum")
+    values = xp.ascontiguousarray(values)
+    out = xp.empty(values.shape[:-1], dtype=values.dtype)
+    if out.size:
+        _SEQUENTIAL_SUM(values, np.int32(values.shape[-1]), out)
+    return out
 
 
 def rrtm_layer_count(nz: int, p_top_pa: float) -> int:
@@ -184,10 +258,7 @@ def rrtm_layer_count(nz: int, p_top_pa: float) -> int:
     """
     if nz < 3:
         raise ValueError("RRTM longwave needs at least three model layers")
-    if not np.isfinite(p_top_pa) or p_top_pa <= 0.0:
-        raise ValueError("p_top_pa must be finite and positive")
-    buffers = int(np.floor(p_top_pa * 0.01 / RRTM_DELTAP_HPA + 0.5))
-    return int(nz) + buffers
+    return int(nz) + rrtm_upper_layer_count(p_top_pa)
 
 
 @lru_cache(maxsize=1)
@@ -240,7 +311,8 @@ def o3data_columns(xp, prlevh, nlay: int):
     pb2 = xp.maximum(bottom - ppwrkh[None, None, 1:32], zero)
     pt1 = xp.maximum(top - ppwrkh[None, None, :31], zero)
     pt2 = xp.maximum(top - ppwrkh[None, None, 1:32], zero)
-    weighted = ((pb2 - pb1 - pt2 + pt1) * o3wrk[None, None, :]).sum(axis=2)
+    weighted = _sequential_sum(xp, (pb2 - pb1 - pt2 + pt1)
+                               * o3wrk[None, None, :])
     return weighted / (prlevh[:, :nlay] - prlevh[:, 1:nlay + 1])
 
 
@@ -295,8 +367,8 @@ def mm5atm_columns(xp, tables, *, t, p_mb, dz, qv, qc, qr, qi, qs, qg,
     ro = p_mb / (real(r) * t) * real(100.0)
     clwp = ro * qc * dz * real(1000.0)
     ciwp = ro * qi * dz * real(1000.0)
-    plwp = (ro * qr) ** real(0.75) * dz * real(1000.0)
-    piwp = (ro * qs) ** real(0.75) * dz * real(1000.0)
+    plwp = _powf(xp, ro * qr, real(0.75)) * dz * real(1000.0)
+    piwp = _powf(xp, ro * qs, real(0.75)) * dz * real(1000.0)
 
     #  TBOUND, F:3946-3953.  WRF resets a hotter surface to 339.99 and
     #  prints; here it is a silent clamp because there is no per-column
@@ -329,8 +401,12 @@ def mm5atm_columns(xp, tables, *, t, p_mb, dz, qv, qc, qr, qi, qs, qg,
     wkl[:, :nz, 2] = o3prof * real(_AMDO)
     # N2O/CH4 are filled as constants by F:3917-3918 (n2ovmr/amdn and
     # ch4vmr/amdc) and multiplied straight back by amdn/amdc here.
-    wkl[:, :nz, 3] = real(n2ovmr / _AMDN) * real(_AMDN)
-    wkl[:, :nz, 5] = real(ch4vmr / _AMDC) * real(_AMDC)
+    # N2O(:) = n2ovmr / amdn divides the REAL(8) gas by the REAL amdn in
+    # binary64 and stores into REAL; WKL then multiplies back in float32.
+    wkl[:, :nz, 3] = (real(float(n2ovmr) / float(real(_AMDN)))
+                      * real(_AMDN))
+    wkl[:, :nz, 5] = (real(float(ch4vmr) / float(real(_AMDC)))
+                      * real(_AMDC))
     amm = ((real(1.0) - wkl[:, :nz, 0]) * real(_AMD)
            + wkl[:, :nz, 0] * real(_AMW))
     coldry[:, :nz] = ((pz[:, :nz] - pz[:, 1:nz + 1]) * real(1.0e3)
@@ -402,6 +478,7 @@ def mm5atm_columns(xp, tables, *, t, p_mb, dz, qv, qc, qr, qi, qs, qg,
         "pavel": pavel, "tavel": tavel, "pz": pz, "tz": tz,
         "cldfrac": cldfrac, "taucloud": taucloud, "coldry": coldry,
         "wkl": wkl, "wx": wx, "tbound": tbound, "semiss": semiss,
+        "o3prof": o3prof,
     }
 
 
@@ -415,9 +492,10 @@ def setcoef_columns(xp, tables, *, pavel, tavel, coldry, wkl):
         lambda: tables.statics["PREFLOG"])
     tref = _device_constant(
         xp, dtype, (id(tables), "TREF"), lambda: tables.statics["TREF"])
-    stpfac = real(296.0 / 1013.0)
+    # STPFAC = 296./1013.: two REAL literals, a float32 quotient.
+    stpfac = real(296.0) / real(1013.0)
 
-    plog = xp.log(pavel)
+    plog = _logf(xp, pavel)
     jp = xp.clip(xp.trunc(real(36.0) - real(5.0) * (plog + real(0.04))
                           ).astype(xp.int32), 1, 58)
     fp = real(5.0) * (preflog[jp - 1] - plog)
@@ -461,7 +539,7 @@ def setcoef_columns(xp, tables, *, pavel, tavel, coldry, wkl):
     colch4 = xp.where(colch4 == real(0.0), floor, colch4)
     co2reg = real(3.55e-24) * coldry
     co2mult = ((colco2 - co2reg) * real(272.63)
-               * xp.exp(real(-1919.4) / tavel)
+               * _expf(xp, real(-1919.4) / tavel)
                / (real(8.7604e-4) * tavel))
 
     compfp = real(1.0) - fp
@@ -504,13 +582,17 @@ def _planck_index(xp, temperature, dtype):
     ``0:5000`` in the Fortran and are indexed here without any shift;
     the two conventions really do sit side by side in the source.
 
-    The clamp is applied to the 1-based value so the returned row pair
-    ``(row, row + 1)`` stays inside ``[0, 180]``.  See the module
-    docstring for why the clamp exists at all.
+    The clamp is applied to the 1-based value and keeps the row inside
+    ``[0, 180]``, the LAST row included: 340.0 K exactly is a legal TBOUND
+    (MM5ATM resets only ``TBOUND .GT. 340.``), it indexes row 181 with a
+    zero fraction, and WRF's value there is ``TOTPLNK(181)`` itself.  The
+    old clamp to row 180 read the 339 K row instead -- 2.3 W m-2 of OLR on
+    the oracle's 340 K surface.  See the module docstring for why a clamp
+    exists at all.
     """
     index = xp.trunc(temperature - dtype.type(159.0)).astype(xp.int32)
     frac = temperature - xp.trunc(temperature)
-    return xp.clip(index, 1, _TOTPLNK_ROWS - 1) - 1, frac
+    return xp.clip(index, 1, _TOTPLNK_ROWS) - 1, frac
 
 
 def _planck_bands(totplnk, delwave, row, frac):
@@ -520,9 +602,16 @@ def _planck_bands(totplnk, delwave, row, frac):
     :func:`_planck_index`.  Hoisted out of :func:`rtrn_columns` so the
     Stefan-Boltzmann table check in the test suite exercises the shipped
     arithmetic rather than a copy of it.
+
+    On the last row the upper neighbour is the row itself.  At exactly
+    340 K the fraction is zero and the result is ``TOTPLNK(181)``, which
+    is what WRF computes (its ``TOTPLNK(182)`` operand is multiplied by
+    that zero).  Above 340 K WRF reads past the table (a level or layer
+    temperature is never clamped there); this port holds the last row
+    instead, a divergence documented in the module docstring.
     """
     low = totplnk[row]
-    high = totplnk[row + 1]
+    high = totplnk[(row + 1).clip(0, _TOTPLNK_ROWS - 1)]
     return delwave * (low + frac[..., None] * (high - low))
 
 
@@ -569,7 +658,7 @@ def rtrn_columns(xp, tables, *, tavel, pz, tz, cldfrac, taucloud, itr,
 
     #  Cloud optics, F:6350-6360.
     odcld = RRTM_SECANG.astype(dtype) * taucloud
-    abscld = real(1.0) - xp.exp(-odcld)
+    abscld = real(1.0) - _expf(xp, -odcld)
     efclfrac = abscld * cldfrac
     icldlyr = cldfrac > real(0.0)
 
@@ -625,16 +714,18 @@ def rtrn_columns(xp, tables, *, tavel, pz, tz, cldfrac, taucloud, itr,
         #  has been crossed; until then it tracks the total stream
         #  (F:6485-6492).
         radclrd = xp.where(cloudy3 | iclddn[:, None], radclrd_step, radld)
-        totdflux[:, lev - 1] = radld.sum(axis=1) * RRTM_WTNUM.astype(dtype)
-        totdclfl[:, lev - 1] = radclrd.sum(axis=1) * RRTM_WTNUM.astype(dtype)
+        totdflux[:, lev - 1] = (_sequential_sum(xp, radld)
+                                * RRTM_WTNUM.astype(dtype))
+        totdclfl[:, lev - 1] = (_sequential_sum(xp, radclrd)
+                                * RRTM_WTNUM.astype(dtype))
 
     #  Surface emission and reflection, F:6506-6520.
     radlu = raduemit + (real(1.0) - semis) * radld
     radclru = raduemit + (real(1.0) - semis) * radclrd
     totuflux = xp.zeros((ncol, nlayers + 1), dtype=dtype)
     totuclfl = xp.zeros((ncol, nlayers + 1), dtype=dtype)
-    totuflux[:, 0] = radlu.sum(axis=1) * RRTM_WTNUM.astype(dtype)
-    totuclfl[:, 0] = radclru.sum(axis=1) * RRTM_WTNUM.astype(dtype)
+    totuflux[:, 0] = _sequential_sum(xp, radlu) * RRTM_WTNUM.astype(dtype)
+    totuclfl[:, 0] = _sequential_sum(xp, radclru) * RRTM_WTNUM.astype(dtype)
 
     #  UPWARD RADIATIVE TRANSFER, F:6527-6574.
     for lev in range(1, nlayers + 1):
@@ -649,8 +740,10 @@ def rtrn_columns(xp, tables, *, tavel, pz, tz, cldfrac, taucloud, itr,
         radlu_clear = radlu + (bbu[:, k, :] - radlu) * layer_abss
         radlu = xp.where(cloudy3, radlu_cloudy, radlu_clear)
         radclru = radclru + (bbu[:, k, :] - radclru) * layer_abss
-        totuflux[:, lev] = radlu.sum(axis=1) * RRTM_WTNUM.astype(dtype)
-        totuclfl[:, lev] = radclru.sum(axis=1) * RRTM_WTNUM.astype(dtype)
+        totuflux[:, lev] = (_sequential_sum(xp, radlu)
+                            * RRTM_WTNUM.astype(dtype))
+        totuclfl[:, lev] = (_sequential_sum(xp, radclru)
+                            * RRTM_WTNUM.astype(dtype))
 
     #  Radiances to fluxes and heating rates, F:6580-6596.
     fluxfac = RRTM_FLUXFAC.astype(dtype)
@@ -672,7 +765,7 @@ def rtrn_columns(xp, tables, *, tavel, pz, tz, cldfrac, taucloud, itr,
 
 def rrtm_longwave_columns(*, t, p_mb, dz, qv, qc, qr, qi, qs, qg, cldfra,
                           tw, pw_mb, tsfc, emiss, r, g, co2vmr, n2ovmr,
-                          ch4vmr, nlayers, tables=None):
+                          ch4vmr, nlayers, tables=None, stages=False):
     """``RRTM``'s per-column driver (F:2059-2298) for a block of columns.
 
     Layer inputs are ``(ncol, nz)`` TOP-DOWN, level inputs
@@ -729,6 +822,12 @@ def rrtm_longwave_columns(*, t, p_mb, dz, qv, qc, qr, qi, qs, qg, cldfra,
         "totdflux": totdflux,
         "totuflux": totuflux,
         "pz": profile["pz"],
+        # ``stages=True`` (the WRF column oracle's stage-by-stage
+        # comparison) also hands back every intermediate RRTM's own
+        # subroutines leave behind: MM5ATM's profile, SETCOEF's indices
+        # and factors, GASABS's TAUG/PFRAC/ITR and RTRN's clear-sky HTRC.
+        **({"stages": {**profile, **coef, "taug": taug, "pfrac": pfrac,
+                       "itr": itr, "htrc": htrc}} if stages else {}),
     }
 
 
@@ -750,6 +849,109 @@ def _t8w_columns(xp, t3d, z_at_w, fnm, fnp):
     w1 = ((z_at_w[:, nz] - z[:, nz - 2]) / (z[:, nz - 1] - z[:, nz - 2]))
     t8w[:, nz] = w1 * t3d[:, nz - 1] + (real(1.0) - w1) * t3d[:, nz - 2]
     return t8w
+
+
+def rrtmlwrad_columns(*, t3d, p3d, pi3d, dz8w, qv, qc, qr, qi, qs, qg,
+                      cldfra, p8w, t8w, tsk, emiss, nlayers, co2vmr,
+                      n2ovmr, ch4vmr, icloud=1, r=None, g=None, chunk=None,
+                      tables=None, stages=False):
+    """``RRTMLWRAD`` (F:1731-2020) for a block of WRF columns.
+
+    The scheme's public boundary, in WRF's own layout: every input is
+    BOTTOM-UP like the 3-D arrays the radiation driver hands RRTMLWRAD,
+    ``(ncol, nz)`` for mass fields, ``(ncol, nz+1)`` for ``p8w``/``t8w``
+    (Pa, K) and ``(ncol,)`` for ``tsk``/``emiss``.  ``cldfra`` is the
+    driver's CLDFRA.  Returns ``rthraten``/``rthratenc`` (``(ncol, nz)``,
+    bottom-up, K s-1 of potential temperature), ``glw`` and ``olr``.
+
+    This is the seam the WRF column oracle grades
+    (``tools/rrtm_lw_wrf461_oracle``) and the one the adapter below calls,
+    so the packing it reproduces -- the top-down reversal, the hPa
+    conversion, the hydrometeor clipping and the ``ICLOUD`` switch -- is
+    measured, not assumed.  RRTMLWRAD's F_QI-absent branch (F:1929-1943)
+    is not reproduced; see :meth:`RRTMLongwaveRadiation.
+    longwave_with_cloud_fraction` for why it is unreachable here.
+    """
+    from woof.core import constants as c
+
+    r = c.RD if r is None else r
+    g = c.G if g is None else g
+    xp = _array_namespace(t3d, p3d, qv)
+    real = t3d.dtype.type
+    zero = real(0.0)
+    ncol, nz = t3d.shape
+
+    def top_down(array):
+        return xp.ascontiguousarray(array[:, ::-1])
+
+    qv_td = top_down(xp.maximum(qv, zero))
+    if icloud:
+        cldfra_td = top_down(cldfra)
+        qc_td = top_down(xp.maximum(qc, zero))
+        qr_td = top_down(xp.maximum(qr, zero))
+        qi_td = top_down(xp.maximum(qi, zero))
+        qs_td = top_down(xp.maximum(qs, zero))
+        qg_td = top_down(xp.maximum(qg, zero))
+    else:
+        #  RRTMLWRAD's "IF (ICLOUD .ne. 0)" block never runs, leaving
+        #  every hydrometeor and the cloud fraction at zero (F:1888-1971).
+        cldfra_td = xp.zeros((ncol, nz), dtype=t3d.dtype)
+        qc_td = qr_td = qi_td = qs_td = qg_td = cldfra_td
+    t_td = top_down(t3d)
+    dz_td = top_down(dz8w)
+    tw_td = top_down(t8w)
+    # P1D = P3D/100. and Pw1D = p8w/100. (F:1886, 1909): a division.  The
+    # adapter used to multiply by 0.01, which is not the same float32
+    # operation; the oracle measured it one ULP off PAVEL and PZ.
+    hundred = real(100.0)
+    p_mb = top_down(p3d) / hundred
+    pw_mb = top_down(p8w) / hundred
+
+    tten = xp.empty((ncol, nz), dtype=t3d.dtype)
+    ttenc = xp.empty((ncol, nz), dtype=t3d.dtype)
+    glw = xp.empty((ncol,), dtype=t3d.dtype)
+    olr = xp.empty((ncol,), dtype=t3d.dtype)
+    step = ncol if chunk is None else max(int(chunk), 1)
+    if stages and step < ncol:
+        raise ValueError("stages=True needs the block in one chunk")
+    for start in range(0, ncol, step):
+        block = slice(start, min(start + step, ncol))
+        result = rrtm_longwave_columns(
+            t=t_td[block], p_mb=p_mb[block], dz=dz_td[block],
+            qv=qv_td[block], qc=qc_td[block], qr=qr_td[block],
+            qi=qi_td[block], qs=qs_td[block], qg=qg_td[block],
+            cldfra=cldfra_td[block], tw=tw_td[block], pw_mb=pw_mb[block],
+            tsfc=tsk[block], emiss=emiss[block], r=r, g=g,
+            co2vmr=co2vmr, n2ovmr=n2ovmr, ch4vmr=ch4vmr, nlayers=nlayers,
+            tables=tables, stages=stages)
+        tten[block] = result["tten"]
+        ttenc[block] = result["ttenc"]
+        glw[block] = result["glw"]
+        olr[block] = result["olr"]
+
+    #  RRTMLWRAD F:2010-2013: rthraten += tten/pi3d, bottom-up.
+    out = {"rthraten": tten / pi3d, "rthratenc": ttenc / pi3d,
+           "glw": glw, "olr": olr}
+    if stages:
+        out["stages"] = {**result["stages"], "tten": tten, "ttenc": ttenc,
+                         "totdflux": result["totdflux"],
+                         "totuflux": result["totuflux"],
+                         "htr": result["htr"]}
+    return out
+
+
+def _classic_trace_gases(valid_time, ghg_input, overrides):
+    """Resolve the classic RRTM gases at the radiation valid time."""
+    gases = rrtm_default_trace_gases(valid_time.year, overrides)
+    if int(ghg_input) == 1:
+        from woof.core.camtr_gases import camtr_trace_gases
+        hour = (valid_time.hour + valid_time.minute / 60.0
+                + valid_time.second / 3600.0 + valid_time.microsecond / 3.6e9)
+        julian = np.float32((valid_time.timetuple().tm_yday - 1) + hour / 24.0)
+        camtr = camtr_trace_gases(valid_time.year, julian)
+        gases = {**gases, **{name: camtr[name] for name in ("co2", "n2o", "ch4")},
+                 **(overrides or {})}
+    return gases
 
 
 @dataclass
@@ -778,12 +980,18 @@ class RRTMLongwaveRadiation:
     #: answer is byte identical either way.
     column_chunk: int | None = None
     trace_gas_overrides: dict[str, float] | None = None
+    #: WRF ghg_input: 1 reads CO2/N2O/CH4 from the CAMtr table at every
+    #: call (RRTMLWRAD, module_ra_rrtm.F:1853-1854; REAL(8) values, used
+    #: as such), 0 the fixed-gas formula.
+    ghg_input: int = 0
     update_count: int = field(default=0, init=False)
     #: ``(ncol, nlayers) -> resolved chunk``, filled by eager solves only.
     #: Plain ints, so it never enters the restart classifier's array walk.
     _auto_chunk: dict = field(default_factory=dict, init=False, repr=False)
 
     publishes_olr = True
+    #: The driver CLDFRA RRTMLWRAD radiated through (zeros under icloud=0).
+    publishes_cldfra = True
     #: The GLW buffer is produced by this scheme, not carried in.
     glw_provenance = "scheme"
 
@@ -826,8 +1034,8 @@ class RRTMLongwaveRadiation:
                 self.longitude_deg, dtype=np.float32)
         if self.latitude_deg.shape != self.longitude_deg.shape:
             raise ValueError("radiation latitude/longitude shapes must match")
-        if self.icloud not in (0, 1):
-            raise ValueError("icloud must be 0 or 1")
+        if self.icloud not in (0, 1, 2):
+            raise ValueError("icloud=3 requires unported cal_cldfra3 condensate adjustment; choose 0, 1 or 2")
         if self.column_chunk is not None:
             effective_column_chunk(self.column_chunk, 1)  # validate the explicit pin
         # Fail closed at construction if the packaged tables are missing
@@ -845,17 +1053,32 @@ class RRTMLongwaveRadiation:
         return cp.ascontiguousarray(
             array.transpose(1, 2, 0).reshape(ny * nx, nz)[:, ::-1])
 
+    @staticmethod
+    def _columns(array):
+        """``(nz, ny, nx)`` model field -> ``(ncol, nz)`` BOTTOM-UP columns."""
+        import cupy as cp
+        nz, ny, nx = array.shape
+        return cp.ascontiguousarray(
+            array.transpose(1, 2, 0).reshape(ny * nx, nz))
+
     def _longwave_metal(self, *, atmosphere, fields, state, cfg):
         """Run the classic RRTM caller with Metal resident columns."""
+        from woof.wrf_exact import ENABLED as _strict
+        if _strict and self.icloud == 2:
+            raise NotImplementedError("strict Metal classic RRTM icloud=2 is not supported")
+        if _strict and (int(getattr(cfg, "mp_physics", 0)) != 0
+                        or int(getattr(cfg, "bl_pbl_physics", 0)) != 0):
+            raise NotImplementedError("strict Metal classic RRTM requires no microphysics or PBL")
         import numpy as np
         from woof.metal.array import MetalArray, MetalArrayModule
         from woof.metal import rrtm_lw_family as metal_lw
+        from woof.metal.rrtmgp_prepare_family import submit_pack_columns
         from woof.core import constants as c
         from woof.core.mynn_radiation import (merge_mynn_bl_clouds,
                                                mynn_bl_cloud_active,
                                                wrf_itimestep)
         from woof.core.rrtmg_legacy import legacy_cloud_fraction_flags
-        from woof.core.rrtmgp import cal_cldfra1
+        from woof.core.rrtmgp import cal_cldfra1, cal_cldfra2
         temperature = atmosphere["temperature"]
         if not isinstance(temperature, MetalArray) or temperature.ndim != 3:
             raise TypeError("classic RRTM Metal caller needs a Metal temperature field")
@@ -866,6 +1089,7 @@ class RRTMLongwaveRadiation:
         ptop = self._resolve_p_top(atmosphere, state)
         nlayers = rrtm_layer_count(nz, ptop)
         context = temperature.buffer.context
+        metal_lw._check_layer_geometry(ncol, nlayers, context)
         arrays = MetalArrayModule(context)
 
         def as_metal(value, dtype=np.float32):
@@ -886,23 +1110,32 @@ class RRTMLongwaveRadiation:
         qi = pack(self._state_field(state, "qi", atmosphere["qi"]))
         qs = pack(self._state_field(state, "qs", zero3))
         qg = pack(self._state_field(state, "qg", zero3))
+        if _strict:
+            # Cloud selection sees the same nonnegative moisture as the source caller.
+            qv, qc, qi, qs = (arrays.asarray(np.maximum(value.to_numpy(), np.float32(0)))
+                              for value in (qv, qc, qi, qs))
         tcols = pack(temperature)
         pcols = pack(atmosphere["pressure"])
         dzcols = pack(atmosphere["dz"])
         if self.icloud:
             f_qi, f_qs = legacy_cloud_fraction_flags(int(getattr(cfg, "mp_physics", 0)))
-            cldfra = cal_cldfra1(qv, qc, qi, qs, tcols, pcols,
-                                 f_qc=True, f_qi=f_qi, f_qs=f_qs)
-            active_bl = mynn_bl_cloud_active(getattr(cfg, "bl_pbl_physics", 0),
-                                             getattr(cfg, "icloud_bl", 0))
+            mp = int(getattr(cfg, "mp_physics", 0))
+            cldfra = (cal_cldfra2(qc, qi, f_qc=mp != 0, f_qi=f_qi)
+                      if self.icloud == 2 else
+                      cal_cldfra1(qv, qc, qi, qs, tcols, pcols,
+                                   f_qc=True, f_qi=f_qi, f_qs=f_qs, mp_physics=mp))
+            active_bl = self.icloud == 1 and mynn_bl_cloud_active(
+                getattr(cfg, "bl_pbl_physics", 0), getattr(cfg, "icloud_bl", 0))
             qc, qi, cldfra = merge_mynn_bl_clouds(
                 qc, qi, cldfra,
                 qc_bl=pack(fields["qc_bl"]) if active_bl else None,
                 qi_bl=pack(fields["qi_bl"]) if active_bl else None,
                 cldfra_bl=pack(fields["cldfra_bl"]) if active_bl else None,
                 bl_pbl_physics=getattr(cfg, "bl_pbl_physics", 0),
-                icloud_bl=getattr(cfg, "icloud_bl", 0),
-                itimestep=wrf_itimestep(state.elapsed_seconds, cfg.dt) if active_bl else 1)
+                icloud_bl=getattr(cfg, "icloud_bl", 0) if active_bl else 0,
+                itimestep=wrf_itimestep(state.elapsed_seconds, cfg.dt) if active_bl else 1,
+                bl_mynn_version=getattr(cfg, "bl_mynn_version", "wrf_461"),
+                temperature=tcols if active_bl else None)
         else:
             cldfra = arrays.zeros((ncol, nz), np.float32)
             qc = arrays.zeros((ncol, nz), np.float32)
@@ -919,7 +1152,7 @@ class RRTMLongwaveRadiation:
         tsfc = tsfc.view((ncol,), byte_offset=tsfc.byte_offset)
         emiss = emiss.view((ncol,), byte_offset=emiss.byte_offset)
         valid_time = self.start_time + timedelta(seconds=float(state.elapsed_seconds))
-        gases = rrtm_default_trace_gases(valid_time.year, self.trace_gas_overrides)
+        gases = _classic_trace_gases(valid_time, self.ghg_input, self.trace_gas_overrides)
         tables = self._tables
         uploaded = metal_lw.upload_tables(context, tables)
 
@@ -961,13 +1194,18 @@ class RRTMLongwaveRadiation:
             tf_table=uploaded["tf"], trans_table=uploaded["trans"],
             ngb0=metal_lw._upload(context, (id(tables), "NGB0"),
                                   np.asarray(tables.ngb, dtype=np.int32) - 1),
-            exner=as_metal(atmosphere["exner"]).view((ncol, nz)),
+            exner=submit_pack_columns(as_metal(atmosphere["exner"])),
             rthratenlw=rthratenlw,
             glw=glw, olr=olr, ncol=ncol, nmodel=nz, nlay=nlayers,
             ny=ny, nx=nx, heatfac=float(tables.statics["HEATFAC"][0]),
-            bpade=float(1.0 / 0.278), fluxfac=float(2.0 * np.arcsin(1.0) * 2.0e4))
+            bpade=float(RRTM_BPADE) if _strict else float(1.0 / 0.278),
+            fluxfac=float(RRTM_FLUXFAC) if _strict else float(2.0 * np.arcsin(1.0) * 2.0e4))
         self.update_count += 1
-        return rthratenlw, glw, olr
+        from woof.metal.rrtmgp_flux_diagnostics import columns_to_grid
+        cloud_top_down = columns_to_grid(cldfra, ny=ny, nx=nx)
+        cloud_bottom_up = self._top_down(cloud_top_down)
+        cloud_grid = columns_to_grid(cloud_bottom_up, ny=ny, nx=nx)
+        return rthratenlw, glw, olr, cloud_grid
 
     @staticmethod
     def _state_field(state, name, fallback):
@@ -1017,6 +1255,16 @@ class RRTMLongwaveRadiation:
 
     def longwave(self, *, atmosphere, fields, state, cfg):
         """Run RRTM LW and return ``(rthratenlw, glw, olr)`` on device."""
+        return self.longwave_with_cloud_fraction(
+            atmosphere=atmosphere, fields=fields, state=state, cfg=cfg)[:3]
+
+    def longwave_with_cloud_fraction(self, *, atmosphere, fields, state, cfg):
+        """:meth:`longwave` plus the driver CLDFRA it radiated through.
+
+        Returns ``(rthratenlw, glw, olr, cldfra)``; ``cldfra`` is the
+        (nz, ny, nx) bottom-up icloud=1 fraction after the MYNN merge
+        (zeros under icloud=0, where RRTMLWRAD's cloud block never runs).
+        """
         from woof.metal.array import MetalArray
         if isinstance(atmosphere["temperature"], MetalArray):
             return self._longwave_metal(
@@ -1027,7 +1275,7 @@ class RRTMLongwaveRadiation:
                                                mynn_bl_cloud_active,
                                                wrf_itimestep)
         from woof.core.rrtmg_legacy import legacy_cloud_fraction_flags
-        from woof.core.rrtmgp import cal_cldfra1
+        from woof.core.rrtmgp import cal_cldfra1, cal_cldfra2
 
         temperature = atmosphere["temperature"]
         nz, ny, nx = temperature.shape
@@ -1038,27 +1286,29 @@ class RRTMLongwaveRadiation:
         nlayers = rrtm_layer_count(nz, self._resolve_p_top(atmosphere, state))
 
         zero = cp.zeros_like(temperature)
-        qv = self._top_down(cp.maximum(atmosphere["qv"], cp.float32(0.0)))
-        qc = self._top_down(cp.maximum(
+        #  Bottom-up (ncol, nz) columns: WRF's own 3-D layout, which is what
+        #  rrtmlwrad_columns takes.  It owns the top-down reversal.
+        qv = self._columns(cp.maximum(atmosphere["qv"], cp.float32(0.0)))
+        qc = self._columns(cp.maximum(
             self._state_field(state, "qc", atmosphere["qc"]),
             cp.float32(0.0)))
-        qr = self._top_down(cp.maximum(
+        qr = self._columns(cp.maximum(
             self._state_field(state, "qr", zero), cp.float32(0.0)))
-        qi = self._top_down(cp.maximum(
+        qi = self._columns(cp.maximum(
             self._state_field(state, "qi", atmosphere["qi"]),
             cp.float32(0.0)))
-        qs = self._top_down(cp.maximum(
+        qs = self._columns(cp.maximum(
             self._state_field(state, "qs", zero), cp.float32(0.0)))
-        qg = self._top_down(cp.maximum(
+        qg = self._columns(cp.maximum(
             self._state_field(state, "qg", zero), cp.float32(0.0)))
-        t_cols = self._top_down(temperature)
-        p_cols = self._top_down(atmosphere["pressure"])
-        dz_cols = self._top_down(atmosphere["dz"])
+        t_cols = self._columns(temperature)
+        p_cols = self._columns(atmosphere["pressure"])
+        dz_cols = self._columns(atmosphere["dz"])
 
         if self.icloud:
             # cal_cldfra1 is the driver's icloud=1 branch and takes
-            # (ncol, nlay) blocks; it is elementwise, so the top-down
-            # packing carries through unchanged.
+            # (ncol, nlay) blocks; it is elementwise, so the column
+            # orientation does not enter it.
             #
             # F_QI/F_QS come from the scheme's Registry package membership
             # (the same resolution the legacy-RRTMG sibling performs),
@@ -1076,21 +1326,28 @@ class RRTMLongwaveRadiation:
             # (tests/test_rrtm_lw_cloud_fraction_flags.py measures it).
             f_qi, f_qs = legacy_cloud_fraction_flags(
                 int(getattr(cfg, "mp_physics", 0)))
-            cldfra = cal_cldfra1(qv, qc, qi, qs, t_cols, p_cols,
-                                 f_qc=True, f_qi=f_qi, f_qs=f_qs)
-            active_bl = mynn_bl_cloud_active(
+            if self.icloud == 2:
+                cldfra = cal_cldfra2(qc, qi,
+                    f_qc=int(getattr(cfg, "mp_physics", 0)) != 0, f_qi=f_qi)
+            else:
+                cldfra = cal_cldfra1(qv, qc, qi, qs, t_cols, p_cols,
+                                     f_qc=True, f_qi=f_qi, f_qs=f_qs,
+                                     mp_physics=int(getattr(cfg, "mp_physics", 0)))
+            active_bl = self.icloud == 1 and mynn_bl_cloud_active(
                 getattr(cfg, "bl_pbl_physics", 0),
                 getattr(cfg, "icloud_bl", 0))
             qc, qi, cldfra = merge_mynn_bl_clouds(
                 qc, qi, cldfra,
-                qc_bl=self._top_down(fields["qc_bl"]) if active_bl else None,
-                qi_bl=self._top_down(fields["qi_bl"]) if active_bl else None,
-                cldfra_bl=(self._top_down(fields["cldfra_bl"])
+                qc_bl=self._columns(fields["qc_bl"]) if active_bl else None,
+                qi_bl=self._columns(fields["qi_bl"]) if active_bl else None,
+                cldfra_bl=(self._columns(fields["cldfra_bl"])
                            if active_bl else None),
                 bl_pbl_physics=getattr(cfg, "bl_pbl_physics", 0),
-                icloud_bl=getattr(cfg, "icloud_bl", 0),
+                icloud_bl=(getattr(cfg, "icloud_bl", 0) if self.icloud == 1 else 0),
                 itimestep=(wrf_itimestep(state.elapsed_seconds, cfg.dt)
-                           if active_bl else 1))
+                           if active_bl else 1),
+                bl_mynn_version=getattr(cfg, "bl_mynn_version", "wrf_461"),
+                temperature=t_cols if active_bl else None)
             #  RRTMLWRAD's F_QI-absent branch (F:1929-1943), which moves
             #  QC into QI and QR into QS below 273.15 K, is deliberately
             #  not reproduced: it exists for schemes that do not carry
@@ -1098,78 +1355,58 @@ class RRTMLongwaveRadiation:
             #  for a warm-rain scheme, which is the same result WRF
             #  reaches through its warm_rain guard.
         else:
-            #  RRTMLWRAD's "IF (ICLOUD .ne. 0)" block never runs, leaving
-            #  every hydrometeor and the cloud fraction at zero
-            #  (F:1888-1971).
+            #  icloud=0: rrtmlwrad_columns zeroes every hydrometeor and the
+            #  fraction itself (RRTMLWRAD F:1888-1971); the published
+            #  CLDFRA is zero too.
             cldfra = cp.zeros_like(t_cols)
-            qc = cp.zeros_like(t_cols)
-            qr = cp.zeros_like(t_cols)
-            qi = cp.zeros_like(t_cols)
-            qs = cp.zeros_like(t_cols)
-            qg = cp.zeros_like(t_cols)
 
-        p8w = self._top_down(atmosphere["p_interface"])
-        z_at_w = self._top_down(atmosphere["z_interface"])
-        #  _top_down reverses to top-first; t8w's phy_prep recurrence wants
-        #  bottom-up columns, so reverse back for the build and again for
-        #  the RRTM frame.
+        p8w = self._columns(atmosphere["p_interface"])
+        z_at_w = self._columns(atmosphere["z_interface"])
         t8w = _t8w_columns(
-            cp, t_cols[:, ::-1], z_at_w[:, ::-1],
+            cp, t_cols, z_at_w,
             cp.asarray(state.fnm, dtype=cp.float32),
             cp.asarray(state.fnp, dtype=cp.float32))
-        tw_cols = cp.ascontiguousarray(t8w[:, ::-1])
 
         tsk = cp.asarray(fields["tsk"], dtype=cp.float32).reshape(-1)
         emiss = cp.asarray(fields["emiss"], dtype=cp.float32).reshape(-1)
+        pi3d = self._columns(atmosphere["exner"])
 
         valid_time = (self.start_time
                       + timedelta(seconds=float(state.elapsed_seconds)))
-        gases = rrtm_default_trace_gases(valid_time.year, self.trace_gas_overrides)
+        gases = _classic_trace_gases(valid_time, self.ghg_input, self.trace_gas_overrides)
 
-        tten = cp.empty((ncol, nz), dtype=cp.float32)
-        glw = cp.empty((ncol,), dtype=cp.float32)
-        olr = cp.empty((ncol,), dtype=cp.float32)
-        hpa = cp.float32(0.01)
-        chunk = self._column_chunk_for(ncol, nlayers, cp)
-        for start in range(0, ncol, chunk):
-            stop = min(start + chunk, ncol)
-            block = slice(start, stop)
-            result = rrtm_longwave_columns(
-                t=t_cols[block], p_mb=p_cols[block] * hpa,
-                dz=dz_cols[block], qv=qv[block], qc=qc[block],
-                qr=qr[block], qi=qi[block], qs=qs[block], qg=qg[block],
-                cldfra=cldfra[block], tw=tw_cols[block],
-                pw_mb=p8w[block] * hpa, tsfc=tsk[block],
-                emiss=emiss[block], r=c.RD, g=c.G,
-                co2vmr=gases["co2"], n2ovmr=gases["n2o"],
-                ch4vmr=gases["ch4"], nlayers=nlayers, tables=self._tables)
-            tten[block] = result["tten"]
-            glw[block] = result["glw"]
-            olr[block] = result["olr"]
+        result = rrtmlwrad_columns(
+            t3d=t_cols, p3d=p_cols, pi3d=pi3d, dz8w=dz_cols, qv=qv, qc=qc,
+            qr=qr, qi=qi, qs=qs, qg=qg, cldfra=cldfra, p8w=p8w, t8w=t8w,
+            tsk=tsk, emiss=emiss, nlayers=nlayers, co2vmr=gases["co2"],
+            n2ovmr=gases["n2o"], ch4vmr=gases["ch4"], icloud=self.icloud,
+            r=c.RD, g=c.G, chunk=self._column_chunk_for(ncol, nlayers, cp),
+            tables=self._tables)
 
-        #  RRTMLWRAD F:2010-2013: rthraten += tten/pi3d, bottom-up.
-        heating = cp.ascontiguousarray(
-            tten.reshape(ny, nx, nz).transpose(2, 0, 1))
-        rthratenlw = heating / atmosphere["exner"]
+        rthratenlw = cp.ascontiguousarray(
+            result["rthraten"].reshape(ny, nx, nz).transpose(2, 0, 1))
         self.update_count += 1
-        return rthratenlw, glw.reshape(ny, nx), olr.reshape(ny, nx)
+        cloud = cp.ascontiguousarray(
+            cldfra.reshape(ny, nx, nz).transpose(2, 0, 1))
+        glw, olr = result["glw"], result["olr"]
+        return rthratenlw, glw.reshape(ny, nx), olr.reshape(ny, nx), cloud
 
     def __call__(self, *, atmosphere, fields, state, cfg):
         from woof.metal.array import MetalArray, MetalArrayModule
         if isinstance(atmosphere["temperature"], MetalArray):
             from woof.core.physics import RadiationResult
-            rthratenlw, glw, olr = self.longwave(
+            rthratenlw, glw, olr, cldfra = self.longwave_with_cloud_fraction(
                 atmosphere=atmosphere, fields=fields, state=state, cfg=cfg)
             module = MetalArrayModule(rthratenlw.buffer.context)
             zeros = module.zeros(glw.shape, np.float32)
             return RadiationResult(
                 rthratenlw=rthratenlw,
                 rthratensw=module.zeros(rthratenlw.shape, np.float32),
-                swdown=zeros, glw=glw, gsw=zeros, coszen=zeros, olr=olr)
+                swdown=zeros, glw=glw, gsw=zeros, coszen=zeros, olr=olr, cldfra=cldfra)
         import cupy as cp
         from woof.core.physics import RadiationResult
 
-        rthratenlw, glw, olr = self.longwave(
+        rthratenlw, glw, olr, cldfra = self.longwave_with_cloud_fraction(
             atmosphere=atmosphere, fields=fields, state=state, cfg=cfg)
         return RadiationResult(
             rthratenlw=rthratenlw,
@@ -1178,17 +1415,20 @@ class RRTMLongwaveRadiation:
             glw=glw,
             gsw=cp.zeros(glw.shape, dtype=cp.float32),
             coszen=cp.zeros(glw.shape, dtype=cp.float32),
-            olr=olr)
+            olr=olr, cldfra=cldfra)
 
     @property
     def restart_identity(self) -> dict[str, object]:
         """Trajectory-changing setup bound into tree restart identity."""
         identity = {
             "algorithm": "wrf-v4.6.1-rrtm-longwave",
+            "above_atmosphere_policy": "WRF RRTM reference-atmosphere extension above configured p_top",
             "wrf_source": "phys/module_ra_rrtm.F:RRTMLWRAD/RRTM",
             "icloud": int(self.icloud),
-            "ghg_input": 0,
-            "supported_path": "no-chem,no-cam-gases,o3-climatology",
+            "ghg_input": int(self.ghg_input),
+            "supported_path": ("no-chem,no-cam-gases,o3-climatology"
+                               if not int(self.ghg_input) else
+                               "no-chem,camtr-gases,o3-climatology"),
         }
         if self.trace_gas_overrides:
             identity["trace_gas_overrides"] = dict(self.trace_gas_overrides)
@@ -1224,8 +1464,10 @@ class RRTMDudhiaRadiation:
     #: Forwarded to :class:`RRTMLongwaveRadiation`: ``None`` auto-sizes.
     column_chunk: int | None = None
     trace_gas_overrides: dict[str, float] | None = None
+    ghg_input: int = 0
 
     publishes_olr = True
+    publishes_cldfra = True
     glw_provenance = "scheme"
 
     def __post_init__(self) -> None:
@@ -1244,7 +1486,8 @@ class RRTMDudhiaRadiation:
         self.longwave_adapter = RRTMLongwaveRadiation(
             self.start_time, self.latitude_deg, self.longitude_deg,
             p_top=self.p_top, icloud=self.icloud,
-            column_chunk=self.column_chunk, trace_gas_overrides=self.trace_gas_overrides)
+            column_chunk=self.column_chunk, trace_gas_overrides=self.trace_gas_overrides,
+            ghg_input=self.ghg_input)
         self.shortwave_adapter = DudhiaShortwaveRadiation(
             self.start_time, self.latitude_deg, self.longitude_deg,
             swrad_scat=self.swrad_scat, icloud=self.icloud)
@@ -1260,8 +1503,9 @@ class RRTMDudhiaRadiation:
     def __call__(self, *, atmosphere, fields, state, cfg):
         from woof.core.physics import RadiationResult
 
-        rthratenlw, glw, olr = self.longwave_adapter.longwave(
-            atmosphere=atmosphere, fields=fields, state=state, cfg=cfg)
+        rthratenlw, glw, olr, cldfra = (
+            self.longwave_adapter.longwave_with_cloud_fraction(
+                atmosphere=atmosphere, fields=fields, state=state, cfg=cfg))
         shortwave = self.shortwave_adapter(
             atmosphere=atmosphere, fields=fields, state=state, cfg=cfg)
         return RadiationResult(
@@ -1271,7 +1515,7 @@ class RRTMDudhiaRadiation:
             glw=glw,
             gsw=shortwave.gsw,
             coszen=shortwave.coszen,
-            olr=olr)
+            olr=olr, cldfra=cldfra)
 
     @property
     def restart_identity(self) -> dict[str, object]:
@@ -1284,5 +1528,5 @@ class RRTMDudhiaRadiation:
 
 __all__ = ["DEFAULT_COLUMN_CHUNK", "RRTMDudhiaRadiation",
            "RRTMLongwaveRadiation", "mm5atm_columns", "o3data_columns",
-           "rrtm_layer_count", "rrtm_longwave_columns", "rtrn_columns",
-           "setcoef_columns"]
+           "rrtm_layer_count", "rrtm_longwave_columns", "rrtmlwrad_columns",
+           "rtrn_columns", "setcoef_columns"]

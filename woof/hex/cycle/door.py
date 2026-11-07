@@ -96,6 +96,8 @@ def _config(arguments: argparse.Namespace) -> CascadeConfig:
         state=None if arguments.state is None else Path(arguments.state),
         metrics=None if arguments.metrics is None else Path(arguments.metrics),
         policy=None if arguments.policy is None else Path(arguments.policy),
+        # No physics named: the hex default MPAS suite by mesh (woof.hex.physics_default).
+        forecast_args=tuple(_ensure_physics(str(item) for item in getattr(arguments, "forecast_arg", None) or ())),
     )
 
 
@@ -309,7 +311,8 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
                         help="how long each fine forecast runs")
     parser.add_argument("--history-every-minutes", type=int, default=30, metavar="M")
     parser.add_argument("--dt", type=float, default=20.0, metavar="SECONDS",
-                        help="the fine grid's timestep; must hold an anchor")
+                        help="the fine grid's timestep, registered on each cull "
+                             "and run by its forecast (no anchor is required)")
     parser.add_argument("--nominal-dx-m", type=float, default=4000.0, metavar="METRES")
     parser.add_argument("--class-id", default="graded-4457m-dt20-z7", metavar="ID",
                         help="the minted regional configuration class these "
@@ -322,6 +325,9 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
                              "is not cycle 1 of the world")
     parser.add_argument("--metrics", type=Path, default=None, metavar="FILE")
     parser.add_argument("--policy", type=Path, default=None, metavar="FILE")
+    parser.add_argument("--forecast-arg", action="append", default=[], metavar="ARG",
+                        help="a flag for every fine forecast, e.g. --forecast-arg=--physics-suite=convection_permitting "
+                             "(`woof hex physics list`); repeat for several")
     parser.add_argument("--no-render", dest="render", action="store_false", default=True,
                         help="skip the frame; the forecast still runs")
     parser.add_argument(
@@ -344,3 +350,9 @@ def _dispatch(arguments: argparse.Namespace) -> int:
 
 
 __all__ = ["add_cycle_parser", "run_cycle_plan", "run_cycle_run"]
+
+
+def _ensure_physics(flags):
+    from ..physics_default import ensure
+
+    return ensure(list(flags))

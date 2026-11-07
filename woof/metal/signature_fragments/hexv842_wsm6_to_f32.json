@@ -1,0 +1,574 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_wsm6_to_f32",
+      "module": "hexv842_wsm6_to_f32",
+      "source": "woof/metal/shaders/hexv842_wsm6_to_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/wsm6_v842.py",
+      "cuda_symbol": "wsm6_to_mpas",
+      "resources": [
+        [
+          "theta_m",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "zgrid",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainprod",
+          "float",
+          "read_write"
+        ],
+        [
+          "evapprod",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_cloud",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_ice",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_snow",
+          "float",
+          "read_write"
+        ],
+        [
+          "rthmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqcmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqimpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqrmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqsmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqgmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rt_diabatic_tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "dtheta_dt_mp",
+          "float",
+          "read_write"
+        ],
+        [
+          "surface_pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "tend_sfc_pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "precipw",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "refl10cm",
+          "float",
+          "read_write"
+        ],
+        [
+          "refl10cm_max",
+          "float",
+          "read_write"
+        ],
+        [
+          "refl10cm_1km",
+          "float",
+          "read_write"
+        ],
+        [
+          "refl10cm_1km_max",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "s",
+          "float",
+          "read_write"
+        ],
+        [
+          "r",
+          "float",
+          "read_write"
+        ],
+        [
+          "prod",
+          "float",
+          "read_write"
+        ],
+        [
+          "c",
+          "float",
+          "read"
+        ],
+        [
+          "i_rainnc",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zgrid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainprod": [
+          [
+            "any_1d"
+          ]
+        ],
+        "evapprod": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_cloud": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_ice": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthmpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvmpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqcmpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqimpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqrmpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqsmpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqgmpten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_diabatic_tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dtheta_dt_mp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_sfc_pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "precipw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snownc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl10cm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl10cm_max": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl10cm_1km": [
+          [
+            "any_1d"
+          ]
+        ],
+        "refl10cm_1km_max": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "s": [
+          [
+            "any_1d"
+          ]
+        ],
+        "r": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prod": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c": [
+          [
+            "any_1d"
+          ]
+        ],
+        "i_rainnc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "top",
+          "int32"
+        ],
+        [
+          "dt_dyn",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv_rd",
+          "float32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ],
+        [
+          "rcv",
+          "float32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "g",
+          "float32"
+        ],
+        [
+          "bucket",
+          "float32"
+        ],
+        [
+          "acrain",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

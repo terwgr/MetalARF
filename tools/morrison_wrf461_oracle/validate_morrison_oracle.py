@@ -3,8 +3,11 @@
 
 This is intentionally a measurement command, not the standing assertion.
 It prints every field's observed FP32 total-order ULP maximum and a machine-
-readable JSON summary. The pytest gate imports :func:`measure_oracle` and
-checks comparison coverage and a known incorrect latent-heat control.
+readable JSON summary. The pytest gate (tests/test_morrison_wrf461_parity.py)
+imports :func:`measure_oracle`: WRF's arithmetic alone (``--row37-off``,
+the unit built with MORR_ROW37_OFF) is bitwise, and the production build
+includes row-37 and nonnegative sedimentation corrections. The row-37
+contract can also be measured in isolation from the transport correction.
 """
 
 from __future__ import annotations
@@ -79,8 +82,11 @@ def _record(
             "worst": None,
             "nonfinite_count": 0,
             "minimum": float("inf"),
+            "mismatch_cases": [],
         },
     )
+    if mismatch.any() and [case, mode] not in entry["mismatch_cases"]:
+        entry["mismatch_cases"].append([case, mode])
     local_max = int(distance.max()) if distance.size else 0
     entry["nonfinite_count"] = int(entry["nonfinite_count"]) + int(
         np.count_nonzero(~np.isfinite(got)))
@@ -108,41 +114,58 @@ def _record(
 def measure_oracle(
     fixture_dir: Path = DEFAULT_FIXTURE_DIR,
     *,
-    fmad_false_diagnostic: bool = False,
+    row37: bool = True,
+    nonnegative_sedimentation: bool = True,
 ) -> dict[str, object]:
-    """Run every fixture column and return field/overall parity metrics."""
+    """Run every fixture column and return field/overall parity metrics.
+
+    ``row37=False`` compiles the unit with ``MORR_ROW37_OFF``: WRF's
+    arithmetic alone, without the owner-ruled row-37 corrections (the
+    nucleation vapour cap and the wide non-finite freezing rates).
+    """
     import cupy as cp
 
-    if fmad_false_diagnostic:
-        # Diagnostic only: compile Morrison with contraction disabled without
-        # changing the production loader or source.  The report must never be
-        # used as a shipped workaround; it answers whether contraction is the
-        # dominant residue.
-        from functools import lru_cache
-        from woof.core import kernels
+    # Disabling just the new transport correction isolates the older row-37
+    # contract; production and the raw WRF oracle are still measured separately.
+    if row37 and nonnegative_sedimentation:
+        return _measure(fixture_dir, row37=True)
+    from woof.core import kernels
 
-        original_load_module = kernels.load_module
+    original = kernels.load_module
 
-        @lru_cache(maxsize=None)
-        def diagnostic_load_module(name: str):
-            if name != "morrison":
-                return original_load_module(name)
-            source = (
-                kernels._preamble()
-                + (kernels._KDIR / "morrison.cu").read_text()
-            )
-            module = cp.RawModule(
-                code=source,
-                options=("-std=c++17", "-fmad=false"),
-                name_expressions=None,
-            )
-            module.compile()
-            return module
+    def row37_off_load_module(name: str):
+        if name != "morrison":
+            return original(name)
+        source = kernels.module_source("morrison")
+        if not nonnegative_sedimentation:
+            correction = "            dmass = FMAXK(dmass, 0.0f);"
+            assert source.count(correction) == 1
+            source = source.replace(correction, "")
+        module = cp.RawModule(
+            code=("" if row37 else "#define MORR_ROW37_OFF 1\n") + source,
+            options=kernels.module_options("morrison"))
+        module.compile()
+        return module
 
-        kernels.load_module = diagnostic_load_module
+    # The breakage the restore prevents: the swap used to outlive the
+    # call, so every later Morrison launch in the same process ran WRF's
+    # arithmetic without the row-37 corrections; on W1 the cold-rain and
+    # cold-cloud finite-state tests that ran after the parity test in one
+    # pytest process went non-finite (18 failures) while each passed alone.
+    kernels.load_module = row37_off_load_module
+    kernels.get_kernel.cache_clear()
+    try:
+        return _measure(fixture_dir, row37=row37)
+    finally:
+        kernels.load_module = original
         kernels.get_kernel.cache_clear()
 
-    from woof.core.morrison import launch_morrison
+
+def _measure(fixture_dir: Path, *, row37: bool) -> dict[str, object]:
+    import cupy as cp
+
+
+    from woof.core.morrison import WORK_T3D, launch_morrison
     from woof.core.refl import launch_refl10cm_morrison
 
     fixture_dir = Path(fixture_dir)
@@ -199,7 +222,7 @@ def measure_oracle(
             for name in ("effc", "effr", "effi", "effs")
         }
 
-        launch_morrison(
+        work = launch_morrison(
             device["theta"], device["qv"], device["qc"], device["qr"],
             device["qi"], device["qs"], device["qg"], device["nc"],
             device["nr"], device["ni"], device["ns"], device["ng"],
@@ -210,12 +233,14 @@ def measure_oracle(
             float(dt), **effective, **cu, morr_rimed_ice=mode,
         )
 
-        temperature = device["theta"] * device["pii"]
+        # WRF's refl10cm_hm reads the scheme's own T1D (the WORK stack's
+        # temperature plane) and the unchanged prepared pressure.
+        t1d = cp.ascontiguousarray(work[WORK_T3D * nz:(WORK_T3D + 1) * nz])
         refl = cp.empty_like(device["theta"])
         launch_refl10cm_morrison(
             device["qv"], device["qr"], device["nr"],
             device["qs"], device["ns"], device["qg"], device["ng"],
-            temperature, device["pressure"], refl, morr_rimed_ice=mode,
+            t1d, device["pressure"], refl, morr_rimed_ice=mode,
         )
         cp.cuda.get_current_stream().synchronize()
 
@@ -248,7 +273,7 @@ def measure_oracle(
     )
     return {
         "fixture_dir": str(fixture_dir),
-        "fmad_false_diagnostic": fmad_false_diagnostic,
+        "row37": row37,
         "column_count": len(grouped),
         "level_count": len(level_rows),
         "fields": aggregate,
@@ -273,11 +298,12 @@ def main() -> int:
     parser.add_argument(
         "fixture_dir", nargs="?", type=Path, default=DEFAULT_FIXTURE_DIR)
     parser.add_argument("--json", action="store_true")
-    parser.add_argument("--fmad-false-diagnostic", action="store_true")
+    parser.add_argument("--row37-off", action="store_true",
+                        help="WRF's arithmetic alone (MORR_ROW37_OFF)")
     args = parser.parse_args()
     report = measure_oracle(
         args.fixture_dir,
-        fmad_false_diagnostic=args.fmad_false_diagnostic,
+        row37=not args.row37_off,
     )
     if not args.json:
         print("field,max_ulp,mismatches,values")

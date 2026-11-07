@@ -1,12 +1,14 @@
 #include <metal_stdlib>
 #include "urban_bem_temperature_average_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
+#include "soft_gfk_pow.metalh"
 using namespace metal;
 #pragma clang fp contract(off)
 
 static inline float ubma_add(float a, float b) { return as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubma_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubma_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
+static inline float ubm_gfk_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
 static inline float ubma_pow4(float x) { float x2 = ubma_mul(x, x); return ubma_mul(x2, x2); }
 
 // WRF module_sf_bep_bem.F bb_averaging_temp (2183-2227). One item handles
@@ -16,7 +18,7 @@ static inline float ubma_pow4(float x) { float x2 = ubma_mul(x, x); return ubma_
 // urban levels, and 15 active building slots. State uses the actual BEM
 // row-major packing: tw[col,building,wall-layer,level,face], while twlev,
 // sfw, and sfwin use [col,building,level,face]. The surface wall temperature
-// is the outermost WRF wall layer (nwr_u=5).
+// is the outermost WRF wall layer (nwr_u=10).
 kernel void urban_bem_temperature_average_fragment(
     constant UrbanBemTemperatureAverageFragmentResources &r [[buffer(0)]],
     constant UrbanBemTemperatureAverageFragmentParams &p [[buffer(1)]],
@@ -64,7 +66,7 @@ kernel void urban_bem_temperature_average_fragment(
                 // CUDA uses one-based iz <= nlev(ib), with nlev=source_iz-1.
                 if (iz + 1 > top_layer[ib]) continue;
                 const float weight = ubma_div(building_fraction[ib], remaining);
-                const ulong wall = (((ulong(col) * 15ul + uint(ib)) * 5ul + 4ul)
+                const ulong wall = (((ulong(col) * 15ul + uint(ib)) * 10ul + 9ul)
                     * 18ul + uint(iz)) * 4ul + uint(face);
                 const ulong building_level =
                     (ulong(col) * 15ul + uint(ib)) * 72ul
@@ -74,8 +76,8 @@ kernel void urban_bem_temperature_average_fragment(
                 sfw_av[out] = ubma_add(sfw_av[out], ubma_mul(weight, sfw[building_level]));
                 sfwind_av[out] = ubma_add(sfwind_av[out], ubma_mul(weight, sfwin[building_level]));
             }
-            tw_av[out] = powr(tw_av[out], 0.25f);
-            twlev_av[out] = powr(twlev_av[out], 0.25f);
+            tw_av[out] = ubm_gfk_pow(tw_av[out], 0.25f);
+            twlev_av[out] = ubm_gfk_pow(twlev_av[out], 0.25f);
         }
     }
     error[col] = 0;

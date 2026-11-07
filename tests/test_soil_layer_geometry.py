@@ -479,7 +479,7 @@ def test_every_wrfout_caller_with_a_config_resolves_the_soil_axis():
                 continue
             keywords = {kw.arg for kw in node.keywords}
             assert "soil_layers" in keywords, (
-                f"gpuwm/{module}:{node.lineno} constructs {name} without "
+                f"woof/{module}:{node.lineno} constructs {name} without "
                 "soil_layers and would take the no-scheme axis for whatever "
                 "land-surface scheme the run selected")
 

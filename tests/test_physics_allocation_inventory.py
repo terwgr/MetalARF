@@ -52,8 +52,12 @@ Noah-MP leaf batches that property is gated, not asserted, by
 from __future__ import annotations
 
 import ast
+import math
 import subprocess
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -161,6 +165,75 @@ _PER_COLUMN_STRIDE_NAMES = frozenset((
 #: the no-``DomainState`` path used by the standalone harnesses, and the
 #: 256-byte validity words, built once per process.
 _PHYSICS_ALLOCATION_INVENTORY = {
+    # Fitch wind farms (labs/windfarm, 2.9.11), allocated once when farms
+    # attach: per-turbine tables (nt x 10 hub, nt x 7 wake, the turbine,
+    # curve, blade and polar rows, sized by the turbine count) and one
+    # (ny, nx) map-factor plane plus one zero tendency field of the domain
+    # shape; the attach entry points stage the turbine list once.
+    'woof/core/wind_farm.py': {'__init__': 9, 'attach_wind_farm': 1,
+                                'attach_voronoi_wind_farm': 1},
+    # HRRR output windows use declared persistent scratch only.
+    'woof/core/climate_diagnostics.py': {},
+    'woof/core/output_diagnostics.py': {},
+    # Streamed history finalization owns one replacement LTG3 plane,
+    # 4*ny*nx bytes, beside the assembled history planes.
+    'woof/core/gsd_diagnostics.py': {'finalize_history_fields': 1},
+    # Initial GSD radar: one float32, float64 and bool column arena.
+    # 87*(nz+1)*tile_threads bytes; bounded by SMs, once per initial frame,
+    # priced by preflight.gsd_initial_reflectivity_workspace_bytes and
+    # checked against the launcher's sizing in test_gsd_initial_reflectivity.
+    'woof/core/gsd_initial_reflectivity.py': {'launch': 3},
+    "woof/core/lin.py": {},  # Persistent DomainState scratch, no raw allocation sites.
+    # Integer-define launchers are part of the same kernel family. Chem
+    # vertical mixing and IEVA draw only declared caller/state buffers;
+    # their empty rows reject any future raw allocation.  The one vertmx
+    # site is the HRRR-fork smoke dry-deposition velocity (aer_drydep_opt =
+    # 111 only): one (ny, nx) float32 surface plane per chemistry vertmx
+    # call, 4 bytes per column, owned by the caller for that call and back
+    # in the pool when it returns.  It is a surface plane, not a column
+    # working set, so it does not scale with the nest's levels.
+    'woof/core/chem_vertmx.py': {'smoke_deposition_velocity': 1},
+    # lane/hrrr-v4-output: one history-time copy per finalized GSD field
+    # (finalize_history_fields), never per step; the output-diagnostics
+    # launchers draw only state carriers.
+    'woof/core/gsd_diagnostics.py': {'finalize_history_fields': 1},
+    'woof/core/output_diagnostics.py': {},
+    'woof/core/ieva.py': {},
+    # The WRF v4.4 Thompson column (thompson_version = "wrf_44") draws its
+    # working fields from state.scratch slots and its coefficient tables
+    # from the per-device table owner; the empty row rejects any future raw
+    # allocation in its step.
+    'woof/core/thompson_column.py': {},
+    # Public Jacobi returns two fresh caller-owned arrays and reduces one
+    # transient status vector. The CPU witness below checks actual shapes,
+    # bytes, input-copy ownership and repeat-call independence.
+    # _launch_global (71b192639, ensembles above 64 members): one reused
+    # slab per call for the global tier, bounded by GLOBAL_SCRATCH_BYTES
+    # (or GLOBAL_MIN_IN_FLIGHT matrices) and freed on return.
+    'woof/core/jacobi_eigh.py': {'batched_eigh': 3, '_launch_global': 1},
+    # The live GSD/precipitation steps use DomainState.scratch; their
+    # scratch_shapes feed preflight.scratch_slot_registry (no raw sites).
+    'woof/core/output_diagnostics.py': {},
+    # Standalone assembled-frame recomputation (not called by a forecast
+    # route) stages at most three float32 horizontal planes: two host
+    # carriers and one output, plus CuPy reduction scalars/workspace.
+    # The raw output allocation belongs to this helper, not a step arena.
+    'woof/core/gsd_diagnostics.py': {'finalize_history_fields': 1},
+    # SASE's pool-backed closure is priced by the two live-set phases in
+    # preflight.sase_workspace_phases, including the driver-held fields.
+    # The CPU allocation/lifetime witness executes its actual step with
+    # numerical kernels stubbed and compares peak bytes to that bound.
+    'woof/core/sase.py': {
+        'launch_box_filter': 1, 'launch_structure_functions': 1,
+        '_z_stencil': 1, '_thickness_args': 1, 'launch_strain': 1,
+        'launch_germano_lift': 2, 'launch_model_stress': 1,
+        'launch_governed_stress': 3, 'launch_dynamic_solve': 2,
+        'launch_bulk_richardson_zi': 1, 'launch_w_sensor_moments': 1,
+        'launch_vertical_channel': 2, 'launch_blackadar_length': 1,
+        'launch_sase_step': 6, 'launch_n2': 1, 'launch_moist_n2': 1,
+        'launch_plume_vent_flux': 3, 'launch_vent_deposit_scale': 1,
+        'launch_scalar_mix': 2,
+    },
     # Active parameter-table scaling is reached from initialize_physics,
     # never the timestep driver. The validated registry selects at most
     # 61 unique cells, independent of domain dimensions. Two explicit
@@ -176,8 +249,19 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # CLM lake columns (sf_lake_physics = 1): per-lake-column state and
     # refresh scratch, bounded by the lake-column count.
     "woof/core/lake.py": {
-        "initialize_lake": 6,
+        # lane/cap-lake (f9eb12244a9): one (7, ncolumns) float32 staging
+        # block for the table-driven lake analysis fields, filled once at
+        # initialization and bound by lake_bind_source_columns (28 B per
+        # lake column).
+        "initialize_lake": 7,
         "refresh_columns": 6,
+        # c4ef64622 moved the CLM lake column storage out of the per-thread
+        # local frame into one device arena per lake model: at most
+        # LAKE_LAUNCH_COLUMNS * LAKE_ARENA_SLOTS * 8 bytes (0.31 GiB, less
+        # for fewer lake columns), reused while its size holds and priced as
+        # lake/arena.  Entered here, in the gate sweep, because that commit
+        # did not enter its own row.
+        "lake_arena": 1,
     },
     # Preparation seeds: candidate numbers span the grid, while rounded alt
     # and gathered scratch use at most 112 bytes per cell in one bounded chunk.
@@ -189,6 +273,143 @@ _PHYSICS_ALLOCATION_INVENTORY = {
         "thompson_cold_start_moment_closure": 2,
     },
     'woof/core/acoustic.py': {},
+    # The chem program (lane/aq-core).  chem_bdy and chem_outputs allocate
+    # nothing through a cupy allocator (their launch tables are cp.asarray
+    # uploads of a handful of pointers).  chem_driver's three sites:
+    # ``_context`` builds the (rows, ny, nx) float32 deposition-velocity
+    # plane ONCE per chem domain and reuses it every step; ``_masses``
+    # allocates the (fields, nz*ny) float64 row partials of one ledger
+    # reduction (8 * nrows * nz * ny bytes: 1.7 MiB for 8 rows at
+    # 896 x 512 x 59) and a zero-length result for an empty row set.
+    'woof/core/chem_bdy.py': {},
+    'woof/core/chem_driver.py': {
+        '_masses': 2,
+        '_context': 1,
+    },
+    'woof/core/chem_outputs.py': {},
+    # chem_prep's ``refresh`` allocates its thirteen met fields ONCE per
+    # chem domain (the ``shape`` check keeps them on every later step);
+    # the device inventory prices them as ``chemprep_<field>``
+    # (woof/core/device_inventory.py:chem_state_array_shapes).
+    'woof/core/chem_prep.py': {'refresh': 1},
+    # The smoke set (lane/aq-smoke).  The fire process and the large-scale
+    # washout allocate nothing through a cupy allocator: every array they
+    # write is one of their ChemAllocations (DomainState allocates them and
+    # device_inventory.chem_state_array_shapes prices them), and their host
+    # frames are uploaded into those.  The Freitas plume unit
+    # (woof/core/chem_plumerise.py) is not on this list because it compiles
+    # through its own unflushed NVRTC site (chem_plumerise_cache) rather than
+    # get_kernel.  Its launch allocates per plume call, every
+    # plumerisefire_frq minutes, never per step: a (12, ny, nx) float32
+    # property plane (20 MiB at 896 x 512), per-fire-column outputs (about
+    # 1.5 KiB per fire column at 59 levels) and the bounded solver workspace,
+    # PLUME_BATCH_COLUMNS x PLUME_WORKSPACE_WORDS float32 = 217 MB.  The
+    # preflight does not price that transient yet: recorded as debt.
+    # trailing_planes (ea9faa63c, the HRRR-Smoke fire timing): once per run,
+    # the trailing window's mass and FRP sums (float64) and burning-hour
+    # count (int32) on the fire source's 2-D grid, 20 bytes per source cell,
+    # cached on the chem state and never reallocated per step.
+    # Missing source archives take a mutually exclusive branch: one
+    # float32 zero plane shared by mass/FRP (4 B/cell), below the existing
+    # 20 B/cell bound; this adds a site without increasing the peak.
+    'woof/core/chem_fire.py': {
+        "trailing_planes": 4,
+    },
+    'woof/core/chem_wetdep.py': {},
+    # WRF's monotonic final stage.  The forecast route hands it the six
+    # scratch arrays, the zero implicit flux, mub and the map factors from
+    # DomainState.scratch (woof/core/chem_transport.py), so on that route
+    # the only site reached is ``launch_mono_fluxes``'s unit-map plane on a
+    # domain with no map factors, one (ny, nx) plane per row launch.  The
+    # other sites serve the oracle tests' standalone calls: ``_plane``
+    # broadcasts a scalar mass, and the launchers allocate the scratch, the
+    # zero implicit flux and a zero base mass when the caller supplies none.
+    'woof/core/chem_advect_mono.py': {
+        '_plane': 1,
+        'launch_mono_fluxes': 3,
+        'launch_mono_renorm_apply': 1,
+    },
+    # GOCART-lite (lane/aq-gocart).  Every launcher below takes its outputs
+    # and workspaces from the caller and allocates only when handed None,
+    # which the chem processes never do on the forecast path: their arrays
+    # are the processes' ChemAllocations, which DomainState allocates and
+    # device_inventory.chem_state_array_shapes prices.  The exceptions:
+    # * chem_ageing ``launch_ageing``: the aging process hands None on the
+    #   first chem step and keeps the returned REAL*8 workspace on the chem
+    #   state, (3, participants, ny, nx) float64 = 96 B per column for the
+    #   four GOCART carbon rows, 42 MiB at 896 x 512, once per domain.
+    # * chem_dust ``step``: dust_opt = 3 (AFWA) only, once per domain: the
+    #   WRF-optional DRI/NGA sentinels (four float32 2-D planes) and the
+    #   scheme's TOT_DUST/VIS_DUST working columns (two float32 3-D fields,
+    #   8 B per cell, 207 MiB at 59 x 512 x 896).  NOT priced by the
+    #   preflight: a cost it does not know about, recorded as debt.
+    # * chem_seasalt ``prepare_seasalt_table``: the sub-bin offsets and
+    #   REAL*8 table, at most 100,000 words (refused above that), once per
+    #   distinct dt.
+    # * chem_optics ``gocart_optics``: each optical output the caller names
+    #   and does not hand in, the moments and diagnostics only when asked,
+    #   and the (ny, nx) int32 refractive-index mask every call.  The
+    #   optics process hands in tauaer, EXTCOF55 and AOD5502D and asks for
+    #   nothing else, so on the forecast path only the mask is allocated,
+    #   once per radiation interval.  ``opt_out`` and ``rrtmg_sw_bands``
+    #   allocate only when handed no outputs (parity tests; the radiation
+    #   adapter, when wired, hands its own).  ``step``: the process's four
+    #   SW wavelengths of tau, (4, nz, ny, nx) float32 = 16 B per cell,
+    #   432 MiB at 59 x 512 x 896, once per domain.
+    # * chem_rrtmgp_aerosol ``_outputs``: the column lookup's four
+    #   (ncol, nz, nbands) outputs and its (nz, ny, nx) type mask, per call.
+    #   Reached only from the parity tests today; the radiation adapter that
+    #   wires it must draw these from the radiation workspace instead.
+    'woof/core/chem_ageing.py': {
+        'launch_ageing': 1,
+    },
+    'woof/core/chem_drydep_aerosol.py': {
+        'launch_drydep': 1,
+    },
+    'woof/core/chem_dust.py': {
+        'step': 5,
+    },
+    'woof/core/chem_inventory.py': {},
+    'woof/core/chem_mp_coupling.py': {},
+    'woof/core/chem_optics.py': {
+        'gocart_optics': 6,
+        'opt_out': 2,
+        'rrtmg_sw_bands': 2,
+        # lane/cap-aer-optics (177a585dd32) moved the held four-wavelength
+        # tauaer work buffer (16 B per cell, once per domain) from step into
+        # update_diagnostics, which the live radiation call also runs.
+        'update_diagnostics': 1,
+    },
+    # lane/cap-aer-optics (177a585dd32): live chemistry aerosol optics into
+    # both radiation engines.  Per radiation call, sized by the radiation
+    # column batch: RRTMG SW three (nc, 14, nlay) band planes or one LW
+    # (nc, nlay, 16); RRTMGP three (nc, nlay, nbands); finalize one to three
+    # g-point arrays shaped like the gas optical depth it mixes into.
+    'woof/core/chem_radiation.py': {
+        'legacy': 2,
+        'modern': 1,
+        'finalize': 1,
+    },
+    'woof/core/chem_rrtmgp_aerosol.py': {
+        '_outputs': 2,
+    },
+    'woof/core/chem_seasalt.py': {
+        'prepare_seasalt_table': 2,
+    },
+    'woof/core/chem_settling.py': {
+        'launch_settling': 2,
+    },
+    'woof/core/chem_sulfur.py': {
+        'launch_solar_init': 2,
+        'launch_solar_step': 1,
+    },
+    # lane/aq-cams.  The Wesely process's arrays are ChemAllocations the
+    # driver owns (the launch output, one (ny, nx) plane per Wesely row, and
+    # a zero plane); the one site left is the launcher's own output when a
+    # caller passes no buffer (the oracle test), (nrows, ny, nx) float32.
+    'woof/core/chem_drydep_gas.py': {
+        'wesely_ddvel': 1,
+    },
     'woof/core/advection.py': {
         '_launch': 1,
         'advect_scalar_rk3_periodic_test': 7,
@@ -216,7 +437,10 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # selector seeds the field from P (woof/ingest/wrfinput.py) before any
     # step.  Bound: 4 bytes per cell, once per state, never per step.
     'woof/core/diagnostics.py': {
-        'update_diagnostics': 1,
+        # The carried-MUTS and ordinary strict arms are mutually exclusive.
+        # Either creates the same p_perturbation field once per state when
+        # absent, bounded by 4 bytes per cell; the first arm returns.
+        'update_diagnostics': 2,
     },
     # THE STREAMED SAFETY FOLD's two buffers, from feat-safety-observers.
     # ``StreamedStability.__init__`` allocates the per-tile partial record
@@ -309,8 +533,15 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # gf_workspace_floats(nz, tile) * 4 bytes, priced by
     # preflight.gf_column_workspace_bytes.  Bound: at most 132 B per cell
     # plus 108 B per column, freed when the call returns.
+    # With a per-column active mask (driver gf_active_column, lane/gf-column-mask
+    # 2b923cb282) the packed inputs and outputs above hold only the n launched
+    # columns, and three more transients scatter them back to every column:
+    # full_lev (ncol, 16, nz) and full_sca (ncol, 9) float32, full_isc (ncol, 6)
+    # int32, zero where the scheme does not run.  Masked bound: at most 132 B
+    # per launched cell plus 108 B per launched column, plus 64 B per cell and
+    # 60 B per column, freed when the call returns; the unmasked call is unchanged.
     'woof/core/gf.py': {
-        '__call__': 9,
+        '__call__': 12,
     },
     'woof/core/health.py': {},
     # ``w0avg`` moved out of ``update_trigger_history`` and into
@@ -326,11 +557,13 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # half-level mean, which is not in ``_ALLOCATORS`` and never was.
     'woof/core/kf.py': {
         'ensure_trigger_history': 1,
-        # The eleventh is the caller-sized column workspace the frame move
-        # added (48ff6b813): one cp.empty priced by the same commit's
-        # preflight row, replacing per-thread local frames the driver
-        # priced at full residency.
-        'launch_kf': 11,
+        # The WRF 4.6.1 port (2026-10-07): the 3-D outputs (one
+        # comprehension), the 2-D outputs (one loop), the optional cloud
+        # diagnostics (one loop) or their 1-word placeholder, and the
+        # caller-sized column workspace the frame move added (48ff6b813).
+        # Every array is (nz, ny, nx) or (ny, nx) float32 except the
+        # workspace, priced by preflight.kf_column_workspace_bytes.
+        'launch_kf': 5,
     },
     'woof/core/microphysics.py': {},
     'woof/core/microphysics_transition.py': {},
@@ -344,6 +577,10 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # the commit that adds the module, per the rule this file states,
     # rather than in a later sweep.
     'woof/core/moist_n2_mutation.py': {},
+    # Classic Thompson (mp=8, lane/parity-mp-libm).  Zero: every working
+    # array of the unit is a named DomainState.scratch slot apply_classic
+    # draws (priced by preflight from thompson_classic's own slot lists).
+    'woof/core/thompson_classic.py': {},
     # Milbrandt-Yau (mp_physics=9).  Zero, and deliberately so: every one of
     # the thirteen scratch volumes the six kernels pass to one another is a
     # named ``DomainState.scratch`` slot the adapter owns, so the allocation
@@ -355,6 +592,11 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # or per call; ``launch_milbrandt2`` reads it and never rebinds it.
     'woof/core/milbrandt2.py': {},
     'woof/core/morrison.py': {
+        # The two-moment launcher's standalone fallbacks: the four radii
+        # (one cp.empty_like comprehension), the WORK stack and the LTRUE
+        # column flag, each only when the caller hands none.  apply() hands
+        # the morr_work / morr_ltrue scratch slots, so a forecast step
+        # allocates nothing here.
         'launch_morrison': 3,
     },
     # MYJ (the 2/2 pair).  Entered here by the commit that closed the MYJ
@@ -429,7 +671,13 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # bound to the urban pointer slots when no urban model ran) are gone: the
     # default path launches noah_column, which takes no urban argument, so
     # nothing is bound when no urban model runs.
-    'woof/core/noah.py': {},
+    # launch_noah_seaice (lane/parity-noah, WRF's seaice_noah): one int32
+    # word per launch for SFLX_SEAICE's fatal flag, read back after the
+    # kernel to refuse an impossible snowpack by WRF's words.  One element,
+    # never grid-scaled, never nest-persistent.
+    'woof/core/noah.py': {
+        'launch_noah_seaice': 1,
+    },
     # ---- the four Noah-MP leaf batches -----------------------------------
     # Entered 2026-07-27, having been committed unlisted since at least
     # 92216d0.  They were checked against the question that decides whether a
@@ -486,6 +734,11 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     'woof/core/noahmp_flux_slab.py': {
         'evaluate_bare_flux_slab': 2,
         'evaluate_vege_flux_slab': 2,
+        # b3dd58fc9f3 (2.9.3): the fixed-width masked dispatch keeps the
+        # vegetated-column selection on the device.  Its two sites are the
+        # sibling's two (the n == 0 empty and the (n, N_OUTPUT) slab); the
+        # live mask never sizes a host allocation or a launch.
+        'evaluate_vege_flux_masked_slab': 2,
         'pack_bare_flux_slab': 2,
         'pack_vege_flux_slab': 2,
     },
@@ -531,7 +784,17 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     },
     'woof/core/nssl2_qvexcess.py': {},
     'woof/core/nssl2_radiation.py': {},
-    'woof/core/refl.py': {},
+    # analysis_refl_10cm: under GPUWM_WRF_EXACT=1 the resident tick-zero
+    # frame is WRF's all-zero array, one caller-owned FP32 mass volume.
+    # scratch (18dbe1d5449, the analysis-frame diagnostic): a host/store
+    # analysis frame stages bounded 64-row horizontal slabs on the GPU, one
+    # FP32 slab per scratch slot, dropped when the slab is done; once per
+    # domain start, never per step.
+    # launch_refl10cm_wsm6: the WSM6 reflectivity column workspace (lane/292-mem-cuts 052440f32b4), three
+    # per-call arrays (5 float32, 4 float64 and 1 uint8 rows per level) sized for the columns in flight, one
+    # tile (wsm6_tile_columns: the card's resident capacity), returned to the pool when the call ends.
+    'woof/core/refl.py': {'analysis_refl_10cm': 1, 'launch_refl10cm_wsm6': 3,
+                           'scratch': 1},
     # WRF v4.7.1 slope_rad / topo_shading (lane 281-namelist-gaps), only on a
     # domain that turns slope_rad on.  ``__init__`` allocates the carrier's
     # held planes once per domain -- diffuse_frac, topo_coszen, hrang and
@@ -640,7 +903,11 @@ _PHYSICS_ALLOCATION_INVENTORY = {
         'ruc_sfctmp_full_width_fused': 8,
     },
     'woof/core/sfclay.py': {
-        '_allocate_result': 1,
+        # Three cold-start surface outputs now receive zeros before a
+        # flux-off call. They have the same caller surface shape as the
+        # returned outputs, replacing uninitialized values rather than
+        # adding a domain-volume workspace.
+        '_allocate_result': 2,
         '_surface_array': 1,
     },
     # Shin-Hong (bl_pbl_physics=11): the same shape as YSU's row below --
@@ -690,6 +957,12 @@ _PHYSICS_ALLOCATION_INVENTORY = {
         '_empty_like_int': 1,
         'probe_cloud_dist': 1,
         'probe_constant_tables': 1,
+        # The libm-word probe (tests/test_thompson_aerosol_libm.py): one
+        # output plus two one-element dummies for the unused argument pair.
+        'probe_libm': 3,
+        # The pair re-enforcement probe
+        # (tests/test_thompson_aerosol_clipping_gpu.py): the two outputs.
+        'probe_reenforce_pair': 2,
     },
     'woof/core/thompson_aerosol_sat.py': {
         'probe_droplet_evaporation_indices': 5,
@@ -752,7 +1025,14 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # did not, and the gate was red for it on every box since
     # (proof/node-reds-276).
     'woof/core/wdm6.py': {'launch_wdm6': 1},
-    'woof/core/wsm6.py': {},
+    # launch_wsm6: the column workspace that replaced the per-thread local frame (lane/292-mem-cuts
+    # 052440f32b4), one per call, wsm6_workspace_rows(nz) float32 rows for the columns in flight (one tile,
+    # at most the card's resident capacity), returned to the pool when the call ends.
+    'woof/core/wsm6.py': {'launch_wsm6': 1},
+    # WSM3 init words are one 25-word constant table per device,
+    # uploaded with cp.asarray, which this raw allocator scanner excludes.
+    # All timestep fields use DomainState scratch.
+    'woof/core/wsm3.py': {},
     # ---- the urban canopy models (sf_urban_physics 1-3), 2026-09-30 --------
     # MYJURB (MYJ under BEP/BEM): ``launch_myjurb``'s per-call bundle, the MYJ
     # roster plus EXCH_M -- eight (nz, ny, nx) outputs from one comprehension,
@@ -781,9 +1061,13 @@ _PHYSICS_ALLOCATION_INVENTORY = {
     # zeroed on the device per call; ``run_columns`` is the oracle-test
     # entry (``ucm_column_test``), not the forecast path, and sizes to the
     # columns a test hands it.
+    # ``_run_columns480`` is the same oracle-test entry for the explicit
+    # WRF 4.8 canopy generation (urban_ucm_generation = "wrf_480"): one
+    # status word per test column, never the forecast path.
     'woof/core/urban_ucm.py': {
         '_status_word': 1,
         'run_columns': 2,
+        '_run_columns480': 1,
     },
     'woof/core/ysu.py': {
         # The precedent this rule follows and the reason it is a ratchet
@@ -799,6 +1083,17 @@ _PHYSICS_ALLOCATION_INVENTORY = {
         # commit's preflight row.
         'launch_ysu': 10,
     },
+
+    # Physics constructor allocations are fixed domain/soil/history carriers,
+    # priced by physics_inventory_census. Default WSM6 delegates its kernels
+    # to the common loader and has no per-call allocation.
+    # _prepare_atmosphere_fused (lane/radiation-fusion): the five phy_prep
+    # fields the unfused ufunc chain allocated implicitly, now named.
+    'woof/core/physics.py': {'couple_sase_w_tendency': 1, '_held_zero_tendency_views': 1, 'scalar': 1, 'zero': 2, 'zeros': 1, 'materialize': 2, 'couple_column_tendencies': 1, '_physics_exner': 1, '_prepare_atmosphere': 1, '_prepare_atmosphere_fused': 5, '__init__': 22, 'zero_surface': 1, '_run_cumulus': 8, '_compose_tendencies': 1, '_run_sfclay': 4, '_run_myj_pbl': 1, '_run_ysu': 2, '_scalar_pblmix_rates': 1, '_run_shinhong': 2, '_run_sase': 2, '_zero_accumulator': 1, '_attach_urban': 2, 'initialize_physics': 37, '_run_radiation': 1},
+
+    # Physics constructor allocations are fixed domain/soil/history carriers,
+    # priced by physics_inventory_census. Default WSM6 delegates its kernels
+    # to the common loader and has no per-call allocation.
 }
 
 
@@ -831,6 +1126,56 @@ def _tracked_core_modules() -> frozenset[str] | None:
     return tracked or None
 
 
+def _kernel_factory_modules(sources):
+    """Follow imported aliases and return-only wrappers of kernel loaders."""
+    trees = {module: ast.parse(source) for module, source in sources.items()}
+    imports = {}
+    for module, tree in trees.items():
+        names = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                prefix = node.module or ""
+                if node.level:
+                    parts = module.split(".")[:-node.level]
+                    prefix = ".".join(parts + ([prefix] if prefix else []))
+                for name in node.names:
+                    names[name.asname or name.name] = prefix + "." + name.name
+            elif isinstance(node, ast.Import):
+                for name in node.names:
+                    names[name.asname or name.name.split(".")[0]] = (
+                        name.name if name.asname else name.name.split(".")[0])
+        imports[module] = names
+
+    def symbol(module, node):
+        if isinstance(node, ast.Name):
+            return imports[module].get(node.id, module + "." + node.id)
+        if isinstance(node, ast.Attribute):
+            parent = symbol(module, node.value)
+            return parent + "." + node.attr if parent else None
+        return None
+
+    factories = {"woof.core.kernels.get_kernel",
+                 "woof.core.kernels.get_kernel_int_defines"}
+    changed = True
+    while changed:
+        changed = False
+        for module, tree in trees.items():
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                name = module + "." + node.name
+                if name in factories:
+                    continue
+                if any(isinstance(ret, ast.Return) and isinstance(ret.value, ast.Call)
+                       and symbol(module, ret.value.func) in factories
+                       for ret in ast.walk(node)):
+                    factories.add(name)
+                    changed = True
+    return {module for module, tree in trees.items()
+            if any(isinstance(node, ast.Call) and symbol(module, node.func) in factories
+                   for node in ast.walk(tree))}
+
+
 def _physics_gpu_modules() -> tuple[str, ...]:
     """Every tracked ``woof/core`` module that launches a kernel, by AST.
 
@@ -838,65 +1183,174 @@ def _physics_gpu_modules() -> tuple[str, ...]:
     gate without anyone remembering to add it here.
     """
     tracked = _tracked_core_modules()
-    trees = {}
+    sources = {}
+    paths = {}
     for path in sorted((ROOT / "woof" / "core").glob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
         if tracked is not None and rel not in tracked:
             continue
-        trees[rel] = ast.parse(path.read_text(encoding="utf-8"))
-    fetchers = _kernel_fetchers(trees)
-    found = []
-    for rel, tree in trees.items():
-        # A fetcher counts only where it is imported from the module that
-        # defines it; a same-named local helper is not a kernel launch.
-        names = {"get_kernel"}
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.ImportFrom)
-                    and node.module in fetchers):
-                names.update(alias.asname or alias.name
-                             for alias in node.names
-                             if alias.name in fetchers[node.module])
-        for node in ast.walk(tree):
-            if (isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Name)
-                    and node.func.id in names):
-                found.append(rel)
-                break
+        module = "woof.core." + path.stem
+        sources[module] = path.read_text(encoding="utf-8")
+        paths[module] = rel
+    found = [paths[module] for module in sorted(_kernel_factory_modules(sources))]
     found.append("woof/ingest/closure_device.py")
     return tuple(found)
 
 
-def _kernel_fetchers(trees) -> dict[str, frozenset[str]]:
-    """Top-level functions that only hand back a ``get_kernel`` result.
+def test_kernel_discovery_keeps_imported_and_local_loader_wrappers():
+    sources = {
+        "woof.core.factory": "from woof.core.kernels import get_kernel, get_kernel_int_defines\n"
+            "def loader(module, name, fork):\n"
+            "    if fork: return get_kernel_int_defines(module, name, {'FORK': 1})\n"
+            "    return get_kernel(module, name)\n",
+        "woof.core.consumer": "from woof.core.factory import loader as selected\n"
+            "def local(name): return selected('physics', name, False)\n"
+            "def step(): local('body')((1,), (1,), ())\n",
+        "woof.core.qualified": "import woof.core.factory as factory\n"
+            "def step(): factory.loader('physics', 'body', True)((1,), (1,), ())\n",
+        "woof.core.relative": "from . import kernels as k\n"
+            "def step(): k.get_kernel('physics', 'body')((1,), (1,), ())\n",
+        "woof.core.host": "def loader(): return object()\ndef step(): loader()\n",
+    }
+    assert _kernel_factory_modules(sources) == {
+        "woof.core.factory", "woof.core.consumer", "woof.core.qualified",
+        "woof.core.relative"}
+    # A new allocation in a transitive caller remains visible to the
+    # function-by-function ratchet; discovering wrappers is not an exemption.
+    allocated = sources["woof.core.consumer"] + (
+        "def unpriced():\n    work = cp.empty((columns, levels), dtype=cp.float32)\n")
+    assert _inventory(allocated, "woof/core/consumer.py") == {"unpriced": 1}
 
-    The breakage this closes: b0556bd76 routed the five aerosol Thompson
-    units (cold, sat, sed, state, warm) through
-    ``thompson_aerosol_launch.aerosol_kernel``, a one-line
-    ``get_kernel`` selector for the generation's define, and a scanner that
-    knew only the name ``get_kernel`` stopped seeing five modules that still
-    launch kernels every step.  Their rows, including the two empty
-    forecast-path rows this ratchet exists to assert, went unchecked.  A
-    function whose every ``return`` is a ``get_kernel`` or
-    ``get_kernel_int_defines`` call is the same launch under another name.
-    """
-    direct = {"get_kernel", "get_kernel_int_defines"}
-    fetchers: dict[str, frozenset[str]] = {}
-    for rel, tree in trees.items():
-        names = set()
-        for node in tree.body:
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            returns = [inner for inner in ast.walk(node)
-                       if isinstance(inner, ast.Return)]
-            if returns and all(
-                    isinstance(inner.value, ast.Call)
-                    and isinstance(inner.value.func, ast.Name)
-                    and inner.value.func.id in direct
-                    for inner in returns):
-                names.add(node.name)
-        if names:
-            fetchers[rel[:-3].replace("/", ".")] = frozenset(names)
-    return fetchers
+
+def test_sase_actual_pool_peak_is_within_its_priced_phase(monkeypatch):
+    """Allocation ownership only: numerical kernels are outside this CPU test."""
+    import gc
+    import weakref
+    import numpy as np
+    from woof.config import RunConfig, SASE_PBL_SCHEME
+    from woof.core import preflight as pf, sase
+
+    class Allocations:
+        live = 0
+        peak = 0
+        rows = []
+
+        def __getattr__(self, name):
+            return getattr(np, name)
+
+        asnumpy = staticmethod(np.asarray)
+
+        def release(self, size):
+            self.live -= size
+
+        def record(self, result):
+            self.live += result.nbytes
+            self.peak = max(self.peak, self.live)
+            self.rows.append((result.shape, result.dtype.itemsize, result.nbytes))
+            weakref.finalize(result, self.release, result.nbytes)
+            return result
+
+        def empty(self, shape, dtype=np.float64):
+            return self.record(np.zeros(shape, dtype))
+
+        zeros = empty
+
+        def empty_like(self, value, **kwargs):
+            return self.record(np.zeros_like(value, **kwargs))
+
+    allocations = Allocations()
+    monkeypatch.setattr(sase, 'cp', allocations)
+    monkeypatch.setattr(sase, '_kern', lambda name: lambda *args, **kwargs: None)
+    # A zero-filled kernel stub produces zero z_i. The host scalar bound has
+    # no allocation, so replace it with a finite value for this storage test.
+    monkeypatch.setattr(sase, 'partition_cap', lambda *args, **kwargs: 1.0)
+    cfg = RunConfig(nx=9, ny=8, nz=6, dx=1000., dy=1000., ztop=6000., dt=1.,
+                    run_seconds=1., bl_pbl_physics=SASE_PBL_SCHEME)
+    shape = (cfg.nz, cfg.ny, cfg.nx)
+    # Match the model driver's seven held work fields and surface rho plane.
+    held = [allocations.empty(shape, np.float32) for _ in range(7)]
+    rho = allocations.empty(shape[1:], np.float32)
+    state = [np.ones(shape, np.float32) for _ in range(5)]
+    dz_col = np.full(shape, 100., np.float32)
+    result = sase.launch_sase_step(*state, dx=1000., dy=1000., dz=100., delta=1000.,
+        dt=1., n2=held[4], n2_moist=held[5], dz_col=dz_col, additive_dissipation=True)
+    phases = pf.sase_workspace_phases(cfg)
+    sizes = {name: sum(math.prod(dimensions) * width for dimensions, width in phase.values())
+             for name, phase in phases.items()}
+    assert allocations.peak == 102_400
+    assert sizes == {'solve': 102_848, 'apply': 71_000}
+    assert allocations.peak <= max(sizes.values())
+    priced = {(tuple(dimensions), width) for phase in phases.values()
+              for dimensions, width in phase.values()}
+    assert all((dimensions, width) in priced for dimensions, width, _ in allocations.rows)
+    assert all(value.dtype == np.dtype('float32') and value.shape == shape
+               for value in (result['kv'], result['km_h']))
+    assert sum(value.nbytes for value in (result['kv'], result['km_h'])) == 2 * 4 * math.prod(shape)
+    del result, held, rho
+    gc.collect()
+    assert allocations.live == 0
+
+
+@pytest.mark.parametrize('dtype', [np.float32, np.float64])
+@pytest.mark.parametrize('count', [0, 3])
+@pytest.mark.parametrize('contiguous', [False, True])
+def test_jacobi_outputs_are_caller_owned_and_status_is_transient(
+        monkeypatch, dtype, count, contiguous):
+    import sys
+    from types import SimpleNamespace
+    from woof.core import jacobi_eigh as module
+
+    allocations, copies, launches = [], [], []
+
+    def empty(shape, dtype):
+        value = np.empty(shape, dtype=dtype)
+        allocations.append(value)
+        return value
+
+    def array(value):
+        copied = np.ascontiguousarray(value)
+        if copied is not value:
+            copies.append(copied)
+        return copied
+
+    def kernel(defines, shared_bytes):
+        def launch(grid, block, args, *, shared_mem):
+            source, w, v, status, n = args
+            assert source.flags.c_contiguous and n == count
+            assert shared_mem == shared_bytes
+            launches.append((grid, block, defines))
+            w.fill(7)
+            v.fill(9)
+            status.fill(2)
+        return launch
+
+    monkeypatch.setitem(sys.modules, 'cupy', SimpleNamespace(
+        empty=empty, ascontiguousarray=array, int32=np.int32))
+    monkeypatch.setattr(module, '_kernel', kernel)
+    original = np.arange(count * 25, dtype=dtype).reshape(count, 5, 5)
+    source = original if contiguous else original[:, :, ::-1]
+    before = source.tobytes()
+    w, v, sweeps = module.batched_eigh(source, return_sweeps=True)
+    assert source.tobytes() == before and len(allocations) == 3
+    assert w is allocations[0] and v is allocations[1]
+    status = allocations[2]
+    assert [(value.shape, value.dtype) for value in allocations] == [
+        ((count, 5), np.dtype(dtype)), ((count, 5, 5), np.dtype(dtype)),
+        ((count,), np.dtype(np.int32))]
+    assert sum(value.nbytes for value in allocations) == count * (30 * np.dtype(dtype).itemsize + 4)
+    assert all(not np.shares_memory(value, source) for value in allocations)
+    assert not np.shares_memory(w, v)
+    if count:
+        assert sweeps == 2 and len(launches) == 1
+        assert launches[0][2] == module.plan(5, np.dtype(dtype).str).defines
+        assert len(copies) == int(not contiguous)
+        assert sum(value.nbytes for value in copies) == int(not contiguous) * source.nbytes
+    else:
+        assert sweeps == 0 and launches == []
+    retained = w.copy()
+    module.batched_eigh(source)
+    assert np.array_equal(w, retained)
+    assert allocations[3] is not w and allocations[4] is not v
 
 
 def _allocator_names(node) -> tuple[str, ...]:
@@ -1035,6 +1489,73 @@ def test_real_device_helper_allocation_inventory():
         "surface_pressure_from_surface": 1,
     }
     assert _inventory((ROOT / rel).read_text(encoding="utf-8"), rel) == expected
+
+
+# Column adapters allocate their documented table and in-flight column slabs.
+# reflectivity (18dbe1d5449): the analysis-frame radar diagnostic for
+# mp=5, once per domain start and never per step: a ones dz volume, one
+# (ny, nx) zero surface plane and one unused output volume, each sized to
+# the state it is handed (a 64-row slab on the host/store road).
+_PHYSICS_ALLOCATION_INVENTORY.update({'woof/core/fer_hires.py': {'reflectivity': 3}})
+# golden/ports-rad (2.9.0 round 2): the radiation and switch ports' sites,
+# entered with their bounds when the round merged them (the lane left them out).
+_PHYSICS_ALLOCATION_INVENTORY.update({
+    # aer_opt = 2: the column AOD, single-scattering albedo, asymmetry and
+    # the two band arrays of one radiation call, each (ncol, nz) or (ncol,)
+    # float32 and released with the call; bounded by the column chunk.
+    'woof/core/aer_opt2.py': {'optics_device': 5},
+    # Lightning: the flash-rate planes (ny, nx) of one due call and the
+    # history extension; nothing scales with nz.
+    'woof/core/lightning.py': {'extend': 1, 'launch_lightning': 2,
+                                'update_lightning': 3},
+    # New Goddard: its column inputs and the two heating/flux outputs of one
+    # radiation call, (ncol, nz) or (ncol, nz+1) float32, released with it.
+    'woof/core/radiation_composition.py': {'__call__': 15},
+})
+# icloud = 2: cal_cldfra2 returns one (ncol, nz) float32 cloud fraction, the
+# same output cal_cldfra1 allocates on the icloud = 1 path.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['cal_cldfra2'] = 1
+# The WRF 4.8 solar constant stays on the card so a radiation-due step can be
+# captured as a graph (2.9.0 round 2): one zero-length float32 coordinate pair
+# per radiation call, 0 bytes; the radconst output it reads is solar.py's.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['_solar_constant_device'] = 1
+# OLR at the top of the radiation column (2.9.1, rrtmgp-edge-olr): one
+# (ncol,) float32 per longwave call, released with it.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['__call__'] += 1
+# The Morrison edge-ring mask (2.9.1, rrtmgp-edge-olr): one (ny, nx) bool per
+# domain shape, built once and cached on the adapter; the ring columns the
+# microphysics never runs on size their cloud from their own moments.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['_microphysics_columns'] = 1
+# WRF's top/bottom boundary fluxes on RTE+RRTMGP (2.9.2, rrtmgp-rows): one
+# (rows, ncol) float32 stack per call, 8 rows per spectrum run, released with
+# the call (columns/boundary_fluxes); and the clear-sky SW solve's zero band
+# cloud optics, one (chunk, nlay, nband) float32 per SW chunk
+# (columns/clear_sky_cloud).  The clear-sky solves' flux outputs allocate
+# inside _lw_rte/_sw_rte (out=None), already counted there.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['__call__'] += 1
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['_clear_sky_cloud'] = 1
+# The paired solvers (rad-history, 2026-10-18): on the prepared route the
+# clear-sky top/surface rows come out of the same kernel as the all-sky
+# fluxes, so _lw_rte and _sw_rte each allocate one (ncol, nlev) float32
+# clear up/down pair per call on that path -- the pair the separate clear
+# solve used to allocate through its own out=None outputs.  The finalized
+# optics and staged Planck cubes that path no longer builds are gone, so
+# no priced term grows.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['_lw_rte'] += 2
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/rrtmgp.py']['_sw_rte'] += 2
+# WRF's ocean mixed layer (2.9.1): initialize_ocean fills an absent (ny, nx)
+# mixed-layer field once at domain start, a persistent driver field.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/surface_ocean.py'] = {'initialize_ocean': 1}
+# lane/cap-slab-ocean (aa6bdeed308): the coupled-ocean SST and SST-change history planes,
+# two (ny, nx) float32 allocated once on first diagnostic update.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/surface_ocean.py']['update_ocean_diagnostics'] = 1
+# lane/cap-solar (04e65faa5ff): the native SW direct/diffuse/DNI history
+# split, three (ny, nx) float32 planes at driver construction (__init__ 21 ->
+# 22, one loop site); _run_radiation's DNI site allocates only when a caller
+# removed that plane.
+# lane/cap-hail (97e9a3ca061): hail.py draws all its working set from the
+# state scratch arena (21 hail_*/hailcast_* slots); no pool allocation.
+_PHYSICS_ALLOCATION_INVENTORY['woof/core/hail.py'] = {}
 
 
 def _live_inventory() -> dict[str, dict[str, int]]:

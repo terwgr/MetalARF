@@ -1,6 +1,6 @@
 {
   "schema": "gpuwm-diffopt1-measured-source-transition-v1",
-  "measured_at_utc": "2026-10-06T06:51:05.432698+00:00",
+  "measured_at_utc": "2026-10-07T02:23:09.587389+00:00",
   "case_count": 88,
   "field_count": 272,
   "words": 178128,
@@ -19,39 +19,39 @@
   "capture_file_sha256": "508de1e310977aabf905ee01a2ec55b1d42302ca6b3fae93c90e2c81e0463de5",
   "raw_source_inputs": [
     {
-      "path": "gpuwm/core/kernels/smag2d.cu",
+      "path": "woof/core/kernels/smag2d.cu",
       "sha256": "932359b9f7685918fdd69e204ead1d2ac8369b792d64ff393e00b6b910dc84ad"
     },
     {
-      "path": "gpuwm/core/kernels/diff_opt1.cu",
+      "path": "woof/core/kernels/diff_opt1.cu",
       "sha256": "bbe1360f8ea5249270a89a11f5f2cd77f3fdc573d66d57755a37852ddacaa161"
     },
     {
-      "path": "gpuwm/core/kernels/common.cuh",
+      "path": "woof/core/kernels/common.cuh",
       "sha256": "c78b17cb02ef67a2ad24d19e06e1129d7d5bcda74b972b38470fd33a6e58ff43"
     },
     {
-      "path": "gpuwm/core/kernels/__init__.py",
-      "sha256": "30df9428aa6e896e8bb42cc559658a341978b8538428eaaed22dd9db82441e45"
+      "path": "woof/core/kernels/__init__.py",
+      "sha256": "bf70972fd28bd1585bfc10cee4713c57f5e7feadd40325fd03cf00a543c5dc55"
     },
     {
-      "path": "gpuwm/core/constants.py",
+      "path": "woof/core/constants.py",
       "sha256": "76c8c11d1a75d17fd54d0a80646cec9dde04f649247ec2347d3d32e6c0500e9e"
     },
     {
-      "path": "gpuwm/core/dycore.py",
-      "sha256": "1ce20af7c28d7b74077225241fec7aaa72f6ba34bccb3dabe436ea0fd620de0d"
+      "path": "woof/core/dycore.py",
+      "sha256": "a03335276d95c5d4c89010957dd4c7ed2d31ff0ea44050e4370af745c32138cf"
     },
     {
-      "path": "gpuwm/core/kernels/rrtmg_aer3.cu",
+      "path": "woof/core/kernels/rrtmg_aer3.cu",
       "sha256": "8f428e8d7d2f02ef174880b24c4e7c09cba5fb89ca6138b24ebab519d80ecccf"
     },
     {
-      "path": "gpuwm/core/kernels/rrtmg_smoke_manifest.cu",
+      "path": "woof/core/kernels/rrtmg_smoke_manifest.cu",
       "sha256": "ac810c4ffc873f084882adb695eccdbf84d8c7d28af1654c3d01755770460ece"
     },
     {
-      "path": "gpuwm/core/kernels/rrtmg_legacy_prep.cu",
+      "path": "woof/core/kernels/rrtmg_legacy_prep.cu",
       "sha256": "fba22c05ab15139df82653cc1e699b8f1a53d10d11359bc7b6c14da36012c15a"
     }
   ],
@@ -61,8 +61,8 @@
       "sha256": "6ffdd709917ecab58ce9d581f3379aada96cf63ef2cbe5b177bf1a54709c9654"
     },
     "tools/wrf_diffopt1_oracle/model_case.py": {
-      "bytes": 3506,
-      "sha256": "2cda07b2ca5a32e60f4ac6032e0f0231c01dff99abbad17894b09a75313dadc1"
+      "bytes": 3500,
+      "sha256": "cc56c7a026d05a7c118938ea6a899af8bea91fd663e8d09d843639cf55f383bc"
     },
     "tests/data/wrf471_diff_opt1/wrf471.npz": {
       "bytes": 1357832,

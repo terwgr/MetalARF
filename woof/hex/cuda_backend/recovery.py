@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 from ..cuda_fp32 import CUDA_FTZ_HELPERS
-from .containers import DeviceAtmosphere
+from .containers import DeviceAtmosphere, terrain_slot_tables
 from .runtime import KernelCache, KernelTiming, launch_checked, launch_timed
 
 
@@ -261,7 +261,7 @@ def recover_state(
     launch recomputes the same outputs from the same inputs, so the two
     paths publish the same bytes; what differed was 36 host stalls and
     10.7 ms of repeated device work per forecast step
-    (``evidence-gallery/hex-perf-profile-2026-09-13``).
+    (the 2026-09-13 performance profile).
 
     ``include_pressure=False`` computes only ``normal_velocity`` and
     ``vertical_velocity`` and leaves the six cell-centred pressure diagnostics
@@ -387,6 +387,9 @@ def recover_state(
         vertical_count = (int(vertical.n_vert_levels) + 1) * mesh.n_cells
     else:
         terrain = atmosphere.terrain
+        # The kernel indexes edgesOnCell, its sign and zb_cell with one slot
+        # stride; a compacted zb_cell is read through the matching tables.
+        slot_edges, slot_signs, slot_stride = terrain_slot_tables(mesh, terrain)
         vertical_args = (
             state.rho,
             state.rho_u,
@@ -394,16 +397,16 @@ def recover_state(
             vertical.zz,
             vertical.fzm,
             vertical.fzp,
-            mesh.edges_on_cell,
+            slot_edges,
             mesh.n_edges_on_cell,
-            mesh.edge_sign_on_cell,
+            slot_signs,
             terrain.zb_cell,
             terrain.zb3_cell,
             vertical_velocity,
             np.int32(vertical.n_vert_levels),
             np.int32(mesh.n_cells),
             np.int32(mesh.n_edges),
-            np.int32(mesh.max_edges),
+            np.int32(slot_stride),
             scalar(vertical.cf1),
             scalar(vertical.cf2),
             scalar(vertical.cf3),

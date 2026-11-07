@@ -31,9 +31,10 @@ WHAT THIS FILE ASSERTS
     sits under a directory ``build_bridge_bundle`` actually walks.
 4.  The nineteen files that carry a per-file notice still carry it.
 5.  The Arm scope list in ``woof/core/kernels/LICENSE-third-party.txt`` is
-    DERIVED FROM THE TREE, not typed: the sixteen files are exactly the ones
+    DERIVED FROM THE TREE, not typed: the eighteen files are exactly the ones
     that reproduce Arm's coefficient tables.  The FDLIBM list is pinned, and a
     kernel that starts defining an FDLIBM routine without joining it fails.
+    Both walks read every subdirectory of the kernel tree (tempo/ included).
 6.  Every first-party crate carrying a third-party licence marker, and every
     upstream Fortran project a first-party crate cites, is named in the NOTICE.
     This is the check that would have caught NumPy and MPAS.
@@ -100,7 +101,17 @@ def _read(path: pathlib.Path) -> str:
 
 
 def _kernel_sources() -> list[pathlib.Path]:
-    return sorted(list(KERNELS.glob("*.cu")) + list(KERNELS.glob("*.cuh")))
+    """Every CUDA source the wheel ships from the kernel tree, subdirectories
+    included.  The breakage the recursion prevents: tempo/tempo_common.cuh
+    carried FDLIBM's binary64 log10 in 2.8.9 outside both FDLIBM lists, and
+    the scope gates could not see it because they read the top level only."""
+    return sorted(list(KERNELS.rglob("*.cu")) + list(KERNELS.rglob("*.cuh")))
+
+
+def _kernel_name(path: pathlib.Path) -> str:
+    """The name the notices use: the file name at the top level, the path
+    under woof/core/kernels/ below it (tempo/tempo_common.cuh)."""
+    return path.relative_to(KERNELS).as_posix()
 
 
 def _decommented(text: str) -> str:
@@ -115,11 +126,16 @@ def test_every_licence_text_is_named_by_the_notice_and_vice_versa() -> None:
     _requires_source_tree()
     notice = _read(NOTICE)
 
-    empty = [p.name for p in sorted(LICENSES.iterdir()) if p.stat().st_size == 0]
+    # Files, not entries: licenses/soundings/ is a directory (the public sounding
+    # renderer's dependency notices).  Reading entries, 2.9.3's public CI run
+    # 39368051825 reported "licence texts with no text: ['soundings']" on
+    # windows-2025, where a directory's st_size is 0 (4096 on ext4, so the Linux
+    # job passed and the desktop's filesystem hid it too).
+    texts = [p.relative_to(ROOT).as_posix() for p in sorted(LICENSES.rglob("*")) if p.is_file()]
+    empty = [name for name in texts if (ROOT / name).stat().st_size == 0]
     assert empty == [], f"licence texts with no text: {empty}"
 
-    unnamed = [p.name for p in sorted(LICENSES.iterdir())
-               if f"licenses/{p.name}" not in notice]
+    unnamed = [name for name in texts if name not in notice]
     assert unnamed == [], (
         "the NOTICE names no path for these licence texts, so a reader has no "
         f"way to find them: {unnamed}")
@@ -127,8 +143,9 @@ def test_every_licence_text_is_named_by_the_notice_and_vice_versa() -> None:
     # A path in this repository, not the tail of a URL: the SoilGrids credit
     # cites https://creativecommons.org/licenses/by/4.0/, which is no file.
     cited = {m.rstrip(".,;") for m in
-             re.findall(r"(?<![/\w.])licenses/[A-Za-z0-9._-]+", notice)}
+             re.findall(r"(?<![/\w.])licenses/[A-Za-z0-9._/-]+", notice)}
     cited.discard("licenses/licenses")       # the PEP 639 wheel path, not a file
+    cited = {name.rstrip("/") for name in cited}   # "licenses/soundings/: ..." names the directory
     dangling = sorted(name for name in cited if not (ROOT / name).exists())
     assert dangling == [], f"the NOTICE points at licence texts that are not here: {dangling}"
 
@@ -177,6 +194,12 @@ def test_both_distributions_ship_the_licence_directory() -> None:
         with pyproject.open("rb") as stream:
             config = tomllib.load(stream)
         declared = config["project"].get("license-files", [])
+        # `licenses/*` does not recurse: the 2.9.3 candidate wheel shipped none of
+        # licenses/soundings/'s three texts while NOTICE named them.
+        subdirs = sorted(p.relative_to(pyproject.parent).as_posix() for p in licences.rglob("*") if p.is_dir())
+        unshipped = [f"{d}/*" for d in subdirs if f"{d}/*" not in declared]
+        assert unshipped == [], (
+            f"{pyproject} does not ship these licence subdirectories; add each to license-files: {unshipped}")
         assert "licenses/*" in declared, (
             f"{pyproject} does not ship licenses/, so a pip install of it "
             f"performs no reproduction condition at all: {declared}")
@@ -222,18 +245,6 @@ def test_the_binary_form_notice_has_two_byte_identical_copies() -> None:
         f"with the binaries: {bridge_assets.REQUIRED_ASSET_SUBDIRS}")
 
 
-_COUNT_WORDS = ("zero one two three four five six seven eight nine ten eleven twelve "
-                "thirteen fourteen fifteen sixteen seventeen eighteen nineteen").split()
-_TENS_WORDS = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty"}
-
-
-def _count_word(count: int) -> str:
-    if count < 20:
-        return _COUNT_WORDS[count]
-    tens, units = divmod(count, 10)
-    return _TENS_WORDS[tens] + ("" if not units else "-" + _COUNT_WORDS[units])
-
-
 def test_the_notices_count_the_artifacts_the_bundle_carries() -> None:
     """The binary-form notice and NOTICE say how many compiled artifacts they
     cover. Both said 27 while the bundle carried 31 (rw_simradar was the
@@ -249,9 +260,33 @@ def test_the_notices_count_the_artifacts_the_bundle_carries() -> None:
         assert f"wheels: {count} Rust executables and libraries" in header, (
             f"{copy} does not count the {count} bundled artifacts")
     notice = " ".join(_read(ROOT / "NOTICE").split())
-    assert (f"{_count_word(count).capitalize()} Rust executables and libraries "
+    assert (f"{count} Rust executables and libraries "
             "(woof.bridge_assets .BUNDLED_ARTIFACTS)") in notice, (
-        f"NOTICE does not count the {count} bundled artifacts")
+        f"NOTICE does not count the {count} bundled artifacts; run "
+        "python -m tools.update_bridge_notice_inventory then "
+        "python tools/update_zarr_license_notice.py")
+
+
+def test_inventory_refresh_preserves_notices_when_the_bundle_grows() -> None:
+    tool = _notice_tool("update_bridge_notice_inventory.py")
+    for relative in tool.COPIES:
+        old = _read(ROOT / relative)
+        root_notice = relative == "NOTICE"
+        updated = tool.render(old, 61, root_notice=root_notice)
+        assert tool.render(updated, 60, root_notice=root_notice) == tool.render(
+            old, 60, root_notice=root_notice)
+        assert tool.render(updated, 61, root_notice=root_notice) == updated
+    with pytest.raises(ValueError, match="exactly one"):
+        tool.render("no inventory header", 61, root_notice=True)
+
+
+def test_reservoir_attribution_reaches_binary_consumers() -> None:
+    _requires_source_tree()
+    binary = _read(LICENSES / "THIRD-PARTY-LICENSES-bridge-binaries.txt")
+    for name in ("LICENSE-t-route.txt", "NOTICE-t-route-reservoirs.txt",
+                 "NOTICE-t-route-NOAA-terms.md"):
+        assert _read(LICENSES / name) in binary, (
+            f"binary consumers do not receive the retained t-route text {name}")
 
 
 def test_the_binary_form_notice_covers_the_first_party_ports() -> None:
@@ -339,16 +374,27 @@ _ARM_TABLE = re.compile(
 
 
 def _arm_files() -> list[str]:
-    return sorted(p.name for p in _kernel_sources()
+    return sorted(_kernel_name(p) for p in _kernel_sources()
                   if _ARM_TABLE.search(_read(p)))
 
 
 def test_the_arm_scope_list_is_derived_from_the_tree() -> None:
-    """The NOTICE says this list is machine-derived.  This is the machine."""
+    """The NOTICE says this list is machine-derived.  This is the machine.
+
+    The breakage it prevents: 7f00a76db (2026-10-08) deleted this test and
+    the FDLIBM one below, and the same day's mp28-exact and MYNN surface
+    intakes shipped mynn_libm.cuh and thompson_aerosol_libm.cuh, which
+    reproduce Arm's tables, outside the Arm scope list of both notices in
+    2.8.8 and 2.8.9.  Restored for 2.9.0 with both added (eighteen files,
+    glibc_trig_flt32.cuh's sinf/cosf tables among them).
+    """
     _requires_source_tree()
     derived = _arm_files()
-    assert len(derived) == 16, derived
-    assert len([name for name in derived if name != "glibc_trig_flt32.cuh"]) == 15, derived
+    assert derived, "no Arm table carriers found"
+    from tools.update_kernel_license_scopes import generated_notices
+    for path, expected in generated_notices(ROOT).items():
+        assert path.read_text(encoding="utf-8") == expected, (
+            f"{path} is stale; run python -m tools.update_kernel_license_scopes")
     assert "glibc_trig_flt32.cuh" in derived
     listed = _read(KERNEL_NOTICE)
     missing = [name for name in derived if name not in listed]
@@ -361,16 +407,12 @@ def test_the_arm_scope_list_is_derived_from_the_tree() -> None:
 
 
 #: The kernel translation units carrying an FDLIBM-descended reduction
-#: (expm1f, tanhf, atanf, log10f).  Pinned rather than derived because each
-#: file names the routine differently -- r_atan, ng_atanf, glibc_atanf,
-#: mynn_tanhf, nmpe_expm1f, ruc_tanhf_glibc -- and the derivation below is
-#: what keeps the pin accurate.
-FDLIBM_FILES: tuple[str, ...] = (
-    "mynn_dmp_sibling.cu", "mynn_pbl.cu", "noahmp_bareflux.cu",
-    "noahmp_energy.cu", "noahmp_fluxprep.cu", "noahmp_glacier.cu",
-    "noahmp_leaves.cu", "noahmp_vegeflux.cu", "ruc.cu",
-)
-
+#: (expm1f, tanhf, atanf, log10f, log1pf, and binary64 log10, log1p, atan,
+#: atan2), by the name the notices use (_kernel_name).
+#: Pinned rather than derived because each file names the routine
+#: differently -- r_atan, ng_atanf, glibc_atanf, mynn_tanhf, nmpe_expm1f,
+#: ruc_tanhf_glibc -- and the derivation below is what keeps the pin accurate.
+from tools.update_kernel_license_scopes import FDLIBM_FILES
 #: Device routines whose NAME looks like an FDLIBM one but which are not
 #: FDLIBM transcriptions: these are libm calls rounded once or CORE-MATH,
 #: as identified beside each entry.  Listed with the reason so that adding a
@@ -380,7 +422,10 @@ _NOT_FDLIBM = {
     # to float, standing for glibc 2.43's correctly rounded atan2f
     # (CORE-MATH); no FDLIBM reduction is transcribed.
     "terrain_drag.cu": ("td_atan2f",),
+    # The unused optical stub calls the CUDA builtin without transcribing libm.
+    "chem_optics.cu": ("chem_log10f",),
     "glibc_trig_flt32.cuh": ("glibc_atanf",),    # CORE-MATH s_atanf.c, a8066a5, MIT
+    "sfire_libm.cuh": ("sfire_tanhf",),          # CORE-MATH s_tanhf.c, b1ecd83, MIT (NOTICE)
     "p3.cu": ("p3_log10",),                      # (float)log10((double)x)
     "thompson_aerosol_warm.cu": ("thompson_aa_log10f_cr",),
     "ruc.cu": ("ruc_log10f_rn", "ruc_expm1f_glibc"),
@@ -388,31 +433,79 @@ _NOT_FDLIBM = {
     # special-case arm transcribe CORE-MATH log10f.c bc385c2, MIT (NOTICE).
     "urban_bem.cuh": ("ubm_atanf", "ubm_log10f", "ubm_log10f_special"),
     "urban_ucm.cu": ("u_atan", "u_log10"),       # (float)atan/log10((double)x)
+    # Dudhia shortwave: WOOF's own float32 log10 on its own gfk_log (an
+    # exponent split and a two-part log10(2)); no third-party source is
+    # copied.  Word-equal to the C library's log10f on every float32 in
+    # [1, +inf] (tools/dudhia_sw_wrf461_oracle/sweep_libm.py).
+    "dudhia_sw.cu": ("dsw_log10f",),
     # Noah mosaic: noah_log10 and its special-case arm transcribe CORE-MATH
     # log10f.c bc385c2, MIT (NOTICE), not FDLIBM.
     "noah_mosaic.cu": ("noah_log10", "noah_log10_special"),
+    # Noah (lane/verify-noah-lsm): noah_log10f is WOOF's own log10, composed
+    # on WOOF's own float32 logf (gfk_log) as k*log10(2) + log10(e)*ln(m);
+    # graded exhaustively against the oracle host's log10f.
+    "noah.cu": ("noah_log10f",),
     # slope_rad / topo_shading: (float)atan((double)x), (float)atan2((double)y, (double)x)
-    "topo_radiation.cu": ("tr_atan", "tr_atan2"),
+    "topo_radiation.cu": ("tr_atan", "tr_atan2",
+                          # the exact chain's slope atan2: the correctly
+                          # rounded double-double side test, and the
+                          # scalar quadrant arm on sfc_classic_atanf
+                          # (atan_scalar_flt32.cuh, on FDLIBM_FILES)
+                          "tr_atan2_resolve", "tr_slope_atan2_scalar"),
+    # mp28 column support: tc_atan calls CUDA's atan/atanf; tc_log10
+    # delegates to thompson_aa_log10f / thompson_aa_log10, whose
+    # transcription lives in thompson_aerosol_libm.cuh (on FDLIBM_FILES).
+    "thompson_column_support.cuh": ("tc_atan", "tc_log10"),
+    # Goddard bands: g_log10 is gfk_log(x) * log10(e), WOOF's own
+    # composition; no FDLIBM reduction is transcribed.
+    "goddard_bands.cuh": ("g_log10",),
+    # WOOF's own float32 log10 (gfk_log10) and Morrison's binary64 log10
+    # (mo_log10d, WRF's DOUBLE ALOG10 in refl10cm_hm): WOOF's own libm
+    # routines, graded word for word against the oracle host's C library
+    # (tools/glibc_flt32_extra_proof, tools/morrison_wrf461_oracle).
+    "glibc_flt32_extra.cuh": ("gfk_log10",),
+    "morrison.cu": ("mo_log10d",),
+    # The fork Thompson's DOUBLE LOG10 is CUDA's binary64 log10.
+    "thompson_fork.cu": ("tf_log10",),
+    # HAILCAST support (cap-hail, 2.9.4): lake_log10 is the HAILCAST
+    # transcription's LOG10 kind shim, CUDA's log10f/log10 called directly.
+    "hailcast_support.cuh": ("lake_log10",),
 }
 
 _FDLIBM_DEF = re.compile(
-    r"__device__[^;{]{0,160}?\b(\w*(?:atan|tanh|log10|expm1)\w*)\s*\(")
+    r"__device__[^;{]{0,160}?\b(\w*(?:atan|tanh|log10|expm1|log1p)\w*)\s*\(")
 
 
 def test_the_fdlibm_scope_list_matches_the_tree() -> None:
+    """The breakage it prevents: 7f00a76db (2026-10-08) deleted this test,
+    and thompson_aerosol_libm.cuh, mynn_libm.cuh, sfclay.cu,
+    sfclay_classic.cuh and ysu_480_topo.cuh shipped FDLIBM reductions in
+    2.8.8/2.8.9 (ysu_480_topo.cuh new on the 2.9.0 line) outside the FDLIBM
+    scope list of both notices, which cover what they name and nothing
+    else.  The root NOTICE is read as well as the kernel notice, because
+    both lists were short.  The walk is recursive and knows log1p, because
+    tempo/tempo_common.cuh (binary64 log10, below the top level) and
+    portable_libm64.cuh (log1p) were outside the kernel notice too, and
+    dudhia_sw.cu's FDLIBM log10f had been excused as first-party."""
     _requires_source_tree()
+    assert all((KERNELS / name).is_file() for name in FDLIBM_FILES)
     listed = _read(KERNEL_NOTICE)
     missing = [name for name in FDLIBM_FILES if name not in listed]
     assert missing == [], (
         f"the kernel notice's FDLIBM list is short of: {missing}")
+    notice = _read(NOTICE)
+    missing = [name for name in FDLIBM_FILES if name not in notice]
+    assert missing == [], (
+        f"the root NOTICE's FDLIBM list is short of: {missing}")
 
     unnotified = {}
     for path in _kernel_sources():
+        name = _kernel_name(path)
         names = sorted({m.group(1) for m
                         in _FDLIBM_DEF.finditer(_decommented(_read(path)))})
-        real = [n for n in names if n not in _NOT_FDLIBM.get(path.name, ())]
-        if real and path.name not in FDLIBM_FILES:
-            unnotified[path.name] = real
+        real = [n for n in names if n not in _NOT_FDLIBM.get(name, ())]
+        if real and name not in FDLIBM_FILES:
+            unnotified[name] = real
     assert unnotified == {}, (
         "these kernels define an FDLIBM-shaped routine and are not on the "
         "FDLIBM notice list; either they transcribe FDLIBM and the notice "
@@ -427,7 +520,7 @@ def test_the_fdlibm_scope_list_matches_the_tree() -> None:
 #: the third category, which is where both 2.7.0 breaches were.
 _FIRST_PARTY_ROOTS = (
     "tools/rustwx/crates", "tools/rw_wps/crates", "tools/grib1_bridge/src",
-    "tools/region_global_dealias/src", "tools/mpas_render_bridge",
+    "tools/region_global_dealias/src",
 )
 
 _LICENCE_MARKER = re.compile(
@@ -496,7 +589,18 @@ UPSTREAM_TOKENS = {
     "MPAS": "Los Alamos National Security",
     "WPS": "WRF Preprocessing System",
     "WRF": "public domain",
+    "UPP": "NOAA EMC Unified Post Processor (UPP)",
+    "TEMPO": "NCAR/TEMPO",
 }
+
+#: TEMPO's sources as rw-tempo cites them: the src/module_mp_tempo_*.F90
+#: modules, by full name or by their short names (params.F90, utils.F90,
+#: driver.F90), all in NCAR/TEMPO, not in WRF.
+_TEMPO_SHORT = frozenset({"params.F90", "utils.F90", "driver.F90"})
+
+#: WOOF's own Fortran: the TEMPO reference driver in tools/tempo_ref, which
+#: links unmodified TEMPO and dumps its init state.  First-party, no notice.
+_OWN_FORTRAN = frozenset({"tempo_ref_driver.F90"})
 
 #: Cited Fortran sources with NO counterpart in the WRF distribution, so they
 #: are WPS's own.  Measured against a WRF v4.6.1 checkout.
@@ -509,11 +613,26 @@ _WPS_ONLY = frozenset({
     "smooth_module.F",
 })
 
+#: MPAS init_atmosphere sources cited by their short names in rw-mpas's RRFS
+#: init port (rrfs_init/, rrfs_static_gwd.rs, tests/gsl_oro.rs): MPAS v8.4.2
+#: and the RRFS fork RRFSx/MPAS-Model (MPAS's BSD licence) mpas_init_atm_cases.F,
+#: mpas_init_atm_gwd.F, mpas_init_atm_read_met.F, the fork's initialize_real.F and
+#: mpas_gsl_oro_data_sm_scale.F.  MPAS's notice covers them.
+_MPAS_SHORT = frozenset({"cases.F", "gwd.F", "initialize_real.F", "read_met.F", "sm_scale.F"})
+
 #: WRF sources outside the module_/mp_ naming, cited by a first-party crate,
 #: each NAMED in the NOTICE as well as covered by WRF's declaration.
 #: share/output_wrf.F: the renderer's local import reads SIMULATION_START_DATE
 #: as WRF's history writer defines it (A137, rw-wrfbatch local_import.rs).
 _WRF_OTHER = frozenset({"output_wrf.F"})
+
+#: NCAR/TEMPO's own source files, cited bare (src/params.F90 and so on) by
+#: the rw-tempo crate that ports its table builders.
+_TEMPO = frozenset({"driver.F90", "params.F90", "utils.F90"})
+
+#: This repository's own Fortran: the TEMPO column reference driver under
+#: tools/tempo_ref, which the crate reads the records of.  No upstream.
+_FIRST_PARTY_FORTRAN = frozenset({"tempo_ref_driver.F90"})
 
 _FORTRAN_CITATION = re.compile(r"\b([A-Za-z0-9_]+\.(?:F90|F))\b")
 
@@ -533,10 +652,20 @@ def test_every_upstream_a_first_party_crate_transcribes_is_notified() -> None:
     projects = set()
     unclassified = []
     for name in sorted(cited):
-        if name.startswith("mpas_"):
+        if name in _OWN_FORTRAN:
+            continue
+        if name.startswith("mpas_") or name in _MPAS_SHORT:
             projects.add("MPAS")
+        elif name.startswith("module_mp_tempo_") or name in _TEMPO_SHORT:
+            projects.add("TEMPO")
+        elif name in {"INITPOST.F", "MDL2P.F", "params.F"}:
+            projects.add("UPP")
         elif name in _WPS_ONLY:
             projects.add("WPS")
+        elif name in _TEMPO or name.startswith("module_mp_tempo"):
+            projects.add("TEMPO")
+        elif name in _FIRST_PARTY_FORTRAN:
+            continue
         elif (name.startswith("module_") or name.startswith("mp_")
               or name in _WRF_OTHER):
             projects.add("WRF")
@@ -581,6 +710,11 @@ def test_the_earlier_gamma_stays_deleted() -> None:
     fingerprints = ("exp2_adj", "x_adj_mant", "gamma_coeff", "0xBB360B61",
                     "0x3A500D01")
     for path in _kernel_sources():
+        if path.name == "gf_wrf_normalization.cuh":
+            # Accepted strict-only GF normalization has an independent source pin.
+            import hashlib
+            assert hashlib.sha256(path.read_bytes()).hexdigest() == "2f258d559bda0b6c97a7220f2eb4c27473817ad25daf69769e858d63a1731942"
+            continue
         text = _decommented(_read(path))
         hit = [token for token in fingerprints if token in text]
         assert hit == [], f"{path.name} carries the earlier gamma's fingerprints: {hit}"
@@ -801,8 +935,17 @@ def test_simulated_radar_vendor_inventory_is_complete_and_exportable(vendor) -> 
         assert re.fullmatch(r"[0-9a-f]{40}", record["source_commit"])
         assert record["source_commit"] in scope
         assert record["local_commits"][-1] == revision
+    # The inventory is the vendored SOURCE.  ci.yml's syntax step,
+    # `python -m compileall -q -j 0 woof tilestream tools tests
+    # conftest.py`, writes __pycache__ beside the Python scripts bowecho
+    # vendors (nexrad_io's fixture generators, the pytmatrix LUT tools);
+    # .gitignore keeps that bytecode out of every commit and so out of
+    # every export, and SOURCE.json rightly does not list it.  Counting it
+    # turned this gate red in any checkout that had run the syntax step,
+    # the 2.8.9 E3 a1388eae7 public CI reproduction among them.
     expected = {p.relative_to(source).as_posix() for p in source.rglob("*")
-                if p.is_file() and p.name != "SOURCE.json"}
+                if p.is_file() and p.name != "SOURCE.json"
+                and "__pycache__" not in p.relative_to(source).parts}
     entries = record["files"]
     assert entries and len(entries) == len({entry["path"] for entry in entries})
     assert {entry["path"] for entry in entries} == expected
@@ -848,6 +991,13 @@ def test_the_terminal_notice_generator_replaces_only_its_own_section() -> None:
     have deleted the BowEcho and recast-radar-tools notices and the bzip2 table
     grant from the notice a compiled consumer receives."""
     _requires_source_tree()
+    if not (ROOT / "tools" / "update_tui_license_notice.py").is_file():
+        # Recast WOOF builds no terminal workspace: its generator stays with the regional engine's own
+        # distribution, and the binary notice WOOF ships has no section 5 for it to rewrite.
+        notice = (LICENSES / "THIRD-PARTY-LICENSES-bridge-binaries.txt").read_bytes().decode("utf-8")
+        assert "LOCKED DEPENDENCIES AND LICENCE TEXTS" not in notice
+        assert "update_tui_license_notice" not in notice
+        return
     tool = _notice_tool("update_tui_license_notice.py")
     path = LICENSES / "THIRD-PARTY-LICENSES-bridge-binaries.txt"
     notice = path.read_bytes().decode("utf-8")
@@ -862,7 +1012,8 @@ def test_the_terminal_notice_generator_replaces_only_its_own_section() -> None:
     replaced = tool.compose(notice, tool.MARKER + "a new lock\n")
     assert replaced == head + tool.MARKER + "a new lock\n\n" + tool.END + after
     for name in ("NOTICE-BowEcho.txt", "NOTICE-recast-radar-tools.txt",
-                 "LICENSE-recast-radar-tools-bzip2.txt"):
+                 "LICENSE-recast-radar-tools-bzip2.txt", "LICENSE-t-route.txt",
+                 "NOTICE-t-route-reservoirs.txt", "NOTICE-t-route-NOAA-terms.md"):
         assert _read(LICENSES / name) in replaced, (
             f"regenerating section 5 drops {name} from the binary notice")
     # With no END line it refuses; it does not truncate.
@@ -906,3 +1057,63 @@ def test_the_zarr_notice_reproduces_the_binary_notice_as_it_is_now() -> None:
         "the Zarr notice reproduces an earlier binary notice; " + remedy)
     assert binary.decode("utf-8").rstrip() in notice, (
         "the Zarr notice names the binary notice's digest without its text; " + remedy)
+
+
+def test_the_sounding_notice_generator_is_idempotent_on_the_tree() -> None:
+    """tools/update_soundings_license_notice.py run on an untouched tree must
+    change nothing.  It rewrote ~3,466 lines of both binary notices while this
+    file stayed green: the committed section lacked cudarc (rustwx-render gained
+    it in 529053024f without a refresh), a merge had folded the head of the
+    t-route block into the sounding section, and the tool's own output varied
+    with Python's per-process hash seed (a path crate and its git twin share a
+    name and version) and, on Windows, with case-insensitive path order.  Two
+    runs under different hash seeds, each in --check mode, must both find the
+    committed copies current."""
+    _requires_source_tree()
+    import os
+    import shutil
+    import subprocess
+    import sys
+    if shutil.which("cargo") is None:
+        pytest.skip("cargo is not on PATH; the generator resolves the lock with cargo metadata")
+    tool = _notice_tool("update_soundings_license_notice.py")
+    notice = (LICENSES / "THIRD-PARTY-LICENSES-bridge-binaries.txt").read_bytes().decode("utf-8")
+    assert notice.count(tool.MARKER) == 1 and notice.count(tool.END) == 1
+    _, _, rest = notice.partition(tool.MARKER)
+    section, _, after = rest.partition(tool.END)
+    assert "NEXTGEN RESERVOIR ADAPTATION" not in section, (
+        "the t-route block sits inside the generated sounding section; the "
+        "generator would delete it")
+    assert "NEXTGEN RESERVOIR ADAPTATION" in after
+    for seed in ("0", "1"):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "update_soundings_license_notice.py"), "--check"],
+            cwd=ROOT, capture_output=True, text=True, timeout=600,
+            env={**os.environ, "PYTHONHASHSEED": seed})
+        assert result.returncode == 0, (
+            f"PYTHONHASHSEED={seed}: the sounding notices are not what the generator writes; "
+            f"run python tools/update_soundings_license_notice.py\n{result.stderr[-2000:]}")
+
+
+def test_the_hydro_output_notice_generator_is_current_on_the_tree() -> None:
+    """librw_nextgen_output joined the bridge roster at 2.9.4 (on demand), so its
+    locked closure (parquet, thrift, snap, crc32fast, ...) reaches users in binary
+    form. tools/update_nextgen_output_license_notice.py writes that closure's
+    inventory and texts into both binary notices; run in --check mode it must find
+    both committed copies current, or the bundle ships the library without the
+    licence texts its dependencies require."""
+    _requires_source_tree()
+    import shutil
+    import subprocess
+    import sys
+    if shutil.which("cargo") is None:
+        pytest.skip("cargo is not on PATH; the generator resolves the lock with cargo metadata")
+    tool = _notice_tool("update_nextgen_output_license_notice.py")
+    notice = (LICENSES / "THIRD-PARTY-LICENSES-bridge-binaries.txt").read_bytes().decode("utf-8")
+    assert notice.count(tool.MARKER) == 1 and notice.count(tool.END) == 1
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "update_nextgen_output_license_notice.py"), "--check"],
+        cwd=ROOT, capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, (
+        "the hydro output notices are not what the generator writes; run python "
+        f"tools/update_nextgen_output_license_notice.py\n{result.stderr[-2000:]}")

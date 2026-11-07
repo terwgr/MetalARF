@@ -133,7 +133,8 @@ _NX, _NY, _NZ = 3, 2, 8
 #: land-surface value at each of the three surface layers it admits (1,
 #: 5, 91).  Its sfclay=0 cells are refused by name (no UST/HFX/QFX) and
 #: its sfclay=2 cells by validate_myj_pairing (the TKE_MYJ scan).
-_ROUTED_COMBINATIONS = 57
+# Re-measured 2026-10-09: CCPP adds eight admitted inventories; int32 policy is unchanged.
+_ROUTED_COMBINATIONS = 65
 
 #: Every int32 descriptor the routed cross-product actually produces.
 _INT32_DESCRIPTORS = frozenset({
@@ -877,3 +878,29 @@ def test_the_real_noahmp_descriptor_build_reaches_the_device():
 
     report = validator.validate(phase="noahmp-initialized-or-restored")
     assert report.ok, report
+
+
+def test_the_ebal_range_admits_every_case_the_noah_kernel_writes():
+    """surface.ebal's health bounds are exactly the codes noah.cu can store.
+
+    The SFLX_GLACIAL port (golden/ports-pbl) stores ebal = 4 on land-ice
+    columns.  With the rule still at [0, 3], a real met_em forecast whose
+    domain holds land ice died at its first post-d01-sync health check
+    (``surface.ebal(37, 22): value 4.0 exceeds upper bound 3.0``).  The
+    codes are read from the kernel source, so a new case cannot drift
+    past the gate again.
+    """
+    import re
+    from pathlib import Path
+
+    from woof.core.health import rule_for_field
+
+    source = (Path(__file__).resolve().parents[1]
+              / "woof" / "core" / "kernels" / "noah.cu").read_text()
+    codes = {int(v) for v in re.findall(
+        r"\bebal_(?:case|a\[idx\])\s*=\s*(\d+)\s*;", source)}
+    codes |= {int(v) for pair in re.findall(
+        r"ebal_case\s*=\s*\w+\s*\?\s*(\d+)\s*:\s*(\d+)", source) for v in pair}
+    assert codes == {0, 1, 2, 3, 4}, codes
+    rule = rule_for_field("surface.ebal")
+    assert (rule.lower, rule.upper) == (min(codes), max(codes))

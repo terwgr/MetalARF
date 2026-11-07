@@ -10,13 +10,13 @@
 //! Coordinates are community-contributed (forwarded by a BowEcho user;
 //! no agency catalog lists these radars). URLs were probed live
 //! 2026-06-12: every Iowa Environmental Mesonet path answered
-//! `{base}/{ID}/dir.list` with data (uppercase only: the host 404s
+//! `{base}/{ID}/dir.list` with data (uppercase only — the host 404s
 //! lowercase ids) except OP5R, whose radar is documented on the IEM index
 //! page but had no directory that day; KXWA/KBPP answered on the North
 //! Dakota State Water Commission host while K08D's directory existed but
 //! was empty; the Laredo EWR host answered with `grlevel2.cfg` naming its
 //! single site `LARE` but the site directory was empty. Feeds that are
-//! quiet today still belong here: the poller reports an unreachable
+//! quiet today still belong here — the poller reports an unreachable
 //! dir.list as a status-line error and keeps the marker clickable.
 
 use std::sync::OnceLock;
@@ -46,7 +46,7 @@ pub struct CommunityFeed {
     pub cluster: Option<&'static str>,
 }
 
-/// Norman Testbed cluster label: eight feeds, one pad, one marker.
+/// Norman Testbed cluster label — eight feeds, one pad, one marker.
 const NORMAN_TESTBED: &str = "Norman Testbed";
 /// The Norman Testbed pad (community-contributed, shared by all eight).
 const NORMAN_LAT: f32 = 35.238;
@@ -85,7 +85,7 @@ const fn norman(id: &'static str, poll_url: &'static str) -> CommunityFeed {
     }
 }
 
-/// The community feed catalog: the single source of truth for the Feeds
+/// The community feed catalog — the single source of truth for the Feeds
 /// menu AND the map markers (one table, so they can't drift apart).
 const COMMUNITY_FEED_TABLE: &[CommunityFeed] = &[
     // Iowa Environmental Mesonet community Level II host.
@@ -145,7 +145,7 @@ const COMMUNITY_FEED_TABLE: &[CommunityFeed] = &[
         -145.833,
         "https://mesonet-nexrad.agron.iastate.edu/level2/raw/OP5R",
     ),
-    // Norman Testbed: eight research feeds on one pad, one map marker.
+    // Norman Testbed: eight research feeds on one pad — one map marker.
     norman(
         "DAN1",
         "https://mesonet-nexrad.agron.iastate.edu/level2/raw/DAN1",
@@ -216,7 +216,7 @@ const COMMUNITY_FEED_TABLE: &[CommunityFeed] = &[
     ),
 ];
 
-/// The community feed table. Pure compiled-in data (never the network)
+/// The community feed table. Pure compiled-in data — never the network —
 /// so it is safe on the UI thread every frame.
 pub fn community_feeds() -> &'static [CommunityFeed] {
     COMMUNITY_FEED_TABLE
@@ -227,7 +227,7 @@ pub fn community_feeds() -> &'static [CommunityFeed] {
 /// whose click opens a feed picker.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommunityMarker {
-    /// Marker label: the cluster label, or the lone feed's `id, label`.
+    /// Marker label: the cluster label, or the lone feed's `id — label`.
     pub label: String,
     /// Marker location (a cluster's shared pad, or the lone feed's site).
     pub latitude_deg: f32,
@@ -259,7 +259,7 @@ pub fn community_markers() -> &'static [CommunityMarker] {
                 });
             } else {
                 markers.push(CommunityMarker {
-                    label: format!("{}, {}", feed.id, feed.label),
+                    label: format!("{} — {}", feed.id, feed.label),
                     latitude_deg: feed.latitude_deg,
                     longitude_deg: feed.longitude_deg,
                     feed_indices: vec![index],

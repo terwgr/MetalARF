@@ -897,7 +897,7 @@ pub struct ScanLegMetadata {
 /// NEXRAD Archive II is always PPI surveillance, but mobile/research formats
 /// (DORADE, CfRadial, ODIM_H5) carry explicit scan modes: RHI sweeps hold a
 /// fixed azimuth and sweep the antenna in elevation, so a plan-view (PPI)
-/// renderer shows them as a single spoke, displays must branch on this.
+/// renderer shows them as a single spoke — displays must branch on this.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ScanMode {
     /// Plan-position indicator: fixed elevation, azimuth sweep (includes

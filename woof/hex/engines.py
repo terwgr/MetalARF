@@ -24,18 +24,26 @@ THE LADDER, best first, identical for every engine:
 1. the door's own command-line flag;
 2. this distribution's environment variable, then any legacy spellings
    it has carried (a rename never silently stops reading a variable);
-3. woof's own environment variable and its bridge ladder -- a woof
+   then woof's own environment variable;
+3. this distribution's own ``woof/hex/libexec``: the engines the woof hex
+   wheel bundles because no released engine carries the version this
+   release needs (``rw_mpas_geometry`` with hex-vertical-v1,
+   ``rw_mpas_stream``, an ``rw_mpas_static`` whose generated-grid statics
+   hold the binary64 coordinates they declare, and the ``rw_mpas_lbc`` whose
+   boundary files equal native init_atmosphere case 9; ``data/engine-bridges.json``
+   pins their bytes);
+4. woof's bridge ladder -- a woof
    checkout's ``tools/rustwx/target/{release,debug}``, ``libexec/bridges``
    beside the installed package, the wheel-bundled directory inside it,
    and ``~/.woof/bridges`` where ``woof fetch-bridges`` stages;
-4. ``PATH``.
+5. ``PATH``.
 
-Rungs 1-3 fail LOUDLY when they name a file that is not there.  An
+Rungs 1, 2 and 4 fail LOUDLY when they name a file that is not there.  An
 explicit configuration that falls through to a different binary is how a
 box runs the wrong engine and reports success, so a named-but-missing
 path is a refusal, never a skipped rung.
 
-Rung 3 is read through :mod:`woof.mpas_mesh` when that module can be
+Rung 4 is read through :mod:`woof.mpas_mesh` when that module can be
 imported, so the two ladders cannot drift; when it cannot -- an older
 woof, or none at all -- the two directories that do not depend on
 woof's internals (``~/.woof/bridges`` and ``libexec/bridges`` beside
@@ -68,6 +76,22 @@ def executable_name(name: str) -> str:
     return f"{name}.exe" if os.name == "nt" else name
 
 
+def bundled_program(name: str) -> str | None:
+    """This wheel's own copy of a bundled program (``woof/hex/libexec``), or None.
+
+    THE BREAKAGE THIS PREVENTS (RRFS-MPAS from a pip install, 2026-10-15): the
+    RRFS fork dycore looked for rw_mpas_rrfs_connectivity, rw_mpas_rrfs_damping
+    and rw_mpas_rrfs_deformation only in their environment variables and on
+    PATH, so a clean install refused every RRFS forecast.  The wheel bundles them
+    (setup.py, ``data/engine-bridges.json``); callers read an explicit setting
+    first, then this, then PATH.
+    """
+
+    from .helpers import path as helper_path
+    path = helper_path(executable_name(name))
+    return str(path) if path.is_file() and os.access(path, os.X_OK) else None
+
+
 @dataclass(frozen=True)
 class EngineSpec:
     """One Rust binary: how it is named, what it owns, how it is built."""
@@ -86,8 +110,13 @@ class EngineSpec:
     subject: str
     #: What is unreachable without it -- the concrete breakage, not "an error".
     what_breaks: str
-    #: The cargo package that builds it inside the ``tools/rustwx`` workspace.
+    #: The cargo package that builds it inside ``workspace``.
     cargo_package: str
+    #: The woof checkout directory holding that cargo workspace.  The WPS
+    #: decode bridges (``met_intermediate``, ``gdt101_remap``) build in
+    #: ``tools/grib1_bridge``, not in ``tools/rustwx``, and a remedy that
+    #: names the wrong directory is a command that fails.
+    workspace: str = "tools/rustwx"
 
 
 #: Meteorological interpolation and the initial-condition write.
@@ -101,6 +130,28 @@ INIT = EngineSpec(
         "no meteorological interpolation and no initial-condition write can "
         "occur, so the init door has nothing to produce"
     ),
+    cargo_package="rw-mpas",
+)
+
+#: Exact derived mesh geometry and RBF reconstruction.
+GEOMETRY = EngineSpec(
+    name="rw_mpas_geometry",
+    flag="geometry bridge",
+    env_names=("WOOF_HEX_RW_MPAS_GEOMETRY", "RW_MPAS_GEOMETRY"),
+    gpuwm_env="WOOF_RW_MPAS_GEOMETRY",
+    subject="the derived geometry builder",
+    what_breaks="a native-free init has no edge normals, tangent planes or RBF reconstruction coefficients",
+    cargo_package="rw-mpas",
+)
+
+#: Exact initialized terrain metrics and vertical momentum correction.
+HOSTPREP = EngineSpec(
+    name="rw_mpas_hostprep",
+    flag="host preparation bridge",
+    env_names=("WOOF_HEX_RW_MPAS_HOSTPREP", "RW_MPAS_HOSTPREP"),
+    gpuwm_env="WOOF_RW_MPAS_HOSTPREP",
+    subject="the terrain and momentum preparation bridge",
+    what_breaks="an initialized forecast has no cell-oriented terrain metrics or coupled vertical momentum",
     cargo_package="rw-mpas",
 )
 
@@ -188,6 +239,12 @@ STATIC = EngineSpec(
 #: the init door refuse on a box where ``woof fetch-bridges`` had already
 #: staged the file: the 2.7.3 to 2.8.0 bundles carry ``rw_mpas_lbc`` beside the
 #: other four, and the ladder reads it from there.
+#:
+#: The wheel bundles it now (hex 0.4.0 install audit, 2026-10-15): the case-9
+#: port whose boundary files equal native init_atmosphere v8.4.2 case 9 is in no
+#: released woof, and 2.9.0's copy refuses a regional grid without model_name,
+#: so a plain install found 2.9.0's file on rung 4 and could not build
+#: native-identical boundaries.  The bundled copy is read first (rung 3).
 LBC = EngineSpec(
     name="rw_mpas_lbc",
     flag="--lbc-exe",
@@ -206,7 +263,98 @@ LBC = EngineSpec(
 #: Every engine a front door of this distribution drives, best-known name
 #: first.  ``woof.hex.doctor`` reads this, so adding an engine is a row
 #: here and is reported without a second edit.
-ENGINES: tuple[EngineSpec, ...] = (INIT, CONVERT, MESH, STATIC, LBC, RENDERER)
+#: Soundings and meteograms at points, straight off native history.  Listed
+#: here so the one ladder finds it and `woof hex doctor` names it: the
+#: product door's third binary was resolved by a search of its own that
+#: doctor could not see, so a fresh install learned it was missing only at
+#: the end of a product run.
+POINTS = EngineSpec(
+    name="rw_hex_points",
+    flag="--points-exe",
+    env_names=("WOOF_HEX_RW_HEX_POINTS",),
+    gpuwm_env="WOOF_RW_HEX_POINTS",
+    subject="the sounding and meteogram renderer",
+    what_breaks=(
+        "soundings and meteograms are drawn by this binary and nothing else, "
+        "so the product door has no point pictures"
+    ),
+    cargo_package="rw-wrfbatch",
+)
+
+#: The WPS intermediate writer every init-source row decodes through.
+#: THE BREAKAGE THIS ROW PREVENTS, measured on a clean pip install of the
+#: 0.4.0 candidate beside woof 2.9.0 (g16 fresh-install QA, 2026-10-12):
+#: ``init-source`` read only ``--writer``, ``$WOOF_MET_INTERMEDIATE`` and
+#: PATH, so it refused "met_intermediate was not found" while the woof
+#: wheel in the same venv carried the binary in ``libexec/bridges`` and
+#: ``woof hex doctor`` never mentioned it.  As an ENGINES row it is
+#: resolved by the same ladder as every other engine and doctor names it.
+MET_INTERMEDIATE = EngineSpec(
+    name="met_intermediate",
+    flag="--writer",
+    env_names=("WOOF_HEX_MET_INTERMEDIATE",),
+    gpuwm_env="WOOF_MET_INTERMEDIATE",
+    subject="the WPS intermediate writer",
+    what_breaks=(
+        "no source's fields can be written as the WPS intermediate the init "
+        "door reads, so init-source cannot build an initial condition from any row"
+    ),
+    cargo_package="grib1_bridge",
+    workspace="tools/grib1_bridge",
+)
+
+#: The regular-grid remapper for rows whose source grid is unstructured
+#: (the table's ``remap`` rows).  Same ladder, same breakage as above; not an
+#: ENGINES row because only those rows need it, so doctor does not count it
+#: against a GFS-only install.
+GDT101_REMAP = EngineSpec(
+    name="gdt101_remap",
+    flag="--remapper",
+    env_names=("WOOF_HEX_GDT101_REMAP",),
+    gpuwm_env="WOOF_GDT101_REMAP",
+    subject="the unstructured-to-regular remapper",
+    what_breaks=(
+        "a source published on an unstructured grid cannot be put on the "
+        "regular grid met_intermediate reads, so its init-source row cannot run"
+    ),
+    cargo_package="grib1_bridge",
+    workspace="tools/grib1_bridge",
+)
+
+#: The RRFS-MPAS initializer: the fork's init_atmosphere (cases 7 and 9, its
+#: static and vertical grid) as one Rust worker taking hex-init-job/v1 jobs on
+#: stdin.  Not an ENGINES row: only the RRFS producer row of
+#: data/profiles/init-producers.v1.json needs it.
+INIT_RRFS = EngineSpec(
+    name="rw_mpas_init_v831",
+    flag="--rrfs-worker",
+    env_names=("WOOF_HEX_RW_MPAS_INIT_V831",),
+    gpuwm_env="WOOF_RW_MPAS_INIT_V831",
+    subject="the RRFS-MPAS initializer",
+    what_breaks=(
+        "no RRFS-MPAS initial condition or boundary file can be made, so "
+        "`woof hex init --physics-suite hrrrv5` (and every RRFS suite) has no producer"
+    ),
+    cargo_package="rw-mpas",
+)
+
+#: The GSL orographic statistics generator (ugwp_oro_data.nc for the RRFS
+#: suites' bl_ugwp_gwdo drag).  Same reason as above for not being an ENGINES row.
+GSL_ORO = EngineSpec(
+    name="rw_mpas_gsl_oro",
+    flag="--gsl-oro",
+    env_names=("WOOF_HEX_RW_MPAS_GSL_ORO",),
+    gpuwm_env="WOOF_RW_MPAS_GSL_ORO",
+    subject="the GSL orographic statistics generator",
+    what_breaks=(
+        "ugwp_oro_data.nc cannot be made by the GSL generator RRFS uses, so the RRFS "
+        "drag statistics fall back to hex's own method"
+    ),
+    cargo_package="rw-mpas",
+)
+
+ENGINES: tuple[EngineSpec, ...] = (
+    INIT, GEOMETRY, HOSTPREP, CONVERT, MESH, STATIC, LBC, RENDERER, POINTS, MET_INTERMEDIATE)
 
 
 # ---------------------------------------------------------------------------
@@ -286,12 +434,40 @@ def _directory_candidates(spec: EngineSpec) -> tuple[Path, ...]:
 
 
 def gpuwm_candidates(spec: EngineSpec) -> tuple[Path, ...]:
-    """Rung 3, whichever way it can be answered."""
+    """Rung 4, whichever way it can be answered."""
 
     through_gpuwm = _gpuwm_module_candidates(spec)
     if through_gpuwm is not None:
         return through_gpuwm
     return _directory_candidates(spec)
+
+
+def bundled_candidate(spec: EngineSpec, *, fetch: bool = True) -> Path:
+    """Rung 3: where this wheel bundles the engine, if it bundles it at all.
+
+    THE BREAKAGE THIS RUNG PREVENTS (release readiness B5, 2026-10-14): the
+    init door needs ``rw_mpas_geometry`` speaking hex-vertical-v1 and the
+    stream I/O needs ``rw_mpas_stream``.  The frozen 2.9.0 engine bundle
+    carries a geometry bridge WITHOUT hex-vertical-v1 and no stream bridge,
+    so a clean install found woof's older file first and the init door
+    refused ("lacks hex-vertical-v1").  The wheel now bundles both
+    (setup.py, ``data/engine-bridges.json``), and they are read before
+    woof's directories so the bytes this release was proven with are the
+    bytes it runs.  A source checkout's ``src/hexcore/libexec`` holds no
+    such file, so checkout runs keep resolving down the ladder as before.
+
+    ``rw_mpas_static`` is bundled for the same reason
+    (2026-10-15): the 2.9.0 static builder reads every
+    grid through binary32, so a generated grid's static declares binary64
+    coordinates it does not hold and the point door refused (its vertical
+    check, then ``rw_mpas_mesh --cull-parent``).  Read first, the bundled
+    builder is the fixed one.
+    """
+
+    from .helpers import path as helper_path
+    # A PyPI wheel leaves the helpers to the release's hex helper archive
+    # (woof.hex.helpers): the first resolve stages them, verified.
+    return helper_path(executable_name(spec.name), fetch=fetch)
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +479,7 @@ def resolution_order(spec: EngineSpec) -> str:
     read = [spec.flag]
     read.extend(f"${name}" for name in spec.env_names)
     read.append(f"${spec.gpuwm_env}")
+    read.append("this distribution's woof/hex/libexec")
     return (
         f"{', '.join(read)}, woof's bridge directories "
         f"(a woof checkout's tools/rustwx/target/release, libexec/bridges "
@@ -311,11 +488,22 @@ def resolution_order(spec: EngineSpec) -> str:
 
 
 def _engine_requirement() -> str:
-    """The engine requirement a remedy names, spelled once in engine_identity."""
+    """The derived pip specifier, or the bare name if none can be derived.
 
-    from .engine_identity import ENGINE_REQUIREMENT
+    Imported inside the function because this is a REMEDY path: it runs when
+    something is already wrong, and a remedy that raises while explaining a
+    failure leaves the user with a traceback instead of a command.  If
+    :func:`engine_pin.gpuwm_requirement` refuses -- which it does when no
+    published engine satisfies the seam manifest -- the fallback is the
+    distribution name alone, which is still a command that runs.
+    """
 
-    return ENGINE_REQUIREMENT
+    from .engine_pin import DISTRIBUTION, EnginePinError, gpuwm_requirement
+
+    try:
+        return gpuwm_requirement()
+    except EnginePinError:
+        return DISTRIBUTION
 
 
 def remedy(spec: EngineSpec) -> str:
@@ -337,7 +525,7 @@ def remedy(spec: EngineSpec) -> str:
         "  # build it from a woof source checkout:",
         "  cargo build --release --locked --offline "
         f"-p {spec.cargo_package} --bin {spec.name}",
-        "      # run at tools/rustwx in the checkout, then:",
+        f"      # run at {spec.workspace} in the checkout, then:",
         f"  # set {spec.env_names[0]} to the built binary",
     ]
     staged = [
@@ -453,12 +641,24 @@ def resolve(spec: EngineSpec, explicit: str | Path | None = None) -> Path:
             _refuse_not_executable(spec, candidate)
         return candidate
 
-    for candidate in gpuwm_candidates(spec):
-        candidate = Path(candidate).expanduser()
-        if candidate.is_file():
-            if os.name == "posix" and not os.access(candidate, os.X_OK):
-                _refuse_not_executable(spec, candidate)
-            return candidate.resolve()
+    bundled = bundled_candidate(spec)
+    if bundled.is_file():
+        if os.name == "posix" and not os.access(bundled, os.X_OK):
+            _refuse_not_executable(spec, bundled)
+        return bundled
+
+    for attempt in range(2):
+        for candidate in gpuwm_candidates(spec):
+            candidate = Path(candidate).expanduser()
+            if candidate.is_file():
+                if os.name == "posix" and not os.access(candidate, os.X_OK):
+                    _refuse_not_executable(spec, candidate)
+                return candidate.resolve()
+        # woof 2.9.10 leaves rw_mpas_init_v831 and rw_mpas_gsl_oro to its release
+        # bundle (PyPI's per-file limit); their first use stages them where woof's
+        # ladder reads, so a plain install's RRFS init runs instead of refusing.
+        if attempt or not _fetch_on_demand(spec):
+            break
 
     found = shutil.which(spec.name)
     if found:
@@ -469,11 +669,36 @@ def resolve(spec: EngineSpec, explicit: str | Path | None = None) -> Path:
     raise EngineRefusal(
         f"{spec.name} not found, so {spec.what_breaks}.\n"
         f"Looked at: {resolution_order(spec)}.\n"
-        f"This distribution ships no compiled engine: the Rust binaries are "
+        f"This distribution bundles only the engines no released woof carries "
+        f"(rw_mpas_geometry, rw_mpas_stream, rw_mpas_static, rw_mpas_lbc and the three RRFS "
+        f"programs); the other Rust binaries are "
         f"built from the woof tools/rustwx workspace and are staged onto a "
-        f"machine, never carried in this wheel.  Supply it with one of:\n"
+        f"machine.  Supply it with one of:\n"
         f"{remedy(spec)}"
     )
+
+
+def _fetch_on_demand(spec: EngineSpec) -> bool:
+    """Stage an engine woof ships on demand (in its bundle, not its platform wheel).
+
+    True when woof staged it now. Never raises: an engine woof does not ship on
+    demand, an older woof without the fetch, or a failed download all leave the
+    ladder's refusal (and its remedy) to speak. Read-only callers (:func:`locate`,
+    doctor) never come here.
+    """
+
+    try:
+        from woof import bridges  # noqa: PLC0415 - lazy on purpose
+    except Exception:  # pragma: no cover - depends on the installed estate
+        return False
+    on_demand = getattr(bridges, "fetched_on_demand", None)
+    fetch = getattr(bridges, "fetch_on_demand", None)
+    if on_demand is None or fetch is None:
+        return False
+    try:
+        return bool(on_demand(spec.name) and fetch(spec.name))
+    except Exception:  # pragma: no cover - a download that failed is reported by the refusal
+        return False
 
 
 def locate(spec: EngineSpec) -> tuple[Path | None, str]:
@@ -500,6 +725,16 @@ def locate(spec: EngineSpec) -> tuple[Path | None, str]:
             return candidate, f"${name}"
         return None, f"${name} names a missing file: {candidate}"
 
+    bundled = bundled_candidate(spec, fetch=False)
+    from .helpers import on_demand
+    if not bundled.is_file() and on_demand(executable_name(spec.name)):
+        return bundled, ("this release's hex helper archive (on demand: the first run that needs it "
+                         "fetches and verifies it, or `woof fetch-bridges` now)")
+    if bundled.is_file():
+        if _not_executable(bundled):
+            return None, _not_executable_text("this distribution's woof/hex/libexec holds", bundled)
+        return bundled, "this distribution's woof/hex/libexec"
+
     for candidate in gpuwm_candidates(spec):
         candidate = Path(candidate).expanduser()
         if candidate.is_file():
@@ -519,12 +754,17 @@ __all__ = [
     "CONVERT",
     "ENGINES",
     "FETCH_COMMAND",
+    "GDT101_REMAP",
+    "GEOMETRY",
+    "HOSTPREP",
     "INIT",
     "LBC",
+    "MET_INTERMEDIATE",
     "RENDERER",
     "STATIC",
     "USER_BRIDGE_DIR",
     "EngineRefusal",
+    "bundled_candidate",
     "EngineSpec",
     "chmod_remedy",
     "executable_name",
@@ -535,3 +775,47 @@ __all__ = [
     "resolution_order",
     "resolve",
 ]
+
+
+def static_geog_argv(explicit: str | Path | None) -> list[str]:
+    """``--geog ROOT`` for ``rw_mpas_static``: the explicit root, else woof's own ladder.
+
+    The helper's built-in ladder is the one ``woof fetch-geog`` stages into
+    (``$GPUWM_WPS_GEOG``, ``$GPUWM_CASE_DATA_ROOT/WPS_GEOG``,
+    ``~/.local/share/gpuwm/WPS_GEOG``).  ``woof fetch-geog`` stages into
+    ``woof.geog_assets.default_geog_root()`` (``~/.local/share/woof/WPS_GEOG``
+    unless the case-data root is set), so a door that left the root to the
+    helper refused with "no geography root" beside the archive ``woof
+    fetch-geog`` had just staged (WOOF 1.1.0 r13: ``woof hex global`` without
+    ``--geog`` on a clean install).  The root comes from
+    ``woof.rustwx_static.default_geog_root()``, the ladder ``woof mesh`` reads.
+    When that finds nothing no flag is passed, and the helper's own refusal
+    names where it looked.
+    """
+
+    if explicit:
+        return ["--geog", str(Path(explicit).expanduser().absolute())]
+    try:
+        from woof.rustwx_static import default_geog_root
+    except ImportError:
+        return []
+    found = default_geog_root()
+    return ["--geog", str(Path(found).absolute())] if found is not None else []
+
+
+def refusal_text(stderr: str | None, stdout: str | None = None, *, max_lines: int = 40) -> str:
+    """An engine's refusal as it printed it, not just its last line.
+
+    Defect (hex global run, 2026-10-16): the doors kept only the last line of
+    ``rw_mpas_static``'s stderr.  Its geography refusal ends with the
+    alternative remedy ("--geog DIR pointing at a complete archive"), so the
+    door reported that line and dropped the one above it naming the missing
+    datasets and ``woof fetch-geog --datasets mesh``.  The engine's refusals
+    are a few lines and progress goes to stdout, so the whole of stderr (its
+    last ``max_lines`` lines) is the message.
+    """
+
+    from .command_names import helper_remedies
+
+    lines = [line.rstrip() for line in helper_remedies(stderr or stdout or "").strip().splitlines()]
+    return "\n".join(lines[-max_lines:]) if lines else "no output"

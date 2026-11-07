@@ -67,6 +67,7 @@ fn sample_projected_opts() -> RenderOpts {
         barbs: Vec::new(),
         streamlines: Vec::new(),
         presentation: RenderPresentation::for_mode(ProductVisualMode::FilledMeteorology),
+        empty_note: None,
     }
 }
 
@@ -303,6 +304,8 @@ fn supersample_scaling_expands_overlay_dimensions() {
         major_width: Some(3),
     }];
     opts.barbs = vec![BarbOverlay {
+        direction_projection: None,
+        direction_arrows: false,
         u: vec![10.0, 10.0, 10.0, 10.0],
         v: vec![0.0, 0.0, 0.0, 0.0],
         ny: 2,
@@ -1119,6 +1122,98 @@ fn projected_pixel_bilinear_rejects_projected_seam_jumps() {
     assert!(projected_pixel_bilinear(&pixel_points, 2, 2, 0.5, 0.5).is_none());
 }
 
+fn isobar_cell_overlay(data: Vec<f64>, nx: usize, ny: usize, levels: Vec<f64>) -> ContourOverlay {
+    ContourOverlay {
+        data,
+        ny,
+        nx,
+        levels,
+        color: Rgba::BLACK,
+        width: 1,
+        labels: false,
+        show_extrema: false,
+        pattern: crate::request::ContourLinePattern::Solid,
+        major_every: None,
+        major_width: None,
+    }
+}
+
+/// U-E9 (2.9.9 R10 look): a small closed isobar on the R11 d01 MSLP/10 m
+/// winds map had a one-cell gap with nothing in it.  The ring passed exactly
+/// through a grid node (the node's MSLP equalled the 2 hPa level), the cell
+/// counted that corner as a crossing on both of its edges, found three
+/// points, and drew only the first pair: the corner to itself.  The segment
+/// from that corner to the opposite edge was never drawn.
+#[test]
+fn contour_through_a_grid_node_keeps_the_segment_to_the_opposite_edge() {
+    let layout = contour_test_layout();
+    // Corners in walk order: c0 (0,0) below, c1 (1,0) exactly ON 1016,
+    // c2 (1,1) and c3 (0,1) above.  The isobar runs from c1 to the c3-c0 edge.
+    let overlay = isobar_cell_overlay(vec![1015.5, 1016.0, 1016.4, 1016.3], 2, 2, vec![1016.0]);
+
+    let (pts, count, _) =
+        contour_cell_intersections(&layout, &overlay, None, 0, 1, 1016.0).expect("the cell is crossed");
+    assert_eq!(count, 2, "a node on the level is one crossing, not two: {pts:?}");
+    let (c0, c1, _c2, c3) = contour_cell_corners(&layout, &overlay, None, 0, 1).unwrap();
+    let t = (1016.0 - 1016.4) / (1015.5 - 1016.4);
+    let a = (c3.0 + (c0.0 - c3.0) * t, c3.1 + (c0.1 - c3.1) * t);
+    let close = |p: (f64, f64), q: (f64, f64)| (p.0 - q.0).abs() < 1e-9 && (p.1 - q.1).abs() < 1e-9;
+    assert!(close(pts[0], c1) && close(pts[1], a), "segment is c1 -> the c3-c0 edge: {pts:?}");
+
+    // And it is drawn: the middle of that segment is inked.
+    let mut img = blank_test_image();
+    let mut labels = ContourLabelPlacer::default();
+    draw_contours_bucketed(&mut img, &layout, &overlay, None, None, &mut labels, 1);
+    let mid = ((c1.0 + a.0) * 0.5, (c1.1 + a.1) * 0.5);
+    let inked = (-1..=1).any(|dy| {
+        (-1..=1).any(|dx| {
+            let x = (mid.0.round() as i32 + dx) as u32;
+            let y = (mid.1.round() as i32 + dy) as u32;
+            img.get_pixel(x, y).0 != [255, 255, 255, 255]
+        })
+    });
+    assert!(inked, "no ink at the middle of the isobar segment {mid:?}");
+}
+
+/// Every cell of a field whose nodes often sit exactly on a level (whole
+/// hPa values, 2 hPa levels) has 0, 2 or 4 crossings, never 3.
+#[test]
+fn contour_cells_never_have_an_odd_crossing_count_when_nodes_sit_on_levels() {
+    let layout = contour_test_layout();
+    let (nx, ny) = (9usize, 9usize);
+    let data: Vec<f64> = (0..ny)
+        .flat_map(|j| (0..nx).map(move |i| 1010.0 + ((i * 7 + j * 3) % 9) as f64))
+        .collect();
+    let levels: Vec<f64> = (0..10).map(|k| 1008.0 + 2.0 * k as f64).collect();
+    let overlay = isobar_cell_overlay(data, nx, ny, levels.clone());
+    let mut on_level_cells = 0usize;
+    for j in 0..ny - 1 {
+        for i in 0..nx - 1 {
+            let base = j * nx + i;
+            for &level in &levels {
+                let corners = [
+                    overlay.data[base],
+                    overlay.data[base + 1],
+                    overlay.data[base + nx + 1],
+                    overlay.data[base + nx],
+                ];
+                if corners.iter().any(|v| *v == level) {
+                    on_level_cells += 1;
+                }
+                if let Some((pts, count, _)) =
+                    contour_cell_intersections(&layout, &overlay, None, base, 1, level)
+                {
+                    assert!(
+                        count == 2 || count == 4,
+                        "cell ({i},{j}) level {level}: {count} crossings {pts:?}"
+                    );
+                }
+            }
+        }
+    }
+    assert!(on_level_cells > 20, "the field must exercise nodes on levels ({on_level_cells})");
+}
+
 #[test]
 fn levels_are_sorted_finite_rejects_unsorted_or_nan_levels() {
     assert!(levels_are_sorted_finite(&[1.0, 2.0, 3.0]));
@@ -1389,6 +1484,8 @@ fn render_to_png_suppresses_barbs_when_overlay_data_is_nan() {
     let mut opts = sample_projected_opts();
     opts.title = None;
     opts.barbs = vec![BarbOverlay {
+        direction_projection: None,
+        direction_arrows: false,
         u: vec![f32::NAN; 4],
         v: vec![f32::NAN; 4],
         ny: 2,
@@ -2241,5 +2338,177 @@ fn a_planned_frame_fills_its_map_and_keeps_its_chrome_inside_the_canvas() {
                 assert!(is_canvas(bar.x.saturating_sub(2), mid) && is_canvas(bar.right() + 2, mid));
             }
         }
+    }
+}
+
+#[test]
+fn transport_arrows_follow_projection_aspect_and_seam() {
+    use crate::georeference::ResolvedProjection;
+    use crate::overlay::DirectionProjection;
+    let projection = DirectionProjection {
+        projection: ResolvedProjection::Geographic { central_meridian_deg: 0.0 },
+        extent: MapExtent { x_min: -180.0, x_max: 180.0, y_min: -90.0, y_max: 90.0 },
+        lat_lon: vec![(60.0, 179.99998)],
+    };
+    let (east, north) = projected_transport_direction(Some(&projection), 0, 1.0, 0.0, 1440, 720).unwrap();
+    assert!(east > 0.0 && north.abs() < 1e-10);
+    let (_, meridional) = projected_transport_direction(Some(&projection), 0, 0.0, 1.0, 1440, 720).unwrap();
+    assert!((east / meridional - 2.0).abs() < 1e-6);
+    let projection = DirectionProjection {
+        projection: ResolvedProjection::LambertConformal {
+            standard_parallel_1_deg: 30.0, standard_parallel_2_deg: 60.0,
+            central_meridian_deg: -100.0, reference_latitude_deg: 40.0 },
+        extent: projection.extent,
+        lat_lon: vec![(40.0, -120.0), (40.0, -80.0)],
+    };
+    let west = projected_transport_direction(Some(&projection), 0, 1.0, 0.0, 1000, 1000).unwrap();
+    let east = projected_transport_direction(Some(&projection), 1, 1.0, 0.0, 1000, 1000).unwrap();
+    assert!(west.0 > 0.0 && east.0 > 0.0);
+    assert!(west.1 < 0.0 && east.1 > 0.0);
+}
+
+/// A smooth height-like field, `levels` lines across the grid, on a grid
+/// whose cells are well under a pixel at the given map size.
+fn dense_contour_overlay(nx: usize, ny: usize) -> ContourOverlay {
+    let mut data = Vec::with_capacity(nx * ny);
+    for j in 0..ny {
+        for i in 0..nx {
+            let x = i as f64 / (nx - 1) as f64;
+            let y = j as f64 / (ny - 1) as f64;
+            data.push(540.0 + 60.0 * x + 12.0 * (3.0 * y).sin());
+        }
+    }
+    ContourOverlay {
+        data,
+        ny,
+        nx,
+        levels: (0..10).map(|index| 546.0 + 6.0 * index as f64).collect(),
+        color: Rgba::BLACK,
+        width: 1,
+        labels: true,
+        show_extrema: false,
+        pattern: crate::request::ContourLinePattern::Solid,
+        major_every: None,
+        major_width: None,
+    }
+}
+
+#[test]
+fn contour_labels_draw_on_a_grid_whose_cells_are_under_a_pixel() {
+    // A 3 km CONUS grid (1799 x 1059) on a ~1000 px map: every marching
+    // squares segment is about half a pixel.  The fixed two-pixel floor
+    // rejected all of them and no label was ever placed.
+    let mut layout = contour_test_layout();
+    layout.map_w = 1000;
+    layout.map_h = 600;
+    let overlay = dense_contour_overlay(1799, 1059);
+    let mut img = RgbaImage::from_pixel(1000, 600, Rgba::WHITE.to_image_rgba());
+    let mut placer = ContourLabelPlacer::default();
+    draw_contours_bucketed(&mut img, &layout, &overlay, None, None, &mut placer, 1);
+    let mut labelled: Vec<String> = placer.labels.iter().map(|label| label.text.clone()).collect();
+    labelled.sort();
+    labelled.dedup();
+    assert!(
+        labelled.len() >= 8,
+        "expected most of the 10 levels labelled, got {labelled:?}"
+    );
+    if let Some(folder) = std::env::var_os("RUSTWX_CONTOUR_LABEL_EVIDENCE") {
+        let folder = std::path::PathBuf::from(folder);
+        std::fs::create_dir_all(&folder).unwrap();
+        placer.draw(&mut img);
+        img.save(folder.join("dense-grid-contour-labels.png")).unwrap();
+    }
+}
+
+#[test]
+fn the_label_segment_floor_is_unchanged_on_coarse_grids() {
+    assert_eq!(contour_label_min_segment_px(4.0), 2.0);
+    assert_eq!(contour_label_min_segment_px(40.0), 2.0);
+    assert_eq!(contour_label_min_segment_px(f64::INFINITY), 2.0);
+    assert_eq!(contour_label_min_segment_px(0.0), 2.0);
+    assert!((contour_label_min_segment_px(0.6) - 0.3).abs() < 1.0e-12);
+}
+
+#[test]
+fn a_label_crossing_the_domain_clip_is_not_placed() {
+    let mut layout = contour_test_layout();
+    layout.map_x = 10;
+    layout.map_y = 10;
+    layout.map_w = 200;
+    layout.map_h = 200;
+    // The drawn domain is the local square 20..180.
+    let mut mask = RgbaImage::new(200, 200);
+    for y in 20..180 {
+        for x in 20..180 {
+            mask.put_pixel(x, y, Rgba::WHITE.to_image_rgba());
+        }
+    }
+    let inside = LabelRect { min_x: 60, max_x: 90, min_y: 60, max_y: 72 };
+    let across_left = LabelRect { min_x: 25, max_x: 55, min_y: 60, max_y: 72 };
+    let across_bottom = LabelRect { min_x: 60, max_x: 90, min_y: 182, max_y: 194 };
+    assert!(label_rect_inside_clip_mask(&layout, inside, 2, Some(&mask)));
+    assert!(!label_rect_inside_clip_mask(&layout, across_left, 2, Some(&mask)));
+    assert!(!label_rect_inside_clip_mask(&layout, across_bottom, 2, Some(&mask)));
+    assert!(label_rect_inside_clip_mask(&layout, across_left, 2, None));
+}
+
+#[test]
+fn masked_dense_contours_keep_every_label_inside_the_domain() {
+    let mut layout = contour_test_layout();
+    layout.map_w = 800;
+    layout.map_h = 500;
+    let overlay = dense_contour_overlay(1400, 900);
+    let mut mask = RgbaImage::new(800, 500);
+    for y in 40..460 {
+        for x in 40..760 {
+            mask.put_pixel(x, y, Rgba::WHITE.to_image_rgba());
+        }
+    }
+    let mut img = RgbaImage::from_pixel(800, 500, Rgba::WHITE.to_image_rgba());
+    let mut placer = ContourLabelPlacer::default();
+    draw_contours_bucketed(&mut img, &layout, &overlay, None, Some(&mask), &mut placer, 1);
+    assert!(!placer.labels.is_empty());
+    for label in &placer.labels {
+        assert!(label.x >= 40 && label.y >= 40, "label {} at {},{}", label.text, label.x, label.y);
+        assert!(label.x < 760 && label.y < 460);
+    }
+}
+
+/// A filled map whose values all fall under the scale's mask (a cold column
+/// with no 0 C level, an accumulation at F000) carries a note; one drawn
+/// cell, or a map with no colour bar, does not.
+#[test]
+fn empty_filled_map_gets_a_note_and_a_drawn_one_does_not() {
+    let mut opts = sample_projected_opts();
+    opts.cmap = sample_masked_cmap();
+    opts.colorbar = true;
+    assert_eq!(empty_map_note(&[f64::NAN, 1.0, 5.0, 9.0], &opts).as_deref(), Some(EMPTY_MAP_NOTE));
+    opts.empty_note = Some("No 0 C level: the whole column is colder than 0 C".into());
+    assert_eq!(
+        empty_map_note(&[f64::NAN; 4], &opts).as_deref(),
+        Some("No 0 C level: the whole column is colder than 0 C")
+    );
+    assert_eq!(empty_map_note(&[f64::NAN, 1.0, 15.0, 9.0], &opts), None);
+    opts.colorbar = false;
+    assert_eq!(empty_map_note(&[f64::NAN; 4], &opts), None);
+    // The note is drawn inside the map rectangle.
+    opts.colorbar = true;
+    let (bare, _) = {
+        let mut drawn = opts.clone();
+        drawn.empty_note = None;
+        render_to_image_profile_unnoted(&[f64::NAN; 4], 2, 2, &drawn)
+    };
+    let (noted, _) = render_to_image_profile(&[f64::NAN; 4], 2, 2, &opts);
+    assert_ne!(bare.as_raw(), noted.as_raw());
+}
+
+/// Dimensionless units label nothing; real units are kept as given.
+#[test]
+fn dimensionless_units_carry_no_colorbar_label() {
+    for units in ["1", "0/1", " 1 ", "", "dimensionless", "-"] {
+        assert_eq!(crate::legend_units_label(units), None, "{units:?}");
+    }
+    for units in ["in", "m", "g kg-1", "%", "dBZ"] {
+        assert_eq!(crate::legend_units_label(units).as_deref(), Some(units));
     }
 }

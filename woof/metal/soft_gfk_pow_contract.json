@@ -1,6 +1,6 @@
 {
   "schema": "woof-metal-soft-gfk-pow-contract-v1",
-  "status": "dependency-blocked-source-proposal",
+  "status": "consumer-specific-verification",
   "source": {
     "file": "woof/core/kernels/glibc_flt32.cuh",
     "upstream": "glibc 2.39 sysdeps/ieee754/flt-32/e_powf.c",
@@ -35,13 +35,13 @@
       "soft64_greater(ulong, ulong) -> bool",
       "soft64_less_equal(ulong, ulong) -> bool"
     ],
-    "state": "The base header and its declared behavior are not centrally cleared or verified. This proposal must not be consumed until central review clears the base."
+    "state": "The shared primitives are used by production consumers; their bounded verification does not establish exhaustive behavior. Each consumer requires its own source comparison."
   },
   "missing_interfaces": [],
   "constraints": [
     "No native float or double arithmetic, approximation, generic libm replacement, or duplicated log/exp API is used.",
     "The pow-owned log2 polynomial is kept inline with its source constants and ordered operations.",
-    "The included soft binary32, soft binary64 and exp interfaces are present in the checked-in source. Keep this proposal dependency-blocked until those shared implementations and this translation are compiled and numerically verified; no production consumer may admit it yet."
+    "The shared binary32, binary64 and exp interfaces are present; a production consumer requires its own numerical comparison. Bounded results do not establish exhaustive parity."
   ],
-  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+  "verification": "The shared helpers matched the in-tree glibc 2.39 transcription on 4,826 bounded input rows. The lake consumer was also compared with the retained WRF v4.6.1 12-column, 300-step Fortran fixture: its TH2 output agreed except for a one-ULP difference inherited from T2 in one step. Other lake state and flux differences remain. These results do not establish exhaustive primitive or full-physics parity."
 }

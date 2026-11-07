@@ -3,6 +3,11 @@
 
 #include "soft_binary64.metalh"
 #include "soft_libm64.metalh"
+#include "lake_wcr_sin.metalh"
+#include "lake_wcr_exp.metalh"
+#include "lake_wcr_log.metalh"
+#include "lake_wcr_pow.metalh"
+#include "lake_wcr_atan.metalh"
 using namespace metal;
 
 // WRF's CLM lake code declares its work arrays and intermediates as real*8.
@@ -75,40 +80,16 @@ static inline LakeR8 lake_abs(LakeR8 a)
 static inline LakeR8 lake_sqrt(LakeR8 a)
 { return LakeR8(soft64_sqrt(a.bits)); }
 static inline LakeR8 lake_exp(LakeR8 a)
-{ return LakeR8(soft64_plm_exp(a.bits)); }
+{ return LakeR8(lake_wcr_exp_bits(a.bits)); }
 static inline LakeR8 lake_log(LakeR8 a)
-{ return LakeR8(soft64_plm_log(a.bits)); }
+{ return LakeR8(lake_wcr_log_bits(a.bits)); }
 static inline LakeR8 lake_log10(LakeR8 a)
-{ return LakeR8(soft64_div(soft64_plm_log(a.bits), 0x40026bb1bbb55516ul)); }
+{ return LakeR8(lake_wcr_log10_bits(a.bits)); }
 static inline LakeR8 lake_pow(LakeR8 a, LakeR8 b)
-{ return LakeR8(soft64_plm_pow(a.bits, b.bits)); }
-static inline LakeR8 lake_atan_small(LakeR8 x)
-{
-    const LakeR8 one(1), xx = x * x;
-    LakeR8 term = x, sum = x;
-    for (int k = 1; k < 36; ++k) {
-        term = -(term * xx);
-        sum += term / LakeR8(2 * k + 1);
-    }
-    return sum;
-}
+{ return LakeR8(lake_wcr_pow_bits(a.bits, b.bits)); }
 static inline LakeR8 lake_atan(LakeR8 x)
-{
-    const LakeR8 pi(0x400921fb54442d18ul);
-    const LakeR8 half_pi(0x3ff921fb54442d18ul);
-    const LakeR8 one(1);
-    const bool negative = x < LakeR8(0);
-    LakeR8 ax = negative ? -x : x;
-    LakeR8 y;
-    if (ax > one) {
-        y = half_pi - lake_atan(ax == LakeR8(0x7ff0000000000000ul)
-                                    ? LakeR8(0) : one / ax);
-    } else {
-        const LakeR8 reduced = ax / (one + lake_sqrt(one + ax * ax));
-        y = LakeR8(2) * lake_atan_small(reduced);
-    }
-    return negative ? -y : y;
-}
+{ return LakeR8(lake_wcr_atan_bits(x.bits)); }
+static inline LakeR8 sin(LakeR8 a) { return LakeR8(lake_wcr_sin_bits(a.bits)); }
 static inline LakeR8 sqrt(LakeR8 a) { return lake_sqrt(a); }
 static inline LakeR8 exp(LakeR8 a) { return lake_exp(a); }
 static inline LakeR8 log(LakeR8 a) { return lake_log(a); }
@@ -165,7 +146,8 @@ static inline float lake_div(float a,float b) { return a/b; }
 static inline LakeR8 lake_div(LakeR8 a,LakeR8 b) { return a/b; }
 template<class A,class B> static inline auto lake_div(A a,B b)->decltype(a+b) { using T=decltype(a+b); return lake_div(T(a),T(b)); }
 template<class T> static inline T lake_pow(T a,int b) { bool neg=b<0; if(neg)b=-b; T r=1; while(b){if(b&1)r=r*a;b>>=1;if(b)a=a*a;}return neg?T(1)/r:r; }
-static inline LakeR8 lake_pow(LakeR8 a,float b) { return LakeR8(soft64_plm_pow(a.bits, LakeR8(b).bits)); }
+static inline float lake_pow(float a,float b) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(a),as_type<uint>(b))); }
+static inline LakeR8 lake_pow(LakeR8 a,float b) { return LakeR8(lake_wcr_pow_bits(a.bits, LakeR8(b).bits)); }
 template<class A,class B> static inline auto lake_pow(A a,B b)->decltype(a+b) { using T=decltype(a+b); return pow(T(a),T(b)); }
 template<class T> static inline T lake_sum(LakeArray<T> a) { T r=0; for(int i=0;i<a.n1*a.n2*a.n3;++i)r=r+a.data[i]; return r; }
 

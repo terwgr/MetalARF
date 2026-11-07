@@ -78,6 +78,8 @@ class StochasticPhysicsBinding:
 
     def snapshot(self):
         return {"contract": "gpuwm-ensemble-stochastic-binding.v1",
+                **({"warnings": ["uncalibrated spread, WRF default amplitudes"]}
+                   if self.enabled else {}),
                 "member_id": self.member_id, "recipe_sha256": self.recipe_sha256,
                 "applied_steps": self.applied_steps, "hook": self.hook.snapshot()}
 
@@ -149,9 +151,10 @@ def coupled_mass_factors(state, cfg):
         u, v = _couple_momentum_to_faces(state, cfg, device_mass, device_mass)
         theta = mass / _host(state.msft)[None] if state.has_msf else mass
         return {"u": _host(u), "v": _host(v), "theta": theta}
+    from woof.wrf_exact import ENABLED as WRF_EXACT
     mass = state.c1h[:, None, None] * state.total_mu()[None] + state.c2h[:, None, None]
     u, v = _couple_momentum_to_faces(state, cfg, mass, mass)
-    theta = mass / state.msft[None] if state.has_msf else mass
+    theta = mass / state.msft[None] if state.has_msf and not WRF_EXACT else mass
     return {"u": u, "v": v, "theta": theta}
 
 

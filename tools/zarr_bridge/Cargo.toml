@@ -19,6 +19,7 @@ zarrs_http = "=0.3.1"
 # The HTTP client the reader's own store (src/http_store.rs) builds, with a timeout sized for a chunk.
 reqwest = { version = "=0.12.28", default-features = false, features = ["blocking"] }
 bytes = "=1.12.1"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "net"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "alloc"] }
@@ -33,11 +34,11 @@ openssl = { version = "=0.10.81", features = ["vendored"] }
 
 # netcrust carries a self-contained path dependency chain for NetCDF/HDF5.
 
+# Same reasoning as tools/rustwx: a bridge binary is package data
+# measured against PyPI's per-file limit, and the static symbol table is
+# the cheapest weight to give back; the source-revision stamp and the ABI
+# marker are .rodata and survive a symbol strip.
 [profile.release]
 lto = "thin"
 codegen-units = 1
-# WOOF: symbol tables go too (strip = "symbols"). Its platform wheel carries
-# six more decoders than the engine's and measured 103,610,312 bytes with
-# debuginfo stripping only; dropping symbols gives back 5.26 MB and keeps the
-# source-revision stamp, contract markers and exported ABI symbols.
 strip = "symbols"

@@ -77,7 +77,13 @@ class MetalTwoPhasePhysicsBackendV841:
         from woof.core.mpas_column_batch_metal import run_mpas_column_batch_metal
 
         prep_geometry.validate()
-        self._values = dict(constructor_values)
+        from .cuda_arwen_physics_v841 import SealedArwenConstructorV841
+        self._constructor = SealedArwenConstructorV841.from_mapping(constructor_values)
+        self._values = self._constructor.arwen_kwargs()
+        # The sealed legacy ABI omits exact-mode keys. The new engine's
+        # unnamed mode is correct, so forward the resolved choice explicitly.
+        self._values["physics_mode"] = self._constructor.physics_mode
+        self._values["physics_correct_skip"] = self._constructor.physics_correct_skip
         self._n_levels = int(self._values["n_levels"])
         self._n_columns = int(self._values["n_columns"])
         self._dt = float(self._values["dt"])
@@ -106,7 +112,18 @@ class MetalTwoPhasePhysicsBackendV841:
         self._gf_forcing_seen = False
 
     def _new_seam(self) -> Any:
-        return self._factory(**self._values, array_module=self._xp)
+        seam = self._factory(**self._values, array_module=self._xp)
+        self.noahmp_statics_receipt = {"bound": False, "fields": {}}
+        for name, value in self._constructor.noahmp_statics().items():
+            target = seam._driver.fields.get(name)
+            if target is None or target.size != value.size:
+                raise ValueError(f"Metal Noah-MP has no matching {name} static carrier")
+            target[...] = self._xp.asarray(value.reshape(target.shape), dtype=target.dtype)
+            self.noahmp_statics_receipt["fields"][name] = {
+                "bound_min": float(value.min()), "bound_max": float(value.max()),
+                "bound_mean": float(value.mean(dtype=np.float64))}
+            self.noahmp_statics_receipt["bound"] = True
+        return seam
 
     @property
     def phase(self) -> str:
@@ -429,17 +446,29 @@ class MetalTwoPhasePhysicsBackendV841:
         return {key.lower(): value
                 for key, value in self._seam.accumulated_precipitation().items()}
 
+    @property
+    def correct_mode_receipt(self) -> dict:
+        return self._seam.correct_mode_receipt
+
+    @property
+    def physics_identity(self) -> dict:
+        """The selected provider's resolved configuration and generations."""
+        return self._seam.configuration_identity
+
     def restart_state(self) -> Mapping[str, Any]:
         if self._phase != "boundary":
             raise RuntimeError("restart_state is legal only at a step boundary")
         return {"seam": self._seam.export_state(),
+                "constructor_identity": self._constructor.identity_sha256,
                 "gf_forcing_seen": self._gf_forcing_seen}
 
     def restore_restart_state(self, payload: Mapping[str, Any]) -> None:
         if self._phase != "boundary":
             raise RuntimeError("restore_restart_state is legal only at a step boundary")
-        if set(payload) != {"seam", "gf_forcing_seen"}:
+        if set(payload) != {"seam", "gf_forcing_seen", "constructor_identity"}:
             raise ValueError(f"restart payload keys changed: {sorted(payload)}")
+        if payload["constructor_identity"] != self._constructor.identity_sha256:
+            raise ValueError("Metal Hex restart constructor/static identity differs")
         fresh = self._new_seam()
         fresh.restore_state(payload["seam"])
         self._seam = fresh
@@ -776,8 +805,12 @@ def open_metal_physics_stack_v841(
         physics_mesh = driver.regional_v841.padded
     prep_geometry = MetalMpasToPhysGeometryV841.from_host(context, physics_mesh)
     physics_geometry = MetalPhysicsGeometryV841.from_host(context, physics_mesh)
-    gwdo_static = MetalYsuGwdoStaticV841.from_host(context, host["gwdo_host"])
-    backend = MetalTwoPhasePhysicsBackendV841(
+    gwdo_static = (None if host.get("gwdo_host") is None else
+                   MetalYsuGwdoStaticV841.from_host(context, host["gwdo_host"]))
+    from .physics_backend_admission import DEFAULT_BACKEND, resolve_backend
+    row = resolve_backend(host.get("physics_backend", DEFAULT_BACKEND))
+    backend = row.build_metal_column_backend(
+        seam_options=host.get("seam_options"),
         constructor_values=host["constructor_values"],
         prep_geometry=prep_geometry,
         array_module=MetalArrayModule(context),
@@ -805,3 +838,53 @@ __all__ = [
     "execute_composite_step_metal_v841",
     "open_metal_physics_stack_v841",
 ]
+
+
+def build_column_backend(row, *, seam_options=None, **kwargs):
+    """The shared two-phase Metal engine, parameterized by the sealed row."""
+    from woof.core.mpas_column_batch import _SPECIES_BY_SCHEME
+
+    if seam_options:
+        from .errors import ConfigurationRefusal
+
+        raise ConfigurationRefusal(
+            "physics_backend", row.name,
+            "this column engine carries no point-source treatment",
+            "a source-capable provider and its Metal implementation")
+    values = kwargs["constructor_values"]
+    scheme = values.get("microphysics_scheme", "wsm6")
+    if tuple(_SPECIES_BY_SCHEME[scheme]) != row.model_scalar_names():
+        raise ValueError("the sealed column engine and provider scalar inventory differ")
+    return MetalTwoPhasePhysicsBackendV841(**kwargs)
+
+
+def additional_memory_bytes(row, n_cells, n_levels):
+    """Conservatively price non-WSM6 state and the selected column scratch.
+
+    The established WSM6 estimate stays unchanged. For another scheme, the
+    shared regional registry bounds every column scratch slot at eight bytes
+    per element, plus a full set of transport/RK copies of its extra scalars.
+    This deliberately overcounts shared WSM6 scratch rather than assuming
+    that changing the transported scalar count has no allocation cost.
+    """
+    import math
+    from woof.config import RunConfig
+    from woof.core.mpas_column_batch import _MP_PHYSICS_BY_SCHEME
+    from woof.core.preflight import scratch_slot_registry
+    from .species_row import species_row_for_names
+
+    species = species_row_for_names(row.model_scalar_names())
+    if species.engine_scheme == "wsm6":
+        return 0
+    cfg = RunConfig(nx=int(n_cells), ny=1, nz=int(n_levels), moist=True,
+                    dx=1.0, dy=1.0, ztop=float(n_levels), dt=1.0, run_seconds=0.0,
+                    mp_physics=_MP_PHYSICS_BY_SCHEME[species.engine_scheme],
+                    sf_surface_physics=4, sf_sfclay_physics=1, bl_pbl_physics=1,
+                    ra_physics=4, ra_rrtmg_variant="rrtmg_legacy")
+    scratch = sum(8 * math.prod(shape)
+                  for shape in scratch_slot_registry(cfg).values())
+    # This covers the state, candidate, saved, stage and scalar flux copies,
+    # with room for each family's transient copies during submission.
+    extra_scalars = max(len(species.names()) - len(_ENGINE_SPECIES), 0)
+    transport = 64 * 4 * extra_scalars * int(n_cells) * int(n_levels)
+    return int(scratch + transport)

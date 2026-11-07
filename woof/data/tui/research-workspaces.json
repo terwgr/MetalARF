@@ -224,7 +224,7 @@
       "id": "native-output",
       "title": "WOOF Plot Presets",
       "publisher": "WOOF source data",
-      "url": "gpuwm/data/tui/plot-presets.json",
+      "url": "woof/data/tui/plot-presets.json",
       "accessed": "2026-09-06",
       "supports": "Exact native plot-product identifiers; selected plots do not create unavailable history fields."
     },

@@ -238,6 +238,10 @@ def test_every_implemented_option_is_selected_by_a_registered_suite() -> None:
         for component_id, option_id in template["components"].items()
     }
     cited = {
+        ("cumulus", "grell-3d"):
+            "column and diagnostic conformance is measured, but no composed "
+            "forecast or observation score qualifies a recommended suite; "
+            "a config or imported WRF namelist selects cu_physics=5 directly",
         ("land_surface", "off"): "a degradation, not a suite to recommend",
         ("surface_layer", "off"): "a degradation, not a suite to recommend",
         ("microphysics", "off"): "a degradation, not a suite to recommend",
@@ -260,6 +264,38 @@ def test_every_implemented_option_is_selected_by_a_registered_suite() -> None:
             "score yet, so no preset recommends it; a config asks for it "
             "directly (bl_pbl_physics = 9, per domain too) and an imported "
             "WRF namelist carries it",
+        ("microphysics", "tempo"):
+            "TEMPO is asked for by name through the rrfs-v2-hex-tempo model "
+            "preset (woof preset run), an RRFS configuration on the hex "
+            "dycore with declared divergences, not a WRF-side template; a "
+            "config asks for it directly (mp_physics = \"tempo\")",
+        ("cumulus", "tiedtke"):
+            "WRF's original Tiedtke (cu_physics = 6) is checked against an "
+            "independent column oracle but has no forecast or observation "
+            "score yet, so no preset recommends it; a config asks for it "
+            "directly (cu_physics = 6)",
+        **{("microphysics", option_id):
+           f"WRF's {label} is graded word for word against WRF's own "
+           "Fortran column but has no forecast or observation score yet, so "
+           "no preset recommends it; a config asks for it directly "
+           f"(mp_physics = {mp}) and an imported WRF namelist carries it"
+           for option_id, label, mp in (
+               ("wsm3-mp3", "WSM3 simple-ice scheme", 3),
+               ("wsm5-mp4", "WSM5 five-class scheme", 4),
+               ("ferrier-aligo-mp5", "Ferrier-Aligo scheme", 5),
+               ("wsm6r-mp106", "revised WSM6 (WSM6R)", 106),
+               ("wsm7-mp24", "WSM7 seven-class scheme with hail", 24))},
+        ("radiation", "new-goddard"):
+            "WRF's 2017 Goddard radiation (ra_lw/ra_sw_physics = 5) is graded "
+            "against WRF's own columns but has no forecast or observation "
+            "score yet, so no preset recommends it; a config or an imported "
+            "WRF namelist selects it directly",
+        ("microphysics", "fast-sbm-mp30"):
+            "WRF's FAST_SBM bin scheme (mp_physics = 30) is graded bit for "
+            "bit against WRF's own column calls but has no forecast or "
+            "observation score yet, so no preset recommends it; `woof "
+            "domain --physics-choices` swaps it into any legacy-RRTMG suite "
+            "and an imported WRF namelist carries it",
     }
 
     missing = sorted(

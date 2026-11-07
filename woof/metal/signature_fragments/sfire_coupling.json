@@ -1,0 +1,454 @@
+{
+  "kernels": [
+    {
+      "name": "sfire_geographic_ignition_units",
+      "cuda_symbol": "sfire_geographic_ignition_units",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "latitude",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "latitude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_pad_plane",
+      "cuda_symbol": "sfire_pad_plane",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "linear",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_plane_floor",
+      "cuda_symbol": "sfire_plane_floor",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "lo",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_static_gradient",
+      "cuda_symbol": "sfire_static_gradient",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "z",
+          "float",
+          "read"
+        ],
+        [
+          "gx",
+          "float",
+          "read_write"
+        ],
+        [
+          "gy",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gy": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_set_nfuel",
+      "cuda_symbol": "sfire_set_nfuel",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "cat",
+          "float",
+          "read_write"
+        ],
+        [
+          "z",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "cat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "read",
+          "int32"
+        ],
+        [
+          "uniform",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_feedback",
+      "cuda_symbol": "sfire_feedback",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "heat",
+          "float",
+          "read"
+        ],
+        [
+          "water",
+          "float",
+          "read"
+        ],
+        [
+          "fuel",
+          "float",
+          "read"
+        ],
+        [
+          "gh",
+          "float",
+          "read_write"
+        ],
+        [
+          "gq",
+          "float",
+          "read_write"
+        ],
+        [
+          "ghfu",
+          "float",
+          "read_write"
+        ],
+        [
+          "gqfu",
+          "float",
+          "read_write"
+        ],
+        [
+          "af",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "heat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "water": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fuel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ghfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gqfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "af": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "refinement",
+          "int32"
+        ],
+        [
+          "feedback",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    },
+    {
+      "name": "sfire_stage_tendencies",
+      "cuda_symbol": "sfire_stage_tendencies",
+      "module": "sfire_coupling",
+      "source": "woof/metal/shaders/sfire_coupling.metal",
+      "cuda_source": "woof/core/kernels/sfire_coupling.cu",
+      "resources": [
+        [
+          "th",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "rt",
+          "float",
+          "read_write"
+        ],
+        [
+          "rq",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "th": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "msft": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rq": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "plane",
+          "int32"
+        ],
+        [
+          "mapped",
+          "int32"
+        ],
+        [
+          "wrf_exact",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "glibc-exp"
+      ]
+    }
+  ]
+}

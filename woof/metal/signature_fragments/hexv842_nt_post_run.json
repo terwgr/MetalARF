@@ -1,0 +1,70 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_post_run",
+      "module": "hexv842_nt_post_run",
+      "source": "woof/metal/shaders/hexv842_nt_post_run.metal",
+      "cuda_source": "woof/hex/mpasphys/ntiedtke_v842.py",
+      "cuda_symbol": "ntiedtke_post_run",
+      "resources": [
+        [
+          "in",
+          "float",
+          "read"
+        ],
+        [
+          "rn",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "stepcu",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

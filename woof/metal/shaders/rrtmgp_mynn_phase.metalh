@@ -1,0 +1,49 @@
+#ifndef WOOF_RRTMGP_MYNN_PHASE_METALH
+#define WOOF_RRTMGP_MYNN_PHASE_METALH
+#include "exact_binary32.metalh"
+
+static inline Exact32 rrtmgp_mynn_liquid_fraction(Exact32 temperature) {
+    Exact32 liquid = (temperature - Exact32(254.0f)) / Exact32(15.0f);
+    // Preserve NaNs, which propagate through both source phase products.
+    if (soft32_less(liquid.bits, Exact32(0.0f).bits)) liquid = Exact32(0.0f);
+    if (soft32_greater(liquid.bits, Exact32(1.0f).bits)) liquid = Exact32(1.0f);
+    return liquid;
+}
+
+
+template <typename Resources, typename Params>
+static inline void rrtmgp_merge_mynn_legacy(
+    constant Resources &r, constant Params &p, uint i) {
+    device Exact32 *qc = reinterpret_cast<device Exact32 *>(r.qc);
+    device Exact32 *qi = reinterpret_cast<device Exact32 *>(r.qi);
+    device Exact32 *cf = reinterpret_cast<device Exact32 *>(r.cldfra);
+    device const Exact32 *cb = reinterpret_cast<device const Exact32 *>(r.qc_bl);
+    device const Exact32 *ib = reinterpret_cast<device const Exact32 *>(r.qi_bl);
+    device const Exact32 *fb = reinterpret_cast<device const Exact32 *>(r.cldfra_bl);
+    Exact32 c=qc[i], e=qi[i], f=fb[i];
+    bool cloudy=soft32_greater(f.bits,Exact32(0.001f).bits);
+    if (p.has_cldfra && p.replace_cldfra) cf[i]=f;
+    if (cloudy && soft32_less(c.bits,Exact32(1.0e-6f).bits)) qc[i]=c+cb[i];
+    if (cloudy && soft32_less(e.bits,Exact32(1.0e-8f).bits)) qi[i]=e+ib[i];
+}
+
+template <typename Resources, typename Params>
+static inline void rrtmgp_merge_mynn_gsd41(
+    constant Resources &r, constant Params &p, uint i) {
+    device Exact32 *qc = reinterpret_cast<device Exact32 *>(r.qc);
+    device Exact32 *qi = reinterpret_cast<device Exact32 *>(r.qi);
+    device Exact32 *cf = reinterpret_cast<device Exact32 *>(r.cldfra);
+    device const Exact32 *cb = reinterpret_cast<device const Exact32 *>(r.qc_bl);
+    device const Exact32 *fb = reinterpret_cast<device const Exact32 *>(r.cldfra_bl);
+    device const Exact32 *t = reinterpret_cast<device const Exact32 *>(r.tlay);
+    Exact32 c=qc[i], e=qi[i], f=fb[i];
+    bool cloudy=soft32_greater(f.bits,Exact32(0.001f).bits);
+    if (p.has_cldfra && (!p.first_step || cloudy)) cf[i]=f;
+    if (cloudy && soft32_less(c.bits,Exact32(1.0e-6f).bits)
+            && soft32_less(e.bits,Exact32(1.0e-8f).bits)) {
+        Exact32 liquid=rrtmgp_mynn_liquid_fraction(t[i]);
+        qc[i]=c+(cb[i]*liquid)*f;
+        qi[i]=e+(cb[i]*(Exact32(1.0f)-liquid))*f;
+    }
+}
+#endif

@@ -1,13 +1,13 @@
 """The UW PBL's fixtures of record, and the CPU reference graded on them.
 
-The fixtures (``tests/data/uwpbl/oracle/cases-g35|g44|g61|extra35``, see
+The fixtures (``tests/data/oracles/uwpbl/cases-g35|g44|g61|extra35``, see
 PROVENANCE.md there) are WRF v4.7.1's own words: the byte-unmodified
 CAMUWPBL sources at gfortran 15.2.0 -O0 on glibc 2.43, six regime families
 on 35/44/61 levels (dt 150/60/20 s, four consecutive steps) plus 48
 branch-probe columns, each step's exact float32 inputs recorded beside its
 outputs.  Pinned here, without a device: the fixture words (sha256), the
 saturation table the kernel is given against the one the oracle recorded,
-and the binary64 CPU reference ``tests.physics_reference.uwpbl_ref`` against every
+and the binary64 CPU reference ``woof.verify.uwpbl_ref`` against every
 output word of every column-step, on a host whose libm is the oracle's.
 
 The product launcher on the card is graded against the same words in
@@ -24,13 +24,13 @@ import numpy as np
 import pytest
 
 from woof.core.uwpbl_constants import ESTBL
-from tests.physics_reference.uwpbl_oracle import (FULL_OUTPUTS, MASS_OUTPUTS,
+from woof.verify.uwpbl_oracle import (FULL_OUTPUTS, MASS_OUTPUTS,
                                        SURFACE_OUTPUTS, dims, load,
                                        step_arrays)
 
 ROOT = Path(__file__).resolve().parents[1]
 ORACLE = Path(os.environ.get("UWPBL_ORACLE_DIR")
-              or ROOT / "tests/data/uwpbl/oracle")
+              or ROOT / "tests/data/oracles/uwpbl")
 GRIDS = ("g35", "g44", "g61", "extra35")
 
 #: sha256 of the fixtures of record (tools/uwpbl_wrf471_oracle/build.sh,
@@ -56,7 +56,7 @@ def _fixture(grid):
 
 
 def test_the_fixtures_are_the_recorded_words():
-    if ORACLE != ROOT / "tests/data/uwpbl/oracle":
+    if ORACLE != ROOT / "tests/data/oracles/uwpbl":
         pytest.skip("pins apply to the packaged fixtures")
     for name, digest in FIXTURE_SHA256.items():
         data = (ORACLE / name).read_bytes()
@@ -105,7 +105,7 @@ def _host_libm_is_the_oracles() -> str | None:
 def test_the_cpu_reference_is_wrfs_words(grid):
     """The binary64 CPU reference, every output word of every column-step.
 
-    ``tests.physics_reference.uwpbl_ref`` is pure Python float arithmetic (binary64,
+    ``woof.verify.uwpbl_ref`` is pure Python float arithmetic (binary64,
     no contraction) transcribing the same Fortran as the kernel, with
     glibc's own transcendentals, so on a glibc x86-64 host it must equal
     the oracle bit for bit, cos and acos included.
@@ -114,7 +114,7 @@ def test_the_cpu_reference_is_wrfs_words(grid):
     if reason is not None:
         pytest.skip("the CPU reference is graded only where its libm is "
                     "the oracle's: " + reason)
-    from tests.physics_reference.uwpbl_ref.driver import camuwpbl_step
+    from woof.verify.uwpbl_ref.driver import camuwpbl_step
 
     fx = _fixture(grid)
     ncol, nk, nsteps = dims(fx)

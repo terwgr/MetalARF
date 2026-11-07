@@ -3,7 +3,9 @@
 These exercise the door's own contract, engine discovery, argument
 completeness, met-source resolution, with no engine binary and no real
 data.  The numeric path is proven against the artifact (the built
-rw_mpas_init exe on real factory inputs), not mocked here.
+rw_mpas_init exe on real factory inputs), not mocked here. The aerosol
+module replay against the pristine Fortran needs the home lane workspace
+and lives in test_init_door_pool.py.
 """
 
 from __future__ import annotations
@@ -271,3 +273,134 @@ def test_stamping_a_native_capsules_init_changes_nothing(tmp_path):
     assert record["stamped"] == {}
     assert set(record["already_present"]) == set(declared)
     assert hashlib.sha256(init.read_bytes()).hexdigest() == before
+
+
+@pytest.mark.parametrize("terrain_present", [False, True])
+def test_source_terrain_requirement_is_format_metadata(monkeypatch, tmp_path, terrain_present):
+    from types import SimpleNamespace
+    from woof.hex import wps_intermediate
+    from woof.hex.init_door import scan_met_file
+
+    names = ["LANDSEA", "TT", "ST000010", "SM000010"]
+    if terrain_present:
+        names.append("SOILHGT")
+
+    class Reader:
+        def __init__(self, path):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def iter_fields(self, *, load_values):
+            assert load_values is False
+            return iter(SimpleNamespace(field=name, level=200100.0, map_source="synthetic",
+                                        valid_time="2026-10-03_15:00:00") for name in names)
+
+    monkeypatch.setattr(wps_intermediate, "WpsIntermediateReader", Reader)
+    arguments = dict(nfglevels=1, start_time="2026-10-03_15:00:00")
+    if terrain_present:
+        assert "SOILHGT" in scan_met_file(tmp_path / "arbitrary.MET", **arguments).fields
+    else:
+        with pytest.raises(InitDoorRefusal, match="source terrain would remain zero"):
+            scan_met_file(tmp_path / "arbitrary.MET", **arguments)
+
+
+def test_cached_vertical_readers_share_the_artifact(tmp_path, monkeypatch):
+    """Member inits of one cycle read the cached vertical artifact at once (unified image, 2026-10-16:
+    six GEFS members ran rw_mpas_init one at a time behind an exclusive lock); a run with other
+    stamped declarations waits for those readers, then stamps."""
+    import argparse
+    import json
+    import threading
+    from netCDF4 import Dataset
+    from woof.hex import init_door, vertical_spec
+
+    built = []
+
+    def materialize(*, grid, static, spec_path, output, receipt_path, run_config):
+        built.append(output)
+        with Dataset(output, "w", format="NETCDF3_64BIT_OFFSET") as dataset:
+            for key in init_door.STAMPED_DECLARATIONS:
+                dataset.setncattr(key, run_config[key])
+        receipt_path.write_text(json.dumps({"output": str(output), "inputs": {"vertical_spec": {
+            "canonical_sha256": "0" * 64}}, "invariants": {}}), encoding="utf-8")
+
+    monkeypatch.setattr(init_door, "_vertical_cache_key", lambda arguments: ("k" * 64, {"m": 1}))
+    monkeypatch.setattr(vertical_spec, "materialize_vertical_artifact", materialize)
+    args = argparse.Namespace(**vars(_declaring_namespace()), grid=None, static=None, vertical_spec=None)
+    first = init_door._cached_vertical_source(args, tmp_path, {})
+    assert first.summary["vertical_cache"]["hit"] is False and len(built) == 1
+    got = {}
+
+    def again(name, namespace):
+        got[name] = init_door._cached_vertical_source(namespace, tmp_path, {})
+
+    reader = threading.Thread(target=again, args=("same", args))
+    reader.start()
+    reader.join(timeout=10)
+    assert "same" in got, "a run with the same declarations waited for the first reader"
+    assert got["same"].summary["vertical_cache"]["hit"] is True and len(built) == 1
+    other = argparse.Namespace(**{**vars(args), "start_time": "2026-09-13_18:00:00"})
+    writer = threading.Thread(target=again, args=("other", other))
+    writer.start()
+    writer.join(timeout=1)
+    assert "other" not in got, "a re-stamp must wait for readers of the old declarations"
+    first.lock.close()
+    got["same"].lock.close()
+    writer.join(timeout=10)
+    assert "other" in got
+    stamp = got["other"].summary["vertical_cache"]
+    assert stamp["config_start_time"] == "2026-09-13_18:00:00"
+    assert stamp["config_start_time_before"] == "2026-09-13_15:00:00"
+    got["other"].lock.close()
+    with Dataset(tmp_path / ("k" * 24 + ".vertical.nc")) as dataset:
+        assert dataset.getncattr("config_start_time") == "2026-09-13_18:00:00"
+
+
+# ---------------------------------------------------------------------------
+# --first-guess-hydrometeors: the first guess's own condensate reaches the
+# MPAS-A init by default (hex-meshes-sources review, 2026-10-29: an HRRR start
+# on MPAS-A physics had no reflectivity at f000), never under strict numerics.
+HRRR_FIELDS = ("GHT", "PRES", "QC", "QG", "QI", "QNC", "QNI", "QNR", "QR", "QS", "SPECHUMD", "TT", "UU", "VV")
+GFS_FIELDS = ("GHT", "RH", "TT", "UU", "VV")
+
+
+def _choose(monkeypatch, fields, *, speaks=True, requested=None, numerics="fast"):
+    from argparse import Namespace
+    from woof.hex import init_door
+    from woof.hex import numerics as hex_numerics
+    monkeypatch.setenv("WOOF_HEX_NUMERICS", numerics)
+    hex_numerics._reset_for_tests()
+    monkeypatch.setattr(init_door, "engine_reads_first_guess_hydrometeors", lambda engine: speaks)
+    try:
+        return init_door.first_guess_hydrometeors(Namespace(first_guess_hydrometeors=requested), "rw_mpas_init", fields)
+    finally:
+        hex_numerics._reset_for_tests()
+
+
+def test_an_hrrr_first_guess_starts_with_its_own_hydrometeors_by_default(monkeypatch):
+    record = _choose(monkeypatch, HRRR_FIELDS)
+    assert record["argv"] == ["--first-guess-hydrometeors", "yes"] and record["applied"]
+    assert record["first_guess_records"] == ["QC", "QG", "QI", "QNC", "QNI", "QNR", "QR", "QS"]
+
+
+def test_strict_numerics_keeps_native_case_7(monkeypatch):
+    record = _choose(monkeypatch, HRRR_FIELDS, numerics="strict")
+    assert record["argv"] == [] and record["requested"] == "no" and not record["applied"]
+
+
+def test_no_is_honoured_and_a_dry_first_guess_changes_nothing(monkeypatch):
+    assert _choose(monkeypatch, HRRR_FIELDS, requested="no")["argv"] == []
+    gfs = _choose(monkeypatch, GFS_FIELDS)
+    assert gfs["argv"] == [] and gfs["first_guess_records"] == [] and not gfs["applied"]
+
+
+def test_an_engine_without_the_flag_is_a_named_gap_not_a_silent_dry_start(monkeypatch, capsys):
+    record = _choose(monkeypatch, HRRR_FIELDS, speaks=False)
+    assert record["argv"] == [] and not record["applied"]
+    assert "predates --first-guess-hydrometeors" in record["gap"]
+    assert "named gap" in capsys.readouterr().err

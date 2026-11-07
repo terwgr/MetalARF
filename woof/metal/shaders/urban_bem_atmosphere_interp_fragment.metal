@@ -16,14 +16,14 @@ static inline float ubmi_max(float a, float b) { return a > b ? a : b; }
 // z and each field are laid out [column, mass-level], z_u is the shared
 // 19-interface BEM grid, and output is [column, field, urban-level].
 // Fields: ua, va, pt, pt0, pr, da, qv. The overlap sum preserves the source
-// k-ascending FP32 order and zero-fills levels above the class-specific nzu.
+// k-ascending FP32 order and zero-fills levels above the selected column nzu.
 kernel void urban_bem_atmosphere_interp_fragment(
     constant UrbanBemAtmosphereInterpFragmentResources &r [[buffer(0)]],
     constant UrbanBemAtmosphereInterpFragmentParams &p [[buffer(1)]],
     uint col [[thread_position_in_grid]]) {
     device const int *active_cols = r.active_cols;
     device const int *utype = r.utype;
-    device const int *nzu_class = r.nzu_class;
+    device const int *nzurban = r.nzurban;
     device const float *z = r.z;
     device const float *z_u = r.z_u;
     device const float *ua = r.ua;
@@ -52,7 +52,7 @@ kernel void urban_bem_atmosphere_interp_fragment(
         error[col] = 5502;
         return;
     }
-    const int nzu = nzu_class[uint(one_based_type - 1)];
+    const int nzu = nzurban[col];
     if (nzu < 1 || nzu > 18) {
         error[col] = 5503;
         return;

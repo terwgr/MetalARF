@@ -12,10 +12,24 @@ import hashlib
 
 import numpy as np
 
+# WRF's carried dry mass after an acoustic loop. Boundary preprocessing
+# needs this inventory key without importing the forecast executor.
+WRF_MUTS_SLOT = "wrf_exact_muts"
+
+
+from woof.core.fast_sbm_contract import BIN_SPECIES as _FSBM_BIN_SPECIES
 
 STATE_SERIALIZED_ATTRS = (
+    # FDDA tendencies persist between calculation times. Off creates none.
+    "nudging_tendency_u", "nudging_tendency_v", "nudging_tendency_temperature",
+    "nudging_tendency_geopotential", "nudging_tendency_qv",
     "u", "v", "w", "thp", "php", "mup",
     "p", "al", "alt",
+    # The strict diagnostic retains WRF's perturbation-pressure words.
+    # Pressure force and history read them across stage boundaries; a
+    # reconstruction from rounded full pressure loses their low bits.
+    # Absent outside that arm, so ordinary inventories are unchanged.
+    "p_perturbation",
     "qv", "qc", "qr", "h_diabatic",
     # WRF RTHFTEN/RQVFTEN: the dycore's pure advective theta/qv forcing
     # pair, exported at RK stage 1 of step N and read by the cumulus call
@@ -40,10 +54,11 @@ STATE_SERIALIZED_ATTRS = (
     # carrier would cold-start the closure on a fully developed field.
     # Absent (None) under every other km_opt, so non-LES inventories are
     # unchanged.
-    "tke",
+    "tke", "tke_edmf",
     "qi", "qs", "qg", "nc", "nr", "ni", "ns", "ng",
     "qh", "qndrop", "qnr", "qni", "qns", "qng", "qnh", "qnn",
     "qvolg", "qvolh",
+    "volg",
     # mp_physics=9 (Milbrandt-Yau) hail number and mp_physics=16 (WDM6)
     # CCN concentration.  Both are transported prognostics (MY2_SPECIES /
     # WDM6_NUMBER_SPECIES in woof/core); a restart that dropped either
@@ -87,12 +102,21 @@ STATE_SERIALIZED_ATTRS = (
     # the writer and the reader skip on ``is None``, so no existing
     # restart inventory moves.
     "qir", "qib", "th_old", "qv_old",
+    # mp_physics=5 (Ferrier-Aligo).  F_ICE_PHY, F_RAIN_PHY and F_RIMEF_PHY
+    # are WRF state carried in its restart stream (Registry.EM_COMMON
+    # fer_mp_hires package, :3019), and QT is the package's scalar.
+    # F_RIMEF is the one that decides a trajectory: FER_HIRES keeps it for
+    # every ice-bearing cell from one call to the next
+    # (module_mp_fer_hires.F:389-395), so a resume that re-set it to 1
+    # would restore unrimed ice.  Absent on every other scheme, and the
+    # writer and the reader skip on ``is None``.
+    "qt", "f_ice", "f_rain", "f_rimef",
     # SASE prognostic subgrid turbulence energy.  Like the optional
     # microphysics moments above, the attribute is ABSENT on a state that
     # did not select the closure, and the manifest walk skips what is not
     # there -- so adding it moves no existing restart.
-    "e_sgs",
-)
+    "e_sgs", "qke_adv",
+) + _FSBM_BIN_SPECIES
 
 # STATE_SETUP_ARRAYS is deliberately NOT extended with nwfa2d/nifa2d, even
 # though they are per-domain constants and read like setup: ``setup_fingerprint``
@@ -103,7 +127,7 @@ STATE_SERIALIZED_ATTRS = (
 STATE_SETUP_ARRAYS = (
     "thb", "pb", "alb", "phb", "mub2d", "ht",
     "c1h", "c2h", "c1f", "c2f", "c3h", "c4h", "c3f", "c4f",
-    "msft", "msfu", "msfv", "f", "e", "sina", "cosa",
+    "msft", "msfu", "msfv", "msfv_inv", "f", "e", "sina", "cosa",
     "dnw", "rdnw", "dn", "rdn", "fnp", "fnm", "znu", "znw",
 )
 
@@ -122,6 +146,11 @@ STATE_SETUP_ARRAYS = (
 #: restore path runs before any reader.
 STATE_DERIVED_SETUP_ARRAYS = (
     "dphb_resid", "dc3f", "dc4f",
+    # WRF aerodm has no IO stream (Registry.EM_COMMON:1270). The monthly
+    # climatology is a deterministic function of the adapter's fingerprinted
+    # grid and checked table. A fresh state rebuilds it at the first radiation
+    # call before reading it; the root grid is fixed and resident nests refuse.
+    "aerodm",
 )
 
 STATE_SETUP_SCALARS = (
@@ -143,7 +172,11 @@ def _digest_array(digest, name: str, value) -> None:
     digest.update(name.encode())
     digest.update(str(host.shape).encode())
     digest.update(str(host.dtype).encode())
-    digest.update(host.tobytes())
+    if host.dtype.hasobject:
+        digest.update(host.tobytes())
+    else:
+        contiguous = np.ascontiguousarray(host)
+        digest.update(memoryview(contiguous.reshape(-1).view(np.uint8)))
 
 
 def _update_setup_core(digest, state, *, error_type: type[Exception]) -> bool:
@@ -156,7 +189,15 @@ def _update_setup_core(digest, state, *, error_type: type[Exception]) -> bool:
     """
 
     for name in STATE_SETUP_ARRAYS:
-        _digest_array(digest, name, getattr(state, name))
+        value = getattr(state, name)
+        if name == "thb":
+            # Strict mode's theta carrier (woof.core.state.
+            # adopt_wrf_theta_carrier) re-expresses a prepared base as
+            # thb = 300; the setup is still the base the preparation built.
+            setup_thb = getattr(state, "_setup_thb", None)
+            if setup_thb is not None:
+                value = setup_thb
+        _digest_array(digest, name, value)
     for name in STATE_SETUP_SCALARS:
         value = getattr(state, name)
         if value is not None and not isinstance(value, bool):
@@ -496,11 +537,52 @@ ADVECTIVE_FORCING_STATE = ("rthften", "rqvften")
 #: the domain, never admitted to the step-local rebuilt workspace.
 CHECKPOINT_ONLY_STATE = ("ww_pp",)
 
+#: Chem species fields (woof/core/chem_state.py).  They are named by the
+#: chem table (``chem_<row>``), not listed in :data:`STATE_SERIALIZED_ATTRS`,
+#: because which rows a run carries is data.  ``chem_<row>`` is serialized
+#: state exactly like ``qv``; ``chem0_<row>`` is its RK time-t copy, rebuilt
+#: like ``qv0``.  PREFIXES, because WRF species names end in digits
+#: (``dust_1``, ``so2``): a ``0`` suffix would make ``chem_dust_10``
+#: ambiguous.  Defined here, in the package that ships in the standalone
+#: RW-WPS wheel, so a prepared chem state serializes through the same
+#: contract as every other field.
+CHEM_STATE_PREFIX = "chem_"
+CHEM_TIME_PREFIX = "chem0_"
+#: Chem PROCESS arrays and the mass ledger (woof/core/chem_driver.py):
+#: ``chemdiag_<name>`` is cross-step state a checkpoint carries
+#: (accumulations, persistence buffers, the ledger's running totals);
+#: ``chemwork_<name>`` is rewritten before every read.
+CHEM_DIAG_PREFIX = "chemdiag_"
+CHEM_WORK_PREFIX = "chemwork_"
+
+
+def chem_state_attrs(state) -> tuple[str, ...]:
+    """The serialized chem arrays ``state`` carries, sorted by name.
+
+    ``chem_<row>`` species fields and ``chemdiag_<name>`` process/ledger
+    arrays.  Empty on every state whose run carries no chem, so
+    :func:`serialized_state_attrs` is then exactly
+    :data:`STATE_SERIALIZED_ATTRS`.
+    """
+    names = getattr(state, "__dict__", None) or {}
+    return tuple(sorted(name for name in names
+                        if name.startswith(CHEM_STATE_PREFIX)
+                        or name.startswith(CHEM_DIAG_PREFIX)))
+
+
+def serialized_state_attrs(state) -> tuple[str, ...]:
+    """:data:`STATE_SERIALIZED_ATTRS` plus this state's chem species fields."""
+    return STATE_SERIALIZED_ATTRS + chem_state_attrs(state)
+
 
 __all__ = [
     "ADVECTIVE_FORCING_STATE",
     "BUILT_END_FRAME_PREFIX_SCHEMA",
     "CHECKPOINT_ONLY_STATE",
+    "CHEM_DIAG_PREFIX",
+    "CHEM_STATE_PREFIX",
+    "CHEM_TIME_PREFIX",
+    "CHEM_WORK_PREFIX",
     "LATERAL_BOUNDARY_PREFIX_SCHEMA",
     "LATERAL_BOUNDARY_PREFIX_SCHEMAS",
     "RATIONAL_BOUNDARY_PREFIX_SCHEMA",
@@ -511,7 +593,9 @@ __all__ = [
     "STATE_SETUP_SCALARS",
     "boundary_frame_sha256",
     "built_end_frame",
+    "chem_state_attrs",
     "lateral_boundary_prefix_identity",
     "setup_core_fingerprint",
+    "serialized_state_attrs",
     "setup_fingerprint",
 ]

@@ -127,6 +127,20 @@ STRUCTURAL_FIELDS: frozenset[str] = frozenset({
     "T",
 })
 
+#: Grid-relative wind components, and the rotation that makes them
+#: earth-relative.  On a projected grid U10/V10 (and U/V) point along the
+#: grid's own axes; without SINALPHA/COSALPHA beside them no reader can
+#: say which way the wind blows.  The frozen station scoreboard refuses
+#: such a wind rather than guess it is east-north (rw-scoreboard
+#: ``extract.rs``: "a projected wind with no orientation is absent"), so
+#: a run whose ``history_vars`` named U10 and V10 but not the rotation got
+#: no 10 m wind score against a single station (the 2026-10-07
+#: boundary-head proof: wind10_rmse empty for both WOOF arms, scored for
+#: HRRR).  A kept wind therefore keeps its rotation, the way a kept field
+#: keeps its georeference.
+PROJECTED_WIND_FIELDS: frozenset[str] = frozenset({"U10", "V10", "U", "V"})
+WIND_ROTATION_FIELDS: frozenset[str] = frozenset({"SINALPHA", "COSALPHA"})
+
 #: The ``minimal`` preset's science: the 2-D surface state and the
 #: accumulators every surface product is drawn from.  One row per field;
 #: adding a surface product's input to the preset is adding a row.
@@ -167,6 +181,9 @@ _SEVERE_EXTRA_FIELDS: frozenset[str] = frozenset({
     "QNCLOUD", "QNRAIN", "QNICE", "QNSNOW", "QNGRAUPEL", "QNHAIL",
     # Simulated reflectivity, the volume every radar product is built on.
     "REFL_10CM",
+    # The radiation cloud fraction the GRIB2 post's cloud cover, base,
+    # top and ceiling are drawn from.
+    "CLDFRA",
 })
 
 #: Named presets: name -> the set of droppable fields it keeps, or
@@ -217,7 +234,8 @@ PRODUCT_COUNT_BASIS = (
 
 #: The keys ``[output]`` accepts.
 OUTPUT_KEYS: frozenset[str] = frozenset(
-    {"preset", "history_vars", "history_drop"})
+    {"formats", "icechunk_store", "preset", "history_vars", "history_drop",
+     "full_history_interval_s", "between_preset", "between_history_add"})
 
 #: How many dropped names the plan-time warning spells out before it
 #: switches to a count.  See :meth:`HistorySelection.warn_lost_products`.
@@ -326,8 +344,26 @@ class HistorySelection:
     preset: str = "full"
     history_vars: tuple[str, ...] = ()
     history_drop: tuple[str, ...] = ()
+    #: Sub-hourly output the way HRRR writes it: a full history frame only
+    #: at leads that are whole multiples of ``full_history_interval_s``,
+    #: and between them the 2-D subset ``between_preset`` plus
+    #: ``between_history_add`` (HRRR's 15-minute wrfsubh files are 2-D
+    #: fields; its 3-D history is hourly).  0 (the default) writes every
+    #: frame with this selection, as before.
+    #:
+    #: Breakage it prevents (V61 8x RTX 5090, 2026-10-21): the HRRR v4
+    #: recipe's 15-minute history wrote an 18.7 GB full frame every 15
+    #: model minutes; the writer lands one in about 40 s while the model
+    #: makes 15 minutes in about 15 s, so frames queued behind each other
+    #: and the step loop blocked 10-30 s per write, growing over the run
+    #: (fh3 171 s/fh against about 62 without output).
+    full_history_interval_s: float = 0.0
+    between_preset: str = "minimal"
+    between_history_add: tuple[str, ...] = ()
     #: Where this block was read from, for refusal text only.
     source: str = "<config>"
+    formats: tuple[str, ...] = ("netcdf",)
+    icechunk_store: str | None = None
 
     # ``_include`` -- the resolved include set, or None for "everything
     # produced" -- is NOT a dataclass field, deliberately.
@@ -338,6 +374,8 @@ class HistorySelection:
     # as a plain attribute.
 
     def __post_init__(self) -> None:
+        from woof.output_formats import selected
+        selected(self.formats)
         if self.preset not in HISTORY_PRESETS:
             raise ValueError(
                 f"[output] preset = {self.preset!r} in {self.source} is not "
@@ -371,6 +409,16 @@ class HistorySelection:
                         f"variable.{_did_you_mean(name, HISTORY_VOCABULARY)}"
                         "  The valid set is: "
                         f"{', '.join(sorted(HISTORY_VOCABULARY))}.")
+        if (WIND_ROTATION_FIELDS & set(self.history_drop)
+                and not PROJECTED_WIND_FIELDS <= set(self.history_drop)):
+            raise ValueError(
+                f"[output] history_drop of {self.source} drops "
+                f"{sorted(WIND_ROTATION_FIELDS & set(self.history_drop))} "
+                "while the tape keeps a grid-relative wind "
+                f"({sorted(PROJECTED_WIND_FIELDS - set(self.history_drop))}): "
+                "without SINALPHA and COSALPHA no reader can turn that wind "
+                "earth-relative, and station scoring drops it.  Keep the "
+                "rotation, or drop U10, V10, U and V as well.")
         for name in self.history_drop:
             if name in STRUCTURAL_FIELDS:
                 raise ValueError(
@@ -383,9 +431,36 @@ class HistorySelection:
                     f"{sorted(STRUCTURAL_FIELDS)}.  Drop the science "
                     "fields you do not need instead, or use preset = "
                     "'minimal'.")
+        if self.full_history_interval_s < 0 or (
+                self.full_history_interval_s != self.full_history_interval_s):
+            raise ValueError(
+                f"[output] full_history_interval_s of {self.source} must be "
+                f"a non-negative number of seconds, got "
+                f"{self.full_history_interval_s!r}.")
+        if self.between_preset not in HISTORY_PRESETS:
+            raise ValueError(
+                f"[output] between_preset = {self.between_preset!r} in "
+                f"{self.source} is not a known history preset; choose one "
+                f"of {sorted(HISTORY_PRESETS)}.")
+        for name in self.between_history_add:
+            if name not in HISTORY_VOCABULARY:
+                raise ValueError(
+                    f"[output] between_history_add of {self.source} names "
+                    f"{name!r}, which is not a wrfout history variable."
+                    f"{_did_you_mean(name, HISTORY_VOCABULARY)}")
+        if (self.between_preset != "minimal" or self.between_history_add) \
+                and not self.full_history_interval_s:
+            raise ValueError(
+                f"[output] of {self.source} sets between_preset or "
+                "between_history_add without full_history_interval_s: the "
+                "between-hours subset applies only to frames between the "
+                "full-history leads, so name that interval (3600 for "
+                "hourly full history).")
         include: frozenset[str] | None
         if self.history_vars:
             include = frozenset(self.history_vars)
+            if include & PROJECTED_WIND_FIELDS:
+                include |= WIND_ROTATION_FIELDS
         else:
             include = HISTORY_PRESETS[self.preset]
         object.__setattr__(self, "_include", include)
@@ -434,12 +509,50 @@ class HistorySelection:
                     "with no science in it, and an empty history_drop "
                     "sheds nothing -- name the variables you mean, or "
                     "delete the key.")
+        add = table.get("between_history_add", ()) or ()
+        if isinstance(add, str) or not isinstance(add, (list, tuple)):
+            raise ValueError(
+                f"[output] between_history_add of {source} must be a LIST of "
+                f"wrfout variable names, got {add!r}.")
+        interval = table.get("full_history_interval_s", 0.0) or 0.0
+        if isinstance(interval, bool) or not isinstance(interval, (int, float)):
+            raise ValueError(
+                f"[output] full_history_interval_s of {source} must be a "
+                f"number of seconds, got {interval!r}.")
+        formats = table.get("formats", ("netcdf",))
+        if not isinstance(formats, (list, tuple)):
+            raise ValueError(f"[output] formats of {source} must be a list of row names")
         return cls(
+            formats=tuple(formats),
+            icechunk_store=table.get("icechunk_store"),
             preset=str(table.get("preset", "full")),
             history_vars=tuple(table.get("history_vars", ()) or ()),
             history_drop=tuple(table.get("history_drop", ()) or ()),
+            full_history_interval_s=float(interval),
+            between_preset=str(table.get("between_preset", "minimal")),
+            between_history_add=tuple(add),
             source=source,
         )
+
+    def for_lead(self, lead_seconds) -> "HistorySelection":
+        """The selection one frame at ``lead_seconds`` is written with.
+
+        Itself at a full-history lead (or with no sub-hourly subset set, or
+        an unknown lead); otherwise the between-hours subset.
+        """
+        interval = float(self.full_history_interval_s or 0.0)
+        if not interval or lead_seconds is None:
+            return self
+        steps = float(lead_seconds) / interval
+        if abs(steps - round(steps)) * interval < 0.5:
+            return self
+        return _between_selection(self.between_preset,
+                                  self.between_history_add, self.source)
+
+    @property
+    def subhourly(self) -> bool:
+        """Whether some frames are written with the between-hours subset."""
+        return bool(self.full_history_interval_s)
 
     @property
     def writes_everything(self) -> bool:
@@ -622,6 +735,78 @@ class HistorySelection:
 FULL = HistorySelection()
 
 
+_BETWEEN_CACHE: dict = {}
+
+
+#: What a QUICK-LOOK frame need not carry although every full frame must:
+#: ``T`` (the one 3-D volume a reader needed to open a wrfout -- the vendored
+#: wrf-core now takes the grid's dimensions from ZNU and XLAT when T is
+#: absent) and ``PHB`` (the base geopotential, which never changes over a
+#: fixed domain and is in every full frame).  A quick-look frame keeps either
+#: one only when its own variable list names it.
+#:
+#: Breakage it prevents (WOOF run_0e9d51235e54e762, 2026-10-28): 22
+#: quick-look frames of 200 x 150 x 49 for eight chosen fields were 26.4 MB
+#: each, and T and PHB -- written whatever the user chose -- were about 45 %
+#: of every frame.
+QUICKLOOK_UNFORCED_FIELDS: frozenset[str] = frozenset({"T", "PHB"})
+
+#: The global attribute a quick-look frame of a FIXED domain carries: the
+#: path, relative to the frame's own folder, of the domain's first full
+#: frame, where a reader finds the static fields the quick-look frame left
+#: out (wrf-core ``WrfFile`` reads PHB, PB, MUB and HGT there).
+STATIC_FRAME_ATTR = "GPUWM_STATIC_FRAME"
+
+
+@dataclass(frozen=True)
+class QuickLookSelection(HistorySelection):
+    """A quick-look stream's selection (``quicklook = {...}`` on a domain).
+
+    The same fields and validation as :class:`HistorySelection` (so a resolved
+    document and every fingerprint read from it keep their bytes); it only
+    stops forcing :data:`QUICKLOOK_UNFORCED_FIELDS` into the frame.
+    """
+
+    def keeps(self, name: str) -> bool:
+        if (name in QUICKLOOK_UNFORCED_FIELDS and self._include is not None
+                and name not in self._include):
+            return False
+        return super().keeps(name)
+
+    def on_moving_domain(self) -> "HistorySelection":
+        """The selection for a domain that moves: PHB changes with every
+        move, so it stays in each frame (T may still be left out)."""
+        return _MovingQuickLookSelection(**{
+            name: getattr(self, name)
+            for name in self.__dataclass_fields__})
+
+
+@dataclass(frozen=True)
+class _MovingQuickLookSelection(QuickLookSelection):
+    def keeps(self, name: str) -> bool:
+        if name == "PHB":
+            return True
+        return super().keeps(name)
+
+    def on_moving_domain(self) -> "HistorySelection":
+        return self
+
+
+def _between_selection(preset, add, source) -> HistorySelection:
+    """The between-hours subset as an ordinary selection (cached)."""
+    key = (preset, tuple(add), source)
+    found = _BETWEEN_CACHE.get(key)
+    if found is None:
+        base = HISTORY_PRESETS[preset]
+        names = (tuple(sorted(base | frozenset(add))) if base is not None
+                 else ())
+        found = (HistorySelection(history_vars=names,
+                                  source=f"{source} (between full-history leads)")
+                 if names else FULL)
+        _BETWEEN_CACHE[key] = found
+    return found
+
+
 def resolve(tree, domain) -> HistorySelection:
     """One domain's selection: its own block, else the tree-wide one.
 
@@ -647,6 +832,9 @@ __all__ = [
     "OUTPUT_KEYS",
     "PRODUCT_HISTORY_INPUTS",
     "STRUCTURAL_FIELDS",
+    "QUICKLOOK_UNFORCED_FIELDS",
+    "QuickLookSelection",
+    "STATIC_FRAME_ATTR",
     "lost_products",
     "resolve",
 ]

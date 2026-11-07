@@ -1,0 +1,23 @@
+#ifndef HEXRRFS_RUC_TBQ_MATH_METALH
+#define HEXRRFS_RUC_TBQ_MATH_METALH
+#include "hexv842_mpas_thompson_column_math.metalh"
+using namespace ntc;
+// land_qsn / ice_qsn are identical: module_ruc_land.F90:2042-2062 and
+// module_ruc_ice.F90:2361-2381. Caller must supply finite tn whose computed
+// r converts to int32, and the exact 5001-word initialized table.
+inline F rrfs_ruc_qsn(F tn, device const float *tbq) {
+    F r = tc_add(tc_div(tc_sub(tn, F(173.15f)), F(.05f)), F(1.f));
+    int i = int(as_type<float>(r.bits));
+    if (i < 1) {
+        i = 1;
+        r = F(1.f);
+    }
+    if (i > 5000) {
+        i = 5000;
+        r = F(5001.f);
+    }
+    F v = f32_word(as_type<uint>(tbq[i - 1]));
+    F dv = tc_sub(f32_word(as_type<uint>(tbq[i])), v);
+    return tc_add(tc_mul(dv, tc_sub(r, F(float(i)))), v);
+}
+#endif

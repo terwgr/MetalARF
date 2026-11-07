@@ -59,14 +59,18 @@ imposing one scheme's assumptions on another:
   verbatim here.  Two departures from the 1/6/8/10 family the caller must
   carry: radardd02 floors at **0 dBZ**, not -35, and it reads five ice
   categories plus their moments rather than the shared rain-first set.
-- ``mp_physics=50`` -- P3 is REFUSED BY NAME and is not in either list
-  above; see :data:`NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP` for the reason
-  text the refusal prints.  P3 is an active scheme and it does produce
-  reflectivity -- ``woof.core.p3`` stashes the scheme's own diagnostic Z
-  as REFL_10CM -- but that Z is computed inside ``p3_main``'s final
-  diagnostics loop, which is simultaneously a state update, so there is
-  no pure H_Z(x) to adapt over.  ``woof.core.refl.compute_refl_10cm``
-  carries no mp=50 branch for the same reason and must not gain one here.
+- ``mp_physics=50`` -- P3, through
+  ``woof.core.p3_device.reflectivity``: the Z half of the scheme's own
+  final-diagnostics loop (WRF module_mp_p3.F:4722-4895), replayed on
+  LOCAL copies in woof/core/kernels/p3_zdiag.cu over the forecast port's
+  unchanged device helpers, so evaluating it moves nothing.  The forecast
+  loop fuses that Z with a state update (sub-QSMALL dumps into vapour and
+  theta, the rain-DSD and ice-number clamps), which is why this was a named
+  refusal until the Z was lifted out.  Its one clear-air value is the
+  scheme's zero-hydrometeor reflectivity, -36.9897 dBZ (the 1e-22 seeds at
+  :2286-2287).  ``woof.core.refl.compute_refl_10cm`` still carries no
+  mp=50 branch: its only P3-satisfiable arm is the rain-only Kessler
+  fallback.
 
 The 1/6/8/10/16/28 routes share the -35 dBZ floor, the 1e-9 kg/kg species
 activity threshold, and the ``refl10cm_hm`` air-density diagnosis, so
@@ -101,10 +105,22 @@ Documented simplifications
    Kessler fallback here implements -- so on ``mp_physics=1`` the fall
    speed and the reflectivity share one PSD (checked numerically in
    :func:`reflectivity_fall_speed`).  On the Morrison, WSM6 and Thompson
-   paths the richer scheme PSD supplies Z while the fall speed is still
-   read off the Marshall-Palmer rain calibration: it consumes that
-   scheme's Z, but it is NOT a moment integral over that scheme's PSD,
-   and it overstates the fall speed of dry snow aloft.
+   paths the richer scheme PSD supplies Z while the RAIN fall speed is
+   still read off the Marshall-Palmer rain calibration: it consumes that
+   scheme's Z, but it is NOT a moment integral over that scheme's PSD.
+
+   Frozen species no longer fall at the rain relation.  Given the state's
+   species (``species=`` and ``inverse_density=``, which both callers in
+   this tree pass), snow, graupel and hail each take the Lin, Farley and
+   Orville (1983, J. Clim. Appl. Meteor. 22, 1065-1092) mass-weighted
+   fall speed of an exponential size distribution, and the cell's fall
+   speed is the mass-weighted blend of its active species, rain keeping
+   Sun and Crook.  The rain relation alone, applied to dry snow aloft,
+   made a 30 dBZ snow cell fall at about 5 m/s where snow falls at about
+   1 m/s, and the radial velocity operator projected the difference onto
+   every elevated beam.  Mass weighting is itself an approximation (a
+   radar weights by reflectivity); it is stated, and it is far nearer
+   than one rain relation for every species.
 
    Because a power law in Z does not vanish in clear air (it still gives
    ~1.7 m/s at the -35 dBZ floor), the fall speed is gated OFF wherever
@@ -189,8 +205,20 @@ Q_ACTIVE_THRESHOLD = 1.0e-9
 #: :data:`CLEAR_AIR_FLOOR_IS_NOT_ONE_NUMBER`, which is a different
 #: statement from being absent.
 CLEAR_AIR_FLOOR_DBZ: dict[int, float] = {
+    2: -35.0,
+    # WSM7's own refl10cm kernel floors every clear cell at -35 dBZ.
+    # No standalone DA route is added here; its native field is available
+    # through the output-due WSM-family runner.
+    24: -35.0,
     1: -35.0,
+    # WSM3 runs refl10cm_wsm6's kernel on its phase-split qr
+    # (woof.core.refl.wsm3_precipitation_phases), which floors every cell
+    # at -35 dBZ exactly as mp=6 does.
+    3: -35.0,
+    4: -35.0,  # wsm5_refl10cm_column final clamp.
     6: -35.0,
+    # WSM6R's H(x) is the same refl10cm_wsm6 operator (woof.core.refl).
+    106: -35.0,
     8: -35.0,
     # WDM6 shares the refl10cm family's floor and always did: its operator
     # arm is woof.core.refl.launch_refl10cm_wdm6, and
@@ -211,12 +239,30 @@ CLEAR_AIR_FLOOR_DBZ: dict[int, float] = {
     # (kernels/milbrandt2.cu:308).  The launch covers every cell on every
     # call, so there is no hydrometeor-free skip and no initialisation
     # value left standing -- which is exactly what separates mp=9 from
-    # mp=50 in CLEAR_AIR_FLOOR_IS_NOT_ONE_NUMBER below, where P3 reports
+    # the P3 forecast field, which reports two clear values (see mp=50),
     # two different clear-air values.  A -99 dBZ floor is NOT
     # interchangeable with the -35 family in one obs array: give
     # reflectivity observations a matching floor or mask the clear-air
     # cells, exactly as for NSSL's 0 dBZ.
     9: -99.0,
+    # P3's operator (woof.core.p3_device.reflectivity, kernel
+    # woof/core/kernels/p3_zdiag.cu) reads the scheme's two accumulator
+    # seeds in every cell with no rain and no ice above QSMALL:
+    # ze_rain = ze_ice = 1e-22 mm6 m-3 (module_mp_p3.F:2286-2287), so
+    # 10*log10(2e-22*1e18) = -36.9897 dBZ, this float32 value exactly
+    # (woof.core.p3_device.CLEAR_AIR_DBZ; tests/test_p3_reflectivity_gpu.py
+    # holds the kernel to it).  The forecast REFL_10CM additionally holds
+    # the -99.0 entry initialisation (:2278) through columns the step's
+    # no-hydrometeor skip (:3972) never diagnoses; that sentinel is not a
+    # reflectivity, and the OPERATOR does not reproduce it, which is what
+    # gives P3 one floor.  Not interchangeable with the -35 family in one
+    # obs array, as for NSSL's 0 and Milbrandt-Yau's -99.
+    50: -36.98970031738281,
+    # Ferrier-Aligo: EGCP01COLUMN initialises every level's DBZ_col to
+    # DBZmin = -20 (module_mp_fer_hires.F:1191, :1279) and replaces it only
+    # where Zrain+Zsnow exceeds Zmin = 0.01 mm6 m-3 (:2496), so clear air
+    # reads -20 exactly (kernels/fer_hires.cu writes the same word).
+    5: -20.0,
 }
 
 #: Schemes whose H(x) has NO single clear-air value, and the paragraph that
@@ -230,41 +276,13 @@ CLEAR_AIR_FLOOR_DBZ: dict[int, float] = {
 #: mechanism, so a reader finds a decision instead of a gap and an editor
 #: who reaches for ``-35.0`` finds out what it would cost.
 CLEAR_AIR_FLOOR_IS_NOT_ONE_NUMBER: dict[int, str] = {
-    50: (
-        "P3, one-category two-moment ice, reports TWO different clear-air "
-        "numbers in the same field, so no single value is its floor.  P3's "
-        "REFL_10CM is ``diag_ze`` verbatim -- ``mp_p3_wrapper_wrf`` "
-        "(module_mp_p3.F:690-932) hands the history array straight into "
-        "``p3_main`` and applies no clamp of its own -- and ``diag_ze`` is "
-        "``10*log10((ze_rain + ze_ice)*1e18)`` over two accumulators seeded "
-        "at 1e-22 mm6 m-3 (:2286-2287), so a clear LEVEL reads "
-        "-36.9897 dBZ, not -35.  A column in which nothing anywhere clears "
-        "QSMALL never reaches that diagnostic block at all -- the "
-        "no-hydrometeor skip (:3972; woof/core/p3.py:1293-1294 and "
-        "woof/core/kernels/p3.cu:1862) leaves every level of it holding "
-        "the -99.0 dBZ value the entry initialisation wrote (:2278).  "
-        "MEASURED, and measured against the Fortran rather than against "
-        "the transcription of it: in the WRF-Fortran oracle campaign the "
-        "reference ``zdbz`` field is bit-identical to this tree on "
-        "F01-clear-dry and F05-coldstart-nucleation, whose entire "
-        "magnitude is 99.0, and on F03-riming and F04-dep-sub, whose clear "
-        "levels hold 36.9897 (evidence/p3-fortran-oracle-20260828/"
-        "receipts/arwen-vs-fortranA.json).  Neither number is -35, and "
-        "P3 is not in "
-        "the refl10cm family that floor belongs to: it carries one ice "
-        "category and no qs and no qg, and stashes its own diagnostic "
-        "rather than being dispatched to woof.core.refl.  Picking either "
-        "value is catastrophic in one direction -- -35.0 puts a +64 dB "
-        "innovation in every fully dry column and the analysis builds "
-        "condensate into clear sky; -99.0 puts a -62 dB innovation at "
-        "every clear level beside an echo and the analysis erases "
-        "condensate around every storm.  What P3 clear-air assimilation "
-        "needs is a per-cell clear-air FIELD, or a rule that masks the "
-        "no-hydrometeor columns out of the batch, and nobody has specified "
-        "one"
-    ),
+    # Empty, and kept: the class is a real one (an operator that reports
+    # more than one clear-air value) and its refusal below still speaks for
+    # a scheme added to it.  P3 sat here while its only reflectivity was
+    # the forecast field, which holds -36.9897 at a clear level and the
+    # -99.0 entry sentinel through a never-diagnosed column; its operator
+    # (CLEAR_AIR_FLOOR_DBZ[50]) reports one value.
 }
-
 
 def clear_air_floor_dbz(mp_physics: int) -> float:
     """The active scheme's clear-air H(x) value, or a refusal.
@@ -324,6 +342,23 @@ SUN_CROOK_VT_EXPONENT = 0.125
 SUN_CROOK_Z_INTERCEPT_DBZ = 43.1
 SUN_CROOK_Z_SLOPE_DB = 17.5
 FALL_SPEED_DENSITY_EXPONENT = 0.4
+
+#: Lin, Farley and Orville (1983) exponential-PSD fall-speed constants
+#: for the frozen species, the set ARPS and the Tong and Xue (2005) radar
+#: EnKF use: ``(a [m^(1-b) s^-1], b, intercept N0 [m^-4], bulk density
+#: [kg m^-3])`` for a power-law fall speed ``V = a D^b`` scaled by
+#: ``(RHO0/rho)**0.5``.  Graupel is Rutledge and Hobbs (1984); hail is
+#: Lin's ``V = (4 g rho_h D / (3 C_D rho))**0.5`` with ``C_D = 0.6``,
+#: written in the same ``a D^b`` form at ``rho = RHO0``.
+FROZEN_FALL_SPEED_CONSTANTS = {
+    "qs": (11.72, 0.41, 3.0e6, 100.0),
+    "qg": (19.3, 0.37, 4.0e6, 400.0),
+    "qh": ((4.0 * 9.81 * 917.0 / (3.0 * 0.6 * 1.225)) ** 0.5, 0.5,
+           4.0e4, 917.0),
+}
+
+#: Reference air density of the ``(RHO0/rho)**0.5`` fall-speed correction.
+FALL_SPEED_RHO0 = 1.225
 
 #: Default clamp on the diagnosed fall speed (m/s).  Large enough for
 #: hail, small enough that a pathological Z cannot dominate the beam
@@ -569,7 +604,6 @@ def mass_point_heights(state):
     base state, extended to the perturbed column.
     """
     php = state.php
-    xp = _array_module(php)
     phb = state.phb
     if getattr(phb, "ndim", 0) == 1:
         phb = phb[:, None, None]
@@ -740,6 +774,14 @@ def mass_point_winds(state, *, rotate_to_earth: bool = True):
 # reflectivity: adapter over the product-side authority
 # --------------------------------------------------------------------------
 
+#: Schemes whose H_Z(x) has a float64 column mirror on the host
+#: (:func:`_host_reflectivity`).  Every other routed scheme is answered on
+#: the CUDA path only, so a caller holding host arrays has to move them to
+#: the device for those (woof.da.radar_assimilation.
+#: scheme_reflectivity_provider does).
+HOST_REFLECTIVITY_MIRRORS = frozenset({1, 6, 10})
+
+
 def _host_reflectivity(state, cfg, temperature, pressure):
     """Column-by-column float64 mirror path (host states only).
 
@@ -782,14 +824,26 @@ def _host_reflectivity(state, cfg, temperature, pressure):
                     qv[:, j, i], qr[:, j, i], nr[:, j, i],
                     qs[:, j, i], ns[:, j, i], qg[:, j, i], ng[:, j, i],
                     t[:, j, i], p[:, j, i], morr_rimed_ice=rimed)
-    elif mp == 6:
+    elif mp in (6, 106):
         qr, qs, qg = field("qr"), field("qs"), field("qg")
-        hail = int(getattr(cfg, "wsm6_hail_opt", 0))
+        hail = int(getattr(cfg, "wsm6_hail_opt", 0)) if mp == 6 else 0
         for j in range(ny):
             for i in range(nx):
                 out[:, j, i] = npref.np_refl10cm_wsm6_column(
                     qv[:, j, i], qr[:, j, i], qs[:, j, i], qg[:, j, i],
                     t[:, j, i], p[:, j, i], hail_opt=hail)
+    elif mp == 3:
+        from woof.core.refl import wsm3_precipitation_phases
+        rain, snow = wsm3_precipitation_phases(
+            np, np.asarray(state.qr, np.float32), np.asarray(t, np.float32))
+        rain = rain.astype(np.float64)
+        snow = snow.astype(np.float64)
+        no_graupel = np.zeros_like(rain)
+        for j in range(ny):
+            for i in range(nx):
+                out[:, j, i] = npref.np_refl10cm_wsm6_column(
+                    qv[:, j, i], rain[:, j, i], snow[:, j, i],
+                    no_graupel[:, j, i], t[:, j, i], p[:, j, i], hail_opt=0)
     elif mp == 1:
         qr = field("qr")
         for j in range(ny):
@@ -837,180 +891,10 @@ def _host_reflectivity(state, cfg, temperature, pressure):
     return out
 
 
-def _nssl_reflectivity(state, temperature, pressure):
-    """``mp_physics=18`` through the product's own NSSL diagnostic.
-
-    Not a fourth Z formula and not a mapping onto Morrison: the same
-    ``woof.core.nssl2_diagnostics.diagnose_radardd02_if_due`` the
-    production coordinator calls, reading the state's own five ice
-    categories, five number moments and two volume moments.
-
-    Two things differ from the 1/6/8/10 routes and a DA caller has to know
-    both.  NSSL's ``radardd02`` floors at **0 dBZ**, not -35, so clear air
-    in an NSSL H(x) column reads 0 and an innovation against a -35 dBZ
-    observation floor is meaningless -- give reflectivity observations a
-    matching floor or mask the clear-air cells.  And the moments here are
-    per unit mass of dry air (``concentration_space=False``), which is what
-    a ``DomainState`` carries; the coordinator passes ``True`` because it
-    hands over the scheme's internal per-volume slab.
-    """
-    from woof.metal.array import MetalArray
-    if isinstance(state.p, MetalArray):
-        from woof.metal.refl_family import (
-            submit_da_air_density, submit_da_observation_temperature)
-
-        shape = tuple(state.p.shape)
-        rho = state.scratch(shape, "da_nssl_rho")
-        submit_da_air_density(state.alt, rho)
-        if temperature is None:
-            t = state.scratch(shape, "da_nssl_t")
-            submit_da_observation_temperature(state, t)
-        else:
-            t = temperature
-    else:
-        import cupy as cp
-
-        from woof.core.state import DTYPE               # noqa: PLC0415
-
-        shape = tuple(state.p.shape)
-        # Dry-air density, formed the way the NSSL runtime forms it
-        # (nssl2_runtime._prepare_fields: rho = 1/alt).
-        rho = state.scratch(shape, "da_nssl_rho")
-        rho[...] = DTYPE(1.0) / state.alt
-        if temperature is None:
-            thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
-            t = state.scratch(shape, "da_nssl_t")
-            t[...] = (thb + state.thp) * cp.power(
-                state.p / DTYPE(c.P0), DTYPE(c.RCP))
-        else:
-            t = temperature
-
-    from woof.core.nssl2_diagnostics import (       # noqa: PLC0415
-        diagnose_radardd02_if_due,
-    )
-    refl = state.scratch(shape, "refl_10cm")
-    diagnose_radardd02_if_due(state, rho, t, refl, output_due=True,
-                              concentration_space=False)
-    return refl
-
-
-def _thompson_graupel_number(state, temperature, pressure):
-    """Classic Thompson's transient graupel number, diagnosed here.
-
-    ``mp_physics=8`` carries no graupel number in the Registry.  WRF's
-    ``mp_gt_driver`` DIAGNOSES one from qg at the beginning of every
-    call, evolves that private moment through the source and
-    sedimentation operators, applies one final lower bound and MVD
-    reconstruction, and hands the result to ``calc_refl10cm``
-    (module_mp_thompson.F 1265-1281, 1915-1939 and 4059-4077).  woof
-    transcribes the two ends of that as
-    ``launch_classic_graupel_number_init`` and
-    ``launch_classic_graupel_number_finalize``, and the microphysics
-    adapter passes the evolved moment to the reflectivity operator on
-    every output-due step.  The operator requires it rather than
-    inventing one, which is right for an in-call caller: a shadow that
-    skipped the call's source and fallout tendencies would not be the
-    moment WRF's own Z read.
-
-    AN OBSERVATION OPERATOR IS NOT AN IN-CALL CALLER.  H_Z(x) is
-    evaluated BETWEEN steps, on a state no microphysics call is in the
-    middle of, and for that state the wrapper's diagnosis IS the moment:
-    no tendency has acted since, so init followed by finalize is exactly
-    the sequence WRF would carry into ``calc_refl10cm`` on a call whose
-    graupel tendency was zero.  Both ends read only qg, T, p and qv off
-    the state, so the derivation asks for nothing the analysis does not
-    already hold.
-
-    Written into the microphysics adapter's own shadow slot rather than
-    a second buffer: it is the same quantity, the slot is scratch the
-    scheme rewrites unconditionally at the entry of its next call, and a
-    DA operator runs between calls, so there is no value here for this
-    to destroy.
-
-    The graupel MASS is a different matter, and the finalize runs on a
-    private copy of it.  ``launch_classic_graupel_number_finalize`` also
-    carries WRF's terminal graupel zero (module_mp_thompson.F:4058-4063):
-    every ``qg <= R1`` is written as zero IN PLACE.  Inside the call that
-    is a state update the scheme owns; here it rewrote the background the
-    operator observes.  The DA cycle evaluates H_Z(x) on a restored
-    member right after its pending increment is applied (the start
-    composite of a leg 0, which a ``--resume-ensemble`` run has and the
-    same leg of the uninterrupted run does not), so the zero moved the
-    resumed trajectory off the continuous one: every member of a resumed
-    step diverged while the unanalysed control, which carries no
-    sub-R1 residue, stayed bit-identical.  The copy changes neither
-    output: the shadow is formed from identical values, and
-    ``refl10cm_thompson_column`` reads graupel only where ``qg > 1e-6``,
-    far above R1.
-
-    Returns ``(temperature, pressure, shadow)`` because the temperature
-    the shadow was diagnosed at is the temperature the reflectivity has
-    to be diagnosed at; handing the pair on is what keeps the two from
-    being formed twice and differing.
-    """
-    from woof.core.thompson import (                  # noqa: PLC0415
-        launch_classic_graupel_number_finalize,
-        launch_classic_graupel_number_init,
-    )
-
-    shape = tuple(state.p.shape)
-    from woof.metal.array import MetalArray
-    is_metal = isinstance(state.p, MetalArray)
-    if temperature is None:
-        pressure = state.p
-        temperature = state.scratch(shape, "refl_t")
-        if is_metal:
-            from woof.metal.refl_family import submit_da_observation_temperature
-
-            submit_da_observation_temperature(state, temperature)
-        else:
-            import cupy as cp                                  # noqa: PLC0415
-            from woof.core.state import DTYPE                 # noqa: PLC0415
-
-            thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
-            temperature[...] = (thb + state.thp) * cp.power(
-                state.p / DTYPE(c.P0), DTYPE(c.RCP))
-    shadow = state.scratch(shape, "mp_thompson_graupel_number_shadow")
-    # A transient copy, not a scratch slot: it is dead when this returns,
-    # and a slot would enter the pinned mp=8 arena layout for a DA-only
-    # temporary.
-    graupel_mass = state.qg.copy()
-    launch_classic_graupel_number_init(
-        graupel_mass, temperature, pressure, state.qv, shadow)
-    launch_classic_graupel_number_finalize(
-        graupel_mass, temperature, pressure, state.qv, shadow)
-    del graupel_mass
-    return temperature, pressure, shadow
-
-
-_P3_NO_PURE_OPERATOR = (
-    "mp_physics=50 (P3) has no H_Z(x) in this module, and this is a NAMED "
-    "refusal, not an absence. P3 is an ACTIVE microphysics scheme and it "
-    "DOES produce reflectivity: woof/core/p3.py:1911-1915 (reference arm) "
-    "and :2062-2064 (CUDA arm) stash the scheme's own diagnostic Z as "
-    "REFL_10CM on every history frame, which "
-    "is why woof/core/refl.py deliberately carries no mp=50 branch. What "
-    "P3 cannot do is produce that Z as a PURE function of the state, which "
-    "is what an observation operator is. WRF computes P3's dBZ inside "
-    "p3_main's k_loop_final_diagnostics (module_mp_p3.F:4722-4895, within "
-    "p3_main :1905-5201), and that loop is simultaneously a state update: "
-    "it dumps sub-qsmall rain and ice into vapour and theta (:4759-4763, "
-    ":4873-4880) and clamps ni onto the ice lookup table's lambda limiters "
-    "before ze_ice reads it (:4833-4834). The woof port is fused the same "
-    "way (p3_final_level, woof/core/kernels/p3.cu), so evaluating it here "
-    "would move the background it is meant to observe. Routing P3 into "
-    "compute_refl_10cm instead is worse than a gap: P3 has ONE ice "
-    "category and allocates no qs and no qg at all "
-    "(woof/core/state.py:464-478), so the only branch whose field list a "
-    "P3 state satisfies is the mp=1 Kessler rain-only fallback, which "
-    "reads qr alone -- it would return the -35 dBZ clear-air floor through "
-    "every glaciated updraft while P3 carries that mass in qi/qir/qib. "
-    "Difference against the model's own REFL_10CM output instead, or pass "
-    "the field in (hotstart_increments takes simulated_dbz=). Lifting this "
-    "refusal means porting a PURE P3 Z -- get_rain_dsd2, calc_bulkRhoRime, "
-    "find_lookupTable_indices_1a and the f1pr13 lookup replayed on LOCAL "
-    "copies -- which is a scheme mirror, not an adapter over one."
+from woof.core.state_reflectivity import (
+    _nssl_reflectivity, _thompson_graupel_number, thompson_generation,
 )
+
 
 #: Shipped ``mp_physics`` selectors whose reflectivity is NATIVE to the
 #: scheme and is NOT separable from the scheme's own state update, with the
@@ -1038,10 +922,48 @@ _P3_NO_PURE_OPERATOR = (
 #: since been lifted into its own kernel
 #: (woof/core/kernels/milbrandt2_zet.cu), which updates nothing, and
 #: ``woof.core.milbrandt2.reflectivity`` is its scheme-diagnostic H(x).
+#:
+#: mp=50 is no longer here either.  P3's Z was fused into p3_main's final
+#: diagnostics loop (WRF module_mp_p3.F:4722-4895), which also dumps
+#: sub-QSMALL condensate into vapour and theta and clamps nr and ni before
+#: Z reads them; the Z half of that loop now runs on LOCAL copies in
+#: woof/core/kernels/p3_zdiag.cu over the forecast port's own device
+#: helpers, which updates nothing, and ``woof.core.p3_device.reflectivity``
+#: is its scheme-diagnostic H(x).  The table stays, empty, for the class.
 NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP: dict[int, str] = {
-    50: _P3_NO_PURE_OPERATOR,
+    5: (
+        "mp_physics=5: Ferrier-Aligo forms its reflectivity inside EGCP01COLUMN from "
+        "quantities that exist only in the middle of the column update: the "
+        "rain intercept N0r and mean diameter INDEXR2 of the rain_pass "
+        "iteration (module_mp_fer_hires.F:2292-2345), the updated rime "
+        "factor, the mean ice diameter INDEXS and the large-ice fraction "
+        "FLIMASS of the ice block (:2232-2251), and the falling rain and "
+        "snow fluxes from the levels above.  Recomputing them from a state "
+        "means running the scheme, which moves the background; the forecast "
+        "REFL_10CM (the scheme's own DBZ_col, stashed by "
+        "woof/core/fer_hires.py) is the field, and woof.da.hotstart "
+        "accepts it through simulated_dbz=."),
 }
 
+#: Schemes whose H_Z(x) is the scheme's own state-reading diagnostic and
+#: which take BOTH a device and a host state themselves, dispatched ahead
+#: of the host/device split.  A row, not a branch: ``module:function``.
+STATE_REFLECTIVITY_OPERATORS: dict[int, str] = {
+    50: "woof.core.p3_device:reflectivity",
+}
+
+
+from woof.microphysics_schemes import NAMED_SCHEMES as _NAMED_MP_SCHEMES
+# Named schemes compute Z inside their column call in this port; a pure
+# H(x) entry is not wired yet, so the radar operator refuses them by name.
+#: Where each named scheme's own reflectivity is defined, at its pin.
+_NAMED_Z_AUTHORITY = {
+    "tempo": "NCAR/TEMPO 9adf9ef module_mp_tempo_diags.F90:59-121 (reflectivity_10cm)",
+}
+NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP.update({
+    _s.mp_id: (f"mp_physics={_s.mp_id} ({_s.label}): Z is computed inside the scheme's column call "
+               f"in this port ({_NAMED_Z_AUTHORITY[_s.name]}); no standalone H(x) entry is wired yet")
+    for _s in _NAMED_MP_SCHEMES.values() if _s.native_reflectivity})
 
 def _refuse_unrouted_reflectivity(mp_physics: int) -> None:
     """Name a shipped scheme whose H(x) route nobody has written.
@@ -1106,12 +1028,13 @@ def simulated_reflectivity(state, cfg, *, temperature=None, pressure=None,
     between steps has no evolved one to have, and refusing there left
     the whole Thompson family with no H_Z(x) at all.
 
-    ``mp_physics=50`` is refused BY NAME through
-    :data:`NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP`: P3 is active and does
-    produce reflectivity, but only from inside ``p3_main``'s final
-    diagnostics loop, which also updates the state -- so it is not an
-    H_Z(x) and it is not routed to ``compute_refl_10cm``, whose only
-    P3-satisfiable branch is the rain-only Kessler fallback.
+    ``mp_physics=50`` dispatches through
+    :data:`STATE_REFLECTIVITY_OPERATORS` to
+    ``woof.core.p3_device.reflectivity``, the Z half of P3's own final
+    diagnostics replayed on local copies (device kernel, host reference),
+    before the host/device split.  It is not routed to
+    ``compute_refl_10cm``, whose only P3-satisfiable branch is the
+    rain-only Kessler fallback.
 
     ``mp_physics=18`` dispatches to the product's NSSL ``radardd02``
     diagnostic exactly as the production coordinator does (CUDA and Metal, no
@@ -1136,6 +1059,13 @@ def simulated_reflectivity(state, cfg, *, temperature=None, pressure=None,
     refusal = NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP.get(int(cfg.mp_physics))
     if refusal is not None:
         raise NotImplementedError(refusal)
+    operator = STATE_REFLECTIVITY_OPERATORS.get(int(cfg.mp_physics))
+    if operator is not None:
+        import importlib
+
+        module_name, function_name = operator.split(":")
+        return getattr(importlib.import_module(module_name), function_name)(
+            state, temperature=temperature, pressure=pressure)
     _refuse_unrouted_reflectivity(int(cfg.mp_physics))
 
     from woof.metal.array import MetalArray
@@ -1162,10 +1092,23 @@ def simulated_reflectivity(state, cfg, *, temperature=None, pressure=None,
         return my2_reflectivity(
             state, temperature=temperature, pressure=pressure)
 
+    if (int(cfg.mp_physics) == 28 and thompson_generation(cfg) == "wrf_461"
+            and temperature is None):
+        from woof.core.thompson_aerosol_state import launch_aerosol_exner
+        pressure = state.p
+        exner = (state._array_module.empty(pressure.shape, dtype=pressure.dtype)
+                 if is_metal else _array_module(pressure).empty_like(pressure))
+        launch_aerosol_exner(pressure, exner)
+        thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
+        temperature = state.scratch(tuple(pressure.shape), "refl_t")
+        temperature[...] = (thb + state.thp) * exner
+
     if (int(cfg.mp_physics) in (8, 28)
             and thompson_graupel_number is None):
         temperature, pressure, thompson_graupel_number = (
-            _thompson_graupel_number(state, temperature, pressure))
+            _thompson_graupel_number(state, temperature, pressure,
+                                     version=thompson_generation(cfg),
+                                     aerosol=int(cfg.mp_physics) == 28))
 
     from woof.core.refl import compute_refl_10cm
 
@@ -1252,9 +1195,77 @@ def precipitating_activity_mask(state):
     return mask
 
 
+def frozen_mass_weighted_fall_speed(name, q, density):
+    """Lin et al. (1983) mass-weighted fall speed (m/s) of one frozen
+    species with mixing ratio ``q`` (kg/kg) in air of ``density`` (kg/m3).
+
+    For an exponential distribution ``N0 exp(-lambda D)`` of spheres of
+    bulk density ``rho_x`` falling at ``a D^b (RHO0/rho)^0.5``,
+    ``lambda = (pi rho_x N0 / (rho q))**0.25`` and the mass-weighted mean
+    is ``a Gamma(4+b) / (6 lambda^b) (RHO0/rho)^0.5``.  Zero where ``q``
+    is not positive.
+    """
+    from math import gamma
+
+    xp = _array_module(q)
+    a, b, n0, bulk = FROZEN_FALL_SPEED_CONSTANTS[name]
+    q = xp.asarray(q, dtype=xp.float64)
+    rho = xp.asarray(density, dtype=xp.float64)
+    positive = q > 0.0
+    safe_q = xp.where(positive, q, 1.0)
+    slope = (np.pi * bulk * n0 / (rho * safe_q)) ** 0.25
+    vt = (a * gamma(4.0 + b) / 6.0) * slope ** (-b) * (
+        FALL_SPEED_RHO0 / rho) ** 0.5
+    return xp.where(positive, vt, 0.0)
+
+
+def species_blended_fall_speed(rain_vt, species, inverse_density, *,
+                               max_ms: float = FALL_SPEED_MAX_MS):
+    """The cell's fall speed as the mass-weighted blend of its ACTIVE
+    precipitating species: rain at ``rain_vt`` (Sun and Crook, from the
+    scheme's Z), snow, graupel and hail at
+    :func:`frozen_mass_weighted_fall_speed`.
+
+    ``species`` maps ``qr``/``qs``/``qg``/``qh`` (any subset) to mixing
+    ratios; a species is active above :data:`Q_ACTIVE_THRESHOLD`, per
+    species, as the reflectivity authority tests it.  Where no species is
+    active the result is ``rain_vt`` (the caller's activity gate then
+    zeroes it).  Where rain is the only active species the result is
+    ``rain_vt`` exactly, so a rain-only column is unchanged.
+    """
+    xp = _array_module(rain_vt)
+    density = 1.0 / xp.asarray(inverse_density, dtype=xp.float64)
+    rain = xp.asarray(rain_vt, dtype=xp.float64)
+    weight_total = xp.zeros_like(rain)
+    weighted = xp.zeros_like(rain)
+    frozen_active = xp.zeros(rain.shape, dtype=bool)
+    for name in PRECIPITATING_SPECIES:
+        q = species.get(name)
+        if q is None:
+            continue
+        q = xp.asarray(q, dtype=xp.float64)
+        active = q > Q_ACTIVE_THRESHOLD
+        mass = xp.where(active, q, 0.0)
+        if name == "qr":
+            speed = rain
+        else:
+            speed = frozen_mass_weighted_fall_speed(name, mass, density)
+            frozen_active = frozen_active | active
+        weight_total = weight_total + mass
+        weighted = weighted + mass * speed
+    blended = xp.where(weight_total > 0.0,
+                       weighted / xp.where(weight_total > 0.0,
+                                           weight_total, 1.0), rain)
+    blended = xp.clip(blended, 0.0, max_ms)
+    # A cell with no active frozen species keeps the rain value bit for bit.
+    return xp.where(frozen_active, blended, rain).astype(
+        rain_vt.dtype, copy=False)
+
+
 def reflectivity_fall_speed(dbz, pressure, active=None, *,
                             surface_pressure=None,
-                            max_ms: float = FALL_SPEED_MAX_MS):
+                            max_ms: float = FALL_SPEED_MAX_MS,
+                            species=None, inverse_density=None):
     """Sun and Crook reflectivity-driven fall speed (m/s, downward).
 
     ``surface_pressure`` is the ``(ny, nx)`` pressure at the ground, in Pa,
@@ -1305,8 +1316,19 @@ def reflectivity_fall_speed(dbz, pressure, active=None, *,
 
     Non-finite dBZ (Morrison's invalid-number-moment signal) propagates as
     non-finite fall speed rather than being silently zeroed.
+
+    ``species`` (``{"qr", "qs", "qg", "qh": mixing ratio}``, any subset)
+    with ``inverse_density`` (``alt``, m3/kg) switches on the per-species
+    blend (:func:`species_blended_fall_speed`): frozen species fall at
+    their own Lin et al. (1983) speeds instead of the rain relation.
+    Both callers in this tree pass them; without them the rain relation
+    applies to every species, as it always did.
     """
     xp = _array_module(dbz)
+    if (species is None) != (inverse_density is None):
+        raise ValueError(
+            "species= and inverse_density= go together: the frozen "
+            "species' fall speeds need the air density")
     if max_ms <= 0.0 or not np.isfinite(max_ms):
         raise ValueError(f"max_ms must be positive and finite, got {max_ms}")
     if surface_pressure is None:
@@ -1338,6 +1360,9 @@ def reflectivity_fall_speed(dbz, pressure, active=None, *,
     vt = (SUN_CROOK_VT_COEFF * density_factor
           * xp.power(xp.asarray(10.0, dtype=dbz.dtype), exponent))
     vt = xp.clip(vt, 0.0, max_ms)
+    if species is not None:
+        vt = species_blended_fall_speed(vt, species, inverse_density,
+                                        max_ms=max_ms)
     if active is not None:
         mask = xp.asarray(active)
         if mask.dtype != bool:
@@ -1453,9 +1478,15 @@ def _resolve_fall_speed(state, cfg, reflectivity_dbz, fall_speed, shape, xp,
             reflectivity_dbz = simulated_reflectivity(state, cfg)
         dbz = reflectivity_dbz.astype(out_dtype, copy=False)
         pressure = state.p.astype(out_dtype, copy=False)
+        species = {name: getattr(state, name) for name in
+                   PRECIPITATING_SPECIES
+                   if getattr(state, name, None) is not None}
+        alt = getattr(state, "alt", None)
         vt = reflectivity_fall_speed(
             dbz, pressure, precipitating_activity_mask(state),
-            surface_pressure=surface_pressure, max_ms=max_ms)
+            surface_pressure=surface_pressure, max_ms=max_ms,
+            species=species if alt is not None else None,
+            inverse_density=alt)
         return vt.astype(out_dtype, copy=False)
     if isinstance(fall_speed, str):
         raise ValueError(
@@ -1513,6 +1544,10 @@ def _require_agreement_with_the_registry() -> None:
         "microphysics", "radar_da", observed, project=project,
         cited_absences={
             0: "no microphysics, no reflectivity operator",
+            30: ("FAST_SBM writes no REFL_10CM (woof.core.fast_sbm_runtime."
+                 "apply refuses a due frame), so radar DA has no H(x) on "
+                 "mp_physics=30 until a reflectivity operator over the bin "
+                 "spectra is wired"),
         })
 
 

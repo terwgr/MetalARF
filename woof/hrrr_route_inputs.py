@@ -158,6 +158,86 @@ def _repeated(value, count: int) -> str:
     return _column([value] * count)
 
 
+def _chem_namelist_rows(runs, *, stock: bool):
+    """``(&dynamics rows, &chem group)`` for a chem run, or two empty lists.
+
+    The route prepares from these namelists, and the preparation is what
+    takes the chem start and edge state (woof/ingest/real.py
+    fill_boundary_sources), so a chem TOML whose namelist carried no
+    ``&chem`` prepared with no chemistry at all.  The group is written in
+    the importer's own vocabulary (woof/namelist_chem.py): ``chem_opt``
+    from the set's WRF package, the input/boundary switches when a
+    boundary source row is enabled, every carried ``&chem`` key, and the
+    operational fork's keys for a fork package (``chem_opt = 18``).  The
+    round trip then demands the re-import reproduce chem_sets and
+    chem_sources.  Native half only: the stock WRF arm is a non-chem build
+    (woof.hrrr_hierarchy_direct._require_raw_stock_delta records it).
+    Empty for a chem-off tree, so every chem-off emission keeps its bytes.
+    """
+    root = runs[0]
+    if stock or not getattr(root, "chem_sets", ""):
+        return [], []
+    from woof.chem_table import catalog, chem_names
+    from woof.namelist_chem import (CARRIED_DYNAMICS_KEYS, CARRIED_KEYS,
+                                     FORK_CHEM_OPT_SETS)
+
+    count = len(runs)
+    for run in runs[1:]:
+        if run.chem_sets != root.chem_sets or run.chem_sources != root.chem_sources:
+            raise HrrrRouteInputError(
+                "chem_sets/chem_sources differ between domains; WRF's &chem "
+                "carries one package for the whole tree")
+    sets = chem_names(root.chem_sets, "chem_sets")
+    table = catalog()
+    chem_opt = None
+    if len(sets) == 1:
+        row = table.sets.get(sets[0])
+        if row is not None and row.wrf_chem_opt is not None:
+            chem_opt = row.wrf_chem_opt
+        else:
+            chem_opt = {name: value for value, name
+                        in FORK_CHEM_OPT_SETS.items()}.get(sets[0])
+    if chem_opt is None:
+        raise HrrrRouteInputError(
+            f"chem_sets = {root.chem_sets!r} has no WRF &chem package the "
+            "route's namelist can spell, so the preparation would run "
+            "without that chemistry")
+    fork = chem_opt in FORK_CHEM_OPT_SETS
+    sources = chem_names(root.chem_sources, "chem_sources")
+
+    def value(raw):
+        if isinstance(raw, bool):
+            return _logical(raw)
+        if isinstance(raw, float):
+            return _f(raw)
+        return raw
+
+    def row(key, raw):
+        return f" {key:<36s}= {_repeated(value(raw), count)}"
+
+    dynamics = [row(key, getattr(root, key)) for key in CARRIED_DYNAMICS_KEYS]
+    group = ["&chem", row("chem_opt", chem_opt)]
+    if any(table.sources[name].kind == "boundary" for name in sources
+           if name in table.sources):
+        group += [row("chem_in_opt", 1), row("have_bcs_chem", True)]
+    group += [row(key, getattr(root, key)) for key in CARRIED_KEYS]
+    if fork:
+        group += [
+            row("simple_dir_fdb", int(getattr(root, "simple_dir_fdb", 0))),
+            *([row("plumerise_flag", 2)]
+              if root.plume_fire_properties == "frp" else []),
+            *([row("bb_dcycle", True)]
+              if root.fire_emission_mode == "trailing_24h_dcycle" else []),
+        ]
+        group.append(row("enh_vermix", bool(root.enh_vermix)))
+        if float(root.flam_part) != -1.0:
+            group.append(row("flam_part", float(root.flam_part)))
+        if int(root.aer_drydep_opt) != 0:
+            group.append(row("aer_drydep_opt", int(root.aer_drydep_opt)))
+    group += ["/", ""]
+    return dynamics, group
+
+
 #: Every switch the route's physics gate reads -- resolved per domain
 #: at emission, per shipped profile at the wizard's pairing gate.
 ROUTE_GATED_SWITCHES = ("mp_physics",)
@@ -576,12 +656,113 @@ def _terrain_radiation_and_mosaic_rows(runs) -> list[str]:
     return rows
 
 
-def render_namelist_input(exp, *, stock: bool = False) -> str:
+def _run_wide(runs, key):
+    """The one value a WRF run-wide key carries for this tree, or a refusal."""
+
+    values = {getattr(run, key) for run in runs}
+    if len(values) > 1:
+        raise HrrrRouteInputError(
+            f"{key} differs between domains; WRF reads one value for the "
+            f"whole run and the domains carry {sorted(values)}")
+    return values.pop()
+
+
+def _land_lake_and_drag_rows(runs) -> list[str]:
+    """WRF &physics rows for RUC mosaic, the CLM lake, sea-ice albedo and
+    the YSU topographic wind correction.
+
+    Every one is a stock WRF 4.6.1 &physics key the route's importer reads
+    (``mosaic_lu`` and ``mosaic_soil`` run-wide, ``seaice_albedo_default``
+    a scalar, ``topo_wind`` and the four lake keys max_domains columns),
+    so both halves of the pair carry them alike and the hierarchy's raw
+    native-to-stock delta is unchanged.  The renderer never wrote them:
+    a TOML with ``mosaic_lu = 1`` or ``sf_lake_physics = 1`` emitted a
+    pair that said 0, so the round trip refused the shipped HRRR recipes
+    (configs/recipes/hrrr_v4_gsd41.toml, hrrr_configuration_cut.toml) on
+    this route, and had it not, the root preparation, the hierarchy stage
+    and the mirrored WRF arm would have run without the setting the
+    forecast integrated.  Each row is written only where the
+    configuration leaves the WRF Registry default (which is also what the
+    importer fills for an omitted key: no recipe row names them), so
+    every emission that does not use them keeps its bytes.
+    """
+
+    from woof.config import RunConfig
+
+    defaults = RunConfig.__dataclass_fields__
+    rows: list[str] = []
+    for key in ("mosaic_lu", "mosaic_soil"):
+        value = int(_run_wide(runs, key))
+        if value != defaults[key].default:
+            rows.append(f" {key:<35} = {value},")
+    albedo = float(_run_wide(runs, "seaice_albedo_default"))
+    if albedo != defaults["seaice_albedo_default"].default:
+        rows.append(f" {'seaice_albedo_default':<35} = {_f(albedo)},")
+    for key in ("topo_wind", "sf_lake_physics", "use_lakedepth"):
+        column = [int(getattr(run, key)) for run in runs]
+        if any(value != defaults[key].default for value in column):
+            rows.append(f" {key:<35} = {_column(column)}")
+    for key in ("lakedepth_default", "lake_min_elev"):
+        column = [float(getattr(run, key)) for run in runs]
+        if any(value != defaults[key].default for value in column):
+            rows.append(f" {key:<35} = {_column(_f(v) for v in column)}")
+    return rows
+
+
+def _drag_and_implicit_advection_rows(runs) -> list[str]:
+    """WRF &dynamics rows for gravity-wave drag and implicit vertical advection.
+
+    ``gwd_opt`` is a max_domains column WRF v4 reads in &dynamics (the
+    importer reads it there, or in &physics for a pre-v4 namelist), and
+    ``zadvect_implicit`` one value for the run (Registry.EM_COMMON:2873).
+    Both are stock WRF 4.6.1 keys, written to both halves alike and only
+    where the configuration leaves WRF's default 0.  Unwritten, a TOML
+    with ``gwd_opt = 3`` (the GSL drag suite of
+    configs/recipes/hrrr_v4_gsd41.toml) or ``zadvect_implicit = 1`` was
+    read back as 0 and refused by the round trip.
+    """
+
+    rows: list[str] = []
+    column = [int(run.gwd_opt) for run in runs]
+    if any(column):
+        rows.append(f" {'gwd_opt':<35} = {_column(column)}")
+    implicit = int(_run_wide(runs, "zadvect_implicit"))
+    if implicit:
+        rows.append(f" {'zadvect_implicit':<35} = {implicit},")
+    return rows
+
+
+def wps_land_categories(wps_text: str, count: int) -> int:
+    """NUM_LAND_CAT the land use ``wps_text``'s geog_data_res selects.
+
+    WRF reads one num_land_cat for the run and real.exe stops when it
+    differs from the geography's (share/input_wrf.F); geogrid stamps 21
+    for the MODIS land use with its lake class and 20 for the 15
+    arc-second set (``modis_15s``).  Domains that disagree keep 21, which
+    the round trip's importer then refuses by name.
+    """
+    from woof.fortran_namelist import parse_namelist_text
+    from woof.static.build import geog_landuse_category_count
+
+    values = (parse_namelist_text(wps_text).get("geogrid", {})
+              .get("geog_data_res") or [])
+    column = [str(value) for value in values][:count]
+    column += ["default"] * (count - len(column))
+    counts = {geog_landuse_category_count(value) for value in column}
+    return counts.pop() if len(counts) == 1 else 21
+
+
+def render_namelist_input(exp, *, stock: bool = False,
+                          num_land_cat: int = 21) -> str:
     """One WRF ``namelist.input`` for this experiment.
 
     ``stock`` renders the unchanged-WRF twin.  It differs from the
     native file in exactly three ways -- the route parses both and
     refuses a fourth -- so both come out of this one function.
+    ``num_land_cat`` is the geography's category count
+    (:func:`wps_land_categories`); it was a literal 21, so the route
+    refused NOAA's own namelist.wps (modis_15s, 20 categories) at its
+    round trip.
     """
     from woof.config import RunConfig
     from woof.physics_source_defaults import recipe_physics_defaults
@@ -603,7 +784,7 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
     def recipe_fills_otherwise(key, value) -> bool:
         return key in recipe and value != recipe[key]
 
-    for key in ("fractional_seaice",):
+    for key in ("fractional_seaice", "seaice_threshold"):
         values = {getattr(run, key) for run in runs}
         if len(values) > 1:
             raise HrrrRouteInputError(
@@ -697,6 +878,19 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
     # without a domain index.
     radar_ref = " do_radar_ref                        = 1," if stock else ""
 
+    # WRF's WIF climatology request, (aer_init_opt, wif_input_opt) = (1, 1);
+    # real.exe derives aer_init_opt from use_aero_icbc.  Run-wide in WRF.
+    wif_pair = (int(_run_wide(runs, "aer_init_opt")),
+                int(_run_wide(runs, "wif_input_opt"))) != (0, 0)
+    # WRF's &time_control cycling (Registry.EM_COMMON: `rconfig logical
+    # cycling namelist,time_control 1 .false.`, run-wide).  The importer
+    # reads it onto RunConfig.cycling, so a pair that omits it reads back
+    # as a fresh start: every imported operational HRRR namelist states
+    # .true. and was refused here by the round trip (acceptance defect
+    # D-04, 2.8.8).  Written on BOTH halves, only when .true., so stock
+    # WRF's MYNN first call runs the same cycled start and every uncycled
+    # emission keeps its bytes.
+    cycling = bool(_run_wide(runs, "cycling"))
     stock_deltas = _STOCK_DELTAS
     if int(getattr(root.run, "alb_sol", 0)) == 1:
         stock_deltas += ", native-only alb_sol=1 (absent from stock WRF 4.6.1)"
@@ -719,6 +913,13 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
         f" run_minutes                         = {minutes},",
         f" run_seconds                         = {seconds},",
     ]
+    for run in runs:
+        if any(getattr(run, key) % 60 for key in (
+                "history_interval2_s", "history_interval_change_s")):
+            raise HrrrRouteInputError(
+                "the fork's history_interval2/history_interval_change namelist "
+                "controls require whole minutes; fractional minutes would "
+                "silently shift the history alarms")
     lines.append(dt_columns(start, "start").rstrip("\n"))
     lines.append(dt_columns(end, "end").rstrip("\n"))
     lines.extend([
@@ -727,8 +928,20 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
         f" input_from_file                     = "
         f"{_repeated('.true.', count)}",
         f" history_interval_s                  = "
-        f"{_column(int(d.history_interval_s) for d in domains)}",
+        f"{_column(int(d.full_history_interval_s or d.history_interval_s) for d in domains)}",
+        *([f" history_interval2                   = {_column(int(r.history_interval2_s / 60) for r in runs)}",
+           f" history_interval_change             = {_column(int(r.history_interval_change_s / 60) for r in runs)}"]
+          if any(r.history_interval2_s for r in runs) else []),
         f" frames_per_outfile                  = {_repeated(1, count)}",
+        *([f" output_diagnostics                  = {root.run.output_diagnostics},",
+           f" diag_int                            = {root.run.diag_int},",
+           f" wind_int                            = {root.run.wind_int},"]
+          if root.run.output_diagnostics or root.run.diag_int != 15 or root.run.wind_int != 5 else []),
+        *([f" gsd_diagnostics                     = {root.run.gsd_diagnostics},",
+           f" reset_interval1                     = {_column(r.reset_interval1 for r in runs)}"]
+          if root.run.gsd_diagnostics else []),
+        *([" cycling                             = .true.,"]
+          if cycling else []),
         " restart                             = .false.,",
         " io_form_history                     = 2,",
         " io_form_restart                     = 2,",
@@ -790,16 +1003,23 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
         f" num_metgrid_levels                  = {NUM_METGRID_LEVELS},",
         f" num_metgrid_soil_levels             = "
         f"{NUM_METGRID_SOIL_LEVELS},",
+        # The WIF key triple's &domains half.  Written for every gsd_41
+        # tree (its established bytes) and wherever the configuration
+        # selects the climatology pair: unwritten, a non-gsd_41 TOML with
+        # aer_init_opt = wif_input_opt = 1 (configs/hrrr_v4_vertical_order5)
+        # was read back as (0, 0) and refused by the round trip.
         *([f" wif_input_opt                       = {root.run.wif_input_opt},"]
-          if root.run.bl_mynn_version == "gsd_41" else []),
+          if root.run.bl_mynn_version == "gsd_41" or wif_pair else []),
         " sfcp_to_sfcp                        = .true.,",
         "/",
         "",
         "&physics",
+        f" prec_acc_dt                         = {_column(_f(r.prec_acc_dt) for r in runs)}",
+        f" prec_acc_dt1                        = {_column(_f(r.prec_acc_dt1) for r in runs)}",
         f" mp_physics                          = "
         f"{_column(r.mp_physics for r in runs)}",
         *([f" use_aero_icbc                       = {_logical(root.run.aer_init_opt == 1)},"]
-          if root.run.bl_mynn_version == "gsd_41" else []),
+          if root.run.bl_mynn_version == "gsd_41" or wif_pair else []),
         f" ra_lw_physics                       = "
         f"{_column(longwave)}",
         f" ra_sw_physics                       = {_column(shortwave)}",
@@ -855,7 +1075,15 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
         *([f" fractional_seaice                   = "
            f"{int(root.run.fractional_seaice)},"]
           if int(root.run.fractional_seaice) != 0 else []),
-        " num_land_cat                        = 21,",
+        # WRF &physics seaice_threshold (Registry single REAL, default
+        # 100): real.exe's open-water-to-ice skin threshold.  Written when
+        # the config moves it, omitted at 100 so default emissions keep
+        # their bytes.
+        *([f" seaice_threshold                    = "
+           f"{_f(float(root.run.seaice_threshold))},"]
+          if float(getattr(root.run, "seaice_threshold", 100.0)) != 100.0
+          else []),
+        f" num_land_cat                        = {int(num_land_cat)},",
         f" sf_urban_physics                    = {_repeated(0, count)}",
         " sst_update                          = 0,",
     ])
@@ -917,6 +1145,7 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
                 and not (stock and key == "alb_sol")):
             lines.append(f" {key:<36s}= {value},")
     lines.extend(_terrain_radiation_and_mosaic_rows(runs))
+    lines.extend(_land_lake_and_drag_rows(runs))
     lines.extend([
         "/",
         "",
@@ -1031,6 +1260,14 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
            f"{_column(r.v_sca_adv_order for r in runs)}"]
           if any(r.v_mom_adv_order != 3 or r.v_sca_adv_order != 3
                  for r in runs) else []),
+        *_drag_and_implicit_advection_rows(runs),
+        # WRF w_crit_cfl (Registry.EM_COMMON:2872, one value for the tree),
+        # written when the config moves it off the 1.0 the importer fills
+        # for a silent namelist, so default emissions keep their bytes.
+        *([f" w_crit_cfl                          = "
+           f"{_f(float(root.run.w_crit_cfl))},"]
+          if float(root.run.w_crit_cfl) != 1.0 else []),
+        *_chem_namelist_rows(runs, stock=stock)[0],
         "/",
         "",
         "&bdy_control",
@@ -1046,6 +1283,7 @@ def render_namelist_input(exp, *, stock: bool = False) -> str:
         f"{_column(_logical(r.nested) for r in runs)}",
         "/",
         "",
+        *_chem_namelist_rows(runs, stock=stock)[1],
         "&grib2",
         "/",
         "",
@@ -1179,7 +1417,7 @@ def route_input_paths(config_path: Path) -> dict[str, Path]:
 #: same edit in the importer's words with no way out.
 ROUTE_SHARED_DOMAIN_KEYS = ("bldt", "diff_6th_opt", "isfflx",
                             "mp_physics", "sf_sfclay_physics",
-                            "mynn_sfclay_variant", "terrain_clock",
+                            "mynn_sfclay_variant", "ysu_version", "terrain_clock",
                             "diff_6th_form", "upper_wind_limiter_form",
                             "mp_zero_out", "mp_zero_out_thresh",
                             "mp_zero_out_all", "ruc_irrigation", "ruc_snow",
@@ -1202,40 +1440,6 @@ def route_shared_domain_keys(source) -> frozenset[str]:
     if candidate_route_chain(source) != "prepared:hrrr":
         return frozenset()
     return frozenset(ROUTE_SHARED_DOMAIN_KEYS)
-
-
-#: Switches of woof's schema that no WRF namelist has a key for, which
-#: THIS route therefore does not read from the configuration: the
-#: importer answers each from
-#: :func:`woof.physics_compat.implicit_runtime_switches` for the physics
-#: the namelists select.  ``top_lid`` is not one of them, because
-#: :func:`render_namelist_input` writes it into &dynamics.  A
-#: configuration stating another value is refused by
-#: :func:`verify_round_trip`, which names the value the namelists carry.
-ROUTE_IMPLICIT_SWITCHES = ("moist_cq",)
-
-
-def route_implicit_switches(source, switches) -> dict[str, object]:
-    """What this candidate's route runs for the switches its namelists cannot state.
-
-    ``switches`` is a resolved physics switch table: a suite's, or a
-    physics mix's as :mod:`woof.physics_catalog` resolves it for the
-    root.  Empty on every route that reads the configuration itself.  On
-    this route it is physics_compat's answer for that selection, the
-    lookup the importer makes when it reads the namelists back, so a set
-    written with it runs as written.  The shared authority enables WRF's
-    moisture pressure correction for every suite; a dry state bypasses
-    it because it has no moisture carrier.  An explicit verification
-    opt-out cannot be encoded in these namelists.
-    """
-
-    from woof.physics_compat import implicit_runtime_switches
-    from woof.source_drivability import candidate_route_chain
-
-    if candidate_route_chain(source) != "prepared:hrrr":
-        return {}
-    implicit = implicit_runtime_switches(**{str(key): value for key, value in dict(switches).items()})
-    return {key: implicit[key] for key in ROUTE_IMPLICIT_SWITCHES}
 
 
 #: The request source this route's namelists are read under, by
@@ -1273,8 +1477,11 @@ def route_fallback_settings(rendered_sections) -> dict[str, object]:
 
     surface = rendered_sections.get("physics", {}).get(
         "sf_surface_physics", [None])
+    microphysics = rendered_sections.get("physics", {}).get(
+        "mp_physics", [None])
     fallback = land_scoped_defaults(
-        recipe_physics_defaults(ROUTE_REQUEST_SOURCE), surface[0])
+        recipe_physics_defaults(ROUTE_REQUEST_SOURCE), surface[0],
+        microphysics[0])
     fallback.update(operational_fork_ruc_defaults(rendered_sections))
     fallback.update(operational_fork_thompson_defaults(rendered_sections))
     return fallback
@@ -1315,6 +1522,33 @@ def route_fallback_settings(rendered_sections) -> dict[str, object]:
 #: which refused the shipped tornado LES configs for an
 #: ``inflow_perturbation`` the forecast does run.
 ROUTE_FORECAST_TOML_FIELDS: Mapping[str, str] = MappingProxyType({
+    # The aer_opt = 2 user-aerosol option and value controls (815912d563b):
+    # read by the legacy RRTMG shortwave's aerosol optics on each radiation
+    # call, from the TOML the forecast is bound to; the namelist pair spells
+    # aer_type and the auxinput15 pair, not these.
+    "aer_aod550_opt": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_angexp_opt": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_ssa_opt": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_asy_opt": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_aod550_val": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_angexp_val": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_ssa_val": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    "aer_asy_val": "woof/core/aer_opt2.py, the aer_opt = 2 optics",
+    # WRF's lightning diagnostic package controls (cd75865eb6e): read by
+    # the forecast's lightning driver on its own cadence, from the bound
+    # TOML; the namelist pair spells lightning_option itself.
+    "lightning_dt": "woof/core/lightning.py, the lightning driver",
+    "lightning_start_seconds": "woof/core/lightning.py, the lightning driver",
+    "flashrate_factor": "woof/core/lightning.py, the lightning driver",
+    "iccg_method": "woof/core/lightning.py, the lightning driver",
+    "iccg_prescribed_num": "woof/core/lightning.py, the lightning driver",
+    "iccg_prescribed_den": "woof/core/lightning.py, the lightning driver",
+    "cellcount_method": "woof/core/lightning.py, the lightning driver",
+    "cldtop_adjustment": "woof/core/lightning.py, the lightning driver",
+    "do_radar_ref": "woof/core/refl.py, the reflectivity diagnostic",
+    # The Thompson fork table directory: read by the Thompson column at
+    # load, never by preparation.
+    "thompson_table_dir": "woof/core/thompson_column.py, the Thompson table loader",
     "inflow_perturbation": (
         "woof/core/inflow_perturbation.py build_inflow_perturbation, "
         "constructed per child by the NestCoupler (woof/core/nest.py)"),
@@ -1339,6 +1573,105 @@ ROUTE_FORECAST_TOML_FIELDS: Mapping[str, str] = MappingProxyType({
     "rrtmg_smoke_manifest": (
         "woof/core/rrtmg_smoke_manifest.py, prescribed smoke in the "
         "radiation call"),
+    # The five RRFS v2 switches 809cdc87b added: no WRF namelist key the
+    # importer spells, each read by the forecast from the bound TOML.
+    # Without these entries the round trip compared them against the
+    # importer's defaults, so a TOML on this route that set one was
+    # refused for a value the forecast does read.
+    "rrtmg_aer3_type_source": (
+        "woof/core/rrtmg_legacy.py, the aer_opt=3 shortwave aerosol type"),
+    "bl_mynn_mixaerosols": (
+        "woof/config.py mynn_mixed_number_species (MYNN_QN_MIX_KEYS), the "
+        "aerosol numbers the MYNN solve couples"),
+    "bl_mynn_mixnumcon": (
+        "woof/config.py mynn_mixed_number_species (MYNN_QN_MIX_KEYS), the "
+        "cloud numbers the MYNN solve couples"),
+    "tempo_ml_for_bl_nc": (
+        "woof/core/tempo.py, TEMPO's boundary-layer cloud number"),
+    "tempo_surface_emission_before": (
+        "woof/core/tempo.py, TEMPO's surface emission order"),
+    # WRF has no namelist key for it (calc_cq runs whenever water vapor
+    # exists), and only the forecast's acoustic and big-step drivers read
+    # it.  The importer states the physics_compat answer, True, for every
+    # pair, so before this entry a TOML moist_cq = false (the verification
+    # counterfactual of configs/les_tornado_100m_mayfield_20211210_attempt2,
+    # attempt2b, configs/recipes/conus_hrrr_configuration.toml and the
+    # three configs/frozen/ archives) was refused on this route for a
+    # value no prepared array depends on.  The mirrored WRF arm runs
+    # WRF's own calc_cq whatever the TOML says; a counterfactual has no
+    # WRF twin on any route.
+    "moist_cq": (
+        "woof/core/acoustic.py prepare_moist_cq, the acoustic and "
+        "big-step moisture coefficients"),
+    # The zero-layer sea ice model (2.9.4): WRF has no such model and no
+    # namelist key for it, so the pair cannot spell it, and the mirrored
+    # WRF arm never runs it.  The forecast builds it from the bound TOML at
+    # physics initialization.  Before this entry the HRRR v4 recipe's
+    # seaice_prognostic = false (operational HRRR keeps RUC's own ice
+    # column) was refused at emission for a value the forecast does read.
+    "seaice_prognostic": (
+        "woof/ocean/seaice/__init__.py, the sea ice model's initialization"),
+    # THE CHEM OPERATOR'S SWITCHES (woof/config.py CHEM_RUN_FIELDS).  This
+    # route's emitted pair carries no &chem group (render_namelist_input
+    # writes none), so the route's pair cannot spell these -- although a
+    # WRF namelist's own &chem group has mapped onto them since 2026-10-12
+    # (woof/namelist_chem.py; until then it was dropped whole).  The
+    # forecast's chem step is built from the bound TOML (chem_sets decides
+    # whether it runs at all, and is compared in its own right), and each
+    # switch below is read there.  Before these entries the route compared
+    # them against the importer's defaults, so a TOML that set any of them
+    # on a chem run was refused at emission for a value the forecast does
+    # read.  The three whose only reader is the chem door's validation
+    # (woof/config.py validate_chem_config) are read there: it refuses
+    # dmsemis_opt != 0 and chem_conv_tr != 0 under a cumulus scheme, and
+    # type-checks biomass_burn_opt, which the smoke set's own
+    # fire_emission_mode and plume rise supersede.
+    "aerosol_mp_coupling": (
+        "woof/core/chem_mp_coupling.py, aerosol to aerosol-aware Thompson"),
+    "biomass_burn_opt": (
+        "woof/config.py validate_chem_config, the chem door"),
+    "chem_conv_tr": (
+        "woof/config.py validate_chem_config, the chem door"),
+    "chem_mix2_off": (
+        "woof/core/chem_transport.py, the chem array's horizontal mixing"),
+    "chemdt": "woof/core/chem_driver.py, the chem step cadence",
+    "dmsemis_opt": (
+        "woof/config.py validate_chem_config, the chem door"),
+    "dust_alpha": "woof/core/chem_dust.py, AFWA dust tuning",
+    "dust_gamma": "woof/core/chem_dust.py, AFWA dust tuning",
+    "dust_opt": "woof/core/chem_dust.py, the dust emission scheme",
+    "dust_smtune": "woof/core/chem_dust.py, AFWA dust tuning",
+    "dust_ustune": "woof/core/chem_dust.py, AFWA dust tuning",
+    "fire_emission_mode": (
+        "woof/core/chem_fire.py, fire emission timing"),
+    "kemit": "woof/core/chem_inventory.py, the emission layer count",
+    "mynn_chem_vertmx": (
+        "woof/core/chem_vertmx.py, the chem vertical mixing"),
+    "plume_fire_properties": (
+        "woof/core/chem_plumerise.py, plume-rise fire properties"),
+    "plumerisefire_frq": (
+        "woof/core/chem_plumerise.py, the plume-rise cadence"),
+    "seas_opt": "woof/core/chem_seasalt.py, the sea-salt emission scheme",
+    "vertmix_onoff": (
+        "woof/core/chem_vertmx.py, the chem vertical mixing"),
+    "wetscav_onoff": (
+        "woof/core/chem_wetdep.py, large-scale washout"),
+    "simple_dir_fdb": (
+        "woof/core/radiation_composition.py transported_smoke_attr, the "
+        "transported smoke's AOD in the aer_opt=3 shortwave"),
+    "enh_vermix": (
+        "woof/core/chem_vertmx.py, the fork's mixing over burning columns"),
+    "flam_part": (
+        "woof/core/chem_plumerise.py, the fork's flaming fraction"),
+    "aer_drydep_opt": (
+        "woof/core/chem_vertmx.py, the fork's smoke deposition velocity"),
+    # The per-run smoke-off sentence (woof/smoke_execution.py): launch
+    # metadata with no WRF spelling, read by the run's receipts.  A run
+    # whose card could not hold the smoke envelope was refused at emission
+    # for it, and its tree authority did not reload without it (a 4090 host and
+    # a rented box, 2026-10-21).
+    "smoke_off_reason": (
+        "woof/smoke_receipts.py, the run receipt's smoke-off sentence"),
 })
 
 
@@ -1552,9 +1885,11 @@ def write_hrrr_route_inputs(config_path: Path, exp, *, wps_text: str,
     paths = route_input_paths(Path(config_path))
     writer(paths["wps_namelist"], wps_text)
     writer(paths["target_domain"], render_target_domain(exp))
-    writer(paths["namelist_input"], render_namelist_input(exp))
+    land = wps_land_categories(wps_text, len(exp.domains))
+    writer(paths["namelist_input"],
+           render_namelist_input(exp, num_land_cat=land))
     writer(paths["stock_namelist_input"],
-           render_namelist_input(exp, stock=True))
+           render_namelist_input(exp, stock=True, num_land_cat=land))
     verify_round_trip(exp, paths["wps_namelist"], paths["namelist_input"])
     return [paths["wps_namelist"], paths["target_domain"],
             paths["namelist_input"], paths["stock_namelist_input"]]
@@ -1593,11 +1928,84 @@ def configuration_reading_sources(source) -> tuple[str, ...]:
     return tuple(found)
 
 
-def run_route_inputs(config_path, exp, *, raw, into=None):
+def beside_root_disagreement(config_path, exp) -> tuple[str, ...]:
+    """The d01 trajectory fields the set beside ``config_path`` holds differently.
+
+    The root preparation reads the configuration itself
+    (``tools.prepare_hrrr_wrf --experiment-config``) and the hierarchy
+    reads d01 out of the namelist pair, then binds the two by
+    :func:`woof.hrrr_hierarchy_direct.root_binding_differences`.  A set a
+    door wrote before the configuration last changed therefore cannot run:
+    WOOF canary run_0771cd8814b6e7f8 (HRRR 2026-03-10 12Z, 3 km + 1 km)
+    had its set written by ``woof domain``, then ``[shared]
+    gsd_diagnostics = 1`` added to the TOML, and was refused after a
+    20 GB fetch and the root preparation with "native namelist d01
+    trajectory controls differ from the sealed root preparation:
+    run.gsd_diagnostics".
+
+    Asked by rendering the set from the configuration (keeping the beside
+    WPS namelist) and binding the two d01 imports by the hierarchy's own
+    rule, so the importer reads both sides the same way.  Equal namelist
+    text, a configuration the writer cannot carry, and a beside pair
+    the importer refuses all answer ``()``: the set beside is then read as
+    before, and the hierarchy reports anything wrong with it in its own
+    words.  Only d01 is compared, because only d01 is bound; a hand edit
+    to a child domain in the set beside still runs.
+    """
+
+    import tempfile
+
+    config_path = Path(config_path)
+    beside = route_input_paths(config_path)
+    with tempfile.TemporaryDirectory(prefix="arwen-route-inputs-") as staging:
+        target = Path(staging) / config_path.name
+        try:
+            write_hrrr_route_inputs(
+                target, exp,
+                wps_text=beside["wps_namelist"].read_text(encoding="utf-8"),
+                writer=lambda path, content: path.write_text(
+                    content, encoding="utf-8"))
+        except ValueError:
+            return ()
+        rendered = route_input_paths(target)
+        if (rendered["namelist_input"].read_text(encoding="utf-8")
+                == beside["namelist_input"].read_text(encoding="utf-8")):
+            return ()
+        from woof.hrrr_hierarchy_direct import (
+            _native_experiment, _sealed_root_rrtmg_compatibility,
+            _sealed_root_rrtmg_variant, root_binding_differences)
+        from woof.ingest.prepared_cache import prepared_domain_config_identity
+
+        # The keywords the hierarchy imports under come from the sealed
+        # root, which the preparation resolved from this configuration.
+        root = {"domain_config": prepared_domain_config_identity(exp.domains[0])}
+        keywords = {
+            "rrtmg_variant": _sealed_root_rrtmg_variant(root),
+            "rrtmg_compatibility": _sealed_root_rrtmg_compatibility(root),
+            "acknowledgements": tuple(getattr(exp, "acknowledgements", ())),
+        }
+        try:
+            ours, _, _ = _native_experiment(
+                rendered["wps_namelist"], rendered["namelist_input"], **keywords)
+            theirs, _, _ = _native_experiment(
+                beside["wps_namelist"], beside["namelist_input"], **keywords)
+        except ValueError:
+            return ()
+    return tuple(sorted(root_binding_differences(
+        prepared_domain_config_identity(ours.domains[0]), theirs.domains[0])))
+
+
+def run_route_inputs(config_path, exp, *, raw, into=None, report=None):
     """The four files one run of ``config_path`` hands this route.
 
-    The set beside the configuration when it is COMPLETE: that is what a
-    door wrote, and it is what the route has always read.  Otherwise the
+    The set beside the configuration when it is COMPLETE and agrees with
+    it: that is what a door wrote, and it is what the route has always
+    read.  A complete set whose d01 disagrees with the configuration
+    (:func:`beside_root_disagreement`: it was written before the
+    configuration last changed) is not read, because the root preparation
+    reads the configuration and the hierarchy would refuse the pair after
+    the fetch; the run writes the set from the configuration instead and
+    ``report["disagreeing"]`` names the fields.  Otherwise the
     run writes the set itself, from the configuration, through
     :func:`write_hrrr_route_inputs` and therefore through
     :func:`verify_round_trip` -- into ``into``, never beside the user's
@@ -1628,7 +2036,11 @@ def run_route_inputs(config_path, exp, *, raw, into=None):
     config_path = Path(config_path)
     beside = route_input_paths(config_path)
     if all(path.is_file() for path in beside.values()):
-        return beside
+        disagreeing = beside_root_disagreement(config_path, exp)
+        if report is not None:
+            report["disagreeing"] = disagreeing
+        if not disagreeing:
+            return beside
     missing = sorted(role for role, path in beside.items()
                      if not path.is_file())
 
@@ -1734,9 +2146,7 @@ __all__ = [
     "candidate_companions",
     "configuration_reading_sources",
     "ROUTE_DEFAULT_PHYSICS_PROFILE",
-    "ROUTE_IMPLICIT_SWITCHES",
     "ROUTE_SHARED_DOMAIN_KEYS",
-    "route_implicit_switches",
     "route_shared_domain_keys",
     "SUPPORTED_MICROPHYSICS",
     "render_namelist_input",

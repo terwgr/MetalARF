@@ -1,0 +1,132 @@
+{
+  "kernels": [
+    {
+      "module": "wrf_exact_noah_init",
+      "source": "woof/metal/shaders/wrf_exact_noah_init.metal",
+      "cuda_source": "woof/core/kernels/noah_init.cu",
+      "cuda_symbol": "noah_initialize_sh2o",
+      "parameters": [
+        [
+          "slcats",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "wrf_exact_noah_init_check",
+      "resources": [
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "tslb",
+          "float",
+          "read"
+        ],
+        [
+          "soiltbl",
+          "float",
+          "read"
+        ],
+        [
+          "status",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "isltyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tslb": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "soiltbl": [
+          [
+            "slcats",
+            10
+          ]
+        ],
+        "status": [
+          [
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "module": "wrf_exact_noah_init",
+      "source": "woof/metal/shaders/wrf_exact_noah_init.metal",
+      "cuda_source": "woof/core/kernels/noah_init.cu",
+      "cuda_symbol": "noah_initialize_sh2o",
+      "parameters": [
+        [
+          "slcats",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "wrf_exact_noah_init_copy",
+      "resources": [
+        [
+          "smois",
+          "float",
+          "read"
+        ],
+        [
+          "sh2o",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "smois": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "sh2o": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ]
+      }
+    }
+  ]
+}

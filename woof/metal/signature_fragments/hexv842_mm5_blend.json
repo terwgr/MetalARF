@@ -1,0 +1,72 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mm5_blend",
+      "module": "hexv842_mm5_boundary",
+      "source": "woof/metal/shaders/hexv842_mm5_boundary.metal",
+      "cuda_source": "woof/hex/mpasphys/sfclay_mm5_v842.py",
+      "cuda_symbol": "mm5_to_mpas",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read_write"
+        ],
+        [
+          "sea",
+          "float",
+          "read"
+        ],
+        [
+          "ice",
+          "float",
+          "read"
+        ],
+        [
+          "regime_hold",
+          "float",
+          "read"
+        ]
+      ],
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "48",
+            "n"
+          ]
+        ],
+        "sea": [
+          [
+            "48",
+            "n"
+          ]
+        ],
+        "ice": [
+          [
+            "n"
+          ]
+        ],
+        "regime_hold": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

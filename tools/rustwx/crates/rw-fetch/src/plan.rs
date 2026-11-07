@@ -240,7 +240,7 @@ pub enum Decision {
 /// because `--mode` was on this process's command line, and this
 /// process cannot see whether a person typed it or a caller's default
 /// supplied it.  They used to claim "operator override", which was
-/// simply false for every `gpuwm fetch` -- that front door passes
+/// simply false for every `woof fetch` -- that front door passes
 /// `--mode full-file` as its own default, so the line credited an
 /// operator for a choice no operator had made.  The layer that knows
 /// says so in its own words (`gpuwm/fetch.py`).
@@ -293,7 +293,9 @@ pub fn decide(request: ModeRequest, facts: &ProbeFacts, patterns: usize) -> Deci
                 ),
                 None => Decision::Refuse(
                     "--mode idx-subset: index coverage could not be proven against the \
-                     object; re-run with --mode full-file"
+                     object: the origin stated no object length and did not answer the \
+                     past-the-end probe, so a subset could silently drop records the \
+                     index does not list; re-run with --mode full-file"
                         .to_string(),
                 ),
             }

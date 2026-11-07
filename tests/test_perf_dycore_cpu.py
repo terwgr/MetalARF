@@ -6,6 +6,38 @@ import numpy as np
 import pytest
 
 
+def _capture_kernels(monkeypatch, owner, module, *, cache=False, requests=None):
+    calls, kernels = [], {}
+
+    def get_kernel(requested_module, function, shape=()):
+        assert requested_module == module
+        if requests is not None:
+            requests.append((function, shape))
+
+        def launch(grid, block, args):
+            calls.append((function, grid, block, args))
+
+        return kernels.setdefault(function, launch) if cache else launch
+
+    monkeypatch.setattr(owner, "get_kernel", get_kernel)
+    return calls
+
+
+class _LaunchState:
+    def __init__(self, has_msf=True, *, column_thb=False, h_diabatic=None):
+        self.p = np.empty((3, 2, 4), dtype=np.float32)
+        self.thb = np.empty(3 if column_thb else (3, 2, 4), dtype=np.float32)
+        self.has_msf = has_msf
+        self.h_diabatic = h_diabatic
+        self._values, self._scratch = {}, {}
+
+    def __getattr__(self, name):
+        return self._values.setdefault(name, object())
+
+    def scratch(self, _shape, slot):
+        return self._scratch.setdefault(slot, object())
+
+
 def test_load_base_installs_copy_owned_dz_min_cache(monkeypatch):
     from woof.core import constants as c
     from woof.core import state as state_module
@@ -154,33 +186,11 @@ def test_dycore_prepares_acoustic_coefficients_outside_substep_loop():
 def test_prepared_acoustic_substep_reuses_launch_containers(monkeypatch):
     from woof.core import acoustic
 
-    class FakeState:
-        def __init__(self):
-            self.p = np.empty((3, 2, 4), dtype=np.float32)
-            self.thb = np.empty((3, 2, 4), dtype=np.float32)
-            self.has_msf = True
-            self._values = {}
-            self._scratch = {}
 
-        def __getattr__(self, name):
-            return self._values.setdefault(name, object())
+    kernel_requests = []
 
-        def scratch(self, shape, slot):
-            return self._scratch.setdefault(slot, object())
-
-    launches = []
-    kernels = {}
-
-    def fake_get_kernel(module, function):
-        assert module == "acoustic"
-
-        def launch(grid, block, args):
-            launches.append((function, grid, block, args))
-
-        return kernels.setdefault(function, launch)
-
-    monkeypatch.setattr(acoustic, "get_kernel", fake_get_kernel)
-    state = FakeState()
+    launches = _capture_kernels(monkeypatch, acoustic, "acoustic", cache=True, requests=kernel_requests)
+    state = _LaunchState()
     cfg = SimpleNamespace(
         nz=3, ny=2, nx=4, dx=1000.0, dy=1200.0, epssm=0.1,
         smdiv=0.25, damp_opt=3, dampcoef=0.2, zdamp=5000.0,
@@ -198,6 +208,10 @@ def test_prepared_acoustic_substep_reuses_launch_containers(monkeypatch):
     expected = [
         "advance_uv", "advance_mu_th_msf", "advance_w_phi_msf",
         "advance_nested_phi_w",
+    ]
+    assert kernel_requests == [
+        (name, () if name == "advance_uv" else (3, 2, 4))
+        for name in expected
     ]
     assert [name for name, *_rest in launches] == expected * 3
     by_name = {
@@ -230,32 +244,11 @@ def test_prebound_acoustic_args_match_plain_path(
     """Every prebound launch is structurally identical to the plain path."""
     from woof.core import acoustic
 
-    class FakeState:
-        def __init__(self):
-            self.p = np.empty((3, 2, 4), dtype=np.float32)
-            self.thb = np.empty((3, 2, 4), dtype=np.float32)
-            self.has_msf = has_msf
-            self._values = {}
-            self._scratch = {}
 
-        def __getattr__(self, name):
-            return self._values.setdefault(name, object())
+    kernel_requests = []
 
-        def scratch(self, _shape, slot):
-            return self._scratch.setdefault(slot, object())
-
-    calls = []
-
-    def fake_get_kernel(module, function):
-        assert module == "acoustic"
-
-        def launch(grid, block, args):
-            calls.append((function, grid, block, args))
-
-        return launch
-
-    monkeypatch.setattr(acoustic, "get_kernel", fake_get_kernel)
-    state = FakeState()
+    calls = _capture_kernels(monkeypatch, acoustic, "acoustic", requests=kernel_requests)
+    state = _LaunchState(has_msf)
     cfg = SimpleNamespace(
         nz=3, ny=2, nx=4, dx=1000.0, dy=1200.0, epssm=0.1,
         smdiv=0.25, damp_opt=3, dampcoef=0.2, zdamp=5000.0,
@@ -269,12 +262,23 @@ def test_prebound_acoustic_args_match_plain_path(
     acoustic.acoustic_substep(
         state, cfg, 0.75, first=first, coefficients=coefficients)
     plain_calls = list(calls)
+    mu_name = "advance_mu_th_msf" if has_msf else "advance_mu_th"
+    w_name = "advance_w_phi_msf" if has_msf else "advance_w_phi"
+    assert kernel_requests == [
+        ("advance_uv", ()),
+        (mu_name, (3, 2, 4) if has_msf else ()),
+        (w_name, (3, 2, 4)),
+    ]
     calls.clear()
+    kernel_requests.clear()
 
     launch_substep = acoustic.prepare_acoustic_substep_launch(
         state, cfg, 0.75, coefficients)
     launch_substep(first=first)
     prebound_calls = list(calls)
+    assert kernel_requests == [
+        ("advance_uv", ()), (mu_name, (3, 2, 4)), (w_name, (3, 2, 4)),
+    ]
 
     assert [call[0] for call in prebound_calls] == [
         "advance_uv",
@@ -414,6 +418,8 @@ def test_fused_dycore_kernel_pins_each_former_cupy_rounding_boundary():
 def test_small_step_prep_and_finish_each_use_two_raw_launches(monkeypatch):
     from woof.core import dycore
 
+
+
     class FakeState:
         def __init__(self):
             self.p = np.empty((3, 2, 4), dtype=np.float32)
@@ -431,17 +437,7 @@ def test_small_step_prep_and_finish_each_use_two_raw_launches(monkeypatch):
                 if not hasattr(self, name):
                     setattr(self, name, object())
 
-    launches = []
-
-    def fake_get_kernel(module, function):
-        assert module == "dycore"
-
-        def launch(grid, block, args):
-            launches.append((function, grid, block, args))
-
-        return launch
-
-    monkeypatch.setattr(dycore, "get_kernel", fake_get_kernel)
+    launches = _capture_kernels(monkeypatch, dycore, "dycore")
     state = FakeState()
     cfg = SimpleNamespace(open_x=False, open_y=False, specified=False,
                           nested=False)
@@ -466,30 +462,10 @@ def test_small_step_prep_and_finish_each_use_two_raw_launches(monkeypatch):
 def test_prepared_small_step_boundaries_reuse_launch_containers(monkeypatch):
     from woof.core import dycore
 
-    class FakeState:
-        def __init__(self):
-            self.p = np.empty((3, 2, 4), dtype=np.float32)
-            self.thb = np.empty(3, dtype=np.float32)
-            self.has_msf = True
-            self.h_diabatic = object()
-            self._values = {}
 
-        def __getattr__(self, name):
-            return self._values.setdefault(name, object())
 
-    launches = []
-    kernels = {}
-
-    def fake_get_kernel(module, function):
-        assert module == "dycore"
-
-        def launch(grid, block, args):
-            launches.append((function, grid, block, args))
-
-        return kernels.setdefault(function, launch)
-
-    monkeypatch.setattr(dycore, "get_kernel", fake_get_kernel)
-    state = FakeState()
+    launches = _capture_kernels(monkeypatch, dycore, "dycore", cache=True)
+    state = _LaunchState(column_thb=True, h_diabatic=object())
     cfg = SimpleNamespace(open_x=False, open_y=False, specified=False,
                           nested=False)
     launch_init = dycore._prepare_small_step_init_launch(state, cfg)
@@ -544,17 +520,8 @@ def test_acoustic_bookkeeping_uses_batched_raw_launches(monkeypatch):
         emdiv=0.01, dx=1000.0, dy=1200.0, open_x=False, open_y=False,
         specified=True, spec_zone=1,
     )
-    launches = []
 
-    def fake_get_kernel(module, function):
-        assert module == "acoustic"
-
-        def launch(grid, block, args):
-            launches.append((function, grid, block, args))
-
-        return launch
-
-    monkeypatch.setattr(dycore, "get_kernel", fake_get_kernel)
+    launches = _capture_kernels(monkeypatch, dycore, "acoustic")
     state = FakeState()
     mudf, mu_prev = object(), object()
     dycore.apply_emdiv_filter(state, cfg, mudf, mu_prev)
@@ -598,18 +565,8 @@ def test_prepared_acoustic_bookkeeping_reuses_launch_containers(monkeypatch):
     mudf, mu_prev = object(), object()
     targets = tuple(FakeArray(n) for n in (24, 30, 32))
     sources = tuple(FakeArray(n) for n in (24, 30, 32))
-    launches = []
-    kernels = {}
 
-    def fake_get_kernel(module, function):
-        assert module == "acoustic"
-
-        def launch(grid, block, args):
-            launches.append((function, grid, block, args))
-
-        return kernels.setdefault(function, launch)
-
-    monkeypatch.setattr(dycore, "get_kernel", fake_get_kernel)
+    launches = _capture_kernels(monkeypatch, dycore, "acoustic", cache=True)
 
     launch_emdiv = dycore._prepare_emdiv_filter_launch(state, cfg, mudf)
     launch_sumflux = dycore._prepare_sumflux_launch(

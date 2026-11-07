@@ -26,10 +26,13 @@ import pytest
 
 import woof.io.restart as restart
 from woof.core.model import ADAPTIVE_TIMESTEP_RUN_FIELDS
-from test_restart import (_HISTORICAL_FORMAT_VERSION,
+from test_restart import (_HISTORICAL_FORMAT_VERSION, _unwind_hailcast_members,
+                                _PINNED_UNDER_MEASURED_CLOCK,
+                                _PRE_REAL_CLAMP_ALGORITHMS,
                                 _VOLATILE_CHECKPOINT_HEADER,
                                 _canonical_member_digest,
-                                _sealed_tree_fixture)
+                                _sealed_tree_fixture,
+                                _unwind_v7_inverse_binding)
 
 #: ``_canonical_member_digest`` on the tree immediately BEFORE the
 #: adaptive-timestep block joined RunConfig, harvested from that tree.
@@ -51,6 +54,9 @@ def _digest_without_the_adaptive_config_keys(
 
     The named historical arm also restores the moist_cq value recorded
     before e13fa45c0 / 59f7e280f. It changes no array or non-config header.
+    The anchor also predates 2.8.8's Kessler identity move
+    (gfix/288-mp-clamp), so every arm names the v1 identity again and
+    recomputes the fingerprint from it.
     """
     with np.load(path, allow_pickle=False) as data:
         header = json.loads(bytes(bytearray(
@@ -59,6 +65,10 @@ def _digest_without_the_adaptive_config_keys(
             header.pop(name, None)
         # The v6 stamp is the declared 2.7.0 break, not a config key.
         header["format_version"] = _HISTORICAL_FORMAT_VERSION
+        # Format 7 (paper/conus-suite-exact, 2.9.11) binds MF_VX_INV into the
+        # setup fingerprints; unwind exactly that binding, as test_restart's
+        # canonical digest does.
+        _unwind_v7_inverse_binding(header)
         # eta_levels was appended later (80a3009c2/06c29b747), the
         # relax_timescale_s / relax_w pair after it, and the three urban
         # canopy keys (lane/urban-infra) after those.  Unwind those separate
@@ -66,7 +76,9 @@ def _digest_without_the_adaptive_config_keys(
         # leave every array and non-config header bound.
         for key in ADAPTIVE_TIMESTEP_RUN_FIELDS + (
                 "eta_levels", "relax_timescale_s", "relax_w",
-                "sf_urban_physics", "use_wudapt_lcz", "num_urban_hi"):
+                "sf_urban_physics", "use_wudapt_lcz", "num_urban_hi",
+                # tc/nest's fixed-frame archive (2.9.7), echoed on a nested domain.
+                "nest_accumulation_archive"):
             header["config"].pop(key, None)
         # The historical anchor predates the e13fa45c0 / 59f7e280f
         # moist_cq default flip. Retain the key and unwind only its value.
@@ -77,13 +89,20 @@ def _digest_without_the_adaptive_config_keys(
         setup = copy.deepcopy(header["physics_setup"])
         setup["configuration_sha256"] = restart._json_sha256(
             restart._json_value(values, "RunConfig"))
+        for component, identity in _PRE_REAL_CLAMP_ALGORITHMS.items():
+            assert component in setup["algorithms"], component
+            setup["algorithms"][component] = identity
         header["physics_setup"] = setup
         header["physics_setup_fingerprint"] = restart._json_sha256(setup)
+        # The historical anchor also predates lane/cap-hail's eleven
+        # persistent HAILCAST members (tests/test_restart.py
+        # _LIFECYCLE_FREE_ROOT_DIGEST): unwind exactly those.
+        names = _unwind_hailcast_members(
+            header, [name for name in sorted(data.files)
+                     if name != restart._HEADER_KEY])
         digest = hashlib.sha256()
         digest.update(json.dumps(header, sort_keys=True).encode("utf-8"))
-        for name in sorted(data.files):
-            if name == restart._HEADER_KEY:
-                continue
+        for name in names:
             host = data[name]
             digest.update(name.encode("utf-8"))
             digest.update(str(host.dtype).encode("utf-8"))
@@ -94,7 +113,8 @@ def _digest_without_the_adaptive_config_keys(
 
 def _write(monkeypatch, tmp_path):
     source, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
     root = restart.write_tree_restart(
         tmp_path, source, start + timedelta(seconds=3600))
     child = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))

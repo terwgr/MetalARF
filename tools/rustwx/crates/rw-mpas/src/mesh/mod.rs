@@ -22,10 +22,12 @@ pub mod hull;
 pub mod icosa;
 pub mod ladder_snap;
 pub mod lloyd;
+pub mod order;
 pub mod profile;
 pub mod surgery;
 pub mod validate;
 
+use rayon::prelude::*;
 use serde::Serialize;
 
 use crate::error::{MpasError, MpasResult};
@@ -225,6 +227,9 @@ pub struct Receipt {
     /// by the maintained triangulation and cannot reproduce one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub triangulation: Option<&'static str>,
+    /// The order the cells are numbered in, and the gather census of it; see
+    /// [`order`] for the measured breakage the generator's own order was.
+    pub cell_order: order::CellOrder,
     /// Per-level ladder reports on the graded arm; empty on the uniform arm.
     pub graded_levels: Vec<hierarchy::LevelReport>,
     /// What each region's requested spacing had to move to reach a rung the
@@ -496,20 +501,38 @@ pub fn generate(
         (pts, outcome, seeding, reports)
     };
 
+    // --- the memory order the file is numbered in ----------------------------
+    //
+    // The ladder appends each level's insertions after the cells before it,
+    // so a fine cell's neighbours sat across the whole index range and the
+    // dycore's neighbour gathers paid for it (the default zoom globe's dycore
+    // step is 35 % shorter in this order; see `mesh::order`). Renamed, not
+    // moved: the same points and the same rings, and edges and vertices follow
+    // the cells because `derive` numbers them canonically from cell pairs and
+    // triples.
+    let numbering = order::morton_order(&points)?;
+    let (points, rings) = order::renumber(&points, &outcome.rings, &numbering)?;
+    drop(numbering);
+
     // --- every field, then the gate -----------------------------------------
     let prepared = spec.prepared();
     let mesh_density: Vec<f64> = crate::mesh::profile::timed(
         &crate::mesh::profile::DENSITY,
         points.len() as u64,
-        || points.iter().map(|&p| prepared.density(p)).collect(),
+        || points.par_iter().map(|&p| prepared.density(p)).collect(),
     );
     let nominal = emit::nominal_min_dc_from_m(spec.finest_km() * 1000.0);
     let n_pts = points.len() as u64;
     let mesh = crate::mesh::profile::timed(
         &crate::mesh::profile::DERIVE,
         n_pts,
-        || MpasMesh::derive(points, mesh_density, &outcome.rings, nominal),
+        || MpasMesh::derive(points, mesh_density, &rings, nominal),
     )?;
+    drop(rings);
+    let cell_order = order::CellOrder {
+        key: order::MORTON_XYZ_21,
+        neighbour_128byte_lines_per_warp: order::neighbour_lines_per_warp(&mesh),
+    };
     progress(&format!(
         "DERIVED\t{}\t{}\t{}",
         mesh.n_cells, mesh.n_edges, mesh.n_vertices
@@ -533,6 +556,7 @@ pub fn generate(
     // Delivered against requested, cell by cell.
     let delivered = mesh.spacing_m();
     let mut ratios: Vec<f64> = (0..mesh.n_cells)
+        .into_par_iter()
         .map(|i| delivered[i] / prepared.spacing_m(mesh.cell_xyz[i]))
         .collect();
     ratios.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
@@ -580,6 +604,7 @@ pub fn generate(
         } else {
             None
         },
+        cell_order,
         graded_levels,
         ladder_snap,
         mesh: report,
@@ -611,6 +636,12 @@ pub fn generate(
 pub fn provenance_json<T: Serialize>(receipt: &T) -> Result<String, serde_json::Error> {
     let mut value = serde_json::to_value(receipt)?;
     strip_durations(&mut value);
+    // The triangulation arm no longer changes a single output word (rings
+    // start at a canonical slot), so stamping its name into the file would be
+    // the only thing that made the two arms' bytes differ.
+    if let serde_json::Value::Object(map) = &mut value {
+        map.remove("triangulation");
+    }
     serde_json::to_string(&value)
 }
 

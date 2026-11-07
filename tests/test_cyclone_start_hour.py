@@ -18,6 +18,7 @@ from woof import domain_wizard as dw
 from woof.fetch_routes import resolve_leads, route_for
 from woof.source_adapters import get_source_adapter
 
+from cyclone_preset_fit import source_licence
 from cyclone_preset_fit import center as tc_point, holds_the_preset_root
 
 CYCLE = "2026090900"
@@ -50,35 +51,36 @@ def test_the_default_is_the_analysis_and_is_byte_identical_to_the_old_door():
 def test_every_lead_publishing_source_begins_at_the_lead_it_is_given(source):
     """One grammar for all of them: cycle picks the run, the lead picks
     where in it the forecast begins."""
-    adapter = get_source_adapter(source)
-    step = int(adapter.forcing_interval_seconds // 3600)
-    lead = min(step * 2, adapter.max_forecast_hour - step)
-    if lead <= 0:
-        pytest.skip(f"{source} publishes no lead beyond one forcing interval")
-    if not holds_the_preset_root(source):
-        # The preset root fits nowhere in this source's window, so the door
-        # refuses it by name and emits no file.  The door checks the lead
-        # against the fetch route before the window, so a refused lead would
-        # fail this match with its own message; the route's ladder is then
-        # asked directly that the window begins at the lead.
-        with pytest.raises(ValueError, match="covering sources"):
-            tc.configuration_text(cycle=CYCLE, point=tc_point(source),
-                                  hours=step, forcing_source=source,
-                                  start_hour=lead)
-        leads = resolve_leads(route_for(source), MOMENT, step,
-                              cadence=dw._fetch_cadence_h(source, lead),
-                              start_hour=lead)
-        assert leads[0] == lead and leads[-1] == lead + step
-        return
-    text, exp = tc.configuration_text(cycle=CYCLE, point=tc_point(source),
+    with source_licence(source):
+        adapter = get_source_adapter(source)
+        step = int(adapter.forcing_interval_seconds // 3600)
+        lead = min(step * 2, adapter.max_forecast_hour - step)
+        if lead <= 0:
+            pytest.skip(f"{source} publishes no lead beyond one forcing interval")
+        if not holds_the_preset_root(source):
+            # The preset root fits nowhere in this source's window, so the door
+            # refuses it by name and emits no file.  The door checks the lead
+            # against the fetch route before the window, so a refused lead would
+            # fail this match with its own message; the route's ladder is then
+            # asked directly that the window begins at the lead.
+            with pytest.raises(ValueError, match="covering sources"):
+                tc.configuration_text(cycle=CYCLE, point=tc_point(source),
                                       hours=step, forcing_source=source,
                                       start_hour=lead)
-    table = tomllib.loads(text)
-    assert exp.start_time == MOMENT + timedelta(hours=lead)
-    assert table["fetch"]["forecast_start_hour"] == lead
-    assert table["fetch"]["cycle"] == "2026-09-09T00"
-    from woof.fetch import validate_fetch_hints
-    validate_fetch_hints(table["fetch"], source="fixture")
+            leads = resolve_leads(route_for(source), MOMENT, step,
+                                  cadence=dw._fetch_cadence_h(source, lead),
+                                  start_hour=lead)
+            assert leads[0] == lead and leads[-1] == lead + step
+            return
+        text, exp = tc.configuration_text(cycle=CYCLE, point=tc_point(source),
+                                          hours=step, forcing_source=source,
+                                          start_hour=lead)
+        table = tomllib.loads(text)
+        assert exp.start_time == MOMENT + timedelta(hours=lead)
+        assert table["fetch"]["forecast_start_hour"] == lead
+        assert table["fetch"]["cycle"] == "2026-09-09T00"
+        from woof.fetch import validate_fetch_hints
+        validate_fetch_hints(table["fetch"], source="fixture")
 
 
 def test_the_lead_reaches_the_clock_the_header_and_the_document():
@@ -127,15 +129,36 @@ def test_the_horizon_is_the_cycles_own_not_the_registry_ceiling():
                               forcing_source=source, start_hour=horizon + 3)
 
 
+def _analysis_moment(source):
+    """MOMENT, or the last day a source's own published period holds.
+
+    Read from the source's fetch contract: since 5ecd0d4a9 20crv3-cf is
+    fetched from an archive that ends in 2015, and the configuration
+    checks its window against it, so a 2026 analysis is refused there for
+    a reason this cell is not about.
+    """
+
+    from woof.fetch import native_cf_fetch_contract
+
+    if native_cf_fetch_contract(source) is None:
+        return MOMENT
+    from woof.cf_archive_fetch import row
+    end = datetime.fromisoformat(row(get_source_adapter(source).source_id)[
+        "coverage_end"])
+    return (end - timedelta(days=1)).replace(hour=0)
+
+
 @pytest.mark.parametrize("source", analysis_only_sources())
 def test_an_analysis_only_source_refuses_a_lead_and_names_why(source):
     with pytest.raises(ValueError, match="max_forecast_hour = 0"):
         tc.configuration_text(cycle=CYCLE, point=tc_point(source), hours=6,
                               forcing_source=source, start_hour=6)
     # And still authors its analysis configuration, unchanged.
-    text, exp = tc.configuration_text(cycle=CYCLE, point=tc_point(source),
+    moment = _analysis_moment(source)
+    text, exp = tc.configuration_text(cycle=f"{moment:%Y%m%d%H}",
+                                      point=tc_point(source),
                                       hours=6, forcing_source=source)
-    assert exp.start_time == MOMENT
+    assert exp.start_time == moment
     assert "forecast_start_hour" not in tomllib.loads(text)["fetch"]
 
 

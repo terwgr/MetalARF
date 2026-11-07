@@ -9,26 +9,19 @@ import numpy as np
 import pytest
 
 from conftest import requires_gpu
+from test_mynn_surface import (
+    _assert_ulp, _budget, INPUT_ALIASES, INPUT_NAMES, ISFFLX0_ZEROED,
+    NARROW_CASES, WIDE_CASES,
+)
 from _toolchain_rows import toolchain_row
 
-from woof.core.fp32_ulp import fp32_ulp_distance
 
 
-ORACLE_DIR = Path(__file__).parents[1] / "tests" / "data" / "mynn" / "oracle"
+ORACLE_DIR = Path(__file__).parents[1] / "tests" / "data" / "oracles" / "mynn"
 ORACLE = ORACLE_DIR / "surface-layer.csv"
 WIDE_ORACLE = ORACLE_DIR / "surface-layer-wide.csv"
 WRAPPER_ORACLE = ORACLE_DIR / "surface-layer-wrapper.csv"
 
-NARROW_CASES = (
-    "stable_land", "unstable_land", "neutral_land", "snow_land",
-    "stable_water", "unstable_water",
-)
-WIDE_CASES = (
-    "strong_stable_land", "clipped_stable_land", "damped_stable_land",
-    "neutral_land", "free_convective_land", "land_qsfc_unset",
-    "thin_land_level2_wind", "thin_land_log10_wind", "midres_water",
-    "coarse_water",
-)
 
 # The FP32 ULP distance of the CUDA kernel from the unmodified WRF v4.6.1
 # oracle, measured per (stage, output, column) -- one integer per compared
@@ -254,6 +247,16 @@ NARROW_ULP_BY_TOOLCHAIN = {
 #: integrate/2.8 9dbb4a2db.
 NARROW_ULP_BY_TOOLCHAIN[("120", (12, 9))] = (
     NARROW_ULP_BY_TOOLCHAIN[("120", (13, 4))])
+#: sm_89 reads the sm_120 row.  Since the cross-architecture rounding pins
+#: (xnode-identity, ecbd106a9 and the A146 __fdiv_rn spellings) the RTX 4090
+#: returns the RTX 5090's words for every output these gates compare:
+#: 16,518 words, zero differing, NVRTC 13.4, 2026-10-05.  The default row,
+#: recorded before those pins, no longer describes it: it failed 31 gates
+#: on the RTX 4090 with no kernel change.  MEASURED on a development machine's RTX 4090
+#: under NVRTC 12.9, 13.3 and 13.4: every gate passes on the sm_120 row.
+NARROW_ULP_BY_TOOLCHAIN[("89", (12, 9))] = NARROW_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+NARROW_ULP_BY_TOOLCHAIN[("89", (13, 3))] = NARROW_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+NARROW_ULP_BY_TOOLCHAIN[("89", (13, 4))] = NARROW_ULP_BY_TOOLCHAIN[("120", (13, 4))]
 
 
 #: ``WIDE_ULP`` per compiler where a compiler reads it differently, keyed
@@ -288,6 +291,10 @@ WIDE_ULP_BY_TOOLCHAIN = {
 #: A167: as for NARROW_ULP_BY_TOOLCHAIN above.
 WIDE_ULP_BY_TOOLCHAIN[("120", (12, 9))] = (
     WIDE_ULP_BY_TOOLCHAIN[("120", (13, 4))])
+#: sm_89: as for NARROW_ULP_BY_TOOLCHAIN above.
+WIDE_ULP_BY_TOOLCHAIN[("89", (12, 9))] = WIDE_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+WIDE_ULP_BY_TOOLCHAIN[("89", (13, 3))] = WIDE_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+WIDE_ULP_BY_TOOLCHAIN[("89", (13, 4))] = WIDE_ULP_BY_TOOLCHAIN[("120", (13, 4))]
 
 
 #: ``WRAPPER_ULP`` per compiler where a compiler reads it differently, keyed
@@ -332,6 +339,10 @@ WRAPPER_ULP_BY_TOOLCHAIN = {
 #: A167: as for NARROW_ULP_BY_TOOLCHAIN above.
 WRAPPER_ULP_BY_TOOLCHAIN[("120", (12, 9))] = (
     WRAPPER_ULP_BY_TOOLCHAIN[("120", (13, 4))])
+#: sm_89: as for NARROW_ULP_BY_TOOLCHAIN above.
+WRAPPER_ULP_BY_TOOLCHAIN[("89", (12, 9))] = WRAPPER_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+WRAPPER_ULP_BY_TOOLCHAIN[("89", (13, 3))] = WRAPPER_ULP_BY_TOOLCHAIN[("120", (13, 4))]
+WRAPPER_ULP_BY_TOOLCHAIN[("89", (13, 4))] = WRAPPER_ULP_BY_TOOLCHAIN[("120", (13, 4))]
 
 
 #: module_sf_mynn.F:1027-1044.  With ISFFLX<1 WRF assigns these thirteen
@@ -344,20 +355,7 @@ WRAPPER_ULP_BY_TOOLCHAIN[("120", (12, 9))] = (
 #:
 #: This is where the old per-fixture table was worst: it handed these thirteen
 #: the ISFFLX=1 budgets, so CH and CHS measured 0 ULP against a budget of 77.
-ISFFLX0_ZEROED = (
-    "hfx", "qfx", "flhc", "flqc", "lh", "chs", "ch", "chs2", "cqs2",
-    "ck", "cd", "cka", "cda",
-)
 
-INPUT_ALIASES = {
-    "hfx": "hfx_input", "qfx": "qfx_input", "znt": "znt_input",
-    "qsfc": "qsfc_input", "ust": "ust_input",
-}
-INPUT_NAMES = (
-    "u1", "v1", "t1", "qv1", "p1", "rho1", "dz1",
-    "u2", "v2", "dz2", "psfc", "tsk", "pblh", "mavail",
-    "hfx", "qfx", "znt", "qsfc", "ust", "xland", "snowh",
-)
 
 
 def _rows(path: Path):
@@ -398,36 +396,8 @@ def _device_inputs(fields):
     }
 
 
-def _budget(table, name, cases, zeroed=()):
-    """The measured per-column residue for ``name``, or zeros."""
-
-    row = () if name in zeroed else table.get(name, ())
-    if not row:
-        return np.zeros(len(cases), dtype=np.int64)
-    assert len(row) == len(cases), name
-    return np.asarray(row, dtype=np.int64)
 
 
-def _assert_ulp(actual, expected, name, budget, cases):
-    """Fail when any column of ``name`` passes its measured ULP residue.
-
-    ``budget`` is per column, so the message names the case that drifted
-    instead of only the output: a field-wide number cannot say which of the
-    ten columns moved, and that is the information a regression needs.
-    """
-
-    residue = fp32_ulp_distance(np.ravel(actual), np.ravel(expected))
-    budget = np.broadcast_to(
-        np.asarray(budget, dtype=np.int64), residue.shape
-    )
-    over = np.flatnonzero(residue > budget)
-    if over.size:
-        worst = int(over[np.argmax(residue[over] - budget[over])])
-        raise AssertionError(
-            f"{name}[{cases[worst]}]: {int(residue[worst])} ULP from the "
-            f"unmodified WRF oracle exceeds the measured {int(budget[worst])} "
-            f"({over.size} of {residue.size} columns over)"
-        )
 
 
 def _assert_parity(actual, fields, names, table, cases, zeroed=()):

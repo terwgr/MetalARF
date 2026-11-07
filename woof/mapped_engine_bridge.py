@@ -77,7 +77,8 @@ ENGINE_CRATE_RELATIVE = "tools/rw_wps"
 #: never the problem.
 ABI_MARKER = (
     b"gpuwm-mapped-engine-abi frameset=gpuwm-mapped-frameset-v1 "
-    b"height-interfaces=1 grib2-drt=0,2,3,4,40,41,42,50,51,61,200")
+    b"height-interfaces=1 window-fields=omega bound-clocks=window-start "
+    b"grib2-drt=0,2,3,4,40,41,42,50,51,61,200")
 
 #: Output schemas the engine writes.
 FRAMESET_SCHEMA = "gpuwm-mapped-frameset-v1"
@@ -1607,6 +1608,7 @@ def engine_command(
     input_manifest_sha256: str | None = None,
     atmospheric_window: bool = False,
     lead_batch: bool = False,
+    unpublished_fallbacks: Mapping[str, str] | None = None,
 ) -> list[str]:
     """The exact argv the seam contract defines, in a stable order.
 
@@ -1656,6 +1658,14 @@ def engine_command(
         # One lead batch of a window decoded as it posts: the window's
         # series rules are the caller's (see decode_composed_source).
         command.append("--lead-batch")
+    for field in sorted(unpublished_fallbacks or {}):
+        # A contributing binding whose files publish no record for its
+        # fields is recorded with these fallbacks instead of refused
+        # (woof.runtime_surface_fetch.composition_unpublished_fallbacks).
+        command.extend((
+            "--unpublished-fallback",
+            f"{field}={(unpublished_fallbacks or {})[field]}",
+        ))
     return command
 
 
@@ -1802,6 +1812,7 @@ def run_engine(
     threads: int | None = None,
     lead_batch: bool = False,
     memory_budget_bytes: int | None = None,
+    unpublished_fallbacks: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     """Run one engine subcommand; refusals become Python exceptions.
 
@@ -1888,6 +1899,7 @@ def run_engine(
         input_manifest_sha256=input_manifest_sha256,
         atmospheric_window=window_enabled,
         lead_batch=lead_batch,
+        unpublished_fallbacks=unpublished_fallbacks,
     )
     environment = None
     if threads is not None or memory_budget_bytes is not None:
@@ -1940,6 +1952,8 @@ def _run_window_engine(command, grids, env=None):
     import tempfile
     from woof.ingest.atmospheric_window import window_request_response
     with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as errors:
+        # One JSON reply per line: the engine reads it with read_line + serde_json, which takes a trailing CR as
+        # whitespace (mapped-engine window.rs exchange), so a Windows CRLF cannot change a reply. text-pipe-ok: above
         child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=errors, text=True, encoding="utf-8", env=env)
         lines = []

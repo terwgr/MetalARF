@@ -21,6 +21,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+
+from woof.static.build import _DEFAULT_GEOG_DIRS
 import pytest
 
 import woof.static.corridor as corridor_module
@@ -127,7 +129,7 @@ def _synthetic_wps_geog(root: Path, *, regional_size=750) -> Path:
     _write_tiles(root / "modis_landuse_20class_30s_with_lakes", landuse, kv)
 
     # soils: coarse global categorical 1..16
-    for name in ("soiltype_top_30s", "soiltype_bot_30s"):
+    for name in (_DEFAULT_GEOG_DIRS["soil_top"], _DEFAULT_GEOG_DIRS["soil_bottom"]):
         kv, nxg, nyg = _coarse_global(kv_extra=dict(
             type="categorical", category_min=1, category_max=16,
             wordsize=1, tile_z=1))
@@ -141,7 +143,7 @@ def _synthetic_wps_geog(root: Path, *, regional_size=750) -> Path:
         ("lai_modis_10m", 12, 0.1, 60),
         ("albedo_modis", 12, 1.0, 30),
         ("maxsnowalb_modis", 1, 1.0, 80),
-        ("soiltemp_1deg", 1, 1.0, 300),
+        (_DEFAULT_GEOG_DIRS["soil_temperature"], 1, 1.0, 300),
     )
     for name, nz, scale, span in monthly:
         kv, nxg, nyg = _coarse_global(nz=nz, kv_extra=dict(
@@ -204,6 +206,59 @@ def corridor_build(geog_root, tmp_path_factory):
     return build_child_statics_corridor(
         child_dc=_child_dc(), parent_run=_parent_run(),
         reference_grid=_reference_grid(), static_catalog=catalog)
+
+
+def test_dust_corridor_crop_equals_direct_rust_sampling(tmp_path):
+    """A moved dust process consumes sealed fine-grid source bytes."""
+    from woof.chem_table import catalog as chem_catalog
+    from woof.core.chem_statics import static_specs
+    from woof.static.extra_fields import build_extra_fields
+
+    root = _synthetic_wps_geog(tmp_path / "dust-geog")
+    for name, nz in (("erod", 3), ("clayfrac_5m", 1), ("sandfrac_5m", 1)):
+        kv, nxg, nyg = _coarse_global(nz=nz, kv_extra=dict(
+            type="continuous", signed="yes", wordsize=2, scale_factor=0.01))
+        kv = _write_index(root / name, **kv)
+        z, y, x = np.meshgrid(np.arange(nz), np.arange(nyg),
+                              np.arange(nxg), indexing="ij")
+        _write_tiles(root / name, 1 + (x + 2 * y + 5 * z) % 50, kv)
+    child = _child_dc()
+    child.run.chem_sets = "dust"
+    build = build_child_statics_corridor(
+        child_dc=child, parent_run=_parent_run(),
+        reference_grid=_reference_grid(), static_catalog=_catalog(root, tmp_path))
+    directory = tmp_path / "sealed-dust"
+    receipt = write_statics_corridor_set(directory, [build])
+    corridor = load_child_statics_corridor(
+        directory, expected_set_receipt=receipt, grid_id=2, child_dc=child,
+        parent_run=_parent_run(), reference_grid=_reference_grid())
+    cost = corridor_cost(child, _parent_run())
+    assert cost["host_bytes"] == build.entry["host_bytes"]
+    assert cost["planes_per_cell"] == CORRIDOR_PLANES_PER_CELL + 5
+    selection = GeogSelection.fallback(root)
+    specs = static_specs(chem_catalog(), selection)
+    for ip, jp in ((_REF_I, _REF_J), (1, 1), (8, 8), (2, 6), (7, 3)):
+        grid = _reference_grid().translated(
+            (ip - _REF_I) * _RATIO, (jp - _REF_J) * _RATIO)
+        direct = build_extra_fields(grid, root, specs)
+        cropped = corridor.crop(ip, jp)
+        for name in ("EROD", "CLAYFRAC", "SANDFRAC"):
+            assert cropped[name].dtype == direct[name].dtype
+            assert cropped[name].shape == direct[name].shape
+            assert cropped[name].tobytes() == direct[name].tobytes(), (
+                name, ip, jp)
+
+
+@pytest.mark.parametrize("missing", ["EROD", "CLAYFRAC", "SANDFRAC"])
+def test_dust_corridor_refuses_partial_static_inventory(corridor_build, missing):
+    fields = dict(corridor_build.fields)
+    ny = int(corridor_build.entry["corridor_ny"])
+    nx = int(corridor_build.entry["corridor_nx"])
+    fields.update(EROD=np.zeros((3, ny, nx)),
+                  CLAYFRAC=np.zeros((ny, nx)), SANDFRAC=np.zeros((ny, nx)))
+    del fields[missing]
+    with pytest.raises(CorridorRefusal, match="chemistry fields are incomplete"):
+        corridor_module._validate_corridor_fields(fields, corridor_build.entry)
 
 
 # ---------------------------------------------------------------------------
@@ -639,3 +694,50 @@ def test_a_whole_frame_corridor_serves_any_reach(corridor_build, tmp_path):
 def test_a_window_the_frame_cannot_hold_is_refused():
     with pytest.raises(ValueError, match="does not lie inside"):
         corridor_geometry(_child_dc(), _parent_run(), window=(20, 0, 18, 9))
+
+
+def test_without_highres_the_corridor_bounds_its_slope_and_births_the_child(
+        geog_root, corridor_build, tmp_path, monkeypatch):
+    """Plan call 5 (2.9.0): the slope bound runs at corridor scale with or
+    without ``[static.highres]``.  Before it a corridor built without the
+    overlay was never bounded while the child's footprint build was, so over
+    steep ground the first move's overlap rule refused, and a nest that did
+    move ran corridor terrain no bound had checked.  This fixture's ground
+    sits inside the measured limit, so the limit is set just under the
+    corridor's own steepest face to make it steep."""
+    import woof.static.terrain_autosmooth as autosmooth
+    from woof.acoustic_adaptation import steepest_slope
+    from woof.static.corridor import corridor_birth_statics
+    from woof.static.terrain_autosmooth import receipt_of, verify_receipt
+
+    reference = _reference_grid()
+    grid = corridor_grid(reference, corridor_geometry(_child_dc(), _parent_run()))
+    raw = np.asarray(corridor_build.fields["HGT_M"])
+    steepest = steepest_slope(raw, grid.dx, grid.dy, msfu=grid.mapfac_u(),
+                              msfv=grid.mapfac_v(), label="d02").slope
+    measured = autosmooth.measured_slope_limit
+    monkeypatch.setattr(autosmooth, "measured_slope_limit",
+                        lambda grid, run=None: (0.9 * steepest, measured(grid, run)[1]))
+    built = build_child_statics_corridor(
+        child_dc=_child_dc(), parent_run=_parent_run(), reference_grid=reference,
+        static_catalog=_catalog(geog_root, tmp_path))
+    directory = tmp_path / "statics-corridor"
+    receipt = write_statics_corridor_set(directory, [built])
+    entry = receipt["domains"]["d02"]
+    assert entry["terrain_autosmooth"]["smooth_passes"] >= 1
+    assert entry["terrain_autosmooth"]["slope_after"] < 0.9 * steepest
+    assert np.asarray(built.fields["HGT_M"]).tobytes() != raw.tobytes()
+
+    births = corridor_birth_statics(directory, receipt,
+                                    SimpleNamespace(domains=[_child_dc()]))
+    baseline = build_static(reference, geog_root,
+                            selection=GeogSelection.fallback(geog_root))
+    born = births[2].footprint_statics(baseline, reference)
+    corridor = load_child_statics_corridor(
+        directory, expected_set_receipt=receipt, grid_id=2,
+        child_dc=_child_dc(), parent_run=_parent_run(), reference_grid=reference)
+    declared = corridor.crop(_REF_I, _REF_J)
+    for name in baseline:
+        assert born[name].tobytes() == declared[name].tobytes(), name
+    assert born["HGT_M"].tobytes() != baseline["HGT_M"].tobytes()
+    verify_receipt(receipt_of(born), born["HGT_M"], domain_id=2)

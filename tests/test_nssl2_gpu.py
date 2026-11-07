@@ -1,4 +1,5 @@
 """GPU gates for independently admitted WRF NSSL option-18 slices."""
+# Replaced in 2.9.1 (the WRF exact chain): test_fused_gs_enforces_nonnegative_hydromass_writeback -> tests/test_nssl2_column_oracle.py::test_gs_hands_wrf_negative_mass_residues_to_nucond.
 
 from __future__ import annotations
 
@@ -15,18 +16,67 @@ _ORACLE = (Path(__file__).parents[1] / "tests" / "data" / "nssl2" /
            "oracle" / "effective-radius.csv")
 
 
+def _host_column(rows, name):
+    return np.asarray([float(row[name]) for row in rows], dtype=np.float32)
+
+
+def _rows_by_case(rows):
+    by_case: dict[int, list[dict[str, str]]] = {}
+    for row in rows:
+        by_case.setdefault(int(row["case"]), []).append(row)
+    return by_case
+
+
+def _surface_column(batch, name, nx):
+    result = np.empty((1, nx), dtype=np.float32)
+    for row in batch:
+        if int(row["k"]) == 1:
+            result[0, int(row["column"]) - 1] = float(row[name])
+    return result
+
+
+def _oracle_rows(name):
+    with _ORACLE.with_name(name).open(newline="", encoding="ascii") as stream:
+        return list(csv.DictReader(stream))
+
+
+def _rows_by_step(rows):
+    by_step: dict[np.float32, list[dict[str, str]]] = {}
+    for row in rows:
+        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    return by_step
+
+
+def _device_columns(rows):
+    import cupy as cp
+
+    def device(name):
+        return cp.asarray(np.asarray(
+            [float(row[name]) for row in rows], dtype=np.float32))
+
+    return device
+
+
+def _volume_columns(batch, nz, nx):
+    def volume(name):
+        result = np.empty((nz, 1, nx), dtype=np.float32)
+        for row in batch:
+            result[int(row["k"]) - 1, 0,
+                   int(row["column"]) - 1] = float(row[name])
+        return result
+
+    return volume
+
+
 def test_effective_radius_matches_compiled_official_wrf_routine():
     import cupy as cp
 
     from woof.core.nssl2 import launch_effective_radius
 
-    with _ORACLE.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("effective-radius.csv")
     assert len(rows) == 48
 
-    def device(name):
-        return cp.asarray(np.asarray(
-            [float(row[name]) for row in rows], dtype=np.float32))
+    device = _device_columns(rows)
 
     density = device("rho_kg_m3")
     qc = device("qc")
@@ -46,8 +96,7 @@ def test_effective_radius_matches_compiled_official_wrf_routine():
     # active, background, lower-clamped, and upper-clamped fixture cases.
     for actual, name in zip(
             outputs, ("re_cloud_m", "re_ice_m", "re_snow_m")):
-        expected = np.asarray(
-            [float(row[name]) for row in rows], dtype=np.float32)
+        expected = _host_column(rows, name)
         np.testing.assert_allclose(
             cp.asnumpy(actual), expected, rtol=2.0e-6, atol=2.0e-12)
 
@@ -81,9 +130,7 @@ def test_mass_only_initial_state_matches_compiled_official_wrf_routine():
 
     from woof.core.nssl2 import launch_initial_state
 
-    fixture = _ORACLE.with_name("initial-state.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("initial-state.csv")
     before = [row for row in rows if row["phase"] == "before"]
     after = [row for row in rows if row["phase"] == "after"]
     assert len(before) == len(after) == 48
@@ -96,8 +143,7 @@ def test_mass_only_initial_state_matches_compiled_official_wrf_routine():
     )
 
     def host(source, name):
-        return np.asarray(
-            [float(row[name]) for row in source], dtype=np.float32)
+        return _host_column(source, name)
 
     fields = [cp.asarray(host(before, name)) for name in names]
     launch_initial_state(*fields)
@@ -137,22 +183,16 @@ def test_rain_self_collection_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_rain_self_collection
 
-    fixture = _ORACLE.with_name("self-collection.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("self-collection.csv")
     assert len(rows) == 48
 
     # WRF's process routine accepts one scalar dt for a slab.  Group the
     # oracle cells by their exact FP32 step and launch each production-shaped
     # batch once.
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         density = device("rho_kg_m3")
         rain = device("qr_before")
@@ -162,9 +202,7 @@ def test_rain_self_collection_matches_official_wrf_process():
         cp.cuda.Stream.null.synchronize()
 
         cp.testing.assert_array_equal(rain, rain_before)
-        expected = np.asarray(
-            [float(row["nr_after_per_kg"]) for row in batch],
-            dtype=np.float32)
+        expected = _host_column(batch, 'nr_after_per_kg')
         np.testing.assert_allclose(
             cp.asnumpy(number), expected, rtol=3.0e-6, atol=2.0e-5)
 
@@ -190,20 +228,14 @@ def test_snow_aggregation_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_snow_aggregation
 
-    fixture = _ORACLE.with_name("snow-aggregation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("snow-aggregation.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_active_sink = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         density = device("rho_kg_m3")
         temperature = device("temperature_k")
@@ -217,9 +249,7 @@ def test_snow_aggregation_matches_official_wrf_process():
         cp.cuda.Stream.null.synchronize()
 
         cp.testing.assert_array_equal(snow, snow_before)
-        expected = np.asarray(
-            [float(row["qns_after_per_kg"]) for row in batch],
-            dtype=np.float32)
+        expected = _host_column(batch, 'qns_after_per_kg')
         np.testing.assert_allclose(
             cp.asnumpy(number), expected, rtol=5.0e-6, atol=3.0e-4)
         active = np.asarray(
@@ -278,21 +308,15 @@ def test_ice_deposition_conversion_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_ice_deposition_conversion
 
-    fixture = _ORACLE.with_name("ice-deposition-conversion.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("ice-deposition-conversion.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_deposition = False
     saw_conversion = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -319,8 +343,7 @@ def test_ice_deposition_conversion_matches_official_wrf_process():
             (snow_number, "qns_after_per_kg", 1.0e-5, 2.0e-2),
         )
         for actual, name, rtol, atol in expected_fields:
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -331,8 +354,7 @@ def test_ice_deposition_conversion_matches_official_wrf_process():
         if np.any(active):
             saw_deposition |= bool(np.any(
                 cp.asnumpy(vapor)[active]
-                < np.asarray([float(row["qv_before"])
-                              for row in batch], dtype=np.float32)[active]))
+                < _host_column(batch, 'qv_before')[active]))
             saw_conversion |= bool(np.any(cp.asnumpy(snow)[active] > 0.0))
 
     assert saw_deposition
@@ -395,22 +417,16 @@ def test_frozen_vapor_exchange_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_frozen_vapor_exchange
 
-    fixture = _ORACLE.with_name("frozen-vapor-exchange.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("frozen-vapor-exchange.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_deposition = False
     saw_sublimation = False
     saw_snow_exchange = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -439,8 +455,7 @@ def test_frozen_vapor_exchange_matches_official_wrf_process():
             (snow_number, "qns_after_per_kg", 4.0e-5, 5.0e-2),
         )
         for actual, name, rtol, atol in expected_fields:
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -486,23 +501,17 @@ def test_graupel_hail_vapor_exchange_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_graupel_hail_vapor_exchange
 
-    fixture = _ORACLE.with_name("graupel-hail-vapor-exchange.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("graupel-hail-vapor-exchange.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_deposition = False
     saw_sublimation = False
     saw_graupel = False
     saw_hail = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -537,8 +546,7 @@ def test_graupel_hail_vapor_exchange_matches_official_wrf_process():
                 (hail_number, "qnh_after_per_kg", 8.0e-5, 8.0e-3),
                 (hail_volume, "qvolh_after_m3_per_kg",
                  8.0e-5, 8.0e-14)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -589,22 +597,16 @@ def test_bigg_rain_freezing_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_bigg_rain_freezing
 
-    fixture = _ORACLE.with_name("bigg-rain-freezing.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("bigg-rain-freezing.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_noop = False
     saw_partial_freezing = False
     saw_near_complete_freezing = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -632,8 +634,7 @@ def test_bigg_rain_freezing_matches_official_wrf_process():
                 (graupel_number, "qng_after_per_kg", 1.0e-5, 8.0e-3),
                 (graupel_volume, "qvolg_after_m3_per_kg",
                  1.0e-5, 8.0e-14)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -757,19 +758,13 @@ def test_warm_autoconversion_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_warm_autoconversion
 
-    fixture = _ORACLE.with_name("warm-autoconversion.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("warm-autoconversion.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         density = device("rho_kg_m3")
         temperature = cp.full_like(density, cp.float32(300.0))
@@ -789,8 +784,7 @@ def test_warm_autoconversion_matches_official_wrf_process():
                 (rain, "qr_after", 3.0e-6, 2.0e-13),
                 (cloud_number, "nc_after_per_kg", 4.0e-6, 2.0e-2),
                 (rain_number, "nr_after_per_kg", 4.0e-6, 2.0e-5)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -834,19 +828,13 @@ def test_rain_cloud_accretion_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_rain_cloud_accretion
 
-    fixture = _ORACLE.with_name("rain-cloud-accretion.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("rain-cloud-accretion.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         density = device("rho_kg_m3")
         cloud = device("qc_before")
@@ -864,8 +852,7 @@ def test_rain_cloud_accretion_matches_official_wrf_process():
                 (rain, "qr_after_accretion", 4.0e-6, 3.0e-11),
                 (cloud_number, "nc_after_accretion_per_kg", 5.0e-6, 3.0e-2),
                 (rain_number, "nr_after_accretion_per_kg", 5.0e-6, 3.0e-3)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
         cp.testing.assert_allclose(
@@ -893,19 +880,13 @@ def test_clear_air_activation_matches_official_wrf_nucond():
 
     from woof.core.nssl2 import launch_clear_air_activation
 
-    fixture = _ORACLE.with_name("clear-air-activation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("clear-air-activation.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -929,8 +910,7 @@ def test_clear_air_activation_matches_official_wrf_nucond():
                 (cloud, "qc_after", 2.5e-3, 1.0e-9),
                 (cloud_number, "nc_after_per_kg", 3.0e-4, 2.6e4),
                 (ccn, "qnn_after_per_kg", 3.0e-5, 64.0)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -942,10 +922,8 @@ def test_clear_air_activation_matches_official_wrf_nucond():
                 (cloud, "qc_before", "qc_after", 3.0e-3, 3.0e-9),
                 (cloud_number, "nc_before_per_kg", "nc_after_per_kg",
                  3.0e-4, 2.6e4)):
-            before = np.asarray(
-                [float(row[before_name]) for row in batch], dtype=np.float32)
-            expected_after = np.asarray(
-                [float(row[after_name]) for row in batch], dtype=np.float32)
+            before = _host_column(batch, before_name)
+            expected_after = _host_column(batch, after_name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual) - before, expected_after - before,
                 rtol=rtol, atol=atol)
@@ -998,19 +976,13 @@ def test_cloudy_water_adjustment_matches_official_wrf_nucond():
 
     from woof.core.nssl2 import launch_cloudy_water_adjustment
 
-    fixture = _ORACLE.with_name("cloudy-water-adjustment.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("cloudy-water-adjustment.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1033,8 +1005,7 @@ def test_cloudy_water_adjustment_matches_official_wrf_nucond():
                 (cloud, "qc_after", 1.0e-5, 5.0e-10),
                 (cloud_number, "nc_after_per_kg", 3.0e-5, 64.0),
                 (ccn, "qnn_after_per_kg", 3.0e-5, 64.0)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -1046,10 +1017,8 @@ def test_cloudy_water_adjustment_matches_official_wrf_nucond():
                 (cloud, "qc_before", "qc_after", 3.0e-3, 3.0e-9),
                 (cloud_number, "nc_before_per_kg", "nc_after_per_kg",
                  3.0e-4, 2048.0)):
-            before = np.asarray(
-                [float(row[before_name]) for row in batch], dtype=np.float32)
-            expected_after = np.asarray(
-                [float(row[after_name]) for row in batch], dtype=np.float32)
+            before = _host_column(batch, before_name)
+            expected_after = _host_column(batch, after_name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual) - before, expected_after - before,
                 rtol=rtol, atol=atol)
@@ -1103,20 +1072,15 @@ def test_cloud_interior_renucleation_matches_official_wrf_nucond():
 
     from woof.core.nssl2 import launch_cloud_interior_renucleation
 
-    fixture = _ORACLE.with_name("cloud-interior-renucleation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("cloud-interior-renucleation.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_renucleation = False
     for step, batch in by_step.items():
         def device(name):
-            center = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            center = _host_column(batch, name)
             host = np.repeat(center[None, :, None], 3, axis=0)
             return cp.asarray(host)
 
@@ -1143,17 +1107,12 @@ def test_cloud_interior_renucleation_matches_official_wrf_nucond():
                 (cloud_number[1, :, 0], "nc_after_per_kg",
                  5.0e-5, 2048.0),
                 (ccn[1, :, 0], "qnn_after_per_kg", 5.0e-5, 2048.0)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
-        expected_ccn_before = np.asarray(
-            [float(row["qnn_before_per_kg"]) for row in batch],
-            dtype=np.float32)
-        expected_ccn_after = np.asarray(
-            [float(row["qnn_after_per_kg"]) for row in batch],
-            dtype=np.float32)
+        expected_ccn_before = _host_column(batch, 'qnn_before_per_kg')
+        expected_ccn_after = _host_column(batch, 'qnn_after_per_kg')
         actual_ccn_delta = cp.asnumpy(ccn[1, :, 0]) - expected_ccn_before
         np.testing.assert_allclose(
             actual_ccn_delta, expected_ccn_after - expected_ccn_before,
@@ -1236,21 +1195,15 @@ def test_primary_ice_nucleation_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_primary_ice_nucleation
 
-    fixture = _ORACLE.with_name("primary-ice-nucleation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("primary-ice-nucleation.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_active = False
     saw_vapor_limited = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1277,16 +1230,12 @@ def test_primary_ice_nucleation_matches_official_wrf_process():
                 (vapor, "qv_after", 2.0e-6, 2.0e-10),
                 (ice, "qi_after", 8.0e-6, 2.0e-14),
                 (number, "qni_after_per_kg", 8.0e-6, 5.0e-3)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
-        expected_ice = np.asarray(
-            [float(row["qi_after"]) for row in batch], dtype=np.float32)
-        expected_number = np.asarray(
-            [float(row["qni_after_per_kg"]) for row in batch],
-            dtype=np.float32)
+        expected_ice = _host_column(batch, 'qi_after')
+        expected_number = _host_column(batch, 'qni_after_per_kg')
         saw_active |= bool(np.any(expected_ice > 0.0))
         # The high-gradient, cold case is bounded below its raw source by
         # vapor availability; retain that independently dynamic oracle gate.
@@ -1350,21 +1299,15 @@ def test_ice_cloud_riming_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_ice_cloud_riming
 
-    fixture = _ORACLE.with_name("ice-cloud-riming.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("ice-cloud-riming.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_active = False
     saw_depletion_cap = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1386,15 +1329,12 @@ def test_ice_cloud_riming_matches_official_wrf_process():
                 (cloud_number, "qnc_after_per_kg", 1.0e-5, 32.0),
                 (ice, "qi_after", 1.0e-5, 2.0e-9),
                 (ice_number, "qni_after_per_kg", 1.0e-6, 1.0)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
-        expected_cloud_before = np.asarray(
-            [float(row["qc_before"]) for row in batch], dtype=np.float32)
-        expected_cloud_after = np.asarray(
-            [float(row["qc_after"]) for row in batch], dtype=np.float32)
+        expected_cloud_before = _host_column(batch, 'qc_before')
+        expected_cloud_after = _host_column(batch, 'qc_after')
         expected_loss = expected_cloud_before - expected_cloud_after
         saw_active |= bool(np.any(expected_loss > 0.0))
         saw_depletion_cap |= bool(np.any(np.isclose(
@@ -1457,21 +1397,15 @@ def test_snow_cloud_riming_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_snow_cloud_riming
 
-    fixture = _ORACLE.with_name("snow-cloud-riming.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("snow-cloud-riming.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_active = False
     saw_depletion_cap = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1493,15 +1427,12 @@ def test_snow_cloud_riming_matches_official_wrf_process():
                 (cloud_number, "qnc_after_per_kg", 1.0e-5, 32.0),
                 (snow, "qs_after", 1.0e-5, 2.0e-9),
                 (snow_number, "qns_after_per_kg", 1.0e-6, 32.0)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
-        expected_cloud_before = np.asarray(
-            [float(row["qc_before"]) for row in batch], dtype=np.float32)
-        expected_cloud_after = np.asarray(
-            [float(row["qc_after"]) for row in batch], dtype=np.float32)
+        expected_cloud_before = _host_column(batch, 'qc_before')
+        expected_cloud_after = _host_column(batch, 'qc_after')
         expected_loss = expected_cloud_before - expected_cloud_after
         saw_active |= bool(np.any(expected_loss > 0.0))
         saw_depletion_cap |= bool(np.any(np.isclose(
@@ -1551,22 +1482,16 @@ def test_graupel_cloud_riming_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_graupel_cloud_riming
 
-    fixture = _ORACLE.with_name("graupel-cloud-riming.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("graupel-cloud-riming.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_active = False
     saw_depletion_cap = False
     saw_volume_growth = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1592,15 +1517,12 @@ def test_graupel_cloud_riming_matches_official_wrf_process():
                 (graupel_number, "qng_after_per_kg", 1.0e-6, 1.0),
                 (graupel_volume, "qvolg_after_m3_per_kg", 1.0e-5,
                  2.0e-12)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
-        expected_cloud_before = np.asarray(
-            [float(row["qc_before"]) for row in batch], dtype=np.float32)
-        expected_cloud_after = np.asarray(
-            [float(row["qc_after"]) for row in batch], dtype=np.float32)
+        expected_cloud_before = _host_column(batch, 'qc_before')
+        expected_cloud_after = _host_column(batch, 'qc_after')
         expected_loss = expected_cloud_before - expected_cloud_after
         saw_active |= bool(np.any(expected_loss > 0.0))
         saw_depletion_cap |= bool(np.any(np.isclose(
@@ -1653,23 +1575,17 @@ def test_hail_cloud_riming_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_hail_cloud_riming
 
-    fixture = _ORACLE.with_name("hail-cloud-riming.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("hail-cloud-riming.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_active = False
     saw_depletion_cap = False
     saw_volume_growth = False
     saw_depth_cap_case = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1697,15 +1613,12 @@ def test_hail_cloud_riming_matches_official_wrf_process():
                 (hail_number, "qnh_after_per_kg", 1.0e-6, 1.0),
                 (hail_volume, "qvolh_after_m3_per_kg", 1.0e-5,
                  2.0e-12)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
-        expected_cloud_before = np.asarray(
-            [float(row["qc_before"]) for row in batch], dtype=np.float32)
-        expected_cloud_after = np.asarray(
-            [float(row["qc_after"]) for row in batch], dtype=np.float32)
+        expected_cloud_before = _host_column(batch, 'qc_before')
+        expected_cloud_after = _host_column(batch, 'qc_after')
         expected_loss = expected_cloud_before - expected_cloud_after
         saw_active |= bool(np.any(expected_loss > 0.0))
         saw_depletion_cap |= bool(np.any(np.isclose(
@@ -1768,14 +1681,10 @@ def test_rain_ice_collection_freezing_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_rain_ice_collection_freezing
 
-    fixture = _ORACLE.with_name("rain-ice-collection-freezing.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("rain-ice-collection-freezing.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_rain_cap = False
     saw_ice_cap = False
@@ -1783,9 +1692,7 @@ def test_rain_ice_collection_freezing_matches_official_wrf_process():
     saw_legacy_mass_only_fallback = False
     saw_warm_craci_number_collection = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -1826,8 +1733,7 @@ def test_rain_ice_collection_freezing_matches_official_wrf_process():
                 (graupel_number, "qng_after_per_kg", 2.0e-5, 2.0),
                 (graupel_volume, "qvolg_after_m3_per_kg",
                  2.0e-5, 2.0e-12)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -1895,14 +1801,10 @@ def test_frozen_cross_collection_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_frozen_cross_collection
 
-    fixture = _ORACLE.with_name("frozen-cross-collection.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("frozen-cross-collection.csv")
     assert len(rows) == 80
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_rain_mass_cap = False
     saw_rain_number_cap = False
@@ -1914,9 +1816,7 @@ def test_frozen_cross_collection_matches_official_wrf_process():
     saw_graupel_volume_growth = False
     saw_hail_volume_growth = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         case = np.asarray([int(row["case"]) for row in batch])
         theta = device("theta_before_k")
@@ -1977,8 +1877,7 @@ def test_frozen_cross_collection_matches_official_wrf_process():
                 (hail_number, "qnh_after_per_kg", 3.0e-5, 2.0),
                 (hail_volume, "qvolh_after_m3_per_kg",
                  3.0e-5, 3.0e-12)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -2073,14 +1972,10 @@ def test_melting_liquid_shedding_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_melting_liquid_shedding
 
-    fixture = _ORACLE.with_name("melting-liquid-shedding.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("melting-liquid-shedding.csv")
     assert len(rows) == 96
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_snow_cap = False
     saw_graupel_cap = False
@@ -2088,9 +1983,7 @@ def test_melting_liquid_shedding_matches_official_wrf_process():
     saw_warm_shedding = False
     saw_melt_soaking = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         case = np.asarray([int(row["case"]) for row in batch])
         theta = device("theta_before_k")
@@ -2149,8 +2042,7 @@ def test_melting_liquid_shedding_matches_official_wrf_process():
                 (hail_number, "qnh_after_per_kg", 5.0e-5, 4.0),
                 (hail_volume, "qvolh_after_m3_per_kg",
                  5.0e-5, 5.0e-12)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -2229,14 +2121,10 @@ def test_secondary_ice_conversions_match_official_wrf_processes():
 
     from woof.core.nssl2 import launch_secondary_ice_conversions
 
-    fixture = _ORACLE.with_name("secondary-ice-conversions.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("secondary-ice-conversions.csv")
     assert len(rows) == 152
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     saw_contact = False
     saw_homogeneous = False
@@ -2246,9 +2134,7 @@ def test_secondary_ice_conversions_match_official_wrf_processes():
     saw_snow_to_graupel = False
     saw_graupel_to_hail = False
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         case = np.asarray([int(row["case"]) for row in batch])
         theta = device("theta_before_k")
@@ -2310,8 +2196,7 @@ def test_secondary_ice_conversions_match_official_wrf_processes():
                 (hail_number, "qnh_after_per_kg", 5.0e-5, 4.0),
                 (hail_volume, "qvolh_after_m3_per_kg",
                  5.0e-5, 5.0e-12)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -2395,19 +2280,13 @@ def test_rain_evaporation_matches_official_wrf_process():
 
     from woof.core.nssl2 import launch_rain_evaporation
 
-    fixture = _ORACLE.with_name("rain-evaporation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("rain-evaporation.csv")
     assert len(rows) == 48
 
-    by_step: dict[np.float32, list[dict[str, str]]] = {}
-    for row in rows:
-        by_step.setdefault(np.float32(row["dt_s"]), []).append(row)
+    by_step = _rows_by_step(rows)
 
     for step, batch in by_step.items():
-        def device(name):
-            return cp.asarray(np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32))
+        device = _device_columns(batch)
 
         theta = device("theta_before_k")
         density = device("rho_kg_m3")
@@ -2428,8 +2307,7 @@ def test_rain_evaporation_matches_official_wrf_process():
                 (vapor, "qv_after", 6.0e-6, 3.0e-10),
                 (rain, "qr_after", 6.0e-6, 3.0e-10),
                 (rain_number, "nr_after_per_kg", 8.0e-6, 3.0e-3)):
-            expected = np.asarray(
-                [float(row[name]) for row in batch], dtype=np.float32)
+            expected = _host_column(batch, name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual), expected, rtol=rtol, atol=atol)
 
@@ -2441,10 +2319,8 @@ def test_rain_evaporation_matches_official_wrf_process():
                 (rain, "qr_before", "qr_after", 2.0e-3, 2.0e-9),
                 (rain_number, "nr_before_per_kg", "nr_after_per_kg",
                  3.0e-4, 5.0e-3)):
-            before = np.asarray(
-                [float(row[before_name]) for row in batch], dtype=np.float32)
-            expected_after = np.asarray(
-                [float(row[after_name]) for row in batch], dtype=np.float32)
+            before = _host_column(batch, before_name)
+            expected_after = _host_column(batch, after_name)
             np.testing.assert_allclose(
                 cp.asnumpy(actual) - before, expected_after - before,
                 rtol=rtol, atol=atol)
@@ -2497,25 +2373,16 @@ def test_rain_sedimentation_matches_official_wrf_columns():
 
     from woof.core.nssl2 import launch_rain_sedimentation
 
-    fixture = _ORACLE.with_name("rain-sedimentation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("rain-sedimentation.csv")
     assert len(rows) == 4 * 6 * 12
 
-    by_case: dict[int, list[dict[str, str]]] = {}
-    for row in rows:
-        by_case.setdefault(int(row["case"]), []).append(row)
+    by_case = _rows_by_case(rows)
 
     for batch in by_case.values():
         nz = max(int(row["k"]) for row in batch)
         nx = max(int(row["column"]) for row in batch)
 
-        def volume(name):
-            result = np.empty((nz, 1, nx), dtype=np.float32)
-            for row in batch:
-                result[int(row["k"]) - 1, 0,
-                       int(row["column"]) - 1] = float(row[name])
-            return result
+        volume = _volume_columns(batch, nz, nx)
 
         density_host = volume("rho_kg_m3")
         depth_host = volume("dz_m")
@@ -2539,11 +2406,7 @@ def test_rain_sedimentation_matches_official_wrf_columns():
         np.testing.assert_allclose(
             cp.asnumpy(number), volume("nr_after_per_kg"),
             rtol=1.5e-5, atol=3.0e-4)
-        expected_surface = np.empty((1, nx), dtype=np.float32)
-        for row in batch:
-            if int(row["k"]) == 1:
-                expected_surface[0, int(row["column"]) - 1] = float(
-                    row["rainncv_mm"])
+        expected_surface = _surface_column(batch, "rainncv_mm", nx)
         np.testing.assert_allclose(
             cp.asnumpy(rainncv), expected_surface,
             rtol=8.0e-6, atol=3.0e-10)
@@ -2595,25 +2458,16 @@ def test_snow_sedimentation_matches_official_wrf_columns():
 
     from woof.core.nssl2 import launch_snow_sedimentation
 
-    fixture = _ORACLE.with_name("snow-sedimentation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("snow-sedimentation.csv")
     assert len(rows) == 4 * 6 * 12
 
-    by_case: dict[int, list[dict[str, str]]] = {}
-    for row in rows:
-        by_case.setdefault(int(row["case"]), []).append(row)
+    by_case = _rows_by_case(rows)
 
     for batch in by_case.values():
         nz = max(int(row["k"]) for row in batch)
         nx = max(int(row["column"]) for row in batch)
 
-        def volume(name):
-            result = np.empty((nz, 1, nx), dtype=np.float32)
-            for row in batch:
-                result[int(row["k"]) - 1, 0,
-                       int(row["column"]) - 1] = float(row[name])
-            return result
+        volume = _volume_columns(batch, nz, nx)
 
         density_host = volume("rho_kg_m3")
         depth_host = volume("dz_m")
@@ -2637,11 +2491,7 @@ def test_snow_sedimentation_matches_official_wrf_columns():
         np.testing.assert_allclose(
             cp.asnumpy(number), volume("ns_after_per_kg"),
             rtol=1.5e-5, atol=3.0e-4)
-        expected_surface = np.empty((1, nx), dtype=np.float32)
-        for row in batch:
-            if int(row["k"]) == 1:
-                expected_surface[0, int(row["column"]) - 1] = float(
-                    row["snowncv_kg_m2"])
+        expected_surface = _surface_column(batch, "snowncv_kg_m2", nx)
         np.testing.assert_allclose(
             cp.asnumpy(snowncv), expected_surface,
             rtol=8.0e-6, atol=3.0e-10)
@@ -2691,25 +2541,16 @@ def test_ice_sedimentation_matches_official_wrf_columns():
 
     from woof.core.nssl2 import launch_ice_sedimentation
 
-    fixture = _ORACLE.with_name("ice-sedimentation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("ice-sedimentation.csv")
     assert len(rows) == 4 * 6 * 12
 
-    by_case: dict[int, list[dict[str, str]]] = {}
-    for row in rows:
-        by_case.setdefault(int(row["case"]), []).append(row)
+    by_case = _rows_by_case(rows)
 
     for batch in by_case.values():
         nz = max(int(row["k"]) for row in batch)
         nx = max(int(row["column"]) for row in batch)
 
-        def volume(name):
-            result = np.empty((nz, 1, nx), dtype=np.float32)
-            for row in batch:
-                result[int(row["k"]) - 1, 0,
-                       int(row["column"]) - 1] = float(row[name])
-            return result
+        volume = _volume_columns(batch, nz, nx)
 
         density_host = volume("rho_kg_m3")
         depth_host = volume("dz_m")
@@ -2733,11 +2574,7 @@ def test_ice_sedimentation_matches_official_wrf_columns():
         np.testing.assert_allclose(
             cp.asnumpy(number), volume("ni_after_per_kg"),
             rtol=1.5e-5, atol=3.0e-4)
-        expected_surface = np.empty((1, nx), dtype=np.float32)
-        for row in batch:
-            if int(row["k"]) == 1:
-                expected_surface[0, int(row["column"]) - 1] = float(
-                    row["icencv_kg_m2"])
+        expected_surface = _surface_column(batch, "icencv_kg_m2", nx)
         np.testing.assert_allclose(
             cp.asnumpy(icencv), expected_surface,
             rtol=8.0e-6, atol=3.0e-10)
@@ -2787,25 +2624,16 @@ def test_graupel_sedimentation_matches_official_wrf_columns():
 
     from woof.core.nssl2 import launch_graupel_sedimentation
 
-    fixture = _ORACLE.with_name("graupel-sedimentation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("graupel-sedimentation.csv")
     assert len(rows) == 4 * 6 * 12
 
-    by_case: dict[int, list[dict[str, str]]] = {}
-    for row in rows:
-        by_case.setdefault(int(row["case"]), []).append(row)
+    by_case = _rows_by_case(rows)
 
     for batch in by_case.values():
         nz = max(int(row["k"]) for row in batch)
         nx = max(int(row["column"]) for row in batch)
 
-        def volume(name):
-            result = np.empty((nz, 1, nx), dtype=np.float32)
-            for row in batch:
-                result[int(row["k"]) - 1, 0,
-                       int(row["column"]) - 1] = float(row[name])
-            return result
+        volume = _volume_columns(batch, nz, nx)
 
         density_host = volume("rho_kg_m3")
         depth_host = volume("dz_m")
@@ -2836,11 +2664,7 @@ def test_graupel_sedimentation_matches_official_wrf_columns():
             cp.asnumpy(graupel_volume),
             volume("qvolg_after_m3_per_kg"),
             rtol=4.0e-5, atol=3.0e-15)
-        expected_surface = np.empty((1, nx), dtype=np.float32)
-        for row in batch:
-            if int(row["k"]) == 1:
-                expected_surface[0, int(row["column"]) - 1] = float(
-                    row["graupelncv_kg_m2"])
+        expected_surface = _surface_column(batch, "graupelncv_kg_m2", nx)
         np.testing.assert_allclose(
             cp.asnumpy(graupelncv), expected_surface,
             rtol=1.5e-5, atol=3.0e-10)
@@ -2898,25 +2722,16 @@ def test_hail_sedimentation_matches_official_wrf_columns():
 
     from woof.core.nssl2 import launch_hail_sedimentation
 
-    fixture = _ORACLE.with_name("hail-sedimentation.csv")
-    with fixture.open(newline="", encoding="ascii") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = _oracle_rows("hail-sedimentation.csv")
     assert len(rows) == 4 * 6 * 12
 
-    by_case: dict[int, list[dict[str, str]]] = {}
-    for row in rows:
-        by_case.setdefault(int(row["case"]), []).append(row)
+    by_case = _rows_by_case(rows)
 
     for batch in by_case.values():
         nz = max(int(row["k"]) for row in batch)
         nx = max(int(row["column"]) for row in batch)
 
-        def volume(name):
-            result = np.empty((nz, 1, nx), dtype=np.float32)
-            for row in batch:
-                result[int(row["k"]) - 1, 0,
-                       int(row["column"]) - 1] = float(row[name])
-            return result
+        volume = _volume_columns(batch, nz, nx)
 
         density_host = volume("rho_kg_m3")
         depth_host = volume("dz_m")
@@ -2946,11 +2761,7 @@ def test_hail_sedimentation_matches_official_wrf_columns():
         np.testing.assert_allclose(
             cp.asnumpy(hail_volume), volume("qvolh_after_m3_per_kg"),
             rtol=4.0e-5, atol=3.0e-15)
-        expected_surface = np.empty((1, nx), dtype=np.float32)
-        for row in batch:
-            if int(row["k"]) == 1:
-                expected_surface[0, int(row["column"]) - 1] = float(
-                    row["hailncv_kg_m2"])
+        expected_surface = _surface_column(batch, "hailncv_kg_m2", nx)
         np.testing.assert_allclose(
             cp.asnumpy(hailncv), expected_surface,
             rtol=1.5e-5, atol=3.0e-10)
@@ -3071,29 +2882,41 @@ def test_mp18_synthetic_gpu_step_executes_real_selector():
         assert bool(cp.isfinite(getattr(state, name)).all()), name
 
 
-def test_fused_gs_enforces_nonnegative_hydromass_writeback():
-    """Reproduce real d01 residues and preserve positive trace mass."""
+def test_fused_gs_hands_mass_residues_to_the_nucond_tail():
+    """Real d01 residues: GS scatters them as WRF does, NUCOND's tail
+    vaporizes them.
+
+    WRF's GS scatter is ``an = qx + min(an, 0)`` (module_mp_nssl_2mom.F:
+    23664): a negative mass residue survives GS, rides through NUCOND
+    (:11658-11667) and is returned to vapour by NUCOND's moment tail
+    (:11799-12199), as is any positive trace below the category minimum.
+    This gate used to require GS itself to clamp the residue to zero, which
+    dropped it from vapour; the 2026-10-07 column oracle
+    (tools/nssl2_wrf461_column_oracle) moved the cleanup to where WRF
+    does it.  The step as a whole still leaves no negative mass.
+    """
     import cupy as cp
 
     from woof.core.nssl2_driver_support import NSSL2DriverWorkspace
     from woof.core.nssl2_fused_gs import launch_fused_gs
+    from woof.core.nssl2_nucond import launch_nucond
 
-    shape = (2, 1, 2)
+    shape = (3, 1, 2)            # NUCOND needs nz >= 3
     state = cp.zeros((16, *shape), dtype=cp.float32)
     workspace = NSSL2DriverWorkspace(
         state,
         cp.zeros((5, *shape[1:]), dtype=cp.float32),
         shape,
     )
+    snow = np.asarray(
+        [-1.0842021724855044e-19, 5.0e-17, -1.0e-10, 0.0, 0.0, 0.0],
+        dtype=np.float32)
+    graupel = np.asarray(
+        [-1.2815462124664279e-13, 5.0e-13, -1.0e-9, 0.0, 0.0, 0.0],
+        dtype=np.float32)
     workspace.field("qv").fill(cp.float32(1.0e-3))
-    workspace.field("qs").ravel()[:3] = cp.asarray(
-        [-1.0842021724855044e-19, 5.0e-17, -1.0e-10],
-        dtype=cp.float32,
-    )
-    workspace.field("qg").ravel()[:3] = cp.asarray(
-        [-1.2815462124664279e-13, 5.0e-13, -1.0e-9],
-        dtype=cp.float32,
-    )
+    workspace.field("qs").ravel()[:] = cp.asarray(snow)
+    workspace.field("qg").ravel()[:] = cp.asarray(graupel)
 
     full_theta = cp.full(shape, 300.0, dtype=cp.float32)
     air_density = cp.ones(shape, dtype=cp.float32)
@@ -3118,16 +2941,40 @@ def test_fused_gs_enforces_nonnegative_hydromass_writeback():
         1.0,
     )
     cp.cuda.Stream.null.synchronize()
+    from woof.wrf_exact import ENABLED
+    if not ENABLED:
+        # A default process compiles nssl2_fused_gs_default.cu, 2.9.0's GS
+        # byte for byte (kernels/__init__.py _DEFAULT_SOURCE_MODULES): it
+        # clamps the negative residues at the GS writeback and keeps the
+        # positive trace mass (2.9.0's test_fused_gs_enforces_nonnegative_
+        # hydromass_writeback).  WRF's hand-off to NUCOND below is the
+        # strict (GPUWM_WRF_EXACT=1) unit's.
+        np.testing.assert_array_equal(
+            cp.asnumpy(workspace.field("qs")).ravel(), np.maximum(snow, 0))
+        np.testing.assert_array_equal(
+            cp.asnumpy(workspace.field("qg")).ravel(), np.maximum(graupel, 0))
+        return
+    np.testing.assert_array_equal(
+        cp.asnumpy(workspace.field("qs")).ravel(), snow)
+    np.testing.assert_array_equal(
+        cp.asnumpy(workspace.field("qg")).ravel(), graupel)
+    vapor_after_gs = cp.asnumpy(workspace.field("qv")).ravel().copy()
 
-    actual_snow = cp.asnumpy(workspace.field("qs")).ravel()
-    assert actual_snow[0] == np.float32(0.0)
-    assert actual_snow[1] == np.float32(5.0e-17)
-    assert actual_snow[2] == np.float32(0.0)
-
-    actual_graupel = cp.asnumpy(workspace.field("qg")).ravel()
-    assert actual_graupel[0] == np.float32(0.0)
-    assert actual_graupel[1] == np.float32(5.0e-13)
-    assert actual_graupel[2] == np.float32(0.0)
+    launch_nucond(
+        full_theta, air_density, pressure_pa, exner, vertical_velocity,
+        *(workspace.field(name) for name in (
+            "qv", "qc", "qr", "qi", "qs", "qndrop", "qnr", "qni", "qns",
+            "qnn")),
+        1.0, concentration_space=True, validate_values=False,
+        frozen=tuple(workspace.field(name) for name in (
+            "qg", "qh", "qng", "qnh", "qvolg", "qvolh")))
+    cp.cuda.Stream.null.synchronize()
+    assert not np.any(cp.asnumpy(workspace.field("qs")))
+    assert not np.any(cp.asnumpy(workspace.field("qg")))
+    # The tail's FP32 vapour sums, in WRF's order: graupel before snow.
+    expected = (vapor_after_gs + graupel) + snow
+    np.testing.assert_array_equal(
+        cp.asnumpy(workspace.field("qv")).ravel(), expected)
 
 
 def test_bigg_nearly_frozen_minimum_drops_keep_the_wrf_mass_remainder():

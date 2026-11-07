@@ -10,15 +10,15 @@ from woof.ensemble.runtime_context import current_session, ensemble_scope
 
 
 def request_for_config(path, *, override=None, members=None, keep_member_files=None,
-                       recipe=None, trajectories=None):
+                       recipe=None, trajectories=None, family_weights=None):
     from woof.config_authority import read_config_authority
     return request_for_payload(read_config_authority(path).payload,
         override=override, members=members, keep_member_files=keep_member_files,
-        recipe=recipe, trajectories=trajectories)
+        recipe=recipe, trajectories=trajectories, family_weights=family_weights)
 
 
 def request_for_payload(payload, *, override=None, members=None, keep_member_files=None,
-                        recipe=None, trajectories=None):
+                        recipe=None, trajectories=None, family_weights=None):
     """Use the captured configuration bytes in a fresh forecast worker.
 
     ``recipe`` and ``trajectories`` are the ``--recipe`` and
@@ -42,7 +42,7 @@ def request_for_payload(payload, *, override=None, members=None, keep_member_fil
             value["trajectories"] = list(trajectories)
         if value.get("trajectories") and value.get("recipe") is None:
             value["recipe"] = "multi-model"
-        if value.get("recipe") != "multi-model":
+        if value.get("recipe") not in ("multi-model", "member-roster"):
             if recipe is not None and trajectories is None:
                 # --recipe time-lagged over a table that listed trajectories.
                 value.pop("trajectories", None)
@@ -69,6 +69,8 @@ def request_for_payload(payload, *, override=None, members=None, keep_member_fil
         request["members"] = members
     if keep_member_files is not None:
         request["keep_member_files"] = keep_member_files
+    if family_weights is not None:
+        request["family_weights"] = family_weights
     return EnsembleRequest.from_mapping(request)
 
 
@@ -122,6 +124,8 @@ def production_run_scope(request, *, output_directory, session_factory=None, inp
 def add_recipe_arguments(parser):
     """The member-source recipe flags, for the doors that fetch their sources."""
     from woof.ensemble.recipe_door import RECIPES
+    parser.add_argument("--family-weights", default=None, metavar="ai=0.5,physics=0.5",
+                        help="family probability masses, must sum to 1; defaults to member shares")
     parser.add_argument("--recipe", choices=RECIPES, default=None,
                         help="take each ensemble member from a real source trajectory: "
                              "time-lagged runs earlier cycles of the config's own source "

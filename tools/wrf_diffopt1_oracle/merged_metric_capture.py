@@ -10,6 +10,7 @@ import argparse
 import ast
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -29,18 +30,23 @@ def install_controls(source_dir, level):
     selected = {}
     functions = []
     if level >= 1:
+        # Open, unforced lateral boundaries route rhs_ph through the compiled
+        # slow_geopotential_open kernel (WRF's outer-row upwinding); the
+        # control restores the launchers that did not route there.
+        functions.extend(("_launch_slow_geopotential", "_launch_slow_geopotential_faces"))
+    if level >= 2:
         selected.update({name: source_dir / (name + ".cu")
                          for name in ("smag2d", "diff6", "diff6_seam")})
         functions.extend(("_compute_wrf_smag_tendencies", "launch_wrf_smag2d_vertical",
                           "launch_diff6", "_launch_diff6_seam", "prepare_fixed_tendencies",
                           "_couple_dry_mixing_map_factor"))
-    if level >= 2:
-        selected["dycore"] = source_dir / "dycore.cu"
     if level >= 3:
+        selected["dycore"] = source_dir / "dycore.cu"
+    if level >= 4:
         selected.update({name: source_dir / (name + ".cu")
                          for name in ("advection", "openbc")})
         functions.append("apply_open_radiative_bc")
-    if level >= 4:
+    if level >= 5:
         selected["acoustic"] = source_dir / "acoustic.cu"
 
     original = kernels.module_source
@@ -95,6 +101,72 @@ def checkpoint_payload_state(path, cfg):
     return state
 
 
+#: The metric checkpoints the resume regression continues, written by the
+#: build under test.  The a4177ebbf checkpoints (diff2-legacy-k*.npz) stay
+#: byte for byte as the 2.8.7 attribution's inputs; from 2.8.8 a restore
+#: refuses them before restore because they record no dycore mixing
+#: identity, so the exact-resume claim needs checkpoints this build wrote.
+CURRENT_CHECKPOINT = "diff2-288-legacy-k{km}.npz"
+CURRENT_CHECKPOINT_RECEIPT = "diff2-288-legacy-checkpoints.json"
+CHECKPOINT_STEPS = 2
+
+
+def checkpoint_configuration(km):
+    """The default-on metric form (diff_opt=2, mix_full_fields) as shipped.
+
+    Under the solar generation the checkpoints were written with: 2.8.8's
+    only one, ``wrf_461``.  2.9.0 makes WRF 4.8's equation of time the
+    default, and a restore refuses a solar generation other than the one a
+    checkpoint records, so the resume claim is checked on the recorded one.
+    """
+    from dataclasses import replace
+    return replace(configuration(km=km, diff=2, mix=True),
+                   solar_generation="wrf_461")
+
+
+def record_checkpoints(data, engine_commit):
+    """Integrate and write the current-build metric checkpoints into ``data``.
+
+    The same synthetic case and step count as the a4177ebbf originals
+    (2 steps of 0.5 s), under this build's defaults, then the ordinary
+    production writer.  The receipt seals each file and names the build
+    and card that integrated it.
+    """
+    import cupy as cp
+    from woof.checkpoint_identity import DYCORE_MIXING_ALGORITHM_IDENTITY
+    from woof.core.dycore import step
+    from woof.io.restart import write_restart
+    import woof.wrf_exact as exact
+    assert not exact.ENABLED, "Record the default production arithmetic"
+    checkpoints = {}
+    for km in (2, 4):
+        cfg = checkpoint_configuration(km)
+        state = model_state(cfg)
+        for _ in range(CHECKPOINT_STEPS):
+            step(state, cfg)
+        assert state.elapsed_seconds == CHECKPOINT_STEPS * cfg.dt
+        path = write_restart(data / CURRENT_CHECKPOINT.format(km=km), state, cfg)
+        checkpoints[f"k{km}"] = sha256(path)
+    receipt = dict(
+        what=("Metric (diff_opt=2, mix_full_fields) checkpoints integrated "
+              f"{CHECKPOINT_STEPS} steps and written by the build under test, "
+              "for the exact-resume regression"),
+        why=("2.8.8 records the dycore mixing identity in every checkpoint of "
+             "a mixing run and refuses, before restore, one that lacks it. "
+             "The a4177ebbf checkpoints lack it and stay unchanged as the "
+             "2.8.7 attribution's inputs and as the refusal witness."),
+        recipe=("python -m tools.wrf_diffopt1_oracle.merged_metric_capture "
+                "FIXTURE_DIRECTORY --record-checkpoints ENGINE_COMMIT"),
+        engine_commit=engine_commit,
+        device=cp.cuda.runtime.getDeviceProperties(0)["name"].decode(),
+        steps=CHECKPOINT_STEPS,
+        dycore_mixing=DYCORE_MIXING_ALGORITHM_IDENTITY,
+        checkpoints=checkpoints)
+    (data / CURRENT_CHECKPOINT_RECEIPT).write_text(
+        json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(checkpoints))
+
+
 def capture(data, output, level=0, source_dir=None):
     import cupy as cp
     from woof.core.dycore import step
@@ -106,15 +178,18 @@ def capture(data, output, level=0, source_dir=None):
     for km in (2, 4):
         for boundary in (False, True):
             for moist in (False, True):
-                cfg = configuration(km=km, diff=2, mix=True,
-                                    boundary=boundary, moist=moist)
+                # Preserve the sealed pre-CQ trajectory, as the merged
+                # baseline test runs it; the default CQ coupling is a later
+                # change this receipt does not attribute.
+                cfg = replace(configuration(km=km, diff=2, mix=True,
+                                            boundary=boundary, moist=moist), moist_cq=False)
                 state = model_state(cfg)
                 for _ in range(3):
                     step(state, cfg)
                 name = f"diff2_k{km}_b{int(boundary)}_m{int(moist)}"
                 arrays.update({name + "_" + field: value
                                for field, value in word_arrays(state).items()})
-        cfg = configuration(km=km, diff=2, mix=True)
+        cfg = replace(configuration(km=km, diff=2, mix=True), moist_cq=False)
         checkpoint = data / f"diff2-legacy-k{km}.npz"
         straight = checkpoint_payload_state(checkpoint, cfg)
         resumed = model_state(cfg)
@@ -147,8 +222,15 @@ def capture(data, output, level=0, source_dir=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("data", type=Path)
-    parser.add_argument("output", type=Path)
-    parser.add_argument("--control-level", type=int, choices=range(5), default=0)
+    parser.add_argument("output", type=Path, nargs="?")
+    parser.add_argument("--control-level", type=int, choices=range(6), default=0)
     parser.add_argument("--control-source", type=Path)
+    parser.add_argument("--record-checkpoints", metavar="ENGINE_COMMIT",
+                        help="write the current-build metric checkpoints into DATA")
     args = parser.parse_args()
-    capture(args.data, args.output, args.control_level, args.control_source)
+    if args.record_checkpoints:
+        record_checkpoints(args.data, args.record_checkpoints)
+    elif args.output is None:
+        parser.error("OUTPUT is required unless --record-checkpoints is given")
+    else:
+        capture(args.data, args.output, args.control_level, args.control_source)

@@ -1,0 +1,216 @@
+#ifndef WOOF_WSM_SUPPORT_METALH
+#define WOOF_WSM_SUPPORT_METALH
+
+// Support for the WSM-family shaders translated from
+// woof/core/kernels/wsm*.cu by tools/wsm_metal/generate.py: the translated
+// statements are the CUDA ones (see thompson_aerosol_soft8.metalh), with the
+// float32 gfk_exp/gfk_log/gfk_pow of the CUDA preamble on their soft32
+// transcriptions and the binary64 hypot, atan2 and log10 the radar code calls
+// (hypot as Darwin libm forms it; atan2 and log10 correctly rounded).
+
+#include <metal_stdlib>
+#include "thompson_aerosol_soft8.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_pow.metalh"
+using namespace metal;
+
+static inline float gfk_log(float x) { return as_type<float>(soft_gfk_log(as_type<uint>(x))); }
+static inline float gfk_exp(float x) { return as_type<float>(soft_gfk_exp(as_type<uint>(x))); }
+static inline float gfk_pow(float x, float y)
+{ return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
+
+// hypot as the Darwin libm computes it: the square root of the larger square
+// fused with the smaller one.
+static inline Soft8 hypot(Soft8 a, Soft8 b)
+{
+    Soft8 x = fabs(a), y = fabs(b);
+    if (y > x) { const Soft8 t = x; x = y; y = t; }
+    if (y == Soft8(0)) return x;
+    return sqrt(__fma_rn(y, y, x * x));
+}
+
+// atan2 and log10 are evaluated in double-double and rounded once, so they
+// return the correctly rounded binary64 result.
+struct Dd8 { Soft8 hi, lo; };
+
+constant ulong wsm_dd_inv_odd[23][2] = {
+    {0x3ff0000000000000ul, 0x0000000000000000ul},
+    {0x3fd5555555555555ul, 0x3c75555555555555ul},
+    {0x3fc999999999999aul, 0xbc6999999999999aul},
+    {0x3fc2492492492492ul, 0x3c62492492492492ul},
+    {0x3fbc71c71c71c71cul, 0x3c5c71c71c71c71cul},
+    {0x3fb745d1745d1746ul, 0xbc4745d1745d1746ul},
+    {0x3fb3b13b13b13b14ul, 0xbc53b13b13b13b14ul},
+    {0x3fb1111111111111ul, 0x3c31111111111111ul},
+    {0x3fae1e1e1e1e1e1eul, 0x3c2e1e1e1e1e1e1eul},
+    {0x3faaf286bca1af28ul, 0x3c4af286bca1af28ul},
+    {0x3fa8618618618618ul, 0x3c48618618618618ul},
+    {0x3fa642c8590b2164ul, 0x3c3642c8590b2164ul},
+    {0x3fa47ae147ae147bul, 0xbc2eb851eb851eb8ul},
+    {0x3fa2f684bda12f68ul, 0x3c42f684bda12f68ul},
+    {0x3fa1a7b9611a7b96ul, 0x3c21a7b9611a7b96ul},
+    {0x3fa0842108421084ul, 0x3c30842108421084ul},
+    {0x3f9f07c1f07c1f08ul, 0xbc2f07c1f07c1f08ul},
+    {0x3f9d41d41d41d41dul, 0x3c30750750750750ul},
+    {0x3f9bacf914c1bad0ul, 0xbc3bacf914c1bad0ul},
+    {0x3f9a41a41a41a41aul, 0x3c30690690690690ul},
+    {0x3f98f9c18f9c18faul, 0xbc2f3831f3831f38ul},
+    {0x3f97d05f417d05f4ul, 0x3c17d05f417d05f4ul},
+    {0x3f96c16c16c16c17ul, 0xbc2f49f49f49f49ful}};
+constant ulong wsm_dd_atan_tab[9][2] = {
+    {0x0000000000000000ul, 0x0000000000000000ul},
+    {0x3fbfd5ba9aac2f6eul, 0xbc4cd37686760c17ul},
+    {0x3fcf5b75f92c80ddul, 0x3c68ab6e3cf7afbdul},
+    {0x3fd6f61941e4def1ul, 0xbc7c63aae6f6e918ul},
+    {0x3fddac670561bb4ful, 0x3c7a2b7f222f65e2ul},
+    {0x3fe1e00babdefeb4ul, 0xbc5928df287a668ful},
+    {0x3fe4978fa3269ee1ul, 0x3c72419a87f2a458ul},
+    {0x3fe700a7c5784634ul, 0xbc78c34d25aadef6ul},
+    {0x3fe921fb54442d18ul, 0x3c81a62633145c07ul}};
+constant ulong wsm_dd_ln2[2] = {0x3fe62e42fefa39eful, 0x3c7abc9e3b39803ful};
+constant ulong wsm_dd_log10e[2] = {0x3fdbcb7b1526e50eul, 0x3c695355baaafad3ul};
+constant ulong wsm_dd_pi_2[2] = {0x3ff921fb54442d18ul, 0x3c91a62633145c07ul};
+constant ulong wsm_dd_pi[2] = {0x400921fb54442d18ul, 0x3ca1a62633145c07ul};
+
+static inline Dd8 dd_const(constant ulong *c) { return Dd8{SD8(c[0]), SD8(c[1])}; }
+static inline Dd8 dd_quick(Soft8 a, Soft8 b)
+{ const Soft8 s = a + b; return Dd8{s, b - (s - a)}; }
+static inline Dd8 dd_two_sum(Soft8 a, Soft8 b)
+{
+    const Soft8 s = a + b, bb = s - a;
+    return Dd8{s, (a - (s - bb)) + (b - bb)};
+}
+static inline Dd8 dd_add(Dd8 a, Dd8 b)
+{
+    const Dd8 s = dd_two_sum(a.hi, b.hi), t = dd_two_sum(a.lo, b.lo);
+    const Dd8 u = dd_quick(s.hi, s.lo + t.hi);
+    return dd_quick(u.hi, u.lo + t.lo);
+}
+static inline Dd8 dd_neg(Dd8 a) { return Dd8{-a.hi, -a.lo}; }
+static inline Dd8 dd_sub(Dd8 a, Dd8 b) { return dd_add(a, dd_neg(b)); }
+static inline Dd8 dd_mul(Dd8 a, Dd8 b)
+{
+    const Soft8 p = a.hi * b.hi;
+    const Soft8 e = __fma_rn(a.hi, b.hi, -p) + (a.hi * b.lo + a.lo * b.hi);
+    return dd_quick(p, e);
+}
+static inline Dd8 dd_div(Dd8 a, Dd8 b)
+{
+    const Soft8 q1 = a.hi / b.hi;
+    Dd8 r = dd_sub(a, dd_mul(Dd8{q1, Soft8(0)}, b));
+    const Soft8 q2 = r.hi / b.hi;
+    r = dd_sub(r, dd_mul(Dd8{q2, Soft8(0)}, b));
+    const Soft8 q3 = r.hi / b.hi;
+    const Dd8 q = dd_quick(q1, q2);
+    return dd_add(q, Dd8{q3, Soft8(0)});
+}
+
+static inline Soft8 atan2(Soft8 y, Soft8 x)
+{
+    const bool yneg = (y.bits >> 63) != 0ul, xneg = (x.bits >> 63) != 0ul;
+    const Soft8 ay = fabs(y), ax = fabs(x), zero(0);
+    Dd8 r;
+    if (ay == zero) {
+        r = xneg ? dd_const(wsm_dd_pi) : Dd8{zero, zero};
+    } else if (ax == zero) {
+        r = dd_const(wsm_dd_pi_2);
+    } else {
+        const bool swap = ay > ax;
+        const Dd8 t = dd_div(Dd8{swap ? ax : ay, zero}, Dd8{swap ? ay : ax, zero});
+        int i = int(float(t.hi * Soft8(8) + SD8(0x3fe0000000000000ul)));
+        i = clamp(i, 0, 8);
+        const Dd8 c{Soft8(i) / Soft8(8), zero};
+        const Dd8 u = dd_div(dd_sub(t, c), dd_add(Dd8{Soft8(1), zero}, dd_mul(t, c)));
+        const Dd8 u2 = dd_neg(dd_mul(u, u));
+        Dd8 acc = dd_const(wsm_dd_inv_odd[15]);
+        for (int n = 14; n >= 0; --n)
+            acc = dd_add(dd_mul(acc, u2), dd_const(wsm_dd_inv_odd[n]));
+        Dd8 a = dd_add(dd_const(wsm_dd_atan_tab[i]), dd_mul(u, acc));
+        if (swap) a = dd_sub(dd_const(wsm_dd_pi_2), a);
+        r = xneg ? dd_sub(dd_const(wsm_dd_pi), a) : a;
+    }
+    const Soft8 h = dd_quick(r.hi, r.lo).hi;
+    return yneg ? -h : h;
+}
+
+static inline Soft8 log10(Soft8 v)
+{
+    const Soft8 zero(0), one(1);
+    if (v.bits == 0ul) return SD8(0xfff0000000000000ul);
+    if ((v.bits >> 63) != 0ul || (v.bits >> 52) == 0x7fful) return v;
+    int e = int((v.bits >> 52) & 0x7fful) - 1023;
+    ulong mb = (v.bits & 0x000ffffffffffffful) | 0x3ff0000000000000ul;
+    if (mb > 0x3ff6a09e667f3bcdul) { mb -= 0x0010000000000000ul; ++e; }
+    const Soft8 m = SD8(mb);
+    const Dd8 s = dd_div(Dd8{m - one, zero}, dd_two_sum(m, one));
+    const Dd8 s2 = dd_mul(s, s);
+    Dd8 acc = dd_const(wsm_dd_inv_odd[22]);
+    for (int n = 21; n >= 0; --n)
+        acc = dd_add(dd_mul(acc, s2), dd_const(wsm_dd_inv_odd[n]));
+    Dd8 ln = dd_mul(s, acc);
+    ln = dd_add(ln, ln);
+    ln = dd_add(dd_mul(Dd8{Soft8(e), zero}, dd_const(wsm_dd_ln2)), ln);
+    const Dd8 r = dd_mul(ln, dd_const(wsm_dd_log10e));
+    return dd_quick(r.hi, r.lo).hi;
+}
+
+
+// ---- binary32 that keeps subnormals.  Metal's native float add, subtract and
+// multiply flush them; Sf runs those on the soft32 helpers and converts to
+// float only where a value leaves the translated statement (calls, indices).
+struct Sf {
+    float v;
+    Sf() = default;
+    Sf(float x) : v(x) {}
+    Sf(int x) : v(float(x)) {}
+    Sf(uint x) : v(float(x)) {}
+    Sf(Soft8 d) : v(float(d)) {}
+    operator float() const { return v; }
+};
+static inline uint sf_bits(Sf a) { return as_type<uint>(a.v); }
+static inline Sf sf_make(uint b) { return Sf(as_type<float>(b)); }
+#define SF_PAIRS(OP, EXPR) \
+static inline Sf operator OP(Sf a, Sf b) { return EXPR; } \
+static inline Sf operator OP(Sf a, float b) { return operator OP(a, Sf(b)); } \
+static inline Sf operator OP(float a, Sf b) { return operator OP(Sf(a), b); } \
+static inline Sf operator OP(Sf a, int b) { return operator OP(a, Sf(b)); } \
+static inline Sf operator OP(int a, Sf b) { return operator OP(Sf(a), b); } \
+static inline Sf operator OP(Sf a, uint b) { return operator OP(a, Sf(b)); } \
+static inline Sf operator OP(uint a, Sf b) { return operator OP(Sf(a), b); }
+SF_PAIRS(+, sf_make(soft32_add(sf_bits(a), sf_bits(b))))
+SF_PAIRS(-, sf_make(soft32_sub(sf_bits(a), sf_bits(b))))
+SF_PAIRS(*, sf_make(soft32_mul(sf_bits(a), sf_bits(b))))
+#undef SF_PAIRS
+#define SF_CMP(OP, FN) \
+static inline bool operator OP(Sf a, Sf b) { return FN(sf_bits(a), sf_bits(b)); } \
+static inline bool operator OP(Sf a, float b) { return operator OP(a, Sf(b)); } \
+static inline bool operator OP(float a, Sf b) { return operator OP(Sf(a), b); } \
+static inline bool operator OP(Sf a, int b) { return operator OP(a, Sf(b)); } \
+static inline bool operator OP(int a, Sf b) { return operator OP(Sf(a), b); }
+SF_CMP(<, soft32_less)
+SF_CMP(>, soft32_greater)
+SF_CMP(<=, soft32_less_equal)
+SF_CMP(>=, soft32_greater_equal)
+SF_CMP(==, soft32_equal)
+#undef SF_CMP
+static inline bool operator!=(Sf a, Sf b) { return !soft32_equal(sf_bits(a), sf_bits(b)); }
+static inline bool operator!=(Sf a, float b) { return a != Sf(b); }
+static inline bool operator!=(float a, Sf b) { return Sf(a) != b; }
+static inline bool operator!=(Sf a, int b) { return a != Sf(b); }
+static inline Sf operator-(Sf a) { return sf_make(soft32_negate_bits(sf_bits(a))); }
+static inline thread Sf &operator+=(thread Sf &a, Sf b) { a = a + b; return a; }
+static inline thread Sf &operator-=(thread Sf &a, Sf b) { a = a - b; return a; }
+static inline thread Sf &operator*=(thread Sf &a, Sf b) { a = a * b; return a; }
+static inline Sf aa_div_impl(Sf a, Sf b) { return sf_make(soft32_div(sf_bits(a), sf_bits(b))); }
+static inline Sf aa_sqrtf(Sf a) { return sf_make(soft32_sqrt(sf_bits(a))); }
+static inline Sf fabs(Sf a) { return sf_make(soft32_abs_bits(sf_bits(a))); }
+static inline Sf aa_fmaxf(Sf a, Sf b) { return Sf(aa_fmaxf(a.v, b.v)); }
+static inline Sf aa_fminf(Sf a, Sf b) { return Sf(aa_fminf(a.v, b.v)); }
+
+static inline Sf aa_fmaxf(Sf a, float b) { return aa_fmaxf(a, Sf(b)); }
+static inline Sf aa_fmaxf(float a, Sf b) { return aa_fmaxf(Sf(a), b); }
+static inline Sf aa_fminf(Sf a, float b) { return aa_fminf(a, Sf(b)); }
+static inline Sf aa_fminf(float a, Sf b) { return aa_fminf(Sf(a), b); }
+
+#endif

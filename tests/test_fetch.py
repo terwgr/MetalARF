@@ -471,7 +471,16 @@ def test_every_registered_source_resolves_latest_or_says_what_it_lacks():
             # would be a horizon miss, which is still a derived answer.
             refused.append(source)
             continue
-        assert cycle_grid_for(source) is not None
+        grid = cycle_grid_for(source)
+        if grid is None:
+            # Closed annual CF archives resolve their final analysis from
+            # their packaged coverage, rather than a forecast cycle grid.
+            from woof import cf_archive_fetch
+            assert fetch.native_cf_fetch_contract(source) is not None
+            assert adapter.time_axis == "analysis_times"
+            metadata = cf_archive_fetch.row(source)
+            assert cycle == datetime.fromisoformat(metadata["coverage_end"])
+            assert cf_archive_fetch.validate_window(source, cycle, 0) == (cycle,)
         assert cycle <= now
         resolved.append(source)
 
@@ -491,85 +500,6 @@ def _fake_gfs_download(url: str, destination: Path, **kwargs) -> None:
     destination.write_bytes(_grib2_stream(fetch.GFS_SUBSET_RECORD_COUNT))
 
 
-def test_fetch_gfs_writes_series_and_manifest(tmp_path, monkeypatch):
-    urls = []
-
-    def download(url, destination, **kwargs):
-        urls.append(url)
-        _fake_gfs_download(url, destination)
-
-    monkeypatch.setattr(gfs_transport, "_download", download)
-    out = tmp_path / "gfs"
-    manifest_path = fetch.fetch_gfs(
-        cycle=datetime(2026, 7, 28, 6), hours=(0, 3, 6),
-        area=fetch.parse_area("30,-100,40,-90"), out=out,
-        progress=lambda line: None)
-
-    assert len(urls) == 3
-    # Completion order is the pool's business; inspect the f000 request.
-    urls.sort()
-    query = dict(parse_qsl(urlsplit(urls[0]).query, keep_blank_values=True))
-    assert urlsplit(urls[0]).path.endswith("filter_gfs_0p25.pl")
-    assert query["file"] == "gfs.t06z.pgrb2.0p25.f000"
-    assert query["dir"] == "/gfs.20260728/06/atmos"
-    assert (query["leftlon"], query["rightlon"]) == ("260", "270")
-    assert (query["bottomlat"], query["toplat"]) == ("30", "40")
-    assert query["var_TSOIL"] == "on" and query["lev_500_mb"] == "on"
-
-    series = (out / "gfs-series.tsv").read_text().splitlines()
-    assert series == [
-        "0\tgfs.t06z.pgrb2.0p25.f000.subset.grib2\t81",
-        "3\tgfs.t06z.pgrb2.0p25.f003.subset.grib2\t96",
-        "6\tgfs.t06z.pgrb2.0p25.f006.subset.grib2\t96",
-    ]
-    manifest = json.loads(manifest_path.read_text())
-    assert manifest["schema"] == fetch.FETCH_MANIFEST_SCHEMA
-    assert manifest["source"] == "gfs"
-    assert manifest["cycle"] == "2026-07-28T06:00:00Z"
-    assert manifest["forecast_hours"] == [0, 3, 6]
-    assert manifest["area"]["lon_west"] == -100.0
-    roles = [item["role"] for item in manifest["files"]]
-    # The payloads, the series, and the front-door receipts written
-    # beside them: the manifest claims every canonical file in the
-    # directory, exactly as the HRRR route's does.
-    assert roles == ["gfs-subset"] * 3 + [
-        "series", "checksums", "input-list", "prep-command"]
-    for item in manifest["files"]:
-        path = out / item["name"]
-        assert item["bytes"] == path.stat().st_size
-        assert item["sha256"] == hashlib.sha256(
-            path.read_bytes()).hexdigest()
-    assert manifest["payload_bytes"] == sum(
-        item["bytes"] for item in manifest["files"])
-
-
-def test_fetch_gfs_refreshes_manifest_after_each_verified_hour(
-        tmp_path, monkeypatch):
-    monkeypatch.setattr(gfs_transport, "_download", _fake_gfs_download)
-    published = []
-    original_write = fetch.write_fetch_manifest
-
-    def record_write(out, payload):
-        published.append((payload["forecast_hours"],
-                          "concurrency" in payload))
-        return original_write(out, payload)
-
-    monkeypatch.setattr(fetch, "write_fetch_manifest", record_write)
-    fetch.fetch_gfs(
-        cycle=datetime(2026, 7, 28, 6), hours=(0, 3, 6),
-        area=fetch.parse_area("30,-100,40,-90"), out=tmp_path / "gfs",
-        progress=lambda line: None,
-        derived_bar=lambda cycle, **kwargs: fetch.GFS_SUBSET_RECORD_COUNT)
-
-    # One publication per verified hour, in hour order, plus the final
-    # republication that attaches the completed run's concurrency
-    # receipt (which cannot exist until every transfer has finished).
-    assert [hours for hours, _ in published] == [
-        [0], [0, 3], [0, 3, 6], [0, 3, 6]]
-    assert [receipted for _, receipted in published] == [
-        False, False, False, True]
-
-
 def test_fetch_gfs_default_transport_overlaps_transfers(tmp_path,
                                                         monkeypatch):
     """Bounded concurrency is the DEFAULT, not a flag.
@@ -580,10 +510,13 @@ def test_fetch_gfs_default_transport_overlaps_transfers(tmp_path,
     start.  A serial transport deadlocks here and fails the timeout.
     """
 
+    from woof import fetch_pool
     import threading
+    urls = []
     started = {0: threading.Event(), 3: threading.Event()}
 
     def download(url, destination, **kwargs):
+        urls.append(url)
         hour = int(url.split(".f0", 1)[1][:2])
         if hour in started:
             started[hour].set()
@@ -593,19 +526,16 @@ def test_fetch_gfs_default_transport_overlaps_transfers(tmp_path,
         _fake_gfs_download(url, destination)
 
     monkeypatch.setattr(gfs_transport, "_download", download)
-    manifest_path = fetch.fetch_gfs(
-        cycle=datetime(2026, 7, 28, 6), hours=(0, 3, 6),
-        area=fetch.parse_area("30,-100,40,-90"), out=tmp_path / "gfs",
-        progress=lambda line: None,
-        derived_bar=lambda cycle, **kwargs: fetch.GFS_SUBSET_RECORD_COUNT)
-    manifest = json.loads(manifest_path.read_text())
-    assert manifest["forecast_hours"] == [0, 3, 6]
+    published = []
+    original_write = fetch.write_fetch_manifest
 
+    def record_write(out, payload):
+        published.append((payload["forecast_hours"],
+                          "concurrency" in payload))
+        return original_write(out, payload)
 
-def test_fetch_gfs_manifest_receipts_the_concurrency(tmp_path, monkeypatch):
-    from woof import fetch_pool
-
-    monkeypatch.setattr(gfs_transport, "_download", _fake_gfs_download)
+    monkeypatch.setattr(fetch, "write_fetch_manifest", record_write)
+    out = tmp_path / "gfs"
     manifest_path = fetch.fetch_gfs(
         cycle=datetime(2026, 7, 28, 6), hours=(0, 3, 6),
         area=fetch.parse_area("30,-100,40,-90"), out=tmp_path / "gfs",
@@ -624,6 +554,48 @@ def test_fetch_gfs_manifest_receipts_the_concurrency(tmp_path, monkeypatch):
     assert receipt["wall_seconds"] > 0.0
     assert receipt["modeled_serial_seconds"] >= 0.0
     assert "effective_speedup" in receipt
+    assert len(urls) == 3
+    # Completion order is the pool's business; inspect the f000 request.
+    urls.sort()
+    query = dict(parse_qsl(urlsplit(urls[0]).query, keep_blank_values=True))
+    assert urlsplit(urls[0]).path.endswith("filter_gfs_0p25.pl")
+    assert query["file"] == "gfs.t06z.pgrb2.0p25.f000"
+    assert query["dir"] == "/gfs.20260728/06/atmos"
+    assert (query["leftlon"], query["rightlon"]) == ("260", "270")
+    assert (query["bottomlat"], query["toplat"]) == ("30", "40")
+    assert query["var_TSOIL"] == "on" and query["lev_500_mb"] == "on"
+
+    series = (out / "gfs-series.tsv").read_text().splitlines()
+    assert series == [
+        "0\tgfs.t06z.pgrb2.0p25.f000.subset.grib2\t81",
+        "3\tgfs.t06z.pgrb2.0p25.f003.subset.grib2\t96",
+        "6\tgfs.t06z.pgrb2.0p25.f006.subset.grib2\t96",
+    ]
+    assert manifest["schema"] == fetch.FETCH_MANIFEST_SCHEMA
+    assert manifest["source"] == "gfs"
+    assert manifest["cycle"] == "2026-07-28T06:00:00Z"
+    assert manifest["forecast_hours"] == [0, 3, 6]
+    assert manifest["area"]["lon_west"] == -100.0
+    roles = [item["role"] for item in manifest["files"]]
+    # The payloads, the series, and the front-door receipts written
+    # beside them: the manifest claims every canonical file in the
+    # directory, exactly as the HRRR route's does.
+    assert roles == ["gfs-subset"] * 3 + [
+        "series", "checksums", "input-list", "prep-command"]
+    for item in manifest["files"]:
+        path = out / item["name"]
+        assert item["bytes"] == path.stat().st_size
+        assert item["sha256"] == hashlib.sha256(
+            path.read_bytes()).hexdigest()
+    assert manifest["payload_bytes"] == sum(
+        item["bytes"] for item in manifest["files"])
+    # One publication per verified hour, in hour order, plus the final
+    # republication that attaches the completed run's concurrency
+    # receipt (which cannot exist until every transfer has finished).
+    assert [hours for hours, _ in published] == [
+        [0], [0, 3], [0, 3, 6], [0, 3, 6]]
+    assert [receipted for _, receipted in published] == [
+        False, False, False, True]
 
 
 def test_fetch_gfs_serial_transport_stays_reachable(tmp_path, monkeypatch):
@@ -823,6 +795,26 @@ def test_fetch_gfs_fullfile_takes_whole_objects_and_records_the_route(
             path.read_bytes()).hexdigest()
 
 
+def test_fullfile_without_index_binds_archived_ladder_before_publication(tmp_path, monkeypatch):
+    _fullfile_env(monkeypatch, idx_records=None)
+    calls = []
+    available = (1., 2., 3., 5., 7., 10., 20., 30., 50., 70.,
+                 *gfs_transport.PRESSURE_LEVELS_HPA)
+    def inventory(path, source):
+        calls.append(path)
+        assert path.is_file() and source == 'gfs'
+        return available, dict(method='native-file-inventory', file=path.name)
+    monkeypatch.setattr(fetch, '_gfs_file_levels', inventory)
+    out = tmp_path / 'archived'
+    manifest = json.loads(fetch.fetch_gfs_fullfile(
+        cycle=datetime(2026, 7, 28, 6), hours=(0, 3), area=None,
+        out=out, top_pressure_pa=5000, progress=lambda line: None).read_text())
+    assert len(calls) == 1
+    assert manifest['pressure_levels_hpa'][:4] == [30., 50., 70., 100.]
+    assert manifest['source_top_pressure_pa'] == 3000
+    assert manifest['pressure_ladder_basis']['file_sha256'] == manifest['files'][0]['sha256']
+
+
 def test_fetch_gfs_fullfile_pools_transfers_and_receipts(tmp_path,
                                                          monkeypatch):
     """The S3 whole-object route rides the same default pool: no NOMADS
@@ -852,22 +844,6 @@ def test_fetch_gfs_fullfile_pools_transfers_and_receipts(tmp_path,
     assert manifest["concurrency"]["workers_effective"] == 1
 
 
-def test_fetch_gfs_fullfile_census_mismatch_quarantines(
-        tmp_path, monkeypatch):
-    """The live index and the envelope walk must agree, or the payload
-    is set aside (nothing deleted) and the fetch refuses."""
-
-    _fullfile_env(monkeypatch, payload_messages=_FULLFILE_MESSAGES - 1)
-    out = tmp_path / "gfs-full"
-    with pytest.raises(ValueError, match="695 GRIB2 messages"):
-        fetch.fetch_gfs_fullfile(
-            cycle=datetime(2026, 7, 28, 6), hours=(0, 3), area=None,
-            out=out, progress=lambda line: None)
-    rejected = [path.name for path in out.iterdir()
-                if ".rejected-" in path.name]
-    assert rejected, "the mismatched payload must be quarantined"
-
-
 def test_fetch_gfs_fullfile_stops_its_progress_ticker_on_every_exit(
         tmp_path, monkeypatch):
     """The whole-object route never closed its transfer monitor, so its
@@ -890,23 +866,13 @@ def test_fetch_gfs_fullfile_stops_its_progress_ticker_on_every_exit(
     assert tickers() <= before
 
     _fullfile_env(monkeypatch, payload_messages=_FULLFILE_MESSAGES - 1)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="695 GRIB2 messages"):
         fetch.fetch_gfs_fullfile(
             cycle=datetime(2026, 7, 28, 6), hours=(0, 3), area=None,
             out=tmp_path / "refused", progress=lambda line: None)
     assert tickers() <= before
-
-
-def test_fetch_gfs_fullfile_resumes_verified_objects(tmp_path, monkeypatch):
-    urls = _fullfile_env(monkeypatch)
-    kwargs = dict(cycle=datetime(2026, 7, 28, 6), hours=(0, 3), area=None,
-                  out=tmp_path / "gfs-full")
-    fetch.fetch_gfs_fullfile(progress=lambda line: None, **kwargs)
-    transferred = len(urls)
-    lines: list[str] = []
-    fetch.fetch_gfs_fullfile(progress=lines.append, **kwargs)
-    assert len(urls) == transferred, "verified objects must not re-download"
-    assert sum("skipped" in line for line in lines) == 2
+    assert any(".rejected-" in path.name
+               for path in (tmp_path / "refused").iterdir())
 
 
 def test_fetch_gfs_fullfile_rust_engine_uses_the_backbone(
@@ -962,7 +928,6 @@ def test_cli_fetch_gfs_mode_and_engine_contracts(tmp_path, capsys):
 
     base = ["fetch", "--source", "gfs", "--cycle", "2026-07-28T06",
             "--hours", "3", "--out", str(tmp_path / "out")]
-    refused("not a certified GFS route", base + ["--mode", "idx-subset"])
     refused("belong to '--mode full-file'",
             base + ["--area", "30,-100,40,-90", "--engine", "rust"])
     refused("--area is optional request identity", base)
@@ -1079,24 +1044,6 @@ def test_fetch_gfs_first_hour_interrupt_records_empty_request(
         out, source="gfs", cycle=datetime(2026, 7, 28, 6), area=area)
 
 
-def test_fetch_gfs_resumes_by_skipping_verified_files(tmp_path, monkeypatch):
-    monkeypatch.setattr(gfs_transport, "_download", _fake_gfs_download)
-    out = tmp_path / "gfs"
-    kwargs = dict(cycle=datetime(2026, 7, 28, 6), hours=(0, 3),
-                  area=fetch.parse_area("30,-100,40,-90"), out=out)
-    lines: list[str] = []
-    fetch.fetch_gfs(**kwargs, progress=lines.append)
-
-    def refuse(url, destination, **kw):
-        raise AssertionError("re-downloaded a complete file")
-
-    monkeypatch.setattr(gfs_transport, "_download", refuse)
-    lines.clear()
-    manifest_path = fetch.fetch_gfs(**kwargs, progress=lines.append)
-    assert all("skipped" in line for line in lines)
-    assert manifest_path.is_file()
-
-
 def test_fetch_gfs_fails_closed_on_record_count_drift(tmp_path, monkeypatch):
     def short(url, destination, **kwargs):
         destination.write_bytes(_grib2_stream(7))
@@ -1165,27 +1112,68 @@ def _fake_hrrr_product(request, *, workers, retries,
 
 
 def _install_runtime_surface_inputs(monkeypatch):
-    """Keep mocked transfers complete when the source declares extra fields.
+    """Exercise the real append/manifest path with synthetic transport bytes.
 
-    Only the generated input bytes are substituted. The shipped manifest,
-    envelope census, digest verification and frozen runtime binding still
-    determine whether a completed file resumes.
+    Only Rust transport and extraction are substituted. Actual requests
+    must match the source's product, pattern and numeric selectors, and
+    the shipped code selects one envelope, appends it and binds its digest.
+    This is a transport contract witness, not a native extraction claim.
     """
-    from woof import runtime_surface_fetch
+    from woof import runtime_surface_fetch, rustwx_fetch
+    from woof.source_adapters import get_source_adapter
+    adapter = get_source_adapter("hrrr")
+    declared = {row[0]: row for row in adapter.runtime_surface_fields}
+    calls = []
 
-    def append(path, *, adapter, cycle, lead, host, **kwargs):
-        evidence = []
-        for name, product, selector, units, numeric in adapter.runtime_surface_fields:
-            payload = _grib2_stream(1)
-            with Path(path).open("ab") as target:
-                target.write(payload)
-            evidence.append({"field": name, "units": units, "selector": selector,
-                "numeric_selector": dict(numeric), "source_file": f"fixture-{product}-f{lead:02d}",
-                "url": "https://example.invalid/runtime-surface", "bytes": len(payload),
-                "sha256": hashlib.sha256(payload).hexdigest(), "fetch_mode": "fixture"})
-        return evidence
+    def acquire(binary, **request):
+        folder = Path(request["out"])
+        name = folder.name
+        assert name in declared
+        _, product, selector, _units, numeric = declared[name]
+        assert binary is not None
+        assert request["model"] == adapter.upstream_model_id
+        assert request["product"] == product
+        assert request["mode"] == "auto" and request["keep_idx"] is True
+        assert request["source"] in ("aws", "nomads")
+        assert Path(request["pattern_file"]).read_text().splitlines() == [selector]
+        assert len(request["hours"]) == 1
+        lead = request["hours"][0]
+        payload = _grib2_stream(2)
+        filename = f"fixture-{product}-f{lead:02d}.grib2"
+        (folder / filename).write_bytes(payload)
+        calls.append({"field": name, "binary": binary,
+                      "numeric_selector": dict(numeric), **request})
+        return {"files": [{"name": filename,
+            "grib_url": f"https://example.invalid/{request['source']}/{filename}",
+            "sha256": hashlib.sha256(payload).hexdigest(), "mode": "idx-subset"}]}
 
-    monkeypatch.setattr(runtime_surface_fetch, "append_runtime_surface_records", append)
+    def extract(path, output, numeric_selector):
+        name = Path(path).parent.name
+        assert name in declared
+        assert dict(numeric_selector) == dict(declared[name][4])
+        assert Path(path).read_bytes() == _grib2_stream(2)
+        Path(output).write_bytes(_grib2_stream(1))
+
+    monkeypatch.setattr(rustwx_fetch, "run_fetch", acquire)
+    monkeypatch.setattr(runtime_surface_fetch, "extract_runtime_record", extract)
+    return calls
+
+
+def _assert_runtime_surface_requests(calls, manifest, cycle):
+    from woof.source_adapters import get_source_adapter
+    rows = get_source_adapter("hrrr").runtime_surface_fields
+    soil = [entry for entry in manifest["files"] if entry["role"] == "soil"]
+    assert sorted((call["hours"][0], call["field"]) for call in calls) == sorted(
+        (entry["forecast_hour"], row[0]) for entry in soil for row in rows)
+    by_hour = {entry["forecast_hour"]: entry for entry in soil}
+    for call in calls:
+        assert call["date"] == f"{cycle:%Y%m%d}" and call["cycle"] == cycle.hour
+        entry = by_hour[call["hours"][0]]
+        assert call["source"] == fetch.RW_FETCH_SOURCES[entry["transport"]]
+        assert entry["records"] == hrrr_transport.SOIL_RECORD_COUNT + len(rows)
+        assert len(entry["runtime_surface"]) == len(rows)
+        assert all(record["sha256"] == hashlib.sha256(_grib2_stream(1)).hexdigest()
+                   for record in entry["runtime_surface"])
 
 
 def test_fetch_hrrr_downloads_wrfnat_and_soil_products(tmp_path,
@@ -1230,35 +1218,6 @@ def test_fetch_hrrr_downloads_wrfnat_and_soil_products(tmp_path,
             (out / name).read_bytes()).hexdigest()
 
 
-def test_fetch_hrrr_pools_products_and_receipts_the_concurrency(
-        tmp_path, monkeypatch):
-    """The HRRR route rides the default pool in plain (non-wait) mode:
-    the manifest receipts the run, and the per-complete-hour checkpoint
-    publications keep their exact serial semantics."""
-
-    from woof import fetch_pool
-
-    monkeypatch.setattr(
-        hrrr_transport, "_download_product", _fake_hrrr_product)
-    published = []
-    original_write = fetch.write_fetch_manifest
-
-    def record_write(out, payload):
-        published.append(payload["forecast_hours"])
-        return original_write(out, payload)
-
-    monkeypatch.setattr(fetch, "write_fetch_manifest", record_write)
-    manifest_path = fetch.fetch_hrrr(
-        cycle=datetime(2026, 7, 28, 5), hours=(0, 1), area=None,
-        out=tmp_path / "hrrr", progress=lambda line: None)
-    manifest = json.loads(manifest_path.read_text())
-    receipt = manifest["concurrency"]
-    assert receipt["workers_requested"] == fetch_pool.DEFAULT_FILE_WORKERS
-    assert receipt["workers_effective"] == 4   # two hours x two products
-    assert receipt["files"] == 4
-    assert published == [[0], [0, 1], [0, 1]]
-
-
 def test_fetch_hrrr_wait_mode_stays_publication_ordered(tmp_path,
                                                         monkeypatch):
     """--wait-for follows the cycle as it publishes: each product is
@@ -1283,23 +1242,6 @@ def test_fetch_hrrr_wait_mode_stays_publication_ordered(tmp_path,
         "hrrr.t05z.wrfnatf00.grib2", "hrrr.t05z.soilf00.grib2",
         "hrrr.t05z.wrfnatf01.grib2", "hrrr.t05z.soilf01.grib2",
     ]
-
-
-def test_fetch_hrrr_skips_existing_verified_products(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        hrrr_transport, "_download_product", _fake_hrrr_product)
-    out = tmp_path / "hrrr"
-    kwargs = dict(cycle=datetime(2026, 7, 28, 5), hours=(0, 1), area=None,
-                  out=out)
-    fetch.fetch_hrrr(**kwargs, progress=lambda line: None)
-
-    def refuse(request, *, workers, retries):
-        raise AssertionError("re-downloaded a complete product")
-
-    monkeypatch.setattr(hrrr_transport, "_download_product", refuse)
-    lines: list[str] = []
-    fetch.fetch_hrrr(**kwargs, progress=lines.append)
-    assert len(lines) == 4 and all("skipped" in line for line in lines)
 
 
 def test_fetch_hrrr_redownloads_boundary_truncated_existing_file(
@@ -2345,11 +2287,11 @@ def test_resolve_hrrr_transport_auto_takes_the_mirror_once_it_has_the_window():
         progress=lines.append)
     assert got == "s3"
     # The throughput rung is asked FIRST, and completeness mirrors
-    # resolve_latest_cycle: BOTH final-hour objects.
-    assert probed[:2] == [
+    # resolve_latest_cycle: EVERY final-hour object a lead's fetch reads.
+    assert probed == [
         fetch.hrrr_object_url(cycle, 6, "wrfnat", transport="s3"),
-        fetch.hrrr_object_url(cycle, 6, "wrfprs", transport="s3")]
-    assert len(probed) == 2
+        fetch.hrrr_object_url(cycle, 6, "wrfprs", transport="s3"),
+        fetch.hrrr_object_url(cycle, 6, "wrfsfc", transport="s3")]
     assert any("mirrored" in line and "throughput" in line
                for line in lines), lines
     assert not any("publishes" in line for line in lines), lines
@@ -2395,7 +2337,7 @@ def test_native_auto_transport_uses_one_host_for_every_prefix_object(index_only)
         required_leads=leads, progress=lambda *_: None) == "nomads"
     assert missing in asked
     expected = {fetch.hrrr_object_url(cycle, lead, product, transport="nomads")
-                + suffix for lead in leads for product in ("wrfnat", "wrfprs")
+                + suffix for lead in leads for product in fetch.hrrr_lead_products()
                 for suffix in ("", ".idx")}
     assert expected <= set(asked)
 
@@ -2411,16 +2353,23 @@ def test_native_auto_transport_still_prefers_a_complete_s3_prefix():
         required_leads=leads, progress=lambda *_: None) == "s3"
     assert set(asked) == {
         fetch.hrrr_object_url(cycle, lead, product, transport="s3") + suffix
-        for lead in leads for product in ("wrfnat", "wrfprs")
+        for lead in leads for product in fetch.hrrr_lead_products()
         for suffix in ("", ".idx")}
 
 
-@pytest.mark.parametrize("missing", ["wrfprs", "wrfprs.idx", "everything"])
+@pytest.mark.parametrize("missing", ["wrfprs", "wrfprs.idx", "wrfsfc",
+                                     "everything"])
 def test_native_auto_transport_never_falls_back_to_an_unverified_prefix(missing):
-    """Every host said an object of the prefix is missing: none is taken."""
+    """Every host said an object of the prefix is missing: none is taken.
+
+    ``wrfsfc``: NOAA posts it up to ~10 min after the lead's wrfnat and
+    wrfprs, and the fetch reads VEGFRA from it; a probe that skipped it
+    called the lead posted and the run died on the absent object.
+    """
 
     cycle = datetime(2026, 7, 28, 5)
-    lagging = {fetch.hrrr_object_url(cycle, 17, "wrfprs", transport=name)
+    product = "wrfsfc" if missing == "wrfsfc" else "wrfprs"
+    lagging = {fetch.hrrr_object_url(cycle, 17, product, transport=name)
                + (".idx" if missing == "wrfprs.idx" else "")
                for name in ("s3", "nomads")}
 
@@ -2551,6 +2500,7 @@ def test_fetch_hrrr_nomads_transport_keeps_the_contracts(tmp_path,
                                                          monkeypatch):
     """Same 561/18 record bars, same manifest discipline -- only the
     host differs, and the manifest records it per file."""
+    runtime_calls = _install_runtime_surface_inputs(monkeypatch)
     seen = []
 
     def product(request, *, workers, retries, expected_count=-1):
@@ -2580,6 +2530,7 @@ def test_fetch_hrrr_nomads_transport_keeps_the_contracts(tmp_path,
     assert all(request.index_url == request.url + ".idx"
                for request in seen)
     manifest = json.loads(manifest_path.read_text())
+    _assert_runtime_surface_requests(runtime_calls, manifest, datetime(2026, 7, 28, 5))
     assert [item["role"] for item in manifest["files"]] == [
         "atmosphere", "soil", "atmosphere", "soil", "checksums"]
     assert [item.get("transport") for item in manifest["files"]] == [
@@ -2657,6 +2608,7 @@ def test_fetch_hrrr_wait_downloads_hours_as_they_publish(tmp_path,
     """The live-cycle mode: f00 is up immediately, f01 publishes 45
     fake-seconds in; both arrive from NOMADS without a single real
     sleep, and the finished manifest is the normal complete one."""
+    runtime_calls = _install_runtime_surface_inputs(monkeypatch)
     live = _LivePublication({
         ("wrfnat", 0, "nomads"): 0.0, ("wrfprs", 0, "nomads"): 0.0,
         ("wrfnat", 1, "nomads"): 45.0, ("wrfprs", 1, "nomads"): 45.0,
@@ -2682,6 +2634,7 @@ def test_fetch_hrrr_wait_downloads_hours_as_they_publish(tmp_path,
                for url in downloaded)
     assert live.sleeps, "f01 was not up at t=0, so the fetch had to poll"
     manifest = json.loads(manifest_path.read_text())
+    _assert_runtime_surface_requests(runtime_calls, manifest, datetime(2026, 7, 28, 5))
     assert manifest["forecast_hours"] == [0, 1]
     assert [item.get("transport") for item in manifest["files"]] == [
         "nomads"] * 4 + [None]
@@ -2691,6 +2644,7 @@ def test_fetch_hrrr_wait_auto_falls_back_per_product(tmp_path,
                                                      monkeypatch):
     """Under auto, every poll round tries NOMADS first and S3 second,
     so a product NOMADS never serves still arrives -- from S3."""
+    runtime_calls = _install_runtime_surface_inputs(monkeypatch)
     live = _LivePublication({
         ("wrfnat", 0, "nomads"): 0.0, ("wrfprs", 0, "nomads"): 0.0,
         ("wrfnat", 1, "nomads"): 30.0,
@@ -2705,6 +2659,7 @@ def test_fetch_hrrr_wait_auto_falls_back_per_product(tmp_path,
         probe=live.probe, sleeper=live.sleep, clock=live.clock,
         progress=lambda line: None)
     manifest = json.loads(manifest_path.read_text())
+    _assert_runtime_surface_requests(runtime_calls, manifest, datetime(2026, 7, 28, 5))
     by_name = {item["name"]: item.get("transport")
                for item in manifest["files"]}
     assert by_name["hrrr.t05z.wrfnatf01.grib2"] == "nomads"
@@ -2720,6 +2675,7 @@ def test_fetch_hrrr_wait_polls_nomads_and_transfers_from_the_mirror(
     to transfer from the slower host is gone -- and at peak hours that
     reason cost ~20 min on a 3.4 GB request.
     """
+    runtime_calls = _install_runtime_surface_inputs(monkeypatch)
     live = _LivePublication({
         ("wrfnat", 0, "nomads"): 0.0, ("wrfprs", 0, "nomads"): 0.0,
         ("wrfnat", 0, "s3"): 0.0, ("wrfprs", 0, "s3"): 0.0,
@@ -2740,6 +2696,7 @@ def test_fetch_hrrr_wait_polls_nomads_and_transfers_from_the_mirror(
     assert any(url.startswith(fetch.HRRR_NOMADS_BASE)
                for url in live.probed)
     manifest = json.loads(manifest_path.read_text())
+    _assert_runtime_surface_requests(runtime_calls, manifest, datetime(2026, 7, 28, 5))
     by_name = {item["name"]: item.get("transport")
                for item in manifest["files"]}
     # f00 is on both, so it is mirrored; f01 is on NOMADS alone when it
@@ -3016,3 +2973,32 @@ def test_an_unresolvable_bridge_names_fetch_bridges_not_a_missing_path(
     assert "Traceback" not in err
     assert "woof fetch-bridges" in err
     assert "gfs_grib2_bridge" in err
+
+
+def test_fetch_hrrr_pools_products_and_receipts_the_concurrency(
+        tmp_path, monkeypatch):
+    """The HRRR route rides the default pool in plain (non-wait) mode:
+    the manifest receipts the run, and the per-complete-hour checkpoint
+    publications keep their exact serial semantics."""
+
+    from woof import fetch_pool
+
+    monkeypatch.setattr(
+        hrrr_transport, "_download_product", _fake_hrrr_product)
+    published = []
+    original_write = fetch.write_fetch_manifest
+
+    def record_write(out, payload):
+        published.append(payload["forecast_hours"])
+        return original_write(out, payload)
+
+    monkeypatch.setattr(fetch, "write_fetch_manifest", record_write)
+    manifest_path = fetch.fetch_hrrr(
+        cycle=datetime(2026, 7, 28, 5), hours=(0, 1), area=None,
+        out=tmp_path / "hrrr", progress=lambda line: None)
+    manifest = json.loads(manifest_path.read_text())
+    receipt = manifest["concurrency"]
+    assert receipt["workers_requested"] == fetch_pool.DEFAULT_FILE_WORKERS
+    assert receipt["workers_effective"] == 4   # two hours x two products
+    assert receipt["files"] == 4
+    assert published == [[0], [0, 1], [0, 1]]

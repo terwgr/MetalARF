@@ -45,9 +45,13 @@ def test_native_config_has_a_runnable_human_next_command(
     parsed = build_parser().parse_args(tokens[1:])
     assert parsed.func is go_cli.go_main
     assert Path(parsed.config) == config
+    from _staged_geog import staged_case_data_env
+
+    # The dry run asks the default geography, as the launch does.
+    env = staged_case_data_env(tmp_path / "case-data")
     result = subprocess.run(
         [sys.executable, "-m", "woof.cli", *tokens[1:], "--dry-run"],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
     assert f"go: {source}, {2 if '-' in ladder else 1} domain(s)" in result.stdout
     assert "sha256" not in result.stdout
@@ -59,7 +63,7 @@ def test_native_config_has_a_runnable_human_next_command(
     # A second real process consumes the EXACT printed argv, adding only dry-run.
     again = subprocess.run(
         [sys.executable, "-m", "woof.cli", *rerun[1:], "--dry-run"],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, text=True, timeout=60, env=env)
     assert again.returncode == 0, again.stdout + again.stderr
     assert not (tmp_path / "weather area-go").exists()
 
@@ -262,8 +266,9 @@ def test_unsupported_source_refuses_before_creating_output(
 
 
 @pytest.mark.parametrize("with_supplement", [False, True])
+@pytest.mark.parametrize("with_initial", [False, True, "recipe"])
 def test_go_executes_the_existing_staged_chain_and_carries_the_manifest(
-        tmp_path, monkeypatch, capsys, with_supplement):
+        tmp_path, monkeypatch, capsys, with_supplement, with_initial):
     """Stub only expensive stages: real plan, route selection and handoff binding."""
     from woof import stage_cli
 
@@ -278,8 +283,26 @@ def test_go_executes_the_existing_staged_chain_and_carries_the_manifest(
     donor = tmp_path / "declared donor.grib"
     donor.write_bytes(b"explicit donor bytes")
     extra = ["--supplement", f"surface={donor}"] if with_supplement else []
+    initial = tmp_path / "analysis.json"
+    initial.write_text("{}")
+    initial_flag = ["--initial-inputs", str(initial)] if with_initial is True else []
+    if with_initial == "recipe":
+        config.write_text(config.read_text().replace('[fetch]',
+            '[fetch]\ninitial_source = "hrrr-native"'))
 
     def fetch(argv, run_dir, **kwargs):
+        if argv[argv.index("--source") + 1] == "hrrr-native":
+            observed.append(("initial-fetch", list(argv)))
+            folder = Path(argv[argv.index("--out") + 1])
+            folder.mkdir(parents=True)
+            native = folder / "native.grib2"
+            native.write_bytes(b"analysis")
+            (folder / fetch_routes.PREP_ARGUMENTS_NAME).write_text(json.dumps({
+                "schema": fetch_routes.PREP_ARGUMENTS_SCHEMA,
+                "source": "hrrr-native", "prep_source": "hrrr-native",
+                "argv": ["--source", "hrrr-native", "--input", str(native)],
+                "unbound_supplement_roles": [], "member": None, "member_set": None}))
+            return {}
         observed.append(("fetch", list(argv)))
         data.mkdir()
         (data / fetch_routes.PREP_ARGUMENTS_NAME).write_text(json.dumps({
@@ -321,18 +344,26 @@ def test_go_executes_the_existing_staged_chain_and_carries_the_manifest(
     capsys.readouterr()
     assert main(["go", str(config), "--outdir", str(out), "--run-stamp", "off",
                  "--data-dir", str(data), "--geog-root", str(geog),
-                 "--products", "none", *extra]) == 0
+                 "--products", "none", *extra, *initial_flag]) == 0
     terminal = capsys.readouterr()
     assert "go: complete" in terminal.out
     assert "internal digest" not in terminal.out
     assert "declared fallback" in terminal.err
     assert "internal digest" in (out / "launch.log").read_text()
+    if with_initial == "recipe":
+        assert observed.pop(0)[0] == "initial-fetch"
+        initial = out / "chain" / "initial-inputs.json"
+        assert json.loads(initial.read_text())["source"] == "hrrr-native"
     assert [item[0] for item in observed] == ["fetch", "prepare", "binding",
                                             "forecast", "render"]
     fetch_argv = observed[0][1]
     assert fetch_argv[fetch_argv.index("--source") + 1] == "icon-eu"
     assert Path(fetch_argv[fetch_argv.index("--out") + 1]) == data
     prep_argv = observed[1][1]
+    if with_initial:
+        assert prep_argv[prep_argv.index("--initial-inputs") + 1] == str(initial)
+    else:
+        assert "--initial-inputs" not in prep_argv
     assert prep_argv[:len(handoff)] == handoff
     assert prep_argv[len(handoff):len(handoff) + len(extra)] == extra
     assert Path(prep_argv[prep_argv.index("--geog-root") + 1]) == geog
@@ -374,10 +405,10 @@ def test_failed_native_stage_reports_action_and_keeps_details(
 def allow_launch_resources(monkeypatch):
     from types import SimpleNamespace
     from woof import doctor
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: SimpleNamespace(status="verified"))
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **kwargs: SimpleNamespace(status="verified"))
     monkeypatch.setattr(go_cli, "memory_gate", lambda *a, **k: {
         "verdict": "fits", "refuse": False, "warn": False})
-    monkeypatch.setattr(go_cli, "geography_refusal", lambda *a: None)
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda *a, **_: None)
     monkeypatch.setattr(go_cli, "render_extra_missing", lambda: None)
     monkeypatch.setattr(capabilities, "require_for_command", lambda *a, **k: None)
     monkeypatch.setattr(capabilities, "require", lambda *a, **k: None)
@@ -391,7 +422,7 @@ def test_native_launch_checks_resources_before_fetch(tmp_path, monkeypatch, caps
         monkeypatch.setattr(go_cli, "memory_gate", lambda *a, **k: {
             "verdict": "forecast needs 40 GiB", "refuse": True, "warn": False})
     elif missing == "geography":
-        monkeypatch.setattr(go_cli, "geography_refusal", lambda *a: "Missing geography. Next: woof fetch-geog")
+        monkeypatch.setattr(go_cli, "geography_refusal", lambda *a, **_: "Missing geography. Next: woof fetch-geog")
     else:
         monkeypatch.setattr(go_cli, "render_extra_missing", lambda: "ABI mismatch")
     monkeypatch.setattr(runplan, "execute_plan", lambda *a, **k: pytest.fail("must refuse before executing"))
@@ -465,7 +496,7 @@ def test_kernel_failure_stops_every_launch_before_fetch(tmp_path, monkeypatch, c
     config = emit(tmp_path, source=source)
     allow_launch_resources(monkeypatch)
     monkeypatch.setattr(go_cli, "resolve_bridge", lambda: tmp_path / "bridge")
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: SimpleNamespace(
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **kwargs: SimpleNamespace(
         status="missing", brief="CUDA headers are missing", detail="NVRTC could not find cuda_fp16.h",
         action="install the matching CUDA runtime headers", remedy="header installation detail"))
     monkeypatch.setattr(runplan, "execute_plan", lambda *a, **k: pytest.fail("must not execute"))

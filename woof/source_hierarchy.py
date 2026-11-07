@@ -41,8 +41,11 @@ from woof.native_hierarchy import (
 )
 from woof.static.corridor import (
     STATICS_CORRIDOR_DIRNAME,
+    catalog_with_corridor_births,
     copy_statics_corridor_set,
+    corridor_birth_statics,
     emit_statics_corridor_set,
+    move_statics_corridor_set,
     validated_corridor_selection,
 )
 
@@ -202,10 +205,31 @@ def _validated_static_one_way_topology(exp, grids) -> dict[str, object]:
     }
 
 
+def _metadata_positions(snapshots) -> int | None:
+    """How many leading forcing times a start-time check reads now.
+
+    ``None`` (every one), unless the series is prepared as its leads post
+    (``decoded_positions``) and some are not decoded yet: then the times
+    decoded so far, at least the start, and
+    :func:`seal_regular_source_hierarchy` checks the rest
+    (:func:`_validate_deferred_series`).  Breakage it prevents: a nested
+    HRRR tree started while its cycle posted held its head in "Validate
+    hierarchy source metadata" until f048 posted (WOOF run_f530d559497471b8,
+    2026-10-29, 88.6 s at the end of the window; up to an hour at its start).
+    """
+
+    ready = getattr(snapshots, "decoded_positions", None)
+    if ready is None:
+        return None
+    count = max(1, int(ready()))
+    return None if count >= len(snapshots) else count
+
+
 def _validated_forcing_series(
         exp, snapshots: Sequence[object],
         forcing_hours: Sequence[int] | None = None,
         forcing_offsets_seconds: Sequence[int] | None = None,
+        metadata_positions: int | None = None,
 ) -> tuple[tuple[object, ...], tuple[int, ...], tuple[datetime, ...], int]:
     # A sequence is kept AS the sequence.  A streamed forcing series
     # packs one valid time when that time is asked for; `tuple()` would
@@ -274,7 +298,8 @@ def _validated_forcing_series(
     # Reading whole weather fields just to ask for their Python type repacked
     # every forcing time before the actual initialization could consume it.
     kinds = {snapshot_metadata(snapshots, index).snapshot_type
-             for index in range(len(snapshots))}
+             for index in range(len(snapshots) if metadata_positions is None
+                                else metadata_positions)}
     if len(kinds) != 1:
         raise TypeError("nested source snapshots must use one adapter type")
     return snapshots, offsets, times, interval_seconds
@@ -353,11 +378,34 @@ def _projection_identity(snapshot) -> object:
     return (str(projection["family"]), dict(projection["parameters"]))
 
 
+def _on_own_lattice(y, x, *, nx: int, ny: int) -> bool:
+    """Whether fractional source indices sit on the source's own lattice
+    (whole cells, or the half-cell faces lattice_identity clamps onto the
+    edge), inside the grid."""
+    y = np.asarray(y, dtype=np.float64)
+    x = np.asarray(x, dtype=np.float64)
+    if not (np.isfinite(y).all() and np.isfinite(x).all()):
+        return False
+    # Axis arithmetic (index x spacing / unit, back over the axis step)
+    # leaves a few ULP on lattice positions; a whole cell is never near.
+    tolerance = 1.0e-6
+    halves_y, halves_x = y * 2.0, x * 2.0
+    return bool(np.abs(halves_y - np.rint(halves_y)).max() < tolerance
+                and np.abs(halves_x - np.rint(halves_x)).max() < tolerance
+                and y.min() > -tolerance and x.min() > -tolerance
+                and y.max() < ny - 1 + tolerance and x.max() < nx - 1 + tolerance)
+
+
 def _spatial_coverage_receipt(
         snapshots: tuple[object, ...], grids: tuple[object, ...], exp,
-        source_name: str,
+        source_name: str, metadata_positions: int | None = None,
 ) -> dict[str, object]:
-    """Prove every child staggering has complete source donor halos."""
+    """Prove every child staggering has complete source donor halos.
+
+    ``metadata_positions`` holds the source grid's sameness over the leading
+    times only (:func:`_metadata_positions`); the receipt is the first
+    time's either way.
+    """
 
     first = snapshot_metadata(snapshots, 0)
     first_latitude = np.asarray(first.latitude, dtype=np.float64)
@@ -370,7 +418,8 @@ def _spatial_coverage_receipt(
             f"{source_name} hierarchy source axes are not finite 1-D donor "
             "coordinates")
     first_projection = _projection_identity(first)
-    for index in range(1, len(snapshots)):
+    for index in range(1, len(snapshots) if metadata_positions is None
+                       else metadata_positions):
         snapshot = snapshot_metadata(snapshots, index)
         latitude = np.asarray(
             getattr(snapshot, "latitude", ()), dtype=np.float64)
@@ -399,6 +448,21 @@ def _spatial_coverage_receipt(
     # without one still takes the identity.
     transform, projected_source = source_coordinate_transform(first)
     axis_space = source_axis_space(first)
+    # A source that declares identity pairing (HRRR's own lattice) copies a
+    # target that IS its grid index for index -- the transform above has
+    # already snapped such a target onto the lattice
+    # (woof.ingest.source_coverage.lattice_identity) -- so that target
+    # needs no interpolation halo past the source's edge, exactly as the
+    # single-domain route certifies it.  Breakage this prevents: every
+    # nested tree under the HRRR recipe's full 1799 x 1059 grid was refused,
+    # "RW-WPS-MAPPED source lacks the complete parabolic donor halo for d01
+    # mass" (a rented box 2026-10-21, 2024-04-27 18Z), while the same root prepared
+    # on the single-domain route.
+    from woof.ingest.horiz import declared_source_projection
+    declared = declared_source_projection(first)
+    identity_declared = bool(
+        declared and (declared.get("parameters") or {}).get(
+            "same_grid_pairing") == "identity")
 
     ny = int(first_latitude.size)
     nx = int(first_longitude.size)
@@ -415,6 +479,13 @@ def _spatial_coverage_receipt(
                 *transform(target_latitude, target_longitude),
                 axis_space=axis_space,
                 target_geographic=(target_latitude, target_longitude))
+            if identity_declared and _on_own_lattice(y, x, nx=nx, ny=ny):
+                staggering_receipts[staggering] = {
+                    "pairing": "identity",
+                    "source_x_range": [float(x.min()), float(x.max())],
+                    "source_y_range": [float(y.min()), float(y.max())],
+                }
+                continue
             floor_y = np.floor(y).astype(np.int64)
             floor_x = np.floor(x).astype(np.int64)
             parabolic = {
@@ -443,6 +514,13 @@ def _spatial_coverage_receipt(
         # the crop must retain usable donors of BOTH surface classes,
         # otherwise a masked class would silently fill where full-grid WPS
         # finds a remote donor.
+        if all(row.get("pairing") == "identity"
+               for row in staggering_receipts.values()):
+            # Every staggering copies its own cells: no masked-surface
+            # stencil reaches past the grid either.
+            domains[f"d{int(domain.grid_id):02d}"] = {
+                "staggerings": staggering_receipts, "pairing": "identity"}
+            continue
         mass_latitude, mass_longitude = grid.latlon_mass()
         mass_y, mass_x = _regular_coordinates(
             first_latitude, first_longitude,
@@ -503,10 +581,10 @@ def _hierarchy_preconditions(exp, grids, *, statics_corridor, workers,
     """
 
     grids = tuple(grids)
-    # Resolved HERE as well as inside the emitter, and deliberately: the
-    # emission happens after the whole join, so a mistyped grid id would
-    # otherwise refuse an hour of work that had already succeeded.  Same
-    # pure function, same inputs, same answer.
+    # Resolved HERE as well as inside the emitter, and deliberately: a
+    # mistyped grid id is refused before any source is read, not after the
+    # static and source work that precedes the emission.  Same pure
+    # function, same inputs, same answer.
     validated_corridor_selection(exp, statics_corridor)
     topology_receipt = _validated_static_one_way_topology(exp, grids)
     if (isinstance(workers, bool) or not isinstance(workers, int)
@@ -526,7 +604,7 @@ def _hierarchy_preconditions(exp, grids, *, statics_corridor, workers,
 def _validated_hierarchy_series(exp, grids, snapshots, *, forcing_hours,
                                 forcing_offsets_seconds, source_name,
                                 source_inventory, source_units,
-                                source_orography):
+                                source_orography, metadata_positions=None):
     """The forcing series checks, before any static work.
 
     Returns ``(snapshots, offsets, times, interval, inventory, units,
@@ -535,7 +613,8 @@ def _validated_hierarchy_series(exp, grids, snapshots, *, forcing_hours,
 
     with prep_stage("hierarchy_metadata", label="Validate hierarchy source metadata"):
         snapshots, offsets, times, interval = _validated_forcing_series(
-            exp, snapshots, forcing_hours, forcing_offsets_seconds)
+            exp, snapshots, forcing_hours, forcing_offsets_seconds,
+            metadata_positions=metadata_positions)
         # Production ExperimentConfig carries the exact rational domain clocks.
         # Lightweight source-adapter unit fixtures intentionally do not.
         if hasattr(exp, "dt_exact") and hasattr(exp, "domain_start_offset_exact"):
@@ -553,9 +632,37 @@ def _validated_hierarchy_series(exp, grids, snapshots, *, forcing_hours,
         orography_receipt = _validate_source_orography(
             exp, snapshots, source_orography, inventory)
         source_coverage_receipt = _spatial_coverage_receipt(
-            snapshots, grids, exp, source_name)
+            snapshots, grids, exp, source_name,
+            metadata_positions=metadata_positions)
     return (snapshots, offsets, times, interval, inventory, units,
             orography_receipt, source_coverage_receipt)
+
+
+def _validate_deferred_series(head, snapshots) -> None:
+    """At the seal, the forcing times an as-posted head left unchecked.
+
+    The same two checks the head ran over its decoded times, now over the
+    whole series: one adapter type and one source grid, whose coverage
+    receipt must be the head's (the children were prepared under it).
+    """
+
+    if head.metadata_positions is None:
+        return
+    if snapshots is None:
+        raise ValueError(
+            "this tree's head checked the source metadata of its first "
+            f"{head.metadata_positions} forcing time(s) only, as they "
+            "posted; its seal needs the whole forcing series to check the "
+            "rest, and none was given")
+    _validated_forcing_series(
+        head.exp, snapshots, head.forcing_hours,
+        head.forcing_offsets_seconds)
+    receipt = _spatial_coverage_receipt(
+        snapshots, head.grids, head.exp, head.source_name)
+    if receipt != dict(head.source_coverage_receipt):
+        raise ValueError(
+            f"{head.source_name} forcing posted after the tree's head "
+            "changes the source coverage its children were prepared under")
 
 
 def _hierarchy_catalog(exp, snapshots, *, wps_namelist, geog_root,
@@ -563,7 +670,10 @@ def _hierarchy_catalog(exp, snapshots, *, wps_namelist, geog_root,
                        orography_receipt, source_coverage_receipt,
                        preprocess_selection, inventory, units,
                        soil_texture_downscale, water_temperature_policy,
-                       static_highres):
+                       static_highres,
+                       relative_humidity_convention="era5_mixed",
+                       lake_whole_source_search=False,
+                       lake_ice_provider=None):
     """The verified static catalog and the children's input catalog.
 
     Returns ``(static_catalog, static_receipt, catalog)``.
@@ -595,6 +705,9 @@ def _hierarchy_catalog(exp, snapshots, *, wps_namelist, geog_root,
             soil_texture_downscale=bool(soil_texture_downscale),
             water_temperature_policy=water_temperature_policy,
             static_highres=static_highres,
+            relative_humidity_convention=relative_humidity_convention,
+            lake_whole_source_search=bool(lake_whole_source_search),
+            lake_ice_provider=lake_ice_provider,
         )
     return static_catalog, static_receipt, catalog
 
@@ -639,18 +752,26 @@ def _bound_hierarchy_identity(source_identity, *, orography_receipt,
 
 
 def _emit_hierarchy_corridor(exp, grids, static_catalog, artifact_output,
-                             statics_corridor, static_highres):
-    # AFTER the artifact join: the hierarchy tree is already atomic and
-    # sealed on its own terms, and the corridor set lands beside it
-    # inside the caller's staging directory, bound by its own receipt
-    # (which the caller embeds in the preparation document).  Through
-    # the corridor module's own emitter, which the HRRR hierarchy stage
-    # calls too -- one emission for both chains, because one runner
-    # consumes both bundles.
+                             statics_corridor, static_highres, *,
+                             directory=None):
+    # Through the corridor module's own emitter, which the HRRR hierarchy
+    # stage calls too -- one emission for both chains, because one runner
+    # consumes both bundles.  The set is bound by its own receipt (which
+    # the caller embeds in the preparation document).
     return emit_statics_corridor_set(
         exp=exp, grids=grids, static_catalog=static_catalog,
-        directory=Path(artifact_output) / STATICS_CORRIDOR_DIRNAME,
+        directory=(Path(directory) if directory is not None
+                   else Path(artifact_output) / STATICS_CORRIDOR_DIRNAME),
         statics_corridor=statics_corridor, static_highres=static_highres)
+
+
+def _corridor_births_catalog(exp, catalog, directory, receipt):
+    """The children's catalog carrying each corridor child's birth crop
+    (plan call 5, 2.9.0): the corridor is sealed BEFORE the children
+    initialize, so a corridor child is born on the ground its moves crop
+    from."""
+    return catalog_with_corridor_births(
+        catalog, corridor_birth_statics(directory, receipt, exp))
 
 
 def initialize_and_export_regular_source_hierarchy(
@@ -677,6 +798,10 @@ def initialize_and_export_regular_source_hierarchy(
         statics_corridor=None,
         soil_texture_downscale: bool = True, static_highres=None,
         state_backend: str = "preprocess", metal_context=None,
+        relative_humidity_convention: str = "era5_mixed",
+        lake_whole_source_search: bool = False,
+        lake_ice_provider=None,
+        nudging_context=None,
 ) -> RegularSourceHierarchyResult:
     """Feed a prepared GFS/ERA5 root and verified child inputs to the join.
 
@@ -730,7 +855,10 @@ def initialize_and_export_regular_source_hierarchy(
         inventory=inventory, units=units,
         soil_texture_downscale=soil_texture_downscale,
         water_temperature_policy=water_temperature_policy,
-        static_highres=static_highres)
+        static_highres=static_highres,
+        relative_humidity_convention=relative_humidity_convention,
+        lake_whole_source_search=lake_whole_source_search,
+        lake_ice_provider=lake_ice_provider)
     root = ParentInitView(
         cfg=exp.root, grid=grids[0], state=state)
     implementation_sha256 = _implementation_sha256()
@@ -744,6 +872,15 @@ def initialize_and_export_regular_source_hierarchy(
     bound_source_identity = _bound_hierarchy_identity(
         source_identity, orography_receipt=orography_receipt,
         implementation_sha256=implementation_sha256)
+    # The export refuses an existing artifact folder, so the set waits
+    # beside it and moves in after the artifact join.
+    pending_corridor = Path(artifact_output).with_name(
+        Path(artifact_output).name + ".statics-corridor-pending")
+    corridor_receipt = _emit_hierarchy_corridor(
+        exp, grids, static_catalog, artifact_output, statics_corridor,
+        static_highres, directory=pending_corridor)
+    catalog = _corridor_births_catalog(
+        exp, catalog, pending_corridor, corridor_receipt)
     hierarchy = initialize_and_export_native_hierarchy(
         exp=exp,
         root_node=root,
@@ -777,9 +914,18 @@ def initialize_and_export_regular_source_hierarchy(
         artifact_manifest_reference=artifact_manifest_reference,
         stock_wrf_export=stock_wrf_export,
     )
-    corridor_receipt = _emit_hierarchy_corridor(
-        exp, grids, static_catalog, artifact_output, statics_corridor,
-        static_highres)
+    if nudging_context is not None:
+        from woof.spectral_nudging.prepared import write_nested_analyses
+        analysis_root, root_at = nudging_context
+        write_nested_analyses(analysis_root, exp, times, source_manifest_sha256,
+            catalog=catalog, root_grid=grids[0], root_at=root_at,
+            source_orography=source_orography, workers=workers,
+            preprocess_backend=backend, cpu_bridge=cpu_bridge,
+            sfcp_to_sfcp=sfcp_to_sfcp, soil_layer_contract=soil_layer_contract)
+    if corridor_receipt is not None:
+        move_statics_corridor_set(
+            pending_corridor,
+            Path(artifact_output) / STATICS_CORRIDOR_DIRNAME)
     return RegularSourceHierarchyResult(
         hierarchy=hierarchy,
         static_catalog_receipt=static_receipt,
@@ -824,6 +970,10 @@ class RegularSourceHierarchyHead:
     #: (``head_artifacts`` of :func:`prepare_regular_source_hierarchy_head`),
     #: or ``None`` when the head built none and the seal emits it.
     statics_corridor_receipt: Mapping[str, object] | None = None
+    #: The leading forcing times whose source metadata the head checked,
+    #: or ``None`` for all of them; the seal checks the rest
+    #: (:func:`_validate_deferred_series`).
+    metadata_positions: int | None = None
 
     def bound_source_identity(self, source_identity) -> dict:
         """``source_identity`` with the two keys the hierarchy binds."""
@@ -872,6 +1022,9 @@ def prepare_regular_source_hierarchy_head(
         soil_texture_downscale: bool = True, static_highres=None,
         state_backend: str = "preprocess", metal_context=None,
         head_artifacts: Path | None = None,
+        relative_humidity_convention: str = "era5_mixed",
+        lake_whole_source_search: bool = False,
+        lake_ice_provider=None,
 ) -> RegularSourceHierarchyHead:
     """Bind the tree and prepare every child from the start time.
 
@@ -880,7 +1033,9 @@ def prepare_regular_source_hierarchy_head(
     checks, catalog and child preparation
     (:func:`woof.native_hierarchy.initialize_native_hierarchy_children`).
     The series is validated whole, as the one-shot tree validates it,
-    because a chained tree's inputs all exist when its head is built.
+    when its inputs all exist when its head is built; a series prepared
+    as its leads post is validated over the times decoded so far, and the
+    seal validates the rest (:func:`_metadata_positions`).
     ``source_manifest_sha256`` is recorded in the child catalog's
     provenance only (no child array depends on it).
 
@@ -897,12 +1052,23 @@ def prepare_regular_source_hierarchy_head(
     grids, topology_receipt, backend = _hierarchy_preconditions(
         exp, grids, statics_corridor=statics_corridor, workers=workers,
         preprocess_backend=preprocess_backend)
+    if head_artifacts is None and validated_corridor_selection(
+            exp, statics_corridor):
+        # The head initializes the children, and a corridor child is born
+        # on its corridor's crop (plan call 5); sealed later by the seal,
+        # the child would keep footprint-scale terrain and its first move
+        # could refuse on the overlap-statics equality.
+        raise ValueError(
+            "a statics corridor head needs head_artifacts: the corridor is "
+            "sealed there before the children it gives birth statics to")
+    metadata_positions = _metadata_positions(snapshots)
     (snapshots, offsets, times, interval, inventory, units,
      orography_receipt, source_coverage_receipt) = _validated_hierarchy_series(
         exp, grids, snapshots, forcing_hours=forcing_hours,
         forcing_offsets_seconds=forcing_offsets_seconds,
         source_name=source_name, source_inventory=source_inventory,
-        source_units=source_units, source_orography=source_orography)
+        source_units=source_units, source_orography=source_orography,
+        metadata_positions=metadata_positions)
     static_catalog, static_receipt, catalog = _hierarchy_catalog(
         exp, snapshots, wps_namelist=wps_namelist, geog_root=geog_root,
         source_name=source_name,
@@ -913,10 +1079,21 @@ def prepare_regular_source_hierarchy_head(
         inventory=inventory, units=units,
         soil_texture_downscale=soil_texture_downscale,
         water_temperature_policy=water_temperature_policy,
-        static_highres=static_highres)
+        static_highres=static_highres,
+        relative_humidity_convention=relative_humidity_convention,
+        lake_whole_source_search=lake_whole_source_search,
+        lake_ice_provider=lake_ice_provider)
     root = ParentInitView(
         cfg=exp.root, grid=grids[0], state=root_initial_result.state)
     implementation_sha256 = _implementation_sha256()
+    corridor_receipt = (
+        None if head_artifacts is None else _emit_hierarchy_corridor(
+            exp, grids, static_catalog, head_artifacts, statics_corridor,
+            static_highres))
+    if corridor_receipt is not None:
+        catalog = _corridor_births_catalog(
+            exp, catalog, Path(head_artifacts) / STATICS_CORRIDOR_DIRNAME,
+            corridor_receipt)
     child_results, child_seconds = initialize_native_hierarchy_children(
         exp=exp, root_node=root, catalog=catalog,
         root_initial_result=root_initial_result,
@@ -924,10 +1101,6 @@ def prepare_regular_source_hierarchy_head(
         preprocess_backend=backend, cpu_bridge=cpu_bridge,
         state_backend=state_backend, metal_context=metal_context,
         sfcp_to_sfcp=sfcp_to_sfcp, soil_layer_contract=soil_layer_contract)
-    corridor_receipt = (
-        None if head_artifacts is None else _emit_hierarchy_corridor(
-            exp, grids, static_catalog, head_artifacts, statics_corridor,
-            static_highres))
     return RegularSourceHierarchyHead(
         exp=exp, grids=grids,
         forcing_hours=(None if forcing_hours is None
@@ -944,7 +1117,8 @@ def prepare_regular_source_hierarchy_head(
         child_initialization_seconds=float(child_seconds),
         source_name=source_name, statics_corridor=statics_corridor,
         static_highres=static_highres,
-        statics_corridor_receipt=corridor_receipt)
+        statics_corridor_receipt=corridor_receipt,
+        metadata_positions=metadata_positions)
 
 
 def seal_regular_source_hierarchy(
@@ -958,8 +1132,13 @@ def seal_regular_source_hierarchy(
         artifact_manifest_reference: str | None = None,
         stock_wrf_export: str = "required",
         head_artifacts: Path | None = None,
+        snapshots: Sequence[object] | None = None,
 ) -> RegularSourceHierarchyResult:
     """Write the one-shot artifact tree, its WRF companions and corridor.
+
+    ``snapshots`` is the whole forcing series, which a head prepared as its
+    leads posted needs here to check the times it left
+    (:func:`_validate_deferred_series`).
 
     The second half of :func:`initialize_and_export_regular_source_hierarchy`,
     called once the root's boundary set is complete: the root with its
@@ -975,6 +1154,7 @@ def seal_regular_source_hierarchy(
     """
 
     exp = head.exp
+    _validate_deferred_series(head, snapshots)
     state = root_initial_result.state
     if getattr(state, "lateral_boundaries", None) is not root_boundaries:
         raise ValueError(

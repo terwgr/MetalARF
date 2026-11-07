@@ -1,19 +1,19 @@
 """YSU planetary-boundary-layer column kernel.
 
-This module is the device launcher for the WRF v4.6.1 YSU transcription in
-``kernels/ysu.cu``.  The scheme consumes mass-point wind, potential
+This module selects the corrected WRF 4.8 generation by default, or the
+exported engine's explicit WRF 4.6.1 reproduction path. The scheme consumes mass-point wind, potential
 temperature, moisture, pressure/Exner, layer depths, and the surface-layer
 coupling fields (UST, HFX/QFX, PSIM/PSIH).  It returns tendencies rather than
 updating the state; Phase 3 Task 12's physics driver owns their application.
 
-Array layout is woof's standard ``(nz, ny, nx)`` with x fastest. Every CUDA
-or Metal thread owns one complete column and performs the implicit vertical
-solves in-thread, matching the acoustic Thomas-solve pattern. The Metal entry
-admits only ordinary non-BEP/non-topo columns, and its native math is not yet
-fully numerically accepted against CUDA. Its cbrt sites use a software RN-even
-real cube root; MSL ``pow``, ``exp`` and the local hypot still need a complete
-source-mapped acceptance envelope. The float64 authority is
-:func:`tests.physics_reference.npref.np_ysu_column`.
+Array layout is woof's standard ``(nz, ny, nx)`` with x fastest.  Every CUDA
+thread owns one complete column and performs the implicit vertical solves
+in-thread, matching the acoustic Thomas-solve pattern. The independent
+referee is the pinned public Fortran scheme driven by
+``tools/ysu_generations_oracle``; the NumPy mirror is a secondary check.
+
+The Metal entry retains ordinary non-BEP/non-topographic columns only;
+its transcendental arithmetic is not WRF-exact.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ try:
 except ImportError:
     cp = None
 
-from woof.core.kernels import get_kernel
+from woof.core.kernels import get_kernel, get_kernel_int_defines
 # The workspace constants and the pricing function live in the
 # runtime-free inventory so the VRAM estimator can read them without
 # cupy resolving; this module is their launcher-side re-export.  The
@@ -37,10 +37,10 @@ from woof.core.physics_inventory import (YSUWS_SLOTS, YSU_BLOCK,
                                           YSU_TILE_BLOCKS_PER_SM,
                                           ysu_workspace_floats)
 from woof.core.state import DTYPE
+from woof.ysu_generations import YSU_DEFAULT_GENERATION, ysu_generation, ysu_kernel_selection
 from woof.physics_vertical_contract import (
     outside_vertical_bounds, refuse_vertical_levels)
 
-_TPB = YSU_BLOCK
 _VALIDATE_TPB = 256
 _KMAX = 128
 
@@ -60,8 +60,12 @@ def ysu_tile_columns(fn, ncol: int) -> int:
     try:
         from cupy_backends.cuda.api import driver
 
+        # A RawKernel wraps its CUDA function (``.kernel``); the shared
+        # no-FTZ loader the WRF 4.8 generation compiles through hands back
+        # the function itself.  Ask whichever it is, so the default
+        # generation's tile is bounded by the card's occupancy too.
         resident = driver.occupancyMaxActiveBlocksPerMultiprocessor(
-            fn.kernel.ptr, YSU_BLOCK, 0)
+            getattr(fn, "kernel", fn).ptr, YSU_BLOCK, 0)
         # Never launch more blocks than the card can hold resident: those
         # columns would wait while their workspace slots stayed allocated.
         per_sm = min(per_sm, int(resident))
@@ -102,6 +106,7 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
                rthraten=None, *,
                psfc, znt, ust, hfx, qfx, wspd, br, psim, psih, xland,
                u10, v10, dt: float, ysu_topdown_pblmix: int = 1,
+               ysu_version: str = YSU_DEFAULT_GENERATION,
                bep: Mapping[str, cp.ndarray] | None = None,
                frc_urb2d: cp.ndarray | None = None,
                topo: tuple[cp.ndarray, cp.ndarray] | None = None,
@@ -132,6 +137,7 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
     are read, never written, so the returned dict keeps its layout.  It
     does not combine with ``bep``.
     """
+    generation = ysu_generation(ysu_version)
     columns = {"u": u, "v": v, "theta": theta, "qv": qv, "qc": qc,
                "qi": qi, "p": p, "exner": exner, "dz": dz}
     shape = theta.shape
@@ -172,7 +178,8 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
             ust=ust, hfx=hfx, qfx=qfx, wspd=wspd, br=br, psim=psim,
             psih=psih, xland=xland, u10=u10, v10=v10, dt=float(dt),
             ysu_topdown_pblmix=int(ysu_topdown_pblmix), topo=topo,
-            u10_out=u10_out, v10_out=v10_out, bep=bep, frc_urb2d=frc_urb2d)
+            u10_out=u10_out, v10_out=v10_out, bep=bep, frc_urb2d=frc_urb2d,
+            ysu_version=ysu_version)
     if cp is None:
         raise RuntimeError("YSU CuPy arrays require CuPy; use MetalArray inputs")
     for name, arr in columns.items():
@@ -256,8 +263,11 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
                wstar3_2=cp.empty((ny, nx), dtype=DTYPE),
                cloudflg=cp.empty((ny, nx), dtype=cp.int32))
     ncol = ny * nx
-    kernel = get_kernel("ysu", "ysu_column_bep" if bep_args
-                        else "ysu_column_topo" if topo_args else "ysu_column")
+    from woof.wrf_exact import ENABLED
+    module, defines = ysu_kernel_selection(ysu_version, strict=ENABLED)
+    entry = "ysu_column_bep" if bep_args else "ysu_column_topo" if topo_args else "ysu_column"
+    kernel = (get_kernel_int_defines(module, entry, defines) if defines
+              else get_kernel(module, entry))
     # The column arrays live in a global workspace sized to the threads in
     # flight, not in the per-thread local frame (which CUDA prices at the
     # card's whole resident-thread capacity).  Columns therefore go in
@@ -292,6 +302,45 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
     return out
 
 
+def _launch_output_validation(out, status, *, scheme, names, level_names,
+                              surface_names, tpb, load_kernel):
+    """Check the common PBL output layout and launch its validation kernel."""
+    if tuple(out) != names:
+        raise ValueError(
+            f"native {scheme} validation requires outputs in launcher order "
+            f"{names}, got {tuple(out)}")
+    if (not isinstance(status, cp.ndarray) or status.shape != (1,)
+            or status.dtype != cp.uint32 or not status.flags.c_contiguous):
+        raise ValueError(
+            f"{scheme} validation status must be a C-contiguous uint32 device "
+            "array with shape (1,)")
+
+    shape_3d = out["du"].shape
+    shape_2d = out["hpbl"].shape
+    if len(shape_3d) != 3 or len(shape_2d) != 2:
+        raise ValueError(f"native {scheme} outputs must retain 3-D/2-D shapes")
+    for group, shape in ((level_names, shape_3d), (surface_names, shape_2d)):
+        for name in group:
+            value = out[name]
+            if (not isinstance(value, cp.ndarray) or value.shape != shape
+                    or value.dtype != DTYPE or not value.flags.c_contiguous):
+                raise ValueError(
+                    f"native {scheme} output {name} must be C-contiguous float32 "
+                    f"with shape {shape}")
+
+    status.fill(cp.uint32(0))
+    count_3d = out["du"].size
+    count_2d = out["hpbl"].size
+    blocks = (max(count_3d, count_2d) + tpb - 1) // tpb
+    key = "ysu" if scheme == "YSU" else "shinhong"
+    kernel = load_kernel(key + "_validation", key + "_validate_outputs")
+    kernel(
+        (blocks,), (tpb,),
+        tuple(out[name] for name in level_names)
+        + tuple(out[name] for name in surface_names)
+        + (status, np.int64(count_3d), np.int64(count_2d)))
+
+
 def validate_ysu_outputs(
         out: Mapping[str, cp.ndarray], status: cp.ndarray,
         *, refuse=None) -> str | None:
@@ -308,45 +357,10 @@ def validate_ysu_outputs(
     flagged name, preserving the historical first-invalid ordering because
     the bit order is the launcher order.  Without it the word is read here.
     """
-    if tuple(out) != _YSU_OUTPUTS:
-        raise ValueError(
-            "native YSU validation requires outputs in launcher order "
-            f"{_YSU_OUTPUTS}, got {tuple(out)}")
-    if (not isinstance(status, cp.ndarray) or status.shape != (1,)
-            or status.dtype != cp.uint32 or not status.flags.c_contiguous):
-        raise ValueError(
-            "YSU validation status must be a C-contiguous uint32 device "
-            "array with shape (1,)")
-
-    shape_3d = out["du"].shape
-    shape_2d = out["hpbl"].shape
-    if len(shape_3d) != 3 or len(shape_2d) != 2:
-        raise ValueError("native YSU outputs must retain 3-D/2-D shapes")
-    for name in _YSU_3D_FLOAT_OUTPUTS:
-        value = out[name]
-        if (not isinstance(value, cp.ndarray) or value.shape != shape_3d
-                or value.dtype != DTYPE or not value.flags.c_contiguous):
-            raise ValueError(
-                f"native YSU output {name} must be C-contiguous float32 "
-                f"with shape {shape_3d}")
-    for name in _YSU_2D_FLOAT_OUTPUTS:
-        value = out[name]
-        if (not isinstance(value, cp.ndarray) or value.shape != shape_2d
-                or value.dtype != DTYPE or not value.flags.c_contiguous):
-            raise ValueError(
-                f"native YSU output {name} must be C-contiguous float32 "
-                f"with shape {shape_2d}")
-
-    status.fill(cp.uint32(0))
-    count_3d = out["du"].size
-    count_2d = out["hpbl"].size
-    blocks = (max(count_3d, count_2d) + _VALIDATE_TPB - 1) // _VALIDATE_TPB
-    kernel = get_kernel("ysu_validation", "ysu_validate_outputs")
-    kernel(
-        (blocks,), (_VALIDATE_TPB,),
-        tuple(out[name] for name in _YSU_3D_FLOAT_OUTPUTS)
-        + tuple(out[name] for name in _YSU_2D_FLOAT_OUTPUTS)
-        + (status, np.int64(count_3d), np.int64(count_2d)))
+    _launch_output_validation(
+        out, status, scheme="YSU", names=_YSU_OUTPUTS,
+        level_names=_YSU_3D_FLOAT_OUTPUTS, surface_names=_YSU_2D_FLOAT_OUTPUTS,
+        tpb=_VALIDATE_TPB, load_kernel=get_kernel)
     from woof.core import health_ledger
 
     def _first_name(flags: int) -> str | None:

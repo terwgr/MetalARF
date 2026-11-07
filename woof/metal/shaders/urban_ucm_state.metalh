@@ -1,0 +1,145 @@
+// SLUCM grid-state plane bundle: planes in the CUDA SP_* order (the layered
+// planes TRL, TBL, TGL, TGRL and SMR take four planes each), shared by the
+// Noah mosaic column and the standalone column entry. Needs UcmCol.
+#pragma once
+constant uint UCM_SP_LAYERS[43] = {
+    1,1,1,1,1,1, 4,4,4, 1,1,1,1, 1,1,1,1,1,1, 1,1, 4,4,
+    1,1,1, 1,1,1, 1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+static inline ulong ucm_sp_base(uint i, ulong plane) {
+    ulong planes = 0;
+    for (uint k = 0; k < i; ++k) planes += UCM_SP_LAYERS[k];
+    return planes * plane;
+}
+#define SBP(i) (sp + ucm_sp_base((i), plane))
+#define SP_TR 0
+#define SP_TB 1
+#define SP_TG 2
+#define SP_TC 3
+#define SP_QC 4
+#define SP_UC 5
+#define SP_TRL 6
+#define SP_TBL 7
+#define SP_TGL 8
+#define SP_XXXR 9
+#define SP_XXXB 10
+#define SP_XXXG 11
+#define SP_XXXC 12
+#define SP_CMR 13
+#define SP_CHR 14
+#define SP_CMC 15
+#define SP_CHC 16
+#define SP_CMGR 17
+#define SP_CHGR 18
+#define SP_CMCR 19
+#define SP_TGR 20
+#define SP_TGRL 21
+#define SP_SMR 22
+#define SP_DRELR 23
+#define SP_DRELB 24
+#define SP_DRELG 25
+#define SP_FLXHUMR 26
+#define SP_FLXHUMB 27
+#define SP_FLXHUMG 28
+#define SP_TS 29
+#define SP_SH 30
+#define SP_LH 31
+#define SP_G 32
+#define SP_RN 33
+#define SP_PSIM 34
+#define SP_PSIH 35
+#define SP_GZ1OZ0 36
+#define SP_U10 37
+#define SP_V10 38
+#define SP_TH2 39
+#define SP_Q2 40
+#define SP_UST 41
+#define SP_AKMS 42
+#define SP_N 43
+
+
+static inline void ucm_load_state(device float* sp, size_t idx, size_t plane, thread UcmCol& c)
+{
+    c.tr = SBP(SP_TR)[idx];
+    c.tb = SBP(SP_TB)[idx];
+    c.tg = SBP(SP_TG)[idx];
+    c.tc = SBP(SP_TC)[idx];
+    c.qc = SBP(SP_QC)[idx];
+    c.uc = SBP(SP_UC)[idx];
+    for (int k = 0; k < UCM_NL; ++k) {
+        c.trl[k] = SBP(SP_TRL)[k * plane + idx];
+        c.tbl[k] = SBP(SP_TBL)[k * plane + idx];
+        c.tgl[k] = SBP(SP_TGL)[k * plane + idx];
+        c.tgrl[k] = SBP(SP_TGRL)[k * plane + idx];
+        c.smr[k] = SBP(SP_SMR)[k * plane + idx];
+    }
+    c.xxxr = SBP(SP_XXXR)[idx];
+    c.xxxb = SBP(SP_XXXB)[idx];
+    c.xxxg = SBP(SP_XXXG)[idx];
+    c.xxxc = SBP(SP_XXXC)[idx];
+    c.cmr = SBP(SP_CMR)[idx];
+    c.chr = SBP(SP_CHR)[idx];
+    c.cmc = SBP(SP_CMC)[idx];
+    c.chc = SBP(SP_CHC)[idx];
+    c.cmgr = SBP(SP_CMGR)[idx];
+    c.chgr = SBP(SP_CHGR)[idx];
+    c.cmcr = SBP(SP_CMCR)[idx];
+    c.tgr = SBP(SP_TGR)[idx];
+    c.drelr = SBP(SP_DRELR)[idx];
+    c.drelb = SBP(SP_DRELB)[idx];
+    c.drelg = SBP(SP_DRELG)[idx];
+    c.flxhumr = SBP(SP_FLXHUMR)[idx];
+    c.flxhumb = SBP(SP_FLXHUMB)[idx];
+    c.flxhumg = SBP(SP_FLXHUMG)[idx];
+}
+
+// module_sf_noahdrv.F 1504-1570 / noahmpdrv.F 3521-3587: renew the state and
+// the per-step urban outputs, AKMS_URB2D included.
+static inline void ucm_store_state(device float* sp, size_t idx, size_t plane, thread const UcmCol& c)
+{
+    SBP(SP_TS)[idx] = c.ts;
+    SBP(SP_TR)[idx] = c.tr;
+    SBP(SP_TB)[idx] = c.tb;
+    SBP(SP_TG)[idx] = c.tg;
+    SBP(SP_TC)[idx] = c.tc;
+    SBP(SP_QC)[idx] = c.qc;
+    SBP(SP_UC)[idx] = c.uc;
+    SBP(SP_TGR)[idx] = c.tgr;
+    SBP(SP_CMCR)[idx] = c.cmcr;
+    SBP(SP_FLXHUMR)[idx] = c.flxhumr;
+    SBP(SP_FLXHUMB)[idx] = c.flxhumb;
+    SBP(SP_FLXHUMG)[idx] = c.flxhumg;
+    SBP(SP_DRELR)[idx] = c.drelr;
+    SBP(SP_DRELB)[idx] = c.drelb;
+    SBP(SP_DRELG)[idx] = c.drelg;
+    for (int k = 0; k < UCM_NL; ++k) {
+        SBP(SP_TRL)[k * plane + idx] = c.trl[k];
+        SBP(SP_SMR)[k * plane + idx] = c.smr[k];
+        SBP(SP_TGRL)[k * plane + idx] = c.tgrl[k];
+        SBP(SP_TBL)[k * plane + idx] = c.tbl[k];
+        SBP(SP_TGL)[k * plane + idx] = c.tgl[k];
+    }
+    SBP(SP_XXXR)[idx] = c.xxxr;
+    SBP(SP_XXXB)[idx] = c.xxxb;
+    SBP(SP_XXXG)[idx] = c.xxxg;
+    SBP(SP_XXXC)[idx] = c.xxxc;
+    SBP(SP_SH)[idx] = c.sh;
+    SBP(SP_LH)[idx] = c.lh;
+    SBP(SP_G)[idx] = c.g;
+    SBP(SP_RN)[idx] = c.rn;
+    SBP(SP_PSIM)[idx] = c.psim;
+    SBP(SP_PSIH)[idx] = c.psih;
+    SBP(SP_GZ1OZ0)[idx] = c.gz1oz0;
+    SBP(SP_U10)[idx] = c.u10;
+    SBP(SP_V10)[idx] = c.v10;
+    SBP(SP_TH2)[idx] = c.th2;
+    SBP(SP_Q2)[idx] = c.q2;
+    SBP(SP_UST)[idx] = c.ust;
+    SBP(SP_AKMS)[idx] = FDIV(FMUL(U_KARMAN, c.ust), FSUB(c.gz1oz0, c.psim));
+    SBP(SP_CMR)[idx] = c.cmr;
+    SBP(SP_CHR)[idx] = c.chr;
+    SBP(SP_CMGR)[idx] = c.cmgr;
+    SBP(SP_CHGR)[idx] = c.chgr;
+    SBP(SP_CMC)[idx] = c.cmc;
+    SBP(SP_CHC)[idx] = c.chc;
+}
+

@@ -55,51 +55,61 @@ def _plan_point(source: str) -> tuple[float, float]:
     return _GLOBAL_POINT if centre is None else centre
 
 
+_PLAN_CYCLE = "2026-08-17T00"
+
+
+def _plan_cycle(source: str) -> str:
+    """A cycle inside SOURCE's own published period, from its fetch contract.
+
+    Table-driven like _plan_point.  Since 5ecd0d4a9 a native CF source
+    (20crv3-cf) is fetched from an archive that ends in 2015, and the plan
+    door checks the window against it, so a 2026 cycle is refused there
+    for a reason that is not the one under test.
+    """
+
+    from datetime import datetime, timedelta
+
+    from woof.fetch import native_cf_fetch_contract
+
+    try:
+        contract = native_cf_fetch_contract(source)
+    except (KeyError, ValueError):
+        contract = None
+    if contract is None:
+        return _PLAN_CYCLE
+    from woof.cf_archive_fetch import row
+    end = datetime.fromisoformat(row(get_source_adapter(source).source_id)[
+        "coverage_end"])
+    return f"{(end - timedelta(days=1)):%Y-%m-%dT00}"
+
+
 def _emit(tmp_path: Path, source: str, *extra: str,
           point: tuple[float, float] | None = None,
-          cycle: str = "2026-08-17T00", hours: str = "6",
+          cycle: str | None = None, hours: str = "6",
           extra_card: str = "16gb") -> tuple[int, Path]:
+    cycle = _plan_cycle(source) if cycle is None else cycle
     lat, lon = point if point is not None else _plan_point(source)
     out = tmp_path / f"{source.replace('-', '_')}.toml"
+    # These are geometry/acquisition tests. Explicitly accept the selected
+    # row's terms for planning only; default licence refusals are tested in
+    # test_earth2_licensing.py and no weight bytes are fetched here.
+    try:
+        row = get_source_adapter(source).model_row or {}
+    except ValueError:
+        row = {}
+    licence_args = []
+    if row and row.get("licence_class") != "permissive":
+        licence_args = ["--accept-licence", (row.get("weights") or {}).get("licence", "unresolved weight licence")]
     rc = cli_main([
         "domain", f"--point={lat:.4f},{lon:.4f}", "--card", extra_card,
         "--root-dx", "3", "--hours", hours, "--source", source,
-        "--cycle", cycle, "--out", str(out), *extra])
+        "--cycle", cycle, "--out", str(out), *licence_args, *extra])
     return rc, out
 
 
 # ---------------------------------------------------------------------------
 # The door: every registered runnable source plans.
 # ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("source", wizard_planable_source_ids())
-def test_every_registered_source_plans_a_runnable_config(tmp_path, source):
-    rc, out = _emit(tmp_path / source, source)
-    assert rc == 0, f"{source} did not plan"
-    assert out.is_file()
-    config = tomllib.loads(out.read_text(encoding="utf-8"))
-    assert config["experiment"]["run_seconds"] == 21600.0
-    # HRRR writes its route inputs instead of the bare companion namelist;
-    # both spellings put a namelist.wps beside the config.
-    namelists = sorted(out.parent.glob("*.namelist.wps"))
-    assert namelists, f"{source} emitted no namelist.wps"
-    declared = int(source_forcing_interval_seconds(source))
-    text = namelists[0].read_text(encoding="utf-8")
-    assert f"interval_seconds = {declared},", (
-        f"{source}: namelist.wps must carry the registry's cadence")
-    assert f" interval_seconds = {declared},\n" in text
-
-
-@pytest.mark.parametrize("source", wizard_planable_source_ids())
-def test_emitted_config_reloads_through_the_real_loader(tmp_path, source):
-    from woof.domain_wizard import experiment_from_text
-
-    rc, out = _emit(tmp_path / source, source)
-    assert rc == 0
-    exp = experiment_from_text(out.read_text(encoding="utf-8"),
-                              source=str(out))
-    assert exp.run_seconds == 21600.0
-
 
 def _sources_with_public_bytes() -> frozenset[str]:
     """Every source `woof fetch` can download, read from the AUTHORITY.
@@ -120,7 +130,9 @@ def _sources_with_public_bytes() -> frozenset[str]:
     table = json.loads(
         (Path(registry.__file__).with_name("authorities") / ROUTE_TABLE_NAME)
         .read_text(encoding="utf-8"))
-    return frozenset(table["routes"]) | frozenset(LEGACY_ROUTE_SOURCES)
+    return (frozenset(table["routes"]) | frozenset(LEGACY_ROUTE_SOURCES)
+            | frozenset(row.source_id for row in registry.source_adapters()
+                        if row.acquisition_owner))
 
 
 def _routed_sources() -> frozenset[str]:
@@ -180,35 +192,33 @@ def _refused_source_ids() -> frozenset[str]:
     return frozenset(table["refusals"])
 
 
-@pytest.mark.parametrize("source", wizard_planable_source_ids())
-def test_fetch_table_is_emitted_exactly_where_the_fetch_door_reaches(
-        tmp_path, source):
-    """A ``[fetch]`` table is a claim about where this source's bytes come from.
+def _planable_sources_with_public_bytes() -> list[str]:
+    """The fetchable sources the wizard plans.
 
-    Emitting one for a source neither `woof fetch` nor the local-input
-    contract serves produces a config that is refused at every later
-    load; omitting one for a source that IS served loses the acquisition
-    hint.  A source with a composed local runner keeps the metadata that
-    names which staged bytes, and review still requires its own input
-    root on top of it.  Both halves are decided against the packaged
-    authorities, never against the emitting seam, never against the
-    run-plan verdict the emission is being checked against, and never
-    against a list written here.
+    86dfe06f0 added a route whose registry row the wizard does not plan
+    (rrfs-ens, explicit_composition_required): a fetch-only source.  Its
+    own cell below asserts the wizard refuses it by name.
     """
 
+    return sorted(_sources_with_public_bytes() & set(wizard_planable_source_ids()))
+
+
+@pytest.mark.parametrize(
+    "source", sorted(_sources_with_public_bytes() - set(wizard_planable_source_ids())))
+def test_a_fetch_only_source_is_refused_by_the_wizard_naming_its_state(
+        tmp_path, capsys, source):
+    """A route can download what no preparation can start from yet; the
+    wizard says so by the registry row's state instead of writing a
+    configuration nothing could prepare."""
+
+    assert get_source_adapter(source).status is AdapterStatus.COMPOSITION_REQUIRED
     rc, out = _emit(tmp_path / source, source)
-    assert rc == 0
-    text = out.read_text(encoding="utf-8")
-    config = tomllib.loads(text)
-    expected = (source in _sources_with_public_bytes()
-                or source in _local_input_source_ids())
-    assert ("fetch" in config) is expected, source
-    if not expected:
-        # And the gap is stated in the file, not merely left blank.
-        assert "NO [fetch] TABLE" in text
+    err = capsys.readouterr().err
+    assert rc == 2 and not out.exists(), err
+    assert "explicit_composition_required" in err, err
 
 
-@pytest.mark.parametrize("source", sorted(_sources_with_public_bytes()))
+@pytest.mark.parametrize("source", _planable_sources_with_public_bytes())
 def test_routed_source_prints_a_runnable_fetch_next_step(
         tmp_path, capsys, source):
     """Automatic routes print go; separate acquisition routes retain fetch."""
@@ -239,7 +249,8 @@ def test_routed_source_prints_a_runnable_fetch_next_step(
     assert config["fetch"]["source"] == source
 
 
-@pytest.mark.parametrize("source", sorted(_ROUTED_SOURCES))
+@pytest.mark.parametrize(
+    "source", sorted(_ROUTED_SOURCES & set(wizard_planable_source_ids())))
 def test_printed_fetch_step_plans_through_the_real_planner(
         tmp_path, capsys, source):
     """Step 1 is RUN, not read: its argv goes through the real planner.
@@ -301,6 +312,13 @@ def _stop_at_remote_acquisition(monkeypatch):
     monkeypatch.setattr(acquisition, "require_published_cycle", remote_boundary)
     monkeypatch.setattr(era5_acquisition, "_client", remote_boundary)
     monkeypatch.setattr(era5_arco, "retrieve_era5_arco", remote_boundary)
+    from woof import earth2_run
+    monkeypatch.setattr(earth2_run, "run_model", remote_boundary)
+    # The annual CF archives (20crv3-cf, fetchable since 5ecd0d4a9) reach
+    # their publisher through cf_archive_fetch's own transport, not the
+    # cycle-publication probe; without this the cell fetched from PSL.
+    from woof import cf_archive_fetch
+    monkeypatch.setattr(cf_archive_fetch, "_download", remote_boundary)
 
 
 def test_printed_fetch_arguments_include_indented_supplements():
@@ -330,6 +348,24 @@ def test_printed_chain_parses_with_matching_acquisition(
     rc, out = _emit(tmp_path / "command paths", source, "--explain")
     assert rc == 0
     printed = capsys.readouterr().out
+    # The complete chain owns the config checks formerly repeated by three
+    # per-source emissions and a regional in-window emission.
+    from woof.domain_wizard import experiment_from_text
+
+    assert out.is_file()
+    text = out.read_text(encoding="utf-8")
+    config = tomllib.loads(text)
+    assert config["experiment"]["run_seconds"] == 21600.0
+    assert experiment_from_text(text, source=str(out)).run_seconds == 21600.0
+    namelists = sorted(out.parent.glob("*.namelist.wps"))
+    assert namelists, f"{source} emitted no namelist.wps"
+    declared = int(source_forcing_interval_seconds(source))
+    assert f" interval_seconds = {declared},\n" in namelists[0].read_text(encoding="utf-8")
+    expected_fetch = (source in _sources_with_public_bytes()
+                      or source in _local_input_source_ids())
+    assert ("fetch" in config) is expected_fetch, source
+    if not expected_fetch:
+        assert "NO [fetch] TABLE" in text
     for argv in _printed_fetch_arguments(printed):
         with pytest.raises(RemoteAcquisitionReached):
             cli_main(argv)
@@ -343,10 +379,16 @@ def test_printed_chain_parses_with_matching_acquisition(
             argv = shlex.split(line[3:], comments=True)
             assert argv[0] == "woof"
             commands[argv[1]] = build_parser().parse_args(argv[1:])
-    config = tomllib.loads(out.read_text(encoding="utf-8"))
     fetch = commands["fetch"]
     assert fetch.source == config["fetch"]["source"]
-    assert fetch.out.resolve() == Path(config["fetch"]["out"]).resolve()
+    row = get_source_adapter(source).model_row or {}
+    if row and row.get("licence_class") != "permissive":
+        licence = (row.get("weights") or {}).get("licence", "unresolved weight licence")
+        assert fetch.accept_licence == [licence]
+        if "go" in commands:
+            assert commands["go"].accept_licence == [licence]
+    # [fetch].out is relative to the config, the printed --out to the cwd (D-11).
+    assert fetch.out.resolve() == (out.parent / config["fetch"]["out"]).resolve()
     assert commands["check"].config.resolve() == out.resolve()
     launch = commands.get("go", commands.get("run"))
     assert launch.config.resolve() == out.resolve()
@@ -378,7 +420,7 @@ def test_template_source_retrieves_by_default(tmp_path, capsys, monkeypatch, sou
     # Automatic launches consume the same hints without printing a separate fetch.
     if not commands:
         commands = [["fetch", *_fetch_arguments_from_hints(
-            config["fetch"], out=Path(config["fetch"]["out"]))]]
+            config["fetch"], out=out.parent / config["fetch"]["out"])]]
     for argv in commands:
         assert "--retrieve" in argv
         with pytest.raises(RemoteAcquisitionReached):
@@ -413,7 +455,7 @@ def test_printed_reanalysis_fetch_retrieves_by_default(
     assert calls[0][0] == transport
     config = tomllib.loads(out.read_text(encoding="utf-8"))
     assert config["fetch"]["retrieve"] is True
-    assert calls[0][1]["out"].resolve() == Path(config["fetch"]["out"]).resolve()
+    assert calls[0][1]["out"].resolve() == (out.parent / config["fetch"]["out"]).resolve()
     assert calls[0][1]["hours"] == config["fetch"]["hours"]
     assert calls[0][1]["cadence"] == config["fetch"]["cadence"]
     assert calls[0][1].get("member") == config["fetch"].get("member")
@@ -442,13 +484,6 @@ def test_hand_written_fetch_table_validates_for_every_routed_source(source):
 def _regional_sources() -> tuple[str, ...]:
     return tuple(s for s in wizard_planable_source_ids()
                  if source_coverage_window(s) is not None)
-
-
-@pytest.mark.parametrize("source", _regional_sources())
-def test_regional_source_plans_inside_its_own_window(tmp_path, source):
-    rc, out = _emit(tmp_path / source, source)
-    assert rc == 0
-    assert out.is_file()
 
 
 @pytest.mark.parametrize("source", _regional_sources())
@@ -701,6 +736,12 @@ def test_declared_cadence_matches_the_packaged_mapping(source):
         target, int(adapter.forcing_interval_seconds)) is None, (
         f"{source}: the packaged mapping refuses the registry row's own "
         "boundary cadence")
+    # A parameterized model declares its own output spacing; several model
+    # rows share a decoder whose minimum spacing is finer than theirs.
+    if adapter.model_table:
+        if adapter.model_row:
+            assert float(adapter.model_row["step_hours"]) * 3600 == adapter.forcing_interval_seconds
+        return
     route = fetch_routes.table_route(source)
     assert (route is not None and route.default_cadence * 3600
             == adapter.forcing_interval_seconds), (

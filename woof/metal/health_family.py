@@ -83,53 +83,6 @@ def submit_health_final(context, partial, result, *, nblocks):
         threads_per_group=_THREADS)
 
 
-def submit_health_partial_tile(tile_state, partial, *, block_offset, bny,
-                               bnx, jb, ib, iny, inx, jd, id, dny, dnx,
-                               nz, u_extra, width=0, gravity=9.81):
-    """Submit one tile-interior record, using domain coordinates for w ties."""
-    _require_metal(tile_state)
-    phb = getattr(tile_state, "phb", None)
-    ph = getattr(tile_state, "php", None)
-    have_geo = int(phb is not None and ph is not None)
-    phb_full = int(have_geo and phb.ndim == 3)
-    if not have_geo:
-        ph = phb = tile_state.w
-    values = {
-        "block_offset": block_offset, "bny": bny, "bnx": bnx,
-        "jb": jb, "ib": ib, "iny": iny, "inx": inx, "jd": jd,
-        "id": id, "dny": dny, "dnx": dnx, "nz": nz,
-        "u_extra": u_extra, "phb_full": phb_full,
-        "have_geopotential": have_geo, "width": width,
-    }
-    q = {name: _i32(name, value) for name, value in values.items()}
-    if q["iny"] <= 0 or q["inx"] <= 0 or q["nz"] <= 0:
-        raise ValueError("tile health interior and nz must be positive")
-    if q["u_extra"] not in (0, 1):
-        raise ValueError("u_extra must be 0 or 1")
-    nblocks = 256
-    if tuple(partial.shape)[1:] != (9,) or partial.shape[0] < q["block_offset"] + nblocks:
-        raise ValueError("partial does not have room for tile health rows")
-    q.update(nblocks=nblocks, npartial=int(partial.shape[0]),
-             nu=int(tile_state.u.size), nw=int(tile_state.w.size),
-             nth=int(tile_state.thp.size), nph=int(ph.size),
-             nphb=int(phb.size),
-             npartial_words=int(partial.size),
-             gravity=float(np.float32(gravity)))
-    if max(q["nu"], q["nw"], q["nth"], q["nph"], q["nphb"],
-           q["npartial_words"]) > _I32_MAX:
-        raise ValueError("tile health resource sizes exceed the runtime int32 ABI")
-    context = tile_state._array_module.context
-    return context.submit_kernel(
-        "health_partial_tile",
-        {"u": tile_state.u.view((int(tile_state.u.size),)),
-         "w": tile_state.w.view((int(tile_state.w.size),)),
-         "thp": tile_state.thp.view((int(tile_state.thp.size),)),
-         "ph": ph.view((int(ph.size),)), "phb": phb.view((int(phb.size),)),
-         "partial": partial.view((int(partial.size),))},
-        q, exact_policy=False, grid_size=nblocks * _THREADS,
-        threads_per_group=_THREADS)
-
-
 _HEALTH_BATCH_FIELDS = 30
 _HEALTH_CHUNK_TARGET_GROUPS = 8192
 _HEALTH_MIN_CHUNK = 4096

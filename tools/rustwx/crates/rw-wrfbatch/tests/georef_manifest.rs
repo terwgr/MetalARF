@@ -27,36 +27,12 @@ mod stored_plane_fixture;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(tag: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!(
-            "rw-wrfbatch-georef-{tag}-{}-{:?}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|value| value.as_nanos())
-                .unwrap_or_default()
-        ));
-        std::fs::create_dir_all(&dir).expect("create scratch dir");
-        Self(dir)
-    }
-
-    fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+mod support;
+use support::Scratch;
 
 #[test]
 fn a_real_run_writes_the_manifest_and_accounts_for_every_rendered_panel() {
-    let scratch = Scratch::new("run");
+    let scratch = Scratch::new("rw-wrfbatch-georef", "run");
     let wrfout = stored_plane_fixture::write(scratch.path());
     let store_root = scratch.path().join("store");
     let out_dir = scratch.path().join("out");
@@ -220,7 +196,7 @@ fn rendered_keys(child: std::process::Child, out_dir: &Path) -> Vec<String> {
 /// panel rendered twice must be recorded once.
 #[test]
 fn every_batch_into_one_out_dir_stays_in_the_manifest() {
-    let scratch = Scratch::new("batches");
+    let scratch = Scratch::new("rw-wrfbatch-georef", "batches");
     let out_dir = scratch.path().join("out");
     let frames: Vec<PathBuf> = (0..3)
         .map(|index| {

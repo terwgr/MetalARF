@@ -17,13 +17,10 @@ from collections.abc import Mapping
 
 from woof.ensemble.physical_store import digest_file
 from woof.ensemble.recipes import SourceRecipe, SourceTrajectory, build_recipe
+from woof.ensemble.physical_fields import canonical_json as _canonical
 
 POLICY_SCHEMA = "gpuwm-ensemble-source-policy.v1"
 SELECTION_SCHEMA = "gpuwm-ensemble-source-selection.v1"
-
-
-def _canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def _digest(value):
@@ -361,13 +358,18 @@ class AutomaticSourceSelection:
         return None if self.stochastic_json is None else json.loads(self.stochastic_json)
 
     def describe(self):
-        return {"schema": SELECTION_SCHEMA, "mode": self.mode,
+        document = {"schema": SELECTION_SCHEMA, "mode": self.mode,
                 "context_sha256": self.context_sha256, "policy_sha256": self.policy_sha256,
                 "reason": self.reason, "recipe": None if self.recipe is None else self.recipe.describe(),
                 "recipe_sha256": None if self.recipe is None else self.recipe.sha256,
                 "stochastic": self.stochastic, "amplitude": self.amplitude,
                 "calibration_evidence": None if self.calibration_evidence_json is None else
                                         json.loads(self.calibration_evidence_json)}
+        from woof.ensemble.calibration_admission import random_warnings
+        warnings = random_warnings(stochastic=self.stochastic)
+        if warnings:
+            document["warnings"] = warnings
+        return document
 
     @property
     def sha256(self):

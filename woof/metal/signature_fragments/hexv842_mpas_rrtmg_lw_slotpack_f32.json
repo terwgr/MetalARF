@@ -1,0 +1,302 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_slotpack_f32",
+      "module": "hexv842_mpas_rrtmg_lw_slotpack_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_slotpack_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_lw_v842.py",
+      "cuda_symbol": "radiation_lw_from_mpas",
+      "resources": [
+        [
+          "indices",
+          "int32",
+          "read"
+        ],
+        [
+          "p3d",
+          "float",
+          "read"
+        ],
+        [
+          "t3d",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "pi",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read"
+        ],
+        [
+          "re_cloud",
+          "float",
+          "read"
+        ],
+        [
+          "re_ice",
+          "float",
+          "read"
+        ],
+        [
+          "re_snow",
+          "float",
+          "read"
+        ],
+        [
+          "p8w",
+          "float",
+          "read"
+        ],
+        [
+          "t8w",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read"
+        ],
+        [
+          "emiss",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "xice",
+          "float",
+          "read"
+        ],
+        [
+          "snow",
+          "float",
+          "read"
+        ],
+        [
+          "xlat",
+          "float",
+          "read"
+        ],
+        [
+          "o3clim",
+          "float",
+          "read"
+        ],
+        [
+          "model",
+          "float",
+          "read_write"
+        ],
+        [
+          "interfaces",
+          "float",
+          "read_write"
+        ],
+        [
+          "surface",
+          "float",
+          "read_write"
+        ],
+        [
+          "ozone",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfra": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_cloud": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_ice": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "emiss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xice": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xlat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "o3clim": [
+          [
+            "any_1d"
+          ]
+        ],
+        "model": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interfaces": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ozone": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ng",
+          "int32"
+        ],
+        [
+          "nm",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "radii",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

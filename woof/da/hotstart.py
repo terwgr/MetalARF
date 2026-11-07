@@ -326,10 +326,80 @@ def _scalar(xp, value) -> float:
     return float(np.asarray(_to_host(xp, value)))
 
 
+def _hotstart_host_pointwise(xp, shape, dtype, z_obs, simulated_dbz, valid,
+                             ramp, in_layer, qsat, cfg, applied, qv):
+    zero = xp.zeros(shape, dtype=dtype)
+    d_theta = zero
+    d_qv = zero
+
+    # -- warm branch: observed echo the model is short of -----------------
+    deficit = z_obs - simulated_dbz
+    warm_mask = (valid
+                 & (z_obs >= cfg.echo_threshold_dbz)
+                 & (deficit >= cfg.deficit_threshold_db)
+                 & in_layer)
+    warm_theta = xp.clip(cfg.theta_per_db * deficit * ramp,
+                         0.0, cfg.max_theta_increment_k)
+    d_theta = xp.where(warm_mask, warm_theta, zero)
+
+    if cfg.adjust_moisture:
+        shortfall = xp.clip(cfg.rh_target * qsat - qv,
+                            0.0, cfg.max_qv_increment_kg_kg)
+        d_qv = xp.where(warm_mask, xp.clip(shortfall * ramp, 0.0,
+                                           cfg.max_qv_increment_kg_kg), zero)
+
+    # -- clear-air branch: model echo the observations deny ---------------
+    clear_mask = xp.zeros(shape, dtype=bool)
+    if cfg.clear_air_enabled:
+        excess = simulated_dbz - z_obs
+        clear_mask = (valid
+                      & (z_obs <= cfg.clear_air_obs_threshold_dbz)
+                      & (simulated_dbz >= cfg.clear_air_model_threshold_dbz)
+                      & in_layer)
+        cool = xp.clip(cfg.clear_air_theta_per_db * excess * ramp,
+                       0.0, cfg.max_theta_decrement_k)
+        d_theta = xp.where(clear_mask, -cool, d_theta)
+        if cfg.adjust_moisture:
+            surplus = xp.clip(qv - cfg.clear_air_rh_target * qsat,
+                              0.0, cfg.max_qv_decrement_kg_kg)
+            dry = xp.clip(surplus * ramp, 0.0, cfg.max_qv_decrement_kg_kg)
+            d_qv = xp.where(clear_mask, -dry, d_qv)
+
+    # -- post-condition clamp --------------------------------------------
+    # The branch arithmetic above is already bounded; clamping the final
+    # arrays makes the guarantee structural rather than a property of
+    # having read the branches correctly.
+    #
+    # With an applied= ledger the bound is on the CUMULATIVE increment, not
+    # this call's: clamp so applied + increment stays within the same
+    # [-decrement, +increment] interval.  applied is subtracted from both
+    # bounds, so a cell already at the cap gets a headroom of zero and this
+    # call adds nothing there -- which is what stops n applications reaching
+    # n times the cap.
+    if applied is None:
+        lo_theta, hi_theta = -cfg.max_theta_decrement_k, cfg.max_theta_increment_k
+        lo_qv, hi_qv = -cfg.max_qv_decrement_kg_kg, cfg.max_qv_increment_kg_kg
+    else:
+        at = applied["thp"].astype(dtype, copy=False)
+        aq = applied["qv"].astype(dtype, copy=False)
+        lo_theta = -cfg.max_theta_decrement_k - at
+        hi_theta = cfg.max_theta_increment_k - at
+        lo_qv = -cfg.max_qv_decrement_kg_kg - aq
+        hi_qv = cfg.max_qv_increment_kg_kg - aq
+    d_theta = xp.clip(d_theta, lo_theta, hi_theta)
+    d_qv = xp.clip(d_qv, lo_qv, hi_qv)
+
+    # Never drive vapour negative.
+    d_qv = xp.maximum(d_qv, -qv)
+
+    return d_theta, d_qv, warm_mask, clear_mask
+
+
 def hotstart_increments(state, z_obs, z_mask, cfg: HotStartConfig, *,
                         simulated_dbz=None, run_cfg=None,
                         temperature=None, pressure=None,
-                        applied=None) -> HotStartResult:
+                        applied=None, _pointwise=None, _prepared_height_agl=None,
+                        _prepared_ramp=None) -> HotStartResult:
     """Bounded warm/moist increments where radar sees echo the model lacks.
 
     ``z_obs`` is observed reflectivity on the model grid (dBZ,
@@ -372,9 +442,9 @@ def hotstart_increments(state, z_obs, z_mask, cfg: HotStartConfig, *,
     exactly ``0.0``, so a forecast that already matches the observations
     produces bitwise-zero increments and applying them is a no-op.
 
-    Non-finite ``z_obs`` or ``simulated_dbz`` never produces an
-    increment: every gate is a comparison, and comparisons against NaN
-    are False.
+    NaN reflectivity fails the comparison gates.  Positive infinity in
+    ``z_obs`` is capped at the insertion limit, while infinite simulated
+    reflectivity follows the ordered comparisons and increment clamps.
     """
     if not isinstance(cfg, HotStartConfig):
         raise TypeError(
@@ -434,75 +504,26 @@ def hotstart_increments(state, z_obs, z_mask, cfg: HotStartConfig, *,
     if pressure is None:
         pressure = state.p
 
-    height_agl = _height_agl(state)
-    ramp = vertical_ramp(height_agl, cfg).astype(dtype, copy=False)
+    ramp = _prepared_ramp
+    if ramp is None:
+        height_agl = (_height_agl(state) if _prepared_height_agl is None
+                      else _prepared_height_agl)
+        ramp = vertical_ramp(height_agl, cfg)
+    ramp = ramp.astype(dtype, copy=False)
     in_layer = ramp > 0.0
-
-    zero = xp.zeros(shape, dtype=dtype)
-    d_theta = zero
-    d_qv = zero
-
-    # -- warm branch: observed echo the model is short of -----------------
-    deficit = z_obs - simulated_dbz
-    warm_mask = (valid
-                 & (z_obs >= cfg.echo_threshold_dbz)
-                 & (deficit >= cfg.deficit_threshold_db)
-                 & in_layer)
-    warm_theta = xp.clip(cfg.theta_per_db * deficit * ramp,
-                         0.0, cfg.max_theta_increment_k)
-    d_theta = xp.where(warm_mask, warm_theta, zero)
 
     qsat = saturation_mixing_ratio(temperature, pressure,
                                    phase=cfg.saturation_phase)
-    if cfg.adjust_moisture:
-        shortfall = xp.clip(cfg.rh_target * qsat - state.qv,
-                            0.0, cfg.max_qv_increment_kg_kg)
-        d_qv = xp.where(warm_mask, xp.clip(shortfall * ramp, 0.0,
-                                           cfg.max_qv_increment_kg_kg), zero)
-
-    # -- clear-air branch: model echo the observations deny ---------------
-    clear_mask = xp.zeros(shape, dtype=bool)
-    if cfg.clear_air_enabled:
-        excess = simulated_dbz - z_obs
-        clear_mask = (valid
-                      & (z_obs <= cfg.clear_air_obs_threshold_dbz)
-                      & (simulated_dbz >= cfg.clear_air_model_threshold_dbz)
-                      & in_layer)
-        cool = xp.clip(cfg.clear_air_theta_per_db * excess * ramp,
-                       0.0, cfg.max_theta_decrement_k)
-        d_theta = xp.where(clear_mask, -cool, d_theta)
-        if cfg.adjust_moisture:
-            surplus = xp.clip(state.qv - cfg.clear_air_rh_target * qsat,
-                              0.0, cfg.max_qv_decrement_kg_kg)
-            dry = xp.clip(surplus * ramp, 0.0, cfg.max_qv_decrement_kg_kg)
-            d_qv = xp.where(clear_mask, -dry, d_qv)
-
-    # -- post-condition clamp --------------------------------------------
-    # The branch arithmetic above is already bounded; clamping the final
-    # arrays makes the guarantee structural rather than a property of
-    # having read the branches correctly.
-    #
-    # With an applied= ledger the bound is on the CUMULATIVE increment, not
-    # this call's: clamp so applied + increment stays within the same
-    # [-decrement, +increment] interval.  applied is subtracted from both
-    # bounds, so a cell already at the cap gets a headroom of zero and this
-    # call adds nothing there -- which is what stops n applications reaching
-    # n times the cap.
-    if applied is None:
-        lo_theta, hi_theta = -cfg.max_theta_decrement_k, cfg.max_theta_increment_k
-        lo_qv, hi_qv = -cfg.max_qv_decrement_kg_kg, cfg.max_qv_increment_kg_kg
-    else:
-        at = applied["thp"].astype(dtype, copy=False)
-        aq = applied["qv"].astype(dtype, copy=False)
-        lo_theta = -cfg.max_theta_decrement_k - at
-        hi_theta = cfg.max_theta_increment_k - at
-        lo_qv = -cfg.max_qv_decrement_kg_kg - aq
-        hi_qv = cfg.max_qv_increment_kg_kg - aq
-    d_theta = xp.clip(d_theta, lo_theta, hi_theta)
-    d_qv = xp.clip(d_qv, lo_qv, hi_qv)
-
-    # Never drive vapour negative.
-    d_qv = xp.maximum(d_qv, -state.qv)
+    result = None if _pointwise is None else _pointwise(
+        z_obs_raw, simulated_dbz, valid, ramp, qsat, cfg, applied)
+    if result is None:
+        qv = state.qv
+        if _pointwise is not None and hasattr(qv, "to_numpy"):
+            qv = qv.to_numpy()
+        result = _hotstart_host_pointwise(
+            xp, shape, dtype, z_obs, simulated_dbz, valid, ramp, in_layer,
+            qsat, cfg, applied, qv)
+    d_theta, d_qv, warm_mask, clear_mask = result
 
     increments = {"thp": d_theta, "qv": d_qv}
     provenance = {

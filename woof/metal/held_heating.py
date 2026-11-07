@@ -1,4 +1,4 @@
-"""Metal launcher for the ordinary retained-heating tendency update."""
+"""Metal launcher for the retained-heating tendency update."""
 
 from __future__ import annotations
 
@@ -9,12 +9,8 @@ def submit_held_heating(state):
     """Add one retained ``h_diabatic`` contribution to ``rth_t``.
 
     The kernel carries the CUDA source's explicit FP32 operation sequence.
-    WRF-exact arithmetic remains refused until Metal provides the required
-    arithmetic guarantees.
+    WRF-exact dispatch uses software binary32 operations with gradual underflow.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal held_heating supports ordinary non-exact arithmetic only")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal held_heating requires a Metal DomainState")
 
@@ -58,5 +54,6 @@ def submit_held_heating(state):
         "nx": nx,
     }
     return state._array_module.context.submit_kernel(
-        "held_heating", arrays, parameters, exact_policy=False,
+        "wrf_exact_held_heating" if WRF_EXACT else "held_heating",
+        arrays, parameters, exact_policy=WRF_EXACT,
         grid_size=grid_size)

@@ -46,7 +46,7 @@
   },
   "run": {
     "argv": [
-      "gpuwm",
+      "woof",
       "run",
       "configs/<the run-of-record config>.toml",
       "--outdir",

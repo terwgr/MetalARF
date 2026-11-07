@@ -91,7 +91,7 @@ fn render(request:Request,output:&Path)->Result<(),String>{
     fs::create_dir_all(parent).map_err(|e|e.to_string())?;
     fs::create_dir(&request.out_dir).map_err(|e|e.to_string())?;
     let out_dir=fs::canonicalize(&request.out_dir).map_err(|e|e.to_string())?;
-    let identity=super::GridIdentity{domain:Some(result.domain.clone()),spacing_m:request.spacing_m};
+    let identity=super::GridIdentity{domain:Some(result.domain.clone()),spacing_m:request.spacing_m,label:None,name:None};
     let fixed=fixed_size(&request)?;
     // Auto layout plans each canvas inside the table's caps; the request's
     // nominal size only has to pass the batch's own bounds.
@@ -116,7 +116,7 @@ fn render(request:Request,output:&Path)->Result<(),String>{
         run_slug:result.frame.run_slug.clone(),hours:BatchHourScope::Current(result.frame.storage_slot),
         product_spec:request.products.join(","),out_dir:out_dir.clone(),domain:BatchRenderDomain::NativeGrid,
         native_domain_slug:super::native_domain_slug(&identity),subtitle_spacing:request.spacing_m.and_then(super::spacing_subtitle),
-        source_label:Some("WOOF".into()),title_provenance:TitleProvenance::LocalImport{grid_label:super::domain_title_label(&identity)},
+        source_label:Some(concat!("WOOF ", env!("GPUWM_ENGINE_VERSION")).into()),title_provenance:TitleProvenance::LocalImport{grid_label:super::domain_title_label(&identity)},
         date_yyyymmdd:None,cycle_utc:None,source:None,output_width:width,output_height:height,limits,
         geographic_overlays:None,panel_annotations:None};
     let mut georefs=Vec::new();let mut panels=Vec::new();let mut failures=Vec::new();

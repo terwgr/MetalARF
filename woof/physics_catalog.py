@@ -83,6 +83,19 @@ def table() -> dict[str, Any]:
     document = json.loads(TABLE_PATH.read_text(encoding="utf-8"))
     if document.get("schema") != TABLE_SCHEMA:
         raise ValueError(f"{TABLE_PATH.name}: expected schema {TABLE_SCHEMA!r}")
+    # Curated prose remains authoritative. A new scheme already declares its
+    # name and scope in the registry; staging it does not require a duplicate
+    # catalog option row. This fallback makes no cost or qualification claim.
+    descriptions = document["descriptions"]
+    for family, component in _registry()["components"].items():
+        rows = descriptions.setdefault(family, {})
+        for option_id, option in component["options"].items():
+            if option_id not in rows:
+                words = option.get("description") or option.get("label")
+                if not isinstance(words, str) or not words.strip():
+                    raise ValueError(
+                        f"{family}.{option_id}: registry needs a description or label")
+                rows[option_id] = words
     return document
 
 
@@ -818,13 +831,31 @@ def apply_to_experiment(text: str, request: Mapping[str, Any], *, load: bool = T
     # it off is written off.
     requested = _cumulus_requested(request) or bool(file_cumulus(text)[0])
     settings, _ = _as_emitted(settings, base, dx_km=float(verdict["dx_km"]), requested=requested)
-    settings.update(route_stated(settings, verdict["source"]))
     known = _run_fields()
     full = {key: value for key, value in settings.items() if key in known and value is not None}
     changed = _changed(base, settings)
     document = tomllib.loads(text)
     shared = document.get("shared") or {}
     tables = document.get("domain") or []
+    # A mix that moves the file onto RUC land writes the RUC cold start
+    # every authoring door writes (physics_source_defaults.
+    # AUTHORED_RUC_DEFAULTS): without it a RUC suite put on a Noah file
+    # (a sensitivity '-ruc-' member, the marine-fog preset) cold-started
+    # the ground vapour the public-WRF way and dropped the land skin
+    # 3.5-4 K on its first step.  A file already on RUC keeps what it runs
+    # (an imported WRF namelist is the parity path), and a value the file
+    # or the request states is kept.
+    from woof.physics_source_defaults import authored_ruc_defaults
+
+    def file_land() -> Any:
+        root = tables[0] if tables else {}
+        return root.get("sf_surface_physics",
+                        shared.get("sf_surface_physics", _run_default("sf_surface_physics")))
+
+    if not authored_ruc_defaults(file_land()):
+        for key, value in authored_ruc_defaults(full.get("sf_surface_physics", file_land())).items():
+            if key not in full and key not in shared and not any(key in table for table in tables):
+                full[key] = value
     # A nest the file runs without cumulus keeps it off: the mix's cumulus
     # is the root's, and ``woof domain`` pins every nest to cu_physics 0.
     # Writing a changed scheme into every table turned cumulus on at a
@@ -906,6 +937,13 @@ def apply_to_experiment(text: str, request: Mapping[str, Any], *, load: bool = T
     missing = [f"{key} = {_toml_value(full[key])}" for key in sorted(in_shared) if key not in seen_shared]
     out[shared_end:shared_end] = missing
     result = "\n".join(out) + "\n"
+    # Both catalog --into and domain --physics-choices write this file.
+    # The root's final switches, including its cumulus choice, own the header.
+    from woof.domain_wizard import mix_physics_summary
+
+    result = re.sub(r"^# PHYSICS: .*$",
+                    lambda _: f"# PHYSICS: {mix_physics_summary(result, request)}.",
+                    result, flags=re.MULTILINE)
     if not load:
         return result
     with tempfile.TemporaryDirectory() as folder:
@@ -1061,6 +1099,117 @@ def write_experiment(into: Path, out: Path, request: Mapping[str, Any]) -> list[
     return written
 
 
+def _lineage_parameters(suite_settings: Mapping[str, Any], registry: Mapping[str, Any]) -> dict[str, str]:
+    """The suite's source-generation settings: parameter name -> its family.
+
+    A generation setting is a family-bound registry parameter whose values
+    are named code generations (a string enum, e.g. ``thompson_version``,
+    ``bl_mynn_version``, ``mynn_sfclay_variant``) and which the suite sets
+    away from the registry default.  Together they are the code lineage
+    the suite was assembled from (the HRRR suite: the NOAA WRF 3.9 fork
+    Thompson, GSD 4.1 MYNN and the GSL surface layer).  Integer tuning
+    knobs (``scalar_pblmix``, ``bl_mynn_mixlength``) are not generations.
+    """
+
+    lineage: dict[str, str] = {}
+    for name, spec in registry["parameters"].items():
+        if (not isinstance(spec, Mapping) or not spec.get("component_id") or "default" not in spec
+                or name not in suite_settings):
+            continue
+        values = spec.get("enum") or []
+        if not values or not all(isinstance(value, str) for value in values):
+            continue
+        if suite_settings[name] != spec["default"]:
+            lineage[name] = str(spec["component_id"])
+    return lineage
+
+
+def _follow_choices(settings: dict[str, Any], chosen: dict[str, str],
+                    suite_settings: Mapping[str, Any], *, explicit: set[str],
+                    template: Mapping[str, str] | None = None) -> None:
+    """The companion edits a scheme choice carries into its suite, in place.
+
+    A choice is one family's scheme; the rest of the suite stays.  Four
+    things in the rest belong to the scheme that was swapped out, and
+    keeping them made the engine refuse the mix (U-E4: 46 suite/choice
+    pairs refused at every source and spacing, customer
+    run_5f83d3dcf5f1cec3) or run a scheme nobody asked for:
+
+    * a sibling the chosen scheme declares it needs
+      (``requires_components``: MYJ needs the Eta surface layer, YSU and
+      Shin-Hong an MM5 one) comes with it, the first the registry lists,
+      unless the request chose that family itself;
+    * the suite's source-generation settings (:func:`_lineage_parameters`)
+      are one lineage: they hold while every scheme that carries one is
+      kept.  Once a choice replaces one of those schemes the mix is no
+      longer that lineage, so the rest go back to the registry's default
+      generation.  Before this, the HRRR suite with its PBL swapped to YSU
+      (and Noah, KF) still ran the NOAA WRF 3.9 fork Thompson under a label
+      that reads only "Thompson aerosol-aware": a user asking for WRF's
+      mp28 got the fork, which on a measured 3 km case gave about a
+      quarter less rain than WRF 4.6.1's Thompson from the same inputs.
+      A request that wants the fork in such a mix sets ``thompson_version``
+      in ``settings``, which applies after this;
+    * a parameter the suite read and the mix no longer reads (the HRRR
+      suite's ``thompson_version = 'wrf_39_noaa'`` once mp_physics is not
+      28, the GSD MYNN generation once the PBL is not MYNN) goes back to
+      its registry default, as an unread knob must
+      (:func:`woof.physics_registry.registry_knob_is_read`);
+    * the WRF RRTMG mapping token follows the RRTMG port that runs: a
+      choice whose declared remedy moves 4/4 radiation to the legacy port
+      (Lin) leaves the suite's RTE+RRTMGP substitution token naming a
+      solver the run no longer has, so it takes the legacy token.
+    """
+
+    from woof.config import (RRTMG_VARIANT_RTE_RRTMGP, WRF_RRTMG_LEGACY,
+                              WRF_RRTMG_SUBSTITUTION_TOKENS)
+    from woof.physics_registry import registry_knob_is_read
+
+    registry = _registry()
+    menu = _menu()
+    for _ in range(len(menu)):
+        moved = False
+        for family in sorted(explicit | {f for f in chosen if f not in explicit}):
+            option = registry["components"].get(family, {}).get("options", {}).get(_registry_id(chosen.get(family)))
+            needs = ((option or {}).get("constraints") or {}).get("requires_components") or {}
+            for sibling, allowed in needs.items():
+                if sibling in explicit or _registry_id(chosen.get(sibling)) in allowed:
+                    continue
+                rows = [row for wanted in allowed for row in menu.get(sibling, {}).values()
+                        if row["registry_option_id"] == wanted
+                        and registry["components"][sibling]["options"][wanted].get("implemented") is True]
+                if not rows:
+                    continue
+                settings.update(rows[0]["settings"])
+                chosen[sibling] = rows[0]["id"]
+                moved = True
+        if not moved:
+            break
+    parameters = registry["parameters"]
+    if template:
+        lineage = _lineage_parameters(suite_settings, registry)
+        replaced = {family for family, scheme in template.items()
+                    if _registry_id(chosen.get(family)) != _registry_id(scheme)}
+        if replaced & set(lineage.values()):
+            for name in lineage:
+                settings[name] = parameters[name]["default"]
+    for _ in range(len(parameters)):
+        reverted = False
+        for name, spec in parameters.items():
+            if (name not in settings or not isinstance(spec, Mapping) or "default" not in spec
+                    or settings[name] == spec["default"]):
+                continue
+            if registry_knob_is_read(name, suite_settings, registry) and not registry_knob_is_read(
+                    name, settings, registry):
+                settings[name] = spec["default"]
+                reverted = True
+        if not reverted:
+            break
+    if (settings.get("wrf_rrtmg_compatibility") in WRF_RRTMG_SUBSTITUTION_TOKENS
+            and settings.get("ra_rrtmg_variant", RRTMG_VARIANT_RTE_RRTMGP) != RRTMG_VARIANT_RTE_RRTMGP):
+        settings["wrf_rrtmg_compatibility"] = WRF_RRTMG_LEGACY
+
+
 def _settings(request: Mapping[str, Any]) -> tuple[str, dict[str, Any], dict[str, str], list[dict[str, Any]]]:
     suite = request.get("suite")
     # No suite named: the default at the request's grid, the one the run binds.
@@ -1072,7 +1221,9 @@ def _settings(request: Mapping[str, Any]) -> tuple[str, dict[str, Any], dict[str
 
         raise CatalogError(f"No suite called {base!r} on the Create page. Suites: "
                            f"{', '.join(shipped_profiles())}.") from error
-    chosen = dict(_template_components(base) or {})
+    template = _template_components(base)
+    chosen = dict(template or {})
+    suite_settings = dict(settings)
     blocked: list[dict[str, Any]] = []
     for family, choice in (request.get("choices") or {}).items():
         if family == "radiation" and isinstance(choice, Mapping):
@@ -1090,6 +1241,9 @@ def _settings(request: Mapping[str, Any]) -> tuple[str, dict[str, Any], dict[str
                 "owner": f"woof/physics_registry_v2.json#/components/{family}/options/{row['registry_option_id']}",
                 "message": f"{option.get('label', row['id'])}: "
                            f"{reachability.get('blocker') or 'declared unimplemented'}"})
+    _follow_choices(settings, chosen, suite_settings,
+                    explicit={str(family) for family in (request.get("choices") or {})},
+                    template=template)
     overrides = {str(key): value for key, value in (request.get("settings") or {}).items()}
     # A name RunConfig has no field for sets nothing: the probe and the
     # written file both drop it, so a misspelled mp_physcs was answered
@@ -1106,26 +1260,6 @@ def _settings(request: Mapping[str, Any]) -> tuple[str, dict[str, Any], dict[str
                                               "table uses, such as mp_physics.")
     settings.update(overrides)
     return base, settings, chosen, blocked
-
-
-def route_stated(settings: Mapping[str, Any], source: str | None) -> dict[str, Any]:
-    """The switches ``source``'s route runs for this set whatever a file says.
-
-    The HRRR route runs its namelists, and a WRF namelist has no key for
-    ``moist_cq``: the route's importer answers it from
-    :func:`woof.physics_compat.implicit_runtime_switches`.  That authority
-    enables WRF's moisture pressure correction for every suite; a dry
-    state bypasses it without a moisture carrier.  A verification opt-out
-    cannot be encoded by this route's namelists, so the round trip checks
-    it before publication.  Empty on every route that reads the
-    configuration itself.
-    """
-
-    if not source:
-        return {}
-    from woof.hrrr_route_inputs import route_implicit_switches
-
-    return dict(route_implicit_switches(source, settings))
 
 
 def _cumulus_requested(request: Mapping[str, Any]) -> bool:
@@ -1340,10 +1474,6 @@ def check(request: Mapping[str, Any]) -> dict[str, Any]:
     base, settings, chosen, blocked = _settings(request)
     as_written = dict(settings)
     settings, retired = _as_emitted(settings, base, dx_km=dx_km, requested=_cumulus_requested(request))
-    # What the source's route runs for a switch its own files cannot state,
-    # so the check describes, and a mix is written with, what that route
-    # runs (route_stated).
-    settings.update(route_stated(settings, source))
     if retired:
         chosen["cumulus"] = next(key for key, row in _menu()["cumulus"].items()
                                  if row["settings"].get("cu_physics") == settings["cu_physics"])
@@ -1427,6 +1557,13 @@ def check(request: Mapping[str, Any]) -> dict[str, Any]:
         rest = result["words"].removeprefix("Runs.").strip()
         result["words"] = " ".join(part for part in (
             "Runs by day only: shortwave with no longwave.", night, rest) if part)
+    # The Thompson generation is said whenever it is not WRF 4.6.1's, so a
+    # mix that keeps HRRR's WRFV3.9 Thompson (the HRRR set, that set with
+    # its cumulus or radiation changed, or a request naming it) never runs
+    # it under a label that reads only "Thompson aerosol-aware".
+    if settings.get("mp_physics") == 28 and settings.get("thompson_version") == "wrf_39_noaa":
+        result["words"] += (" Its Thompson is HRRR's WRFV3.9 version "
+                            "(thompson_version = \"wrf_39_noaa\"), not WRF 4.6.1's.")
     return result
 
 

@@ -187,10 +187,3 @@ def submit_refl_temperature_product(theta, pii, temperature):
         grid_size=nz * ny * nx, threads_per_group=256)
 
 
-def submit_refl10cm_thompson(*args, **kwargs):
-    raise NotImplementedError("Metal Thompson reflectivity remains unsupported")
-
-
-def submit_refl10cm_wsm6(*args, **kwargs):
-    from .wsm6_reflectivity import launch_refl10cm_wsm6
-    return launch_refl10cm_wsm6(*args, **kwargs)

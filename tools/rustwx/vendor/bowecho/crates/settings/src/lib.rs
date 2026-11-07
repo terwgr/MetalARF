@@ -1,5 +1,5 @@
 //! Persisted application settings: a small JSON document under the platform
-//! config directory. Loading is best-effort: a missing or unreadable file
+//! config directory. Loading is best-effort — a missing or unreadable file
 //! yields defaults so the app always starts.
 
 fn default_true() -> bool {
@@ -125,14 +125,14 @@ pub struct LoopSweepControl {
 /// Radar raster quality: the supersample factor the polar radar data is
 /// rasterized into for the frame the user is looking at. Higher factors mean
 /// genuinely finer gate sampling (real added detail, not upscaling) so zoomed
-/// views and native screenshots are sharper, at a memory/CPU cost that scales
+/// views and native screenshots are sharper — at a memory/CPU cost that scales
 /// with the pixel count. Persisted as a lowercase slug (see the string-slug
 /// convention used by `units`/`basemap_style`) so old and new builds interop
 /// and an unknown value falls back to `Standard` instead of failing the whole
 /// settings load.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum RasterQuality {
-    /// 1x, the historical behavior: the radar raster matches the on-screen
+    /// 1x — the historical behavior: the radar raster matches the on-screen
     /// map size. Nominal reference square 1024².
     #[default]
     Standard,
@@ -200,7 +200,7 @@ impl RasterQuality {
     }
 }
 
-/// Estimated bytes to hold `frame_count` loop frames at `quality`: the figure
+/// Estimated bytes to hold `frame_count` loop frames at `quality` — the figure
 /// shown next to the "Apply high-res to the whole loop" toggle. Deliberately a
 /// simple `per_frame · frames` upper bound (e.g. 60 Ultra frames ≈ 3.8 GB): it
 /// warns, it never blocks.
@@ -756,7 +756,7 @@ pub struct AppSettings {
     /// `SiteRef` settings key (`"KTLX"` | `"intl:smhi:angelholm"`, case
     /// preserved for `:`-keys). Absent = pre-v0.29 behavior (bare
     /// `startup_site` only; intl sessions resumed as a stale US site).
-    /// New key only: a v0.29 file opened by v0.28 ignores it.
+    /// New key only — a v0.29 file opened by v0.28 ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_owner_site: Option<String>,
     /// Favorite site ids, in user order.
@@ -783,7 +783,7 @@ pub struct AppSettings {
     /// (deleted .pal) falls back to the family default.
     pub palette_by_family: BTreeMap<String, String>,
     /// Per-product overrides (product label -> table name), beating the
-    /// family binding for just that product (e.g. SRV vs VEL, both the
+    /// family binding for just that product (e.g. SRV vs VEL — both the
     /// Velocity family).
     #[serde(default)]
     pub palette_by_product: BTreeMap<String, String>,
@@ -802,7 +802,7 @@ pub struct AppSettings {
     /// (0 = Pane 2), encoded as `SiteRef` settings keys (`"KTLX"` |
     /// `"intl:smhi:angelholm"`; bare ids parse as US forever, `:`-keys
     /// keep their case). Absent = pre-v0.29 behavior (no pin restore).
-    /// New key only: a v0.29 file opened by v0.28 ignores it.
+    /// New key only — a v0.29 file opened by v0.28 ignores it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra_pane_pins: BTreeMap<u8, String>,
     /// Placefile sources (community URLs or absolute downloaded-file paths)
@@ -853,7 +853,7 @@ pub struct AppSettings {
     /// Satellite native-resolution window: when enabled, true-color
     /// composite ingests fetch/decode only the data covering a picked
     /// center+size box and compose at full instrument resolution (0.5 km)
-    /// instead of the default 4× sector decimation, a crisp, loopable
+    /// instead of the default 4× sector decimation — a crisp, loopable
     /// typhoon-eye view. Center is stored in microdegrees so `AppSettings`
     /// stays `Eq`-derivable (FarmGeorefEntry convention).
     #[serde(default)]
@@ -868,7 +868,7 @@ pub struct AppSettings {
     /// Himawari true-color compose scope: "region" (the west-Pacific
     /// tropics segment band, the pre-v0.29.3 behavior), "fulldisk" (the
     /// whole disk at ~4 km effective), or "fulldisk2km" (the whole disk at
-    /// ~2 km effective, 4× the pixels). The native window, when enabled,
+    /// ~2 km effective — 4× the pixels). The native window, when enabled,
     /// overrides the scope. Unknown slugs fall back to "region" at use
     /// sites (app_ui/main.rs).
     #[serde(default = "default_himawari_true_color_scope")]
@@ -887,7 +887,7 @@ pub struct AppSettings {
     /// FCI products or five-minute Lightning Imager AFA).
     #[serde(default = "default_eumetsat_loop_frames")]
     pub eumetsat_loop_frames: u8,
-    /// RAOB launch-site markers (the observed-soundings obs layer),
+    /// RAOB launch-site markers (the observed-soundings obs layer) —
     /// default off; clicking a marker fetches that station's sounding at
     /// the displayed radar time.
     #[serde(default)]
@@ -932,7 +932,7 @@ pub struct AppSettings {
     pub overlay_mping_reports: bool,
     /// Loop swath overlays: per-gate maximum reflectivity, peak velocity
     /// magnitude, and minimum correlation coefficient accumulated across the
-    /// loaded loop, "where the storm has been". Default off (recomputed on
+    /// loaded loop — "where the storm has been". Default off (recomputed on
     /// demand).
     #[serde(default)]
     pub overlay_max_ref_swath: bool,
@@ -1174,8 +1174,8 @@ pub struct AppSettings {
     pub smooth_display: bool,
     /// Display smoothing mode (Settings ▸ Display ▸ Smoothing):
     /// "native" (no smoothing), "soften" (3×3 binomial over the polar
-    /// grid, the legacy Smooth display), or "interpolated" (bilinear
-    /// polar upsampling, inter-gate interpolation). Empty = derive from
+    /// grid — the legacy Smooth display), or "interpolated" (bilinear
+    /// polar upsampling — inter-gate interpolation). Empty = derive from
     /// the legacy `smooth_display` bool, so old configs keep their
     /// setting unchanged.
     #[serde(default)]
@@ -1193,7 +1193,7 @@ pub struct AppSettings {
     #[serde(default)]
     pub cross_section_floating: bool,
     /// Loop playback speed in percent of the 700 ms/frame baseline
-    /// (100 = baseline, 200 = twice as fast). Screen playback only:
+    /// (100 = baseline, 200 = twice as fast). Screen playback only —
     /// media exports have their own speed control.
     #[serde(default = "default_loop_speed_percent")]
     pub loop_speed_percent: u16,
@@ -1327,7 +1327,7 @@ pub struct AppSettings {
     /// almost immediately. Auto-refresh does not use this.
     #[serde(default = "default_live_preload_frame_count")]
     pub live_preload_frame_count: u16,
-    /// Last GR2A-style poll URL (mobile/research radar feeds), typing it
+    /// Last GR2A-style poll URL (mobile/research radar feeds) — typing it
     /// once per deployment is fine, once per session is not.
     #[serde(default)]
     pub poll_url: String,
@@ -1343,14 +1343,14 @@ pub struct AppSettings {
     pub intl_provider: String,
     #[serde(default)]
     pub intl_site: String,
-    /// FARM quicklook map-drape georeferences, one per sensor id,
+    /// FARM quicklook map-drape georeferences, one per sensor id —
     /// auto-located or manually pinned deployment positions survive
     /// restarts (re-located automatically when the scan id changes).
     #[serde(default)]
     pub farm_georefs: Vec<FarmGeorefEntry>,
     /// Dockable-workspace layout: versioned JSON ({"version", "tree",
-    /// "viewers", "prefer_docked"}) built and parsed by app_ui/src/dock.rs,
-    /// opaque here so settings stays UI-crate-free. None = the default
+    /// "viewers", "prefer_docked"}) built and parsed by app_ui/src/dock.rs
+    /// — opaque here so settings stays UI-crate-free. None = the default
     /// map-only layout; parse failures fall back to it (best-effort, like
     /// everything else in this file).
     #[serde(default)]
@@ -1408,7 +1408,7 @@ pub struct AppSettings {
     pub data_dir: String,
     /// Sidebar section open/closed memory (section id -> open). eframe is
     /// built without the `persistence` feature, so egui's own collapsing
-    /// state dies with the process: this map is what survives restarts.
+    /// state dies with the process — this map is what survives restarts.
     #[serde(default)]
     pub sidebar_section_open: BTreeMap<String, bool>,
     /// Sidebar (right control panel) width in whole logical points,
@@ -1457,7 +1457,7 @@ pub struct AppSettings {
     /// back to HRRR at use sites.
     #[serde(default = "default_model_slug")]
     pub model_slug: String,
-    /// Readout unit system: "imperial" (the default, US-born app) or
+    /// Readout unit system: "imperial" (the default — US-born app) or
     /// "metric". Unknown values read as imperial at use sites
     /// (app_ui/src/units.rs); kept as a string so `AppSettings` stays
     /// UI-crate-free and Eq-derivable.
@@ -1584,7 +1584,7 @@ fn default_glm_show_last_minutes() -> u16 {
 
 /// Satellite native-window defaults: Guam (13.5N 144.8E), the west-Pacific
 /// tropics the Himawari composite default already targets, with an 800 km
-/// box, a whole typhoon core at 0.5 km is 1600×1600 px.
+/// box — a whole typhoon core at 0.5 km is 1600×1600 px.
 fn default_sat_native_window_lat_e6() -> i64 {
     13_500_000
 }
@@ -2112,7 +2112,7 @@ impl AppSettings {
     /// ids (`"KTLX"`), which keep the historical uppercase-on-write /
     /// case-insensitive-compare behavior byte-for-byte, and namespaced
     /// `SiteRef` keys (`"intl:ord:deess"`, recognized by the `':'`),
-    /// which are stored VERBATIM and compared case-sensitively, ORD/SMHI
+    /// which are stored VERBATIM and compared case-sensitively — ORD/SMHI
     /// site ids are case-significant lowercase, so uppercasing would
     /// corrupt them on write.
     pub fn add_favorite(&mut self, site: &str) {
@@ -2171,7 +2171,7 @@ fn default_current_alert_filter() -> String {
 }
 
 /// Platform bowecho config root (`%APPDATA%\bowecho` on Windows, the
-/// XDG/Library equivalents elsewhere). NOT created here: callers that
+/// XDG/Library equivalents elsewhere). NOT created here — callers that
 /// write under it create what they need. Shared with the `styles` crate
 /// so styles.json/color_tables/ sit beside config.json.
 pub fn bowecho_config_dir() -> Option<PathBuf> {
@@ -2207,7 +2207,7 @@ pub fn storage_root_for_namespace(namespace: &str) -> Option<PathBuf> {
     config_dir().map(|dir| dir.join(namespace))
 }
 
-/// Config-document path for an explicitly named storage namespace, the
+/// Config-document path for an explicitly named storage namespace — the
 /// settings home for second frontends (miniDerecho: B4,
 /// docs/miniderecho-spec.md §1). Additive: BowEcho's own settings document
 /// deliberately stays at `bowecho_config_dir()/config.json`
@@ -2292,7 +2292,7 @@ pub fn tile_cache_dir() -> Option<PathBuf> {
 /// terms of localappdata storage"). Set ONCE at startup from
 /// `AppSettings.data_dir` / `BOWECHO_DATA_DIR`; changes apply on
 /// restart so live stores never move under their workers. config.json
-/// and styles.json deliberately stay at the default config path: they
+/// and styles.json deliberately stay at the default config path — they
 /// are where the override itself is read from.
 static DATA_DIR_OVERRIDE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
 
@@ -2403,7 +2403,7 @@ pub fn panic_log_path() -> Option<PathBuf> {
     })
 }
 
-/// GOES rolling store (always bowecho's own: no cross-process sharing).
+/// GOES rolling store (always bowecho's own — no cross-process sharing).
 pub fn sat_store_dir() -> PathBuf {
     bowecho_dir("sat-store")
 }
@@ -2468,7 +2468,7 @@ pub fn annotations_dir() -> PathBuf {
 }
 
 /// Where screenshots and loop recordings land: a user-visible media folder
-/// (`~/Pictures/BowEcho`), NOT the config dir, these files exist to be
+/// (`~/Pictures/BowEcho`), NOT the config dir — these files exist to be
 /// shared. `BOWECHO_SCREENSHOT_DIR` overrides. Created on demand by callers.
 pub fn screenshots_dir() -> PathBuf {
     screenshots_dir_for_folder("BowEcho")
@@ -4021,7 +4021,7 @@ mod tests {
 
     #[test]
     fn overlay_raob_defaults_off_and_round_trips() {
-        // Older configs have no overlay_raob field: the layer stays off.
+        // Older configs have no overlay_raob field — the layer stays off.
         assert!(!AppSettings::from_json("{}").overlay_raob);
         let s = AppSettings {
             overlay_raob: true,
@@ -4185,7 +4185,7 @@ mod tests {
 
     #[test]
     fn model_slug_defaults_to_hrrr_and_round_trips() {
-        // Older configs have no model_slug field: default to HRRR.
+        // Older configs have no model_slug field — default to HRRR.
         assert_eq!(AppSettings::from_json("{}").model_slug, "hrrr");
         let s = AppSettings {
             model_slug: "gfs".to_owned(),
@@ -4196,7 +4196,7 @@ mod tests {
 
     #[test]
     fn units_default_to_imperial_and_round_trip() {
-        // Older configs have no units field: default to imperial.
+        // Older configs have no units field — default to imperial.
         assert_eq!(AppSettings::from_json("{}").units, "imperial");
         let s = AppSettings {
             units: "metric".to_owned(),
@@ -4207,7 +4207,7 @@ mod tests {
 
     #[test]
     fn time_zone_defaults_to_utc_and_round_trips() {
-        // Older configs have no time_zone field: keep legacy UTC labels.
+        // Older configs have no time_zone field — keep legacy UTC labels.
         assert_eq!(AppSettings::from_json("{}").time_zone, "utc");
         let s = AppSettings {
             time_zone: "eastern".to_owned(),
@@ -4364,7 +4364,7 @@ mod tests {
     }
 
     /// v0.29 spec §1.1: namespaced `SiteRef` favorites (`':'`-keys) are
-    /// stored VERBATIM and compared case-sensitively, the old blanket
+    /// stored VERBATIM and compared case-sensitively — the old blanket
     /// `to_ascii_uppercase()` would corrupt `"intl:ord:deess"` to
     /// `"INTL:ORD:DEESS"` on the very first intl star, and ORD/SMHI site
     /// ids are case-significant lowercase.

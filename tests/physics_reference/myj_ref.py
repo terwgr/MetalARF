@@ -13,11 +13,16 @@ Both column functions take woof's bottom-up ``(nz,)`` columns and flip to
 MYJ's own top-down 1-based layout internally, exactly as the Fortran
 drivers flip WRF's bottom-up arrays (module_bl_myjpbl.F:364-383,
 module_sf_myjsfc.F:237-259).  All arithmetic is ``np.float32`` with the
-Fortran's expression shapes.  Transcendentals are NumPy's float32
-``log``/``exp``/``sqrt``/``atan``; pinning them to a specific libm word
-(the ``noahmp_libm`` treatment) is deliberately deferred to the MYJ
-oracle campaign -- NO oracle comparison against the WRF Fortran has been
-run yet, and nothing in this module claims one.
+Fortran's expression shapes.  In :func:`np_myjsfc_column` LOG, EXP and
+REAL**REAL are WOOF's own float32 routines (``woof.core.noahmp_libm``),
+and that column function is BIT-IDENTICAL to WRF v4.6.1's MYJSFC on the
+column oracle (tools/myjsfc_wrf461_oracle,
+tests/test_myjsfc_wrf461_parity.py, every field of every call, replayed
+and free-running).  The MYJPBL column function still uses NumPy's float32
+``log``/``exp``/``sqrt``, not pinned to a libm word, so for the PBL this
+module is a tolerance authority: the MYJPBL oracle campaign graded the
+CUDA kernel, not this module, against WRF (tools/myjpbl_wrf461_oracle,
+tests/test_myjpbl_wrf461_parity.py: bit-identical).
 
 WRF quirks preserved on purpose (cited where they occur):
 
@@ -36,12 +41,18 @@ WRF quirks preserved on purpose (cited where they occur):
 
 DECLARED DIVERGENCES FROM WRF (one, stated here and again where it lives):
 
-* The interface-height column is GROUND-relative, not sea-level relative:
-  WRF seeds ``ZINT(KTE+1)=HT`` (module_bl_myjpbl.F:312,
-  module_sf_myjsfc.F:162) and woof seeds 0.  HT cancels exactly in real
-  arithmetic and only approximately in float32; woof's column is the more
-  accurate one.  Full declaration and the measurement that bounds it:
-  :func:`_interface_heights`.
+* MYJSFC's interface-height column is GROUND-relative, not sea-level
+  relative: WRF seeds ``ZINT(KTE+1)=HT`` (module_sf_myjsfc.F:162) and the
+  surface-layer kernel seeds 0.  HT cancels exactly in real arithmetic and
+  only approximately in float32.  Full declaration and the measurement that
+  bounds it: :func:`_interface_heights`.  The PBL kernel no longer does
+  this: it seeds HT as WRF does (module_bl_myjpbl.F:312) and is
+  bit-identical to WRF's MYJPBL (tests/test_myjpbl_wrf461_parity.py).
+
+The parameters below are folded exactly as gfortran folds them; the
+oracle's dump of WRF's own words checks every MYJPBL one.  Transcendentals
+here are still NumPy's, so this authority agrees with WRF within a
+tolerance, not bitwise; the CUDA kernel is the bitwise one.
 """
 
 from __future__ import annotations
@@ -54,6 +65,29 @@ import numpy as np
 # sase_limits precedent).  Re-exported here so the reference's callers keep
 # one import site.
 from woof.core.myjsfc_tables import KZTM, KZTM2, build_psi_tables
+# np_myjsfc_column's LOG, EXP and REAL**REAL are WOOF's own float32
+# routines, the words the CUDA kernel's gfk_log / gfk_exp_fma / gfk_pow
+# agree with (see that function's docstring).
+from woof.core.noahmp_libm import expf as _expf
+from woof.core.noahmp_libm import logf as _logf
+from woof.core.noahmp_libm import powf as _powf
+
+# WRF uses the same mixlen parameter words in MYJ and Shin-Hong.
+# module_bl_myjpbl.F:98-124 matches module_bl_shinhong.F:1802-1822.
+# Reexport every existing MYJ name; only one copy folds the expressions.
+from woof.verify.shinhong_ref import (  # noqa: F401
+    _EPS1 as EPS1, _EPSL as EPSL, _EPSRU as EPSRU,
+    _EPSRS as EPSRS, _EL0MAX as EL0MAX, _EL0MIN as EL0MIN,
+    _ELFC as ELFC, _ALPH as ALPH, _BETA as BETA,
+    _BTG as BTG, _A1 as A1, _A2X as A2X,
+    _B1 as B1, _B2 as B2, _C1 as C1,
+    _ADNH as ADNH, _ADNM as ADNM, _BDNH as BDNH,
+    _BDNM as BDNM, _AEQH as AEQH, _AEQM as AEQM,
+    _REQU as REQU, _EPSGH as EPSGH, _EPSGM as EPSGM,
+    _UBRYL as UBRYL, _UBRY as UBRY, _UBRY3 as UBRY3,
+    _AUBH as AUBH, _AUBM as AUBM, _BUBH as BUBH,
+    _BUBM as BUBM, _CUBR as CUBR, _RCUBR as RCUBR,
+)
 
 F = np.float32
 
@@ -65,7 +99,6 @@ R_V = F(461.6)
 CP = F(F(7.0) * R_D / F(2.0))
 XLV = F(2.5e6)
 XLS = F(2.85e6)
-EP_1 = F(R_V / R_D - F(1.0))
 P608 = F(R_V / R_D - F(1.0))          # rvovrd - 1.
 PQ0 = F(379.90516)
 A2C = F(17.2693882)                    # module_model_constants a2
@@ -76,46 +109,28 @@ P1000MB = F(1.0e5)
 
 # ---------------------------------------------------------------------------
 # module_bl_myjpbl.F:25-124 parameters (stepwise float32, the Fortran's
-# compile-time single-precision folding).
+# compile-time single-precision folding). Shared values are imported above.
 VKARMAN = F(0.4)
 CAPA = F(R_D / CP)
 RLIVWV = F(XLS / XLV)
 ELOCP = F(F(2.72e6) / CP)
-EPS1 = F(1.0e-12)
 EPS2 = F(0.0)
-EPSL = F(0.32)
-EPSRU = F(1.0e-7)
-EPSRS = F(1.0e-7)
 EPSTRB = F(1.0e-24)
 FH_PBL = F(1.01)
-ALPH = F(0.30)
-BETA = F(F(1.0) / F(273.0))
-EL0MAX = F(1000.0)
-EL0MIN = F(1.0)
-ELFC = F(F(0.23) * F(0.5))
-PRT = F(1.0)
-A1 = F(0.659888514560862645)
-A2X = F(0.6574209922667784586)
-B1 = F(11.87799326209552761)
-B2 = F(7.226971804046074028)
-C1 = F(0.000830955950095854396)
 ELZ0 = F(0.0)
 ESQ = F(5.0)
 SEAFC = F(0.98)
 PQ0SEA = F(PQ0 * SEAFC)
-BTG = F(BETA * G)
 RB1 = F(F(1.0) / B1)
 
-# module_bl_myjpbl.F:62-92 (stepwise, left-to-right with parentheses).
-ADNH = F(F(F(F(F(F(9.0) * A1) * A2X) * A2X)
-           * F(F(F(12.0) * A1) + F(F(3.0) * B2))) * F(BTG * BTG))
-ADNM = F(F(F(F(F(F(18.0) * A1) * A1) * A2X) * F(B2 - F(F(3.0) * A2X))) * BTG)
-ANMH = F(F(F(F(F(-9.0) * A1) * A2X) * A2X) * F(BTG * BTG))
+# module_bl_myjpbl.F:62-92 (stepwise, left-to-right with parentheses, as
+# gfortran folds them: ``...*BTG*BTG`` is ``(...*BTG)*BTG``, never
+# ``...*(BTG*BTG)``; tests/test_myjpbl_wrf461_parity.py checks every
+# derived word against the one WRF's object carries).
+ANMH = F(F(F(F(F(F(F(-9.0) * A1) * A2X) * A2X) * BTG) * BTG))
 ANMM = F(F(F(F(F(-3.0) * A1) * A2X)
            * F(F(F(F(F(3.0) * A2X) + F(F(F(3.0) * B2) * C1))
                  + F(F(F(18.0) * A1) * C1)) - B2)) * BTG)
-BDNH = F(F(F(F(3.0) * A2X) * F(F(F(7.0) * A1) + B2)) * BTG)
-BDNM = F(F(F(6.0) * A1) * A1)
 BEQH = F(F(F(F(A2X * B1) * BTG)
            + F(F(F(F(3.0) * A2X) * F(F(F(7.0) * A1) + B2)) * BTG)))
 BEQM = F(F(F(F(-A1) * B1) * F(F(1.0) - F(F(3.0) * C1)))
@@ -129,35 +144,6 @@ BSMH = F(F(F(F(F(-3.0) * A1) * A2X)
                  + F(F(F(12.0) * A1) * C1)) - B2)) * BTG)
 CESH = A2X
 CESM = F(A1 * F(F(1.0) - F(F(3.0) * C1)))
-
-# module_bl_myjpbl.F:98-101 free equilibrium term.
-AEQH = F(F(F(F(F(F(F(9.0) * A1) * A2X) * A2X) * B1) * F(BTG * BTG))
-         + F(F(F(F(F(F(9.0) * A1) * A2X) * A2X)
-               * F(F(F(F(12.0) * A1)) + F(F(3.0) * B2))) * F(BTG * BTG)))
-AEQM = F(F(F(F(F(F(F(3.0) * A1) * A2X) * B1)
-            * F(F(F(F(F(3.0) * A2X) + F(F(F(3.0) * B2) * C1))
-                  + F(F(F(18.0) * A1) * C1)) - B2)) * BTG)
-         + F(F(F(F(F(F(18.0) * A1) * A1) * A2X)
-               * F(B2 - F(F(3.0) * A2X))) * BTG))
-
-# module_bl_myjpbl.F:107-124 forbidden area / near isotropy.
-REQU = F(-AEQH / AEQM)
-EPSGH = F(1.0e-9)
-EPSGM = F(REQU * EPSGH)
-UBRYL = F(F(F(F(F(F(F(F(F(18.0) * REQU) * A1) * A1) * A2X) * B2) * C1) * BTG)
-          + F(F(F(F(F(F(F(9.0) * A1) * A2X) * A2X) * B2) * F(BTG * BTG))))
-UBRYL = F(UBRYL / F(F(REQU * ADNM) + ADNH))
-UBRY = F(F(F(1.0) + EPSRS) * UBRYL)
-UBRY3 = F(F(3.0) * UBRY)
-AUBH = F(F(F(F(F(F(F(27.0) * A1) * A2X) * A2X) * B2) * F(BTG * BTG))
-         - F(ADNH * UBRY3))
-AUBM = F(F(F(F(F(F(F(54.0) * A1) * A1) * A2X) * B2) * F(C1 * BTG))
-         - F(ADNM * UBRY3))
-BUBH = F(F(F(F(F(F(9.0) * A1) * A2X) + F(F(F(3.0) * A2X) * B2)) * BTG)
-         - F(BDNH * UBRY3))
-BUBM = F(F(F(F(F(18.0) * A1) * A1) * C1) - F(BDNM * UBRY3))
-CUBR = F(F(1.0) - UBRY3)
-RCUBR = F(F(1.0) / CUBR)
 
 # ---------------------------------------------------------------------------
 # module_sf_myjsfc.F:23-55 parameters.
@@ -175,7 +161,6 @@ EXCML = F(0.0001)
 EXCMS = F(0.0001)
 GLKBR = F(10.0)
 GLKBS = F(30.0)
-PI = F(3.1415926)
 QVISC = F(2.1e-5)
 RIC = F(0.505)
 SMALL = F(0.35)
@@ -199,7 +184,6 @@ FZQ2 = F(F(RTVISC * QVISC) * ZQRZT)
 FZT1 = F(F(RVISC * TVISC) * SQPR)
 FZT2 = F(F(F(CZIV * GRRS) * TVISC) * SQPR)
 FZU1 = F(CZIV * VISC)
-PIHF = F(F(0.5) * PI)
 RQVISC = F(F(1.0) / QVISC)
 USTFC = F(F(0.018) / G)
 WWST2 = F(WWST * WWST)
@@ -223,8 +207,16 @@ def _interface_heights(dz, ht=F(0.0)):
     ``KFLIP=KTE+1-K`` (module_bl_myjpbl.F:313-320,
     module_sf_myjsfc.F:163-170).
 
-    DELIBERATE DIVERGENCE, woof goes its own way (float32 precision):
-    WRF seeds that recursion with the TERRAIN HEIGHT --
+    MYJPBL: NO LONGER A DIVERGENCE.  The PBL kernel (kernels/myjpbl.cu)
+    seeds ``zh[nz] = HT`` as WRF does, because the float32 words depend on
+    it and the WRF column oracle grades it bitwise
+    (tests/test_myjpbl_wrf461_parity.py; with HT = 0 the terrain columns
+    miss by up to 51 ULP on PBLH and 231 ULP on EXCH_H).  What follows
+    describes the SURFACE LAYER (kernels/myjsfc.cu), which still runs the
+    ground-relative column and has no WRF oracle yet.
+
+    DELIBERATE DIVERGENCE (MYJSFC), woof goes its own way (float32
+    precision): WRF seeds that recursion with the TERRAIN HEIGHT --
     ``ZINT(I,KTE+1,J)=HT(I,J)`` (module_bl_myjpbl.F:312,
     module_sf_myjsfc.F:162) -- so every interface height it carries is
     height above SEA LEVEL.  woof seeds it with ``ht=0.0`` by default, so
@@ -283,10 +275,23 @@ def np_myjsfc_column(
     output set as a dict of float32 scalars (plus ``pblh``).  ``lowlyr=1``
     (ARW sigma, MYJSFCINIT:1117-1124).
 
-    ``ht`` is the interface-height origin (module_sf_myjsfc.F:162-170).  It
-    defaults to woof's DECLARED ground-relative 0 rather than WRF's
-    terrain height; :func:`_interface_heights` carries the declaration and
-    names the test that measures it.
+    ``ht`` is the interface-height origin, WRF's ``ZINT(KTE+1)=HT``
+    (module_sf_myjsfc.F:162-170).  The shipped kernel seeds it with the
+    terrain height exactly as WRF does; pass the column's HT to mirror it
+    (the oracle grading, woof.verify.myjsfc_oracle.measure_cpu_authority,
+    does).  The default 0 is kept for the comparisons in
+    tests/test_myj_port.py.
+
+    LOG, EXP and REAL**REAL are WOOF's own float32 ``logf``/``expf``/
+    ``powf``, the same algorithms as the kernel's gfk_log, gfk_exp and
+    gfk_pow.  The kernel's EXP is the contracted device form gfk_exp_fma,
+    which matches the oracle host's C library at every float32 input
+    (tools/myjsfc_wrf461_oracle/libm_sweep.py); the uncontracted EXP used
+    here differs from it at two inputs only, 1 ULP each, checked on W1:
+    x = 0x4202422F (32.56) and 0xC27C65D9 (-63.10).  The oracle grading
+    shows neither on its columns.  POW is the uncontracted form on both
+    sides (1 ULP from the host at x = 0x3C072A38 with exponent 1/CAPA,
+    unreachable: see libm_sweep.py's DECLARED).
     """
     dz = np.asarray(dz, dtype=F)
     tke = np.asarray(tke, dtype=F)
@@ -299,7 +304,7 @@ def np_myjsfc_column(
         ust = F(0.1)
     ct = F(0.0)
     seamask = F(F(xland) - F(1.0))
-    thsk = F(F(tsk) / F(F(psfc) / P1000MB) ** CAPA)
+    thsk = F(F(tsk) / _powf(F(F(psfc) / P1000MB), CAPA))
     # Q2 profile in myj layout for the PBLH scan (:246,:263-277).
     q2m = np.empty(nz, dtype=F)
     for m in range(nz):
@@ -323,7 +328,7 @@ def np_myjsfc_column(
     ulow = F(u1)
     vlow = F(v1)
     zsl = F(F(zh[lmh - 1] - zh[lmh]) * F(0.5))
-    apesfc = F(F(F(psfc) / P1000MB) ** CAPA)
+    apesfc = _powf(F(F(psfc) / P1000MB), CAPA)
     if ntsd == 1:
         tz0 = F(tsk)                       # :296-305 (ARW branch)
     else:
@@ -431,8 +436,8 @@ def np_myjsfc_column(
             zslt = F(zsl + zt)
             rzsu = F(zslu / zu)
             rzst = F(zslt / zt)
-            rlogu = F(np.log(rzsu))
-            rlogt = F(np.log(rzst))
+            rlogu = F(_logf(rzsu))
+            rlogt = F(_logf(rzst))
             rlmo = F(F(F(elfc * akhs) * dthv) / F(F(ust * ust) * ust))
             zetalu = F(zslu * rlmo)
             zetalt = F(zslt * rlmo)
@@ -452,8 +457,8 @@ def np_myjsfc_column(
             akms = F(max(F(ustark / simm), cxchs))
             akhs = F(max(F(ustark / simh), cxchs))
             if dthv <= F(0.0):
-                wstar2 = F(WWST2 * F(abs(F(F(F(btgh * akhs) * dthv)))
-                                     ** F(F(2.0) / F(3.0))))
+                wstar2 = F(WWST2 * _powf(abs(F(F(F(btgh * akhs) * dthv))),
+                                        F(F(2.0) / F(3.0))))
             else:
                 wstar2 = F(0.0)
             ust = F(max(F(np.sqrt(F(akms * F(np.sqrt(F(du2 + wstar2)))))),
@@ -483,7 +488,7 @@ def np_myjsfc_column(
         rib = F(F(F(btgx * dthv) * zsl) / du2)
         zslu = F(zsl + zu)
         rzsu = F(zslu / zu)
-        rlogu = F(np.log(rzsu))
+        rlogu = F(_logf(rzsu))
         zslt = F(zsl + zu)       # u,v and t are at the same level (:685)
         czil = F(0.1)            # :697 (Chen-Zhang block commented out)
         zilfc = F(F(F(-czil) * VKARMAN) * SQVISC)
@@ -498,10 +503,10 @@ def np_myjsfc_column(
             zzil = zilfc
         for _ in range(ITRMX):
             # Zilitinkevich fix (:733): the v4.6.1 form uses Z0BASE.
-            zt = F(max(F(F(np.exp(F(zzil * F(np.sqrt(F(ust * F(z0base)))))))
+            zt = F(max(F(F(_expf(F(zzil * F(np.sqrt(F(ust * F(z0base)))))))
                         * F(z0base)), EPSZT))
             rzst = F(zslt / zt)
-            rlogt = F(np.log(rzst))
+            rlogt = F(_logf(rzst))
             rlmo = F(F(F(elfc * akhs) * dthv) / F(F(ust * ust) * ust))
             zetalu = F(zslu * rlmo)
             zetalt = F(zslt * rlmo)
@@ -521,8 +526,8 @@ def np_myjsfc_column(
             akms = F(max(F(ustark / simm), cxchl))
             akhs = F(max(F(ustark / simh), cxchl))
             if dthv <= F(0.0):
-                wstar2 = F(WWST2 * F(abs(F(F(F(btgh * akhs) * dthv)))
-                                     ** F(F(2.0) / F(3.0))))
+                wstar2 = F(WWST2 * _powf(abs(F(F(F(btgh * akhs) * dthv))),
+                                        F(F(2.0) / F(3.0))))
             else:
                 wstar2 = F(0.0)
             ust = F(max(F(np.sqrt(F(akms * F(np.sqrt(F(du2 + wstar2)))))),
@@ -538,9 +543,9 @@ def np_myjsfc_column(
     zu10 = F(zu + F(10.0))
     zt02 = F(zt + F(2.0))
     zt10 = F(zt + F(10.0))
-    rlnu10 = F(np.log(F(zu10 / zu)))
-    rlnt02 = F(np.log(F(zt02 / zt)))
-    rlnt10 = F(np.log(F(zt10 / zt)))
+    rlnu10 = F(_logf(F(zu10 / zu)))
+    rlnt02 = F(_logf(F(zt02 / zt)))
+    rlnt10 = F(_logf(F(zt10 / zt)))
     ztau10 = F(zu10 * rlmo_out)
     ztat02 = F(zt02 * rlmo_out)
     ztat10 = F(zt10 * rlmo_out)
@@ -583,7 +588,7 @@ def np_myjsfc_column(
     q02 = F(F(hlflx / akhs02) + qz0)
     q10 = F(F(hlflx / akhs10) + qz0)
     term1 = F(F(-0.068283) / tlow)
-    pshltr = F(F(psfc) * F(np.exp(term1)))
+    pshltr = F(F(psfc) * F(_expf(term1)))
     u10e = u10
     v10e = v10
     if seamask < F(0.5):
@@ -592,7 +597,7 @@ def np_myjsfc_column(
         zu = F(max(F(zu * F(0.35)), zuuz))
         zu10 = F(zu + F(10.0))
         rzsu_l = F(zu10 / zu)
-        rlnu10 = F(np.log(rzsu_l))
+        rlnu10 = F(_logf(rzsu_l))
         zetau_l = F(zu * rlmo_out)
         ztau10 = F(zu10 * rlmo_out)
         ztau10 = F(min(max(ztau10, ztmin2), ztmax2))
@@ -614,12 +619,12 @@ def np_myjsfc_column(
     flhc = F(F(rlow * CP) * akhs)
     flqc = F(F(rlow * akhs) * F(mavail))
     qgh = F(F(F(F(F(F(1.0) - seamask) * PQ0) + F(seamask * PQ0SEA)) / plow)
-            * F(np.exp(F(F(A2S * F(tlow - A3S)) / F(tlow - A4S)))))
+            * F(_expf(F(F(A2S * F(tlow - A3S)) / F(tlow - A4S)))))
     qgh = F(qgh / F(F(1.0) - qgh))       # convert to mixing ratio (:1041)
     cpm = F(CP * F(F(1.0) + F(F(0.8) * qlow)))
     if seamask > F(0.5):
         qs = F(F(PQ0SEA / F(psfc))
-               * F(np.exp(F(F(A2S * F(F(tsk) - A3S)) / F(F(tsk) - A4S)))))
+               * F(_expf(F(F(A2S * F(F(tsk) - A3S)) / F(F(tsk) - A4S)))))
         qs = F(qs / F(F(1.0) - qs))
     # ---- shelter supersaturation removal (module_sf_myjsfc.F:326-349) ----
     tshltr = th02          # SFCDIF's TH02 dummy is MYJSFC's TSHLTR.
@@ -634,12 +639,12 @@ def np_myjsfc_column(
     t10p = F(th10p * rapa10)
     t2_grid = F(th2_grid * apesfc)      # :337
     rcap = F(F(1.0) / CAPA)
-    p02p = F(F(rapa02 ** rcap) * P1000MB)
-    p10p = F(F(rapa10 ** rcap) * P1000MB)
+    p02p = F(_powf(rapa02, rcap) * P1000MB)
+    p10p = F(_powf(rapa10, rcap) * P1000MB)
     qs02 = F(F(PQ0 / p02p)
-             * F(np.exp(F(F(A2C * F(t02p - A3C)) / F(t02p - A4C)))))
+             * F(_expf(F(F(A2C * F(t02p - A3C)) / F(t02p - A4C)))))
     qs10 = F(F(PQ0 / p10p)
-             * F(np.exp(F(F(A2C * F(t10p - A3C)) / F(t10p - A4C)))))
+             * F(_expf(F(F(A2C * F(t10p - A3C)) / F(t10p - A4C)))))
     if qshltr > qs02:
         qshltr = qs02
     if q10 > qs10:
@@ -998,10 +1003,12 @@ def np_myjpbl_column(
     module_pbl_driver.F:1457).  Returns bottom-up tendencies plus updated
     state, mirroring the WRF INOUT set.
 
-    ``ht`` is the interface-height origin (module_bl_myjpbl.F:312-320).  It
-    defaults to woof's DECLARED ground-relative 0 rather than WRF's
-    terrain height; :func:`_interface_heights` carries the declaration and
-    names the test that measures it.
+    ``ht`` is the interface-height origin, WRF's ``ZINT(KTE+1)=HT``
+    (module_bl_myjpbl.F:312-320).  The shipped kernel seeds it with the
+    terrain height exactly as WRF does (it is bit-identical to WRF's
+    MYJPBL, tests/test_myjpbl_wrf461_parity.py); pass the column's HT to
+    mirror it.  The default 0 is kept for the surface-layer comparisons in
+    tests/test_myj_port.py, see :func:`_interface_heights`.
     """
     dz = np.asarray(dz, dtype=F)
     nz = dz.shape[0]

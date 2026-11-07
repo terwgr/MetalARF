@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from woof.wrf_exact import ENABLED as WRF_EXACT
 from .array import MetalArray
 
 
@@ -74,6 +75,8 @@ def submit_cloud_optics(context, clwp, ciwp, reliq, dgice, extliq, ssaliq,
     nliq, nice, nrgh = int(nliq), int(nice), int(nrgh)
     if min(ncell, nband, nrgh) <= 0 or min(nliq, nice) < 2:
         raise ValueError("RRTMGP tables need at least two sizes and positive other dimensions")
+    if WRF_EXACT and nrgh < 2:
+        raise ValueError("Strict RRTMGP cloud optics requires the medium ice roughness table")
     arrays = {
         "clwp": _flat(clwp, "clwp"), "ciwp": _flat(ciwp, "ciwp"),
         "reliq": _flat(reliq, "reliq"), "dgice": _flat(dgice, "dgice"),
@@ -95,15 +98,16 @@ def submit_cloud_optics(context, clwp, ciwp, reliq, dgice, extliq, ssaliq,
     arrays["tau"] = arrays["tau"].view((ncell, nband))
     arrays["ssa"] = arrays["ssa"].view((ncell, nband))
     arrays["asym"] = arrays["asym"].view((ncell, nband))
+    name = "rrtmgp_exact_cloud_optics" if WRF_EXACT else "rrtmgp_cloud_optics"
     return context.submit_kernel(
-        "rrtmgp_cloud_optics", arrays,
+        name, arrays,
         {"ncell": ncell, "nband": nband, "nliq": nliq, "nice": nice,
          "nrgh": nrgh,
          "liq_offset": float(np.float32(liq_offset)),
          "liq_step": float(np.float32(liq_step)),
          "ice_offset": float(np.float32(ice_offset)),
          "ice_step": float(np.float32(ice_step))},
-        exact_policy=False, grid_size=noptics)
+        exact_policy=WRF_EXACT, grid_size=noptics)
 
 
 def submit_finalize_cloud_lw(context, tau_gas, tau_cloud, ssa_cloud,
@@ -164,24 +168,6 @@ def submit_finalize_cloud_sw(context, tau_gas, ssa_gas, tau_cloud,
         exact_policy=False, grid_size=n)
 
 
-def submit_clear_upper_layers(context, values, outputs, *, ncol,
-                              model_nlay, upper_nlay):
-    if len(values) != 5 or len(outputs) != 5:
-        raise ValueError("clear-upper-layers needs five inputs and outputs")
-    ncol, model_nlay, upper_nlay = map(int, (ncol, model_nlay, upper_nlay))
-    nlay = model_nlay + upper_nlay
-    arrays = {}
-    for index, (value, output) in enumerate(zip(values, outputs)):
-        arrays[f"in_{index}"] = _array(value, f"input {index}",
-                                        (ncol, model_nlay))
-        arrays[f"out_{index}"] = _array(output, f"output {index}",
-                                         (ncol, nlay))
-    return context.submit_kernel(
-        "rrtmgp_clear_upper_layers", arrays,
-        {"ncol": ncol, "model_nlay": model_nlay, "nlay": nlay},
-        exact_policy=False, grid_size=ncol * nlay)
-
-
 def submit_store_model_flux_pair(context, up, dn, daylight_f32,
                                  out_up, out_dn, *, ncol, source_nlev,
                                  model_nlev, apply_daylight=False):
@@ -225,37 +211,3 @@ def submit_prepare_sw_inputs(context, albedo, solar, mu, albedo_gpt,
         exact_policy=False, grid_size=max(ncol * ngpt, ncol * nlay))
 
 
-def submit_append_profile_fp32(context, model, upper, outputs, *, ncol,
-                               model_nlay, upper_nlay):
-    if len(model) != 5 or len(upper) != 5 or len(outputs) != 5:
-        raise ValueError("profile append needs five model, upper, and output arrays")
-    ncol, model_nlay, upper_nlay = map(int, (ncol, model_nlay, upper_nlay))
-    nlay = model_nlay + upper_nlay
-    model_shapes = ((ncol, model_nlay), (ncol, model_nlay + 1),
-                    (ncol, model_nlay), (ncol, model_nlay + 1),
-                    (ncol, model_nlay))
-    upper_shapes = ((ncol, upper_nlay), (ncol, upper_nlay + 1),
-                    (ncol, upper_nlay), (ncol, upper_nlay + 1),
-                    (ncol, upper_nlay))
-    output_shapes = ((ncol, nlay), (ncol, nlay + 1), (ncol, nlay),
-                     (ncol, nlay + 1), (ncol, nlay))
-    names = ("play", "plev", "tlay", "tlev", "qv")
-    arrays = {}
-    for group, values, shapes in (("model", model, model_shapes),
-                                  ("upper", upper, upper_shapes),
-                                  ("output", outputs, output_shapes)):
-        for name, value, shape in zip(names, values, shapes):
-            arrays[f"{group}_{name}"] = _array(
-                value, f"{group}_{name}", shape)
-    # MetalArray is C-contiguous; retain source stride parameters explicitly.
-    upper_strides = [int(stride // 4) for value in upper
-                     for stride in value.strides]
-    stride_names = ("spc", "spl", "sec", "sel", "stc", "stl",
-                    "sic", "sil", "sqc", "sql")
-    parameters = {"ncol": ncol, "model_nlay": model_nlay,
-                  "upper_nlay": upper_nlay}
-    parameters.update(zip(stride_names, upper_strides))
-    count = ncol * (nlay + 1)
-    return context.submit_kernel(
-        "rrtmgp_append_profile_fp32", arrays, parameters,
-        exact_policy=False, grid_size=count)

@@ -65,11 +65,24 @@ static inline double __dsub_rn(double a, double b) { return a - b; }
 static inline double __dmul_rn(double a, double b) { return a * b; }
 static inline double __ddiv_rn(double a, double b) { return a / b; }
 static inline double __fma_rn(double a, double b, double c) { return fma(a, b, c); }
+static inline double __dsqrt_rn(double a) { return sqrt(a); }
+// Integer intrinsics WOOF's binary64 libm header (glibc_flt64.cuh) uses.
+static inline int __clzll(unsigned long long x)
+{ return x == 0ULL ? 64 : __builtin_clzll(x); }
+static inline unsigned long long __umul64hi(unsigned long long a,
+                                            unsigned long long b)
+{ return (unsigned long long)(((unsigned __int128)a * b) >> 64); }
 static inline float __double2float_rn(double d) { return (float)d; }
 // __float2int_rn rounds half to EVEN (the current, default rounding mode).
+static inline int atomicExch(int* address, int value)
+{ int old = *address; *address = value; return old; }
 static inline int __float2int_rn(float x) { return (int)nearbyintf(x); }
 static inline int __float2int_rz(float x) { return (int)x; }
 static inline int __double2int_rn(double x) { return (int)nearbyint(x); }
+static inline long long __double2ll_rn(double x) { return (long long)nearbyint(x); }
+static inline int __double2int_rz(double x) { return (int)x; }
+static inline double __int2double_rn(int x) { return (double)x; }
+static inline float __int2float_rn(int x) { return (float)x; }
 
 static inline float __uint_as_float(unsigned int u)
 { float f; std::memcpy(&f, &u, 4); return f; }
@@ -83,6 +96,17 @@ static inline long long __double_as_longlong(double d)
 { long long l; std::memcpy(&l, &d, 8); return l; }
 static inline double __longlong_as_double(long long l)
 { double d; std::memcpy(&d, &l, 8); return d; }
+
+// The serial host launchers run one thread at a time, so the device
+// atomics thompson_classic.cu uses for its column flags are plain
+// read-modify-writes here.
+static inline int atomicOr(int *a, int v) { int o = *a; *a = o | v; return o; }
+static inline int atomicMax(int *a, int v)
+{ int o = *a; *a = o > v ? o : v; return o; }
+static inline int __clz(int x)
+{ return x == 0 ? 32 : __builtin_clz((unsigned)x); }
+static inline int __clzll(long long x)
+{ return x == 0 ? 64 : __builtin_clzll((unsigned long long)x); }
 
 // Optional host-only rate readback (tools/thompson_real_column_parity/
 // instrument_port_rates.py).  The instrumented copy of a kernel calls

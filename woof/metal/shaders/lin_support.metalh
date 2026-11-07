@@ -1,0 +1,33 @@
+#ifndef WOOF_LIN_SUPPORT_METALH
+#define WOOF_LIN_SUPPORT_METALH
+
+// Metal counterparts of the helpers the Purdue Lin CUDA unit takes from
+// lin_support.cuh. The unit's binary32 values are F words (soft_word32.metalh).
+
+#include "soft_word32.metalh"
+
+static inline F lin_add(F a, F b) { return a + b; }
+static inline F lin_sub(F a, F b) { return a - b; }
+static inline F lin_mul(F a, F b) { return a * b; }
+static inline F lin_div(F a, F b) { return aa_div_impl(a, b); }
+static inline F aa_div(F a, F b) { return lin_div(a, b); }
+
+// gfortran MIN/MAX choose the second operand on equality. Keep signed zeros.
+static inline F lin_min(F a, F b) { return a < b ? a : b; }
+static inline F lin_max(F a, F b) { return a > b ? a : b; }
+static inline int lin_min(int a, int b) { return a < b ? a : b; }
+static inline int lin_max(int a, int b) { return a > b ? a : b; }
+
+// Integer powers use the same square-and-multiply chain as the Fortran runtime.
+static inline F lin_powi(F x, int n)
+{
+    uint m = n < 0 ? uint(-n) : uint(n);
+    F y = (m & 1u) ? x : F(1.0f);
+    while (m >>= 1) {
+        x = lin_mul(x, x);
+        if (m & 1u) y = lin_mul(y, x);
+    }
+    return n < 0 ? lin_div(F(1.0f), y) : y;
+}
+
+#endif

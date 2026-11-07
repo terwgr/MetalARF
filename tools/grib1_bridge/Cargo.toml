@@ -17,24 +17,26 @@ chrono = { version = "0.4", default-features = false }
 # turns "decode this record" into a refusal about packing rather than
 # about meteorology.  The implementation is grib-core's own
 # (BowEcho-ratified) optional openjp2 backend, through the same vendored
-# openjp2 the renderer workspace already builds; png_codec stays off
-# because no consumed product uses Template 5.41.
-grib-core = { path = "vendor/grib-core", default-features = false, features = ["jpeg2000"] }
+# openjp2 the renderer workspace already builds.  png_codec (DRT 5.41) is
+# ON too: MRMS packs its QPE and reflectivity products with it, and
+# grib2_dump refused every MRMS record with "PNG decoding not available".
+# The png crate and its deflate stack are vendored from the renderer
+# workspace's own copies (same versions).
+grib-core = { path = "vendor/grib-core", default-features = false, features = ["jpeg2000", "png_codec"] }
 # A pure Rust port of musl's libm, for the portable transcendentals in
 # src/portable_math.rs: the same bits on every CPU and C library.
 libm = "0.2.16"
+# Inflates the IMS snow and ice product (src/ims_snow_ice.rs).  The same
+# versions rw_wps vendors, copied unchanged with their checksums.
+miniz_oxide = "0.8.9"
 rayon = "1"
 sha2 = "0.10"
 
 # See tools/rustwx/Cargo.toml for the reasoning: these artifacts are
-# package data in a platform wheel measured against PyPI's 100 MB cap,
-# and debug symbols are the cheapest weight to give back.  The
-# source-revision stamp and the `gpuwm_preprocess_cpu_abi_version`
-# export both survive stripping -- one is .rodata, the other is an
-# export table entry.
+# package data in a platform wheel measured against PyPI's 100,000,000-
+# byte limit, and the static symbol table is the cheapest weight to give
+# back.  The source-revision stamp and the
+# `gpuwm_preprocess_cpu_abi_version` export both survive a symbol strip:
+# one is .rodata, the other is a .dynsym entry, which stripping keeps.
 [profile.release]
-# WOOF: symbol tables go too (strip = "symbols"). Its platform wheel carries
-# six more decoders than the engine's and measured 103,610,312 bytes with
-# debuginfo stripping only; dropping symbols gives back 5.26 MB and keeps the
-# source-revision stamp, contract markers and exported ABI symbols.
 strip = "symbols"

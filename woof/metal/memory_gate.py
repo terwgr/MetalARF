@@ -118,13 +118,14 @@ def estimate(domains, context, *, cumulus=None, spp_conv=None,
         fraction=fraction, columns=columns)
 
 
-def estimate_runs(runs, context, *, stochastic_rates: bool = False) -> MetalMemoryEstimate:
+def estimate_runs(runs, context, *, stochastic_rates: bool = False,
+                  p_top: float | None = None) -> MetalMemoryEstimate:
     """Resolve the selected physics for each live regional domain.
 
     ``stochastic_rates`` prices SPPT/SKEBS, which no RunConfig field names.
     """
     runs = list(runs)
-    return estimate([(int(run.nx), int(run.ny), int(run.nz)) for run in runs], context,
+    result = estimate([(int(run.nx), int(run.ny), int(run.nz)) for run in runs], context,
         stochastic_rates=stochastic_rates,
         spp_pbl=[getattr(run, "spp_pbl", 0) for run in runs],
         cumulus=[run.cu_physics for run in runs], spp_conv=[run.spp_conv for run in runs],
@@ -135,6 +136,39 @@ def estimate_runs(runs, context, *, stochastic_rates: bool = False) -> MetalMemo
         mosaic_lu=[run.mosaic_lu for run in runs],
         mosaic_soil=[run.mosaic_soil for run in runs])
 
+    from dataclasses import replace
+    from woof.config import radiation_scheme_ids
+    from woof.core.rrtm_inventory import (allocation_bytes, call_workspace_bytes,
+                                          table_allocation_shapes)
+    from woof.vertical_contract import WRF_REFERENCE_PRESSURE_PA
+    # The Metal RRTM caller allocates all columns together.  If the caller
+    # has no vertical contract, price the largest permitted top pressure.
+    top = float(WRF_REFERENCE_PRESSURE_PA if p_top is None else p_top)
+    classic_workspace = max((
+        call_workspace_bytes(int(run.nx) * int(run.ny), int(run.nz), top,
+                             int(run.nx) * int(run.ny))
+        + allocation_bytes(table_allocation_shapes())
+        for run in runs if radiation_scheme_ids(run)[0] == 1), default=0)
+    from woof.metal.nssl2_sedimentation import workspace_bytes
+    deep_workspace = max((workspace_bytes(context, run.nz, run.nx*run.ny)
+                          for run in runs if int(run.mp_physics) == 18), default=0)
+    from woof.wrf_exact import ENABLED as wrf_exact
+    nest_history = 0
+    children = [run for run in runs if getattr(run, "nested", False)]
+    if wrf_exact and children:
+        # Every parent holds one T snapshot. Price all domains because this
+        # interface receives runs without their parent graph. One child
+        # history field copy is live on the device at a time, along with its
+        # replacement snapshot on the host before the old field is released.
+        parent_snapshots = sum(4 * run.nz * run.ny * run.nx for run in runs)
+        child_copy = max(4 * max((run.nz + 1) * run.ny * run.nx,
+                                 run.nz * (run.ny + 1) * run.nx,
+                                 run.nz * run.ny * (run.nx + 1))
+                         for run in children)
+        nest_history = parent_snapshots + 2 * child_copy
+    return replace(result, peak_bytes=(result.peak_bytes + deep_workspace
+                                       + classic_workspace + nest_history))
+
 
 def estimate_ensemble(experiments, context) -> MetalMemoryEstimate:
     """Serial members plus the collector's retained unified-memory planes."""
@@ -143,7 +177,8 @@ def estimate_ensemble(experiments, context) -> MetalMemoryEstimate:
     experiments = list(experiments)
     if not experiments:
         raise ValueError("Metal ensemble memory admission needs its member experiments")
-    forecasts = [estimate_runs([domain.run for domain in exp.domains], context)
+    forecasts = [estimate_runs([domain.run for domain in exp.domains], context,
+                                  p_top=exp.vertical.p_top)
                  for exp in experiments]
     retained = coordinates = product_columns = 0
     for exp in experiments:
@@ -178,15 +213,19 @@ HEX_BATCH_COLUMNS = 2562
 HEX_FIXED_BYTES = 64 * 2**20
 
 
-def estimate_hex(n_cells: int, n_levels: int, context) -> MetalMemoryEstimate:
+def estimate_hex(n_cells: int, n_levels: int, context, *,
+                 additional_bytes: int = 0) -> MetalMemoryEstimate:
     """Price one Metal Hex physics forecast before it allocates."""
     n_cells, n_levels = int(n_cells), int(n_levels)
+    if not isinstance(additional_bytes, int) or additional_bytes < 0:
+        raise ValueError("additional Hex allocation bytes must be a non-negative integer")
     working_set = int(context.recommended_working_set_size)
     transient = (HEX_BATCH_COLUMN_BYTES_55 * n_levels * min(n_cells, HEX_BATCH_COLUMNS)
                  // 55)
     fraction = _fraction()
     return MetalMemoryEstimate(
-        peak_bytes=HEX_FIXED_BYTES + HEX_CELL_LEVEL_BYTES * n_cells * n_levels + transient,
+        peak_bytes=(HEX_FIXED_BYTES + HEX_CELL_LEVEL_BYTES * n_cells * n_levels
+                    + transient + additional_bytes),
         limit_bytes=int(fraction * working_set), working_set_bytes=working_set,
         fraction=fraction, columns=n_cells)
 

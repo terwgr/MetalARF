@@ -437,7 +437,15 @@ def test_a_spawned_worker_at_another_source_depth_passes_and_is_recorded():
 
 
 def test_the_receipt_check_holds_each_worker_count_to_the_allocation():
-    """The counts left out of the comparison are checked, not dropped."""
+    """The counts left out of the comparison are checked, not dropped.
+
+    Each is held to at most its allocation.  Fewer is the backend's own
+    answer to a busy host (its memory headroom fell between the budget
+    and the job): "f00 mapping used 20 native workers; expected 24"
+    refused a CPU preparation on a loaded test host although the count moves
+    no byte.  More than the allocation is the oversubscription the check
+    exists for.
+    """
     from woof.ingest import preprocess_backend as backends
 
     controller = backends._selection(
@@ -445,9 +453,21 @@ def test_the_receipt_check_holds_each_worker_count_to_the_allocation():
         backends.NAMED_BY_CALLER)
     expected = controller.receipt()
     slot = controller.at_workers(2).receipt()
-    with pytest.raises(RuntimeError, match="used 2 native workers; expected 3"):
+    # Fewer than the allocation: the job ran, inside its share.
+    hrrr_runner._require_preprocess_receipt(
+        expected, slot, "f00 mapping", expected_native_workers=3)
+    # More than the allocation: the controller's whole budget on a slot.
+    with pytest.raises(
+            RuntimeError,
+            match="used 4 native workers; its allocation is at most 2"):
         hrrr_runner._require_preprocess_receipt(
-            expected, slot, "f01 west mapping", expected_native_workers=3)
+            expected, controller.receipt(), "f01 west mapping",
+            expected_native_workers=2)
+    for count in (0, None, True, "auto"):
+        bad = dict(copy.deepcopy(slot), workers=count)
+        with pytest.raises(RuntimeError, match="its allocation is at most 2"):
+            hrrr_runner._require_preprocess_receipt(
+                expected, bad, "f01 west mapping", expected_native_workers=2)
     stray = copy.deepcopy(slot)
     stray["masked_surface_chain"]["workers"] = 3
     with pytest.raises(RuntimeError,
@@ -550,6 +570,56 @@ def test_public_hrrr_receipt_keeps_decoder_and_native_budgets_separate():
         _validated_worker_receipts(
             report, selected_backend="cpu", requested_preprocess_workers=8,
             requested_pipeline_workers="4", final_hour=1)
+
+
+def test_public_hrrr_receipt_takes_a_backend_below_its_budget():
+    """The controller's backend may run on fewer threads than the budget.
+
+    A busy host narrowed the CPUs between the budget (24) and the
+    backend's own count (20): "f00 mapping used 20 native workers;
+    expected 24", then "worker budget was not honored", although the
+    count moves no byte.  More than the budget or the request is still
+    refused.
+    """
+    def report(backend_workers):
+        return {
+            "status": "PASS",
+            "preparation": {
+                "preprocess_backend": {
+                    "backend": "cpu", "workers": backend_workers},
+                "preprocess_worker_budget": {
+                    "schema": "gpuwm-preprocess-worker-budget-v1",
+                    "backend": "cpu",
+                    "applicable": True,
+                    "requested_total_native_workers": 24,
+                    "effective_total_native_workers": 24,
+                    "effective_allocation_per_job": [
+                        {"effective_native_workers": 24},
+                        {"effective_native_workers": 12},
+                        {"effective_native_workers": 12},
+                    ],
+                    "peak_active_native_workers": 24,
+                    "pipeline_decoder_workers_included": False,
+                },
+            },
+            "pipeline": {"workers": {"requested": "4", "selected": 4}},
+        }
+
+    options = dict(selected_backend="cpu", requested_pipeline_workers="4",
+                   final_hour=1)
+    for requested in (None, 24):
+        _validated_worker_receipts(
+            report(20), requested_preprocess_workers=requested, **options)
+    with pytest.raises(RuntimeError, match="budget was not honored"):
+        _validated_worker_receipts(
+            report(25), requested_preprocess_workers=None, **options)
+    with pytest.raises(RuntimeError, match="differs from the request"):
+        _validated_worker_receipts(
+            report(25), requested_preprocess_workers=24, **options)
+    for bad in (0, None, True, "auto"):
+        with pytest.raises(RuntimeError, match="budget was not honored"):
+            _validated_worker_receipts(
+                report(bad), requested_preprocess_workers=None, **options)
 
 
 def test_pipeline_mode_accepts_launch_ready_prepared_cache():
@@ -748,11 +818,14 @@ def test_boundary_mapping_targets_are_bitwise_full_grid_slices():
 @pytest.mark.requires_capability("masked_stencil_bridge")
 def test_f00_and_boundary_mapping_forward_explicit_target_radius(monkeypatch):
     observed = []
+    parents = []
 
     def fake_interpolate(
             snapshot, grid, *, target_landmask, soil_mapping_report,
-            surface_fallback_radius, backend, target_name):
+            surface_fallback_radius, backend, target_name,
+            lattice_parent=None):
         observed.append((surface_fallback_radius, backend, target_name))
+        parents.append(lattice_parent)
         soil_mapping_report.update({
             "land_stencil": {
                 "fallback_radius_cells": surface_fallback_radius,
@@ -782,7 +855,7 @@ def test_f00_and_boundary_mapping_forward_explicit_target_radius(monkeypatch):
     boundary_report = {}
     _map_boundary_snapshot(
         object(), targets, boundary_report, surface_fallback_radius=10,
-        preprocess_backend="cpu-backend")
+        preprocess_backend="cpu-backend", domain_grid=grid)
 
     assert [entry[:2] for entry in observed] == [(10, "cpu-backend")] * 5
     # Each of the five mappings names ITSELF.  A soil refusal from one of
@@ -800,6 +873,9 @@ def test_f00_and_boundary_mapping_forward_explicit_target_radius(monkeypatch):
     assert all(
         report["land_stencil"]["fallback_radius_cells"] == 10
         for report in boundary_report["sides"].values())
+    # Each strip names the domain it was cut from, so the strips of the
+    # native grid take its identity route (acceptance D-05, 2.8.8).
+    assert parents == [None] + [grid] * 4
 
 
 @pytest.mark.parametrize("nz", [4, 17, 49, 80])
@@ -2135,17 +2211,33 @@ def test_hrrr_morrison_initialization_receipts_every_source_absent_moment():
 
     assert receipt["source_absent_wrf_fields"] == [
         "QNRAIN", "QNICE", "QNSNOW", "QNGRAUPEL"]
-    assert receipt["state_number_fields"] == {
-        name: {"all_exact_zero": True}
-        for name in ("nc", "nr", "ni", "ns", "ng")
-    }
-    assert all(
-        item["expected_uint32_bits"] == 0
-        and item["all_exact_expected"] is True
-        for item in receipt["state_source_absent_fields"].values())
-
-    state.ng.flat[0] = np.float32(1.0)
-    with pytest.raises(ValueError, match="source-absent state ng"):
+    from woof.ingest.handover_numbers import closure_active
+    if not closure_active(None):
+        # Exact mode (and a strict process): real.exe's zeros.
+        assert receipt["state_number_fields"] == {
+            name: {"all_exact_zero": True}
+            for name in ("nc", "nr", "ni", "ns", "ng")
+        }
+        assert all(
+            item["expected_uint32_bits"] == 0
+            and item["all_exact_expected"] is True
+            for item in receipt["state_source_absent_fields"].values())
+        state.ng.flat[0] = np.float32(1.0)
+        with pytest.raises(ValueError, match="source-absent state ng"):
+            _initial_hrrr_microphysics_receipt(
+                state, MORRISON_PROFILE_ID,
+                result.hydrometeor_initialization)
+        return
+    # Correct-mode HN1 (2.9.7): nc starts at Morrison's NDCNST droplet number,
+    # and each other number is exact zero where its mass is zero and closed
+    # from the mass where it is above zero, as the closure receipt records.
+    numbers = receipt["state_number_fields"]
+    assert numbers["nc"] == {"ndcnst_droplet_number": True}
+    for name, mass in (("nr", "qr"), ("ni", "qi"), ("ns", "qs"), ("ng", "qg")):
+        assert numbers[name]["all_exact_zero_where_mass_is_zero"] is True
+        assert numbers[name]["paired_mass_field"] == mass
+    state.ng.flat[0] = np.float32(-1.0)
+    with pytest.raises(ValueError, match="number moment ng must be"):
         _initial_hrrr_microphysics_receipt(
             state, MORRISON_PROFILE_ID,
             result.hydrometeor_initialization)
@@ -2578,3 +2670,152 @@ def test_a_prepare_only_run_says_its_steps_and_a_forecast_run_does_not(capsys):
                                 label="Initialize the start state"):
         pass
     assert "GPUWM_PREP_EVENT" not in capsys.readouterr().err
+
+
+def _boundary_static(ny, nx):
+    mass = np.zeros((ny, nx))
+    return {"HGT_M": mass, "LANDMASK": mass, "MAPFAC_M": mass + 1.0,
+            "MAPFAC_U": np.ones((ny, nx + 1)), "MAPFAC_V": np.ones((ny + 1, nx)),
+            "F": mass, "E": mass, "SINALPHA": mass, "COSALPHA": mass + 1.0}
+
+
+def test_an_mp28_boundary_strip_carries_its_own_geodesy():
+    """Each side ships its rectangle of the mass-point lat/lon, which is
+    what the WIF climatology needs (it refused in every boundary worker
+    without it); without lat/lon the payload is the eight fields it was."""
+
+    ny, nx, width = 12, 15, 3
+    lat = np.arange(ny * nx, dtype=np.float64).reshape(ny, nx)
+    lon = -lat
+    sides = hrrr_runner._compact_boundary_static(
+        _boundary_static(ny, nx), SimpleNamespace(ny=ny, nx=nx),
+        width=width, latlon_mass=(lat, lon))
+    rectangles = {"west": (0, ny, 0, width), "east": (0, ny, nx - width, nx),
+                  "south": (0, width, 0, nx), "north": (ny - width, ny, 0, nx)}
+    for side, (y0, y1, x0, x1) in rectangles.items():
+        np.testing.assert_array_equal(sides[side]["XLAT_M"], lat[y0:y1, x0:x1])
+        np.testing.assert_array_equal(sides[side]["XLONG_M"], lon[y0:y1, x0:x1])
+    bare = hrrr_runner._compact_boundary_static(
+        _boundary_static(ny, nx), SimpleNamespace(ny=ny, nx=nx), width=width)
+    assert all("XLAT_M" not in fields for fields in bare.values())
+
+
+def test_a_boundary_strip_hands_its_geodesy_to_initialize_real(monkeypatch):
+    import woof.ingest.preprocess_backend as backends
+    import woof.ingest.real as real
+    from woof.config import RunConfig
+
+    class Stop(Exception):
+        pass
+
+    seen = {}
+
+    def initialize_real(*args, **kwargs):
+        seen.update(kwargs)
+        raise Stop
+
+    monkeypatch.setattr(real, "initialize_real", initialize_real)
+    monkeypatch.setattr(backends, "resolve_preprocess_backend",
+                        lambda *a, **k: SimpleNamespace(
+                            array_module=np, name="cpu", receipt=lambda: {}))
+    ny, nx, width = 12, 15, 3
+    lat = np.full((ny, nx), 40.0)
+    lon = np.full((ny, nx), -100.0)
+    sides = hrrr_runner._compact_boundary_static(
+        _boundary_static(ny, nx), SimpleNamespace(ny=ny, nx=nx),
+        width=width, latlon_mass=(lat, lon))
+    cfg = RunConfig(nx=nx, ny=ny, nz=4, dx=3000.0, dy=3000.0, ztop=20000.0,
+                    dt=10.0, run_seconds=60.0, mp_physics=28)
+    mets = {side: SimpleNamespace(flag_sh_surface_fallback=False)
+            for side in sides}
+    with pytest.raises(Stop):
+        hrrr_runner._initialize_boundary_sides(
+            mets, cfg, sides, [1.0, 0.7, 0.4, 0.1, 0.0], p_top=5000.0,
+            width=width, preprocess_backend="cpu")
+    # A later forcing slab must use boundary-source roles, not the source
+    # selected only to initialize the start state.
+    assert seen["boundary_only"] is True
+    grid = seen["grid"]
+    np.testing.assert_array_equal(grid["XLAT_M"], lat[:, :width])
+    np.testing.assert_array_equal(grid["XLONG_M"], lon[:, :width])
+
+
+def test_production_initial_and_lateral_times_read_their_declared_smoke_source(monkeypatch, tmp_path):
+    """The production preparer's slabs must not reread initial-only smoke.
+
+    Only file IO and numerical remapping are stubbed. The source selection is
+    the real chem table and fill_boundary_sources path used by initialize_real.
+    """
+    from datetime import timedelta, timezone
+    from pathlib import Path
+    import woof.chem_source_init as source_init
+    import woof.ingest.lateral_bc as lateral
+    import woof.ingest.preprocess_backend as backends
+    import woof.ingest.real as real
+    from woof.chem_table import load
+    from woof.config import RunConfig
+
+    ny, nx, width, nz = 12, 15, 3, 4
+    cfg = RunConfig(nx=nx, ny=ny, nz=nz, dx=3000., dy=3000., ztop=20000.,
+                    dt=12., run_seconds=10800., mp_physics=28,
+                    chem_sets="smoke", chem_sources="rap-native-smoke,hrrr-native-smoke",
+                    aerosol_mp_coupling="none")
+    table = load(cfg)
+    start = datetime(2023, 6, 7, tzinfo=timezone.utc)
+    reads = []
+
+    def covering(row, variables, valid_time, **kwargs):
+        reads.append((valid_time, row.name))
+        return {"hybrid_level": Path(row.name)}
+
+    def remap(table, row, frames, target, valid_time, **kwargs):
+        value = 11. if row.name == "hrrr-native-smoke" else 37.
+        return {"smoke": np.full(target.pressure.shape, value, np.float32)}, {"source": row.name}
+
+    monkeypatch.setattr(source_init, "covering_files", covering)
+    monkeypatch.setattr(source_init, "_frames", lambda *a: object())
+    monkeypatch.setattr(source_init, "files_cycle", lambda *a: start)
+    monkeypatch.setattr(source_init, "boundary_fields_for_grid", remap)
+
+    def initialize(snapshot, run, coord, terrain, *, grid, boundary_only=False, **kwargs):
+        state = SimpleNamespace(chem=SimpleNamespace(table=table),
+            chem_smoke=np.zeros((run.nz, run.ny, run.nx), np.float32),
+            set_map_coriolis=lambda *a, **k: None)
+        source_init.fill_boundary_sources(state, run, valid_time=snapshot.valid_time,
+            latlon=(grid["XLAT_M"], grid["XLONG_M"]),
+            pressure=np.ones_like(state.chem_smoke) * 80000., cache_root=tmp_path,
+            frame="boundary" if boundary_only else "initial")
+        return SimpleNamespace(state=state)
+
+    monkeypatch.setattr(real, "initialize_real", initialize)
+    monkeypatch.setattr(hrrr_runner, "_map_snapshot", lambda snapshot, *a, **k: (snapshot, 0.))
+    monkeypatch.setattr(backends, "resolve_preprocess_backend", lambda *a, **k:
+        SimpleNamespace(array_module=np, name="cpu", receipt=lambda: {}))
+    monkeypatch.setattr(lateral, "_coupled_device_fields", lambda state: {"smoke": state.chem_smoke})
+    monkeypatch.setattr(lateral, "extract_lateral_side", lambda fields, *a: fields)
+    lat, lon = np.full((ny, nx), 41.), np.full((ny, nx), -75.)
+    grid = {"XLAT_M": lat, "XLONG_M": lon}
+    static = _boundary_static(ny, nx)
+    initial = SimpleNamespace(valid_time=start, flag_sh_surface_fallback=False)
+    result, *_ = hrrr_runner._initialize_state(initial, SimpleNamespace(run=cfg), grid,
+        static, [1., .7, .4, .1, 0.], {}, p_top=5000., preprocess_backend="cpu",
+        state_backend="preprocess")
+    assert reads == [(start, "hrrr-native-smoke")]
+    np.testing.assert_array_equal(result.state.chem_smoke, np.float32(11.))
+
+    # Before the fix, omitting the role at a later time read the initial source.
+    later = SimpleNamespace(valid_time=start + timedelta(hours=1), flag_sh_surface_fallback=False)
+    initialize(later, cfg, None, static["HGT_M"], grid=grid)
+    assert reads[-1] == (later.valid_time, "hrrr-native-smoke")
+
+    sides = hrrr_runner._compact_boundary_static(static, cfg, width=width, latlon_mass=(lat, lon))
+    for hour in (1, 2, 3):
+        valid = start + timedelta(hours=hour)
+        mets = {side: SimpleNamespace(valid_time=valid, flag_sh_surface_fallback=False)
+                for side in sides}
+        reads.clear()
+        fields, *_ = hrrr_runner._initialize_boundary_sides(mets, cfg, sides,
+            [1., .7, .4, .1, 0.], p_top=5000., width=width, preprocess_backend="cpu")
+        assert reads == [(valid, "rap-native-smoke")] * 4
+        for side in fields.values():
+            np.testing.assert_array_equal(side["smoke"], np.float64(37.))

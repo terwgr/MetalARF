@@ -376,7 +376,9 @@ pub fn direct_product_spec(recipe: &PlotRecipe) -> ProductSpec {
             id,
             &aliases,
         )),
-        maturity: ProductMaturity::Operational,
+        maturity: if matches!(recipe.slug, "lightning_threat_1" | "lightning_threat_2" | "lightning_threat_3" | "pr92_flash_rate") {
+            ProductMaturity::Experimental
+        } else { ProductMaturity::Operational },
         flags: Vec::new(),
         render_style: Some(direct_render_style(recipe).to_string()),
         aliases,
@@ -805,6 +807,9 @@ fn direct_entry_notes(slug: &str) -> Vec<String> {
         "precipitation_type" => vec![
             "Rendered as an accurate HRRR direct composite panel over categorical rain, freezing-rain, ice-pellet, and snow phase flags".to_string(),
         ],
+        "snowfall_window" => vec!["Explicit SNOWFALLAC depth in mm of snow, from model initialization or an exact selected baseline".into()],
+        "snow_10to1_window" => vec!["Interval changes in SNOWNC plus optional GRAUPELNC times 10; mm of snow; history cadence is retained".into()],
+        "snow_kuchera_window" => vec!["Interval changes in frozen liquid equivalent weighted by interval-end native column Tmax through 500 hPa; empirical snow-to-liquid ratio; mm of snow".into()],
         _ => Vec::new(),
     }
 }
@@ -845,12 +850,24 @@ fn derived_entry_notes(slug: &str, experimental: bool) -> Vec<String> {
 
 fn render_style_name(style: RenderStyle) -> &'static str {
     match style {
+        RenderStyle::AirQualityPm25 => "air_quality_pm25",
+        RenderStyle::AirQualityOzone => "air_quality_ozone",
+        RenderStyle::AerosolOpticalDepth => "aerosol_optical_depth",
+        RenderStyle::DustConcentration => "dust_concentration",
+        RenderStyle::WeatherWbgt => "weatherwbgt",
+        RenderStyle::WeatherHdw => "weatherhdw",
+        RenderStyle::WeatherHaines => "weatherhaines",
+        RenderStyle::WeatherLightningThreat => "weatherlightningthreat",
+        RenderStyle::WeatherFlashRate => "weatherflashrate",
         RenderStyle::WeatherCape => "weather_cape",
         RenderStyle::WeatherCin => "weather_cin",
         RenderStyle::WeatherReflectivity => "weather_reflectivity",
         RenderStyle::WeatherUh => "weather_uh",
+        RenderStyle::WeatherVerticalVelocity => "weather_vertical_velocity",
         RenderStyle::WeatherTemperature => "weather_temperature",
         RenderStyle::WeatherDewpoint => "weather_dewpoint",
+        RenderStyle::WeatherSpecificHumidity => "weather_specific_humidity",
+        RenderStyle::WeatherOmega => "weather_omega",
         RenderStyle::WeatherRh => "weather_rh",
         RenderStyle::WeatherProbability => "weather_probability",
         RenderStyle::WeatherWinds => "weather_winds",
@@ -859,7 +876,11 @@ fn render_style_name(style: RenderStyle) -> &'static str {
         RenderStyle::WeatherWindGust => "weather_wind_gust",
         RenderStyle::WeatherCloudCover => "weather_cloud_cover",
         RenderStyle::WeatherPrecipitableWater => "weather_precipitable_water",
+        RenderStyle::WeatherIvt => "weather_ivt",
         RenderStyle::WeatherQpf => "weather_qpf",
+        RenderStyle::WeatherSnowfall => "weather_snowfall",
+        RenderStyle::WeatherSnowDepthChange => "weather_snow_depth_change",
+        RenderStyle::WeatherHail => "weather_hail",
         RenderStyle::WeatherCategorical => "weather_categorical",
         RenderStyle::WeatherVisibility => "weather_visibility",
         RenderStyle::WeatherRadarReflectivity => "weather_radar_reflectivity",

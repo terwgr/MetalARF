@@ -216,6 +216,7 @@ __all__ = [
     "reconcile_inventories",
     "restart_bytes",
     "write_streamed_restart",
+    "prepare_streamed_restart",
 ]
 
 
@@ -662,8 +663,35 @@ def write_streamed_restart(path, store, cfg, *, scalars, setup,
                            template_state, run_trackers=None, drop=(),
                            check_pinned: bool = True,
                            tree_header: dict | None = None,
-                           extra_scratch_slots=(), stochastic_binding=None) -> StreamedRestartInfo:
-    """Write a woof restart file from a pinned host store. No device state.
+                           extra_scratch_slots=(), stochastic_binding=None,
+                           archive_state=None) -> StreamedRestartInfo:
+    """Write a woof restart file from a pinned host store now.
+
+    :func:`prepare_streamed_restart` followed at once by its publication;
+    see that function for the contract.
+    """
+    return prepare_streamed_restart(
+        path, store, cfg, scalars=scalars, setup=setup,
+        template_state=template_state, run_trackers=run_trackers, drop=drop,
+        check_pinned=check_pinned, tree_header=tree_header,
+        extra_scratch_slots=extra_scratch_slots,
+        stochastic_binding=stochastic_binding, archive_state=archive_state)()
+
+
+def prepare_streamed_restart(path, store, cfg, *, scalars, setup,
+                             template_state, run_trackers=None, drop=(),
+                             check_pinned: bool = True,
+                             tree_header: dict | None = None,
+                             extra_scratch_slots=(), stochastic_binding=None,
+                             archive_state=None):
+    """Snapshot a woof restart file of a pinned host store. No device state.
+
+    Every refusal, the header and the member list are decided HERE; the
+    returned callable performs only the ``np.savez``/``fsync``/rename and
+    returns the :class:`StreamedRestartInfo`.  The payload is the store's
+    own arrays, not copies, so the caller must not let anything write the
+    store until the callable has returned (the ranked road holds that with
+    :meth:`tilestream.ranks.RankedRun.add_store_guard`).
 
     ``store`` is the streamed domain: ``{restart member name: host array}``,
     the same mapping ``run_tiled`` integrates.  ``scalars`` is the DOMAIN's
@@ -717,6 +745,9 @@ def write_streamed_restart(path, store, cfg, *, scalars, setup,
     template_carriers.update(restart._opted_in_scratch_manifest(
         template_state, extra_scratch_slots))
     expected = set(_checkpoint_carriers(template_carriers, extra_scratch_slots))
+    if scalars.get("pbl_raw_available") is False:
+        arrays = {k: v for k, v in arrays.items() if not k.startswith("pbl/")}
+        expected = {k for k in expected if not k.startswith("pbl/")}
     missing = sorted(expected - set(arrays))
     extra = sorted(set(arrays) - expected)
     if missing or extra:
@@ -740,6 +771,14 @@ def write_streamed_restart(path, store, cfg, *, scalars, setup,
                 "check_pinned=False for a host-array store that was never "
                 "streamed.")
 
+    from woof.core.nest_accumulation import capture as capture_nest_archive
+    # The nest accumulation archive is domain-level: a streamed run holds it
+    # on its domain template (``archive_state``), never on a tile buffer.
+    # Read off the tile buffer, a bounded streamed moving nest wrote no
+    # archive while its resident twin did (test_streamed_relocation_rebuild_gpu).
+    arrays.update({'scratch/' + k: _as_host(v)
+                   for k, v in capture_nest_archive(
+                       template_state if archive_state is None else archive_state).items()})
     drop = tuple(drop)
     for name in drop:
         if name not in arrays:
@@ -823,30 +862,33 @@ def write_streamed_restart(path, store, cfg, *, scalars, setup,
             header["array_manifest"][key] = {"shape": list(host.shape), "dtype": str(host.dtype)}
             payload[key] = host
     header_seconds = time.perf_counter() - t0
-
-    t1 = time.perf_counter()
     body = {restart._HEADER_KEY: np.frombuffer(
         json.dumps(header, allow_nan=False).encode("utf-8"), dtype=np.uint8)}
     body.update(payload)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    try:
-        with temp.open("wb") as stream:
-            np.savez(stream, **body)
-        restart.fsync_file(temp)
-        os.replace(temp, path)
-    except BaseException:
-        temp.unlink(missing_ok=True)
-        raise
-    serialize_seconds = time.perf_counter() - t1
 
-    return StreamedRestartInfo(
-        path=path, members=len(payload),
-        bytes=sum(int(a.nbytes) for a in payload.values()),
-        seconds=header_seconds + serialize_seconds,
-        header_seconds=header_seconds, serialize_seconds=serialize_seconds,
-        device_copies=stochastic_copies, dropped=drop,
-        elapsed_seconds=header["elapsed_seconds"], header=header)
+    def publish() -> StreamedRestartInfo:
+        t1 = time.perf_counter()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(path.name + ".tmp")
+        try:
+            # np.savez's archive, byte for byte, from every core.
+            from woof.io.parallel_npz import write_npz
+            write_npz(temp, body)
+            restart.fsync_file(temp)
+            os.replace(temp, path)
+        except BaseException:
+            temp.unlink(missing_ok=True)
+            raise
+        serialize_seconds = time.perf_counter() - t1
+        return StreamedRestartInfo(
+            path=path, members=len(payload),
+            bytes=sum(int(a.nbytes) for a in payload.values()),
+            seconds=header_seconds + serialize_seconds,
+            header_seconds=header_seconds, serialize_seconds=serialize_seconds,
+            device_copies=stochastic_copies, dropped=drop,
+            elapsed_seconds=header["elapsed_seconds"], header=header)
+
+    return publish
 
 
 def _utcnow() -> str:
@@ -861,8 +903,8 @@ def _utcnow() -> str:
 
 def validate_streamed_restart(path, store, cfg, *, setup, template_state,
                           allow_missing: bool = False,
-                          scalars: dict | None = None, extra_scratch_slots=(), stochastic_binding=None
-                          ) -> ValidatedStreamedRestart:
+                          scalars: dict | None = None, extra_scratch_slots=(), stochastic_binding=None,
+                          archive_state=None) -> ValidatedStreamedRestart:
     """Validate a restart without mutating the pinned host store.
 
     The mirror of :func:`write_streamed_restart`, and the same refusals in the
@@ -906,6 +948,9 @@ def validate_streamed_restart(path, store, cfg, *, setup, template_state,
     except restart.RestartMismatchError as error:
         raise RestartRefused(str(error)) from error
     with _as_refusal(f"restart file {path} does not match this run"):
+        # Schemes this build computes differently first: no configuration
+        # resumes such a checkpoint, so the walk's notes must not lead.
+        restart._require_current_algorithm_identities(header, cfg, path)
         restart._require_config_match(header["config"], cfg, path)
         elapsed = restart._admissible_elapsed_seconds(
             header["elapsed_seconds"], f"restart file {path}")
@@ -999,8 +1044,26 @@ def validate_streamed_restart(path, store, cfg, *, setup, template_state,
             SimpleNamespace(_ensemble_stochastic=stochastic_binding))
     stochastic_arrays = {key: value for key, value in stored.items() if key.startswith("stochastic/")}
     stored = {key: value for key, value in stored.items() if not key.startswith("stochastic/")}
+    from woof.core.nest_accumulation import is_archive_slot
+    nest_archive = {k[8:]: v for k, v in stored.items()
+                    if k.startswith('scratch/') and is_archive_slot(k[8:])}
+    stored = {k: v for k, v in stored.items()
+              if not (k.startswith('scratch/') and is_archive_slot(k[8:]))}
 
-    missing = sorted(set(arrays) - set(stored))
+    # The checkpoint-only driver carriers are tolerant both ways, as the
+    # resident reader is (physics_inventory.is_absent_tolerant).
+    stored = {key: value for key, value in stored.items()
+              if key in arrays or not _physinv.is_absent_tolerant(key)}
+    driver_header = header.get("driver") or {}
+    marker = driver_header.get("pbl_raw_available")
+    if marker is not None and not isinstance(marker, bool):
+        raise RestartRefused("restart pbl_raw_available must be boolean")
+    stored_pbl = {k for k in stored if k.startswith("pbl/")}
+    if marker is False and stored_pbl:
+        raise RestartRefused("unavailable PBL raw rates must not carry raw payload")
+    missing = sorted(key for key in set(arrays) - set(stored)
+                     if not _physinv.is_absent_tolerant(key)
+                     and not (marker is False and key.startswith("pbl/")))
     extra = sorted(set(stored) - set(arrays))
     if extra:
         raise RestartRefused(
@@ -1038,7 +1101,8 @@ def validate_streamed_restart(path, store, cfg, *, setup, template_state,
 
     from tilestream.checkpoint import restart_scalars
 
-    restored_scalars = restart_scalars(header)
+    with _as_refusal("restart shortwave split producer is unavailable"):
+        restored_scalars = restart_scalars(header, stored)
     for key, host in stored.items():
         target = arrays[key]
         if tuple(target.shape) != tuple(host.shape) \
@@ -1051,7 +1115,9 @@ def validate_streamed_restart(path, store, cfg, *, setup, template_state,
         whole_store=whole_store, restored_scalars=restored_scalars,
         scalars=scalars, elapsed=float(elapsed), missing=tuple(missing),
         started=t0, stochastic_binding=stochastic_binding,
-        stochastic_metadata=header.get("ensemble_stochastic"), stochastic_arrays=stochastic_arrays)
+        stochastic_metadata=header.get("ensemble_stochastic"), stochastic_arrays=stochastic_arrays,
+        nest_archive=nest_archive,
+        nest_archive_owner=template_state if archive_state is None else archive_state)
 
 
 @dataclasses.dataclass
@@ -1070,6 +1136,8 @@ class ValidatedStreamedRestart:
     stochastic_binding: object = None
     stochastic_metadata: object = None
     stochastic_arrays: object = None
+    nest_archive: object = None
+    nest_archive_owner: object = None
     _stochastic_applied: bool = False
 
     def apply(self) -> StreamedRestartInfo:
@@ -1079,7 +1147,10 @@ class ValidatedStreamedRestart:
             raise RestartRefused("full-domain stochastic checkpoint was already applied")
 
         for key, host in self.stored.items():
-            np.copyto(self.arrays[key], host)
+            self.arrays[key][...] = host
+        if self.nest_archive_owner is not None:
+            from woof.core.nest_accumulation import install
+            install(self.nest_archive_owner, self.nest_archive or {})
         # Ordinary windows reset. Explicit lifecycle windows are already
         # restored above and must retain the consumer's consultation history.
         for key, target in _physinv.carried_only_carriers(self.whole_store).items():
@@ -1092,9 +1163,10 @@ class ValidatedStreamedRestart:
             restore_checkpoint_payload(self.stochastic_binding, self.stochastic_metadata, self.stochastic_arrays)
             self._stochastic_applied = True
         return StreamedRestartInfo(
-            path=self.path, members=len(self.stored) + len(self.stochastic_arrays or {}),
+            path=self.path, members=len(self.stored) + len(self.stochastic_arrays or {}) + len(self.nest_archive or {}),
             bytes=sum(int(np.asarray(a).nbytes) for a in self.stored.values())
-                + sum(int(np.asarray(a).nbytes) for a in (self.stochastic_arrays or {}).values()),
+                + sum(int(np.asarray(a).nbytes) for a in (self.stochastic_arrays or {}).values())
+                + sum(int(np.asarray(a).nbytes) for a in (self.nest_archive or {}).values()),
             seconds=time.perf_counter() - self.started, device_copies=len(self.stochastic_arrays or {}),
             missing=self.missing, elapsed_seconds=self.elapsed, header=self.header)
 

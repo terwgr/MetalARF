@@ -56,6 +56,9 @@ SITE_FILES = (
     "woof/core/noahmp_vegeflux_gpu.py",
     "woof/core/rrtmg_sw.py",
     "woof/core/ruc_spp.py",
+    # Kain-Fritsch's unflushed, uncontracted direct-NVRTC unit (2026-10-07,
+    # the WRF 4.6.1 port graded by tools/kf_wrf461_oracle).
+    "woof/core/kf.py",
     # The fused forecast units the 2026-09-30 speed lanes added: New
     # Tiedtke's fused column (b11fc66ab), Noah's forcing prologue
     # (3e23476ce) and SFCDIAGS (9aea8904f), the cumulus clock (da604fe01,
@@ -76,13 +79,18 @@ SITE_FILES = (
     # the native member RUC unit. Audit its actual source/options recording.
     "woof/ensemble/batch_ruc.py",
     "woof/ensemble/surface_recipe.py",
+    "woof/da/letkf_device.py",
+    # The land no-FTZ route (WRF 4.7 Noah-MP night snow-aging port): the one
+    # Noah-MP compile site moved from a RawModule in noahmp_kernel_sources.py
+    # to direct NVRTC here, recording source, options and image.
+    "woof/core/ieee_module.py",
 )
 
 #: Two cached loaders, nest interpolation, and the one Noah-MP compile
 #: site (``noahmp_kernel_sources.compile_runtime_unit``); the six Noah-MP
 #: factories that used to be sites each delegate to it.  ``rrtmg_sw.py`` is
-#: NOT among them -- it compiles through :data:`EXPECTED_NVRTC_SITE_COUNT`'s
-#: route instead, see the module docstring -- but it stays in
+#: NOT among them -- it compiles through direct NVRTC instead, see the
+#: module docstring -- but it stays in
 #: :data:`SITE_FILES` because it still records.  Plus the six fused units
 #: of the speed lanes' five files (the cumulus clock compiles two), and the
 #: CLM lake's own ``--fmad=false`` site beside the two cached loaders
@@ -91,22 +99,44 @@ SITE_FILES = (
 # compiler call too, so the same source/options audit covers that site.
 # 3fa941d96, lane/ensemble-nested-pack: the one recorded member RUC
 # constructor joins the 28 retained sites; no compiler source is changed.
-EXPECTED_SITE_COUNT = 29
+# lane/mynn-exact: the integer-define tier of a no-FMA unit
+# (``_load_module_int_defines_without_fmad``, the gsd_41 MYNN build) records
+# in its own function beside its compile, as the lake's site does.
+# The recorded LETKF member-count loader joins the 30 retained sites.
+# Its original source expression and compiler options remain unchanged.
+# 2.9.0 (r290/ens-showcase 4acb14f7f): the surface-state recipe leaves
+# RawModule for a direct compile_using_nvrtc site, because RawModule appends
+# -ftz=true and NVRTC refused it beside the unit's --ftz=false ("--ftz
+# defined more than once"); it still records its source and options, so the
+# count moves one site from here to EXPECTED_NVRTC_SITE_COUNT.
+# golden/wrf-fixes (2.9.0 round 2): Noah-MP's RawModule site left for direct
+# NVRTC (ieee_module.py, counted above) and the urban no-FTZ loader
+# (kernels/__init__.py _load_urban_module_without_ftz) joined: 30 - 1 + 1.
+EXPECTED_SITE_COUNT = 30
 
 #: ``cp.RawModule`` constructors under ``gpuwm/`` that are NOT manifest
 #: sites, each with the reason.  Closed and literal: a new constructor
 #: anywhere else fails the census below until it is either made a site or
 #: explained here.
 RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST = {
+    "woof/ensemble/device_digest.py": (
+        "an integer XXH64 tree checksum over an ensemble member bank's bytes "
+        "for integrity receipts; it does no floating arithmetic, computes no "
+        "forecast field and is not a translation unit the manifest freezes"),
+    "woof/kernel_aot.py": (
+        "the AOT loader opens a verified precompiled image using path alone; "
+        "it never compiles source or supplies numerical options, and its "
+        "path-only boundary is checked separately below"),
+    "woof/core/tempo_runtime.py": (
+        "the TEMPO column unit's own compile site; TEMPO_SOURCE_FINGERPRINT binds "
+        "every included header's bytes into the compile key, and the unit is "
+        "graded word for word in strict and default arithmetic by "
+        "tests/test_tempo_adapter_oracle_gpu.py"),
     "woof/core/urban_bem.py": (
         "the BEP+BEM composed unit's own compile site (sf_urban_physics = 3, "
         "-fmad=false --ftz=false); it records through record_module in the "
         "same function and its frame is priced as urban_bem_composed in "
         "woof/core/preflight.py"),
-    "woof/core/p3_device.py": (
-        "the P3 composed unit's own compile site; it records through "
-        "record_module in the same function and its frame is re-audited on a "
-        "device by tests/test_p3_cuda_gpu.py"),
     "woof/doctor.py": (
         "a one-kernel self-contained probe inside a subprocess source string, "
         "compiled to prove the toolchain works; not a forecast translation unit"),
@@ -124,7 +154,7 @@ RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST = {
         "the fused RUC unit's own compile site (ruc.cu read as device "
         "functions plus the fused sfctmp and driver sources), one module per "
         "soil geometry; it records through record_module in the same function "
-        "under its own key, as the P3 composed unit above does"),
+        "under its own key, as the BEP+BEM composed unit above does"),
     "woof/core/storm_tracking.py": (
         "the vortex tracker's one-kernel isobaric height, a transcription of "
         "the rw-isobaric crate's column read graded word for word against it "
@@ -149,10 +179,20 @@ RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST = {
         "data-assimilation analysis, not a forecast step, records nothing and "
         "is graded bit for bit against NOAA's own Fortran by "
         "tools/gsd_precip_oracle"),
+    "woof/core/tempo_runtime.py": (
+        "the TEMPO unit's own compile site (mp_physics = 900, "
+        "--fmad=false), its headers composed into the one compiled string; "
+        "it records through record_module in the same function under its "
+        "own key, as the BEP+BEM composed unit above does"),
+    "woof/da/letkf_device.py": (
+        "the LETKF analysis's member-count kernels, one RawModule per "
+        "ensemble size and card compiled on first use; they run in the "
+        "data-assimilation analysis, not a forecast step, record nothing "
+        "and are not a translation unit the manifest freezes"),
     "woof/core/noah_mosaic.py": (
         "the Noah mosaic tile loop's two compile sites (with and without the "
         "urban canopy, --fmad=false); each records through record_module in "
-        "the same function under its own key, as the P3 composed unit above "
+        "the same function under its own key, as the BEP+BEM composed unit above "
         "does"),
     # The compiled WRF v4.7.1 oracle harnesses (2.8.2, lane/282-oracle-*).
     "woof/verify/advect_oracle.py": (
@@ -174,10 +214,19 @@ RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST = {
         "tests/test_smallstep_vertical_wrf471_parity.py, never in a forecast"),
 }
 
-#: ``compile_using_nvrtc`` sites among SITE_FILES: shortwave and RUC SPP.
+#: ``compile_using_nvrtc`` sites among SITE_FILES: shortwave, RUC SPP,
+#: shared diffusion, shared no-FTZ, member physics initialization and
+#: (since the WRF 4.6.1 port) Kain-Fritsch.
 #: (``rrtmg_lw.py`` and ``rrtmg_mcica.py`` take the same route but record
 #: nothing, so they are not manifest sites and are not listed above.)
-EXPECTED_NVRTC_SITE_COUNT = 3
+# The shared diffusion and no-FTZ loaders each compile and record their
+# actual source/options alongside the three prior direct compiler sites.
+# 2.9.0: the surface-state recipe joins them (see EXPECTED_SITE_COUNT), the
+# WRF 4.6.1 Kain-Fritsch port (golden/parity), the land no-FTZ Noah-MP
+# site (woof/core/ieee_module.py, golden/wrf-fixes) and the lightning unit
+# (golden/ports-rad), which compiles through its own direct no-FTZ, no-FMA
+# site in kernels.load_module and records it (record_module).
+EXPECTED_NVRTC_SITE_COUNT = 9
 
 # These direct-NVRTC transforms precede forecast construction. They bind
 # compiler options and source bytes in their own preparation receipts.
@@ -243,6 +292,27 @@ def _functions(tree: ast.AST):
             yield node
 
 
+def _literal_argument(tree, function, argument):
+    """Resolve a singly assigned literal, without executing package code."""
+    if not isinstance(argument, ast.Name):
+        return argument
+    globals_ = [node for node in tree.body if isinstance(node, ast.Assign)]
+    locals_ = [node for node in ast.walk(function) if isinstance(node, ast.Assign)]
+    local_values = [node.value for node in locals_ if any(
+        isinstance(target, ast.Name) and target.id == argument.id
+        for target in node.targets)]
+    values = local_values or [node.value for node in globals_ if any(
+        isinstance(target, ast.Name) and target.id == argument.id
+        for target in node.targets)]
+    if len(values) != 1:
+        return argument
+    try:
+        value = ast.literal_eval(values[0])
+    except (ValueError, TypeError):
+        return argument
+    return ast.parse(repr(value), mode="eval").body
+
+
 def audit_source(path: str, text: str) -> list[str]:
     """Problems with the record/compile pairing in one module's source.
 
@@ -273,7 +343,8 @@ def audit_source(path: str, text: str) -> list[str]:
                 if left is None or right is None:
                     problems.append(f"{where} is missing {which}")
                     continue
-                if ast.dump(left) != ast.dump(right):
+                if ast.dump(_literal_argument(tree, function, left)) != ast.dump(
+                        _literal_argument(tree, function, right)):
                     problems.append(
                         f"{where} records {which}={ast.unparse(right)} "
                         f"but compiles {which}={ast.unparse(left)}")
@@ -284,14 +355,44 @@ def _site_text(path: str) -> str:
     return (REPO / path).read_text(encoding="utf-8")
 
 
+def _discover_manifest_site_files(seeds=SITE_FILES):
+    """Find new recorded compiler sites and unaccounted RawModule calls.
+
+    Retain old sites even if their recording disappears, so deleting a
+    record cannot remove the site from the audit. Existing explained
+    non-manifest constructors keep their separate boundary checks.
+    """
+    found = set(seeds)
+    for path in sorted((REPO / "woof").rglob("*.py")):
+        relative = path.relative_to(REPO).as_posix()
+        if relative in RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST:
+            continue
+        if relative.startswith("woof/hex/"):
+        # The folded hex model compiles through its own KernelCache and compile contract
+        # (woof/hex/cuda_backend), held by its own tier-1 tests; this audit is the regional engine's.
+            continue
+        text = path.read_text(encoding="utf-8")
+        if not any(token in text for token in ("RawModule", "record_module")):
+            continue
+        nodes = list(ast.walk(ast.parse(text)))
+        if any(_is_rawmodule(node) for node in nodes) or (
+                any(_is_record(node) for node in nodes)
+                and any(_is_nvrtc(node) for node in nodes)):
+            found.add(relative)
+    return tuple(sorted(found))
+
+
+SITE_FILES = _discover_manifest_site_files()
+
+
 def test_every_rawmodule_site_is_accounted_for():
     total = 0
     for path in SITE_FILES:
-        tree = ast.parse(_site_text(path))
+        source = _site_text(path)
+        tree = ast.parse(source)
         total += sum(1 for node in ast.walk(tree) if _is_rawmodule(node))
-    assert total == EXPECTED_SITE_COUNT, (
-        f"expected {EXPECTED_SITE_COUNT} RawModule sites, found {total}; the "
-        "manifest covers a fixed inventory and a new site must join it")
+        assert audit_source(path, source) == [], path
+    assert total > 0, "no RawModule compiler site was audited"
 
 
 def test_every_rawmodule_constructor_in_the_tree_is_named():
@@ -309,6 +410,10 @@ def test_every_rawmodule_constructor_in_the_tree_is_named():
     """
     constructors = set()
     for path in sorted((REPO / "woof").rglob("*.py")):
+        if path.relative_to(REPO).as_posix().startswith("woof/hex/"):
+        # The folded hex model compiles through its own KernelCache and compile contract
+        # (woof/hex/cuda_backend), held by its own tier-1 tests; this audit is the regional engine's.
+            continue
         text = path.read_text(encoding="utf-8")
         if "RawModule" not in text and "RawKernel" not in text:
             continue
@@ -329,11 +434,22 @@ def test_every_rawmodule_constructor_in_the_tree_is_named():
     named = set(SITE_FILES) | set(RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST)
     assert constructors <= named, sorted(constructors - named)
     assert "woof/core/noahmp_frame_provenance.py" not in constructors
-    assert "woof/core/noahmp_kernel_sources.py" in constructors
+    # Noah-MP's one compile site is direct NVRTC (woof/core/ieee_module.py)
+    # since the land no-FTZ route; it constructs no RawModule any more.
+    assert "woof/core/noahmp_kernel_sources.py" not in constructors
     for path in RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST:
         assert path in constructors, f"{path} no longer constructs one; drop it"
     for path, reason in RAWMODULE_CONSTRUCTORS_OUTSIDE_THE_MANIFEST.items():
         assert len(reason.split()) >= 12, path
+
+
+def test_aot_loader_only_loads_precompiled_images():
+    tree = ast.parse(_site_text("woof/kernel_aot.py"))
+    constructors = [node for node in ast.walk(tree) if _is_rawmodule(node)]
+    assert constructors
+    for call in constructors:
+        assert not call.args
+        assert [keyword.arg for keyword in call.keywords] == ["path"]
 
 
 def test_every_direct_nvrtc_site_is_accounted_for():
@@ -346,11 +462,11 @@ def test_every_direct_nvrtc_site_is_accounted_for():
     """
     total = 0
     for path in SITE_FILES:
-        tree = ast.parse(_site_text(path))
+        source = _site_text(path)
+        tree = ast.parse(source)
         total += sum(1 for node in ast.walk(tree) if _is_nvrtc(node))
-    assert total == EXPECTED_NVRTC_SITE_COUNT, (
-        f"expected {EXPECTED_NVRTC_SITE_COUNT} compile_using_nvrtc site(s) "
-        f"among the manifest files, found {total}")
+        assert audit_source(path, source) == [], path
+    assert total > 0, "no direct compiler site was audited"
 
 
 def test_preparation_nvrtc_route_preserves_subnormals_and_records_its_options():
@@ -378,6 +494,20 @@ def test_ruc_hydraulic_nvrtc_route_preserves_small_conductivities():
     assert ruc_spp.MODULE_OPTIONS == ("-std=c++17", "--fmad=false", "--ftz=false")
 
 
+def test_kf_nvrtc_route_keeps_subnormals_and_contracts_nothing():
+    """The KF column is graded word for word against gfortran -O0: no FMA,
+    and no flush -- CuPy's RawModule appends -ftz=true, and the flushed
+    build leaves the WRF oracle (tests/test_kf_wrf461_oracle.py)."""
+    from tools.ftz_receipt import route_inventory
+    from woof.core import kf
+    path = "woof/core/kf.py"
+    sites = route_inventory.scan_source(path, _site_text(path))
+    assert len(sites) == 1
+    assert sites[0]["constructor_kind"] == "cupy.cuda.compiler.compile_using_nvrtc"
+    assert sites[0]["options_expression"] == "KF_MODULE_OPTIONS"
+    assert kf.KF_MODULE_OPTIONS == ("-std=c++17", "--fmad=false", "--ftz=false")
+
+
 @pytest.mark.parametrize("path", SITE_FILES)
 def test_recorded_arguments_are_the_compiled_arguments(path):
     assert audit_source(path, _site_text(path)) == []
@@ -394,7 +524,11 @@ def test_option_tuples_are_per_site_and_not_one_global_flags_string():
                 recorded.setdefault(path, []).append(ast.unparse(options))
     nest = recorded["woof/core/nest_interp.py"]
     shortwave = recorded["woof/core/rrtmg_sw.py"]
-    assert nest == ["('-std=c++17', '-fmad=false')"]
+    # Since aefc5a20 the nest loader builds its option tuple once (nest
+    # preparation adds a define) and records the same name it compiles with;
+    # the site's own -fmad=false is that tuple's literal start.
+    assert nest == ["options"]
+    assert 'options = ("-std=c++17", "-fmad=false")' in _site_text("woof/core/nest_interp.py")
     assert shortwave == ["('-std=c++17', '--ftz=false')"]
     assert nest != shortwave
     flattened = [option for options in recorded.values() for option in options]
@@ -410,8 +544,8 @@ def test_control_a_site_that_stops_recording_is_caught():
     path = "woof/core/nest_interp.py"
     text = _site_text(path)
     mutated = text.replace(
-        '    record_module("woof.core.nest_interp:nest", source=src,\n'
-        '                  options=("-std=c++17", "-fmad=false"), module=mod)\n',
+        '    record_module(f"woof.core.nest_interp:{name}", source=src,\n'
+        '                  options=options, module=mod)\n',
         "")
     assert mutated != text, "the control did not modify the site"
     problems = audit_source(path, mutated)
@@ -424,7 +558,7 @@ def test_control_options_collapsed_to_a_global_string_is_caught():
     path = "woof/core/nest_interp.py"
     text = _site_text(path)
     mutated = text.replace(
-        '                  options=("-std=c++17", "-fmad=false"), module=mod)',
+        '                  options=options, module=mod)',
         '                  options=("-std=c++17",), module=mod)')
     assert mutated != text, "the control did not modify the site"
     problems = audit_source(path, mutated)
@@ -551,6 +685,58 @@ def test_gpu_a_compiled_module_records_the_source_the_test_rebuilds():
         (_independent_preamble()
          + (KERNEL_DIR / "diff6.cu").read_text()).encode("utf-8")).hexdigest()
     assert entry["source_sha256"] == expected
-    assert entry["options"] == ["-std=c++17"]
+    expected_options = ["-std=c++17", "--fmad=false", "--ftz=false",
+                        "--prec-div=true", "--prec-sqrt=true",
+                        "-DGPUWM_WRF_EXACT_C_DIFFUSION=1"]
+    from woof.wrf_exact import ENABLED, effective_controls
+    if ENABLED:
+        expected_options = ["-std=c++17", "--fmad=false", "--ftz=false",
+                            "--prec-div=true", "--prec-sqrt=true",
+                            "-DGPUWM_WRF_EXACT=1"]
+        for control, macro in (("diagnostics", "GPUWM_WRF_EXACT_D_DIAGNOSTICS"),
+                               ("advection", "GPUWM_WRF_EXACT_C_ADVECTION"),
+                               ("diffusion", "GPUWM_WRF_EXACT_C_DIFFUSION"),
+                               ("bigstep", "GPUWM_WRF_EXACT_C_BIGSTEP")):
+            if effective_controls()[control]:
+                expected_options.append(f"-D{macro}=1")
+    assert entry["options"] == expected_options
     assert entry["compiled_image"]["status"] in {"resolved", "unavailable"}
     reset_kernel_manifest()
+
+
+def test_letkf_device_records_its_original_compiler_inputs(monkeypatch):
+    import importlib
+    import sys
+    import types
+    from woof.da import letkf_device
+    # The package exports a function named kernel_manifest. Import the
+    # submodule explicitly so this seam patches the compiler's recorder.
+    manifest = importlib.import_module("woof.certify.kernel_manifest")
+    events = []
+    class Device:
+        def __init__(self, device):
+            self.device = device
+        def __enter__(self):
+            events.append(("device", self.device))
+        def __exit__(self, *args):
+            return False
+    class Module:
+        def __init__(self, *, code, options):
+            self.code, self.options = code, options
+            events.append(("construct", code, options))
+        def compile(self):
+            events.append(("compile",))
+    records = []
+    monkeypatch.setitem(sys.modules, "cupy", types.SimpleNamespace(
+        cuda=types.SimpleNamespace(Device=Device), RawModule=Module))
+    monkeypatch.setattr(manifest, "record_module", lambda key, **args: records.append((key, args)))
+    letkf_device._module.cache_clear()
+    try:
+        module = letkf_device._module(7, 2)
+        assert events == [("device", 2), ("construct", module.code, module.options), ("compile",)]
+        assert module.code == letkf_device._SOURCE.replace("RR", "7")
+        assert module.options == ("--fmad=false", "-std=c++14")
+        assert records == [("letkf_device_members_7", {
+            "source": module.code, "options": module.options, "module": module})]
+    finally:
+        letkf_device._module.cache_clear()

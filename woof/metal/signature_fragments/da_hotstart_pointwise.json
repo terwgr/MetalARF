@@ -1,0 +1,200 @@
+{
+  "kernels": [
+    {
+      "name": "da_hotstart_pointwise",
+      "module": "da_hotstart_pointwise",
+      "source": "woof/metal/shaders/da_hotstart_pointwise.metal",
+      "cuda_source": "woof/da/hotstart.py",
+      "cuda_symbol": "hotstart_increments",
+      "resources": [
+        [
+          "obs",
+          "float",
+          "read"
+        ],
+        [
+          "model",
+          "float",
+          "read"
+        ],
+        [
+          "mask",
+          "uint32",
+          "read"
+        ],
+        [
+          "ramp",
+          "float",
+          "read"
+        ],
+        [
+          "qsat",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "applied_theta",
+          "float",
+          "read"
+        ],
+        [
+          "applied_qv",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "moisture",
+          "float",
+          "read_write"
+        ],
+        [
+          "flags",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "obs": [
+          [
+            "n"
+          ]
+        ],
+        "model": [
+          [
+            "n"
+          ]
+        ],
+        "mask": [
+          [
+            "n"
+          ]
+        ],
+        "ramp": [
+          [
+            "n"
+          ]
+        ],
+        "qsat": [
+          [
+            "n"
+          ]
+        ],
+        "qv": [
+          [
+            "n"
+          ]
+        ],
+        "applied_theta": [
+          [
+            "n"
+          ]
+        ],
+        "applied_qv": [
+          [
+            "n"
+          ]
+        ],
+        "theta": [
+          [
+            "n"
+          ]
+        ],
+        "moisture": [
+          [
+            "n"
+          ]
+        ],
+        "flags": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "cap",
+          "float32"
+        ],
+        [
+          "echo",
+          "float32"
+        ],
+        [
+          "deficit",
+          "float32"
+        ],
+        [
+          "theta_per_db",
+          "float32"
+        ],
+        [
+          "theta_max",
+          "float32"
+        ],
+        [
+          "theta_min",
+          "float32"
+        ],
+        [
+          "rh",
+          "float32"
+        ],
+        [
+          "qv_max",
+          "float32"
+        ],
+        [
+          "qv_min",
+          "float32"
+        ],
+        [
+          "clear_obs",
+          "float32"
+        ],
+        [
+          "clear_model",
+          "float32"
+        ],
+        [
+          "clear_theta_per_db",
+          "float32"
+        ],
+        [
+          "clear_rh",
+          "float32"
+        ],
+        [
+          "adjust_moisture",
+          "int32"
+        ],
+        [
+          "clear_air",
+          "int32"
+        ],
+        [
+          "ledger",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "arithmetic_policies": [
+        "default"
+      ],
+      "layout_version": 1,
+      "threads_per_group": 128
+    }
+  ]
+}

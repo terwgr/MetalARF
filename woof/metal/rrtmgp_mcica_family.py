@@ -38,7 +38,7 @@ def _submit_seed_prepare(play, seed, *, ncol, nlay, permuteseed):
         {"play": play, "seed": seed},
         {"ncol": int(ncol), "nlay": int(nlay),
          "permuteseed": int(permuteseed)},
-        exact_policy=False, grid_size=int(ncol),
+        exact_policy=WRF_EXACT, grid_size=int(ncol),
         threads_per_group=_THREADS)
 
 
@@ -53,9 +53,6 @@ def submit_mcica_maxran(play, cldfra, jump_s1, jump_s2, jump_s3, jump_s4,
     a device ``uchar`` view; any final padding bytes are ignored by consumers.
     The returned array is the backing words, not a numerically converted mask.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal RRTMGP MCICA does not implement WRF exact-D arithmetic")
     if (isinstance(ngpt, bool) or not isinstance(ngpt, (int, np.integer))
             or int(ngpt) <= 0):
         raise ValueError("RRTMGP MCICA ngpt must be a positive integer")
@@ -103,7 +100,7 @@ def submit_mcica_maxran(play, cldfra, jump_s1, jump_s2, jump_s3, jump_s4,
          "mask_words": mask_words},
         {"ncol": ncol, "nlay": nlay, "ngpt": ngpt,
          "nmask_words": nwords},
-        exact_policy=False, grid_size=ncol * ngpt,
+        exact_policy=WRF_EXACT, grid_size=ncol * ngpt,
         threads_per_group=_THREADS)
     return mask_words
 

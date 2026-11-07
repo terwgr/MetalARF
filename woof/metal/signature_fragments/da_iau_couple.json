@@ -1,0 +1,11 @@
+{
+  "kernels": [{
+    "name": "da_iau_couple", "module": "da_iau_couple",
+    "source": "woof/metal/shaders/da_iau_couple.metal",
+    "cuda_source": "woof/da/iau.py", "cuda_symbol": "_couple",
+    "resources": [["rate", "float", "read_write"], ["mub", "float", "read"], ["mup", "float", "read"], ["c1", "float", "read"], ["c2", "float", "read"], ["map", "float", "read"]],
+    "shapes": {"rate": [["n"]], "mub": [["ny", "nx"]], "mup": [["ny", "nx"]], "c1": [["nz"]], "c2": [["nz"]], "map": [["ny", "nx"], ["ny", "nx+1"], ["ny+1", "nx"], ["n"]]},
+    "parameters": [["n", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["stagger", "int32"], ["mask_y", "int32"], ["mask_x", "int32"], ["has_map", "int32"]],
+    "arithmetic_policies": ["default"], "layout_version": 1, "threads_per_group": 128
+  }]
+}

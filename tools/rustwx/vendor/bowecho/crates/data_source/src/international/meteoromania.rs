@@ -1,7 +1,7 @@
 //! ANM (Administrația Națională de Meteorologie, Romania) radar volume feed.
 //!
 //! Catalog: `https://opendata.meteoromania.ro/radar/`, the "Portal Open
-//! Data Meteo Romania": ANM's official open-data host. One nginx
+//! Data Meteo Romania" — ANM's official open-data host. One nginx
 //! autoindex directory per radar plus a national `COMPOSITE/` directory
 //! (captured live 2026-07-07 UTC):
 //!
@@ -18,7 +18,7 @@
 //! Each of dBZ/V/ZDR/KDP/RhoHV is a FULL polar volume (ODIM_H5 `PVOL`,
 //! H5rad 2.3; EUMETNET OPERA Data Information Model; Michelson et al.,
 //! OPERA WP 2.1/2.2) carrying that moment across all 12 cuts (0.5–19.5°,
-//! 920 bins @ 250 m): confirmed by live decode of every station's dBZ and
+//! 920 bins @ 250 m) — confirmed by live decode of every station's dBZ and
 //! BUC's full moment set. A multi-moment volume is assembled SHMU-style:
 //! one PVOL per moment at a common timestamp, merged with
 //! `radar_core::merge_radar_volumes`, dBZ first (merge base), V second,
@@ -27,7 +27,7 @@
 //! `RHOHV`), so the existing `nexrad_io` ODIM decode path handles every
 //! part unchanged.
 //!
-//! LISTED BUT SKIPPED, `dBR` and `Height`: those files are NOT polar
+//! LISTED BUT SKIPPED — `dBR` and `Height`: those files are NOT polar
 //! volumes but ODIM `IMAGE` objects (Cartesian 700×700 aeqd grids; `dBR` =
 //! PCAPPI rain rate `RATE`, `Height` = echo-top `HGHT`, verified live
 //! 2026-07-07). They belong to the same product family as the `COMPOSITE/`
@@ -43,13 +43,13 @@
 //! frame is therefore only anchored on a stamp at least
 //! [`STAMP_SETTLE_MINUTES`] old; if nothing in the listing is that old
 //! (feed gap or local clock skew), the newest complete stamp is used
-//! anyway: the ODIM decoder rejects `IMAGE` objects with a clear error,
+//! anyway — the ODIM decoder rejects `IMAGE` objects with a clear error,
 //! so a too-early download fails the poll tick and retries, it never
 //! installs a wrong volume.
 //!
 //! Relationship to EUMETNET ORD: ANM pushes the SAME per-moment ODIM
 //! PVOLs to ORD (the ORD `robuc` DBZH object is byte-identical to the
-//! native dBZ file), but ORD carries only DBZH/TH/VRADH: the native
+//! native dBZ file), but ORD carries only DBZH/TH/VRADH — the native
 //! portal adds the full dual-pol set (ZDR/KDP/RhoHV). This provider is
 //! the live/recent Romania source (rolling ~3 days); ORD remains the
 //! deep-archive path, and `ord.rs` defers its seven `ro*` picker/marker
@@ -77,7 +77,7 @@ const ANM_RADAR_ROOT: &str = "https://opendata.meteoromania.ro/radar/";
 /// at the chosen timestamp.
 const MOMENT_ORDER: [&str; 5] = ["dBZ", "V", "ZDR", "KDP", "RhoHV"];
 /// How many leading [`MOMENT_ORDER`] entries a stamp must have to anchor a
-/// frame (dBZ and V, the same required pair as SHMU/DWD).
+/// frame (dBZ and V — the same required pair as SHMU/DWD).
 const REQUIRED_MOMENTS: usize = 2;
 
 /// Cartesian `IMAGE` products listed alongside the volumes (see the module
@@ -85,8 +85,8 @@ const REQUIRED_MOMENTS: usize = 2;
 const CARTESIAN_PRODUCTS: [&str; 2] = ["dBR", "Height"];
 
 /// Youngest stamp age (minutes) trusted to hold real PVOLs. ANM overwrites
-/// each dBZ file in-place, Cartesian placeholder at ~stamp+4 min, real
-/// PVOL at ~stamp+6 min (module doc), so anchoring before the rewrite
+/// each dBZ file in-place — Cartesian placeholder at ~stamp+4 min, real
+/// PVOL at ~stamp+6 min (module doc) — so anchoring before the rewrite
 /// would download the wrong object family. 9 minutes = the observed
 /// rewrite completion plus a 3-minute margin, still under two 5-minute
 /// cycles behind real time.
@@ -199,7 +199,7 @@ fn anm_recent_plans(
 
 /// Parse a site-directory listing into `16-digit stamp -> (moment -> file
 /// name)`, volume moments only. File names are `{DIR}_{stamp}{moment}.hdf`
-/// with a 16-digit stamp (`yyyymmddHHMMSScc`, centisecond suffix: the
+/// with a 16-digit stamp (`yyyymmddHHMMSScc`, centisecond suffix — the
 /// scan second varies between volumes, so the full run is the group key).
 /// Names are kept verbatim from the listing for URL joining. The Cartesian
 /// `dBR`/`Height` products and anything else (README files, the parent
@@ -259,7 +259,7 @@ fn stamp_time(stamp: &str) -> Option<NaiveDateTime> {
 /// ANM's in-place rewrite window (module doc) and are passed over; when
 /// NOTHING is old enough (stalled feed timestamps in the future, or local
 /// clock skew), the newest complete stamps are returned regardless so the
-/// site stays pollable: the decoder's IMAGE rejection is the backstop.
+/// site stays pollable — the decoder's IMAGE rejection is the backstop.
 fn anchor_stamps(
     groups: &BTreeMap<String, BTreeMap<&'static str, String>>,
     count: usize,
@@ -288,7 +288,7 @@ fn anchor_stamps(
 }
 
 /// Build one plan per stamp from the grouped listing, OLDEST FIRST (pure;
-/// unit-testable). Part order per frame: [`MOMENT_ORDER`], dBZ (merge
+/// unit-testable). Part order per frame: [`MOMENT_ORDER`] — dBZ (merge
 /// base), V, then each dual-pol moment present at that stamp.
 fn plans_from_groups(
     site_id: &str,
@@ -366,7 +366,7 @@ mod tests {
         for (stamp, group) in &groups {
             assert_eq!(
                 group.keys().copied().collect::<Vec<_>>(),
-                // BTreeMap order, not merge order: merge order is the
+                // BTreeMap order, not merge order — merge order is the
                 // plan builder's job.
                 vec!["KDP", "RhoHV", "V", "ZDR", "dBZ"],
                 "{stamp}: all five volume moments, dBR/Height skipped"
@@ -403,8 +403,8 @@ mod tests {
     #[test]
     fn seven_moment_stamp_builds_a_five_part_merge_plan_in_moment_order() {
         let groups = stamp_moment_groups(BUC_LISTING, "BUC");
-        // 18:52:44Z: the newest stamp (18:45:02) is 7 minutes old (still
-        // inside ANM's in-place rewrite window) so 18:40:02 anchors.
+        // 18:52:44Z: the newest stamp (18:45:02) is 7 minutes old — still
+        // inside ANM's in-place rewrite window — so 18:40:02 anchors.
         let stamps = anchor_stamps(&groups, 1, utc(2026, 7, 7, 18, 52, 44));
         assert_eq!(stamps, vec!["2026070718400200".to_owned()]);
 
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn settle_window_passes_over_fresh_stamps_and_recovers_once_settled() {
         let groups = stamp_moment_groups(BUC_LISTING, "BUC");
-        // 18:55:00Z: 18:45:02 is 9m58s old, settled, anchors.
+        // 18:55:00Z: 18:45:02 is 9m58s old — settled, anchors.
         assert_eq!(
             anchor_stamps(&groups, 1, utc(2026, 7, 7, 18, 55, 0)),
             vec!["2026070718450200".to_owned()]
@@ -440,7 +440,7 @@ mod tests {
             anchor_stamps(&groups, 1, utc(2026, 7, 7, 18, 46, 0)),
             vec!["2026070718350200".to_owned()]
         );
-        // Clock far behind upstream: nothing looks settled, fall back to
+        // Clock far behind upstream: nothing looks settled — fall back to
         // the newest complete stamp instead of going dark.
         assert_eq!(
             anchor_stamps(&groups, 1, utc(2026, 7, 1, 0, 0, 0)),
@@ -458,7 +458,7 @@ mod tests {
             r#"<a href="TIM_2026070718400200V.hdf">x</a>"#,
             r#"<a href="TIM_2026070718400200ZDR.hdf">x</a>"#,
             r#"<a href="TIM_2026070718400200KDP.hdf">x</a>"#,
-            // 18:45: dual-pol tail lagging, RhoHV missing everywhere,
+            // 18:45: dual-pol tail lagging — RhoHV missing everywhere,
             // and the newest stamp has no V yet (only dBZ + Height).
             r#"<a href="TIM_2026070718450200dBZ.hdf">x</a>"#,
             r#"<a href="TIM_2026070718450200Height.hdf">x</a>"#,
@@ -480,7 +480,7 @@ mod tests {
         );
     }
 
-    /// Plans come back OLDEST FIRST with the newest frame LAST, and the
+    /// Plans come back OLDEST FIRST with the newest frame LAST — and the
     /// newest frame is exactly the single frame a count-1 (`latest`) build
     /// produces, so the loop ends on the poll dedupe key.
     #[test]
@@ -530,7 +530,7 @@ mod tests {
     /// The provider must advertise the real loop it has, and its static
     /// table must mirror the network: seven stations whose ids are the
     /// upstream directory names and whose coordinates agree with the ORD
-    /// `ro*` rows (same radars, `NOD:ro...` sources: the table values are
+    /// `ro*` rows (same radars, `NOD:ro...` sources — the table values are
     /// the live PVOL `/where` groups rounded to 4 decimals).
     #[test]
     fn site_table_lists_the_seven_anm_radars_with_ord_consistent_coords() {
@@ -583,7 +583,7 @@ mod tests {
     /// (the poll consumer owns the merge). Network test; run with
     /// `cargo test -p data_source anm_live -- --ignored --nocapture`
     #[test]
-    #[ignore = "live opendata.meteoromania.ro probe: run manually with --ignored"]
+    #[ignore = "live opendata.meteoromania.ro probe — run manually with --ignored"]
     fn anm_live_roundtrip_lists_plans_downloads_and_decodes() {
         let provider = MeteoRomaniaProvider::new();
         let plan = provider.latest("BUC").expect("live BUC frame plan");

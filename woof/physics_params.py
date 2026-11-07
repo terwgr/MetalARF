@@ -458,6 +458,8 @@ def edit_kernel_source(module: str, text: str) -> str:
 
 def note_compiled(module: str) -> None:
     """Record which set a kernel module was compiled under."""
+    from woof.kernel_plan import refuse_while_capturing
+    refuse_while_capturing()  # a static-plan capture compiled nothing for the run
     compiled = dict(_STATE["compiled"])
     compiled[module] = _active_sha()
     _STATE["compiled"] = compiled

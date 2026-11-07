@@ -1,0 +1,98 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_mynnsfc_v600",
+      "source": "woof/metal/shaders/hexrrfs_mynnsfc_v600.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/sf_mynnsfc_v600.py",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_mynnsfc_columns",
+      "cuda_symbol": "mynnsfc_columns",
+      "resources": [
+        [
+          "fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "options",
+          "int32",
+          "read"
+        ],
+        [
+          "vegtype",
+          "int32",
+          "read"
+        ],
+        [
+          "errors",
+          "int32",
+          "read_write"
+        ],
+        [
+          "tables",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fields": [
+          [
+            "68",
+            "ncol"
+          ]
+        ],
+        "options": [
+          [
+            "14"
+          ]
+        ],
+        "vegtype": [
+          [
+            "ncol"
+          ]
+        ],
+        "errors": [
+          [
+            "ncol"
+          ]
+        ],
+        "tables": [
+          [
+            "4",
+            "1001"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ],
+        [
+          "present_lo",
+          "int32"
+        ],
+        [
+          "present_hi",
+          "int32"
+        ],
+        [
+          "step_override",
+          "int32"
+        ],
+        [
+          "init_override",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

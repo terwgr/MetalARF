@@ -1,0 +1,134 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_diagnostics",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_diagnostics.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_radar",
+      "cuda_symbol": "tempo_radar",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "prepared",
+          "float",
+          "read"
+        ],
+        [
+          "refl10cm",
+          "float",
+          "read"
+        ],
+        [
+          "refl10cm_max",
+          "float",
+          "read_write"
+        ],
+        [
+          "refl10cm_1km",
+          "float",
+          "read_write"
+        ],
+        [
+          "refl10cm_1km_max",
+          "float",
+          "read_write"
+        ],
+        [
+          "relhum",
+          "float",
+          "read_write"
+        ],
+        [
+          "hourly_word",
+          "int32",
+          "read"
+        ],
+        [
+          "status",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "prepared": [
+          [
+            "20",
+            "nz",
+            "nc"
+          ]
+        ],
+        "refl10cm": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "refl10cm_max": [
+          [
+            "nc"
+          ]
+        ],
+        "refl10cm_1km": [
+          [
+            "nc"
+          ]
+        ],
+        "refl10cm_1km_max": [
+          [
+            "nc"
+          ]
+        ],
+        "relhum": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "hourly_word": [
+          [
+            "1"
+          ]
+        ],
+        "status": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "hourly",
+          "int32"
+        ],
+        [
+          "full",
+          "int32"
+        ],
+        [
+          "has_hourly_word",
+          "int32"
+        ],
+        [
+          "validate_only",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

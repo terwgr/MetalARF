@@ -158,14 +158,39 @@ def _profile(
 
 
 _PACKAGED_PROFILES = MappingProxyType({
+    "gefs-reforecast-grib2-v1": _profile(
+        "rw-wps-gefs-reforecast-grib2", source_format="grib2",
+        mapping="576de4015f181e72b63b9afb7e6c50e08772cbb9ff009efa74c38c255a252e87", composition="593368d096f71277706214d0cf1ab6898ac0bd428a71bb64be9049c982225d92", provenance="20bd3d3641cbade7948114b08cae950153173f28e464567c6b560cbfbcc9c45c",
+        data_role="gefs_member_in_band_surface", provenance_role="gefs_member_in_band_surface_provenance",
+        contributing_mappings={'land_mapping': {'file': 'rw-wps-gefs-retrospective-land.mapping.json', 'sha256': '55af957db69d20353833dc4f47a8b270cb164e8c7abe5c8bbcd4ce96c4449df2'}, 'seaice_mapping': {'file': 'rw-wps-ncep-r1-seaice-netcdf.mapping.json', 'sha256': '754251fa04dedae5dff4ff65bc040546871a82951424431c5de240f2850caa9b'}},
+        contributing_provenances={'land_provenance': {'file': 'rw-wps-gefs-retrospective-land.provenance.json', 'sha256': 'e9660dffeb7f622f1d10162302f5694d9c40e44f8566bab12f426d12f1e8b4c3'}, 'seaice_provenance': {'file': 'rw-wps-ncep-r1-seaice-netcdf.provenance.json', 'sha256': '50313934795556e2bccbd3ed1f9e81d7c780fc8cb52abbc6ce4219b37f045266'}},
+    ),
+
     "ecmwf-ens-open-grib2-v1": _profile(
         "rw-wps-ecmwf-ens-open-grib2",
         source_format="grib2",
-        mapping="f24b41cd53e8da762cdc1bbd786d0a43f231a246e93347f0b3f07090c7423d09",
-        composition="bd8a748fb20f9709cca13490a806f3b6b6cbf4eca72fafb1189758557fc3b53f",
+        mapping="e60114f2949e80df748d2d9fd1955aec3c1c2471db19b5ecf665712383806740",
+        composition="a58313084790807306ddca80fa1009d5187c2485aff3596a0ba1330d8940f9b5",
         provenance="e6127a3c9da1ba3834a529c135a177d3652d80bbb2c5c7ca68891e8c87d0bec3",
         data_role="ecmwf_open_data_in_band_surface",
         provenance_role="ecmwf_open_data_in_band_surface_provenance",
+        # Sea ice: the ENS open data publishes thickness only, never a
+        # concentration, so every member start had no sea ice anywhere.
+        # The composition binds sea_ice_fraction to the same cycle's GFS
+        # analysis ICEC (the route's declared gfs f000 donor), nearest
+        # 0.25-degree cell, as ecmwf-open-data-oper-grib2-v1 does.
+        contributing_mappings={
+            "seaice_mapping": {
+                "file": "rw-wps-earth2-gdas-donor.mapping.json",
+                "sha256": "e24542b3a9747c37614451d29eb4047b5f17f6068e3e63c299a2cc5367d8d8a1",
+            },
+        },
+        contributing_provenances={
+            "seaice_provenance": {
+                "file": "rw-wps-gfs-analysis-seaice.provenance.json",
+                "sha256": "2ced4ae3b2d6f8974fd9a259b97bf18483f972b41e66ff1b112b297468b0af64",
+            },
+        },
     ),
 
     # Native global ICON carries its coordinates in separate GDT-101
@@ -222,6 +247,18 @@ _PACKAGED_PROFILES = MappingProxyType({
         data_role="twentycrv3_netcdf_recovered_invariant",
         provenance_role="twentycrv3_netcdf_recovered_invariant_provenance",
     ),
+    # A woof hex run as an ArWen parent: the export door's frames on a
+    # regular lat-lon window (region-latlon: or global-mesh), decoded on
+    # the 55 MPAS model levels.  Terrain is in band (HGT in every frame).
+    "hex-history-netcdf-v1": _profile(
+        "rw-wps-hex-history-netcdf",
+        source_format="netcdf",
+        mapping="e992c19fd9957ca050e8038e65033b1b886857a3ce80e47448515e67e081279a",
+        composition="bbd2c5b52f13ee8f1ebfac8a138fd109ae883877d5d6fee3a5684172bec8d875",
+        provenance="cd38d89e487695716cea9298be4ecb1f2ec0a93b96955ce1b0ac34a1ba195890",
+        data_role="hex_in_band_surface",
+        provenance_role="hex_in_band_surface_provenance",
+    ),
     # HRRR's public pressure-level product (wrfprs), decoded through the
     # generic mapped route: the Lambert CONUS grid, grid-relative wind
     # rotation and nine-node RUC soil are all TABLE DATA in these three
@@ -234,7 +271,7 @@ _PACKAGED_PROFILES = MappingProxyType({
     "hrrr-prs-grib2-v1": _profile(
         "rw-wps-hrrr-prs-grib2",
         source_format="grib2",
-        mapping="770b747a0a8eb62b281fe51a5853a4fa82a43512079615a60f1c385f9713ee0c",
+        mapping="8e86e27af452391159881059fbaae3ef6451e86538d5caec75f8ca639e12c6eb",
         composition="7e1739721286ed0c2bf0c44ef480bc80cf3a6c0f5fb032e46ae5c2a423544eb4",
         provenance="c7f2ea4142fe09c687f2b1ac0f4d4c462cb55398bfe5149fe9008d9d03ff2cc0",
         data_role="hrrr_prs_in_band_surface",
@@ -257,7 +294,7 @@ _PACKAGED_PROFILES = MappingProxyType({
     # soil column in one file per valid time.
     "rap-native-grib2-v1": _profile(
         "rw-wps-rap-native-grib2", source_format="grib2",
-        mapping="6a94ace93fff992657cf70122dd4934762df50b9a1babae03d7b575b28f6621f",
+        mapping="dac1731f40e9a2334dc48d690419880f0ea01434a6a8f15a955cb1de8b197b27",
         composition="5e1191db5f310fef5e6f27af7a8268662785b0e10a1bee844d825931be0e7cc5",
         provenance="89ba6be652b95b99da759d1ae88d09235335f45b41117f767f48fcb228ac3c1c",
         data_role="rap_native_in_band_surface",
@@ -267,9 +304,9 @@ _PACKAGED_PROFILES = MappingProxyType({
     # nine-node soil column come from the same cycle's wrfprs analysis.
     "hrrr-native-grib2-v1": _profile(
         "rw-wps-hrrr-native-grib2", source_format="grib2",
-        mapping="648778426cbaf852b95ae8945f8152c2915bc5bdf15ba28d05c9af925420e05f",
-        composition="503852a8bfe955be9a844bc63de6d11bc6896a3817c15689bc30a5dc97ef427b",
-        provenance="99c6f704b6c783bbd70672bcf2ecc23752a82a6d902a03f05b16c774d3ca4c77",
+        mapping="b8227dfb5a30165661f8268bd2b8b45d7040d9f71dd49103054df14f82320a0d",
+        composition="3197e0372f333489cdfb017246cdf4809647229ffde97c8ec928639ee52daf87",
+        provenance="23f05eb17c5d3373c118df6d3ea84a97530f7e9c386bfae9ae37f34fffd44495",
         data_role="soil_surface_data",
         provenance_role="soil_surface_provenance",
         contributing_provenances={
@@ -281,7 +318,7 @@ _PACKAGED_PROFILES = MappingProxyType({
         contributing_mappings={
             "soil_surface_mapping": {
                 "file": "rw-wps-hrrr-prs-grib2.mapping.json",
-                "sha256": "770b747a0a8eb62b281fe51a5853a4fa82a43512079615a60f1c385f9713ee0c",
+                "sha256": "8e86e27af452391159881059fbaae3ef6451e86538d5caec75f8ca639e12c6eb",
             },
             "vegetation_surface_mapping": {
                 "file": "rw-wps-hrrr-surface-vegetation-grib2.mapping.json",
@@ -343,8 +380,8 @@ _PACKAGED_PROFILES = MappingProxyType({
     "aifs-single-grib2-v1": _profile(
         "rw-wps-aifs-single-grib2",
         source_format="grib2",
-        mapping="1dec5755c55c2a527e7545bc6add7ce11beddc9fdd51c7f6ea95a8c7083d1a85",
-        composition="eccaa63a5b025c91378f005d88d93b411e9fc07724c75328a2460065590abbf7",
+        mapping="4f30cce175e902799077f0d69905e25b6d6fca38ccdccf6fd067c07b6d624e42",
+        composition="3e5d36143454b46c3fb8bf59d7ff7eba401d80606aa7fb65e99ef97e813a3426",
         provenance="26e16197183f4d2b6dffc9c732b9d18933ae26118b40d61617663a1355557f2c",
         data_role="aifs_single_in_band_surface",
         provenance_role="aifs_single_in_band_surface_provenance",
@@ -355,6 +392,20 @@ _PACKAGED_PROFILES = MappingProxyType({
                     "99adc3a8894c2d19ba37d6da6d53418a95dcf32c2b1094b86"
                     "e8ccd1feecb7b02"
                 ),
+            },
+            # Sea ice: AIFS publishes no sea-ice field at any lead, so
+            # every start had no sea ice anywhere.  The composition binds
+            # sea_ice_fraction to the same cycle's GFS analysis ICEC (the
+            # route's declared gfs f000 donor), nearest 0.25-degree cell.
+            "seaice_mapping": {
+                "file": "rw-wps-earth2-gdas-donor.mapping.json",
+                "sha256": "e24542b3a9747c37614451d29eb4047b5f17f6068e3e63c299a2cc5367d8d8a1",
+            },
+        },
+        contributing_provenances={
+            "seaice_provenance": {
+                "file": "rw-wps-gfs-analysis-seaice.provenance.json",
+                "sha256": "2ced4ae3b2d6f8974fd9a259b97bf18483f972b41e66ff1b112b297468b0af64",
             },
         },
     ),
@@ -368,11 +419,28 @@ _PACKAGED_PROFILES = MappingProxyType({
     "ecmwf-open-data-oper-grib2-v1": _profile(
         "rw-wps-ecmwf-open-data-oper-grib2",
         source_format="grib2",
-        mapping="95ff9698d9db7f346f3973333936e58fda5860c9f2e4f76da76b2ed2c1284185",
-        composition="3bd9c9cc25c74b53169b586e9d9ff499aeef3f512ef35c8dd551fd769fdfe5c1",
+        mapping="e3637e86c9998a1e49197206a13b7e5338651ae70f8efd5ebd7c8a4dfcffb6fb",
+        composition="cae4f4c02cb2a730bd8430891743220c4a7f9c036175b01584ee876151c89bd2",
         provenance="c574a07fb303620eab432eea89dad3e765ccd510d965f2b0734c4e278d435b8b",
         data_role="ecmwf_open_data_in_band_surface",
         provenance_role="ecmwf_open_data_in_band_surface_provenance",
+        # Sea ice: ECMWF open data publishes thickness only, never a
+        # concentration (0.25- and 0.1-degree indexes checked 2026-10-28),
+        # so every IFS start had no sea ice anywhere.  The composition
+        # binds sea_ice_fraction to the same cycle's GFS analysis ICEC (the
+        # route's declared gfs f000 donor), nearest 0.25-degree cell.
+        contributing_mappings={
+            "seaice_mapping": {
+                "file": "rw-wps-earth2-gdas-donor.mapping.json",
+                "sha256": "e24542b3a9747c37614451d29eb4047b5f17f6068e3e63c299a2cc5367d8d8a1",
+            },
+        },
+        contributing_provenances={
+            "seaice_provenance": {
+                "file": "rw-wps-gfs-analysis-seaice.provenance.json",
+                "sha256": "2ced4ae3b2d6f8974fd9a259b97bf18483f972b41e66ff1b112b297468b0af64",
+            },
+        },
     ),
     # NCEP's GDAS analysis-cycle pgrb2 at 0.25 degrees: record-for-record
     # the GFS pgrb2 catalogue (696/696 at f000, MEASURED), arriving at a
@@ -388,7 +456,7 @@ _PACKAGED_PROFILES = MappingProxyType({
     "gdas-pgrb2-0p25-grib2-v1": _profile(
         "rw-wps-gdas-pgrb2-0p25-grib2",
         source_format="grib2",
-        mapping="eee8342a5a9a57f17d267dd48ad5edbb1a72f6d34c8803bd2ba1010668e0268d",
+        mapping="8df20187d7d953dce19875f0aaad215fbaa926134ee50610396864290a07b88e",
         composition="7d57188638a53ecf8771ce4779c7923015cee519b63318f6dcd0982798abf75d",
         provenance="13105c86f74d247d8795c075458ccc87bea1de5f663d53b805a1765aaa07c5a6",
         data_role="gdas_pgrb2_in_band_surface",
@@ -414,6 +482,181 @@ _PACKAGED_PROFILES = MappingProxyType({
         composition="39953c876827616ee0142a26729a2d9813d062ca9350500e0d232a901cd00b41",
         provenance="7199ecd0f94c06d8c1d98829ebf66f24a78905ccc6cf52643aeba6e2f2979fad",
         composition_state="pending_cross_source",
+    ),
+    # NVIDIA Earth-2 model output (FourCastNet 3, SFNO, Pangu, Aurora,
+    # FengWu, GraphCast, AIFS through earth2studio) as Earth2Studio's
+    # NetCDF4Backend writes it: one variable per field and level, (time,
+    # lead_time, lat, lon), no units in the file (the mapping's
+    # producer_attributes carries Earth2Studio's lexicon).  The land
+    # surface these models do not publish is borrowed from the ERA5
+    # analysis at the forecast's initialization (ARCO, keyless) through the
+    # cross-source composition, as the AIGFS hybrid borrows it from GDAS.
+    # Authored from woof/authorities/earth2-models.v1.json by
+    # tools/author_earth2_profile.py; proven on real FCN3 bytes 2026-10-19.
+    "earth2-stormcast-hrrr-netcdf-v1": _profile(
+        "rw-wps-earth2-stormcast-hrrr-netcdf",
+        source_format="netcdf",
+        mapping="bd9435782a2f7e0315419a89f2b584ef9d663ee1bd4833fa02d5a0215a3f997c",
+        composition="41c3cefb12cda90c50f19777a5e35238ae93eca19e5f32f1686d0214061b0dd3",
+        provenance="c49ac5b2da4e02631d44d61bb210f63e992f8c243388937f57f2695e314598f1",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-hrrr-native-donor.mapping.json",
+                "sha256": "d97b028807c5ac090a95674c10e508dd0598b30b82336f971c57b781d2f12634",
+            },
+        },
+    ),
+    "earth2-stormcast-conus-hrrr-netcdf-v1": _profile(
+        "rw-wps-earth2-stormcast-conus-hrrr-netcdf",
+        source_format="netcdf",
+        mapping="e54a5a39bf69a38fdefdbc14afb3c3db45811d053e97f4ff75179cebd845a89d",
+        composition="41c3cefb12cda90c50f19777a5e35238ae93eca19e5f32f1686d0214061b0dd3",
+        provenance="20e1eeb5e9ec1bac254fb77e3ba670b8e961ba6d58ba6845c9e4bfe6af3d1847",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-hrrr-native-donor.mapping.json",
+                "sha256": "d97b028807c5ac090a95674c10e508dd0598b30b82336f971c57b781d2f12634",
+            },
+        },
+    ),
+    "earth2-pl13-q-netcdf-v1": _profile(
+        "rw-wps-earth2-pl13-q-netcdf",
+        source_format="netcdf",
+        mapping="814639a651cb44d861489c46c583921ccccccfac51a06cd1a3c390b8ef4441b2",
+        composition="8b88da8dd45e6d2067babdd3706df8b3c11321fcc5d7ea02a479360b3564871b",
+        provenance="ab7aa121392c15667befc84351431431c49604055705e711e70d5f3e89b1a7cb",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-era5-arco-netcdf-donor.mapping.json",
+                "sha256": "fc6d7a02be6610e29b8f4da8c723c3ce32a55407a4fd70543ab81bf2c7034682",
+            },
+        },
+    ),
+    "earth2-sparse-r-netcdf-v1": _profile(
+        "rw-wps-earth2-sparse-r-netcdf",
+        source_format="netcdf",
+        mapping="e7207f7f3819cb6cf6b0e312f85fdf17fbc7db628762fda0ac04aec3e077cfaa",
+        composition="1b028d4da5d95189344c49b215b9fb303000767d7464a9f23af6cf1e5eb11cd6",
+        provenance="0204d362fe49f9d0d2be9b8358f8245798654771a2a13f1cabc9ea57fd163b08",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-era5-arco-netcdf-donor.mapping.json",
+                "sha256": "fc6d7a02be6610e29b8f4da8c723c3ce32a55407a4fd70543ab81bf2c7034682",
+            },
+        },
+    ),
+    "earth2-pl13-q-gfs-netcdf-v1": _profile(
+        "rw-wps-earth2-pl13-q-gfs-netcdf",
+        source_format="netcdf",
+        mapping="7ce88cdbf032252329e166ef2a7c465de93a9dbdfab076d80fafd32bbc59e9f2",
+        composition="3f5ce2527fb36a2d85db1d0f1d46a55c81e6dcca01a0ec3aff7fa2e533313b11",
+        provenance="80777b61866d834251b9ca7985f45ea828b2c2b2100167b189048f2202173ddf",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-gdas-donor.mapping.json",
+                "sha256": "e24542b3a9747c37614451d29eb4047b5f17f6068e3e63c299a2cc5367d8d8a1",
+            },
+        },
+    ),
+    "earth2-pl13-q-ifs-netcdf-v1": _profile(
+        "rw-wps-earth2-pl13-q-ifs-netcdf",
+        source_format="netcdf",
+        mapping="3880baab923f8ca07bbb059795a086142fd76f26a5258e9e96f2b241061ef8d6",
+        composition="4ceec22d014ece8c8dc663e1f977ccc7ca193223ae225371ed033e71a84fac8b",
+        provenance="72e860df39577f20a196ee02b48ecd0ca5c802522af4f1ab3bc7b4aee8bd03cc",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-ifs-donor.mapping.json",
+                "sha256": "ac39bd4c9a59a5bc2e7fded1863d70c8bcb4e163367c6b187f62ca8bbc5cbb04",
+            },
+        },
+    ),
+    "earth2-sparse-r-gfs-netcdf-v1": _profile(
+        "rw-wps-earth2-sparse-r-gfs-netcdf",
+        source_format="netcdf",
+        mapping="36bbacf994db8edbea01b91d1c4532a9891837e88acf55ffdd48cd262bf5f56a",
+        composition="f8ca19754a1e5cec8f5878975df6cccba3ed1a1e175ff8c7a8560cf27e45c933",
+        provenance="2e29f28ea798f1e67e334ba0e29f43875bb3b2097391ab463485573f0a21ade1",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-gdas-donor.mapping.json",
+                "sha256": "e24542b3a9747c37614451d29eb4047b5f17f6068e3e63c299a2cc5367d8d8a1",
+            },
+        },
+    ),
+    "earth2-sparse-r-ifs-netcdf-v1": _profile(
+        "rw-wps-earth2-sparse-r-ifs-netcdf",
+        source_format="netcdf",
+        mapping="baf137c563208c250ee9f7aa13d9fdc1519830e668dd47afa4a65c17a8fddbfc",
+        composition="9fd1eae2df0c6ec3da2c4dfe51228816ab0450ca50f5e52b00bfcd22b4fcfa92",
+        provenance="cbb4079023cbb7e35a8eb17c0b9814ec76e132d37c0e62b7c85afae8ce3d53d6",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-ifs-donor.mapping.json",
+                "sha256": "ac39bd4c9a59a5bc2e7fded1863d70c8bcb4e163367c6b187f62ca8bbc5cbb04",
+            },
+        },
+    ),
+    "earth2-pl13-rh-netcdf-v1": _profile(
+        "rw-wps-earth2-pl13-rh-netcdf",
+        source_format="netcdf",
+        mapping="abceb83c784e6749fd650af10463b2b23bee32f86b1b5829d71fd60fae9c773d",
+        composition="8b88da8dd45e6d2067babdd3706df8b3c11321fcc5d7ea02a479360b3564871b",
+        provenance="e7e4ead6b5e269ebbba8682461f37815bffe9b4804607af1526b242006fe65d9",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-era5-arco-netcdf-donor.mapping.json",
+                "sha256": "fc6d7a02be6610e29b8f4da8c723c3ce32a55407a4fd70543ab81bf2c7034682",
+            },
+        },
+    ),
+    "earth2-pl13-rh-gfs-netcdf-v1": _profile(
+        "rw-wps-earth2-pl13-rh-gfs-netcdf",
+        source_format="netcdf",
+        mapping="3113c80d149eec08dd3747a2955bd281c2746fbe394da41d584356253c458dad",
+        composition="3f5ce2527fb36a2d85db1d0f1d46a55c81e6dcca01a0ec3aff7fa2e533313b11",
+        provenance="3df59fd76ffcac01aa98d431fa77cd591b951012b9e9856f28af9bdc5db92e7e",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-gdas-donor.mapping.json",
+                "sha256": "e24542b3a9747c37614451d29eb4047b5f17f6068e3e63c299a2cc5367d8d8a1",
+            },
+        },
+    ),
+    "earth2-pl13-rh-ifs-netcdf-v1": _profile(
+        "rw-wps-earth2-pl13-rh-ifs-netcdf",
+        source_format="netcdf",
+        mapping="129661c93e1ba1017ca3030db89551b8d7144b4dd4d1fbd5a4fd6eacb55c5685",
+        composition="4ceec22d014ece8c8dc663e1f977ccc7ca193223ae225371ed033e71a84fac8b",
+        provenance="1dd4542a617245af8640da504f5a9a31d2d10bc72fbd9834aeaa71923e36c67e",
+        data_role="physical_analysis_surface_data",
+        provenance_role="physical_analysis_surface_provenance",
+        contributing_mappings={
+            "physical_analysis_surface_mapping": {
+                "file": "rw-wps-earth2-ifs-donor.mapping.json",
+                "sha256": "ac39bd4c9a59a5bc2e7fded1863d70c8bcb4e163367c6b187f62ca8bbc5cbb04",
+            },
+        },
     ),
     # The AIGFS HYBRID: the same operational NOMADS atmosphere (every
     # selector still pins subcenter=0 against the S3/EAGLE imposter) made
@@ -466,6 +709,24 @@ _PACKAGED_PROFILES = MappingProxyType({
     # answers only how a verified member's FIELDS decode.  Selectors
     # were authored from real 2026-08-17 00Z bytes through the converged
     # grib-core inventory.
+    "gefs-v11-flat-grib2-v1": _profile(
+        "rw-wps-gefs-v11-flat-grib2",
+        source_format="grib2",
+        mapping="dd6a686fbcc739ec30369b377abb4148a1fdc742145d928a2ca4f9c6f740b6c8",
+        composition="20b454f08f5a6a1995e9c3051cfd75c0f7a87948038794a7df5df9c96b554658",
+        provenance="8659bf35897a1c35a01fce996f5ce5c5682701c2198944485bce3947baf03dd0",
+        data_role="gefs_member_in_band_surface",
+        provenance_role="gefs_member_in_band_surface_provenance",
+    ),
+    "gefs-v11-grib2-v1": _profile(
+        "rw-wps-gefs-v11-grib2",
+        source_format="grib2",
+        mapping="ff6560082eaec715934a35fecc8d84be6226d62f012a70f03ffe2fa61a6ac599",
+        composition="65fa7756915f178d96ac67455f381caba3d466c2b33efe86eaeedf54d542a4fc",
+        provenance="815a4bee91429d90d29a1a172f9e7e2e1479e7538cb3fa5e5c2fde0eb1b69739",
+        data_role="gefs_member_in_band_surface",
+        provenance_role="gefs_member_in_band_surface_provenance",
+    ),
     "gefs-ensemble-grib2-v1": _profile(
         "rw-wps-gefs-ensemble-grib2",
         source_format="grib2",
@@ -550,6 +811,39 @@ _PACKAGED_PROFILES = MappingProxyType({
         data_role="rrfs_prslev_2dfld_in_band_surface",
         provenance_role="rrfs_prslev_2dfld_in_band_surface_provenance",
     ),
+    # One RRFS ensemble MEMBER from the public rrfsens subset, completed by
+    # its DECLARED COMPANION: the deterministic prslev+2dfld pair of the
+    # same cycle, decoded through the deterministic RRFS mapping above as
+    # a pinned contributing authority.  The member subset stops at 250 hPa
+    # and has no soil, skin temperature or land mask.  Every member field
+    # pins product definition template 1, so the member's own decode never
+    # mixes runs; the composition's companion row stacks the companion's
+    # 14 levels above 250 hPa onto the member's columns and lends the land
+    # state through the ordinary field_sources grammar.  The composition
+    # receipt names which levels and fields came from which run.  Without
+    # the companion's files there is no soil state and the model top sits
+    # above the data, and the front door refuses with the row's words.
+    "rrfs-ens-member-companion-grib2-v1": _profile(
+        "rw-wps-rrfs-ens-member-companion-grib2",
+        source_format="grib2",
+        mapping="d7386655a10547a8e95a4a44e1edae7d9258e668258a5a19b70657be58ce6644",
+        composition="242d529a511e21bbb2a62195a49320b1547fb4f606cd03e58d0af5d4a776b7b6",
+        provenance="e1c3997fb2b0e24cfcc671347d3cd6aea68af7f39523e5bc86040a87102649e9",
+        data_role="rrfs_ens_member_in_band_surface",
+        provenance_role="rrfs_ens_member_in_band_surface_provenance",
+        contributing_provenances={
+            "rrfs_ens_companion_provenance": {
+                "file": "rw-wps-rrfs-prslev-2dfld-grib2.provenance.json",
+                "sha256": "e364f22ec917bfd991ec3bb756aa49b697d03c7cd425d40a35501dd769f279de",
+            },
+        },
+        contributing_mappings={
+            "rrfs_ens_companion_mapping": {
+                "file": "rw-wps-rrfs-prslev-2dfld-grib2.mapping.json",
+                "sha256": "6b89a9d1eed5ad8868505e5560301599736837340ca2fb8d87dd4fdf872d68cb",
+            },
+        },
+    ),
     # ERA5 on its NATIVE 137 hybrid sigma-pressure model levels -- the
     # first shipped profile whose vertical coordinate is not a pressure
     # ladder.  The A/B interface coefficients ride IN BAND as the GRIB2
@@ -620,6 +914,16 @@ _PACKAGED_MEMBER_GRAMMARS = MappingProxyType({
     # (geavg/gespr) share the member directories and filename pattern.
     # Every declared value was measured from real 2026-08-17 00Z bytes
     # through the extended grib-core inventory.
+    "gefs-v11-flat-grib2-members-v1": MappingProxyType({
+        "file": "rw-wps-gefs-v11-flat-grib2.members.json",
+        "sha256": "c6eb2d709eb1be7641c41cedfeb43c2441918abd980ecde1931ff3882fc0cd5f",
+    }),
+    "gefs-reforecast-grib2-members-v1": MappingProxyType({'file': 'rw-wps-gefs-reforecast-grib2.members.json', 'sha256': 'fe51794a16335247b4b177fe6901ff5b8f66b94ebbde1e716407351a2ebaca10'}),
+    "gefs-reforecast-weekly-grib2-members-v1": MappingProxyType({'file': 'rw-wps-gefs-reforecast-weekly-grib2.members.json', 'sha256': 'cf8668dff0ca704ac0382a24990212b91c236160a550a392d7c1d430203b3bd1'}),
+    "gefs-v11-grib2-members-v1": MappingProxyType({
+        "file": "rw-wps-gefs-v11-grib2.members.json",
+        "sha256": "cd18697dffe60a37ec7cd968460eb51595286c63e6add20f465076be334aa593",
+    }),
     "gefs-ensemble-grib2-members-v1": MappingProxyType({
         "file": "rw-wps-gefs-ensemble-grib2.members.json",
         "sha256": (
@@ -1102,6 +1406,25 @@ def packaged_mapping_target(profile_id: str) -> Mapping[str, object]:
 ADMISSION_ONLY_TARGET_KEYS = frozenset({BOUNDARY_MULTIPLES_KEY,
                                         "boundary_interval_seconds"})
 
+#: Mapping ``grid`` keys that decide which files are admitted and nothing
+#: decoded, on the same rule:
+#:
+#: - ``published_first_points``: other encodings of the declared first
+#:   grid point that a publisher writes for the same grid (HRRRv1's
+#:   millidegree corner, 2.8.9).  A record matching one is admitted as the
+#:   declared grid; the frame header and every array come from the
+#:   declared ``parameters``, so a preparation made before the key existed
+#:   holds the same frames.
+ADMISSION_ONLY_GRID_KEYS = frozenset({"published_first_points"})
+
+#: Mapping ``fields.<name>`` keys of the same kind:
+#:
+#: - ``repeated_record``: which of two messages a publisher wrote for one
+#:   record the field reads (HRRRv1's repeated HGT, 2.8.9).  Without it a
+#:   repeat is refused, so every frame a preparation decoded before the
+#:   key existed had no repeat, and the key reads it the same way.
+ADMISSION_ONLY_FIELD_KEYS = frozenset({"repeated_record"})
+
 
 def mapping_decode_identity(document: Mapping[str, object]) -> str:
     """SHA-256 of a mapping document without its admission-only keys.
@@ -1109,7 +1432,9 @@ def mapping_decode_identity(document: Mapping[str, object]) -> str:
     Canonical JSON of the parsed document (sorted keys, no whitespace), so
     two documents with this digest equal parse to the same fields,
     derivations, grid and target, which is everything the engine decodes
-    from; only :data:`ADMISSION_ONLY_TARGET_KEYS` are left out.
+    from; only :data:`ADMISSION_ONLY_TARGET_KEYS`,
+    :data:`ADMISSION_ONLY_GRID_KEYS` and :data:`ADMISSION_ONLY_FIELD_KEYS`
+    are left out.
     """
 
     stripped = dict(document)
@@ -1117,6 +1442,17 @@ def mapping_decode_identity(document: Mapping[str, object]) -> str:
     if isinstance(target, Mapping):
         stripped["target"] = {key: value for key, value in target.items()
                               if key not in ADMISSION_ONLY_TARGET_KEYS}
+    grid = stripped.get("grid")
+    if isinstance(grid, Mapping):
+        stripped["grid"] = {key: value for key, value in grid.items()
+                            if key not in ADMISSION_ONLY_GRID_KEYS}
+    fields = stripped.get("fields")
+    if isinstance(fields, Mapping):
+        stripped["fields"] = {
+            name: ({key: value for key, value in field.items()
+                    if key not in ADMISSION_ONLY_FIELD_KEYS}
+                   if isinstance(field, Mapping) else field)
+            for name, field in fields.items()}
     canonical = json.dumps(stripped, sort_keys=True, separators=(",", ":"),
                            ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -1175,7 +1511,9 @@ def bound_mapping_refusal(profile_id: str, bound: bytes, *,
 
 
 __all__ = [
-    "ADMISSION_ONLY_TARGET_KEYS", "bound_mapping_refusal",
+    "ADMISSION_ONLY_FIELD_KEYS", "ADMISSION_ONLY_GRID_KEYS",
+    "ADMISSION_ONLY_TARGET_KEYS",
+    "bound_mapping_refusal",
     "mapping_decode_identity",
     "BOUNDARY_MULTIPLES_KEY", "boundary_interval_refusal",
     "boundary_interval_takes", "packaged_mapping_target",

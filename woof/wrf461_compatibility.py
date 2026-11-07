@@ -74,7 +74,7 @@ class WRFCompatibilityCell:
 # verdict count by 10/6 and the pinned counts in
 # tests/test_wrf461_compatibility.py were re-measured off the enlarged
 # matrix rather than projected.
-MP_OPTIONS = (0, 1, 6, 8, 9, 10, 16, 18, 28, 50)
+MP_OPTIONS = (0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 30, 50, 106)
 # 11 (Shin-Hong) joined the PBL axis with the Shin-Hong port: an implemented
 # scheme with a certified oracle (max ULP 0 CPU authority against the
 # byte-frozen WRF v4.6.1 module_bl_shinhong.F,
@@ -112,7 +112,12 @@ RADIATION_OPTIONS = (
 # the drift was latent rather than a live refusal; it is closed here, and
 # test_authority_agreement now holds every axis of this transcription
 # equal to the selectable set so the next one cannot be latent either.
-CUMULUS_OPTIONS = (0, 1, 3, 16)
+#
+# 5 (Grell 3D) joined with the G3 port (woof/core/kernels/g3.cu, 0 ULP
+# under the strict arm against tools/g3_wrf461_oracle), on the same
+# verdict-independent terms; 96 (New SAS with NSCV) joined with its port,
+# on the same terms.
+CUMULUS_OPTIONS = (0, 1, 3, 5, 6, 16, 96)
 
 #: Values ``woof.config`` lets a user select that this transcription does
 #: NOT represent, each with the reason it is absent.  The table exists
@@ -129,6 +134,10 @@ CUMULUS_OPTIONS = (0, 1, 3, 16)
 #: transcription's silence means, which is what stops the next reader from
 #: mistaking absence for illegality.
 AXIS_EXCLUSIONS = MappingProxyType({
+    ("mp_physics", 900): (
+        "TEMPO is a WOOF named scheme (woof.microphysics_schemes, id 900, "
+        "outside WRF's mp_physics range): WRF v4.6.1 has no TEMPO option, so "
+        "there is no WRF surface-layer or PBL pairing law to transcribe."),
     ("bl_pbl_physics", 2): (
         "MYJ's WRF law is stronger than a matrix cell and is implemented "
         "directly: phys/module_physics_init.F:3770-3772 fatals the MYJ "
@@ -146,6 +155,7 @@ AXIS_EXCLUSIONS = MappingProxyType({
         "cell is refused by woof.config.validate_myj_pairing for its own "
         "reason (the TKE_MYJ scan). A row here would be a second "
         "authority over questions that already have one."),
+    ("bl_pbl_physics", 901): ("CCPP TKE-EDMF has no WRF selector counterpart; its admission follows its own registry metadata."),
     ("bl_pbl_physics", 900): (
         "SASE is a WOOF closure with no WRF counterpart: WRF v4.6.1 "
         "registers no package at bl_pbl_physics=900, so there is no "
@@ -170,12 +180,23 @@ MATRIX_CELL_COUNT = (
 
 
 _MP_CITATION = MappingProxyType({
+    2: WRFCitation("Registry/Registry.EM_COMMON", "3016",
+        "the linscheme package binds mp_physics=2 and carries six masses"),
+    30: WRFCitation("Registry/registry.sbm", "318",
+        "the fast spectral bin package binds mp_physics=30"),
     0: WRFCitation(
         "Registry/Registry.EM_COMMON", "3014",
         "the passiveqv package binds mp_physics=0 and allocates qv alone"),
     1: WRFCitation(
         "Registry/Registry.EM_COMMON", "3015",
         "the Kessler package binds mp_physics=1 and allocates qv/qc/qr"),
+    5: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3019",
+        "the fer_mp_hires package binds mp_physics=5"),
+    3: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3017",
+        "the wsm3scheme package binds mp_physics=3 and allocates qv/qc/qr"),
+    4: WRFCitation("Registry/Registry.EM_COMMON", "3018", "the WSM5 package binds mp_physics=4 and qv/qc/qr/qi/qs"),
     6: WRFCitation(
         "Registry/Registry.EM_COMMON", "3021",
         "the WSM6 package binds mp_physics=6"),
@@ -191,9 +212,16 @@ _MP_CITATION = MappingProxyType({
     16: WRFCitation(
         "Registry/Registry.EM_COMMON", "3031",
         "the wdm6scheme package binds mp_physics=16"),
+    106: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3022",
+        "the wsm6rscheme package binds mp_physics=106 and allocates "
+        "qv/qc/qr/qi/qs/qg"),
     18: WRFCitation(
         "Registry/Registry.EM_COMMON", "3033",
         "the NSSL two-moment package binds mp_physics=18"),
+    24: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3034",
+        "the wsm7scheme package binds mp_physics=24"),
     28: WRFCitation(
         "Registry/Registry.EM_COMMON", "3036",
         "the aerosol-aware Thompson package binds mp_physics=28"),
@@ -227,9 +255,18 @@ _CUMULUS_CITATION = MappingProxyType({
     3: WRFCitation(
         "Registry/Registry.EM_COMMON", "3192",
         "the gfscheme package binds cu_physics=3"),
+    5: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3194",
+        "the g3scheme package binds cu_physics=5"),
+    6: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3195",
+        "the tiedtkescheme package binds cu_physics=6"),
     16: WRFCitation(
         "Registry/Registry.EM_COMMON", "3201",
         "the ntiedtkescheme package binds cu_physics=16"),
+    96: WRFCitation(
+        "Registry/Registry.EM_COMMON", "3200",
+        "the nsasscheme package binds cu_physics=96"),
 })
 
 _RADIATION_CITATION = MappingProxyType({

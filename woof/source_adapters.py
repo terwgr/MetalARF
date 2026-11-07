@@ -10,7 +10,8 @@ complete limited-area initial state.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 from enum import Enum
 import hashlib
 import math
@@ -26,6 +27,7 @@ from woof.source_coverage import (COVERAGE_WINDOW_TYPES, CoverageWindow,
                                    LambertGridWindow, RegularLatLonWindow)
 from woof.source_cycles import CycleGrid
 from woof.source_availability import ArchiveWindow
+from woof import fetch_endpoints
 from woof.grid_requirements import NATIVE_TARGET_INTERIOR_AXIS
 from woof.source_credentials import (CredentialLocation, SourceCredential,
                                       credential_declaration)
@@ -37,7 +39,7 @@ RUSTY_WEATHER_INVENTORY_HASHES = {
         "cb5a6fbf87f0d0f5cac35f4735bfc0053c7f4dd79985a64afc1b920c7b20a2eb"
     ),
     "crates/rustwx-models/src/lib.rs": (
-        "125b919608b1981fa314755d2a5419f4fdb3783b3abd52200806cb0252268d3c"
+        "2b7c449a4f9e90ba242856c9955a8d1c9d813d7c6328943033074e7b058b2340"
     ),
     "README.md": (
         "6eb3ea080d78a634fea1fc74e32795fde14af30ad48032efe62bcd90e98db6f3"
@@ -54,20 +56,41 @@ class SourceKind(str, Enum):
     SURFACE_ANALYSIS = "surface_analysis"
     POSTPROCESSED_GUIDANCE = "postprocessed_guidance"
     WRF_ARCHIVE = "wrf_archive"
+    HYDRO_FORCING = "hydro_forcing"
+
+
+@dataclass(frozen=True)
+class SourceTopEra:
+    """One era of a model-level source's native top, measured from its files.
+
+    ``start`` is the first cycle (``YYYY-MM-DDTHH`` UTC) the era covers, or
+    ``""`` for the source's whole earlier record.  ``top_pa`` is the model
+    top (Pa) the source model ran with: on the source's own eta ladder a
+    target with this ``p_top`` co-locates its top level with the source's,
+    and any higher target would be extrapolated past the analysis.
+    """
+
+    start: str
+    top_pa: float
+    basis: str
+
+    def __post_init__(self) -> None:
+        if self.start:
+            datetime.strptime(self.start, "%Y-%m-%dT%H")
+        if not math.isfinite(float(self.top_pa)) or float(self.top_pa) <= 0.0:
+            raise ValueError("SourceTopEra.top_pa must be a positive finite pressure (Pa)")
+        if not self.basis.strip():
+            raise ValueError("SourceTopEra.basis must say how the top was established")
 
 
 class AdapterStatus(str, Enum):
     """Readiness for direct native production of stock-WRF inputs."""
 
     CERTIFIED = "certified_stock_wrf"
-    NATIVE_EXPORT_PENDING = "native_ingest_direct_export_pending"
     MAPPING_REQUIRED = "adapter_mapping_required"
     MEMBER_SELECTION_REQUIRED = "member_selection_and_mapping_required"
     COMPOSITION_REQUIRED = "explicit_composition_required"
     ARCHIVE_MAPPING_REQUIRED = "wrf_archive_mapping_required"
-    DECODE_IMPLEMENTED_CERTIFICATION_REQUIRED = (
-        "mapped_decode_implemented_stock_wrf_certification_required"
-    )
     RUNNABLE_NOT_CERTIFIED = "runnable_mapping_not_stock_wrf_certified"
 
 
@@ -90,6 +113,12 @@ class SourceAdapter:
     level_mapping: str
     cadence_mapping: str
     stock_wrf_gate: str
+    parent_family: str = "physics"
+    upstream_model_version: str | None = None
+    lineage_donor_source: str | None = None
+    lineage_receipts: tuple[str, ...] = ()
+    lineage_root_keys: tuple[str, ...] = ()
+    lineage_runtime_keys: tuple[str, ...] = ()
     runnable: bool = False
     runner: str | None = None
     #: The packaged profile (mapping + composition + provenance, shipped in
@@ -99,8 +128,17 @@ class SourceAdapter:
     #: is the arbitrary-acceptance seam -- adding a model whose mapping can
     #: be written is three JSON documents plus this row.
     packaged_profile: str | None = None
+    #: Row in data/hydro/forcing-sources.v1.json. This declares catchment
+    #: forcing independently of atmospheric initialization capability.
+    hydro_forcing_profile: str | None = None
     # A recommendation only; runtime capability never depends on this name.
     default_physics_profile: str | None = None
+    #: The recommendation for a run whose finest grid is convection-permitting
+    #: (finer than :data:`woof.physics_menu.CONVECTION_PERMITTING_BELOW_M`),
+    #: binding ahead of ``default_physics_profile`` there.  A row, not a code
+    #: path: a source whose coarse-grid default is wrong at storm scale names
+    #: the suite here.
+    convection_permitting_physics_profile: str | None = None
     #: Published static source selected by this source's configuration.
     #: An absent declaration leaves existing configuration bytes unchanged.
     static_source: str | None = None
@@ -151,6 +189,16 @@ class SourceAdapter:
     forcing_interval_seconds: float | None = None
     #: The acquisition consumes every native frame; a cadence cannot subsample it.
     fetch_entire_window: bool = False
+    #: How a run on the same machine publishes this source's leads as it
+    #: writes them (``woof.local_posting``), for a source that is produced,
+    #: not downloaded.  Set, ``woof prep --as-posted`` prepares it lead by
+    #: lead with no network posting row; ``None`` keeps the posting-row rule.
+    local_posting: str | None = None
+    #: Hours of this source's 2 m air temperature that inland water beyond
+    #: the source's reach averages (WRF use_tavg_for_tsk, WPS avg_tsfc).
+    #: ``None`` keeps the WPS day (24 h); ``0`` takes the start time's own
+    #: 2 m air temperature, so the initial state needs no later lead.
+    inland_air_mean_hours: float | None = None
     #: The default fetch transport writes a template unless retrieval is requested.
     fetch_requires_retrieve: bool = False
     #: The smallest pressure (Pa) this source's CERTIFIED inventory serves
@@ -174,6 +222,17 @@ class SourceAdapter:
     #: :func:`fetch_model_top_pa`, so a run whose own ladder tops out
     #: above the certified one fetches the levels it needs with no flag.
     extendable_source_top_pa: float | None = None
+    #: The native model top (Pa) a model-level source's column reaches,
+    #: by the cycle era it was produced in, oldest first: a published fact
+    #: of the source's own vertical grid that changed with an upgrade
+    #: (HRRR raised its top from 20 to 15 hPa with v4).  Read through
+    #: :func:`source_top_pa_for_cycle`, so an emitted configuration whose
+    #: requested top lies above what its cycle's era reaches is served at
+    #: the era's top before anything is downloaded.  Breakage it prevents:
+    #: the hrrr_v4_gsd41 recipe (p_top 1500 Pa) on a pre-v4 HRRR cycle
+    #: fetched 26 GB and then refused at root_initialize ("target pressure
+    #: lies above source top").  Empty means one top for every cycle.
+    source_top_eras: tuple["SourceTopEra", ...] = ()
     #: Where this source's native grid reaches, or ``None`` for a global
     #: product.  A declared window (see :mod:`woof.source_coverage`) is what
     #: lets `woof domain` refuse an out-of-coverage plan AT PLAN TIME with
@@ -261,8 +320,24 @@ class SourceAdapter:
     # source registry owns product/time semantics independently of transport.
     time_axis: str | None = None
     selection_owner: str | None = None
+    selection_provider_hint: str | None = None
+    ensemble_physics_arms: tuple = ()
     forecast_time_owner: str | None = None
     forecast_time_cycle_argument: bool = False
+    #: The module whose ``fetch(args)`` produces this source's bytes when
+    #: they are not files at a URL: a model the fetch door RUNS (the
+    #: ``earth2`` row runs an NVIDIA Earth-2 model through earth2studio,
+    #: table-driven by ``woof.earth2_run``).  The fetch door asks the row
+    #: instead of comparing a source id.
+    acquisition_owner: str | None = None
+    # Parameterized sources share one route and retain a model identity.
+    model_table: str | None = None
+    model_key: str | None = None
+    model_row: dict | None = field(default=None, compare=False)
+    acquisition_area: bool = False
+    ensemble_preparation_owner: str | None = None
+    acquisition_prep_handoff: bool = False
+    acquisition_hints: tuple = ()
     case_data_file: str | None = None
     case_data_vtable: str | None = None
     notes: str = ""
@@ -274,13 +349,15 @@ class SourceAdapter:
         return (self.display_name or "").strip() or self.source_id
 
     def __post_init__(self) -> None:
+        if self.parent_family not in ("ai", "physics"):
+            raise ValueError("parent_family must be ai or physics")
         if self.same_grid_pairing not in (None, "identity"):
             raise ValueError(
                 "same_grid_pairing must be 'identity' or None; an unknown "
                 "pairing cannot preserve the declared source indices")
         if type(self.forecast_time_cycle_argument) is not bool:
             raise TypeError("forecast_time_cycle_argument must be a boolean")
-        for name in ("selection_owner", "forecast_time_owner"):
+        for name in ("selection_owner", "forecast_time_owner", "acquisition_owner"):
             value = getattr(self, name)
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise TypeError(f"{name} must name an owner or be None")
@@ -352,10 +429,18 @@ def _adapter(
     level_mapping: str = "pending",
     cadence_mapping: str = "pending",
     stock_wrf_gate: str = "not_run",
+    parent_family: str = "physics",
+    upstream_model_version: str | None = None,
+    lineage_donor_source: str | None = None,
+    lineage_receipts: tuple[str, ...] = (),
+    lineage_root_keys: tuple[str, ...] = (),
+    lineage_runtime_keys: tuple[str, ...] = (),
     runnable: bool = False,
     runner: str | None = None,
     packaged_profile: str | None = None,
+    hydro_forcing_profile: str | None = None,
     default_physics_profile: str | None = None,
+    convection_permitting_physics_profile: str | None = None,
     static_source: str | None = None,
     runtime_surface_fields: tuple[tuple, ...] = (),
     same_grid_pairing: str | None = None,
@@ -366,9 +451,12 @@ def _adapter(
     requires_ensemble_calibration: bool = False,
     forcing_interval_seconds: float | None = None,
     fetch_entire_window: bool = False,
+    local_posting: str | None = None,
+    inland_air_mean_hours: float | None = None,
     fetch_requires_retrieve: bool = False,
     certified_source_top_pa: float | None = None,
     extendable_source_top_pa: float | None = None,
+    source_top_eras: tuple[SourceTopEra, ...] = (),
     coverage: CoverageWindow | None = None,
     cycles: CycleGrid | None = None,
     archives: tuple[ArchiveWindow, ...] = (),
@@ -379,8 +467,16 @@ def _adapter(
     boundary_species: tuple[str, ...] = (),
     time_axis: str | None = None,
     selection_owner: str | None = None,
+    selection_provider_hint: str | None = None,
+    ensemble_physics_arms: tuple = (),
+    acquisition_owner: str | None = None,
     forecast_time_owner: str | None = None,
     forecast_time_cycle_argument: bool = False,
+    model_table: str | None = None,
+    acquisition_area: bool = False,
+    ensemble_preparation_owner: str | None = None,
+    acquisition_prep_handoff: bool = False,
+    acquisition_hints: tuple = (),
     case_data_file: str | None = None,
     case_data_vtable: str | None = None,
 ) -> SourceAdapter:
@@ -406,10 +502,17 @@ def _adapter(
         level_mapping=level_mapping,
         cadence_mapping=cadence_mapping,
         stock_wrf_gate=stock_wrf_gate,
+        parent_family=parent_family, upstream_model_version=upstream_model_version,
+        lineage_donor_source=lineage_donor_source,
+        lineage_receipts=lineage_receipts, lineage_root_keys=lineage_root_keys,
+        lineage_runtime_keys=lineage_runtime_keys,
         runnable=runnable,
         runner=runner,
         packaged_profile=packaged_profile,
+        hydro_forcing_profile=hydro_forcing_profile,
         default_physics_profile=default_physics_profile,
+        convection_permitting_physics_profile=(
+            convection_permitting_physics_profile),
         static_source=static_source,
         runtime_surface_fields=runtime_surface_fields,
         same_grid_pairing=same_grid_pairing,
@@ -420,9 +523,12 @@ def _adapter(
         requires_ensemble_calibration=requires_ensemble_calibration,
         forcing_interval_seconds=forcing_interval_seconds,
         fetch_entire_window=fetch_entire_window,
+        local_posting=local_posting,
+        inland_air_mean_hours=inland_air_mean_hours,
         fetch_requires_retrieve=fetch_requires_retrieve,
         certified_source_top_pa=certified_source_top_pa,
         extendable_source_top_pa=extendable_source_top_pa,
+        source_top_eras=tuple(source_top_eras),
         coverage_window=coverage,
         cycle_grid=cycles,
         archive_windows=archives,
@@ -434,6 +540,13 @@ def _adapter(
         seed_fields=tuple(seed_fields),
         boundary_species=tuple(boundary_species),
         time_axis=time_axis, selection_owner=selection_owner,
+        selection_provider_hint=selection_provider_hint,
+        ensemble_physics_arms=ensemble_physics_arms,
+        acquisition_owner=acquisition_owner, model_table=model_table,
+        acquisition_area=acquisition_area,
+        ensemble_preparation_owner=ensemble_preparation_owner,
+        acquisition_prep_handoff=acquisition_prep_handoff,
+        acquisition_hints=acquisition_hints,
         forecast_time_owner=forecast_time_owner,
         forecast_time_cycle_argument=forecast_time_cycle_argument,
         case_data_file=case_data_file, case_data_vtable=case_data_vtable,
@@ -566,6 +679,30 @@ _HRRR_NATIVE_ARCHIVE = ArchiveWindow(
      "https://noaa-hrrr-bdp-pds.s3.amazonaws.com/?list-type=2&max-keys=2&prefix=hrrr.20140730/conus/hrrr.t18z.wrfprsf00"),
 )
 
+#: HRRR's native model top by era, MEASURED 2026-10-27 from the archive's
+#: own wrfnat f00 files (PRES on hybrid level 50, the top mass level, read
+#: by byte range on noaa-hrrr-bdp-pds): 2230.3 Pa on every cycle checked
+#: from the v3 start (2018-07-13 12Z) through 2020-12-01 23Z, and
+#: 2139-2238 Pa on the v1/v2 sigma grid (2015-06-01, 2017-06-01 12Z); then
+#: 1731.5 Pa from the 2020-12-02 00Z cycle on (2020-12-02 00/06/09-12Z,
+#: 2024-06-01 12Z).  On HRRR's own eta ladder (the hrrr_v4_gsd41 recipe's)
+#: those are the top levels of a 2000 Pa and a 1500 Pa model top.  The
+#: same switch measured on the preparation (updraft-factory, 2026-10-27):
+#: 2020-05-22, 2020-08-10, 2019-06-20 and 2019-03-24 12Z refused p_top
+#: 1500 Pa at root_initialize, 2020-05-22 prepared at 2000 Pa, and
+#: 2022-06-11/15 prepared at 1500 Pa.
+_HRRR_NATIVE_TOP_ERAS = (
+    SourceTopEra(
+        "", 2000.0,
+        "HRRR v1-v3 (to the 2020-12-01 23Z cycle) ran with a 20 hPa model "
+        "top: wrfnat hybrid level 50 reads 2230.3 Pa (v3) on the "
+        "archive's own files"),
+    SourceTopEra(
+        "2020-12-02T00", 1500.0,
+        "HRRR v4 raised the model top to 15 hPa: wrfnat hybrid level 50 "
+        "reads 1731.5 Pa from the 2020-12-02 00Z cycle on"),
+)
+
 
 #: The next six bounds were MEASURED on 2026-09-25 by asking each archive
 #: for the exact object this program's route reads (the f000 of the
@@ -575,13 +712,13 @@ _HRRR_NATIVE_ARCHIVE = ArchiveWindow(
 #: begins, so a date before it answers no in plain words at the date
 #: picker instead of failing at the download.
 _GEFS_ARCHIVE = ArchiveWindow(
-    "aws", "2020-09-23T00",
+    "aws", "2020-09-23T12",
     "The GEFS v12 atmos/pgrb2ap5 layout this route reads starts with the "
     "2020-09-23 implementation; older objects in the bucket are GEFS v11 "
     "under other paths. Not every cycle of the first days is present.",
-    ("https://noaa-gefs-pds.s3.amazonaws.com/?list-type=2&max-keys=5&prefix=gefs.20200923/00/atmos/pgrb2ap5/gec00",
+    ("https://noaa-gefs-pds.s3.amazonaws.com/?list-type=2&max-keys=5&prefix=gefs.20200923/12/atmos/pgrb2ap5/gec00",
      "https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php"),
-    checked_at="2026-09-25",
+    checked_at="2026-10-20",
 )
 _AIGEFS_ARCHIVE = ArchiveWindow(
     "aws", "2025-06-01T00",
@@ -589,6 +726,18 @@ _AIGEFS_ARCHIVE = ArchiveWindow(
     "exist before it.",
     ("https://noaa-nws-graphcastgfs-pds.s3.amazonaws.com/?list-type=2&delimiter=/&max-keys=3&prefix=EAGLE_ensemble/",),
     checked_at="2026-09-25",
+)
+_ECMWF_ENS_ARCHIVE = ArchiveWindow(
+    "aws", "2024-03-18T12",
+    "Archived 0.25-degree ENS members with nine pressure levels and four "
+    "soil layers are read from the open-data AWS replica. Its date listing "
+    "begins 2023-01-18, but earlier soil inventories do not satisfy this "
+    "preparation. CC-BY-4.0 and ECMWF Terms of Use. TIGGE is separate, "
+    "CC-BY-NC-4.0 research-only data, never an automatic fallback.",
+    ("https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com/20240318/12z/ifs/0p25/enfo/20240318120000-0h-enfo-ef.index",
+     "https://www.ecmwf.int/en/forecasts/datasets/open-data",
+     "https://apps.ecmwf.int/datasets/licences/tigge/"),
+    checked_at="2026-10-20",
 )
 _AIFS_OPEN_ARCHIVE = ArchiveWindow(
     "aws", "2025-02-25T06",
@@ -612,6 +761,27 @@ _RAP_ARCHIVE = ArchiveWindow(
      "https://registry.opendata.aws/noaa-rap/"),
     checked_at="2026-09-25",
     early_start="2021-02-22T00", early_hours=tuple(range(10)),
+)
+#: MEASURED 2026-10-10 the same way, on the native-level product this
+#: route reads (rap.tHHz.awp130bgrbf00.grib2): none on 2021-02-21; from
+#: 2021-02-22 the 00 to 08 UTC runs every day and 09 UTC on some days only
+#: (absent 02-22, 02-23 and 02-26, present 02-24, 02-25 and 03-01), so
+#: the early hours named are the ones every day holds; every hour from
+#: 2021-04-26 00 UTC (2021-04-25 holds 00 to 09 only).
+_RAP_NATIVE_ARCHIVE = ArchiveWindow(
+    "aws", "2021-04-26T00",
+    "The mirror's rap.YYYYMMDD awp130bgrb objects begin on 2021-02-22 with "
+    "the 00 to 08 UTC runs (09 UTC on some days only); every hour of the "
+    "day begins on 2021-04-26 00 UTC. 2021-02-21 holds none. Older RAP "
+    "runs are kept only by NCEI, which this route does not read.",
+    ("https://noaa-rap-pds.s3.amazonaws.com/rap.20210221/rap.t00z.awp130bgrbf00.grib2",
+     "https://noaa-rap-pds.s3.amazonaws.com/rap.20210222/rap.t08z.awp130bgrbf00.grib2",
+     "https://noaa-rap-pds.s3.amazonaws.com/rap.20210222/rap.t09z.awp130bgrbf00.grib2",
+     "https://noaa-rap-pds.s3.amazonaws.com/rap.20210425/rap.t10z.awp130bgrbf00.grib2",
+     "https://noaa-rap-pds.s3.amazonaws.com/rap.20210426/rap.t10z.awp130bgrbf00.grib2",
+     "https://registry.opendata.aws/noaa-rap/"),
+    checked_at="2026-10-10",
+    early_start="2021-02-22T00", early_hours=tuple(range(9)),
 )
 _RRFS_OPS_ARCHIVE = ArchiveWindow(
     "aws", "2026-08-13T00",
@@ -662,9 +832,41 @@ _MSC_DATAMART_DOOR = ArchiveWindow(
 # source already decoded by woof's native ingest path, the packaged 20CRv3
 # member profile, its complementary metadata-driven NetCDF-CF primitives, then
 # the declarative format-level adapter exposed by RW-WPS.
+
+
 _ADAPTERS = (
     _adapter(
+        "aorc", name="NOAA AORC catchment forcing",
+        upstream_model_id=None, kind=SourceKind.HYDRO_FORCING,
+        file_family="NetCDF", default_product="forcing", max_hour=0,
+        hydro_forcing_profile="aorc-grid", forcing_interval_seconds=3600.0,
+        notes="Hydro forcing declaration; local NetCDF input, area weights and time origin required.",
+    ),
+    _adapter(
+        "era5-land", name="ECMWF ERA5-Land hourly catchment forcing",
+        upstream_model_id=None, kind=SourceKind.HYDRO_FORCING,
+        file_family="NetCDF", default_product="forcing", max_hour=0,
+        hydro_forcing_profile="era5-land-hourly", forcing_interval_seconds=3600.0,
+        notes="CDS reanalysis-era5-land netCDF4 (CC BY 4.0, engine CDS credential); valid-cell area weights and time origin required.",
+    ),
+    _adapter(
+        "ngen-csv", name="NextGen catchment CSV forcing", aliases=("aorc-csv",),
+        upstream_model_id=None, kind=SourceKind.HYDRO_FORCING,
+        file_family="CSV", default_product="forcing", max_hour=0,
+        hydro_forcing_profile="ngen-catchment-csv", forcing_interval_seconds=3600.0,
+        notes="Ordered per-catchment CSV inputs; native ngen specific humidity and precip_rate units.",
+    ),
+    _adapter(
+        "nwm-retrospective-forcing", name="NOAA NWM retrospective forcing",
+        aliases=("nwm-forcing",), upstream_model_id=None,
+        kind=SourceKind.HYDRO_FORCING, file_family="NetCDF",
+        default_product="forcing", max_hour=0,
+        hydro_forcing_profile="decoded-canonical-grid", forcing_interval_seconds=3600.0,
+        notes="RAINRATE is kg m-2 s-1 (numerically mm/s); native grid area weights required.",
+    ),
+    _adapter(
         "hrrr",
+        hydro_forcing_profile="decoded-canonical-grid",
         static_source="hrrr-conus-v4",
         same_grid_pairing="identity",
         runtime_surface_fields=(("VEGFRA", "sfc", "VEG:surface", "percent", (
@@ -687,6 +889,7 @@ _ADAPTERS = (
         # boundary carries them as the start state does.
         boundary_species=("qc", "qr", "qi", "qs", "qg"),
         archives=(_HRRR_NATIVE_ARCHIVE,),
+        source_top_eras=_HRRR_NATIVE_TOP_ERAS,
         name="HRRR (native hybrid levels)",
         default_product="sfc",
         required_products=("sfc", "nat"),
@@ -955,11 +1158,17 @@ _ADAPTERS = (
     ),
     _adapter(
         "gfs",
+        hydro_forcing_profile="decoded-canonical-grid",
         ensemble_source="gefs",
         forecast_time_owner="gfs_forecast_hours",
         seed_fields=('air_pressure', 'air_temperature', 'eastward_wind',
                      'northward_wind', 'mean_sea_level_pressure'),
-        archives=(_GLOBAL_PGRB2_ARCHIVE,),
+        archives=tuple(ArchiveWindow(
+            row["transport"], row["record_start"], row["why"],
+            tuple(row["documentation"]), user_note=row["license"])
+            for row in fetch_endpoints.archive_rows("gfs")
+            if row is next(r for r in fetch_endpoints.archive_rows("gfs")
+                           if r["transport"] == row["transport"])),
         name="GFS (global, 0.25 degree)", aliases=("gfs-0p25", "gfs-0.25"),
         default_product="pgrb2.0p25", max_hour=384,
         upstream_ingest="full",
@@ -1066,6 +1275,120 @@ _ADAPTERS = (
         ),
     ),
     _adapter(
+        "gefs-v11-flat",
+        ensemble_source="gefs-v11-flat",
+        archives=(ArchiveWindow("aws", "2017-01-01T00", "Legacy flat layout; exact member and lead objects are required, not inferred from date.", ("https://noaa-gefs-pds.s3.amazonaws.com/?list-type=2&prefix=gefs.20180101/00/",), checked_at="2026-10-20"),),
+        name="GEFS v11 flat archive member", aliases=(),
+        kind=SourceKind.ENSEMBLE_MEMBERS,
+        file_family="GRIB2",
+        decoder=(
+            "packaged GEFS ensemble-member profile + "
+            "vendored rusty-weather GRIB2 bridges"
+        ),
+        default_product="pgrb2a+pgrb2b/member",
+        required_products=("pgrb2a", "pgrb2b"),
+        max_hour=384,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-gefs-v11-flat-grib2-v1",
+        level_mapping="26-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="uniform-six-hour-forecast-series-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="gefs-v11-flat-grib2-v1",
+        forcing_interval_seconds=21600.0,
+        composition="Initialize from one verified member's pgrb2a+pgrb2b pair; ensemble means/spread are not trajectory states.",
+        member_set="gefs-v11-flat-grib2-members-v1",
+        notes="Verified 20180101/00 v11: one-degree, 21 members, six-hour leads, 26 pressure levels. Both products of one member are required. Not stock-WRF certified.",
+    ),
+    _adapter(
+        "gefs-reforecast",
+        ensemble_source="gefs-reforecast",
+        archives=(ArchiveWindow("aws", "2000-01-01T00", "GEFSv12 historical reforecast; exact requested objects and indexed leads checked", ("https://registry.opendata.aws/noaa-gefs-reforecast/",), checked_at="2026-10-20"),),
+        name="GEFSv12 retrospective daily member", aliases=(),
+        kind=SourceKind.ENSEMBLE_MEMBERS,
+        file_family="GRIB2",
+        decoder=(
+            "packaged GEFS ensemble-member profile + "
+            "vendored rusty-weather GRIB2 bridges"
+        ),
+        default_product="reforecast/member",
+        required_products=("pressure",),
+        max_hour=384,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-gefs-reforecast-grib2-v1",
+        level_mapping="25-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="three-hour-through-f240-six-hour-after-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="gefs-reforecast-grib2-v1",
+        forcing_interval_seconds=10800.0,
+        composition="Exact coarsest pressure grid; static land and same-cycle NOAA ice analysis donors.",
+        member_set="gefs-reforecast-grib2-members-v1",
+        notes="5 published members. f003 first instantaneous state, no f000; indexed native member verification. Not stock-WRF certified.",
+    ),
+    _adapter(
+        "gefs-reforecast-weekly",
+        ensemble_source="gefs-reforecast-weekly",
+        archives=(ArchiveWindow("aws", "2000-01-01T00", "GEFSv12 historical reforecast; exact requested objects and indexed leads checked", ("https://registry.opendata.aws/noaa-gefs-reforecast/",), checked_at="2026-10-20"),),
+        name="GEFSv12 retrospective weekly member", aliases=(),
+        kind=SourceKind.ENSEMBLE_MEMBERS,
+        file_family="GRIB2",
+        decoder=(
+            "packaged GEFS ensemble-member profile + "
+            "vendored rusty-weather GRIB2 bridges"
+        ),
+        default_product="reforecast/member",
+        required_products=("pressure",),
+        max_hour=840,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-gefs-reforecast-weekly-grib2-v1",
+        level_mapping="25-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="three-hour-through-f240-six-hour-after-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="gefs-reforecast-grib2-v1",
+        forcing_interval_seconds=10800.0,
+        composition="Exact coarsest pressure grid; static land and same-cycle NOAA ice analysis donors.",
+        member_set="gefs-reforecast-weekly-grib2-members-v1",
+        notes="11 published members. f003 first instantaneous state, no f000; indexed native member verification. Not stock-WRF certified.",
+    ),
+    _adapter("gefs-reforecast-land", name="NOAA surface donor: gefs-reforecast-land", kind=SourceKind.SURFACE_ANALYSIS, file_family="GRIB2", default_product="surface", max_hour=0, upstream_ingest="table_route_donor_only", notes="Partial surface state used only by a declared composition; cannot initialize an atmosphere alone."),
+    _adapter("ncep-r1-seaice", name="NOAA surface donor: ncep-r1-seaice", kind=SourceKind.SURFACE_ANALYSIS, file_family="NetCDF", default_product="surface", max_hour=0, upstream_ingest="table_route_donor_only", notes="Partial surface state used only by a declared composition; cannot initialize an atmosphere alone."),
+    _adapter(
+        "gefs-v11",
+        ensemble_source="gefs-v11",
+        archives=(ArchiveWindow("aws", "2018-07-27T00", "Legacy product-directory layout; exact member and lead objects are required, not inferred from date.", ("https://noaa-gefs-pds.s3.amazonaws.com/?list-type=2&prefix=gefs.20190201/00/",), checked_at="2026-10-20"),),
+        name="GEFS v11 legacy archive member", aliases=("gefs-legacy",),
+        kind=SourceKind.ENSEMBLE_MEMBERS,
+        file_family="GRIB2",
+        decoder=(
+            "packaged GEFS ensemble-member profile + "
+            "vendored rusty-weather GRIB2 bridges"
+        ),
+        default_product="pgrb2a+pgrb2b/member",
+        required_products=("pgrb2a", "pgrb2b"),
+        max_hour=384,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-gefs-v11-grib2-v1",
+        level_mapping="26-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="uniform-six-hour-forecast-series-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="gefs-v11-grib2-v1",
+        forcing_interval_seconds=21600.0,
+        composition="Initialize from one verified member's pgrb2a+pgrb2b pair; ensemble means/spread are not trajectory states.",
+        member_set="gefs-v11-grib2-members-v1",
+        notes="Verified 20190201/00 v11: one-degree, 21 members, six-hour leads, 26 pressure levels. Both products of one member are required. Not stock-WRF certified.",
+    ),
+    _adapter(
         "gefs",
         ensemble_source="gefs",
         archives=(_GEFS_ARCHIVE,),
@@ -1119,7 +1442,7 @@ _ADAPTERS = (
         ),
     ),
     _adapter(
-        "aigfs",
+        "aigfs", parent_family="ai", lineage_donor_source="gdas",
         ensemble_source="aigefs",
         name="AIGFS (NOAA AI global forecast)", aliases=("ai-gfs",),
         decoder=(
@@ -1180,7 +1503,7 @@ _ADAPTERS = (
         ),
     ),
     _adapter(
-        "aigefs",
+        "aigefs", parent_family="ai", lineage_donor_source="gdas",
         ensemble_source="aigefs",
         archives=(_AIGEFS_ARCHIVE,),
         name="AIGEFS (NOAA AI global ensemble member)", aliases=("ai-gefs",),
@@ -1289,10 +1612,44 @@ _ADAPTERS = (
         ),
     ),
     _adapter(
+        "ecmwf-open-data-0p1",
+        archives=(_ECMWF_OPEN_DOOR,),
+        name="ECMWF IFS HRES (open data, 0.1 degree)",
+        aliases=("ifs-0p1", "ifs-hres", "ecmwf-hres", "ecmwf-0p1"),
+        file_family="GRIB2",
+        decoder=(
+            "packaged ECMWF open-data oper profile over the concatenated "
+            "0.1-degree pl + sfc pair + vendored rusty-weather GRIB2 bridges"
+        ),
+        default_product="oper", max_hour=360,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-ecmwf-open-data-oper-grib2-v1",
+        level_mapping="14-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="uniform-three-hour-forecast-series-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="ecmwf-open-data-oper-grib2-v1",
+        forcing_interval_seconds=10800.0,
+        notes=(
+            "ECMWF's IFS HRES open data at 0.1 degree, published from the "
+            "2026-10-20 cycles under CC-BY-4.0, about 2 h after the "
+            "0.25-degree set. Each lead is a pressure-level file and a "
+            "surface file with disjoint records; the route concatenates "
+            "the pair and the 0.25-degree oper profile decodes it (same "
+            "14 levels, parameters and soil ordinals; the grid is read "
+            "from the records). Surface geopotential is published at step "
+            "0 only, so a start past step 0 takes terrain from the "
+            "mapping's height-at-surface-pressure derivation, as the "
+            "0.25-degree route does."
+        ),
+    ),
+    _adapter(
         "ecmwf-ens",
         ensemble_source="ecmwf-ens",
         ensemble_control_source="ecmwf-open-data",
-        archives=(_ECMWF_OPEN_DOOR,),
+        archives=(_ECMWF_OPEN_DOOR, _ECMWF_ENS_ARCHIVE),
         name="ECMWF ENS (open data, member)",
         aliases=("ifs-ens", "ecmwf-ensemble"),
         kind=SourceKind.ENSEMBLE_MEMBERS,
@@ -1322,12 +1679,14 @@ _ADAPTERS = (
             "geopotential is absent. The separately published oper-fc "
             "control makes 51 trajectories. Fetch-as-posted remains active "
             "for each member's forcing series. Historical publication "
-            "layouts before IFS cycle 50r1 are not declared by this route. "
+            "layouts from 2024-03-18T12 use the AWS open-data archive, "
+            "the published nine-level atmosphere and legacy soil aliases. "
+            "TIGGE is CC-BY-NC-4.0 research-only, not a fallback. "
             "Data: ECMWF open data, CC BY 4.0. Not stock-WRF certified."
         ),
     ),
     _adapter(
-        "aifs",
+        "aifs", parent_family="ai",
         archives=(_ECMWF_OPEN_DOOR, _AIFS_OPEN_ARCHIVE),
         name="ECMWF AIFS single (open data)",
         aliases=("aifs-v2", "aifs-single"),
@@ -1374,6 +1733,79 @@ _ADAPTERS = (
         ),
     ),
     _adapter(
+        "earth2", parent_family="ai",
+        lineage_donor_source="era5",
+        lineage_receipts=("earth2-batch.json", "earth2-run.json"),
+        lineage_root_keys=("earth2_batch_root",),
+        lineage_runtime_keys=("earth2studio", "torch"),
+        time_axis="supplied_times",
+        acquisition_owner="woof.earth2_run",
+        selection_owner="woof.earth2_members",
+        selection_provider_hint="model",
+        name="NVIDIA Earth-2 model output (Earth2Studio NetCDF)",
+        aliases=("earth2studio",),
+        model_table="earth2-models.v1.json", acquisition_area=True,
+        acquisition_prep_handoff=True,
+        acquisition_hints=(
+            ("model", "string", None, "model key from this source's declared model table"),
+            ("earth2_members", "string", None, "complete comma-separated noise-id roster"),
+            ("earth2_batch_root", "string", None, "shared generated-member batch directory"),
+            ("earth2_batch_size", "integer", None, "members per admitted GPU sub-batch"),
+            ("earth2_weights_package", "string", None, "local pinned model weight package"),
+        ),
+        cycles=CycleGrid(tuple(range(24)), 0.0, basis="caller-selected analysis initialization"),
+        upstream_model_id=None,
+        file_family="NetCDF (Earth2Studio NetCDF4Backend)",
+        decoder=(
+            "packaged Earth-2 13-level profile + rw_netcdf/netcrust "
+            "(mapped engine)"
+        ),
+        default_product="earth2studio deterministic forecast, NetCDF4Backend",
+        required_products=(
+            "one Earth2Studio forecast file: (time, lead_time, lat, lon) with "
+            "z/t/u/v/q on 50..1000 hPa, t2m, u10m, v10m, msl",
+            "the ERA5 analysis at that forecast's initialization (woof fetch "
+            "--source era5 --era5-provider arco) over an area containing it",
+        ),
+        max_hour=8784,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-earth2-pl13-q-netcdf-v1",
+        level_mapping="13-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="uniform-six-hour-forecast-series-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="earth2-pl13-q-netcdf-v1",
+        forcing_interval_seconds=21600.0,
+        composition=(
+            "Earth-2 models publish no soil, land mask, orography, skin "
+            "temperature, SST, sea ice, snow, surface pressure or 2 m "
+            "humidity; the profile borrows the land-surface state from the "
+            "ERA5 analysis AT the forecast's initialization (the caller's one "
+            "supplement, keyless from ARCO) through the cross-source "
+            "composition, and derives surface pressure at every lead from the "
+            "model's own mean-sea-level pressure at the analysis terrain."
+        ),
+        notes=(
+            "Any NVIDIA Earth-2 model run through Earth2Studio whose output "
+            "carries the 13-level z/t/u/v/q vocabulary -- FourCastNet 3, SFNO, "
+            "Pangu, Aurora, FengWu, GraphCast, AIFS -- as the initial and "
+            "lateral boundary source of a WOOF domain, read straight from "
+            "the file Earth2Studio's NetCDF4Backend writes (no reshaping).  "
+            "Which models qualify, their weights and what the others need is "
+            "woof/authorities/earth2-models.v1.json; `woof fetch --source "
+            "earth2 --model fcn3 --cycle C --hours N` runs the model and "
+            "writes the file and the analysis together.  Valid times are the "
+            "file's initialization plus lead_time; the source cycle is the "
+            "initialization, so a domain may start at any lead "
+            "(--forecast-start-hour).  The land surface is the initialization "
+            "analysis carried unchanged, the same frozen-surface class as the "
+            "AI-GFS row; an AI emulator publishes no hydrometeors, so runs "
+            "start cloud-free.  Not yet accepted by unchanged stock WRF."
+        ),
+    ),
+    _adapter(
         "rap-native",
         name="RAP hybrid levels (13 km CONUS)",
         aliases=("rap-awp130bgrb",), upstream_model_id="rap",
@@ -1386,6 +1818,7 @@ _ADAPTERS = (
         stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
         runnable=True, runner="mapped_composition_v1",
         packaged_profile="rap-native-grib2-v1",
+        archives=(_RAP_NATIVE_ARCHIVE,),
         forcing_interval_seconds=3600.0, coverage=_CONUS_13KM_LAMBERT,
         boundary_species=("qc", "qr", "qi", "qs", "qg"),
         notes=(
@@ -1405,6 +1838,14 @@ _ADAPTERS = (
         default_physics_profile=(
             "thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1"
         ),
+        # The route reads the AWS mirror's wrfnat, wrfsfc and same-cycle
+        # wrfprs objects, all three first present at 2014-07-30 18Z
+        # (measured 2026-10-10: 17Z holds none), the hrrr-prs row's window.
+        archives=(ArchiveWindow("aws", _HRRR_NATIVE_ARCHIVE.start,
+                                _HRRR_NATIVE_ARCHIVE.note,
+                                _HRRR_NATIVE_ARCHIVE.documentation),),
+        # The same wrfnat objects, so the same measured tops.
+        source_top_eras=_HRRR_NATIVE_TOP_ERAS,
         name="HRRR native hybrid analysis (mapped)",
         aliases=("hrrr-mapped-native",), upstream_model_id="hrrr",
         default_product="wrfnat", max_hour=48,
@@ -1577,19 +2018,35 @@ _ADAPTERS = (
         ensemble_source="rrfs-ens",
         name="RRFS ensemble (public member subset)", aliases=("rrfsens",),
         kind=SourceKind.ENSEMBLE_MEMBERS,
+        file_family="GRIB2",
+        decoder=(
+            "packaged RRFS member-with-companion profile + "
+            "vendored rusty-weather GRIB2 bridges"
+        ),
         default_product="prslevnomads+2dfldnomads/member",
-        required_products=("prslevnomads", "2dfldnomads"), max_hour=60,
-        status=AdapterStatus.COMPOSITION_REQUIRED,
+        required_products=("prslevnomads", "2dfldnomads", "prslev", "2dfld"),
+        max_hour=60,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-rrfs-ens-member-companion-grib2-v1",
+        level_mapping="28-pressure-level-to-explicit-wrf-eta-v2",
+        cadence_mapping="uniform-hourly-forecast-series-v1",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="rrfs-ens-member-companion-grib2-v1",
         member_set="rrfs-ops-subset-grib2-members-v1",
         forcing_interval_seconds=3600.0,
-        certified_source_top_pa=25000.0,
         coverage=_CONUS_3KM_LAMBERT,
         composition=(
-            "The public member column stops at 250 hPa and publishes no "
+            "Initialize from one verified member's prslevnomads+2dfldnomads "
+            "pair together with its declared companion, the RRFS "
+            "deterministic prslev+2dfld pair of the same cycle and valid "
+            "time. The member column stops at 250 hPa and publishes no "
             "soil temperature, soil moisture, skin temperature or land "
-            "mask. A complete upper atmosphere and explicit land-state "
-            "composition are required before these members can initialize "
-            "a normal full-column run. No automatic top lowering."
+            "mask, so without the companion there is no soil state and "
+            "the model top sits above the data; such a member is refused. "
+            "No automatic top lowering."
         ),
         notes=(
             "Five real member trajectories, m001 through m005, are posted "
@@ -1597,9 +2054,16 @@ _ADAPTERS = (
             "and NOMADS v1.0. Member 1 pressure and surface samples carry "
             "PDT 1, perturbation number 1, ensemble type 3 and size 5. "
             "The subset supplies 14 pressure levels from 250 to 1000 hPa. "
-            "Acquisition and byte identity are implemented; complete "
-            "initialization is not. Ensemble statistics remain the separate "
-            "REFS source and cannot substitute for a member."
+            "The packaged profile is table work on the generic mapped "
+            "route: every member field pins product definition template 1, "
+            "and the composition declares the deterministic run of the same "
+            "cycle as the member's companion, which stacks its 14 levels "
+            "above 250 hPa onto the member's columns and lends the skin "
+            "temperature, land mask, sea ice, snow and the nine-node RUC "
+            "soil column. The composition receipt names which levels and "
+            "fields came from the member and which from the companion. "
+            "Ensemble statistics remain the separate REFS source and cannot "
+            "substitute for a member."
         ),
     ),
     _adapter(
@@ -1644,9 +2108,12 @@ _ADAPTERS = (
     ),
     _adapter(
         "era5",
+        ensemble_preparation_owner="woof.era5_preparation",
+        hydro_forcing_profile="decoded-canonical-grid",
         record="reanalysis",
         time_axis="analysis_times",
         selection_owner="woof.era5_member",
+        selection_provider_hint="era5_provider",
         seed_fields=('air_pressure', 'air_temperature', 'eastward_wind',
                      'northward_wind', 'mean_sea_level_pressure'),
         archives=(_ERA5_ARCO_ARCHIVE, _ERA5_ARCHIVE),
@@ -1667,6 +2134,8 @@ _ADAPTERS = (
         ),
         runnable=True,
         runner="era5_combined_grib1_v1",
+        # fetch.ERA5_PRESSURE_LEVELS_HPA: the complete 37-level ladder.
+        certified_source_top_pa=100.0,
         case_data_file="era5-combined.grib",
         case_data_vtable="data/vtables/Vtable.ERA5_CDO",
         forcing_interval_seconds=21600.0,
@@ -1874,6 +2343,73 @@ _ADAPTERS = (
         ),
     ),
     _adapter(
+        "hex-global",
+        time_axis="supplied_times",
+        # THE BREAKAGE THIS PREVENTS (HEX-REGIONAL-2026-10-23/WET-BIAS.md):
+        # a 3 km child of a hex run took the gfs/era5-class Morrison default,
+        # whose wet-snow REFL_10CM drew a 55-65 dBZ shield over the trailing
+        # stratiform where MRMS had 25-40 (Kansas nest +6 h: 42,822 km2 at
+        # 50+ dBZ against MRMS 1,107; 4,302 on this suite).
+        convection_permitting_physics_profile=(
+            "thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1"),
+        name="woof hex forecast export (global or regional window, NetCDF)",
+        aliases=("hex", "woof hex", "hex-regional"),
+        upstream_model_id=None,
+        file_family="NetCDF (woof hex export frames)",
+        decoder=(
+            "packaged woof hex history NetCDF profile + rw_netcdf "
+            "(woof.netcdf_bridge)"
+        ),
+        default_product="export --field-set full on a lat-lon window",
+        required_products=(
+            "woof hex export frames: --field-set full, --window "
+            "region-latlon:CLAT,CLON,W_KM,H_KM or global-mesh",
+            "the same frames as the in-band terrain supplement",
+        ),
+        max_hour=0,
+        upstream_ingest="declarative_mapping_v1_over_packaged_profile",
+        status=AdapterStatus.RUNNABLE_NOT_CERTIFIED,
+        field_mapping="packaged-rw-wps-hex-history-netcdf-v1",
+        level_mapping="55-mpas-model-level-to-explicit-wrf-eta-v1",
+        cadence_mapping="mapping-declared-uniform-series",
+        stock_wrf_gate="live-unchanged-stock-wrf-gate-pending",
+        runnable=True,
+        runner="mapped_composition_v1",
+        packaged_profile="hex-history-netcdf-v1",
+        local_posting=(
+            "woof hex export RUN --follow writes each frame as the parent "
+            "forecast closes it; python -m woof.local_posting --source "
+            "hex-global --ready-list EXPORT/export-ready.jsonl publishes "
+            "them for woof prep --as-posted"),
+        # A parent produced beside the nest posts a lead per parent hour: a
+        # daily mean over its first 24 h held the nest's head until the whole
+        # parent forecast was done (box G 2026-10-23: the as-posted head
+        # waited for f012 of a 12 h window).  Inland water the parent does
+        # not resolve takes the start time's own 2 m air temperature.
+        inland_air_mean_hours=0.0,
+        notes=(
+            "A woof hex run (any mesh: the 60 km global row, a regional "
+            "mesh, an ensemble member) as the initial and lateral boundary "
+            "source of a WOOF domain anywhere its export window covers. "
+            "Export the run with `woof hex export RUN --field-set full "
+            "--window region-latlon:CLAT,CLON,W_KM,H_KM` (or global-mesh): "
+            "those frames carry CF 1-D lat/lon/Time/level coordinates and "
+            "the mass-grid earth winds this profile reads.  The mapping "
+            "decodes the 55 MPAS model levels directly (full pressure, "
+            "heights from the init zgrid, T from theta with MPAS's kappa, "
+            "q from the mixing ratio) with no pressure-level step.  SST is "
+            "the water skin temperature, a named policy: hex carries no "
+            "ocean model and holds the SST it was initialised with.  Sea "
+            "ice and snow are the run's own land-surface state.  Boundary "
+            "spacing is whatever the export carries (hourly by default for "
+            "a parent store), so `woof domain --source hex-global` takes "
+            "it from --cadence HOURS; the whole route (domain, fetch-geog, "
+            "prep with --author-input-manifest, sim) is the fenced block "
+            "in docs/native-mapped-source-authoring.md.  Not yet accepted "
+            "by unchanged stock WRF."
+        ),
+    ),
+    _adapter(
         "mapped",
         time_axis="supplied_times",
         name="Generic mapped source (rw-wps mapping v1)",
@@ -1915,6 +2451,36 @@ _ADAPTERS = (
 )
 
 
+
+
+def _model_table_rows(base):
+    """Expand declared model inventories without changing dynamic route registration."""
+    import json
+    result = []
+    for template in base:
+        if template.model_table is None or template.model_key is not None:
+            continue
+        table = Path(__file__).with_name("authorities") / template.model_table
+        models = json.loads(table.read_text(encoding="utf-8"))["models"]
+        for key, row in models.items():
+            profile = row.get("profile")
+            result.append(replace(template, source_id=template.source_id + "-" + key,
+                model_key=key, model_row=row, display_name=row.get("name", key),
+                aliases=tuple(template.source_id + "-" + alias for alias in row.get("aliases", ())),
+                packaged_profile=profile, runnable=template.runnable and bool(profile),
+                status=template.status if profile else AdapterStatus.COMPOSITION_REQUIRED,
+                field_mapping="packaged-rw-wps-" + profile if profile else template.field_mapping,
+                forcing_interval_seconds=float(row["step_hours"]) * 3600
+                    if row.get("step_hours") else template.forcing_interval_seconds,
+                selection_owner=row.get("selection_owner", template.selection_owner),
+                notes=row.get("refusal") or row.get("needs") or template.notes))
+    return tuple(result)
+
+
+
+_ADAPTERS = _ADAPTERS + _model_table_rows(_ADAPTERS)
+
+
 def _build_alias_map() -> dict[str, SourceAdapter]:
     aliases: dict[str, SourceAdapter] = {}
     for adapter in _ADAPTERS:
@@ -1923,6 +2489,15 @@ def _build_alias_map() -> dict[str, SourceAdapter]:
             if name in aliases:
                 raise RuntimeError(f"duplicate source-adapter alias: {name}")
             aliases[name] = adapter
+    # Acquisition owners may expose table-derived model spellings. Existing
+    # source ids and explicit aliases keep priority over a model shorthand.
+    from importlib import import_module
+    for adapter in _ADAPTERS:
+        if adapter.acquisition_owner is not None and adapter.model_key is None:
+            names = getattr(import_module(adapter.acquisition_owner), "source_aliases", lambda: ())()
+            for name in names:
+                normalized = name.strip().lower().replace("_", "-")
+                aliases.setdefault(normalized, aliases.get(adapter.source_id + "-" + normalized, adapter))
     return aliases
 
 
@@ -1952,17 +2527,83 @@ def packaged_profile_sources() -> Mapping[str, str]:
     })
 
 
-def get_source_adapter(source: str) -> SourceAdapter:
-    """Resolve a source id/alias or raise a useful fail-closed error."""
+def model_rows(adapter):
+    """The declared model table for a route, with no model-specific code."""
+    import json
+    if adapter.model_table is None or adapter.model_key is not None:
+        return {}
+    rows = json.loads((Path(__file__).with_name("authorities") / adapter.model_table)
+                      .read_text(encoding="utf-8"))["models"]
+    return {key: row for key, row in rows.items() if row.get("kind") != "diagnostic"}
 
-    normalized = source.strip().lower().replace("_", "-")
+
+def _normalized_source(source):
+    return source.strip().lower().replace("_", "-")
+
+
+def get_source_adapter(source: str) -> SourceAdapter:
+    """Resolve ids, aliases and <row>-<model> using the row's model table."""
+    normalized = _normalized_source(source)
+    if normalized in _ALIASES:
+        return _ALIASES[normalized]
+    for adapter in _ADAPTERS:
+        if adapter.model_table is None:
+            continue
+        for prefix in (adapter.source_id, *adapter.aliases):
+            if not normalized.startswith(prefix + "-"):
+                continue
+            suffix = normalized[len(prefix) + 1:]
+            for key, row in model_rows(adapter).items():
+                if suffix in tuple(_normalized_source(v) for v in (key, *row.get("aliases", ()))):
+                    profile = row.get("profile")
+                    return replace(adapter, model_key=key, model_row=row,
+                        runnable=adapter.runnable and bool(profile),
+                        packaged_profile=profile,
+                        status=adapter.status if profile else AdapterStatus.COMPOSITION_REQUIRED,
+                        notes=row.get("refusal") or row.get("needs") or adapter.notes,
+                        forcing_interval_seconds=float(row["step_hours"]) * 3600
+                            if row.get("step_hours") else adapter.forcing_interval_seconds,
+                        selection_owner=row.get("selection_owner", adapter.selection_owner))
     try:
         return _ALIASES[normalized]
     except KeyError as exc:
         available = ", ".join(adapter.source_id for adapter in _ADAPTERS)
-        raise ValueError(
-            f"unknown native source {source!r}; available sources: {available}"
-        ) from exc
+        raise ValueError(f"unknown native source {source!r}; available sources: {available}") from exc
+
+
+def canonical_source_token(source):
+    """Route id plus model key when the caller selected a parameterized row."""
+    adapter = get_source_adapter(source)
+    suffix = "-" + adapter.model_key if adapter.model_key else ""
+    return adapter.source_id + (suffix if suffix and not adapter.source_id.endswith(suffix) else "")
+
+
+def ensemble_source_ids():
+    """Eligible family ids, derived from runnable planning/selection rows."""
+    planable = set(wizard_planable_source_ids())
+    result = []
+    for adapter in _ADAPTERS:
+        if not adapter.runnable or not (adapter.source_id in planable
+                                       or adapter.member_set or adapter.selection_owner):
+            continue
+        result.append(adapter.source_id)
+        for key in model_rows(adapter):
+            token = adapter.source_id + "-" + key
+            if get_source_adapter(token).runnable:
+                result.append(token)
+    return tuple(dict.fromkeys(result))
+
+
+def ensemble_source_argument(value):
+    """Validate a family id/alias; the refusal lists the same rows as help."""
+    try:
+        token = canonical_source_token(value)
+        if token in ensemble_source_ids():
+            return token
+    except ValueError:
+        pass
+    raise ValueError(f"ensemble source {value!r} is not eligible; eligible ids: "
+                     + ", ".join(ensemble_source_ids()))
 
 
 def wizard_planable_source_ids() -> tuple[str, ...]:
@@ -1979,6 +2620,23 @@ def wizard_planable_source_ids() -> tuple[str, ...]:
     return tuple(adapter.source_id for adapter in _ADAPTERS
                  if adapter.runnable
                  and adapter.forcing_interval_seconds is not None)
+
+
+def wizard_cadence_named_source_ids() -> tuple[str, ...]:
+    """Every runnable row whose boundary cadence the caller names.
+
+    A row with no ``forcing_interval_seconds`` (a supplied-times source
+    whose spacing is whatever its history files carry, such as a
+    woof hex export) is still plannable by ``woof domain``: the caller
+    passes ``--cadence HOURS`` naming the spacing of the files it will hand
+    ``woof prep``, and that number is the ``interval_seconds`` written.
+    Nothing here enumerates model names, so the next such row reaches the
+    door, and its ``--help``, with no edit to the wizard.
+    """
+
+    return tuple(adapter.source_id for adapter in _ADAPTERS
+                 if adapter.runnable
+                 and adapter.forcing_interval_seconds is None)
 
 
 def source_forcing_interval_seconds(source: str) -> float:
@@ -2004,6 +2662,42 @@ def source_coverage_window(source: str) -> CoverageWindow | None:
     """SOURCE's declared native-grid window, or ``None`` when it is global."""
 
     return get_source_adapter(source).coverage_window
+
+
+def source_top_pa_for_cycle(source, cycle) -> float | None:
+    """The native model top (Pa) SOURCE's column reaches at CYCLE, or ``None``.
+
+    Read from the row's ``source_top_eras`` (the last era starting at or
+    before the cycle), never from a list of model names.  ``None`` when the
+    row declares no eras, the source is unknown, or the cycle is not a
+    concrete time (``latest``, absent): the preparation's decoded-data
+    check then stays the only verdict, as before.
+    """
+
+    from datetime import timezone
+
+    if not source or cycle is None:
+        return None
+    try:
+        adapter = get_source_adapter(str(source))
+    except (TypeError, ValueError):
+        return None
+    if not adapter.source_top_eras:
+        return None
+    if isinstance(cycle, str):
+        if cycle == "latest":
+            return None
+        from woof.source_availability import parse_cycle
+        cycle = parse_cycle(cycle)
+    if not isinstance(cycle, datetime):
+        return None
+    if cycle.tzinfo is not None:
+        cycle = cycle.astimezone(timezone.utc).replace(tzinfo=None)
+    top = None
+    for era in adapter.source_top_eras:
+        if not era.start or cycle >= datetime.strptime(era.start, "%Y-%m-%dT%H"):
+            top = float(era.top_pa)
+    return top
 
 
 def fetch_model_top_pa(source, p_top_pa) -> float | None:
@@ -2034,7 +2728,7 @@ def fetch_model_top_pa(source, p_top_pa) -> float | None:
         return None
     ceiling = adapter.certified_source_top_pa
     if (adapter.extendable_source_top_pa is None or ceiling is None
-            or not math.isfinite(top) or top <= 0.0 or top >= float(ceiling)):
+            or not math.isfinite(top) or top <= 0.0 or top > float(ceiling)):
         return None
     return top
 
@@ -2270,3 +2964,37 @@ def source_capability_manifest() -> dict[str, object]:
         ],
         "sources": [adapter.to_dict() for adapter in _ADAPTERS],
     }
+
+
+def source_for_cycle(source: str, cycle) -> str:
+    """Select a dated publication's complete source row before planning.
+
+    A publication can change its member population, vertical ladder and
+    cadence as well as its URL. These are separate rows, selected by data.
+    The chosen row still checks its own archive bounds and exact objects.
+    """
+    import json
+    from datetime import datetime, timezone
+    try:
+        source = canonical_source_token(source)
+    except ValueError:
+        # Dynamically registered acquisition rows need not have a native
+        # preparation adapter. Their route remains the validation owner.
+        return source
+    if isinstance(cycle, str):
+        if cycle == "latest":
+            return source
+        from woof.source_availability import parse_cycle
+        cycle = parse_cycle(cycle)
+    if not isinstance(cycle, datetime):
+        return source
+    if cycle.tzinfo is not None:
+        cycle = cycle.astimezone(timezone.utc).replace(tzinfo=None)
+    rows = json.loads((Path(__file__).parent / "authorities" /
+                       "source-publications.v1.json").read_text())
+    for row in rows["sources"].get(source, []):
+        if ((not row.get("valid_from") or cycle >= datetime.fromisoformat(row["valid_from"]))
+                and (not row.get("valid_until") or cycle < datetime.fromisoformat(row["valid_until"]))
+                and (not row.get("weekdays") or cycle.weekday() in row["weekdays"])):
+            return canonical_source_token(row["source"])
+    return source

@@ -17,10 +17,11 @@ pub const FETCH_RECORD_SCHEMA: &str = "gpuwm-rw-fetch-record-v1";
 ///
 /// The distribution check greps the built binary for this byte string,
 /// so a stale `rw_fetch` that still answers `--help` but no longer
-/// emits one of these keys fails the check instead of failing later,
+/// emits one of these keys or lacks a declared command fails the check instead of failing later,
 /// after a distribution has been built and installed.
 pub const FETCH_RECORD_ABI: &str = "gpuwm-rw-fetch-record-v1\tmode\tmode_reason\tsource\
-\tgrib_url\tidx_url\tidx_sha256\tidx_record_count\tselected_record_count\tranges\tsha256";
+\tgrib_url\tidx_url\tidx_sha256\tidx_record_count\tselected_record_count\tranges\tsha256\
+\tcommands=fetch,probe,latest,object,asset,encoded-asset,hash,unpack,unpack-audit,decode,inventory,objects";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RangeRecord {
@@ -51,6 +52,9 @@ pub struct FileRecord {
     pub path: String,
     pub bytes: u64,
     pub sha256: String,
+    pub grib2_messages: usize,
+    pub last_byte_unix: f64,
+    pub publication: Option<crate::stream::Publication>,
     pub source: String,
     pub grib_url: String,
     pub idx_url: Option<String>,

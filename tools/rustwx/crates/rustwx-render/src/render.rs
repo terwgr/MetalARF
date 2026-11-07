@@ -73,6 +73,9 @@ pub struct RenderOpts {
     pub barbs: Vec<BarbOverlay>,
     pub streamlines: Vec<StreamlineOverlay>,
     pub presentation: RenderPresentation,
+    /// The product's own note for a map with nothing to draw; `None` uses
+    /// [`EMPTY_MAP_NOTE`]. See [`empty_map_note`].
+    pub empty_note: Option<String>,
 }
 
 /// The mesh layer as the renderer holds it: the cells and the resolved
@@ -238,6 +241,7 @@ impl Default for RenderOpts {
                 over_color: None,
                 mask_below: None,
                 categories: false,
+                equal_bands: false,
             },
             background: Rgba::WHITE,
             colorbar: true,
@@ -269,6 +273,7 @@ impl Default for RenderOpts {
             presentation: RenderPresentation::for_mode_from_env(
                 ProductVisualMode::FilledMeteorology,
             ),
+            empty_note: None,
         }
     }
 }
@@ -788,25 +793,6 @@ pub fn map_frame_aspect_ratio_for_mode_with_chrome_scale(
     layout.map_w as f64 / (layout.map_h.max(1) as f64)
 }
 
-pub fn map_frame_aspect_ratio_for_mode_with_domain_frame(
-    mode: ProductVisualMode,
-    total_w: u32,
-    total_h: u32,
-    has_cbar: bool,
-    has_title: bool,
-    has_domain_frame: bool,
-) -> f64 {
-    map_frame_aspect_ratio_for_mode_with_domain_frame_and_chrome_scale(
-        mode,
-        total_w,
-        total_h,
-        has_cbar,
-        has_title,
-        has_domain_frame,
-        ChromeScale::default(),
-    )
-}
-
 pub fn map_frame_aspect_ratio_for_mode_with_domain_frame_and_chrome_scale(
     mode: ProductVisualMode,
     total_w: u32,
@@ -874,8 +860,25 @@ pub(crate) fn pick_ticks(levels: &[f64], step: Option<f64>) -> Vec<f64> {
 /// The values the colorbar labels: the category codes at band centres for a
 /// category colormap, otherwise [`pick_ticks`] over the legend levels.
 pub(crate) fn legend_ticks(cmap: &LeveledColormap, step: Option<f64>) -> Vec<f64> {
+    if cmap.equal_bands {
+        // A threshold bar labels its boundaries: a stepped tick between two
+        // boundaries would sit inside a band at a place that means nothing.
+        return cmap.legend_levels_for_display().to_vec();
+    }
     cmap.category_codes()
         .unwrap_or_else(|| pick_ticks(cmap.legend_levels_for_display(), step))
+}
+
+/// A tick's place on the colour bar (0..1): linear in value, as the bar has
+/// always placed ticks, except on an equal-band threshold bar, where it is
+/// the boundary's own place ([`LeveledColormap::legend_fraction`]).
+pub(crate) fn legend_tick_position(cmap: &LeveledColormap, tick: f64, lo: f64, range: f64) -> f64 {
+    if cmap.equal_bands {
+        if let Some(frac) = cmap.legend_fraction(tick) {
+            return frac;
+        }
+    }
+    (tick - lo) / range
 }
 
 pub(crate) fn colorbar_levels_for_ticks(cmap: &LeveledColormap) -> &[f64] {
@@ -963,32 +966,7 @@ fn subtitle_left_width(
 }
 
 fn ellipsize_text_to_width(text: &str, max_width: u32, scale: u32, bold: bool) -> String {
-    if measure_text_width(text, scale, bold) <= max_width {
-        return text.to_string();
-    }
-
-    let ellipsis = "...";
-    let ellipsis_w = measure_text_width(ellipsis, scale, bold);
-    if ellipsis_w >= max_width {
-        return ellipsis.to_string();
-    }
-
-    let mut kept = String::new();
-    for ch in text.chars() {
-        let mut candidate = kept.clone();
-        candidate.push(ch);
-        candidate.push_str(ellipsis);
-        if measure_text_width(&candidate, scale, bold) > max_width {
-            break;
-        }
-        kept.push(ch);
-    }
-
-    if kept.is_empty() {
-        ellipsis.to_string()
-    } else {
-        format!("{kept}{ellipsis}")
-    }
+    ellipsize_text_to_width_with_factor(text, max_width, scale, 1.0, bold)
 }
 
 fn fit_chrome_title_metadata(
@@ -1040,10 +1018,30 @@ fn ellipsize_text_to_width_with_factor(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn filter_tick_labels_to_fit(
     ticks: &[f64],
     lo: f64,
     range: f64,
+    cbar_x: u32,
+    cbar_w: u32,
+    label_left_bound: u32,
+    label_right_bound: u32,
+    img_w: u32,
+    text_scale: u32,
+) -> Vec<(f64, i32, String)> {
+    let fracs: Vec<f64> = ticks.iter().map(|tick| (tick - lo) / range).collect();
+    filter_tick_labels_at(
+        ticks, &fracs, cbar_x, cbar_w, label_left_bound, label_right_bound, img_w, text_scale,
+    )
+}
+
+/// [`filter_tick_labels_to_fit`] with each tick's place on the bar given
+/// (`fracs`, 0..1), so an equal-band threshold bar places its labels where
+/// its boundaries are drawn.
+fn filter_tick_labels_at(
+    ticks: &[f64],
+    fracs: &[f64],
     cbar_x: u32,
     cbar_w: u32,
     label_left_bound: u32,
@@ -1060,8 +1058,7 @@ fn filter_tick_labels_to_fit(
     let mut labels = Vec::with_capacity(ticks.len());
     let mut last_right = i32::MIN / 4;
 
-    for (tick_val, label) in ticks.iter().zip(text::format_tick_labels(ticks)) {
-        let frac = (tick_val - lo) / range;
+    for ((tick_val, label), frac) in ticks.iter().zip(text::format_tick_labels(ticks)).zip(fracs) {
         let px = cbar_x as f64 + frac * cbar_w as f64;
         let lw = text::text_width(&label, text_scale) as i32;
         if lw >= max_x.saturating_sub(min_x) {
@@ -1080,10 +1077,29 @@ fn filter_tick_labels_to_fit(
     labels
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn filter_vertical_tick_labels_to_fit(
     ticks: &[f64],
     lo: f64,
     range: f64,
+    cbar_y: u32,
+    cbar_h: u32,
+    label_top_bound: u32,
+    label_bottom_bound: u32,
+    img_h: u32,
+    text_scale: u32,
+) -> Vec<(f64, i32, String)> {
+    let fracs: Vec<f64> = ticks.iter().map(|tick| (tick - lo) / range).collect();
+    filter_vertical_tick_labels_at(
+        ticks, &fracs, cbar_y, cbar_h, label_top_bound, label_bottom_bound, img_h, text_scale,
+    )
+}
+
+/// [`filter_vertical_tick_labels_to_fit`] with each tick's place on the bar
+/// given (`fracs`, 0 at the bottom, 1 at the top).
+fn filter_vertical_tick_labels_at(
+    ticks: &[f64],
+    fracs: &[f64],
     cbar_y: u32,
     cbar_h: u32,
     label_top_bound: u32,
@@ -1100,8 +1116,7 @@ fn filter_vertical_tick_labels_to_fit(
     }
 
     let mut candidates = Vec::with_capacity(ticks.len());
-    for (tick_val, label) in ticks.iter().zip(text::format_tick_labels(ticks)) {
-        let frac = (tick_val - lo) / range;
+    for ((tick_val, label), &frac) in ticks.iter().zip(text::format_tick_labels(ticks)).zip(fracs) {
         if !frac.is_finite() {
             continue;
         }
@@ -2485,12 +2500,22 @@ fn draw_local_mask_outline(
     mask: &RgbaImage,
     color: Rgba,
     width: u32,
+    stroked_rect: Option<(LocalRect, u32)>,
 ) {
     let radius = width.saturating_sub(1).min(3) as i32;
     for local_y in 0..mask.height() {
         for local_x in 0..mask.width() {
             if mask.get_pixel(local_x, local_y).0[3] == 0 {
                 continue;
+            }
+            if let Some((rect, band)) = stroked_rect {
+                let near_edge = local_x.abs_diff(rect.min_x) <= band
+                    || local_x.abs_diff(rect.max_x) <= band
+                    || local_y.abs_diff(rect.min_y) <= band
+                    || local_y.abs_diff(rect.max_y) <= band;
+                if near_edge {
+                    continue;
+                }
             }
             let x = local_x as i32;
             let y = local_y as i32;
@@ -2780,20 +2805,28 @@ fn hash_projected_grid(grid: &ProjectedGrid) -> u64 {
     hasher.finish()
 }
 
+/// Where `level` crosses the edge from `a` to `b`, if it does.
+///
+/// Each corner is classified once, at-or-above the level or below it, and
+/// an edge is crossed only when its two corners fall on different sides.
+/// A corner lying exactly ON the level used to count as a crossing on BOTH
+/// of its edges: the cell then had three intersection points (or two copies
+/// of the same corner), the walk drew only the first pair, and the real
+/// segment from that corner to the opposite edge was never drawn.  A small
+/// closed isobar in a nearly flat field showed a one-cell gap with nothing
+/// in it (2.9.9 R10 look, U-E9: the R11 d01 MSLP/10 m winds map, north-east
+/// corner).  With the classification a cell always has 0, 2 or 4 crossings;
+/// values off the level take exactly the arithmetic they always did.
 fn interp_point(a: (f64, f64, f64), b: (f64, f64, f64), level: f64) -> Option<(f64, f64)> {
     let (x0, y0, v0) = a;
     let (x1, y1, v1) = b;
     if !v0.is_finite() || !v1.is_finite() {
         return None;
     }
-    let d0 = v0 - level;
-    let d1 = v1 - level;
-    if (d0 > 0.0 && d1 > 0.0) || (d0 < 0.0 && d1 < 0.0) {
+    if (v0 >= level) == (v1 >= level) {
         return None;
     }
-    if (v1 - v0).abs() < 1e-12 {
-        return Some(((x0 + x1) * 0.5, (y0 + y1) * 0.5));
-    }
+    // Opposite sides, so v1 != v0 and t lies in [0, 1].
     let t = (level - v0) / (v1 - v0);
     Some((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t))
 }
@@ -2950,9 +2983,13 @@ fn contour_cell_intersections(
     base: usize,
     cell_step: usize,
     level: f64,
-) -> Option<([(f64, f64); 4], usize)> {
+) -> Option<([(f64, f64); 4], usize, f64)> {
     let cell_step = cell_step.max(1);
     let (c0, c1, c2, c3) = contour_cell_corners(layout, overlay, pixel_points, base, cell_step)?;
+    let extent = point_distance(c0, c1)
+        .max(point_distance(c1, c2))
+        .max(point_distance(c2, c3))
+        .max(point_distance(c3, c0));
     let p0 = (c0.0, c0.1, overlay.data[base]);
     let p1 = (c1.0, c1.1, overlay.data[base + cell_step]);
     let p2 = (
@@ -2969,7 +3006,7 @@ fn contour_cell_intersections(
     emit_interp_point(&mut pts, &mut count, p2, p3, level);
     emit_interp_point(&mut pts, &mut count, p3, p0, level);
 
-    if count >= 2 { Some((pts, count)) } else { None }
+    if count >= 2 { Some((pts, count, extent)) } else { None }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3059,6 +3096,9 @@ struct ContourLevelLabelState {
     max_labels: usize,
     min_spacing_sq: f64,
     centers: Vec<(f64, f64)>,
+    /// Longest projected side, in pixels, of the grid cell whose segments
+    /// are being offered.  Set by the contour walk before each cell.
+    cell_extent_px: f64,
 }
 
 impl ContourLevelLabelState {
@@ -3071,6 +3111,7 @@ impl ContourLevelLabelState {
             max_labels,
             min_spacing_sq: min_spacing * min_spacing,
             centers: Vec::with_capacity(max_labels),
+            cell_extent_px: f64::INFINITY,
         }
     }
 
@@ -3100,12 +3141,13 @@ fn maybe_place_contour_label(
     y1: f64,
     label_state: &mut ContourLevelLabelState,
     label_placer: &mut ContourLabelPlacer,
+    clip_mask: Option<&RgbaImage>,
 ) {
     if !contour_level_gets_label(overlay, level_index) {
         return;
     }
     let segment_len = (x1 - x0).hypot(y1 - y0);
-    if segment_len <= 2.0 {
+    if segment_len <= contour_label_min_segment_px(label_state.cell_extent_px) {
         return;
     }
     let center = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
@@ -3140,6 +3182,7 @@ fn maybe_place_contour_label(
         || rect.max_x > map_rect.max_x
         || rect.min_y < map_rect.min_y
         || rect.max_y > map_rect.max_y
+        || !label_rect_inside_clip_mask(layout, rect, contour_label_halo_width(layout), clip_mask)
         || !label_placer.can_place(rect)
     {
         return;
@@ -3161,6 +3204,49 @@ fn maybe_place_contour_label(
         bold: true,
     });
     label_state.record(center);
+}
+
+/// The shortest segment a contour label may sit on.  Two pixels keeps a
+/// label off a cell corner the line merely clips, which is what the floor
+/// was for on grids whose cells span several pixels.  On a grid whose
+/// cells are a pixel or less (a 3 km CONUS grid on a 1200 px panel) EVERY
+/// segment is two pixels or shorter, so a fixed floor rejected every
+/// segment and no contour label was ever drawn, though one was requested
+/// (the WOOF-vs-HRRR 500 hPa height sheets).  The floor is therefore half
+/// the cell's longest projected side, capped at the old two pixels:
+/// identical on coarse grids, and a dense grid's segments qualify.
+fn contour_label_min_segment_px(cell_extent_px: f64) -> f64 {
+    if cell_extent_px.is_finite() && cell_extent_px > 0.0 {
+        (0.5 * cell_extent_px).min(2.0)
+    } else {
+        2.0
+    }
+}
+
+/// A label is drawn only where its whole box, halo included, survives the
+/// clear outside the drawn domain.  Before, a label placed inside the map
+/// rectangle but across the domain frame was cut in half by that clear
+/// (a "564" reading "64" at the frame edge).
+fn label_rect_inside_clip_mask(
+    layout: &Layout,
+    rect: LabelRect,
+    halo_px: u32,
+    clip_mask: Option<&RgbaImage>,
+) -> bool {
+    let Some(mask) = clip_mask else {
+        return true;
+    };
+    let halo = halo_px as i32;
+    let x0 = rect.min_x - halo - layout.map_x as i32;
+    let x1 = rect.max_x + halo - layout.map_x as i32;
+    let y0 = rect.min_y - halo - layout.map_y as i32;
+    let y1 = rect.max_y + halo - layout.map_y as i32;
+    let xs = [x0, (x0 + x1) / 2, x1];
+    let ys = [y0, (y0 + y1) / 2, y1];
+    xs.iter().all(|&x| {
+        ys.iter()
+            .all(|&y| mask_contains_local_pixel(mask, x as f64, y as f64))
+    })
 }
 
 fn contour_level_gets_label(overlay: &ContourOverlay, level_index: usize) -> bool {
@@ -3256,7 +3342,7 @@ fn draw_contour_stroke(
     }
 }
 
-fn draw_contour_segments_unmasked(
+fn draw_contour_segments(
     img: &mut RgbaImage,
     layout: &Layout,
     overlay: &ContourOverlay,
@@ -3264,6 +3350,7 @@ fn draw_contour_segments_unmasked(
     level: f64,
     pts: &[(f64, f64); 4],
     count: usize,
+    clip_mask: Option<&RgbaImage>,
     label_state: &mut ContourLevelLabelState,
     label_placer: &mut ContourLabelPlacer,
 ) {
@@ -3276,53 +3363,7 @@ fn draw_contour_segments_unmasked(
     for &(a, b) in segments {
         let (x0, y0) = pts[a];
         let (x1, y1) = pts[b];
-        draw_contour_stroke(
-            img,
-            layout.map_x as f64 + x0,
-            layout.map_y as f64 + y0,
-            layout.map_x as f64 + x1,
-            layout.map_y as f64 + y1,
-            overlay.color,
-            contour_level_width(overlay, level_index),
-            overlay.pattern,
-        );
-        maybe_place_contour_label(
-            layout,
-            overlay,
-            level_index,
-            level,
-            x0,
-            y0,
-            x1,
-            y1,
-            label_state,
-            label_placer,
-        );
-    }
-}
-
-fn draw_contour_segments_masked(
-    img: &mut RgbaImage,
-    layout: &Layout,
-    overlay: &ContourOverlay,
-    level_index: usize,
-    level: f64,
-    pts: &[(f64, f64); 4],
-    count: usize,
-    mask: &RgbaImage,
-    label_state: &mut ContourLevelLabelState,
-    label_placer: &mut ContourLabelPlacer,
-) {
-    let segments: &[(usize, usize)] = if count == 4 {
-        &[(0, 1), (2, 3)]
-    } else {
-        &[(0, 1)]
-    };
-
-    for &(a, b) in segments {
-        let (x0, y0) = pts[a];
-        let (x1, y1) = pts[b];
-        if !segment_intersects_mask(mask, x0, y0, x1, y1) {
+        if clip_mask.is_some_and(|mask| !segment_intersects_mask(mask, x0, y0, x1, y1)) {
             continue;
         }
         draw_contour_stroke(
@@ -3346,6 +3387,7 @@ fn draw_contour_segments_masked(
             y1,
             label_state,
             label_placer,
+            clip_mask,
         );
     }
 }
@@ -3418,68 +3460,36 @@ fn draw_contours_bucketed(
     let buckets = build_contour_buckets(overlay, pixel_points, cell_step);
     timing.bucket_ms = bucket_start.elapsed().as_millis();
 
-    if let Some(mask) = clip_mask {
-        for (level_index, &level) in overlay.levels.iter().enumerate() {
-            let mut label_state = ContourLevelLabelState::new(overlay.labels, layout);
-            for &base in &buckets[level_index] {
-                let Some((pts, count)) = contour_cell_intersections(
-                    layout,
-                    overlay,
-                    pixel_points,
-                    base as usize,
-                    cell_step,
-                    level,
-                ) else {
-                    continue;
-                };
-                timing.segment_count =
-                    timing
-                        .segment_count
-                        .saturating_add(if count == 4 { 2 } else { 1 });
-                draw_contour_segments_masked(
-                    img,
-                    layout,
-                    overlay,
-                    level_index,
-                    level,
-                    &pts,
-                    count,
-                    mask,
-                    &mut label_state,
-                    label_placer,
-                );
-            }
-        }
-    } else {
-        for (level_index, &level) in overlay.levels.iter().enumerate() {
-            let mut label_state = ContourLevelLabelState::new(overlay.labels, layout);
-            for &base in &buckets[level_index] {
-                let Some((pts, count)) = contour_cell_intersections(
-                    layout,
-                    overlay,
-                    pixel_points,
-                    base as usize,
-                    cell_step,
-                    level,
-                ) else {
-                    continue;
-                };
-                timing.segment_count =
-                    timing
-                        .segment_count
-                        .saturating_add(if count == 4 { 2 } else { 1 });
-                draw_contour_segments_unmasked(
-                    img,
-                    layout,
-                    overlay,
-                    level_index,
-                    level,
-                    &pts,
-                    count,
-                    &mut label_state,
-                    label_placer,
-                );
-            }
+    for (level_index, &level) in overlay.levels.iter().enumerate() {
+        let mut label_state = ContourLevelLabelState::new(overlay.labels, layout);
+        for &base in &buckets[level_index] {
+            let Some((pts, count, cell_extent)) = contour_cell_intersections(
+                layout,
+                overlay,
+                pixel_points,
+                base as usize,
+                cell_step,
+                level,
+            ) else {
+                continue;
+            };
+            label_state.cell_extent_px = cell_extent;
+            timing.segment_count =
+                timing
+                    .segment_count
+                    .saturating_add(if count == 4 { 2 } else { 1 });
+            draw_contour_segments(
+                img,
+                layout,
+                overlay,
+                level_index,
+                level,
+                &pts,
+                count,
+                clip_mask,
+                &mut label_state,
+                label_placer,
+            );
         }
     }
     timing
@@ -3502,7 +3512,7 @@ fn draw_contours_legacy(
             let row_base = j * overlay.nx;
             for i in (0..overlay.nx.saturating_sub(cell_step)).step_by(cell_step) {
                 let base = row_base + i;
-                let Some((pts, count)) = contour_cell_intersections(
+                let Some((pts, count, cell_extent)) = contour_cell_intersections(
                     layout,
                     overlay,
                     pixel_points,
@@ -3512,37 +3522,24 @@ fn draw_contours_legacy(
                 ) else {
                     continue;
                 };
+                label_state.cell_extent_px = cell_extent;
                 timing.segment_count =
                     timing
                         .segment_count
                         .saturating_add(if count == 4 { 2 } else { 1 });
 
-                if let Some(mask) = clip_mask {
-                    draw_contour_segments_masked(
-                        img,
-                        layout,
-                        overlay,
-                        level_index,
-                        level,
-                        &pts,
-                        count,
-                        mask,
-                        &mut label_state,
-                        label_placer,
-                    );
-                } else {
-                    draw_contour_segments_unmasked(
-                        img,
-                        layout,
-                        overlay,
-                        level_index,
-                        level,
-                        &pts,
-                        count,
-                        &mut label_state,
-                        label_placer,
-                    );
-                }
+                draw_contour_segments(
+                    img,
+                    layout,
+                    overlay,
+                    level_index,
+                    level,
+                    &pts,
+                    count,
+                    clip_mask,
+                    &mut label_state,
+                    label_placer,
+                );
             }
         }
     }
@@ -4382,19 +4379,18 @@ fn draw_barbs(
             // A planned frame draws no glyph for a calm point: the calm
             // circle, repeated on a barb lattice over a light-wind area,
             // read as a grid of dots over the whole map.
-            if layout.plan.is_some()
+            if !overlay.direction_arrows && layout.plan.is_some()
                 && (overlay.u[idx] as f64).hypot(overlay.v[idx] as f64) < CALM_KT
             {
                 continue;
             }
-            draw_wind_barb_with_halo(
-                img,
-                overlay,
-                x,
-                y,
-                overlay.u[idx] as f64,
-                overlay.v[idx] as f64,
-            );
+            let (u, v) = if overlay.direction_arrows {
+                match projected_transport_direction(overlay.direction_projection.as_deref(), idx,
+                    overlay.u[idx] as f64, overlay.v[idx] as f64, layout.map_w, layout.map_h) {
+                    Some(vector) => vector, None => continue,
+                }
+            } else { (overlay.u[idx] as f64, overlay.v[idx] as f64) };
+            draw_wind_barb_with_halo(img, overlay, x, y, u, v);
         }
     }
 }
@@ -4429,6 +4425,33 @@ fn accept_pixel_spaced_barb(
     true
 }
 
+// Project a short physical east/north displacement, then apply the map's
+// actual pixel aspect. Pick the shorter one-sided derivative at a map seam.
+fn projected_transport_direction(
+    projection: Option<&crate::overlay::DirectionProjection>, idx: usize,
+    u: f64, v: f64, width: u32, height: u32,
+) -> Option<(f64, f64)> {
+    let Some(projection) = projection else { return Some((u, v)); };
+    let &(lat, lon) = projection.lat_lon.get(idx)?;
+    let (lat, lon) = (lat as f64, lon as f64);
+    if !lat.is_finite() || !lon.is_finite() || lat.abs() > 89.999 { return None; }
+    let origin = projection.projection.project(lat, lon);
+    let h = 1e-4;
+    let tangent = |dlat: f64, dlon: f64| {
+        let a = projection.projection.project(lat + dlat, lon + dlon);
+        let b = projection.projection.project(lat - dlat, lon - dlon);
+        let forward = (a.0-origin.0, a.1-origin.1);
+        let backward = (origin.0-b.0, origin.1-b.1);
+        if forward.0.hypot(forward.1) < backward.0.hypot(backward.1) { forward } else { backward }
+    };
+    let east = tangent(0.0, h / lat.to_radians().cos());
+    let north = tangent(h, 0.0);
+    let e = &projection.extent;
+    let x = (u*east.0+v*north.0) * width as f64 / (e.x_max-e.x_min);
+    let y = (u*east.1+v*north.1) * height as f64 / (e.y_max-e.y_min);
+    (x.is_finite() && y.is_finite()).then_some((x, y))
+}
+
 fn draw_wind_barb_with_halo(
     img: &mut RgbaImage,
     overlay: &BarbOverlay,
@@ -4437,6 +4460,28 @@ fn draw_wind_barb_with_halo(
     u: f64,
     v: f64,
 ) {
+    if overlay.direction_arrows {
+        let speed = u.hypot(v);
+        if !speed.is_finite() || speed <= 0.0 { return; }
+        let (dx, dy) = (u / speed, -v / speed);
+        let length = overlay.length_px;
+        let tip = (x + dx * length * 0.5, y + dy * length * 0.5);
+        let tail = (x - dx * length * 0.5, y - dy * length * 0.5);
+        let head = length * 0.28;
+        let draw_arrow = |img: &mut RgbaImage, color, width| {
+            draw::draw_line_aa_width(img, tail.0, tail.1, tip.0, tip.1, color, width);
+            for sign in [-1.0, 1.0] {
+                draw::draw_line_aa_width(img, tip.0, tip.1,
+                    tip.0 - head * dx + sign * head * 0.5 * dy,
+                    tip.1 - head * dy - sign * head * 0.5 * dx, color, width);
+            }
+        };
+        if overlay.halo_color.a > 0 && overlay.halo_width > 0 {
+            draw_arrow(img, overlay.halo_color, overlay.width + 2 * overlay.halo_width);
+        }
+        draw_arrow(img, overlay.color, overlay.width);
+        return;
+    }
     if overlay.halo_color.a > 0 && overlay.halo_width > 0 {
         draw::draw_wind_barb(
             img,
@@ -4743,6 +4788,18 @@ fn draw_variable_layers(
             &mut contour_label_placer,
         ));
     }
+    let contour_line_ms = contour_start.elapsed().as_millis();
+
+    let barb_start = Instant::now();
+    for barb in &opts.barbs {
+        draw_barbs(img, layout, barb, projected_pixels, draw_clip_mask);
+    }
+    let barb_ms = streamline_ms.saturating_add(barb_start.elapsed().as_millis());
+
+    // Contour labels and H/L extrema go on top of the barbs: a barb drawn
+    // after them covered isobar values on MSLP / 10 m wind maps (2.9.6 R10
+    // look, U10).  Lines stay beneath the barbs.
+    let contour_label_start = Instant::now();
     let label_draw_start = Instant::now();
     contour_label_placer.draw(img);
     contour_profile.label_draw_ms = contour_profile
@@ -4757,13 +4814,7 @@ fn draw_variable_layers(
                 .saturating_add(extrema_start.elapsed().as_millis());
         }
     }
-    let contour_ms = contour_start.elapsed().as_millis();
-
-    let barb_start = Instant::now();
-    for barb in &opts.barbs {
-        draw_barbs(img, layout, barb, projected_pixels, draw_clip_mask);
-    }
-    let barb_ms = streamline_ms.saturating_add(barb_start.elapsed().as_millis());
+    let contour_ms = contour_line_ms.saturating_add(contour_label_start.elapsed().as_millis());
 
     let label_start = Instant::now();
     if let Some(ref extent) = opts.map_extent {
@@ -4781,14 +4832,14 @@ fn draw_variable_layers(
     let outside_frame_clear_start = Instant::now();
     if let Some(mask) = combined_clip_mask.as_ref() {
         clear_map_outside_local_mask(img, layout, mask, canvas_background);
-        draw_domain_clip_mask_outline(img, layout, mask, opts);
+        draw_domain_clip_mask_outline(img, layout, mask, opts, effective_domain_frame_rect);
     } else if let (Some(frame), Some(rect)) = (opts.domain_frame, effective_domain_frame_rect) {
         if frame.clear_outside {
             clear_map_outside_local_rect(img, layout, rect, canvas_background);
         }
     } else if let Some(mask) = projection_clip_mask.as_ref() {
         clear_map_outside_local_mask(img, layout, mask, canvas_background);
-        draw_domain_clip_mask_outline(img, layout, mask, opts);
+        draw_domain_clip_mask_outline(img, layout, mask, opts, effective_domain_frame_rect);
     }
     let outside_frame_clear_ms = outside_frame_clear_start.elapsed().as_millis();
 
@@ -4808,21 +4859,37 @@ fn draw_variable_layers(
     }
 }
 
+/// Outline the clip mask in the domain frame's style.
+///
+/// `frame_rect` is the rectangle the chrome strokes afterwards
+/// (`draw_frame_outlines`) when a non-raster domain frame is drawn; mask
+/// edge pixels inside that stroke's band are left to it.
+///
+/// WHAT BREAKAGE THIS PREVENTS (gate law): a native grid whose projected
+/// edge runs a pixel or two inside the frame rectangle got both strokes side
+/// by side, so the left frame edge read thicker from the top corner to about
+/// a third of the way down and then thinned where the two met (R10 look,
+/// 2.9.4). Where the data really stops short of the rectangle the mask
+/// outline still draws.
 fn draw_domain_clip_mask_outline(
     img: &mut RgbaImage,
     layout: &Layout,
     mask: &RgbaImage,
     opts: &RenderOpts,
+    frame_rect: Option<LocalRect>,
 ) {
     if let Some(frame) = opts.domain_frame {
         let frame_style = opts
             .presentation
             .domain_frame_style(frame.outline_color.into(), frame.outline_width);
         if frame_style.visible {
-            draw_local_mask_outline(img, layout, mask, frame_style.color, frame_style.width);
+            let stroked = frame_rect
+                .filter(|_| !matches!(frame.source, DomainFrameSource::RasterAlpha))
+                .map(|rect| (rect, frame_style.width.saturating_add(1)));
+            draw_local_mask_outline(img, layout, mask, frame_style.color, frame_style.width, stroked);
         }
     } else if let Some(frame) = opts.presentation.chrome.frame_color {
-        draw_local_mask_outline(img, layout, mask, frame, 1);
+        draw_local_mask_outline(img, layout, mask, frame, 1, None);
     }
 }
 
@@ -5026,8 +5093,10 @@ fn draw_chrome_and_colorbar(
                     let hi = levels[levels.len() - 1];
                     let range = hi - lo;
                     if range > 0.0 {
-                        let tick_positions: Vec<f64> =
-                            ticks.iter().map(|t| (t - lo) / range).collect();
+                        let tick_positions: Vec<f64> = ticks
+                            .iter()
+                            .map(|t| legend_tick_position(&opts.cmap, *t, lo, range))
+                            .collect();
                         colorbar::draw_colorbar_ticks(
                             img,
                             cbar_x,
@@ -5038,10 +5107,9 @@ fn draw_chrome_and_colorbar(
                         );
                         let tick_y = cbar_y.saturating_sub(layout.label_gap) as i32;
                         let label_color = opts.presentation.colorbar.label_color;
-                        for (_, lx, label) in filter_tick_labels_to_fit(
+                        for (_, lx, label) in filter_tick_labels_at(
                             &ticks,
-                            lo,
-                            range,
+                            &tick_positions,
                             cbar_x,
                             cbar_w,
                             cbar_x,
@@ -5078,8 +5146,10 @@ fn draw_chrome_and_colorbar(
                     let hi = levels[levels.len() - 1];
                     let range = hi - lo;
                     if range > 0.0 {
-                        let tick_positions: Vec<f64> =
-                            ticks.iter().map(|t| (t - lo) / range).collect();
+                        let tick_positions: Vec<f64> = ticks
+                            .iter()
+                            .map(|t| legend_tick_position(&opts.cmap, *t, lo, range))
+                            .collect();
                         colorbar::draw_vertical_colorbar_ticks(
                             img,
                             cbar_x,
@@ -5094,10 +5164,9 @@ fn draw_chrome_and_colorbar(
                             .saturating_add(cbar_w)
                             .saturating_add(6u32.saturating_mul(layout.text_scale.max(1)))
                             as i32;
-                        for (_, ly, label) in filter_vertical_tick_labels_to_fit(
+                        for (_, ly, label) in filter_vertical_tick_labels_at(
                             &ticks,
-                            lo,
-                            range,
+                            &tick_positions,
                             cbar_y,
                             layout.cbar_h,
                             cbar_y,
@@ -5537,7 +5606,111 @@ fn render_to_image_profile_inner(
     (img, timing)
 }
 
+/// The note a filled map carries when it has nothing to draw and the product
+/// gave no reason of its own.
+pub const EMPTY_MAP_NOTE: &str = "No values to plot";
+
+/// The note to draw on a filled map that has nothing to draw: no value of
+/// the field takes a visible colour on its scale, and no contour, barb,
+/// streamline or RGBA layer draws anything over it. `None` when anything is
+/// drawn, and for a map without a colour bar (overlay-only pictures are
+/// blank fills by design).
+///
+/// WHAT BREAKAGE THIS PREVENTS (gate law): a map with nothing to draw for a
+/// valid reason (no 0 C level in a cold column, the Haines layer below
+/// ground, an accumulation at F000) looked exactly like a failed render (R10
+/// look, 2.9.4).
+pub fn empty_map_note(data: &[f64], opts: &RenderOpts) -> Option<String> {
+    if !opts.colorbar
+        || opts.rgba_grid.is_some()
+        || !opts.contours.is_empty()
+        || !opts.barbs.is_empty()
+        || !opts.streamlines.is_empty()
+        || data.is_empty()
+    {
+        return None;
+    }
+    if data.iter().any(|value| opts.cmap.map(*value).a > 0) {
+        return None;
+    }
+    Some(
+        opts.empty_note
+            .clone()
+            .filter(|note| !note.trim().is_empty())
+            .unwrap_or_else(|| EMPTY_MAP_NOTE.to_string()),
+    )
+}
+
+/// Draw `note` centred on the map rectangle of a finished image, on a panel
+/// in the canvas colour with a hairline in the frame colour, so it reads as
+/// a statement about the map rather than as data.
+fn draw_empty_map_note(img: &mut RgbaImage, timing: &RenderImageTiming, note: &str, opts: &RenderOpts) {
+    let (map_x, map_y, map_w, map_h) = (timing.map_x, timing.map_y, timing.map_w, timing.map_h);
+    if map_w < 40 || map_h < 24 {
+        return;
+    }
+    // The face the rest of the chrome uses: Source Sans 3 on a fixed
+    // canvas, the planned chrome face otherwise.
+    let fixed = matches!(
+        crate::layout_plan::layout_mode(),
+        crate::layout_plan::LayoutMode::Fixed
+    );
+    let width_of = |size: f32| {
+        if fixed {
+            text::text_width_bold_with_factor(note, 1, size / 15.0)
+        } else {
+            text::text_width_px(note, size, true)
+        }
+    };
+    let mut size = (map_h as f32 / 28.0).clamp(10.0, 22.0);
+    let mut text_w = width_of(size);
+    while text_w + 2 * (size * 0.8) as u32 > map_w.saturating_sub(8) && size > 10.0 {
+        size -= 1.0;
+        text_w = width_of(size);
+    }
+    let pad = (size * 0.8).round() as u32;
+    let line_h = if fixed {
+        text::bold_line_height_with_factor(1, size / 15.0)
+    } else {
+        text::line_height_px(size, true)
+    };
+    let box_w = (text_w + 2 * pad).min(map_w.saturating_sub(4));
+    let box_h = line_h + pad;
+    let box_x = map_x + (map_w.saturating_sub(box_w)) / 2;
+    let box_y = map_y + (map_h.saturating_sub(box_h)) / 2;
+    let fill = opts.presentation.canvas_background;
+    let edge = opts.presentation.colorbar.frame_color;
+    for y in box_y..(box_y + box_h).min(img.height()) {
+        for x in box_x..(box_x + box_w).min(img.width()) {
+            let on_edge = y == box_y || x == box_x || y + 1 == box_y + box_h || x + 1 == box_x + box_w;
+            let color = if on_edge { edge } else { fill };
+            img.put_pixel(x, y, image::Rgba([color.r, color.g, color.b, 255]));
+        }
+    }
+    let text_x = (box_x + (box_w.saturating_sub(text_w)) / 2) as i32;
+    let text_y = (box_y as f32 + (box_h as f32 - line_h as f32) / 2.0).round() as i32;
+    let color = opts.presentation.chrome.title_color;
+    if fixed {
+        text::draw_text_bold_with_factor(img, note, text_x, text_y, color, 1, size / 15.0);
+    } else {
+        text::draw_text_px(img, note, text_x, text_y, color, size, true);
+    }
+}
+
 pub fn render_to_image_profile(
+    data: &[f64],
+    ny: usize,
+    nx: usize,
+    opts: &RenderOpts,
+) -> (RgbaImage, RenderImageTiming) {
+    let (mut image, timing) = render_to_image_profile_unnoted(data, ny, nx, opts);
+    if let Some(note) = empty_map_note(data, opts) {
+        draw_empty_map_note(&mut image, &timing, &note, opts);
+    }
+    (image, timing)
+}
+
+fn render_to_image_profile_unnoted(
     data: &[f64],
     ny: usize,
     nx: usize,

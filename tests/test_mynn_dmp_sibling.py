@@ -1,72 +1,33 @@
-"""The DMP sibling preserves its historical source and tagged exports.
+"""The shared DMP source keeps the frozen default and plume-export arms.
 
-The ordinary mixing-length entry point now calls the rounded shared helper
-with options 1 and 2, and initialization forwards the selected option.
-The sibling is still used only for its DMP exports. Its stripped source
-digest is re-pinned for the level-major layout, and every byte outside that
-mixing-length changes must agree with the active source. Numerical DMP controls
-cover the actual default and scalar-mixing paths.
+Source pins come from a24a0c478e3, before the sibling fold. GPU exactness and
+whole-forecast BASE/TIP receipts are required before this fold lands.
 """
-
 from __future__ import annotations
 
+import ast
 import hashlib
 from pathlib import Path
+import re
+
+import pytest
 
 _KDIR = Path(__file__).resolve().parents[1] / "woof" / "core" / "kernels"
 _MARKER = "// MF-EXPORT"
-
-#: Re-pinned for the level-major MYNN layout (speed lane, 2.8.1): the same
-#: addressing-only edit as mynn_pbl.cu, whose FROZEN_MODULE_DIGESTS entry in
-#: tests/test_mp8_frozen.py records the identity evidence.  The scalar-mixing
-#: path it serves replayed bitwise identical on the RTX 4090 and RTX 5090.
-#: Re-pinned for A146 (a98f2482e): the constant-divisor float divisions both
-#: siblings share are spelled __fdiv_rn.  Previously 9c5c9543.
-_FROZEN_SHA256 = (
-    "06cada42b47a4f7874641216e491917eabb53185abd7cd0465e946978ba56c76"
-)
 
 
 def _read(name: str) -> str:
     return (_KDIR / name).read_text(encoding="utf-8")
 
 
-def _historical_source():
-    return "".join(line for line in _read("mynn_dmp_sibling.cu").splitlines(True)
-                   if _MARKER not in line)
+def _export_arm(source, enabled):
+    return re.sub(r"#ifdef MYNN_EXPORT_PLUME_EDGE\n(.*?)#endif\n",
+                  lambda match: match[1] if enabled else "", source, flags=re.S)
 
 
-def _without_length_entry(source):
-    start = source.index('extern "C" __global__\nvoid mynn_mixlength_default_columns(')
-    end = source.index("\n}\n", start) + 3
-    return source[:start].rstrip("\n") + "\n\n" + source[end:].lstrip("\n")
-
-
-def test_historical_sibling_source_pin_unchanged():
-    assert hashlib.sha256(_historical_source().encode()).hexdigest() == _FROZEN_SHA256
-
-
-def _without_local_length_option(source):
-    start = source.index("// WRF v4.6.1 module_bl_mynn.F:2100-2232")
-    end = source.index("// module_bl_mynn.F:1999-2098", start)
-    source = source[:start] + source[end:]
-    edits = (
-        ("MynnColumn<real> dld, int nz, int mixlength)",
-         "MynnColumn<real> dld, int nz)"),
-        ("    if (mixlength == 2) {\n"
-         "        mynn_mym_length_local_column(dz, zw, qke, dtv, edmf_w, edmf_a,\n"
-         "            rmo, fltv, zi, psig_bl, el, qkw, qtke, nz);\n"
-         "        return;\n    }\n", ""),
-        ("int initialize_qke, int mixlength, int nz, int ncol)",
-         "int initialize_qke, int nz, int ncol)"),
-        ("el, qkw, qtke, thetaw, elblavg, dlu, dld, nz,\n"
-         "                               mixlength);",
-         "el, qkw, qtke, thetaw, elblavg, dlu, dld, nz);"),
-    )
-    for current, historical in edits:
-        assert source.count(current) == 1, current
-        source = source.replace(current, historical)
-    return source
+def _dmp_entry(source):
+    start = source.index('extern "C" __global__\nvoid mynn_dmp_mf_columns(')
+    return source[start:source.index("\n}\n", start) + 3]
 
 
 def _without_gsd41(source):
@@ -112,45 +73,69 @@ def _without_gsd41(source):
     return source.replace("\n    )\n{", ")\n{")
 
 
-def test_only_mixing_length_entries_differ_from_the_sibling():
-    # Do not let the new length option silently alter DMP scalar fluxes.
-    assert _without_local_length_option(_without_length_entry(
-        _without_gsd41(_read("mynn_pbl.cu")))) == _without_length_entry(
-        _historical_source())
+def test_default_source_pin_unchanged():
+    source = _export_arm(_read("mynn_pbl.cu"), False)
+    assert hashlib.sha256(source.encode()).hexdigest() == "176d00a656786395753cd254921fe74968448c8daafc7c7f254b97c484338cda"
+
+
+def test_export_arm_is_the_frozen_sibling_dmp_entry():
+    source = _without_gsd41(_export_arm(_read("mynn_pbl.cu"), True))
+    assert hashlib.sha256(_dmp_entry(source).encode()).hexdigest() == "a83ed1f766e20c39b2e86eaaa71b3ce4e71ea8e062567ffa4316809817ad0085"
 
 
 def test_the_marker_is_actually_exercised():
-    """A vacuous strip (no tagged lines) would mean the sibling exports
-    nothing and the mixscalars lane silently reads garbage."""
-    sibling = _read("mynn_dmp_sibling.cu")
-    tagged = [line for line in sibling.splitlines() if _MARKER in line]
-    assert len(tagged) >= 10, f"only {len(tagged)} tagged export lines"
-    text = "\n".join(tagged)
-    for needle in ("up_a_pre", "psig_w_o", "plume_active_o",
-                   "limiter_adjustment_o"):
-        assert needle in text, f"no tagged line exports {needle}"
+    source = _read("mynn_pbl.cu")
+    tagged = [line for line in source.splitlines() if _MARKER in line]
+    assert len(tagged) == 12
+    assert _MARKER not in _export_arm(source, False)
+    for name in ("up_a_pre", "psig_w_o", "plume_active_o", "limiter_adjustment_o"):
+        assert name in "\n".join(tagged)
 
 
-def test_default_dmp_still_launches_the_original_module(monkeypatch):
+def test_logical_sibling_keeps_its_compiler_policy_and_shared_source():
+    from woof.core import kernels
+
+    source = kernels.module_source("mynn_dmp_sibling")
+    assert "#define MYNN_EXPORT_PLUME_EDGE 1\n" in source
+    assert source.endswith(_read("mynn_pbl.cu"))
+    assert kernels.module_options("mynn_dmp_sibling") == ("-std=c++17", "--fmad=false")
+    assert "mynn_dmp_sibling" not in kernels._NO_FTZ_MODULES
+    assert "mynn_pbl" in kernels._NO_FTZ_MODULES
+
+
+@pytest.mark.parametrize("shape", [(), (3, 2, 4)])
+def test_default_dmp_still_launches_the_original_module(shape):
     """The DMP dispatch uses the sibling only for scalar-mixing exports."""
-    from woof.core import mynn_pbl_gpu
+    # Execute the production dispatch and its validator without importing the
+    # device-array driver. This guard tests loader routing, not CUDA execution.
+    path = _KDIR.parent / "mynn_pbl_gpu.py"
+    core = path.read_text(encoding="utf-8")
+    tree = ast.parse(core)
+    dispatch = ast.Module(body=[node for node in tree.body if (
+        isinstance(node, ast.FunctionDef)
+        and node.name in {"mynn_pbl_kernel", "_mynn_version_check"}
+    ) or (
+        isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "MYNN_VERSIONS"
+                for target in node.targets)
+    )], type_ignores=[])
 
     calls, original = [], object()
 
-    def capture(module, function):
-        calls.append((module, function))
+    def capture(module, function, shape=()):
+        calls.append((module, function, shape))
         return original
 
     def refuse_defines(*args, **kwargs):
         raise AssertionError("generic MYNN must use the original module without defines")
 
-    monkeypatch.setattr(mynn_pbl_gpu, "get_kernel", capture)
-    monkeypatch.setattr(mynn_pbl_gpu, "get_kernel_int_defines", refuse_defines)
+    namespace = {"get_kernel": capture, "get_kernel_int_defines": refuse_defines}
+    exec(compile(dispatch, str(path), "exec"), namespace)
     for args in (("mynn_dmp_mf_columns",), ("mynn_dmp_mf_columns", "wrf_461")):
-        assert mynn_pbl_gpu.mynn_pbl_kernel(*args) is original
-    assert calls == [("mynn_pbl", "mynn_dmp_mf_columns")] * 2
+        assert namespace["mynn_pbl_kernel"](*args, shape=shape) is original
+    assert calls == [("mynn_pbl", "mynn_dmp_mf_columns", shape)] * 2
 
-    core = (Path(__file__).resolve().parents[1] / "woof" / "core"
-            / "mynn_pbl_gpu.py").read_text(encoding="utf-8")
-    assert 'mynn_pbl_kernel("mynn_dmp_mf_columns", bl_mynn_version)' in core
-    assert 'get_kernel("mynn_dmp_sibling", "mynn_dmp_mf_columns")' in core
+    assert ('mynn_pbl_kernel("mynn_dmp_mf_columns", bl_mynn_version, '
+            '(nz, 1, ncol))') in core
+    assert ('get_kernel("mynn_dmp_sibling", "mynn_dmp_mf_columns", '
+            '(nz, 1, ncol))') in core

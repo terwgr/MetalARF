@@ -167,10 +167,18 @@ def make_vertical_state(raw, metadata):
 @lru_cache(maxsize=12)
 def _diagnostic_module(source, no_fma, preserve_subnormals):
     import cupy as cp
-    options = ("-std=c++17",) + (("--fmad=false",) if no_fma else ())
-    if preserve_subnormals:
+    from woof import wrf_exact
+    from woof.core.kernels import diffusion_kernel, function_options, module_options
+    options = function_options("acoustic", "advance_w_phi", module_options("acoustic"))
+    if wrf_exact.ENABLED:
+        options = wrf_exact.effective_options(options)
+    if no_fma and "--fmad=false" not in options:
+        options += ("--fmad=false",)
+    if preserve_subnormals and "--ftz=false" not in options:
+        options += ("--ftz=false",)
+    if diffusion_kernel("acoustic", "advance_w_phi") or preserve_subnormals:
         from cupy.cuda import compiler, function
-        binary, _ = compiler.compile_using_nvrtc(source, options=options + ("-ftz=false",))
+        binary, _ = compiler.compile_using_nvrtc(source, options=options)
         module = function.Module()
         module.load(binary)
         return module
@@ -188,22 +196,22 @@ def selected_vertical_launch(state, cfg, dtau, coefficients, *, no_fma=False, wo
     original_get = acoustic.get_kernel
     original_w = acoustic._w_phi_kernel
 
-    def recorder(module, name):
-        actual = original_get(module, name)
+    def recorder(module, name, shape=()):
+        actual = original_get(module, name, shape) if shape else original_get(module, name)
 
         def save(grid, block, args):
             captured.append((name, actual, grid, block, args))
         return save
 
-    def record_w(name, nz):
+    def record_w(name, nz, ny=0, nx=0):
         # _w_phi_kernel itself resolves get_kernel through this module.
         # Restore that lookup while obtaining the native callable, so a
         # selected launch cannot accidentally retain another recorder.
         with patch.object(acoustic, "get_kernel", original_get):
-            actual = original_w(name, nz)
+            actual = original_w(name, nz, ny, nx) if ny and nx else original_w(name, nz)
         if (no_fma or workspace is not None or wrf_phi_order or preserve_subnormals
                 or wrf_top_order or wrf_update_order or correct_pi or wrf_eos_order or replay_pi_defect):
-            source = acoustic.wphi_kernel_source(nz)
+            source = acoustic.wphi_kernel_source(nz, ny, nx, name=name)
             if replay_pi_defect:
                 if source.count("1.5707963267948966f") == 2:
                     source = source.replace("1.5707963267948966f", "1.5707963f")

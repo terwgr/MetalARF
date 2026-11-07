@@ -64,8 +64,10 @@ class NSSL2DriverWorkspace:
     QVEXCESS, and diagnostic phases; none of those phases should re-gather.
 
     ``category_surface_export`` has shape ``(5, ny, nx)`` in the fixed order
-    rain/ice/snow/graupel/hail and units kg/m2 over the step. The standard WRF
-    four-category precipitation reducer intentionally omits cloud-ice export.
+    rain/ice/snow/graupel/hail.  The cloud-ice row is kg/m2 over the step and
+    is not reduced (WRF's four-category reducer omits cloud-ice fallout); the
+    four reduced rows carry WRF's surface ``xfall``, which the reducer sums
+    before multiplying by ``dt*rho`` exactly as WRF does.
     ``ignored_accumulator`` preserves the likewise-unreduced cloud-droplet
     surface export after sedimentation, allowing an exact water-budget receipt
     without adding it to WRF's precipitation accumulators.
@@ -143,19 +145,12 @@ def _validate_volume_fields(
     if nz < 2 or nz > _KMAX:
         raise ValueError(
             f"NSSL driver support requires 2 <= nz <= {_KMAX}, got {nz}")
-    for name, value in fields.items():
-        if value.shape != shape:
-            raise ValueError(
-                f"{name} must have shape {shape}, got {value.shape}")
-        if value.dtype != DTYPE:
-            raise TypeError(f"{name} must be float32, got {value.dtype}")
-        if not value.flags.c_contiguous:
-            raise ValueError(f"{name} must be C-contiguous")
+    _validate_surface_fields(fields, shape)
     return (nz, ny, nx), int(np.prod(shape, dtype=np.int64))
 
 
 def _validate_surface_fields(
-        fields: dict[str, object], shape: tuple[int, int],
+        fields: dict[str, object], shape: tuple[int, ...],
         ) -> None:
     for name, value in fields.items():
         if value.shape != shape:
@@ -383,21 +378,211 @@ def gather_initialize_and_sediment(
         shape=(nz, ny, nx), ignored_accumulator=ignored_accumulator)
 
 
+def launch_cloud_sedimentation(workspace, air_density, temperature_k, dz, dt_s):
+    """Run the standalone serial cloud stage and its receipt.
+
+    The production shallow combined kernel uses a separate parallel source
+    path; this component does not establish parity for that combined path.
+    """
+    if not isinstance(workspace, NSSL2DriverWorkspace):
+        raise TypeError("workspace must be an NSSL2DriverWorkspace")
+    nz, ny, nx = workspace.shape
+    if not 2 <= nz <= _KMAX:
+        raise ValueError("NSSL sedimentation requires 2 <= nz <= 256")
+    qc, qndrop = workspace.field("qc"), workspace.field("qndrop")
+    receipt = workspace.ignored_accumulator
+    if receipt is None:
+        raise ValueError("cloud sedimentation requires its surface receipt")
+    from woof.metal.array import MetalArray
+    if isinstance(workspace.state, MetalArray):
+        from woof.metal.nssl2_sedimentation import submit_nssl2_cloud_sediment_exact
+        return submit_nssl2_cloud_sediment_exact(
+            workspace.state.buffer.context, air_density, temperature_k,
+            qc, qndrop, dz, receipt, dt_s)
+    _validate_volume_fields({"air_density": air_density, "temperature_k": temperature_k,
+                             "qc": qc, "qndrop": qndrop, "dz": dz})
+    if receipt.shape != (ny, nx) or receipt.dtype != DTYPE:
+        raise ValueError("cloud surface receipt must be an FP32 horizontal field")
+    step = _step32(dt_s)
+    suffix = "64" if nz <= _SHALLOW_KMAX else "256"
+    blocks = (ny * nx + _COLUMN_TPB - 1) // _COLUMN_TPB
+    return get_kernel("nssl2_driver_support", f"nssl2_cloud_sediment_{suffix}")(
+        (blocks,), (_COLUMN_TPB,),
+        (air_density, temperature_k, qc, qndrop, dz, receipt, step,
+         np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def launch_rain_sedimentation(workspace, air_density, dz, dt_s):
+    """Run the standalone serial rain stage and its two surface receipts.
+
+    This does not establish parity for the production shallow parallel path.
+    """
+    if not isinstance(workspace, NSSL2DriverWorkspace):
+        raise TypeError("workspace must be an NSSL2DriverWorkspace")
+    nz, ny, nx = workspace.shape
+    if not 2 <= nz <= _KMAX:
+        raise ValueError("NSSL sedimentation requires 2 <= nz <= 256")
+    qr, qnr = workspace.field("qr"), workspace.field("qnr")
+    receipt = workspace.ignored_accumulator
+    if receipt is None:
+        raise ValueError("rain sedimentation requires its surface accumulator")
+    from woof.metal.array import MetalArray
+    if isinstance(workspace.state, MetalArray):
+        from woof.metal.nssl2_sedimentation import submit_nssl2_rain_sediment_exact
+        export = workspace.category_surface_export.view((ny, nx), byte_offset=workspace.category_surface_export.byte_offset)
+        return submit_nssl2_rain_sediment_exact(
+            workspace.state.buffer.context, air_density, qr, qnr, dz, receipt, export, dt_s)
+    export = workspace.category_surface_export[0]
+    _validate_volume_fields({"air_density": air_density, "qr": qr, "qnr": qnr, "dz": dz})
+    if any(value.shape != (ny, nx) or value.dtype != DTYPE for value in (receipt, export)):
+        raise ValueError("rain receipts must be FP32 horizontal fields")
+    step = _step32(dt_s)
+    suffix = "64" if nz <= _SHALLOW_KMAX else "256"
+    blocks = (ny * nx + _COLUMN_TPB - 1) // _COLUMN_TPB
+    return get_kernel("nssl2_driver_support", f"nssl2_rain_sediment_{suffix}")(
+        (blocks,), (_COLUMN_TPB,),
+        (air_density, qr, qnr, dz, receipt, export, step,
+         np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def launch_ice_sedimentation(workspace, air_density, dz, dt_s):
+    """Run the standalone serial ice stage and its two surface receipts.
+
+    This does not establish parity for the production shallow parallel path.
+    """
+    if not isinstance(workspace, NSSL2DriverWorkspace):
+        raise TypeError("workspace must be an NSSL2DriverWorkspace")
+    nz, ny, nx = workspace.shape
+    if not 2 <= nz <= _KMAX:
+        raise ValueError("NSSL sedimentation requires 2 <= nz <= 256")
+    qi, qni = workspace.field("qi"), workspace.field("qni")
+    receipt = workspace.ignored_accumulator
+    if receipt is None:
+        raise ValueError("ice sedimentation requires its surface accumulator")
+    from woof.metal.array import MetalArray
+    if isinstance(workspace.state, MetalArray):
+        from woof.metal.nssl2_sedimentation import submit_nssl2_ice_sediment_exact
+        export = workspace.category_surface_export.view((ny, nx), byte_offset=workspace.category_surface_export.byte_offset + ny * nx * 4)
+        return submit_nssl2_ice_sediment_exact(
+            workspace.state.buffer.context, air_density, qi, qni, dz, receipt, export, dt_s)
+    export = workspace.category_surface_export[1]
+    _validate_volume_fields({"air_density": air_density, "qi": qi, "qni": qni, "dz": dz})
+    if any(value.shape != (ny, nx) or value.dtype != DTYPE for value in (receipt, export)):
+        raise ValueError("ice receipts must be FP32 horizontal fields")
+    step = _step32(dt_s)
+    suffix = "64" if nz <= _SHALLOW_KMAX else "256"
+    blocks = (ny * nx + _COLUMN_TPB - 1) // _COLUMN_TPB
+    return get_kernel("nssl2_driver_support", f"nssl2_ice_sediment_{suffix}")(
+        (blocks,), (_COLUMN_TPB,),
+        (air_density, qi, qni, dz, receipt, export, step,
+         np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def launch_snow_sedimentation(workspace, air_density, dz, dt_s):
+    """Run the standalone serial snow stage and its two surface receipts.
+
+    This does not establish parity for the production shallow parallel path.
+    """
+    if not isinstance(workspace, NSSL2DriverWorkspace):
+        raise TypeError("workspace must be an NSSL2DriverWorkspace")
+    nz, ny, nx = workspace.shape
+    if not 2 <= nz <= _KMAX:
+        raise ValueError("NSSL sedimentation requires 2 <= nz <= 256")
+    qs, qns = workspace.field("qs"), workspace.field("qns")
+    receipt = workspace.ignored_accumulator
+    if receipt is None:
+        raise ValueError("snow sedimentation requires its surface accumulator")
+    from woof.metal.array import MetalArray
+    if isinstance(workspace.state, MetalArray):
+        from woof.metal.nssl2_sedimentation import submit_nssl2_snow_sediment_exact
+        export = workspace.category_surface_export.view((ny, nx), byte_offset=workspace.category_surface_export.byte_offset + 2 * ny * nx * 4)
+        return submit_nssl2_snow_sediment_exact(
+            workspace.state.buffer.context, air_density, qs, qns, dz, receipt, export, dt_s)
+    export = workspace.category_surface_export[2]
+    _validate_volume_fields({"air_density": air_density, "qs": qs, "qns": qns, "dz": dz})
+    if any(value.shape != (ny, nx) or value.dtype != DTYPE for value in (receipt, export)):
+        raise ValueError("snow receipts must be FP32 horizontal fields")
+    step = _step32(dt_s)
+    suffix = "64" if nz <= _SHALLOW_KMAX else "256"
+    blocks = (ny * nx + _COLUMN_TPB - 1) // _COLUMN_TPB
+    return get_kernel("nssl2_driver_support", f"nssl2_snow_sediment_{suffix}")(
+        (blocks,), (_COLUMN_TPB,),
+        (air_density, qs, qns, dz, receipt, export, step,
+         np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def launch_shallow_warm_sedimentation(workspace, air_density, temperature_k, dz, dt_s):
+    """Run the strict shallow sedimentation component with zero dense mass.
+
+    Admission reads graupel and hail mass back to the host. This component
+    does not initialize the CUDA gamma table or admit the full physics path.
+    """
+    from woof.metal.array import MetalArray
+    from woof.wrf_exact import ENABLED
+
+    if not ENABLED:
+        raise RuntimeError("strict NSSL sedimentation requires WRF exact mode")
+    if not isinstance(workspace, NSSL2DriverWorkspace):
+        raise TypeError("workspace must be an NSSL2DriverWorkspace")
+    shape = tuple(workspace.shape)
+    if len(shape) != 3 or not 2 <= shape[0] <= _SHALLOW_KMAX:
+        raise ValueError("shallow NSSL sedimentation requires 2 <= nz <= 64")
+    validate_nssl2_driver_workspace(workspace, shape)
+    if not isinstance(workspace.state, MetalArray):
+        raise TypeError("strict shallow sedimentation requires Metal arrays")
+    context = workspace.state.buffer.context
+    for name, value in (("state", workspace.state),
+                        ("category_surface_export", workspace.category_surface_export),
+                        ("ignored_accumulator", workspace.ignored_accumulator),
+                        ("air_density", air_density),
+                        ("temperature_k", temperature_k), ("dz", dz)):
+        if (not isinstance(value, MetalArray) or value.buffer.context is not context
+                or value.dtype != DTYPE or not value.flags.c_contiguous):
+            raise ValueError(f"{name} must be contiguous FP32 in the same Metal context")
+    _validate_surface_fields({"air_density": air_density, "temperature_k": temperature_k,
+                              "dz": dz}, shape)
+    step = _step32(dt_s)
+    if any(np.any(workspace.field(name).to_numpy() != 0) for name in ("qg", "qh")):
+        raise NotImplementedError("strict shallow sedimentation requires zero graupel and hail mass")
+    ny, nx = shape[1:]
+    workspace.ignored_accumulator.fill(0)
+    for row in (3, 4):
+        workspace.category_surface_export.view(
+            (ny, nx), byte_offset=workspace.category_surface_export.byte_offset + row * ny * nx * 4,
+        ).fill(0)
+    launch_rain_sedimentation(workspace, air_density, dz, step)
+    launch_ice_sedimentation(workspace, air_density, dz, step)
+    launch_snow_sedimentation(workspace, air_density, dz, step)
+    launch_cloud_sedimentation(workspace, air_density, temperature_k, dz, step)
+
+
 def reduce_nssl2_precipitation(
         workspace: NSSL2DriverWorkspace,
         rainnc, rainncv, snownc, snowncv,
         graupelnc, graupelncv, hailnc, hailncv, sr,
+        *, air_density, dt_s: float,
         ) -> None:
-    """Apply WRF's four-category surface precipitation reducer and SR."""
+    """Apply WRF's four-category surface precipitation reducer and SR.
+
+    WRF sums the categories' surface ``xfall`` before multiplying by
+    ``dtp*dn1`` (``module_mp_nssl_2mom.F:3008-3061``); the workspace rows
+    carry that ``xfall``, so the reducer needs the step and the cell density
+    (only the lowest level is read).
+    """
     from woof.metal.array import MetalArray
     if isinstance(workspace.state, MetalArray):
         from woof.metal.nssl2_driver import reduce_nssl2_precipitation as metal_reduce
         return metal_reduce(
             workspace, rainnc, rainncv, snownc, snowncv, graupelnc,
-            graupelncv, hailnc, hailncv, sr)
+            graupelncv, hailnc, hailncv, sr, air_density=air_density, dt_s=dt_s)
     if not isinstance(workspace, NSSL2DriverWorkspace):
         raise TypeError("workspace must be NSSL2DriverWorkspace")
     _, ny, nx = workspace.shape
+    if tuple(air_density.shape) != tuple(workspace.shape):
+        raise ValueError(
+            f"air_density has shape {air_density.shape}, expected "
+            f"{workspace.shape}")
+    step = _step32(dt_s)
     _validate_surface_fields({
         "rainnc": rainnc,
         "rainncv": rainncv,
@@ -411,12 +596,15 @@ def reduce_nssl2_precipitation(
     }, (ny, nx))
     ncol = ny * nx
     blocks = (ncol + _COLUMN_TPB - 1) // _COLUMN_TPB
+    from woof.wrf_exact import ENABLED
+    density_args = (air_density,) if ENABLED else ()
+    step_args = (step,) if ENABLED else ()
     get_kernel(
         "nssl2_driver_support", "nssl2_driver_reduce_precipitation",
     )((blocks,), (_COLUMN_TPB,),
-      (workspace.category_surface_export,
+      (workspace.category_surface_export, *density_args,
        rainnc, rainncv, snownc, snowncv,
-       graupelnc, graupelncv, hailnc, hailncv, sr, np.int32(ncol)))
+       graupelnc, graupelncv, hailnc, hailncv, sr, *step_args, np.int32(ncol)))
 
 
 def scatter_nssl2_driver_workspace(
@@ -500,7 +688,8 @@ def launch_nssl2_driver_support(
         qicuten=qicuten, qccuten=qccuten)
     reduce_nssl2_precipitation(
         workspace, rainnc, rainncv, snownc, snowncv,
-        graupelnc, graupelncv, hailnc, hailncv, sr)
+        graupelnc, graupelncv, hailnc, hailncv, sr,
+        air_density=air_density, dt_s=dt_s)
     scatter_nssl2_driver_workspace(
         workspace, air_density,
         qv, qc, qr, qi, qs, qg, qh,
@@ -517,6 +706,10 @@ __all__ = [
     "NSSL2DriverWorkspace",
     "gather_initialize_and_sediment",
     "launch_nssl2_driver_support",
+    "launch_cloud_sedimentation",
+    "launch_rain_sedimentation",
+    "launch_ice_sedimentation",
+    "launch_snow_sedimentation",
     "reduce_nssl2_precipitation",
     "scatter_nssl2_driver_workspace",
     "validate_nssl2_driver_workspace",

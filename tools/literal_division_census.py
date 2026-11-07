@@ -147,7 +147,7 @@ def _preamble_pieces(kdir: Path):
 
 
 def production_units(root) -> list[Unit]:
-    """Every -ftz=true translation unit the package compiles, as compiled
+    """Every runtime translation unit, with its caller arithmetic options,
     from the tree at ``root`` (its repository root).
 
     Every source text is read under ``root`` (A193).  The loader's own
@@ -170,21 +170,88 @@ def production_units(root) -> list[Unit]:
         return (f"woof/core/kernels/{name}",
                 (kdir / name).read_text(encoding="utf-8"))
 
+    def headers(name):
+        # Resolve the active loader composition, including mode-selected
+        # headers. Keep labels for PTX attribution and require exact bytes.
+        remaining = K._extra_header_text(name, kdir)
+        parts = []
+        from woof.wrf_exact import ENABLED
+        if not ENABLED and name == "nssl2":
+            # Inline math aliases are loader text rather than a header file.
+            return [("<nssl2 default math>", remaining)]
+        while remaining:
+            matches = [(p.name, p.read_text(encoding="utf-8"))
+                       for p in sorted(p for p in kdir.iterdir() if p.is_file())]
+            if not ENABLED and name == "smag2d":
+                # smag2d's default composition is glibc_flt32.cuh with the
+                # loader's own gfk_exp rewrite (K._smag2d_default_gfk_exp);
+                # attribute it to that file, through that same function.
+                matches = [(n, K._smag2d_default_gfk_exp(text) if n == "glibc_flt32.cuh" else text)
+                           for n, text in matches]
+            matches = [(n, text) for n, text in matches
+                       if text and remaining.startswith(text)]
+            if not matches:
+                raise AssertionError(f"unattributed loader header for {name}")
+            filename, text = max(matches, key=lambda item: len(item[1]))
+            parts.append((f"woof/core/kernels/{filename}", text))
+            remaining = remaining[len(text):]
+        return parts
+
+    def unit_piece(name):
+        from woof.wrf_exact import ENABLED
+        filename = name + ".cu"
+        if not ENABLED and name in K._DEFAULT_SOURCE_MODULES:
+            filename = name + "_default.cu"
+        source = K._unit_text(name, kdir)
+        prefix = "#define NOAH_WRF_SCALAR_RCT 1\n"
+        if name == "noah" and source.startswith(prefix):
+            return [("<NOAH_WRF_SCALAR_RCT>", prefix),
+                    (f"woof/core/kernels/{filename}", source[len(prefix):])]
+        return [(f"woof/core/kernels/{filename}", source)]
+
     noahmp_parts = set()
+    # These files compile through their own observed NVRTC composition. A
+    # bare generic-loader source omits the shared SFIRE physics and libm.
+    from woof.core import sfire_atm, sfire_core, sfire_moisture, sfire_phys, sfire_wind, sfire_coupler, sfire_spotting, sfire_ideal, sfire_ideal_atmos, chem_sfire, urban_bem
+    dedicated_units = {
+        "sfire_atm": (sfire_atm.module_source, sfire_atm.MODULE_OPTIONS),
+        "sfire_core": (sfire_core.source, sfire_core.NVRTC_OPTIONS),
+        "sfire_moisture": (sfire_moisture.module_source, sfire_moisture.MODULE_OPTIONS),
+        "sfire_phys": (sfire_phys.module_source, sfire_phys.MODULE_OPTIONS),
+        "sfire_wind": (sfire_wind.module_source, sfire_wind.MODULE_OPTIONS),
+        "sfire_coupling": (sfire_coupler.module_source, sfire_coupler.MODULE_OPTIONS),
+        "sfire_spotting": (sfire_spotting.module_source, sfire_spotting.MODULE_OPTIONS),
+        "sfire_ideal": (sfire_ideal.module_source, sfire_ideal.MODULE_OPTIONS),
+        "sfire_ideal_atmos": (sfire_ideal_atmos.module_source, sfire_ideal_atmos.MODULE_OPTIONS),
+        "chem_sfire": (chem_sfire.module_source, chem_sfire.MODULE_OPTIONS),
+        "urban_bep_bem": (urban_bem.module_source, urban_bem.MODULE_OPTIONS),
+        # KF compiles on its own direct-NVRTC route (woof/core/kf.py
+        # _kf_module) with KF_MODULE_OPTIONS, not the generic loader's.
+        "kf": (lambda kernel_dir: K.module_source("kf", kernel_dir=kernel_dir),
+               _kf_module_options()),
+    }
     for parts in N.NOAHMP_TRANSLATION_UNITS.values():
         noahmp_parts.update(parts)
     for path in sorted(kdir.glob("*.cu")):
         name = path.stem
+        if name.endswith("_default") and name[:-len("_default")] in K._DEFAULT_SOURCE_MODULES:
+            continue  # Selected above under their runtime module names.
+        if name in dedicated_units:
+            source_fn, options = dedicated_units[name]
+            units.append(Unit(f"kernels:{name}", source_fn(kernel_dir=kdir), tuple(options), []))
+            continue
         if name in noahmp_parts:
             continue
-        extra = [kfile(h) for h in K.EXTRA_HEADERS.get(name, ())]
-        unit = _segmented(f"kernels:{name}", pre + extra + [kfile(path.name)],
+        extra = headers(name)
+        from woof.cuda_subnormals import MARKER
+        prefix = [("<GPUWM_RETAIN_SUBNORMALS>", MARKER)] if name in K._URBAN_NO_FTZ_MODULES else []
+        unit = _segmented(f"kernels:{name}", prefix + pre + extra + unit_piece(name),
                           K.module_options(name))
         if unit.source != K.module_source(name, kernel_dir=kdir):
             raise AssertionError(f"census source for {name} drifted")
         units.append(unit)
     # gf above 40 levels compiles with an integer tier; 60 is one such tier.
-    extra = [kfile(h) for h in K.EXTRA_HEADERS.get("gf", ())]
+    extra = headers("gf")
     gf = _segmented("kernels:gf[GF_KMAX=60]",
                     pre + extra + [("<GF_KMAX>", "#define GF_KMAX 60\n"),
                                    kfile("gf.cu")], ("-std=c++17",))
@@ -243,9 +310,34 @@ def _is_exact_divisor(bits: int) -> bool:
     return (bits & 0x007FFFFF) == 0
 
 
+def _kf_module_options() -> tuple[str, ...]:
+    from woof.core.kf import KF_MODULE_OPTIONS
+    return tuple(KF_MODULE_OPTIONS)
+
+
+def unflushed_route(options) -> bool:
+    """Does a unit compile with ``--ftz=false`` on its production route?
+
+    A146's rewrite (``x / C`` into ``x * RN(1/C)``) needs ``-ftz=true``.  A
+    unit whose own options carry ``--ftz=false`` (KF, Grell 3D, New SAS,
+    lightning, the surface layers and the other unflushed routes in
+    woof.core.kernels) keeps ``div.rn`` for a constant divisor, which is the
+    IEEE quotient, so both census passes report no site for it rather than
+    compiling it under a flush mode production never uses.  The source
+    scan's FTZ_FALSE_SOURCES is the same rule at the source layer.
+    """
+    return any(str(option).replace("--", "-") == "-ftz=false"
+               for option in options)
+
+
 def census_unit(unit: Unit, arch: str = "compute_89") -> dict:
     """Constant-divisor float divisions of one unit, with source lines."""
-    opts = tuple(unit.options) + ("-ftz=true", "-lineinfo", f"-arch={arch}")
+    if unflushed_route(unit.options):
+        return {"unit": unit.key, "arch": arch, "div_rn_f32": None,
+                "constant_divisor_sites": [], "unflushed_route": True}
+    from woof.cuda_subnormals import effective_options
+    opts = effective_options(unit.source, tuple(unit.options) +
+                             ("-ftz=true", "-lineinfo", f"-arch={arch}"))
     ptx = compile_ptx(unit.source, opts)
     sites, loc, total = [], None, 0
     for text in ptx.splitlines():
@@ -347,7 +439,14 @@ def _plain_division_on(line_text: str) -> bool:
     return "/" in code
 
 
-def rewrite_sites(unit: Unit, arch: str = "compute_120") -> dict:
+def _flush_counts(unit: Unit, arch: str, flush: str):
+    """The per-line quotient and immediate counts of ``unit`` compiled
+    for ``arch`` under one flush mode (``-ftz=false`` or ``-ftz=true``)."""
+    base = tuple(unit.options) + ("-lineinfo", f"-arch={arch}")
+    return _line_counts(compile_ptx(unit.source, base + (flush,)))
+
+
+def rewrite_sites(unit: Unit, arch: str = "compute_120", counts=None) -> dict:
     """Source lines whose float division ``arch`` compiles under
     ``-ftz=true`` as a multiply by an immediate where the same architecture
     under ``-ftz=false`` keeps a ``div.rn``: the line loses an IEEE quotient
@@ -361,9 +460,16 @@ def rewrite_sites(unit: Unit, arch: str = "compute_120") -> dict:
     differs between the two builds (A174): a compute_89 reference read
     NVRTC 12.9.86's compute_120 code for ``powf`` and ``logf``, which is not
     its compute_89 code, as rewritten divisions."""
-    base = tuple(unit.options) + ("-lineinfo", f"-arch={arch}")
-    before = _line_counts(compile_ptx(unit.source, base + ("-ftz=false",)))
-    after = _line_counts(compile_ptx(unit.source, base + ("-ftz=true",)))
+    if unflushed_route(unit.options):
+        return {"unit": unit.key, "arch": arch, "rewritten_sites": [],
+                "unflushed_route": True}
+    if counts is None:
+        before = _flush_counts(unit, arch, "-ftz=false")
+        after = _flush_counts(unit, arch, "-ftz=true")
+    else:
+        # The two compiles were run elsewhere (census_tree's workers):
+        # (-ftz=false counts, -ftz=true counts) of this unit under arch.
+        before, after = counts
     source_lines = unit.source.splitlines()
     sites = []
     for key in sorted(set(before) | set(after)):
@@ -392,6 +498,117 @@ def rewrite_sites(unit: Unit, arch: str = "compute_120") -> dict:
 
 def census(root, units=None) -> list[dict]:
     return [census_unit(u) for u in (units or production_units(root))]
+
+
+#: The two whole-tree passes :func:`census_tree` can run, by name.
+_PASSES = ("immediate", "rewrites")
+
+#: Per worker process: the units of the tree it was started for, so each
+#: unit's source crosses the process boundary once (as an index), not once
+#: per call.
+_WORKER_UNITS: dict[str, list[Unit]] = {}
+
+
+def _worker_init(root: str) -> None:
+    # The worker is a fresh interpreter (spawn): put the tree under test on
+    # its path so ``woof`` and ``tools`` resolve to that tree, assemble its
+    # units once, and initialise NVRTC once here rather than on the first
+    # compile of every unit.
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from cupy.cuda import nvrtc
+    nvrtc.getVersion()
+    _WORKER_UNITS[root] = production_units(root)
+
+
+def _worker_compile(job: tuple[str, int, str, str | None]):
+    """One NVRTC compile: the immediate census of a unit (``flush`` None)
+    or the line counts of a unit under one flush mode of the rewrite pass.
+    ``None`` for a unit NVRTC refuses alone: a fragment compiled through
+    another unit (p3 via p3_device) or an --ftz=false RRTMG source; the
+    census covers the fragments through their real units and the callers
+    count only the units that compiled."""
+    root, index, arch, flush = job
+    units = _WORKER_UNITS.get(root)
+    if units is None:
+        _worker_init(root)
+        units = _WORKER_UNITS[root]
+    try:
+        if flush is None:
+            return census_unit(units[index], arch)
+        return _flush_counts(units[index], arch, flush)
+    except Exception:
+        return None
+
+
+def census_tree(root, pass_name: str = "immediate", arch: str | None = None,
+                workers: int | None = None) -> list[tuple[str, dict | None]]:
+    """Run one census pass over every production unit of the tree at
+    ``root``, compiling concurrently, one NVRTC per worker.
+
+    Returns ``[(unit.key, row)]`` in :func:`production_units` order, with
+    ``None`` for a unit NVRTC refused alone, so the result is the serial
+    loop's (``census_unit`` or ``rewrite_sites`` per unit), whatever the
+    number of workers.  The pass is ``"immediate"`` (:func:`census_unit`,
+    compute_89) or ``"rewrites"`` (:func:`rewrite_sites`, compute_120); the
+    flags each unit compiles with are the same as in the serial loop, since
+    the same functions compile it.  The rewrite pass's two compiles of a
+    unit (one per flush mode) are separate tasks, so the longest unit
+    bounds the wall by one compile, not two; the comparison runs here.
+
+    Each worker is a fresh interpreter (the spawn start method): NVRTC
+    holds process-wide state that a forked child inherits half-built, and
+    CuPy's NVRTC binding in a forked worker can block on it.  ``workers``
+    defaults to one per core, capped at the number of tasks and at 32 (one
+    compile takes one core; more lanes than cores only add memory).  The
+    largest sources are submitted first, so the slowest compiles start at
+    once instead of after the queue has drained around them.
+    """
+    import os
+    from concurrent.futures import ProcessPoolExecutor
+    from multiprocessing import get_context
+
+    if pass_name not in _PASSES:
+        raise ValueError(f"pass must be one of {_PASSES}, not {pass_name!r}")
+    arch = arch or ("compute_120" if pass_name == "rewrites"
+                    else "compute_89")
+    root = str(Path(root).resolve())
+    units = production_units(root)
+    rows: list = [None] * len(units)
+    jobs: list[tuple[str, int, str, str | None]] = []
+    for index, unit in enumerate(units):
+        if pass_name == "immediate":
+            if unflushed_route(unit.options):
+                rows[index] = census_unit(unit, arch)   # no compile
+            else:
+                jobs.append((root, index, arch, None))
+        elif unflushed_route(unit.options):
+            rows[index] = rewrite_sites(unit, arch)      # no compile
+        else:
+            jobs.append((root, index, arch, "-ftz=false"))
+            jobs.append((root, index, arch, "-ftz=true"))
+    jobs.sort(key=lambda job: -len(units[job[1]].source))
+    if workers is None:
+        cores = getattr(os, "process_cpu_count", os.cpu_count)() or 1
+        workers = max(1, min(len(jobs), cores, 32))
+    results = {}
+    if jobs:
+        with ProcessPoolExecutor(max_workers=workers,
+                                 mp_context=get_context("spawn"),
+                                 initializer=_worker_init,
+                                 initargs=(root,)) as pool:
+            for job, result in zip(jobs, pool.map(_worker_compile, jobs)):
+                results[job[1:]] = result
+    for index, unit in enumerate(units):
+        if pass_name == "immediate":
+            if (index, arch, None) in results:
+                rows[index] = results[(index, arch, None)]
+        elif (index, arch, "-ftz=false") in results:
+            before = results[(index, arch, "-ftz=false")]
+            after = results[(index, arch, "-ftz=true")]
+            if before is not None and after is not None:
+                rows[index] = rewrite_sites(unit, arch, counts=(before, after))
+    return [(unit.key, row) for unit, row in zip(units, rows)]
 
 
 def main(argv=None) -> int:

@@ -16,8 +16,6 @@ def submit_diff6_to_edge(state, f, tend, mut, c1, c2, *, factor, dt, opt,
     four on the high sides, then add only the real-grid tendency. Reuse the
     preflight-priced edge workspace; no host staging or array arithmetic.
     """
-    if WRF_EXACT:
-        raise NotImplementedError("Metal diff6 does not implement WRF exact-D arithmetic")
     if state is None or not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal edge diff6 requires its owning DomainState")
     if work is None:
@@ -70,12 +68,16 @@ def submit_diff6_to_edge(state, f, tend, mut, c1, c2, *, factor, dt, opt,
 
     fp = edge_pad(f, prefix(work["field"], (nlev, nys + pad, nxs + pad)))
     tp = prefix(work["tend"], fp.shape)
-    tp.fill(0)
+    if WRF_EXACT:
+        edge_pad(tend, tp)
+    else:
+        tp.fill(0)
     if mut is None:
         mut = state.scratch((ny, nx), "diff6_mu_t")
         context.submit_kernel(
-            "rk_total_mu", {"mub2d": state.mub2d, "mup": state.mup0, "out": mut},
-            {"ny": ny, "nx": nx}, exact_policy=False, grid_size=ny * nx)
+            "wrf_exact_rk_total_mu" if WRF_EXACT else "rk_total_mu",
+            {"mub2d": state.mub2d, "mup": state.mup0, "out": mut},
+            {"ny": ny, "nx": nx}, exact_policy=WRF_EXACT, grid_size=ny * nx)
     padded = []
     offset = 0
     for src, shape in zip((mut, msfu, msfv, msft), plane_shapes(ny, nx)):
@@ -99,9 +101,10 @@ def submit_diff6_to_edge(state, f, tend, mut, c1, c2, *, factor, dt, opt,
                  msft=padded[3], slopeopt=int(slope),
                  dzthr_x=dzthr_x, dzthr_y=dzthr_y)
     context.submit_kernel(
-        "diff6_edge_crop_add", {"padded": tp, "tend": tend},
+        "wrf_exact_diff6_edge_crop" if WRF_EXACT else "diff6_edge_crop_add",
+        {"padded": tp, "tend": tend},
         {"nlev": nlev, "ny": nys, "nx": nxs},
-        exact_policy=False, grid_size=tend.size)
+        exact_policy=WRF_EXACT, grid_size=tend.size)
 
 
 def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
@@ -114,9 +117,6 @@ def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
     strips after this submission. All Metal work stays ordered on the
     state's serial context queue.
     """
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal diff6 does not implement WRF exact-D arithmetic")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal diff6 requires a Metal DomainState")
     if stagger not in ("", "x", "y", "z"):
@@ -156,9 +156,9 @@ def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
         # evaluating unsupported MetalArray Python arithmetic on the host.
         mut = state.scratch((ny, nx), "diff6_mu_t")
         state._array_module.context.submit_kernel(
-            "rk_total_mu",
+            "wrf_exact_rk_total_mu" if WRF_EXACT else "rk_total_mu",
             {"mub2d": state.mub2d, "mup": state.mup0, "out": mut},
-            {"ny": ny, "nx": nx}, exact_policy=False,
+            {"ny": ny, "nx": nx}, exact_policy=WRF_EXACT,
             grid_size=ny * nx)
     if mut.shape != (ny, nx):
         raise ValueError("Metal diff6 total mass must match the mass grid")
@@ -193,7 +193,7 @@ def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
               "variant": variant, "wstag": int(stagger == "z"),
               "boundary_x": int(bool(boundary_x)),
               "boundary_y": int(bool(boundary_y))}
-    context.submit_kernel("diff6", arrays, common, exact_policy=False,
+    context.submit_kernel("wrf_exact_diff6" if WRF_EXACT else "diff6", arrays, common, exact_policy=WRF_EXACT,
                           grid_size=nlev * nys * nxs)
 
     # WRF includes u(ide-3)/v(jde-3) in nonperiodic loops. The main kernel
@@ -207,7 +207,7 @@ def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
             seam_params.update({"h0": h0, "h1": h1,
                                 "boundary_cross": int(bool(boundary_y))})
             context.submit_kernel(
-                "diff6_seam_u", arrays, seam_params, exact_policy=False,
+                "wrf_exact_diff6_seam_u" if WRF_EXACT else "diff6_seam_u", arrays, seam_params, exact_policy=WRF_EXACT,
                 grid_size=nlev * (h1 - h0 + 1))
     elif stagger == "y" and boundary_y and ny >= 6:
         h0, h1 = ((3, nx - 4) if boundary_x else (0, nx - 1))
@@ -218,5 +218,5 @@ def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
             seam_params.update({"h0": h0, "h1": h1,
                                 "boundary_cross": int(bool(boundary_x))})
             context.submit_kernel(
-                "diff6_seam_v", arrays, seam_params, exact_policy=False,
+                "wrf_exact_diff6_seam_v" if WRF_EXACT else "diff6_seam_v", arrays, seam_params, exact_policy=WRF_EXACT,
                 grid_size=nlev * (h1 - h0 + 1))

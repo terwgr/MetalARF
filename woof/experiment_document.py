@@ -48,8 +48,19 @@ _TABLE_ORDER = ("experiment", "projection", "shared")
 #: document that dropped the block would run that root unperturbed under
 #: the bubbles' name, and one that could not be written stopped the
 #: root preparation of every perturbed tree.
+#: ``devices`` rides with it too: the forecast reads its card placement
+#: from the published authority, and a document that could not carry
+#: the table stopped the root preparation of every multi-card HRRR run
+#: after its fetch ("unsupported experiment table(s) ['devices']",
+#: measured on configs/recipes/hrrr_v4_gsd41.toml on two cards).
+#: ``output`` rides with it as well: the HRRR recipe's [output] names the
+#: 2-D subset written between whole hours (lane/upp-history-subset), the
+#: forecast reads it from the published authority, and a document that could
+#: not carry it refused the root preparation of every HRRR-recipe run
+#: ("unsupported experiment table(s) ['output']",
+#: tests/test_go_prepare_only.py on configs/recipes/hrrr_v4_gsd41.toml).
 _COMPANION_TABLES = ("case_data", "static", "ingest", "perturbation",
-                     "simulated_radar")
+                     "simulated_radar", "devices", "output", "ensemble", "nudging", "spectral_nudging")
 
 #: Long numeric arrays (eta ladders) wrap at this many values per line.
 _ARRAY_WRAP = 5
@@ -86,6 +97,11 @@ def _literal(value: object) -> str:
 
 
 def _render_value(value: object, indent: str = "") -> str:
+    if isinstance(value, Mapping):
+        # Domain quick-look controls are inline tables. Keep their list
+        # values inline too, since TOML inline tables cannot span lines.
+        from woof.toml_document import _scalar
+        return _scalar(dict(value), "experiment document")
     if isinstance(value, (list, tuple)):
         items = [_literal(item) for item in value]
         if len(items) <= _ARRAY_WRAP:
@@ -192,9 +208,28 @@ def publish_experiment_document(
         observed = [prepared_domain_config_identity(domain)
                     for domain in reloaded.domains]
         if observed != expected:
+            def _flat(document, prefix=""):
+                out = {}
+                for key, value in (document or {}).items():
+                    name = f"{prefix}{key}"
+                    if isinstance(value, dict):
+                        out.update(_flat(value, name + "."))
+                    else:
+                        out[name] = value
+                return out
+            differing = []
+            for index, (want, got) in enumerate(zip(expected, observed)):
+                want, got = _flat(want), _flat(got)
+                for key in sorted(set(want) | set(got)):
+                    if want.get(key, "<absent>") != got.get(key, "<absent>"):
+                        differing.append(
+                            f"domain {index + 1} {key}: rendered "
+                            f"{want.get(key, '<absent>')!r} reloads "
+                            f"{got.get(key, '<absent>')!r}")
             raise ExperimentDocumentError(
                 "published experiment document does not reload to the "
-                "prepared domain identity it was rendered from")
+                "prepared domain identity it was rendered from: "
+                + "; ".join(differing[:12]))
         if reloaded.start_time != experiment.start_time:
             raise ExperimentDocumentError(
                 "published experiment document reloads to a different "

@@ -41,10 +41,10 @@ def inputs():
                            posted_source=object(), shared_static=object())
 
 
-def session(tmp_path, **kwargs):
+def session(tmp_path, *, request=None, **kwargs):
     if "input_provider" not in kwargs:
         kwargs.setdefault("identical_members", COPIES)
-    return PreparedEnsembleSession({"members": 3}, output_directory=tmp_path,
+    return PreparedEnsembleSession({"members": 3} if request is None else request, output_directory=tmp_path,
         cards=(CardBudget(0, 1000),),
         memory_model=EnsembleMemoryModel((MemoryComponent("ordinary", "ordinary", fixed_bytes=100),)),
         device_scope=lambda _: nullcontext(), **kwargs)
@@ -147,6 +147,57 @@ def test_failure_records_partial_roster_and_never_calls_products_complete(tmp_pa
     assert current_capture() is None
 
 
+def lineage_request():
+    from woof.ensemble.lineage import build_lineage
+    return {"members": 3, "provenance": [build_lineage({"member": member,
+        "source": "gefs", "source_member": f"p{member+1:02d}",
+        "cycle": "2024-01-01T00", "seed": 42+member, "rung": "source-member"})
+        for member in range(3)]}
+
+
+@pytest.mark.parametrize("outcome", [None, RuntimeError("member failure"), KeyboardInterrupt()])
+def test_lineage_files_cover_success_failed_and_unstarted_members(tmp_path, outcome):
+    run = session(tmp_path, request=lineage_request(), collector=Collector())
+    seen = []
+    def runner(*args, output_directory, **kwargs):
+        member = current_capture().member_id
+        seen.append(member)
+        # Lineage exists before the runner, including for members not yet run.
+        for row in run.request.provenance:
+            retained = tmp_path / "members" / f"member-{row['member']:04d}" / "member-provenance.json"
+            assert json.loads(retained.read_text()) == row
+        assert output_directory == tmp_path / "members" / f"member-{member:04d}"
+        if member == 1 and outcome is not None:
+            raise outcome
+        return {"status": "PASS"}
+    if outcome is None:
+        result = run.run_prepared(runner, inputs())
+        assert result["status"] == "PASS" and seen == [0, 1, 2]
+    else:
+        with pytest.raises(type(outcome)) as caught:
+            run.run_prepared(runner, inputs())
+        assert caught.value is outcome and seen == [0, 1]
+        result = json.loads((tmp_path / "ensemble-run.json").read_text())
+        assert result["status"] == ("interrupted" if isinstance(outcome, KeyboardInterrupt) else "failed")
+    for row in run.request.provenance:
+        retained = tmp_path / "members" / f"member-{row['member']:04d}" / "member-provenance.json"
+        assert json.loads(retained.read_text()) == row
+    assert result["request"]["provenance"] == list(run.request.provenance)
+
+
+def test_lineage_directory_collision_is_refused_before_any_runner(tmp_path):
+    occupied = tmp_path / "members" / "member-0001"
+    occupied.mkdir(parents=True)
+    marker = occupied / "member-provenance.json"
+    marker.write_text('{"owner":"existing run"}')
+    seen = []
+    run = session(tmp_path, request=lineage_request(), collector=Collector())
+    with pytest.raises(FileExistsError):
+        run.run_prepared(lambda *args, **kwargs: seen.append(True), inputs())
+    assert seen == [] and marker.read_text() == '{"owner":"existing run"}'
+    assert not (tmp_path / "ensemble-run.json").exists()
+
+
 def test_failing_member_receipt_is_not_reported_as_success(tmp_path):
     with pytest.raises(RuntimeError, match="failing forecast receipt"):
         session(tmp_path, collector=Collector()).run_prepared(
@@ -174,3 +225,31 @@ def test_sparse_source_roster_binds_each_initial_and_boundary_owner(tmp_path):
     assert observed == [19, 3, 44]
     assert result["member_order"] == [19, 3, 44]
     assert result["members_completed"] == [3, 19, 44]
+
+
+def test_cyclone_hook_consumes_completed_member_histories_before_pass(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from woof.ensemble import cyclone_products
+    collector = Collector()
+    collector.history_ledger = object()
+    owner = session(tmp_path, collector=collector)
+    owner.request = replace(owner.request, cyclone_products={})
+    seen = []
+    def products(root, trajectories, request, **kwargs):
+        assert collector.finished
+        assert kwargs['history_ledger'] is collector.history_ledger
+        assert kwargs['member_order'] == (0, 1, 2)
+        seen.append(root)
+        return {'status': 'complete', 'tracks': 'cyclone/tracks/tracks.json'}
+    # The ledger validator belongs to the writer, outside this hook check.
+    collector.history_ledger = SimpleNamespace(validate_retirements=lambda: [])
+    monkeypatch.setattr(cyclone_products, 'render_roster', products)
+    result = owner.run_prepared(lambda *a, **kw: {'status': 'PASS'}, inputs())
+    assert result['status'] == 'PASS'
+    assert result['products']['cyclone']['status'] == 'complete'
+    assert set(result['timing_seconds']) == {'forecast', 'products', 'total'}
+    assert result['timing_seconds']['total'] >= result['timing_seconds']['products'] >= 0
+    saved = json.loads((tmp_path / 'ensemble-run.json').read_text())
+    assert saved['products']['cyclone'] == result['products']['cyclone']
+    assert saved['timing_seconds'] == result['timing_seconds']
+    assert seen == [tmp_path]

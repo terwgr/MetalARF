@@ -59,6 +59,9 @@ def test_non_object_or_malformed_json_is_refused(tmp_path: Path) -> None:
 
 
 def test_prepared_publisher_preserves_native_build_qualification_without_rebuilding():
+    from _woof_snapshot import engine_workflow_reason
+    if (reason := engine_workflow_reason(".github/workflows/publish.yml")) is not None:
+        pytest.skip(reason)
     from tools import build_linux_release_bridges as linux_build
     import yaml
     document = yaml.load((REPO_ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
@@ -81,6 +84,9 @@ def test_prepared_publisher_preserves_native_build_qualification_without_rebuild
 
 
 def test_publish_workflow_has_two_publication_ingresses() -> None:
+    from _woof_snapshot import engine_workflow_reason
+    if (reason := engine_workflow_reason(".github/workflows/publish.yml")) is not None:
+        pytest.skip(reason)
     import yaml
     text = (REPO_ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
     document = yaml.load(text, Loader=yaml.BaseLoader)
@@ -100,7 +106,7 @@ def test_publish_workflow_has_two_publication_ingresses() -> None:
     assert 'release.get("immutable") is True' in controller
     assert "exactly one authenticated release must carry the selected tag" in controller
     for name, job in document["jobs"].items():
-        if name != "test":
+        if name != "controller":
             assert job["if"] == "github.event_name != 'pull_request'"
     publish = document["jobs"]["publish"]
     assert publish["permissions"] == {"id-token": "write"}

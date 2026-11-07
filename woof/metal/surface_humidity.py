@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
-from .runtime import MetalContext
 
 
 def submit_cap_land_q2(q2: MetalArray, qv: MetalArray,

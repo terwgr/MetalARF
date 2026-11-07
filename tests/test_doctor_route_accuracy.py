@@ -373,10 +373,8 @@ def test_the_bridge_lines_say_the_mapped_route_resolves_them_again():
 # H16: the three front doors no bundle carries
 # ---------------------------------------------------------------------------
 
-def test_the_obs_front_doors_are_reported_when_absent(monkeypatch, tmp_path):
-    """A green estate over three dead observation routes, ended."""
-
-    frontdoor = pytest.importorskip("woof.obs.frontdoor")
+def _obs_wheel_install(monkeypatch, tmp_path, frontdoor):
+    # An unstaged observation install with no checkout or env override.
     for door in frontdoor.FRONT_DOORS.values():
         monkeypatch.delenv(door.env_var, raising=False)
     monkeypatch.setattr(frontdoor, "crate_dir", lambda: tmp_path / "no-crate")
@@ -384,8 +382,15 @@ def test_the_obs_front_doors_are_reported_when_absent(monkeypatch, tmp_path):
     monkeypatch.setattr(frontdoor, "default_bridge_dir",
                         lambda: tmp_path / "userdir")
 
+
+def test_the_obs_front_doors_are_reported_when_absent(monkeypatch, tmp_path):
+    """A green estate over three dead observation routes, ended."""
+
+    frontdoor = pytest.importorskip("woof.obs.frontdoor")
+    _obs_wheel_install(monkeypatch, tmp_path, frontdoor)
+
     checks = {check.name: check for check in doctor._obs_front_door_checks()}
-    assert len(checks) == len(frontdoor.FRONT_DOORS) == 6
+    assert len(checks) == len(frontdoor.FRONT_DOORS) == 9
     for name, check in checks.items():
         assert check.status == "missing", name
         assert check.severity == doctor.SEVERITY_UNREACHABLE
@@ -432,7 +437,7 @@ def test_an_obs_front_door_that_is_present_and_current_is_verified(
                         lambda self, path: (True, "rw 0.1.0 -- --abi matches"))
 
     checks = doctor._obs_front_door_checks()
-    assert len(checks) == len(frontdoor.FRONT_DOORS) == 6
+    assert len(checks) == len(frontdoor.FRONT_DOORS) == 9
     assert all(check.status == "verified" for check in checks)
     assert doctor.blocking_gaps(checks) == []
 
@@ -537,12 +542,7 @@ def test_an_obs_front_door_that_the_bundle_carries_gets_the_one_command(
     frontdoor = pytest.importorskip("woof.obs.frontdoor")
     from woof import bridge_assets
 
-    for door in frontdoor.FRONT_DOORS.values():
-        monkeypatch.delenv(door.env_var, raising=False)
-    monkeypatch.setattr(frontdoor, "crate_dir", lambda: tmp_path / "no-crate")
-    monkeypatch.setattr(frontdoor, "_repo_root", lambda: tmp_path / "pkg")
-    monkeypatch.setattr(frontdoor, "default_bridge_dir",
-                        lambda: tmp_path / "userdir")
+    _obs_wheel_install(monkeypatch, tmp_path, frontdoor)
 
     bundled = tuple(bridge_assets.BUNDLED_ARTIFACTS) + tuple(
         bridge_assets.BundledArtifact(
@@ -552,7 +552,7 @@ def test_an_obs_front_door_that_the_bundle_carries_gets_the_one_command(
     monkeypatch.setattr(bridge_assets, "BUNDLED_ARTIFACTS", bundled)
 
     checks = doctor._obs_front_door_checks()
-    assert len(checks) == len(frontdoor.FRONT_DOORS) == 6
+    assert len(checks) == len(frontdoor.FRONT_DOORS) == 9
     for check in checks:
         assert check.status == "missing"
         assert check.action == "woof fetch-bridges"
@@ -574,12 +574,7 @@ def test_an_obs_front_door_the_bundle_lacks_still_gets_the_build_route(
     frontdoor = pytest.importorskip("woof.obs.frontdoor")
     from woof import bridge_assets
 
-    for door in frontdoor.FRONT_DOORS.values():
-        monkeypatch.delenv(door.env_var, raising=False)
-    monkeypatch.setattr(frontdoor, "crate_dir", lambda: tmp_path / "no-crate")
-    monkeypatch.setattr(frontdoor, "_repo_root", lambda: tmp_path / "pkg")
-    monkeypatch.setattr(frontdoor, "default_bridge_dir",
-                        lambda: tmp_path / "userdir")
+    _obs_wheel_install(monkeypatch, tmp_path, frontdoor)
 
     doors = {door.name for door in frontdoor.FRONT_DOORS.values()}
     monkeypatch.setattr(bridge_assets, "BUNDLED_ARTIFACTS", tuple(
@@ -587,7 +582,7 @@ def test_an_obs_front_door_the_bundle_lacks_still_gets_the_build_route(
         if artifact.name not in doors))
 
     checks = doctor._obs_front_door_checks()
-    assert len(checks) == len(frontdoor.FRONT_DOORS) == 6
+    assert len(checks) == len(frontdoor.FRONT_DOORS) == 9
     for check in checks:
         assert check.status == "missing"
         assert check.action == doctor._OBS_FRONT_DOOR_ACTION
@@ -610,8 +605,10 @@ def test_untested_never_reads_as_ok_and_always_says_not_tested():
     assert "UNTESTED" in text
     assert "ok " not in text.splitlines()[1]
     findings = doctor.collect_checks()
+    from _woof_snapshot import without_left_out_artifacts
+    # one terminal-workspace line where the tree carries the terminal UI, none where it leaves it out
     assert sum(finding.name == "terminal workspace arwen-tui (woof tui)"
-               for finding in findings) == 1
+               for finding in findings) == len(without_left_out_artifacts({"arwen-tui"}))
     for finding in findings:
         if finding.status == "untested":
             assert finding.detail.startswith("not tested"), finding.name

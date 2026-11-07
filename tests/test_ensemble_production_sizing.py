@@ -131,6 +131,23 @@ def test_original_forecast_and_health_peak_is_added_once_with_external_allocator
     assert "health" in margin.evidence and "EXTERNAL_MARGIN_BYTES" in margin.evidence
 
 
+def test_completed_member_cyclone_swaths_still_count_in_next_wave_admission():
+    inputs, collector = prepared(), Collector(31)
+    collector.cyclone_request = dict(grid_id=1, products=['max-wind', 'rain'],
+        common_grid=dict(south=18, north=30, west=-98, east=-80, ny=401, nx=601))
+    components = ordinary_output_memory_components(inputs.experiment, collector)
+    rows = {row.name: row for row in components}
+    retained = rows['cyclone_full_roster_swaths'].inventory(1)['required_bytes']
+    # Even one active forecast must reserve maps for all 31 completed/live
+    # captures. Pricing only its ordinary history workspace admitted a card
+    # too small to hold the final roster's common-grid planes.
+    assert retained >= 31 * 401 * 601 * 95
+    assert rows['cyclone_swath_call_peak'].fixed_bytes > 401 * 601 * 8
+    collector.cyclone_request = None
+    assert all(not row.name.startswith('cyclone_')
+               for row in ordinary_output_memory_components(inputs.experiment, collector))
+
+
 def test_default_session_uses_every_visible_card_and_original_member_clocks(tmp_path, monkeypatch):
     seen = preflight(monkeypatch)
     inputs, xp = prepared(), DeviceModule(2, reusable=128)
@@ -248,11 +265,10 @@ def test_default_other_card_bootstrap_uses_original_initializer_and_stops_before
 
 
 def test_spp_true_without_declared_consumers_fails_before_any_initializer(tmp_path):
-    # The public session now refuses uncalibrated SPP before it exists,
-    # which is earlier than the consumer check this test first pinned.
-    with pytest.raises(ValueError, match="calibrated against observations"):
-        PreparedEnsembleSession({"members": 2, "stochastic": {"spp": True}},
-            output_directory=tmp_path, collector=Collector(2), array_module=object())
+    session = PreparedEnsembleSession({"members": 2, "stochastic": {"spp": True}},
+        output_directory=tmp_path, collector=Collector(2), array_module=object())
+    with pytest.raises(ValueError, match="requires selected spp_conv"):
+        session.run_prepared(lambda **kw: pytest.fail("initializer was entered"), prepared())
 
 
 def test_stochastic_memory_declares_original_words_2d_spp_and_measured_fft_workspace():
@@ -370,3 +386,101 @@ def test_bootstrap_array_ownership_guard_uses_only_metadata():
     require_bootstrap_device(node, array_module=SimpleNamespace(ndarray=Array), device_id=1)
     with pytest.raises(ValueError, match="another physical card"):
         require_bootstrap_device(node, array_module=SimpleNamespace(ndarray=Array), device_id=0)
+
+
+@pytest.fixture
+def hydro_members(tmp_path, monkeypatch):
+    """Real metadata plans and session orchestration; no forecast/device execution."""
+    import sys
+    from types import ModuleType
+    from woof.hydro.memory import ArrayMemory, StageMemory
+    from woof.hydro import runtime
+    from woof.ensemble import nextgen_capture
+    from woof import numerics
+    # Metadata resolution fixes a process mode too. Restore it along with the
+    # environment so these session checks cannot select later tests' numerics.
+    monkeypatch.setattr(numerics, "_mode", None)
+    monkeypatch.setenv(numerics.ENV, "fast")
+    monkeypatch.delenv("GPUWM_WRF_EXACT", raising=False)
+    monkeypatch.delenv("WOOF_NEXTGEN_ENABLED", raising=False)
+    monkeypatch.delenv("WOOF_NEXTGEN_SETTINGS", raising=False)
+    module = ModuleType("woof.hydro._ensemble_memory_test")
+    module.prepare = lambda **kw: pytest.fail("hydro construction entered during metadata admission")
+    module.prepare_memory = lambda **kw: StageMemory((
+        ArrayMemory("storage", (kw["options"]["cells"],), "float64"),), "fixture metadata", 0)
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    class MetadataCollector:
+        def __init__(self, original, member_ids, **unused):
+            self.original = original
+            self.nextgen_points = SimpleNamespace(options={"device_budget_bytes": 4096}, receipt=lambda: {})
+            self.resident_inventory = SimpleNamespace(receipt=lambda: {})
+        def __getattr__(self, name):
+            return getattr(self.original, name)
+    monkeypatch.setattr(nextgen_capture, "NextGenCollector", MetadataCollector)
+    @dataclass(frozen=True)
+    class HydroInputs(Inputs):
+        experiment_config: object = None
+    base = prepared()
+    configs = []
+    for index, cells in enumerate((64, 4096)):
+        path = tmp_path / f"member-config-{index}.toml"
+        path.write_text('[hydro]\nenabled = true\n[[hydro.stages]]\nname = "runoff"\n'
+                        f'factory = "{module.__name__}:prepare"\n[hydro.stages.options]\ncells = {cells}\n')
+        configs.append(path)
+    members = tuple(HydroInputs(base.experiment, base.initial, base.boundaries,
+                               experiment_config=configs[index]) for index in (0, 1, 0))
+    assert all(member.experiment is base.experiment for member in members)
+    return base, members, runtime
+
+
+@pytest.mark.parametrize("ambient", [None, {"enabled": True, "stages": []}])
+def test_every_member_hydro_plan_is_priced_before_initialization(hydro_members, tmp_path, monkeypatch, ambient):
+    from woof.hydro.memory import forecast_plan
+    from woof.core import preflight as original
+    base, members, runtime = hydro_members
+    preflight(monkeypatch)
+    expected = []
+    for member in members[:2]:
+        with runtime.settings_scope(runtime.read_settings(member.experiment_config)):
+            expected.append(forecast_plan(base.experiment).inventory()["required_bytes"])
+    priced = []
+    def price(exp, **kwargs):
+        value = forecast_plan(exp)
+        size = 0 if value is None else value.inventory()["required_bytes"]
+        priced.append(size)
+        return estimate(10_000 + size)
+    monkeypatch.setattr(original, "estimate_experiment", price)
+    initialized = []
+    def runner(bound, **kwargs):
+        assert priced == expected  # including distinct hydro on the SAME Experiment
+        initialized.append(current_capture().member_id)
+        return {"status": "PASS"}
+    session = PreparedEnsembleSession(3, output_directory=tmp_path / "run", collector=Collector(3),
+        array_module=DeviceModule(1), input_provider=lambda member_id, **kw: members[member_id])
+    with runtime.settings_scope(ambient):
+        result = session.run_prepared(runner, base)
+        assert runtime.current_settings() is ambient
+    assert initialized == [0, 1, 2]
+    assert priced == expected and expected[0] < expected[1]
+    peak = result["ordinary_memory_inventory"][0]["components"][0]
+    assert peak["name"] == "ordinary_variant_forecast_peak"
+    assert peak["required_bytes"] >= expected[1]
+
+
+def test_member_hydro_scope_reaches_ordinary_tile_admission(hydro_members, tmp_path, monkeypatch):
+    from woof.ensemble import prepared_execution
+    base, members, runtime = hydro_members
+    preflight(monkeypatch)
+    original = prepared_execution.ordinary_member_execution_inputs
+    seen = []
+    def tile_inputs(inputs, **kwargs):
+        settings = runtime.current_settings()
+        seen.append(None if settings is None else settings.get("settings_path"))
+        return original(inputs, **kwargs)
+    monkeypatch.setattr(prepared_execution, "ordinary_member_execution_inputs", tile_inputs)
+    session = PreparedEnsembleSession(3, output_directory=tmp_path / "run", collector=Collector(3),
+        array_module=DeviceModule(1), input_provider=lambda member_id, **kw: members[member_id])
+    with runtime.settings_scope(None):
+        session.run_prepared(lambda *args, **kwargs: {"status": "PASS"}, base)
+        assert runtime.current_settings() is None
+    assert seen == [str(member.experiment_config) for member in members]

@@ -155,11 +155,16 @@ def test_streaming_a_tiny_child_does_not_hide_an_oversized_resident_parent():
 
 
 def test_declared_budget_is_not_charged_external_margin_twice():
-    exp = _exp(704, "auto", vram_budget_bytes=24 * GIB)
+    # 24.25 GiB: the configured envelope is 24.08 GiB since the WRF exact
+    # chain's history rows (2.9.1: P_HYD and RTHRATEN planes, eight surface
+    # planes) joined it, so the declared budget still sits just above the
+    # envelope and a second external margin would still flip it to streaming.
+    budget = int(24.25 * GIB)
+    exp = _exp(704, "auto", vram_budget_bytes=budget)
     estimate = _windows_estimate(exp)
     machine = ap.Machine(64 * GIB, 256 * GIB)
     decision = st.decide(exp.root.run, exp.tiles, machine=machine, resident_estimate=estimate)
-    assert decision.detail["resident_admission"]["budget_bytes"] == 24 * GIB
+    assert decision.detail["resident_admission"]["budget_bytes"] == budget
     assert not decision.stream
 
 
@@ -376,7 +381,12 @@ def test_tree_public_dispatch_preserves_cold_machine_and_domain_options(tmp_path
     exp = replace(exp, domains=(exp.root, child))
     machine = ap.Machine(24 * GIB, 256 * GIB)
     model = SimpleNamespace(_input_catalog=object())
-    data, result = object(), object()
+    # run_experiment writes report.json from the summary since 384a7aa6c9a
+    # (lane/improve-2-era5-hydro-receipt), so the stub carries the summary
+    # fields that report reads, as RealCaseRunSummary and ExperimentRunSummary do.
+    data = object()
+    result = SimpleNamespace(completed_seconds=float(exp.run_seconds), wrfout_paths=(),
+                             nan_free=True, hydro_receipts=None)
     events = []
     monkeypatch.setattr(ap.Machine, "detect", lambda **kw: events.append("cold") or machine)
     def build(value, companion):
@@ -395,3 +405,6 @@ def test_tree_public_dispatch_preserves_cold_machine_and_domain_options(tmp_path
     monkeypatch.setattr(runtime, "_run_built_experiment", execute)
     assert runtime.run_experiment(exp, data, tmp_path / "tree") is result
     assert events == ["cold", "build", "execute"]
+    import json
+    report = json.loads((tmp_path / "tree" / "report.json").read_text())
+    assert report["status"] == "PASS" and report["domain_count"] == 2

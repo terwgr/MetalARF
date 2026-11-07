@@ -57,7 +57,7 @@ use rw_nexrad::s3::parse_time;
 use rw_obs::net::{agent, get_text, query_encode};
 use rw_obs::seam::{seam_time, wrap_longitude, Provenance, TIME_FORMAT};
 use rw_obs::table::{
-    altimeter_inhg_to_station_pa, fahrenheit_to_kelvin as table_fahrenheit_to_kelvin,
+    altimeter_inhg_to_station_pa, fahrenheit_to_kelvin,
     knots_to_m_s, wind_components, RowProvenance, TableRow, TableWriter,
     ERROR_DEWPOINT_SURFACE_K, ERROR_SURFACE_PRESSURE_PA, ERROR_TEMPERATURE_SURFACE_K,
     ERROR_WIND_SURFACE_M_S, GROSS_DEWPOINT_K, GROSS_SURFACE_PRESSURE_PA, GROSS_TEMPERATURE_K,
@@ -81,7 +81,7 @@ pub static GPUWM_BRIDGE_SOURCE_REV_STAMP: &str =
 const DEFAULT_ARCHIVE: &str = "https://mesonet.agron.iastate.edu";
 /// The columns requested, in the order the request states them.
 const DATA_COLUMNS: &[&str] = &[
-    "tmpf", "dwpf", "drct", "sknt", "gust", "alti", "mslp", "p01i",
+    "tmpf", "dwpf", "drct", "sknt", "gust", "alti", "mslp", "p01i", "vsby",
 ];
 /// The one-minute route's variables, in the order the request states them.
 /// The one-minute pages carry no MSLP, gust, altimeter or hourly
@@ -230,6 +230,8 @@ fetch options
                          free and asks to be paced
 
 fetch and decode options
+  --report-types TYPES   live METAR report types, comma-separated 1,3,4.
+                         Default 3,4; 1 adds high-frequency HFMETAR reports.
   --product NAME         metar (default): routine and special METARs from
                          asos.py. asos1min: the one-minute ASOS pages from
                          asos1min.py for the same stations and seam, a
@@ -266,29 +268,14 @@ table options
 
 fn main() -> ExitCode {
     let _ = std::hint::black_box(GPUWM_BRIDGE_SOURCE_REV_STAMP);
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match run(&args) {
-        Ok(output) => {
-            print!("{output}");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("rw_asos: {error}");
-            ExitCode::FAILURE
-        }
-    }
+    rw_obs::cli::main("rw_asos", run)
 }
 
 fn run(args: &[String]) -> Result<String, Box<dyn Error>> {
-    let Some(first) = args.first() else {
-        return Ok(USAGE.to_string());
-    };
-    match first.as_str() {
-        "--help" | "-h" | "help" => return Ok(USAGE.to_string()),
-        "--version" | "-V" => return Ok(format!("rw_asos {VERSION}\n")),
-        "--abi" => return Ok(format!("{ABI_MARKER}\n")),
-        _ => {}
+    if let Some(output) = rw_obs::cli::information(args, "rw_asos", VERSION, USAGE, ABI_MARKER) {
+        return Ok(output);
     }
+    let first = &args[0];
     let options = Options::parse(&args[1..])?;
     match first.as_str() {
         "stations" => cmd_stations(&options),
@@ -323,6 +310,7 @@ struct Options {
     fetch_record: Option<PathBuf>,
     product: Option<String>,
     step_minutes: Option<u32>,
+    report_types: Option<Vec<u8>>,
 }
 
 impl Options {
@@ -331,12 +319,7 @@ impl Options {
         let mut index = 0;
         while index < args.len() {
             let flag = args[index].as_str();
-            let mut value = || -> Result<String, Box<dyn Error>> {
-                index += 1;
-                args.get(index)
-                    .cloned()
-                    .ok_or_else(|| err(format!("{flag} needs a value")))
-            };
+            let mut value = || rw_obs::cli::value(args, &mut index, flag);
             let rate = |raw: String, flag: &str| -> Result<f64, Box<dyn Error>> {
                 let parsed: f64 = raw
                     .parse()
@@ -441,6 +424,17 @@ impl Options {
                     }
                     options.product = Some(raw);
                 }
+                "--report-types" => {
+                    let raw = value()?;
+                    let mut selected = Vec::new();
+                    for token in raw.split(',').map(str::trim) {
+                        let kind: u8 = token.parse().map_err(|_| err("--report-types expects comma-separated 1,3,4"))?;
+                        if ![1,3,4].contains(&kind) { return Err(err("--report-types permits only 1 (HFMETAR), 3 (routine), 4 (special)")); }
+                        if !selected.contains(&kind) { selected.push(kind); }
+                    }
+                    selected.sort_unstable();
+                    options.report_types = Some(selected);
+                }
                 "--step-minutes" => {
                     let raw = value()?;
                     let minutes: u32 = raw
@@ -460,6 +454,9 @@ impl Options {
             // a flag the record silently did not follow.
             return Err(err("--step-hours and --step-minutes both set the valid-time stride; give one"));
         }
+        if options.one_minute() && options.report_types.is_some() {
+            return Err(err("--report-types applies only to the live METAR route"));
+        }
         Ok(options)
     }
 
@@ -472,6 +469,9 @@ impl Options {
 
     fn one_minute(&self) -> bool {
         self.product().name == PRODUCT_ONE_MINUTE
+    }
+    fn report_types(&self) -> &[u8] {
+        self.report_types.as_deref().unwrap_or(&[3,4])
     }
 
     /// The decode stride: the one the caller gave, else the product's own.
@@ -505,16 +505,7 @@ impl Options {
     }
 
     fn window(&self) -> Result<(DateTime<Utc>, DateTime<Utc>), Box<dyn Error>> {
-        let start = parse_time(self.start.as_deref().ok_or_else(|| err("--start is required"))?)?;
-        let end = parse_time(self.end.as_deref().ok_or_else(|| err("--end is required"))?)?;
-        if end < start {
-            return Err(err(format!(
-                "--end {} precedes --start {}",
-                seam_time(end),
-                seam_time(start)
-            )));
-        }
-        Ok((start, end))
+        rw_obs::cli::window(self.start.as_deref(), self.end.as_deref())
     }
 
     fn out(&self) -> Result<&Path, Box<dyn Error>> {
@@ -782,6 +773,15 @@ fn fetch_url(archive: &str, stations: &[Station], start: DateTime<Utc>, end: Dat
     url
 }
 
+/// Preserve the historic routine/special default; the scoreboard explicitly
+/// asks for HFMETAR as well. IEM report type 1 is the live high-frequency
+/// METAR product, distinct from the delayed one-minute archive.
+fn select_report_types(url: String, types: &[u8]) -> String {
+    let mut url = url.replace("&report_type=3&report_type=4", "");
+    for kind in types { url.push_str(&format!("&report_type={kind}")); }
+    url
+}
+
 /// The one-minute route's request: `asos1min.py` takes its window as two
 /// ISO stamps and its variables as `vars=`, and `tz=UTC` is what makes its
 /// `valid(UTC)` column UTC. Its `ets` is exclusive (asked for 11:50 to
@@ -899,7 +899,7 @@ fn cmd_fetch(options: &Options) -> Result<String, Box<dyn Error>> {
         let url = if options.one_minute() {
             one_minute_url(options.archive(), group, start, end)
         } else {
-            fetch_url(options.archive(), group, start, end)
+            select_report_types(fetch_url(options.archive(), group, start, end), options.report_types())
         };
         let text = get_text(&client, &url, "IEM ASOS window")?;
         let mut lines = text.lines().filter(|line| !line.trim().is_empty());
@@ -945,6 +945,7 @@ fn cmd_fetch(options: &Options) -> Result<String, Box<dyn Error>> {
         requests: usize,
         stations_per_request: usize,
         stations_requested: usize,
+        report_types: Vec<u8>,
         start: String,
         end: String,
         rows: usize,
@@ -963,6 +964,7 @@ fn cmd_fetch(options: &Options) -> Result<String, Box<dyn Error>> {
             request_urls: urls,
             stations_per_request: chunk,
             stations_requested: table.stations.len(),
+            report_types: if options.one_minute() { vec![] } else { options.report_types().to_vec() },
             start: seam_time(start),
             end: seam_time(end),
             rows,
@@ -984,23 +986,14 @@ struct RawReport {
     dwpf: Option<f64>,
     sknt: Option<f64>,
     mslp_hpa: Option<f64>,
+    gust_kt: Option<f64>,
+    precipitation_in: Option<f64>,
+    visibility_sm: Option<f64>,
 }
 
 fn split_csv(line: &str) -> Vec<String> {
-    // The archive quotes fields that contain commas; a naive split would
-    // shift every column after one.
-    let mut fields = Vec::new();
-    let mut current = String::new();
-    let mut quoted = false;
-    for ch in line.chars() {
-        match ch {
-            '"' => quoted = !quoted,
-            ',' if !quoted => fields.push(std::mem::take(&mut current)),
-            _ => current.push(ch),
-        }
-    }
-    fields.push(current);
-    fields.into_iter().map(|f| f.trim().to_string()).collect()
+    rw_obs::csv::parse(line).ok().and_then(|rows|rows.into_iter().next())
+        .unwrap_or_default().into_iter().map(|f|f.trim().to_string()).collect()
 }
 
 fn parse_csv(text: &str) -> Result<Vec<RawReport>, Box<dyn Error>> {
@@ -1038,6 +1031,9 @@ fn parse_product_csv(text: &str, product: &Product) -> Result<Vec<RawReport>, Bo
     let dwpf_at = index_of("dwpf");
     let sknt_at = index_of("sknt");
     let mslp_at = index_of("mslp");
+    let gust_at = index_of("gust");
+    let precipitation_at = index_of("p01i");
+    let visibility_at = index_of("vsby");
 
     let mut reports = Vec::new();
     for line in lines {
@@ -1072,13 +1068,12 @@ fn parse_product_csv(text: &str, product: &Product) -> Result<Vec<RawReport>, Bo
             dwpf: get(dwpf_at),
             sknt: get(sknt_at),
             mslp_hpa: get(mslp_at),
+            gust_kt: get(gust_at),
+            precipitation_in: get(precipitation_at),
+            visibility_sm: get(visibility_at).filter(|v| (0.0..=100.0).contains(v)),
         });
     }
     Ok(reports)
-}
-
-fn fahrenheit_to_kelvin(value: f64) -> f64 {
-    (value - 32.0) * 5.0 / 9.0 + 273.15
 }
 
 fn knots_to_ms(value: f64) -> f64 {
@@ -1198,6 +1193,20 @@ fn cmd_decode(options: &Options) -> Result<String, Box<dyn Error>> {
     let text = std::fs::read_to_string(obs_path)
         .map_err(|e| err(format!("cannot read {}: {e}", obs_path.display())))?;
     let source_sha = hex_sha256(text.as_bytes());
+    let fetched_at = match &options.fetch_record {
+        Some(path) => {
+            let record: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+            if record.get("schema").and_then(|v| v.as_str()) != Some(FETCH_SCHEMA)
+                || record.get("status").and_then(|v| v.as_str()) != Some("READY")
+                || record.get("sha256").and_then(|v| v.as_str()) != Some(source_sha.as_str()) {
+                return Err(err("fetch record does not bind this CSV; a provenance clock from another source is refused"));
+            }
+            let clock = record.get("fetched_at").and_then(|v| v.as_str())
+                .ok_or_else(|| err("fetch record has no fetched_at acquisition clock"))?;
+            seam_time(parse_time(clock)?)
+        }
+        None => seam_time(Utc::now()),
+    };
     let raw = parse_product_csv(&text, options.product())?;
 
     let mut valid_times = Vec::new();
@@ -1287,6 +1296,21 @@ fn cmd_decode(options: &Options) -> Result<String, Box<dyn Error>> {
             if let Some(hpa) = best.mslp_hpa {
                 values.insert("mslp".to_string(), hpa * 100.0);
             }
+            // Missing gust is not calm wind. Missing or trace precipitation
+            // remains missing, rather than being scored as an observed zero.
+            if let Some(gust) = best.gust_kt.filter(|v| (0.0..=250.0).contains(v)) {
+                values.insert("wind_gust_10m".into(), knots_to_ms(gust));
+            }
+            if let Some(rain) = best.precipitation_in.filter(|v| (0.0..=30.0).contains(v)) {
+                values.insert("precipitation_1h".into(), rain * 25.4);
+            }
+            let mut flags = Vec::new();
+            if let Some(sm) = best.visibility_sm {
+                // ASOS METAR visibility at 10 SM is right censored. Retain
+                // the lower bound; never treat it as exact clear-air truth.
+                values.insert("visibility".into(), sm.min(10.0) * 1609.344);
+                if sm >= 10.0 { flags.push("metar_visibility_ge_10sm".into()); }
+            }
             if values.is_empty() {
                 // A report that carries no scored variable is not a report
                 // for this purpose; emitting it would inflate the
@@ -1299,7 +1323,7 @@ fn cmd_decode(options: &Options) -> Result<String, Box<dyn Error>> {
                 valid_time: seam_time(*target),
                 observation_time: seam_time(best.valid),
                 values,
-                flags: Vec::new(),
+                flags,
             });
         }
     }
@@ -1356,7 +1380,7 @@ fn cmd_decode(options: &Options) -> Result<String, Box<dyn Error>> {
             options.product().provenance,
             rw_obs::absolute_uri(obs_path),
             source_sha,
-            seam_time(Utc::now()),
+            fetched_at,
         ),
         station_table_sha256: table.content_sha256.clone(),
         valid_times: valid_times.iter().map(|t| seam_time(*t)).collect(),
@@ -1551,7 +1575,7 @@ fn cmd_fetch_networks(options: &Options, networks: &[String]) -> Result<String, 
         if !urls.is_empty() && !pause.is_zero() {
             std::thread::sleep(pause);
         }
-        let url = fetch_url_networks(options.archive(), group, start, end);
+        let url = select_report_types(fetch_url_networks(options.archive(), group, start, end), options.report_types());
         let t = std::time::Instant::now();
         let text = get_text(&client, &url, "IEM ASOS network window")?;
         walls.push(t.elapsed().as_secs_f64());
@@ -1593,6 +1617,7 @@ fn cmd_fetch_networks(options: &Options, networks: &[String]) -> Result<String, 
         requests: usize,
         networks_per_request: usize,
         networks_requested: usize,
+        report_types: Vec<u8>,
         networks: Vec<String>,
         start: String,
         end: String,
@@ -1614,6 +1639,7 @@ fn cmd_fetch_networks(options: &Options, networks: &[String]) -> Result<String, 
             request_wall_s: walls,
             networks_per_request: chunk,
             networks_requested: networks.len(),
+            report_types: options.report_types().to_vec(),
             networks: networks.to_vec(),
             start: seam_time(start),
             end: seam_time(end),
@@ -2115,7 +2141,7 @@ fn table_rows_for(
         }
         None => counters.values_underivable += 1,
     }
-    let t_k = raw.tmpf.map(table_fahrenheit_to_kelvin);
+    let t_k = raw.tmpf.map(fahrenheit_to_kelvin);
     match t_k {
         Some(t) if GROSS_TEMPERATURE_K.0 <= t && t <= GROSS_TEMPERATURE_K.1 => {
             let mut r = base.clone();
@@ -2128,7 +2154,7 @@ fn table_rows_for(
         Some(_) => counters.values_temperature_out_of_range += 1,
         None => counters.values_underivable += 1,
     }
-    match raw.dwpf.map(table_fahrenheit_to_kelvin) {
+    match raw.dwpf.map(fahrenheit_to_kelvin) {
         Some(td) if !(GROSS_DEWPOINT_K.0 <= td && td <= GROSS_DEWPOINT_K.1) => {
             counters.values_dewpoint_out_of_range += 1
         }
@@ -2309,6 +2335,21 @@ fn cmd_table(options: &Options) -> Result<String, Box<dyn Error>> {
 #[cfg(test)]
 mod table_tests {
     use super::*;
+    #[test]
+    fn live_high_frequency_types_are_explicit_and_defaults_remain_routine_special() {
+        let parse = |args: &[&str]| Options::parse(&args.iter().map(|s|s.to_string()).collect::<Vec<_>>());
+        assert_eq!(parse(&[]).unwrap().report_types(), &[3,4]);
+        let options = parse(&["--report-types","4,1,3,1"]).unwrap();
+        assert_eq!(options.report_types(), &[1,3,4]);
+        let start=parse_time("2026-10-01T00:00:00Z").unwrap();
+        let url=select_report_types(fetch_url_networks(DEFAULT_ARCHIVE,&["CA_ASOS".into()],start,start),options.report_types());
+        assert!(url.contains("/cgi-bin/request/asos.py?"));
+        assert_eq!(url.matches("report_type=1").count(),1);
+        assert_eq!(url.matches("report_type=3").count(),1);
+        assert_eq!(url.matches("report_type=4").count(),1);
+        for raw in ["0","2","5","","1,x"] { assert!(parse(&["--report-types",raw]).is_err()); }
+        assert!(parse(&["--product","asos1min","--report-types","1,3,4"]).is_err());
+    }
 
     const CSV: &str = "station,valid,lon,lat,elevation,tmpf,dwpf,drct,sknt,gust,alti,mslp,p01i\n\
 YPXM,2026-09-01 00:00,105.6875,-10.4528,259.00,77.00,73.40,100.00,11.00,,30.03,,0.00\n\
@@ -2402,6 +2443,9 @@ mod tests {
             dwpf: None,
             sknt: None,
             mslp_hpa: None,
+            gust_kt: None,
+            precipitation_in: None,
+            visibility_sm: None,
         }
     }
 
@@ -2725,6 +2769,19 @@ mod tests {
         cmd_decode(&Options::parse(&args).unwrap()).unwrap();
         let record: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&out).unwrap()).unwrap();
+        let clock_receipt = dir.join("fetch.json");
+        std::fs::write(&clock_receipt, serde_json::to_vec(&serde_json::json!({
+            "schema": FETCH_SCHEMA, "status": "READY", "sha256": hex_sha256(&std::fs::read(&csv).unwrap()),
+            "fetched_at": "2025-05-02T00:00:00Z"})).unwrap()).unwrap();
+        let mut pinned_args = args.clone();
+        pinned_args.extend(["--fetch-record".into(), clock_receipt.display().to_string()]);
+        cmd_decode(&Options::parse(&pinned_args).unwrap()).unwrap();
+        let pinned = std::fs::read(&out).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        cmd_decode(&Options::parse(&pinned_args).unwrap()).unwrap();
+        assert_eq!(pinned, std::fs::read(&out).unwrap(), "same source and acquisition clock must reproduce seam bytes");
+        std::fs::write(&clock_receipt, format!(r#"{{"schema":"{FETCH_SCHEMA}","sha256":"wrong","fetched_at":"2025-05-02T00:00:00Z"}}"#)).unwrap();
+        assert!(cmd_decode(&Options::parse(&pinned_args).unwrap()).is_err());
         std::fs::remove_dir_all(&dir).ok();
         assert_eq!(record["provenance"]["product"], "iem-asos-1min");
         assert_eq!(record["match_seconds"], 30);
@@ -2757,6 +2814,28 @@ mod tests {
             vec!["DSM", "2024-05-21 20:54", "METAR KDSM 21Z, AUTO", "80.00"]
         );
         assert_eq!(split_csv("a,,c"), vec!["a", "", "c"]);
+    }
+    #[test]
+    fn decoded_gust_and_precipitation_keep_missing_and_trace_absent() {
+        let dir=std::env::temp_dir().join(format!("rw_asos_gust_{}",std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let station=one_minute_station();
+        let table=StationTable{schema:STATIONS_SCHEMA.into(),status:"READY".into(),archive:DEFAULT_ARCHIVE.into(),networks:vec!["XX_ASOS".into()],frozen_at:"2025-05-01T00:00:00".into(),content_sha256:station_rows_digest(std::slice::from_ref(&station)),stations:vec![station]};
+        let stations=dir.join("stations.json");let csv=dir.join("obs.csv");let out=dir.join("surface.json");
+        std::fs::write(&stations,serde_json::to_vec(&table).unwrap()).unwrap();
+        std::fs::write(&csv,"station,valid,tmpf,dwpf,sknt,gust,p01i,vsby\nAAA,2025-05-01 17:00,80,60,10,20,0.1,0.25\nAAA,2025-05-01 18:00,80,60,10,,T,10\n").unwrap();
+        let args=["--stations",stations.to_str().unwrap(),"--obs",csv.to_str().unwrap(),"--start","2025-05-01T17:00:00Z","--end","2025-05-01T18:00:00Z","--out",out.to_str().unwrap()].map(str::to_string);
+        cmd_decode(&Options::parse(&args).unwrap()).unwrap();
+        let record:serde_json::Value=serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
+        assert!((record["reports"][0]["values"]["wind_gust_10m"].as_f64().unwrap()-knots_to_ms(20.0)).abs()<1e-12);
+        assert!((record["reports"][0]["values"]["precipitation_1h"].as_f64().unwrap()-2.54).abs()<1e-12);
+        assert!(record["reports"][1]["values"].get("wind_gust_10m").is_none());
+        assert!(record["reports"][1]["values"].get("precipitation_1h").is_none());
+        assert!((record["reports"][0]["values"]["visibility"].as_f64().unwrap()-402.336).abs()<1e-10);
+        assert_eq!(record["reports"][1]["values"]["visibility"], 16093.44);
+        assert_eq!(record["reports"][1]["flags"][0], "metar_visibility_ge_10sm");
+        for entry in std::fs::read_dir(&dir).unwrap() {let entry=entry.unwrap();println!("deleted {} {}",entry.path().display(),entry.metadata().unwrap().len());std::fs::remove_file(entry.path()).unwrap();}
+        std::fs::remove_dir(&dir).unwrap();
     }
 
     #[test]

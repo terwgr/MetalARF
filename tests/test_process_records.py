@@ -42,8 +42,8 @@ def test_two_launchers_in_two_processes_do_not_share_the_card(tmp_path, monkeypa
     script = tmp_path / "launch.py"
     script.write_text(
         "import json, pathlib, sys, time\n"
-        "from gpuwm.mcp.jobs import JobManager\n"
-        "from gpuwm.mcp.doors import ArwenRefusal\n"
+        "from woof.mcp.jobs import JobManager\n"
+        "from woof.mcp.doors import ArwenRefusal\n"
         "root = pathlib.Path(sys.argv[1]); label = sys.argv[2]\n"
         "(root / (label + '.ready')).touch()\n"
         "while not (root / 'go').exists():\n"

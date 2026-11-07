@@ -150,7 +150,8 @@ def test_gwd_runs_on_a_tile_with_the_gathered_columns(monkeypatch, option):
         called.append(True)
 
     drag = SimpleNamespace(gwd_opt=option, apply_gwd=apply)
-    driver._apply_gwd(drag, SimpleNamespace(dx=3000.0), rates, atmosphere)
+    driver._apply_gwd(drag, SimpleNamespace(dx=3000.0, spp_pbl=0), rates,
+                      atmosphere)
     assert called == [True]
     assert np.all(rates["du"] == 2.0) and np.all(rates["dv"] == -3.0)
 
@@ -165,6 +166,7 @@ def test_topo_wind_reaches_ysu_on_a_tile(monkeypatch):
     driver.fields = defaultdict(lambda: plane)
     driver.terrain_drag = _drag(1, 0, plane.shape)
     driver.bldt_seconds = 24.0
+    driver._wrf_rthraten = None
     driver.rthratenlw = driver.rthratensw = np.zeros((4, 3, 5), np.float32)
     driver.urban = None
     atmosphere = defaultdict(lambda: np.ones((4, 3, 5), np.float32))
@@ -180,4 +182,5 @@ def test_topo_wind_reaches_ysu_on_a_tile(monkeypatch):
 
     monkeypatch.setattr(physics, "launch_ysu", launch)
     with pytest.raises(ReachedKernel):
-        driver._run_ysu(atmosphere, SimpleNamespace(ysu_topdown_pblmix=0))
+        driver._run_ysu(atmosphere, SimpleNamespace(
+            ysu_topdown_pblmix=0, ysu_version="wrf_480"))

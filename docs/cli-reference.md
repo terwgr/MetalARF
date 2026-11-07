@@ -94,6 +94,7 @@ can run for each trusted row.
 | `gem-gdps` | per-valid-time GDPS GRIB2 (Datamart per-variable files, concatenable) plus the analysis terrain record | ECCC's global GDPS through the generic mapped route.  Packaged profile supplies mapping/composition/provenance -- 33 pressure levels, the single 0-10 cm ISBA soil layer, and the once-per-cycle analysis invariants (orography, land mask, ice) broadcast by the generic invariant grammar; not stock-WRF certified |
 | `ecmwf-open-data` | ordered three-hourly `oper` GRIB2 step files | ECMWF's open-data IFS at 0.25 degrees through the generic mapped route.  Packaged profile supplies mapping/composition/provenance -- 14 pressure levels (earlier publications: 13 levels, depth-below-land soil and no surface geopotential, read through the same mapping), dewpoint-derived 2 m humidity, index-addressed IFS soil and cycle-analysis in-band terrain are table data; 0.25-degree open data (CC-BY-4.0), the 9 km HRES is access-restricted; not stock-WRF certified |
 | `gefs` | one verified member's `pgrb2a`+`pgrb2b` pair per valid time (concatenated), staged by `woof-member-prep` | One MEMBER of NCEP's 31-forecast global ensemble through the generic mapped route.  Packaged profile supplies mapping/composition/provenance -- the 31-level ladder is the measured exact union of the two products' disjoint isobaric sets, every state selector pins PDT 1 (mean/spread and accumulation twins refuse at the byte level), four Noah soil layers split across the pair; in-band terrain; not stock-WRF certified |
+| `hex-global` | woof hex export frames (`--field-set full`, a lat-lon window or global-mesh), each also named as its `hex_in_band_surface` supplement, plus `--author-input-manifest` | A woof hex forecast as a WOOF domain's initial and boundary source through the packaged `hex-history-netcdf-v1` profile (the 55 MPAS model levels read directly); the boundary cadence is the export's, named to `woof domain --cadence`; not stock-WRF certified.  The whole route is the fenced block in `native-mapped-source-authoring.md` |
 | `mapped` | mapping, composition, ordered inputs, role bindings, SHA manifest | Generic GRIB1, GRIB2, or NetCDF; new mappings are validated, not certified |
 
 All executing routes require an output path that does not already exist.
@@ -217,7 +218,11 @@ own alias data (`--list-sources` prints the same rows as JSON), and a
 test refuses any drift between the two.
 
 | `--source` id | also spelled |
-|---|---|
+| --- | --- |
+| `aorc` | -- |
+| `era5-land` | -- |
+| `ngen-csv` | `aorc-csv` |
+| `nwm-retrospective-forcing` | `nwm-forcing` |
 | `hrrr` | -- |
 | `hrrr-prs` | `hrrr-pressure`, `hrrr-wrfprs` |
 | `gem-gdps` | `gem`, `gdps`, `gem-global` |
@@ -232,7 +237,10 @@ test refuses any drift between the two.
 | `aigefs` | `ai-gefs` |
 | `hgefs` | `hybrid-gefs` |
 | `ecmwf-open-data` | `ecmwf`, `ifs` |
+| `ecmwf-ens` | `ifs-ens`, `ecmwf-ensemble` |
 | `aifs` | `aifs-v2`, `aifs-single` |
+| `rap-native` | `rap-awp130bgrb` |
+| `hrrr-native` | `hrrr-mapped-native` |
 | `rap` | `rap-awip32` |
 | `nam` | -- |
 | `hiresw` | `hires` |
@@ -242,15 +250,18 @@ test refuses any drift between the two.
 | `urma` | -- |
 | `nbm` | `blend` |
 | `rrfs` | `rrfs-ops` |
+| `rrfs-ens` | `rrfsens` |
 | `rrfs-a` | `rrfsa` |
 | `rrfs-public` | -- |
 | `refs` | `rrfs-ensemble` |
 | `rrfs-firewx` | `firewx` |
 | `wrf` | `wrf-gdex`, `wrf-arw` |
+| `earth2` | `earth2studio` |
 | `era5` | -- |
 | `era5-l137` | `era5-model-level`, `era5-ml` |
 | `20crv3` | `20cr`, `twentycrv3`, `20crv3-member` |
 | `20crv3-cf` | `20crv3-netcdf`, `20cr-netcdf`, `20cr-cf` |
+| `hex-global` | `hex`, `woof hex`, `hex-regional` |
 | `mapped` | `generic-mapped`, `mapping-v1` |
 
 Not every row is runnable on this release; the tables above name the
@@ -561,6 +572,16 @@ record-for-record byte-identical to GFS `pgrb2.0p25` -- only the
 acquisition path says which model a file came from.  The route is not
 yet accepted by unchanged stock WRF.
 
+## Source-pinned model specifications
+
+`woof preset list|show|check|export|verify-sources` reads the packaged model
+preset registry. The `rrfs-v2-hex-tempo` entry records the native MPAS settings
+and source pins, including TEMPO, and runs on the hex dycore through
+`woof preset run`. `check` reports any unmet runtime requirement and every
+declared divergence from the NOAA pins, and `export` retains the requested
+physics switches. See [model-presets.md](model-presets.md)
+for the exact commands and limits.
+
 ## The RRFS route
 
 `woof prep --source rrfs` reads RRFS -- HRRR's operational successor,
@@ -811,3 +832,12 @@ directory. Exit 0 when a bundle was written or listed; a refusal only
 when no location accepts the write.
 
 See `public/REPORTING-A-PROBLEM.md` for the user-facing page.
+
+## Native tools and partial fetch
+
+Platform wheels carry every declared native tool, including simulated radar,
+ML export and globe packing. `woof fetch-bridges` also serves fallback installs
+and repairs a user's bridge directory. `woof fetch-bridges --partial` fetches
+only missing or stale binaries through HTTP byte ranges. Add repeatable
+`--artifact NAME` arguments to select tools. A renderer launcher also selects
+its shared `rw_wrfbatch` executable. Map assets require the full fetch.

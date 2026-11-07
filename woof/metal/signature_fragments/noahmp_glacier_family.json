@@ -16,7 +16,7 @@
         "zsoil_row": [[4]], "out": [["ncase", 68]],
         "io": [["ncase", 2]]
       },
-      "parameters": [["dt", "float32"], ["ncase", "int32"]],
+      "parameters": [["dt", "float32"], ["ncase", "int32"], ["night_age", "int32"]],
       "threads_per_group": 64,
       "layout_version": 1,
       "arithmetic_policies": ["wrf-exact"]

@@ -11,7 +11,6 @@ constant uint BEMPV_NDM = 2u;
 constant uint BEMPV_INTERP_FIELDS = 7u;
 constant uint BEMPV_GR_FRAC = 1206u;
 constant uint BEMPV_EMR = 121u;
-constant uint BEMPV_BS = 220u;
 constant uint BEMPV_PV_FRAC = 1217u;
 
 static inline float ubpv_add(float a, float b) {
@@ -72,7 +71,6 @@ kernel void urban_bep_bem_pv_solve_fragment(
     const float hrad = ubpv_div(5.67e-8f, ubpv_add(ubpv_add(
         ubpv_div(ubpv_sub(1.0f, empv_down), empv_down), 1.0f),
         ubpv_div(ubpv_sub(1.0f, emissivity), emissivity)));
-    const ulong class_bs = BEMPV_BS + class_row * BEMPV_NDM;
     const float rs = r.swdown[col];
     const float rl = r.glw[col];
     for (uint building = 0; building < BEMPV_NBUI; ++building) {
@@ -93,17 +91,17 @@ kernel void urban_bep_bem_pv_solve_fragment(
         const float tr = r.tr_av[(c * BEMPV_NZUM + z) * BEMPV_NDM];
         const ulong tpv_index = (c * BEMPV_NZUM + z) * BEMPV_NDM;
         float tpv = r.tpv[tpv_index];
-        const float uroof = ubpv_sqrt(ubpv_add(
-            ubpv_mul(ua, ua), ubpv_mul(va, va)));
+        const float uroof = ubpv_pow(ubpv_add(
+            ubpv_mul(ua, ua), ubpv_mul(va, va)), 0.5f);
         const float deltat = ubpv_sub(tpv, tair);
         const float hf = ubpv_mul(2.5f, ubpv_pow(
             ubpv_mul(0.4f, uroof), 0.5f));
         float hc = ubpv_div(ubpv_mul(9.482f,
-            ubpv_pow(ubpv_abs(deltat), 1.0f / 3.0f)), 6.238f);
-        const float hup = ubpv_sqrt(ubpv_add(ubpv_mul(hc, hc), ubpv_mul(hf, hf)));
+            ubpv_pow(ubpv_abs(deltat), 1.0f / 3.0f)), ubpv_sub(7.238f, 1.0f));
+        const float hup = ubpv_sqrt(ubpv_add(ubpv_pow(hc, 2.0f), ubpv_pow(hf, 2.0f)));
         hc = ubpv_div(ubpv_mul(1.810f,
-            ubpv_pow(ubpv_abs(deltat), 1.0f / 3.0f)), 2.382f);
-        const float hdown = ubpv_sqrt(ubpv_add(ubpv_mul(hc, hc), ubpv_mul(hf, hf)));
+            ubpv_pow(ubpv_abs(deltat), 1.0f / 3.0f)), ubpv_add(1.382f, 1.0f));
+        const float hdown = ubpv_sqrt(ubpv_add(ubpv_pow(hc, 2.0f), ubpv_pow(hf, 2.0f)));
         const float enerpv = ubpv_mul(ubpv_mul(0.19f, rs), ubpv_min(
             1.0f, ubpv_sub(1.0f, ubpv_mul(0.005f,
                  ubpv_sub(tpv, ubpv_add(t_amb, 273.15f))))));
@@ -112,7 +110,7 @@ kernel void urban_bep_bem_pv_solve_fragment(
         const float lwpv_out = ubpv_mul(ubpv_mul(empv_up, 5.67e-8f),
             ubpv_pow(tpv, 4.0f));
         const float lwupr = ubpv_mul(hrad,
-            ubpv_sub(ubpv_pow(tr, 4.0f), ubpv_pow(tpv, 4.0f)));
+            ubpv_sub(ubpv_mul(ubpv_mul(tr, tr), ubpv_mul(tr, tr)), ubpv_pow(tpv, 4.0f)));
         const float hspv = ubpv_mul(ubpv_add(hup, hdown),
             ubpv_sub(tpv, tair));
         const float tendency = ubpv_div(ubpv_sub(ubpv_sub(ubpv_add(
@@ -121,19 +119,9 @@ kernel void urban_bep_bem_pv_solve_fragment(
         r.tpv[tpv_index] = tpv;
         r.tpv[tpv_index + 1ul] = tpv;
         const float eppv = ubpv_mul(ubpv_mul(ubpv_mul(
-            enerpv, pv_fraction), r.class_float[class_bs]),
-            r.class_float[class_bs + 1ul]);
+            enerpv, pv_fraction), r.bs[c * BEMPV_NDM + 1ul]),
+            r.bs[c * BEMPV_NDM]);
         r.pv_energy[out] = eppv;
         r.pv_hspv[out] = hspv;
-
-        const float da = r.interp[interp_base + 5ul * BEMPV_NZUM + z];
-        const float pv_tendency = ubpv_div(
-            ubpv_mul(ubpv_mul(ubpv_sub(1.0f, green_fraction),
-                              pv_fraction), hspv),
-            ubpv_mul(da, p.cp_u));
-        for (uint d = 0; d < BEMPV_NDM; ++d) {
-            const ulong flat = (c * BEMPV_NDM + d) * BEMPV_NZUM + z;
-            r.flat_thb[flat] = ubpv_add(r.flat_thb[flat], pv_tendency);
-        }
     }
 }

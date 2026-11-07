@@ -1,25 +1,30 @@
 """MYJ (Eta similarity) surface layer, ``sf_sfclay_physics = 2``.
 
-CUDA launcher around :mod:`woof.core.kernels.myjsfc`, the device mirror of
-the float32 CPU authority ``tests.physics_reference.myj_ref.np_myjsfc_column``.  Both
-halves interpolate the SAME similarity tables: they are built once on the
-host by :func:`woof.core.myjsfc_tables.build_psi_tables` (a transcription
-of ``MYJSFCINIT``, phys/module_sf_myjsfc.F:1174-1299) and uploaded here, so
-no table word can differ between the reference and the kernel.
+CUDA launcher around :mod:`woof.core.kernels.myjsfc`, the device port of
+the byte-frozen WRF v4.6.1 ``phys/module_sf_myjsfc.F`` (the float32 CPU
+authority ``woof.verify.myj_ref.np_myjsfc_column`` is its tolerance
+twin).  Both interpolate the SAME similarity tables: they are built once on
+the host by :func:`woof.core.myjsfc_tables.build_psi_tables` (a
+transcription of ``MYJSFCINIT``, phys/module_sf_myjsfc.F:1174-1299) and
+uploaded here.
 
 The scheme is the Eta surface layer WRF pairs with the MYJ PBL and with
 nothing else (phys/module_physics_init.F:3770-3772 fatals a MYJ PBL whose
 surface layer did not set ``isfc = 2``).  woof enforces the same pairing in
 :func:`woof.config.validate_myj_pairing`.
 
-Conformance status: implemented-unverified.  ``tests/test_myj_port.py``
-asserts CPU-vs-CUDA agreement and physical sanity; NO oracle comparison
-against the WRF Fortran has been run.
+Conformance status: BIT-IDENTICAL to WRF v4.6.1's MYJSFC and MYJSFCINIT
+on the 224-column oracle (tools/myjsfc_wrf461_oracle,
+tests/test_myjsfc_wrf461_parity.py) under the strict build and under
+default arithmetic; registry maturity stays implemented-unverified because
+no matched forecast trajectory exists.  ``surface["ht"]`` is WRF's HT:
+MYJSFC's interface heights start at the terrain height (ZINT(KTE+1)=HT,
+:165), PBLH and ZSL are differences of them, and the float32 words depend
+on it.
 """
 
 from __future__ import annotations
 
-from functools import lru_cache
 from woof.core.device_cache import cuda_cache
 
 try:
@@ -28,7 +33,7 @@ except ImportError:
     cp = None
 import numpy as np
 
-from woof.core.kernels import get_kernel
+from woof.core.kernels import get_kernel, get_kernel_int_defines
 from woof.core.myjsfc_tables import build_psi_tables
 # WRF INOUT surface state and pure outputs, in kernel argument order.  The
 # tables live in the runtime-free inventory module so the VRAM estimator
@@ -43,18 +48,20 @@ _TPB = 128
 _COLUMN_INPUTS = ("dz", "tke")
 #: Read-only surface inputs, in kernel argument order.
 _SURFACE_INPUTS = ("u1", "v1", "t1", "th1", "qv1", "qc1", "p1", "psfc",
-                   "tsk", "xland", "mavail", "z0base")
+                   "tsk", "xland", "mavail", "z0base", "ht")
 
 
 @cuda_cache(maxsize=None, ready=True)
-def _device_tables():
-    """Upload the MYJSFCINIT tables once per process.
+def _device_tables(correctly_rounded_atan: bool = False):
+    """Upload the MYJSFCINIT tables once per process and ATAN generation.
 
     The scalars ride along as Python floats; the kernel takes them by
     value.  ``lru_cache`` keeps the four 10001-word arrays resident for the
     life of the process rather than re-uploading 160 kB every call.
+    ``correctly_rounded_atan`` is the referee WRF's libm generation
+    (:func:`woof.wrf_exact.referee_correctly_rounded_trig`).
     """
-    tables = build_psi_tables()
+    tables = build_psi_tables(correctly_rounded_atan)
     arrays = tuple(cp.asarray(tables[name], dtype=DTYPE)
                    for name in ("psim1", "psih1", "psim2", "psih2"))
     scalars = tuple(DTYPE(tables[name]) for name in (
@@ -64,7 +71,7 @@ def _device_tables():
 
 
 def launch_myj_sfclay(columns, surface, state, outputs, *,
-                      itimestep: int) -> None:
+                      itimestep: int, ocean_z0=None) -> None:
     """Run one MYJ surface-layer step in place.
 
     ``columns`` supplies the full bottom-up ``(nz, ny, nx)`` ``dz`` and
@@ -100,9 +107,20 @@ def launch_myj_sfclay(columns, surface, state, outputs, *,
                 or not array.flags.c_contiguous):
             raise ValueError("launch_myj_sfclay requires same-shape "
                              "contiguous float32 surface arrays")
-    arrays, scalars = _device_tables()
+    ocean_args = ()
+    if ocean_z0 is not None:
+        if (not isinstance(ocean_z0, cp.ndarray)
+                or ocean_z0.shape != shape or ocean_z0.dtype != DTYPE
+                or not ocean_z0.flags.c_contiguous
+                or ocean_z0.device.id != surface["psfc"].device.id):
+            raise ValueError("MYJ wave roughness requires contiguous float32 on the surface device/grid")
+        ocean_args = (ocean_z0,)
+    from woof.wrf_exact import referee_correctly_rounded_trig
+    arrays, scalars = _device_tables(referee_correctly_rounded_trig())
     n = int(np.prod(shape))
     blocks = (n + _TPB - 1) // _TPB
-    kernel = get_kernel("myjsfc", "myjsfc_column")
-    kernel((blocks,), (_TPB,), tuple(named) + arrays + scalars
+    kernel = (get_kernel_int_defines("myjsfc", "myjsfc_column",
+              (("OCEAN_WAVE_ROUGHNESS", 1),)) if ocean_z0 is not None
+              else get_kernel("myjsfc", "myjsfc_column"))
+    kernel((blocks,), (_TPB,), tuple(named) + arrays + scalars + ocean_args
            + (np.int32(itimestep), np.int32(nz), np.int32(n)))

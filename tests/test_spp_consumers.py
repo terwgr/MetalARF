@@ -20,7 +20,19 @@ import test_mynn_pbl as pbl
 import test_mynn_surface_water as surface
 
 DATA = Path(__file__).resolve().parents[1] / "woof" / "data" / "spp"
-NATIVE_ZIP_SHA256 = "9bc14a88c46b54547a6a19000830a3f4028fbce4b755f5bfb2648e853e4d0f4b"
+# The native captures ship in the recast-woof-data companion since 2.8.7
+# (woof.data_assets.COMPANION_TREES); the ULP receipts stay in DATA.
+NATIVE_ZIP = "spp/native-wrf461.zip"
+# Rebuilt by lane/verify-spp-stochastic on the program's oracle platform
+# (gfortran 13.3.0, glibc 2.39, the toolchain of every other WRF column
+# oracle) with tools/spp_wrf461_oracle/build.py and package.py.  The previous
+# archive (9bc14a88...) was built with gfortran 15.2.0 on glibc 2.43; its
+# MYNN PBL and GF captures differ from this platform's in the float32 libm
+# words, which the per-element budgets below used to absorb.  2.9.1: the GF
+# captures were re-run (receipt.json gf_rebuild, same platform) on the GF
+# harness after d612ddee205 corrected its GFS constants; built before it,
+# their stock capture differed from GFDRV on 14 of 216 columns by 1-4 ULP.
+NATIVE_ZIP_SHA256 = "201025994da48275c72fb06d37e38074c924780139a1aed8ed4409682b3a688e"
 
 
 @pytest.fixture(scope="session")
@@ -28,7 +40,8 @@ def native_directory(tmp_path_factory):
     directory = os.environ.get("WOOF_SPP_ORACLE")
     if directory:
         return Path(directory)
-    archive = DATA / "native-wrf461.zip"
+    from woof.data_assets import data_path
+    archive = data_path(NATIVE_ZIP)
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == NATIVE_ZIP_SHA256
     target = tmp_path_factory.mktemp("spp-native")
     with zipfile.ZipFile(archive) as source:
@@ -73,10 +86,20 @@ def _measure(actual, expected):
 def _gate(label, actual, expected):
     metrics = _measure(actual, expected)
     print("SPP_NATIVE " + json.dumps({"name": label, "ulp": {k:v for k,v in metrics.items() if v}, "fields": len(metrics)}, sort_keys=True))
-    # The whole-column ports already carry named arithmetic residuals.
-    # Store one measured bound per element: an exactly matching element has
-    # no slack, and an inherited error in one cloud cannot hide a change in
-    # another column. The new DMP and diffusivity operators are exact.
+    for name in expected:
+        assert np.isfinite(actual[name]).all(), (label, name)
+    # Every MYNN PBL label is 0 ULP against the capture rebuilt on the oracle
+    # platform, CPU and GPU, default and strict arithmetic (measured on W1,
+    # RTX PRO 6000, by lane/verify-spp-stochastic).  The budgets this gate
+    # used to read for them measured the old capture's foreign libm words,
+    # so a regression of up to 18 ULP in the SPP cloud diagnosis could pass.
+    if not label.split(".", 1)[1].startswith("surface"):
+        assert {name: value for name, value in metrics.items() if value} == {}, label
+        return
+    # The MYNN surface layer keeps one measured bound per element: on this
+    # base its kernel is not yet WRF-exact.  lane/verify-mynn-sfclay-wrf461
+    # makes it 0 ULP with spp_pbl=1 on the same platform; this budget
+    # retires when that fix lands (woof/data/spp/*-ulp.json "why").
     with np.load(DATA / (label.split(".",1)[0] + "-ulp.npz"), allow_pickle=False) as budget:
         for name,value in expected.items():
             distance = fp32_ulp_distance(actual[name],value)
@@ -141,6 +164,14 @@ def test_mynn_driver_spp_native(oracle, backend, step):
 
 
 def test_mynn_surface_spp_native(oracle, backend):
+    # The gpu.surface budget was re-measured by lane/verify-mynn-sfclay-wrf461
+    # (gpu-ulp.json "gpu.surface_remeasured"; no other label moved).  This
+    # capture was built with gfortran 15.2.0 on glibc 2.43; on the program's
+    # oracle platform (gfortran 13.3.0, glibc 2.39) the CUDA kernel is 0 ULP
+    # on every output with spp_pbl=1 as well as 0
+    # (tests/test_mynn_sfclay_wrf461_column_oracle_gpu.py).  So the budget
+    # here measures the two platforms' float32 libm words, chiefly psim (up
+    # to 51 ULP), not a kernel residual.
     with (oracle / "surface-spp.csv").open(newline="") as stream:
         rows = list(csv.DictReader(stream))
     actual, expected = {}, {}
@@ -169,17 +200,48 @@ def test_mynn_surface_spp_native(oracle, backend):
 def test_spp_specializations_leave_default_compiler_sources_frozen():
     from woof.core.kernels import module_source
     from woof.core.spp_kernel_sources import specialized_source
-    pins = {"gf": "53785cdbe6d07c950bb4d8017ecf84a83d0f3bc84b81875e96bcda14ee8d9191",
+    pins = {
+            # RE-PINNED for 2.9.0 (lane/290-A5-fixes 0e7c7f03d, exact chain
+            # 7cdf42951): CUP_gf keeps descending after a valid
+            # downdraft-origin adjustment, as WRF does; the same change
+            # re-pinned gf in tests/test_kernel_source_freeze_per_module.py.
+            # Previously 53785cdb.
+            # RE-PINNED for 2.9.1 (the WRF exact chain): float32-widened GFS
+            # constants, the PBL closure bound, the lower-face W and the FMA exp
+            # form are default-on GF corrections. Previously ada52295.
+            # Re-pinned for the WOOF 1.0.0 text scrub: comments only (punctuation, host
+            # labels), proven equal with comments stripped; the preprocessor drops
+            # comments, so the compiled binary does not move.
+            "gf": "def595abad6b216b052a38c05bceab230fbe9018467774b92adfc354e035cb3f",
             # Accepted staging adds source-selected GSD41 entry points.
             # This pins the actual default compiler string and checks that
             # constructing an SPP specialization leaves that string intact.
             # It does not claim unchanged default PTX from the older source.
-            "mynn_pbl": "ecf106fc09e1f3982a9fa8c2b277b3959dbc7af102cc1500b4e64dbad6fd6d25",
+            # P23 (lane/ec-mynn-p23) adds MYNN_GSD41 arms only; the default
+            # PTX is byte-identical (test_mp8_frozen's mynn_pbl row).
+            # RE-PINNED by lane/mynn-exact (the YSU recipe on MYNN), MOVES ANSWERS
+            # for bl_pbl_physics = 5: --fmad=false, glibc 2.39 expf/log10f and the
+            # FMA-ifunc logf/powf/expf in the unit, fdlibm tanhf at every site;
+            # under MYNN_GSD41 the fork's a2den algebra and 0.608 thetav.  Reading
+            # (RTX 5090 sm_120, NVRTC 12.9): every MYNN CUDA leaf and both drivers 0
+            # ULP against WRF v4.6.1, six column families x 12 steps free-running 0
+            # ULP (tests/test_mynn_wrf461_exact_gpu.py); gsd_41 0 ULP against the
+            # fork's driver (tests/test_mynn_gsd41_driver_exact_gpu.py). Previously
+            # 185b36a7.
+            # Review: the changed CASE(1) is excluded from the stock/SPP build.
+            # Source-only synchronization to the selected R1 capture in
+            # test_mp8_frozen.FROZEN_MODULE_DIGESTS. This does not establish new PTX or
+            # numerical replay identity for the assembled MYNN source.
+            # Slimming recorder follows the reviewed R1 export-arm fold.
+            "mynn_pbl": '1f5e6f64a206f602e4281d0d38bc8295b897a13050826f62d487ff5f0e61d871',
             # Match test_mp8_frozen's accepted staging source: selectable
             # GSL WRF 3.9 stability solver plus explicitly rounded ordinary
             # mynn_table interpolation. The SPP construction remains inert
             # for the default compiler string; the table source has changed.
-            "mynn_surface": "dc759001e1fbb3886d0c8d066596d31a78b9c57cea51b2fbd62ecdad35ccd650"}
+            # lane/cap-waves-couple (8cd59d74c15) adds the OCEAN_WAVE_ROUGHNESS
+            # block, off in the default string; synchronized with
+            # test_mp8_frozen.FROZEN_MODULE_DIGESTS.
+            "mynn_surface": "5b294157fb4224d0aa2ce11ce4856dafeb9e9f0a0e8145694dd6e0c48acfe64f"}
     for name, pin in pins.items():
         baseline = module_source(name)
         assert hashlib.sha256(baseline.encode()).hexdigest() == pin
@@ -226,3 +288,30 @@ def test_disabled_spp_config_preserves_old_prepared_cache_identity():
         live["run"][key] = 1
         assert compare_prepared_domain_config(cached,live,not_in_use=defaults)[1] == ["run."+key]
         live["run"][key] = 0
+
+
+def test_gpu_surface_bounds_never_exceed_the_cpu_authority():
+    """Every gpu.surface element bound is at most the CPU port's bound.
+
+    The breakage: the gpu.surface rows were re-recorded on 2.8.8 (the MYNN
+    surface unit lost flush to zero and took WOOF's float32 libm), which
+    raised 46 per-element bounds.  Each raised bound equals the CPU float32
+    port's bound for the same element, so the card reproduces a residual the
+    CPU port already carries against WRF.  A re-record that raised a bound
+    past the CPU's would let the GPU acquire a residual the CPU port lacks,
+    and the native gate above would accept it because it reads only
+    gpu-ulp.npz.
+    """
+    receipt = json.loads((DATA / "gpu-ulp.json").read_text(encoding="utf-8"))
+    assert "cpu-ulp" in receipt["metadata"]["rerecorded_rows"]["gpu.surface"]["bounds"]
+    with np.load(DATA / "gpu-ulp.npz", allow_pickle=False) as gpu, \
+            np.load(DATA / "cpu-ulp.npz", allow_pickle=False) as cpu:
+        rows = [name for name in gpu.files if name.startswith("gpu.surface/")]
+        assert len(rows) > 0
+        for name in rows:
+            twin = "cpu.surface/" + name.split("/", 1)[1]
+            assert twin in cpu.files, name
+            assert gpu[name].shape == cpu[twin].shape, name
+            above = gpu[name] > cpu[twin]
+            assert not above.any(), (name, gpu[name][above].tolist(),
+                                     cpu[twin][above].tolist())

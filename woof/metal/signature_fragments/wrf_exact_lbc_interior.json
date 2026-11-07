@@ -1,0 +1,93 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_lbc_interior",
+      "module": "lbc_state",
+      "source": "woof/metal/shaders/wrf_exact_lbc_interior.metal",
+      "cuda_source": "woof/ingest/lateral_bc.py",
+      "cuda_symbol": "_apply_legacy_held_interior",
+      "resources": [
+        [
+          "field_tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "held",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "field_tend": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "held": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "mny",
+            "mnx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "divide_msf",
+          "int32"
+        ],
+        [
+          "add_held",
+          "int32"
+        ],
+        [
+          "active_width",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "mny",
+          "int32"
+        ],
+        [
+          "mnx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

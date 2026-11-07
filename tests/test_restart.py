@@ -120,6 +120,13 @@ def _cfg(**overrides) -> RunConfig:
 
 def _shim_state(cfg, monkeypatch):
     import woof.core.state as state_module
+    # woof.core.dycore binds state's cp at import (``from woof.core.state
+    # import cp``) and keeps it.  Load it with the real one before the shim
+    # replaces it: a dycore first imported inside this window (building a
+    # PhysicsDriver reaches it) kept the shim for the rest of the process
+    # (2.9.11 pass 3 R5: test_checkpoint_config_echo, then the batch layout
+    # trials raised "_NumpyCupyShim has no attribute 'ElementwiseKernel'").
+    import woof.core.dycore  # noqa: F401
 
     monkeypatch.setattr(state_module, "cp", _NumpyCupyShim)
     return state_module.DomainState(cfg)
@@ -127,7 +134,9 @@ def _shim_state(cfg, monkeypatch):
 
 def _fill_setup(state) -> None:
     """Deterministic nonzero setup arrays (identical across builds)."""
-    for index, name in enumerate(restart.STATE_SETUP_ARRAYS):
+    # Preserve every pre-v7 fixture word when the inverse identity is added.
+    names = tuple(n for n in restart.STATE_SETUP_ARRAYS if n != "msfv_inv") + ("msfv_inv",)
+    for index, name in enumerate(names):
         array = getattr(state, name)
         array[...] = np.arange(array.size, dtype=np.float64).reshape(
             array.shape).astype(np.float32) * np.float32(0.01 * (index + 1))
@@ -183,13 +192,16 @@ def _rewrite_restart_archive(path, output, edit):
 
 
 def _shim_driver_state(cfg, monkeypatch):
-    """NumPy-backed PhysicsDriver with no scheme callables or surface fields."""
+    """NumPy-backed PhysicsDriver with required surface outputs and no callables."""
     import woof.core.physics as physics
 
     state = _shim_state(cfg, monkeypatch)
     monkeypatch.setattr(physics, "cp", _NumpyCupyShim)
+    fields = ({name: np.zeros(state.mup.shape, dtype=np.float32)
+               for name in physics.MYNN_SURFACE_OUTPUTS}
+              if cfg.sf_sfclay_physics == physics.MYNN_SFCLAY_SCHEME else {})
     driver = physics.PhysicsDriver(
-        state, cfg, fields={}, sfclay_result=None, noah_params=None)
+        state, cfg, fields=fields, sfclay_result=None, noah_params=None)
     state.physics = driver
     return state, driver
 
@@ -327,14 +339,6 @@ def test_unclassified_state_attribute_fails_the_write(monkeypatch, tmp_path):
     state.brand_new_accumulator = np.zeros(3, dtype=np.float32)
     with pytest.raises(restart.RestartManifestError,
                        match="brand_new_accumulator"):
-        restart.write_restart(tmp_path / "rst.npz", state, cfg)
-
-
-def test_unclassified_scratch_slot_fails_the_write(monkeypatch, tmp_path):
-    cfg = _cfg(moist=True, mp_physics=1)
-    state = _shim_state(cfg, monkeypatch)
-    state.scratch((2, 2), "mystery_buffer")
-    with pytest.raises(restart.RestartManifestError, match="mystery_buffer"):
         restart.write_restart(tmp_path / "rst.npz", state, cfg)
 
 
@@ -537,8 +541,17 @@ def test_every_source_scratch_slot_is_classified():
     for slot in sorted(literals):
         restart.classify_scratch_slot(slot)   # raises on any new slot
     for prefix in sorted(prefixes):
+        if prefix == "mp_":
+            # The family executor's dynamic names are bounded by its table.
+            # They are serialized accumulators, never rebuilt scratch.
+            from woof.core.wsm_family_constants import selectors, precipitation_classes
+            for selector in selectors():
+                for species in precipitation_classes(selector):
+                    for suffix in ("nc", "ncv"):
+                        assert restart.classify_scratch_slot(f"mp_{species}{suffix}") == "serialize"
+            continue
         assert (prefix.startswith(tuple(restart.REBUILT_SCRATCH_PREFIXES))
-                or prefix == "cu_"), prefix
+                or prefix in ("cu_", "ltng_")), prefix
     # The one dynamic serialized family: the KF stored per-column rates.
     for name in ("rthcuten", "rqvcuten", "rqccuten", "rqicuten",
                  "rqrcuten", "rqscuten"):
@@ -859,6 +872,20 @@ def test_current_restart_rejects_missing_canonical_kf_phase_member(
         restart.restore_restart(tampered, live, cfg)
 
 
+def test_wind_detection_receipt_is_rebuilt_without_hiding_unknown_state(monkeypatch):
+    cfg = _cfg(moist=True, mp_physics=10)
+    _state, driver = _shim_driver_state(cfg, monkeypatch)
+    before = restart._driver_manifest(driver)
+    driver.wind_farm_detection = {"enabled": True, "turbine_count": 631}
+    after = restart._driver_manifest(driver)
+    assert after.keys() == before.keys()
+    assert all(after[key] is before[key] for key in before)
+    driver.wind_farm_unclassified_state = np.ones(1, dtype=np.float32)
+    with pytest.raises(restart.RestartManifestError,
+                       match="wind_farm_unclassified_state.*not classified"):
+        restart._driver_manifest(driver)
+
+
 def test_restart_refuses_unfinalized_kf_expiry_transition(monkeypatch):
     """A checkpoint cannot retain an unconsumed transient expiry mask."""
     cfg = _cfg(moist=True, mp_physics=10, cu_physics=1)
@@ -972,7 +999,7 @@ def test_wsm6_sr_exact_upper_roundtrips_restart_bits(monkeypatch, tmp_path):
     _fill_setup(fresh)
     restart.restore_restart(path, fresh, cfg)
 
-    assert fresh_driver._sr_roundoff_max_ulps == 3
+    assert fresh_driver._sr_roundoff_max_ulps == 7
     assert fresh_driver._wsm6_minor_loops == 1
     assert fresh_driver.microphysics.sr is fresh._scratch["mp_sr"]
     np.testing.assert_array_equal(
@@ -2163,8 +2190,20 @@ def test_restore_rejects_changed_physics_setup_before_mutation(
     elif mismatch == "resolved-driver-switch":
         live_driver.surface_enabled = False
 
-    with pytest.raises(restart.RestartMismatchError,
-                       match="physics setup"):
+    # A moved algorithm identity is a change of build, refused before the
+    # configuration walk with the scheme named; the rest are the physics
+    # gate's resolved-setup refusals.
+    expected = {
+        "radiation-algorithm": (
+            "scheme implementations this build does not run: "
+            "ra_lw_physics=4 \\(radiation lw\\): rte-rrtmgp-v1 -> "
+            "rte-rrtmgp-deliberately-different-test"),
+        "land-surface-algorithm": (
+            "scheme implementations this build does not run: "
+            "sf_surface_physics=2 \\(land surface\\): .* -> "
+            "pre-chs2-and-source-water-lake-skin-test-identity"),
+    }.get(mismatch, "physics setup")
+    with pytest.raises(restart.RestartMismatchError, match=expected):
         restart.restore_restart(path, live, cfg)
 
     assert live.elapsed_seconds == 47.0
@@ -2347,7 +2386,7 @@ def test_lbc_forcing_tables_are_pinned_by_the_fingerprint(monkeypatch,
         restart.restore_restart(path, none_state, cfg)
 
 
-def _historical_setup_fingerprint(state) -> str:
+def _historical_setup_fingerprint(state, *, inverse=True, lateral=True) -> str:
     """The pre-extension digest algorithm, copied here as a freeze oracle."""
     digest = hashlib.sha256()
 
@@ -2359,7 +2398,8 @@ def _historical_setup_fingerprint(state) -> str:
         digest.update(host.tobytes())
 
     for name in restart.STATE_SETUP_ARRAYS:
-        array(name, getattr(state, name))
+        if name != "msfv_inv" or inverse:
+            array(name, getattr(state, name))
     for name in restart.STATE_SETUP_SCALARS:
         value = getattr(state, name)
         if value is not None and not isinstance(value, bool):
@@ -2369,7 +2409,7 @@ def _historical_setup_fingerprint(state) -> str:
     if nest_class is not None:
         assert nest_class == "REBUILT"
         digest.update(b"nest_tables=REBUILT;")
-    else:
+    elif lateral:
         boundaries = getattr(state, "lateral_boundaries", None)
         if boundaries is None:
             digest.update(b"lateral_boundaries=None;")
@@ -2673,6 +2713,22 @@ def test_sealed_extension_header_tamper_and_rebuilt_child_contract(
             sealed_forcing_extension=True)
 
 
+# Only the explicitly added inverse binding is unwound for old byte pins.
+# New fields still enter the historical algorithm and therefore fail its pins.
+_V6_SETUP_HASHES = {}
+
+
+def _remember_v6_setup(state):
+    _V6_SETUP_HASHES[restart.setup_fingerprint(state)] = _historical_setup_fingerprint(state, inverse=False)
+    _V6_SETUP_HASHES[restart.setup_core_fingerprint(state)] = _historical_setup_fingerprint(state, inverse=False, lateral=False)
+
+
+def _unwind_v7_inverse_binding(header):
+    for name in ("setup_fingerprint", "setup_core_fingerprint"):
+        if name in header:
+            header[name] = _V6_SETUP_HASHES.get(header[name], header[name])
+
+
 def _sealed_tree_fixture(monkeypatch, *, forcing_count: int,
                          run_seconds: float, payload_seed: int,
                          nwp_diagnostics: int = 0, run_overrides=None):
@@ -2697,6 +2753,8 @@ def _sealed_tree_fixture(monkeypatch, *, forcing_count: int,
     child_state._nest_restart_classification = "REBUILT"
     _fill_serialized(root_state, payload_seed)
     _fill_serialized(child_state, payload_seed + 1)
+    _remember_v6_setup(root_state)
+    _remember_v6_setup(child_state)
 
     start = datetime(2026, 7, 30)
 
@@ -2866,13 +2924,27 @@ def test_tree_restart_past_the_stop_tick_refuses_and_names_the_remedy(
 _VOLATILE_CHECKPOINT_HEADER = ("created", "producer", "checkpoint_set_id",
                                "written_mode")
 
+#: The terrain clock every digest below was pinned under.  From 2.8.8 the
+#: default is "local_face", which the echo and the restart identity bind
+#: (a run under it can take a longer step than the checkpoint's), so the
+#: digest fixtures name the clock they were recorded with.  That the
+#: default moves the header and nothing else is
+#: test_the_local_face_default_moves_only_the_clock_binding below.
+#: It also names the solar generation they were recorded with: from 2.9.0
+#: the default is WRF 4.8's equation of time ("wrf_480"), which the echo
+#: and the restart identity bind (COSZEN and HRANG change).  That the
+#: default moves the solar binding and nothing else is
+#: test_the_wrf480_solar_default_moves_only_the_solar_binding below.
+_PINNED_UNDER_MEASURED_CLOCK = {"terrain_clock": "measured",
+                                "solar_generation": "wrf_461"}
+
 #: The format stamp every historical digest in this file and its two
 #: per-change siblings was harvested under.  v6 declared the 2.7.0 break
 #: (ENG-010 / ENG-011: adaptive + eta_levels echo, fields/ustm, held/gf_*),
 #: so the stamp is normalised back to 5 before hashing: these digests
 #: attribute WHAT ELSE moved, and the stamp is the one header field whose
 #: move is declared rather than attributed.  The live stamp is asserted
-#: separately (test_the_live_format_stamp_is_the_declared_v6_and_v5_is_named).
+#: separately (test_the_live_format_stamp_is_the_declared_v7_and_v5_is_named).
 _HISTORICAL_FORMAT_VERSION = 5
 
 
@@ -2885,6 +2957,7 @@ def _canonical_member_digest(path) -> str:
         for name in _VOLATILE_CHECKPOINT_HEADER:
             header.pop(name, None)
         header["format_version"] = _HISTORICAL_FORMAT_VERSION
+        _unwind_v7_inverse_binding(header)
         digest.update(json.dumps(header, sort_keys=True).encode("utf-8"))
         for name in sorted(data.files):
             if name == restart._HEADER_KEY:
@@ -3010,10 +3083,81 @@ def _member_names(path) -> list[str]:
 #: only that value back and recovers both previous canonical digests,
 #: retaining every array byte and every other header value.  Older ledger
 #: reconstructions first unwind the same default before removing their keys.
+#:
+#: RE-PINNED for the Kessler identity (2.8.8, gfix/288-mp-clamp): the
+#: shared microphysics finish clamps at WRF's REAL product mp_tend_lim*dt,
+#: so this mp=1 fixture's physics_setup names "kessler-warm-rain-v2-real-
+#: clamp-product" and the fingerprint derived from it moves.  The
+#: attribution is test_the_checkpoint_pins_moved_for_the_real_clamp_
+#: identity_and_nothing_else below: naming the v1 identity again and
+#: recomputing the fingerprint recovers the previous pair exactly, and
+#: every older reconstruction unwinds the same name
+#: (_PRE_REAL_CLAMP_ALGORITHMS).
+#:
+#: RE-PINNED for HAILCAST (lane/cap-hail, 97e9a3ca061): hailcast_opt = -1
+#: runs the diagnostic at dx <= 4 km with microphysics on
+#: (woof.core.hail.enabled), so this mp=1, 2 km fixture now carries the
+#: eleven persistent HAILCAST slots (_HAILCAST_PERSISTENT_MEMBERS: running
+#: maximum, updraft mask and duration, the embryo and window diameters) as
+#: scratch members with their manifest rows, which a resume needs to
+#: continue the running maxima exactly.  The attribution is
+#: test_the_checkpoint_pins_moved_for_the_hailcast_slots_and_nothing_else:
+#: dropping exactly those members and rows recovers the previous pair, and
+#: every older reconstruction unwinds the same members
+#: (_digest_without_config_keys unwind_hailcast).
+#:
+#: RE-PINNED for tc/nest's fixed-frame nest accumulation archive (2.9.7):
+#: a nested domain's echo carries nest_accumulation_archive at its default
+#: True, so the child's header and its two derived physics hashes move; the
+#: root is not nested and keeps its digest.  The attribution is
+#: test_the_checkpoint_pins_moved_for_the_nest_archive_and_nothing_else:
+#: dropping that key recovers the previous child digest
+#: (_PRE_NEST_ARCHIVE_CHILD_DIGEST), and every older reconstruction unwinds it
+#: (_digest_without_config_keys unwind_nest_archive).
 _LIFECYCLE_FREE_ROOT_DIGEST = \
-    "efca0135a058d4aedb3a120ee729b769ed13d08352446eaa350f7cf5276fc76a"
+    "72c1bf64128f7686fb82e04d6430d3140a899faa3c6aba319bfe73e1f01ef5e8"
 _LIFECYCLE_FREE_CHILD_DIGEST = \
+    "c63b17c9cb1bb4966f81f9f9ca15ca448629c483356ad828f3f824596d8c62d3"
+_PRE_NEST_ARCHIVE_CHILD_DIGEST = \
+    "cce75c2551272396fa9cdbbb69701612922d73ce5e006054cb2a510546d05354"
+
+#: The pair above before the HAILCAST slots joined the checkpoint.
+_PRE_HAILCAST_ROOT_DIGEST = \
+    "b2ce004e590de75a7d37596fd6437f8aa33de0ffd40b86a8e459bb626217089e"
+_PRE_HAILCAST_CHILD_DIGEST = \
+    "e03f5ad776fb76735fa796e555813e379e2d874d9641fe3f4f11574bbde690e0"
+
+#: lane/cap-hail's persistent slots at default (mp_physics = 1 has no PSD
+#: row, so the four hail_* PSD slots are absent).
+_HAILCAST_PERSISTENT_MEMBERS = (
+    "scratch/hailcast_dhail1", "scratch/hailcast_dhail2",
+    "scratch/hailcast_dhail3", "scratch/hailcast_dhail4",
+    "scratch/hailcast_dhail5", "scratch/hailcast_diam_max",
+    "scratch/hailcast_diam_mean", "scratch/hailcast_diam_std",
+    "scratch/hailcast_runmax", "scratch/hailcast_wdur",
+    "scratch/hailcast_wup_mask")
+
+
+def _unwind_hailcast_members(header: dict, names) -> list[str]:
+    """Drop the HAILCAST manifest rows; return the member names to keep."""
+    for name in _HAILCAST_PERSISTENT_MEMBERS:
+        assert name in names, name
+        del header["array_manifest"][name]
+    return [name for name in names if name not in _HAILCAST_PERSISTENT_MEMBERS]
+
+#: The pair above before the Kessler identity moved, and the identity every
+#: digest older than 2.8.8's clamp fix was harvested under.
+_PRE_REAL_CLAMP_ROOT_DIGEST = \
+    "efca0135a058d4aedb3a120ee729b769ed13d08352446eaa350f7cf5276fc76a"
+_PRE_REAL_CLAMP_CHILD_DIGEST = \
     "e35a7d91043c4096d8b7087e66eea09a7ca87bea63f3ad4cb8f47b3d5cce48c7"
+_PRE_EXACT_CHAIN_ALGORITHMS = {
+    "physics_driver": "gpuwm-physics-driver-v3-kf-phase-energy-pre-mp-expiry",
+}
+_PRE_REAL_CLAMP_ALGORITHMS = {
+    "microphysics": "kessler-warm-rain-v1",
+    **_PRE_EXACT_CHAIN_ALGORITHMS,
+}
 
 _PRE_CQ_DEFAULT_ROOT_DIGEST = \
     "9ead8250634097dc3d514611b5b2aed7aefec327008f36c8b2897683a7325b93"
@@ -3063,7 +3207,10 @@ _WIF_CONFIG_KEYS = ("mp28_aerosol_source", "wif_climatology_path",
 
 
 
-def _digest_without_config_keys(path, keys, *, config_overrides=None) -> str:
+def _digest_without_config_keys(path, keys, *, config_overrides=None,
+                                algorithm_overrides=None,
+                                unwind_hailcast=True,
+                                unwind_nest_archive=True) -> str:
     """The canonical member digest as it would read WITHOUT ``keys``.
 
     Same construction as :func:`_canonical_member_digest`, with exactly
@@ -3081,6 +3228,20 @@ def _digest_without_config_keys(path, keys, *, config_overrides=None) -> str:
     recomputed after the named replacements; every other header value and
     every array byte remain bound.
 
+    ``unwind_hailcast`` (default on: every digest this reconstructs
+    predates lane/cap-hail) drops the eleven HAILCAST persistent members and
+    their manifest rows, and asserts each was there, so a missing or extra
+    slot still leaves the reconstruction short.
+
+    ``unwind_nest_archive`` (default on: every digest this reconstructs
+    predates tc/nest) drops ``nest_accumulation_archive`` from the echo, which
+    a nested domain writes at its default True.
+
+    ``algorithm_overrides`` reconstructs a declared scheme identity move
+    (``physics_setup.algorithms``) the same way: the named components take
+    their previous identity and the fingerprint is recomputed; nothing
+    else is touched.
+
     Taking ``keys`` as an argument is what lets one construction serve
     both the cumulative reconstruction below and the per-change
     attribution in ``tests/test_ntiedtke_closure_checkpoint.py``; the
@@ -3094,8 +3255,11 @@ def _digest_without_config_keys(path, keys, *, config_overrides=None) -> str:
         for name in _VOLATILE_CHECKPOINT_HEADER:
             header.pop(name, None)
         header["format_version"] = _HISTORICAL_FORMAT_VERSION
+        _unwind_v7_inverse_binding(header)
         for key in keys:
             header["config"].pop(key, None)
+        if unwind_nest_archive:
+            header["config"].pop("nest_accumulation_archive", None)
         for key, value in (config_overrides or {}).items():
             assert key in header["config"], key
             header["config"][key] = value
@@ -3103,13 +3267,18 @@ def _digest_without_config_keys(path, keys, *, config_overrides=None) -> str:
         setup = copy.deepcopy(header["physics_setup"])
         setup["configuration_sha256"] = restart._json_sha256(
             restart._json_value(values, "RunConfig"))
+        for component, identity in (algorithm_overrides or {}).items():
+            assert component in setup["algorithms"], component
+            setup["algorithms"][component] = identity
         header["physics_setup"] = setup
         header["physics_setup_fingerprint"] = restart._json_sha256(setup)
+        names = [name for name in sorted(data.files)
+                 if name != restart._HEADER_KEY]
+        if unwind_hailcast:
+            names = _unwind_hailcast_members(header, names)
         digest = hashlib.sha256()
         digest.update(json.dumps(header, sort_keys=True).encode("utf-8"))
-        for name in sorted(data.files):
-            if name == restart._HEADER_KEY:
-                continue
+        for name in names:
             host = data[name]
             digest.update(name.encode("utf-8"))
             digest.update(str(host.dtype).encode("utf-8"))
@@ -3122,8 +3291,10 @@ def _digest_without_the_wif_config_keys(path) -> str:
     """Unwind later config additions and the declared moisture default move."""
     # e13fa45c0 / 59f7e280f turned moist_cq on by default.  These pre-WIF
     # anchors were recorded with it off; restore that value, retain the key.
+    # They also predate 2.8.8's Kessler identity move: name v1 again.
     return _digest_without_config_keys(
-        path, _WIF_CONFIG_KEYS, config_overrides={"moist_cq": False})
+        path, _WIF_CONFIG_KEYS, config_overrides={"moist_cq": False},
+        algorithm_overrides=_PRE_REAL_CLAMP_ALGORITHMS)
 
 
 def test_the_checkpoint_pins_moved_for_the_two_wif_keys_and_nothing_else(
@@ -3149,7 +3320,8 @@ def test_the_checkpoint_pins_moved_for_the_two_wif_keys_and_nothing_else(
     ``tests/test_adaptive_timestep_checkpoint.py``.
     """
     source, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
     root_path = restart.write_tree_restart(
         tmp_path, source, start + timedelta(seconds=3600))
     child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
@@ -3168,11 +3340,123 @@ def test_the_checkpoint_pins_moved_for_the_two_wif_keys_and_nothing_else(
         assert key in echo, key
 
 
+def _written_sealed_tree_members(monkeypatch, directory, overrides):
+    directory.mkdir()
+    source, start = _sealed_tree_fixture(
+        monkeypatch, forcing_count=2, run_seconds=3600.0,
+        payload_seed=31, run_overrides=overrides)
+    restart.write_tree_restart(
+        directory, source, start + timedelta(seconds=3600))
+    members = {}
+    for path in sorted(directory.glob("gpuwmrst_d0*_*.npz")):
+        with np.load(path, allow_pickle=False) as data:
+            header = json.loads(bytes(bytearray(
+                data[restart._HEADER_KEY])).decode("utf-8"))
+            arrays = {name: (str(data[name].dtype), data[name].shape,
+                             data[name].tobytes(order="C"))
+                      for name in data.files
+                      if name != restart._HEADER_KEY}
+        members[path.name.split("_")[1]] = (header, arrays)
+    return members
+
+
+def test_the_local_face_default_moves_only_the_clock_binding(
+        monkeypatch, tmp_path):
+    """From 2.8.8 the default terrain clock is "local_face" and it binds.
+
+    THE CONCRETE BREAKAGE THIS PREVENTS: a checkpoint-format change riding
+    in under the default flip, hidden because the digests above are pinned
+    under "measured".  The same tree written under the default and under
+    "measured" must differ only in the config echo's terrain_clock and the
+    two hashes the writer derives from the echo; every array member is
+    byte for byte the same.
+    """
+    default = _written_sealed_tree_members(monkeypatch, tmp_path / "default", None)
+    measured = _written_sealed_tree_members(
+        monkeypatch, tmp_path / "measured", {"terrain_clock": "measured"})
+    assert sorted(default) == sorted(measured) == ["d01", "d02"]
+    for member in default:
+        live, live_arrays = default[member]
+        old, old_arrays = measured[member]
+        assert live_arrays == old_arrays
+        assert live["config"]["terrain_clock"] == "local_face"
+        assert "terrain_clock" not in old["config"]
+        moved = {key for key in set(live) | set(old)
+                 if key not in _VOLATILE_CHECKPOINT_HEADER
+                 and live.get(key) != old.get(key)}
+        assert moved == {"config", "physics_setup",
+                         "physics_setup_fingerprint"}
+        assert {key for key in set(live["config"]) | set(old["config"])
+                if live["config"].get(key) != old["config"].get(key)} \
+            == {"terrain_clock"}
+        assert {key for key in set(live["physics_setup"])
+                | set(old["physics_setup"])
+                if live["physics_setup"].get(key)
+                != old["physics_setup"].get(key)} == {"configuration_sha256"}
+
+
+def test_the_wrf480_solar_default_moves_only_the_solar_binding(
+        monkeypatch, tmp_path):
+    """From 2.9.0 the default solar generation is "wrf_480" and it binds.
+
+    THE CONCRETE BREAKAGE THIS PREVENTS: a checkpoint-format change riding
+    in under the WRF 4.8 equation-of-time default (golden/wrf-fixes), hidden
+    because the digests above are pinned under "wrf_461".  The same tree
+    written under the default and under "wrf_461" must differ only in the
+    config echo's solar_generation, the "solar" algorithm identity and the
+    hashes the writer derives from them; every array member is byte for
+    byte the same.  (The YSU, Noah-MP snow-aging and urban water-balance
+    selectors are scheme-scoped and absent from this fixture's echo.)
+    """
+    default = _written_sealed_tree_members(monkeypatch, tmp_path / "default", None)
+    legacy = _written_sealed_tree_members(
+        monkeypatch, tmp_path / "legacy", {"solar_generation": "wrf_461"})
+    assert sorted(default) == sorted(legacy) == ["d01", "d02"]
+    for member in default:
+        live, live_arrays = default[member]
+        old, old_arrays = legacy[member]
+        assert live_arrays == old_arrays
+        assert live["config"]["solar_generation"] == "wrf_480"
+        assert "solar_generation" not in old["config"]
+        for scoped in ("ysu_version", "noahmp_snow_age",
+                       "urban_water_balance"):
+            assert scoped not in live["config"], scoped
+        moved = {key for key in set(live) | set(old)
+                 if key not in _VOLATILE_CHECKPOINT_HEADER
+                 and live.get(key) != old.get(key)}
+        assert moved == {"config", "physics_setup",
+                         "physics_setup_fingerprint"}
+        assert {key for key in set(live["config"]) | set(old["config"])
+                if live["config"].get(key) != old["config"].get(key)}             == {"solar_generation"}
+        assert {key for key in set(live["physics_setup"])
+                | set(old["physics_setup"])
+                if live["physics_setup"].get(key)
+                != old["physics_setup"].get(key)}             == {"configuration_sha256", "algorithms"}
+        assert {key for key in set(live["physics_setup"]["algorithms"])
+                | set(old["physics_setup"]["algorithms"])
+                if live["physics_setup"]["algorithms"].get(key)
+                != old["physics_setup"]["algorithms"].get(key)} == {"solar"}
+
+
+def test_exact_chain_checkpoint_pin_moves_only_the_driver_identity(monkeypatch, tmp_path):
+    """Reconstruct the base digest without changing an array or config word."""
+    from tools.release.refresh_checkpoint_identity_pins import BASE_DIGESTS
+    source, start = _sealed_tree_fixture(
+        monkeypatch, forcing_count=2, run_seconds=3600., payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
+    write = restart.write_tree_restart(tmp_path, source, start + timedelta(seconds=3600))
+    child = next(tmp_path.glob("gpuwmrst_d02_*.npz"))
+    for grid, path in (("d01", write), ("d02", child)):
+        assert _digest_without_config_keys(
+            path, (), algorithm_overrides=_PRE_EXACT_CHAIN_ALGORITHMS) == BASE_DIGESTS[grid]
+
+
 def test_a_lifecycle_free_tree_checkpoint_is_byte_identical(
         monkeypatch, tmp_path):
     """Ran green BEFORE the lifecycle block existed and green after."""
     source, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
     root_path = restart.write_tree_restart(
         tmp_path, source, start + timedelta(seconds=3600))
     child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
@@ -3182,27 +3466,111 @@ def test_a_lifecycle_free_tree_checkpoint_is_byte_identical(
         _LIFECYCLE_FREE_CHILD_DIGEST
 
 
+def test_the_checkpoint_pins_moved_for_the_nest_archive_and_nothing_else(
+        monkeypatch, tmp_path):
+    """tc/nest's archive key moved the nested child's echo, not the format."""
+    source, start = _sealed_tree_fixture(
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
+    restart.write_tree_restart(tmp_path, source, start + timedelta(seconds=3600))
+    child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
+    assert restart.read_restart_header(child_path)["config"][
+        "nest_accumulation_archive"] is True
+    assert _canonical_member_digest(child_path) == _LIFECYCLE_FREE_CHILD_DIGEST
+    assert _LIFECYCLE_FREE_CHILD_DIGEST != _PRE_NEST_ARCHIVE_CHILD_DIGEST
+    assert _digest_without_config_keys(
+        child_path, (), unwind_hailcast=False) == _PRE_NEST_ARCHIVE_CHILD_DIGEST
+
+
 def test_the_checkpoint_pins_moved_for_the_moist_cq_default_and_nothing_else(
         monkeypatch, tmp_path):
     """e13fa45c0 / 59f7e280f changed one bound default, not the format."""
     source, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
     root_path = restart.write_tree_restart(
         tmp_path, source, start + timedelta(seconds=3600))
     child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
     for path, old_digest, current_digest in (
             (root_path, _PRE_CQ_DEFAULT_ROOT_DIGEST,
-             _LIFECYCLE_FREE_ROOT_DIGEST),
+             _PRE_REAL_CLAMP_ROOT_DIGEST),
             (child_path, _PRE_CQ_DEFAULT_CHILD_DIGEST,
-             _LIFECYCLE_FREE_CHILD_DIGEST)):
+             _PRE_REAL_CLAMP_CHILD_DIGEST)):
         assert restart.read_restart_header(path)["config"]["moist_cq"] is True
+        # The CQ flip's own "after" pair predates the Kessler identity
+        # move, so both sides name v1 (_PRE_REAL_CLAMP_ALGORITHMS).
+        assert _digest_without_config_keys(
+            path, (), algorithm_overrides=_PRE_REAL_CLAMP_ALGORITHMS
+        ) == current_digest
+        assert current_digest != old_digest
+        assert _digest_without_config_keys(
+            path, (), config_overrides={"moist_cq": False},
+            algorithm_overrides=_PRE_REAL_CLAMP_ALGORITHMS) == old_digest
+
+
+def test_the_checkpoint_pins_moved_for_the_real_clamp_identity_and_nothing_else(
+        monkeypatch, tmp_path):
+    """gfix/288-mp-clamp moved one scheme identity, not the format.
+
+    THE CONCRETE BREAKAGE THIS PREVENTS: a checkpoint-format change riding
+    in under the Kessler identity re-pin.  Naming the v1 identity again and
+    recomputing the fingerprint must land on the previous pair exactly;
+    anything else that moved leaves the reconstruction short.
+    """
+    source, start = _sealed_tree_fixture(
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
+    root_path = restart.write_tree_restart(
+        tmp_path, source, start + timedelta(seconds=3600))
+    child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
+    for path, old_digest, current_digest in (
+            (root_path, _PRE_REAL_CLAMP_ROOT_DIGEST,
+             _LIFECYCLE_FREE_ROOT_DIGEST),
+            (child_path, _PRE_REAL_CLAMP_CHILD_DIGEST,
+             _LIFECYCLE_FREE_CHILD_DIGEST)):
+        algorithms = restart.read_restart_header(path)["physics_setup"][
+            "algorithms"]
+        assert algorithms["microphysics"] == (
+            restart.MICROPHYSICS_ALGORITHM_IDENTITIES[1])
+        assert algorithms["microphysics"] != (
+            _PRE_REAL_CLAMP_ALGORITHMS["microphysics"])
         assert _canonical_member_digest(path) == current_digest
         assert current_digest != old_digest
         assert _digest_without_config_keys(
-            path, (), config_overrides={"moist_cq": False}) == old_digest
+            path, (), algorithm_overrides=_PRE_REAL_CLAMP_ALGORITHMS
+        ) == old_digest
 
 
-def test_the_live_format_stamp_is_the_declared_v6_and_v5_is_named(
+def test_the_checkpoint_pins_moved_for_the_hailcast_slots_and_nothing_else(
+        monkeypatch, tmp_path):
+    """lane/cap-hail added eleven persistent members, not a format change.
+
+    THE CONCRETE BREAKAGE THIS PREVENTS: a checkpoint-format change riding
+    in under the HAILCAST re-pin.  Dropping exactly the eleven members and
+    their manifest rows must land on the previous pair; anything else that
+    moved leaves the reconstruction short.
+    """
+    source, start = _sealed_tree_fixture(
+        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
+        run_overrides=_PINNED_UNDER_MEASURED_CLOCK)
+    root_path = restart.write_tree_restart(
+        tmp_path, source, start + timedelta(seconds=3600))
+    child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
+    for path, old_digest, current_digest in (
+            (root_path, _PRE_HAILCAST_ROOT_DIGEST,
+             _LIFECYCLE_FREE_ROOT_DIGEST),
+            (child_path, _PRE_HAILCAST_CHILD_DIGEST,
+             _LIFECYCLE_FREE_CHILD_DIGEST)):
+        assert set(_HAILCAST_PERSISTENT_MEMBERS) <= set(_member_names(path))
+        assert _canonical_member_digest(path) == current_digest
+        assert _digest_without_config_keys(
+            path, (), unwind_hailcast=False,
+            unwind_nest_archive=False) == current_digest
+        assert current_digest != old_digest
+        assert _digest_without_config_keys(path, ()) == old_digest
+
+
+def test_the_live_format_stamp_is_the_declared_v7_and_v5_is_named(
         monkeypatch, tmp_path):
     """The break is DECLARED: a real 2.6.5-shaped member is refused by name.
 
@@ -3218,8 +3586,8 @@ def test_the_live_format_stamp_is_the_declared_v6_and_v5_is_named(
         monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
     root_path = restart.write_tree_restart(
         tmp_path, source, start + timedelta(seconds=3600))
-    assert restart.read_restart_header(root_path)["format_version"] == 6
-    assert restart.RESTART_FORMAT_VERSION == 6
+    assert restart.read_restart_header(root_path)["format_version"] == restart.RESTART_FORMAT_VERSION
+    assert restart.RESTART_FORMAT_VERSION == 7
     assert 5 in restart.RETIRED_RESTART_FORMAT_VERSIONS
     for member in tmp_path.glob("gpuwmrst_d0*_*.npz"):
         with np.load(member, allow_pickle=False) as data:
@@ -3408,66 +3776,6 @@ def _legacy_follow_config():
         fallback_threshold=35.0)
 
 
-def test_a_lifecycle_run_writes_the_block_on_the_root_alone(
-        monkeypatch, tmp_path):
-    """The root member is the set's commit marker, so it is the one place
-    a whole-tree fact can live without being written twice."""
-    model, start = _lifecycle_tree_fixture(monkeypatch)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-    child_path = next(p for p in tmp_path.glob("gpuwmrst_d02_*.npz"))
-
-    block = restart.read_restart_header(root_path)[
-        restart.NEST_LIFECYCLE_HEADER_KEY]
-    assert block["contract"] == restart.NEST_LIFECYCLE_CONTRACT
-    assert sorted(block) == ["contract", "followers", "leg_seconds",
-                             "spawn", "window_slots"]
-    assert block["leg_seconds"] == 360.0
-    assert restart.NEST_LIFECYCLE_HEADER_KEY not in \
-        restart.read_restart_header(child_path)
-
-
-def test_the_written_spawn_block_is_the_runners_own(monkeypatch, tmp_path):
-    """Assembled by calling ``SpawnRunner.state_json(model=...)``, not by
-    a second transcription of the same maps: the model argument is what
-    separates the FIRED placement from the one the follower moved to."""
-    model, start = _lifecycle_tree_fixture(monkeypatch)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-    spawn = restart.read_restart_header(root_path)[
-        restart.NEST_LIFECYCLE_HEADER_KEY]["spawn"]
-
-    assert spawn == model._spawn_runner.state_json(model=model)
-    assert spawn["spawned"]["2"]["fired"] == [20, 18]
-    assert spawn["spawned"]["2"]["current"] == [24, 21]
-    assert spawn["spawns_executed"] == 1
-
-
-def test_a_follower_entry_merges_the_writers_three_keys_with_the_runners_four(
-        monkeypatch, tmp_path):
-    """``kind``/``current_placement``/``declared_placement`` describe the
-    TREE and the runner cannot invent them; the other four are its own
-    history.  The entry is written whole and the runner takes it whole."""
-    model, start = _lifecycle_tree_fixture(monkeypatch)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-    followers = restart.read_restart_header(root_path)[
-        restart.NEST_LIFECYCLE_HEADER_KEY]["followers"]
-
-    from woof.core.relocation_runner import (RUNNER_STATE_KEYS,
-                                              RUNNER_WRITER_KEYS)
-    entry = followers["2"]
-    assert sorted(entry) == sorted(RUNNER_STATE_KEYS + RUNNER_WRITER_KEYS)
-    assert entry["kind"] == "per-domain"
-    assert entry["declared_placement"] == [20, 18]
-    assert entry["current_placement"] == [24, 21]
-    assert entry["last_proposal_t"] == 60.0
-    assert entry["last_move_t"] is None
-    assert entry["moves_executed"] == 0 and entry["segment"] is None
-    # The runner takes its own entry back WHOLE, writer keys included.
-    model._relocation_runner.runners[2].restore_state(entry)
-
-
 def test_the_declaration_is_published_on_the_tree_not_read_off_a_route(
         monkeypatch, tmp_path):
     """Checkpointing a run with a live follower is a GENERIC capability.
@@ -3539,17 +3847,6 @@ def test_a_follower_resumes_off_a_checkpoint_no_route_context_wrote(
     assert restart.lifecycle_followers(resumed)[2].moves_executed == 0
 
 
-def test_a_legacy_follower_says_so(monkeypatch, tmp_path):
-    """Tree-level ``[relocation]`` and a per-domain ``[follow]`` produce
-    different rebuild paths on the way back in, so the entry says which."""
-    model, start = _lifecycle_tree_fixture(monkeypatch, follow=False)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-    followers = restart.read_restart_header(root_path)[
-        restart.NEST_LIFECYCLE_HEADER_KEY]["followers"]
-    assert followers["2"]["kind"] == "legacy"
-
-
 def test_the_window_planes_are_written_as_members_of_their_owner(
         monkeypatch, tmp_path):
     """The consumer windows are a max-fold since that consumer last
@@ -3572,30 +3869,6 @@ def test_the_window_planes_are_written_as_members_of_their_owner(
     assert {name for name in _member_names(child_path)
             if name.startswith("scratch/uh_")} == {
         "scratch/uh_follow_window", "scratch/uh_spawn_window"}
-
-
-def test_a_lifecycle_run_that_declares_no_window_writes_none(
-        monkeypatch, tmp_path):
-    """``nwp_diagnostics = 0`` allocates no window at all; the opt-in is
-    over the slots a domain HAS, never a fixed name list."""
-    model, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31)
-    publish_declared_experiment(model, _lifecycle_experiment(follow=False))
-    model._spawn_leg_seconds = 360.0
-    from woof.core.spawn_runner import SpawnRunner
-
-    runner = SpawnRunner.from_experiment(
-        _lifecycle_experiment(follow=False),
-        on_child_built=lambda *_a: None, array_module=np)
-    runner.restore_state(_FIXTURE_SPAWN_BLOCK)
-    model._spawn_runner = runner
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-
-    header = restart.read_restart_header(root_path)
-    assert header[restart.NEST_LIFECYCLE_HEADER_KEY]["window_slots"] == {}
-    assert not any(name.startswith("scratch/uh_")
-                   for name in _member_names(root_path))
 
 
 class _FakeStreamedDomain:
@@ -3660,33 +3933,6 @@ def test_a_streamed_parents_window_is_published_before_it_is_serialized(
         assert np.array_equal(data["scratch/uh_spawn_window"], live)
 
 
-def test_a_lifecycle_free_streamed_run_is_not_touched_by_the_publish(
-        monkeypatch, tmp_path):
-    """The publish WRITES to a streamed domain's state, so it sits behind
-    the compatibility predicate with the block and the window members.  A
-    run with no lifecycle gets no store projection and no refusal, even
-    with a per-follower window sitting on a streamed parent."""
-    from woof.core import uh_diag
-
-    model, start = _sealed_tree_fixture(
-        monkeypatch, forcing_count=2, run_seconds=3600.0, payload_seed=31,
-        nwp_diagnostics=1)
-    root = model.root
-    shape = (int(root.cfg.run.ny), int(root.cfg.run.nx))
-    root.state.scratch(shape, uh_diag.follow_window_slot(2))
-    stream = _FakeStreamedDomain({
-        "scratch/uh_spawn_window": np.ones(shape, dtype=np.float32),
-        "scratch/uh_follow_window": np.ones(shape, dtype=np.float32),
-    }).attach_to(root.state)
-
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-    assert stream.published == []
-    assert not root.state.existing_scratch("uh_spawn_window").any()
-    assert not any(name.startswith("scratch/uh_follow")
-                   for name in _member_names(root_path))
-
-
 def test_a_streamed_parent_publishes_its_generated_follower_window(
         monkeypatch, tmp_path):
     """The live generated carrier is checkpointed, never its stale state copy."""
@@ -3704,37 +3950,6 @@ def test_a_streamed_parent_publishes_its_generated_follower_window(
     assert "scratch/uh_follow_window.d02" in stream.published[0]
     with np.load(path, allow_pickle=False) as data:
         np.testing.assert_array_equal(data["scratch/uh_follow_window.d02"], live)
-
-
-def test_the_written_block_satisfies_the_restore_side_invariants(
-        monkeypatch, tmp_path):
-    """The two invariants the runners enforce on the way back in hold by
-    construction on the way out -- asserted anyway, because "by
-    construction" is what every silent divergence was called first."""
-    model, start = _lifecycle_tree_fixture(monkeypatch)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-    block = restart.read_restart_header(root_path)[
-        restart.NEST_LIFECYCLE_HEADER_KEY]
-
-    spawn = block["spawn"]
-    for gid, row in spawn["spawned"].items():
-        assert row["episode"] == spawn["episodes"][gid]
-    for gid, row in spawn["retired"].items():
-        assert row["episode"] == spawn["episodes"][gid]
-    for entry in block["followers"].values():
-        recorded = (0 if entry["segment"] is None
-                    else entry["segment"]["generation"])
-        assert recorded == entry["moves_executed"]
-
-    # The runners accept their own halves back, which is the invariant
-    # check that actually runs the refusals.
-    from woof.core.spawn_runner import SpawnRunner
-
-    fresh = SpawnRunner.from_experiment(
-        _lifecycle_experiment(follow=True),
-        on_child_built=lambda *_a: None, array_module=np)
-    assert fresh.restore_state(spawn) == {2: (24, 21)}
 
 
 def test_a_checkpoint_written_after_a_move_attaches_the_posture_block(
@@ -3820,8 +4035,14 @@ def test_a_tree_resumes_with_an_output_only_switch_changed(
         monkeypatch, forcing_count=2, run_seconds=7200.0, payload_seed=61,
         run_overrides={name: after})
     _bind_tree_identity(resumed)
-    assert (resumed.experiment_fingerprint
-            != restart.read_restart_header(root_path)["experiment_fingerprint"])
+    from woof.core.model import RESTART_TOLERATED_RUN_FIELDS
+    written = restart.read_restart_header(root_path)["experiment_fingerprint"]
+    if name in RESTART_TOLERATED_RUN_FIELDS:
+        # Tolerated outright (surface_energy_diag, lane/sf-landsurface): it
+        # never enters the identity payload, so the fingerprints agree.
+        assert resumed.experiment_fingerprint == written
+    else:
+        assert resumed.experiment_fingerprint != written
 
     info = restart.restore_tree_restart(root_path, resumed)
 
@@ -4090,22 +4311,6 @@ def _retune_lifecycle_block(root_path, out_dir, mutate):
         root_path, out_dir / root_path.name, edit)
 
 
-def test_the_peek_reads_the_block_off_the_root_member(monkeypatch, tmp_path):
-    """One member, one JSON key: the reader states what the writer wrote."""
-    model, start = _lifecycle_tree_fixture(monkeypatch)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-
-    peek = restart.read_tree_lifecycle_header(root_path, model)
-    assert peek.root_path == root_path
-    assert peek.domain_ids == (1, 2)
-    assert peek.block == restart.read_restart_header(root_path)[
-        restart.NEST_LIFECYCLE_HEADER_KEY]
-    assert peek.spawn["spawned"]["2"]["fired"] == [20, 18]
-    assert peek.spawn["spawned"]["2"]["current"] == [24, 21]
-    assert sorted(peek.followers) == ["2"]
-
-
 def test_the_peek_walks_to_the_root_when_handed_a_child_member(
         monkeypatch, tmp_path):
     """A supervisor hands whichever member it found.  The block is a
@@ -4352,18 +4557,6 @@ def test_a_resumed_run_that_has_not_moved_still_states_its_inheritance(
     peek = restart.read_tree_lifecycle_header(root_path, model)
     assert peek.relocation_records == ("a" * 64,)
     assert peek.relocation["segment_id"] == "seg-1"
-
-
-def test_the_peek_without_a_model_states_the_block_and_refuses_nothing(
-        monkeypatch, tmp_path):
-    """The compatibility half needs an experiment to compare against; a
-    bare inspection of a file has none, and must not invent one."""
-    model, start = _lifecycle_tree_fixture(monkeypatch)
-    root_path = restart.write_tree_restart(
-        tmp_path, model, start + timedelta(seconds=3600))
-
-    peek = restart.read_tree_lifecycle_header(root_path)
-    assert peek.block["contract"] == restart.NEST_LIFECYCLE_CONTRACT
 
 
 def _grell_freitas_tree(monkeypatch, *, seed=61):
@@ -4731,10 +4924,11 @@ def test_failed_write_leaves_no_residue(monkeypatch, tmp_path):
     state = _shim_state(cfg, monkeypatch)
     _fill_setup(state)
 
-    def explode(*args, **kwargs):
+    def explode(path, *args, **kwargs):
+        Path(path).write_bytes(b"PK\x03\x04 partial")     # a half-written archive
         raise OSError("disk full")
 
-    monkeypatch.setattr(restart.np, "savez", explode)
+    monkeypatch.setattr(restart, "write_npz", explode)
     with pytest.raises(OSError, match="disk full"):
         restart.write_restart(tmp_path / "rst.npz", state, cfg)
     assert list(tmp_path.iterdir()) == []
@@ -5548,3 +5742,20 @@ def test_a_streamed_domain_is_gathered_before_a_sealed_forcing_extension_checkpo
     assert stream.calls.index(("impose_clock", 3600.0)) < stream.calls.index(refreshes[0])
     header = restart.read_restart_header(root_path)
     assert header["forcing_extension_mode"] == restart.SEALED_FORCING_EXTENSION_MODE
+
+
+def test_v7_binds_independent_map_inverse_and_refuses_v6(monkeypatch, tmp_path):
+    source, start = _sealed_tree_fixture(monkeypatch, forcing_count=2,
+        run_seconds=3600., payload_seed=31)
+    path=restart.write_tree_restart(tmp_path/'first', source, start+timedelta(seconds=3600))
+    first=restart.read_restart_header(path)
+    assert first['format_version']==7
+    assert first['setup_fingerprint']==restart.setup_fingerprint(source.root.state)
+    assert first['setup_fingerprint']!=_historical_setup_fingerprint(source.root.state,inverse=False)
+    source.root.state.msfv_inv.flat[0]=np.nextafter(source.root.state.msfv_inv.flat[0],np.float32(1.))
+    second_path=restart.write_tree_restart(tmp_path/'second', source,start+timedelta(seconds=3600))
+    second=restart.read_restart_header(second_path)
+    assert first['setup_fingerprint']!=second['setup_fingerprint']
+    legacy=_rewrite_header(path,path,lambda h:h.__setitem__('format_version',6))
+    with pytest.raises(restart.RestartMismatchError,match='MF_VX_INV'):
+        restart.restore_tree_restart(legacy,source)

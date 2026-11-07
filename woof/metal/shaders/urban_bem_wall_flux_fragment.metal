@@ -3,6 +3,10 @@
 #include "soft_binary32.metalh"
 #include "soft_gfk_pow.metalh"
 using namespace metal;
+#include "soft_glibc_solar_trig.metalh"
+static inline float ubmwf_sin_pinned(float x) { return as_type<float>(soft_glibc_solar_sinf(as_type<uint>(x))); }
+static inline float ubmwf_cos_pinned(float x) { return as_type<float>(soft_glibc_solar_cosf(as_type<uint>(x))); }
+
 #pragma clang fp contract(off)
 
 static inline float ubw_add(float a, float b) { return as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))); }
@@ -50,7 +54,7 @@ kernel void urban_bem_wall_flux_fragment(
     const float pr = interp[atmos + 72ul + iz];
     const float da = interp[atmos + 90ul + iz];
     const float angle = drst[ulong(col) * 2ul + direction];
-    const float sine = precise::sin(angle), cosine = precise::cos(angle);
+    const float sine = ubmwf_sin_pinned(angle), cosine = ubmwf_cos_pinned(angle);
     const float speed = ubw_pow(ubw_add(ubw_mul(ua, ua), ubw_mul(va, va)), 0.5f);
     const float u_ort = fabs(ubw_sub(ubw_mul(cosine, ua), ubw_mul(sine, va)));
     const float ratio = ubw_div(pr, p.p0);

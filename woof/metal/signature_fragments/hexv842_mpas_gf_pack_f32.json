@@ -1,0 +1,290 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_gf_pack_f32",
+      "module": "hexv842_mpas_gf_pack_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_gf_pack_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/gf_mpas_v842.py",
+      "cuda_symbol": "gf_mpas_pack_inputs",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "q",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pi",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "p8w",
+          "float",
+          "read"
+        ],
+        [
+          "rthdynten",
+          "float",
+          "read"
+        ],
+        [
+          "rqvdynten",
+          "float",
+          "read"
+        ],
+        [
+          "rthratenlw",
+          "float",
+          "read"
+        ],
+        [
+          "rthratensw",
+          "float",
+          "read"
+        ],
+        [
+          "rthblten",
+          "float",
+          "read"
+        ],
+        [
+          "rqvblten",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "gsw",
+          "float",
+          "read"
+        ],
+        [
+          "meshDensity",
+          "float",
+          "read"
+        ],
+        [
+          "areaCell",
+          "float",
+          "read"
+        ],
+        [
+          "levels",
+          "float",
+          "read_write"
+        ],
+        [
+          "surface",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthratenlw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthratensw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ht": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gsw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meshDensity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "areaCell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "levels": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "len_disp",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

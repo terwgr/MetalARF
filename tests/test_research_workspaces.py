@@ -169,21 +169,6 @@ def test_native_creation_honors_reviewed_bubble_and_exact_diagnostics(tmp_path, 
     assert (tmp_path / "new.namelist.wps").is_file()
 
 
-def test_moving_recipe_uses_effective_inner_domain_and_native_units(tmp_path, known_products):
-    recipe = next(row for row in research.catalog_document()["configurations"]
-                  if row["method"] == "moving_nest" and row["tracker"]["field"] == "uh")
-    receipt = research.create_workspace(_args(tmp_path, recipe["id"], "--hardware-class=16", "--vram-gib=16"))
-    raw = tomllib.loads((tmp_path / "new.toml").read_text())
-    assert len(raw["domain"]) == 3
-    assert raw["relocation"]["grid_id"] == 3
-    assert raw["relocation"]["follow"]["field"] == "uh"
-    assert raw["relocation"]["follow"]["threshold"] == recipe["tracker"]["threshold"]
-    assert raw["relocation"]["follow"]["fallback_threshold"] == recipe["tracker"]["fallback_threshold"]
-    assert raw["relocation"]["track"] == {"path": "storm-track.csv"}
-    assert receipt["effective_profile"]["geometry"]["nest_ratios"] == [4, 3]
-    assert any("statics-corridor" in step for step in receipt["required_next_steps"])
-
-
 @pytest.mark.parametrize("recipe", ["rotation.follow", "tropical-track.follow"])
 def test_follow_disclosure_matches_native_placement_edges_and_plan_track(tmp_path, known_products, recipe):
     from dataclasses import replace
@@ -195,6 +180,18 @@ def test_follow_disclosure_matches_native_placement_edges_and_plan_track(tmp_pat
     config = tmp_path / "new.toml"
     original = config.read_bytes()
     exp = wizard.experiment_from_text(config.read_text(), source=str(config))
+    if recipe == "rotation.follow":
+        raw = tomllib.loads(config.read_text())
+        expected = next(row for row in research.catalog_document()["configurations"]
+                        if row["id"] == recipe)
+        assert len(raw["domain"]) == 3
+        assert raw["relocation"]["grid_id"] == 3
+        assert raw["relocation"]["follow"]["field"] == "uh"
+        for key in ("threshold", "fallback_threshold"):
+            assert raw["relocation"]["follow"][key] == expected["tracker"][key]
+        assert raw["relocation"]["track"] == {"path": "storm-track.csv"}
+        assert receipt["effective_profile"]["geometry"]["nest_ratios"] == [4, 3]
+        assert any("statics-corridor" in step for step in receipt["required_next_steps"])
     moving = receipt["geometry_review"]["moving_nest"]
     child = next(domain for domain in exp.domains if domain.grid_id == moving["grid_id"])
     parent = next(domain for domain in exp.domains if domain.grid_id == moving["parent_id"])
@@ -337,8 +334,15 @@ def test_registry_exposes_exact_gui_flags_and_explicit_overrides(tmp_path):
     assert parsed.func is research.research_main
 
 
-@pytest.mark.parametrize("source", ["gfs", "gdas", "hrrr", "era5", "20crv3"])
-def test_native_sources_preserve_companions_and_labels_are_not_data_paths(tmp_path, known_products, source):
+@pytest.mark.parametrize("source,provider", [("gfs", None), ("gdas", None),
+                                            ("hrrr", None), ("era5", "cds"),
+                                            ("era5", "arco"), ("20crv3", None)])
+def test_native_sources_preserve_companions_and_labels_are_not_data_paths(
+        tmp_path, known_products, monkeypatch, source, provider):
+    # Both provider containers must retain the same workspace companions.
+    if source == "era5":
+        from woof import fetch
+        monkeypatch.setattr(fetch, "cds_credentials_present", lambda: provider == "cds")
     cycle = "2015-09-05T18" if source == "20crv3" else "2020-09-05T18"
     # This checks source companions, using enough capacity for HRRR's default suite.
     args = _args(tmp_path, "regional-evolution.reference", f"--source={source}", "--hours=3",
@@ -362,8 +366,10 @@ def test_native_sources_preserve_companions_and_labels_are_not_data_paths(tmp_pa
         assert case["wps_namelist"] == "new.namelist.wps"
         assert case["vtable"] == "new.Vtable.ERA5_CDO"
         assert (tmp_path / case["vtable"]).read_bytes() == wizard._PACKAGED_VTABLE.read_bytes()
+        assert raw["fetch"].get("era5_provider", "cds") == provider
+        artifact = "era5-combined.grib" if provider == "cds" else "era5-combined.nc"
         assert [Path(value) for value in case["forcing"]] == [
-            tmp_path / "data" / "new" / "era5-combined.grib"]
+            tmp_path / "data" / "new" / artifact]
     if source == "hrrr":
         assert {"new.namelist.input", "new.stock.namelist.input", "new.d01-target.json"} <= {
             path.name for path in tmp_path.iterdir()}

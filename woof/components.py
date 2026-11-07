@@ -1,12 +1,12 @@
-"""The component doors: ``woof hex`` and ``woof global``.
+"""The component door: ``woof hex``.
 
-The regional engine is the core of this distribution.  Two components ride
-with it as subpackages: the hex model (``woof.hex``, an MPAS-style
-unstructured-mesh port, preview) and the global model (``woof.globe``,
-preview; ``global`` is a Python keyword, so the package cannot carry that
-name, but the command word can).  Each keeps its own complete command-line
-parser, so the front door hands the rest of the command line to it
-unchanged instead of re-declaring its options here.
+The regional engine is the core of this distribution.  The hex model
+(``woof.hex``, an MPAS-style unstructured-mesh port, preview) rides with it
+as a subpackage, regional and global (``woof hex global``).  It keeps its own
+complete command-line parser, so the front door hands the rest of the command
+line to it unchanged instead of re-declaring its options here.
+
+The retained spectral global model remains available as ``woof global``.
 """
 from __future__ import annotations
 
@@ -22,6 +22,9 @@ COMPONENTS = {
                "the global model, preview: woof global --help"),
 }
 
+#: retired command words -> what to run instead
+RETIRED = {}
+
 
 def component_available(word: str) -> bool:
     module = COMPONENTS[word][0]
@@ -34,7 +37,12 @@ def component_available(word: str) -> bool:
 def register_component_doors(sub) -> None:
     """List each component in the front door's help; dispatch happens earlier."""
     for word, (_module, _func, _label, text) in COMPONENTS.items():
-        sub.add_parser(word, help=text, add_help=False)
+        door = sub.add_parser(word, help=text, add_help=False)
+        # Every word after the component's name goes to the component's own
+        # parser (dispatch_component runs before this one), so this entry
+        # defines no options of its own: a forwarding door, like `woof obs`.
+        # (1.1.2) the docs-flag test held `woof hex ...` commands to this empty parser
+        door._forward_argv = True
 
 
 def dispatch_component(tokens: list[str]) -> int | None:
@@ -43,6 +51,9 @@ def dispatch_component(tokens: list[str]) -> int | None:
     Returns the component's exit code, or None when the words are not a
     component command and the regional parser should take them.
     """
+    if tokens and tokens[0] in RETIRED:
+        print(f"woof {tokens[0]}: {RETIRED[tokens[0]]}", file=sys.stderr)
+        return 2
     if not tokens or tokens[0] not in COMPONENTS:
         return None
     word = tokens[0]

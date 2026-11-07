@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_tables_f32",
+      "module": "hexv842_mpas_rrtmg_lw_tables_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_tables_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_lw_v842.py",
+      "cuda_symbol": "mpas_init_tables",
+      "resources": [
+        [
+          "tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "exp_table",
+          "float",
+          "read_write"
+        ],
+        [
+          "tfn",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tau": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exp_table": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tfn": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

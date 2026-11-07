@@ -50,6 +50,11 @@ woof hex forecast ... --backend metal
 woof global run CONFIG.toml --metal
 ```
 
+`woof go --backend metal` runs single domains and prepared multi-domain
+trees, with Metal boundary interpolation, feedback and tree-checkpoint
+resume. A WRF `wrfrst` file passed to `woof run --wrfinput` starts a Metal
+run from that restart.
+
 Other commands select Metal the same way:
 
 - `woof run --backend metal` runs `--wrfinput` / `--met-em` inputs and
@@ -60,8 +65,13 @@ Other commands select Metal the same way:
   SKEBS and SPP for the GF, MYNN and RUC consumers) runs on resident Metal
   members: the patterns are generated and applied on the host, which shares
   memory with the GPU, and the Metal memory check counts that work. A public
-  request still cannot set amplitudes, as on CUDA, and `[tiles]` with
-  stochastic physics stays CUDA only.
+  request still cannot set amplitudes, as on CUDA. Under `[tiles]` the
+  tiles share one pattern, generated on the host.
+  Ensemble products (`[products]`) come from the same engine as on CUDA,
+  with member diagnostics formed on the host; `cyclone_products` and
+  `sounding_points` are refused.
+- `woof fire-ideal --backend metal` runs the coupled SFIRE fire model and
+  resumes its checkpoints; `fire_smoke` and firebrand spotting are refused.
   Delayed, spawned and moving nests (scripted `[relocation]` moves,
   `[relocation.follow]` and per-domain `follow`) run as on CUDA, and the
   tree is checked against the Metal memory plan first, as `woof go` does.
@@ -97,8 +107,10 @@ Other commands select Metal the same way:
   hot start, `--radar-tten`, `--hydrometeors`, reflectivity and clear-air
   analysis, `--precip-analysis clear` and `--save-ensemble` /
   `--resume-ensemble`. The perturbation, the increments and the hot start
-  are computed on host copies of the state and written back. The nest
-  options stay CUDA only and are refused.
+  are computed on host copies of the state and written back. Nested
+  parent and child legs also run on Metal, with the analysis addition and
+  the SINT parent correction on the GPU; combining nests with radar
+  tendency forcing is refused on both backends.
 - `woof cycle --parent-kind mpas-metal` cycles an MPAS-mesh parent on the
   Metal Hex engine (no `--port-root`): each leg runs in its own process and
   hands its state on through anchors. A null arm reproduces the
@@ -123,7 +135,9 @@ step on the chosen backend).
 
 ## Regional Metal admission and evidence
 
-The selectors below come from `METAL_FAMILY_CAPS` in
+[METAL_FEATURES.md](../../METAL_FEATURES.md) is the detailed record of each
+Metal path: what it implements, how it was compared with the CUDA source and
+what stays refused. The selectors below come from `METAL_FAMILY_CAPS` in
 [`woof/core/physics.py`](../../woof/core/physics.py). They describe caller
 availability at this source revision. They are not a list of numerically
 verified combinations; config validation and coupling restrictions still
@@ -134,13 +148,13 @@ particular inputs, fields and tolerances compared.
 <!-- metal-capabilities:start -->
 | Family | Selectors listed by Metal admission |
 |---|---|
-| Microphysics (`mp_physics`) | 0, 1, 6, 8, 9, 10, 16, 18, 28, 50 |
-| PBL (`bl_pbl_physics`) | 0, 1, 2, 5, 9, 11, 900 |
+| Microphysics (`mp_physics`) | 0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 16, 18, 24, 28, 30, 50, 106, 900 |
+| PBL (`bl_pbl_physics`) | 0, 1, 2, 5, 9, 11, 900, 901 |
 | MYNN source form (`bl_mynn_version`) | `gsd_41`, `wrf_461` |
 | Surface layer (`sf_sfclay_physics`) | 0, 1, 2, 5, 91 |
 | Land surface (`sf_surface_physics`) | 0, 2, 3, 4 |
-| Cumulus (`cu_physics`) | 0, 1, 3, 16 |
-| Radiation (LW, SW) | (0, 0), (0, 1), (1, 1), (4, 0), (4, 4) |
+| Cumulus (`cu_physics`) | 0, 1, 3, 5, 6, 16, 96 |
+| Radiation (LW, SW) | any pair of 0, 1, 4, 5 and 90 |
 | Urban (`sf_urban_physics`) | 0, 1, 2, 3 |
 <!-- metal-capabilities:end -->
 
@@ -148,17 +162,15 @@ Important restrictions from `METAL_KNOWN_CONFLICTS` and the dynamics gate:
 
 | Option or coupling | Metal requirement or limitation |
 |---|---|
-| WRF-exact mode | No Metal physics callers; dynamics also refuses WRF-exact arithmetic. |
-| TKE budget | No implementation; use `tke_budget=0`. Initialization, direct stepping and admission inspection reject a nonzero budget. |
+| WRF-exact mode | Refused outside the bounded strict-arithmetic profile described in [METAL_FEATURES.md](../../METAL_FEATURES.md); full WRF-exact mode is unfinished. |
 | RUC | Nine soil levels. |
-| Lake model | Requires RUC (`sf_surface_physics=3`) on Metal; upstream's broader LSM allowance does not apply. |
-| MYNN GSD 4.1 | Requires PBL 5, mixlength 2 and the registered option set listed in `METAL_KNOWN_CONFLICTS`. |
+| CCPP sa-TKE-EDMF (`bl_pbl_physics=901`) | Needs a land-surface scheme. |
+| MYNN GSD 4.1 | Requires PBL 5, mixlength 1 or 2 and the registered option set listed in `METAL_KNOWN_CONFLICTS`. |
 | MYJ / Eta surface layer | PBL 2 and surface-layer option 2 must be paired. |
 | Grell–Freitas | Requires a PBL caller for KPBL and `cudt_minutes=0`. |
-| Urban | Requires Noah-MP (`sf_surface_physics=4`) in Metal admission. |
-| NSSL (`mp_physics=18`) | At most 128 levels on Metal (CUDA: 256); the 256-level sedimentation column does not fit the GPU stack. |
-| IEVA (`zadvect_implicit`) | Both variants, up to 256 levels, as on CUDA. |
-| MYNN | `bl_mynn_mixscalars=1` runs on Metal with `wrf_461`; with `gsd_41` it stays refused, as on CUDA. `spp_pbl` takes its pattern from an ensemble member's stochastic physics, as on CUDA; outside an ensemble member it is refused before the run. |
+| Urban | Requires Noah or Noah-MP (`sf_surface_physics` 2 or 4). |
+| Level counts | WSM3, WSM5, WSM6, WSM7 and WDM6: 2 to 80 levels. Purdue Lin: 2 to 128. Milbrandt–Yau: 3 to 256. Thompson `wrf_44`, NSSL and IEVA (`zadvect_implicit`): at most 256. TEMPO: at most 512. |
+| MYNN | `spp_pbl` takes its pattern from an ensemble member's stochastic physics, as on CUDA; outside an ensemble member it is refused before the run. |
 | Radiation / cumulus adapters | Must match the configured selectors; no radiation adapter when radiation is disabled. |
 | Noah-MP | Admission checks that its required SFLX and glacier callers exist. |
 | Dynamics | Further checks cover base-state layout, boundary forcing, diffusion, damping and diagnostics in `dycore.step`. |
@@ -183,38 +195,14 @@ The [exp-helper contract](../../woof/metal/soft_gfk_exp_contract.json) is a
 dependency-blocked source proposal with `production_registration=false`,
 although production shaders include the helper. These records do not
 certify all production arithmetic. Historical upstream WRF comparisons do
-not certify Metal. Published Metal release notes do not
-provide a reproducible cross-model bitwise comparison or speed benchmark.
+not certify Metal. The word-for-word comparisons of ported kernels with the
+host-built CUDA source, listed per path in METAL_FEATURES.md, do not establish
+agreement with a CUDA device or a speed benchmark.
 
 The [real-data divergence report](https://github.com/terwgr/MetalARF/issues/7)
 remains open. [PR #8](https://github.com/terwgr/MetalARF/pull/8) addresses a
 longwave band-table defect, but its idealized comparison does not replace a
 rerun of the reported forecast.
-
-## MetalARF 1.0.3 bounded validation
-
-MP50 has exact FP32 NumPy agreement on the retained tiny and cold profiles
-in `tools/metal_p3_parity_regression.py`. Prepared public P3 forecasts ran
-for ten minutes in a clean installed environment; three repeats and three
-checkpoint resumes produced identical final canonical states. This does not
-certify every profile, long-duration stability or a P3 radar DA operator.
-
-The release also exercised evolving prepared UW/Thompson, NSSL, Thompson,
-Milbrandt–Yau and WDM6 forecasts, with three identical final states and finite
-history fields per case. The radar regression uses the actual observation
-operator, including repeated calls without forecast-state mutation; the
-public synthetic DA analysis is a separate bounded check.
-
-Morrison reflectivity requires positive finite number moments for active
-hydrometeor mass. Boundary forcing can violate this requirement; the
-reference deliberately produces NaN for an invalid active population.
-One UW/Morrison boundary receipt did so and is retained as a restriction,
-not a finite-output acceptance result. Use compatible mass/number forcing.
-
-Radiation comparisons use the numerical reference for corrected paths;
-cloudy outputs intentionally change after the band-index correction.
-Issue #7's Vermont CUDA comparison remains outstanding. Admission, smoke
-success and execution capsules alone do not certify numerical agreement.
 
 ## Idealized verification cases
 

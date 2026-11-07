@@ -108,18 +108,15 @@ def _f(x) -> np.float32:
 
 
 # --- NOAHMP_GLACIER_GLOBALS, module_sf_noahmp_glacier.F:10-26 --------------
-GRAV = _f(9.80616)
 SB = _f(5.67e-08)
 VKC = _f(0.40)
 TFRZ = _f(273.16)
 HSUB = _f(2.8440e06)
-HVAP = _f(2.5104e06)
 HFUS = _f(0.3336e06)
 CWAT = _f(4.188e06)
 CICE = _f(2.094e06)
 CPAIR = _f(1004.64)
 RAIR = _f(287.04)
-RW = _f(461.269)
 DENH2O = _f(1000.0)
 DENICE = _f(917.0)
 
@@ -296,13 +293,18 @@ def _snowalb_class_glacier(qsnow, dt, albold):
 # ===========================================================================
 
 def _radiation_glacier(dt, tg, sneqvo, sneqv, cosz, qsnow, solad, solai,
-                       albold, tauss):
+                       albold, tauss, noahmp_snow_age="wrf_470"):
     """Returns ``(albold, tauss, sag, fsr, fsa)`` under opt_alb = 2."""
     albsnd = [_ZERO, _ZERO]                                       # :706-707
     albsni = [_ZERO, _ZERO]
 
-    if cosz > _ZERO:                                              # :714-727
+    from woof.noahmp_generation import snow_age_generation
+    generation = snow_age_generation(noahmp_snow_age)
+    if generation == "wrf_470":
         tauss, _fage = _snow_age_glacier(dt, tg, sneqvo, sneqv, tauss)
+    if cosz > _ZERO:                                              # :714-727
+        if generation == "wrf_461":
+            tauss, _fage = _snow_age_glacier(dt, tg, sneqvo, sneqv, tauss)
         alb = _snowalb_class_glacier(qsnow, dt, albold)           # opt_alb=2
         albold = alb
         albsni[0] = alb                                           # :899-902
@@ -815,7 +817,7 @@ def _phasechange_glacier(col: SnowColumn, stc, dt, fact, smc, sh2o):
 def _energy_glacier(col: SnowColumn, *, dt, qsnow, rhoair, eair, sfcprs,
                     qair, sfctmp, lwdn, uu, vv, solad, solai, cosz, zref,
                     tbot, stc, smc, sh2o, tg, sneqvo, albold, cm, ch,
-                    tauss, qsfc):
+                    tauss, qsfc, noahmp_snow_age="wrf_470"):
     """Energy budget; mutates ``col`` (via phasechange), ``stc``, ``smc``,
     ``sh2o``.  Returns a dict of the driver-visible outputs plus the
     ``hcpct`` array and the bottom flux."""
@@ -831,7 +833,7 @@ def _energy_glacier(col: SnowColumn, *, dt, qsnow, rhoair, eair, sfcprs,
 
     albold, tauss, sag, fsr, fsa = _radiation_glacier(
         dt, tg, sneqvo, col.sneqv, cosz, qsnow, solad, solai,
-        albold, tauss)                                            # :467-470
+        albold, tauss, noahmp_snow_age)                            # :467-470
 
     emg = _EMG                                                    # :474
     rhsur = _ONE                                                  # :478
@@ -1455,7 +1457,7 @@ def noahmp_glacier(*, iloc=0, jloc=0, cosz, nsnow, nsoil, dt, sfctmp,
                    ficeold, zsoil, qsnow, sneqvo, albold, cm, ch, isnow,
                    sneqv, smc, zsnso, snowh, snice, snliq, tg, stc, sh2o,
                    tauss, qsfc, opt_alb=2, opt_snf=1, opt_tbot=2,
-                   opt_stc=1, opt_gla=1) -> GlacierResult:
+                   opt_stc=1, opt_gla=1, noahmp_snow_age="wrf_470") -> GlacierResult:
     """One ``NOAHMP_GLACIER`` column call (:105-297).
 
     Array arguments are plain 0-based sequences: ``ficeold``/``snice``/
@@ -1518,7 +1520,7 @@ def noahmp_glacier(*, iloc=0, jloc=0, cosz, nsnow, nsoil, dt, sfctmp,
         qair=_qair, sfctmp=sfctmp, lwdn=lwdn, uu=uu, vv=vv, solad=solad,
         solai=solai, cosz=cosz, zref=zlvl, tbot=tbot, stc=STC, smc=smc,
         sh2o=sh2o, tg=tg, sneqvo=sneqvo, albold=albold, cm=cm, ch=ch,
-        tauss=tauss, qsfc=qsfc)                                   # :239-248
+        tauss=tauss, qsfc=qsfc, noahmp_snow_age=noahmp_snow_age)     # :239-248
 
     for j in range(1, nsoil + 1):                                 # :250
         sice_v[j] = _fmax(_ZERO, smc_v[j] - sh2o_v[j])

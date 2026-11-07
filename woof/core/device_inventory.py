@@ -17,7 +17,11 @@ lookup, :mod:`woof.boundary_fields`, is function-local.  No CuPy.
 """
 from __future__ import annotations
 
+from woof.core.column_schemes import COLUMN_SCHEMES
+
 from dataclasses import dataclass
+
+from woof.microphysics_schemes import scheme as _named_scheme
 
 from woof.config import (CUMULUS_ADVECTIVE_FORCING_SCHEMES,
                           SASE_PBL_SCHEME, RunConfig)
@@ -169,7 +173,7 @@ class DeviceLocalMemoryProfile:
 #: ``cudaDeviceGetLimit(cudaLimitStackSize)`` on the run host.
 #:
 #: ``bare_context_bytes`` is deliberately left unset even though this
-#: card's bare context WAS measured (530,579,456 B, a development machine,
+#: card's bare context WAS measured (530,579,456 B, test host B,
 #: 2026-08-20).  This profile is what an ABSENT card is priced against,
 #: and the absent-card path may never be more optimistic than the
 #: present-card one -- the 2026-08-03 lesson that retired
@@ -220,11 +224,15 @@ def state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
         # the opt-2 EOS branch but allocated unconditionally beside c3f.
         "dc3f": (nz,), "dc4f": (nz,),
         "msft": s2, "msfu": (ny, nx + 1), "msfv": (ny + 1, nx),
+        "msfv_inv": (ny + 1, nx),
         "f": s2, "e": s2, "sina": s2, "cosa": s2,
         # Vertical-coordinate arrays.
         "dnw": (nz,), "rdnw": (nz,), "dn": (nz,), "rdn": (nz,),
         "fnp": (nz,), "fnm": (nz,), "znu": (nz,), "znw": (nz + 1,),
     }
+    from woof.wrf_exact import DIAGNOSTICS_ENABLED
+    if DIAGNOSTICS_ENABLED:
+        shapes["p_perturbation"] = m
     if cfg.terrain_opt == 0:
         shapes.update(thb=(nz,), pb=(nz,), alb=(nz,), phb=(nz + 1,),
                       dphb_resid=(nz,))
@@ -244,7 +252,13 @@ def state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
             # and for nobody else.
             shapes["rthften"] = m
             shapes["rqvften"] = m
-        if cfg.mp_physics == 50:
+        if cfg.mp_physics == 5:
+            # Ferrier-Aligo (Registry.EM_COMMON:3019, and the mp==5 arm of
+            # woof/core/state.py): total ice, the qt carrier, the three
+            # WRF state fields, and qi's RK time-t copy.
+            for name in ("qi", "qt", "f_ice", "f_rain", "f_rimef", "qi0"):
+                shapes[name] = m
+        elif cfg.mp_physics == 50:
             # P3 one-category (Registry.EM_COMMON:3038, and the mp==50 arm
             # of woof/core/state.py): ONE ice mass with rime mass and rime
             # volume, no qs/qg/effs, plus the two cross-step supersaturation
@@ -254,7 +268,23 @@ def state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
                          "th_old", "qv_old",
                          "qi0", "ni0", "nr0", "qir0", "qib0"):
                 shapes[name] = m
-        elif cfg.mp_physics in (6, 8, 9, 10, 16, 18, 28):
+        elif cfg.mp_physics == 2:
+            for name in ("qi","qs","qg","qi0","qs0","qg0"):
+                shapes[name] = m
+        elif cfg.mp_physics == 3:
+            # WSM3 (Registry.EM_COMMON:3017, and the mp==3 arm of
+            # woof/core/state.py): moist:qv,qc,qr plus the three radiation
+            # radii; no qi/qs/qg and no RK copies beyond the qv/qc/qr ones
+            # every moist state carries.
+            for name in ("effc", "effi", "effs"):
+                shapes[name] = m
+        elif cfg.mp_physics in COLUMN_SCHEMES:
+            for name in COLUMN_SCHEMES[cfg.mp_physics].species:
+                if name not in ("qv", "qc", "qr"):
+                    shapes[name] = shapes[name + "0"] = m
+            for name in ("effc", "effi", "effs"):
+                shapes[name] = m
+        elif cfg.mp_physics in (6, 8, 9, 10, 16, 18, 24, 28, 106):
             # WRF's SIX-MASS moist package, transcribed.  This tuple is
             # not "the schemes with ice" -- it is the schemes whose
             # Registry package is moist:qv,qc,qr,qi,qs,qg
@@ -292,6 +322,25 @@ def state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
             #     plane short.
             for name in ("qi", "qs", "qg", "qi0", "qs0", "qg0",
                          "effc", "effi", "effs"):
+                shapes[name] = m
+        elif cfg.mp_physics == 30:
+            # FAST_SBM (Registry/registry.sbm:318, and the mp==30 arm of
+            # woof/core/state.py): the six-mass moist package, the 142
+            # spectral bins and six number moments as scalars, the two
+            # cross-step carriers and three effective radii, with every
+            # transported field's RK time-t copy.  Chained after the
+            # six-mass arm so that arm stays the mp==50 arm's only sibling
+            # (tests/test_preflight.py pins the chain).
+            from woof.core.fast_sbm_contract import BIN_SPECIES,EXTRA_SPECIES,NUMBER_SPECIES
+            for name in (*BIN_SPECIES,"qi","qs","qg",*NUMBER_SPECIES,
+                         "th_old","qv_old","effc","effi","effs"):
+                shapes[name]=m
+            for name in EXTRA_SPECIES:
+                shapes[name+"0"]=m
+        if cfg.mp_physics == 24:
+            # WSM7: the hail mass beside the six (Registry.EM_COMMON:3034)
+            # with its RK time-t copy, as woof/core/state.py allocates.
+            for name in ("qh", "qh0"):
                 shapes[name] = m
         if cfg.mp_physics == 9:
             # Milbrandt-Yau two-moment: hail mass beside graupel plus a
@@ -333,6 +382,23 @@ def state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
             # Cross-step constants, allocated once per domain.
             for name in ("nwfa2d", "nifa2d"):
                 shapes[name] = s2
+        named = _named_scheme(cfg.mp_physics)
+        if named is not None:
+            # A NAMED scheme: the capability row is the manifest, the same
+            # row woof/core/state.py allocates from.
+            species = (named.ice_mass_species + named.moment_species
+                       + named.aerosol_species)
+            for name in species + tuple(n + "0" for n in species) + ("effc", "effi", "effs"):
+                shapes[name] = m
+            for name in named.surface_fields:
+                shapes[name] = s2
+    if cfg.bl_pbl_physics == 5 and cfg.bl_mynn_tkeadvect:
+        shapes["qke_adv"] = m
+        shapes["qke_adv0"] = m
+    from woof.core.physics_inventory import PBL_ADVECTED_SCALARS
+    for name, _ in PBL_ADVECTED_SCALARS.get(cfg.bl_pbl_physics, ()):
+        shapes[name] = m
+        shapes[name + "0"] = m
     if cfg.km_opt == 2:
         # WRF's two-time-level prognostic TKE (Registry.EM_COMMON:312):
         # the SERIALIZED carrier plus its REBUILT time-t copy.
@@ -344,7 +410,77 @@ def state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
         # or Shin-Hong's per-step TKE diagnostic -- the D1 gray-zone
         # instrument reads state.e_sgs whichever closure produced it.
         shapes["e_sgs"] = m
+    shapes.update(chem_state_array_shapes(cfg))
     return shapes
+
+
+def chem_state_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
+    """The chem arrays a chem domain allocates, as float32-word shapes.
+
+    Every transported row's field and RK time-t copy and every prescribed
+    row's field, each (nz, ny, nx) float32 (views into one arena, so the
+    sum is the arena), plus the mass ledger's (nrows,) float64 vectors,
+    priced here as 2 * nrows float32 words each
+    (woof/core/chem_state.py:attach_chem_state).  When any process runs,
+    also every array a process declares (``ALLOCATES``, a float64 one at
+    twice its words), the chem_prep met fields
+    (woof/core/chem_prep.py:ChemPrep.refresh) and the per-row deposition
+    velocity plane (woof/core/chem_driver.py:_context), each allocated
+    once per chem domain.  Empty while chem is off.
+    """
+    if not getattr(cfg, "chem_sets", ""):
+        return {}
+    from woof.chem_table import load
+    from woof.core.chem_context import (
+        CHEM_PREP_FIELDS, CHEM_PREP_W_FIELDS, LEDGER_BUCKETS,
+        allocation_shape, chem_processes,
+    )
+    from woof.core.chem_state import LEDGER_TOTALS, ledger_attr, process_attr
+
+    table = load(cfg)
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    m = (nz, ny, nx)
+    shapes: dict[str, tuple[int, ...]] = {}
+    for row in table.transported:
+        shapes[row.state_attr] = m
+        shapes[row.time_attr] = m
+    for row in table.prescribed:
+        shapes[row.state_attr] = m
+    n = len(table.transported)
+    for name in (*LEDGER_TOTALS, *LEDGER_BUCKETS):
+        shapes[ledger_attr(name)] = (2 * n,)
+    shapes[ledger_attr("started")] = (1,)
+    processes = chem_processes(table) if table.processes else []
+    for _key, module in processes:
+        rows = module.rows(table)
+        for alloc in getattr(module, "ALLOCATES", ()):
+            shape = allocation_shape(alloc, len(rows), nz, ny, nx)
+            if str(alloc.dtype).endswith("64"):
+                shape = (2, *shape)
+            shapes[process_attr(alloc)] = shape
+    if processes:
+        for name in CHEM_PREP_FIELDS:
+            shapes["chemprep_" + name] = (
+                (nz + 1, ny, nx) if name in CHEM_PREP_W_FIELDS else m)
+        shapes["chemprep_ddvel"] = (len(table.rows), ny, nx)
+    return shapes
+
+
+def chem_process_memory_shapes(cfg):
+    """Additional live process buffers, in float32 words, including peaks."""
+    if not getattr(cfg, "chem_sets", ""):
+        return {}, {}
+    from woof.chem_table import load
+    from woof.core.chem_context import chem_processes
+    table = load(cfg)
+    held, transient = {}, {}
+    for key, module in chem_processes(table):
+        price = getattr(module, "memory_shapes", None)
+        if price is not None:
+            keep, work = price(cfg, len(module.rows(table)))
+            held.update({"chem/" + key + "/" + name: shape for name, shape in keep.items()})
+            transient.update({"chem/" + key + "/" + name: shape for name, shape in work.items()})
+    return held, transient
 
 
 #: d01 external-LBC field inventory (state boundaries built by
@@ -363,6 +499,13 @@ def _lbc_field_dims(cfg: RunConfig, *, boundary_species=()
     for name in potential_external_scalar_fields(
             cfg, boundary_species=boundary_species):
         dims[name] = (nz, ny, nx)
+    if getattr(cfg, "chem_sets", "") and cfg.specified:
+        # The chem rows a data-store source fills ride the same tables
+        # (woof.chem_source_init.chem_boundary_fields).
+        from woof.chem_source_init import chem_boundary_fields
+        from woof.chem_table import load as load_chem_table
+        for name in chem_boundary_fields(load_chem_table(cfg), cfg):
+            dims[name] = (nz, ny, nx)
     return dims
 
 
@@ -382,5 +525,5 @@ __all__ = [
     "CONTEXT_RUNTIME_GROWTH_BYTES", "DeviceLocalMemoryProfile",
     "MEASURED_LOCAL_MEMORY_PROFILE",
     "MODELLED_BARE_CONTEXT_BYTES_PER_RESIDENT_THREAD",
-    "lbc_interval_values", "state_array_shapes",
+    "chem_state_array_shapes", "lbc_interval_values", "state_array_shapes",
 ]

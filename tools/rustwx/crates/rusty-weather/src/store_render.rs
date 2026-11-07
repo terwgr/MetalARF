@@ -36,7 +36,7 @@ use rustwx_products::direct::{
 use rustwx_products::plot_design::StaticPlotDesign;
 use rustwx_products::viewer::{
     curated_style_for_store_variable, generic_style_for_store_variable,
-    observation_style_for_store_variable, operational_style_for_store_variable,
+    operational_style_for_store_variable,
 };
 use rustwx_render::{
     MapRenderRequest, PngWriteOptions, ProductVisualMode, ProjectedDomain,
@@ -230,11 +230,6 @@ impl StoreFieldSource {
         read_grid_2d(&self.reader, &self.grid, name)
     }
 
-    /// Read one precomputed derived/heavy grid by recipe slug.
-    pub fn derived_grid(&self, slug: &str) -> Result<StoredField2D, RwStoreError> {
-        read_grid_2d(&self.reader, &self.grid, slug)
-    }
-
     /// The full hour grid (coordinates from `grid.rwg`).
     pub fn full_grid(&self) -> rustwx_core::LatLonGrid {
         rustwx_core::LatLonGrid {
@@ -405,20 +400,10 @@ pub fn render_generic_store_variable(
             });
         }
     }
-    // Style resolution ladder: an observation plane's own row first (so an
-    // observation is never titled as the model plane whose colour table it
-    // wears), then the variable's own production style, then the curated
-    // same-quantity mapping, then the generic full-range ramp.
+    // Style resolution ladder: the variable's own production style, then
+    // the curated same-quantity mapping, then the generic full-range ramp.
     let style =
-        observation_style_for_store_variable(variable, &meta.units, finite_range, config.model)
-            .or_else(|| {
-                operational_style_for_store_variable(
-                    variable,
-                    &meta.selector,
-                    &meta.units,
-                    config.model,
-                )
-            })
+        operational_style_for_store_variable(variable, &meta.selector, &meta.units, config.model)
             .or_else(|| {
                 curated_style_for_store_variable(
                     variable,
@@ -691,7 +676,7 @@ pub fn render_derived_recipes_from_store(
     let mut skipped = Vec::new();
     let mut winds: Option<(Vec<f64>, Vec<f64>)> = None;
     for slug in recipe_slugs {
-        let stored = match source.derived_grid(slug) {
+        let stored = match source.generic_grid(slug) {
             Ok(stored) => stored,
             Err(RwStoreError::UnknownVariable(_)) => {
                 skipped.push(StoreRenderSkip {

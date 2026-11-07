@@ -63,6 +63,9 @@ def _run(monkeypatch, cp, rng_seed, use_scheme_sr):
     driver.noah_usemonalb = False
     driver.noah_rdlai2d = False
     driver.noah_opt_thcnd = 1
+    # The MYJ CHKLOWQ arm (paper/conus-suite-exact, 2.9.11) is off with a
+    # non-MYJ surface layer, as initialize_physics sets it.
+    driver.noah_myj = False
     seen = {}
 
     def probe(f, *args, **kwargs):
@@ -70,6 +73,9 @@ def _run(monkeypatch, cp, rng_seed, use_scheme_sr):
             seen[name] = cp.asnumpy(f[name]).view(np.uint32).copy()
 
     monkeypatch.setattr(physics, "launch_noah", probe)
+    # seaice_noah follows lsm in _run_noah (2.8.6); it reads none of the
+    # forcing statements under test and has its own WRF oracle gate.
+    driver._run_noah_seaice = lambda *args, **kwargs: None
     monkeypatch.setattr(physics, "microphysics_scheme_sr_available",
                         lambda mp: use_scheme_sr)
     driver._run_noah(atmosphere, None, 1)

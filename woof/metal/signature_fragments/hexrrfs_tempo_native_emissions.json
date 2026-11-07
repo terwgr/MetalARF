@@ -1,0 +1,64 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_prep",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_prep.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_emissions",
+      "cuda_symbol": "tempo_emissions",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "nwfa2d",
+          "float",
+          "read"
+        ],
+        [
+          "prepared",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "nwfa2d": [
+          [
+            "nc"
+          ]
+        ],
+        "prepared": [
+          [
+            "20",
+            "nz",
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "aerosol",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

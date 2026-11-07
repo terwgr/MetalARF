@@ -389,8 +389,8 @@
         );
 
         assert_eq!(compact.kdp, [-123, 123]);
-        assert!((compact.contribution_at(0, 10.0).kdp_deg_km + 12.3).abs() < 1.0e-6);
-        assert!((compact.contribution_at(1, 10.0).kdp_deg_km - 12.3).abs() < 1.0e-6);
+        assert!((compact.contribution_at(0, 10.0, 0.5).kdp_deg_km + 12.3).abs() < 1.0e-6);
+        assert!((compact.contribution_at(1, 10.0, 0.5).kdp_deg_km - 12.3).abs() < 1.0e-6);
     }
 
     #[test]
@@ -889,6 +889,34 @@
             .scaled_value(0, 2)
             .expect("rho gate");
         assert!((0.0..=1.0).contains(&rho));
+    }
+
+    #[test]
+    fn band_path_retains_strong_specific_and_differential_attenuation() {
+        let mut fields=uniform_box_fields();
+        let zh=dbz_to_z(40.);
+        let zv=zh/10f32.powf(0.1);
+        attach_uniform_polar(&mut fields,crate::wrf_radar_physics::IntrinsicPolarSample {
+            zh,zv,cov_re:(zh*zv).sqrt(),rho_hv:1.,zdr_db:1.,..Default::default()
+        });
+        let moment=crate::wrf_radar_physics::BulkContribution {
+            zh,zv,cov_re:(zh*zv).sqrt(),kdp_deg_km:1.,ah_db_km:3.,av_db_km:2.,..Default::default()
+        };
+        fields.polarimetric.as_mut().unwrap().band_moments=Some(vec![[moment;5];fields.dbz.len()]);
+        let config=SyntheticRadarConfig {
+            site_lat_deg:Some(39.),site_lon_deg:Some(-95.),antenna_msl_m:Some(200.),
+            elevations_deg:vec![0.5],azimuth_count:4,gate_spacing_m:1000.,max_range_m:5000.,
+            ref_floor_dbz:-30.,ref_gate_texture:false,dual_pol:true,propagation:true,
+            ..Default::default()
+        };
+        let volume=try_build_synthetic_volume(&fields,DateTime::<Utc>::from_timestamp(1_700_000_000,0).unwrap(),&config).unwrap();
+        let cut=&volume.cuts[0];
+        let value=|moment|cut.moments[&moment].scaled_value(0,2).unwrap();
+        assert!((value(MomentType::Unknown("PIA".into()))-12.).abs()<0.01);
+        assert!((value(MomentType::Unknown("PIDA".into()))-4.).abs()<0.01);
+        assert!((value(MomentType::Reflectivity)-28.).abs()<0.01);
+        assert!((value(MomentType::DifferentialReflectivity)+3.).abs()<0.01);
+        assert!((value(MomentType::DifferentialPhase)-4.).abs()<0.01);
     }
 
     #[test]
@@ -1418,7 +1446,7 @@
         assert_eq!(
             renamed.data_fingerprint(),
             fingerprint,
-            "site_name is a label, it must not move the data fingerprint"
+            "site_name is a label — it must not move the data fingerprint"
         );
 
         let larger_memory_budget = SyntheticRadarConfig {
@@ -1462,19 +1490,19 @@
         assert!(differs(&|c| c.max_range_m = 460_000.0), "max_range_m");
         assert!(
             differs(&|c| c.match_gate_to_grid = true),
-            "match_gate_to_grid: toggling grid-matching resizes gates and must rebuild"
+            "match_gate_to_grid — toggling grid-matching resizes gates and must rebuild"
         );
         assert!(differs(&|c| c.ref_floor_dbz = 5.0), "ref_floor_dbz");
         assert!(differs(&|c| c.nyquist_mps = 64.0), "nyquist_mps");
         assert!(
             differs(&|c| c.fold_velocity = true),
-            "fold_velocity: toggling folding re-aliases VEL and re-stamps Nyquist"
+            "fold_velocity — toggling folding re-aliases VEL and re-stamps Nyquist"
         );
         assert!(differs(&|c| c.ref_gate_texture = false), "ref_gate_texture");
         assert!(differs(&|c| c.vel_gate_texture = true), "vel_gate_texture");
         assert!(
             differs(&|c| c.clutter_intensity = 0.5),
-            "clutter_intensity: the slider must rebuild the volume"
+            "clutter_intensity — the slider must rebuild the volume"
         );
         assert!(
             differs(&|c| c.reflectivity_operator = ClassicStoelinga),
@@ -2126,7 +2154,7 @@
         assert_eq!(fold_velocity_mps(2.0 * vn, vn), 0.0);
         assert_eq!(fold_velocity_mps(3.0 * vn, vn), -vn);
 
-        // Boundary convention: half-open [-Vn, +Vn), BOTH +Vn and -Vn map to
+        // Boundary convention: half-open [-Vn, +Vn) — BOTH +Vn and -Vn map to
         // -Vn (+Vn aliases in, -Vn is already the representable end).
         assert_eq!(fold_velocity_mps(vn, vn), -vn);
         assert_eq!(fold_velocity_mps(-vn, vn), -vn);
@@ -2336,11 +2364,11 @@
         let defaults = SyntheticRadarConfig::default();
         assert!(
             defaults.ref_gate_texture,
-            "reflectivity texture ships ON, the smooth field looks garbage without it"
+            "reflectivity texture ships ON — the smooth field looks garbage without it"
         );
         assert!(
             !defaults.vel_gate_texture,
-            "velocity texture stays opt-in, the clean Vr feeds dealias/GBVTD"
+            "velocity texture stays opt-in — the clean Vr feeds dealias/GBVTD"
         );
 
         let fields = uniform_box_fields();
@@ -2497,12 +2525,12 @@
         let time = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
 
         // Amount 0: the clutter path is skipped, so every finite REF is the pure
-        // 8 dBZ echo, nothing is injected (bit-identical to the featureless path).
+        // 8 dBZ echo — nothing is injected (bit-identical to the featureless path).
         let clean = build_synthetic_volume(&fields, time, &clutter_box_config(0.0));
         for value in ref_values(&clean).iter().filter(|value| value.is_finite()) {
             assert!(
                 (value - 8.0).abs() < 1e-6,
-                "amount-0 REF {value} must be the pristine model echo: no clutter injected"
+                "amount-0 REF {value} must be the pristine model echo — no clutter injected"
             );
         }
 
@@ -2522,7 +2550,7 @@
         );
 
         // A DIFFERENT forecast frame (different valid time) gets a DIFFERENT
-        // clutter pattern: the seed folds in the frame time.
+        // clutter pattern — the seed folds in the frame time.
         let other_time = DateTime::<Utc>::from_timestamp(1_700_003_600, 0).unwrap();
         let other = build_synthetic_volume(&fields, other_time, &clutter_box_config(1.0));
         assert_ne!(
@@ -2572,7 +2600,7 @@
         assert_eq!(
             moment_bits(&clean),
             moment_bits(&cluttered),
-            "40 dBZ echo out-values any clutter: the field must be untouched"
+            "40 dBZ echo out-values any clutter — the field must be untouched"
         );
     }
 

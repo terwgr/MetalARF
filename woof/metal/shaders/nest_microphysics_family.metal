@@ -1,5 +1,6 @@
 #include "nest_mp8_to_mp18_mass_diagnosed_field_bindings.metalh"
 #include "nest_microphysics_edge_field_bindings.metalh"
+#include "nest_carry_number_bindings.metalh"
 #include <metal_stdlib>
 #include "nssl2_soft64.metalh"
 #include "soft_binary32.metalh"
@@ -744,4 +745,23 @@ kernel void nest_microphysics_edge_field(
         value = nest_edge_fmul(hybrid_mass, value);
     }
     out[idx] = value;
+}
+
+// Carry the parent's number using the edge kernel's explicit FP32 order.
+kernel void nest_carry_number(
+    constant NestCarryNumberResources &r [[buffer(0)]],
+    constant NestCarryNumberParams &p [[buffer(1)]],
+    uint tid [[thread_position_in_grid]])
+{
+    const int idx = int(tid);
+    if (idx >= p.nz * p.ny * p.nx) return;
+    float value = r.source[idx];
+    if (p.coupled != 0) {
+        const int k = idx / (p.ny * p.nx);
+        const int q = idx % (p.ny * p.nx);
+        const float base = nest_edge_fadd(nest_edge_fmul(r.c1h[k], r.mub2d[q]), r.c2h[k]);
+        const float perturbation = nest_edge_fmul(r.c1h[k], r.mup[q]);
+        value = nest_edge_fmul(nest_edge_fadd(base, perturbation), value);
+    }
+    r.out[idx] = value;
 }

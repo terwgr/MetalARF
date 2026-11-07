@@ -46,13 +46,22 @@ def test_timeout_keeps_old_roster_without_binding_new_checkpoint_or_step_retry(t
         def save_resume(self):
             calls.append(1)
             raise TimeoutError("busy product owner")
-    monkeypatch.setattr(restart_roster, "bind_checkpoint_member", lambda *args: bound.append(args))
-    monkeypatch.setattr(restart_roster, "seal", lambda *args: sealed.append(args))
+    def bind(root, checkpoint):
+        # The owner binding is written first; a deferred snapshot removes it.
+        bound.append(checkpoint)
+        checkpoint.with_suffix(".member.json").write_text("{}")
+    def seal(root, *, collector=None):
+        # seal saves the collector snapshot under its checkpoint hold before
+        # it writes a roster; a timeout there publishes nothing.
+        collector.save_resume()
+        sealed.append(root)
+    monkeypatch.setattr(restart_roster, "bind_checkpoint_member", bind)
+    monkeypatch.setattr(restart_roster, "seal", seal)
     progress = CheckpointProgress(lambda **event: events.append(event), collector=Collector(),
         root=tmp_path, manifest_lock=RLock())
     progress(last_checkpoint=tmp_path / "new.npz", outer_step=10)
     progress(last_checkpoint=tmp_path / "new.npz", outer_step=11)
-    assert calls == [1] and not bound and not sealed
+    assert calls == [1] and bound == [tmp_path / "new.npz"] and not sealed
     assert len(events) == 2 and "ensemble_checkpoint_deferred" in events[0]
     assert roster.read_bytes() == b"previous coherent member checkpoint"
     assert not (tmp_path / "new.member.json").exists()
@@ -203,3 +212,47 @@ def test_complete_pending_hour_is_readmitted_once_on_cpu_after_restore(tmp_path,
     with pytest.raises(ValueError, match="already scheduled"):
         resumed.product_consumer.submit(("d01", valid), device=0, replay=lambda: None)
     resumed.product_consumer.close()
+
+
+def test_ice_resume_preserves_missing_history_and_sampling_clock(tmp_path):
+    from woof.ensemble.ice_accretion import FIELDS
+    original = collector(tmp_path)
+    key = (1,0,1,"fixed-grid")
+    original.ice.history[key] = {"tick": 7200000000, "rain": np.full((2,2), 5., np.float32),
+        **{name: np.array([[1.,np.nan],[3.,4.]],np.float32) for name in FIELDS}}
+    original.ice.intervals = {1., 2.}
+    original.save_resume()
+    restored = collector(tmp_path)
+    restored.restore_resume()
+    assert restored.ice.intervals == {1., 2.}
+    assert restored.ice.history[key]["tick"] == 7200000000
+    for name in ("rain", *FIELDS):
+        np.testing.assert_array_equal(restored.ice.history[key][name], original.ice.history[key][name])
+    original.product_consumer.close()
+    restored.product_consumer.close()
+
+
+
+def test_save_retires_superseded_arrays_snapshots(tmp_path):
+    from woof.ensemble.ice_accretion import FIELDS
+    original = collector(tmp_path)
+    key = (1, 0, 1, "fixed-grid")
+    directory = tmp_path / ".ensemble-resume"
+    sealed = directory / ("a" * 64 + ".nc")
+    directory.mkdir(parents=True, exist_ok=True)
+    sealed.write_bytes(b"sealed")
+    (tmp_path / "ensemble-restart.json").write_text(json.dumps({"files": [
+        {"path": ".ensemble-resume/" + sealed.name}]}))
+    names = []
+    for tick in (3600000000, 7200000000, 10800000000):
+        original.ice.history[key] = {"tick": tick, "rain": np.full((2, 2), tick / 1e9, np.float32),
+            **{name: np.full((2, 2), tick / 1e9, np.float32) for name in FIELDS}}
+        names.append(Path(original.save_resume()["arrays"]).name)
+    assert len(set(names)) == 3
+    left = sorted(p.name for p in directory.glob("*.nc"))
+    assert left == sorted([names[-1], sealed.name])
+    restored = collector(tmp_path)
+    restored.restore_resume()
+    assert restored.ice.history[key]["tick"] == 10800000000
+    original.product_consumer.close()
+    restored.product_consumer.close()

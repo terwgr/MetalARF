@@ -2,30 +2,29 @@
 //! run hour: 2D surface fields as zstd-compressed f32 tiles supporting
 //! windowed (regional) reads, and 3D pressure-level fields as quantized
 //! affine-i16 column chunks laid out for fast single-point sounding pulls.
+//!
+//! Version 2 ([`columns`]) is the tiled column store: every column of a grid at one valid time in overlapping
+//! 16x16 tiles, so one sounding anywhere is one range read. [`columns::open_any`] opens either version.
 
 pub mod atomic;
 pub mod codec;
+pub mod columns;
 pub mod diff;
 pub mod error;
-pub mod export;
 pub mod format;
 pub mod grid;
 pub mod header;
 pub mod index;
 pub mod ingest;
 pub mod lock;
-pub mod netcdf3;
 pub mod netcdf_classic;
 pub mod reader;
 pub mod run;
 pub mod validate;
 pub mod writer;
 
-pub use diff::{
-    Difference, build_matches, compare, meta_without_build, read_writer_build, record_at,
-};
+pub use diff::{Difference, build_matches, compare, read_writer_build};
 pub use error::{RwResult, RwStoreError};
-pub use export::{ExportSummary, export_hour_to_netcdf3};
 pub use format::RwsExactTime;
 pub use ingest::{
     DerivedFieldInput, HourIngestWriter, PressureVolumeInput, StoredField2D, WrittenHour,

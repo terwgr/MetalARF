@@ -6,8 +6,8 @@ use rustwx_core::{
 };
 use rustwx_models::{PlotRecipe, RenderStyle};
 use rustwx_render::{
-    Color, ColorScale, ContourLayer, DifferenceSubject, DiscreteColorScale, ExtendMode,
-    LegendMode, LevelDensity, MapRenderRequest, ProductVisualMode, ProjectedContourLineStyle, ProjectedDomain, ProjectedMap,
+    Color, ColorScale, ContourLayer, DiscreteColorScale, ExtendMode, LegendMode, LevelDensity,
+    MapRenderRequest, ProductVisualMode, ProjectedContourLineStyle, ProjectedDomain, ProjectedMap,
     RasterSampleMode, WindBarbLayer, WindStreamlineLayer, build_projected_contour_geometry_profile,
     densify_discrete_scale,
 };
@@ -38,7 +38,22 @@ pub(crate) fn direct_recipe_render_controls(
     recipe: &PlotRecipe,
     filled_selector: FieldSelector,
 ) -> (Option<LegendMode>, Option<f64>) {
-    if matches!(recipe.style, RenderStyle::WeatherDewpoint) {
+    if filled_selector.field == CanonicalField::SmokeMassDensity {
+        // Smoke aliases retain the sparse-signal legend and transparent scale.
+        (None, None)
+    } else if filled_selector.field == CanonicalField::FogFlag
+        || matches!(recipe.style, RenderStyle::WeatherCategorical)
+    {
+        (Some(LegendMode::Categories), None)
+    } else if matches!(recipe.style, RenderStyle::WeatherVisibility) {
+        (Some(LegendMode::Thresholds), Some(200.0))
+    } else if matches!(recipe.style, RenderStyle::AirQualityPm25 | RenderStyle::AirQualityOzone | RenderStyle::WeatherSnowfall | RenderStyle::WeatherSnowDepthChange) || filled_selector.field == CanonicalField::SnowfallLiquidEquivalent {
+        (Some(LegendMode::Thresholds), None)
+    } else if matches!(recipe.style, RenderStyle::WeatherHaines) {
+        (Some(LegendMode::Categories), None)
+    } else if matches!(recipe.style, RenderStyle::WeatherLightningThreat | RenderStyle::WeatherFlashRate) {
+        (Some(LegendMode::Thresholds), None)
+    } else if matches!(recipe.style, RenderStyle::WeatherDewpoint) {
         let tick = matches!(
             filled_selector.vertical,
             VerticalSelector::HeightAboveGroundMeters(2)
@@ -54,6 +69,42 @@ pub(crate) fn direct_recipe_render_controls(
         (Some(LegendMode::Stepped), Some(25.0))
     } else {
         (None, None)
+    }
+}
+
+/// The physical reason a recipe's map can hold nothing to draw, written on
+/// the map when it does (`rustwx_render::empty_map_note`); `None` leaves
+/// the renderer's generic note.
+pub(crate) fn empty_note_for_recipe(recipe: &PlotRecipe, selector: FieldSelector) -> Option<String> {
+    if let VerticalSelector::IsothermCelsius(celsius) = selector.vertical {
+        // The model top is always colder than any isotherm drawn here, so a
+        // missing level at or below 0 C means the whole column is colder.
+        return Some(if celsius <= 0 {
+            format!("No {celsius} C level: the whole column is colder than {celsius} C")
+        } else {
+            format!("No {celsius} C level in the column")
+        });
+    }
+    match selector.field {
+        CanonicalField::HainesLow => {
+            return Some("Haines low undefined: 950 hPa is below ground here".into());
+        }
+        CanonicalField::HainesMid => {
+            return Some("Haines mid undefined: 850 hPa is below ground here".into());
+        }
+        CanonicalField::HainesHigh => {
+            return Some("Haines high undefined: 700 hPa is below ground here".into());
+        }
+        CanonicalField::SnowfallLiquidEquivalent => {
+            return Some("No snowfall accumulated in this window".into());
+        }
+        _ => {}
+    }
+    match recipe.style {
+        RenderStyle::WeatherSnowfall => Some("No snowfall accumulated in this window".into()),
+        RenderStyle::WeatherQpf => Some("No precipitation accumulated in this window".into()),
+        RenderStyle::WeatherCategorical => Some("Not diagnosed anywhere at this time".into()),
+        _ => None,
     }
 }
 
@@ -88,12 +139,9 @@ pub(super) fn build_render_request(
 ) -> Result<(MapRenderRequest, DirectRequestBuildTiming), Box<dyn std::error::Error>> {
     let mut timing = DirectRequestBuildTiming::default();
     let field_prepare_start = Instant::now();
-    let (filled_field, fills_companion) = render_fill(recipe, filled, extracted)?;
+    let filled_field = render_filled_field(recipe, filled, extracted)?;
     timing.field_prepare_ms = field_prepare_start.elapsed().as_millis();
     let overlay_only = should_render_overlay_only(filled.selector, recipe.contours.is_some());
-    // The contour layer drawn from the recipe's own filled field, if any:
-    // the field the title names when the fill is the companion wind.
-    let mut filled_contour: Option<usize> = None;
     let visual_mode = visual_mode_for_direct_recipe(recipe, filled.selector, overlay_only);
     let mut request = if overlay_only {
         let mut request = MapRenderRequest::contour_only(filled_field.clone().into());
@@ -105,7 +153,6 @@ pub(super) fn build_render_request(
             filled.grid.shape.ny,
             contour_layer_cache,
         ) {
-            filled_contour = Some(request.contours.len());
             request.contours.push(layer);
         }
         timing.contour_prepare_ms += contour_prepare_start.elapsed().as_millis();
@@ -121,10 +168,28 @@ pub(super) fn build_render_request(
             ),
         )
     };
+    // Keep a fixed hurricane-range ceiling across member/frame sheets.
+    // An unset override preserves the operational standalone wind scale.
+    if recipe.slug == "10m_wind_speed_and_direction" {
+        if let Ok(text) = std::env::var("RUSTWX_WIND_MAX_KT") {
+            let ceiling = text.parse::<f64>()
+                .map_err(|_| "RUSTWX_WIND_MAX_KT must be numeric")?;
+            if !ceiling.is_finite() || ceiling <= 0. {
+                return Err("RUSTWX_WIND_MAX_KT must be finite and positive".into());
+            }
+            let mut scale = request.scale.resolved_discrete();
+            let intervals = scale.levels.len() - 1;
+            scale.levels = (0..=intervals)
+                .map(|i| ceiling * i as f64 / intervals as f64).collect();
+            scale.mask_below = None;
+            request.scale = ColorScale::Discrete(scale);
+        }
+    }
     crate::plot_design::StaticPlotDesign::new(bounds, visual_mode)
         .overlay_only(overlay_only)
         .apply_to_request(&mut request);
     apply_direct_recipe_render_controls(recipe, filled.selector, &mut request);
+    request.empty_note = empty_note_for_recipe(recipe, filled.selector);
     request.title = Some(static_title_with_suffix(recipe.title));
     request.width = output_width;
     request.height = output_height;
@@ -146,14 +211,6 @@ pub(super) fn build_render_request(
             .extend(build_contour_layers(recipe, extracted, contour_layer_cache));
     } else {
         request.contours = build_contour_layers(recipe, extracted, contour_layer_cache);
-        let contoured = recipe.contours.as_ref().and_then(|spec| spec.selector);
-        if contoured == Some(filled.selector) && !request.contours.is_empty() {
-            filled_contour = Some(0);
-        }
-    }
-    if fills_companion {
-        request.difference_subject =
-            filled_contour.map(|contour| companion_difference_subject(recipe, filled, contour));
     }
     timing.contour_prepare_ms += contour_prepare_start.elapsed().as_millis();
     let barb_prepare_start = Instant::now();
@@ -471,47 +528,10 @@ pub(super) fn render_filled_field(
     field: &SelectedField2D,
     extracted: &HashMap<FieldSelector, SelectedField2D>,
 ) -> Result<rustwx_core::Field2D, Box<dyn std::error::Error>> {
-    Ok(render_fill(recipe, field, extracted)?.0)
-}
-
-/// The field a recipe fills, and whether it is the companion 10 m or
-/// isobaric wind speed standing in for the recipe's own filled field
-/// (`MSLP / 10m Winds`, every `<level> Height / Winds`).
-pub(super) fn render_fill(
-    recipe: &PlotRecipe,
-    field: &SelectedField2D,
-    extracted: &HashMap<FieldSelector, SelectedField2D>,
-) -> Result<(rustwx_core::Field2D, bool), Box<dyn std::error::Error>> {
     if let Some(wind_speed) = derived_companion_wind_speed_fill(recipe, field, extracted)? {
-        return Ok((wind_speed, true));
+        return Ok(wind_speed);
     }
-    Ok((convert_filled_field(recipe, field), false))
-}
-
-/// What a run difference of a companion-filled map subtracts: the recipe's
-/// own filled field, which the title names and the map draws only as the
-/// contour layer at `contour`, in the units that layer is drawn in.  The
-/// name is the title up to its first ` / ` (`MSLP / 10m Winds` names MSLP,
-/// `500mb Height / Winds` the 500 mb height).  Without it the difference
-/// subtracted the wind speed fill and was titled as a pressure difference.
-pub(super) fn companion_difference_subject(
-    recipe: &PlotRecipe,
-    filled: &SelectedField2D,
-    contour: usize,
-) -> DifferenceSubject {
-    let name = recipe
-        .title
-        .split_once(" / ")
-        .map_or(recipe.title, |(titled, _)| titled)
-        .trim()
-        .to_string();
-    let units = crate::plot_design::operational_contour_conversion(filled.selector)
-        .map_or_else(|| filled.units.clone(), |(_, units)| units.to_string());
-    DifferenceSubject {
-        name,
-        units,
-        contour,
-    }
+    Ok(convert_filled_field(recipe, field))
 }
 
 fn derived_companion_wind_speed_fill(
@@ -570,7 +590,8 @@ pub(crate) fn direct_fill_unit_conversion(
         (UnitConvert::KgM2ToMgM2, Some("mg/m^2"))
     } else if matches!(
         selector.field,
-        CanonicalField::CloudWaterMixingRatio
+        CanonicalField::SpecificHumidity
+            | CanonicalField::CloudWaterMixingRatio
             | CanonicalField::RainWaterMixingRatio
             | CanonicalField::CloudIceMixingRatio
             | CanonicalField::SnowMixingRatio
@@ -601,7 +622,7 @@ pub(crate) fn direct_fill_unit_conversion(
     } else if selector.field == CanonicalField::PrecipitableWater {
         (UnitConvert::MmToInches, Some("in"))
     } else if selector.field == CanonicalField::Visibility {
-        (UnitConvert::MetersToMiles, Some("mi"))
+        (UnitConvert::None, Some("m"))
     } else if selector.field == CanonicalField::AbsoluteVorticity {
         (UnitConvert::PerSecondToE5PerSecond, Some("10^-5 s^-1"))
     } else if matches!(
@@ -615,6 +636,8 @@ pub(crate) fn direct_fill_unit_conversion(
         } else {
             (UnitConvert::None, Some("mm"))
         }
+    } else if matches!(selector.field, CanonicalField::ModelSnowfall | CanonicalField::Snowfall10to1 | CanonicalField::SnowfallKuchera | CanonicalField::SnowfallLiquidEquivalent | CanonicalField::SnowDepth | CanonicalField::SnowDepthChange) {
+        (UnitConvert::MmToInches, Some("in"))
     } else {
         (UnitConvert::None, None)
     }
@@ -677,7 +700,16 @@ pub(super) fn scale_for_filled_selector_in(
     if selector_is_spread_product(filled_selector) {
         return ensemble_spread_scale(values);
     }
-    scale_for_recipe_in(recipe, filled_selector, hemisphere)
+    let scale = scale_for_recipe_in(recipe, filled_selector, hemisphere);
+    // Isobaric temperature: the fixed mid-latitude ladder moves onto a
+    // field it would otherwise saturate (a tropical 300 hPa map drew one
+    // colour); unchanged where the field already fits.
+    match (&recipe.style, filled_selector.field, filled_selector.vertical, scale) {
+        (RenderStyle::WeatherTemperature, CanonicalField::Temperature, VerticalSelector::IsobaricHpa(_),
+         ColorScale::Discrete(discrete)) => ColorScale::Discrete(
+            crate::plot_design::fit_isobaric_temperature_scale(discrete, values)),
+        (_, _, _, scale) => scale,
+    }
 }
 
 fn ensemble_spread_scale(values: &[f32]) -> ColorScale {
@@ -834,6 +866,7 @@ fn pressure_contour_smoothing_passes() -> usize {
     std::env::var("RUSTWX_PRESSURE_CONTOUR_SMOOTH_PASSES")
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
+        .or_else(|| rustwx_render::theme::active_theme().contour_smooth_passes("mslp"))
         .unwrap_or(0)
         .clamp(0, 12)
 }
@@ -883,6 +916,7 @@ fn build_streamline_layers(
     streamline_layer_cache: &SharedStreamlineLayerCache,
     barb_stride_cache: &SharedBarbStrideCache,
 ) -> Vec<WindStreamlineLayer> {
+    if recipe.style == RenderStyle::WeatherIvt { return Vec::new(); }
     let (Some(u_spec), Some(v_spec)) = (&recipe.barbs_u, &recipe.barbs_v) else {
         return Vec::new();
     };
@@ -892,7 +926,7 @@ fn build_streamline_layers(
     let (Some(u), Some(v)) = (extracted.get(&u_selector), extracted.get(&v_selector)) else {
         return Vec::new();
     };
-    if !static_streamlines_enabled_for_grid(&u.grid) {
+    if u_selector.field == CanonicalField::IvtEastward || !static_streamlines_enabled_for_grid(&u.grid) {
         return Vec::new();
     }
     let key = BarbStrideCacheKey {
@@ -950,6 +984,7 @@ fn build_barb_layers(
     let (Some(u), Some(v)) = (extracted.get(&u_selector), extracted.get(&v_selector)) else {
         return Vec::new();
     };
+    let is_transport = u_selector.field == CanonicalField::IvtEastward || recipe.style == RenderStyle::WeatherIvt;
     let key = BarbStrideCacheKey {
         u_selector,
         v_selector,
@@ -972,8 +1007,9 @@ fn build_barb_layers(
     let (stride_x, stride_y) =
         cached_barb_strides(u_selector, v_selector, &u.grid, bounds, barb_stride_cache);
     let layers = vec![WindBarbLayer {
-        u: u.values.iter().map(|value| value * 1.943_844_5).collect(),
-        v: v.values.iter().map(|value| value * 1.943_844_5).collect(),
+        direction_arrows: is_transport,
+        u: u.values.iter().map(|value| value * if is_transport {1.0} else {1.943_844_5}).collect(),
+        v: v.values.iter().map(|value| value * if is_transport {1.0} else {1.943_844_5}).collect(),
         stride_x,
         stride_y,
         spacing_px: static_barb_spacing_px(),

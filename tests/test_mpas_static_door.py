@@ -65,11 +65,9 @@ def test_every_mpas_binary_the_pair_needs_is_bundled():
 # --------------------------------------------------------------- naming
 
 
-@pytest.mark.parametrize("grid,expected", [
-    ("kansas.grid.nc", "kansas.static.nc"),
-    ("mesh.nc", "mesh.static.nc"),
-    ("plain", "plain.static.nc"),
-    ("/tmp/a/b.grid.nc", "b.static.nc"),
+@pytest.mark.parametrize('grid, expected', [
+    pytest.param('plain', 'plain.static.nc', id='plain-plain.static.nc'),
+    pytest.param('/tmp/a/b.grid.nc', 'b.static.nc', id='/tmp/a/b.grid.nc-b.static.nc'),
 ])
 def test_the_static_lands_beside_the_grid_under_a_matching_name(grid, expected):
     """They are admitted as a pair, so they are written as a pair."""
@@ -106,7 +104,8 @@ def test_an_incomplete_geography_archive_names_the_missing_datasets(tmp_path):
     assert text is not None
     assert "topo_gmted2010_30s" not in text.split("what does work")[0], (
         "the dataset that IS present is listed as missing")
-    assert "soiltype_top_30s" in text
+    assert "texture_top" in text and "soiltemp_era5_1deg" in text
+    assert "soiltype_top_30s" not in text and "soiltemp_1deg," not in text
     assert "field of zeros" in text
 
 
@@ -129,6 +128,19 @@ def test_the_refusal_names_the_plain_fetch_now_that_it_covers_the_soil(
         "woof fetch-geog,") == 1
     assert "--datasets soilgrids" not in works, (
         "the bare fetch stages it; the flag is a narrower command")
+
+
+def test_the_builders_own_refusal_names_woofs_command(tmp_path):
+    """rw_mpas_static's text says the engine's command; WOOF installs no such command."""
+    binary = tmp_path / "rw_mpas_static"
+    binary.write_text("#!/bin/sh\n"
+                      "echo '  gpuwm fetch-geog --datasets mesh, which stages every dataset' >&2\n"
+                      "exit 3\n", encoding="utf-8")
+    binary.chmod(0o755)
+    with pytest.raises(rustwx_static.StaticEngineError) as refused:
+        rustwx_static.run_static(binary, [])
+    assert "woof fetch-geog --datasets mesh" in str(refused.value)
+    assert "gpuwm" not in str(refused.value)
 
 
 def test_a_complete_geography_archive_is_not_refused(tmp_path):
@@ -628,3 +640,75 @@ def test_the_binary_names_the_fields_it_writes_as_placeholders():
     # reader who learnt the old list is not left looking for a gap.
     for field in rustwx_static.FORMERLY_UNWRITTEN_FIELDS:
         assert field in probe.stdout, f"{field} is not named in --help"
+
+
+# ------------------------------------------------------------------ tools
+
+
+def test_the_tool_line_names_exactly_the_tools_the_crate_dispatches():
+    """The Python list and the Rust dispatch table are one contract: the
+    marker's last line is what the probe compares, so a tool added to one
+    and not the other fails the handshake instead of a forecast's
+    comparison step."""
+
+    main = (REPO_ROOT / "tools/rustwx/crates/rw-mpas/src/bin/rw_mpas_static"
+            / "main.rs").read_text(encoding="utf-8")
+    table = main[main.index("pub const TOOLS"):main.index("];", main.index("pub const TOOLS"))]
+    names = tuple(line.split('"')[1] for line in table.splitlines()
+                  if line.strip().startswith("name:"))
+    assert names == rustwx_static.STATIC_TOOLS
+    assert rustwx_static.STATIC_ABI_MARKER.splitlines()[-1] == (
+        "TOOLS\t" + "\t".join(rustwx_static.STATIC_TOOLS))
+
+
+def test_no_former_tool_binary_is_a_separate_cargo_target():
+    """Six binaries over one library would each carry their own copy of
+    the shared code into the wheel; the folded ones must stay folded."""
+
+    cargo = (REPO_ROOT / "tools/rustwx/crates/rw-mpas/Cargo.toml").read_text(
+        encoding="utf-8")
+    bins = REPO_ROOT / "tools/rustwx/crates/rw-mpas/src/bin"
+    for former in ("rw_mpas_static_bounded", "rw_mpas_static_words",
+                   "rw_mpas_gwd_replace", "rw_mpas_gwd_review", "rw_mpas_verify"):
+        assert f'name = "{former}"' not in cargo
+        assert not (bins / f"{former}.rs").exists(), (
+            f"src/bin/{former}.rs would be auto-discovered as its own binary")
+
+
+def test_tool_command_refuses_an_unknown_tool():
+    with pytest.raises(ValueError, match="no tool 'mesh'"):
+        rustwx_static.tool_command("mesh", Path("unused"))
+
+
+def test_tool_command_refuses_a_build_that_predates_the_tools(monkeypatch, tmp_path):
+    """A pre-2.9.0 build answers the door's contract without the tool line;
+    run as ``rw_mpas_static verify`` it would refuse for want of --grid."""
+
+    old = tmp_path / "rw_mpas_static"
+    old.write_bytes(b"old")
+    monkeypatch.setattr(
+        rustwx_static, "probe_static_bin",
+        lambda path: (False, "executes but reports a different static-builder ABI"))
+    with pytest.raises(RuntimeError, match="different static-builder ABI"):
+        rustwx_static.tool_command("verify", old)
+
+
+def test_tool_command_puts_the_tool_after_the_probed_binary(monkeypatch, tmp_path):
+    binary = tmp_path / "rw_mpas_static"
+    binary.write_bytes(b"new")
+    monkeypatch.setattr(rustwx_static, "probe_static_bin",
+                        lambda path: (True, "matches"))
+    monkeypatch.setattr(rustwx_static, "find_static_bin", lambda: binary)
+    assert rustwx_static.tool_command("verify") == [str(binary), "verify"]
+
+
+@pytest.mark.skipif(_built_static_binary() is None,
+                    reason="NOT MEASURED: rw_mpas_static is not built here")
+def test_the_built_binary_runs_each_tool_through_tool_command():
+    binary = _built_static_binary()
+    assert binary is not None
+    command = rustwx_static.tool_command("verify", binary)
+    probe = subprocess.run(command + ["--abi"], capture_output=True,
+                           text=True, timeout=30)
+    assert probe.returncode == 0, probe.stderr
+    assert probe.stdout.strip() == "gpuwm-rw-mpas-verify-v1"

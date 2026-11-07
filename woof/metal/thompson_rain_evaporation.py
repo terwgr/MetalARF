@@ -4,15 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .array import MetalArray
-
-
-def _overlap(left: MetalArray, right: MetalArray) -> bool:
-    if left.buffer is not right.buffer:
-        return False
-    a0, a1 = left.byte_offset, left.byte_offset + left.nbytes
-    b0, b1 = right.byte_offset, right.byte_offset + right.nbytes
-    return a0 < b1 and b0 < a1
+from .array import MetalArray, overlaps
 
 
 def submit_thompson_rain_evaporation_with_density_history_and_presence(
@@ -54,7 +46,7 @@ def submit_thompson_rain_evaporation_with_density_history_and_presence(
     names = tuple(arrays)
     for i, left_name in enumerate(names):
         for right_name in names[i + 1:]:
-            if _overlap(arrays[left_name], arrays[right_name]):
+            if overlaps(arrays[left_name], arrays[right_name]):
                 raise ValueError(
                     f"Metal Thompson rain evaporation {left_name} must not alias {right_name}")
     dt32 = np.float32(dt)

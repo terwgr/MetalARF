@@ -12,7 +12,7 @@
 //!
 //! Each feature's `asset.data.href` is a full ODIM_H5 PVOL (EUMETNET OPERA
 //! Data Information Model; Michelson et al., OPERA WP 2.1/2.2, v2.2-2.3),
-//! e.g. `.../download/dkste_202606120635.vol.h5`: raw unfiltered volume
+//! e.g. `.../download/dkste_202606120635.vol.h5` — raw unfiltered volume
 //! scans per DMI's collection description. Frame identity: the feature id
 //! (`{site}_{yyyymmddhhmm}.vol.h5`).
 
@@ -30,7 +30,7 @@ const ITEMS_URL: &str = "https://opendataapi.dmi.dk/v1/radardata/collections/vol
 const SITE_DISCOVERY_LIMIT: u32 = 50;
 
 /// Upper bound on one `recent` STAC query. At the 5-minute cadence 1000
-/// items span ~3.5 days (comfortably past any loop-history limit) while
+/// items span ~3.5 days — comfortably past any loop-history limit — while
 /// keeping the items response a single bounded page.
 const RECENT_ITEMS_LIMIT: usize = 1000;
 
@@ -369,7 +369,7 @@ mod tests {
     }
 
     /// A DESC items answer comes back OLDEST FIRST, with the newest item
-    /// LAST: its identity is what the live poll dedupes against, so it
+    /// LAST — its identity is what the live poll dedupes against, so it
     /// must equal the plan `latest` builds from the same answer.
     #[test]
     fn recent_plans_reorder_desc_items_oldest_first_with_latest_identity_last() {

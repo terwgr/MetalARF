@@ -1211,6 +1211,290 @@
       ]
     },
     {
+      "name": "thompson_aa_wrf39_rain_sediment_64",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_wrf39_rain_sediment_64",
+      "resources": [
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_wrf39_rain_sediment_256",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_wrf39_rain_sediment_256",
+      "resources": [
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
       "name": "thompson_aa_wrf39_warm_snow_boost",
       "module": "thompson_aerosol_wrf39_sed_family",
       "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
@@ -1247,6 +1531,2120 @@
         ]
       ],
       "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_rain_sediment_accumulate_64",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_rain_sediment_accumulate_64",
+      "resources": [
+        [
+          "qr1d",
+          "float",
+          "read"
+        ],
+        [
+          "nr1d",
+          "float",
+          "read"
+        ],
+        [
+          "qrten",
+          "float",
+          "read_write"
+        ],
+        [
+          "nrten",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "accumulate_surface",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_rain_sediment_accumulate_256",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_rain_sediment_accumulate_256",
+      "resources": [
+        [
+          "qr1d",
+          "float",
+          "read"
+        ],
+        [
+          "nr1d",
+          "float",
+          "read"
+        ],
+        [
+          "qrten",
+          "float",
+          "read_write"
+        ],
+        [
+          "nrten",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "accumulate_surface",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_ice_sediment_accumulate_64",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_ice_sediment_accumulate_64",
+      "resources": [
+        [
+          "qi1d",
+          "float",
+          "read"
+        ],
+        [
+          "ni1d",
+          "float",
+          "read"
+        ],
+        [
+          "qiten",
+          "float",
+          "read_write"
+        ],
+        [
+          "niten",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "rain_active_columns",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qi1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qiten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "niten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_active_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "export_only",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_ice_sediment_accumulate_256",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_ice_sediment_accumulate_256",
+      "resources": [
+        [
+          "qi1d",
+          "float",
+          "read"
+        ],
+        [
+          "ni1d",
+          "float",
+          "read"
+        ],
+        [
+          "qiten",
+          "float",
+          "read_write"
+        ],
+        [
+          "niten",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "rain_active_columns",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qi1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qiten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "niten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_active_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "export_only",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_snow_sediment_64",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_snow_sediment_64",
+      "resources": [
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read"
+        ],
+        [
+          "qr1d",
+          "float",
+          "read"
+        ],
+        [
+          "nr1d",
+          "float",
+          "read"
+        ],
+        [
+          "qrten",
+          "float",
+          "read"
+        ],
+        [
+          "nrten",
+          "float",
+          "read"
+        ],
+        [
+          "rain_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "reference_temperature",
+          "float",
+          "read"
+        ],
+        [
+          "velocity_boost",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "snow_precipitation",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsten",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "velocity_boost": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_precipitation": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "accumulate",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_snow_sediment_256",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_snow_sediment_256",
+      "resources": [
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read"
+        ],
+        [
+          "qr1d",
+          "float",
+          "read"
+        ],
+        [
+          "nr1d",
+          "float",
+          "read"
+        ],
+        [
+          "qrten",
+          "float",
+          "read"
+        ],
+        [
+          "nrten",
+          "float",
+          "read"
+        ],
+        [
+          "rain_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "reference_temperature",
+          "float",
+          "read"
+        ],
+        [
+          "velocity_boost",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "snow_precipitation",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsten",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr1d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nrten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "velocity_boost": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_precipitation": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "accumulate",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_graupel_sediment_64",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_graupel_sediment_64",
+      "resources": [
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number",
+          "float",
+          "read_write"
+        ],
+        [
+          "rain_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "active_columns",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_precipitation",
+          "float",
+          "read_write"
+        ],
+        [
+          "qgten",
+          "float",
+          "read_write"
+        ],
+        [
+          "ngten",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "active_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_precipitation": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qgten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ngten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "accumulate",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_graupel_sediment_256",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_graupel_sediment_256",
+      "resources": [
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number",
+          "float",
+          "read_write"
+        ],
+        [
+          "rain_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "active_columns",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_precipitation",
+          "float",
+          "read_write"
+        ],
+        [
+          "qgten",
+          "float",
+          "read_write"
+        ],
+        [
+          "ngten",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "active_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_precipitation": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qgten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ngten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "accumulate",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_surface_precipitation",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_surface_precipitation",
+      "resources": [
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snownc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sr": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_entry_warm_mask",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_entry_warm_mask",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "warm_mask",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "warm_mask": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_terminal_rain_ice",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_terminal_rain_ice",
+      "resources": [
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "qrten",
+          "float",
+          "read"
+        ],
+        [
+          "nrten",
+          "float",
+          "read"
+        ],
+        [
+          "qiten",
+          "float",
+          "read"
+        ],
+        [
+          "niten",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "micro_columns",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qrten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nrten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qiten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "niten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "micro_columns": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_graupel_number_finalize",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_graupel_number_finalize",
+      "resources": [
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number",
+          "float",
+          "read_write"
+        ],
+        [
+          "terminal_density",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number": [
+          [
+            "any_1d"
+          ]
+        ],
+        "terminal_density": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "thompson_aa_final_phase_cleanup",
+      "module": "thompson_aerosol_wrf39_sed_family",
+      "source": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_final_phase_cleanup",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "cloud_number_entry",
+          "float",
+          "read"
+        ],
+        [
+          "ice_number_entry",
+          "float",
+          "read"
+        ],
+        [
+          "cloud_number_tendency",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qcten",
+          "float",
+          "read_write"
+        ],
+        [
+          "qiten",
+          "float",
+          "read_write"
+        ],
+        [
+          "niten",
+          "float",
+          "read_write"
+        ],
+        [
+          "tten",
+          "float",
+          "read_write"
+        ],
+        [
+          "heat_ocp",
+          "float",
+          "read"
+        ],
+        [
+          "heat_lvap",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_number_entry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ice_number_entry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_number_tendency": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qiten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "niten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "heat_ocp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "heat_lvap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "size",
+          "int32"
+        ],
+        [
+          "accumulate_ice",
+          "int32"
+        ],
+        [
+          "accumulate_heat",
+          "int32"
+        ],
+        [
+          "accumulate_cloud",
+          "int32"
+        ],
+        [
+          "wrf39",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
       "layout_version": 1,
       "arithmetic_policies": [
         "soft32-rn-nonftz",

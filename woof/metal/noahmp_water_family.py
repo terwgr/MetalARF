@@ -22,7 +22,7 @@ def submit_water(context, par: MetalArray, fin: MetalArray, iin: MetalArray,
         raise ValueError("WATER par must have shape (ncase, 26)")
     n = int(par.shape[0])
     expected = {"par": (_F32, (n, 26)), "fin": (_F32, (n, 76)),
-                "iin": (_I32, (n, 9)), "fout": (_F32, (n, 73)),
+                "iin": (_I32, (n, 9)), "fout": (_F32, (n, 74)),
                 "iout": (_I32, (n,))}
     for name, array in arrays.items():
         dtype, shape = expected[name]

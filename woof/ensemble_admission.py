@@ -8,9 +8,7 @@ runtime.
 
 Each refusal here names the breakage it prevents:
 
-* random spread whose amplitude has no observation calibration
-  (:data:`UNCALIBRATED_SPREAD_REASON`): the spread and the probabilities
-  drawn from it would mean nothing;
+* selectors with no runtime consumer: requested fields would stay unperturbed;
 * N > 1 members that would all run one input (:func:`copies_breakage`):
   the run is N copies of one forecast, published with zero spread and
   probabilities of 0 or 1;
@@ -28,10 +26,12 @@ Each refusal here names the breakage it prevents:
 from __future__ import annotations
 
 
-UNCALIBRATED_SPREAD_REASON = (
-    "Random ensemble perturbations are unavailable: spread amplitudes have not "
-    "been calibrated against observations, so ensemble spread and probabilities "
-    "would be meaningless.")
+UNCALIBRATED_SPREAD_WARNING = "uncalibrated spread, WRF default amplitudes"
+# Compatibility import for tools that display this notice. It is no longer
+# an admission reason: calibration does not identify an implementation defect.
+UNCALIBRATED_SPREAD_REASON = UNCALIBRATED_SPREAD_WARNING
+IMPLEMENTED_RANDOM_SELECTORS = frozenset({
+    "sppt", "skebs", "stoch_force_opt", "spp", "spp_conv", "spp_pbl", "spp_lsm"})
 RANDOM_SELECTORS = frozenset({
     "sppt", "skebs", "stoch_force_opt", "spp", "spp_conv", "spp_pbl", "spp_lsm",
     "rand_perturb", "multi_perturb", "perturb_bdy", "perturb_chem_bdy",
@@ -44,14 +44,41 @@ RANDOM_SELECTORS = frozenset({
 #: either one marks the table as that overlay.
 OVERLAY_MARKERS = frozenset({"base_config", "n_members"})
 OVERLAY_COMMAND = "python -m tools.ensemble_forecast run --ensemble-config FILE"
-TABLE_KEYS = ("members, keep_member_files, thresholds, recipe, trajectories and "
+TABLE_KEYS = ("members, keep_member_files, sounding_points, thresholds, comparison (ge/gt/le/lt or a field table), recipe, trajectories and "
               "member_variants (named member-roster land/surface arms), or "
               "perturbation (kind = 'surface-state', soil_moisture_scale, sst_offset_k), "
               "with optional max_ordinary_members_per_device concurrency cap")
 
 
+#: rand_perturb is the one selector whose loss changes no forecast field:
+#: WRF v4.6.1 fills RAND_PERT on domain 1 every step
+#: (dyn_em/module_first_rk_step_part2.F:240-260) and writes it to history and
+#: restart (Registry registry.stoch:15, "rhdf"); its only reader is
+#: perturb_chem_bdy (dyn_em/solve_em.F:2583), refused on its own.  Until
+#: 2.9.1 this refusal said the "initial random-field increments" would stay
+#: unperturbed, a breakage WRF does not have.
+RAND_PERTURB_REFUSAL = (
+    "rand_perturb has no runtime consumer here for the RAND_PERT pattern: WRF "
+    "fills it on domain 1 every step and writes it to history and restart, "
+    "and no stock WRF physics reads it (its one reader, perturb_chem_bdy, is "
+    "refused on its own), so every forecast field would be the one requested "
+    "and only the RAND_PERT history and restart field would be missing. "
+    "Next: turn rand_perturb off; no forecast field changes.")
+
+
+def missing_random_consumer(selector):
+    """Name the lost operation rather than the amplitude's scientific status."""
+    if selector == "rand_perturb":
+        return RAND_PERTURB_REFUSAL
+    target = ("lateral boundary fields" if "bdy" in selector else
+              "selected physics parameter increments")
+    return (f"{selector} has no runtime consumer for {target}: the requested "
+            "fields would remain unperturbed while the receipt claimed this selector. "
+            f"Next: turn {selector} off; use implemented SPPT, SKEBS or a supported SPP consumer.")
+
+
 def refuse_configured_random(raw):
-    """Refuse an authored random-physics switch, wherever the config sets it.
+    """Refuse authored random switches with missing runtime consumers.
 
     Called by the config loaders themselves, so every door that reads a
     config inherits the refusal before it downloads, spawns or allocates.
@@ -62,10 +89,10 @@ def refuse_configured_random(raw):
         for name, value in raw.items():
             if name == "ensemble":
                 continue
-            if name in RANDOM_SELECTORS:
+            if name in RANDOM_SELECTORS or name.startswith("pert_"):
                 enabled = any(bool(item) for item in value) if isinstance(value, list) else bool(value)
-                if enabled:
-                    raise ValueError(UNCALIBRATED_SPREAD_REASON)
+                if enabled and name not in IMPLEMENTED_RANDOM_SELECTORS:
+                    raise ValueError(missing_random_consumer(name))
             elif isinstance(value, (dict, list)):
                 refuse_configured_random(value)
     elif isinstance(raw, list):

@@ -1,0 +1,170 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_pack_f32",
+      "module": "hexv842_mpas_rrtmg_lw_pack_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_pack_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_lw_v842.py",
+      "cuda_symbol": "solve_device",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read"
+        ],
+        [
+          "lev",
+          "float",
+          "read"
+        ],
+        [
+          "surface",
+          "float",
+          "read"
+        ],
+        [
+          "pavel",
+          "float",
+          "read_write"
+        ],
+        [
+          "tavel",
+          "float",
+          "read_write"
+        ],
+        [
+          "plev",
+          "float",
+          "read_write"
+        ],
+        [
+          "tlev",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "semiss",
+          "float",
+          "read_write"
+        ],
+        [
+          "wkl",
+          "float",
+          "read_write"
+        ],
+        [
+          "wx",
+          "float",
+          "read_write"
+        ],
+        [
+          "reic",
+          "float",
+          "read_write"
+        ],
+        [
+          "relq",
+          "float",
+          "read_write"
+        ],
+        [
+          "resn",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pavel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tavel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tlev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsfc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "semiss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wkl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "reic": [
+          [
+            "any_1d"
+          ]
+        ],
+        "relq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "resn": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

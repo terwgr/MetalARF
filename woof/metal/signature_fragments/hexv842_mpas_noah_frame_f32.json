@@ -1,0 +1,160 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_noah_frame_f32",
+      "module": "hexv842_mpas_noah_frame_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_noah_frame_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/noah_v842.py",
+      "cuda_symbol": "replay_driver_with_state",
+      "resources": [
+        [
+          "floats",
+          "float",
+          "read_write"
+        ],
+        [
+          "integers",
+          "int32",
+          "read_write"
+        ],
+        [
+          "tables",
+          "uint32",
+          "read"
+        ],
+        [
+          "frames",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "routes",
+          "int32",
+          "read_write"
+        ],
+        [
+          "land",
+          "float",
+          "read_write"
+        ],
+        [
+          "landi",
+          "int32",
+          "read_write"
+        ],
+        [
+          "glacier",
+          "float",
+          "read_write"
+        ],
+        [
+          "glacieri",
+          "int32",
+          "read_write"
+        ],
+        [
+          "land_status",
+          "int32",
+          "read"
+        ],
+        [
+          "glacier_status",
+          "int32",
+          "read"
+        ],
+        [
+          "locations",
+          "int32",
+          "read"
+        ],
+        [
+          "status",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "floats": [
+          [
+            "any_1d"
+          ]
+        ],
+        "integers": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tables": [
+          [
+            "any_1d"
+          ]
+        ],
+        "frames": [
+          [
+            "any_1d"
+          ]
+        ],
+        "routes": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land": [
+          [
+            "any_1d"
+          ]
+        ],
+        "landi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "glacier": [
+          [
+            "any_1d"
+          ]
+        ],
+        "glacieri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land_status": [
+          [
+            "any_1d"
+          ]
+        ],
+        "glacier_status": [
+          [
+            "any_1d"
+          ]
+        ],
+        "locations": [
+          [
+            "any_1d"
+          ]
+        ],
+        "status": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "mode",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

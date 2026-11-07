@@ -30,7 +30,8 @@ def submit_sfclay_column(
     ``result`` may be a mapping or an object exposing the 34 canonical
     ``SFCLAY_OUTPUTS`` arrays. Inputs/results must be same-context contiguous
     float32 MetalArrays; the first eight result arrays preserve WRF inout
-    state. No allocation, host arithmetic, or fallback is performed here.
+    state. Strict revised calls allocate a validation buffer and read its status
+    on the host before the column can write result fields.
     """
     from woof.core.physics_inventory import SFCLAY_OUTPUTS
 
@@ -78,6 +79,22 @@ def submit_sfclay_column(
 
     ny, nx = shape
     n = int(np.prod(shape))
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        if option != 1:
+            raise NotImplementedError("strict Metal SFCLAY supports revised option 1 only")
+        status = MetalArray(context.buffer(max(4, n * 4)), shape, np.float32)
+        context.submit_kernel(
+            "sfclay_preflight_exact", {"znt": arrays["znt"], "dz8w": arrays["dz8w"], "status": status},
+            {"ny": ny, "nx": nx, "n": n}, exact_policy=True, grid_size=n)
+        if np.any(status.to_numpy() != 0):
+            raise NotImplementedError("strict Metal SFCLAY cannot execute the source binary64 log rescue")
+        context.submit_kernel(
+            "sfclay_column_exact", arrays,
+            {"dx": float(dx), "option": option, "isfflx": int(bool(isfflx)),
+             "isftcflx": int(isftcflx), "iz0tlnd": int(iz0tlnd),
+             "nx": nx, "ny": ny, "n": n}, exact_policy=True, grid_size=n)
+        return
     context.submit_kernel(
         "sfclay_column", arrays,
         {"dx": float(dx), "option": int(option),

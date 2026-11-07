@@ -13,7 +13,7 @@
 //!
 //! The same dated tarlists are the archive catalog: [`ArchiveFrames`] folds
 //! them per UTC date, so any archived day is one tarlist probe away. NCI
-//! ingests BOM data roughly THREE DAYS behind real time BY DESIGN: frame
+//! ingests BOM data roughly THREE DAYS behind real time BY DESIGN — frame
 //! identities and stamps are always the real data times (never fetch times),
 //! so the app's age chips report that delay honestly instead of hiding it.
 
@@ -243,7 +243,7 @@ impl RecentFrames for AustraliaNciProvider {
 impl ArchiveFrames for AustraliaNciProvider {
     /// One dated-tarlist probe: every frame anchored on `date_utc`,
     /// oldest first. NCI publishes ~3 days behind real time, so "today"
-    /// usually errors while any settled archive date lists in full: the
+    /// usually errors while any settled archive date lists in full — the
     /// plan stamps stay the real data times either way.
     fn day_plans(&self, site_id: &str, date_utc: NaiveDate) -> Result<Vec<FramePlan>, String> {
         validate_site_id(site_id)?;
@@ -317,7 +317,7 @@ fn frame_stamp_utc(frame: &TarlistFrame) -> DateTime<Utc> {
 
 /// Tarlist frames -> frame plans: chronological, identity-deduped (per
 /// site the tarlist file name IS the identity tail, see [`frame_plan`]),
-/// capped to the NEWEST `max` while staying oldest-first, the same
+/// capped to the NEWEST `max` while staying oldest-first — the same
 /// tail-of-the-window shape as ORD's and SMHI's archive lookups.
 fn archive_frames_oldest_first(mut frames: Vec<TarlistFrame>, max: usize) -> Vec<FramePlan> {
     frames.sort_by_key(|frame| frame.timestamp);
@@ -792,7 +792,7 @@ id,id_long,WIGOS,short_name,location,radar_type,postchange_start,prechange_end,s
     }
 
     #[test]
-    #[ignore = "live NCI THREDDS dated-tarlist archive probe: run with --ignored"]
+    #[ignore = "live NCI THREDDS dated-tarlist archive probe — run with --ignored"]
     fn live_melbourne_archive_day_and_window_plans_are_dated_oldest_first() {
         let provider = AustraliaNciProvider::new();
         let source = provider.archive_source().expect("NCI archive source");

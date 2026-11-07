@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_rrtmg_lw_taut",
+      "module": "wrf_exact_rrtmg_lw_transfer",
+      "source": "woof/metal/shaders/wrf_exact_rrtmg_lw_transfer.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_taut",
+      "resources": [
+        [
+          "taug",
+          "float",
+          "read"
+        ],
+        [
+          "taua",
+          "float",
+          "read"
+        ],
+        [
+          "ngb",
+          "int32",
+          "read"
+        ],
+        [
+          "taut",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "taug": [
+          [
+            "ncol",
+            "nl",
+            "ngpt"
+          ]
+        ],
+        "taua": [
+          [
+            "ncol",
+            "nl",
+            "nbnd"
+          ]
+        ],
+        "ngb": [
+          [
+            "ngpt"
+          ]
+        ],
+        "taut": [
+          [
+            "ncol",
+            "nl",
+            "ngpt"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "ngpt",
+          "int32"
+        ],
+        [
+          "nbnd",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

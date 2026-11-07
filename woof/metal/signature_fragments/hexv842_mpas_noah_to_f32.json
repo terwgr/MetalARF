@@ -1,0 +1,396 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_noah_to_f32",
+      "module": "hexv842_mpas_noah_to_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_noah_to_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/noah_v842.py",
+      "cuda_symbol": "noah_to_mpas",
+      "resources": [
+        [
+          "floats",
+          "float",
+          "read"
+        ],
+        [
+          "status",
+          "int32",
+          "read"
+        ],
+        [
+          "skintemp",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx",
+          "float",
+          "read_write"
+        ],
+        [
+          "smstav",
+          "float",
+          "read_write"
+        ],
+        [
+          "smstot",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfcrunoff",
+          "float",
+          "read_write"
+        ],
+        [
+          "udrunoff",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfc_albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfc_albbck",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "z0",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfc_emiss",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "smois",
+          "float",
+          "read_write"
+        ],
+        [
+          "tslb",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow",
+          "float",
+          "read_write"
+        ],
+        [
+          "canwat",
+          "float",
+          "read_write"
+        ],
+        [
+          "chs",
+          "float",
+          "read_write"
+        ],
+        [
+          "chs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "cqs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "chklowq",
+          "float",
+          "read_write"
+        ],
+        [
+          "lai",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowh",
+          "float",
+          "read_write"
+        ],
+        [
+          "snoalb",
+          "float",
+          "read_write"
+        ],
+        [
+          "snotime",
+          "float",
+          "read_write"
+        ],
+        [
+          "acsnom",
+          "float",
+          "read_write"
+        ],
+        [
+          "acsnow",
+          "float",
+          "read_write"
+        ],
+        [
+          "snopcx",
+          "float",
+          "read_write"
+        ],
+        [
+          "potevp",
+          "float",
+          "read_write"
+        ],
+        [
+          "smcrel",
+          "float",
+          "read_write"
+        ],
+        [
+          "noahres",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "floats": [
+          [
+            "any_1d"
+          ]
+        ],
+        "status": [
+          [
+            "any_1d"
+          ]
+        ],
+        "skintemp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "grdflx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "smstav": [
+          [
+            "any_1d"
+          ]
+        ],
+        "smstot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sfcrunoff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "udrunoff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sfc_albedo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sfc_albbck": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z0": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sfc_emiss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsfc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "smois": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tslb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "canwat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "chs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "chs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "chklowq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lai": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sh2o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snoalb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snotime": [
+          [
+            "any_1d"
+          ]
+        ],
+        "acsnom": [
+          [
+            "any_1d"
+          ]
+        ],
+        "acsnow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snopcx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "potevp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "smcrel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noahres": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

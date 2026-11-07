@@ -1,0 +1,113 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_init",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_init.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/framework_init_rrfs.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_init_aerosols",
+      "cuda_symbol": "rrfs_tempo_aerosol_profile",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "nwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nwfa2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "nifa2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "zgrid",
+          "float",
+          "read"
+        ],
+        [
+          "area",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "nwfa": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "nifa": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "nwfa2d": [
+          [
+            "nc"
+          ]
+        ],
+        "nifa2d": [
+          [
+            "nc"
+          ]
+        ],
+        "zgrid": [
+          [
+            "nz+1",
+            "nc"
+          ]
+        ],
+        "area": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "initw",
+          "int32"
+        ],
+        [
+          "initi",
+          "int32"
+        ],
+        [
+          "log_w",
+          "float32"
+        ],
+        [
+          "log_i",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

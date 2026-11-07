@@ -29,7 +29,8 @@
         ["ncol", "int32"],
         ["nlay", "int32"],
         ["f_qi", "int32"],
-        ["f_qs", "int32"]
+        ["f_qs", "int32"],
+        ["ferrier", "int32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

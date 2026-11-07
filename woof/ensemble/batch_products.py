@@ -19,6 +19,7 @@ import numpy as np
 
 from woof.ensemble.batch_storage import BatchArraySpec, BatchMemoryPlan, BatchStorage
 from woof.certify.kernel_manifest import record_module
+from woof.ensemble.batch_storage import _positive_count as _positive_int
 
 PRODUCT_CONTRACT = "gpuwm-resident-ensemble-products.v1"
 _IDENTIFIER = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
@@ -37,20 +38,17 @@ DEFAULT_THRESHOLDS = {
     "rain_total": ("mm", (25.0,)),
     "uh": ("m2 s-2", (75.0,)),
     "humidity2": ("%", (15.0, 20.0, 30.0)),
+    "visibility": ("m", (1000.0, 400.0)),
+    "temperature2_below_freezing": ("K", (273.15,)),
+    "freezing_rain_rate": ("mm h-1", (0.1, 1.0, 5.0)),
+    "freezing_rain_total": ("mm", (1.0, 5.0, 10.0)),
+    "ice_accretion": ("mm", (2.54, 6.35, 12.7)),
+    "ice_accretion_horizontal": ("mm", (2.54, 6.35, 12.7)),
 }
 
-# The headline identities are the same fields as the production viewer
-# recipes. An unavailable diagnostic is recorded by admission, not invented.
-HEADLINE_PRODUCTS = {
-    "composite_reflectivity": "refl", "2m_temperature": "temperature2",
-    "2m_dewpoint": "dewpoint2", "2m_relative_humidity": "humidity2",
-    "10m_wind_speed_and_direction": "wind10", "total_qpf": "rain_total",
-    "qpf_1h": "qpf_1h", "qpf_3h": "qpf_3h", "qpf_6h": "qpf_6h",
-    "uh_2to5km": "uh", "10m_wind_gusts": "gust",
-}
+DEFAULT_COMPARISONS = {"visibility": "lt", "temperature2_below_freezing": "lt", "ice_accretion": "gt", "ice_accretion_horizontal": "gt"}
 
-
-def default_product_requests(available_fields, *, thresholds=None, postage_stamp=True):
+def default_product_requests(available_fields, *, thresholds=None, comparison=None, postage_stamp=True):
     """Resolve the headline threshold table without changing diagnostic units.
 
     The production viewer and ensemble field catalog own the field identities.
@@ -63,8 +61,21 @@ def default_product_requests(available_fields, *, thresholds=None, postage_stamp
     unknown = set(overrides) - set(DEFAULT_THRESHOLDS)
     if unknown:
         raise ValueError(f"threshold overrides name unknown diagnostics: {sorted(unknown)}")
+    if comparison is None:
+        comparisons = {}
+    elif isinstance(comparison, str):
+        comparisons = dict.fromkeys(DEFAULT_THRESHOLDS, comparison)
+    elif isinstance(comparison, dict):
+        comparisons = dict(comparison)
+    else:
+        raise ValueError("ensemble comparison must be ge, gt, le, lt or a field-to-comparison table")
+    if set(comparisons) - set(DEFAULT_THRESHOLDS):
+        raise ValueError(f"comparison overrides name unknown diagnostics: {sorted(set(comparisons) - set(DEFAULT_THRESHOLDS))}")
+    if any(value not in ("ge", "gt", "le", "lt") for value in comparisons.values()):
+        raise ValueError("ensemble comparison values must be ge, gt, le or lt")
     requests = tuple(FieldProducts(field, units, tuple(overrides.get(field, values)),
-                                   paintball=True, postage_stamp=postage_stamp)
+                                   comparison=comparisons.get(field, DEFAULT_COMPARISONS.get(field, "ge")),
+                                   paintball=True, spaghetti=True, postage_stamp=postage_stamp)
                      for field, (units, values) in DEFAULT_THRESHOLDS.items()
                      if field in available)
     unavailable = tuple(field for field in DEFAULT_THRESHOLDS if field not in available)
@@ -199,15 +210,6 @@ class PreparedCompoundField:
         return self.output
 
 
-def _positive_int(value, name):
-    if isinstance(value, (bool, np.bool_)):
-        raise TypeError(f"{name} must be an integer")
-    value = index(value)
-    if value < 1:
-        raise ValueError(f"{name} must be positive")
-    return value
-
-
 @dataclass(frozen=True)
 class FieldProducts:
     """One diagnostic field, with thresholds in its declared units."""
@@ -243,7 +245,7 @@ class FieldProducts:
                 "postage_stamp": self.postage_stamp}
 
 
-def product_memory_plan(requests, field_shapes, *, members, reserved_bytes=0):
+def product_memory_plan(requests, field_shapes, *, members, reserved_bytes=0, include_pmm=False, member_weights=None):
     """Price every output and threshold allocation, including membership maps.
 
     Inputs belong to the caller's forecast/diagnostic plan. This output plan
@@ -256,7 +258,10 @@ def product_memory_plan(requests, field_shapes, *, members, reserved_bytes=0):
         raise ValueError("product plan needs FieldProducts requests")
     if len({r.field for r in requests}) != len(requests):
         raise ValueError("duplicate product fields would hide allocations")
-    rows = []
+    from woof.ensemble.member_weights import validate_weights, unequal_weights
+    member_weights = validate_weights(member_weights, members)
+    rows = ([BatchArraySpec("ensemble:weights", (members,), "shared", "float64")]
+            if unequal_weights(member_weights) else [])
     for request in requests:
         try:
             shape = tuple(_positive_int(n, request.field) for n in field_shapes[request.field])
@@ -266,6 +271,8 @@ def product_memory_plan(requests, field_shapes, *, members, reserved_bytes=0):
             raise ValueError(f"{request.field} needs a gridded field")
         for name in ("mean", "spread", "min", "max"):
             rows.append(BatchArraySpec(f"{request.field}:{name}", shape, "shared"))
+        if include_pmm and request.field in ("refl", "rain_total"):
+            rows.append(BatchArraySpec(f"{request.field}:pmm", shape, "shared"))
         rows.append(BatchArraySpec(f"{request.field}:finite_count", shape, "shared", "uint32"))
         thresholds = len(request.thresholds)
         if thresholds:
@@ -293,38 +300,44 @@ extern "C" __global__ void ensemble_field_products(
     unsigned int *finite_count, float *probability,
     unsigned long long *paintball,
     unsigned long long cells, int members, int threshold_count, int relation,
-    int paintball_enabled) {
+    int paintball_enabled, const double *weights, int weighted) {
     unsigned long long cell = (unsigned long long)blockIdx.x * blockDim.x + threadIdx.x;
     if (cell >= cells) return;
     unsigned int finite = 0;
-    double total = 0.0;
+    double total = 0.0, mass = 0.0, pair_mass = 0.0;
     float lo = values[cell], hi = lo;
     for (int member = 0; member < members; ++member) {
         float x = values[(unsigned long long)member * cells + cell];
         if (isfinite(x)) {
             ++finite;
-            total = __dadd_rn(total, (double)x);
+            double w = weighted ? weights[member] : 1.0;
+            total = __dadd_rn(total, weighted ? __dmul_rn(w, (double)x) : (double)x);
+            pair_mass = __dadd_rn(pair_mass, __dmul_rn(mass, w));
+            mass = __dadd_rn(mass, w);
             if (x < lo) lo = x;
             if (x > hi) hi = x;
         }
     }
     finite_count[cell] = finite;
-    double average = __ddiv_rn(total, (double)members);
+    double average = __ddiv_rn(total, weighted ? mass : (double)members);
     double deviations = 0.0;
     for (int member = 0; member < members; ++member) {
         double delta = __dsub_rn((double)values[(unsigned long long)member * cells + cell], average);
-        deviations = __dadd_rn(deviations, __dmul_rn(delta, delta));
+        double squared = __dmul_rn(delta, delta);
+        deviations = __dadd_rn(deviations, weighted ? __dmul_rn(weights[member], squared) : squared);
     }
     float missing = __int_as_float(0x7fc00000);
     bool complete = finite == (unsigned int)members;
     mean[cell] = complete ? __double2float_rn(average) : missing;
+    double spread_denominator = weighted ? __ddiv_rn(__dmul_rn(2.0, pair_mass), mass) : (double)(members - 1);
     spread[cell] = complete ? (members == 1 ? 0.0f :
-        __double2float_rn(sqrt(__ddiv_rn(deviations, (double)(members - 1))))) : missing;
+        __double2float_rn(sqrt(__ddiv_rn(deviations, spread_denominator)))) : missing;
     minimum[cell] = complete ? lo : missing;
     maximum[cell] = complete ? hi : missing;
     int words = (members + 63) >> 6;
     for (int threshold = 0; threshold < threshold_count; ++threshold) {
         unsigned int count = 0;
+        double event_mass = 0.0;
         for (int word = 0; word < words; ++word) {
             unsigned long long mask = 0;
             int end = min(members, (word + 1) * 64);
@@ -332,6 +345,7 @@ extern "C" __global__ void ensemble_field_products(
                 float x = values[(unsigned long long)member * cells + cell];
                 if (isfinite(x) && selected(x, thresholds[threshold], relation)) {
                     ++count;
+                    if (weighted) event_mass = __dadd_rn(event_mass, weights[member]);
                     mask |= 1ULL << (member - word * 64);
                 }
             }
@@ -339,7 +353,7 @@ extern "C" __global__ void ensemble_field_products(
                 paintball[((unsigned long long)threshold * words + word) * cells + cell] = mask;
         }
         probability[(unsigned long long)threshold * cells + cell] = complete ?
-            __double2float_rn(__ddiv_rn((double)count, (double)members)) : missing;
+            __double2float_rn(__ddiv_rn(weighted ? event_mass : (double)count, weighted ? mass : (double)members)) : missing;
     }
 }
 extern "C" __global__ void ensemble_spaghetti_cells(
@@ -386,12 +400,80 @@ def _refuse_overlap(inputs, outputs):
                 raise ValueError(f"product outputs {name} and {other} overlap")
 
 
+def probability_matched_mean(values, mean, xp, member_weights=None):
+    """GPU rank matching, optionally drawing from a weighted member CDF.
+
+    Each finite grid cell carries its member's probability mass. Equal mean
+    ranks share their draws. Uniform weights retain the existing PMM exactly.
+    """
+    flat = mean.reshape(-1)
+    indices = xp.flatnonzero(xp.isfinite(flat))
+    source = values.reshape(-1)
+    finite = xp.isfinite(source)
+    source_order = xp.argsort(-source[finite], kind="stable")
+    pool = source[finite][source_order]
+    out = xp.full(flat.shape, xp.nan, dtype=xp.float32)
+    if indices.size and pool.size:
+        order = xp.argsort(-flat[indices], kind="stable")
+        ranks = flat[indices[order]]
+        quantiles = xp.arange(indices.size, dtype=xp.float64) / indices.size
+        if member_weights is None:
+            picks = (xp.arange(indices.size, dtype=xp.float64) * (pool.size / indices.size)).astype(xp.int64)
+        else:
+            weights = xp.asarray(member_weights, dtype=xp.float64)
+            mass = xp.broadcast_to(weights.reshape((-1,) + (1,) * (values.ndim - 1)), values.shape)
+            mass = mass.reshape(-1)[finite][source_order]
+            cumulative = xp.cumsum(mass)
+            picks = xp.minimum(xp.searchsorted(cumulative, quantiles * cumulative[-1], side="right"), pool.size - 1)
+        draws = pool[picks]
+        group = xp.cumsum(xp.concatenate((xp.asarray([True]), ranks[1:] != ranks[:-1]))) - 1
+        draws = (xp.bincount(group, weights=draws) / xp.bincount(group))[group]
+        out[indices[order]] = draws
+    return out.reshape(mean.shape)
+
+
+def apply_member_weights(products, member_weights):
+    """Weight the existing aggregate buffers on their resident GPU.
+
+    Missing members still mask a cell. Weights never change that denominator.
+    The sample spread uses the reliability-weight correction 1-sum(w**2).
+    """
+    xp = products._xp
+    weights = np.asarray(member_weights, dtype=np.float64)
+    if (weights.shape != (products.members,) or not np.isfinite(weights).all()
+            or (weights < 0).any() or not (weights > 0).any() or not np.isfinite(weights.sum())):
+        raise ValueError("member weights must be finite nonnegative masses with a positive finite total for the complete roster")
+    weights = weights / weights.sum()
+    device_weights = xp.asarray(weights)
+    for request in products.requests:
+        values = products.fields[request.field]
+        w = device_weights.reshape((-1,) + (1,) * (values.ndim - 1))
+        complete = xp.all(xp.isfinite(values), axis=0)
+        mean = xp.sum(w * values, axis=0)
+        prefix = request.field + ":"
+        products.outputs[prefix + "mean"][:] = xp.where(complete, mean, xp.nan)
+        correction = float(1 - np.sum(weights ** 2))
+        variance = xp.sum(w * (values - mean) ** 2, axis=0)
+        spread = xp.sqrt(variance / correction) if correction > 0 else xp.zeros_like(mean)
+        products.outputs[prefix + "spread"][:] = xp.where(complete, spread, xp.nan)
+        compare = {"ge": xp.greater_equal, "gt": xp.greater, "le": xp.less_equal, "lt": xp.less}[request.comparison]
+        for position, threshold in enumerate(request.thresholds):
+            products.outputs[prefix + "probability"][position] = xp.where(
+                complete, xp.sum(w * compare(values, threshold), axis=0), xp.nan)
+        if prefix + "pmm" in products.outputs:
+            products.outputs[prefix + "pmm"][:] = probability_matched_mean(
+                values, products.outputs[prefix + "mean"], xp,
+                None if np.all(weights == weights[0]) else weights)
+    return products
+
+
 class PreparedProductFrame:
     """Bound product launchers; calls allocate no forecast-sized device arrays."""
 
-    def __init__(self, *, fields, requests, storage, array_module):
+    def __init__(self, *, fields, requests, storage, array_module, member_weights=None):
         self.fields, self.requests, self.storage = dict(fields), tuple(requests), storage
         self.members = storage.members
+        self.member_weights = member_weights
         self.calls = 0
         self.device = int(array_module.cuda.runtime.getDevice())
         self._xp = array_module
@@ -418,7 +500,8 @@ class PreparedProductFrame:
                     get("min"), get("max"), get("finite_count"), probability,
                     paintball, np.uint64(count), np.int32(self.members),
                     np.int32(len(request.thresholds)), np.int32(relation),
-                    np.int32(request.paintball))
+                    np.int32(request.paintball), outputs.get("ensemble:weights", get("mean")),
+                    np.int32("ensemble:weights" in outputs))
             self._launches.append((self._reduce, ((count + 255) // 256,), args))
             if request.spaghetti:
                 ny, nx = shape
@@ -440,11 +523,16 @@ class PreparedProductFrame:
         for request in self.requests:
             if request.postage_stamp:
                 self._xp.copyto(self.outputs[f"{request.field}:members"], self.fields[request.field])
+            if f"{request.field}:pmm" in self.outputs:
+                self.outputs[f"{request.field}:pmm"][:] = probability_matched_mean(
+                    self.fields[request.field], self.outputs[f"{request.field}:mean"], self._xp, self.member_weights)
         self.calls += 1
         return self.outputs
 
     def receipt(self):
-        return {"contract": PRODUCT_CONTRACT, "members": self.members,
+        from woof.ensemble.member_weights import weight_receipt
+        return {**weight_receipt(range(self.members), self.member_weights),
+                "contract": PRODUCT_CONTRACT, "members": self.members,
                 "device": self.device, "spread_ddof": 1,
                 "nonfinite_policy": "mask aggregate; retain finite_count",
                 "probability_scale": "fraction", "input_layout": "member-outermost",
@@ -456,7 +544,7 @@ class PreparedProductFrame:
 
 
 def prepare_product_frame(fields, requests, *, available_bytes, reserved_bytes=0,
-                          array_module=None):
+                          array_module=None, member_weights=None):
     """Bind const resident member fields and allocate the declared products.
 
     Supplying a budget prevents output buffers from exhausting memory after
@@ -487,12 +575,18 @@ def prepare_product_frame(fields, requests, *, available_bytes, reserved_bytes=0
         members, shapes[name] = count, array.shape[1:]
     if members > np.iinfo(np.int32).max:
         raise ValueError("member count exceeds the CUDA int32 product ABI")
-    plan = product_memory_plan(requests, shapes, members=members, reserved_bytes=reserved_bytes)
+    from woof.ensemble.member_weights import validate_weights
+    member_weights = validate_weights(member_weights, members)
+    plan = product_memory_plan(requests, shapes, members=members, reserved_bytes=reserved_bytes,
+                               include_pmm=True, member_weights=member_weights)
     storage = BatchStorage(plan, members, array_module=array_module, available_bytes=available_bytes)
+    if "ensemble:weights" in storage.arrays:
+        scale = max(member_weights)
+        storage.arrays["ensemble:weights"].set(np.asarray([w/scale for w in member_weights], np.float64))
     for request in requests:
         if request.thresholds:
             storage.arrays[f"{request.field}:thresholds"].set(np.asarray(request.thresholds, np.float32))
-    return PreparedProductFrame(fields=fields, requests=requests, storage=storage, array_module=array_module)
+    return PreparedProductFrame(fields=fields, requests=requests, storage=storage, array_module=array_module, member_weights=member_weights)
 
 
 _RAIN_SOURCE = r'''
@@ -656,12 +750,17 @@ def write_product_frame(path, products, *, valid_time, latitude, longitude,
         writer.setncattr("ensemble_members", products.members)
         writer.setncattr("valid_time", str(valid_time))
         writer.setncattr("spread_ddof", 1)
+        from woof.ensemble.member_weights import weight_receipt
+        import json
+        writer.setncattr("ensemble_weighting", json.dumps(weight_receipt(
+            getattr(products, "member_order", range(products.members)), getattr(products, "member_weights", None)), sort_keys=True))
         writer.setncattr("probability_scale", "fraction")
         for name, values in coordinates.items():
             writer.createVariable(name, "float32", ("south_north", "west_east"))[:] = values
         for request in products.requests:
             field = request.field
-            for kind in ("mean", "spread", "min", "max", "finite_count"):
+            for kind in ("mean", "spread", "min", "max", "finite_count",
+                         *(("pmm",) if f"{field}:pmm" in products.outputs else ())):
                 name = f"{field}_{kind}"
                 array = products.outputs[f"{field}:{kind}"]
                 variable = writer.createVariable(name, array.dtype, ("south_north", "west_east"))

@@ -39,6 +39,7 @@ from typing import Mapping
 import numpy as np
 
 from woof.core.urban_bem_layout import METADATA
+from woof.core.urban_state import BEP_SPEC, BEM_SPEC
 
 # module_sf_bep_bem.F:22-53, the BEP_BEM module parameters.
 NDM = 2
@@ -60,26 +61,7 @@ DIMENSIONS = MappingProxyType({
 
 #: The option-3 arrays (Registry.EM_COMMON), in infra's row convention:
 #: layers 0 = 2-D, a string names an ``urban_map_*`` size or ``ndm``.
-STATE_SPEC = MappingProxyType({
-    "tsk_rural_bep": ("f4", 0),
-    "trb_urb4d": ("f4", "zrd"), "tw1_urb4d": ("f4", "zwd"),
-    "tw2_urb4d": ("f4", "zwd"), "tgb_urb4d": ("f4", "gd"),
-    "sfw1_urb3d": ("f4", "zd"), "sfw2_urb3d": ("f4", "zd"),
-    "sfr_urb3d": ("f4", "zdf"), "sfg_urb3d": ("f4", "ndm"),
-    "tlev_urb3d": ("f4", "bd"), "qlev_urb3d": ("f4", "bd"),
-    "tw1lev_urb3d": ("f4", "wd"), "tw2lev_urb3d": ("f4", "wd"),
-    "tglev_urb3d": ("f4", "gbd"), "tflev_urb3d": ("f4", "fbd"),
-    **{name: ("f4", 0) for name in (
-        "sf_ac_urb3d", "lf_ac_urb3d", "cm_ac_urb3d", "sfvent_urb3d",
-        "lfvent_urb3d", "ep_pv_urb3d", "qgr_urb3d", "tgr_urb3d",
-        "draingr_urb3d")},
-    "sfwin1_urb3d": ("f4", "wd"), "sfwin2_urb3d": ("f4", "wd"),
-    "t_pv_urb3d": ("f4", "zdf"), "trv_urb4d": ("f4", "zgrd"),
-    "qr_urb4d": ("f4", "zgrd"), "drain_urb4d": ("f4", "zdf"),
-    "sfrv_urb3d": ("f4", "zdf"), "lfrv_urb3d": ("f4", "zdf"),
-    "dgr_urb3d": ("f4", "zdf"), "lfr_urb3d": ("f4", "zdf"),
-    "dg_urb3d": ("f4", "ndm"), "lfg_urb3d": ("f4", "ndm"),
-})
+STATE_SPEC = MappingProxyType({**BEP_SPEC, **BEM_SPEC})
 
 # ---------------------------------------------------------------------------
 # the generated layouts
@@ -183,12 +165,13 @@ def tables_from_params(params) -> dict[str, object]:
 # the device module
 # ---------------------------------------------------------------------------
 
-def module_source() -> str:
+def module_source(*, kernel_dir=None) -> str:
     """The exact source string NVRTC compiles."""
     from woof.core.kernels import _preamble
 
-    root = Path(__file__).parent / "kernels"
-    return _preamble() + "".join(
+    root = Path(kernel_dir) if kernel_dir is not None else Path(__file__).parent / "kernels"
+    from woof.cuda_subnormals import MARKER
+    return MARKER + _preamble(root) + "".join(
         (root / name).read_text(encoding="utf-8") for name in _SOURCES)
 
 
@@ -196,6 +179,8 @@ def module_source() -> str:
 def _bem_module():
     """Dedicated loader: this module alone needs both option overrides."""
     import cupy as cp
+    from woof.cuda_subnormals import install
+    install()
 
     from woof.certify.kernel_manifest import record_module
 
@@ -435,6 +420,12 @@ def workspace_bytes_per_column(nz: int) -> int:
                 + WORKSPACE_FLOATS_PER_LEVEL * (int(nz) + 1))
 
 
+def urban_columns(frc_urb2d):
+    """Positive validated [0,1] fractions, including positive subnormal words."""
+    import cupy as cp
+    return cp.flatnonzero(frc_urb2d.ravel().view(cp.int32) > cp.int32(0))
+
+
 class ColumnPlan:
     """The urban column list, chunked to a workspace budget, and its buffers.
 
@@ -472,7 +463,7 @@ class ColumnPlan:
 
         import cupy as cp
 
-        cols = cp.flatnonzero(frc_urb2d.ravel() > cp.float32(0))
+        cols = urban_columns(frc_urb2d)
         cols = cols.astype(cp.int32)
         self.count = int(cols.size)
         self.nz = int(nz)
@@ -492,12 +483,11 @@ class ColumnPlan:
 def _launch_bep_bem_columns_metal(
         dev: Mapping, cls: Mapping, *, gmt, julday, declin_urb, dt,
         itimestep, num_urban_hi, workspace_bytes, plan=None) -> ColumnPlan:
-    """Prepare the BEP record and BEM column geometry/state through bb_param.
+    """Run BEM canopy radiation, materials, rooms and atmospheric coupling.
 
-    The atmosphere gather is shared with option 2. BEM's selected height
-    profile and prognostic arrays are packed into source-local arrays without
-    modifying the resident state. The path stops after the per-column
-    building-level scan, before the remaining atmospheric/BEM solver chain.
+    The atmosphere gather is shared with option 2. Source-local views retain
+    the WRF building and level order; the final scatter publishes persistent
+    canopy state and the PBL and surface outputs.
     """
     del gmt, julday, itimestep
     from woof.metal.array import MetalArray, MetalArrayModule
@@ -926,7 +916,7 @@ def _launch_bep_bem_columns_metal(
     submit_bem_atmosphere_interp(
         context,
         {"active_cols": active_cols, "utype": param_resources["utype"],
-         "nzu_class": profiles["nz_u"], "z": atmosphere["z1d"],
+         "nzurban": param["nzurban"], "z": atmosphere["z1d"],
          "z_u": profiles["z_u"], "ua": atmosphere["ua1d"],
          "va": atmosphere["va1d"], "pt": atmosphere["pt1d"],
          "pt0": atmosphere["pt01d"], "pr": atmosphere["pr1d"],
@@ -978,7 +968,7 @@ def _launch_bep_bem_columns_metal(
         "active_cols": active_cols,
         "utype": param_resources["utype"],
         "class_int": class_int,
-        "nzu_class": profiles["nz_u"],
+        "nzurban": param["nzurban"],
         "z_u": profiles["z_u"],
         "ws": param["ws"], "drst": param["drst"],
         "ss": param["ss"], "pb": param["pb"],
@@ -997,9 +987,10 @@ def _launch_bep_bem_columns_metal(
     radiation["rlg"] = module.zeros((ncol, NDM), dtype=np.float32)
     radiation["error_lw"] = module.zeros((ncol, NDM), dtype=np.int32)
     longwave_resources = {
+        "active_cols": active_cols,
         "pb": param["pb"], "utype": param_resources["utype"],
         "class_int": class_int, "class_float": class_float,
-        "nzu_class": profiles["nz_u"],
+        "nzurban": param["nzurban"],
         "fwg": factor["fwg"], "fww": factor["fww"],
         "fgw": factor["fgw"], "fsw": factor["fsw"], "fsg": factor["fsg"],
         "tg_av": temperature_profiles["tg_av"],
@@ -1016,9 +1007,10 @@ def _launch_bep_bem_columns_metal(
 
     radiation["error_sw"] = module.zeros((ncol, NDM), dtype=np.int32)
     shortwave_resources = {
+        "active_cols": active_cols,
         "pb": param["pb"], "utype": param_resources["utype"],
         "class_int": class_int, "class_float": class_float,
-        "nzu_class": profiles["nz_u"],
+        "nzurban": param["nzurban"],
         "fwg": factor["fwg"], "fww": factor["fww"],
         "fgw": factor["fgw"], "fsw": factor["fsw"], "fsg": factor["fsg"],
         "rsw": radiation["rsw"], "rsg": radiation["rsg"],
@@ -1055,7 +1047,7 @@ def _launch_bep_bem_columns_metal(
         "rld": dev["glw"].view((ncol,), byte_offset=dev["glw"].byte_offset),
         "rs": dev["swdown"].view((ncol,), byte_offset=dev["swdown"].byte_offset),
         "utype": param_resources["utype"], "class_int": class_int,
-        "class_float": class_float, "nzu_class": profiles["nz_u"],
+        "class_float": class_float, "nzurban": param["nzurban"],
         **upward,
     }
     submit_bem_upward_rad(
@@ -1131,24 +1123,9 @@ def _launch_bep_bem_columns_metal(
          "green_roof": green_roof}, grid_size=ncol)
     check_stage_error(green_roof_state["error"], "bb_roof_temp_veg")
 
-    # bb_flux_flat computes the real column ground/roof sensible and latent
-    # terms. Repack its direction-major output before the BEM per-building
-    # call, whose persistent state uses level-major, then direction order.
-    flat_flux = {
-        name: module.zeros((ncol, NDM, NZ_UM), dtype=np.float32)
-        for name in ("uhb", "vhb", "sf", "lf", "ehb", "thb", "qhb")
-    }
-    flat_flux["error"] = module.zeros((ncol, NDM, NZ_UM), dtype=np.int32)
-    submit_bem_flat_flux(
-        context,
-        {"active_cols": active_cols, "interp": atmosphere_interp["interp"],
-         "z0": param["z0"], "ss": param["ss"],
-         "ptg": ground_temperature["ptg"], "tr": packed["tr"],
-         "dg": packed["dg"], "dgr": packed["dgr"], **flat_flux},
-        ncol=ncol, g_u=9.81, vk=0.4, p0=100000.0,
-        rcp_u=287.0 / 1004.0, cp_u=1004.0, latent=2.45e6,
-        dz_u=DZ_U, dgmax=1.0, drmax=1.0)
-    check_stage_error(flat_flux["error"], "bb_flux_flat")
+    # bem_bem consumes carried surface fluxes from entry state. WRF gathers
+    # the ordinary/green roof mixture before advancing the material stacks;
+    # bb_buildings refreshes exterior fluxes only after that solve.
     roof_flux = {
         "hsrof": module.zeros((ncol, NBUI_MAX), dtype=np.float32),
         "lsrof": module.zeros((ncol, NBUI_MAX), dtype=np.float32),
@@ -1158,10 +1135,14 @@ def _launch_bep_bem_columns_metal(
         context,
         {"active_cols": active_cols,
          "building_nlev": level_scan["building_nlev"],
-         "sf": flat_flux["sf"], "lf": flat_flux["lf"],
+         # The gather-only branch does not read direction-major sf/lf.
+         "sf": packed["sfr"].view((ncol, NDM, NZ_UM)),
+         "lf": packed["lfr"].view((ncol, NDM, NZ_UM)),
+         "utype": param_resources["utype"], "class_float": class_float,
+         "sfrv": packed["sfrv"],
          "sfr": packed["sfr"], "lfr": packed["lfr"],
          "sfg": packed["sfg"], "lfg": packed["lfg"], **roof_flux},
-        ncol=ncol)
+        ncol=ncol, gather_only=True)
     check_stage_error(roof_flux["error"], "BEM flat flux repack")
 
     # bem_fluxeqocc is a pure room-gain calculation. Pack its per-class
@@ -1183,11 +1164,8 @@ def _launch_bep_bem_columns_metal(
          "class_float": class_float, "bs": param["bs"], **occupancy_inputs},
         ncol=ncol, class_float_len=int(class_float.shape[0]))
     check_stage_error(occupancy_inputs["error"], "BEM occupancy input select")
-    nhourday = float(gmt)
-    if nhourday >= 24.0:
-        nhourday -= 24.0
-    if nhourday < 0.0:
-        nhourday += 24.0
+    hour_angle = dev["omg_urb2d"].view(
+        (ncol,), byte_offset=dev["omg_urb2d"].byte_offset)
     occupancy = {
         "sensible_gain": module.zeros((indoor_nitem,), dtype=np.float32),
         "latent_gain": module.zeros((indoor_nitem,), dtype=np.float32),
@@ -1195,8 +1173,8 @@ def _launch_bep_bem_columns_metal(
     }
     submit_bem_occupancy(
         context,
-        {**occupancy_inputs, **occupancy},
-        nitem=indoor_nitem, nhourday=nhourday)
+        {"hour_angle": hour_angle, **occupancy_inputs, **occupancy},
+        nitem=indoor_nitem, ncol=ncol)
     check_stage_error(occupancy["error"], "bem_fluxeqocc")
 
     # WRF calls bem_int_rsrad/bem_int_rlrad once for every active building
@@ -1244,7 +1222,7 @@ def _launch_bep_bem_columns_metal(
          "tw": packed["tw"], "twlev": packed["twlev"],
          "tflev": packed["tflev"], "tglev": packed["tglev"],
          "tr": packed["tr"], "tlev": packed["tlev"],
-         "tr_av": temperature_profiles["tr_av"],
+         "tr_av": temperature_profiles["tr_av"], "tpv": packed["tpv"],
          "swdown": dev["swdown"].view((ncol,), byte_offset=dev["swdown"].byte_offset),
          "glw": dev["glw"].view((ncol,), byte_offset=dev["glw"].byte_offset),
          **indoor_fluxes},
@@ -1252,29 +1230,14 @@ def _launch_bep_bem_columns_metal(
         class_float_len=int(class_float.shape[0]), dz_u=DZ_U)
     check_stage_error(indoor_fluxes["error"], "bem_radfluxs/bem_hsinsflux/bem_fluxcond")
 
-    # bb_flux_wall supplies the exterior sensible wall/window terms consumed
-    # by bem_bem's material matrices. Preserve the returned surface fluxes in
-    # the packed state so the final inverse scatter commits the WRF fields.
+    # Reserve bb_buildings outputs without overwriting the carried wall and
+    # window fluxes that form bem_bem's material boundary conditions.
     wall_flux = {
         name: module.zeros((ncol, NBUI_MAX, NZ_UM, 4), dtype=np.float32)
         for name in ("uva", "vva", "uvb", "vvb", "sfw", "sfwin", "evb")
     }
     wall_flux["error"] = module.zeros(
         (ncol, NBUI_MAX, NZ_UM, 4), dtype=np.int32)
-    submit_bem_wall_flux(
-        context,
-        {"active_cols": active_cols,
-         "building_nlev": level_scan["building_nlev"],
-         "interp": atmosphere_interp["interp"], "tw": packed["tw"],
-         "twlev": packed["twlev"], "pb": param["pb"],
-         "bs": param["bs"], "ws": param["ws"], "drst": param["drst"],
-         **wall_flux},
-        ncol=ncol, p0=100000.0, rcp_u=287.0 / 1004.0,
-        cp_u=1004.0, dt=float(dt))
-    check_stage_error(wall_flux["error"], "bb_flux_wall")
-    packed["sfw"] = wall_flux["sfw"]
-    packed["sfwin"] = wall_flux["sfwin"]
-
     material = {
         "gswal": module.zeros(
             (ncol, NBUI_MAX, NZ_UM, 4), dtype=np.float32),
@@ -1290,17 +1253,26 @@ def _launch_bep_bem_columns_metal(
         "dzr": param["dzr"], "csr": param["csr"], "alar": param["alar"],
         "hswalins": indoor_fluxes["hswalins"],
         "hrwalins": indoor_fluxes["hrwalins"],
-        "hswalout": wall_flux["sfw"], "hrwalout": indoor_fluxes["hrwalout"],
+        "hswalout": packed["sfw"], "hrwalout": indoor_fluxes["hrwalout"],
         "hswinins": indoor_fluxes["hswinins"],
         "hrwinins": indoor_fluxes["hrwinins"],
-        "hswinout": wall_flux["sfwin"], "hrwinout": indoor_fluxes["hrwinout"],
+        "hswinout": packed["sfwin"], "hrwinout": indoor_fluxes["hrwinout"],
         "hsrof": roof_flux["hsrof"], "hrrof": indoor_fluxes["hrrof"],
         "lsrof": roof_flux["lsrof"],
         "tw": packed["tw"], "twlev": packed["twlev"],
         "tflev": packed["tflev"], "tglev": packed["tglev"],
         "tr": packed["tr"], **material,
     }
-    material_params = {"ncol": ncol, "dt": float(dt)}
+    # Indoor radiation uses flattened building-level rows. Lend the
+    # material solver its declared column/building/level views of the same
+    # contiguous storage; wall faces and the six interior surfaces differ.
+    for name in ("hswalins", "hrwalins", "hrwalout", "hswinins",
+                 "hrwinins", "hrwinout"):
+        faces = 6 if name in ("hswalins", "hrwalins") else 4
+        material_resources[name] = material_resources[name].view(
+            (ncol, NBUI_MAX, NZ_UM, faces))
+    material_resources["error"] = material["error"].view((ncol * NBUI_MAX,))
+    material_params = {"ncol": ncol, "nitem": ncol * NBUI_MAX, "dt": float(dt)}
     material_kernel = "urban_bem_material_solve_fragment"
     if green_roof:
         material_kernel = "urban_bem_material_solve_green_roof_fragment"
@@ -1351,27 +1323,19 @@ def _launch_bep_bem_columns_metal(
         "consump": module.zeros((indoor_rad_nitem,), dtype=np.float32),
     }
     submit_bem_room_control(
-        context, room_control, nitem=indoor_rad_nitem,
-        nhourday=nhourday, dt=float(dt))
+        context, {"hour_angle": hour_angle, **room_control},
+        nitem=indoor_rad_nitem, ncol=ncol, dt=float(dt))
 
     # These four per-building profiles are bem_bem's source outputs at
-    # module_sf_bep_bem.F:1749-1753. Keep the exact stage results as views:
-    # hsroo/hlroo are bem_fluxroo's net room sensible/latent fluxes, and
-    # hsvent/hlvent are bem_fluxvent's sensible/latent ventilation fluxes.
-    # The later bb_buildings tendency stage consumes all four profiles.
+    # module_sf_bep_bem.F:1749-1753: hsout/hlout are the air-conditioning
+    # sensible/latent loads, hsvent/hlvent the ventilation fluxes. The later
+    # bb_buildings tendency stage consumes all four profiles.
     bem_flux_profiles = {
-        "sflev": room_inputs["hsroo"].view(
+        name: room_control[source].view(
             (ncol, NBUI_MAX, NZ_UM),
-            byte_offset=room_inputs["hsroo"].byte_offset),
-        "lflev": room_inputs["hlroo"].view(
-            (ncol, NBUI_MAX, NZ_UM),
-            byte_offset=room_inputs["hlroo"].byte_offset),
-        "sfvlev": room_control["hsvent"].view(
-            (ncol, NBUI_MAX, NZ_UM),
-            byte_offset=room_control["hsvent"].byte_offset),
-        "lfvlev": room_control["hlvent"].view(
-            (ncol, NBUI_MAX, NZ_UM),
-            byte_offset=room_control["hlvent"].byte_offset),
+            byte_offset=room_control[source].byte_offset)
+        for name, source in (("sflev", "hsout"), ("lflev", "hlout"),
+                             ("sfvlev", "hsvent"), ("lfvlev", "hlvent"))
     }
 
     staged_indoor_state = {
@@ -1409,9 +1373,7 @@ def _launch_bep_bem_columns_metal(
     check_stage_error(totals["error"], "bem_consump_total")
 
     # bb_buildings runs after bem_bem has updated roof/material temperatures.
-    # Recompute its flat fluxes in that source position; the earlier flat pass
-    # supplies the material-solver boundary condition and is intentionally not
-    # reused for the post-solve atmospheric tendencies.
+    # Compute exterior fluxes here from the advanced material temperatures.
     post_solve_flat_flux = {
         name: module.zeros((ncol, NDM, NZ_UM), dtype=np.float32)
         for name in ("uhb", "vhb", "sf", "lf", "ehb", "thb", "qhb")
@@ -1442,7 +1404,7 @@ def _launch_bep_bem_columns_metal(
         {"active_cols": active_cols,
          "utype": param_resources["utype"],
          "building_nlev": level_scan["building_nlev"],
-         "class_float": class_float,
+         "class_float": class_float, "bs": param["bs"],
          "interp": atmosphere_interp["interp"],
          "tr_av": temperature_profiles["tr_av"],
          "tpv": packed["tpv"],
@@ -1450,8 +1412,8 @@ def _launch_bep_bem_columns_metal(
              (ncol,), byte_offset=dev["swdown"].byte_offset),
          "glw": dev["glw"].view(
              (ncol,), byte_offset=dev["glw"].byte_offset),
-         "flat_thb": post_solve_flat_flux["thb"],
-         **pv_profiles},
+         "pv_energy": pv_profiles["pv_energy"],
+         "pv_hspv": pv_profiles["pv_hspv"]},
         {"ncol": ncol, "dt": float(dt), "cp_u": 1004.0},
         grid_size=ncol)
 
@@ -1460,12 +1422,9 @@ def _launch_bep_bem_columns_metal(
         {"active_cols": active_cols,
          "utype": param_resources["utype"],
          "building_nlev": level_scan["building_nlev"],
-         "class_float": class_float,
-         "interp": atmosphere_interp["interp"],
          "pv_hspv": pv_profiles["pv_hspv"],
-         "flat_thb": post_solve_flat_flux["thb"],
          "sfrpv": pv_profiles["sfrpv"]},
-        {"ncol": ncol, "cp_u": 1004.0}, grid_size=ncol)
+        {"ncol": ncol}, grid_size=ncol)
 
     post_solve_roof_flux = {
         "hsrof": module.zeros((ncol, NBUI_MAX), dtype=np.float32),
@@ -1477,6 +1436,8 @@ def _launch_bep_bem_columns_metal(
         {"active_cols": active_cols,
          "building_nlev": level_scan["building_nlev"],
          "sf": post_solve_flat_flux["sf"], "lf": post_solve_flat_flux["lf"],
+         "utype": param_resources["utype"], "class_float": class_float,
+         "sfrv": packed["sfrv"],
          "sfr": packed["sfr"], "lfr": packed["lfr"],
          "sfg": packed["sfg"], "lfg": packed["lfg"],
          **post_solve_roof_flux},
@@ -1607,6 +1568,8 @@ def _launch_bep_bem_columns_metal(
          "ss": param["ss"], "interp": atmosphere_interp["interp"],
          "sfrv": packed["sfrv"], "lfrv": packed["lfrv"],
          "sfrpv": pv_profiles["sfrpv"],
+         "sfr": packed["sfr"],
+         "flat_lf": post_solve_flat_flux["lf"],
          "flat_uhb": post_solve_flat_flux["uhb"],
          "flat_vhb": post_solve_flat_flux["vhb"],
          "flat_thb": post_solve_flat_flux["thb"],
@@ -1835,7 +1798,11 @@ def launch_bep_bem_columns(dev: Mapping, cls: Mapping, *, gmt, julday,
         args += tuple(scalars[name] for name in COLUMN_SCALAR_ARGUMENTS)
         args += (plan.ws, np.int32(plan.words), err)
         kernel(((count + 31) // 32,), (32,), args)
-        status = err.max().reshape(1)
+        # A uint32 status word, as the health ledger's slots are: err is
+        # int32 (non-negative codes) and cupy refuses to OR an int32 word
+        # into a uint32 slot, which crashed option 3 on the first step of
+        # every single-device forecast once ac988f1fd deferred those reads.
+        status = err.max().reshape(1).astype(cp.uint32)
         code = health_ledger.read_status(status, site="urban_bem",
                                          describe=_refuse)
         if code:
@@ -1901,9 +1868,9 @@ def init_state(state, params, *, tlayer0, tsurface0, tdeep0, smois,
     option-3 part of ``urban_var_init`` (module_sf_urban.F:2912-2992);
     ``tests/test_urban_bem_wrf471_parity.py::
     test_option3_cold_start_is_urban_var_init`` grades it against the state
-    WRF's own ``urban_var_init`` leaves, word for word. The first BEM
-    profile stage is a separate typed Metal dispatch; the full class table
-    initializer and column solve remain downstream stages.
+    WRF's own ``urban_var_init`` leaves, word for word. Metal initializes
+    the class tables here; per-column geometry and canyon factors are rebuilt
+    by the source-ordered column solve from its selected height distribution.
     """
     del tlayer0, tsurface0, tdeep0, smois, restart
     from woof.metal.array import MetalArray
@@ -1913,50 +1880,6 @@ def init_state(state, params, *, tlayer0, tsurface0, tdeep0, smois,
         return
     context = fraction.buffer.context
     state.bem_class_tables = class_tables(params, context=context)
-
-    # WRF's bb_view_factors receives STREET_DIRECTION_TBL and
-    # STREET_WIDTH_TBL for each urban type. Resolve utype on device so a
-    # Metal state never stages that grid field through NumPy during setup.
-    from woof.metal.array import MetalArrayModule
-    utype = state.fields["utype_urb2d"]
-    if (not isinstance(utype, MetalArray) or utype.dtype != np.dtype(np.int32)
-            or utype.buffer.context is not context
-            or tuple(utype.shape) != tuple(fraction.shape)):
-        raise TypeError("BEM Metal init needs same-context int32 utype_urb2d")
-    ncol = int(utype.size)
-    table = tables_from_params(params)
-    nclasses = int(params.icate)
-    if not 1 <= nclasses <= NURBMAX:
-        raise ValueError("BEM class count is outside the WRF table extent")
-    module = MetalArrayModule(context)
-    dxy_table = module.asarray(np.ascontiguousarray(
-        np.asarray(table["street_direction_tbl"], dtype=np.float32)
-        [:NDM, :nclasses]))
-    width_table = module.asarray(np.ascontiguousarray(
-        np.asarray(table["street_width_tbl"], dtype=np.float32)
-        [:NDM, :nclasses]))
-    z = module.empty((ncol, NZ_UM + 1), dtype=np.float32)
-    dxy = module.empty((ncol, NDM), dtype=np.float32)
-    street_width = module.empty((ncol, NDM), dtype=np.float32)
-    error = module.zeros((ncol, NDM), dtype=np.int32)
-    from woof.metal.generated import kernel_specs
-    context.submit_kernel(
-        "urban_bem_view_inputs_fragment",
-        {"utype": utype.view((ncol,), byte_offset=utype.byte_offset),
-         "street_direction_table": dxy_table,
-         "street_width_table": width_table,
-         "z": z, "dxy": dxy, "street_width": street_width, "error": error},
-        {"ncol": ncol, "nclasses": nclasses, "nd": NDM},
-        exact_policy=False, grid_size=ncol * NDM,
-        threads_per_group=kernel_specs.URBAN_BEM_VIEW_INPUTS_FRAGMENT_THREADS_PER_GROUP,
-    )
-    if error.to_numpy().any():
-        raise BepBemError(
-            "BEM view-factor setup: UTYPE is outside the configured BEM classes")
-    state.bem_view_factor_columns = np.arange(ncol, dtype=np.int32)
-    state.bem_view_factors = launch_bem_view_factors_metal(
-        context, z=module.asarray(z), dxy=module.asarray(dxy),
-        street_width=module.asarray(street_width), nz_u=NZ_UM, nd=NDM)
 
 
 def after_lsm(state, params, *, lsm: int, fields: dict, atmosphere,
@@ -1981,9 +1904,6 @@ def after_lsm(state, params, *, lsm: int, fields: dict, atmosphere,
     pbl = state.pbl_terms
     pbl["b_q_bep"][...] = 0.0
     dev = {name: state.fields[name] for name in STATE_ARGUMENTS}
-    # These setup products are BEM-specific inputs to the Metal column path;
-    # the legacy CUDA argument tuple carries them through its class record.
-    dev["_bem_view_factors"] = getattr(state, "bem_view_factors", None)
     for name, source in ATMOSPHERE_SOURCES.items():
         dev[name] = atmosphere[source]
     for name in _FIELD_INPUTS:

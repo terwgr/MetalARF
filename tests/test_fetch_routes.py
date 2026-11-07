@@ -22,6 +22,7 @@ import shlex
 import pytest
 
 from woof import fetch_routes, source_adapters
+from woof.filesystem_paths import io_path
 
 
 # --------------------------------------------------------------------------
@@ -36,13 +37,32 @@ def test_every_runnable_source_either_routes_or_refuses_by_name():
     bytes -- engine-proven, not shipped.
     """
 
-    handled = set(fetch_routes.route_ids()) | set(fetch_routes.refusal_ids())
+    handled = set(fetch_routes.all_fetchable_sources()) | set(fetch_routes.refusal_ids())
     # gfs/hrrr/era5 keep their own hand-written routes in woof.fetch.
     handled |= set(fetch_routes.LEGACY_ROUTE_SOURCES)
+    # A row whose bytes come from running a model names its door as an
+    # acquisition owner (earth2 runs an Earth-2 model through earth2studio).
+    handled |= {row.source_id for row in source_adapters.source_adapters()
+                if row.acquisition_owner}
     from woof.cf_archive_fetch import sources
     handled |= set(sources())
+    # Model-backed rows delegate acquisition to their declared owner rather
+    # than a published-object route. Check the actual front-door contract.
+    from importlib import import_module
+    for row in source_adapters.source_adapters():
+        if row.acquisition_owner:
+            assert callable(getattr(import_module(row.acquisition_owner), "fetch", None))
+            handled.add(row.source_id)
     runnable = {row.source_id for row in source_adapters.source_adapters()
                 if row.runnable}
+    # A runnable preparation can require caller-supplied files. Its fetch
+    # boundary must explain that by source name rather than silently fall off.
+    for source in runnable - handled:
+        with pytest.raises(ValueError) as refusal:
+            fetch_routes.route_for(source)
+        assert source in str(refusal.value)
+        assert "woof sources" in str(refusal.value)
+        handled.add(source)
     assert runnable - handled == set()
 
 
@@ -404,7 +424,10 @@ def test_the_aifs_handoff_binds_the_step0_object_and_lists_only_the_window(tmp_p
             encoding="utf-8"))["argv"]
     bindings = [argv[index + 1] for index, token in enumerate(argv)
                 if token == "--supplement"]
-    step0 = (tmp_path / "20260929120000-0h-oper-fc.grib2").resolve()
+    # write_handoff binds through the I/O spelling (9e3980670: a deep cache
+    # must stay openable on Windows), so on Windows the binding is the
+    # extended-length path (prefix \\?\); elsewhere io_path is the path itself.
+    step0 = io_path(tmp_path / "20260929120000-0h-oper-fc.grib2").resolve()
     assert bindings == [f"aifs_single_in_band_surface={step0}"]
 
 
@@ -418,8 +441,12 @@ def test_the_step0_object_is_priced_as_one_more_object_of_its_kind():
     first = download_budget.download_estimate(request)
     later = download_budget.download_estimate(
         dict(request, forecast_start_hour=12))
-    assert (first["objects"], later["objects"]) == (2, 3)
-    assert first["bytes"] and later["bytes"] == first["bytes"] * 3 // 2
+    # Each estimate also carries the same cycle's GFS f000 ICEC record, the
+    # declared sea-ice donor (AIFS publishes no sea-ice field), once: taken
+    # by the .idx (fix/ecmwf-record-subset), not the whole 513 MB object.
+    assert (first["objects"], later["objects"]) == (3, 4)
+    aifs_object = later["bytes"] - first["bytes"]
+    assert aifs_object and first["bytes"] == 2 * aifs_object + 101_000
 
 
 def test_only_producers_with_step0_statics_declare_them():
@@ -601,22 +628,15 @@ def test_an_unresolvable_supplement_origin_refuses_at_load(monkeypatch):
 # Transport policy
 # --------------------------------------------------------------------------
 
-def test_full_file_is_the_default_mode_on_every_table_route():
-    for source_id in fetch_routes.route_ids():
-        assert fetch_routes.resolve_mode(source_id, None) == "full-file"
-
-
 def test_idx_subset_refuses_with_the_row_s_own_reason():
+    # GEFS was this example until fix/gefs-record-subset made its pair take
+    # the mapped records by .idx; GDPS's refusal is structural (one record
+    # per object), so it stays.
     with pytest.raises(ValueError) as error:
-        fetch_routes.resolve_mode("gefs", "idx-subset")
+        fetch_routes.resolve_mode("gem-gdps", "idx-subset")
     message = str(error.value)
     assert "idx-subset" in message
-    assert "disjoint" in message
-
-
-def test_auto_mode_takes_the_default_full_file_route():
-    for source_id in fetch_routes.route_ids():
-        assert fetch_routes.resolve_mode(source_id, "auto") == "full-file"
+    assert "the file IS the record" in message
 
 
 def test_an_area_crop_refuses_naming_where_the_crop_actually_happens():
@@ -689,34 +709,11 @@ def test_a_table_route_moves_every_object_and_publishes_its_receipts(tmp_path):
     # The pool receipt rides in the manifest, so a slow fetch is
     # explicable after the fact.
     assert payload["concurrency"]["files"] == 2
-    assert payload["concurrency"]["workers_requested"] >= 1
+    assert (payload["concurrency"]["workers_requested"]
+            == fetch_routes.fetch_pool.DEFAULT_FILE_WORKERS)
     sums = (tmp_path / fetch_routes.SHA256SUMS_NAME).read_text().splitlines()
     assert len(sums) == 2
     assert all(len(line.split("  ")[0]) == 64 for line in sums)
-
-
-def test_the_pool_is_the_default_transport_not_a_flag(tmp_path):
-    plan = fetch_routes.resolve_request(
-        "rap", cycle=datetime(2026, 8, 16, 0), hours=5)
-    payload = fetch_routes.run_plan(
-        plan, out=tmp_path, downloader=_fake_downloader([]),
-        progress=lambda *_: None)
-    assert (payload["concurrency"]["workers_requested"]
-            == fetch_routes.fetch_pool.DEFAULT_FILE_WORKERS)
-
-
-def test_a_second_run_reuses_the_bytes_already_on_disk(tmp_path):
-    plan = fetch_routes.resolve_request(
-        "rap", cycle=datetime(2026, 8, 16, 0), hours=1)
-    fetch_routes.run_plan(plan, out=tmp_path,
-                          downloader=_fake_downloader([]),
-                          progress=lambda *_: None)
-    second: list[str] = []
-    payload = fetch_routes.run_plan(
-        plan, out=tmp_path, downloader=_fake_downloader(second),
-        progress=lambda *_: None)
-    assert second == []
-    assert all(entry["reused"] for entry in payload["files"])
 
 
 def test_a_different_request_into_the_same_directory_refuses(tmp_path):
@@ -946,9 +943,16 @@ def test_every_route_prints_the_whole_prep_line_it_published(source,
     """
 
     route = fetch_routes.route_for(source)
+    cycle = datetime(2026, 8, 17, route.cycle_hours[0])
+    if route.publication_eras and not any(
+            era.valid_from <= cycle and
+            (era.valid_until is None or cycle < era.valid_until)
+            for era in route.publication_eras):
+        cycle = fetch_routes.first_preparable_cycle(route)
+        assert cycle is not None
     plan = fetch_routes.resolve_request(
-        source, cycle=datetime(2026, 8, 17, route.cycle_hours[0]),
-        hours=route.default_cadence)
+        source, cycle=cycle, start_hour=route.first_lead,
+        hours=min(route.default_cadence, fetch_routes.ladder_for(route, cycle)[-1]-route.first_lead))
     fetch_routes.write_handoff(plan, tmp_path)
     document = json.loads(
         (tmp_path / fetch_routes.PREP_ARGUMENTS_NAME).read_text())

@@ -1,6 +1,6 @@
 //! Store-viewer style resolver: map one STORED variable (its name + the
 //! selector JSON the store carries for it) to the production render styling
-//! its plot counterpart uses: the same `ColorScale`, colormap build
+//! its plot counterpart uses â€” the same `ColorScale`, colormap build
 //! options, tick step, legend mode, unit conversion, and title the PNG
 //! lanes render with.
 //!
@@ -21,9 +21,9 @@
 //!   `wind_speed_10m_max_1h`) mirror `build_windowed_render_request`.
 //!
 //! Variables with NO production fill counterpart (u/v wind components,
-//! geopotential height planes (production only contours heights)
-//! `mslp`: production contours mslp and fills the companion 10 m wind
-//! speed: `surface_pressure`, `orography`, 3D volumes) resolve to
+//! geopotential height planes â€” production only contours heights â€”
+//! `mslp` â€” production contours mslp and fills the companion 10 m wind
+//! speed â€” `surface_pressure`, `orography`, 3D volumes) resolve to
 //! `None`: the viewer keeps its clearly-labeled generic ramp for those.
 
 use rustwx_core::{CanonicalField, FieldSelector, ModelId, VerticalSelector};
@@ -34,15 +34,14 @@ use rustwx_render::{
     WeatherProduct,
 };
 use std::collections::HashSet;
-use std::sync::OnceLock;
 
 use crate::direct::{
     direct_fill_unit_conversion, direct_recipe_render_controls, supported_direct_recipe_slugs,
 };
 use crate::windowed::HrrrWindowedProduct;
 
-/// The unit conversion applied to raw stored values before the color scale:
-/// mirrors the direct lane's `convert_filled_field` arithmetic exactly
+/// The unit conversion applied to raw stored values before the color scale
+/// â€” mirrors the direct lane's `convert_filled_field` arithmetic exactly
 /// (same f32 expressions), so converted values color identically to the
 /// production fill.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -514,6 +513,21 @@ fn borrowed_style_identity(mut style: StoreVariableStyle, var_name: &str) -> Sto
     style
 }
 
+/// Plain headlines for curated planes a product page shows as a map of
+/// its own (WOOF city templates request `var:wrf_snownc`).  The palette
+/// stays the borrowed production one; the headline names the quantity
+/// the plane really holds, so the borrowed table still cannot impersonate
+/// the product it came from, and the map no longer reads
+/// "wrf_snownc (Total QPF palette)".
+fn curated_headline(name: &str) -> Option<&'static str> {
+    match name {
+        "snownc" => Some("Snow since start, liquid equivalent"),
+        "graupelnc" => Some("Graupel since start, liquid equivalent"),
+        "hailnc" => Some("Hail since start, liquid equivalent"),
+        _ => None,
+    }
+}
+
 /// Curated colortable mapping for stored variables the production style
 /// resolver leaves unstyled: same-quantity diagnostics wear the EXISTING
 /// operational palette for their physical quantity instead of the
@@ -622,114 +636,27 @@ pub fn curated_style_for_store_variable(
         ("graupelnc" | "snownc" | "hailnc", "mm") => {
             canonical(FieldSelector::surface(CanonicalField::TotalPrecipitation))
         }
+        ("snow_level_ft", "ft") => Some(snow_level_style()),
         ("terrain", "m") => canonical(FieldSelector::surface(CanonicalField::GeopotentialHeight)),
         ("wspd10", "m/s") => {
             canonical(FieldSelector::height_agl(CanonicalField::WindSpeed, 10))
         }
         _ => None,
     };
-    style.map(|style| borrowed_style_identity(style, var_name))
-}
-
-const OBSERVATION_PLANES_JSON: &str = include_str!("../data/observation_planes.json");
-
-/// One row of `data/observation_planes.json`: a stored plane that holds
-/// observations, the title its map carries, and the model product whose
-/// colour table it wears.
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct ObservationPlane {
-    pub plane: String,
-    pub title: String,
-    #[serde(default)]
-    pub units: Option<String>,
-    #[serde(default)]
-    pub wears: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-struct ObservationPlaneTable {
-    planes: Vec<ObservationPlane>,
-}
-
-/// The built-in observation plane table.
-pub fn observation_planes() -> &'static [ObservationPlane] {
-    static TABLE: OnceLock<ObservationPlaneTable> = OnceLock::new();
-    &TABLE
-        .get_or_init(|| {
-            serde_json::from_str(OBSERVATION_PLANES_JSON)
-                .expect("the built-in observation plane table parses")
-        })
-        .planes
-}
-
-/// The digits `{n}` stood for when `name` matches `pattern` (empty for a
-/// pattern without `{n}`), or `None`.
-fn match_observation_plane(pattern: &str, name: &str) -> Option<String> {
-    match pattern.split_once("{n}") {
-        None => (pattern == name).then(String::new),
-        Some((head, tail)) => {
-            let digits = name.strip_prefix(head)?.strip_suffix(tail)?;
-            (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
-                .then(|| digits.to_string())
+    style.map(|mut style| match curated_headline(name) {
+        Some(headline) => {
+            style.title = headline.to_string();
+            style
         }
-    }
-}
-
-/// The table row and title of a stored plane of observations, matched on
-/// the plane's own name with or without the `wrf_` prefix the store gives a
-/// raw plane, case-insensitively.
-pub fn observation_plane(var_name: &str) -> Option<(&'static ObservationPlane, String)> {
-    let lower = var_name.trim().to_ascii_lowercase();
-    let bare = lower.strip_prefix("wrf_").unwrap_or(&lower);
-    observation_planes().iter().find_map(|row| {
-        match_observation_plane(&row.plane.to_ascii_lowercase(), bare)
-            .map(|digits| (row, row.title.replace("{n}", &digits)))
+        None => borrowed_style_identity(style, var_name),
     })
-}
-
-/// The style of a stored plane of observations: titled by its row in
-/// `data/observation_planes.json`, and wearing the operational colour table
-/// of the model product the row names while the plane is stored in the
-/// row's units (the generic ramp otherwise).
-///
-/// WHAT BREAKAGE THIS PREVENTS (gate law): an observation drawn beside
-/// model panels titled as a model plane.  A GOES-18 low cloud mask had to
-/// ride under the model's `cloudfrac_low` name to share the models' colour
-/// table, and its panel was titled "wrf_cloudfrac_low (Low Cloud Cover
-/// palette)": the reader was told a model drew it.  `None` for a plane the
-/// table does not name.
-pub fn observation_style_for_store_variable(
-    var_name: &str,
-    stored_units: &str,
-    finite_range: Option<(f32, f32)>,
-    model: ModelId,
-) -> Option<StoreVariableStyle> {
-    let (row, title) = observation_plane(var_name)?;
-    let calibrated = row
-        .units
-        .as_deref()
-        .is_none_or(|units| units.trim() == stored_units.trim());
-    let worn = row
-        .wears
-        .as_deref()
-        .filter(|_| calibrated)
-        .and_then(rustwx_models::plot_recipe)
-        .and_then(|recipe| recipe.filled.selector)
-        .and_then(|selector| serde_json::to_value(selector).ok())
-        .and_then(|selector| {
-            operational_style_for_store_variable(var_name, &selector, stored_units, model)
-        });
-    let mut style = worn
-        .unwrap_or_else(|| generic_style_for_store_variable(var_name, stored_units, finite_range));
-    style.title = title;
-    Some(style)
 }
 
 /// Resolve the production styling for the stored variable `var_name`
 /// carrying `stored_selector` (the store's per-variable selector JSON:
 /// either a `FieldSelector` or a `{"derived": slug}` marker) and
 /// `stored_units`. Returns `None` for variables with no production fill
-/// counterpart: the caller should fall back to a clearly-labeled generic
+/// counterpart â€” the caller should fall back to a clearly-labeled generic
 /// ramp.
 pub fn operational_style_for_store_variable(
     var_name: &str,
@@ -750,7 +677,7 @@ pub fn operational_style_for_store_variable(
 
     // Trailing (h-1)->h window planes: their formal plot counterpart is the
     // windowed product family, mirroring `build_windowed_render_request`
-    // (`1h_qpf` is deliberately NOT a direct recipe, it routes to the
+    // (`1h_qpf` is deliberately NOT a direct recipe â€” it routes to the
     // windowed `qpf_1h` product, see `LEGACY_PRODUCT_ALIASES`).
     match var_name {
         "uh_2to5km_max_1h" => return Some(windowed_uh_style(stored_units)),
@@ -775,7 +702,7 @@ pub fn operational_style_for_store_variable(
     // so no production colorbar exists for the stored pressure plane.
     // Claiming that plot's identity over the catalog WeatherPressure scale
     // would show legend values (960..1044 hPa) that match no production
-    // colorbar: keep the clearly-labeled generic ramp instead.
+    // colorbar â€” keep the clearly-labeled generic ramp instead.
     if selector.field == CanonicalField::PressureReducedToMeanSeaLevel {
         return None;
     }
@@ -834,7 +761,7 @@ pub fn operational_style_templates(model: ModelId) -> Vec<StoreVariableStyleTemp
     let mut out = Vec::new();
     let mut seen = HashSet::<String>::new();
 
-    let supported = supported_direct_recipe_slugs(model);
+    let supported = style_recipe_slugs(model);
     for recipe in built_in_plot_recipes()
         .iter()
         .filter(|recipe| supported.iter().any(|slug| slug == recipe.slug))
@@ -983,7 +910,7 @@ fn weather_product_style(slug: &str, stored_units: &str) -> Option<StoreVariable
     })
 }
 
-/// `uh_2to5km_max_1h`: the windowed UH family request,
+/// `uh_2to5km_max_1h`: the windowed UH family request â€”
 /// `for_core_weather_product(WeatherProduct::Uh)` + static map design.
 fn windowed_uh_style(stored_units: &str) -> StoreVariableStyle {
     let mut request =
@@ -1000,7 +927,7 @@ fn windowed_uh_style(stored_units: &str) -> StoreVariableStyle {
     }
 }
 
-/// `wind_speed_10m_max_1h`: the windowed 10 m wind family request,
+/// `wind_speed_10m_max_1h`: the windowed 10 m wind family request â€”
 /// `from_core_field(windowed_product_scale(...))` + static map design. The
 /// stored plane is m/s; the windowed lane displays knots.
 fn windowed_wind10m_style() -> StoreVariableStyle {
@@ -1018,7 +945,7 @@ fn windowed_wind10m_style() -> StoreVariableStyle {
     }
 }
 
-/// `apcp_1h`: the trailing 1 h QPF window, the windowed `qpf_1h` product
+/// `apcp_1h`: the trailing 1 h QPF window â€” the windowed `qpf_1h` product
 /// (its legacy `1h_qpf` recipe slug deliberately aliases to the windowed
 /// lane). Stored kg/m^2 == mm; displayed in inches like all QPF products.
 fn windowed_qpf_1h_style() -> StoreVariableStyle {
@@ -1037,7 +964,7 @@ fn windowed_qpf_1h_style() -> StoreVariableStyle {
 }
 
 /// Reverse-resolve one stored direct plane to its plot recipe: the first
-/// supported recipe whose `filled.selector` equals the stored selector,
+/// supported recipe whose `filled.selector` equals the stored selector â€”
 /// except `apcp_run_total`, whose store name pins the run-total window
 /// identity for the shared plain TotalPrecipitation selector.
 fn windowed_product_style(product: HrrrWindowedProduct) -> Option<StoreVariableStyle> {
@@ -1153,17 +1080,25 @@ fn direct_recipe_for_selector(
     direct_recipe_for_selector_with_supported(
         var_name,
         selector,
-        &supported_direct_recipe_slugs(model),
+        &style_recipe_slugs(model),
     )
     .or_else(|| {
         (model == ModelId::WrfGdex).then(|| {
             direct_recipe_for_selector_with_supported(
                 var_name,
                 selector,
-                &supported_direct_recipe_slugs(ModelId::Hrrr),
+                &style_recipe_slugs(ModelId::Hrrr),
             )
         })?
     })
+}
+
+// A stored canonical plane can use its registered production style even
+// when the model's downloadable files do not carry that derived field.
+fn style_recipe_slugs(model: ModelId) -> Vec<String> {
+    let mut slugs=supported_direct_recipe_slugs(model);
+    slugs.extend(crate::direct::store_direct_recipe_slugs());
+    slugs
 }
 
 fn direct_recipe_for_selector_with_supported(
@@ -1185,7 +1120,7 @@ fn direct_recipe_for_selector_with_supported(
 }
 
 /// The render density + legend controls a single-product operational static
-/// plot request ends with: read off a real request run through
+/// plot request ends with â€” read off a real request run through
 /// `StaticPlotDesign` (the same code path every PNG lane applies), over a
 /// regional domain like the production CONUS products.
 fn operational_request_chrome() -> (RenderDensity, LegendControls) {
@@ -1262,78 +1197,6 @@ mod tests {
         serde_json::json!({ "derived": slug })
     }
 
-    #[test]
-    fn the_observation_plane_table_parses_and_every_worn_product_exists() {
-        assert!(!observation_planes().is_empty());
-        for row in observation_planes() {
-            assert!(!row.title.trim().is_empty(), "{row:?}");
-            assert!(!row.title.contains('\u{2014}'), "{row:?}");
-            if let Some(slug) = &row.wears {
-                let recipe = rustwx_models::plot_recipe(slug)
-                    .unwrap_or_else(|| panic!("{slug} is not a product"));
-                assert!(recipe.filled.selector.is_some(), "{slug}");
-                assert!(row.units.is_some(), "a worn table names its units: {row:?}");
-            }
-        }
-    }
-
-    /// An observation plane is titled by the table, whatever it is stored
-    /// as, and wears the model product's colour table in that table's
-    /// units; a model plane of the same quantity keeps its own identity.
-    #[test]
-    fn an_observation_plane_is_titled_as_an_observation_and_wears_the_models_table() {
-        let model = ModelId::WrfGdex;
-        let obs = observation_style_for_store_variable(
-            "wrf_goes18_low_cloud",
-            "%",
-            Some((0.0, 100.0)),
-            model,
-        )
-        .expect("a GOES-18 low cloud plane is an observation plane");
-        assert_eq!(obs.title, "GOES-18 low cloud");
-        let models = curated_style_for_store_variable(
-            "wrf_cloudfrac_low",
-            &derived_marker("wrf_cloudfrac_low"),
-            "%",
-            model,
-        )
-        .expect("the model plane wears the low cloud table");
-        assert_eq!(obs.scale, models.scale, "the observation shares the models' scale");
-        assert_eq!(obs.display_units, models.display_units);
-        assert_eq!(obs.convert, models.convert);
-
-        // Another satellite is the same row; the prefix and case do not matter.
-        let east = observation_style_for_store_variable("GOES19_LOW_CLOUD", "%", None, model)
-            .unwrap();
-        assert_eq!(east.title, "GOES-19 low cloud");
-
-        // Stored in a unit the table is not calibrated for: still titled as
-        // the observation, on the generic ramp.
-        let fraction = observation_style_for_store_variable(
-            "wrf_goes18_low_cloud",
-            "1",
-            Some((0.0, 1.0)),
-            model,
-        )
-        .unwrap();
-        assert_eq!(fraction.title, "GOES-18 low cloud");
-        assert_ne!(fraction.scale, models.scale);
-
-        // A plane with no worn table keeps the generic ramp under its title.
-        let btd =
-            observation_style_for_store_variable("wrf_goes18_fog_btd", "K", Some((-4.0, 9.0)), model)
-                .unwrap();
-        assert_eq!(btd.title, "GOES-18 night fog difference, 10.3 minus 3.9 um");
-
-        // Names the table does not hold are not observations.
-        for name in ["wrf_cloudfrac_low", "wrf_goes_low_cloud", "wrf_goesx_low_cloud", "goes18_low_cloud_x"] {
-            assert!(
-                observation_style_for_store_variable(name, "%", None, model).is_none(),
-                "{name}"
-            );
-        }
-    }
-
     /// One representative per curated quantity class: the resolved style
     /// must be the borrowed OPERATIONAL one (variable-named title wearing a
     /// production palette), never the auto-ranged generic ramp.
@@ -1359,11 +1222,14 @@ mod tests {
         for (name, units, convert, display) in cases {
             let style = curated_style_for_store_variable(name, &derived, units, model)
                 .unwrap_or_else(|| panic!("{name} [{units}] must resolve a curated style"));
-            assert!(
-                style.title.starts_with(name) && style.title.contains("palette"),
-                "{name}: borrowed identity must name the variable and the palette: {}",
-                style.title
-            );
+            match curated_headline(name.strip_prefix("wrf_").unwrap_or(name)) {
+                Some(headline) => assert_eq!(style.title, headline, "{name} headline"),
+                None => assert!(
+                    style.title.starts_with(name) && style.title.contains("palette"),
+                    "{name}: borrowed identity must name the variable and the palette: {}",
+                    style.title
+                ),
+            }
             assert!(
                 !style.title.contains("(generic"),
                 "{name}: curated style must not be the generic ramp: {}",
@@ -1382,6 +1248,25 @@ mod tests {
         let dp2m = curated_style_for_store_variable("wrf_dp2m", &derived, "degC", model).unwrap();
         assert_eq!(dp2m.convert, UnitConvert::CelsiusToFahrenheit);
         assert!((UnitConvert::CelsiusToFahrenheit.apply(20.0) - 68.0).abs() < 1.0e-4);
+    }
+
+    /// The WOOF city snow map (`var:wrf_snownc`) headlined
+    /// "wrf_snownc (Total QPF palette)": it reads as the product page
+    /// names it, on the same QPF palette and mm -> in conversion.
+    #[test]
+    fn accumulated_snow_graupel_hail_wear_plain_headlines() {
+        let derived = derived_marker("anything");
+        for (name, headline) in [
+            ("wrf_snownc", "Snow since start, liquid equivalent"),
+            ("wrf_graupelnc", "Graupel since start, liquid equivalent"),
+            ("wrf_hailnc", "Hail since start, liquid equivalent"),
+        ] {
+            let style = curated_style_for_store_variable(name, &derived, "mm", ModelId::WrfGdex)
+                .unwrap_or_else(|| panic!("{name} must resolve a curated style"));
+            assert_eq!(style.title, headline);
+            assert_eq!(style.convert, UnitConvert::MmToInches, "{name} conversion");
+            assert_eq!(style.display_units, "in", "{name} display units");
+        }
     }
 
     #[test]
@@ -1962,7 +1847,7 @@ mod tests {
     #[test]
     fn mslp_falls_back_to_the_generic_ramp() {
         // The production `mslp_10m_winds` plot fills the companion 10 m wind
-        // speed (legend 10..60 kt) and only contours mslp: there is no
+        // speed (legend 10..60 kt) and only contours mslp â€” there is no
         // production colorbar for the stored pressure values, so claiming
         // production parity with ANY pressure-valued legend would be false.
         assert!(
@@ -2084,7 +1969,7 @@ mod tests {
         // `direct_recipe_for_selector` resolves a stored selector by
         // FIRST-MATCH over the supported recipe catalog. That is only safe
         // while every pair of supported recipes sharing a filled selector
-        // agrees on render style and operational fill scale, otherwise the
+        // agrees on render style and operational fill scale â€” otherwise the
         // viewer would silently pick whichever recipe happens to come first.
         // Pin the invariant over ALL pairs (zero offending pairs required;
         // the sweep guards future catalog additions even if no pair exists
@@ -2111,7 +1996,7 @@ mod tests {
                 assert_eq!(
                     a.style, b.style,
                     "supported recipes '{}' and '{}' share filled selector {selector:?} but \
-                     disagree on render style: first-match resolution in \
+                     disagree on render style â€” first-match resolution in \
                      direct_recipe_for_selector is no longer safe",
                     a.slug, b.slug,
                 );
@@ -2119,7 +2004,7 @@ mod tests {
                     crate::plot_design::operational_fill_scale_for_recipe(a, selector),
                     crate::plot_design::operational_fill_scale_for_recipe(b, selector),
                     "supported recipes '{}' and '{}' share filled selector {selector:?} but \
-                     disagree on operational fill scale, first-match resolution in \
+                     disagree on operational fill scale â€” first-match resolution in \
                      direct_recipe_for_selector is no longer safe",
                     a.slug,
                     b.slug,
@@ -2269,5 +2154,35 @@ mod category_plane_regression {
             let style = generic_style_for_store_variable("wrf_lu_index", "", Some(range));
             assert_eq!(style.legend_mode, LegendMode::SmoothRamp, "{range:?}");
         }
+    }
+}
+
+/// Snow level (wet-bulb 0 C height, ft MSL): 500 ft bins from 2,000 to
+/// 10,000 ft, purple-blue where snow reaches the plains, through green and
+/// yellow to red where only the high peaks are cold enough.
+fn snow_level_style() -> StoreVariableStyle {
+    let levels: Vec<f64> = (0..=16).map(|i| 2000.0 + 500.0 * i as f64).collect();
+    let colors: Vec<Color> = [
+        (0x54, 0x27, 0x88), (0x6A, 0x51, 0xA3), (0x3F, 0x4F, 0xBF), (0x21, 0x66, 0xAC),
+        (0x43, 0x93, 0xC3), (0x92, 0xC5, 0xDE), (0x1B, 0x78, 0x37), (0x5A, 0xAE, 0x61),
+        (0xA6, 0xDB, 0xA0), (0xFF, 0xFF, 0xBF), (0xFE, 0xE0, 0x90), (0xFD, 0xAE, 0x61),
+        (0xF4, 0x6D, 0x43), (0xD7, 0x30, 0x27), (0xA5, 0x00, 0x26), (0x7F, 0x00, 0x1A),
+        (0x67, 0x00, 0x0D),
+    ]
+    .iter()
+    .map(|&(r, g, b)| Color::rgba(r, g, b, 255))
+    .collect();
+    let scale = DiscreteColorScale { levels, colors, extend: ExtendMode::Max, mask_below: None };
+    let mut request = MapRenderRequest::from_core_field(probe_core_field(), ColorScale::Discrete(scale));
+    apply_probe_static_design(&mut request);
+    request.legend.mode = LegendMode::Thresholds;
+    StoreVariableStyle {
+        title: "Snow level guide: wet-bulb 0 C height".to_string(),
+        display_units: "ft MSL".to_string(),
+        convert: UnitConvert::None,
+        scale: request.scale,
+        colormap_options: filtered_options(request.render_density, request.legend),
+        cbar_tick_step: request.cbar_tick_step,
+        legend_mode: request.legend.mode,
     }
 }

@@ -169,7 +169,7 @@ def test_selecting_legacy_constructs_the_adapter_at_physics_setup(
     # coefficient/table builds exist on the instance
     identity = adapter.restart_identity()
     assert identity["algorithms"]["lw"] == \
-        "wrf-v4.6.1-rrtmg-legacy-lw-v2-owned-gpoint-stratosphere-corrections"
+        "wrf-v4.6.1-rrtmg-legacy-lw-v3-owned-gpoint-stratosphere-corrections-micron-inputs"
     assert adapter._C is not None and adapter._sw_tables is not None
 
 
@@ -210,9 +210,9 @@ def test_restart_identity_strings_are_distinct_from_rte_rrtmgp():
     # v2: the band 4 and band 7 stratospheric corrections are applied once
     # by their owning g-point thread; a v1 checkpoint ran the racing form.
     assert restart.RRTMG_LEGACY_LW_ALGORITHM_IDENTITY == \
-        "wrf-v4.6.1-rrtmg-legacy-lw-v2-owned-gpoint-stratosphere-corrections"
+        "wrf-v4.6.1-rrtmg-legacy-lw-v3-owned-gpoint-stratosphere-corrections-micron-inputs"
     assert restart.RRTMG_LEGACY_SW_ALGORITHM_IDENTITY == \
-        "wrf-v4.6.1-rrtmg-legacy-sw-v1"
+        "wrf-v4.6.1-rrtmg-legacy-sw-v2-micron-inputs"
     assert restart.RRTMG_LEGACY_LW_ALGORITHM_IDENTITY != \
         restart.LONGWAVE_ALGORITHM_IDENTITIES[4]
     assert restart.RRTMG_LEGACY_SW_ALGORITHM_IDENTITY != \
@@ -330,14 +330,21 @@ def test_rrtmg_option_keys_are_ratified_with_failclosed_ranges(tmp_path):
         wps2, inp2, name="synth", rrtmg_variant=RRTMG_VARIANT_RTE_RRTMGP)
     assert rte_text == base_text, (
         "pinned-value radiation keys must not perturb the emitted TOML")
+    # ghg_input = 1 is WRF's CAMtr gases, implemented since 2.9.10 (woof.core.camtr_gases, fix/wrf461-2dom-exact):
+    # it imports and is carried (below); the fail-closed range is now what WRF does not define.
     for key, bad in (("cldovrlp", 3), ("idcor", 1), ("o3input", 0),
-                     ("ghg_input", 1), ("aer_opt", 1)):
+                     ("ghg_input", 2), ("aer_opt", 1)):
         inp_bad = tni.INPUT_TEXT.replace(
             "&physics\n", f"&physics\n {key} = {bad},\n")
         inp3 = tmp_path / f"bad_{key}.input"
         inp3.write_text(inp_bad)
         with pytest.raises(ValueError, match=key):
             import_namelists(wps2, inp3, name="synth")
+    camtr_dir = tmp_path / "camtr"
+    camtr_dir.mkdir()
+    wps4, inp4 = tni._pair(camtr_dir, inp=tni.INPUT_TEXT.replace("&physics\n", "&physics\n ghg_input = 1,\n"))
+    camtr_text, _ = import_namelists(wps4, inp4, name="synth", rrtmg_variant=RRTMG_VARIANT_LEGACY)
+    assert "ghg_input = 1" in camtr_text, "an explicit ghg_input = 1 must reach the run (WRF CAMtr gases)"
 
 
 def test_legacy_import_emits_o3data_and_calculated_radii_modes(tmp_path):

@@ -357,63 +357,6 @@ def submit_sase_e_hflux(context: MetalContext, e: MetalArray,
     return fx, fy
 
 
-def submit_sase_model_stress(
-        context: MetalContext, e: MetalArray,
-        strain: dict[str, MetalArray], *, c_nu: float, f_blend: float,
-        delta_eddy: float, delta_mom: float, ck_over_prt: float,
-        e_min: float) -> dict[str, MetalArray]:
-    """Submit the original blended SASE stress kernel."""
-    if not isinstance(e, MetalArray) or e.ndim != 3:
-        raise TypeError("SASE e must be a 3-D MetalArray")
-    _field("e", e, context, e.shape)
-    names = ("sxx", "syy", "szz", "sxy", "sxz", "syz")
-    if set(strain) != set(names):
-        raise ValueError("SASE strain must contain the six named tensor fields")
-    for name in names:
-        _field(name, strain[name], context, e.shape)
-    scalars = (c_nu, f_blend, delta_eddy, delta_mom, ck_over_prt, e_min)
-    if any(isinstance(x, bool) or not np.isfinite(x) for x in scalars):
-        raise ValueError("SASE stress parameters must be finite")
-    nz, ny, nx = e.shape
-    xp = MetalArrayModule(context)
-    outputs = {f"t{i}": xp.empty(e.shape, dtype=np.float32)
-               for i in range(6)}
-    arrays = {"e": e, **{f"s{i}": strain[name]
-                         for i, name in enumerate(names)}, **outputs}
-    context.submit_kernel(
-        "sase_model_stress", arrays,
-        {"c_nu": float(c_nu), "f_blend": float(f_blend),
-         "delta_eddy": float(delta_eddy), "delta_mom": float(delta_mom),
-         "ck_over_prt": float(ck_over_prt), "e_min": float(e_min),
-         "nz": nz, "ny": ny, "nx": nx}, exact_policy=False,
-        grid_size=e.size, threads_per_group=_TPB)
-    return outputs
-
-
-def submit_sase_scalar_hflux(
-        context: MetalContext, scalar: MetalArray, e: MetalArray, *,
-        two_dx: float, two_dy: float, kh_coef: float,
-        e_min: float) -> tuple[MetalArray, MetalArray]:
-    """Submit the e-derived horizontal scalar flux pair."""
-    if not isinstance(scalar, MetalArray) or scalar.ndim != 3:
-        raise TypeError("SASE scalar must be a 3-D MetalArray")
-    _field("scalar", scalar, context, scalar.shape)
-    _field("e", e, context, scalar.shape)
-    if any(isinstance(x, bool) or not np.isfinite(x)
-           for x in (two_dx, two_dy, kh_coef, e_min)):
-        raise ValueError("SASE scalar flux parameters must be finite")
-    nz, ny, nx = scalar.shape
-    xp = MetalArrayModule(context)
-    fx, fy = (xp.empty(scalar.shape, dtype=np.float32) for _ in range(2))
-    context.submit_kernel(
-        "sase_scalar_hflux", {"s": scalar, "e": e, "fx": fx, "fy": fy},
-        {"two_dx": float(two_dx), "two_dy": float(two_dy),
-         "kh_coef": float(kh_coef), "e_min": float(e_min),
-         "nz": nz, "ny": ny, "nx": nx}, exact_policy=False,
-        grid_size=scalar.size, threads_per_group=_TPB)
-    return fx, fy
-
-
 def submit_sase_vent_flux_diag(
         context: MetalContext, f_row: MetalArray, scale: MetalArray,
         out: MetalArray, *, fac: float = 1.0) -> None:
@@ -543,23 +486,6 @@ def submit_sase_rate(
          "heat_scale": float(heat_scale), "nz": nz, "ny": ny, "nx": nx},
         exact_policy=False, grid_size=a.size, threads_per_group=_TPB)
     return out
-
-
-def submit_sase_structure_partial(
-        context: MetalContext, field: MetalArray) -> MetalArray:
-    """Accumulate FP64 horizontal structure-function sums by block."""
-    if not isinstance(field, MetalArray) or field.ndim != 3:
-        raise TypeError("SASE structure field must be a 3-D MetalArray")
-    _field("structure field", field, context, field.shape)
-    nz, ny, nx = field.shape
-    nblocks = (field.size + _TPB - 1) // _TPB
-    partials = MetalArrayModule(context).empty((3, nblocks), dtype=np.float64)
-    context.submit_kernel(
-        "sase_structure_partial", {"f": field, "partials": partials},
-        {"nz": nz, "ny": ny, "nx": nx, "nblocks": nblocks},
-        exact_policy=False, grid_size=nblocks * _TPB,
-        threads_per_group=_TPB)
-    return partials
 
 
 def submit_sase_w_sensor_partial(

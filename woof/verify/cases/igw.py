@@ -77,7 +77,7 @@ def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
     xc = -50 km (so the packet crosses the domain center during the run),
     H = 10 km; uniform u = 20 m/s on top of the rebalanced at-rest state.
     """
-    from woof.core.state import init_theta_perturbation
+    from woof.core.state import init_theta_perturbation, adopt_wrf_theta_carrier
 
     def thp_func(x, z):
         thp = (THP_AMP * np.sin(np.pi * z[:, None, None] / H_DEPTH)
@@ -87,6 +87,8 @@ def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
     state = init_theta_perturbation(cfg, coord, base, thp_func,
                                        array_module=array_module)
     state.u[...] = U_BAR
+    if getattr(state, "_metal_setup_state", False):
+        adopt_wrf_theta_carrier(state)
     return state
 
 
@@ -157,6 +159,8 @@ def _run(outdir: Path | None = None, *, array_module=None) -> dict:
 
     report = stability_report(state, cfg)
     thp = cp.asnumpy(state.thp).astype(np.float64)     # (nz, ny, nx)
+    if getattr(state, "_metal_setup_state", False) and hasattr(state, "_setup_thb"):
+        thp = thp + 300.0 - state._setup_thb[:, None, None]
     x = (np.arange(cfg.nx) + 0.5) * cfg.dx - 0.5 * cfg.nx * cfg.dx
     z = state.height_half()
 

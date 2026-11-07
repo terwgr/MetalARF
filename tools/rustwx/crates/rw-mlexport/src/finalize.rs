@@ -33,14 +33,14 @@ pub const MODEL_TOP_RULE: &str = "between the top model mass level and the model
 fn time_dims(layout: Layout) -> Vec<String> {
     match layout {
         Layout::Analysis => vec!["time".into()],
-        Layout::Forecast => vec!["time".into(), "prediction_timedelta".into()],
+        Layout::Forecast | Layout::Earth2 => vec!["time".into(), "prediction_timedelta".into()],
     }
 }
 
 fn time_shape(layout: Layout, frames: usize) -> Vec<usize> {
     match layout {
         Layout::Analysis => vec![frames],
-        Layout::Forecast => vec![1, frames],
+        Layout::Forecast | Layout::Earth2 => vec![1, frames],
     }
 }
 
@@ -190,7 +190,7 @@ fn write_coordinates(store: &Path, out: &Path, domain: &DomainState, request: &R
             };
             bytes += zarr::write_small(store, "lead_time", &meta, &zarr::i64_bytes(&leads))?;
         }
-        Layout::Forecast => {
+        Layout::Forecast | Layout::Earth2 => {
             let meta = ArrayMeta {
                 shape: vec![1],
                 chunks: vec![1],
@@ -329,7 +329,7 @@ fn write_coordinates(store: &Path, out: &Path, domain: &DomainState, request: &R
                     let values: Vec<f32> = plane.iter().map(|&v| v as f32).collect();
                     let mut index = match layout {
                         Layout::Analysis => vec![t],
-                        Layout::Forecast => vec![0, t],
+                        Layout::Forecast | Layout::Earth2 => vec![0, t],
                     };
                     index.extend([0, 0]);
                     bytes += zarr::write_chunk(store, name, &index, &zarr::f32_bytes(&values), Dtype::F32)?;
@@ -370,7 +370,7 @@ fn write_coordinates(store: &Path, out: &Path, domain: &DomainState, request: &R
                             )))?;
                         let mut index = match layout {
                             Layout::Analysis => vec![t],
-                            Layout::Forecast => vec![0, t],
+                            Layout::Forecast | Layout::Earth2 => vec![0, t],
                         };
                         index.push(0);
                         bytes += zarr::write_chunk(store, name, &index, &zarr::f64_bytes(&values), Dtype::F64)?;
@@ -473,7 +473,7 @@ fn group_attrs(domain: &DomainState, request: &Request, omitted: &[(String, Stri
         "layout".into(),
         json!(match request.layout {
             Layout::Analysis => "analysis",
-            Layout::Forecast => "forecast",
+            Layout::Forecast | Layout::Earth2 => "forecast",
         }),
     );
     if !omitted.is_empty() {
@@ -488,11 +488,13 @@ fn group_attrs(domain: &DomainState, request: &Request, omitted: &[(String, Stri
 /// Close one domain's store; returns (bytes of coordinates and metadata
 /// written now, omitted variables).
 fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(u64, Vec<(String, String)>)> {
+    if request.layout == Layout::Earth2 { return crate::earth2::close_domain(out, domain, request); }
     let store = out.join(format!("{}.zarr", domain.id));
     let layout = request.layout;
     let frames = domain.times.len();
     let (ydim, xdim) = space_dims(domain);
     let (ny, nx) = (domain.out_ny, domain.out_nx);
+    let (cy, cx) = domain.chunk_yx();
     let mut omitted: Vec<(String, String)> = Vec::new();
     let level_dim = match request.levels.kind {
         LevelKind::Pressure => "level",
@@ -530,7 +532,7 @@ fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(
                 let mut shape = time_shape(layout, frames);
                 shape.extend([levels, ny, nx]);
                 let mut chunks = ones(shape.len() - 3);
-                chunks.extend([domain.levels_per_chunk, ny, nx]);
+                chunks.extend([domain.levels_per_chunk, cy, cx]);
                 let mut dims = time_dims(layout);
                 dims.extend([level_dim.to_string(), ydim.clone(), xdim.clone()]);
                 (shape, chunks, dims)
@@ -539,7 +541,7 @@ fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(
                 let mut shape = time_shape(layout, frames);
                 shape.extend([ny, nx]);
                 let mut chunks = ones(shape.len() - 2);
-                chunks.extend([ny, nx]);
+                chunks.extend([cy, cx]);
                 let mut dims = time_dims(layout);
                 dims.extend([ydim.clone(), xdim.clone()]);
                 (shape, chunks, dims)
@@ -548,7 +550,7 @@ fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(
                 let mut shape = time_shape(layout, frames);
                 shape.extend([ny, nx]);
                 let mut chunks = ones(time_dims(layout).len());
-                chunks.extend([ny, nx]);
+                chunks.extend([cy, cx]);
                 let mut dims = time_dims(layout);
                 dims.extend([ydim.clone(), xdim.clone()]);
                 (shape, chunks, dims)
@@ -558,20 +560,24 @@ fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(
                 // frame moves.  A stationary export retains its usual 2-D
                 // representation and exactly the first plane's bytes.
                 for t in 0..frames {
-                    let key = match layout {
-                        Layout::Analysis => format!("{t}.0.0"),
-                        Layout::Forecast => format!("0.{t}.0.0"),
-                    };
-                    let path = store.join(&var.name).join(key);
-                    if t == 0 {
-                        if path.is_file() {
-                            std::fs::rename(&path, store.join(&var.name).join("0.0"))?;
+                    for iy in 0..ny.div_ceil(cy) {
+                        for ix in 0..nx.div_ceil(cx) {
+                            let key = match layout {
+                                Layout::Analysis => format!("{t}.{iy}.{ix}"),
+                                Layout::Forecast | Layout::Earth2 => format!("0.{t}.{iy}.{ix}"),
+                            };
+                            let path = store.join(&var.name).join(key);
+                            if t == 0 {
+                                if path.is_file() {
+                                    std::fs::rename(&path, store.join(&var.name).join(format!("{iy}.{ix}")))?;
+                                }
+                            } else if path.is_file() {
+                                std::fs::remove_file(path)?;
+                            }
                         }
-                    } else if path.is_file() {
-                        std::fs::remove_file(path)?;
                     }
                 }
-                (vec![ny, nx], vec![ny, nx], vec![ydim.clone(), xdim.clone()])
+                (vec![ny, nx], vec![cy, cx], vec![ydim.clone(), xdim.clone()])
             }
         };
         let meta = ArrayMeta {
@@ -587,7 +593,7 @@ fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(
         let mut shape = time_shape(layout, frames);
         shape.extend([levels, ny, nx]);
         let mut chunks = ones(shape.len() - 3);
-        chunks.extend([domain.levels_per_chunk, ny, nx]);
+        chunks.extend([domain.levels_per_chunk, cy, cx]);
         let mut dims = time_dims(layout);
         dims.extend([level_dim.to_string(), ydim.clone(), xdim.clone()]);
         let mut attrs = attrs_of(&[
@@ -610,6 +616,15 @@ fn close_domain(out: &Path, domain: &DomainState, request: &Request) -> Result<(
 
 fn readme(request: &Request, state: &State, slug: &str, zip: bool) -> String {
     let mut text = String::new();
+    if request.layout == Layout::Earth2 {
+        text.push_str("Earth2Studio export (0.19.0)\n\nZarr format 3, consolidated, one per-channel dataset per domain.\nDimensions: time (initialization), lead_time (offset), then profile spatial dimensions.\n\n");
+        text.push_str("from earth2studio.data import InferenceOutputSource\nfrom earth2studio.io import ZarrBackend\n");
+        for id in state.domains.keys() {
+            text.push_str(&format!("source = InferenceOutputSource(\"{slug}/{id}.zarr\", engine=\"zarr\")\nbackend = ZarrBackend(\"{slug}/{id}.zarr\", backend_kwargs={{\"overwrite\": False}})\n"));
+        }
+        text.push_str("\nsource(valid_times, [\"t2m\", \"tcwv\", \"z500\"]) returns (time, variable, spatial dimensions).\nPressure channels carry pressure_hpa; z is geopotential in m2 s-2; w is omega in Pa s-1.\ntp06 is trailing 6-hour precipitation in metres; incomplete initial windows are NaN.\nThe receipt lists channels, profiles, input hashes and frame timings.\n");
+        return text;
+    }
     text.push_str("Machine-learning export\n=======================\n\n");
     text.push_str(&format!(
         "Written by ml-export {} from model history files. One Zarr (format 2, consolidated) dataset per domain.\n\n",
@@ -749,10 +764,14 @@ pub fn finalize(out: &Path, state: &State, zip: bool, progress: Progress<'_>) ->
         "exporter": format!("ml-export {}", request.provenance.exporter_version),
         "domains": state.domains.keys().collect::<Vec<_>>(),
     });
-    zarr::write_document(&out.join(".zgroup"), &json!({"zarr_format": 2}))?;
-    zarr::write_document(&out.join(".zattrs"), &folder_attrs)?;
-    let tree = zarr::consolidated_tree(out, "")?;
-    zarr::write_document(&out.join(".zmetadata"), &tree)?;
+    if request.layout == Layout::Earth2 {
+        zarr::write_document(&out.join("zarr.json"), &json!({"zarr_format":3,"node_type":"group","attributes":folder_attrs}))?;
+    } else {
+        zarr::write_document(&out.join(".zgroup"), &json!({"zarr_format": 2}))?;
+        zarr::write_document(&out.join(".zattrs"), &folder_attrs)?;
+        let tree = zarr::consolidated_tree(out, "")?;
+        zarr::write_document(&out.join(".zmetadata"), &tree)?;
+    }
     std::fs::write(out.join("README.txt"), readme(request, state, &slug, zip))?;
     let bytes_before_receipt = folder_bytes(out);
     let receipt_path = out.join("ml-export-receipt.json");
@@ -770,11 +789,13 @@ pub fn finalize(out: &Path, state: &State, zip: bool, progress: Progress<'_>) ->
             metadata.insert(".zgroup".into(), json!({"zarr_format": 2}));
             metadata.insert(".zattrs".into(), json!({}));
         }
-        let memory = vec![
+        let memory = if request.layout == Layout::Earth2 {
+            vec![("zarr.json".to_string(), zarr::json_bytes(&json!({"zarr_format":3,"node_type":"group","attributes":{}})))]
+        } else { vec![
             (".zgroup".to_string(), zarr::json_bytes(&json!({"zarr_format": 2}))),
             (".zattrs".to_string(), zarr::json_bytes(&json!({}))),
             (".zmetadata".to_string(), zarr::json_bytes(&root_tree)),
-        ];
+        ] };
         let size = zipout::write_with(&archive, &files, &memory)?;
         progress(json!({"event": "zip", "name": archive.file_name().map(|n| n.to_string_lossy().into_owned()), "bytes": size}));
         zipped = Some((archive, size));

@@ -1,0 +1,154 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_band15_f32",
+      "module": "hexv842_mpas_rrtmg_lw_band15_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_band15_f32.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_taugb13_16.cu",
+      "cuda_symbol": "rlw_taugb15",
+      "resources": [
+        [
+          "laytrop_v",
+          "int32",
+          "read"
+        ],
+        [
+          "fs",
+          "float",
+          "read"
+        ],
+        [
+          "isv",
+          "int32",
+          "read"
+        ],
+        [
+          "wx",
+          "float",
+          "read"
+        ],
+        [
+          "chi_mls",
+          "float",
+          "read"
+        ],
+        [
+          "absa",
+          "float",
+          "read"
+        ],
+        [
+          "selfref",
+          "float",
+          "read"
+        ],
+        [
+          "forref",
+          "float",
+          "read"
+        ],
+        [
+          "ka_mn2",
+          "float",
+          "read"
+        ],
+        [
+          "fracrefa",
+          "float",
+          "read"
+        ],
+        [
+          "gas_tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "fracs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "laytrop_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "isv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "chi_mls": [
+          [
+            "any_1d"
+          ]
+        ],
+        "absa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "selfref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "forref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ka_mn2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fracrefa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gas_tau": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fracs": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "oneminus",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-"""Metal submission helper for ordinary calc_p_alpha diagnostics."""
+"""Metal submission helpers for ordinary and strict pressure diagnostics."""
 
 from __future__ import annotations
 
@@ -6,17 +6,8 @@ from woof.wrf_exact import ENABLED as WRF_EXACT
 from woof.wrf_exact import DIAGNOSTICS_ENABLED
 
 
-def submit_calc_p_alpha(state, hypsometric_opt: int = 1, window=None):
-    """Submit ordinary opt-1 or opt-2 diagnostics to Metal.
-
-    The separate WRF exact-D variant requires glibc_flt32 log/pow helpers
-    that do not yet exist in the Metal runtime. Refuse that selection rather
-    than silently using Metal's different transcendental implementation.
-    """
-    if DIAGNOSTICS_ENABLED:
-        raise NotImplementedError(
-            "Metal calc_p_alpha does not yet implement the WRF exact-D "
-            "glibc float32 log/pow path")
+def submit_calc_p_alpha(state, hypsometric_opt: int = 1, window=None, *, muts=None):
+    """Submit the selected source contract over a whole domain or window."""
     if hypsometric_opt not in (1, 2):
         raise ValueError(f"hypsometric_opt must be 1 or 2, got {hypsometric_opt}")
     if hypsometric_opt == 2:
@@ -58,6 +49,18 @@ def submit_calc_p_alpha(state, hypsometric_opt: int = 1, window=None):
         "nz": nz, "ny": ny, "nx": nx,
         "j0": j0, "i0": i0, "nyw": nyw, "nxw": nxw,
     }
+    name = "diagnostics_calc_p_alpha"
+    if DIAGNOSTICS_ENABLED:
+        from woof.core import constants
+        if getattr(state, "p_perturbation", None) is None:
+            state.p_perturbation = state._array_module.empty(state.p.shape, dtype=state.p.dtype)
+        for unused in ("thb", "dphbr", "dc3f", "dc4f"):
+            arrays.pop(unused)
+        arrays.update(pb=state.pb, muts=state.mub2d if muts is None else muts,
+                      p_perturbation=state.p_perturbation)
+        parameters.update(carried_muts=int(muts is not None), rd=constants.RD,
+                          rvovrd=constants.RVOVRD, p0=constants.P0,
+                          gamma=constants.GAMMA)
+        name = "wrf_exact_calc_p_alpha"
     return state._array_module.context.submit_kernel(
-        "diagnostics_calc_p_alpha", arrays, parameters,
-        exact_policy=WRF_EXACT, grid_size=nyw * nxw)
+        name, arrays, parameters, exact_policy=WRF_EXACT, grid_size=nyw * nxw)

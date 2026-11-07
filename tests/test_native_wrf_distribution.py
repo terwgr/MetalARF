@@ -1,3 +1,4 @@
+# Replaces: test_standalone_native_smoke_forecast_annotation_still_guards_staging (now test_standalone_forecast_supervisor_annotation_still_guards_staging).
 from __future__ import annotations
 
 import hashlib
@@ -5,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -62,6 +64,11 @@ from tools.smoke_rw_wps_cpu_install import _safe_extract, _safe_extract_zip
 ROOT = Path(__file__).parents[1]
 
 
+def _run_python(*arguments, **options):
+    return subprocess.run([sys.executable, *arguments], capture_output=True,
+                          text=True, check=False, **options)
+
+
 def _stage_or_skip(destination):
     """Stage the standalone project, or say why the tree cannot.
 
@@ -82,18 +89,36 @@ def _stage_or_skip(destination):
         pytest.skip(str(error))
 
 
+@pytest.fixture(scope="module")
+def staged_project(tmp_path_factory):
+    """The standalone project, staged once for the module (once per
+    pytest-xdist worker), as ``(path, receipt)``.
+
+    Staging copies and import-scans about 735 tracked files, 3 s on an
+    idle desktop and longer on a loaded battery host, and fifteen tests
+    here used to stage a copy each to read it.  They read this one.  A
+    test that writes into the staged tree takes ``staged_copy``; the two
+    tests whose subject is a refused staging call the real staging.
+    """
+
+    destination = tmp_path_factory.mktemp("rw-wps-staging") / "rw-wps-python"
+    receipt = _stage_or_skip(destination)
+    return destination, receipt
+
+
+@pytest.fixture
+def staged_copy(staged_project, tmp_path):
+    """A private copy of the shared staging, for a test that writes into it."""
+
+    source, receipt = staged_project
+    destination = tmp_path / "rw-wps-python"
+    shutil.copytree(source, destination,
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    return destination, receipt
+
+
 def test_distribution_builder_runs_directly_outside_checkout(tmp_path):
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / "tools" / "build_native_wrf_distribution.py"),
-            "--help",
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python(str(ROOT / 'tools' / 'build_native_wrf_distribution.py'), '--help', cwd=tmp_path)
     assert completed.returncode == 0, completed.stderr
     assert "Build a hash-bound Linux woof" in completed.stdout
     assert "native-WRF runtime distribution." in completed.stdout
@@ -109,13 +134,7 @@ def test_distribution_builder_runs_directly_outside_checkout(tmp_path):
 def test_standalone_release_tools_run_directly_outside_checkout(
     tmp_path, script, marker,
 ):
-    completed = subprocess.run(
-        [sys.executable, str(ROOT / "tools" / script), "--help"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python(str(ROOT / 'tools' / script), '--help', cwd=tmp_path)
     assert completed.returncode == 0, completed.stderr
     assert marker in completed.stdout
 
@@ -160,17 +179,7 @@ def test_release_builder_stdout_is_one_strict_json_document(
 
 
 def test_windows_release_tool_runs_directly_outside_checkout(tmp_path):
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / "tools" / "build_rw_wps_windows_release.py"),
-            "--help",
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python(str(ROOT / 'tools' / 'build_rw_wps_windows_release.py'), '--help', cwd=tmp_path)
     assert completed.returncode == 0, completed.stderr
     assert "complete Windows x86_64 CPU RW-WPS runtime" in completed.stdout
 
@@ -419,13 +428,13 @@ def test_windows_installer_and_launcher_are_fail_closed():
     assert launcher.count("& $python -B -P -m") == 2
 
 
-def test_standalone_parser_resolves_a_named_parameter_set_without_forecast_runtime(tmp_path):
+def test_standalone_parser_resolves_a_named_parameter_set_without_forecast_runtime(
+        tmp_path, staged_copy):
     """The staged parser carries its registry and fixed-clock dependencies."""
     import tomllib
     from test_physics_params import _EXPERIMENT
 
-    staged = tmp_path / "rw-wps-python"
-    receipt = _stage_or_skip(staged)
+    staged, receipt = staged_copy
     assert "woof/physics_params.py" in receipt["files"]
     assert "woof/physics_params_registry_v1.json" in receipt["files"]
     assert "woof/core/adaptive_clock.py" in receipt["files"]
@@ -480,14 +489,61 @@ for module in ("woof.core.physics", "woof.core.ruc", "woof.core.ruc_gpu", "woof.
         'wrf_rrtmg_compatibility = "wrf-rrtmg-4-4-legacy-v1"',
         'wrf_rrtmg_compatibility = "none"')
     environment["WOOF_PHYSICS_PARAMS"] = str(set_path)
-    completed = subprocess.run([sys.executable, "-P", "-c", script], cwd=tmp_path,
-                               env=environment, capture_output=True, text=True, check=False)
+    completed = _run_python('-P', '-c', script, cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def test_standalone_python_project_excludes_forecast_executor(tmp_path):
-    staged = tmp_path / "rw-wps-python"
-    receipt = _stage_or_skip(staged)
+def test_standalone_terrain_preparation_reads_measured_maps_without_forecast(
+        staged_project):
+    """Non-flat preparation reaches the staged map readers and their data."""
+    import tomllib
+
+    staged, receipt = staged_project
+    names = {
+        "terrain_clock_map.json", "terrain_clock_map_local_face.json",
+        "terrain_clock_adaptive_local_face.json",
+    }
+    assert {f"woof/{name}" for name in names} <= set(receipt["files"])
+    metadata = tomllib.loads((staged / "pyproject.toml").read_text(encoding="utf-8"))
+    assert names <= set(metadata["tool"]["setuptools"]["package-data"]["woof"])
+    assert not [item for item in receipt["optional_internal_imports"]
+                if item["module"] in {"woof.acoustic_adaptation",
+                                      "woof.terrain_clock",
+                                      "woof.terrain_clock_local"}]
+    script = """
+from pathlib import Path
+import sys
+import numpy as np
+from woof import acoustic_adaptation, terrain_clock, terrain_clock_local
+from woof.static.lambert import LambertGrid
+from woof.static.terrain_autosmooth import measured_slope_limit, prepare_fields
+
+root = Path.cwd().resolve()
+for module in (acoustic_adaptation, terrain_clock, terrain_clock_local):
+    assert Path(module.__file__).resolve().is_relative_to(root)
+grid = LambertGrid(25, 0, 20, 30, 0, 500, 500, 25, 25)
+limit, arms = measured_slope_limit(grid)
+assert limit == .85 and arms
+# A non-flat field reaches the map instead of taking the flat early return.
+terrain = np.zeros((24, 24))
+terrain[10:14, 10:14] = 20
+fields = {"HGT_M": terrain}
+assert prepare_fields(fields, grid, domain_id=1) is fields
+table = terrain_clock_local.candidate_map(arms)
+assert table.rows
+assert terrain_clock_local.adaptive_document()["rows"]
+for name in ("woof.core.model", "woof.core.dycore", "woof.core.physics", "cupy"):
+    assert name not in sys.modules, name
+"""
+    environment = os.environ.copy()
+    environment.update(PYTHONPATH=str(staged), CUDA_VISIBLE_DEVICES="",
+                       GPUWM_NO_LOCAL_GPU="1", PYTHONDONTWRITEBYTECODE="1")
+    completed = _run_python('-P', '-c', script, cwd=staged, env=environment)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_standalone_python_project_excludes_forecast_executor(staged_project):
+    staged, receipt = staged_project
     files = set(receipt["files"])
 
     assert receipt["distribution"] == "rw-wps"
@@ -523,6 +579,37 @@ def test_standalone_python_project_excludes_forecast_executor(tmp_path):
     assert "woof/core/nest_fields.py" in files
     assert "woof/core/ozone_contract.py" in files
     assert "woof/core/inflow_perturbation.py" in files
+    assert "woof/ensemble/surface_controls.py" in files
+    assert "woof/ensemble/member_variants.py" in files
+    environment = os.environ.copy()
+    environment.update(PYTHONPATH=str(staged), CUDA_VISIBLE_DEVICES="",
+                       GPUWM_NO_LOCAL_GPU="1", PYTHONDONTWRITEBYTECODE="1")
+    script = """
+from pathlib import Path
+from woof.ensemble import member_variants, surface_controls
+assert Path(surface_controls.__file__).resolve().is_relative_to(Path.cwd())
+assert Path(member_variants.__file__).resolve().is_relative_to(Path.cwd())
+assert surface_controls.shared_surface_options(
+    {"kind": "surface-state", "sst_offset_k": [-1.0, 1.0]}, 2
+) == {"kind": "surface-state", "sst_offset_k": [-1.0, 1.0]}
+variants = member_variants.normalize_member_variants([
+    {"name": "land_a", "physics": {"sf_surface_physics": 2, "num_soil_layers": 4}},
+    {"name": "land_b", "physics": {"sf_surface_physics": 3, "num_soil_layers": 9},
+     "surface": {"soil_moisture_scale": 0.9, "sst_offset_k": 1.0}},
+], 2)
+assert variants[0]["physics"] == {"sf_surface_physics": 2, "num_soil_layers": 4}
+assert variants[1]["surface"]["sst_offset_k"] == 1.0
+import sys
+from woof import kernel_aot, kernel_aot_build
+from woof.certify import compile_platform
+assert Path(kernel_aot.__file__).resolve().is_relative_to(Path.cwd())
+assert Path(kernel_aot_build.__file__).resolve().is_relative_to(Path.cwd())
+assert callable(compile_platform.nvrtc_banner)
+assert "woof.supervisor" not in sys.modules
+assert "cupy" not in sys.modules
+"""
+    completed = _run_python('-P', '-c', script, cwd=staged, env=environment)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
     assert "woof/core/attribute_tracking.py" in files
     assert "woof/toml_document.py" in files
     assert "woof/prepared_source_schemas.py" in files
@@ -536,7 +623,7 @@ def test_standalone_python_project_excludes_forecast_executor(tmp_path):
                  "render", "render_receipts", "background_contract", "regional_preparation",
                  "local_da", "local_da_fetch", "local_da_observations", "local_da_runtime",
                  "cyclone_seed", "cyclone_sources"):
-        assert f"gpuwm/{name}.py" not in files
+        assert f"woof/{name}.py" not in files
     assert "woof/ingest/case_store.py" not in files
     assert "woof/ingest/relocation_continuation.py" not in files
     assert "woof/core/thompson_contract.py" in files
@@ -580,13 +667,18 @@ def test_standalone_python_project_excludes_forecast_executor(tmp_path):
     assert {(item["path"], item["module"]) for item in receipt["optional_internal_imports"]} >= {
         ("woof/source_availability.py", "woof.domain_wizard")}
     # The initial-state perturbation ships with the ingest package; the
-    # radiation ceiling it reads when a forecast runner builds one is in
-    # the RTE+RRTMGP module, which does not, and that import is named
-    # optional.
+    # radiation ceiling import is optional. A configuration may also need
+    # this module's cloud-optics metadata, in which case the package-derived
+    # closure stages it and leaves its forecast-only imports unreachable.
     assert "woof/ingest/init_perturbation.py" in files
-    assert "woof/core/rrtmgp.py" not in files
-    assert {(item["path"], item["module"]) for item in receipt["optional_internal_imports"]} >= {
-        ("woof/ingest/init_perturbation.py", "woof.core.rrtmgp")}
+    if "woof/core/rrtmgp.py" in files:
+        assert "woof/core/rrtmgp.py" in receipt["import_closure_files"]
+        assert any(item["path"] == "woof/core/rrtmgp.py"
+                   and item["module"] == "woof.core.physics"
+                   for item in receipt["optional_internal_imports"])
+    else:
+        assert {(item["path"], item["module"]) for item in receipt["optional_internal_imports"]} >= {
+            ("woof/ingest/init_perturbation.py", "woof.core.rrtmgp")}
     # Preparation builds and seals the moving-nest statics corridor, so the
     # corridor module ships.  Its check of a corridor sealed under an older
     # build contract reads the relocation planner and the relocation
@@ -600,16 +692,21 @@ def test_standalone_python_project_excludes_forecast_executor(tmp_path):
     assert {(item["path"], item["module"]) for item in receipt["optional_internal_imports"]} >= {
         ("woof/static/corridor.py", "woof.core.nest_relocation"),
         ("woof/static/corridor.py", "woof.ingest.relocation_init")}
-    # Terrain adaptation belongs to the excluded forecast runners. The
-    # namelist importer needs the shared acoustic count, which ships with
-    # its adaptive-timestep dependency. Its live physics cadence stays out.
-    assert "woof/acoustic_adaptation.py" not in files
-    assert "woof/terrain_clock.py" not in files
+    # Static preparation checks its slope against the measured terrain map.
+    # Ship its CPU readers while leaving forecast execution and live physics
+    # cadence out of this preprocessing package.
+    assert "woof/acoustic_adaptation.py" in files
+    assert "woof/terrain_clock.py" in files
+    assert "woof/terrain_clock_local.py" in files
     assert "woof/core/adaptive_clock.py" in files
     assert "woof/core/adaptive_timestep.py" in files
     assert "woof/core/physics.py" not in files
-    assert {(item["path"], item["module"]) for item in receipt["optional_internal_imports"]} >= {
-        ("woof/core/adaptive_clock.py", "woof.core.physics")}
+    # lateral_bc.py no longer reaches woof.core.dycore: the exact chain moved
+    # WRF_MUTS_SLOT into woof.state_serialization_contract (2.9.1), which the
+    # standalone project already ships.
+    optional = {(item["path"], item["module"]) for item in receipt["optional_internal_imports"]}
+    assert ("woof/core/adaptive_clock.py", "woof.core.physics") in optional
+    assert ("woof/ingest/lateral_bc.py", "woof.core.dycore") not in optional
     # The chained writer ships with the era5, gfs and mapped routes; the
     # forecast admission it reaches only when it chains does not, and a
     # preparation-only install never chains, so that import is optional.
@@ -641,9 +738,9 @@ def test_standalone_python_project_excludes_forecast_executor(tmp_path):
     assert "matplotlib" not in metadata
 
 
-def test_standalone_python_project_imports_without_source_tree_or_cupy(tmp_path):
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
+def test_standalone_python_project_imports_without_source_tree_or_cupy(
+        tmp_path, staged_project):
+    staged, _receipt = staged_project
     script = r"""
 from importlib.abc import MetaPathFinder
 from pathlib import Path
@@ -890,14 +987,7 @@ for name in (
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(staged)
     environment["RW_WPS_STAGED_ROOT"] = str(staged)
-    completed = subprocess.run(
-        [sys.executable, "-P", "-c", script],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python('-P', '-c', script, cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stderr
 
 
@@ -954,17 +1044,16 @@ def test_the_planning_door_reads_its_member_list_without_the_forecast_door(tmp_p
         "                     '--trajectories', sys.argv[1]])\n"
         "assert code == 0, code\n"
         "assert 'woof.ensemble.recipe_door' not in sys.modules\n")
-    completed = subprocess.run(
-        [sys.executable, "-c", script, str(listed)], cwd=tmp_path,
-        env={**os.environ, "PYTHONPATH": os.pathsep.join(
-            [str(ROOT), os.environ.get("PYTHONPATH", "")])},
-        capture_output=True, text=True, timeout=120)
+    completed = _run_python(
+        '-c', script, str(listed),
+        cwd=tmp_path, env={**os.environ, "PYTHONPATH": os.pathsep.join(
+            [str(ROOT), os.environ.get("PYTHONPATH", "")])}, timeout=120)
     assert completed.returncode == 0, completed.stderr
     plan = json.loads(completed.stdout)
     assert [member["trajectory"]["source"] for member in plan["members"]] == ["hrrr", "rap"]
 
 
-def test_standalone_auto_backend_reads_the_card_load(tmp_path):
+def test_standalone_auto_backend_reads_the_card_load(tmp_path, staged_project):
     """The staged package prices its preparation against the card's load.
 
     Auto's load probe lived in the forecast memory preflight, which this
@@ -982,8 +1071,7 @@ def test_standalone_auto_backend_reads_the_card_load(tmp_path):
     not read as a CuPy that could not load.
     """
 
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
+    staged, _receipt = staged_project
     shadow = tmp_path / "shadow"
     (shadow / "cupy").mkdir(parents=True)
     (shadow / "cupy" / "__init__.py").write_text(
@@ -1053,20 +1141,25 @@ price = price_forcing_preparation("mapped", exp, [snapshot] * 7)
 # 30 GiB free admits the host-retained, bounded CUDA preparation.
 assert 2 * GIB < price.need_bytes < 30 * GIB, price.need_bytes
 
+# A card another program has filled no longer sends auto to the CPU
+# (f80839b3f6, CPU and CUDA preparation must give the same child inputs):
+# the preparation waits for the memory and stays on the card.  The stand-in
+# card frees 30 GiB at the first wait.
+import time
+waits = []
+_sleep = time.sleep
+def _release(seconds):
+    waits.append(seconds)
+    os.environ["SHADOW_FREE_GIB"] = "30"
 os.environ["SHADOW_FREE_GIB"] = "0"
-chosen = backend.resolve_preprocess_backend("auto", price=price)
-assert chosen is cpu, chosen.selection
-reason = chosen.selection["reason"]
-assert reason.startswith("the CUDA preparation needs "), reason
-assert "the card has 0.0 GiB free of 32.0 GiB" in reason, reason
-fit = chosen.selection["device_fit"]
-assert fit["fits"] is False, fit
-assert fit["need_bytes"] == price.need_bytes, fit
-assert fit["free_bytes"] == 0, fit
-assert fit["route"] == "mapped", fit
-load = chosen.selection["device_load"]
-assert load["free_bytes"] == 0, load
-assert load["total_bytes"] == 32 * GIB, load
+time.sleep = _release
+try:
+    chosen = backend.resolve_preprocess_backend("auto", price=price)
+finally:
+    time.sleep = _sleep
+assert chosen is not cpu, chosen.selection
+assert chosen.name == "cuda", chosen.selection
+assert waits, "a full card must be waited for, not traded for the CPU"
 
 os.environ["SHADOW_FREE_GIB"] = "30"
 chosen = backend.resolve_preprocess_backend("auto", price=price)
@@ -1088,23 +1181,20 @@ assert Path(probe.__file__).resolve().is_relative_to(root)
     environment = os.environ.copy()
     environment.pop("WOOF_NATIVE_DISTRIBUTION_MANIFEST", None)
     environment.pop("GPUWM_NO_LOCAL_GPU", None)
+    # WOOF's spelling of the same switch: woof/_env.py maps it back onto the
+    # engine's name at import, so the probe would still see local CUDA forbidden.
+    environment.pop("WOOF_NO_LOCAL_GPU", None)
     environment.pop("PYTHONSAFEPATH", None)
     environment["CUDA_VISIBLE_DEVICES"] = "-1"
     environment["PYTHONPATH"] = os.pathsep.join((str(shadow), str(staged)))
     environment["RW_WPS_STAGED_ROOT"] = str(staged)
-    completed = subprocess.run(
-        [sys.executable, "-P", "-c", script],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python('-P', '-c', script, cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stderr
     assert "could not be loaded" not in completed.stderr
+    assert "waiting for" in completed.stderr, completed.stderr
 
 
-def test_standalone_preparation_publishes_at_its_seal(tmp_path):
+def test_standalone_preparation_publishes_at_its_seal(tmp_path, staged_project):
     """The staged chained writer admits a CUDA producer without a forecast.
 
     The package stages the chained writer for its era5, gfs and mapped
@@ -1114,8 +1204,7 @@ def test_standalone_preparation_publishes_at_its_seal(tmp_path):
     prices nothing.
     """
 
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
+    staged, _receipt = staged_project
     script = r"""
 from pathlib import Path
 import os
@@ -1143,14 +1232,7 @@ assert "woof.core.preflight" not in sys.modules
     environment["PYTHONPATH"] = str(staged)
     environment["RW_WPS_STAGED_ROOT"] = str(staged)
     environment["RW_WPS_WORK"] = str(tmp_path)
-    completed = subprocess.run(
-        [sys.executable, "-P", "-c", script],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python('-P', '-c', script, cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stderr
 
 
@@ -1276,17 +1358,70 @@ def test_standalone_scan_reads_from_gpuwm_import_verify(tmp_path):
     }]
 
 
-def _finish_a_staged_preparation(tmp_path, preamble=""):
+def test_standalone_fire_static_keeps_metadata_without_forecast_commands(
+        staged_project):
+    staged, _receipt = staged_project
+    for name in ("fire_ideal.py", "sfire_debug.py"):
+        assert not (staged / "woof" / name).exists()
+    for name in ("core/sfire_clock.py", "io/sfire_schema.py",
+                 "static/sfire.py", "ingest/wrfinput_sfire.py"):
+        assert (staged / "woof" / name).is_file(), name
+    import tomllib
+    project = tomllib.loads((staged / "pyproject.toml").read_text())
+    assert project["project"]["scripts"]["gpuwm-sfire-static"] == (
+        "woof.static.sfire:main")
+    script = r"""
+import importlib.abc, pathlib, sys
+root = pathlib.Path(sys.argv[1]).resolve()
+sys.path.insert(0, str(root))
+class NoCuPy(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.partition('.')[0] == 'cupy':
+            raise ImportError('standalone fire-static metadata must not require CuPy')
+sys.meta_path.insert(0, NoCuPy())
+from woof.core import sfire_clock
+from woof.io import sfire_schema, wrf_output_schema
+from woof.static import sfire
+from woof.ingest import wrfinput_sfire
+for module in (sfire_clock, sfire_schema, wrf_output_schema, sfire, wrfinput_sfire):
+    assert pathlib.Path(module.__file__).resolve().is_relative_to(root)
+assert 'NFUEL_CAT' in sfire_schema.SFIRE_REGISTRY_FIELDS
+assert 'FIRE_AREA' in wrf_output_schema.HISTORY_FIELDS_BY_NETCDF_NAME
+try: sfire.main(['--help'])
+except SystemExit as stopped: assert stopped.code == 0
+else: raise AssertionError('the staged static helper did not expose its CLI')
+"""
+    result = _run_python('-I', '-c', script, str(staged))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_standalone_forecast_supervisor_annotation_still_guards_staging(
+        tmp_path, monkeypatch, staged_project):
+    import tools.build_rw_wps_release as release
+    # The symbol-aware closure can now stage chem_sfire.import_native as a
+    # leaf, so removing that old annotation no longer crosses an executor
+    # boundary. Supervisor is still forbidden, regardless of its imports.
+    # The unmodified tree stages: ``staged_project`` is that staging.
+    key = ("woof/certify/capsule.py", "woof.supervisor")
+    monkeypatch.setattr(release, "_OPTIONAL_STAGED_IMPORTS", {
+        name: reason for name, reason in release._OPTIONAL_STAGED_IMPORTS.items()
+        if name != key})
+    with pytest.raises(RuntimeError, match="unresolved internal imports") as refused:
+        _stage_or_skip(tmp_path / "missing-annotation")
+    assert "woof.supervisor" in str(refused.value)
+    assert "woof/certify/capsule.py" in str(refused.value)
+
+
+def _finish_a_staged_preparation(tmp_path, staged, preamble=""):
     """Run a mapped preparation to its handoff through the staged door.
 
-    A stand-in adapter child writes a finished bundle; ``preamble`` runs
-    in the child interpreter before woof is imported.
+    ``staged`` is the staged project (the module's shared staging).  A
+    stand-in adapter child writes a finished bundle; ``preamble`` runs in
+    the child interpreter before woof is imported.
     """
 
     from test_source_adapters import _mapped_args
 
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
     root = tmp_path / "prepared"
     argv = _mapped_args()
     argv[argv.index("--output-root") + 1] = str(root)
@@ -1329,14 +1464,7 @@ for name in ("woof.prepared_single_domain_forecast",
     environment["RW_WPS_STAGED_ROOT"] = str(staged)
     environment["RW_WPS_ADAPTER"] = str(adapter)
     environment["RW_WPS_ARGV"] = json.dumps(argv)
-    completed = subprocess.run(
-        [sys.executable, "-P", "-c", script],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python('-P', '-c', script, cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stderr
     assert "Traceback" not in completed.stderr, completed.stderr
     assert "prep: complete" in completed.stdout
@@ -1348,7 +1476,8 @@ for name in ("woof.prepared_single_domain_forecast",
     return completed
 
 
-def test_standalone_preparation_finishes_without_the_forecast_runners(tmp_path):
+def test_standalone_preparation_finishes_without_the_forecast_runners(
+        tmp_path, staged_project):
     """A finished preparation hands off without a forecast to hand to.
 
     The package stages prep_output and stage_cli but neither forecast
@@ -1359,7 +1488,7 @@ def test_standalone_preparation_finishes_without_the_forecast_runners(tmp_path):
     with a stand-in adapter child that writes a finished bundle.
     """
 
-    _finish_a_staged_preparation(tmp_path)
+    _finish_a_staged_preparation(tmp_path, staged_project[0])
 
 
 #: The finder an editable woof install (``pip install -e .``, as the
@@ -1385,14 +1514,16 @@ class _EditableGpuwmFinder:
         return None
 
 
-_sys.meta_path.append(_EditableGpuwmFinder)
+# Keep normal staged-path resolution first, then this fixture's checkout,
+# ahead of any real editable install already registered by the gate venv.
+_sys.meta_path.insert(_sys.meta_path.index(_PathFinder) + 1, _EditableGpuwmFinder)
 _spec = _util.find_spec("woof.prepared_domain_tree_forecast")
 print("CHECKOUT RUNNER", _spec.origin)
 """
 
 
 def test_standalone_preparation_ignores_a_runner_another_tree_provides(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, staged_project):
     """A runner only another woof tree has is a runner this one lacks.
 
     With woof installed editable (publish.yml's test job) and the staged
@@ -1408,7 +1539,7 @@ def test_standalone_preparation_ignores_a_runner_another_tree_provides(
     assert checkout_runner.is_file()
     monkeypatch.setenv("RW_WPS_CHECKOUT", str(ROOT))
     completed = _finish_a_staged_preparation(
-        tmp_path, preamble=_EDITABLE_GPUWM_FINDER)
+        tmp_path, staged_project[0], preamble=_EDITABLE_GPUWM_FINDER)
     first = completed.stdout.splitlines()[0]
     # The finder is in effect: it hands the checkout's runner to find_spec.
     assert first.startswith("CHECKOUT RUNNER "), completed.stdout
@@ -1416,7 +1547,8 @@ def test_standalone_preparation_ignores_a_runner_another_tree_provides(
         checkout_runner.resolve())
 
 
-def test_the_standalone_package_reports_its_own_distribution_version(tmp_path):
+def test_the_standalone_package_reports_its_own_distribution_version(
+        tmp_path, staged_project):
     """A clean rw-wps install knows its version.
 
     woof/__init__.py read the ``woof`` distribution alone, and a clean
@@ -1431,8 +1563,7 @@ def test_the_standalone_package_reports_its_own_distribution_version(tmp_path):
 
     assert PYTHON_DISTRIBUTION in woof.DISTRIBUTION_NAMES
     assert woof.DISTRIBUTION_NAMES[0] == woof.DISTRIBUTION_NAME
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
+    staged, _receipt = staged_project
     site = tmp_path / "site"
     info = site / "rw_wps-9.8.7.dist-info"
     info.mkdir(parents=True)
@@ -1441,15 +1572,9 @@ def test_the_standalone_package_reports_its_own_distribution_version(tmp_path):
         encoding="utf-8")
     environment = os.environ.copy()
     environment["PYTHONPATH"] = os.pathsep.join((str(staged), str(site)))
-    completed = subprocess.run(
-        [sys.executable, "-S", "-P", "-c",
-         "import woof; print(woof.__version__); print(woof.__file__)"],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python(
+        '-S', '-P', '-c', 'import woof; print(woof.__version__); print(woof.__file__)',
+        cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stderr
     version, location = completed.stdout.splitlines()
     assert version == "9.8.7"
@@ -1457,7 +1582,7 @@ def test_the_standalone_package_reports_its_own_distribution_version(tmp_path):
 
 
 def test_a_staged_package_reads_its_own_version_beside_an_installed_gpuwm(
-        tmp_path):
+        tmp_path, staged_copy):
     """The staged package's runtime check passes beside another woof.
 
     install_gpuwm_native_wrf.sh installs the rw-wps wheel with ``pip
@@ -1471,8 +1596,7 @@ def test_a_staged_package_reads_its_own_version_beside_an_installed_gpuwm(
     later site directory carries an installed woof, package and all.
     """
 
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
+    staged, _receipt = staged_copy
     info = staged / "rw_wps-9.8.7.dist-info"
     info.mkdir()
     (info / "METADATA").write_text(
@@ -1503,14 +1627,7 @@ def test_a_staged_package_reads_its_own_version_beside_an_installed_gpuwm(
         "print(json.dumps({'version': woof.__version__,"
         " 'file': woof.__file__,"
         " 'receipt': _installed_record_receipt()}))")
-    completed = subprocess.run(
-        [sys.executable, "-S", "-P", "-c", program],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python('-S', '-P', '-c', program, cwd=tmp_path, env=environment)
     assert "version mismatch" not in completed.stderr, completed.stderr
     assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
@@ -1585,7 +1702,7 @@ def test_the_installed_record_check_finds_the_console_scripts_pip_wrote(
         distribution._installed_record_receipt()
 
 
-def test_standalone_radar_grid_writer_is_staged(tmp_path):
+def test_standalone_radar_grid_writer_is_staged(tmp_path, staged_project):
     """woof.obs.write_radar_grid writes, or refuses by name.
 
     The staged woof.obs exports the radar-grid writer, whose default
@@ -1596,8 +1713,7 @@ def test_standalone_radar_grid_writer_is_staged(tmp_path):
     the named one, not an ImportError.
     """
 
-    staged = tmp_path / "rw-wps-python"
-    _stage_or_skip(staged)
+    staged, _receipt = staged_project
     script = r"""
 import os
 from pathlib import Path
@@ -1649,14 +1765,26 @@ else:
     environment["RW_WPS_STAGED_ROOT"] = str(staged)
     environment["RW_WPS_TESTS"] = str(ROOT / "tests")
     environment["RW_WPS_WORK"] = str(tmp_path)
-    completed = subprocess.run(
-        [sys.executable, "-P", "-c", script],
-        cwd=tmp_path,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    # The radar-grid fixture superobs its volume before the writer under
+    # test sees it, and since 2.8.7 superob refuses rather than falls back
+    # to numpy when rw-superob is absent.  The staged tree is Python only,
+    # so the library's own ladder there searches a tools/rustwx with no
+    # build in it and the fixture died before reaching the writer (public
+    # CI 37665304517, cpu ubuntu-24.04 and windows-2025).  Where this
+    # checkout built the library, the fixture uses that build.  publish.yml's
+    # test job and the Windows cpu job build no natives and run this file;
+    # there the fixture states the numpy reference opt-out the library
+    # documents.  Either way the subject, the staged writer or its named
+    # refusal, is unchanged.
+    from woof.obs import superob_bridge
+    try:
+        built = superob_bridge.resolve_superob_bridge()
+    except superob_bridge.SuperobBridgeMissing:
+        environment[superob_bridge.SUPEROB_PYTHON_ENV] = "1"
+    else:
+        environment[superob_bridge.SUPEROB_BRIDGE_ENV] = str(built)
+        environment.pop(superob_bridge.SUPEROB_PYTHON_ENV, None)
+    completed = _run_python('-P', '-c', script, cwd=tmp_path, env=environment)
     assert completed.returncode == 0, completed.stderr
     # Without the Rust static-fields library (publish.yml's test job
     # builds no natives) the grid helper's projection prints its
@@ -1716,13 +1844,7 @@ for module in (
 ):
     assert module not in sys.modules
 """
-    completed = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_python('-c', script, cwd=ROOT)
     assert completed.returncode == 0, completed.stderr
 
 
@@ -1930,7 +2052,7 @@ def test_a_freshly_sealed_artifact_carries_the_distribution_version():
     import woof
     from tools.build_rw_wps_release import _standalone_pyproject
 
-    distribution = metadata.version("woof")
+    distribution = metadata.version("recast-woof")
     for platform in ("linux-x86_64", "windows-x86_64"):
         contract = distribution_contract(platform)
         assert contract["gpuwm_version"] == distribution, platform
@@ -1950,7 +2072,7 @@ def test_a_freshly_written_prepared_cache_stamps_this_release(tmp_path):
         CACHE_WRITER_KEY, cache_writer_version)
 
     header = {CACHE_WRITER_KEY: {"gpuwm_version": __version__}}
-    assert cache_writer_version(header) == metadata.version("woof")
+    assert cache_writer_version(header) == metadata.version("recast-woof")
 
 
 # ---------------------------------------------------------------------------
@@ -2023,7 +2145,7 @@ def test_every_declared_bridge_is_one_row_and_nothing_is_written_per_bridge():
         assert bridge.workspace in BRIDGE_WORKSPACES
         assert bridge.option.startswith("--")
         assert bridge.dest == bridge.option[2:].replace("-", "_")
-        assert bridge.env_var.startswith("GPUWM_")
+        assert bridge.env_var.startswith("WOOF_")
         assert bridge.usage_marker == f"usage: {bridge.name}"
         assert _BRIDGE_USAGE_MARKERS[bridge.name] == bridge.usage_marker
         assert bridge.consumer.strip() == bridge.consumer and bridge.consumer
@@ -2139,3 +2261,65 @@ def test_both_installed_launchers_bind_every_declared_bridge():
         assert (f'$env:{bridge.env_var} = Join-Path $Root '
                 f'"libexec{separator}bridges{separator}'
                 f'{bridge.name}.exe"') in windows, bridge.name
+
+
+@pytest.mark.parametrize("argv, message", [
+    ([], "--bridge-dir is required unless --contract is used"),
+    (["--contract", "--receipt", "r.json"],
+     "--contract cannot be combined with runtime verification inputs"),
+])
+def test_runtime_check_usage_errors_reach_the_user(argv, message, monkeypatch,
+                                                   capsys):
+    """``woof-wrf-runtime-check`` prints its usage error and exits 2.
+
+    The named breakage: ``main`` called ``parser.error`` on a parser it
+    never bound, so a bare ``woof-wrf-runtime-check`` (or ``--contract``
+    with a runtime input) died on ``NameError: name 'parser' is not
+    defined`` instead of saying what was missing (shipped in 2.8.7;
+    found by tests/test_no_undefined_names.py).
+    """
+    import woof.native_wrf_distribution as runtime_check
+    import woof.provenance_gate as provenance_gate
+
+    monkeypatch.setattr(provenance_gate, "announce_for_main", lambda name: None)
+    with pytest.raises(SystemExit) as caught:
+        runtime_check.main(argv)
+    assert caught.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_preparation_package_carries_ocean_configuration_without_gpu(
+        tmp_path, staged_project):
+    project, _receipt = staged_project
+    asset = project / "woof/data/surface_ocean.json"
+    assert asset.read_bytes() == (ROOT / "woof/data/surface_ocean.json").read_bytes()
+    code = """
+import sys
+sys.path.insert(0, sys.argv[1])
+from woof.config import RunConfig
+from woof.surface_ocean import ocean_namelist_defaults
+cfg = RunConfig(nx=8, ny=8, nz=8, dx=9000, dy=9000,
+                ztop=12000, dt=10, run_seconds=20, sf_ocean_physics=1)
+for key, value in ocean_namelist_defaults().items():
+    assert getattr(cfg, key) == value, key
+assert 'cupy' not in sys.modules
+"""
+    env = dict(os.environ, GPUWM_NO_LOCAL_GPU="1", PYTHONPATH="")
+    result = _run_python('-P', '-c', code, str(project), cwd=tmp_path, env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_runtime_identity_keeps_a_git_status_timeout_unverified(monkeypatch):
+    """The receipt fallback remains truthful when the status subprocess times out."""
+    from woof import provenance
+
+    monkeypatch.setattr(provenance, "git_executable", lambda: "git")
+    monkeypatch.setattr("woof.runtime_manifest.git_checkout_root", lambda root: root)
+    monkeypatch.setattr(provenance.subprocess, "run", lambda *args, **kwargs: (
+        _ for _ in ()).throw(subprocess.TimeoutExpired(args[0], timeout=10)))
+    identity = provenance.git_identity(ROOT)
+    assert identity is not None and identity["dirty"] is None
+    assert "timed out" in identity["dirty_unknown_reason"]
+    assert not provenance.worktree_is_clean(identity)
+    receipt = provenance.Provenance(str(ROOT / "woof"), str(ROOT), "source", git=identity)
+    assert "worktree unverified" in receipt.banner()

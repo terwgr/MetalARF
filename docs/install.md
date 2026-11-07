@@ -1,5 +1,36 @@
 # Install and verify RW-WPS
 
+## Without an NVIDIA GPU
+
+The base `pip install recast-woof` works without CuPy. Fetching, CPU preparation
+(`woof prep --preprocess-backend cpu`), doctor, rendering existing output,
+and extracting soundings do not require an NVIDIA GPU. NumPy setup states
+support preparation and export; there is no CPU forecast step.
+
+Forecast allocation and `woof.core.dycore.step` require an NVIDIA GPU and
+a driver supporting CUDA 12.x with `pip install 'recast-woof[gpu-cu12]'` (CuPy
+>=14.0 and its CUDA toolkit). Use `recast-woof[gpu-cu13]` on a CUDA-13-only
+system. VRAM depends on the domain and physics; `woof check` sizes the
+configuration. `woof doctor` reports the detected runtime and matching
+extra, and explains this requirement when a device is unavailable.
+
+Direct integrations can display the same named error:
+
+```python
+from woof.forecast_gpu import ForecastGPURequired, require_forecast_gpu
+
+try:
+    require_forecast_gpu()  # before constructing a forecast domain
+except ForecastGPURequired as error:
+    print(error)  # present this message in the application's interface
+```
+
+`DomainState` forecast allocation and `dycore.step` also check this
+requirement. Catch `ForecastGPURequired` around either call to handle an
+unavailable device. CLI forecast commands print the message and exit 2.
+The [CPU walkthrough](public/WITHOUT-A-GPU.md) covers preparing inputs for
+a forecast run on another machine.
+
 RW-WPS does not yet publish a community package. There are two useful
 installation modes: a developer checkout for inspection/tests and a sealed
 Linux or Windows x86-64 runtime archive for real preprocessing. Neither mode changes the scientific support matrix. For model installation
@@ -10,7 +41,8 @@ and forecast backend choices, see [Backends](public/BACKENDS.md).
 ### One command
 
 `install.sh` (POSIX) and `install.ps1` (PowerShell) at the repository root
-perform the whole developer install: create `.venv` if absent, install
+perform the whole developer install: create `.venv` if absent, on
+free-threaded CPython 3.14t (see "Interpreter" below), install
 the matching data companion with `pip install -e recast-woof-data`, then install
 `-e '.[gpu-cu12,render]'` (or `gpu-cu13`) into it, stage the externalized Thompson tables
 with `woof fetch-tables` (downloads only what is absent -- ~243 MiB
@@ -31,8 +63,12 @@ announces itself, not an automatic fallback), build the terminal workspace
 in the Zarr reader in `tools/zarr_bridge`, the default
 mapped-source decode engine in `tools/rw_wps` and the default velocity
 dealiasing library in `tools/region_global_dealias` with the same locked
-offline command, and
-finish with `woof doctor`, whose exit status the script propagates.
+offline command, build the hydro payload (`tools/nextgen_hydrofabric`),
+forcing (`tools/nextgen_forcing`), gauge verification (`tools/nextgen_verify`) and
+hydro fabric preparation (`tools/hydro_world`, `tools/hydro_world_params`,
+`tools/nextgen_reservoir_prepare`, `tools/hydro_world_init`) and ocean
+preparation (`tools/ocean_prepare`, `tools/rw-bathy`), the wind-turbine table decoder (`tools/wind-table`) and hydro output (`tools/nextgen_output`), and the Icechunk store writer (`tools/rw_icechunk`)
+workspaces (fetching their locked dependencies first), and finish with `woof doctor`, whose exit status the script propagates.
 
 A pip install on Windows x86-64 or Linux x86-64 needs no toolchain for
 either half: the platform wheels for those two carry all of the prebuilt
@@ -50,8 +86,33 @@ in a `render_basemap_missing` warning event. Both scripts are idempotent: re-run
 `.venv` and the incremental cargo build. Run them from the checkout
 root, or standalone (piped from the raw URL), in which case they clone
 https://github.com/recastsystems/woof into `./gpuwm`
-(`WOOF_REPO_URL` overrides the clone source). `WOOF_PYTHON`
-overrides the interpreter used to create the venv.
+(`WOOF_REPO_URL` overrides the clone source).
+
+**Interpreter.** A new `.venv` is made on free-threaded CPython 3.14t:
+a `python3.14t` already on PATH, else the one uv finds or installs
+(`uv python install 3.14t`), else, with consent (`--yes`/`-Yes` or the
+prompt), uv itself from https://astral.sh/uv first. Multi-card
+`[devices]` forecasts step each card from its own Python thread, and under
+a standard Python those threads take turns on the interpreter lock: four
+cards measured 289 s per forecast hour with the lock and 130 s on 3.14t.
+The `woof` command line and both prepared runners re-run themselves once
+with `PYTHON_GIL=0`, so nothing is exported by hand. On a free-threaded
+`.venv` the scripts install with `--prefer-binary` (cftime 1.6.6 has no
+cp314t wheel; 1.6.5 does), and the `[render]` extra's `wrf-rust`, which
+publishes no cp314t wheel, builds from its sdist with the Rust toolchain
+the scripts already require, which is why the Rust check runs before the
+`.venv` step. `--python PY`/`-Python PY` (or `WOOF_PYTHON`) picks another
+interpreter. When no 3.14t can be had, or a dependency will not install
+under it, the install goes on with `python3`/`python` and prints a warning
+naming the cost and the remedy; `woof doctor` reports the same. A
+`python3.14t` that cannot make a venv (a distribution build without its
+venv package has no ensurepip; deadsnakes splits it out as
+`python3.14-venv`) gives way to the 3.14t uv provides, then to
+`python3`/`python` with that warning, and the half-made `.venv` is removed.
+A pip install on 3.14t outside the scripts needs `--prefer-binary` too, or
+pip builds cftime 1.6.6 from source with a C compiler. A
+re-run keeps an existing `.venv` and warns when it has the lock; remove
+`.venv` and re-run to remake it on 3.14t.
 
 ### Manual steps
 
@@ -75,8 +136,8 @@ python -m pip install --upgrade pip
 python -m pip install -e recast-woof-data
 python -m pip install -e '.[gpu-cu12,render]'   # or gpu-cu13
 woof fetch-tables
-for workspace in tools/grib1_bridge tools/rustwx tools/zarr_bridge tools/rw_wps tools/region_global_dealias; do
-  (cd "$workspace" && cargo build --release --locked --offline)
+for workspace in tools/grib1_bridge tools/rustwx tools/zarr_bridge tools/rw_wps tools/region_global_dealias tools/nextgen_hydrofabric tools/nextgen_forcing tools/nextgen_verify tools/hydro_world tools/hydro_world_params tools/nextgen_reservoir_prepare tools/hydro_world_init tools/ocean_prepare tools/rw-bathy tools/wind-table tools/nextgen_output tools/rw_icechunk; do
+  (cd "$workspace" && cargo fetch --locked && cargo build --release --locked --offline)
 done
 woof doctor
 ```
@@ -91,8 +152,8 @@ python -m pip install --upgrade pip
 python -m pip install -e recast-woof-data
 python -m pip install -e '.[gpu-cu12,render]'   # or gpu-cu13
 woof fetch-tables
-foreach ($workspace in 'tools\grib1_bridge', 'tools\rustwx', 'tools\zarr_bridge', 'tools\rw_wps', 'tools\region_global_dealias') {
-  Push-Location $workspace; cargo build --release --locked --offline; Pop-Location
+foreach ($workspace in 'tools\grib1_bridge', 'tools\rustwx', 'tools\zarr_bridge', 'tools\rw_wps', 'tools\region_global_dealias', 'tools\nextgen_hydrofabric', 'tools\nextgen_forcing', 'tools\nextgen_verify', 'tools\hydro_world', 'tools\hydro_world_params', 'tools\nextgen_reservoir_prepare', 'tools\hydro_world_init', 'tools\ocean_prepare', 'tools\rw-bathy', 'tools\wind-table', 'tools\nextgen_output', 'tools\rw_icechunk') {
+  Push-Location $workspace; cargo fetch --locked; cargo build --release --locked --offline; Pop-Location
 }
 woof doctor
 ```
@@ -112,7 +173,7 @@ no Rust costs seconds:
 ./install.sh          # Windows (PowerShell): .\install.ps1
 ```
 
-They build six cargo workspaces, one for every compiled artifact a
+They build nine cargo workspaces, one for every compiled artifact a
 bundle carries, and the gate below judges each one it finds built:
 
 | Workspace | What it builds |
@@ -122,20 +183,32 @@ bundle carries, and the gate below judges each one it finds built:
 | `tools/zarr_bridge` | `rw_zarr` |
 | `tools/rw_wps` | `gpuwm_mapped_engine`, the default mapped-source decode engine |
 | `tools/region_global_dealias` | the default velocity dealiasing library |
+| `tools/nextgen_hydrofabric` | hydro payload transport and source preparation |
+| `tools/nextgen_forcing` | external hydro forcing preparation |
+| `tools/nextgen_verify` | gauge verification |
+| `tools/hydro_world` | `rw_hydro_world`, the hydro door's fabric builder (`--hydro on`) |
+| `tools/hydro_world_params` | `rw_hydro_params`, hydro catchment parameters |
+| `tools/nextgen_reservoir_prepare` | `nextgen-reservoir-prepare`, hydro reservoirs |
+| `tools/hydro_world_init` | `rw_hydro_init`, hydro initial water state |
+| `tools/ocean_prepare` | `rw_ocean`, ocean bathymetry and atmospheric forcing preparation |
+| `tools/rw-bathy` | `rw_bathy`, storm-surge bathymetry ingest and products |
+| `tools/wind-table` | `rw-wind-table`, wind-turbine inventories and WRF Fitch tables (`--wind-farms`) |
+| `tools/nextgen_output` | `rw_nextgen_output`, coupled hydro history, restart and products |
+| `tools/rw_icechunk` | `rw_icechunk`, the optional Icechunk output store writer |
 
 By hand, POSIX:
 
 ```bash
-for workspace in tools/grib1_bridge tools/rustwx tools/zarr_bridge tools/rw_wps tools/region_global_dealias; do
-  (cd "$workspace" && cargo build --release --locked --offline)
+for workspace in tools/grib1_bridge tools/rustwx tools/zarr_bridge tools/rw_wps tools/region_global_dealias tools/nextgen_hydrofabric tools/nextgen_forcing tools/nextgen_verify tools/hydro_world tools/hydro_world_params tools/nextgen_reservoir_prepare tools/hydro_world_init tools/ocean_prepare tools/rw-bathy tools/wind-table tools/nextgen_output tools/rw_icechunk; do
+  (cd "$workspace" && cargo fetch --locked && cargo build --release --locked --offline)
 done
 ```
 
 Windows (PowerShell):
 
 ```powershell
-foreach ($workspace in 'tools\grib1_bridge', 'tools\rustwx', 'tools\zarr_bridge', 'tools\rw_wps', 'tools\region_global_dealias') {
-  Push-Location $workspace; cargo build --release --locked --offline; Pop-Location
+foreach ($workspace in 'tools\grib1_bridge', 'tools\rustwx', 'tools\zarr_bridge', 'tools\rw_wps', 'tools\region_global_dealias', 'tools\nextgen_hydrofabric', 'tools\nextgen_forcing', 'tools\nextgen_verify', 'tools\hydro_world', 'tools\hydro_world_params', 'tools\nextgen_reservoir_prepare', 'tools\hydro_world_init', 'tools\ocean_prepare', 'tools\rw-bathy', 'tools\wind-table', 'tools\nextgen_output', 'tools\rw_icechunk') {
+  Push-Location $workspace; cargo fetch --locked; cargo build --release --locked --offline; Pop-Location
 }
 ```
 
@@ -236,6 +309,13 @@ rather than printing a pip line that cannot work -- the runtime window
 still accepts `>=0.2.35`, so a 0.2.38 already on your box keeps
 rendering.
 
+The free-threaded build (`python3.14t`, which `install.sh` and
+`install.ps1` use by default) is the exception: 0.2.39 publishes no cp314t
+wheel, so pip builds it from its sdist, which needs `cargo` on PATH. Its
+PyO3 supports 3.14t: the build takes about 20 s on a 24-core box and the
+module imports without switching the interpreter lock back on (measured
+2026-10-08).
+
 ```bash
 python -m pip install -e '.[dev]'
 python -m pytest -q \
@@ -244,19 +324,19 @@ python -m pytest -q \
   tests/test_native_wrf_distribution.py
 ```
 
-**A pip install needs the tables, and sometimes the native bundle.**  A
+**Tables stage on first use; some installs need the native bundle.** A
 platform wheel (Windows x86-64, Linux x86-64) already contains all of
 the compiled Rust tools and needs no `woof fetch-bridges`. A
 pure-Python wheel or an sdist install contains none, so until
 `woof fetch-bridges` stages them, `woof check`/`run` (ERA5 route) and
 the `rw-wps` GFS/HRRR front doors have nothing to decode GRIB with.
-Every pip install needs `woof fetch-tables`, and `woof doctor` says
-which of the two is still missing:
+The first Thompson forecast stages its missing tables automatically, and
+`woof doctor` says which assets are still missing:
 
 ```bash
 pip install 'recast-woof[all-cu12]'   # or 'recast-woof[all-cu13]' on a CUDA-13-only box
 woof fetch-bridges   # pure-Python wheel or sdist only
-woof fetch-tables
+woof fetch-tables   # optional: stage Thompson tables ahead of the first run
 woof doctor
 ```
 
@@ -298,10 +378,14 @@ two remedies is true for the machine it runs on.
 
 The wheel and sdist also exclude the two externalized Thompson tables
 (freezeH2O.dat, 243 MiB, and qr_acr_qg_V4.dat, 71 MiB -- together they
-would put the artifacts over PyPI's per-file limit); run
-`woof fetch-tables` once after `pip install recast-woof` to stage them,
-SHA-256-verified, into `~/.woof/tables/thompson` -- outside the
-install, beside `~/.woof/bridges`, because staging inside
+would put the artifacts over PyPI's per-file limit). The first
+`woof go` run selecting Thompson downloads and checks the two tables
+(about 315 MiB) from the pinned release assets into
+`~/.woof/tables/thompson`. `woof fetch-tables` stages them ahead of
+time or offline with `--from DIR`. An explicit
+`WOOF_THOMPSON_TABLE_ROOT` must already contain the tables; automatic
+staging does not fill a named root. The default staging location is
+outside the install, beside `~/.woof/bridges`, because staging inside
 site-packages meant the next `pip install --upgrade` deleted the
 download without saying so. The staged directory holds the whole
 four-asset set (the two the wheel does carry are copied in beside the
@@ -311,6 +395,44 @@ into site-packages before 1.4 -- keeps reading that one and stages
 nothing.
 `woof doctor` reports exactly which pieces are missing and prints the
 command that fixes each one.
+
+Downstream programs can check tables without starting CUDA or downloading:
+
+```python
+from woof import tables
+
+report = tables.status({"mp_physics": 50, "sf_surface_physics": 2})
+print(report.needed, report.present, report.missing, report.corrupt)
+tables.ensure({"mp_physics": 50}, fetch=False)  # raise a named table error
+tables.ensure({"mp_physics": 8})  # retain verified Thompson first-use staging
+```
+
+These public checks inspect the current bytes on every call. Physics loaders
+reuse verification within a process while the resolved path, size, nanosecond
+modification/change times, inode and device remain unchanged; replacing a table
+invalidates that cache. Admission and checkpoint identities share those digests.
+
+Both helpers accept a `RunConfig`, an experiment, a mapping of physics
+selectors, or family names such as `["p3", "noah", "tempo", "rrtmgp"]`.
+An experiment also includes the tables its real-data land-use initialization reads.
+`present` means the size and SHA-256 match; `ready` means every required file
+is present. Corrupt data raises `tables.CorruptTableAssets`; missing data
+raises `tables.MissingTableAssets`. No scheme is substituted. TEMPO retains
+its verified automatic acquisition and announces each staged file.
+Acquisition failures raise `tables.TableAssetError` with the attempted source
+and the offline staging command.
+
+`woof fetch-tables --schemes p3 noah --from DIR` stages just those families.
+The directory can mirror the package's data layout, contain family
+subdirectories, or hold the files directly. Add `--replace-damaged` to repair
+a corrupt destination: the replacement must pass its pin before the atomic
+install, and a bad source leaves the destination untouched. `WOOF_TABLE_ROOT`
+selects an isolated packaged-table root with the package's relative data
+layout; existing Thompson, TEMPO and P3 root overrides remain supported.
+For a pinned uncompressed mirror, `WOOF_TABLE_ASSET_URL_BASE` plus each
+packaged table's relative data path supplies its URL. Failed or interrupted
+downloads never publish a partial table; rerunning safely starts a new
+transfer. Offline failures name the attempted URL and the `--from DIR` route.
 
 High-resolution static geography needs no extra. Its engine is the Rust
 `static-fields` library, which ships in the bridge bundle every install
@@ -359,7 +481,7 @@ observation battery and the demo gallery's basemaps.
 | `recast-woof[gpu-cu13]` | `cupy-cuda13x[ctk]` | running the model on a CUDA-13-only box |
 | `recast-woof[gpu]` | alias of `gpu-cu12` | kept so existing install lines keep working |
 | `recast-woof[render]` | `wrf-rust>=0.2.39` | `woof render`'s matplotlib engine, `woof enprod`, and derived quantities. The default rust engine needs none of it. The floor is 0.2.39 because that is the oldest release with wheels for every supported interpreter (cp310-cp314); no environment marker, nothing skipped |
-| `recast-woof[dev]` | `pytest`, `psutil`, `pyyaml`, `setuptools` | running the test battery (setuptools because the wheel-gate tests run `setup.py` with the battery's interpreter) |
+| `recast-woof[dev]` | `pytest`, `pyyaml`, `setuptools` | running the test battery (setuptools because the wheel-gate tests run `setup.py` with the battery's interpreter) |
 | `recast-woof[publish]` | `huggingface_hub` | maintainers only: publishing the WPS_GEOG mirror snapshot. Needs write credentials nobody else has, so it is deliberately outside `[all]` |
 | `recast-woof[all-cu12]` | `gpu-cu12` + `render` | one line for a CUDA 12.x forecasting box |
 | `recast-woof[all-cu13]` | `gpu-cu13` + `render` | one line for a CUDA-13-only forecasting box |

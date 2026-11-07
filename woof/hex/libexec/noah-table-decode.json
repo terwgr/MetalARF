@@ -1,0 +1,10 @@
+{
+  "schema": "mpas-noah-table-decoder/v1",
+  "target": "aarch64-apple-darwin",
+  "sha256": "faff2bad57763d58a69dd937066d2863fcae1234b3a0d723be8288e66ad3746e",
+  "bytes": 387680,
+  "sources": {
+    "table_decode.rs": "cf5d474938d5953c8918455bef668c0ca8880cd9ff8e7e51b77c48e7688bc5a3",
+    "table_schema.rs": "774a4a9a80595e04d86a19dff25d139fc3f429a415970d65acda93d0a8352d12"
+  }
+}

@@ -59,8 +59,18 @@ def nest_field_kinds(cfg: RunConfig) -> tuple[str, ...]:
     kinds = ["u", "v", "w", "t", "ph", "mu"]
     if cfg.moist:
         kinds += ["qv", "qc", "qr"]
-        if cfg.mp_physics in (6, 8, 9, 10, 16, 18, 28):
+        from woof.core.column_schemes import COLUMN_SCHEMES
+        if cfg.mp_physics in COLUMN_SCHEMES:
+            kinds += [n for n in COLUMN_SCHEMES[cfg.mp_physics].species if n not in ("qv", "qc", "qr")]
+        if cfg.mp_physics in (2, 6, 8, 9, 10, 16, 18, 24, 28, 106):
             kinds += ["qi", "qs", "qg"]
+        if cfg.mp_physics == 30:
+            from woof.core.fast_sbm_contract import EXTRA_SPECIES
+            kinds += list(EXTRA_SPECIES)
+        if cfg.mp_physics == 24:
+            # WSM7's hail mass (woof/core/moist.py
+            # SINGLE_MOMENT_HAIL_SPECIES) crosses a nest edge with the rest.
+            kinds += ["qh"]
         if cfg.mp_physics == 9:
             # The inventory follows what is transported
             # (woof/core/moist.py::MY2_SPECIES): hail mass plus all six
@@ -80,6 +90,11 @@ def nest_field_kinds(cfg: RunConfig) -> tuple[str, ...]:
         if cfg.mp_physics == 18:
             kinds += ["qh", "qndrop", "qnr", "qni", "qns", "qng",
                       "qnh", "qnn", "qvolg", "qvolh"]
+        if cfg.mp_physics == 5:
+            # Ferrier-Aligo: the one transported species beyond qv/qc/qr is
+            # its total ice qi (woof/core/moist.py::FERRIER_SPECIES).  The
+            # f_* state and qt are not transported, so they do not cross.
+            kinds += ["qi"]
         if cfg.mp_physics == 50:
             # P3 one-category: the inventory follows what is transported
             # (woof/core/moist.py::P3_SPECIES), so the rime mass/volume
@@ -92,4 +107,27 @@ def nest_field_kinds(cfg: RunConfig) -> tuple[str, ...]:
             # scheme no qs and no qg (the docstring carries the
             # consequence of widening that tuple).
             kinds += ["qi", "ni", "nr", "qir", "qib"]
+        # A named scheme (woof.microphysics_schemes): its capability row is
+        # the transported set, the same rows moist.extra_moist_species
+        # returns for it, so each crosses a nest edge with its masses.
+        from woof.microphysics_schemes import scheme as _named_scheme
+        named = _named_scheme(int(cfg.mp_physics))
+        if named is not None:
+            kinds += [name for name in (named.ice_mass_species
+                                        + named.moment_species
+                                        + named.aerosol_species)
+                      if name not in kinds]
+    # Read like chem_sets below: a caller may hand a partial configuration
+    # (the offline-child inventory passes only the microphysics fields).
+    if (getattr(cfg, "bl_pbl_physics", 0) == 5
+            and getattr(cfg, "bl_mynn_tkeadvect", False)):
+        kinds.append("qke_adv")
+    # Chem species (woof/core/chem_state.py), named by the chem table: WRF
+    # declares every chem species with the nest interpolation and feedback
+    # flags (registry.chem ``i0{12}rhusdf=(bdy_interp:dt)``) and forces a
+    # nest's chem with relax plus spec (solve_em.F:2509-2545), the generic
+    # scalar coupling of the moments above.  Empty while chem is off.
+    if getattr(cfg, "chem_sets", ()):
+        from woof.chem_table import load as load_chem_table
+        kinds += [row.state_attr for row in load_chem_table(cfg).transported]
     return tuple(kinds)

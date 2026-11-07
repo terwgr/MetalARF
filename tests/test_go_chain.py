@@ -104,6 +104,14 @@ def _startup_notices(command: str) -> tuple:
     except Exception as unstaged:  # noqa: BLE001 - the state, not a failure
         table_notice = "warning: " + " ".join(str(unstaged).split())
         notices.append(lambda line: line == table_notice)
+
+    # A FOURTH, from the go chain's first stage: `woof check` states the
+    # planning-time model-top verdict (woof.vertical_contract, 8f7e4c27247)
+    # on stderr, so `--json` stdout stays one document.  Only the PASS form
+    # is a healthy notice; a REFUSED top stops the door and still fails the
+    # test that calls this.
+    top_pass = "woof check: model-top check PASS: source "
+    notices.append(lambda line: line.startswith(top_pass))
     return tuple(notices)
 
 
@@ -229,7 +237,7 @@ def _a_card_whose_free_vram_this_file_decides(monkeypatch):
     from woof.core import preflight
     from types import SimpleNamespace
     from woof import doctor
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: SimpleNamespace(status="verified"))
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **kwargs: SimpleNamespace(status="verified"))
 
     monkeypatch.setattr(
         preflight, "device_memory_probe_subprocess",
@@ -251,7 +259,19 @@ def test_the_pinned_card_is_what_the_gate_reads(gfs_config, tmp_path):
 # Refusals: never half-orchestrate
 # ---------------------------------------------------------------------------
 
-def test_wizard_era5_config_uses_the_shared_declared_input_launch(tmp_path, capsys):
+def test_wizard_era5_config_uses_the_shared_declared_input_launch(tmp_path, capsys, monkeypatch):
+    # Repeated previews reuse published archive bounds rather than probing again.
+    from datetime import datetime
+    from time import monotonic
+    from woof import source_availability as availability
+    from woof.source_adapters import get_source_adapter
+    from dataclasses import replace
+    original = get_source_adapter("era5").archive_windows[0]
+    window = replace(original, bounds_url="https://fixture.invalid/era5-bounds",
+                     bounds_stop_keys=("end",))
+    stop = datetime(2026, 8, 1, 23)
+    monkeypatch.setattr(availability, "_BOUNDS", {window.bounds_url: (monotonic(), stop)})
+    assert availability.published_stop(window) == stop
     config = _emit(tmp_path, "era5", source="era5")
     before = config.read_bytes()
     capsys.readouterr()  # Separate wizard output from the launch preview.
@@ -732,10 +752,11 @@ _BUBBLE = ("\n[[perturbation.bubbles]]\ncenter_lat = 35.3\n"
 def test_a_tree_carries_a_warm_bubble_through_the_authority_stage(tmp_path):
     """Stage 1 of `woof go` publishes a tree's bubble for the tree runner.
 
-    GFS preparation defers [perturbation] to the prepared domain-tree
-    runner, which applies it to its restored states; only the
-    single-domain runner cannot.  Stage 1 refused the block on every
-    config, so `woof go` ran no bubble on any tree.
+    GFS preparation defers [perturbation] to the prepared runner, which
+    applies it to its restored states.  Stage 1 refused the block on every
+    config, so `woof go` ran no bubble on any tree.  Since
+    fix/single-domain-perturbation (9b04a0e9d5) the single-domain runner
+    applies it too, so a single domain carries it through as well.
     """
     from woof.prepared_single_domain_forecast import (
         _render_materialized_experiment)
@@ -747,11 +768,12 @@ def test_a_tree_carries_a_warm_bubble_through_the_authority_stage(tmp_path):
     assert exp.perturbation.bubbles[0].amplitude_k == 3.0
     assert "[[perturbation.bubbles]]" in rendered
     single = _emit(tmp_path, "single")
-    with pytest.raises(ValueError,
-                       match=r"prepared single-domain forecast"):
-        _render_materialized_experiment(
-            single.read_text(encoding="utf-8") + _BUBBLE, source="gfs",
-            profile=None)
+    rendered, exp, _receipt = _render_materialized_experiment(
+        single.read_text(encoding="utf-8") + _BUBBLE, source="gfs",
+        profile=None)
+    assert len(exp.domains) == 1
+    assert exp.perturbation.bubbles[0].amplitude_k == 3.0
+    assert "[[perturbation.bubbles]]" in rendered
 
 
 def test_the_forecast_stage_matches_what_the_front_door_prints(tmp_path,
@@ -985,6 +1007,24 @@ class _FakeCompleted:
         self.stderr = stderr
 
 
+def _publish_chain_artifacts(command, *, frames=False):
+    """Stage artifacts shared by the output-policy tests."""
+    if "--author-front-door-manifest" in command:
+        manifest = Path(command[command.index("--manifest-out") + 1])
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text("{}", encoding="utf-8")
+    if "--output-root" in command:
+        prepared = Path(command[command.index("--output-root") + 1])
+        prepared.mkdir(parents=True, exist_ok=True)
+        (prepared / "proof.json").write_text(json.dumps({
+            "input_manifest_sha256": "a" * 64,
+            "prepared_cache": {"content_sha256": "b" * 64}}), encoding="utf-8")
+    if frames and "--io-mode" in command:
+        directory = Path(command[command.index("--outdir") + 1]) / "wrfout"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "wrfout_d01_2026-07-29_18_00_00").write_text("", encoding="utf-8")
+
+
 # NEEDS CUPY INSTALLED, and opens no device.  The chain tests marked below
 # run the real `woof go` door; without the array library it refuses
 # before the fetch stage (`this command needs cupy (cupy-cuda12x /
@@ -1020,6 +1060,13 @@ def test_a_failing_stage_replays_its_output_and_stops(
                 stderr="line two, naming the actual problem\n")
         return _FakeCompleted(0, stdout="chatty success\n")
 
+    # This double counts chain stages. The concurrent kernel warm-up uses
+    # Popen too, but is independent of stage failure and output replay.
+    monkeypatch.setattr(go_cli.SpeedHooks, "warm_kernels_spawn",
+                        lambda args, plan: None)
+    # The hydro door's tool probe is stubbed outside the hydro test modules
+    # (conftest _hydro_door_tools_unprobed_outside_hydro_tests), so only chain
+    # stages reach this double.
     monkeypatch.setattr(subprocess, "Popen", _popen_double(fake_run))
     monkeypatch.setattr(go_cli, "resolve_bridge",
                         lambda: tmp_path / "gfs_grib2_bridge")
@@ -1028,6 +1075,12 @@ def test_a_failing_stage_replays_its_output_and_stops(
                    "--geog-root", str(staged_geog)])
     printed = capsys.readouterr().out
     assert rc == 3
+    # The hydro door's verdict sits in the memory gate's line block (V59: the
+    # headline run had hydro off and only the receipt said so).
+    lines = printed.splitlines()
+    memory = next(i for i, line in enumerate(lines) if line.startswith("go: memory -- "))
+    # Hydro is opt-in (2.9.4 hotfix): a run that did not ask says so in the same block.
+    assert lines[memory + 1].startswith("go: hydro -- off (default_off)"), lines[memory + 1]
     assert f"FAILED  {failing_label}" in printed
     # Verbatim, without --explain, because this is the reason.
     assert "line one of the real diagnosis" in printed
@@ -1114,30 +1167,7 @@ def test_a_succeeding_chain_reports_one_line_per_stage(tmp_path, capsys,
     plan_root = tmp_path / "go"
 
     def fake_run(command, **kwargs):
-        # Materialize the artifacts the relay reads back.
-        if "--author-front-door-manifest" in command:
-            manifest = Path(command[command.index("--manifest-out") + 1])
-            manifest.parent.mkdir(parents=True, exist_ok=True)
-            manifest.write_text("{}", encoding="utf-8")
-        if "--output-root" in command:
-            prepared = Path(command[command.index("--output-root") + 1])
-            prepared.mkdir(parents=True, exist_ok=True)
-            (prepared / "proof.json").write_text(json.dumps({
-                "input_manifest_sha256": "a" * 64,
-                "prepared_cache": {"content_sha256": "b" * 64}}),
-                encoding="utf-8")
-        if "--io-mode" in command:
-            # The forecast stage publishes history frames, and the render
-            # stage enumerates them: `woof render` takes FILES, and
-            # handing it the directory is what a real run died on after
-            # the forecast had already succeeded.  A forecast that
-            # published nothing is a skipped render, not a rendered
-            # nothing, so this fake has to publish one.
-            frames = Path(
-                command[command.index("--outdir") + 1]) / "wrfout"
-            frames.mkdir(parents=True, exist_ok=True)
-            (frames / "wrfout_d01_2026-07-29_18_00_00").write_text(
-                "", encoding="utf-8")
+        _publish_chain_artifacts(command, frames=True)
         return _FakeCompleted(0, stdout="detail nobody asked for\n")
 
     monkeypatch.setattr(subprocess, "Popen", _popen_double(fake_run))
@@ -1145,6 +1175,18 @@ def test_a_succeeding_chain_reports_one_line_per_stage(tmp_path, capsys,
                         lambda: tmp_path / "gfs_grib2_bridge")
 
     monkeypatch.setattr(go_cli, "render_extra_missing", lambda: None)
+    # The finalize compare stage (d63a454a40) probes rw_compare --abi through
+    # subprocess.  The double above answers EVERY child with the stage
+    # stdout, so on a host whose environment names an rw_compare it
+    # impersonated a stale engine and the skip line quoted its answer.  Pin
+    # the engine absent: this test reads the stage lines, and the compare
+    # stage's own lines are pinned in tests/test_render_compare.py.
+    from woof import rustwx_lanes
+
+    def no_compare_engine():
+        raise RuntimeError("rw_compare is not built")
+
+    monkeypatch.setattr(rustwx_lanes, "require_compare_bin", no_compare_engine)
 
     rc = cli_main(["go", str(gfs_config), "--outdir", str(plan_root),
                    "--geog-root", str(staged_geog)])
@@ -1187,17 +1229,7 @@ def test_a_passing_stages_note_survives_the_output_capture(
     plan_root = tmp_path / "go"
 
     def fake_run(command, **kwargs):
-        if "--author-front-door-manifest" in command:
-            manifest = Path(command[command.index("--manifest-out") + 1])
-            manifest.parent.mkdir(parents=True, exist_ok=True)
-            manifest.write_text("{}", encoding="utf-8")
-        if "--output-root" in command:
-            prepared = Path(command[command.index("--output-root") + 1])
-            prepared.mkdir(parents=True, exist_ok=True)
-            (prepared / "proof.json").write_text(json.dumps({
-                "input_manifest_sha256": "a" * 64,
-                "prepared_cache": {"content_sha256": "b" * 64}}),
-                encoding="utf-8")
+        _publish_chain_artifacts(command)
         return _FakeCompleted(0, stdout=(
             "note: render skipped 1 product render(s) (refl)\n"
             "warning: something to know\n"
@@ -1231,17 +1263,7 @@ def test_explain_replays_every_stage(tmp_path, capsys, monkeypatch,
     plan_root = tmp_path / "go"
 
     def fake_run(command, **kwargs):
-        if "--author-front-door-manifest" in command:
-            manifest = Path(command[command.index("--manifest-out") + 1])
-            manifest.parent.mkdir(parents=True, exist_ok=True)
-            manifest.write_text("{}", encoding="utf-8")
-        if "--output-root" in command:
-            prepared = Path(command[command.index("--output-root") + 1])
-            prepared.mkdir(parents=True, exist_ok=True)
-            (prepared / "proof.json").write_text(json.dumps({
-                "input_manifest_sha256": "a" * 64,
-                "prepared_cache": {"content_sha256": "b" * 64}}),
-                encoding="utf-8")
+        _publish_chain_artifacts(command)
         return _FakeCompleted(0, stdout="the full receipt\n")
 
     monkeypatch.setattr(subprocess, "Popen", _popen_double(fake_run))
@@ -2055,13 +2077,12 @@ def _staged_geog_tree(root: Path) -> Path:
     check under test.
     """
 
-    from woof.geog_assets import geog_datasets
+    # The one stand-in (tests/_staged_geog.py) that stages each container
+    # archive's child indexes (soilgrids, the permissive default soil set
+    # since c3e7e0d647), which is where the go door's geography check looks.
+    from _staged_geog import staged_geog_tree
 
-    geog = root / "WPS_GEOG"
-    for name in geog_datasets():
-        (geog / name).mkdir(parents=True, exist_ok=True)
-        (geog / name / "index").write_text("", encoding="utf-8")
-    return geog
+    return staged_geog_tree(root / "WPS_GEOG")
 
 
 @pytest.fixture(scope="module")

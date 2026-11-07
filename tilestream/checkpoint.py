@@ -342,14 +342,14 @@ def domain_physics_setup(state, cfg, *, latitude=None, longitude=None) -> dict:
 # the header
 # --------------------------------------------------------------------------
 
-def restart_scalars(header: Mapping[str, Any]) -> dict:
+def restart_scalars(header: Mapping[str, Any], stored: Mapping[str, Any]) -> dict:
     """``physics_inventory.carrier_scalars`` shape, read out of a header.
 
     The clock is a carrier and so are the three driver counters: a resumed
     sweep that did not restore ``microphysics_updates`` would re-run NSSL
     mp18's first-call branch and would let RRTMGP distrust effective radii it
     should trust.  Returning them in ``set_carrier_scalars``'s own shape is
-    what makes ``set_carrier_scalars(tile_state, restart_scalars(header))``
+    what makes ``set_carrier_scalars(tile_state, restart_scalars(header, stored))``
     the whole of a resume's scalar restore.
     """
     scalars: dict[str, Any] = {
@@ -361,6 +361,17 @@ def restart_scalars(header: Mapping[str, Any]) -> dict:
                                   driver["call_counts"].items()}
         scalars["ysu_nan_guard_fires"] = int(driver["ysu_nan_guard_fires"])
         scalars["microphysics_updates"] = int(driver["microphysics_updates"])
+        scalars["swdd_from_scheme"] = _restart._validated_swdd_marker(driver, stored)
+        available = driver.get("pbl_raw_available")
+        if available is not None:
+            if not isinstance(available, bool):
+                raise ValueError("restart pbl_raw_available must be boolean")
+            scalars["pbl_raw_available"] = available
+        if "fire" in driver:
+            from tilestream.sfire import GRID_CLOCKS
+            scalars["fire_clocks"] = {key: driver["fire"]["grid"][key] for key in GRID_CLOCKS}
+            scalars["fire_header"] = {key: driver[key] for key in
+                                     ("fire", "fire_setup_identity", "fire_setup_fingerprint")}
         # The carrier contract's records travel with the clock for the same
         # reason the counters do: the freshness law
         # (woof/core/radiation_carriers.py) reads produced-at stamps
@@ -397,6 +408,10 @@ def driver_restart_header(scalars: Mapping[str, Any]) -> dict | None:
             "ysu_nan_guard_fires": int(scalars["ysu_nan_guard_fires"]),
             "microphysics_updates": int(scalars["microphysics_updates"]),
         }
+        if "swdd_from_scheme" in scalars:
+            driver_header["swdd_from_scheme"] = scalars["swdd_from_scheme"]
+        if "pbl_raw_available" in scalars:
+            driver_header["pbl_raw_available"] = scalars["pbl_raw_available"]
         # Key-for-key what restart.write_restart's driver header carries
         # (woof/io/restart.py, "carriers"/"surface_radiation_policy"):
         # the carrier contract is the provenance a checkpoint's arrays
@@ -413,6 +428,8 @@ def driver_restart_header(scalars: Mapping[str, Any]) -> dict | None:
         if "surface_radiation_policy" in scalars:
             driver_header["surface_radiation_policy"] = str(
                 scalars["surface_radiation_policy"])
+    if driver_header is not None and "fire_header" in scalars:
+        driver_header.update(scalars["fire_header"])
     return driver_header
 
 
@@ -564,6 +581,7 @@ def read_store_restart(path, store, setup: DomainSetup, cfg, *,
             f"restart file {path} header is missing {missing_header}")
     version = header.get("format_version")
     _restart.require_readable_format_version(version, path)
+    _restart._require_current_algorithm_identities(header, cfg, path)
     _restart._require_config_match(header["config"], cfg, path)
 
     live_lbc_clock = setup.lbc_clock_identity(cfg)
@@ -617,6 +635,12 @@ def read_store_restart(path, store, setup: DomainSetup, cfg, *,
     # Compared against the CHECKPOINTED subset for the same reason the
     # writer emits only that subset; the rest is zeroed below.
     arrays = _physinv.checkpointed_carriers(whole_store)
+    # The checkpoint-only driver carriers are tolerant both ways, as the
+    # resident reader is (physics_inventory.is_absent_tolerant).
+    stored = {key: value for key, value in stored.items()
+              if key in arrays or not _physinv.is_absent_tolerant(key)}
+    arrays = {key: value for key, value in arrays.items()
+              if key in stored or not _physinv.is_absent_tolerant(key)}
     if set(stored) != set(arrays):
         missing = sorted(set(arrays) - set(stored))
         extra = sorted(set(stored) - set(arrays))
@@ -635,6 +659,7 @@ def read_store_restart(path, store, setup: DomainSetup, cfg, *,
                 f"{host.dtype} but this domain's store slot is "
                 f"{tuple(target.shape)} {target.dtype}")
 
+    scalars = restart_scalars(header, stored)
     if fill:
         for key, target in arrays.items():
             target[...] = stored[key]
@@ -645,7 +670,6 @@ def read_store_restart(path, store, setup: DomainSetup, cfg, *,
         # resumed run keeps a window measured before the checkpoint.
         for target in _physinv.carried_only_carriers(whole_store).values():
             target[...] = 0.0
-    scalars = restart_scalars(header)
     if scalars["elapsed_seconds"] != elapsed:
         raise CheckpointError(
             "restart clock disagreed with itself between the header and the "

@@ -1,0 +1,486 @@
+// Generated from the exp/log helpers in woof/core/kernels/glibc_flt64.cuh
+// by tools/mp28_metal/generate.py; do not edit.
+// Copyright (c) 2017-2026, Arm Limited.
+// SPDX-License-Identifier: MIT
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+#ifndef WOOF_THOMPSON_AEROSOL_LIBM64_FRAGMENT_METALH
+#define WOOF_THOMPSON_AEROSOL_LIBM64_FRAGMENT_METALH
+static inline Soft8 g64_inf ( ) {
+return __longlong_as_double ( 0x7ff0000000000000ul ) ;
+}
+
+namespace aa_g64_exp {
+static inline ulong asuint64(Soft8 x) { return x.bits; }
+static inline Soft8 asdouble(ulong x) { return Soft8::fromBits(x); }
+static inline Soft8 __math_oflow ( uint s ) {
+return s ? - ( g64_inf ( ) ) : ( g64_inf ( ) ) ;
+}
+
+static inline Soft8 __math_uflow ( uint s ) {
+return asdouble ( ( ulong ) ( ! ! s ) << 63 ) ;
+}
+
+struct exp_data {
+Soft8 invln2N ;
+Soft8 negln2hiN ;
+Soft8 negln2loN ;
+Soft8 poly [ 4 ] ;
+Soft8 shift ;
+Soft8 exp2_shift ;
+Soft8 exp2_poly [ 5 ] ;
+Soft8 neglog10_2hiN ;
+Soft8 neglog10_2loN ;
+Soft8 exp10_poly [ 5 ] ;
+ulong tab [ 2 * ( 1 << 7 ) ] ;
+Soft8 invlog10_2N ;
+}
+;
+
+constant struct exp_data __exp_data = {
+SD8(0x40671547652b82feul) , - SD8(0x3f762e42fefa0000ul) , - SD8(0x3d0cf79abc9e3b3aul) , {
+SD8(0x3fdffffffffffdbdul) , SD8(0x3fc555555555543cul) , SD8(0x3fa55555cf172b91ul) , SD8(0x3f81111167a4d017ul) , }
+, SD8(0x4338000000000000ul) , SD8(0x42c8000000000000ul) , {
+SD8(0x3fe62e42fefa39eful) , SD8(0x3fcebfbdff82c424ul) , SD8(0x3fac6b08d70cf4b5ul) , SD8(0x3f83b2abd24650ccul) , SD8(0x3f55d7e09b4e3a84ul) , }
+, - SD8(0x3f63441350a00000ul) , SD8(0x3d10c0219dc1da99ul) , {
+SD8(0x40026bb1bbb55516ul) , SD8(0x40053524c73ce9feul) , SD8(0x4000470591ce4b26ul) , SD8(0x3ff2bd76577fe684ul) , SD8(0x3fe1446eeccd0efbul) }
+, {
+0x0 , 0x3ff0000000000000 , 0x3c9b3b4f1a88bf6e , 0x3feff63da9fb3335 , 0xbc7160139cd8dc5d , 0x3fefec9a3e778061 , 0xbc905e7a108766d1 , 0x3fefe315e86e7f85 , 0x3c8cd2523567f613 , 0x3fefd9b0d3158574 , 0xbc8bce8023f98efa , 0x3fefd06b29ddf6de , 0x3c60f74e61e6c861 , 0x3fefc74518759bc8 , 0x3c90a3e45b33d399 , 0x3fefbe3ecac6f383 , 0x3c979aa65d837b6d , 0x3fefb5586cf9890f , 0x3c8eb51a92fdeffc , 0x3fefac922b7247f7 , 0x3c3ebe3d702f9cd1 , 0x3fefa3ec32d3d1a2 , 0xbc6a033489906e0b , 0x3fef9b66affed31b , 0xbc9556522a2fbd0e , 0x3fef9301d0125b51 , 0xbc5080ef8c4eea55 , 0x3fef8abdc06c31cc , 0xbc91c923b9d5f416 , 0x3fef829aaea92de0 , 0x3c80d3e3e95c55af , 0x3fef7a98c8a58e51 , 0xbc801b15eaa59348 , 0x3fef72b83c7d517b , 0xbc8f1ff055de323d , 0x3fef6af9388c8dea , 0x3c8b898c3f1353bf , 0x3fef635beb6fcb75 , 0xbc96d99c7611eb26 , 0x3fef5be084045cd4 , 0x3c9aecf73e3a2f60 , 0x3fef54873168b9aa , 0xbc8fe782cb86389d , 0x3fef4d5022fcd91d , 0x3c8a6f4144a6c38d , 0x3fef463b88628cd6 , 0x3c807a05b0e4047d , 0x3fef3f49917ddc96 , 0x3c968efde3a8a894 , 0x3fef387a6e756238 , 0x3c875e18f274487d , 0x3fef31ce4fb2a63f , 0x3c80472b981fe7f2 , 0x3fef2b4565e27cdd , 0xbc96b87b3f71085e , 0x3fef24dfe1f56381 , 0x3c82f7e16d09ab31 , 0x3fef1e9df51fdee1 , 0xbc3d219b1a6fbffa , 0x3fef187fd0dad990 , 0x3c8b3782720c0ab4 , 0x3fef1285a6e4030b , 0x3c6e149289cecb8f , 0x3fef0cafa93e2f56 , 0x3c834d754db0abb6 , 0x3fef06fe0a31b715 , 0x3c864201e2ac744c , 0x3fef0170fc4cd831 , 0x3c8fdd395dd3f84a , 0x3feefc08b26416ff , 0xbc86a3803b8e5b04 , 0x3feef6c55f929ff1 , 0xbc924aedcc4b5068 , 0x3feef1a7373aa9cb , 0xbc9907f81b512d8e , 0x3feeecae6d05d866 , 0xbc71d1e83e9436d2 , 0x3feee7db34e59ff7 , 0xbc991919b3ce1b15 , 0x3feee32dc313a8e5 , 0x3c859f48a72a4c6d , 0x3feedea64c123422 , 0xbc9312607a28698a , 0x3feeda4504ac801c , 0xbc58a78f4817895b , 0x3feed60a21f72e2a , 0xbc7c2c9b67499a1b , 0x3feed1f5d950a897 , 0x3c4363ed60c2ac11 , 0x3feece086061892d , 0x3c9666093b0664ef , 0x3feeca41ed1d0057 , 0x3c6ecce1daa10379 , 0x3feec6a2b5c13cd0 , 0x3c93ff8e3f0f1230 , 0x3feec32af0d7d3de , 0x3c7690cebb7aafb0 , 0x3feebfdad5362a27 , 0x3c931dbdeb54e077 , 0x3feebcb299fddd0d , 0xbc8f94340071a38e , 0x3feeb9b2769d2ca7 , 0xbc87deccdc93a349 , 0x3feeb6daa2cf6642 , 0xbc78dec6bd0f385f , 0x3feeb42b569d4f82 , 0xbc861246ec7b5cf6 , 0x3feeb1a4ca5d920f , 0x3c93350518fdd78e , 0x3feeaf4736b527da , 0x3c7b98b72f8a9b05 , 0x3feead12d497c7fd , 0x3c9063e1e21c5409 , 0x3feeab07dd485429 , 0x3c34c7855019c6ea , 0x3feea9268a5946b7 , 0x3c9432e62b64c035 , 0x3feea76f15ad2148 , 0xbc8ce44a6199769f , 0x3feea5e1b976dc09 , 0xbc8c33c53bef4da8 , 0x3feea47eb03a5585 , 0xbc845378892be9ae , 0x3feea34634ccc320 , 0xbc93cedd78565858 , 0x3feea23882552225 , 0x3c5710aa807e1964 , 0x3feea155d44ca973 , 0xbc93b3efbf5e2228 , 0x3feea09e667f3bcd , 0xbc6a12ad8734b982 , 0x3feea012750bdabf , 0xbc6367efb86da9ee , 0x3fee9fb23c651a2f , 0xbc80dc3d54e08851 , 0x3fee9f7df9519484 , 0xbc781f647e5a3ecf , 0x3fee9f75e8ec5f74 , 0xbc86ee4ac08b7db0 , 0x3fee9f9a48a58174 , 0xbc8619321e55e68a , 0x3fee9feb564267c9 , 0x3c909ccb5e09d4d3 , 0x3feea0694fde5d3f , 0xbc7b32dcb94da51d , 0x3feea11473eb0187 , 0x3c94ecfd5467c06b , 0x3feea1ed0130c132 , 0x3c65ebe1abd66c55 , 0x3feea2f336cf4e62 , 0xbc88a1c52fb3cf42 , 0x3feea427543e1a12 , 0xbc9369b6f13b3734 , 0x3feea589994cce13 , 0xbc805e843a19ff1e , 0x3feea71a4623c7ad , 0xbc94d450d872576e , 0x3feea8d99b4492ed , 0x3c90ad675b0e8a00 , 0x3feeaac7d98a6699 , 0x3c8db72fc1f0eab4 , 0x3feeace5422aa0db , 0xbc65b6609cc5e7ff , 0x3feeaf3216b5448c , 0x3c7bf68359f35f44 , 0x3feeb1ae99157736 , 0xbc93091fa71e3d83 , 0x3feeb45b0b91ffc6 , 0xbc5da9b88b6c1e29 , 0x3feeb737b0cdc5e5 , 0xbc6c23f97c90b959 , 0x3feeba44cbc8520f , 0xbc92434322f4f9aa , 0x3feebd829fde4e50 , 0xbc85ca6cd7668e4b , 0x3feec0f170ca07ba , 0x3c71affc2b91ce27 , 0x3feec49182a3f090 , 0x3c6dd235e10a73bb , 0x3feec86319e32323 , 0xbc87c50422622263 , 0x3feecc667b5de565 , 0x3c8b1c86e3e231d5 , 0x3feed09bec4a2d33 , 0xbc91bbd1d3bcbb15 , 0x3feed503b23e255d , 0x3c90cc319cee31d2 , 0x3feed99e1330b358 , 0x3c8469846e735ab3 , 0x3feede6b5579fdbf , 0xbc82dfcd978e9db4 , 0x3feee36bbfd3f37a , 0x3c8c1a7792cb3387 , 0x3feee89f995ad3ad , 0xbc907b8f4ad1d9fa , 0x3feeee07298db666 , 0xbc55c3d956dcaeba , 0x3feef3a2b84f15fb , 0xbc90a40e3da6f640 , 0x3feef9728de5593a , 0xbc68d6f438ad9334 , 0x3feeff76f2fb5e47 , 0xbc91eee26b588a35 , 0x3fef05b030a1064a , 0x3c74ffd70a5fddcd , 0x3fef0c1e904bc1d2 , 0xbc91bdfbfa9298ac , 0x3fef12c25bd71e09 , 0x3c736eae30af0cb3 , 0x3fef199bdd85529c , 0x3c8ee3325c9ffd94 , 0x3fef20ab5fffd07a , 0x3c84e08fd10959ac , 0x3fef27f12e57d14b , 0x3c63cdaf384e1a67 , 0x3fef2f6d9406e7b5 , 0x3c676b2c6c921968 , 0x3fef3720dcef9069 , 0xbc808a1883ccb5d2 , 0x3fef3f0b555dc3fa , 0xbc8fad5d3ffffa6f , 0x3fef472d4a07897c , 0xbc900dae3875a949 , 0x3fef4f87080d89f2 , 0x3c74a385a63d07a7 , 0x3fef5818dcfba487 , 0xbc82919e2040220f , 0x3fef60e316c98398 , 0x3c8e5a50d5c192ac , 0x3fef69e603db3285 , 0x3c843a59ac016b4b , 0x3fef7321f301b460 , 0xbc82d52107b43e1f , 0x3fef7c97337b9b5f , 0xbc892ab93b470dc9 , 0x3fef864614f5a129 , 0x3c74b604603a88d3 , 0x3fef902ee78b3ff6 , 0x3c83c5ec519d7271 , 0x3fef9a51fbc74c83 , 0xbc8ff7128fd391f0 , 0x3fefa4afa2a490da , 0xbc8dae98e223747d , 0x3fefaf482d8e67f1 , 0x3c8ec3bc41aa2008 , 0x3fefba1bee615a27 , 0x3c842b94c3a9eb32 , 0x3fefc52b376bba97 , 0x3c8a64a931d185ee , 0x3fefd0765b6e4540 , 0xbc8e37bae43be3ed , 0x3fefdbfdad9cbe14 , 0x3c77893b4d91cd9d , 0x3fefe7c1819e90d8 , 0x3c5305c14160cc89 , 0x3feff3c22b8f71f1 , }
+, SD8(0x407a934f0979a371ul) }
+;
+
+static inline Soft8 specialcase ( Soft8 tmp , ulong sbits , ulong ki ) {
+Soft8 scale , y ;
+if ( ( ki & 0x80000000 ) == 0 ) {
+sbits -= 1009ul << 52 ;
+scale = asdouble ( sbits ) ;
+y = __dmul_rn ( SD8 ( 0x7f00000000000000ul ) , __fma_rn ( scale , tmp , scale ) ) ;
+return ( ( y ) ) ;
+}
+sbits += 1022ul << 52 ;
+scale = asdouble ( sbits ) ;
+y = __dadd_rn ( scale , __dmul_rn ( scale , tmp ) ) ;
+if ( y < SD8 ( 0x3ff0000000000000ul ) ) {
+Soft8 hi , lo ;
+lo = __dadd_rn ( __dsub_rn ( scale , y ) , __dmul_rn ( scale , tmp ) ) ;
+hi = __dadd_rn ( SD8 ( 0x3ff0000000000000ul ) , y ) ;
+lo = __dadd_rn ( __dadd_rn ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , hi ) , y ) , lo ) ;
+y = __dsub_rn ( ( __dadd_rn ( hi , lo ) ) , SD8 ( 0x3ff0000000000000ul ) ) ;
+if ( 1 && y == SD8 ( 0x0000000000000000ul ) ) y = SD8 ( 0x0000000000000000ul ) ;
+( ( void ) ( __dmul_rn ( ( SD8 ( 0x0010000000000000ul ) ) , SD8 ( 0x0010000000000000ul ) ) ) ) ;
+}
+y = __dmul_rn ( SD8 ( 0x0010000000000000ul ) , y ) ;
+return ( ( y ) ) ;
+}
+
+static inline uint top12 ( Soft8 x ) {
+return asuint64 ( x ) >> 52 ;
+}
+
+static inline Soft8 exp_inline ( Soft8 x , Soft8 xtail ) {
+uint abstop ;
+ulong ki , idx , top , sbits ;
+Soft8 kd , z , r , r2 , scale , tail , tmp ;
+abstop = top12 ( x ) & 0x7ff ;
+if ( ( abstop - top12 ( SD8 ( 0x3c90000000000000ul ) ) >= top12 ( SD8 ( 0x4080000000000000ul ) ) - top12 ( SD8 ( 0x3c90000000000000ul ) ) ) ) {
+if ( abstop - top12 ( SD8 ( 0x3c90000000000000ul ) ) >= 0x80000000 ) return 1 ? __dadd_rn ( SD8 ( 0x3ff0000000000000ul ) , x ) : SD8 ( 0x3ff0000000000000ul ) ;
+if ( abstop >= top12 ( SD8 ( 0x4090000000000000ul ) ) ) {
+if ( asuint64 ( x ) == asuint64 ( - ( g64_inf ( ) ) ) ) return SD8 ( 0x0000000000000000ul ) ;
+if ( abstop >= top12 ( ( g64_inf ( ) ) ) ) return __dadd_rn ( SD8 ( 0x3ff0000000000000ul ) , x ) ;
+if ( asuint64 ( x ) >> 63 ) return __math_uflow ( 0 ) ;
+else return __math_oflow ( 0 ) ;
+}
+abstop = 0 ;
+}
+z = __dmul_rn ( __exp_data . invln2N , x ) ;
+kd = __fma_rn ( __exp_data . invln2N , x , __exp_data . shift ) ;
+ki = asuint64 ( kd ) ;
+kd = __dsub_rn ( kd , __exp_data . shift ) ;
+r = __fma_rn ( kd , __exp_data . negln2loN , __fma_rn ( kd , __exp_data . negln2hiN , x ) ) ;
+if ( xtail != SD8 ( 0x0000000000000000ul ) ) r = __dadd_rn ( r , xtail ) ;
+idx = 2 * ( ki % ( 1 << 7 ) ) ;
+top = ki << ( 52 - 7 ) ;
+tail = asdouble ( __exp_data . tab [ idx ] ) ;
+sbits = __exp_data . tab [ idx + 1 ] + top ;
+r2 = __dmul_rn ( r , r ) ;
+tmp = __fma_rn ( __dmul_rn ( r2 , r2 ) , __fma_rn ( r , __exp_data . poly [ 8 - 5 ] , __exp_data . poly [ 7 - 5 ] ) , __fma_rn ( r2 , __fma_rn ( r , __exp_data . poly [ 6 - 5 ] , __exp_data . poly [ 5 - 5 ] ) , __dadd_rn ( tail , r ) ) ) ;
+if ( ( abstop == 0 ) ) return specialcase ( tmp , sbits , ki ) ;
+scale = asdouble ( sbits ) ;
+return __fma_rn ( scale , tmp , scale ) ;
+}
+
+static inline Soft8 exp ( Soft8 x ) {
+return exp_inline ( x , 0 ) ;
+}
+
+}
+namespace aa_g64_log {
+static inline ulong asuint64(Soft8 x) { return x.bits; }
+static inline Soft8 asdouble(ulong x) { return Soft8::fromBits(x); }
+static inline Soft8 __math_divzero ( uint s ) {
+return s ? - ( g64_inf ( ) ) : ( g64_inf ( ) ) ;
+}
+
+static inline Soft8 __math_invalid ( Soft8 x ) {
+ulong u = asuint64 ( x ) ;
+return asdouble ( ( u & 0x7ffffffffffffffful ) > 0x7ff0000000000000ul ? u | 0x8000000000000ul : 0xfff8000000000000ul ) ;
+}
+
+struct log_data {
+Soft8 ln2hi ;
+Soft8 ln2lo ;
+Soft8 poly [ 6 - 1 ] ;
+Soft8 poly1 [ 12 - 1 ] ;
+struct {
+Soft8 invc , logc ;
+}
+tab [ 1 << 7 ] ;
+}
+;
+
+constant struct log_data __log_data = {
+SD8(0x3fe62e42fefa3800ul) , SD8(0x3d2ef35793c76730ul) , {
+- SD8(0x3fe0000000000001ul) , SD8(0x3fd555555551305bul) , - SD8(0x3fcfffffffeb4590ul) , SD8(0x3fc999b324f10111ul) , - SD8(0x3fc55575e506c89ful) , }
+, {
+- SD8(0x3fe0000000000000ul) , SD8(0x3fd5555555555577ul) , - SD8(0x3fcffffffffffdcbul) , SD8(0x3fc999999995dd0cul) , - SD8(0x3fc55555556745a7ul) , SD8(0x3fc24924a344de30ul) , - SD8(0x3fbfffffa4423d65ul) , SD8(0x3fbc7184282ad6caul) , - SD8(0x3fb999eb43b068fful) , SD8(0x3fb78182f7afd085ul) , - SD8(0x3fb5521375d145cdul) , }
+, {
+{
+SD8(0x3ff734f0c3e0de9ful) , - SD8(0x3fd7cc7f79e69000ul) }
+, {
+SD8(0x3ff713786a2ce91ful) , - SD8(0x3fd76feec20d0000ul) }
+, {
+SD8(0x3ff6f26008fab5a0ul) , - SD8(0x3fd713e31351e000ul) }
+, {
+SD8(0x3ff6d1a61f138c7dul) , - SD8(0x3fd6b85b38287800ul) }
+, {
+SD8(0x3ff6b1490bc5b4d1ul) , - SD8(0x3fd65d5590807800ul) }
+, {
+SD8(0x3ff69147332f0cbaul) , - SD8(0x3fd602d076180000ul) }
+, {
+SD8(0x3ff6719f18224223ul) , - SD8(0x3fd5a8ca86909000ul) }
+, {
+SD8(0x3ff6524f99a51ed9ul) , - SD8(0x3fd54f4356035000ul) }
+, {
+SD8(0x3ff63356aa8f24c4ul) , - SD8(0x3fd4f637c36b4000ul) }
+, {
+SD8(0x3ff614b36b9ddc14ul) , - SD8(0x3fd49da7fda85000ul) }
+, {
+SD8(0x3ff5f66452c65c4cul) , - SD8(0x3fd445923989a800ul) }
+, {
+SD8(0x3ff5d867b5912c4ful) , - SD8(0x3fd3edf439b0b800ul) }
+, {
+SD8(0x3ff5babccb5b90deul) , - SD8(0x3fd396ce448f7000ul) }
+, {
+SD8(0x3ff59d61f2d91a78ul) , - SD8(0x3fd3401e17bda000ul) }
+, {
+SD8(0x3ff5805612465687ul) , - SD8(0x3fd2e9e2ef468000ul) }
+, {
+SD8(0x3ff56397cee76bd3ul) , - SD8(0x3fd2941b3830e000ul) }
+, {
+SD8(0x3ff54725e2a77f93ul) , - SD8(0x3fd23ec58cda8800ul) }
+, {
+SD8(0x3ff52aff42064583ul) , - SD8(0x3fd1e9e129279000ul) }
+, {
+SD8(0x3ff50f22dbb2bddful) , - SD8(0x3fd1956d2b48f800ul) }
+, {
+SD8(0x3ff4f38f4734ded7ul) , - SD8(0x3fd141679ab9f800ul) }
+, {
+SD8(0x3ff4d843cfde2840ul) , - SD8(0x3fd0edd094ef9800ul) }
+, {
+SD8(0x3ff4bd3ec078a3c8ul) , - SD8(0x3fd09aa518db1000ul) }
+, {
+SD8(0x3ff4a27fc3e0258aul) , - SD8(0x3fd047e65263b800ul) }
+, {
+SD8(0x3ff4880524d48434ul) , - SD8(0x3fcfeb224586f000ul) }
+, {
+SD8(0x3ff46dce1b192d0bul) , - SD8(0x3fcf474a7517b000ul) }
+, {
+SD8(0x3ff453d9d3391854ul) , - SD8(0x3fcea4443d103000ul) }
+, {
+SD8(0x3ff43a2744b4845aul) , - SD8(0x3fce020d44e9b000ul) }
+, {
+SD8(0x3ff420b54115f8fbul) , - SD8(0x3fcd60a22977f000ul) }
+, {
+SD8(0x3ff40782da3ef4b1ul) , - SD8(0x3fccc00104959000ul) }
+, {
+SD8(0x3ff3ee8f5d57fe8ful) , - SD8(0x3fcc202956891000ul) }
+, {
+SD8(0x3ff3d5d9a00b4ce9ul) , - SD8(0x3fcb81178d811000ul) }
+, {
+SD8(0x3ff3bd60c010c12bul) , - SD8(0x3fcae2c9ccd3d000ul) }
+, {
+SD8(0x3ff3a5242b75dab8ul) , - SD8(0x3fca45402e129000ul) }
+, {
+SD8(0x3ff38d22cd9fd002ul) , - SD8(0x3fc9a877681df000ul) }
+, {
+SD8(0x3ff3755bc5847a1cul) , - SD8(0x3fc90c6d69483000ul) }
+, {
+SD8(0x3ff35dce49ad36e2ul) , - SD8(0x3fc87120a645c000ul) }
+, {
+SD8(0x3ff34679984dd440ul) , - SD8(0x3fc7d68fb4143000ul) }
+, {
+SD8(0x3ff32f5cceffcb24ul) , - SD8(0x3fc73cb83c627000ul) }
+, {
+SD8(0x3ff3187775a10d49ul) , - SD8(0x3fc6a39a9b376000ul) }
+, {
+SD8(0x3ff301c8373e3990ul) , - SD8(0x3fc60b3154b7a000ul) }
+, {
+SD8(0x3ff2eb4ebb95f841ul) , - SD8(0x3fc5737d76243000ul) }
+, {
+SD8(0x3ff2d50a0219a9d1ul) , - SD8(0x3fc4dc7b8fc23000ul) }
+, {
+SD8(0x3ff2bef9a8b7fd2aul) , - SD8(0x3fc4462c51d20000ul) }
+, {
+SD8(0x3ff2a91c7a0c1babul) , - SD8(0x3fc3b08abc830000ul) }
+, {
+SD8(0x3ff293726014b530ul) , - SD8(0x3fc31b996b490000ul) }
+, {
+SD8(0x3ff27dfa5757a1f5ul) , - SD8(0x3fc2875490a44000ul) }
+, {
+SD8(0x3ff268b39b1d3bbful) , - SD8(0x3fc1f3b9f879a000ul) }
+, {
+SD8(0x3ff2539d838ff5bdul) , - SD8(0x3fc160c8252ca000ul) }
+, {
+SD8(0x3ff23eb7aac9083bul) , - SD8(0x3fc0ce7f57f72000ul) }
+, {
+SD8(0x3ff22a012ba940b6ul) , - SD8(0x3fc03cdc49fea000ul) }
+, {
+SD8(0x3ff2157996cc4132ul) , - SD8(0x3fbf57bdbc4b8000ul) }
+, {
+SD8(0x3ff201201dd2fc9bul) , - SD8(0x3fbe370896404000ul) }
+, {
+SD8(0x3ff1ecf4494d480bul) , - SD8(0x3fbd17983ef94000ul) }
+, {
+SD8(0x3ff1d8f5528f6569ul) , - SD8(0x3fbbf9674ed8a000ul) }
+, {
+SD8(0x3ff1c52311577e7cul) , - SD8(0x3fbadc79202f6000ul) }
+, {
+SD8(0x3ff1b17c74cb26e9ul) , - SD8(0x3fb9c0c3e7288000ul) }
+, {
+SD8(0x3ff19e010c2c1ab6ul) , - SD8(0x3fb8a646b372c000ul) }
+, {
+SD8(0x3ff18ab07bb670bdul) , - SD8(0x3fb78d01b3ac0000ul) }
+, {
+SD8(0x3ff1778a25efbcb6ul) , - SD8(0x3fb674f145380000ul) }
+, {
+SD8(0x3ff1648d354c31daul) , - SD8(0x3fb55e0e6d878000ul) }
+, {
+SD8(0x3ff151b990275fddul) , - SD8(0x3fb4485cdea1e000ul) }
+, {
+SD8(0x3ff13f0ea432d24cul) , - SD8(0x3fb333d94d6aa000ul) }
+, {
+SD8(0x3ff12c8b7210f9daul) , - SD8(0x3fb22079f8c56000ul) }
+, {
+SD8(0x3ff11a3028ecb531ul) , - SD8(0x3fb10e4698622000ul) }
+, {
+SD8(0x3ff107fbda8434aful) , - SD8(0x3faffa6c6ad20000ul) }
+, {
+SD8(0x3ff0f5ee0f4e6bb3ul) , - SD8(0x3fadda8d4a774000ul) }
+, {
+SD8(0x3ff0e4065d2a9fceul) , - SD8(0x3fabbcece4850000ul) }
+, {
+SD8(0x3ff0d244632ca521ul) , - SD8(0x3fa9a1894012c000ul) }
+, {
+SD8(0x3ff0c0a77ce2981aul) , - SD8(0x3fa788583302c000ul) }
+, {
+SD8(0x3ff0af2f83c636d1ul) , - SD8(0x3fa5715e67d68000ul) }
+, {
+SD8(0x3ff09ddb98a01339ul) , - SD8(0x3fa35c8a49658000ul) }
+, {
+SD8(0x3ff08cabaf52e7dful) , - SD8(0x3fa149e364154000ul) }
+, {
+SD8(0x3ff07b9f2f4e28fbul) , - SD8(0x3f9e72c082eb8000ul) }
+, {
+SD8(0x3ff06ab58c358f19ul) , - SD8(0x3f9a55f152528000ul) }
+, {
+SD8(0x3ff059eea5ecf92cul) , - SD8(0x3f963d62cf818000ul) }
+, {
+SD8(0x3ff04949cdd12c90ul) , - SD8(0x3f9228fb8caa0000ul) }
+, {
+SD8(0x3ff038c6c6f0ada9ul) , - SD8(0x3f8c317b20f90000ul) }
+, {
+SD8(0x3ff02865137932a9ul) , - SD8(0x3f8419355daa0000ul) }
+, {
+SD8(0x3ff0182427ea7348ul) , - SD8(0x3f781203c2ec0000ul) }
+, {
+SD8(0x3ff008040614b195ul) , - SD8(0x3f60040979240000ul) }
+, {
+SD8(0x3fefe01ff726fa1aul) , SD8(0x3f6feff384900000ul) }
+, {
+SD8(0x3fefa11cc261ea74ul) , SD8(0x3f87dc41353d0000ul) }
+, {
+SD8(0x3fef6310b081992eul) , SD8(0x3f93cea3c4c28000ul) }
+, {
+SD8(0x3fef25f63ceeadcdul) , SD8(0x3f9b9fc114890000ul) }
+, {
+SD8(0x3feee9c8039113e7ul) , SD8(0x3fa1b0d8ce110000ul) }
+, {
+SD8(0x3feeae8078cbb1abul) , SD8(0x3fa58a5bd001c000ul) }
+, {
+SD8(0x3fee741aa29d0c9bul) , SD8(0x3fa95c8340d88000ul) }
+, {
+SD8(0x3fee3a91830a99b5ul) , SD8(0x3fad276aef578000ul) }
+, {
+SD8(0x3fee01e009609a56ul) , SD8(0x3fb07598e598c000ul) }
+, {
+SD8(0x3fedca01e577bb98ul) , SD8(0x3fb253f5e30d2000ul) }
+, {
+SD8(0x3fed92f20b7c9103ul) , SD8(0x3fb42edd8b380000ul) }
+, {
+SD8(0x3fed5cac66fb5cceul) , SD8(0x3fb606598757c000ul) }
+, {
+SD8(0x3fed272caa5ede9dul) , SD8(0x3fb7da76356a0000ul) }
+, {
+SD8(0x3fecf26e3e6b2ccdul) , SD8(0x3fb9ab434e1c6000ul) }
+, {
+SD8(0x3fecbe6da2a77902ul) , SD8(0x3fbb78c7bb0d6000ul) }
+, {
+SD8(0x3fec8b266d37086dul) , SD8(0x3fbd431332e72000ul) }
+, {
+SD8(0x3fec5894bd5d5804ul) , SD8(0x3fbf0a3171de6000ul) }
+, {
+SD8(0x3fec26b533bb9f8cul) , SD8(0x3fc067152b914000ul) }
+, {
+SD8(0x3febf583eeece73ful) , SD8(0x3fc147858292b000ul) }
+, {
+SD8(0x3febc4fd75db96c1ul) , SD8(0x3fc2266ecdca3000ul) }
+, {
+SD8(0x3feb951e0c864a28ul) , SD8(0x3fc303d7a6c55000ul) }
+, {
+SD8(0x3feb65e2c5ef3e2cul) , SD8(0x3fc3dfc33c331000ul) }
+, {
+SD8(0x3feb374867c9888bul) , SD8(0x3fc4ba366b7a8000ul) }
+, {
+SD8(0x3feb094b211d304aul) , SD8(0x3fc5933928d1f000ul) }
+, {
+SD8(0x3feadbe885f2ef7eul) , SD8(0x3fc66acd2418f000ul) }
+, {
+SD8(0x3feaaf1d31603da2ul) , SD8(0x3fc740f8ec669000ul) }
+, {
+SD8(0x3fea82e63fd358a7ul) , SD8(0x3fc815c0f51af000ul) }
+, {
+SD8(0x3fea5740ef09738bul) , SD8(0x3fc8e92954f68000ul) }
+, {
+SD8(0x3fea2c2a90ab4b27ul) , SD8(0x3fc9bb3602f84000ul) }
+, {
+SD8(0x3fea01a01393f2d1ul) , SD8(0x3fca8bed1c2c0000ul) }
+, {
+SD8(0x3fe9d79f24db3c1bul) , SD8(0x3fcb5b515c01d000ul) }
+, {
+SD8(0x3fe9ae2505c7b190ul) , SD8(0x3fcc2967ccbcc000ul) }
+, {
+SD8(0x3fe9852ef297ce2ful) , SD8(0x3fccf635d5486000ul) }
+, {
+SD8(0x3fe95cbaeea44b75ul) , SD8(0x3fcdc1bd3446c000ul) }
+, {
+SD8(0x3fe934c69de74838ul) , SD8(0x3fce8c01b8cfe000ul) }
+, {
+SD8(0x3fe90d4f2f6752e6ul) , SD8(0x3fcf5509c0179000ul) }
+, {
+SD8(0x3fe8e6528effd79dul) , SD8(0x3fd00e6c121fb800ul) }
+, {
+SD8(0x3fe8bfce9fcc007cul) , SD8(0x3fd071b80e93d000ul) }
+, {
+SD8(0x3fe899c0dabec30eul) , SD8(0x3fd0d46b9e867000ul) }
+, {
+SD8(0x3fe87427aa2317fbul) , SD8(0x3fd13687334bd000ul) }
+, {
+SD8(0x3fe84f00acb39a08ul) , SD8(0x3fd1980d67234800ul) }
+, {
+SD8(0x3fe82a49e8653e55ul) , SD8(0x3fd1f8ffe0cc8000ul) }
+, {
+SD8(0x3fe8060195f40260ul) , SD8(0x3fd2595fd7636800ul) }
+, {
+SD8(0x3fe7e22563e0a329ul) , SD8(0x3fd2b9300914a800ul) }
+, {
+SD8(0x3fe7beb377dcb5adul) , SD8(0x3fd3187210436000ul) }
+, {
+SD8(0x3fe79baa679725c2ul) , SD8(0x3fd377266dec1800ul) }
+, {
+SD8(0x3fe77907f2170657ul) , SD8(0x3fd3d54ffbaf3000ul) }
+, {
+SD8(0x3fe756cadbd6130cul) , SD8(0x3fd432eee32fe000ul) }
+, }
+}
+;
+
+static inline uint top16 ( Soft8 x ) {
+return asuint64 ( x ) >> 48 ;
+}
+
+static inline Soft8 log ( Soft8 x ) {
+Soft8 w , z , r , r2 , r3 , y , invc , logc , kd , hi , lo ;
+ulong ix , iz , tmp ;
+uint top ;
+int k , i ;
+ix = asuint64 ( x ) ;
+top = top16 ( x ) ;
+if ( ( ix - asuint64 ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , SD8 ( 0x3fb0000000000000ul ) ) ) < asuint64 ( __dadd_rn ( SD8 ( 0x3ff0000000000000ul ) , SD8 ( 0x3fb0900000000000ul ) ) ) - asuint64 ( __dsub_rn ( SD8 ( 0x3ff0000000000000ul ) , SD8 ( 0x3fb0000000000000ul ) ) ) ) ) {
+if ( 1 && ( ix == asuint64 ( SD8 ( 0x3ff0000000000000ul ) ) ) ) return 0 ;
+r = __dsub_rn ( x , SD8 ( 0x3ff0000000000000ul ) ) ;
+r2 = __dmul_rn ( r , r ) ;
+r3 = __dmul_rn ( r , r2 ) ;
+y = __fma_rn ( r3 , __fma_rn ( r3 , __log_data . poly1 [ 10 ] , __fma_rn ( r2 , __log_data . poly1 [ 9 ] , __fma_rn ( r , __log_data . poly1 [ 8 ] , __log_data . poly1 [ 7 ] ) ) ) , __fma_rn ( r2 , __log_data . poly1 [ 6 ] , __fma_rn ( r , __log_data . poly1 [ 5 ] , __log_data . poly1 [ 4 ] ) ) ) ;
+y = __fma_rn ( r3 , y , __fma_rn ( r2 , __log_data . poly1 [ 3 ] , __fma_rn ( r , __log_data . poly1 [ 2 ] , __log_data . poly1 [ 1 ] ) ) ) ;
+w = __dmul_rn ( r , SD8 ( 0x41a0000000000000ul ) ) ;
+Soft8 rhi = __fma_rn ( - r , SD8 ( 0x41a0000000000000ul ) , __fma_rn ( r , SD8 ( 0x41a0000000000000ul ) , r ) ) ;
+Soft8 rlo = __dsub_rn ( r , rhi ) ;
+w = __dmul_rn ( __dmul_rn ( rhi , rhi ) , __log_data . poly1 [ 0 ] ) ;
+hi = __fma_rn ( __dmul_rn ( rhi , rhi ) , __log_data . poly1 [ 0 ] , r ) ;
+lo = __fma_rn ( __dmul_rn ( rhi , rhi ) , __log_data . poly1 [ 0 ] , __dsub_rn ( r , hi ) ) ;
+lo = __fma_rn ( __dmul_rn ( __log_data . poly1 [ 0 ] , rlo ) , __dadd_rn ( rhi , r ) , lo ) ;
+y = __fma_rn ( r3 , y , lo ) ;
+y = __dadd_rn ( y , hi ) ;
+return ( y ) ;
+}
+if ( ( top - 0x0010 >= 0x7ff0 - 0x0010 ) ) {
+if ( ix * 2 == 0 ) return __math_divzero ( 1 ) ;
+if ( ix == asuint64 ( ( g64_inf ( ) ) ) ) return x ;
+if ( ( top & 0x8000 ) || ( top & 0x7ff0 ) == 0x7ff0 ) return __math_invalid ( x ) ;
+ix = asuint64 ( __dmul_rn ( x , SD8 ( 0x4330000000000000ul ) ) ) ;
+ix -= 52ul << 52 ;
+}
+tmp = ix - 0x3fe6000000000000 ;
+i = ( tmp >> ( 52 - 7 ) ) % ( 1 << 7 ) ;
+k = ( long ) tmp >> 52 ;
+iz = ix - ( tmp & 0xffful << 52 ) ;
+invc = __log_data . tab [ i ] . invc ;
+logc = __log_data . tab [ i ] . logc ;
+z = asdouble ( iz ) ;
+r = __fma_rn ( z , invc , - SD8 ( 0x3ff0000000000000ul ) ) ;
+kd = ( Soft8 ) k ;
+w = __fma_rn ( kd , __log_data . ln2hi , logc ) ;
+hi = __dadd_rn ( w , r ) ;
+lo = __fma_rn ( kd , __log_data . ln2lo , __dadd_rn ( __dsub_rn ( w , hi ) , r ) ) ;
+r2 = __dmul_rn ( r , r ) ;
+y = __dadd_rn ( __fma_rn ( __dmul_rn ( r , r2 ) , __fma_rn ( r2 , __fma_rn ( r , __log_data . poly [ 4 ] , __log_data . poly [ 3 ] ) , __fma_rn ( r , __log_data . poly [ 2 ] , __log_data . poly [ 1 ] ) ) , __fma_rn ( r2 , __log_data . poly [ 0 ] , lo ) ) , hi ) ;
+return ( y ) ;
+}
+
+}
+static inline Soft8 glibc_exp ( Soft8 x ) {
+ulong u = aa_g64_exp :: asuint64 ( x ) ;
+if ( ( u & 0x7ffffffffffffffful ) > 0x7ff0000000000000ul ) return aa_g64_exp :: asdouble ( u | 0x8000000000000ul ) ;
+return aa_g64_exp :: exp ( x ) ;
+}
+
+static inline Soft8 glibc_log ( Soft8 x ) {
+return aa_g64_log :: log ( x ) ;
+}
+
+#endif

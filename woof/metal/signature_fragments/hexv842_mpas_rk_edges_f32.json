@@ -1,0 +1,96 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rk_edges_f32",
+      "module": "hexv842_mpas_rk_edges_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rk_edges_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "mpas_rk_edges_v842_f32",
+      "resources": [
+        [
+          "mass_edge",
+          "float",
+          "read"
+        ],
+        [
+          "pbl_edge",
+          "float",
+          "read"
+        ],
+        [
+          "cu_edge",
+          "float",
+          "read"
+        ],
+        [
+          "out_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "tend_u_phys",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mass_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pbl_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cu_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_u_phys": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "pbl",
+          "int32"
+        ],
+        [
+          "cu_momentum",
+          "int32"
+        ],
+        [
+          "first",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

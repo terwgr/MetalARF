@@ -81,6 +81,20 @@ def _run_config_field_names() -> tuple[str, ...]:
     return tuple(f.name for f in dataclasses.fields(RunConfig))
 
 
+def _correct_mode_scoped(name, scheme) -> bool:
+    """A correct-mode key (woof/correct_mode.py) carries its own scope:
+    ``KEY_SCOPE`` drops it from the identity of every domain whose schemes do
+    not read it (woof/core/model.py restart_identity_payload, the checkpoint
+    echo and the public documents), which is this gate's requirement.  The
+    off-scheme refusal does not apply: the mode authors EVERY key in both
+    modes, so an exact run carries ``False`` on keys no selected scheme
+    reads, and refusing that would refuse exact mode itself."""
+    from woof.correct_mode import KEY_SCOPE
+    scope = KEY_SCOPE.get(name)
+    return (scope is not None and scope[0] == "mp_physics"
+            and scheme in scope[1])
+
+
 def _unscoped(field_names) -> list[tuple[str, int]]:
     """Scheme-prefixed fields missing from their scheme's scoped row."""
     offenders = []
@@ -88,7 +102,8 @@ def _unscoped(field_names) -> list[tuple[str, int]]:
         for prefix, scheme in SCHEME_FIELD_PREFIXES.items():
             if not name.startswith(prefix):
                 continue
-            if name not in SCHEME_SCOPED_RUN_FIELDS.get(scheme, ()):
+            if (name not in SCHEME_SCOPED_RUN_FIELDS.get(scheme, ())
+                    and not _correct_mode_scoped(name, scheme)):
                 offenders.append((name, scheme))
     return offenders
 
@@ -223,6 +238,11 @@ def test_the_p3_restart_contract_string_is_the_measured_configuration():
       of every call under model='WRF', :5018-5021).
     * ``rime-mass-volume-transported`` -- ``qir``/``qib`` advect with
       ``qi`` (woof/core/moist.py::P3_SPECIES).
+    * ``real-clamp-product`` -- ``moist_physics_finish_em`` clamps the
+      theta increment at ``mp_tend_lim*dt``, two REALs multiplied
+      (dyn_em/module_big_step_utilities_em.F:5706-5707), and P3 finishes
+      through woof.core.microphysics.moist_physics_finish, which forms
+      that float32 product since 2.8.8 (v2).
 
     KNOWN IMPRECISION, recorded rather than fixed: the string says
     ``wrf-v4.6.1``, which names a WRF RELEASE, not the P3 version (4.5.2)
@@ -235,10 +255,10 @@ def test_the_p3_restart_contract_string_is_the_measured_configuration():
     """
     identity = MICROPHYSICS_ALGORITHM_IDENTITIES[50]
     assert identity == (
-        "p3-one-category-wrf-v4.6.1-v1-2mom-ice-specified-nc-"
-        "diagnosed-ssat-rime-mass-volume-transported")
+        "p3-one-category-wrf-v4.6.1-v2-2mom-ice-specified-nc-"
+        "diagnosed-ssat-rime-mass-volume-transported-real-clamp-product")
     for token in ("2mom-ice", "specified-nc", "diagnosed-ssat",
-                  "rime-mass-volume-transported"):
+                  "rime-mass-volume-transported", "real-clamp-product"):
         assert token in identity
     # The unported siblings must NOT be describable by this row.
     assert "3mom" not in identity

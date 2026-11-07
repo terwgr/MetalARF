@@ -7,6 +7,8 @@ can configure extra non-pool overhead and external reserve in bytes.
 """
 
 from __future__ import annotations
+
+from contextlib import contextmanager
 from collections.abc import Iterable, Mapping
 
 
@@ -18,17 +20,24 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    # Only the PhaseMemoryEstimate.streamed annotation names it; the
+    # streaming module is imported where the envelope is computed.
+    from woof.core.streaming import StreamedEnvelope
 
 from woof.config import (CUMULUS_ADVECTIVE_FORCING_SCHEMES,
                           DEFAULT_COLUMN_CHUNK, MYJ_PBL_SCHEME,
                           MYJ_SFCLAY_SCHEME, SASE_PBL_SCHEME,
                           UW_PBL_SCHEME, RunConfig,
+                          mynn_mixscalars_active,
                           radiation_enabled, radiation_scheme_ids,
                           soil_layer_count)
 from woof.core import kernel_frame_recordings as _kernel_frame_recordings
 from woof.core.noahmp_kernel_sources import NOAHMP_PRICING_MODULES
 from woof.experiment import DomainConfig, ExperimentConfig
+from woof.wrf_exact import ENABLED as WRF_EXACT
 # The preparation price's inventories, in the leaf the RW-WPS wheel
 # stages; re-exported here under their historical names.
 from woof.core.device_inventory import (  # noqa: F401
@@ -325,7 +334,7 @@ _WINDOWS_PLATFORM_NAMES = ("cygwin",)
 
 #: What `woof check` says about an experimental two-way configuration.
 #:
-#: `feedback = 1` is a legal schema value, so a a development machine validation run
+#: `feedback = 1` is a legal schema value, so a test host G validation run
 #: authored one, got a clean PASS and exit 0 here -- output identical to
 #: the feedback=0 twin -- and discovered only at prepare, after a 26 s
 #: hierarchy build, that the prepared-hierarchy route refused two-way
@@ -945,8 +954,8 @@ ENVELOPE_AFFINE_BASIS = (
 #: forecasts spanning the first radiation call and a history write, a 6 h
 #: legacy-RRTMG forecast, a ``[tiles]`` forecast and three trees, each
 #: forecast's own process tree sampled at 100 ms through NVML beside the
-#: runtime's 20 Hz watcher, on an RTX 5070 Ti 16 GB (a development machine, card held
-#: alone) and an RTX 5090 32 GB (a development machine, the run's own processes).  The
+#: runtime's 20 Hz watcher, on an RTX 5070 Ti 16 GB (test host D, card held
+#: alone) and an RTX 5090 32 GB (test host B, the run's own processes).  The
 #: two CONUS 3 km forecasts of 2026-09-30 on the RTX PRO 6000 are carried
 #: as rows too.  The table lives beside the constant it calibrates:
 #: :data:`FORECAST_PEAK_BATTERY`.
@@ -1050,8 +1059,8 @@ def forecast_pool_headroom(runs) -> float:
 #: The A163 battery, one row per measured forecast: ``(label, card,
 #: radiation lane, domains, itemized subtotal, itemized non-pool, measured
 #: peak, measured pool-held peak, held arrays)``, bytes.  The peak is NVML
-#: at 100 ms: device-wide on a development machine, whose card was held alone, and the
-#: sum of the forecast's own process tree on a development machine's shared card; the
+#: at 100 ms: device-wide on test host D, whose card was held alone, and the
+#: sum of the forecast's own process tree on test host B's shared card; the
 #: pool-held peak is the runtime's 20 Hz ``cupy_pool_total`` receipt.  The
 #: subtotal, non-pool and held arrays (the urban arrays priced at their
 #: allocated size, :func:`forecast_pool_estimate_bytes`) are
@@ -1059,8 +1068,8 @@ def forecast_pool_headroom(runs) -> float:
 #: 12Z, 20 min forecasts (70 min for the delayed-nest tree), radiation
 #: from step 0, history every 10 min; the second repair's rows are
 #: HRRR-prs 2026-09-30 00Z, labelled with their own length.  The PRO 6000
-#: rows are the CONUS 3 km report's
-#: (Downloads/CONUS-HRRR-CLONE-18H-2026-09-30/REPORT.md section 3) at its
+#: rows are the CONUS 3 km HRRR-clone 18 h run report's
+#: (2026-09-30, section 3) at its
 #: printed two decimals, pool-held not recorded (0).
 FORECAST_PEAK_BATTERY = (
     ("lean 528x528x49", "RTX 5070 Ti", "rte-rrtmgp", 1,
@@ -1164,6 +1173,320 @@ ENVELOPE_A163_BASIS = (
     "forecast, and 6 h of the default suite with legacy RRTMG; NVML at "
     "100 ms; plus the RTX PRO 6000 CONUS runs of 2026-09-30")
 
+#: A13: THE POOL RESIDUE IS BOUNDED, AND THE RANKED ROAD PRICES IT SO.
+#:
+#: THE DEFECT.  Full HRRR (1797 x 1057 x 50, HRRR physics) on four RTX
+#: 5090 cards was refused: the 2x2 split priced 31.23-31.66 GiB per card
+#: against a 30.86 GiB budget, and the four cards measured 27.6-29.5 GiB
+#: at their peaks (a rented box, 2026-10-06, the A13 receipts).  Each rank's
+#: price is the A163 envelope of a 25-26 GiB itemized subtotal: x1.13
+#: (the measured worst ratio 1.09 plus the 0.04 safety) prices a 3.3 GiB
+#: pool margin per rank.  The ratio was measured on 3.5-11 GiB subtotals
+#: (:data:`FORECAST_PEAK_BATTERY`), where the pool held 0.63-1.82 GiB
+#: beyond the itemization and that residue reads as 9-17% of the
+#: subtotal.  On the 24.6-26.2 GiB ranks the pool held 0.42-0.72 GiB
+#: beyond the itemization (the run report's per-card ``pool_held_bytes``
+#: against this module's itemization of each rank, the rows below): the
+#: residue did not grow with the subtotal, so the ratio priced 2.5 GiB
+#: per card that no card used, and the price refused a run that fits
+#: with 1.3-3.2 GiB to spare.
+#:
+#: THE MEASUREMENT.  Over every forecast whose pool-held peak was
+#: recorded (:data:`FORECAST_PEAK_BATTERY` rows with a held receipt,
+#: subtotals 3.5-11 GiB, and the four ranks below at 25-28 GiB) the pool
+#: held at most 1.82 GiB beyond the itemization (the default suite with
+#: legacy RRTMG at 500 x 500 x 49 on the 5070 Ti), and the card-to-card
+#: swing of the held residue on the configuration the itemization prices
+#: most exactly (lean 528 x 528 x 49) is 0.34 GiB.  The bound is their
+#: sum rounded up to the next quarter gibibyte: 2.25 GiB.  A rank's pool
+#: margin is the smaller of the A163 ratio's margin and this bound, so
+#: below 17.3 GiB of itemized pool nothing changes, and above it the
+#: margin is the bound.
+#:
+#: ONE CARD, THE SAME BOUND (2026-10-17).  The single-card road kept the
+#: ratio because one RTX PRO 6000 row of 2026-09-30 (HRRR physics,
+#: 1620 x 953 x 50) peaked 4.24 GiB over the pool it was itemized at then
+#: (64.68 GiB) plus its non-pool.  The itemization has since priced the
+#: arrays that run held unlisted (the RUC slabs, the Thompson tables and
+#: accumulators, moist_cq, ...): today's pricing of that grid is a
+#: 78.1 GiB subtotal, so its bounded envelope (82.3 GiB) sits 9.9 GiB above
+#: the 72.48 GiB the card measured.  The residue is the pool's, not the
+#: rank's: a one-domain forecast of a suite on this table carries the
+#: bound on one card too (:func:`single_card_pool_residue_cap_bytes`).
+#: THE BREAKAGE: full HRRR (1797 x 1057 x 50) on one 96 GB RTX PRO 6000
+#: was priced 108.05 GiB against 94.47 GiB free, 12.1 GiB of it the
+#: ratio's margin, and refused resident; it runs resident at 1.70 s/step,
+#: and was streamed instead at 4.5 s/step (lane/292-hrrr-admission).
+#:
+#: Each row: ``(label, card, layout, rank, itemized pool bytes (the
+#: rank's subtotal plus its seam buffers, this module's pricing with the
+#: prepared statics' lake bound), pool-held peak bytes, device peak
+#: bytes, itemized non-pool bytes)``.  Box E, four RTX 5090, HRRR physics
+#: on the full HRRR grid, 2026-10-03 21Z, 3 h, hourly history,
+#: ``[devices] 1x4``; pool-held from the run report
+#: (``peak_memory_per_card``, post-step samples: the CuPy pool never
+#: shrinks, so a post-step high-water mark is the run's), device peak
+#: from NVML at 200 ms.
+#:
+#: The two band rows are the bounded price's own run, admitted BY
+#: DEFAULT (no refusal override): a 1797 x 557 x 50 exact crop of the
+#: HRRR lattice, HRRR physics, 2024-05-21 18Z, 1 h, ``[devices] 1x2`` on
+#: two RTX 5090 (a rented box, 2026-10-06), whose ranks (557 x 926 and 557 x
+#: 927) are the rank shape of the full grid split 2x2.  Priced
+#: 30.70 / 30.75 GiB per card against 30.82 / 30.84 budgets with the
+#: MYNN chunk widened to 24,576 / 28,672 columns; the pool held 0.52 /
+#: 0.40 GiB beyond the itemization and the cards peaked 28.35 / 28.44
+#: GiB, 2.3 GiB under the price.
+RANK_POOL_RESIDUE_BATTERY = (
+    ("full HRRR 1797x1057x50, HRRR physics, 1x4", "RTX 5090", "1x4", 0,
+     27_201_817_616, 27_974_908_928, 29_605_494_784, 1_475_592_192),
+    ("full HRRR 1797x1057x50, HRRR physics, 1x4", "RTX 5090", "1x4", 1,
+     29_344_842_752, 30_016_247_296, 31_610_372_096, 1_475_592_192),
+    ("full HRRR 1797x1057x50, HRRR physics, 1x4", "RTX 5090", "1x4", 2,
+     29_668_728_384, 30_123_004_416, 31_717_326_848, 1_475_592_192),
+    ("full HRRR 1797x1057x50, HRRR physics, 1x4", "RTX 5090", "1x4", 3,
+     27_570_478_776, 28_188_711_936, 29_773_266_944, 1_475_592_192),
+    ("HRRR lattice band 1797x557x50, HRRR physics, 1x2 (bounded price, "
+     "default admission)", "RTX 5090", "1x2", 0,
+     28_324_674_648, 28_882_237_952, 30_435_966_976, 1_475_592_192),
+    ("HRRR lattice band 1797x557x50, HRRR physics, 1x2 (bounded price, "
+     "default admission)", "RTX 5090", "1x2", 1,
+     28_590_739_680, 29_016_986_624, 30_538_727_424, 1_475_592_192),
+)
+
+
+def _pool_residue_receipts() -> tuple[tuple[str, int, int], ...]:
+    """``(label, itemized pool bytes, pool-held peak bytes)`` for every
+    measured forecast with a pool-held receipt: the A163 battery rows
+    that recorded one and the ranked rows."""
+    rows = [(row[0], row[4], row[7]) for row in FORECAST_PEAK_BATTERY
+            if row[7]]
+    rows += [(f"{row[0]} rank {row[3]}", row[4], row[5])
+             for row in RANK_POOL_RESIDUE_BATTERY]
+    return tuple(rows)
+
+
+#: The widest pool residue any receipt measured, bytes: pool-held peak
+#: less the itemized pool, worst over :func:`_pool_residue_receipts`.
+POOL_RESIDUE_MEASURED_BYTES = max(
+    held - itemized for _label, itemized, held in _pool_residue_receipts())
+
+#: The card-to-card swing of the pool-held residue on the configuration
+#: the itemization prices most exactly (lean 528 x 528 x 49, the two
+#: cards of :data:`FORECAST_PEAK_BATTERY`), bytes: the same swing the
+#: A163 safety term is, in bytes rather than as a fraction.
+POOL_RESIDUE_SWING_BYTES = abs(
+    [row[7] for row in FORECAST_PEAK_BATTERY if row[0] == "lean 528x528x49"][0]
+    - [row[7] for row in FORECAST_PEAK_BATTERY if row[0] == "lean 528x528x49"][1])
+
+#: The bound a device rank's pool margin never exceeds, bytes: the worst
+#: measured residue plus the swing, rounded up to the next quarter
+#: gibibyte.  2.25 GiB at the receipts above.
+RANK_POOL_RESIDUE_BOUND_BYTES = int(math.ceil(
+    (POOL_RESIDUE_MEASURED_BYTES + POOL_RESIDUE_SWING_BYTES) / (GIB // 4))
+    * (GIB // 4))
+
+#: What the rank bound rests on, printed beside the number it makes.
+RANK_POOL_RESIDUE_BASIS = (
+    f"the bound is the widest pool residue any receipt measured "
+    f"({POOL_RESIDUE_MEASURED_BYTES / GIB:.2f} GiB, pool held less itemized, "
+    f"over {len(_pool_residue_receipts())} forecasts of 3.5-28 GiB on the "
+    "RTX 5070 Ti and RTX 5090 including the four ranks of full HRRR on 4 "
+    "x RTX 5090 and the two ranks of its 1797 x 557 lattice band under this "
+    f"bound) plus the card-to-card swing ({POOL_RESIDUE_SWING_BYTES / GIB:.2f} "
+    "GiB), rounded up to the quarter gibibyte (A13)")
+
+#: Why a rank keeps the ratio when an itemization-gap row raised its
+#: headroom, printed beside the verdict in the bound's place.
+RANK_POOL_RESIDUE_GAP_BASIS = (
+    "the byte bound (A13) covers the pool's residue over a COMPLETE "
+    "itemization; this suite matches an itemization-gap row "
+    "(FORECAST_ITEMIZATION_GAP_ROWS: pool USED above the subtotal, a "
+    "shortfall that grows with the rank, 4.1 GiB on a 25 GiB rank of "
+    "full HRRR under RTE-RRTMGP where the bound would price 2.25), so "
+    "the measured ratio stands until those arrays are itemized")
+
+#: The suites whose pool residue was measured AT RANK SCALE (every row
+#: of :data:`RANK_POOL_RESIDUE_BATTERY`), one row per suite: the
+#: radiation lane (RRTMG on both streams, legacy or RTE-RRTMGP) and the
+#: scheme ids every domain must carry.  Only a suite on this table
+#: carries the byte bound; a suite off it keeps the ratio
+#: (:func:`rank_pool_residue_cap_bytes`).  A new suite joins the
+#: table with its own rank receipts, as rows of the battery and a row
+#: here; nothing else changes.
+#:
+#: Why the table (A13 review): "the residue does not grow with the
+#: rank" is shown for one suite only.  The single-card battery
+#: (:data:`FORECAST_PEAK_BATTERY`) shows the default suite's pool-held
+#: residue growing WITH the subtotal, 0.73 GiB at 300 x 300 x 49 and
+#: 1.82 GiB at 500 x 500 x 49 (3.53 and 8.43 GiB itemized, 20.6% and
+#: 21.6%), and by the device-peak measure 0.52-1.26 GiB on 8.3-8.9 GiB
+#: (6-14%).  At that rate a 27 GiB rank of the default suite holds
+#: 1.6-3.8 GiB beyond its itemization, up to 1.5 GiB over the 2.25 GiB
+#: bound: the gate would admit a card that then allocates past its
+#: price, the mid-run out-of-memory the gate exists to refuse.  HRRR
+#: physics under legacy RRTMG measured 0.40-0.72 GiB on six 25-28 GiB
+#: ranks (1.5-2.8%), which is what the bound covers.
+RANK_POOL_RESIDUE_SUITES = (
+    {"label": "HRRR physics under legacy RRTMG, no cumulus",
+     "radiation": "legacy-rrtmg",
+     "all_of": (("mp_physics", 28), ("bl_pbl_physics", 5),
+                ("sf_sfclay_physics", 5), ("sf_surface_physics", 3),
+                ("cu_physics", 0))},
+)
+
+#: Why a rank keeps the ratio when its suite has no rank-scale receipt,
+#: printed beside the verdict in the bound's place.
+RANK_POOL_RESIDUE_UNMEASURED_BASIS = (
+    "the byte bound (A13) rests on rank-scale receipts of the suites in "
+    "RANK_POOL_RESIDUE_SUITES only; this suite has none, and the "
+    "single-card battery shows the default suite's pool residue growing "
+    "with the subtotal (0.73 GiB at 3.5 GiB, 1.82 GiB at 8.4 GiB, about "
+    "21%), which on a 27 GiB rank would exceed the 2.25 GiB bound by up "
+    "to 1.5 GiB, so the measured ratio stands until a ranked run of this "
+    "suite above 17 GiB per rank records its pool-held peak")
+
+
+def rank_pool_residue_suite(runs):
+    """The :data:`RANK_POOL_RESIDUE_SUITES` row every one of these
+    domains' run configs matches, or ``None``: the domains share one
+    pool, so one domain off the table takes the whole forecast off it."""
+    from woof.physics_compat import RRTMG_VARIANT_LEGACY, rrtmg_variant
+
+    matched = None
+    for run in runs:
+        run = getattr(run, "run", run)
+        # Every rank receipt ran RRTMG on BOTH streams; a run that pairs
+        # RRTMG with another scheme on one stream is a suite without a
+        # receipt (A13 review 3), whatever its other scheme ids say.
+        if tuple(radiation_scheme_ids(run)) != (4, 4):
+            return None
+        lane = ("legacy-rrtmg" if rrtmg_variant(run) == RRTMG_VARIANT_LEGACY
+                else "rte-rrtmgp")
+        row_for_run = None
+        for row in RANK_POOL_RESIDUE_SUITES:
+            if row["radiation"] != lane:
+                continue
+            if all(int(getattr(run, key, -1)) == int(value)
+                   for key, value in row["all_of"]):
+                row_for_run = row
+                break
+        if row_for_run is None or (matched is not None
+                                   and row_for_run is not matched):
+            return None
+        matched = row_for_run
+    return matched
+
+
+def rank_pool_residue_cap_bytes(runs) -> int | None:
+    """The byte bound a device rank's pool margin carries for these
+    domains' run configs (A13), or ``None`` when the ratio must stand.
+
+    The bound (:data:`RANK_POOL_RESIDUE_BOUND_BYTES`) was measured as
+    the pool's residue over a complete itemization: what the CuPy pool
+    holds beyond arrays the itemization already counts, which the rank
+    receipts show does not grow with the rank FOR THE SUITES THEY
+    MEASURED (:data:`RANK_POOL_RESIDUE_SUITES`); a suite with no
+    rank-scale receipt keeps the ratio, since the single-card battery
+    shows the default suite's residue growing with the subtotal and a
+    27 GiB rank of it would exceed the bound.  An itemization-gap row
+    (:data:`FORECAST_ITEMIZATION_GAP_ROWS`) names the opposite: a suite
+    whose pool is USED beyond the subtotal (1.16x, HRRR physics under
+    RTE-RRTMGP), arrays the forecast allocates and the itemization does
+    not list, a shortfall proportional to the rank by construction.
+    Capping that margin at the bound would price 2.25 GiB on a 25 GiB
+    rank whose unlisted arrays alone take about 4.1 GiB, so the gate
+    would admit a card that then allocates past its price, the
+    mid-run out-of-memory the gate exists to refuse.  Such a suite
+    keeps the ratio its gap row measured."""
+    runs = tuple(runs)
+    if forecast_pool_headroom(runs) > FORECAST_POOL_HEADROOM:
+        return None
+    if rank_pool_residue_suite(runs) is None:
+        return None
+    return int(RANK_POOL_RESIDUE_BOUND_BYTES)
+
+
+def rank_pool_residue_basis(runs) -> str:
+    """What the ranked road's pool margin rests on for these domains'
+    run configs, printed beside the gate's verdict: the bound's receipts,
+    the itemization-gap row that keeps the ratio, or the missing
+    rank-scale receipt that keeps it."""
+    runs = tuple(runs)
+    if forecast_pool_headroom(runs) > FORECAST_POOL_HEADROOM:
+        return RANK_POOL_RESIDUE_GAP_BASIS
+    if rank_pool_residue_suite(runs) is None:
+        return RANK_POOL_RESIDUE_UNMEASURED_BASIS
+    return RANK_POOL_RESIDUE_BASIS
+
+
+def single_card_pool_residue_cap_bytes(exp) -> int | None:
+    """The A13 byte bound a ONE-CARD resident forecast's pool margin
+    carries, or ``None`` when the ratio stands.
+
+    The same bound and the same suite table as a device rank
+    (:func:`rank_pool_residue_cap_bytes`): what the CuPy pool holds beyond
+    a complete itemization is a property of the suite's allocations, not
+    of the forecast being one rank of several, and the one single-card
+    row that kept the ratio is covered at today's itemization (see the A13
+    note above :data:`RANK_POOL_RESIDUE_BATTERY`).  One domain only: the
+    receipts are one HRRR grid, so a tree keeps the ratio."""
+    domains = tuple(getattr(exp, "domains", ()) or ())
+    if len(domains) != 1:
+        return None
+    return rank_pool_residue_cap_bytes([domains[0].run])
+
+
+def single_card_residue_terms(exp) -> dict:
+    """``estimate_experiment`` keywords for the one-card residue bound:
+    empty where the ratio stands, so a ratio-priced call is the call it
+    always was."""
+    cap = single_card_pool_residue_cap_bytes(exp)
+    return {} if cap is None else {"pool_residue_cap_bytes": cap}
+
+
+def mynn_width_adjustable(exp) -> bool:
+    """Can the resident road narrow this forecast's MYNN width to fit?
+
+    True when a domain runs MYNN and neither a pin nor an operator
+    override names the width (those are walked as asked)."""
+    from woof.core.mynn_pbl_scratch import mynn_rank_chunk_candidates
+    runs = [dc.run for dc in (getattr(exp, "domains", ()) or ())
+            if int(getattr(dc.run, "bl_pbl_physics", 0) or 0) == 5]
+    return bool(runs) and len(mynn_rank_chunk_candidates(int(runs[0].nz))) > 1
+
+
+@contextmanager
+def required_mynn_pricing(exp, width: int | None = None, *,
+                          only_given: bool = False):
+    """Price the resident MYNN workspace at ``width`` columns, or at the
+    narrowest width a run may walk when ``width`` is None (A3c).
+
+    The MYNN column width is a speed choice that never changes a byte of
+    output (:func:`woof.core.mynn_pbl_scratch.choose_mynn_column_chunk`).
+    The ranked road prices each rank at the narrowest width and widens it
+    into what the budget leaves (open-defects ledger A3c).  On one card the
+    run picks its width from the card's free memory before anything is
+    allocated (98,304 columns on a 96 GB card, 5.3 GiB of workspace at 50
+    levels against 0.45 GiB at the narrowest), so a forecast whose state
+    and physics fit only at a narrower width was refused.  The resident
+    door prices the narrow width when the walked one does not fit, then
+    fits and pins the widest width that does
+    (:func:`woof.core.streaming.admit_resident_road`).  ``only_given``
+    leaves the width alone when ``width`` is None.  A pin or an operator
+    override is the width priced either way."""
+    from woof.core.mynn_pbl_scratch import (
+        mynn_pricing_resident_chunk, mynn_rank_chunk_candidates)
+    runs = [dc.run for dc in (getattr(exp, "domains", ()) or ())
+            if int(getattr(dc.run, "bl_pbl_physics", 0) or 0) == 5]
+    if not runs or (width is None and only_given):
+        yield None
+        return
+    if width is None:
+        width = int(mynn_rank_chunk_candidates(int(runs[0].nz))[0])
+    with mynn_pricing_resident_chunk(int(width)):
+        yield int(width)
+
 
 def machine_peak_envelope_bytes(
         *, alloc_estimate_bytes: int, non_pool_bytes: int,
@@ -1218,9 +1541,23 @@ def machine_peak_envelope_bytes(
 
 def forecast_pool_estimate_bytes(subtotal_bytes: int, *,
                                  held_exact_bytes: int = 0,
-                                 headroom: float) -> int:
+                                 headroom: float,
+                                 residue_cap_bytes: int | None = None) -> int:
     """The forecast's pool estimate: the measured margin on what the pool
     turns over, and the held arrays at their allocated size.
+
+    ``residue_cap_bytes`` bounds the margin in bytes (A13, the ranked
+    road: :data:`RANK_POOL_RESIDUE_BOUND_BYTES`).  The margin is a ratio
+    measured on 3.5-11 GiB subtotals, where the pool's residue over the
+    itemization reads as 9-17%; on 25-28 GiB device ranks every pool
+    receipt measured that residue at 0.40-0.72 GiB, so the ratio alone
+    priced 2.5 GiB per card that no card used.  Below the crossover
+    (``residue_cap / (headroom - 1)``, 17.3 GiB at the measured margin
+    and bound) the cap is inactive and the price is unchanged.  The cap
+    bounds a residue over a COMPLETE itemization: a caller prices a
+    suite that matches an itemization-gap row with the ratio alone
+    (:func:`rank_pool_residue_cap_bytes`; :func:`estimate_experiment`
+    drops the cap for such a suite itself).
 
     A163.  The margin (:data:`FORECAST_POOL_HEADROOM`) is what the CuPy
     pool holds beyond the itemization: blocks a step frees and the pool
@@ -1238,7 +1575,11 @@ def forecast_pool_estimate_bytes(subtotal_bytes: int, *,
     14.79 GB envelope.
     """
     held = max(0, min(int(held_exact_bytes), int(subtotal_bytes)))
-    return math.ceil(float(headroom) * (int(subtotal_bytes) - held)) + held
+    turnover = int(subtotal_bytes) - held
+    margin = math.ceil(float(headroom) * turnover) - turnover
+    if residue_cap_bytes is not None:
+        margin = min(margin, max(0, int(residue_cap_bytes)))
+    return turnover + margin + held
 
 
 def urban_held_item_names(run) -> frozenset:
@@ -1605,6 +1946,40 @@ def read_compile_platform() -> tuple[str, str] | None:
 #: under-pricing is what put a run 1,630 MiB over; the bound is stated, not
 #: silently tightened.
 KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
+    # Production loaders, RTX 3080 sm_86 / NVRTC 13.0.48, 2026-10-21.
+    "output_diagnostics": 0, "gsd_diagnostics": 0, "gsd_helicity": 0,
+    "climate_diagnostics": 0,
+    "gsd_initial_reflectivity": 0,
+    # WRF's ocean mixed layer, read at 0 B through the production loader
+    # by the OML port lane (port289-1-ocean1-oml, tools/vram_reserve_probe.py).
+    "oml": 0,
+    # Production loader, V58 sm_120 / NVRTC 12.8.93, 2026-10-20.
+    "hail": 7392,
+    # 27,408 B on test host B (RTX 5090, sm_120, NVRTC 13.4.92, 2026-10-17);
+    # the G2 reading under NVRTC 12.9.86 was 26,736 B (kernel_frame_recordings).
+    # Ceiling: 28,576 B, test host A (RTX 4090, sm_89, NVRTC 13.4.92, fast
+    # numerics, 2026-10-22).
+    "fast_sbm": 28576,
+    "thompson_column": 50016,
+    # 512 B: widest driver-read G3 ensemble variant on sm_120 / NVRTC 13.2.86;
+    # 2,272 B on sm_89 / NVRTC 13.4.92 (2026-10-22), the ceiling.
+    "g3": 2272,
+    # New port units: measured production-composed driver frames, V12 12.8.93.
+    'fer_hires': 0,
+
+    "wsm6r": 0,  # sm_120, NVRTC 12.9.86, measured scalar/external-work kernels.
+    # Production WSM-family tier 64, sm_120 / NVRTC 12.8.93.
+    # The family metadata below prices a deeper launched tier separately.
+    "wsm7": 7216,
+    # 2.9.0 round 2: the radiation, lightning and New SAS units joined with no
+    # row (golden/ports-rad, golden/ports-cu).  Read 2026-10-13 through the
+    # production loader (tools/vram_reserve_probe.py frames) on test host D's RTX
+    # 5070 Ti, sm_120, NVRTC 13.4, at 2f7194f53: nsas through its no-FTZ
+    # route, lightning through its direct NVRTC site.
+    "aer_opt2": 0,
+    "lightning": 0,
+    "nsas": 64,
+    "rrtmg_aer1": 0,
     # Three units the 2.8.6 staging line shipped without a row, read
     # 2026-10-05 with tools/vram_reserve_probe.py frames on RTX 5090 /
     # NVRTC 13.4.92 through the production loader: 0 B each.  The fork's
@@ -1613,6 +1988,12 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     "pd_vertical_sl": 0,
     "rrtmg_smoke_manifest": 0,
     "upper_wind_limiter": 0,
+    # The coupled fire's standalone units (lane/ec-sfire), 0 B each on
+    # sm_120 / NVRTC 13.4.92 (test host D RTX 5070 Ti, 2026-10-06).
+    "chem_sfire": 0,
+    "sfire_coupling": 0,
+    "sfire_ideal": 0,
+    "sfire_ideal_atmos": 0,
     # Initialization-only parameter-table scaler, measured 2026-10-04
     # through the production loader on RTX 5090 / NVRTC 13.4.92: 0 B.
     "physics_params": 0,
@@ -1622,17 +2003,73 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     "ensemble_bookkeeping": 0,
     "ensemble_stochastic": 0,
     "ruc_spp": 0,
-    # Production lake loader, measured 2026-10-03: step 14,224 B on
-    # RTX 5090 / NVRTC 13.4.92 and 14,400 B on RTX PRO 6000 / 12.8.93.
-    # Init is 4,720 B on both; charge the larger measured step frame.
-    "lake": 14400,
+    # Classic Thompson (mp=8), the transcription of WRF v4.6.1
+    # mp_thompson: 0 B at every entry point, sm_120 / NVRTC 13.4,
+    # 2026-10-05 (kernel_frame_recordings.SM120_NVRTC_13_4_92).
+    # 64 B on sm_89 / NVRTC 13.4.92 (2026-10-22), the ceiling.
+    "thompson_classic": 64,
+    # Production lake loader.  Measured 2026-10-03 at 14,224 B (RTX 5090,
+    # NVRTC 13.4.92) and 14,400 B (RTX PRO 6000, NVRTC 12.8.93) while the
+    # column arrays lived in the local frame; that frame was the widest of
+    # every HRRR-physics run and its backing store cost 3.3 GiB per 5090.
+    # The arrays moved to a priced device arena (``lake/arena`` in
+    # physics_array_shapes, kernels/lake_support.cuh), and the same probe
+    # read 2026-10-05 on RTX 5090 / cupy-cuda13x through the production
+    # loader: step 1,240 B, init 0 B; the card's non-pool residency after a
+    # 40,800-column step fell from 3,288 MiB to 58 MiB.  The same source
+    # reads 4,496 B on an RTX 4090 (sm_89, NVRTC 13.4.92, 2026-10-22), the
+    # ceiling: priced at 1,240 B a 4090 lake run was under-charged 0.6 GiB.
+    "lake": 4496,
     # Test-only math grading unit, read on sm_89 and sm_120, NVRTC 13.4.59.
     "portable_libm64_grade": 48,
     # Added with this box's recording at 0 B. 'ntiedtke' is what
     # cu_physics = 16 needs to be priceable at all.
+    # The GOCART kernels (lane/aq-gocart), read 2026-09-30 on sm_120 at
+    # NVRTC 13.4.92 (RTX 5090) and sm_89 at 13.0.48 (RTX 4090): the maximum
+    # of the two, which is sm_89's for chem_dust (72 B against 0) and
+    # chem_optics (1,904 B against 1,648).  lane/aq-core's chem rows and
+    # the dycore-host units follow in their own places below.
+    "chem_ageing": 0,
+    "chem_drydep_gocart": 0,
+    "chem_dust": 72,
+    "chem_inventory": 0,
+    "chem_mp_coupling": 0,
+    "chem_optics": 1904,
+    "chem_rrtmgp_aerosol": 0,
+    # cap-aer-optics: NVRTC sm_120 measured 0 B, gpu-tests.json 2026-10-20.
+    "chem_radiation": 0,
+    # cap-fzra (aa11dd9dc41): the saved-frame freezing-rain/FRAM unit,
+    # saved_frame_ice 0 B on sm_120 at NVRTC 13.4.92 (read 2026-10-20,
+    # lab box RTX 5090, its own --std=c++17 site and the loader alike).
+    "ice_accretion": 0,
+    "chem_seasalt": 0,
+    "chem_settling": 0,
+    "chem_sulfur": 32,
+    # WRF-Chem's Wesely gas dry deposition (lane/aq-cams): 0 B on sm_120 and
+    # sm_89 at NVRTC 13.4.92 (read 2026-09-30, RTX 5090 and RTX 4090).
+    "chem_drydep_wesely": 0,
+    # Added with this box's recording; all three are 0 B and none
+    # was in the ceiling before. 'ntiedtke' is what cu_physics = 16
+    # needs to be priceable at all.
     'ntiedtke': 0,
     "acoustic": 544,
     "advection": 0,
+    # The chem program (woof/core/chem_*.py, lane/aq-core), read on the
+    # sm_120 NVRTC 13.4.92 recording.  chem_vertmx is level-specialized
+    # (LEVEL_SPECIALIZED_KERNEL_FRAMES): 2,048 B is its CHEM_NZ = 256
+    # ceiling; a 59-level run launches 472 B.  mono_advection (WRF's
+    # advect_scalar_mono) is 0 B; its row sits in order below.
+    "chem_bdy": 0,
+    # The smoke lane's units (lane/aq-smoke), the same recording: the fire
+    # classifier's 16 group sums, and the Freitas plume state in its global
+    # workspace rather than the thread frame.
+    "chem_fire": 64,
+    "chem_ledger": 0,
+    "chem_outputs": 0,
+    "chem_plumerise": 0,
+    "chem_prep": 0,
+    "chem_vertmx": 2048,
+    "chem_wetdep_ls": 0,
     "coriolis_map": 0,
     "diagnostics": 0,
     "diff6": 0,
@@ -1662,7 +2099,7 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # woof/core/kernels/gf.cu keeps them in a global workspace that
     # woof/core/gf.py sizes to the threads IN FLIGHT, because the driver
     # sizes the local-memory backing store to the threads the card can
-    # ever hold.  MEASURED on a development machine (RTX 5070 Ti, sm_120): the frame went
+    # ever hold.  MEASURED on test host A (RTX 5070 Ti, sm_120): the frame went
     # 22,416 -> 72 B on NVRTC 13.3 and 22,416 -> 88 B on NVRTC 13.0.48,
     # and the launch-time reservation went 2,200.0 MiB -> 4.0 MiB.  Both
     # readings are under the 1,024 B default stack, so the row reserves
@@ -1689,22 +2126,19 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # kernel is written around shared memory instead of per-thread arrays.
     "jacobi_eigh": 0,
     "kessler": 5120,
-    # Kain-Fritsch.  One thread still owns one whole column, but 52 of
-    # kf_column's 54 column arrays no longer live in the per-thread local
-    # frame: woof/core/kernels/kf.cu keeps them in a global workspace that
-    # woof/core/kf.py sizes to the threads IN FLIGHT, because the driver
-    # sizes the local-memory backing store to the threads the card can ever
-    # hold.  MEASURED on a development machine (RTX 5070 Ti, 70 SMs x 1,536, sm_120, NVRTC
-    # 13.0.48): the frame went 9,216 -> 512 B and the launch-time
-    # reservation went 840.0 MiB -> 0.0 MiB.
+    # Kain-Fritsch.  One thread owns one whole column, and every column
+    # array lives in a global workspace woof/core/kf.py sizes to the threads
+    # IN FLIGHT, because the driver sizes the local-memory backing store to
+    # the threads the card can ever hold.  MEASURED on test host A (RTX 5070 Ti,
+    # 70 SMs x 1,536, sm_120, NVRTC 13.0.48): the pre-workspace frame was
+    # 9,216 B and its launch-time reservation 840.0 MiB.
     #
-    # 512 B, not 0: ``tv_env`` and ``positive_energy`` stay on the stack
-    # because they are the only two whose PLACEMENT moves an output bit
-    # (kf.cu says why), and at the unspecialized KF_KMAX = 128 the compiler
-    # materialises 512 B of them.  That is half the 1,024 B default stack,
-    # so the row reserves nothing on any card -- and it no longer moves
-    # with nz, which is what retired kf's LEVEL_SPECIALIZED_KERNEL_FRAMES
-    # entry and the per-nz recompile that entry priced.
+    # The row is the element-wise ceiling over the recorded platforms
+    # (kernel_frame_recordings), 512 B from the readings of the kernel that
+    # kept two arrays on the stack.  The WRF port of 2026-10-07 keeps none
+    # and reads 0 B (W1, RTX PRO 6000 Blackwell, sm_120, NVRTC 12.9), so
+    # the ceiling over-prices by at most half the default stack, i.e. it
+    # still reserves nothing on any card.
     # The workspace itself is priced by :func:`kf_column_workspace_bytes`.
     "kf": 512,
     "kf_validation": 0,
@@ -1740,8 +2174,10 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # for exact equality against them at import, so the 0 here IS that
     # reading rather than a second statement of it.
     "milbrandt2_zet": 0,
+    "mono_advection": 0,
     "morrison": 5120,
     "microphysics_validation": 0,
+    "wsm5": 7072,  # sm_120, NVRTC 12.9.86, unflushed WSM5_KMAX=80, 2026-10-08.
     # MYJ.  MEASURED on an RTX 5090 by the driver sweep this table is
     # checked against, at the kernel's compiled MYJ_KMAX = 128 tier: the
     # PBL translation unit holds 9,232 B and the Eta surface layer holds
@@ -1785,7 +2221,7 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # The two MYNN-EDMF qn-family modules (4a0bb3f69) landed declared
     # UNMEASURED because their lane had no measurement platform; the
     # 2026-08-31 sm_86 campaign measured both at 0 B (RTX 3080, NVRTC
-    # 13.0.48; a development machine's sm_120 at NVRTC 13.0.88 also read 0 B), which
+    # 13.0.48; test host A's sm_120 at NVRTC 13.0.88 also read 0 B), which
     # retired that declaration.  Scalar per column, no per-thread stack
     # arrays -- the same shape as mynn_pbl itself.
     "mynn_dmp_sibling": 0,
@@ -1794,10 +2230,11 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     "mynn_surface": 0,
     "nest": 0,
     "nest_microphysics": 0,
-    # sm_86 compiles Noah 48 B wider than sm_120 (224 against 176); the
-    # ceiling is the sm_86 reading.  Well under the default stack either
+    # sm_86 compiles Noah 48 B wider than sm_120 (224 against 176); sm_89
+    # compiles the 2026-10-12 source to 320 B (re-read 2026-10-22), so the
+    # ceiling is the sm_89 reading.  Well under the default stack either
     # way, so it reserves nothing on any card.
-    "noah": 224,
+    "noah": 320,
     "noahmp_bareflux": 0,
     "noahmp_fluxprep": 0,
     "noahmp_leaves": 272,
@@ -1823,12 +2260,20 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # header for why it is not part of refl.cu).  63 B/level against
     # refl.cu's widest 72: WDM6 diagnoses one N0 array from nr where
     # Morrison carries three.
+    "lin": 37808,  # G2 and V12, sm_120, NVRTC 12.9.86, LIN_KMAX=128
+    "lin_refl": 14080,  # V12/V13, same compiler, unspecialized REFL_KMAX=256
     "wdm6_refl": 16128,
     # The legacy RRTMG adapter's device glue and its device wrapper prep:
     # 0 B each, read on sm_120 at NVRTC 13.4.92 (the only recording that
     # has them).
     "rrtmg_legacy_adapter": 0,
     "rrtmg_legacy_prep": 0,
+    # The adapter's WRF v4.6.1 radconst + calc_coszen (WOOF's own float32
+    # trig): 0 B for both entry points, read on sm_120 at NVRTC 12.9.86.
+    "rrtmg_legacy_solar": 0,
+    # The exact chain's strict Exner unit (physics_exner.cu): 0 B, read
+    # on sm_120 at NVRTC 13.4.92.
+    "physics_exner": 0,
     "rrtmg_lw": 0,
     "rrtmg_mcica_wrf": 0,
     # Another compiler-build move at a fixed sm_120: 0 B on NVRTC 13.0.48,
@@ -1918,7 +2363,10 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     "swint": 0,
     # Production loader on RTX 5090, NVRTC 13.4.92, 2026-10-04.
     "solar_albedo": 0,
-    "rrtmg_aer3": 0,
+    # Dudhia shortwave (lane/verify-dudhia-sw): 0 B, 48 registers, on sm_120
+    # at NVRTC 12.9.86 and 13.4.92 (kernel_frame_recordings).
+    "dudhia_sw": 0,
+    "rrtmg_aer3": 24,  # sm_89 / NVRTC 13.4.92, 2026-10-22; 0 B on sm_120.
     "uh_diag": 0,
     # The UW moist-turbulence PBL (bl_pbl_physics = 9): uwpbl_columns keeps
     # CAM's automatic arrays in a global per-column workspace
@@ -1926,6 +2374,7 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # is its binary64 scalars at 255 registers: 3,184 B on sm_89 and 864 B
     # on sm_120, both at NVRTC 13.4.92 (kernel_frame_recordings).
     "uwpbl": 3184,
+    "satmedmf": 112,  # Recorded SM89/NVRTC 13.4.92 module maximum.
     # Fused preparation interpolation, 16 B on sm_89 and sm_120, NVRTC 13.4.92.
     # Portable binary64 RH kernel is 0 B; regular interpolation remains 16 B.
     "horizontal": 16,
@@ -1934,6 +2383,10 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     "real_init": 0,
     "real_init_math": 48,
     "vert_interp": 768,
+    # The original cu6 kernel (cu_physics = 6): 24 B on sm_120, NVRTC
+    # 12.9.86 (RTX 5090, 2026-10-09). Under the default stack, so it
+    # reserves nothing.
+    "tiedtke": 24,
     # WDM6 (mp_physics=16).  MEASURED 2026-08-10 on the reference RTX 5090
     # the same NVRTC + driver way as every other row: the module's one
     # kernel, ``wdm6_column``, holds 9,776 B at the source's ``#ifndef``
@@ -1956,13 +2409,22 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # step (2026-09-29): 9,264 B at 64 and 11,568 B at 80 on sm_86 too,
     # with NVRTC 13.4.92 and 13.0, so every recorded card now agrees.
     "wdm6": 9264,
-    # WSM6 (mp_physics=6).  This row is the 64 TIER, not a ceiling: the
-    # launcher compiles the 80 tier for 65 <= nz <= 80 and that frame is
-    # WIDER (9,008 B measured).  :data:`WSM6_TIER_FRAME` carries the ladder
-    # and the measurements behind it -- exactly 112 B per level between the
-    # two rungs -- and tests/test_kernel_local_bounds.py re-reads both off
-    # the driver.
+    # WSM6 (mp_physics=6).  This row is the 64 TIER: the launcher compiles
+    # the 80 tier for 65 <= nz <= 80 and that frame is WIDER.
+    # :data:`WSM6_TIER_FRAME` carries the ladder, and
+    # tests/test_kernel_local_bounds.py re-reads both rungs off the driver.
+    # Since lane/verify-wsm6-mp6 (2026-10-07, the WRF-exact rewrite) every
+    # sm_120 build reads 6,448 B here (NVRTC 12.9.86, 13.0.48, 13.0.88,
+    # 13.3.33, 13.4.92); the row stays at the 7,216 B the sm_86 and sm_89
+    # recordings carry from the previous source, the element-wise maximum,
+    # until those cards are read again.  Since the column workspace
+    # (2026-10-16, memory census item 12) both kernels read 0 B on sm_120
+    # (NVRTC 13.4.92): the arrays live in a per-call global workspace of
+    # (25 nz + 8) x 4 B per column in flight.  This row stays the ceiling,
+    # which over-prices that workspace (safe direction) until the
+    # workspace is priced on its own and every recording is re-read.
     "wsm6": 7216,
+    "wsm3": 5664,
     # YSU (bl_pbl_physics = 1, the SHIPPED DEFAULT).  One thread still owns
     # one whole column, but the column arrays no longer live in the
     # per-thread local frame: woof/core/kernels/ysu.cu keeps them in a
@@ -1970,7 +2432,7 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # FLIGHT, because the driver sizes the local-memory backing store to
     # the threads the card can ever hold.
     #
-    # MEASURED on a development machine (a development machine, RTX 5070 Ti, 70 SMs x 1,536,
+    # MEASURED on test host A (RTX 5070 Ti, 70 SMs x 1,536,
     # sm_120) through the real launcher at nz=49: the frame went 9,232 -> 0
     # B on BOTH NVRTC 13.0 and 13.3, and the launch-time reservation went
     # 842.0 MiB -> nothing.  A zero frame reserves nothing on any card, and
@@ -1984,6 +2446,7 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     # the 842.0 MiB.
     # The workspace itself is priced by :func:`ysu_column_workspace_bytes`.
     "ysu": 0,
+    "ysu_480": 0,
     "ysu_validation": 0,
     # The urban canopy models (sf_urban_physics 1-3), read 2026-09-30 at
     # NVRTC 13.4.92 on sm_89 (RTX 4090) and sm_120 (RTX 5090):
@@ -2001,6 +2464,18 @@ KERNEL_MAX_LOCAL_SIZE_BYTES: dict[str, int] = {
     "urban_bep": 16,
     "urban_bep_couple": 0,
     "urban_ucm": 552,
+    # 2026-10-17, test host B (RTX 5090, sm_120, NVRTC 13.4.92): the two
+    # modules that left UNMEASURED_KERNEL_MODULES on the 2.9.2 line.
+    # goddard at its source default GDD_MAX_LEVELS tier; urban_ucm480 is
+    # the WRF 4.8 full-canopy SLUCM (kernel_frame_recordings, same date).
+    "goddard": 43664,
+    "urban_ucm480": 848,  # sm_89 / NVRTC 13.4.92, 2026-10-22 (352 B on sm_120).
+    # RTX 5070 Ti production loaders, 2026-10-18, both numerics modes.
+    "nextgen_cfe": 0, "nextgen_reservoirs": 0,
+    "nextgen_inundation": 0, "nextgen_terrain": 56,
+    # The Fitch wind-farm unit (labs/windfarm, 2.9.11): RTX 4090 sm_89,
+    # NVRTC 12.9.86 and 13.4.92, fast and strict, 2026-10-30.
+    "wind_farm": 56,
 }
 
 #: The readings the ceiling above is made of, each naming its box, its
@@ -2148,7 +2623,7 @@ LEVEL_SPECIALIZED_KERNEL_FRAMES: dict[str, LevelSpecializedFrame] = {
     # the bound worth 312 B of frame that reserves nothing either way.  So
     # woof/core/kf.py stopped recompiling the module per level count, and
     # the ONE binary that can now launch holds a frame that does not move
-    # with ``nz`` at all.  MEASURED on a development machine (RTX 5070 Ti, sm_120, NVRTC
+    # with ``nz`` at all.  MEASURED on test host A (RTX 5070 Ti, sm_120, NVRTC
     # 13.0.48): 512 B at the shipped KF_KMAX = 128 -- half the 1,024 B
     # default stack, so it reserves nothing on any card.  The flat row in
     # KERNEL_MAX_LOCAL_SIZE_BYTES is the whole model.
@@ -2160,6 +2635,10 @@ LEVEL_SPECIALIZED_KERNEL_FRAMES: dict[str, LevelSpecializedFrame] = {
     # tests/test_wdm6.py pins the realistic bounds rather than that one.
     "wdm6_refl": LevelSpecializedFrame(
         "wdm6_refl", "REFL_KMAX", 256, 63, alignment_bytes=16),
+    # WRF-Chem's vertmx (woof/core/chem_vertmx.py specializes CHEM_NZ to
+    # the column): its two Thomas recurrences, 8 B per level, read at nine
+    # bounds from 11 to 256 on the sm_120 NVRTC 13.4.92 recording.
+    "chem_vertmx": LevelSpecializedFrame("chem_vertmx", "CHEM_NZ", 256, 8),
 }
 
 # The launchers select only 64-level fallout variants at nz <= 64.
@@ -2175,20 +2654,7 @@ THOMPSON_SHALLOW_KERNEL_FRAMES = {
 }
 THOMPSON_SHALLOW_LEVELS = 64
 
-# thompson_version = "wrf_39_noaa" compiles the aerosol units with
-# THOMPSON_AA_WRF39 (woof.core.thompson_aerosol_launch.WRF39_DEFINES), and
-# the fork's fallout is a different frame: read 2026-10-05 through the
-# production loader on RTX 5090 / NVRTC 13.4.92, the sedimentation unit's
-# widest export is 11,264 B (9,216 at wrf_461) and its widest 64-level or
-# plain export is 2,816 B (2,304 at wrf_461).  The other five aerosol units
-# read the same frame at both generations.  This row does not move today's
-# reservation: that is the widest frame over every launched module, and
-# mp_physics = 28 always launches the classic ``thompson`` unit, whose rows
-# (11,264 / 2,816) equal the fork's.  Breakage prevented: nothing else reads
-# the fork's frames, so a change that narrows the classic unit would leave the
-# shipped HRRR configuration recipes (which select the fork generation)
-# under-priced by up to 2,048 B per resident thread with no gate failing.
-#   module -> (widest export, widest plain/64-level export)
+
 THOMPSON_WRF39_KERNEL_FRAMES = {
     "thompson_aerosol_sed": (11264, 2816),
 }
@@ -2227,6 +2693,8 @@ class TieredKernelFrame:
     shipped_tier: int
     bytes_per_level: int
     alignment_bytes: int = 8
+    # The standalone reading may use a deeper bound than the minimum tier.
+    reference_tier: int | None = None
 
     def frame_bytes(self, tier: int) -> int:
         tier = int(tier)
@@ -2234,8 +2702,9 @@ class TieredKernelFrame:
             raise ValueError(
                 f"{self.module}: {self.define}={tier} is below the shipped "
                 f"tier {self.shipped_tier}")
+        anchor = self.shipped_tier if self.reference_tier is None else self.reference_tier
         raw = (KERNEL_MAX_LOCAL_SIZE_BYTES[self.module]
-               + self.bytes_per_level * (tier - self.shipped_tier))
+               + self.bytes_per_level * (tier - anchor))
         remainder = raw % self.alignment_bytes
         return raw if remainder == 0 else raw + self.alignment_bytes - remainder
 
@@ -2267,6 +2736,11 @@ IEVA_TIER_FRAME = TieredKernelFrame("ieva", "IEVA_KMAX", 65, 16)
 #: which is the safe direction.)
 WDM6_TIER_FRAME = TieredKernelFrame("wdm6", "WDM6_KMAX", 64, 144)
 
+LIN_TIER_FRAME = TieredKernelFrame("lin", "LIN_KMAX", 128, 60)
+# The linear frame is evaluated at the launcher's 128/256/512 tiers.
+LIN_REFL_TIER_FRAME = TieredKernelFrame(
+    "lin_refl", "REFL_KMAX", 128, 55, reference_tier=256)
+
 #: ``wsm6.cu``'s ``WSM6_KMAX`` sizes the whole per-thread column stack, and
 #: ``woof/core/wsm6.py`` compiles it at one of two rungs
 #: (``wsm6_constants.WSM6_KERNEL_LEVEL_TIERS`` = 64, 80) rather than at
@@ -2284,7 +2758,21 @@ WDM6_TIER_FRAME = TieredKernelFrame("wdm6", "WDM6_KMAX", 64, 144)
 #: rungs.  (Between the rungs the driver's frame sits up to 16 B below the
 #: same line; the launcher never compiles there, and the model is a stated
 #: ceiling on that band, which is the safe direction.)
+#:
+#: RE-MEASURED 2026-10-07 after the WRF-exact rewrite (lane/verify-wsm6-mp6)
+#: on W1's RTX PRO 6000 at five sm_120 NVRTC builds: 6,448 B at 64 and
+#: 8,048 B at 80, 100 B per level, and the module's reflectivity kernel
+#: (3,392 B / 4,240 B) is narrower.  The 112 B slope and the 7,216 B row
+#: stay as the ceiling over the sm_86/sm_89 readings of the old source.
 WSM6_TIER_FRAME = TieredKernelFrame("wsm6", "WSM6_KMAX", 64, 112)
+
+# Additional column families declare their measured compile tiers here.
+# WSM3 reads 5664 B at 64 and 7072 B at 80 in both arithmetic arms.
+from woof.core.wsm3_constants import wsm3_level_tier as _wsm3_level_tier
+CONDITIONAL_COLUMN_TIERED_FRAMES = {
+    "wsm3": (TieredKernelFrame("wsm3", "WSM3_KMAX", 64, 88), _wsm3_level_tier),
+}
+
 
 #: Kernel source files that have no standalone local frame because they
 #: never compile alone: ``noahmp_driver.cu``, ``noahmp_energy.cu``,
@@ -2311,6 +2799,13 @@ WSM6_TIER_FRAME = TieredKernelFrame("wsm6", "WSM6_KMAX", 64, 112)
 #: :data:`CHAINED_TRANSLATION_UNIT_FRAMES`, which cover these fragments
 #: as the translation units they actually launch in.
 UNMEASURED_KERNEL_MODULES = frozenset({
+    # New Goddard (golden/ports-rad) sat here while its standalone compile
+    # failed; it compiles alone now (read 2026-10-17 on test host B's RTX
+    # 5090, sm_120, NVRTC 13.4.92: 43,664 B, its source default
+    # GDD_MAX_LEVELS tier) and is a recorded row in
+    # kernel_frame_recordings.KERNEL_LOCAL_FRAME_RECORDINGS.  A run's own
+    # tier (woof/core/radiation_composition.py, get_kernel_int_defines)
+    # is priced through its TieredKernelFrame declaration where one exists.
     # Noah mosaic (sf_surface_mosaic = 1) launches only through its own
     # unit, woof/core/noah_mosaic.py _mosaic_module, compiled with
     # --fmad=false beside the loader's -std=c++17.  A default-option
@@ -2318,6 +2813,12 @@ UNMEASURED_KERNEL_MODULES = frozenset({
     # price nothing; the unit that does launch is noah_mosaic_unit in
     # CHAINED_TRANSLATION_UNIT_FRAMES below.
     "noah_mosaic",
+    # The fork Thompson unit (thompson_version = "wrf_39_noaa") launches
+    # only through woof/core/thompson_fork.py's own NVRTC compile
+    # (its MODULE_OPTIONS).  The loader's default-option standalone
+    # compile is a module nothing launches; the unit that does is
+    # thompson_fork_unit in CHAINED_TRANSLATION_UNIT_FRAMES below.
+    "thompson_fork",
     "noahmp_driver", "noahmp_energy", "noahmp_thermal", "noahmp_libm_slab",
     "noahmp_glacier",
     # P3 borrows r_pow/r_exp/r_log from noahmp_leaves.cu rather than
@@ -2328,6 +2829,17 @@ UNMEASURED_KERNEL_MODULES = frozenset({
     # below -- so unlike the Noah-MP fragments this one is priced, not a
     # refusal.
     "p3",
+    # P3's radar reflectivity operator (acb8faf25) is appended to that
+    # composed unit by woof/core/p3_device.p3_reflectivity_source() and
+    # calls p3.cu's own __device__ helpers (p3_get_rain_dsd2,
+    # p3_access_lookup_table, ...), so p3_zdiag.cu alone fails NVRTC
+    # (read 2026-10-07 on test host D's RTX 5070 Ti, sm_120, NVRTC 13.4.92:
+    # 'identifier "P3_RD" is undefined').  It is the DA observation
+    # operator (woof/da/obsop.py), launched by no forecast scheme, so no
+    # mp_physics row selects it and no forecast price reads it.  The unit
+    # that launches it, p3_reflectivity_module, read p3k_reflectivity at
+    # 0 B local frame (40 registers) on the same card the same day.
+    "p3_zdiag",
     "rrtmg_sw", "rrtmg_lw_chain", "rrtmg_lw_chain_coalesced", "rrtmg_lw_zbatched",
     "rrtmg_lw_taugb02_10_11_12", "rrtmg_lw_taugb03_05",
     "rrtmg_lw_taugb06_09", "rrtmg_lw_taugb13_16",
@@ -2336,7 +2848,44 @@ UNMEASURED_KERNEL_MODULES = frozenset({
     "urban_bep_bem",
     # The drag unit borrows glibc helpers from the composed source in
     # woof.core.terrain_drag.module_source(); it cannot compile alone.
-    "terrain_drag"})
+    "terrain_drag",
+    # The coupled fire's fragments (lane/ec-sfire): woof/core/sfire_core.py
+    # composes them with their shared headers into the units it compiles,
+    # and NVRTC refuses each handed over alone (test host D, 2026-10-06).  No
+    # selector row names them; a row that did is priced at the assumed bound.
+    "sfire_atm", "sfire_core", "sfire_moisture", "sfire_phys",
+    "sfire_spotting", "sfire_wind",
+    # golden/wrf-fixes: the WRF 4.8 full-canopy SLUCM (urban_ucm_generation
+    # = "wrf_480") sat here until a card read it; it left this set on
+    # 2026-10-17 with the row test host B's RTX 5090 read (352 B, sm_120,
+    # NVRTC 13.4.92), as the solar geometry unit (rrtmg_legacy_solar) did at
+    # the 2.9.1 exact-chain intake.  Breakage the two retirements fix:
+    # tests/test_preflight.py::test_the_recorded_local_frames_match_the_driver
+    # asserts the set of modules NVRTC refuses alone is exactly this set, and
+    # both compiled alone on the 2.9.2 line.
+    })
+
+#: Priced units whose committed ``.cu`` compiles only through its own
+#: production loader (a shared header spliced in, a composed prefix), so the
+#: generic loader cannot read them: ``module -> "package.module:function"``,
+#: the function returning ``(cupy module, the source text it compiled)``.
+#: The frame regenerator (``tools/vram_reserve_probe.py frames``) and the
+#: frame gate (tests/test_preflight.py) both measure these through
+#: :func:`load_production_kernel_unit`, so the number recorded is the frame
+#: of the image the run launches.  Breakage this prevents: the 2.9.4 hydro
+#: rows were priced in KERNEL_MAX_LOCAL_SIZE_BYTES from their loaders while
+#: the gate tried the generic loader, failed, and called them unpriced.
+PRODUCTION_LOADED_KERNEL_UNITS = {
+    "nextgen_cfe": "woof.hydro.cfe:frame_module",
+    "nextgen_reservoirs": "woof.hydro.reservoirs:frame_module",
+}
+
+
+def load_production_kernel_unit(module: str):
+    """``(cupy module, compiled source)`` for one production-loaded unit."""
+    from importlib import import_module
+    package, _, function = PRODUCTION_LOADED_KERNEL_UNITS[module].partition(":")
+    return getattr(import_module(package), function)()
 # face_mass, held_heating, rk_bookkeeping and surface_w (the dycore-host
 # speed lane's point-local units, 66af318bc) sat in this set on
 # 2026-09-30 under the same "no measurement platform in this lane"
@@ -2421,7 +2970,7 @@ CHAINED_TRANSLATION_UNIT_FRAMES: dict[str, ChainedTranslationUnitFrame] = {
     # legacy-RRTMG chain and the Noah-MP driver use.
     #
     # Measured 2026-08-29, cupy 14.2.0 NVRTC on sm_120 (RTX 5070 Ti,
-    # a development machine), over all twelve kernels of the unit: local_size_bytes = 0
+    # test host A), over all twelve kernels of the unit: local_size_bytes = 0
     # for every one, both arms.  The widest register user is
     # ``p3k_kloopmain`` at 244 registers (the fused ``p3k_fused_process``
     # at 250), which costs occupancy but spills nothing.  A re-measure past
@@ -2487,6 +3036,23 @@ CHAINED_TRANSLATION_UNIT_FRAMES: dict[str, ChainedTranslationUnitFrame] = {
         module="terrain_drag_composed",
         max_local_size_bytes=1184,
         covers=frozenset({"terrain_drag"})),
+    # The fork Thompson unit (thompson_version = "wrf_39_noaa", mp_physics
+    # = 28, the HRRR and RAP doors' default): thompson_fork.cu +
+    # thompson_fork_constants.cuh compiled by woof/core/thompson_fork.py.
+    # Its column arrays first sat in the thread's local frame, 48 + 448 B
+    # per level of a compiled TF_KMAX (read at fourteen bounds from 8 to
+    # 256): 25,136 B at a 50-level column, a 6.5 GiB launch-time
+    # reservation on a 188-SM RTX PRO 6000 that nothing priced.  They moved
+    # to a column arena sized to the launcher's tile
+    # (thompson_fork_column_workspace_bytes), and the unit's frame is now
+    # the register spill alone: 784 B at 255 registers, read 2026-10-07 off
+    # the driver on that card (sm_120) at NVRTC 12.9.86, the default
+    # install's compiler, in the default and the strict build alike.
+    # Under the 1,024 B default stack, so it reserves nothing.
+    "thompson_fork_unit": ChainedTranslationUnitFrame(
+        module="thompson_fork_unit",
+        max_local_size_bytes=784,
+        covers=frozenset({"thompson_fork"})),
 }
 
 _seen_covers: set[str] = set()
@@ -2518,7 +3084,7 @@ CORE_KERNEL_MODULES = frozenset({
     "spec_bdy", "tke_budget", "vert_interp", "wrf_cold_start_w"})
 
 #: ``mp_physics`` -> the kernel modules that scheme launches.  Keys are
-#: exactly ``woof/config.py``'s accepted set (0, 1, 6, 8, 9, 10, 16, 18,
+#: exactly ``woof/config.py``'s accepted set (0, 1, 3, 6, 8, 9, 10, 16, 18,
 #: 28, 50), which is priced here ahead of its driver dispatch so a run can
 #: never reach ``kernel_local_frame_bytes`` with an unpriced selector.
 #: That "exactly" is now MEASURED rather than asserted in prose --
@@ -2526,9 +3092,24 @@ CORE_KERNEL_MODULES = frozenset({
 #: accepts and prices each one, which is what caught mp=50 and MYJ
 #: shipping accepted-but-unpriceable into the 1.9 assembly.
 _MICROPHYSICS_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
+    30: ("fast_sbm", "microphysics_validation"),
     0: (),
     1: ("kessler", "microphysics_validation"),
+    2: ("lin", "microphysics_validation"),
+    # Ferrier-Aligo: one translation unit (init and column kernels) plus
+    # the shared validator its three canonical slots go through.  ``refl``
+    # is not priced: the column kernel writes its own DBZ_col.
+    5: ("fer_hires", "microphysics_validation"),
+    # WSM3: one column kernel (woof/core/kernels/wsm3.cu) and the shared
+    # validator; its REFL_10CM diagnostic loads refl.cu's WSM6 routine and
+    # is priced by _REFLECTIVITY_MICROPHYSICS below.
+    3: ("wsm3", "microphysics_validation"),
+    4: ("wsm5", "microphysics_validation"),
     6: ("wsm6", "microphysics_validation"),
+    # WSM6R: its own translation unit (the column kernel and the WSM6
+    # effective-radius diagnosis) plus the shared validator; it never loads
+    # the WSM6 unit.
+    106: ("wsm6r", "microphysics_validation"),
     8: ("thompson", "microphysics_validation"),
     # Milbrandt-Yau.  All seven kernels live in the one ``milbrandt2``
     # translation unit (woof/core/milbrandt2.py:179-187), and the scheme
@@ -2546,6 +3127,10 @@ _MICROPHYSICS_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
     # pass; its cold half is transcribed inside wdm6.cu rather than shared
     # with wsm6.cu, so mp=16 never loads the WSM6 translation unit.
     16: ("wdm6", "microphysics_validation"),
+    # WSM7: ONE translation unit holds the column and the REFL_10CM
+    # kernels (woof/core/wsm_family.py compiles it), plus the shared
+    # moisture validation pass.
+    24: ("wsm7", "microphysics_validation"),
     18: ("nssl2", "nssl2_driver_support", "nssl2_diagnostics",
          "nssl2_fused_gs", "nssl2_nucond", "nssl2_qvexcess"),
     # Thompson aerosol-aware.  ``thompson`` is genuinely launched: mp=28
@@ -2589,6 +3174,14 @@ _MICROPHYSICS_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
     50: ("p3_composed", "microphysics_validation"),
 }
 
+# Named schemes compile their column kernel through their own runtime
+# module (woof/core/tempo_runtime.py, state in global work arrays, no large
+# local frame) and take the native validation path.
+from woof.microphysics_schemes import NAMED_SCHEMES as _NAMED_MP_SCHEMES_K
+from woof.microphysics_schemes import SCHEMES_BY_ID as _NAMED_MP_ROWS_BY_ID
+_MICROPHYSICS_KERNEL_MODULES.update({
+    _s.mp_id: ("microphysics_validation",) for _s in _NAMED_MP_SCHEMES_K.values()})
+
 #: ``mp_physics`` values with a REFL_10CM path in ``woof/core/refl.py``.
 #: The ``refl`` module is priced only when a history frame can come due
 #: during the run (:func:`refl_diagnostic_reachable`), because the kernel is
@@ -2621,7 +3214,7 @@ _MICROPHYSICS_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
 #: 28 to the shared operator -- so an NSSL domain reserved refl.cu's
 #: per-thread frame for a translation unit the run cannot launch, and a
 #: reservation that is too large refuses a run that would have fit.
-_REFLECTIVITY_MICROPHYSICS = frozenset({1, 6, 8, 10, 16, 28})
+_REFLECTIVITY_MICROPHYSICS = frozenset({1, 2, 3, 6, 8, 10, 16, 28, 106})
 
 #: The DELIBERATE absences from :data:`_REFLECTIVITY_MICROPHYSICS`, each
 #: with the reason it is a decision and not an omission.  The pattern is
@@ -2631,6 +3224,23 @@ _REFLECTIVITY_MICROPHYSICS = frozenset({1, 6, 8, 10, 16, 28})
 #: :data:`_MICROPHYSICS_KERNEL_MODULES` without landing it in one set or
 #: the other now fails closed at ``woof check``.
 _SELF_REFLECTIVITY_MICROPHYSICS: dict[int, str] = {
+    30: ("FAST_SBM writes no REFL_10CM: its polar-scattering diagnostic is "
+         "not ported and woof.core.fast_sbm_runtime.apply refuses a due "
+         "frame, so it neither loads refl.cu nor fills stash_refl_10cm and "
+         "the history lane (physics_inventory.REFL_10CM_MICROPHYSICS) never "
+         "asks it for one"),
+    5: (
+        "Ferrier-Aligo computes its reflectivity column inside "
+        "EGCP01COLUMN (DBZ_col from the scheme's own rain and "
+        "precipitating-ice moments, module_mp_fer_hires.F:2232-2251, "
+        ":2339-2345, :2494-2496).  kernels/fer_hires.cu writes that column "
+        "on output steps and woof/core/fer_hires.py hands it to "
+        "stash_refl_10cm, so no refl kernel is loaded.  The shared "
+        "operator could not stand in: its Rayleigh sums read qs and qg, "
+        "and the fer_mp_hires package carries one total-ice mass and "
+        "neither."
+    ),
+    4: "The column scheme row launches its own radar kernel for stash_refl_10cm in wsm5.cu; no shared refl.cu is loaded.",
     18: (
         "NSSL two-moment fills the REFL_10CM slot from its own radardd02 "
         "diagnostic (woof.core.nssl2_diagnostics, priced by this module's "
@@ -2640,6 +3250,12 @@ _SELF_REFLECTIVITY_MICROPHYSICS: dict[int, str] = {
         "row below -- refl compiles to 3,600 B per thread at nz=50, the "
         "widest frame either scheme has -- charged to a domain that never "
         "launches it."
+    ),
+    24: (
+        "WSM7's refl10cm_wsm7 kernel lives in its own wsm7 translation "
+        "unit (woof/core/kernels/wsm7.cu), priced by this module's "
+        "mp=24 kernel row, and uses stash_refl_10cm for consume-once output; "
+        "refl.cu is never loaded for it."
     ),
     9: (
         "Milbrandt-Yau fills the REFL_10CM slot inside its own "
@@ -2671,6 +3287,14 @@ _SELF_REFLECTIVITY_MICROPHYSICS: dict[int, str] = {
 }
 
 
+# Named schemes computing their own REFL_10CM (capability row): the adapter
+# stashes the scheme's field, so no refl kernel is loaded.
+from woof.microphysics_schemes import NAMED_SCHEMES as _NAMED_MP_SCHEMES
+_SELF_REFLECTIVITY_MICROPHYSICS.update({
+    _s.mp_id: (f"{_s.label} computes REFL_10CM in its own column call and "
+               "its adapter hands the finished array to stash_refl_10cm")
+    for _s in _NAMED_MP_SCHEMES.values() if _s.native_reflectivity})
+
 def _hold_reflectivity_rail_equal_to_the_operator() -> None:
     """HELD EQUAL, AT IMPORT, to the reflectivity operator's own tables.
 
@@ -2691,13 +3315,14 @@ def _hold_reflectivity_rail_equal_to_the_operator() -> None:
                                  SCHEME_NATIVE_REFL_10CM)
 
     problems: list[str] = []
-    if set(REFL_10CM_INPUT_SPECIES) != set(_REFLECTIVITY_MICROPHYSICS):
+    from woof.core.column_schemes import COLUMN_SCHEMES
+    if set(REFL_10CM_INPUT_SPECIES) - set(COLUMN_SCHEMES) != set(_REFLECTIVITY_MICROPHYSICS):
         problems.append(
             "the schemes woof.core.refl.compute_refl_10cm dispatches "
             f"({sorted(REFL_10CM_INPUT_SPECIES)}) are not the schemes this "
             "module prices refl.cu for "
             f"({sorted(_REFLECTIVITY_MICROPHYSICS)})")
-    if set(SCHEME_NATIVE_REFL_10CM) != set(_SELF_REFLECTIVITY_MICROPHYSICS):
+    if set(SCHEME_NATIVE_REFL_10CM) | set(COLUMN_SCHEMES) != set(_SELF_REFLECTIVITY_MICROPHYSICS):
         problems.append(
             "the schemes woof.core.refl names as computing their own "
             f"REFL_10CM ({sorted(SCHEME_NATIVE_REFL_10CM)}) are not the "
@@ -2717,12 +3342,18 @@ _CUMULUS_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
     0: (), 1: ("kf", "kf_validation"),
     # One translation unit carries all of GFDRV (deep, shallow, driver).
     3: ("gf",),
+    6: ("tiedtke",),
     # And one carries all twenty-one New Tiedtke stages. The table is
     # FAIL-CLOSED -- domain_kernel_modules raises on a selector with no
     # entry -- so 16 announced itself here rather than going quiet, which
     # is why this was the one item of the seven that could not be
     # forgotten.
-    16: ("ntiedtke",)}
+    16: ("ntiedtke",),
+    # Grell 3D: one translation unit carries G3DRV/CUP_enss_3d
+    # (g3_column) and conv_grell_spread3d (g3_spread).
+    5: ("g3",),
+    # New SAS: one unit carries cu_nsas, nsas2d and nscv2d.
+    96: ("nsas",)}
 _PBL_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
     0: (), 1: ("ysu", "ysu_validation"),
     # MYJ (Mellor-Yamada-Janjic).  ONE module: woof/core/myjpbl.py's only
@@ -2766,6 +3397,7 @@ _PBL_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
     # that kernel.  No validation module: _run_uwpbl's finiteness check is
     # a host reduction and compiles nothing.
     UW_PBL_SCHEME: ("uwpbl",),
+    901: ("satmedmf",),
     # Shin-Hong launches its column kernel plus its own batched output
     # validator, the YSU pair's shape (woof/core/shinhong.py).
     11: ("shinhong", "shinhong_validation"),
@@ -2807,7 +3439,7 @@ _RADIATION_KERNEL_MODULES: dict[int, tuple[str, ...]] = {
 #: row).
 _RRTMG_LEGACY_KERNEL_MODULES: tuple[str, ...] = (
     "rrtmg_mcica_wrf", "rrtmg_lw_legacy_chain", "rrtmg_sw_legacy",
-    "rrtmg_legacy_adapter", "rrtmg_legacy_prep")
+    "rrtmg_legacy_adapter", "rrtmg_legacy_prep", "rrtmg_legacy_solar")
 
 
 def _radiation_44_kernel_modules(run) -> tuple[str, ...]:
@@ -2902,6 +3534,11 @@ def domain_kernel_modules(dc: DomainConfig, *,
             modules.update(_radiation_44_kernel_modules(dc.run))
         else:
             modules.update(table[value])
+    if int(dc.run.bl_pbl_physics) == 1:
+        from woof.ysu_generations import ysu_kernel_selection
+        from woof.wrf_exact import ENABLED
+        modules.discard("ysu")
+        modules.add(ysu_kernel_selection(dc.run.ysu_version, strict=ENABLED)[0])
     modules.update(_urban_kernel_modules(dc.run, dc.grid_id))
     if int(getattr(dc.run, "diff_opt", 2)) == 1:
         modules.add("diff_opt1")
@@ -2920,11 +3557,41 @@ def domain_kernel_modules(dc: DomainConfig, *,
         modules.add("swint")
     if int(getattr(dc.run, "alb_sol", 0) or 0) == 1:
         modules.add("solar_albedo")
+    # Dudhia shortwave (ra_sw_physics = 1) launches its own column kernel
+    # (woof/core/dudhia.py, lane/verify-dudhia-sw).
+    if int(getattr(dc.run, "ra_sw_physics", 0) or 0) == 1:
+        modules.add("dudhia_sw")
+    if int(getattr(dc.run, "aer_opt", 0) or 0) == 1:
+        modules.add("rrtmg_aer1")
     if int(getattr(dc.run, "aer_opt", 0) or 0) == 3:
         modules.add("rrtmg_aer3")
+    if int(getattr(dc.run,"aer_opt",0) or 0) == 2:
+        modules.add("aer_opt2")
+    from woof.core.hail import enabled as hail_enabled
+    if hail_enabled(dc.run):
+        modules.add("hail")
+    if (float(getattr(dc.run, "prec_acc_dt", 0)) > 0
+            or float(getattr(dc.run, "prec_acc_dt1", 0)) > 0):
+        modules.add("output_diagnostics")
+    if int(getattr(dc.run, "output_diagnostics", 0)):
+        modules.add("climate_diagnostics")
+    if int(getattr(dc.run, "gsd_diagnostics", 0)):
+        modules.update(("gsd_diagnostics", "gsd_helicity"))
+    from woof.core.gsd_initial_reflectivity import enabled as gsd_initial_enabled
+    if gsd_initial_enabled(dc.run):
+        modules.add("gsd_initial_reflectivity")
     if int(getattr(dc.run, "sf_lake_physics", 0)) == 1:
         modules.add("lake")
+    if int(getattr(dc.run, "sf_ocean_physics", 0)) == 1:
+        modules.add("oml")
     mp_physics = int(dc.run.mp_physics)
+    from woof.thompson_generations import CLASSIC_GENERATIONS
+    classic_generation = (CLASSIC_GENERATIONS.get(getattr(dc.run,"thompson_version","wrf_461"))
+                          if mp_physics == 8 else None)
+    generated_thompson = classic_generation is not None and classic_generation.backend == "column"
+    if generated_thompson:
+        modules.discard("thompson")
+        modules.update(("thompson_column","thompson_aerosol_state"))
     if (mp_physics and mp_physics not in _REFLECTIVITY_MICROPHYSICS
             and mp_physics not in _SELF_REFLECTIVITY_MICROPHYSICS):
         # FAIL-CLOSED on the reflectivity rail too, not just on the scheme
@@ -2943,17 +3610,36 @@ def domain_kernel_modules(dc: DomainConfig, *,
             "stash_refl_10cm it loads neither, and must say so in "
             "_SELF_REFLECTIVITY_MICROPHYSICS with the reason.  Leaving it "
             "out of both under-prices the local-memory reservation.")
+    if (WRF_EXACT and mp_physics == 28
+            and getattr(dc.run, "thompson_version", "wrf_461")
+            == "wrf_39_noaa"):
+        # Under GPUWM_WRF_EXACT=1 the fork generation's whole driver runs in
+        # its own column unit (woof.core.microphysics_aerosol.
+        # _apply_thompson_fork_call); a default run keeps the aerosol units.
+        modules.add("thompson_fork_unit")
     if int(getattr(dc.run, "sf_surface_mosaic", 0)) == 1:
         # lsm_mosaic replaces lsm (module_surface_driver.F:2662-2778): the
-        # mosaic unit runs every Noah column, and noah.cu is never loaded.
-        modules.discard("noah")
+        # mosaic unit runs every Noah column.  noah.cu is still loaded: the
+        # driver calls seaice_noah after lsm_mosaic too (:2917-2929), and
+        # noah_seaice_column lives in noah.cu, so its frame stays priced.
         modules.add("noah_mosaic_ucm_unit" if int(getattr(dc.run, "sf_urban_physics", 0)) == 1
                     else "noah_mosaic_unit")
-    if prices_refl and mp_physics in _REFLECTIVITY_MICROPHYSICS:
+    if prices_refl and mp_physics in _REFLECTIVITY_MICROPHYSICS and not generated_thompson:
         # mp=16 launches its reflectivity from its OWN translation unit, so
         # a WDM6 domain must never reserve refl.cu's wider frame and a
         # non-WDM6 domain must never reserve wdm6_refl.cu's.
-        modules.add("wdm6_refl" if mp_physics == 16 else "refl")
+        modules.add({2:"lin_refl",16:"wdm6_refl"}.get(mp_physics,"refl"))
+    if getattr(dc.run, "chem_sets", ""):
+        # A chem domain's own units (woof/core/chem_context.py:
+        # chem_kernel_modules), fail-closed on a process that does not
+        # name the kernels its step launches.
+        from woof.chem_table import load as load_chem_table
+        from woof.core.chem_context import chem_kernel_modules
+
+        modules.update(chem_kernel_modules(load_chem_table(dc.run),
+                                           dc.run.chem_adv_opt))
+        if getattr(dc.run, "aer_ra_feedback", 0):
+            modules.update(("chem_radiation", "chem_rrtmgp_aerosol"))
     return frozenset(modules)
 
 
@@ -3044,6 +3730,14 @@ def kernel_local_frame_bytes(
         frame = ACOUSTIC_TIER_FRAME.frame_bytes(tier)
         if frame > frames.get(ACOUSTIC_TIER_FRAME.module, -1):
             frames[ACOUSTIC_TIER_FRAME.module] = frame
+    for dc in exp.domains:
+        selected = domain_kernel_modules(dc, prices_refl=prices_refl)
+        for module, (frame_row, select_tier) in CONDITIONAL_COLUMN_TIERED_FRAMES.items():
+            if module not in selected:
+                continue
+            frame = frame_row.frame_bytes(select_tier(int(dc.run.nz)))
+            if frame > frames.get(module, -1):
+                frames[module] = frame
     # ``wdm6`` and ``wsm6`` are the CONDITIONAL tiered modules, so
     # unlike acoustic it is priced PER DOMAIN THAT SELECTS IT.  Both halves
     # of that matter: a 40-level WDM6 child beside a 100-level WSM6 parent
@@ -3061,6 +3755,13 @@ def kernel_local_frame_bytes(
         frame = WDM6_TIER_FRAME.frame_bytes(wdm6_level_tier(int(dc.run.nz)))
         if frame > frames.get(WDM6_TIER_FRAME.module, -1):
             frames[WDM6_TIER_FRAME.module] = frame
+    for dc in exp.domains:
+        modules = domain_kernel_modules(dc, prices_refl=prices_refl)
+        for declaration in (LIN_TIER_FRAME, LIN_REFL_TIER_FRAME):
+            if declaration.module in modules:
+                tier = next(t for t in (128, 256, 512) if t >= dc.run.nz)
+                frames[declaration.module] = max(
+                    frames.get(declaration.module, 0), declaration.frame_bytes(tier))
     # ``wsm6`` prices the same way, and the same two halves matter: a
     # 40-level WSM6 child beside a 100-level Morrison parent takes WSM6's
     # own 64 tier rather than a tier WSM6 has no kernel for, and the
@@ -3075,6 +3776,18 @@ def kernel_local_frame_bytes(
         frame = WSM6_TIER_FRAME.frame_bytes(wsm6_level_tier(int(dc.run.nz)))
         if frame > frames.get(WSM6_TIER_FRAME.module, -1):
             frames[WSM6_TIER_FRAME.module] = frame
+    # Each WSM-family row prices its own launched tier. A deeper domain
+    # running another scheme cannot raise this module's reservation.
+    from woof.core.wsm_family import (
+        family_selectors, local_frame_bytes as family_frame_bytes, row as family_row)
+
+    for dc in exp.domains:
+        mp = int(dc.run.mp_physics)
+        if mp not in family_selectors():
+            continue
+        unit = family_row(mp).unit
+        frame = family_frame_bytes(mp, int(dc.run.nz))
+        frames[unit] = max(frames.get(unit, -1), frame)
     # ``ieva`` prices per domain that turns zadvect_implicit on, at that
     # domain's own tier, exactly as wdm6/wsm6 do.
     from woof.core.ieva_constants import level_tier as ieva_level_tier
@@ -3105,6 +3818,16 @@ def kernel_local_frame_bytes(
         frame = shallow_frame if shallow else deep_frame
         if frame > frames.get(module, -1):
             frames[module] = frame
+    # Full-column statement generations compile to one of these three
+    # capacities, not to nz. All three are driver readings on V12,
+    # sm_120 / NVRTC 12.8.93, tools/thompson_generation_oracle/frame.py.
+    for dc in exp.domains:
+        if "thompson_column" in domain_kernel_modules(dc, prices_refl=prices_refl):
+            capacity = next((k for k in (64, 128, 256) if int(dc.run.nz) <= k), None)
+            if capacity is None:
+                raise ValueError("generated Thompson column capacity is 256 levels; a larger column would overwrite private working arrays")
+            frame = {64: 50016, 128: 100000, 256: 199968}[capacity]
+            frames["thompson_column"] = max(frames.get("thompson_column", 0), frame)
     return frames
 
 
@@ -3194,12 +3917,12 @@ def kf_column_workspace_bytes(
     """Device bytes the Kain-Fritsch column workspace holds, or zero.
 
     This is the term that REPLACED KF's local-memory reservation.
-    ``woof/core/kernels/kf.cu`` keeps 52 of ``kf_column``'s 54 column
+    ``woof/core/kernels/kf.cu`` keeps all 66 of ``kf_column``'s column
     arrays in a global workspace instead of the per-thread local frame,
     and ``woof/core/kf.py`` sizes that workspace to the columns it keeps
     in flight -- ``SMs x KF_TILE_BLOCKS_PER_SM x _TPB`` -- rather than to
     the resident-thread capacity the driver would have charged.  That
-    ratio is the whole saving: MEASURED on a development machine (RTX 5070 Ti, 70 SMs x
+    ratio is the whole saving: MEASURED on test host A (RTX 5070 Ti, 70 SMs x
     1,536) at nz = 49, 840.0 MiB of reservation became 174.2 MiB of
     workspace.
 
@@ -3245,8 +3968,153 @@ def column_workspace_bytes(
             + kf_column_workspace_bytes(exp, profile=profile)
             + ysu_column_workspace_bytes(exp, profile=profile)
             + shinhong_column_workspace_bytes(exp, profile=profile)
+            + thompson_fork_column_workspace_bytes(exp, profile=profile)
+            + gsd_initial_reflectivity_workspace_bytes(exp, profile=profile)
             + ntiedtke_column_workspace_bytes(exp, profile=profile)
-            + uwpbl_column_workspace_bytes(exp, profile=profile))
+            + tiedtke_column_workspace_bytes(exp)
+            + g3_column_workspace_bytes(exp, profile=profile)
+            + uwpbl_column_workspace_bytes(exp, profile=profile)
+            + column_cumulus_workspace_bytes(exp, profile=profile)
+            + satmedmf_column_workspace_bytes(exp))
+
+
+def column_cumulus_workspace_bytes(
+        exp: ExperimentConfig, *,
+        profile: DeviceLocalMemoryProfile | None = None) -> int:
+    """Device bytes the table-driven column cumulus workspace holds, or zero.
+
+    Every row of woof.core.column_cumulus.COLUMN_CUMULUS_SCHEMES (New SAS,
+    cu_physics = 96, first) keeps its column arrays in one global workspace
+    of ``slots * (nz + 2)`` floats per column in flight, sized to the
+    card's width (SMs x TILE_BLOCKS_PER_SM x BLOCK) and bounded by the
+    column count.  The formula is the launcher's own
+    (``column_cumulus.workspace_bytes``), not restated.  The worst domain:
+    the workspace is a call transient.
+
+    Zero for every configuration that selects no row of the table.
+    """
+    from woof.core.column_cumulus import (COLUMN_CUMULUS_SCHEMES,
+                                           workspace_bytes)
+
+    profile = MEASURED_LOCAL_MEMORY_PROFILE if profile is None else profile
+    worst = 0
+    for dc in exp.domains:
+        if int(dc.run.cu_physics) not in COLUMN_CUMULUS_SCHEMES:
+            continue
+        worst = max(worst, workspace_bytes(
+            int(dc.run.cu_physics), int(dc.run.nz),
+            int(dc.run.nx) * int(dc.run.ny), profile.multiprocessor_count))
+    return int(worst)
+
+
+def tiedtke_column_workspace_bytes(exp: ExperimentConfig) -> int:
+    """cu6's per-call column arenas, summed over the domains that select it.
+
+    Each arena holds the complete j rows one launch walks, as many as
+    ``woof.core.tiedtke.rows_per_launch`` admits under its byte budget;
+    the row count and the byte formula both come from that module.
+    """
+    from woof.core.tiedtke import rows_per_launch, workspace_bytes
+    total = 0
+    for dc in exp.domains:
+        if int(dc.run.cu_physics) != 6:
+            continue
+        nz, nx = int(dc.run.nz), int(dc.run.nx)
+        total += workspace_bytes(nz, nx * rows_per_launch(nz, nx, int(dc.run.ny)))
+    return total
+
+
+def g3_column_workspace_bytes(
+        exp: ExperimentConfig, *,
+        profile: DeviceLocalMemoryProfile | None = None) -> int:
+    """Device bytes the Grell 3D column workspace holds, or zero.
+
+    ``woof/core/kernels/g3.cu`` keeps CUP_enss_3d's level arrays in a
+    global workspace of ``G3_SLOT_COUNT`` slots per column in flight, and
+    ``woof/core/g3.py`` walks the written band in tiles bounded by
+    ``G3_WORKSPACE_BYTES``.  The tile and the slot count both come from
+    ``woof.core.g3``; neither is restated here.  It does not depend on the
+    device, so ``profile`` is accepted for the common signature only.
+
+    Zero for every configuration that does not select ``cu_physics = 5``.
+    """
+    from woof.core.g3 import g3_workspace_bytes
+
+    worst = 0
+    for dc in exp.domains:
+        if int(dc.run.cu_physics) != 5:
+            continue
+        worst = max(worst, g3_workspace_bytes(
+            int(dc.run.nz), int(dc.run.ny), int(dc.run.nx),
+            slots=158 + 27 + 6 * int(dc.run.maxens2)))
+    return int(worst)
+
+
+def satmedmf_column_workspace_bytes(exp: ExperimentConfig) -> int:
+    worst=0
+    for dc in exp.domains:
+        if int(dc.run.bl_pbl_physics)!=901:
+            continue
+        n,k=int(dc.run.nx)*int(dc.run.ny),int(dc.run.nz)
+        capacity=(220+16*64)*k+4096
+        per_column=capacity*8+((20+2*64)*k+23)*8
+        chunk=min(n,max(1,(512*1024*1024)//per_column))
+        # Full input/output bindings, finite-step humidity conversion and pool.
+        worst=max(worst,chunk*per_column+n*(180*k+32)*8+7501*8)
+    return int(worst)
+
+
+def thompson_fork_column_workspace_bytes(
+        exp: ExperimentConfig, *,
+        profile: DeviceLocalMemoryProfile | None = None) -> int:
+    """Device bytes of the fork Thompson unit's column arena, or zero.
+
+    thompson_version = "wrf_39_noaa" (mp_physics = 28) keeps the fork's
+    column arrays in an arena sized to the launcher's tile of threads in
+    flight (woof.core.thompson_fork: TILE_BLOCKS_PER_SM blocks of BLOCK on
+    every multiprocessor, never more than the columns need), 377 B per
+    level + 1 per thread.  The sizing is the launcher's own formula
+    (thompson_fork.workspace_bytes), so this term and the allocation are
+    one formula.  Breakage prevented: an unpriced arena of 0.86 GiB at 50
+    levels on a 188-SM card, met as an out-of-memory at the first
+    microphysics call of a run admitted near the card's limit.  The domains
+    run one at a time, so the deepest/widest domain prices it.
+    """
+    from woof.core.thompson_fork import tile_threads, workspace_bytes
+
+    profile = MEASURED_LOCAL_MEMORY_PROFILE if profile is None else profile
+    if not WRF_EXACT:
+        # The fork unit launches only under GPUWM_WRF_EXACT=1
+        # (microphysics_aerosol._apply_thompson_fork_call); a default run
+        # allocates no arena, so pricing one would refuse runs that fit.
+        return 0
+    worst = 0
+    for dc in exp.domains:
+        if (int(getattr(dc.run, "mp_physics", 0) or 0) != 28
+                or getattr(dc.run, "thompson_version", "wrf_461")
+                != "wrf_39_noaa"):
+            continue
+        threads = tile_threads(profile.multiprocessor_count,
+                               int(dc.run.nx) * int(dc.run.ny))
+        worst = max(worst, workspace_bytes(int(dc.run.nz), threads))
+    return int(worst)
+
+
+def gsd_initial_reflectivity_workspace_bytes(
+        exp: ExperimentConfig, *,
+        profile: DeviceLocalMemoryProfile | None = None) -> int:
+    """Bounded initial-history radar arena; prevents unpriced t=0 allocation.
+
+    Each enabled domain uses 87 * (nz + 1) bytes per thread in flight.
+    The same formula sizes the launcher's three device buffers.
+    Domains and host/store slabs are diagnosed sequentially.
+    """
+    from woof.core.gsd_initial_reflectivity import enabled, tile_threads, workspace_bytes
+
+    profile = MEASURED_LOCAL_MEMORY_PROFILE if profile is None else profile
+    return max((workspace_bytes(int(dc.run.nz), tile_threads(
+                    profile.multiprocessor_count, int(dc.run.nx)*int(dc.run.ny)))
+                for dc in exp.domains if enabled(dc.run)), default=0)
 
 
 def uwpbl_column_workspace_bytes(
@@ -3289,7 +4157,7 @@ def gf_column_workspace_bytes(
     ``woof/core/gf.py`` sizes that workspace to the columns it keeps in
     flight -- ``SMs x GF_TILE_BLOCKS_PER_SM x GF_BLOCK`` -- rather than to
     the resident-thread capacity the driver would have charged.  That
-    ratio is the whole saving: MEASURED on a development machine (RTX 5070 Ti, 70 SMs x
+    ratio is the whole saving: MEASURED on test host A (RTX 5070 Ti, 70 SMs x
     1,536) at the nz<=40 tier, 2,200.0 MiB of reservation became 422.1
     MiB of workspace.
 
@@ -3328,7 +4196,7 @@ def ysu_column_workspace_bytes(
     -- ``SMs x YSU_TILE_BLOCKS_PER_SM x YSU_BLOCK`` -- rather than to the
     resident-thread capacity the driver charged.
 
-    MEASURED on a development machine (a development machine, RTX 5070 Ti, 70 SMs x 1,536,
+    MEASURED on test host A (RTX 5070 Ti, 70 SMs x 1,536,
     sm_120) at nz=49 and 102,400 columns: an 842.0 MiB reservation became
     123.0 MiB of workspace, for +1.8% on the kernel's wall clock.
 
@@ -3810,7 +4678,15 @@ def shared_dycore_state_symbols() -> frozenset[str]:
     """
     from woof.io.restart import STATE_REBUILT_ATTRS
 
-    return STATE_REBUILT_ATTRS
+    # Strict mode's p_perturbation is rebuilt by a restart but CARRIED
+    # between steps in a live run: rk_step 1 reads the previous step's
+    # words without diagnosing again (core/dycore.py:_wrf_reuse_diagnostics)
+    # and every history frame writes it as P.  Shared, a two-domain strict
+    # run read the last-stepped domain's pressure in another shape: on a
+    # 9 km/3 km pair d01's history P differed from wrf.exe 4.6.1 in
+    # 527,901 of 528,000 words at 45 s and was 0 outside the nest at t = 0.
+    # Each domain keeps its own, like the carried wrf_exact_muts slot.
+    return STATE_REBUILT_ATTRS - {"p_perturbation"}
 
 
 def shared_dycore_state_workspace_shapes(
@@ -3838,9 +4714,10 @@ def shared_dycore_state_workspace_bytes(
 #: initialize_physics's own 2-D allocations before the SFCLAY/Noah unions
 #: (physics.py:935-950).
 _PHYSICS_INIT_FIELDS_2D = (
-    "landmask", "xland", "tsk", "pblh", "mavail", "lakemask",
-    "ivgtyp", "isltyp", "vegfra", "tmn", "xice", "swdown", "glw",
-    "snow", "snowh",
+    "landmask", "xland", "tsk", "sst", "pblh", "mavail", "lakemask",
+    "ivgtyp", "isltyp", "vegfra", "tmn", "xice", "xicem", "swdown", "glw",
+    "snow", "snowh", "sstsk",
+    "achfx", "aclhf", "acgrdflx",
 )
 
 
@@ -3864,6 +4741,18 @@ def physics_field_names_2d(cfg: RunConfig | None = None) -> tuple[str, ...]:
     from woof.core.physics_inventory import SFCLAY_OUTPUTS
 
     union = dict.fromkeys(_PHYSICS_INIT_FIELDS_2D)
+    if cfg is not None:
+        # WRF's ocean mixed layer carries seven planes and reads GSW.
+        from woof.surface_ocean import ocean_fields
+        if int(getattr(cfg, "sf_ocean_physics", 0)) == 2:
+            union.update(dict.fromkeys(("om_ml", "_pwp_mx", "_pwp_my", "_pwp_land")))
+        else:
+            union.update(dict.fromkeys(ocean_fields(cfg)))
+        if int(getattr(cfg, "sf_ocean_physics", 0)):
+            union["gsw"] = None
+            union.update(dict.fromkeys(("ocean_sst", "ocean_sst_change")))
+    if cfg is not None and cfg.nwp_diagnostics == 0 and not cfg.gsd_diagnostics:
+        union["refd_max"] = None
     union.update(dict.fromkeys(SFCLAY_OUTPUTS))
     if cfg is not None and int(cfg.sf_sfclay_physics) == 5:
         from woof.core.physics_inventory import MYNN_SURFACE_OUTPUTS
@@ -3876,6 +4765,19 @@ def physics_field_names_2d(cfg: RunConfig | None = None) -> tuple[str, ...]:
         from woof.core.physics_inventory import MYJ_SFCLAY_FIELDS_2D
         union.update(dict.fromkeys(MYJ_SFCLAY_FIELDS_2D))
     union.update(dict.fromkeys(NOAH_FIELDS_2D))
+    if cfg is not None and radiation_enabled(cfg):
+        from woof.core.topo_radiation import topo_shortwave_active
+        if not topo_shortwave_active(cfg):
+            union["swnorm"] = None
+    if cfg is not None:
+        from woof.config import radiation_scheme_ids
+        if radiation_scheme_ids(cfg)[1]:
+            union.update(dict.fromkeys(("swddir", "swddif", "swddni")))
+        from woof.core.physics_inventory import radiation_boundary_flux_names
+        for name in radiation_boundary_flux_names(cfg):
+            union[name] = union["ac"+name] = None
+        if "swupt" in radiation_boundary_flux_names(cfg):
+            union["coszen"] = None
     union.update(dict.fromkeys(("ebal", "kpbl")))
     if cfg is not None and int(cfg.bl_pbl_physics) == 5:
         from woof.core.physics_inventory import (
@@ -3901,6 +4803,17 @@ def physics_field_names_2d(cfg: RunConfig | None = None) -> tuple[str, ...]:
                 f"{name}_sea" for name in MYNN_SURFACE_OUTPUTS))
         union.update(dict.fromkeys(SURFACE_PRECIPITATION_FIELDS))
         union["gsw"] = None
+    if cfg is not None:
+        # A chem process that reads GSW keeps the plane outside RUC too
+        # (physics.initialize_physics, the same chem_physics_reads answer).
+        from woof.core.chem_context import chem_physics_reads
+        if "gsw" in chem_physics_reads(cfg) or int(cfg.aer_opt) == 1:
+            union["gsw"] = None
+        # Grell 3D reads GSW for its capping depth (physics.initialize_
+        # physics keeps the plane from the same table).
+        from woof.config import CU_GSW_READING_SCHEMES
+        if int(cfg.cu_physics) in CU_GSW_READING_SCHEMES:
+            union["gsw"] = None
     if cfg is not None and int(cfg.sf_surface_physics) == 4:
         from woof.core.noahmp_runtime import (
             NOAHMP_DIAGNOSTICS_2D, NOAHMP_STATE_2D, NOAHMP_STATE_INT_2D,
@@ -3950,8 +4863,29 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
     shapes: dict[str, tuple[int, ...]] = {}
     if cam_ozone:
         shapes["radiation/o33d_grid"] = m
+    shapes["fields/p_hyd"] = m
+    from woof.core.physics_inventory import scm_forcing_fields
+    for name in scm_forcing_fields():
+        shapes[f"fields/{name}"] = ()
+    if cfg.bl_pbl_physics:
+        from woof.core.physics_inventory import pbl_history_rates
+        for name in pbl_history_rates(cfg):
+            shapes[f"fields/{name}"] = m
+    if cfg.cu_physics:
+        from woof.core.physics_inventory import (CUMULUS_HISTORY_RATES,
+                                                  history_tendency_rows)
+        if history_tendency_rows():
+            for name in CUMULUS_HISTORY_RATES:
+                shapes[f"fields/{name}"] = m
     for name in physics_field_names_2d(cfg):
         shapes[f"fields/{name}"] = s2
+    if int(getattr(cfg, "sf_ocean_physics", 0)) == 2:
+        from woof.ocean.mixed_layer import PROFILE_FIELDS
+        for name in (*PROFILE_FIELDS, "_pwp_w", "_pwp_p"):
+            shapes[f"fields/{name}"] = (cfg.ocean_levels, ny, nx)
+        for name in ("_pwp_base", "_pwp_tend"):
+            shapes[f"fields/{name}"] = (4*cfg.ocean_levels, ny, nx)
+        shapes["fields/_pwp_status"] = (1,)
     n_soil = soil_layer_count(cfg)
     for name in ("smois", "tslb", "sh2o", "smcrel"):
         shapes[f"fields/{name}"] = (n_soil, ny, nx)
@@ -3986,6 +4920,12 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
         # an out buffer is supplied; this also covers the smaller init seed.
         shapes["lake/gather_work"] = (LAKE_STATE_WORDS, count)
         shapes["lake/precipitation"] = s2
+        # The column arrays' device arena (kernels/lake_support.cuh), one
+        # launch window wide, in place of the 14,400 B local frame the
+        # backing store used to charge every resident thread of the card.
+        from woof.core.lake import LAKE_ARENA_SLOTS, LAKE_LAUNCH_COLUMNS
+        shapes["lake/arena"] = (2 * LAKE_ARENA_SLOTS,
+                                max(1, min(count, LAKE_LAUNCH_COLUMNS)))
     if int(getattr(cfg, "sf_surface_mosaic", 0)) == 1:
         from woof.core.noah_mosaic import mosaic_array_shapes
         for name, (shape, dtype) in mosaic_array_shapes(
@@ -4000,6 +4940,11 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
         from woof.core.physics_inventory import MYNN_PBL_STATE_3D
         for name in MYNN_PBL_STATE_3D:
             shapes[f"fields/{name}"] = m
+        shapes["fields/tke_pbl"] = (nz + 1, ny, nx)
+    if int(cfg.bl_pbl_physics) == 11:
+        # Shin-Hong's Registry carriers TKE_PBL and EL_PBL (initialize_physics).
+        shapes["fields/tke_pbl"] = (nz + 1, ny, nx)
+        shapes["fields/el_pbl"] = m
     if int(cfg.bl_pbl_physics) == MYJ_PBL_SCHEME:
         # MYJ's carried TKE_MYJ and EL_MYJ, allocated by initialize_physics
         # for this selector only.  Missing them under-counts by 2*nz*ny*nx
@@ -4052,7 +4997,8 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
                 cfg, urban_columns=urban_columns).items():
             shapes[f"fields/{name}"] = shape
 
-    from woof.core.physics_inventory import terrain_drag_array_shapes
+    from woof.core.physics_inventory import (
+        PBL_OPTIONAL_TENDENCIES, terrain_drag_array_shapes)
     shapes.update(terrain_drag_array_shapes(cfg))
 
     stacks = ["pbl_tendencies", "radiation_tendencies", "cumulus_tendencies"]
@@ -4064,6 +5010,21 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
         shapes[f"{stack}/rv"] = (nz, ny + 1, nx)
         for comp in ("rtheta", "rqv", "rqc"):
             shapes[f"{stack}/{comp}"] = m
+    # The logical zero arrays keep their restart names, but radiation's
+    # ru/rv/rqv/rqc share one contiguous backing; held KF's ru/rv share
+    # another. Price the largest shape of each backing exactly once.
+    for stack, components in (
+            ("radiation_tendencies", ("ru", "rv", "rqv", "rqc")),
+            ("cumulus_tendencies", ("ru", "rv") if cfg.cu_physics == 1 else ())):
+        if components:
+            largest = max(components, key=lambda comp: math.prod(shapes[f"{stack}/{comp}"]))
+            for comp in components:
+                if comp != largest:
+                    shapes.pop(f"{stack}/{comp}")
+    for component in PBL_OPTIONAL_TENDENCIES.get(cfg.bl_pbl_physics, ()):
+        shapes[f"pbl_tendencies/{component}"] = m
+        if (radiation_enabled(cfg) or cfg.cu_physics) and not reuse_pbl:
+            shapes[f"tendencies/{component}"] = m
     if cfg.cu_physics:
         # Mixed-phase KF returns QR/QI/QS independently.  At bldt=0 the fresh
         # PBL stack is the composed target; positive cadence keeps the
@@ -4102,6 +5063,10 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
 
     shapes["rthratenlw"] = m
     shapes["rthratensw"] = m
+    if radiation_enabled(cfg):
+        shapes["rthraten"] = m
+    if WRF_EXACT and radiation_enabled(cfg):
+        shapes["_wrf_rthraten"] = m
     if cfg.cu_physics in CUMULUS_ADVECTIVE_FORCING_SCHEMES:
         # Raw PBL rates held for GF/New Tiedtke across calls, tile swaps
         # and checkpoints; these are distinct from coupled tendencies.
@@ -4145,6 +5110,8 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
     if not microphysics_scratch_slots(cfg.mp_physics):
         for comp in ("rainnc", "rainncv", "sr"):
             shapes[f"microphysics/{comp}"] = s2
+    from woof.core.physics_inventory import cumulus_state_layout
+    shapes.update({f"fields/{name}": shape for name, (shape, _dtype) in cumulus_state_layout(cfg).items()})
     if cfg.cu_physics == 1:
         shapes["cumulus/w0avg"] = m  # kf.py:174, WRF Registry r-flagged
         # Once-per-process lru_cache device LUT (kf.py load_kf_table +
@@ -4176,7 +5143,74 @@ def physics_array_shapes(cfg: RunConfig, *, cam_ozone: bool = False,
         # unallocated, and over-counting by one 2-D field is the safe
         # direction for a VRAM estimate.
         shapes["olr"] = s2
+    if int(getattr(cfg, "aer_opt", 0) or 0) == 1:
+        shapes["aodtot"] = s2
+        shapes["radiation/aerodm"] = (int(cfg.ny)*int(cfg.nx), 12, 12, 6)
         # Classic LW call/packing arrays are priced as transients below.
+    if ra_lw_physics in (1, 4) or ra_sw_physics == 4:
+        # The CLDFRA publication buffer (physics.py PhysicsDriver
+        # __init__): one resident (nz, ny, nx) FP32 driver persistent
+        # holding the radiation cloud fraction for output, allocated when
+        # the attached radiation callable declares ``publishes_cldfra``.
+        # RTE+RRTMGP and legacy RRTMG declare it on either spectrum, the
+        # classic RRTM longwave on its own; Dudhia alone computes no
+        # fraction.  Over-counting a caller-injected adapter that does not
+        # declare it is the safe direction for a VRAM estimate.
+        shapes["cldfra"] = m
+    if int(getattr(cfg, "ifire", 0) or 0) == 2:
+        shapes.update(fire_array_shapes(cfg))
+    return shapes
+
+
+#: Halo of the coarse spotting accumulation grids (sfire_spotting), cells.
+_SPOTTING_HALO = 4
+
+
+def fire_array_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
+    """The SFIRE coupler's resident arrays at ``ifire`` 2, as priced shapes.
+
+    The breakage this prevents: ``PhysicsDriver.fire`` (the FireCoupler) and
+    ``fire_tendencies`` were serialized by the restart manifest but priced by
+    nothing, so a refined fire grid (sr_x * sr_y fine cells per column, 43
+    padded fine planes) could be admitted on a card it does not fit.
+
+    Every count is the inventory of an actual FireCoupler read on an RTX
+    4090 (tests/test_sfire_preflight_price_gpu.py re-reads it and requires
+    these shapes to equal the allocated bytes): 43 padded fine float32
+    planes; coarse planes (20 without spotting, 12 with it, whose particle
+    owner replaces eight); two coarse 3-D heating tendencies; the two
+    staggered fire winds; the moisture model's three (nfmc, ny, nx) class
+    fields, one (2, ny, nx) pair and one scalar; and with spotting the
+    unpadded fine landing field, eight halo-4 coarse accumulators, eleven
+    particle vectors of fs_array_maxsize and a three-word counter.  Integer
+    arrays are int32, so every entry prices at four bytes a word.
+    """
+    nz, ny, nx = int(cfg.nz), int(cfg.ny), int(cfg.nx)
+    sr_x, sr_y = int(cfg.sr_x), int(cfg.sr_y)
+    fine_y, fine_x = ny * sr_y, nx * sr_x
+    spotting = int(getattr(cfg, "fs_firebrand_gen_lim", 0) or 0) > 0
+    shapes = {
+        "fire/fine_padded": (43, fine_y + 2, fine_x + 2),
+        "fire/coarse": (12 if spotting else 20, ny, nx),
+        "fire/heating": (2, nz, ny, nx),
+        "fire/uah": (ny, nx + 1),
+        "fire/vah": (ny + 1, nx),
+        "fire/moisture_classes": (3, int(cfg.nfmc), ny, nx),
+        "fire/moisture_pair": (2, ny, nx),
+        "fire/lfn_time": (1,),
+        # PhysicsTendencies.zeros: ru, rv and three mass-point scalars.
+        "fire_tendencies/ru": (nz, ny, nx + 1),
+        "fire_tendencies/rv": (nz, ny + 1, nx),
+        "fire_tendencies/scalars": (3, nz, ny, nx),
+    }
+    if spotting:
+        halo = 2 * _SPOTTING_HALO
+        shapes.update({
+            "fire/spotting_landing": (fine_y, fine_x),
+            "fire/spotting_coarse": (8, ny + halo, nx + halo),
+            "fire/spotting_particles": (11, int(cfg.fs_array_maxsize)),
+            "fire/spotting_counter": (3,),
+        })
     return shapes
 
 
@@ -4292,6 +5326,17 @@ def mynn_pbl_scratch_bytes_for(cfg: RunConfig) -> int:
     return total
 
 
+def _wsm_family_selectors() -> frozenset[int]:
+    from woof.core.wsm_family import family_selectors
+    return family_selectors()
+
+
+def _wsm_family_preparation_slots() -> tuple[str, ...]:
+    from woof.core.wsm_family import preparation_slots
+    return tuple(slot for mp in _wsm_family_selectors()
+                 for slot in preparation_slots(mp))
+
+
 def scratch_slot_registry(cfg: RunConfig, *,
                           n_lbc_intervals: int = 0,
                           tile_buffer: bool = False
@@ -4312,6 +5357,17 @@ def scratch_slot_registry(cfg: RunConfig, *,
     fl = (nz + 1, ny, nx)
     s2 = (ny, nx)
     slots: dict[str, tuple[int, ...]] = {}
+    from woof.core.hail import scratch_shapes as hail_scratch_shapes
+    slots.update(hail_scratch_shapes(cfg))
+    from woof.core.output_diagnostics import scratch_shapes as output_shapes
+    slots.update(output_shapes(cfg))
+    if cfg.lightning_option:
+        from woof.lightning_contract import LIGHTNING_OPTIONS
+        slots.update({"ltng_" + k: s2 for k in LIGHTNING_OPTIONS[cfg.lightning_option]["fields"]})
+        slots.update(ltng_iccg_in_num=(12, ny, nx), ltng_iccg_in_den=(12, ny, nx),
+                     ltng_ltngacttime=(1,), ltng_calendar=(6,), ltng_lat=s2, ltng_lon=s2)
+        if cfg.lightning_option == 11:
+            slots["ltng_ktop_deep"] = s2
 
     # dycore.py rk stage fluxes (:102, :154-155) + integration health
     # (:1471-1474; nblocks = min(256, max(1, ceil(largest/256)))).
@@ -4321,18 +5377,21 @@ def scratch_slot_registry(cfg: RunConfig, *,
     slots["integration_health_partial"] = (nblocks, 9)
     slots["integration_health_result"] = (8,)
     # health.py StateHealthValidator: descriptor metadata and compact result.
-    # These are always the fixed MAX_HEALTH_FIELDS footprint, independent of
-    # case size; inventory additions fail at that explicit cap.
-    from woof.core.health import MAX_HEALTH_FIELDS
-    health_words = (MAX_HEALTH_FIELDS * 2,)
+    # These are the fixed descriptor-ceiling footprint, independent of case
+    # size; inventory additions fail at that explicit cap (MAX_HEALTH_FIELDS,
+    # or FSBM_HEALTH_FIELDS on a FAST_SBM domain -- health.py).
+    from woof.core.health import health_field_ceiling_for_config
+    ceiling = health_field_ceiling_for_config(cfg)
+    health_words = (ceiling * 2,)
     slots.update(
         integration_health_field_ptr=health_words,
         integration_health_aux_ptr=health_words,
         integration_health_field_size=health_words,
-        integration_health_bounds=(MAX_HEALTH_FIELDS, 2),
-        integration_health_flags=(MAX_HEALTH_FIELDS,),
-        integration_health_planes=(MAX_HEALTH_FIELDS,),
+        integration_health_bounds=(ceiling, 2),
+        integration_health_flags=(ceiling,),
+        integration_health_planes=(ceiling,),
         integration_health_status_bits=health_words,
+        integration_health_rim=(ceiling, 3),
         integration_health_validation=(4,),
     )
     if int(getattr(cfg, "zadvect_implicit", 0) or 0) > 0:
@@ -4347,6 +5406,18 @@ def scratch_slot_registry(cfg: RunConfig, *,
     slots.update(acoustic_mu_pp_old=s2, acoustic_th_pp_old=m,
                  acoustic_c2a=m, acoustic_a=fl, acoustic_alpha=fl,
                  acoustic_gamma=fl)
+    from woof.wrf_exact import ENABLED as wrf_exact
+    if wrf_exact:
+        slots["acoustic_wrf_muts"] = s2
+        # Strict mode's own allocations: the step-carried acoustic mass
+        # (dycore.py WRF_MUTS_SLOT, WRF_MU_HALO_SLOT on state.mup's plane),
+        # calc_ww_cp's coupled face fluxes (dycore.py:_calc_ww_cp_fluxes)
+        # and the one held species source WRF's rk_update_scalar forms
+        # (moist.py:_advance_species_wrf).
+        slots.update(wrf_exact_muts=s2, wrf_exact_mu_halo=s2,
+                     rk_ww_ru=xs, rk_ww_rv=ys)
+        if cfg.moist:
+            slots["moist_sc_t"] = m
     if cfg.moist and cfg.moist_cq:
         # acoustic.py:prepare_moist_cq.  These stage-fixed face arrays alias
         # the disjoint advection-only adv_ru/rv/rw arena backings below.
@@ -4358,13 +5429,15 @@ def scratch_slot_registry(cfg: RunConfig, *,
     if cfg.emdiv > 0.0:
         slots.update(acoustic_mudf=s2)
 
-    if cfg.moist or cfg.km_opt == 2:
-        # dycore.py acoustic time-averaged mass fluxes (moist scalars
-        # and/or the km_opt=2 TKE carrier advect with them).
+    chem_on = bool(getattr(cfg, "chem_sets", ""))
+    if cfg.moist or cfg.km_opt == 2 or chem_on or (cfg.bl_pbl_physics == 5 and cfg.bl_mynn_tkeadvect):
+        # dycore.py acoustic time-averaged mass fluxes (moist scalars,
+        # the km_opt=2 TKE carrier and the chem rows advect with them;
+        # dycore.step accumulates them for a chem state even when dry).
         slots.update(rk_ru_m=xs, rk_rv_m=ys, rk_ww_m=fl)
         slots["moist_rq_t"] = m                     # moist.py:247
         allocated = state_array_shapes(cfg)
-        if "qi" in allocated and "qs" not in allocated:
+        if "qi" in allocated and "qg" not in allocated:
             # woof/core/moist.py::absent_mass_plane.  The two fused
             # moist-array sums (calc_cq, slow_buoyancy's q_total) select
             # their species by an integer mode with no one-ice-mass arm,
@@ -4377,21 +5450,37 @@ def scratch_slot_registry(cfg: RunConfig, *,
             # module must stay importable without cupy;
             # tests/test_p3_port.py pins it to moist.ABSENT_MASS_SLOT.
             slots["moist_absent_mass"] = m
-        pd = ((cfg.moist and cfg.moist_adv_opt == 1) or cfg.km_opt == 2)             and not (cfg.open_x or cfg.open_y)
-        if pd:
+        pd = ((cfg.moist and cfg.moist_adv_opt == 1) or cfg.km_opt == 2
+              or (cfg.bl_pbl_physics == 5 and cfg.bl_mynn_tkeadvect
+                  and cfg.scalar_adv_opt == 1)) and not (cfg.open_x or cfg.open_y)
+        # woof/core/chem_transport.py: the chem rows' limited final stage
+        # borrows the same six face buffers and fold copy, positive
+        # definite (chem_adv_opt 1, not on open domains) or monotonic (2).
+        chem_limited = chem_on and (
+            cfg.chem_adv_opt == 2
+            or (cfg.chem_adv_opt == 1 and not (cfg.open_x or cfg.open_y)))
+        if pd or chem_limited:
             slots.update(pd_fxl=xs, pd_fxc=xs, pd_fyl=ys, pd_fyc=ys,
                          pd_fzl=fl, pd_fzc=fl)      # moist.py:283-288
             slots["moist_pd_q0"] = m                # moist.py:197
+        if chem_on and cfg.chem_adv_opt == 2:
+            from woof.core.chem_context import (
+                MONO_IMPLICIT_SLOT, MONO_SCRATCH_SLOTS,
+            )
+            for slot in MONO_SCRATCH_SLOTS:
+                slots[slot] = m
+            slots[MONO_IMPLICIT_SLOT] = fl
         if cfg.specified:
             from woof.boundary_fields import potential_external_scalar_fields
             for name in potential_external_scalar_fields(cfg):
                 slots[f"lbc_{name}_held"] = m
 
-    if cfg.nwp_diagnostics == 1:
+    if cfg.nwp_diagnostics == 1 or cfg.gsd_diagnostics == 1:
         # woof/core/uh_diag.py: the serialized UP_HELI_MAX running max
         # (eagerly allocated by DomainState.__init__) plus two per-launch
         # work planes (column UH and the use_column flags).
         slots.update(up_heli_max=s2, uh_diag_col=s2, uh_diag_use=s2)
+    if cfg.nwp_diagnostics == 1:
         # The two consumer-owned tracking windows (woof/core/uh_diag.py:
         # TRACKER_WINDOW_SLOTS).  Priced on the same gate that allocates
         # them, because they are allocated whenever the diagnostic runs
@@ -4407,12 +5496,56 @@ def scratch_slot_registry(cfg: RunConfig, *,
         slots.update(mp_th=m, mp_rho=m, mp_pii=m, mp_z=m, mp_dz8w=m,
                      mp_z8w=fl, mp_rainnc=s2, mp_rainncv=s2,
                      mp_kessler_sr=s2)
+    if cfg.mp_physics == 2:
+        slots.update(lin_theta=m,lin_rho=m,lin_pii=m,lin_dz=m,lin_z=m,lin_z8w=fl,
+                     mp_rainnc=s2,mp_rainncv=s2,mp_snownc=s2,mp_snowncv=s2,
+                     mp_graupelnc=s2,mp_graupelncv=s2,mp_sr=s2,refl_t=m,refl_10cm=m)
+    if cfg.mp_physics == 5:
+        # woof/core/fer_hires.py::apply: the WRF preparation bracket, the
+        # three canonical surface slots and the scheme's own reflectivity.
+        slots.update(mp_th=m, mp_rho=m, mp_pii=m, mp_dz8w=m, mp_z8w=fl,
+                     mp_rainnc=s2, mp_rainncv=s2, mp_sr=s2, refl_10cm=m)
+    if cfg.mp_physics == 3:
+        # wsm3.py preparation (w on the lower faces included), persistent
+        # precipitation, and the due reflectivity with its phase-split
+        # inputs (woof.core.refl.wsm3_precipitation_phases).
+        slots.update(wsm3_theta=m, wsm3_rho=m, wsm3_pii=m, wsm3_dz=m,
+                     wsm3_z8w=fl, wsm3_w=m, mp_rainnc=s2, mp_rainncv=s2,
+                     mp_snownc=s2, mp_snowncv=s2, mp_sr=s2, refl_t=m,
+                     refl_10cm=m, refl_wsm3_rain=m, refl_wsm3_snow=m,
+                     refl_wsm3_graupel=m)
+    from woof.core.column_schemes import COLUMN_SCHEMES
+    row = COLUMN_SCHEMES.get(cfg.mp_physics)
+    if row is not None:
+        slots.update(mpcol_theta=m, mpcol_rho=m, mpcol_pii=m, mpcol_dz=m,
+                     mpcol_z8w=fl, refl_t=m, refl_10cm=m)
+        slots.update({name: s2 for name in row.surface})
     if cfg.mp_physics == 6:
         # wsm6.py preparation, persistent precipitation and due reflectivity.
         slots.update(wsm6_theta=m, wsm6_rho=m, wsm6_pii=m, wsm6_dz=m,
                      wsm6_z8w=fl, mp_rainnc=s2, mp_rainncv=s2,
                      mp_snownc=s2, mp_snowncv=s2, mp_graupelnc=s2,
                      mp_graupelncv=s2, mp_sr=s2, refl_t=m, refl_10cm=m)
+    if cfg.mp_physics == 106:
+        # wsm6._apply_wsm6r: the shared preparation, fallk's (3, nz, ny, nx)
+        # fall-speed scratch, RAINNC/RAINNCV/SR and due reflectivity.
+        slots.update(wsm6r_theta=m, wsm6r_rho=m, wsm6r_pii=m, wsm6r_dz=m,
+                     wsm6r_z8w=fl, wsm6r_work=(3,) + m, mp_rainnc=s2,
+                     mp_rainncv=s2, mp_sr=s2, refl_t=m, refl_10cm=m)
+    if cfg.mp_physics in _wsm_family_selectors():
+        # woof/core/wsm_family.py::apply -- the WRF driver preparation
+        # under the row's name, one (nz+1) interface plane, the
+        # accumulator pair of every precipitating class the row carries,
+        # SR, and the due reflectivity.
+        from woof.core.wsm_family import row as _wsm_row
+        _r = _wsm_row(cfg.mp_physics)
+        slots.update({f"{_r.name}_theta": m, f"{_r.name}_rho": m,
+                      f"{_r.name}_pii": m, f"{_r.name}_dz": m,
+                      f"{_r.name}_z8w": fl, "mp_sr": s2,
+                      "refl_t": m, "refl_10cm": m})
+        for _cls in _r.precip:
+            slots[f"mp_{_cls}nc"] = s2
+            slots[f"mp_{_cls}ncv"] = s2
     if cfg.mp_physics == 6 and cfg.ny == 1:
         # mpas_column_batch.py:769-773 (run_phase2 adapter pair):
         # alt = 1/rho_dry and php = z_interface*g, fully rewritten by every
@@ -4429,8 +5562,8 @@ def scratch_slot_registry(cfg: RunConfig, *,
                      wdm6_z8w=fl, wdm6_count_status=(1,), mp_rainnc=s2, mp_rainncv=s2,
                      mp_snownc=s2, mp_snowncv=s2, mp_graupelnc=s2,
                      mp_graupelncv=s2, mp_sr=s2, refl_t=m, refl_10cm=m)
-    if cfg.mp_physics == 8:
-        # microphysics.py:_apply_thompson preparation,
+    if cfg.mp_physics == 8 and not WRF_EXACT:
+        # microphysics.py:_apply_thompson_default preparation,
         # persistent precipitation, output-due private graupel-number shadow,
         # and Thompson REFL_10CM staging.  The three reference fields are
         # deliberately distinct registry entries even where the runtime can
@@ -4453,6 +5586,49 @@ def scratch_slot_registry(cfg: RunConfig, *,
             # floor: one float32 per column.
             mp_thompson_micro_columns=s2,
         )
+        if getattr(cfg, "thompson_cloud_surface_booking", False) is True:
+            # Correct mode WB1 (woof/core/thompson_cloud_booking.py): the
+            # settled-cloud total and its per-call amount.
+            slots.update(mp_cloudnc=s2, mp_cloudncv=s2)
+    elif cfg.mp_physics == 8:
+        # GPUWM_WRF_EXACT=1 (microphysics._apply_thompson_strict):
+        # woof/core/thompson_classic.py:apply_classic, the slots it draws,
+        # from its own lists: theta, Exner, temperature, layer depths, the
+        # pre-microphysics theta, the private graupel number, the
+        # plane-stacked tendency / working / column buffers, the int32 cell
+        # and column flags, persistent precipitation and REFL_10CM staging.
+        from woof.core import thompson_classic as tcl
+        for name, planes in tcl.SCRATCH_VOLUME_SLOTS:
+            slots[name] = (planes * cfg.nz, ny, nx)
+        for name, planes in tcl.SCRATCH_INTERFACE_SLOTS:
+            slots[name] = (planes * (cfg.nz + 1), ny, nx)
+        for name in tcl.SCRATCH_INT_VOLUME_SLOTS:
+            slots[name] = m
+        for name in tcl.SCRATCH_INT_SURFACE_SLOTS:
+            slots[name] = s2
+        slots.update(
+            mp_rainnc=s2, mp_rainncv=s2, mp_snownc=s2, mp_snowncv=s2,
+            mp_graupelnc=s2, mp_graupelncv=s2, mp_sr=s2, refl_10cm=m,
+        )
+        if getattr(cfg, "thompson_cloud_surface_booking", False) is True:
+            # Correct mode WB1 (woof/core/thompson_cloud_booking.py): the
+            # settled-cloud total and its per-call amount.
+            slots.update(mp_cloudnc=s2, mp_cloudncv=s2)
+    if cfg.mp_physics == 30:
+        from woof.core.fast_sbm_contract import STATE_FIELDS
+        slots.update(mp_th=m,mp_rho=m,mp_pii=m,mp_dz8w=m,mp_z8w=fl,
+            mp_rainnc=s2,mp_rainncv=s2,mp_snownc=s2,mp_snowncv=s2,
+            mp_graupelnc=s2,mp_graupelncv=s2,mp_sr=s2)
+        ni,nk,nj=nx+2,nz+1,ny+2
+        columns=(nx-2*max(int(cfg.spec_zone),0))*(ny-2*max(int(cfg.spec_zone),0)) if cfg.specified or cfg.nested else nx*ny
+        n=ni*nk*nj
+        slots.update(fsbm_dims=(18,),fsbm_pointers=(len(STATE_FIELDS),),
+            fsbm_work=(7*n+2*columns*(nz+2),),fsbm_cloud_base=(columns,),
+            fsbm_tally=(columns,17),fsbm_status=(columns,))
+        surfaces={"xland","rainnc","rainncv","snownc","snowncv","graupelnc","graupelncv"}
+        for name in STATE_FIELDS:
+            slots["fsbm_frame_"+name]=((143,nj,nk,ni) if name=="chem" else
+                ((nj,ni) if name in surfaces else (nj,nk,ni)))
     if cfg.mp_physics == 50:
         # P3 one-category (woof/core/p3.py::apply).  The WRF preparation
         # bracket, five precipitation slots and the reflectivity staging,
@@ -4502,7 +5678,23 @@ def scratch_slot_registry(cfg: RunConfig, *,
             p3_flags=(2, ny, nx),
             refl_10cm=m,
         )
-    if cfg.mp_physics == 28:
+    if (WRF_EXACT and cfg.mp_physics == 28
+            and getattr(cfg, "thompson_version", "wrf_461") == "wrf_39_noaa"):
+        # Under GPUWM_WRF_EXACT=1 the operational fork's Thompson
+        # (thompson_version = "wrf_39_noaa") runs as one column unit (woof/core/kernels/thompson_fork.cu) that
+        # holds the fork's tendencies and working arrays per column in its
+        # column arena (priced by thompson_fork_column_workspace_bytes, not
+        # here).  Its adapter
+        # (microphysics_aerosol._apply_thompson_fork_call) draws exactly
+        # microphysics_aerosol.FORK_SCRATCH_SLOTS: the preparation bracket,
+        # the seven precipitation slots and the reflectivity staging.
+        slots.update(
+            mp_th=m, mp_pii=m, mp_dz8w=m, mp_z8w=fl,
+            mp_rainnc=s2, mp_rainncv=s2, mp_snownc=s2, mp_snowncv=s2,
+            mp_graupelnc=s2, mp_graupelncv=s2, mp_sr=s2,
+            refl_10cm=m,
+        )
+    elif cfg.mp_physics == 28:
         # Thompson AEROSOL-AWARE (mp=28).  A deliberate near-clone of the
         # mp=8 block above -- the aerosol adapter reuses every classic
         # preparation, precipitation, melt-marker and reflectivity slot with
@@ -4529,6 +5721,10 @@ def scratch_slot_registry(cfg: RunConfig, *,
             # floor: one float32 per column.
             mp_thompson_micro_columns=s2,
         )
+        if getattr(cfg, "thompson_cloud_surface_booking", False) is True:
+            # Correct mode WB1 (woof/core/thompson_cloud_booking.py): the
+            # settled-cloud total and its per-call amount, as for mp=8.
+            slots.update(mp_cloudnc=s2, mp_cloudncv=s2)
         # --- The aerosol working set -------------------------------------
         # WRF runs mp=28 as ONE monolithic column loop that freezes
         # nc1d/nwfa1d/nifa1d at entry (module_mp_thompson.F:1795-1812),
@@ -4553,11 +5749,22 @@ def scratch_slot_registry(cfg: RunConfig, *,
         #   nwfa_work_m3           -- the :3211 working CCN snapshot, which
         #       has no 9999E6 ceiling, uses tau+1 density and feeds
         #       activ_ncloud only.
-        #   qc_entry               -- frozen qc1d, required by the ncten
-        #       balance limiter (:2996-3019), which needs BOTH the entry and
-        #       the post-source cloud mass.
-        #   ni_entry               -- frozen ni1d, credited to ncten by the
-        #       cloud-ice melt branch of the final phase cleanup (:3943-3966).
+        #   qcten                  -- WRF's cloud water accumulator
+        #       (:1670 zero, :3975 apply), written by every stage that moves
+        #       cloud water so the cloud is rounded once per call.  The entry
+        #       cloud itself needs no copy: state.qc stays qc1d until :3975.
+        #   qrten/nrten/qiten/niten -- v4.6.1 generation: WRF's rain and
+        #       ice accumulators, applied once with the :4023-4053 bounds
+        #       (state.qr/nr/qi/ni stay the entry state, so no copy).
+        #   ni_entry               -- fork generation only: frozen ni1d,
+        #       credited to ncten by the cloud-ice melt branch of the final
+        #       phase cleanup (:3943-3966), whose sources write ni in place.
+        #   qvten/tten             -- v4.6.1 generation: WRF's vapour and
+        #       temperature accumulators (:1668-1669 zero), written by the
+        #       two source networks, the condensation and the rain
+        #       evaporation, each of which re-forms qv1d + DT*qvten and
+        #       t1d + DT*tten as WRF does (state.qv stays qv1d until the
+        #       rain evaporation has run, so no copy).
         #   condensation_rate      -- prw_vcd, held so rain evaporation can
         #       reproduce the :3502 gate that suppresses evaporation in a
         #       cell that just condensed.
@@ -4573,10 +5780,25 @@ def scratch_slot_registry(cfg: RunConfig, *,
             mp_thompson_aero_entry_density=m,
             mp_thompson_aero_tau1_density=m,
             mp_thompson_aero_nwfa_work_m3=m,
-            mp_thompson_aero_qc_entry=m,
-            mp_thompson_aero_ni_entry=m,
+            mp_thompson_aero_qcten=m,
             mp_thompson_aero_condensation_rate=m,
         )
+        if getattr(cfg, "thompson_version", "wrf_461") == "wrf_39_noaa":
+            # The fork keeps its in-place rain and ice: no rain or ice
+            # accumulator, and the entry ice number held for the cleanup.
+            slots.update(mp_thompson_aero_ni_entry=m)
+        else:
+            slots.update(
+                mp_thompson_aero_qrten=m,
+                mp_thompson_aero_nrten=m,
+                mp_thompson_aero_qiten=m,
+                mp_thompson_aero_niten=m,
+                mp_thompson_aero_qvten=m,
+                mp_thompson_aero_tten=m,
+                mp_thompson_aero_qsten=m,
+                mp_thompson_aero_qgten=m,
+                mp_thompson_aero_ngten=m,
+            )
     if cfg.mp_physics == 9:
         # milbrandt2.py::apply -- the WRF prep pair, the thirteen scratch
         # volumes the six kernels hand to one another (Part 1 leaves DZ/iDZ
@@ -4603,13 +5825,26 @@ def scratch_slot_registry(cfg: RunConfig, *,
                      # float32 the arena estimator otherwise never saw.
                      my2_zet_t=m)
     if cfg.mp_physics == 10:
-        # morrison.py apply (prep + accumulators) + refl.py:324-325.
-        # morr_z8w is no longer allocated: the fused preparation kernel
-        # (morrison_prepare_fields) forms each dz in registers.  It stays
-        # priced, an over-estimate of (nz + 1) * ny * nx * 4 bytes, until
-        # the d01 calibration fixture (measured with it) is re-measured.
-        slots.update(morr_theta=m, morr_rho=m, morr_pii=m, morr_dz=m,
-                     morr_ice_to_snow=m, morr_z8w=fl,
+        # woof/core/morrison.py apply, the slots it draws from its own
+        # lists (morrison_constants, CPU-only): the WRF preparation fields,
+        # the WORK stack for one column call (tendencies, the scheme's
+        # temperature, the stage hand-offs; the scheme runs in
+        # ceil(ncol / NWORK)-column calls, so WORK is one volume plus at
+        # most NWORK * nz values), the int32 LTRUE column flag, persistent
+        # precipitation and REFL_10CM staging with refl_t, the post-call
+        # temperature each column call copies out of its WORK plane.
+        # morr_z8w is not allocated: the preparation kernel forms each dz
+        # in registers.  It stays priced, an over-estimate of
+        # (nz + 1) * ny * nx * 4 bytes, until the d01 calibration fixture
+        # (measured with it) is re-measured.
+        from woof.core import morrison_constants as mo
+        for name in mo.SCRATCH_VOLUME_SLOTS:
+            slots[name] = m
+        slots[mo.SCRATCH_WORK_SLOT] = mo.work_slot_shape(cfg.nz, ny * nx)
+
+        for name in mo.SCRATCH_INT_SURFACE_SLOTS:
+            slots[name] = s2
+        slots.update(morr_z8w=fl,
                      mp_rainnc=s2, mp_rainncv=s2, mp_snownc=s2,
                      mp_snowncv=s2, mp_graupelnc=s2, mp_graupelncv=s2,
                      mp_sr=s2, refl_t=m, refl_10cm=m)
@@ -4619,6 +5854,22 @@ def scratch_slot_registry(cfg: RunConfig, *,
         # shapes from the single-source helper).
         # physics_inventory, not microphysics: that module imports cupy
         # at module scope and this registry is priced on CPU-only installs.
+        from woof.core.physics_inventory import spec_zone_ring_save_slots
+        slots.update(spec_zone_ring_save_slots(cfg))
+    from woof.microphysics_schemes import scheme as _named_mp_scheme
+    if _named_mp_scheme(cfg.mp_physics) is not None:
+        # A NAMED scheme's adapter (woof/core/<name>.py): the shared mp_*
+        # preparation slots, its own temperature / w / graupel-volume work
+        # planes, the standard precipitation slots and the reflectivity
+        # handoff.  The column work area lives in the runtime, batched to
+        # WOOF_TEMPO_WORK_BYTES, outside the arena.
+        slots.update(
+            mp_th=m, mp_pii=m, mp_dz8w=m, mp_z8w=fl,
+            mp_tempo_temperature=m, mp_tempo_w=m, mp_tempo_qb=m,
+            mp_rainnc=s2, mp_rainncv=s2, mp_snownc=s2, mp_snowncv=s2,
+            mp_graupelnc=s2, mp_graupelncv=s2, mp_sr=s2,
+            refl_10cm=m,
+        )
         from woof.core.physics_inventory import spec_zone_ring_save_slots
         slots.update(spec_zone_ring_save_slots(cfg))
     if cfg.mp_physics == 18:
@@ -4642,14 +5893,19 @@ def scratch_slot_registry(cfg: RunConfig, *,
         # mass-shaped, filled and consumed inside one operator call.
         slots.update(da_nssl_rho=m, da_nssl_t=m)
 
-    if cfg.km_opt in (2, 3, 4):
+    from woof.config import wrf_mixing_package_active
+    mixing_package = wrf_mixing_package_active(cfg)
+    if mixing_package:
         slots.update(smag_km=m, smag_kh=m)
         if cfg.diff_opt == 1:
             slots.update(diff1_theta_initial=m, diff1_theta_work=m,
                          smag_mut=s2)
-    if cfg.km_opt in (2, 3):
+    if getattr(cfg, "sf_lake_physics", 0):
+        slots["physics_lake_precipitation"] = s2
+    if cfg.km_opt in (2, 3) or (mixing_package and cfg.km_opt == 1):
         # These closures carry the vertical exchange-coefficient pair; BN2
         # borrows the diff6_x face-workspace prefix and needs no slot.
+        # km_opt=1 keeps its kvdif pair there (launch_wrf_isotropic_km).
         slots.update(smag_kmv=m, smag_khv=m)
     if cfg.km_opt == 2:
         # Prognostic-TKE forward tendency, its doubling temporary, and the
@@ -4668,10 +5924,12 @@ def scratch_slot_registry(cfg: RunConfig, *,
                 tke_budget_mu0=s2, tke_budget_mu=s2,
                 tke_budget_acc=(len(TERMS), nz),
                 tke_budget_steps=(1,))
-    if cfg.km_opt in (2, 3, 4) or cfg.diff_6th_opt:
+    if mixing_package or cfg.diff_6th_opt:
         # dycore.py prepare_fixed_tendencies: carrying WRF forward
         # tendencies shared by Smagorinsky and sixth-order diffusion.
         slots.update(smag_ru=xs, smag_rv=ys, smag_rw=fl, smag_rth=m)
+        if cfg.bl_pbl_physics == 5 and cfg.bl_mynn_tkeadvect:
+            slots["smag_rqke_adv"] = m
         if cfg.moist:
             for name in ("qv", "qc", "qr"):
                 slots["smag_r" + name] = m
@@ -4703,8 +5961,20 @@ def scratch_slot_registry(cfg: RunConfig, *,
             # prepare_fixed_tendencies never writes, inflating the
             # headroom estimate on the card the estimate exists to
             # protect.  P3's own row is the mp == 50 arm below.
-            if cfg.mp_physics in (6, 8, 9, 10, 16, 18, 28):
+            from woof.core.column_schemes import COLUMN_SCHEMES
+            column_row = COLUMN_SCHEMES.get(int(cfg.mp_physics))
+            if column_row is not None:
+                for name in column_row.species:
+                    if name not in ("qv", "qc", "qr"):
+                        slots["smag_r" + name] = m
+            if cfg.mp_physics in (2, 6, 8, 9, 10, 16, 18, 28, 30, 106):
                 for name in ("qi", "qs", "qg"):
+                    slots["smag_r" + name] = m
+            if cfg.mp_physics == 30:
+                from woof.core.fast_sbm_contract import EXTRA_SPECIES
+                for name in EXTRA_SPECIES: slots["smag_r"+name]=m
+            if cfg.mp_physics == 24:
+                for name in ("qi", "qs", "qg", "qh"):
                     slots["smag_r" + name] = m
             if cfg.mp_physics == 9:
                 # One held tendency per TRANSPORTED species beyond the
@@ -4729,6 +5999,9 @@ def scratch_slot_registry(cfg: RunConfig, *,
             if cfg.mp_physics == 10:
                 for name in ("nr", "ni", "ns", "ng"):
                     slots["smag_r" + name] = m
+            if cfg.mp_physics == 5:
+                # woof/core/moist.py::FERRIER_SPECIES.
+                slots["smag_rqi"] = m
             if cfg.mp_physics == 50:
                 # One held tendency per TRANSPORTED species, and the set is
                 # woof/core/moist.py::P3_SPECIES -- which is what
@@ -4740,7 +6013,22 @@ def scratch_slot_registry(cfg: RunConfig, *,
                 for name in ("qh", "qndrop", "qnr", "qni", "qns", "qng",
                              "qnh", "qnn", "qvolg", "qvolh"):
                     slots["smag_r" + name] = m
-    if cfg.km_opt in (2, 3, 4) or cfg.diff_6th_opt:
+            # A named scheme (woof.microphysics_schemes): one held tendency
+            # per species its capability row transports -- the same rows
+            # moist.extra_moist_species returns for it.
+            named = _NAMED_MP_ROWS_BY_ID.get(int(cfg.mp_physics))
+            if named is not None:
+                for name in (named.ice_mass_species + named.moment_species
+                             + named.aerosol_species):
+                    slots["smag_r" + name] = m
+        if getattr(cfg, "chem_sets", ""):
+            # One held tendency per transported chem row, dry state or
+            # moist: dycore._smag2d_specs appends the chem rows whenever
+            # the state carries chem (their slots are smag_rchem_<row>).
+            from woof.chem_table import load as load_chem_table
+            for row in load_chem_table(cfg).transported:
+                slots["smag_r" + row.state_attr] = m
+    if mixing_package or cfg.diff_6th_opt:
         # Smagorinsky reuses the x/y face workspaces for u/v staging,
         # W stresses and metric scalar fluxes (km_opt=3 stages BN2 in the
         # diff6_x prefix during the K computation); sixth-order diffusion
@@ -4795,9 +6083,9 @@ def scratch_slot_registry(cfg: RunConfig, *,
         # and_not_the_present_ice_one, which measures the prep's own
         # scratch requests on a real mp=50 state; before it existed that
         # edit left this whole module green.
-        if cfg.mp_physics not in (6, 8, 9, 10, 16, 18, 28, 50):
+        if cfg.mp_physics not in (2, 5, 6, 8, 9, 10, 16, 18, 24, 28, 30, 50, 106):
             slots["physics_qi"] = m                 # physics.py:1541-1545
-        if cfg.mp_physics not in (6, 8, 9, 10, 16, 18, 28):
+        if cfg.mp_physics not in (2, 6, 8, 9, 10, 16, 18, 24, 28, 30, 106):
             slots["physics_qs"] = m                 # physics.py:1546-1550
     # FOUR producers write this one uint32 word and the disjunction has to
     # name every one of them: YSU (physics.py:_run_ysu), Shin-Hong
@@ -4895,6 +6183,19 @@ def scratch_slot_registry(cfg: RunConfig, *,
         if cfg.specified and n_lbc_intervals > 0:
             slots["lbc_forcing_tables"] = (
                 n_lbc_intervals * lbc_interval_values(cfg),)
+        if cfg.specified and getattr(cfg, "chem_sets", ""):
+            # WRF-Chem's chem_b/chem_bt of the rows a data-store source
+            # fills (have_bcs_chem): the outer row of every side, packed
+            # per served interval for the chem flow boundary launch
+            # (lateral_bc.chem_boundary_rows), one row per transported row.
+            from woof.chem_source_init import chem_boundary_fields
+            from woof.chem_table import load as load_chem_table
+            from woof.ingest.lateral_bc import CHEM_BOUNDARY_SLOTS
+            table = load_chem_table(cfg)
+            if chem_boundary_fields(table, cfg):
+                rows = len(table.transported)
+                for index, slot in enumerate(CHEM_BOUNDARY_SLOTS):
+                    slots[slot] = (rows, nz, ny if index < 4 else nx)
     elif cfg.nested:
         # Rolling tables themselves live in the F4/F16 nest manifest.
         # Only the tiny Davies weights and MU finalizer frame use the legacy
@@ -4909,6 +6210,21 @@ def scratch_slot_registry(cfg: RunConfig, *,
         # largest field only when horizontal extents exceed nz; retain the
         # true maximum so valid skinny/high-top grids remain capacity-safe.
         slots["lbc_nested_relax"] = _full_field_capacity(cfg)
+        if WRF_EXACT:
+            # Strict mode takes WRF's solve_em order on a nest too
+            # (dycore._wrf_relaxation_fold: specified OR nested):
+            # lateral_bc.capture_folded_relaxation holds u/v/theta/w and
+            # _apply_state_lateral_boundaries_wrf holds phi, each at THIS
+            # domain's own shape, in the same lbc_relax_* slots a specified
+            # parent declares above.  The shared arena sizes a slot by the
+            # largest domain that declares it, so with only the parent
+            # declaring them a nest larger than its parent got the parent's
+            # backing: a two-domain strict case (d01 121x100,
+            # d02 211x150, 44 levels) stopped at its first nest step with
+            # "scratch slot 'lbc_relax_u' arena capacity is 532400 values
+            # ((44, 100, 121)), requested 1392600 values ((44, 150, 211))".
+            slots.update(lbc_relax_u=xs, lbc_relax_v=ys, lbc_relax_theta=m,
+                         lbc_relax_phi=fl, lbc_relax_w=fl)
     return slots
 
 
@@ -5057,7 +6373,65 @@ class ScratchSlotLifetime:
 # Committed audit table. tests/test_preflight.py expands every registry and
 # F4-manifest slot through this table, rejects gaps/overlaps, and separately
 # proves that every arena-admitted row is write-before-read classified.
+from woof.core.hail import PERSISTENT as _HAIL_PERSISTENT
+
+from woof.core.output_diagnostics import PERSISTENT as _OUTPUT_PERSISTENT
+
 SCRATCH_SLOT_LIFETIME_AUDIT = (
+    ScratchSlotLifetime(_OUTPUT_PERSISTENT + ("cl_zero", "output_zero", "gsd_zero", "gsd_uh_use", "gsd_pressure_w", "gsd_temperature", "gsd_density", "gsd_wind10", "gsd_wind80"), "carrying",
+        "woof/core/output_diagnostics.py:update_precipitation",
+        "Interval buckets survive history and checkpoint; absent inputs stay zero"),
+    ScratchSlotLifetime(
+        _HAIL_PERSISTENT
+        + ("hail_zero",), "carrying", "woof/core/hail.py:update,reset_window",
+        "Embryos, history windows, run maxima and updraft duration survive "
+        "steps; the absent-species plane must remain zero"),
+    ScratchSlotLifetime(
+        ("hail_temperature", "hail_height", "hail_density", "hail_new_mask",
+         "hail_new_duration"), "write_before_read", "woof/core/hail.py:update",
+        "Preparation and duration kernels overwrite every entry before use"),
+    ScratchSlotLifetime(("ieva_*",), "excluded_unproven", "woof/core/ieva.py (zadvect_implicit = 1)", "the explicit/implicit eta mass-flux split and column masses are produced by the dynamics and reused by the scalar split later in the step; no audit has proven a sibling domain cannot interleave, so each domain keeps its own (found by the first HRRR-recipe tree, 2026-10-21)"),
+    ScratchSlotLifetime(("fsbm_*",), "excluded_unproven", "woof/core/fast_sbm_runtime.py:apply", "mixed uint64 pointers, int32 status and float64 tallies are not compatible with the float32 arena; all are rewritten inside each call"),
+    # Strict WRF mode (woof.wrf_exact.ENABLED).  acoustic_wrf_muts entered
+    # the registry (9190ec5f2) without a row here, so every multi-domain
+    # strict run raised KeyError in scratch_slot_uses_arena while
+    # woof/core/model.py built the shared arena, and the estimator raised
+    # the same on the same road.  The two mass planes cross the step
+    # (woof/io/restart.py carries them); the rest have no reviewed
+    # sequential-domain lifetime proof, and strict mode is the byte-identity
+    # referee, so each domain keeps its own backing, exactly as a
+    # single-domain strict run (which builds no arena) always has.
+    ScratchSlotLifetime(
+        ("wrf_exact_muts", "wrf_exact_mu_halo"), "carrying",
+        "woof/core/dycore.py:_capture_wrf_muts, _wrf_step_epilogue; "
+        "woof/io/restart.py:CARRIED_SCRATCH_SLOTS",
+        "the acoustic loop's MUT + MU'' and the pre-boundary mu ring are "
+        "read by the next step's first RK stage"),
+    ScratchSlotLifetime(
+        ("acoustic_wrf_muts", "rk_ww_ru", "rk_ww_rv", "moist_sc_t"),
+        "excluded_unproven",
+        "woof/core/acoustic.py:wrf_acoustic_muts; "
+        "woof/core/dycore.py:_calc_ww_cp_fluxes; "
+        "woof/core/moist.py:_advance_species_wrf",
+        "strict-mode only; kept off the shared arena until a lifetime "
+        "review admits them, so strict multi-domain runs allocate them per "
+        "domain as single-domain strict runs do"),
+    ScratchSlotLifetime(
+        ("wsm3_theta", "wsm3_rho", "wsm3_pii", "wsm3_dz", "wsm3_z8w", "wsm3_w"),
+        "write_before_read", "woof/core/wsm3.py:apply_wsm3",
+        "all six fields are assigned over their complete shapes before the column launch"),
+    ScratchSlotLifetime(
+        ("refl_wsm3_rain", "refl_wsm3_snow", "refl_wsm3_graupel"),
+        "write_before_read", "woof/core/refl.py:compute_refl_10cm",
+        "the phase split fills rain and snow and zeroes graupel before the radar launch"),
+    ScratchSlotLifetime(
+        ("wsm6r_theta", "wsm6r_rho", "wsm6r_pii", "wsm6r_dz",
+         "wsm6r_z8w", "wsm6r_work"), "write_before_read",
+        "woof/core/wsm6.py:_wsm6_prepare and _apply_wsm6r; "
+        "woof/core/kernels/wsm6r.cu:column preparation and fall velocity",
+        "Preparation rewrites theta, density, Exner, layer thickness and "
+        "interfaces; the column initializes each fall-velocity workspace "
+        "element before using it in the sedimentation sweep"),
     ScratchSlotLifetime(
         ("diff1_theta_initial",), "carrying",
         "woof/core/dycore.py:initialize_coordinate_reference; "
@@ -5094,7 +6468,7 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "the first substep; acoustic_a row zero is not consumed"),
     ScratchSlotLifetime(
         ("smag_km", "smag_kh", "smag_ru", "smag_rv", "smag_rw",
-         "smag_rth", "smag_rqv", "smag_rqc", "smag_rqr", "smag_rqi",
+         "smag_rth", "smag_rqv", "smag_rqc", "smag_rqr", "smag_rqi", "smag_rqke_adv",
          "smag_rqs", "smag_rqg", "smag_rnr", "smag_rni", "smag_rns",
          # mp=16 (WDM6) transported number moments.  smag_rnc/smag_rnr are
          # already above -- Morrison named them first -- so only the CCN
@@ -5119,7 +6493,14 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
          # lifetime: they are transported scalars like the number moments,
          # so prepare_fixed_tendencies writes each held tendency once
          # before the RK loop and every stage only reads it.
-         "smag_rqir", "smag_rqib"),
+         "smag_rqir", "smag_rqib",
+         # A named scheme's graupel volume (TEMPO's volg); its numbers
+         # share the names above.  Same construction, same lifetime.
+         "smag_rvolg",
+         # Chem rows' held tendencies (woof/core/chem_transport.py), one
+         # per transported row, named by the chem table.  Same
+         # construction, same lifetime.
+         "smag_rchem_*", "smag_rff1i*", "smag_rff5i*", "smag_rff6i*", "smag_rff8i*"),
         "write_before_read",
         "woof/core/dycore.py:prepare_fixed_tendencies",
         "time-t K and its held tendencies are written and consumed before "
@@ -5191,6 +6572,23 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "diff6_* temporary before it returns; nothing is read across "
         "calls, so no arena neighbour can be observed through them"),
     ScratchSlotLifetime(
+        ("chem_mono_qmin", "chem_mono_qmax", "chem_mono_si",
+         "chem_mono_so", "chem_mono_ht", "chem_mono_zt"),
+        "write_before_read",
+        "woof/core/chem_advect_mono.py:launch_mono_fluxes; "
+        "woof/core/kernels/mono_advection.cu:mono_fluxes,mono_scales,"
+        "mono_apply",
+        "mono_fluxes writes both extrema of every cell, mono_scales both "
+        "scales of every cell and mono_apply both diagnostics of every cell, "
+        "each before the next kernel reads them, once per chem row"),
+    ScratchSlotLifetime(
+        ("chem_mono_wwi",), "carrying",
+        "woof/core/chem_transport.py:advance_chem_stage",
+        "WRF's implicit vertical mass flux, read as the zeros the slot is "
+        "allocated with on every monotonic stage and never written; lending "
+        "its backing to any other slot would hand the limiter a nonzero "
+        "implicit flux"),
+    ScratchSlotLifetime(
         ("moist_pd_q0", "moist_rq_t", "moist_absent_mass",
          "pd_fxl", "pd_fxc", "pd_fyl",
          "pd_fyc", "pd_fzl", "pd_fzc"), "write_before_read",
@@ -5202,6 +6600,7 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "launch, so no arena neighbour can be observed through it"),
     ScratchSlotLifetime(
         ("mp_th", "mp_rho", "mp_pii", "mp_z", "mp_dz8w", "mp_z8w",
+         "mp_tempo_temperature", "mp_tempo_w", "mp_tempo_qb",
          "nssl2_driver_state", "nssl2_driver_surface_export",
          "nssl2_driver_ignored_accumulator",
          "nssl2_fused_temperature", "nssl2_primary_ice_target",
@@ -5282,6 +6681,31 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "the fused cold source resets every velocity boost; output-due "
         "graupel number is initialized across the complete field before "
         "source/fallout reads"),
+    # Classic Thompson's own working set (woof/core/thompson_classic.py).
+    # Every call writes every word it reads: tc_entry the temperature,
+    # theta, Exner, layer depths, private graupel number and both column
+    # flags (filled to zero first); tc_sources every tendency of every cell
+    # (zero in a no-microphysics column), every working field of every cell
+    # of a column with microphysics, and every cell flag; tc_column zeroes
+    # its fall-speed planes before it reads them and writes each flux
+    # before the update that reads it, and touches no column whose flags
+    # say it has no microphysics.  Nothing crosses a call.
+    ScratchSlotLifetime(
+        ("mp_thompson_saved_theta",
+         "mp_thompson_classic_ten",
+         "mp_thompson_classic_work",
+         "mp_thompson_classic_colbuf",
+         "mp_thompson_classic_flags",
+         "mp_thompson_classic_micro",
+         "mp_thompson_classic_kmelt"),
+        "write_before_read",
+        "woof/core/thompson_classic.py:apply_classic; "
+        "woof/core/kernels/thompson_classic.cu:tc_entry, tc_sources, "
+        "tc_column",
+        "WRF's mp_thompson zeroes its tendencies and recomputes every "
+        "working value at the top of each column call (module_mp_thompson.F"
+        ":1650-1777, :1798-2002); the unit's buffers hold exactly those "
+        "values for the length of one call"),
     # WRF's per-column no_micro flag (module_mp_thompson.F:1646, :2020),
     # registered for mp=8 and mp=28 by the Thompson repair G.  The slot
     # shipped in 217e84e18 without this row, so every mp=8 and mp=28
@@ -5320,8 +6744,17 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
          "mp_thompson_aero_entry_density",
          "mp_thompson_aero_tau1_density",
          "mp_thompson_aero_nwfa_work_m3",
-         "mp_thompson_aero_qc_entry",
+         "mp_thompson_aero_qcten",
+         "mp_thompson_aero_qrten",
+         "mp_thompson_aero_nrten",
+         "mp_thompson_aero_qiten",
+         "mp_thompson_aero_niten",
          "mp_thompson_aero_ni_entry",
+         "mp_thompson_aero_qvten",
+         "mp_thompson_aero_tten",
+         "mp_thompson_aero_qsten",
+         "mp_thompson_aero_qgten",
+         "mp_thompson_aero_ngten",
          "mp_thompson_aero_condensation_rate"),
         "write_before_read",
         "woof/core/thompson_aerosol_state.py:"
@@ -5333,6 +6766,20 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "snapshot at call entry, before any source network reads them; the "
         "terminal state-finalize kernel is the single consumer of the "
         "accumulators and runs after every writer"),
+    ScratchSlotLifetime(
+        ("lin_theta", "lin_rho", "lin_pii", "lin_dz", "lin_z", "lin_z8w"),
+        "write_before_read", "woof/core/lin.py:apply",
+        "Lin preparation assigns every volume before its kernel reads it"),
+    ScratchSlotLifetime(
+        ("mpcol_theta", "mpcol_rho", "mpcol_pii", "mpcol_dz", "mpcol_z8w"),
+        "write_before_read", "woof/core/microphysics.py:_apply_column_scheme",
+        "The shared column prologue assigns the complete fields before each launch."),
+    ScratchSlotLifetime(
+        _wsm_family_preparation_slots(),
+        "write_before_read", "woof/core/wsm_family.py:apply",
+        "WSM-family preparation fully assigns every array before the "
+        "column kernel reads it; precipitation accumulators are separate "
+        "carrying slots"),
     ScratchSlotLifetime(
         ("wsm6_theta", "wsm6_rho", "wsm6_pii", "wsm6_dz",
          "wsm6_z8w"), "write_before_read",
@@ -5347,9 +6794,17 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "or any dependent read"),
     ScratchSlotLifetime(
         ("morr_theta", "morr_rho", "morr_pii", "morr_dz",
-         "morr_ice_to_snow", "morr_z8w"), "write_before_read",
-        "woof/core/morrison.py:159-202",
-        "Morrison preparation fields are rebuilt for every scheme call"),
+         "morr_work", "morr_ltrue", "morr_z8w"), "write_before_read",
+        "woof/core/morrison.py:apply; woof/core/kernels/morrison.cu:"
+        "mo_process, mo_sediment_64/_256, mo_finalize",
+        "Morrison preparation fields are rebuilt for every scheme call; "
+        "LTRUE is zeroed before the first column call; each column call's "
+        "mo_process writes every WORK plane of every cell of its columns "
+        "(tendencies, temperature, CPM, LAMI, ACN and the zeroed fallout "
+        "tendencies); that call's sedimentation and final loop read only "
+        "what it wrote (WRF's MORR_TWO_MOMENT_MICRO zeroes its tendencies "
+        "at :1275-1418 of every column call)"),
+
     ScratchSlotLifetime(
         ("my2_theta", "my2_pii", "my2_t", "my2_z", "my2_z8w", "my2_psfc"),
         "write_before_read", "woof/core/milbrandt2.py::apply",
@@ -5371,7 +6826,8 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         "read them"),
     ScratchSlotLifetime(
         ("refl_t",), "write_before_read", "woof/core/refl.py:349-372; "
-        "woof/core/nssl2_runtime.py:apply_nssl2_production",
+        "woof/core/nssl2_runtime.py:apply_nssl2_production; "
+        "woof/core/morrison.py:apply (every column call copies its T1D)",
         "post-scheme temperature preparation is assigned after the final "
         "condensation hook and before the reflectivity launch"),
     ScratchSlotLifetime(
@@ -5445,12 +6901,14 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
         ("integration_health_field_ptr", "integration_health_aux_ptr",
          "integration_health_field_size", "integration_health_bounds",
          "integration_health_flags", "integration_health_planes",
-         "integration_health_status_bits", "integration_health_validation"),
+         "integration_health_status_bits", "integration_health_validation",
+         "integration_health_rim"),
         "carrying",
         "woof/core/health.py:476-496",
         "setup-time launch tables persist across steps, and the status/"
         "result buffers may be read asynchronously by supervision between "
-        "steps; per-domain only (conservative; ~49 KB/domain)"),
+        "steps; per-domain only (conservative; ~61 KB/domain with the "
+        "12 KiB strict-rim geometry table)"),
 
     # EXCLUDED (carrying): these microphysics accumulators are read-modify-
     # write and restart-serialized (restart.py:148-158; kessler.cu:91-92;
@@ -5461,6 +6919,14 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
          "mp_sr", "mp_kessler_sr"),
         "carrying", "woof/io/restart.py:148-158",
         "restart-visible live microphysics accumulator/diagnostic state"),
+    # EXCLUDED (carrying): correct mode WB1's settled-cloud total and its
+    # per-call amount (woof/core/thompson_cloud_booking.py), read-modify-
+    # write and restart-serialized like the precipitation accumulators.
+    ScratchSlotLifetime(
+        ("mp_cloudnc", "mp_cloudncv"),
+        "carrying", "woof/core/thompson_cloud_booking.py; woof/io/restart.py "
+        "SERIALIZED_SCRATCH_SLOTS",
+        "restart-visible correct-mode cloud-booking accumulator"),
     # EXCLUDED (carrying): KF initialization stores these arrays on the
     # driver and later calls update them (physics.py:474-500); restart.py:
     # 148-158 serializes the same slots.
@@ -5544,8 +7010,11 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
     # EXCLUDED (carrying/setup): weights are cached by key and forcing views
     # remain attached across all steps (lateral_bc.py:282-301,535-577).
     ScratchSlotLifetime(
-        ("lbc_weights_*", "lbc_forcing_tables", "lbc_evaluated_tables"), "carrying",
-        "woof/ingest/lateral_bc.py:282-301,535-577",
+        ("lbc_weights_*", "lbc_forcing_tables", "lbc_evaluated_tables",
+         # The chem rows' packed outer boundary rows, cut once per served
+         # interval and read by every RK stage until it changes.
+         "lbc_chem_*"), "carrying",
+        "woof/ingest/lateral_bc.py:282-301,535-577,chem_boundary_rows",
         "resident forcing tables and cached weights are cross-step setup"),
     # MYNN's declared workspace.  Split three ways on purpose.
     #
@@ -5566,6 +7035,7 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
          "mynn_pbl_mixlength_work", "mynn_pbl_turbulence",
          "mynn_pbl_predict", "mynn_pbl_predict_work",
          "mynn_pbl_condensation", "mynn_pbl_initialize",
+         "mynn_pbl_gsd41_condensation_work", "mynn_pbl_gsd41_pblh_thetav",
          "mynn_pbl_initialize_work", "mynn_pbl_plume_layer",
          "mynn_pbl_plume_face", "mynn_pbl_plume_column",
          "mynn_pbl_plume_work", "mynn_pbl_plume_scratch",
@@ -5577,11 +7047,15 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
          "mynn_pbl_out_dqi"),
         "write_before_read",
         "woof/core/mynn_pbl_scratch.py; woof/core/mynn_pbl_gpu.py; "
-        "woof/core/kernels/mynn_pbl.cu:945,2482-2489,2799-2821,1400-1406",
+        "woof/core/kernels/mynn_pbl.cu:945,2482-2489,2799-2821,1400-1406; "
+        "mynn_condensation_gsd41_columns; mynn_gsd41_thvl_columns",
         "each solver leaf fills its own outputs and work vectors before any "
         "reader; the six returned A-grid tendency fields are fully written "
         "across the chunk walk and are dead the moment "
-        "couple_ysu_tendencies has multiplied them into new arrays",
+        "couple_ysu_tendencies has multiplied them into new arrays; GSD "
+        "condensation writes all five consumed work vectors before its "
+        "second loop reads them, and the GSD driver fills liquid-water "
+        "virtual theta before every PBL-height reader",
     ),
     # EXCLUDED (constant): nothing writes these.  WRF passes them to systems
     # this lane's pinned identity switches off, and every reader requires
@@ -5639,7 +7113,17 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
                "qi", "qs", "qg", "nr", "ni", "ns", "ng", "nh", "qh",
                "qir", "qib",
                "qndrop", "qnr", "qni", "qns", "qng", "qnh", "qnn",
-               "qvolg", "qvolh", "nc", "nn", "nwfa", "nifa")),
+               "qvolg", "qvolh", "nc", "nn", "nwfa", "nifa",
+               # MYNN TKE advection's scalar (nest_field_kinds appends it
+               # when bl_pbl_physics=5 and bl_mynn_tkeadvect).  MEASURED
+               # without it: every nested run with TKE advection on (the
+               # rrfs-v1 suite, HRRR's MYNN settings) died at preflight
+               # with `KeyError: scratch slot 'nest_qke_adv_bxs' has no
+               # lifetime audit row` (LA 750 m, woof 2.9.9, 2026-10-29).
+               "qke_adv"))
+        # Chem rows' rolling frames, one per transported row a nest carries
+        # (woof/core/nest_fields.py), named by the chem table.
+        + ("nest_chem_*", "nest_ff1i*", "nest_ff5i*", "nest_ff6i*", "nest_ff8i*"),
         "carrying", "woof/core/nest.py:force; "
         "woof/ingest/lateral_bc.py:attach_nest_boundaries",
         "rolling value/tendency frames are consumed through the complete "
@@ -5652,16 +7136,48 @@ SCRATCH_SLOT_LIFETIME_AUDIT = (
 )
 
 
+_scratch_lifetime_index = (None, None)
+
+
+def _index_scratch_lifetimes(audit):
+    """Index literal rules once; memoize the much smaller prefix search.
+
+    Domain sizing repeatedly prices the same slot names at different shapes.
+    Scanning every pattern of every row for each request made that metadata
+    walk the wizard's single-core tail. The audit is immutable; replacing it
+    (including in an audit test) builds a new index and a new lookup cache.
+    Row numbers, rather than patterns, preserve the unique-ROW overlap rule.
+    """
+    from functools import lru_cache
+
+    exact, prefixes = {}, []
+    for index, row in enumerate(audit):
+        for pattern in row.patterns:
+            if pattern.endswith("*"):
+                prefixes.append((pattern[:-1], index))
+            else:
+                exact.setdefault(pattern, set()).add(index)
+
+    @lru_cache(maxsize=8192)
+    def lookup(slot):
+        matches = set(exact.get(slot, ()))
+        matches.update(index for prefix, index in prefixes if slot.startswith(prefix))
+        if len(matches) > 1:
+            raise RuntimeError(f"scratch lifetime audit overlaps for {slot!r}")
+        return audit[next(iter(matches))] if matches else None
+
+    return lookup
+
+
 def scratch_slot_lifetime(slot: str) -> ScratchSlotLifetime | None:
     """Return the unique audit row for ``slot``, or ``None`` if unclassified."""
-    matches = []
-    for row in SCRATCH_SLOT_LIFETIME_AUDIT:
-        if any((slot.startswith(pattern[:-1]) if pattern.endswith("*")
-                else slot == pattern) for pattern in row.patterns):
-            matches.append(row)
-    if len(matches) > 1:
-        raise RuntimeError(f"scratch lifetime audit overlaps for {slot!r}")
-    return matches[0] if matches else None
+    global _scratch_lifetime_index
+    audit, lookup = _scratch_lifetime_index
+    if audit is not SCRATCH_SLOT_LIFETIME_AUDIT:
+        audit = SCRATCH_SLOT_LIFETIME_AUDIT
+        lookup = _index_scratch_lifetimes(audit)
+        _scratch_lifetime_index = audit, lookup
+    return lookup(slot)
 
 
 def scratch_slot_uses_arena(slot: str) -> bool:
@@ -5746,7 +7262,9 @@ def shared_scratch_arena_aliases(
 
     Smagorinsky K_m/K_h are consumed only while the pre-RK preparation builds
     the held mixing tendencies.  Each stage later prepares acoustic alpha and
-    gamma from scratch before its first acoustic read, and no stage reads K.
+    gamma from scratch before its first acoustic read. Strict coordinate
+    scalar diffusion reads Kh after the first acoustic loop, so that arm
+    keeps Kh separate from acoustic gamma.
     The two mass-point K arrays can therefore borrow prefixes of those two
     independent full-level coefficient backings.
 
@@ -5802,7 +7320,8 @@ def shared_scratch_arena_aliases(
             and math.prod(shapes["lbc_nested_relax"])
             <= math.prod(shapes["acoustic_a"])):
         aliases["lbc_nested_relax"] = "acoustic_a"
-    smag_uses_xy = any(dc.run.km_opt in (2, 3, 4) for dc in domains)
+    from woof.config import wrf_mixing_package_active
+    smag_uses_xy = any(wrf_mixing_package_active(dc.run) for dc in domains)
     if "diff6_z" in shapes:
         candidates = (("diff6_x", "diff6_m") if smag_uses_xy
                       else ("diff6_x", "diff6_y", "diff6_m"))
@@ -5811,8 +7330,12 @@ def shared_scratch_arena_aliases(
                     and math.prod(shapes[slot])
                     <= math.prod(shapes["diff6_z"])):
                 aliases[slot] = "diff6_z"
+    keep_scalar_kh = WRF_EXACT and any(
+        dc.run.diff_opt == 1 and dc.run.km_opt in (2, 3, 4) for dc in domains)
     for slot, target in (("smag_km", "acoustic_alpha"),
                          ("smag_kh", "acoustic_gamma")):
+        if slot == "smag_kh" and keep_scalar_kh:
+            continue
         if (slot in shapes and target in shapes
                 and math.prod(shapes[slot]) <= math.prod(shapes[target])):
             aliases[slot] = target
@@ -5835,11 +7358,13 @@ def shared_scratch_arena_bytes(
 @lru_cache(maxsize=1)
 def _gas_table_meta() -> dict[str, int]:
     """ngpt/ngas per band from the shipped k-distributions (lazy import --
-    the estimator stays CPU-only; table loading is host NetCDF I/O)."""
-    from woof.core.rrtmgp import load_gas_tables
+    the estimator stays CPU-only; table loading is host NetCDF I/O).
+    Read from the packaged receipt when the installed tables match it, so a
+    plan needs no native NetCDF decoder (see woof.core.rrtmgp.packaged_table_facts)."""
+    from woof.core.rrtmgp import gas_table_shape
 
-    lw = load_gas_tables("lw")
-    sw = load_gas_tables("sw")
+    lw = gas_table_shape("lw")
+    sw = gas_table_shape("sw")
     return {"ngpt_lw": lw.ngpt, "ngpt_sw": sw.ngpt,
             "ngas_lw": lw.ngas, "ngas_sw": sw.ngas,
             "nband_lw": lw.nband, "nband_sw": sw.nband}
@@ -5850,7 +7375,17 @@ def k_distribution_bytes() -> int:
     """Device bytes of the lru_cache-shared k-distribution/cloud tables,
     counted ONCE per process (rrtmgp.py:324/:436 -- baseline behavior,
     never claimed as savings).  Uses the to_device dtype rule
-    (rrtmgp.py:266-282): float -> f32, int -> i32, bool -> 1 byte."""
+    (rrtmgp.py:266-282): float -> f32, int -> i32, bool -> 1 byte.
+    Read from the packaged receipt when the installed tables match it."""
+    from woof.core.rrtmgp import packaged_table_facts
+
+    facts = packaged_table_facts()
+    if facts is not None:
+        return int(facts["bytes"])
+    return _decoded_k_distribution_bytes()
+
+
+def _decoded_k_distribution_bytes() -> int:
     import numpy as np
     from woof.core.rrtmgp import load_cloud_tables, load_gas_tables
 
@@ -5985,6 +7520,18 @@ def rrtmgp_workspace_shapes(nz: int, column_chunk: int, p_top: float = 5000.0
             for name, spec in phases[phase].items()}
 
 
+def _named_three_radius_schemes() -> frozenset[int]:
+    """Selectors outside WRF's numbering (woof.microphysics_schemes, ids
+    from 900) whose cloud-optics family reads effc/effi/effs off the state
+    the way Thompson's row does: TEMPO (900) couples as "thompson"
+    (woof/core/rrtmgp.py _MP_CLOUD_OPTICS_SCHEME), so its radiation call
+    packs the same three radius columns and they are priced here.
+    """
+    from woof.microphysics_schemes import NAMED_SCHEMES
+    return frozenset(int(scheme.mp_id) for scheme in NAMED_SCHEMES.values()
+                     if scheme.cloud_optics_family in ("thompson", "wsm6", "wsm3"))
+
+
 def rrtmgp_column_shapes(
         cfg: RunConfig, p_top: float = 5000.0, *,
         column_chunk: int = DEFAULT_COLUMN_CHUNK,
@@ -6021,7 +7568,11 @@ def rrtmgp_column_shapes(
            "clwp", "ciwp", "reliq", "dgice"]
     if cfg.mp_physics == 10:
         lay += ["nc", "nr", "ni", "ns", "effc", "effr", "effi", "effs"]
-    elif cfg.mp_physics in (6, 8, 16, 18, 28):
+    elif (cfg.mp_physics in (3, 4, 6, 8, 16, 18, 24, 28, 106)
+          or cfg.mp_physics in _named_three_radius_schemes()):
+        # WSM3 (3) packs its three radii for the same reason: WSM3SCHEME is
+        # in the use_mp_re disjunction (module_physics_init.F:1008) and its
+        # "wsm3" coupling reads effc/effi/effs (woof/core/rrtmgp.py).
         # WRF's use_mp_re scheme table lists THOMPSONAERO explicitly and
         # separately from THOMPSON in the same disjunction
         # (phys/module_physics_init.F:1005 THOMPSON, :1006 THOMPSONAERO), and
@@ -6083,6 +7634,19 @@ def rrtmgp_column_shapes(
     shapes["columns/emiss_bands"] = ((ncol, 16), 4)
     for name in ("tsfc", "mu0", "albedo_surface", "daylight"):
         shapes[f"columns/{name}"] = ((ncol,), 4)
+    # WRF's top/bottom fluxes (rrtmgp.py RRTMGPRadiation.__call__): the
+    # per-flux rows, and one chunk's clear-sky solve -- fresh flux outputs
+    # (SW: up, down, direct), the LW zero incident g-point plane and the
+    # SW zero band cloud optics.
+    from woof.core.physics_inventory import radiation_boundary_flux_names
+    boundary = radiation_boundary_flux_names(cfg)
+    if boundary:
+        shapes["columns/boundary_fluxes"] = ((len(boundary), ncol), 4)
+        for name in ("up", "dn", "dir"):
+            shapes[f"columns/clear_sky_flux_{name}"] = (
+                (cap_ncol, peak_nz + 1), 4)
+        shapes["columns/clear_sky_incident"] = ((cap_ncol, 256), 4)
+        shapes["columns/clear_sky_cloud"] = ((cap_ncol, peak_nz, 16), 4)
     return shapes
 
 
@@ -6168,7 +7732,10 @@ def mynn_mixscalars_memory_items(cfg: RunConfig, *, tile_buffer: bool = False
     allocations. Owners: mynn_pbl_runtime.py, mynn_pbl_gpu.py and
     mynn_scalar_mix_gpu.py.
     """
-    if int(cfg.bl_pbl_physics) != 5 or int(cfg.bl_mynn_mixscalars) != 1:
+    # Priced for the ACTIVE key only: with a microphysics that carries no
+    # qn family the key is inert (config.mynn_mixscalars_active) and the
+    # runtime stages none of this storage.
+    if not mynn_mixscalars_active(cfg):
         return ()
     from woof.core.mynn_pbl import DMP_NUP
     from woof.core.mynn_scalar_mix import QN_SOLVE_ORDER
@@ -6236,9 +7803,25 @@ def mynn_scalar_transient_shapes(cfg: RunConfig) -> dict[str, tuple[int, ...]]:
     Charge the larger phase, rather than summing nonconcurrent phases.
     The scalar-off estimate is unchanged.
     """
-    if int(cfg.bl_pbl_physics) != 5 or int(cfg.scalar_pblmix) != 1:
+    from woof.config import (SCALAR_PBLMIX_SPECIES, scalar_pblmix_exchange,
+                              scalar_pblmix_mixes)
+    if int(cfg.scalar_pblmix) != 1 or not scalar_pblmix_mixes(cfg):
         return {}
     nz, columns = int(cfg.nz), int(cfg.ny) * int(cfg.nx)
+    if not scalar_pblmix_exchange(cfg)["mixes_in_scheme"] or int(cfg.mp_physics) != 28:
+        # The shared post-PBL arm (physics._scalar_pblmix_rates, after YSU,
+        # MYJ, Shin-Hong or UW, and after MYNN for every microphysics but
+        # mp=28, whose family MYNN's wrapper solves): one raw rate per
+        # species, its coupled rate and the mass coefficient live together
+        # (N = 4 under mp=28 gives the historical 9); each 32768-column
+        # chunk adds four packed inputs, 5*nz+1 work values and two outputs
+        # per column.  A scheme with no diffused scalar keeps only the mass
+        # coefficient.  The YSU key keeps its historical name.
+        species = len(SCALAR_PBLMIX_SPECIES.get(int(cfg.mp_physics), ()))
+        chunk = min(32768, columns) if species else 0
+        key = ("ysu_scalar/local_diffusion_peak" if int(cfg.bl_pbl_physics) == 1
+               else "pbl_scalar/local_diffusion_peak")
+        return {key: ((2 * species + 1) * nz * columns + (11 * nz + 1) * chunk,)}
     chunk = mynn_pbl_column_chunk(cfg)
     solve = 8 * nz * columns + (8 * nz + 2) * chunk + 1
     coupling = 13 * nz * columns
@@ -6521,6 +8104,7 @@ def estimate_domain(dc: DomainConfig, *, spec_bdy_width: int | None = None,
                     boundary_species=(),
                     tile_buffer: bool = False,
                     urban_columns: int | None = None,
+                    lake_columns: int | None = None,
                     ) -> DomainMemoryEstimate:
     """Itemized :class:`DomainMemoryEstimate` for one domain.
 
@@ -6544,7 +8128,8 @@ def estimate_domain(dc: DomainConfig, *, spec_bdy_width: int | None = None,
         (HeldMemoryItem if name in held else MemoryItem)(
             name, "physics", tuple(shape), 4)
         for name, shape in physics_array_shapes(
-            run, cam_ozone=cam_ozone, urban_columns=urban_columns).items())
+            run, cam_ozone=cam_ozone, urban_columns=urban_columns,
+            lake_columns=lake_columns).items())
     from woof.core.cfl_inventory import (
         WRF_CFL_SHAPE, wrf_cfl_recording_requested)
     if wrf_cfl_recording_requested(run, adaptive=cfl_recording):
@@ -6570,9 +8155,11 @@ def estimate_domain(dc: DomainConfig, *, spec_bdy_width: int | None = None,
     # their own itemization category (architecture section E contract).
     items += _items("lbc", {slot: shape for slot, shape in registry.items()
                             if slot.startswith("lbc_")})
-    items += _items("scratch",
-                    {slot: shape for slot, shape in registry.items()
-                     if not slot.startswith("lbc_")})
+    wide_fsbm={"fsbm_pointers":"uint64","fsbm_tally":"float64"}
+    items += tuple(MemoryItem(slot,"scratch",tuple(shape),
+                    8 if slot in wide_fsbm else 4,
+                    wide_fsbm.get(slot,"float32"))
+              for slot,shape in registry.items() if not slot.startswith("lbc_"))
     if dc.parent_id != 0:
         shapes = nest_slot_shapes(dc, width, parent)
         items += _nest_items(shapes, nest_slot_dtypes(dc, width, parent))
@@ -6606,6 +8193,15 @@ def estimate_domain(dc: DomainConfig, *, spec_bdy_width: int | None = None,
                    for name, (shape, size) in classic_rrtm_column_shapes(
                        run, p_top, column_chunk=column_chunk).items())
     items += _items("transient", dudhia_column_shapes(run))
+    if getattr(run, "chem_sets", ""):
+        from woof.core.chem_radiation import memory_shapes
+        from woof.core.device_inventory import chem_process_memory_shapes
+        process_held, process_work = chem_process_memory_shapes(run)
+        items += _items("physics", process_held)
+        items += _items("transient", process_work)
+        optics_held, optics_transient = memory_shapes(run, p_top, column_chunk)
+        items += _items("physics", optics_held)
+        items += _items("transient", optics_transient)
     # The SASE closure's step working set gets its OWN category rather
     # than joining "transient": on a wide domain its dynamic-solve peak
     # is the single largest transient in the run, and a user reading a
@@ -6644,6 +8240,10 @@ class ExperimentMemoryEstimate:
     column_chunk: int
     #: The measured forecast margin (A163), not the plan's 1.15.
     headroom: float = FORECAST_POOL_HEADROOM
+    #: A byte bound on the margin ``headroom`` prices (A13): set by the
+    #: ranked road to :data:`RANK_POOL_RESIDUE_BOUND_BYTES`, ``None``
+    #: (the ratio alone) on every other road.
+    pool_residue_cap_bytes: int | None = None
     retention_residual_bytes: int = field(default=0)
     device_overhead_bytes: int = field(
         default=0)
@@ -6675,6 +8275,9 @@ class ExperimentMemoryEstimate:
     # once per domain. Separate from radiation's shared k-tables so a
     # legacy radiation workspace is never mistaken for a fixed floor.
     physics_tables_bytes: int = 0
+    # Table-selected hydro is priced outside the static RunConfig physics
+    # roster. Missing owner hooks are explicit gaps in this same envelope.
+    hydro_memory: dict | None = None
 
     @property
     def fixed_envelope_bytes(self) -> int:
@@ -6703,7 +8306,8 @@ class ExperimentMemoryEstimate:
         if self.uses_shared_dycore_state_workspace:
             per_domain -= self.dycore_state_request_bytes
             per_domain += self.dycore_state_workspace_bytes
-        return per_domain + self.k_tables_bytes + self.physics_tables_bytes
+        return (per_domain + self.k_tables_bytes + self.physics_tables_bytes
+                + int((self.hydro_memory or {}).get("resident_bytes", 0)))
 
     @property
     def dycore_state_request_bytes(self) -> int:
@@ -6735,7 +8339,7 @@ class ExperimentMemoryEstimate:
         """Domains step strictly sequentially (architecture section E
         chunk-policy adjudication); one domain's step transients live at
         a time, so the peak takes the max, not the sum."""
-        return max((d.transient_bytes + (self.legacy_call_peak_by_domain[index]
+        return int((self.hydro_memory or {}).get("transient_bytes", 0)) + max((d.transient_bytes + (self.legacy_call_peak_by_domain[index]
                     if self.legacy_call_peak_by_domain else 0)
                     for index, d in enumerate(self.domains)), default=0)
 
@@ -6754,7 +8358,20 @@ class ExperimentMemoryEstimate:
     def alloc_estimate_bytes(self) -> int:
         return forecast_pool_estimate_bytes(
             self.subtotal_bytes, held_exact_bytes=self.held_exact_bytes,
-            headroom=self.headroom)
+            headroom=self.headroom,
+            residue_cap_bytes=self.pool_residue_cap_bytes)
+
+    @property
+    def pool_residue_cap_active(self) -> bool:
+        """Is the pool margin this estimate carries the byte bound rather
+        than the ratio (A13)?  False whenever no cap was given or the
+        ratio's margin is already under it."""
+        cap = self.pool_residue_cap_bytes
+        if cap is None:
+            return False
+        turnover = self.subtotal_bytes - max(
+            0, min(self.held_exact_bytes, self.subtotal_bytes))
+        return math.ceil(self.headroom * turnover) - turnover > int(cap)
 
     @property
     def held_projection_bytes(self) -> int:
@@ -6775,7 +8392,7 @@ class ExperimentMemoryEstimate:
         itemized non-pool term is how a 10 GiB card came to carry
         4.12 GiB of another machine's accounting (the 3080 walk).
         """
-        return self.non_pool_device_bytes
+        return self.non_pool_device_bytes + int((self.hydro_memory or {}).get("non_pool_bytes", 0))
 
     @property
     def peak_envelope_bytes(self) -> int:
@@ -6796,7 +8413,12 @@ class ExperimentMemoryEstimate:
         measured over a battery that carries both lanes, and the
         intercept and residue rest on the affine campaign.
         """
-        return f"{ENVELOPE_A163_BASIS}; {ENVELOPE_AFFINE_BASIS}"
+        basis = f"{ENVELOPE_A163_BASIS}; {ENVELOPE_AFFINE_BASIS}"
+        if self.hydro_memory is not None:
+            gaps = self.hydro_memory["gaps"]
+            basis += ("; hydro allocation inventory PARTIAL: " + "; ".join(gaps)
+                      if gaps else "; hydro owner allocation contracts (whole-run qualification pending)")
+        return basis
 
     def peak_envelope_terms(self) -> str:
         """The envelope's arithmetic, exactly as it was evaluated.
@@ -6814,6 +8436,10 @@ class ExperimentMemoryEstimate:
         margin = (f"x {self.headroom:.2f}: measured peak/itemized "
                   f"{self.headroom - FORECAST_PEAK_RATIO_SAFETY:.2f} + safety "
                   f"{FORECAST_PEAK_RATIO_SAFETY:.2f}")
+        if self.pool_residue_cap_active:
+            margin = (f"+ {int(self.pool_residue_cap_bytes) / GIB:.2f}: the "
+                      f"measured pool residue bound (A13), under the "
+                      f"{margin}")
         pool = (f"subtotal {self.subtotal_bytes / GIB:.2f} {margin}"
                 if not held else
                 f"subtotal less held arrays "
@@ -8091,6 +9717,7 @@ def estimate_phases(exp: ExperimentConfig, *, source: str,
                     boundary_source=_SAME_AS_SOURCE,
                     preparation_route: str | None = None,
                     urban_columns=None,
+                    resident_forcing_intervals: int | None = None,
                     ) -> PhaseMemoryEstimate:
     """Price every phase of ``exp`` and say which one binds the card.
 
@@ -8120,6 +9747,16 @@ def estimate_phases(exp: ExperimentConfig, *, source: str,
     unchanged; they price the ingest phase's HOST residency, which no
     term above touches.
 
+    ``resident_forcing_intervals`` is how many forcing intervals the
+    RESIDENT forecast holds on the card when that differs from the schedule:
+    a forecast started on a chained preparation's head streams its root's
+    intervals through one device slot
+    (:func:`woof.ingest.lateral_bc.attach_streaming_lateral_boundaries`),
+    which is what its door prices (``forcing_intervals=1`` on a stream
+    head).  ``None`` holds the whole schedule, as a sealed restore does.
+    Only the resident forecast term reads it; the ingest phase and a
+    streamed domain's host series keep ``forcing_intervals``.
+
     ``boundary_source`` is the source whose published hydrometeors the
     root's boundary tables carry, in every forecast term here; it is
     ``source`` unless given.  A surface that prices no ingest phase
@@ -8134,11 +9771,16 @@ def estimate_phases(exp: ExperimentConfig, *, source: str,
         source=source, experiment=exp, requested=preprocess_backend)
     from woof.boundary_fields import source_boundary_species
     forecast = estimate_experiment(
-        exp, column_chunk=column_chunk, forcing_intervals=forcing_intervals,
+        exp, column_chunk=column_chunk,
+        forcing_intervals=(forcing_intervals
+                           if resident_forcing_intervals is None
+                           else max(1, int(resident_forcing_intervals))),
         forcing_interval_seconds=forcing_interval_seconds,
         vram_gib=vram_gib, profile=profile,
         boundary_species=source_boundary_species(boundary_source),
-        urban_columns=urban_columns)
+        urban_columns=urban_columns,
+        # The one-card residue bound, as the admission prices it.
+        **single_card_residue_terms(exp))
     key = None if source is None else str(source).strip().lower()
     ingest = None
     if key in SOURCE_ANALYSIS_LEVELS or analysis_shapes_by_domain is not None:
@@ -8258,6 +9900,33 @@ def thompson_coefficient_bytes(aerosol: bool = False) -> int:
     return sum(((int(size) + 511) // 512) * 512 for size in sizes)
 
 
+def thompson_generation_coefficient_bytes(cfg) -> int:
+    """Immutable device allocations of the selected statement generation."""
+    from woof.thompson_generations import CLASSIC_GENERATIONS
+    if int(cfg.mp_physics) not in (8, 28):
+        return 0
+    if int(cfg.mp_physics) == 28 or CLASSIC_GENERATIONS[cfg.thompson_version].backend != "column":
+        return thompson_coefficient_bytes(int(cfg.mp_physics) == 28)
+    from woof.core.thompson_column import TABLE_ARGUMENTS
+    from woof.core.thompson_contract import AUXILIARY_TABLE_RECORDS, GENERATED_TABLE_FILES, TableRecord
+    records = tuple(TableRecord(n, (37,37,37,37)) for n in TABLE_ARGUMENTS[:5])
+    records += tuple(r for name in ("qr_acr_qsV2.dat", "freezeH2O.dat") for r in GENERATED_TABLE_FILES[name])
+    records += AUXILIARY_TABLE_RECORDS[:5]
+    return sum(((r.payload_bytes + 511) // 512) * 512 for r in records)
+
+
+def experiment_thompson_coefficient_bytes(exp) -> int:
+    """Each resident generation owns its tables once, across all domains."""
+    owners = {}
+    for dc in exp.domains:
+        cfg = dc.run
+        if int(cfg.mp_physics) not in (8, 28):
+            continue
+        key = "legacy" if int(cfg.mp_physics) == 28 or cfg.thompson_version == "wrf_461" else cfg.thompson_version
+        owners[key] = max(owners.get(key, 0), thompson_generation_coefficient_bytes(cfg))
+    return sum(owners.values())
+
+
 def estimate_experiment(
         exp: ExperimentConfig, *,
         column_chunk: int | None = None,
@@ -8269,6 +9938,8 @@ def estimate_experiment(
         boundary_species=(),
         urban_columns=None,
         tile_buffer: bool = False,
+        lake_columns=None,
+        pool_residue_cap_bytes: int | None = None,
 ) -> ExperimentMemoryEstimate:
     """Sum the per-domain itemizations; count the lru_cache-shared
     k-distribution tables ONCE (rrtmgp.py:324/:436 -- baseline behavior,
@@ -8288,7 +9959,17 @@ def estimate_experiment(
     (:func:`woof.core.urban_state.prepared_urban_columns`); a domain it
     does not name is priced at every column urban (A176). ``tile_buffer``
     prices the workspace policy used by ``prepared_tile_state_factory``;
-    permanently resident device ranks use that factory too."""
+    permanently resident device ranks use that factory too.
+
+    ``lake_columns`` maps grid id to an upper bound on the domain's CLM
+    lake columns (a device rank's count of lake-eligible columns in its
+    compute window, :func:`woof.core.devices_memory.rank_lake_column_bounds`);
+    a domain it does not name prices the sparse lake work arrays at every
+    column, the configuration door's bound.
+
+    ``pool_residue_cap_bytes`` bounds the pool margin in bytes
+    (:func:`forecast_pool_estimate_bytes`); the ranked road passes
+    :data:`RANK_POOL_RESIDUE_BOUND_BYTES` for its device ranks (A13)."""
     column_chunk = (exp.column_chunk if column_chunk is None
                     else column_chunk)
     if (isinstance(column_chunk, bool)
@@ -8317,7 +9998,8 @@ def estimate_experiment(
             p_top=exp.vertical.p_top,
             column_chunk=column_chunk,
             tile_buffer=tile_buffer,
-            urban_columns=(urban_columns or {}).get(int(dc.grid_id)))
+            urban_columns=(urban_columns or {}).get(int(dc.grid_id)),
+            lake_columns=(lake_columns or {}).get(int(dc.grid_id)))
         for dc in exp.domains)
     from woof.physics_compat import RRTMG_VARIANT_LEGACY, rrtmg_variant
     variants = {rrtmg_variant(dc.run) for dc in exp.domains
@@ -8340,6 +10022,7 @@ def estimate_experiment(
     legacy_envelope = 0
     if uses_legacy:
         from woof.core.rrtmg_legacy import legacy_radiation_vram_bytes
+        from woof.core.chem_radiation import feedback_row_count
         # Modern tables/workspace persist while another domain executes legacy
         # radiation. Per-domain call peaks combine with that domain's other
         # transients; unrelated domains' transient maxima are not summed.
@@ -8385,7 +10068,8 @@ def estimate_experiment(
                 longwave=radiation_scheme_ids(dc.run)[0] == 4,
                 shortwave=radiation_scheme_ids(dc.run)[1] == 4,
                 resident_threads=device_profile.resident_thread_capacity,
-                aer_opt=int(getattr(dc.run, "aer_opt", 0)))
+                aer_opt=int(getattr(dc.run, "aer_opt", 0)),
+                chem_optics_rows=feedback_row_count(dc.run))
             if (4 in radiation_scheme_ids(dc.run)
                 and rrtmg_variant(dc.run) == RRTMG_VARIANT_LEGACY) else 0
             for dc in exp.domains)
@@ -8394,7 +10078,10 @@ def estimate_experiment(
     arena_shapes = (shared_scratch_arena_shapes(exp.domains)
                     if uses_arena else {})
     nz = exp.domains[0].run.nz
+    from woof.hydro.memory import forecast_plan
+    hydro_plan = forecast_plan(exp)
     return ExperimentMemoryEstimate(
+        hydro_memory=None if hydro_plan is None else hydro_plan.inventory(),
         domains=domains,
         k_tables_bytes=k_distribution_bytes() if uses_rrtmgp else 0,
         workspace_bytes=(_workspace_total_bytes(
@@ -8409,6 +10096,15 @@ def estimate_experiment(
         uses_shared_dycore_state_workspace=uses_arena,
         column_chunk=column_chunk,
         headroom=forecast_pool_headroom(dc.run for dc in exp.domains),
+        # A suite an itemization-gap row raised the headroom for keeps
+        # the ratio whatever the caller passed: its shortfall is pool
+        # USED beyond the subtotal, proportional to the rank, which the
+        # byte bound would under-price (rank_pool_residue_cap_bytes).
+        pool_residue_cap_bytes=(
+            None if pool_residue_cap_bytes is None
+            or rank_pool_residue_cap_bytes(
+                dc.run for dc in exp.domains) is None
+            else int(pool_residue_cap_bytes)),
         retention_residual_bytes=0,
         device_overhead_bytes=0,
         non_pool_device_bytes=non_pool_device_bytes(exp, profile=device_profile),
@@ -8420,15 +10116,14 @@ def estimate_experiment(
         column_workspace_bytes=column_workspace_bytes(
             exp, profile=(card_local_memory_profile(vram_gib)
                           if profile is None else profile)),
-        physics_tables_bytes=(thompson_coefficient_bytes(
-            any(int(dc.run.mp_physics) == 28 for dc in exp.domains))
-            if any(int(dc.run.mp_physics) in (8, 28) for dc in exp.domains)
-            else 0),
+        physics_tables_bytes=experiment_thompson_coefficient_bytes(exp),
     )
 
 
 def admission_estimate(exp: ExperimentConfig, *, machine=None, source=None,
-                       urban_columns=None) -> ExperimentMemoryEstimate:
+                       urban_columns=None,
+                       mynn_column_chunk: int | None = None
+                       ) -> ExperimentMemoryEstimate:
     """THE estimate a tree's ``[tiles]`` admission is judged from.
 
     ONE function, called with the same arguments wherever the question is
@@ -8492,13 +10187,21 @@ def admission_estimate(exp: ExperimentConfig, *, machine=None, source=None,
     the plan the run builds.  The configuration has no land cover, so the
     review prices every column urban, the upper bound: a prepared door can
     admit what the review refused, never the other way (A176).
+
+    THE MEASURED POOL RESIDUE.  A one-domain forecast of a suite with
+    rank receipts carries the A13 pool residue bound
+    (:func:`single_card_pool_residue_cap_bytes`), as each device rank
+    does.  ``mynn_column_chunk`` prices the MYNN workspace at that width
+    instead of the width the run walks; only the resident road's width
+    fit asks for it (:func:`required_mynn_pricing`).
     """
     from woof.boundary_fields import source_boundary_species
-    return estimate_experiment(
-        exp, column_chunk=exp.column_chunk,
-        profile=getattr(machine, "device_profile", None),
-        boundary_species=source_boundary_species(source),
-        urban_columns=urban_columns)
+    with required_mynn_pricing(exp, mynn_column_chunk, only_given=True):
+        return estimate_experiment(
+            exp, column_chunk=exp.column_chunk,
+            profile=getattr(machine, "device_profile", None),
+            boundary_species=source_boundary_species(source),
+            urban_columns=urban_columns, **single_card_residue_terms(exp))
 
 
 # ---------------------------------------------------------------------------
@@ -9066,22 +10769,33 @@ def run_alloc_preflight(
     estimate = estimate_experiment(
         exp, column_chunk=column_chunk, forcing_intervals=forcing_intervals,
         forcing_interval_seconds=forcing_interval_seconds, profile=profile,
-        boundary_species=boundary_species)
+        boundary_species=boundary_species, **single_card_residue_terms(exp))
     column_chunk = estimate.column_chunk
     n_int = lbc_intervals(exp.run_seconds, forcing_interval_seconds,
                           retained_intervals=forcing_intervals)
 
     pool = cp.get_default_memory_pool()
     free_before, total = cp.cuda.runtime.memGetInfo()
-    used_peak = pool.used_bytes()
-    held_peak = pool.total_bytes()
+    # Growth from entry, not the pool's absolute level: the estimate prices
+    # THIS run's allocations, and free_before/free_at_peak are already a
+    # delta.  Breakage it prevents (2.9.4 R6 sweep, RTX 5070 Ti, 2026-10-22):
+    # tests/test_preflight.py::test_alloc_preflight_d01_measured_le_estimate
+    # failed in a pytest process whose earlier GPU test files still held
+    # pool memory (alone: 1.88 GB measured <= 2.66 GB estimate, green),
+    # because the absolute used level charged their arrays to this run.
+    # A fresh `woof check --alloc` process starts at zero, so its numbers
+    # are unchanged.
+    used_base = pool.used_bytes()
+    held_base = pool.total_bytes()
+    used_peak = 0
+    held_peak = 0
     free_at_peak = free_before
 
     def sample(phase: str) -> None:
         nonlocal used_peak, held_peak, free_at_peak
         cp.cuda.runtime.deviceSynchronize()
-        used_peak = max(used_peak, pool.used_bytes())
-        held_peak = max(held_peak, pool.total_bytes())
+        used_peak = max(used_peak, pool.used_bytes() - used_base)
+        held_peak = max(held_peak, pool.total_bytes() - held_base)
         free_at_peak = min(free_at_peak, cp.cuda.runtime.memGetInfo()[0])
 
     per_domain = {}
@@ -9189,13 +10903,15 @@ def run_alloc_preflight(
             # adapter's worst single call.
             phase = "legacy-RRTMG call-peak envelope"
             from woof.core.rrtmg_legacy import legacy_radiation_vram_bytes
+            from woof.core.chem_radiation import feedback_row_count
             envelope = max(
                 legacy_radiation_vram_bytes(
                     ncol=dc.run.ny * dc.run.nx, nz=dc.run.nz,
                     p_top=exp.vertical.p_top, column_chunk=None,
                     longwave=radiation_scheme_ids(dc.run)[0] == 4,
                     shortwave=radiation_scheme_ids(dc.run)[1] == 4,
-                    aer_opt=int(getattr(dc.run, "aer_opt", 0)))
+                    aer_opt=int(getattr(dc.run, "aer_opt", 0)),
+                    chem_optics_rows=feedback_row_count(dc.run))
                 for dc in legacy_44)
             holdings.append(cp.zeros(envelope, dtype=cp.uint8))
         if any(4 in radiation_scheme_ids(dc.run)
@@ -9285,12 +11001,8 @@ def _load_experiment_any(path: Path) -> ExperimentConfig:
             # validated by their owners and split off, as every file
             # loader does.  Splitting only [fetch] stopped `woof go` on
             # every such config that turned [static.highres] on.
-            fetch_table = raw.get("fetch")
             exp = build_experiment_from_config_tables(
                 raw, source=str(path), base_dir=Path(authority.base_dir))
-            if fetch_table is not None and len(exp.domains) == 1:
-                from woof.experiment import refuse_unrouted_perturbation
-                refuse_unrouted_perturbation(exp, "single-domain prepared forecast")
             return exp
         exp, _case_data = load_experiment_case(path)
         return exp
@@ -9811,12 +11523,21 @@ def _warn_unstaged_physics_tables(exp) -> None:
     """
 
     try:
-        if not any(int(domain.run.mp_physics) == 8
-                   for domain in exp.domains):
+        selected = {int(domain.run.mp_physics) for domain in exp.domains}
+        if not selected & {8, 28}:
             return
+        from woof.core.thompson_contract import CLASSIC_TABLE_ASSETS
         from woof.table_assets import require_thompson_tables
 
-        require_thompson_tables()
+        assets = CLASSIC_TABLE_ASSETS
+        if 28 in selected:
+            from woof.core.thompson_aerosol_contract import (
+                AEROSOL_TABLE_ASSETS)
+
+            assets = (*CLASSIC_TABLE_ASSETS, *AEROSOL_TABLE_ASSETS)
+        # stage=False: a memory preflight must not start a 315 MiB
+        # download; the run doors stage the set on first use.
+        require_thompson_tables(assets=assets, stage=False)
     except FileNotFoundError as error:
         from woof.explain import warn
 
@@ -10221,7 +11942,7 @@ def _metal_memory_check(args, exp) -> int:
 
     runs = [domain.run for domain in exp.domains]
     with MetalContext() as context:
-        estimate = metal_memory.estimate_runs(runs, context)
+        estimate = metal_memory.estimate_runs(runs, context, p_top=exp.vertical.p_top)
     refusal = metal_memory.refusal_text(
         estimate, [(int(run.nx), int(run.ny), int(run.nz)) for run in runs])
     if args.json:
@@ -10449,6 +12170,19 @@ def check_main(args) -> int:
         raise ValueError("--forcing-interval-s must be finite and positive")
     ingest_interval = (explicit_interval if explicit_interval is not None
                        else configured_interval)
+    # THE FORCING SLOTS THE CARD HOLDS, priced the way `woof go` prices
+    # them.  A config `woof go` runs chained (one domain, one card) streams
+    # its lateral intervals through one device slot; a verified prepared
+    # bundle is a sealed restore and holds the whole schedule.  Pricing the
+    # whole schedule here refused a full-grid 18 h HRRR on a 96 GB card by
+    # 0.50 GiB (19 hourly intervals, 8.24 GiB of boundary tables) that the
+    # go gate admits.  The ingest phase keeps the whole schedule.
+    from woof.ingest.boundary_stream import chained_resident_forcing_slots
+    resident_slots = (chained_resident_forcing_slots(exp)
+                      if prepared is None else None)
+    resident_intervals = (forcing_intervals if resident_slots is None
+                          else resident_slots if forcing_intervals is None
+                          else min(int(forcing_intervals), resident_slots))
     #: Whether the free-VRAM figure below was measured off the device or
     #: derived from a declared --budget-gib.  Printed, because the two
     #: must never wear the same label.
@@ -10532,6 +12266,8 @@ def check_main(args) -> int:
     if getattr(getattr(exp, "devices", None), "enabled", False):
         from woof.core.devices import probe_devices, validate_device_count
         from woof.core.devices_memory import devices_gate, include_preparation
+        from woof.free_threading import refuse_multi_card_under_gil
+        refuse_multi_card_under_gil(exp.devices.count, "woof preflight")
         if args.alloc:
             raise ValueError("[devices] --alloc is not wired into the ranked road; "
                              "refused to prevent allocating a one-card reference domain")
@@ -10610,10 +12346,11 @@ def check_main(args) -> int:
         return exit_code
     reserve = ReservePolicy.n0_alloc(
         exp, profile=profile, estimate_bytes=estimate_experiment(
-            exp, forcing_intervals=forcing_intervals, column_chunk=chunk,
+            exp, forcing_intervals=resident_intervals, column_chunk=chunk,
             forcing_interval_seconds=forcing_interval,
             vram_gib=card_total_gib, profile=profile,
-            boundary_species=boundary_species, urban_columns=urban_columns
+            boundary_species=boundary_species, urban_columns=urban_columns,
+            **single_card_residue_terms(exp)
         ).alloc_estimate_bytes)
     if args.reserve_gib is not None:
         # Flat controller-ratified reserve replacing the proposed stack.
@@ -10624,7 +12361,7 @@ def check_main(args) -> int:
     if args.alloc:
         try:
             report = run_alloc_preflight(
-                exp, column_chunk=chunk, forcing_intervals=forcing_intervals,
+                exp, column_chunk=chunk, forcing_intervals=resident_intervals,
                 forcing_interval_seconds=forcing_interval,
                 reserve=reserve, profile=profile,
                 boundary_species=boundary_species)
@@ -10640,10 +12377,11 @@ def check_main(args) -> int:
             # Aborted before measurement: still report the estimate side
             # (F1 fix) -- the measured legs stay None and can never pass.
             estimate = estimate_experiment(
-                exp, forcing_intervals=forcing_intervals, column_chunk=chunk,
+                exp, forcing_intervals=resident_intervals, column_chunk=chunk,
                 forcing_interval_seconds=forcing_interval,
                 vram_gib=card_total_gib, profile=profile,
-                boundary_species=boundary_species)
+                boundary_species=boundary_species,
+                **single_card_residue_terms(exp))
             measured_used = None
             free = getattr(abort, "free_bytes", None)
             physical_total_bytes = getattr(abort, "total_bytes", None)
@@ -10653,10 +12391,11 @@ def check_main(args) -> int:
                 measured_free_bytes=free, reserve=reserve)
     else:
         estimate = estimate_experiment(
-            exp, forcing_intervals=forcing_intervals, column_chunk=chunk,
+            exp, forcing_intervals=resident_intervals, column_chunk=chunk,
             forcing_interval_seconds=forcing_interval,
             vram_gib=card_total_gib, profile=profile,
-            boundary_species=boundary_species, urban_columns=urban_columns)
+            boundary_species=boundary_species, urban_columns=urban_columns,
+            **single_card_residue_terms(exp))
         measured_used = None
         free = None
         if declared_memory:
@@ -10732,6 +12471,12 @@ def check_main(args) -> int:
                 if capped_to is not None:
                     free_source = ("measured, capped at the declared "
                                    "card's physical total")
+        from woof.core.device_probe import sizing_free_memory
+        if free is not None:
+            lease_free, lease_note = sizing_free_memory(free)
+            if lease_note:
+                free = min(free, lease_free) if declared_memory else lease_free
+                free_source = lease_note
         gates = evaluate_alloc_gates(
             measured_used_bytes=None,
             estimate_bytes=estimate.alloc_estimate_bytes,
@@ -10783,6 +12528,7 @@ def check_main(args) -> int:
         urban_columns=urban_columns,
         preparation_route=config_preparation_route(args.config),
         forcing_intervals=forcing_intervals,
+        resident_forcing_intervals=resident_slots,
         ingest_forcing_interval_seconds=ingest_interval,
         forcing_interval_seconds=forcing_interval,
         vram_gib=card_total_gib, profile=profile,
@@ -11341,7 +13087,11 @@ def check_main(args) -> int:
         print(f"  TIER 1  resident: {_format_bytes(estimate.resident_bytes)}"
               f"   subtotal (+workspace+transient peak): "
               f"{_format_bytes(estimate.subtotal_bytes)}")
-        print(f"  ESTIMATE (x{estimate.headroom:.2f}: measured peak/itemized "
+        print(f"  ESTIMATE ("
+              + (f"+{int(estimate.pool_residue_cap_bytes) / GIB:.2f} GiB "
+                 f"measured pool residue bound (A13), under "
+                 if estimate.pool_residue_cap_active else "")
+              + f"x{estimate.headroom:.2f}: measured peak/itemized "
               f"{estimate.headroom - FORECAST_PEAK_RATIO_SAFETY:.2f} + safety "
               f"{FORECAST_PEAK_RATIO_SAFETY:.2f}"
               + (f", on the subtotal less "
@@ -11365,6 +13115,8 @@ def check_main(args) -> int:
         kf_ws = kf_column_workspace_bytes(exp, profile=profile)
         ysu_ws = ysu_column_workspace_bytes(exp, profile=profile)
         shinhong_ws = shinhong_column_workspace_bytes(exp, profile=profile)
+        fork_ws = thompson_fork_column_workspace_bytes(exp, profile=profile)
+        initial_refl_ws = gsd_initial_reflectivity_workspace_bytes(exp, profile=profile)
         # Kept out of the f-string: a line break inside an f-string
         # expression is PEP 701 (Python 3.12+) syntax, and the supported
         # floor is 3.11 -- the 1.2.0 release workflow failed on exactly
@@ -11375,7 +13127,7 @@ def check_main(args) -> int:
         # to the per-card term (task 206).
         context_bytes = profile.cuda_context_bytes
         remeasured_bytes = (estimate.alloc_estimate_bytes + widest
-                            + gf_ws + kf_ws + ysu_ws + shinhong_ws
+                            + gf_ws + kf_ws + ysu_ws + shinhong_ws + fork_ws + initial_refl_ws
                             + context_bytes
                             + reserve.retention_residual_bytes)
         gf_ws_term = (f" + GF column workspace {_format_bytes(gf_ws)}"
@@ -11387,6 +13139,8 @@ def check_main(args) -> int:
         ysu_ws_term += (" + Shin-Hong column workspace "
                         f"{_format_bytes(shinhong_ws)}"
                         if shinhong_ws else "")
+        ysu_ws_term += (f" + initial GSD radar workspace {_format_bytes(initial_refl_ws)}"
+                       if initial_refl_ws else "")
         print(f"  NON-POOL: CUDA context "
               f"{_format_bytes(context_bytes)} + local-memory backing "
               f"store {_format_bytes(widest)} "
@@ -11837,6 +13591,10 @@ def check_main(args) -> int:
         road = "mixed resident/streamed" if phases.mixed_road else "streamed" if phases.streamed_forecast else "resident"
         mode = getattr(getattr(exp, "tiles", None), "mode", "off")
         print(f"Forecast execution: {road} ([tiles] mode={mode})")
+        if resident_slots is not None:
+            print(f"Lateral boundaries: {resident_intervals} forcing slot(s) on the card; "
+                  "the chained preparation streams the rest of the schedule "
+                  "(WOOF_CHAINED_PREP=0 holds the whole schedule)")
         if phases.tree_road is not None:
             for line in phases.tree_road.row_lines():
                 print(f"  {line}")
@@ -12031,9 +13789,10 @@ def register_cli(subparsers) -> None:
         "check",
         help="memory preflight: itemized estimate vs the measured WDDM "
              "budget; --alloc performs the enforced N0 allocation run")
-    p.add_argument("config", type=Path, metavar="CONFIG",
+    p.add_argument("config", type=Path, metavar="CONFIG", nargs="?",
                    help="experiment TOML (or legacy RunConfig TOML, "
-                        "wrapped as a one-domain experiment)")
+                        "wrapped as a one-domain experiment); omit only for "
+                        "woof check --json context-free box inventory")
     p.add_argument("--prepared-root", type=Path, default=None, metavar="DIR",
                    help="verify prepared forecast inputs and price their "
                         "land cover and retained boundary tables; "
@@ -12107,7 +13866,8 @@ __all__ = [
     "device_rail_free_bytes", "device_wide_used_bytes",
     "column_workspace_bytes", "gf_column_workspace_bytes",
     "kf_column_workspace_bytes", "ysu_column_workspace_bytes",
-    "shinhong_column_workspace_bytes",
+    "shinhong_column_workspace_bytes", "thompson_fork_column_workspace_bytes",
+    "gsd_initial_reflectivity_workspace_bytes",
     "kernel_local_memory_bytes", "non_pool_device_bytes",
     "physics_kernel_modules", "refl_diagnostic_reachable",
     "LEVEL_SPECIALIZED_KERNEL_FRAMES", "LevelSpecializedFrame",
@@ -12153,6 +13913,14 @@ __all__ = [
     "ENVELOPE_AFFINE_BASIS", "ENVELOPE_A163_BASIS", "ENVELOPE_PER_NEST_FRACTION",
     "FORECAST_PEAK_RATIO_MEASURED", "FORECAST_PEAK_RATIO_SAFETY",
     "FORECAST_POOL_HEADROOM", "FORECAST_PEAK_BATTERY",
+    "RANK_POOL_RESIDUE_BATTERY", "RANK_POOL_RESIDUE_BOUND_BYTES",
+    "RANK_POOL_RESIDUE_BASIS", "POOL_RESIDUE_MEASURED_BYTES",
+    "POOL_RESIDUE_SWING_BYTES", "RANK_POOL_RESIDUE_GAP_BASIS",
+    "RANK_POOL_RESIDUE_SUITES", "RANK_POOL_RESIDUE_UNMEASURED_BASIS",
+    "rank_pool_residue_cap_bytes", "rank_pool_residue_suite",
+    "single_card_pool_residue_cap_bytes", "single_card_residue_terms",
+    "mynn_width_adjustable", "required_mynn_pricing",
+    "rank_pool_residue_basis",
     "HeldMemoryItem", "bem_workspace_bound_note",
     "forecast_pool_estimate_bytes", "urban_held_bytes",
     "urban_held_item_names",

@@ -22,6 +22,13 @@ tools/zarr_bridge/vendor/crates-io
 tools/grib1_bridge/.cargo/config.toml
 tools/rw_wps/.cargo/config.toml
 tools/zarr_bridge/.cargo/config.toml
+tools/nextgen_output/.cargo/config.toml
+tools/nextgen_forcing/.cargo/config.toml
+tools/nextgen_verify/.cargo/config.toml
+tools/hydro_world_params/.cargo/config.toml
+tools/nextgen_reservoir_prepare/.cargo/config.toml
+tools/ocean_prepare/.cargo/config.toml
+tools/rw-bathy/.cargo/config.toml
 
 # Installed from PyPI instead
 recast-woof-data

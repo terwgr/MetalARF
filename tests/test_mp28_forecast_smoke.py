@@ -78,6 +78,23 @@ import pytest
 
 from conftest import requires_gpu
 
+# Consumer expectations come from the independent generated declarations.
+from woof.physics_registry import implemented_selector_values as _intake_selectors
+from woof.physics_registry import consumer_rows_by_selector as _intake_rows
+_INTAKE_MP = tuple(sorted(_intake_selectors("microphysics")))
+_INTAKE_REFL = tuple(mp for mp in _INTAKE_MP if mp)
+_INTAKE_PRODUCERS = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "reflectivity_input_species").items()
+    if row is not None))
+from woof.core.column_schemes import COLUMN_SCHEMES
+_INTAKE_NATIVE = tuple(sorted((set(_INTAKE_REFL) - set(_INTAKE_PRODUCERS)) | set(COLUMN_SCHEMES)))
+_INTAKE_SNOW = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qs" in (row or {}).get("state_fields", ())))
+_INTAKE_SIX = tuple(sorted(mp for mp, row in
+    _intake_rows("microphysics", "ring_guard").items()
+    if "qg" in (row or {}).get("state_fields", ())))
+
 # ---------------------------------------------------------------------------
 # WRF's own bounds.  Every constant below is transcribed from
 # wrf461-pristine/phys/module_mp_thompson.F with its line number,
@@ -674,10 +691,11 @@ def test_g4_persistent_scratch_is_not_carried_between_forecast_steps():
     see it -- it allocates a fresh zeroed array and hands it in.
 
     ``tests/test_thompson_aerosol_adapter.py`` poisons the slots between two
-    calls.  This does the same thing 150 times, inside a real integration,
+    calls.  This does the same thing 40 times, inside a real integration,
     with EVERY ``mp_thompson_aero_*`` slot poisoned rather than three -- so
-    it also covers the twelve working buffers whose zeroing nobody has ever
-    had a reason to check across a step.  The requirement is BITWISE
+    it also covers the four working buffers and WRF's five hydrometeor
+    tendency accumulators carried alongside the three aerosol tendency
+    accumulators.  The requirement is BITWISE
     identity of the entire prognostic state against an unpoisoned run.
     """
     import cupy as cp
@@ -692,6 +710,27 @@ def test_g4_persistent_scratch_is_not_carried_between_forecast_steps():
     tracked = ("qv", "qc", "qr", "qi", "qs", "qg", "nc", "nr", "ni",
                "nwfa", "nifa", "effc", "effi", "effs", "thp")
     steps = 40                       # bitwise identity does not need 150
+    expected_slots = (
+        "mp_thompson_aero_ncten", "mp_thompson_aero_nwfaten",
+        "mp_thompson_aero_nifaten", "mp_thompson_aero_entry_density",
+        "mp_thompson_aero_tau1_density", "mp_thompson_aero_nwfa_work_m3",
+        # WRF v4.6.1's hydrometeor tendency accumulators (lane/cut286-mp28-g3).
+        "mp_thompson_aero_qcten", "mp_thompson_aero_qrten",
+        "mp_thompson_aero_nrten", "mp_thompson_aero_qiten",
+        "mp_thompson_aero_niten",
+        # WRF's REAL vapour and temperature tendencies
+        # (lane/mp28fix-warm-network).
+        "mp_thompson_aero_qvten", "mp_thompson_aero_tten",
+        # The frozen carriers' snow, graupel and graupel-number accumulators
+        # (a860663b5, the delivered frozen-carrier launch).
+        "mp_thompson_aero_qsten", "mp_thompson_aero_qgten",
+        "mp_thompson_aero_ngten",
+        "mp_thompson_aero_condensation_rate",
+    )
+    assert AEROSOL_SCRATCH_SLOTS == expected_slots
+    assert AEROSOL_INT_SCRATCH_SLOTS == ()
+    poisoned_calls = {slot: 0 for slot in expected_slots}
+    apply_calls = {False: 0, True: 0}
 
     results = {}
     for poison in (False, True):
@@ -704,15 +743,34 @@ def test_g4_persistent_scratch_is_not_carried_between_forecast_steps():
 
         def wrapper(target, run_cfg, dt, _poison=poison,
                     _real=real_apply, **kwargs):
+            call = apply_calls[_poison]
+            apply_calls[_poison] += 1
+            owned = {slot for slot in target._scratch
+                     if slot.startswith("mp_thompson_aero_")}
+            assert owned <= set(expected_slots), owned
+            if call:
+                assert owned == set(expected_slots), owned
+                ranges = []
+                for slot in expected_slots:
+                    buf = target._scratch[slot]
+                    assert buf.dtype == cp.float32 and buf.flags.c_contiguous
+                    start = int(buf.data.ptr)
+                    end = start + int(buf.nbytes)
+                    assert start and end > start, slot
+                    for other, other_start, other_end in ranges:
+                        assert end <= other_start or other_end <= start, (slot, other)
+                    ranges.append((slot, start, end))
             if _poison:
-                for slot in AEROSOL_SCRATCH_SLOTS:
+                for slot in expected_slots:
                     buf = target._scratch.get(slot)
                     if buf is None:
+                        assert call == 0, slot
                         continue
                     if slot in AEROSOL_INT_SCRATCH_SLOTS:
                         buf.fill(7)
                     else:
                         buf.fill(cp.float32(-3.25e5))
+                    poisoned_calls[slot] += 1
             return _real(target, run_cfg, dt, **kwargs)
 
         dycore.apply_microphysics = wrapper
@@ -728,7 +786,16 @@ def test_g4_persistent_scratch_is_not_carried_between_forecast_steps():
     # The poisoning must actually have reached live buffers, or this proves
     # nothing: the slots are created on the first call, so from step 2 on
     # every one of them is overwritten before the adapter runs.
-    assert len(AEROSOL_SCRATCH_SLOTS) >= 15, AEROSOL_SCRATCH_SLOTS
+    # (This read ``len(AEROSOL_SCRATCH_SLOTS) >= 15``, a count from when the
+    # six optional probe outputs were forecast residents; it failed at
+    # aa5b9607f with nine.  What it means is asserted directly instead:
+    # every slot the adapter draws was live on every call after the first,
+    # and so poisoned on each of them.)
+    missing = [slot for slot in AEROSOL_SCRATCH_SLOTS
+               if slot not in state._scratch]
+    assert not missing, missing
+    assert apply_calls == {False: steps, True: steps}, apply_calls
+    assert poisoned_calls == {slot: steps - 1 for slot in expected_slots}, poisoned_calls
 
     differing = [name for name in tracked
                  if not np.array_equal(results[False][name],
@@ -1231,8 +1298,11 @@ def test_the_runtime_history_lane_admits_28_for_refl_10cm():
     # shipped through the hand-typed set that used to sit here.
     from woof.config import MP_PHYSICS_ACCEPTED
 
+    # FAST_SBM (30) is the one moist scheme out: its polar-scattering
+    # diagnostic is not ported, and woof.core.fast_sbm_runtime.apply
+    # refuses a due frame, so the history lane never asks it for one.
     assert (set(runtime.REFL_10CM_MICROPHYSICS)
-            == {mp for mp in MP_PHYSICS_ACCEPTED if mp})
+            == {mp for mp in MP_PHYSICS_ACCEPTED if mp} - {30})
     # ... and the set is cross-checked against the estimator's own
     # admission set rather than left as one hand-typed tuple, which is how
     # this pin went stale.  The two sets are no longer EQUAL, and the
@@ -1254,9 +1324,11 @@ def test_the_runtime_history_lane_admits_28_for_refl_10cm():
 
     assert (set(pf._REFLECTIVITY_MICROPHYSICS)
             <= set(runtime.REFL_10CM_MICROPHYSICS))
+    # FAST_SBM's row in that table records the third answer: it neither
+    # loads refl.cu nor fills the slot, and the history lane leaves it out.
     assert (set(runtime.REFL_10CM_MICROPHYSICS)
             - set(pf._REFLECTIVITY_MICROPHYSICS)
-            == set(pf._SELF_REFLECTIVITY_MICROPHYSICS) == {9, 18, 50})
+            == set(pf._SELF_REFLECTIVITY_MICROPHYSICS) - {30} == {4, 5, 9, 18, 24, 50, 900})
 
     runtime_source = (pathlib.Path(__file__).resolve().parent.parent
                       / "woof" / "runtime.py").read_text(encoding="utf-8")

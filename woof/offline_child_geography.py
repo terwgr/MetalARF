@@ -87,6 +87,22 @@ WRF_BLEND_WIDTH = 5
 #: storage rounding.
 PARENT_GEOREFERENCE_TOLERANCE_DEG = 2.0e-4
 
+#: The finest child spacing whose land use, soil and land-surface
+#: climatologies may stay on the 30-arc-second WPS baseline.  A 30-arc-second
+#: cell is about 925 m north-south and 755 m east-west at 35 N, so at or
+#: below this spacing one baseline cell covers 1.5 or more child cells and
+#: the child's land shows as about 1 km squares.  A child this fine with no
+#: declared ``[static.highres]`` block takes land cover and soil at source
+#: resolution (``fields = "auto"``: CGLC-MODIS-LCZ 100 m land cover and
+#: SoilGrids 250 m soil, terrain-only where the land cover reaches no part
+#: of the footprint) on top of the Copernicus terrain every sub-km grid
+#: already gets.  Breakage it prevents (WOOF run_373d64f91dce7cdb, a 333 m
+#: nest-down from a 1 km child, 2026-10-29): its 2 m temperature at +1 h was
+#: made of 2-3 cell squares, 90 % of its small-scale variance explained by
+#: the 30-arc-second cells its LU_INDEX, ISLTYP, ALBBCK and EMISS were
+#: built from.
+CHILD_LAND_COVER_MAX_DX_M = 600.0
+
 #: Sentence half shared by every refusal that turns away an own-geography
 #: child, naming the way back to the route that needs no geography.
 PARENT_TERRAIN_REMEDY = (
@@ -211,19 +227,24 @@ def _raw_static_table(child_config_path):
 
 
 def load_child_static_policy(child_config_path, cfg, *,
-                             terrain=None, geog_root=None
-                             ) -> ChildStaticPolicy:
+                             terrain=None, geog_root=None,
+                             highres_cache=None) -> ChildStaticPolicy:
     """The static policy a child config and the door's flags resolve to.
 
-    ``terrain`` and ``geog_root`` are the door's flags (``--parent-terrain``
-    and ``--geog-root``); a flag wins over the file, as ``--tiles`` and
-    ``--child-levels`` do on this route.  A child config with no ``[static]``
-    table takes the engine's own defaults: its own geography, the staged
-    WPS_GEOG tree, WPS's default terrain smoother and the engine's
-    high-resolution default for its spacing
-    (:data:`woof.static.highres_production.HIGHRES_DEFAULT_BY_DX`:
-    Copernicus GLO-30 terrain at 1 km or finer), with the urban legend
+    ``terrain``, ``geog_root`` and ``highres_cache`` are the door's flags
+    (``--parent-terrain``, ``--geog-root`` and ``--highres-cache``); a flag
+    wins over the file, as ``--tiles`` and ``--child-levels`` do on this
+    route.  A child config with no ``[static]`` table takes the engine's own
+    defaults: its own geography, the staged WPS_GEOG tree, WPS's default
+    terrain smoother and the engine's high-resolution default for its
+    spacing (:data:`woof.static.highres_production.HIGHRES_DEFAULT_BY_DX`:
+    Copernicus GLO-30 terrain at 1 km or finer; at
+    :data:`CHILD_LAND_COVER_MAX_DX_M` or finer also land cover and soil at
+    source resolution), with the urban legend
     ``sf_urban_physics``/``use_wudapt_lcz`` of the child's own config.
+    ``highres_cache`` is the folder the high-resolution tiles and land-cover
+    rasters are read from and cached in (default: the declared block's
+    ``cache_root``, else the engine's per-user cache).
     """
 
     source = str(child_config_path)
@@ -277,11 +298,32 @@ def load_child_static_policy(child_config_path, cfg, *,
     highres = resolve_static_highres(
         raw, source=source, base_dir=Path(child_config_path).resolve().parent,
         spacings_m=(float(cfg.dx),), run_config=cfg)
+    highres = child_land_cover_default(highres, cfg, declared="highres" in table)
+    if highres is not None and highres_cache is not None:
+        highres = replace(highres, cache_root=Path(highres_cache).resolve())
     return ChildStaticPolicy(
         terrain=chosen, geog_root=root_path,
         geog_data_res=str(table.get("geog_data_res", "default")),
         smoothing=smoothing, highres=highres, source=origin,
         declared=declared)
+
+
+def child_land_cover_default(highres, cfg, *, declared: bool):
+    """The engine's terrain default, widened to land cover and soil for a
+    child at :data:`CHILD_LAND_COVER_MAX_DX_M` or finer.
+
+    Only the engine's own default is widened: a declared ``[static.highres]``
+    block (``enabled = false`` included) is the user's and is returned as
+    written, and a child coarser than the threshold keeps terrain only.
+    """
+    if declared or highres is None or float(cfg.dx) > (
+            CHILD_LAND_COVER_MAX_DX_M + 1e-3):
+        return highres
+    from woof.static.highres_production import default_row_of
+
+    if default_row_of(highres) is None or highres.fields != "terrain":
+        return highres
+    return replace(highres, fields="auto", landcover_source="auto")
 
 
 def static_table_text(policy: ChildStaticPolicy) -> str:
@@ -774,7 +816,10 @@ def surface_on_child_geography(parent_frame, *, placement, geography,
                                      OfflineChildContractError,
                                      _ParentHistory, _require_finite,
                                      _DAMAGED_PARENT_HISTORY,
-                                     _SURFACE_IDENTITY_ATTRS)
+                                     _SURFACE_IDENTITY_ATTRS,
+                                     noah_soil_onto_ruc_levels,
+                                     noah_soil_onto_ruc_receipt,
+                                     parent_soil_onto_child_levels)
     from woof.static.build import monthly_interp_to_date
 
     path = Path(parent_frame)
@@ -810,6 +855,8 @@ def surface_on_child_geography(parent_frame, *, placement, geography,
             _require_finite(path, name, value, dims,
                             remedy=_DAMAGED_PARENT_HISTORY)
             parent[name] = value
+        parent_zs = (np.asarray(dataset.variables["ZS"][:]).reshape(-1)
+                     if "ZS" in dataset.variables else None)
     child_identity = {"MMINLU": str(attrs["MMINLU"]).strip(),
                       "ISWATER": int(attrs["ISWATER"]),
                       "ISLAKE": int(attrs["ISLAKE"]),
@@ -875,6 +922,14 @@ def surface_on_child_geography(parent_frame, *, placement, geography,
         "SHDMIN": 100.0 * np.asarray(statics["GREENFRAC"]).min(axis=0),
         "SHDMAX": 100.0 * np.asarray(statics["GREENFRAC"]).max(axis=0),
     })
+    # A Noah parent under a RUC child (a refined nest-down on the HRRR-shape
+    # suite): the column is rebuilt on RUC's levels from the lapsed layers
+    # against the child's own TMN and land mask, as real.exe builds it.
+    parent_soil = int(np.asarray(fields["TSLB"]).shape[0])
+    remap_soil = parent_soil_onto_child_levels(parent_soil, num_soil_layers)
+    if remap_soil:
+        fields = noah_soil_onto_ruc_levels(
+            fields, parent_zs_m=parent_zs, num_soil_layers=num_soil_layers)
     if "LAI12M" in statics:
         fields["LAI"] = monthly_interp_to_date(statics["LAI12M"], valid_time)
     if "SNOALB" in statics:
@@ -897,6 +952,8 @@ def surface_on_child_geography(parent_frame, *, placement, geography,
     identity["ISOILWATER"] = parent_identity["ISOILWATER"]
     lapse_cells = int(np.count_nonzero(delta))
     receipt = MappingProxyType({
+        **({"soil_levels_rebuilt": noah_soil_onto_ruc_receipt(
+            parent_zs, num_soil_layers)} if remap_soil else {}),
         "path": str(path.resolve()),
         "source": "child-own-geography",
         "identity": dict(identity),
@@ -920,11 +977,13 @@ def surface_on_child_geography(parent_frame, *, placement, geography,
 
 
 __all__ = [
+    "CHILD_LAND_COVER_MAX_DX_M",
     "CHILD_TERRAIN_CHOICES", "CHILD_TERRAIN_OWN", "CHILD_TERRAIN_PARENT",
     "ChildGeography", "ChildGeographyError", "ChildStaticPolicy",
     "DEFAULT_CHILD_TERRAIN", "OWN_TERRAIN_POLICY", "PARENT_TERRAIN_POLICY",
     "PARENT_TERRAIN_REMEDY", "RebalancedColumns", "WRF_BLEND_WIDTH",
-    "blend_child_terrain", "build_child_geography", "child_projected_grid",
+    "blend_child_terrain", "build_child_geography",
+    "child_land_cover_default", "child_projected_grid",
     "load_child_static_policy", "parent_projected_grid",
     "parse_child_static_table", "rebalance_to_child_terrain",
     "require_geog_tree", "static_table_text",

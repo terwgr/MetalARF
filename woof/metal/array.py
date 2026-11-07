@@ -112,6 +112,14 @@ class MetalArray:
                 raise ValueError("Metal copy requires equal shape and dtype")
             if self.size == 0:
                 return
+            if value.buffer is self.buffer:
+                if value.byte_offset == self.byte_offset:
+                    return
+                # The copy kernel works in place, so a source that overlaps
+                # its target is first copied to a buffer of its own.
+                if (value.byte_offset < self.byte_offset + self.nbytes
+                        and self.byte_offset < value.byte_offset + value.nbytes):
+                    value = value.copy()
             self.buffer.context.submit_bookkeeping(((value, self),))
         else:
             host = np.asarray(value, dtype=self.dtype)
@@ -174,6 +182,13 @@ class MetalArray:
     def __array__(self, dtype=None, copy=None):
         raise TypeError(
             "implicit Metal-to-host conversion is disabled; call to_numpy()")
+
+
+def overlaps(left: MetalArray, right: MetalArray) -> bool:
+    """Whether two arrays share any byte of the same Metal buffer."""
+    return (left.buffer is right.buffer
+            and left.byte_offset < right.byte_offset + right.nbytes
+            and right.byte_offset < left.byte_offset + left.nbytes)
 
 
 class MetalArrayModule:
@@ -243,8 +258,9 @@ class MetalArrayModule:
             raise TypeError(f"Metal slice does not support dtype {host.dtype}")
         if order not in (None, "C", "A", "K"):
             raise ValueError("MetalArray supports only C-contiguous storage")
+        shape = host.shape
         host = np.ascontiguousarray(host)
-        result = self.zeros(host.shape, host.dtype)
+        result = self.zeros(shape, host.dtype)
         if host.size:
             result.buffer.write(host.tobytes(), offset=result.byte_offset)
         return result

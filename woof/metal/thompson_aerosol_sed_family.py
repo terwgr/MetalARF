@@ -57,8 +57,17 @@ def submit_cloud_sedimentation(
         qc, cloud_number_entry, cloud_number_tendency,
         temperature, pressure, qv, vertical_velocity, dz, *,
         reference_density, rain_active_columns, cloud_active_columns,
-        gamma_moments, dt: float, level_parallel: bool):
+        gamma_moments, dt: float, level_parallel: bool, qcten=None):
     """Submit masked production cloud fallout for one MP28 column grid."""
+    if qcten is not None:
+        from .thompson_aerosol_cloud_tendency import submit_cloud_tendency
+        return submit_cloud_tendency(
+            qc, cloud_number_entry, cloud_number_tendency, temperature,
+            pressure, qv, vertical_velocity, dz, qcten=qcten,
+            reference_density=reference_density,
+            rain_active_columns=rain_active_columns,
+            cloud_active_columns=cloud_active_columns,
+            gamma_moments=gamma_moments, dt=dt)
     if not isinstance(qc, MetalArray) or qc.ndim != 3:
         raise TypeError("MP28 cloud fallout requires 3-D MetalArray state")
     nz, ny, nx = map(int, qc.shape)

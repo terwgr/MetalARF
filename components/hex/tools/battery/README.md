@@ -14,7 +14,7 @@ gate that was supposed to run has not been running for a month.
 ## Tier 1 (`cpu_files.txt`) runs anywhere
 
 ```sh
-PYTHONPATH=src python -m pytest -q -m "not gpu and not bigcard and not assets" \
+PYTHONPATH=src python -m pytest -q -rs -m "not gpu and not bigcard and not assets" \
     $(grep -v '^#' tools/battery/cpu_files.txt)
 ```
 
@@ -23,6 +23,11 @@ GitHub-hosted runner runs on every push and pull request, and it is the tier
 that catches what a public cut can actually break: the packaging declaration,
 the front doors' argument surfaces and refusals, the proof-guard ordering and
 pin structure, the multi-GPU partition executor's pure logic.
+
+`test_native_dry_agreement.py` also runs one NumPy dry step when the
+rebuildable native reference is present. Set `HEX_NATIVE_DRY_REFERENCE`
+to the work root produced by `woof hex verify-dycore`. Without it, `-rs`
+prints the missing-reference reason and the command that creates it.
 
 It deliberately does not import CuPy. Any test whose module or function
 reaches CuPy is auto-marked `gpu` by `tests/conftest.py` (by AST, not by
@@ -79,3 +84,31 @@ Set `WOOF_HEX_NO_LOCAL_GPU=1` (or `GPUWM_NO_LOCAL_GPU=1`, honoured so a box
 configured for the engine behaves the same) to ban device contact outright:
 the gates skip by name and `CUDA_VISIBLE_DEVICES` is set to `-1` so that a
 transitive allocation the markers cannot see still finds no device.
+
+## Both routes (`both_routes.json`) one real run per capability family, on each physics route
+
+```sh
+HEX_GPU_LEASE=<pool admission program> PYTHONPATH=src python tools/both_routes_gate.py --work DIR \
+    --staged GFS_DIR --geog WPS_GEOG --best-track IBTRACS.csv --storm-staged GFS_F000 [--jobs 3] [--clean]
+PYTHONPATH=src python tools/both_routes_gate.py --plan     # every command, nothing run
+```
+
+Every hex capability has to work on the WOOF-physics route and on the MPAS-physics route, and a fix to one
+route has to reach the other. This leg runs each capability family once on each route: a 120 km globe for 1-2 h
+(global door with live frames, maps and export; keep-as-init export with `HGT`, radar and the column store;
+2 cards = 1 card; restart with SPPT+SKEB = straight; IAU; JEDI background; chemistry; balance series; trigger
+nests arming; a member roster), a small variable-resolution globe with and without local time stepping, a
+limited-area country point and a storm-following moving region. One leg is TIMED: `lts-speed` runs the 96 -> 3 km
+zoom globe (the site's default hex shape) for 3 h with the fixed step and again with a bare local-time-stepping
+request, back to back on the same card, and is red unless the LTS arm's warm forecast hour (frame to frame, f000
+excluded) is at least `min_speedup` times faster; its receipt keeps both rates, the door's plan choice and the
+host load at each start, so a red on a loaded box can be told apart from a regression. Breakage it prevents:
+LTS at 0.74-0.81x of the fixed step on that mesh in 0.4.5-0.4.9 with no red anywhere (HEX-LTS-REGRESSION
+2026-10-27). Each check names what it proves; the receipt
+(`DIR/both-routes.json`) and matrix (`DIR/both-routes.md`) carry the verdict, median step time and sampled peak
+VRAM per route.
+
+It never holds a card exclusively. GPU steps go through `HEX_GPU_LEASE` (invoked as
+`<program> --vram-mib N [--cards K] <lane> -- <command>`, K only for the two-card leg) or the site GPU queue
+without `--proof`, so a timed arm in flight keeps its card. The CPU tier's `tests/test_both_routes_gate.py`
+parses every command with the real parser, so a renamed flag is red there, before any card is asked for.

@@ -1,0 +1,246 @@
+{
+  "kernels": [
+    {
+      "name": "hexrrfs_cloudiness",
+      "module": "hexrrfs_cloudiness",
+      "source": "woof/metal/shaders/hexrrfs_cloudiness.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/radiation_rrfs.py",
+      "cuda_symbol": "cloud_from",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "density",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "cldfrac_bl",
+          "float",
+          "read"
+        ],
+        [
+          "qc_bl",
+          "float",
+          "read"
+        ],
+        [
+          "qi_bl",
+          "float",
+          "read"
+        ],
+        [
+          "cldfrac_cu",
+          "float",
+          "read"
+        ],
+        [
+          "qc_cu",
+          "float",
+          "read"
+        ],
+        [
+          "qi_cu",
+          "float",
+          "read"
+        ],
+        [
+          "qvrad",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcrad",
+          "float",
+          "read_write"
+        ],
+        [
+          "qirad",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsrad",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_cldfrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "dx",
+          "float",
+          "read_write"
+        ],
+        [
+          "land",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfrac_bl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi_bl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfrac_cu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc_cu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi_cu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvrad": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcrad": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qirad": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsrad": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfrac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_cldfrac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "mynn",
+          "int32"
+        ],
+        [
+          "step",
+          "int32"
+        ],
+        [
+          "gfl",
+          "int32"
+        ],
+        [
+          "len_disp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

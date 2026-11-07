@@ -67,7 +67,7 @@ tests/test_mynn_surface.py
 # only): a missing fixture must fail, not silently remove the comparison.
 tests/test_scalar_pblmix.py
 
-# --- Noah-MP, against woof/data/noahmp/oracle/ and tools/noahmp_wrf461_oracle/
+# --- Noah-MP, against tests/data/oracles/noahmp/ and tools/noahmp_wrf461_oracle/
 tests/test_noahmp_bareflux.py
 tests/test_noahmp_driver.py
 tests/test_noahmp_oracle_harness.py
@@ -95,7 +95,6 @@ tests/test_projection_oracle.py
 tests/test_thompson_aerosol_oracle_provenance.py
 tests/test_thompson_oracle_provenance.py
 
-tests/test_tui_cli.py
 
 # Committed WRF SOILVEGIN and complete LSMRUC mosaic fixtures. A skipped
 # comparison would lose mixture-order and irrigation regression coverage.
@@ -108,14 +107,6 @@ tests/test_lake_contract.py
 # --- DECLARED-SKIPPING-BEGIN -------------------------------------------------
 # Release-source checks need an external Git executable to construct real repositories.
 tests/test_verify_release_build_tree.py  needs Git on PATH; it checks real tracked and untracked build state.
-# DECLARED TEST EXCEPTIONS: one test id, not a file (tools/battery/
-# no_silent_skip.py skips exactly that test with this reason; every other test
-# in the file keeps running).  2.8.6 ruling: the g3 gate is the one test that
-# asserts the aero-cloud-freeze-nc, aero-cold-overlap and wp08-nusweep cells
-# against the 2e-6 bound; the residual ratchet, the published-matrix pins and
-# the one-extra-rounding pin beside it keep gating.  Retire this entry in the
-# commit that makes g3 pass.
-tests/test_thompson_aerosol_adapter.py::test_g3_end_to_end_against_all_nineteen_oracle_fixtures  mp=28 (aerosol-aware Thompson) is not yet bit-parity with WRF 4.6.1 on 7 oracle cells (qc up to 4.9e-6 against a 2e-6 bound); the accumulation-order rework is in progress and changes kernels shared with mp=8 (lane/cut286-mp28-g3)
 # Ensemble member decks (lane/283-ensemble-batch) skip whole modules when
 # their device or native preparation library is absent.
 tests/test_ensemble_batch_bookkeeping_gpu.py  needs a CUDA device; it is skipped when GPUWM_NO_LOCAL_GPU is set, and a GPU leg with the device runs its member bookkeeping word comparisons.
@@ -164,7 +155,7 @@ tests/test_no_forecast_gate.py  needs bash and the gate script; skipped on a
 #                              Windows box with no bash on PATH.
 tests/test_remote_worker_linux.py  needs Linux /proc process ownership and POSIX process groups; runs on the hosted Linux CPU lane and skips on Windows.
 tests/test_remote_completion_transition.py  needs Linux pidfd ownership (os.pidfd_open and signal.pidfd_send_signal); it drives real wrapper and runner exits, so nothing restores it on Windows or macOS, and it runs on the hosted Linux CPU lane.
-tests/test_local_da_obs_tables.py  needs the shared observation-table package (woof.globe.obs_table), which no extra of this tree installs; the deck adapts that package's row type and operators, so nothing in a fresh clone restores it.
+tests/test_local_da_obs_tables.py  needs the shared observation-table package (arwen_global.obs_table), which no extra of this tree installs; the deck adapts that package's row type and operators, so nothing in a fresh clone restores it.
 tests/test_local_da_windows_status_publication.py  holds the Windows file-sharing contract of the status publication (os.name is nt); on every other platform the contract does not exist and the deck skips by name.
 tests/test_wrfout_unicode_recovery.py  holds the Windows contract for history files under folders with non-ASCII letters (os.name is nt), where NetCDF-C cannot open the path; on every other platform the path opens and the deck skips by name. tests/test_wrfout_native_validation.py sends a file through the same native route on any platform.
 
@@ -210,3 +201,19 @@ tests/test_mynn_mixlength2.py  needs a CUDA device for its CUDA column compariso
 tests/test_ensemble_spp_runtime_gpu.py  needs a CUDA device and WOOF_TEST_RUNTIME_CASE_CONFIG (staged on a development machine); with both, its SPP member arm builds a public EnsembleRequest with stochastic controls, which the 2.8.5 calibration refusal (woof/ensemble/calibration_admission.py) refuses, so 1 of its 3 tests fails until that arm reaches the stochastic path through a door the refusal admits; it joins tools/battery/gpu_shard_files.txt SHARD 1w when it does.
 tests/test_ensemble_wrf_seed_labels_runtime_gpu.py  needs a CUDA device and WOOF_TEST_RUNTIME_CASE_CONFIG (staged on a development machine); with both, its 2 tests build a public EnsembleRequest with SPPT controls (one arm adds SKEBS), which the 2.8.5 calibration refusal (woof/ensemble/calibration_admission.py) refuses, so both fail until they reach the stochastic path through a door the refusal admits; it joins tools/battery/gpu_shard_files.txt SHARD 1w when they do.
 tests/test_ensemble_tiny_domain_gpu.py  needs a CUDA device and the staged May-1999 ERA5 case data with its reference bundle under GPUWM_CASE_DATA_ROOT, which is not staged on the release node; it is marked slow, so every battery leg's marker expression deselects it.
+
+# Module-level skips added on the 2.8.8 and 2.8.9 lines without an entry here
+# (declared by lane/stale-tests-289, each with the commit that added it).
+tests/test_enprod_v2_engine.py  needs the built rw_ensbatch engine (tools/rustwx) that probes usable; a leg that builds or stages the bridges runs it (81b5a42e9).
+tests/test_ensemble_packing_launch_gpu.py  needs a CUDA device and the live provider network (WOOF_NETWORK_TESTS=1), and is marked slow; a card queue that sets the variable runs it (83484a379).
+tests/test_obs_parallel_native.py  needs the native rw-superob library staged; a leg that builds or stages the bridges runs it (85e9951d9).
+tests/test_obs_superob_rust_parity.py  needs the native rw-superob library staged; a leg that builds or stages the bridges runs it (3aa8b242d).
+tests/test_tempo_rust_init.py  needs TEMPO_BLOB, a dump tools/tempo_ref/tempo_ref_driver.F90 writes from TEMPO 9adf9ef under gfortran, and TEMPO_TABLE_DIR with TEMPO's four table files, none of which ship in this repository (809cdc87b).
+tests/test_wrf_exact_round3.py  needs GPUWM_WRF_EXACT=1 set before import: the module flags are read at import under the opt-in strict compiler hook, which a default process never installs (01402fcb1).
+# G3 column fixtures ship; its CUDA execution is checked in the queued GPU leg.
+tests/test_g3_cu5_parity.py  needs a CUDA device; CPU legs skip this module, while both queued arithmetic arms run all committed column fixtures.
+# Module-level skips added on the 2.9.0 line without an entry here (declared
+# by lane 290-A6, each with the commit that added it).
+tests/test_fast_sbm_port_oracle.py  needs a C++ compiler (g++, c++ or clang++) on PATH to build the fast-SBM host replay library from tools/fast_sbm_host; the WRF fixtures ship, so every Linux leg with a compiler runs it (767819c79).
+tests/test_owner_identity_scan.py  needs the release cut tooling (tools/release/cut/drivers/owner_identity_scan.py), which RELEASE-EXCLUDE.txt drops from the public snapshot; every leg on the private tree runs it (7321ad1ea).
+tests/test_icechunk_door_gpu.py  needs a CUDA device, provider network, rw_icechunk and WOOF_ICECHUNK_CASE naming a domain-door TOML; a leased GPU leg runs the real go door and compares every native field at each snapshot.

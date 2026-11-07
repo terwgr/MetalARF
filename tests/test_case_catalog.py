@@ -642,7 +642,13 @@ def test_imported_diffusion_requires_a_supported_selector(tmp_path, value):
     assert any("diff_opt" in issue for issue in preview["import_issues"])
 
 
-def test_imported_native_creation_honors_hourly_cadence_and_unique_vtables(tmp_path):
+@pytest.mark.parametrize("provider,artifact", [("cds", "era5-combined.grib"),
+                                               ("arco", "era5-combined.nc")])
+def test_imported_native_creation_honors_hourly_cadence_and_unique_vtables(
+        tmp_path, monkeypatch, provider, artifact):
+    # The keyless default publishes NetCDF; a present CDS key selects GRIB.
+    from woof import fetch
+    monkeypatch.setattr(fetch, "cds_credentials_present", lambda: provider == "cds")
     path = proposal_zip(tmp_path)
     for name in ("one", "two"):
         out = tmp_path / (name + ".toml")
@@ -651,7 +657,8 @@ def test_imported_native_creation_honors_hourly_cadence_and_unique_vtables(tmp_p
         assert raw["fetch"]["cycle"] == "2013-05-31T14"
         assert raw["fetch"]["cadence"] == 1 and raw["fetch"]["hours"] == 11
         assert raw["case_data"]["forcing_interval_s"] == 3600
-        assert [Path(value).resolve() for value in raw["case_data"]["forcing"]] == [(tmp_path / "data" / name / "era5-combined.grib").resolve()]
+        assert raw["fetch"].get("era5_provider", "cds") == provider
+        assert [Path(value).resolve() for value in raw["case_data"]["forcing"]] == [(tmp_path / "data" / name / artifact).resolve()]
         assert raw["case_data"]["geog_root"] == "${GPUWM_CASE_DATA_ROOT}/WPS_GEOG"
         assert raw["case_data"]["vtable"].startswith(name + ".")
         assert (tmp_path / raw["case_data"]["vtable"]).is_file()
@@ -775,22 +782,30 @@ def test_worldwide_source_geometry_and_cadence_reach_native_creation(tmp_path, s
 
 
 def test_a_regional_case_the_route_cannot_state_is_refused_whole(tmp_path):
-    """The route reads namelists, and they have no key for this one.
+    """The route reads namelists, and the pair it writes has no row for this one.
 
-    WRF always applies the moisture pressure correction when moisture
-    exists, and its namelist cannot encode an explicit verification
-    opt-out.  A configuration requesting false would therefore run a
-    different model after the route re-imported its namelists.
+    The HRRR route prepares the tree, and its mirrored WRF arm runs, from
+    the namelist pair it emits beside the TOML.  Its renderer writes no
+    swrad_scat row, so a configuration stating swrad_scat = 1.5 would be
+    read back as WRF's 1.0: a different model from the TOML beside it.
     Publication refuses the mismatch and creates nothing.
+
+    (moist_cq = false was this example until 6ce05efd2 made the forecast
+    read it from the TOML (ROUTE_FORECAST_TOML_FIELDS), so it no longer
+    refuses.  relax_w, the example 574743358 moved the bare-configuration
+    test to, is not a catalog override.  swrad_scat is one of the
+    catalog-allowed settings the route's renderer does not write, measured
+    2026-10-07 at the 2.8.7 gate; when the renderer learns to carry it,
+    this example moves again.)
     """
     from woof.hrrr_route_inputs import HrrrRouteInputError
 
     loaded = catalog.load_catalog(proposal_zip(tmp_path, document=worldwide_proposal_document()))
     output = tmp_path / "unstateable.toml"
-    with pytest.raises(HrrrRouteInputError, match="moist_cq"):
+    with pytest.raises(HrrrRouteInputError, match="swrad_scat"):
         catalog.create_case(loaded, "synthetic-import", out=output, tier="lower",
                             source_option="hrrr", vram_gib=32, now=NOW,
-                            native_overrides={"shared": {"moist_cq": False}})
+                            native_overrides={"shared": {"swrad_scat": 1.5}})
     assert not output.exists()
     assert not list(tmp_path.glob("unstateable*"))
 

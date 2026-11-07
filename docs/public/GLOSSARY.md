@@ -17,7 +17,7 @@ different vocabulary.
 | `ungrib.exe` + Vtable | **decode**, driven by a **mapping** | no intermediate files; the Vtable's job is done by the mapping's selectors |
 | `metgrid.exe` | **horizontal interpolation** inside `woof prep` | no `met_em` files; the result goes straight into the prepared bundle |
 | `real.exe` | **initialize** inside `woof prep` | produces `wrfinput`/`wrfbdy` equivalents under `wrf-native-input/` |
-| `wrf.exe` | `woof sim` | Legacy CUDA simulation route; regional Metal forecasts use `woof go --backend metal` ([Backends](BACKENDS.md)). |
+| `wrf.exe` | `woof sim` | the one stage that needs a GPU: CUDA, or `--backend metal` on Apple Silicon ([Backends](BACKENDS.md)) |
 | all four, scripted | `woof prep` | one command, one output root, one proof |
 | the whole thing plus plotting | `woof go` | authority, fetch, manifest, prep, sim, render: the same six commands, run in order |
 

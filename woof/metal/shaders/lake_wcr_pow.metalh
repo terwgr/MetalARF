@@ -1,0 +1,37 @@
+#ifndef WOOF_LAKE_WCR_POW_METALH
+#define WOOF_LAKE_WCR_POW_METALH
+#include "lake_wcr_log.metalh"
+static inline bool lw_is_int(W y){return soft64_equal(soft64_rint_bits(y.bits),y.bits);}
+static inline bool lw_is_odd_int(W y){
+ if(!(lw_abs(y)<lw_bits(0x4340000000000000ul)))return false;
+ W scaled=y*W(.5f);return lw_is_int(y) && !soft64_equal(soft64_rint_bits(scaled.bits),scaled.bits);
+}
+static inline ulong lake_wcr_pow_bits(ulong xb,ulong yb){
+ W x=lw_bits(xb),y=lw_bits(yb),zero=W(0),one=W(1),inf=lw_bits(0x7ff0000000000000ul);
+ if(y==zero || x==one)return one.bits;
+ if(y==W(2))return (x*x).bits;
+ if(soft64_is_nan(xb) || soft64_is_nan(yb))return (x+y).bits;
+ W ax=lw_abs(x);
+ if(soft64_is_infinite(yb)){
+  if(ax==one)return one.bits;return ((ax>one)==(y>zero))?inf.bits:zero.bits;
+ }
+ bool odd=lw_is_odd_int(y);
+ if(x==zero){if(y>zero)return odd?x.bits:zero.bits;return odd?(one/x).bits:inf.bits;}
+ if(soft64_is_infinite(ax.bits)){
+  if(x>zero)return y>zero?inf.bits:zero.bits;
+  if(y>zero)return odd?(-inf).bits:inf.bits;
+  return odd?0x8000000000000000ul:0ul;
+ }
+ W sign=one;
+ if(x<zero){if(!lw_is_int(y))return (zero/zero).bits;if(odd)sign=-one;}
+ LakeWcrDD lx=lw_log_fast(ax);W t0=lx.h*y;
+ if(t0>W(710))return (sign*inf).bits;
+ if(t0<W(-746))return (sign*zero).bits;
+ LakeWcrDD t=lw_mul_d(lx,y);int k;W out;
+ LakeWcrDD f=lw_exp_fast(t,k);
+ W rel=lw_bits(0x3c00000000000000ul)+lw_abs(t.h)*lw_bits(0x3bf0000000000000ul);
+ if(k> -1022 && lw_round_ok(f,rel,out))return (sign*(k>1023?(out*lw_pow2(1023))*W(2):out*lw_pow2(k))).bits;
+ t=lw_mul_d(lw_log_dd(ax),y);LakeWcrDD e=lw_exp_core(t,k);
+ return (sign*lw_exp_finish(e,k)).bits;
+}
+#endif

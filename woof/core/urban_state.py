@@ -148,23 +148,23 @@ def _normalized_row(row) -> tuple[str, object]:
     return dtype, layers
 
 
-def option_spec(option: int, module=None) -> dict[str, tuple[str, object]]:
+def option_spec(option: int, module=None, *, generation="wrf_471") -> dict[str, tuple[str, object]]:
     """The full array spec for ``option``: infra's rows plus the module's."""
     spec = dict(COMMON_SPEC)
     if option == 1:
         spec.update(UCM_SPEC)
+        if generation == "wrf_480":
+            from woof.core.urban_ucm import state_spec_for_generation
+            spec.update({n: _normalized_row(r) for n, r in state_spec_for_generation(generation).items()})
     if option in (2, 3):
         spec.update(BEP_SPEC)
     if option == 3:
         spec.update(BEM_SPEC)
     extra = getattr(module, "STATE_SPEC", None) or {}
 
-    def norm(row):
-        return _normalized_row(row)
-
     def same(a, b):
         # A single-level row and infra's 2-D row describe one plane.
-        (ta, la), (tb, lb) = norm(a), norm(b)
+        (ta, la), (tb, lb) = _normalized_row(a), _normalized_row(b)
         return ta == tb and ({la, lb} <= {0, 1} or la == lb)
 
     for name, row in extra.items():
@@ -173,7 +173,7 @@ def option_spec(option: int, module=None) -> dict[str, tuple[str, object]]:
                 f"{getattr(module, '__name__', module)} declares {name} as "
                 f"{tuple(row)}, infra's Registry row is {spec[name]}")
         if name not in spec:
-            spec[name] = norm(row)
+            spec[name] = _normalized_row(row)
     return spec
 
 
@@ -239,7 +239,7 @@ def urban_array_shapes(cfg, *, urban_columns: int | None = None
     dims = resolve_dimensions(option)
     hi = int(getattr(cfg, "num_urban_hi", 15))
     shapes: dict[str, tuple[int, ...]] = {}
-    for name, row in option_spec(option).items():
+    for name, row in option_spec(option, generation=getattr(cfg, "urban_ucm_generation", "wrf_471")).items():
         layers = _layers(row, dims, hi)
         shapes[name] = ((layers,) if layers else ()) + (ny, nx)
     if option in (2, 3):
@@ -503,6 +503,7 @@ def urban_var_init_host(*, option: int, use_wudapt_lcz: int,
     smois = np.asarray(smois, dtype=f4)
     dims = dict(dims or {})
     spec = dict(spec if spec is not None else option_spec(option))
+    # Zero allocation also supplies WRF's zero fluxes, morphology and stores.
     out: dict[str, np.ndarray] = {}
     for name, row in spec.items():
         layers = _layers(row, dims, num_urban_hi)
@@ -518,21 +519,7 @@ def urban_var_init_host(*, option: int, use_wudapt_lcz: int,
     # the end of a 3-row table for an LCZ type above 3 -- undefined in WRF,
     # so the refusal comes first here.
     _validate_urban_types(utype, use_wudapt_lcz)
-    # :2716-2719 and :2725
-    for name in ("sh_urb2d", "lh_urb2d", "g_urb2d", "rn_urb2d"):
-        out[name][...] = 0.0
     out["utype_urb2d"][...] = utype
-    # :2749-2767 -- default morphology when HGT_URB2D <= 0 (always, until
-    # gridded morphology is ingested), and :2785-2799 off the city.
-    zero_morph = ~switch | ~(out["hgt_urb2d"] > 0.0)
-    for name in ("lp_urb2d", "lb_urb2d", "hgt_urb2d"):
-        out[name][zero_morph] = 0.0
-    if option == 1:
-        out["mh_urb2d"][zero_morph] = 0.0
-        out["stdh_urb2d"][zero_morph] = 0.0
-        out["lf_urb2d"][:, zero_morph] = 0.0
-    else:
-        out["hi_urb2d"][:, zero_morph] = 0.0
     out["frc_urb2d"][...] = urban_fraction(utype, out["frc_urb2d"],
                                            params.FRC_URB_TBL)
     if "qc_urb2d" in out:
@@ -543,14 +530,7 @@ def urban_var_init_host(*, option: int, use_wudapt_lcz: int,
         tl_mid = (f4(0.5) * (tl1 + tl2)).astype(f4)
         tl_4 = (tl2 + ((tl3 - tl2).astype(f4) * f4(0.29)).astype(f4)).astype(f4)
         ladder = np.stack([tl1 + f4(0.0), tl_mid, tl2 + f4(0.0), tl_4])
-        for name in ("xxxr_urb2d", "xxxb_urb2d", "xxxg_urb2d", "xxxc_urb2d"):
-            if name in out:
-                out[name][...] = 0.0
         if option == 1:
-            for name in ("drelr_urb2d", "drelb_urb2d", "drelg_urb2d",
-                         "flxhumr_urb2d", "flxhumb_urb2d", "flxhumg_urb2d",
-                         "cmcr_urb2d"):
-                out[name][...] = 0.0
             out["tgr_urb2d"][...] = t0 + f4(0.0)
         for name in ("tc_urb2d", "tr_urb2d", "tb_urb2d", "tg_urb2d",
                      "ts_urb2d"):
@@ -563,6 +543,11 @@ def urban_var_init_host(*, option: int, use_wudapt_lcz: int,
             out["tgrl_urb3d"][...] = ladder
             out["smr_urb3d"][...] = np.array(
                 [0.2, 0.2, 0.2, 0.0], dtype=f4)[:, None, None]
+            if "tvg_urb2d" in out:
+                out["tvg_urb2d"][...] = t0 + f4(0.0)
+                out["tt_urb2d"][...] = t0 + f4(0.0)
+                out["tvgl_urb3d"][...] = ladder
+                out["smg_urb3d"][...] = np.array([0.2, 0.2, 0.2, 0.0], dtype=f4)[:, None, None]
         if "tgl_urb3d" in out:
             out["tgl_urb3d"][...] = tslb[:URBAN_LAYERS] + f4(0.0)
         if option in (2, 3):
@@ -571,21 +556,10 @@ def urban_var_init_host(*, option: int, use_wudapt_lcz: int,
             for name in ("trb_urb4d", "tw1_urb4d", "tw2_urb4d"):
                 out[name][...] = walls.astype(f4)
             out["tgb_urb4d"][...] = tl1
-            for name in ("sfw1_urb3d", "sfw2_urb3d", "sfr_urb3d",
-                         "sfg_urb3d"):
-                out[name][...] = 0.0
         if option == 3:
-            for name in ("lf_ac_urb3d", "sf_ac_urb3d", "cm_ac_urb3d",
-                         "sfvent_urb3d", "lfvent_urb3d", "ep_pv_urb3d",
-                         "drain_urb4d", "sfrv_urb3d", "lfrv_urb3d",
-                         "dgr_urb3d", "dg_urb3d", "lfr_urb3d", "lfg_urb3d",
-                         "draingr_urb3d", "sfwin1_urb3d", "sfwin2_urb3d"):
-                out[name][...] = 0.0
             out["t_pv_urb3d"][...] = tl1
             out["qr_urb4d"][...] = smois[0]
             out["qgr_urb3d"][...] = smois[0]
-            # :2891 then :2899: TGR_URB3D = tlayer0 then = 0.
-            out["tgr_urb3d"][...] = 0.0
             out["trv_urb4d"][...] = np.where(
                 switch, tblend[np.maximum(utype, 1) - 1], tl1).astype(f4)
             for name in ("tlev_urb3d", "tw1lev_urb3d", "tw2lev_urb3d",
@@ -653,9 +627,6 @@ class UrbanState:
             return object.__getattribute__(self, "fields")[name]
         raise AttributeError(name)
 
-    def arrays(self) -> dict:
-        return {name: self.fields[name] for name in self.names}
-
 
 def init_urban_state(cfg, params: UrbanParams, categories: UrbanCategories,
                      fields: dict, *, nz: int, frc_urb2d=None,
@@ -671,7 +642,7 @@ def init_urban_state(cfg, params: UrbanParams, categories: UrbanCategories,
     option = int(cfg.sf_urban_physics)
     if module is None:
         module = load_model_module(option)
-    spec = option_spec(option, module)
+    spec = option_spec(option, module, generation=params.generation)
     dims = resolve_dimensions(option, module)
     # The Metal caller keeps every urban field in the base state context. Read
     # only the small setup inputs back to host; urban_var_init_host is the

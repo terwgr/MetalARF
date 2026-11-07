@@ -1,0 +1,100 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_sw_aerosol_gather_f32",
+      "module": "hexv842_sw_aerosol_gather_f32",
+      "source": "woof/metal/shaders/hexv842_sw_aerosol_gather_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_sw_v842.py",
+      "cuda_symbol": "_sunlit_batches",
+      "resources": [
+        [
+          "indices",
+          "int32",
+          "read"
+        ],
+        [
+          "tau_in",
+          "float",
+          "read"
+        ],
+        [
+          "ssa_in",
+          "float",
+          "read"
+        ],
+        [
+          "asy_in",
+          "float",
+          "read"
+        ],
+        [
+          "tau_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "ssa_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "asy_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tau_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ssa_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "asy_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tau_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ssa_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "asy_out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nd",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

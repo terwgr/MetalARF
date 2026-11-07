@@ -124,8 +124,19 @@ def cull_one(
     *,
     graph: Path | None = None,
     clobber: bool = False,
+    provenance_grid: Path | None = None,
+    mark_parent: Path | None = None,
 ) -> dict[str, Any]:
-    """Cut one file, and return what the engine said it did."""
+    """Cut one file, and return what the engine said it did.
+
+    ``mark_parent`` is the parent GRID the region is marked on (rw_mpas_mesh
+    ``--cull-mark-parent``) when the file being cut is another file of the
+    same mesh.  THE BREAKAGE IT PREVENTS (hex shapes study, 2026-10-23): a
+    native MPAS static stores its coordinates in binary32, the cut's
+    boundary walk breaks near-ties on them, and a CONUS cut of NCAR
+    x1.163842's native static put six of the grid cut's 4,766 cells in other
+    boundary rings, so ``--cull-provenance-grid`` refused the static.
+    """
 
     receipt = out.with_suffix(out.suffix + ".cull-receipt.json")
     argv = [
@@ -141,6 +152,13 @@ def cull_one(
     ]
     if graph is not None:
         argv += ["--graph", str(graph)]
+    if provenance_grid is not None or mark_parent is not None:
+        help_result = subprocess.run([str(engine), "--help"], capture_output=True, text=True)
+        engine_help = help_result.stdout + help_result.stderr
+        if provenance_grid is not None and "--cull-provenance-grid" in engine_help:
+            argv += ["--cull-provenance-grid", str(provenance_grid)]
+        if mark_parent is not None and "--cull-mark-parent" in engine_help:
+            argv += ["--cull-mark-parent", str(mark_parent)]
     if clobber:
         argv.append("--clobber")
     started = time.perf_counter()
@@ -206,16 +224,22 @@ def carry_lineage(
         except AttributeError:
             return value
 
+    from .netcdf_define import deferred_definition
+
     carried: dict[str, Any] = {}
     with Dataset(str(parent), "r") as source:
         available = {name: source.getncattr(name) for name in source.ncattrs()}
-    with Dataset(str(child), "a") as target:
+    # One define session for every carried attribute: set one at a time, each grew the header of a file that
+    # already holds its data and moved the whole data section again (11-15 s of one core per region cull,
+    # 2026-10-27).  The file's bytes are the same (woof.hex.netcdf_define).
+    with deferred_definition(Dataset)(str(child), "a", keepweakref=True) as target:
         present = set(target.ncattrs())
-        for name, value in available.items():
-            if name in present:
-                continue
-            target.setncattr(name, value)
-            carried[name] = plain(value)
+        with target.definition_batch():
+            for name, value in available.items():
+                if name in present:
+                    continue
+                target.setncattr(name, value)
+                carried[name] = plain(value)
         final = sorted(target.ncattrs())
     missing = [name for name in LBC_REQUIRED_ATTRIBUTES if name not in final]
     # The requirement lands on the file that will be handed to
@@ -326,6 +350,10 @@ def run_cull(arguments: argparse.Namespace) -> int:
             out,
             graph=graph,
             clobber=bool(getattr(arguments, "clobber", False)),
+            provenance_grid=Path(rows["grid"]["out"]) if role == "static" else None,
+            # Every other file is subset against the grid, so it is marked on the
+            # grid's own coordinates (cull_one says why).
+            mark_parent=None if role == "grid" else parents["grid"],
         )
         cells = rows[role].get("receipt", {}).get("region_cells")
         parent_cells = rows[role].get("receipt", {}).get("parent_cells")

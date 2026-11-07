@@ -95,7 +95,7 @@ fn write_frame_shift(path: &Path, hour: usize, projected: bool, shift: f64) {
 }
 
 fn request(inputs: Vec<PathBuf>, out: &Path, layout: Layout) -> Request {
-    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../gpuwm/data/ml_export/variables.json");
+    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../woof/data/ml_export/variables.json");
     let document: Value = serde_json::from_str(&std::fs::read_to_string(table).unwrap()).unwrap();
     let rows: Vec<VariableRow> = serde_json::from_value(document["rows"].clone()).unwrap();
     Request {
@@ -103,9 +103,9 @@ fn request(inputs: Vec<PathBuf>, out: &Path, layout: Layout) -> Request {
         overwrite: false, zip: false,
         variables: rows.into_iter().filter(|r| ["2m_temperature", "geopotential_at_surface", "land_sea_mask"].contains(&r.id.as_str())).collect(),
         levels: LevelSpec { set: "model".into(), kind: LevelKind::Model, hpa: vec![], model_levels: vec![] },
-        grid: GridRequest { kind: GridKind::Native, deg: None, method: RegridMethod::Bilinear },
+        grid: GridRequest { target: None, kind: GridKind::Native, deg: None, method: RegridMethod::Bilinear },
         names: "wb2".into(), layout, domains: None, every_hours: None, start: None, end: None,
-        skip_unavailable: false, threads: None, spacings_deg: vec![0.1],
+        skip_unavailable: false, threads: None, spacings_deg: vec![0.1], chunk_yx: None,
         provenance: Provenance { engine: "engine".into(), exporter_version: "0-test".into(), created_utc: "2026-10-01T00:00:00Z".into(), ..Default::default() },
     }
 }
@@ -215,7 +215,7 @@ fn moving_precipitation_differences_the_same_ground_for_interval_and_six_hours()
     }
     let out = scratch.join("export");
     let mut req = request(inputs, &out, Layout::Analysis);
-    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../gpuwm/data/ml_export/variables.json");
+    let table = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../woof/data/ml_export/variables.json");
     let document: Value = serde_json::from_str(&std::fs::read_to_string(table).unwrap()).unwrap();
     let rows: Vec<VariableRow> = serde_json::from_value(document["rows"].clone()).unwrap();
     req.variables.extend(rows.into_iter().filter(|r| ["total_precipitation", "total_precipitation_6hr"].contains(&r.id.as_str())));

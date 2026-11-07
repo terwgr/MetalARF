@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "ieva_solve_family_bindings.metalh"
 #include "soft_binary64.metalh"
+#include "soft_binary32.metalh"
 
 using namespace metal;
 #pragma clang fp contract(off)
@@ -14,17 +15,25 @@ static inline ulong ieva_widen(float x) {
 static inline float ieva_narrow(ulong x) {
     return as_type<float>(soft64_to_f32_bits(x));
 }
-static inline float ieva_fadd(float a, float b) { return a + b; }
-static inline float ieva_fsub(float a, float b) { return a - b; }
-static inline float ieva_fmul(float a, float b) { return a * b; }
-static inline float ieva_fdiv(float a, float b) { return a / b; }
-static inline float ieva_fmax(float a, float b) { return a > b ? a : b; }
-static inline float ieva_fmin(float a, float b) { return a < b ? a : b; }
+static inline float ieva_op_add(float a, float b, int strict) { return strict ? as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))) : a + b; }
+static inline float ieva_op_sub(float a, float b, int strict) { return strict ? as_type<float>(soft32_sub(as_type<uint>(a), as_type<uint>(b))) : a - b; }
+static inline float ieva_op_mul(float a, float b, int strict) { return strict ? as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))) : a * b; }
+static inline float ieva_op_div(float a, float b, int strict) { return strict ? as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))) : a / b; }
+static inline float ieva_op_max(float a, float b, int strict) { return (strict ? soft32_greater(as_type<uint>(a), as_type<uint>(b)) : a > b) ? a : b; }
+static inline float ieva_op_min(float a, float b, int strict) { return (strict ? soft32_less(as_type<uint>(a), as_type<uint>(b)) : a < b) ? a : b; }
+#define ieva_fadd(a,b) ieva_op_add((a),(b),p.strict)
+#define ieva_fsub(a,b) ieva_op_sub((a),(b),p.strict)
+#define ieva_fmul(a,b) ieva_op_mul((a),(b),p.strict)
+#define ieva_fdiv(a,b) ieva_op_div((a),(b),p.strict)
+#define ieva_fmax(a,b) ieva_op_max((a),(b),p.strict)
+#define ieva_fmin(a,b) ieva_op_min((a),(b),p.strict)
 
+template <typename P>
 static inline void ieva_coefficients(float wiL, float wiR, float dt,
                                      float zero, thread ulong& at,
-                                     thread ulong& ct, thread ulong& btmp) {
-    at = ieva_widen(-ieva_fmul(dt, ieva_fmax(wiL, zero)));
+                                     thread ulong& ct, thread ulong& btmp, constant P& p) {
+    const float product = ieva_fmul(dt, ieva_fmax(wiL, zero));
+    at = ieva_widen(p.strict ? as_type<float>(as_type<uint>(product) ^ 0x80000000u) : -product);
     ct = ieva_widen(ieva_fmul(dt, ieva_fmin(wiR, zero)));
     btmp = ieva_widen(ieva_fmul(
         dt, ieva_fsub(ieva_fmax(wiR, zero), ieva_fmin(wiL, zero))));
@@ -100,7 +109,7 @@ static inline void ieva_solve_s_column(constant R& r, constant P& p, uint c) {
         const float wiR = ieva_fdiv(ieva_fmul(r.rom[ulong(k + 1) * st + c],
                                                r.rdnw[k]), mass_new);
         ulong at, ct, btmp;
-        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp);
+        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp, p);
         const ulong bt = soft64_add(ieva_widen(p.one), btmp);
         const float mass_old = ieva_fadd(ieva_fmul(r.c1h[k], mo), r.c2h[k]);
         const float lead = ieva_fmul(p.dt, r.tend[ulong(k) * st + c]);
@@ -132,9 +141,10 @@ kernel void ieva_solve_s_k257(constant IevaSolveSK257Resources& r [[buffer(0)]],
 }
 
 
+template <typename P>
 static inline float ieva_face_mass(device const float* mu, ulong row,
                                    int face, int n, int stride,
-                                   int periodic, float half_val) {
+                                   int periodic, float half_val, constant P& p) {
     int a = face;
     int b = face - 1;
     if (periodic) {
@@ -146,8 +156,8 @@ static inline float ieva_face_mass(device const float* mu, ulong row,
         if (face == 0) b = a;
         if (face == n) a = b;
     }
-    return half_val * (mu[row + ulong(a * stride)]
-                   + mu[row + ulong(b * stride)]);
+    return ieva_fmul(half_val, ieva_fadd(mu[row + ulong(a * stride)],
+                   mu[row + ulong(b * stride)]));
 }
 
 template <int KMAX, typename R, typename P>
@@ -164,9 +174,9 @@ static inline void ieva_solve_u_column(constant R& r, constant P& p, uint t) {
     const int ib = p.periodic ? (f - 1 + p.nx) % p.nx : f - 1;
     const ulong fc = ulong(j) * nxu + ulong(f);
     float mo = ieva_face_mass(r.mut_old, row, f, p.nx, 1,
-                              p.periodic, p.half_val);
+                              p.periodic, p.half_val, p);
     float mn = ieva_face_mass(r.mut_new, row, f, p.nx, 1,
-                              p.periodic, p.half_val);
+                              p.periodic, p.half_val, p);
     if (p.legacy) mo = mn = r.legacy_face[fc];
     const float msf = p.has_msf ? r.msfu[fc] : p.one;
     ulong gamma[KMAX];
@@ -177,17 +187,17 @@ static inline void ieva_solve_u_column(constant R& r, constant P& p, uint t) {
         const int km1 = k == 0 ? 0 : k - 1;
         const int kp1 = k == p.nz - 1 ? p.nz - 1 : k + 1;
         const float mass_new = ieva_fadd(ieva_fmul(r.c1h[k], mn), r.c2h[k]);
-        const float rl = p.half_val * (r.rom[ulong(k) * st + row + ulong(ib)]
-                                  + r.rom[ulong(k) * st + row + ulong(ia)]);
-        const float rr = p.half_val * (r.rom[ulong(k + 1) * st + row + ulong(ib)]
-                                  + r.rom[ulong(k + 1) * st + row + ulong(ia)]);
-        float wiL = rl * r.rdnw[k];
-        float wiR = rr * r.rdnw[k];
-        if (p.has_msf) { wiL *= msf; wiR *= msf; }
+        const float rl = ieva_fmul(p.half_val, ieva_fadd(r.rom[ulong(k) * st + row + ulong(ib)],
+                                  r.rom[ulong(k) * st + row + ulong(ia)]));
+        const float rr = ieva_fmul(p.half_val, ieva_fadd(r.rom[ulong(k + 1) * st + row + ulong(ib)],
+                                  r.rom[ulong(k + 1) * st + row + ulong(ia)]));
+        float wiL = ieva_fmul(rl, r.rdnw[k]);
+        float wiR = ieva_fmul(rr, r.rdnw[k]);
+        if (p.has_msf) { wiL = ieva_fmul(wiL, msf); wiR = ieva_fmul(wiR, msf); }
         wiL = ieva_fdiv(wiL, mass_new);
         wiR = ieva_fdiv(wiR, mass_new);
         ulong at, ct, btmp;
-        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp);
+        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp, p);
         const ulong bt = soft64_add(ieva_widen(p.one), btmp);
         const float mass_old = ieva_fadd(ieva_fmul(r.c1h[k], mo), r.c2h[k]);
         float lead = ieva_fmul(p.dt, r.tend[ulong(k) * stu + fc]);
@@ -239,9 +249,9 @@ static inline void ieva_solve_v_column(constant R& r, constant P& p, uint t) {
     const int jb = p.periodic ? (f - 1 + p.ny) % p.ny : f - 1;
     const ulong fc = ulong(f) * ulong(p.nx) + ulong(i);
     float mo = ieva_face_mass(r.mut_old, ulong(i), f, p.ny, p.nx,
-                              p.periodic, p.half_val);
+                              p.periodic, p.half_val, p);
     float mn = ieva_face_mass(r.mut_new, ulong(i), f, p.ny, p.nx,
-                              p.periodic, p.half_val);
+                              p.periodic, p.half_val, p);
     if (p.legacy) mo = mn = r.legacy_face[fc];
     const float msf = p.has_msf ? r.msfv[fc] : p.one;
     ulong gamma[KMAX];
@@ -252,17 +262,17 @@ static inline void ieva_solve_v_column(constant R& r, constant P& p, uint t) {
         const int km1 = k == 0 ? 0 : k - 1;
         const int kp1 = k == p.nz - 1 ? p.nz - 1 : k + 1;
         const float mass_new = ieva_fadd(ieva_fmul(r.c1h[k], mn), r.c2h[k]);
-        const float rl = p.half_val * (r.rom[ulong(k) * st + ulong(jb) * ulong(p.nx) + ulong(i)]
-                                  + r.rom[ulong(k) * st + ulong(ja) * ulong(p.nx) + ulong(i)]);
-        const float rr = p.half_val * (r.rom[ulong(k + 1) * st + ulong(jb) * ulong(p.nx) + ulong(i)]
-                                  + r.rom[ulong(k + 1) * st + ulong(ja) * ulong(p.nx) + ulong(i)]);
-        float wiL = rl * r.rdnw[k];
-        float wiR = rr * r.rdnw[k];
-        if (p.has_msf) { wiL *= msf; wiR *= msf; }
+        const float rl = ieva_fmul(p.half_val, ieva_fadd(r.rom[ulong(k) * st + ulong(jb) * ulong(p.nx) + ulong(i)],
+                                  r.rom[ulong(k) * st + ulong(ja) * ulong(p.nx) + ulong(i)]));
+        const float rr = ieva_fmul(p.half_val, ieva_fadd(r.rom[ulong(k + 1) * st + ulong(jb) * ulong(p.nx) + ulong(i)],
+                                  r.rom[ulong(k + 1) * st + ulong(ja) * ulong(p.nx) + ulong(i)]));
+        float wiL = ieva_fmul(rl, r.rdnw[k]);
+        float wiR = ieva_fmul(rr, r.rdnw[k]);
+        if (p.has_msf) { wiL = ieva_fmul(wiL, msf); wiR = ieva_fmul(wiR, msf); }
         wiL = ieva_fdiv(wiL, mass_new);
         wiR = ieva_fdiv(wiR, mass_new);
         ulong at, ct, btmp;
-        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp);
+        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp, p);
         const ulong bt = soft64_add(ieva_widen(p.one), btmp);
         const float mass_old = ieva_fadd(ieva_fmul(r.c1h[k], mo), r.c2h[k]);
         float lead = ieva_fmul(p.dt, r.tend[ulong(k) * stv + fc]);
@@ -319,9 +329,11 @@ static inline void ieva_solve_ph_column(constant R& r, constant P& p, uint c) {
             ieva_fadd(r.rdnw[k - 1], r.rdnw[k]));
         if (p.has_msf) wi = ieva_fmul(wi, msf);
         wi = ieva_fdiv(wi, mass);
-        const ulong at = ieva_widen(-ieva_fmul(p.dt, ieva_fmax(wi, p.zero)));
+        const float product = ieva_fmul(p.dt, ieva_fmax(wi, p.zero));
+        const ulong at = ieva_widen(p.strict ? as_type<float>(as_type<uint>(product) ^ 0x80000000u) : -product);
         const ulong ct = ieva_widen(ieva_fmul(p.dt, ieva_fmin(wi, p.zero)));
-        const ulong btmp = soft64_sub(soft64_sub(0ul, at), ct);
+        const ulong neg_at = p.strict ? (at ^ 0x8000000000000000ul) : soft64_sub(0ul, at);
+        const ulong btmp = soft64_sub(neg_at, ct);
         const ulong bt = soft64_add(ieva_widen(p.one), btmp);
         float lead = ieva_fmul(r.tend[ulong(k) * st + ulong(c)], p.dt);
         if (p.has_msf) lead = ieva_fmul(lead, msf);
@@ -379,8 +391,9 @@ static inline float ieva_ht_at(device const float* ht, int j, int i,
     return ht[ulong(j) * ulong(nx) + ulong(i)];
 }
 
+template <typename P>
 static inline float ieva_uncoupled(float tend, float msf, int has_msf,
-                                   float c1, float c2, float mu) {
+                                   float c1, float c2, float mu, constant P& p) {
     const float scaled = has_msf ? ieva_fmul(tend, msf) : tend;
     return ieva_fdiv(scaled, ieva_fadd(ieva_fmul(c1, mu), c2));
 }
@@ -419,7 +432,7 @@ static inline void ieva_solve_w_column(constant R& r, constant P& p, uint c) {
         wiL = ieva_fdiv(wiL, mass_new);
         wiR = ieva_fdiv(wiR, mass_new);
         ulong at, ct, btmp;
-        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp);
+        ieva_coefficients(wiL, wiR, p.dt, p.zero, at, ct, btmp, p);
         const ulong bt = soft64_add(ieva_widen(p.one), btmp);
         const float mass_old = ieva_fadd(ieva_fmul(r.c1f[k], mo), r.c2f[k]);
         float lead = ieva_fmul(p.dt, r.tend[ulong(k) * st + ulong(c)]);
@@ -437,19 +450,19 @@ static inline void ieva_solve_w_column(constant R& r, constant P& p, uint c) {
             float vcn = ieva_fadd(
                 ieva_fadd(
                     ieva_fmul(p.cf1, ieva_uncoupled(r.vtend[vn], mvn,
-                        p.has_msf, r.c1h[0], r.c2h[0], r.muy[vn])),
+                        p.has_msf, r.c1h[0], r.c2h[0], r.muy[vn], p)),
                     ieva_fmul(p.cf2, ieva_uncoupled(r.vtend[stv + vn], mvn,
-                        p.has_msf, r.c1h[1], r.c2h[1], r.muy[vn]))),
+                        p.has_msf, r.c1h[1], r.c2h[1], r.muy[vn], p))),
                 ieva_fmul(p.cf3, ieva_uncoupled(r.vtend[2ul * stv + vn], mvn,
-                    p.has_msf, r.c1h[2], r.c2h[2], r.muy[vn])));
+                    p.has_msf, r.c1h[2], r.c2h[2], r.muy[vn], p)));
             float vcs = ieva_fadd(
                 ieva_fadd(
                     ieva_fmul(p.cf1, ieva_uncoupled(r.vtend[vs], mvs,
-                        p.has_msf, r.c1h[0], r.c2h[0], r.muy[vs])),
+                        p.has_msf, r.c1h[0], r.c2h[0], r.muy[vs], p)),
                     ieva_fmul(p.cf2, ieva_uncoupled(r.vtend[stv + vs], mvs,
-                        p.has_msf, r.c1h[1], r.c2h[1], r.muy[vs]))),
+                        p.has_msf, r.c1h[1], r.c2h[1], r.muy[vs], p))),
                 ieva_fmul(p.cf3, ieva_uncoupled(r.vtend[2ul * stv + vs], mvs,
-                    p.has_msf, r.c1h[2], r.c2h[2], r.muy[vs])));
+                    p.has_msf, r.c1h[2], r.c2h[2], r.muy[vs], p)));
             const ulong ue = ulong(j) * ulong(p.nx + 1) + ulong(i + 1);
             const ulong uw = ulong(j) * ulong(p.nx + 1) + ulong(i);
             const float mue = p.has_msf ? r.msfu[ue] : p.one;
@@ -457,19 +470,19 @@ static inline void ieva_solve_w_column(constant R& r, constant P& p, uint c) {
             const float uce = ieva_fadd(
                 ieva_fadd(
                     ieva_fmul(p.cf1, ieva_uncoupled(r.utend[ue], mue,
-                        p.has_msf, r.c1h[0], r.c2h[0], r.mux[ue])),
+                        p.has_msf, r.c1h[0], r.c2h[0], r.mux[ue], p)),
                     ieva_fmul(p.cf2, ieva_uncoupled(r.utend[stu + ue], mue,
-                        p.has_msf, r.c1h[1], r.c2h[1], r.mux[ue]))),
+                        p.has_msf, r.c1h[1], r.c2h[1], r.mux[ue], p))),
                 ieva_fmul(p.cf3, ieva_uncoupled(r.utend[2ul * stu + ue], mue,
-                    p.has_msf, r.c1h[2], r.c2h[2], r.mux[ue])));
+                    p.has_msf, r.c1h[2], r.c2h[2], r.mux[ue], p)));
             const float ucw = ieva_fadd(
                 ieva_fadd(
                     ieva_fmul(p.cf1, ieva_uncoupled(r.utend[uw], muw,
-                        p.has_msf, r.c1h[0], r.c2h[0], r.mux[uw])),
+                        p.has_msf, r.c1h[0], r.c2h[0], r.mux[uw], p)),
                     ieva_fmul(p.cf2, ieva_uncoupled(r.utend[stu + uw], muw,
-                        p.has_msf, r.c1h[1], r.c2h[1], r.mux[uw]))),
+                        p.has_msf, r.c1h[1], r.c2h[1], r.mux[uw], p))),
                 ieva_fmul(p.cf3, ieva_uncoupled(r.utend[2ul * stu + uw], muw,
-                    p.has_msf, r.c1h[2], r.c2h[2], r.mux[uw])));
+                    p.has_msf, r.c1h[2], r.c2h[2], r.mux[uw], p)));
             const float h0 = r.ht[c];
             const float hn = ieva_ht_at(r.ht, j + 1, i, p.ny, p.nx, p.bx, p.by);
             const float hs = ieva_ht_at(r.ht, j - 1, i, p.ny, p.nx, p.bx, p.by);
@@ -497,7 +510,9 @@ static inline void ieva_solve_w_column(constant R& r, constant P& p, uint c) {
             if (p.legacy) {
                 dph = ieva_fdiv(ieva_fsub(r.ph_new[top], r.ph_old[top]), p.dt);
                 pt = ieva_fdiv(r.ph_tend[top], mass);
-                dw = ieva_fdiv(ieva_fmul(msf, ieva_fsub(dph, pt)), p.g);
+                dw = ieva_fsub(dph, pt);
+                if (p.has_msf || !p.strict) dw = ieva_fmul(msf, dw);
+                dw = ieva_fdiv(dw, p.g);
             }
             float boundary = ieva_fsub(dw, r.w_old[top]);
             rhs = soft64_sub(rhs, soft64_mul(

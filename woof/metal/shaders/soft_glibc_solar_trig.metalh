@@ -1,0 +1,422 @@
+// ======================================================================
+// THIRD-PARTY NOTICE. Parts of this file are hand transcriptions of
+// third-party work. ArWen distributes the file under the Apache License
+// 2.0; the notices below belong to the transcribed parts and are kept
+// here because their own licences require it. Full texts are in the
+// repository NOTICE, licenses/, and beside the code in
+// gpuwm/core/kernels/LICENSE-third-party.txt.
+//
+// Arm optimized-routines: glibc_sinf / glibc_cosf and their data tables.
+// github.com/ARM-software/optimized-routines: math/sinf.c, math/cosf.c,
+// math/sincosf.h, math/sincosf_data.c, published in 2018 and imported
+// into glibc in August 2018; transcribed here from glibc 2.43
+// sysdeps/ieee754/flt-32/s_sinf.c, s_cosf.c, s_sincosf.h,
+// sincosf_poly.h and s_sincosf_data.c (x86 FMA IFUNC variant).
+//
+// Copyright (c) 2018-2024, Arm Limited.
+// Copyright (c) 2018-2019, Arm Limited.
+// SPDX-License-Identifier: MIT
+//
+// Taken under the MIT branch of Arm's grant, as glibc_flt32.cuh is.
+// The algorithm, constants and tables reproduce Arm's work; glibc's
+// integration macros, aliases and IFUNC wrapper are not transcribed.
+// Arm 5e8389113b47 (2018), MIT relicensing 11253b0b9d6b,
+// current fe09d4e7ed62. The full permission notice is reproduced in
+// licenses/LICENSE-Arm-optimized-routines-MIT.txt and the files above.
+//
+// CORE-MATH MIT transcriptions from sysdeps/ieee754/flt-32/:
+// e_asinf.c and s_asincosf_data.c (src/binary32/asin/asinf.c, bc385c2);
+// e_acosf.c (src/binary32/acos/acosf.c, 56dd347);
+// s_atanf.c (src/binary32/atan/atanf.c, a8066a5);
+// s_tanf.c (src/binary32/tan/tanf.c, 59d21d7).
+// Copyright (c) 2022-2024 Alexei Sibidanov.
+// Copyright (c) 2023-2024 Alexei Sibidanov.
+// Full text: licenses/LICENSE-CORE-MATH-MIT.txt.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+// No SunPro FDLIBM code is used.
+// ======================================================================
+
+#ifndef WOOF_SOFT_GLIBC_SOLAR_TRIG_METALH
+#define WOOF_SOFT_GLIBC_SOLAR_TRIG_METALH
+
+// Scalar trig from glibc_trig_flt32.cuh, with the pinned glibc
+// 2.43 x86 FMA operation graph. Binary32/64 values are integer bit patterns;
+// separate rounded operations and explicitly fused operations stay distinct.
+// No native floating-point arithmetic, conversions or trig intrinsics.
+#include "soft_binary32.metalh"
+#include "soft_binary64.metalh"
+
+static inline uint sgt_invalid(uint x) {
+    return (x & 0x7fffffffu) > 0x7f800000u ? x | 0x00400000u : 0xffc00000u;
+}
+static inline ulong sgt_from_i64(long x) {
+    const ulong magnitude = x < 0 ? 0ul - ulong(x) : ulong(x);
+    return soft64_from_u64(magnitude) | (x < 0 ? 0x8000000000000000ul : 0ul);
+}
+struct SgtSincos {
+    ulong c0, c1, c2, c3, c4, s1, s2, s3;
+};
+constant SgtSincos sgt_sincos_table[2] = {
+    {0x3ff0000000000000ul, 0xbfdffffffd0c621cul, 0x3fa55553e1068f19ul,
+     0xbf56c087e89a359dul, 0x3ef99343027bf8c3ul,
+     0xbfc555545995a603ul, 0x3f81107605230bc4ul, 0xbf2994eb3774cf24ul},
+    {0xbff0000000000000ul, 0x3fdffffffd0c621cul, 0xbfa55553e1068f19ul,
+     0x3f56c087e89a359dul, 0xbef99343027bf8c3ul,
+     0xbfc555545995a603ul, 0x3f81107605230bc4ul, 0xbf2994eb3774cf24ul}
+};
+constant uint sgt_inv_pio4[24] = {
+    0xa2,0xa2f9,0xa2f983,0xa2f9836e,0xf9836e4e,0x836e4e44,0x6e4e4415,0x4e441529,
+    0x441529fc,0x1529fc27,0x29fc2757,0xfc2757d1,0x2757d1f5,0x57d1f534,0xd1f534dd,0xf534ddc0,
+    0x34ddc0db,0xddc0db62,0xc0db6295,0xdb629599,0x6295993c,0x95993c43,0x993c4390,0x3c439041
+};
+static inline uint sgt_sinf_poly(ulong x, ulong x2, constant SgtSincos &p, int n) {
+    if (!(n & 1)) {
+        const ulong x3 = soft64_mul(x, x2);
+        const ulong s1 = soft64_fma(x2, p.s3, p.s2);
+        const ulong x7 = soft64_mul(x3, x2);
+        const ulong s = soft64_fma(x3, p.s1, x);
+        return soft64_to_f32_bits(soft64_fma(x7, s1, s));
+    }
+    const ulong x4 = soft64_mul(x2, x2);
+    const ulong c2 = soft64_fma(x2, p.c4, p.c3);
+    const ulong c1 = soft64_fma(x2, p.c1, p.c0);
+    const ulong x6 = soft64_mul(x4, x2);
+    const ulong c = soft64_fma(x4, p.c2, c1);
+    return soft64_to_f32_bits(soft64_fma(x6, c2, c));
+}
+static inline ulong sgt_reduce_large(uint xi, thread int &n) {
+    const uint offset = (xi >> 26) & 15u;
+    const int shift = (xi >> 23) & 7;
+    xi = ((xi & 0xffffffu) | 0x800000u) << shift;
+    ulong r0 = uint(xi * sgt_inv_pio4[offset]);
+    const ulong r1 = ulong(xi) * sgt_inv_pio4[offset + 4];
+    const ulong r2 = ulong(xi) * sgt_inv_pio4[offset + 8];
+    r0 = ((r2 >> 32) | (r0 << 32)) + r1;
+    const ulong quotient = (r0 + (1ul << 61)) >> 62;
+    r0 -= quotient << 62;
+    n = int(quotient);
+    return soft64_mul(sgt_from_i64(as_type<long>(r0)), 0x3c1921fb54442d18ul);
+}
+static inline uint sgt_sincos(uint y, int cosine) {
+    const uint top = (y >> 20) & 0x7ffu;
+    if (top >= 0x7f8u) return sgt_invalid(y);
+    if (top < 0x398u) return cosine ? 0x3f800000u : y;
+    ulong x = soft64_from_f32_bits(y);
+    int n = 0, sign = 0, table = 0;
+    if (top >= 0x3f4u) {
+        if (top < 0x42fu) {
+            const ulong r = soft64_mul(x, 0x41645f306dc9c883ul);
+            n = (soft64_to_i32_rz(r).value + 0x800000) >> 24;
+            x = soft64_fma(soft64_negate_bits(soft64_from_i32(n)), 0x3ff921fb54442d18ul, x);
+        } else {
+            x = sgt_reduce_large(y, n);
+            sign = int(y >> 31);
+        }
+        const int q = (n + sign) & 3;
+        if (q & 2) table = 1;
+        const ulong x2 = soft64_mul(x, x);
+        const ulong direction = (q == 1 || q == 2) ? 0xbff0000000000000ul : 0x3ff0000000000000ul;
+        return sgt_sinf_poly(soft64_mul(x, direction), x2, sgt_sincos_table[table], n ^ cosine);
+    }
+    return sgt_sinf_poly(x, soft64_mul(x, x), sgt_sincos_table[0], cosine);
+}
+static inline uint soft_glibc_solar_sinf(uint x) { return sgt_sincos(x, 0); }
+static inline uint soft_glibc_solar_cosf(uint x) { return sgt_sincos(x, 1); }
+
+constant ulong sgt_asincos_c0[12] = {
+    0x3fc555555555529cul, 0x3fb333333337e0ddul, 0x3fa6db6db3b4465eul, 0x3f9f1c72e13ac306ul, 0x3f96e89cebe06bc4ul, 0x3f91c6dcf5289094ul, 0x3f8c6dbbcc7c6315ul, 0x3f88f8dc2615e996ul, 0x3f7a5833b7bf15e8ul, 0x3f943f44ace1665cul, 0xbf90fb17df881c73ul, 0x3fa07520c026b2d6ul
+};
+constant ulong sgt_asincos_c1[12] = {
+    0x3ff6a09e667f3bcbul, 0x3fbe2b7dddff2db9ul, 0x3f9b27247ab42dbcul, 0x3f802995cc4e0744ul, 0x3f65ffb0276ec8eaul, 0x3f5033885a928decul, 0x3f3911f2be23f8c7ul, 0x3f24c3c55d2437fdul, 0x3f0af477e1d7b461ul, 0x3f0abd6bdff67dcbul, 0xbef1717e86d0fa28ul, 0x3ef6ff526de46023ul
+};
+constant ulong sgt_asinf_b[16] = {
+    0x3ff0000000000005ul, 0x3fc55557aeca105dul, 0x3fb3314ec3db7d12ul, 0x3fa775738a5a6f92ul, 0x3f75d5f7ce1c8538ul, 0x3fd605c6d58740f0ul, 0xc005728b732d73c6ul, 0x402f152170f151ebul, 0xc04f962ea3ca992eul, 0x40671971e17375a0ul, 0xc07860512b4ba230ul, 0x40826a3b8d4bdb14ul, 0xc0836f2ea5698b51ul, 0x407b3d722aebfa2eul, 0xc066cf89703b1289ul, 0x4041518af6a65e2dul
+};
+
+static inline ulong sgt_asinf_poly12(ulong z, constant ulong *c) {
+    const ulong z2 = soft64_mul(z, z);
+    const ulong z4 = soft64_mul(z2, z2);
+    ulong c0 = soft64_add(c[0], soft64_mul(z, c[1]));
+    const ulong c2 = soft64_add(c[2], soft64_mul(z, c[3]));
+    ulong c4 = soft64_add(c[4], soft64_mul(z, c[5]));
+    const ulong c6 = soft64_add(c[6], soft64_mul(z, c[7]));
+    ulong c8 = soft64_add(c[8], soft64_mul(z, c[9]));
+    const ulong c10 = soft64_add(c[10], soft64_mul(z, c[11]));
+    c0 = soft64_add(c0, soft64_mul(c2, z2));
+    c4 = soft64_add(c4, soft64_mul(c6, z2));
+    c8 = soft64_add(c8, soft64_mul(z2, c10));
+    return soft64_add(c0, soft64_mul(z4, soft64_add(c4, soft64_mul(z4, c8))));
+}
+static inline uint soft_glibc_solar_asinf(uint x) {
+    const uint ax = x << 1;
+    if (ax > (0x7fu << 24)) return sgt_invalid(x);
+    const ulong z = soft64_from_f32_bits(x);
+    ulong r;
+    if (ax < 0x7ec29000u) {
+        // The pinned tiny FMA rounds back to x in RN, including subnormals.
+        if (ax < (115u << 24)) return x;
+        const ulong z2 = soft64_mul(z, z);
+        const ulong z4 = soft64_mul(z2, z2);
+        const ulong z8 = soft64_mul(z4, z4);
+        const ulong z16 = soft64_mul(z8, z8);
+        // Retain the source expression's balanced, separately rounded graph.
+        const ulong p0 = soft64_add(sgt_asinf_b[0], soft64_mul(z2, sgt_asinf_b[1]));
+        const ulong p1 = soft64_mul(z4, soft64_add(sgt_asinf_b[2], soft64_mul(z2, sgt_asinf_b[3])));
+        const ulong p2 = soft64_add(sgt_asinf_b[4], soft64_mul(z2, sgt_asinf_b[5]));
+        const ulong p3 = soft64_mul(z4, soft64_add(sgt_asinf_b[6], soft64_mul(z2, sgt_asinf_b[7])));
+        const ulong p4 = soft64_add(sgt_asinf_b[8], soft64_mul(z2, sgt_asinf_b[9]));
+        const ulong p5 = soft64_mul(z4, soft64_add(sgt_asinf_b[10], soft64_mul(z2, sgt_asinf_b[11])));
+        const ulong p6 = soft64_add(sgt_asinf_b[12], soft64_mul(z2, sgt_asinf_b[13]));
+        const ulong p7 = soft64_mul(z4, soft64_add(sgt_asinf_b[14], soft64_mul(z2, sgt_asinf_b[15])));
+        const ulong low = soft64_add(soft64_add(p0, p1), soft64_mul(z8, soft64_add(p2, p3)));
+        const ulong high = soft64_add(soft64_add(p4, p5), soft64_mul(z8, soft64_add(p6, p7)));
+        r = soft64_mul(z, soft64_add(low, soft64_mul(z16, high)));
+        const uint ub = soft64_to_f32_bits(r);
+        const uint lb = soft64_to_f32_bits(soft64_sub(r, soft64_mul(z, 0x3e0efa8eb0000000ul)));
+        if (soft32_equal(ub, lb)) return ub;
+    }
+    if (ax < (0x7eu << 24)) {
+        const ulong z2 = soft64_mul(z, z);
+        r = soft64_add(z, soft64_mul(soft64_mul(z, z2), sgt_asinf_poly12(z2, sgt_asincos_c0)));
+    } else {
+        const uint sign = x & 0x80000000u;
+        if (ax == 0x7e55688au) return soft32_add(0x3f3adc51u | sign, 0x32800000u | sign);
+        if (ax == 0x7e107434u) return soft32_add(0x3f0fa5b2u | sign, 0x32800000u | sign);
+        const ulong t = soft64_sub(0x3ff0000000000000ul, soft64_abs_bits(z));
+        const ulong s = soft64_sqrt(t);
+        r = soft64_sub(0x3ff921fb54442d18ul, soft64_mul(s, sgt_asinf_poly12(t, sgt_asincos_c1)));
+        r = soft64_abs_bits(r) | (ulong(sign) << 32);
+    }
+    return soft64_to_f32_bits(r);
+}
+// glibc 2.43 e_acosf.c and s_tanf.c (CORE-MATH), in the same bit-pattern
+// form. Large tanf arguments use the source four-limb reduction as well.
+constant ulong sgt_acosf_b[16] = {
+    0x3fefffffffd9ccb8ul, 0x3fc5555c94838007ul, 0x3fb32ded4b7c20faul, 0x3fa8566df703309eul, 0xbf9980c959bec9a3ul, 0x3fe56fbb04998344ul, 0xc01403d8e4c49f52ul, 0x403b06c3e9f311eaul, 0xc059ea97c4e2c21ful, 0x407200b8261cc61bul, 0xc082274c2799a5c7ul, 0x408a558a59cc19d3ul, 0xc08aca4b6a529ff0ul, 0x408228744703f813ul, 0xc06d7dbb0b322228ul, 0x4045c2018c0c0105ul
+};
+static inline uint soft_glibc_solar_acosf(uint x) {
+    const ulong pi2 = 0x3ff921fb54442d18ul;
+    const uint t = x;
+    const uint ax = x << 1;
+    if (ax >= (0x7fu << 24)) {
+        if (t == (0x7fu << 23)) return 0u;
+        if (t == (0x17fu << 23)) return soft32_add(0x40490fdbu, 0xb3800000u);
+        if (ax > (0xffu << 24)) return sgt_invalid(x);
+        return 0xffc00000u;
+    }
+    const ulong xs = soft64_from_f32_bits(x);
+    ulong r;
+    if (ax < 0x7ec2a1dcu) {
+        if (ax <= 0x40000000u) return soft64_to_f32_bits(pi2);
+        const ulong z = xs;
+        const ulong z2 = soft64_mul(z, z);
+        const ulong z4 = soft64_mul(z2, z2);
+        const ulong z8 = soft64_mul(z4, z4);
+        const ulong z16 = soft64_mul(z8, z8);
+        const ulong p0 = soft64_add(sgt_acosf_b[0], soft64_mul(z2, sgt_acosf_b[1]));
+        const ulong p1 = soft64_mul(z4, soft64_add(sgt_acosf_b[2], soft64_mul(z2, sgt_acosf_b[3])));
+        const ulong p2 = soft64_add(sgt_acosf_b[4], soft64_mul(z2, sgt_acosf_b[5]));
+        const ulong p3 = soft64_mul(z4, soft64_add(sgt_acosf_b[6], soft64_mul(z2, sgt_acosf_b[7])));
+        const ulong p4 = soft64_add(sgt_acosf_b[8], soft64_mul(z2, sgt_acosf_b[9]));
+        const ulong p5 = soft64_mul(z4, soft64_add(sgt_acosf_b[10], soft64_mul(z2, sgt_acosf_b[11])));
+        const ulong p6 = soft64_add(sgt_acosf_b[12], soft64_mul(z2, sgt_acosf_b[13]));
+        const ulong p7 = soft64_mul(z4, soft64_add(sgt_acosf_b[14], soft64_mul(z2, sgt_acosf_b[15])));
+        const ulong low = soft64_add(soft64_add(p0, p1), soft64_mul(z8, soft64_add(p2, p3)));
+        const ulong high = soft64_add(soft64_add(p4, p5), soft64_mul(z8, soft64_add(p6, p7)));
+        r = soft64_mul(z, soft64_add(low, soft64_mul(z16, high)));
+        const uint ub = soft64_to_f32_bits(soft64_sub(0x3ff921fb54574191ul, r));
+        const uint lb = soft64_to_f32_bits(soft64_sub(0x3ff921fb543118a0ul, r));
+        if (soft32_equal(ub, lb)) return ub;
+    }
+    if (ax < (0x7eu << 24)) {
+        if (t == 0x328885a3u) return soft32_add(0x3fc90fdbu, 0x33000000u);
+        if (t == 0x39826222u) return soft32_add(0x3fc907b5u, 0x33000000u);
+        const ulong x2 = soft64_mul(xs, xs);
+        r = soft64_sub(soft64_sub(pi2, xs),
+                       soft64_mul(soft64_mul(xs, x2), sgt_asinf_poly12(x2, sgt_asincos_c0)));
+    } else {
+        const ulong z = soft64_sub(0x3ff0000000000000ul, soft64_abs_bits(xs));
+        const ulong root = soft64_sqrt(z);
+        const ulong s = soft64_abs_bits(root) | (xs & 0x8000000000000000ul);
+        const ulong o = (t >> 31) ? 0x400921fb54442d18ul : 0ul;
+        r = soft64_add(o, soft64_mul(s, sgt_asinf_poly12(z, sgt_asincos_c1)));
+    }
+    return soft64_to_f32_bits(r);
+}
+
+constant ulong sgt_tanf_cn[4] = {
+    0x3ff921fb54442d18ul, 0xbfdfd226e573289ful, 0x3f9b7a60c8dac9f6ul, 0xbf2725beb40f33e5ul
+};
+constant ulong sgt_tanf_cd[4] = {
+    0x3ff0000000000000ul, 0xbff2395347fb829dul, 0x3fc2313660f29c36ul, 0xbf69a707ab98d1c1ul
+};
+constant uint sgt_tanf_st[8][3] = {
+    {0x3f8a1f62u, 0x3feefcfbu, 0xa5c48e92u}, {0x4d56d355u, 0x3e740182u, 0x22a0cfa3u},
+    {0x57d7b0edu, 0x3eb068e4u, 0xa416b61du}, {0x5980445eu, 0x3fe50f68u, 0x257b0298u},
+    {0x63fc86feu, 0x3f2cbfceu, 0x25492cbcu}, {0x6a662711u, 0xc0799ac2u, 0x266b92a5u},
+    {0x6ad36709u, 0xbf62b097u, 0xa513619fu}, {0x72b505bbu, 0xbff2150fu, 0xa58ee483u}
+};
+// Parity of an integral binary64 value of magnitude below 2^53.
+static inline uint sgt_integral_parity(ulong bits) {
+    const uint exponent = uint((bits >> 52) & 0x7fful);
+    if (exponent == 0u) return 0u;
+    const ulong mantissa = (bits & 0x000ffffffffffffful) | 0x0010000000000000ul;
+    const int shift = 1075 - int(exponent);
+    if (shift < 0 || shift >= 64) return 0u;
+    return uint((mantissa >> uint(shift)) & 1ul);
+}
+// The first factor has exactly 24 significant bits. Splitting the second
+// factor at bit 32 computes the high product limb without a 128-bit type.
+static inline ulong sgt_mulhi24(ulong a, ulong b) {
+    const ulong low = a * (b & 0xfffffffful);
+    const ulong high = a * (b >> 32) + (low >> 32);
+    return high >> 32;
+}
+constant ulong sgt_tan_ipi[4] = {
+    0xfe5163abdebbc562ul, 0xdb6295993c439041ul,
+    0xfc2757d1f534ddc0ul, 0xa2f9836e4e441529ul
+};
+static inline ulong sgt_tan_reduce_large(uint u, thread uint &odd) {
+    const ulong m = (u & 0x7fffffu) | 0x800000u;
+    ulong h = sgt_mulhi24(m, sgt_tan_ipi[0]);
+    const ulong p1l = m * sgt_tan_ipi[1] + h;
+    h = sgt_mulhi24(m, sgt_tan_ipi[1]) + ulong(p1l < h);
+    const ulong p2l = m * sgt_tan_ipi[2] + h;
+    h = sgt_mulhi24(m, sgt_tan_ipi[2]) + ulong(p2l < h);
+    const ulong p3l = m * sgt_tan_ipi[3] + h;
+    const ulong p3h = sgt_mulhi24(m, sgt_tan_ipi[3]) + ulong(p3l < h);
+    const int s = int((u >> 23) & 255u) - 127 - 23;
+    ulong a;
+    uint i;
+    if (s < 64) {
+        i = uint((p3h << s) | (p3l >> (64 - s)));
+        a = (p3l << s) | (p2l >> (64 - s));
+    } else if (s == 64) {
+        i = uint(p3l);
+        a = p2l;
+    } else {
+        i = uint((p3l << (s - 64)) | (p2l >> (128 - s)));
+        a = (p2l << (s - 64)) | (p1l >> (128 - s));
+    }
+    const uint sign = 0u - (u >> 31);
+    i -= uint(as_type<long>(a) >> 63);
+    i = (i ^ sign) - sign;
+    odd = i & 1u;
+    const long az = as_type<long>(a ^ ulong(long(as_type<int>(sign))));
+    return soft64_mul(sgt_from_i64(az), 0x3bf0000000000000ul);
+}
+static inline uint soft_glibc_solar_tanf(uint t) {
+    const int e = int((t >> 23) & 0xffu);
+    if (e >= 0xff) return sgt_invalid(t);
+    if (e < 115) {
+        if (e < 102) return t;
+        const uint x2 = soft32_mul(t, t);
+        const ulong prod = soft64_mul(soft64_from_f32_bits(t),
+            soft64_from_f32_bits(soft32_mul(0x3eaaaaabu, x2)));
+        return soft64_to_f32_bits(soft64_add(prod, soft64_from_f32_bits(t)));
+    }
+    uint odd;
+    ulong z;
+    if (e < 127 + 28) {
+        const ulong x = soft64_from_f32_bits(t);
+        const ulong idl = soft64_mul(0xbdfb1bbead603d8bul, x);
+        const ulong idh = soft64_mul(0x3fe45f306e000000ul, x);
+        const ulong id = soft64_rint_bits(idh);
+        odd = sgt_integral_parity(id);
+        z = soft64_add(soft64_sub(idh, id), idl);
+    } else {
+        z = sgt_tan_reduce_large(t, odd);
+    }
+    const ulong z2 = soft64_mul(z, z);
+    const ulong z4 = soft64_mul(z2, z2);
+    ulong n = soft64_add(sgt_tanf_cn[0], soft64_mul(z2, sgt_tanf_cn[1]));
+    const ulong n2 = soft64_add(sgt_tanf_cn[2], soft64_mul(z2, sgt_tanf_cn[3]));
+    n = soft64_add(n, soft64_mul(z4, n2));
+    ulong d = soft64_add(sgt_tanf_cd[0], soft64_mul(z2, sgt_tanf_cd[1]));
+    const ulong d2 = soft64_add(sgt_tanf_cd[2], soft64_mul(z2, sgt_tanf_cd[3]));
+    d = soft64_add(d, soft64_mul(z4, d2));
+    n = soft64_mul(n, z);
+    const ulong s0 = odd ? 0x3ff0000000000000ul : 0ul;
+    const ulong s1 = odd ? 0ul : 0x3ff0000000000000ul;
+    const ulong r1 = soft64_div(
+        soft64_sub(soft64_mul(n, s1), soft64_mul(d, s0)),
+        soft64_add(soft64_mul(n, s0), soft64_mul(d, s1)));
+    const ulong tail = (r1 + 7ul) & (0xfffffffffffffffful >> 35);
+    if (tail <= 14ul) {
+        const uint ax = t & 0x7fffffffu;
+        for (uint j = 0u; j < 8u; ++j) {
+            if (sgt_tanf_st[j][0] == ax) {
+                if (t >> 31)
+                    return soft32_sub(soft32_negate_bits(sgt_tanf_st[j][1]), sgt_tanf_st[j][2]);
+                return soft32_add(sgt_tanf_st[j][1], sgt_tanf_st[j][2]);
+            }
+        }
+    }
+    return soft64_to_f32_bits(r1);
+}
+constant ulong sgt_atanf_cn[7] = {0x3fd51eccde075d67ul, 0x3fea76bb5637f2f2ul, 0x3fe81e0eed20de88ul, 0x3fd376c8ca67d11dul, 0x3faaec7b69202ac6ul, 0x3f69561899acc73eul, 0x3efbf9fa5b67e600ul};
+constant ulong sgt_atanf_cd[7] = {0x3fd51eccde075d66ul, 0x3fedfbdd7b392d28ul, 0x3ff0000000000000ul, 0x3fdfd22bf0e89b54ul, 0x3fbd91ff8b576282ul, 0x3f8653ea99fc9bb0ul, 0x3f31e7fcc202340aul};
+static inline uint soft_glibc_solar_atanf(uint t)
+{
+  const ulong pi2 = 0x3ff921fb54442d18ul;
+  int e = (t >> 23) & 0xff;
+  bool gt = e >= 127;
+  uint ta = t & 0x7fffffff;
+  if (ta >= 0x4c700518u)
+  {
+    if (ta > 0x7f800000u)
+      return sgt_invalid(t); // Preserve the input NaN sign and payload.
+    return soft64_to_f32_bits((pi2 | (ulong(t & 0x80000000u) << 32)));
+  }
+  // Both source tiny-input FMA paths round to the input in RN: the
+  // cubic correction is below half an output ULP throughout this branch.
+  if (e < (127 - 13)) return t;
+  ulong z = soft64_from_f32_bits(t);
+  if (gt)
+    z = soft64_div(0x3ff0000000000000ul, z);
+  ulong z2 = soft64_mul(z, z);
+  ulong z4 = soft64_mul(z2, z2);
+  ulong z8 = soft64_mul(z4, z4);
+  /* table sgt_atanf_cn */;
+  /* table sgt_atanf_cd */;
+  ulong cn0 = soft64_add(sgt_atanf_cn[0], soft64_mul(z2, sgt_atanf_cn[1]));
+  ulong cn2 = soft64_add(sgt_atanf_cn[2], soft64_mul(z2, sgt_atanf_cn[3]));
+  ulong cn4 = soft64_add(sgt_atanf_cn[4], soft64_mul(z2, sgt_atanf_cn[5]));
+  ulong cn6 = sgt_atanf_cn[6];
+  cn0 = soft64_add(cn0, soft64_mul(z4, cn2));
+  cn4 = soft64_add(cn4, soft64_mul(z4, cn6));
+  cn0 = soft64_add(cn0, soft64_mul(z8, cn4));
+  cn0 = soft64_mul(cn0, z);
+  ulong cd0 = soft64_add(sgt_atanf_cd[0], soft64_mul(z2, sgt_atanf_cd[1]));
+  ulong cd2 = soft64_add(sgt_atanf_cd[2], soft64_mul(z2, sgt_atanf_cd[3]));
+  ulong cd4 = soft64_add(sgt_atanf_cd[4], soft64_mul(z2, sgt_atanf_cd[5]));
+  ulong cd6 = sgt_atanf_cd[6];
+  cd0 = soft64_add(cd0, soft64_mul(z4, cd2));
+  cd4 = soft64_add(cd4, soft64_mul(z4, cd6));
+  cd0 = soft64_add(cd0, soft64_mul(z8, cd4));
+  ulong r = soft64_div(cn0, cd0);
+  if (!gt)
+    return soft64_to_f32_bits(r);
+  r = soft64_add(soft64_sub((0x3f80fdaa22168c23ul | (z & 0x8000000000000000ul)), r), (0x3ff9000000000000ul | (z & 0x8000000000000000ul)));
+  return soft64_to_f32_bits(r);
+}
+
+
+
+
+#endif

@@ -1,0 +1,17 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_negative_vapour_fill",
+      "module": "thompson_vapour_fill",
+      "source": "woof/metal/shaders/thompson_vapour_fill.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "thompson_negative_vapour_fill",
+      "resources": [["qv", "float", "read_write"]],
+      "shapes": {"qv": [["nz", "ny", "nx"]]},
+      "parameters": [["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

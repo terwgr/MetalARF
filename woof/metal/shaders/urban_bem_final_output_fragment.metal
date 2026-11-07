@@ -76,7 +76,7 @@ kernel void urban_bem_final_output_fragment(
         r.out_b_t[out] = r.b_t[in]; r.out_b_e[out] = r.b_e[in];
         r.out_b_q[out] = r.b_q[in]; r.out_dlg[out] = r.dlg[in];
         r.out_dl_u[out] = r.dl_u[in];
-        r.out_sf[out] = r.sf[in];
+        r.out_sf[out] = r.sf[c * (uint(p.nz) + 1u) + z];
     }
     r.out_sf[ulong(p.nz) * ncol + c] = r.sf[c * (uint(p.nz) + 1u) + uint(p.nz)];
 }

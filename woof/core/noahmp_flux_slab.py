@@ -267,6 +267,58 @@ def evaluate_vege_flux_slab(fields: Mapping[str, object], n: int, *,
     return _unpack(cp, device_out, _vege.OUTPUT_NAMES)
 
 
+def evaluate_vege_flux_masked_slab(fields: Mapping[str, object], n: int,
+                                   active, *, use_device_libm: bool = False) -> dict:
+    """Evaluate only active columns in a fixed-width device slab.
+
+    The leaf arithmetic is unchanged. Inactive outputs are positive zero,
+    matching the former scatter allocation, and their physics is not evaluated.
+    CUDA keeps a fixed-width device launch. Metal packs the full slab first,
+    then gathers active rows on the host, runs the existing Metal leaf, and
+    scatters its answers into a host slab initialized to positive zero.
+    """
+    cp = _cupy()
+    n = _check_size(n)
+    active = cp.ascontiguousarray(active, dtype=cp.bool_)
+    if active.shape != (n,):
+        raise ValueError(f"VEGE_FLUX mask shape {active.shape} != {(n,)}")
+    if n == 0:
+        return {name: cp.empty(0, dtype=cp.float32)
+                for name in _vege.OUTPUT_NAMES}
+    packed = pack_vege_flux_slab(fields, n)
+    context = slab_metal_context()
+    if context is not None:
+        from woof.metal.noahmp_vegeflux_family import submit_vegeflux
+
+        # Select packed rows, where the column axis is unambiguous even when
+        # n equals a layer count. These host copies retain every input word.
+        index = np.flatnonzero(active)
+        device_out = np.zeros((n, _vege.N_OUTPUT), dtype=np.float32)
+        if index.size:
+            selected = VegeFluxSlabInputs(
+                *(np.ascontiguousarray(value[index]) for value in packed))
+            selected_out = np.empty((index.size, _vege.N_OUTPUT),
+                                    dtype=np.float32)
+            run_metal_leaf(partial(submit_vegeflux, context), selected,
+                           (selected_out,))
+            device_out[index] = selected_out
+        return _unpack(cp, device_out, _vege.OUTPUT_NAMES)
+
+    device_out = cp.empty((n, _vege.N_OUTPUT), dtype=cp.float32)
+    kernel = _vege._module(use_device_libm).get_function("k_vegeflux_masked")
+    kernel(
+        ((n + _vege.THREADS - 1) // _vege.THREADS,), (_vege.THREADS,),
+        (cp.ascontiguousarray(packed.inputs),
+         cp.ascontiguousarray(packed.params),
+         cp.ascontiguousarray(packed.isnow),
+         cp.ascontiguousarray(packed.dzsnso),
+         cp.ascontiguousarray(packed.stc),
+         cp.ascontiguousarray(packed.df),
+         device_out, np.int32(n), active),
+    )
+    return _unpack(cp, device_out, _vege.OUTPUT_NAMES)
+
+
 # --------------------------------------------------------------------------
 # BARE_FLUX
 # --------------------------------------------------------------------------

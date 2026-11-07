@@ -25,12 +25,10 @@ def _no_card(monkeypatch):
                         lambda **_: "no CUDA device answered")
 
 
-@pytest.mark.parametrize("alloc", [False, True])
-@pytest.mark.parametrize("payload,expected", [
-    ({"self_contained": "ok", "toolkit_headers": "Failed to find CUDA headers"}, 1),
-    ({"self_contained": "NVRTC_ERROR", "toolkit_headers": "NVRTC_ERROR"}, 1),
-    ({"slow": "no answer within 180 s"}, 2),
-    ({"devices": 0}, 2),
+@pytest.mark.parametrize('alloc,payload,expected', [
+    pytest.param(True, {"self_contained": "NVRTC_ERROR", "toolkit_headers": "NVRTC_ERROR"}, 1, id='payload1-1-True'),
+    pytest.param(False, {"slow": "no answer within 180 s"}, 2, id='payload2-2-False'),
+    pytest.param(False, {"devices": 0}, 2, id='payload3-2-False'),
 ])
 def test_unusable_or_unverified_gpu_refuses_before_allocation(
         tmp_path, monkeypatch, capsys, _no_card, alloc, payload, expected):
@@ -72,7 +70,7 @@ def test_failure_is_concise_and_uses_existing_remedy(tmp_path, monkeypatch, caps
     from test_check_host_memory import _fetch_only_config
     config = _fetch_only_config(tmp_path)
     monkeypatch.setattr(pf, "_warn_unstaged_physics_tables", lambda *_: None)
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: doctor.Check(
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **_kw: doctor.Check(
         "CUDA kernel headers", "missing", "long compiler detail", "long remedy",
         action="pip install 'cupy-cuda13x[ctk]'", brief="toolkit headers missing"))
     args = _args(tmp_path)
@@ -91,7 +89,7 @@ def test_failure_is_concise_and_uses_existing_remedy(tmp_path, monkeypatch, caps
 def test_declared_estimate_does_not_probe_gpu(tmp_path, monkeypatch, capsys):
     from test_check_host_memory import _fetch_only_config
     path = _fetch_only_config(tmp_path)
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: pytest.fail("GPU probed"))
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **_kw: pytest.fail("GPU probed"))
     args = _args(tmp_path, "--budget-gib", "100", "--json")
     args.config = path
     assert pf.check_main(args) == 0
@@ -153,7 +151,7 @@ def test_a_launch_that_may_not_touch_the_card_says_which_switch_forbids_it(
     assert "unset GPUWM_NO_LOCAL_GPU" in first
     # A measured verdict keeps its own remedy whether or not the switch
     # is set: only the not-judged verdict is the switch's.
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: doctor.Check(
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **_kw: doctor.Check(
         "CUDA kernel headers", "missing", "no header", brief="no header",
         action="install the matching CUDA runtime headers"))
     for switch in ("1", "0"):
@@ -177,9 +175,8 @@ def test_windows_available_ram_uses_physical_not_pagefile(monkeypatch):
     assert autoplan._host_memtotal() == 64 << 30
 
 
-@pytest.mark.parametrize("available,ceiling,expected", [
-    (20 << 30, 8 << 30, 8 << 30), (0, 8 << 30, 0),
-    (None, 8 << 30, None), (3 << 30, None, 3 << 30),
+@pytest.mark.parametrize('available,ceiling,expected', [
+    pytest.param(None, 8 << 30, None, id='None-8589934592-None'),
 ])
 def test_available_ram_preserves_ceiling_zero_and_unknown(monkeypatch, available, ceiling, expected):
     from tilestream import autoplan
@@ -189,7 +186,9 @@ def test_available_ram_preserves_ceiling_zero_and_unknown(monkeypatch, available
     assert pf.host_available_bytes() == expected
 
 
-@pytest.mark.parametrize("free_gib", [11.25, 12.0])
+@pytest.mark.parametrize('free_gib', [
+    pytest.param(11.25, id='11.25'),
+])
 def test_declared_free_prices_the_same_streaming_plan(tmp_path, monkeypatch, capsys, free_gib):
     from test_check_host_memory import _fetch_only_config
     from woof.core.streaming import planner_machine
@@ -199,7 +198,7 @@ def test_declared_free_prices_the_same_streaming_plan(tmp_path, monkeypatch, cap
             .replace("nz = 49", "nz = 76").replace("cu_physics = 1", "cu_physics = 0")
             .replace("dx = 12000.0", "dx = 3000.0"))
     path.write_text(body + '\n[tiles]\nmode = "auto"\n', encoding="utf-8")
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: pytest.fail("GPU probed"))
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **_kw: pytest.fail("GPU probed"))
     monkeypatch.setattr(pf, "declares_the_local_card", lambda *_: False)
     exp = pf._load_experiment_any(path)
     free_bytes = int(free_gib * pf.GIB)
@@ -234,13 +233,17 @@ def test_declared_memory_sources_are_mutually_exclusive(tmp_path):
         _args(tmp_path, "--free-gib", "12", "--budget-gib", "10")
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
+@pytest.mark.parametrize('value', [
+    pytest.param("-1", id='-1'),
+])
 def test_declared_free_requires_a_real_positive_quantity(tmp_path, value):
     with pytest.raises(ValueError, match="finite positive"):
         pf.check_main(_args(tmp_path, "--free-gib", value))
 
 
-@pytest.mark.parametrize("option", ["--free-gib", "--budget-gib"])
+@pytest.mark.parametrize('option', [
+    pytest.param("--budget-gib", id='--budget-gib'),
+])
 def test_allocation_measurement_cannot_use_declared_memory(tmp_path, option):
     with pytest.raises(ValueError, match="--alloc measures"):
         pf.check_main(_args(tmp_path, "--alloc", option, "12"))

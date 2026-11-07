@@ -1,0 +1,308 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_rrtm_lw_taumol_03",
+      "module": "wrf_exact_rrtm_band03",
+      "source": "woof/metal/shaders/wrf_exact_rrtm_band03.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "source_only_helper": true,
+      "resources": [
+        [
+          "colh2o",
+          "float",
+          "read"
+        ],
+        [
+          "colco2",
+          "float",
+          "read"
+        ],
+        [
+          "coln2o",
+          "float",
+          "read"
+        ],
+        [
+          "fac00",
+          "float",
+          "read"
+        ],
+        [
+          "fac01",
+          "float",
+          "read"
+        ],
+        [
+          "fac10",
+          "float",
+          "read"
+        ],
+        [
+          "fac11",
+          "float",
+          "read"
+        ],
+        [
+          "forfac",
+          "float",
+          "read"
+        ],
+        [
+          "selffac",
+          "float",
+          "read"
+        ],
+        [
+          "selffrac",
+          "float",
+          "read"
+        ],
+        [
+          "jp",
+          "int32",
+          "read"
+        ],
+        [
+          "jt",
+          "int32",
+          "read"
+        ],
+        [
+          "jt1",
+          "int32",
+          "read"
+        ],
+        [
+          "indself",
+          "int32",
+          "read"
+        ],
+        [
+          "laytrop",
+          "int32",
+          "read"
+        ],
+        [
+          "tables",
+          "float",
+          "read"
+        ],
+        [
+          "table_index",
+          "int32",
+          "read"
+        ],
+        [
+          "taug",
+          "float",
+          "read_write"
+        ],
+        [
+          "pfrac",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "colh2o": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "colco2": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "coln2o": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac00": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac01": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac10": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac11": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "forfac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "selffac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "selffrac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jp": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt1": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "indself": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "laytrop": [
+          [
+            "ncol"
+          ]
+        ],
+        "tables": [
+          [
+            "ntable_values"
+          ]
+        ],
+        "table_index": [
+          [
+            "ntables",
+            "3"
+          ]
+        ],
+        "taug": [
+          [
+            "ncol",
+            "nlay",
+            "140"
+          ]
+        ],
+        "pfrac": [
+          [
+            "ncol",
+            "nlay",
+            "140"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "nspa3",
+          "int32"
+        ],
+        [
+          "nspb3",
+          "int32"
+        ],
+        [
+          "nrowa3",
+          "int32"
+        ],
+        [
+          "nrowb3",
+          "int32"
+        ],
+        [
+          "id_absa",
+          "int32"
+        ],
+        [
+          "id_absb",
+          "int32"
+        ],
+        [
+          "id_self3",
+          "int32"
+        ],
+        [
+          "id_forref",
+          "int32"
+        ],
+        [
+          "id_fraca",
+          "int32"
+        ],
+        [
+          "id_fracb",
+          "int32"
+        ],
+        [
+          "id_absn2oa",
+          "int32"
+        ],
+        [
+          "id_absn2ob",
+          "int32"
+        ],
+        [
+          "id_h2oref",
+          "int32"
+        ],
+        [
+          "id_co2ref",
+          "int32"
+        ],
+        [
+          "id_n2oref",
+          "int32"
+        ],
+        [
+          "id_etaref",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

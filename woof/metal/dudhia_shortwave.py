@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 def submit_dudhia_shortwave(
@@ -41,13 +42,13 @@ def submit_dudhia_shortwave(
         raise ValueError("Dudhia solar constant must be finite and positive")
     if not np.isfinite(scat32) or scat32 < 0:
         raise ValueError("Dudhia scattering coefficient must be finite and non-negative")
-    if int(icloud) not in (0, 1):
-        raise ValueError("Dudhia icloud must be zero or one")
+    if int(icloud) not in (0, 1, 2):
+        raise ValueError("Dudhia icloud must be zero, one or two")
     return context.submit_kernel(
-        "dudhia_shortwave_columns", arrays,
+        "wrf_exact_dudhia_shortwave_columns" if WRF_EXACT else "dudhia_shortwave_columns", arrays,
         {"nz": nz, "ny": ny, "nx": nx, "solcon": float(solcon32),
          "swrad_scat": float(scat32), "icloud": int(icloud)},
-        exact_policy=False, grid_size=ny * nx, threads_per_group=64)
+        exact_policy=WRF_EXACT, grid_size=ny * nx, threads_per_group=64)
 
 
 __all__ = ["submit_dudhia_shortwave"]

@@ -331,7 +331,10 @@ def test_mp28_dispatch_does_not_disturb_the_frozen_mp8_route(monkeypatch):
 # 3b.  The one-time scheme init hook (WRF's microphysics_init).
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("mp", [0, 1, 6, 8, 10, 18])
+# NSSL (18) and WDM6 (16) are not here: the WRF exact chain (2.9.1) gave them
+# WRF's start-of-domain CCN fill (woof.core.microphysics.ccn_start_fill),
+# which reads state.qnn / the CCN carrier and returns its own receipt.
+@pytest.mark.parametrize("mp", [0, 1, 6, 8, 10])
 def test_microphysics_init_is_an_empty_receipt_for_every_other_scheme(mp):
     """Unconditionally callable, so the init path needs no scheme branch.
 
@@ -468,7 +471,7 @@ def test_the_unfilled_aerosol_profile_is_physics_visible_not_cosmetic():
         cp.cuda.Stream.null.synchronize()
         results[filled] = {
             name: cp.asnumpy(getattr(state, name)).astype(np.float64)
-            for name in ("qc", "nc", "qr", "effc", "nwfa", "nifa")
+            for name in ("qc", "qi", "nc", "qr", "effc", "nwfa", "nifa")
         }
     unfilled, filled = results[False], results[True]
     # The aerosol state itself: the unfilled column sits on WRF's floors.
@@ -478,7 +481,12 @@ def test_the_unfilled_aerosol_profile_is_physics_visible_not_cosmetic():
     assert filled["nifa"].max() > 50.0 * unfilled["nifa"].max()
     # ... and it propagates into the cloud field within one step, including
     # the effective radius radiation consumes.
-    assert not np.array_equal(filled["qc"], unfilled["qc"])
+    # The cloud MASS is no longer a witness: the filled column's ice
+    # nucleation (iceDeMott reads nifa) moves qcten by 2.5e-11 kg/kg/s at one
+    # level, and since the 2.8.7 accumulator rework applies the cloud once
+    # (:3975) that lands on the same float32 qc as the unfilled column.  The
+    # ice it nucleates and the droplet number do differ.
+    assert not np.array_equal(filled["qi"], unfilled["qi"])
     assert not np.array_equal(filled["nc"], unfilled["nc"])
     effc_relative = np.abs(filled["effc"] - unfilled["effc"]) / np.maximum(
         unfilled["effc"], 1.0e-30)
@@ -570,7 +578,8 @@ def test_compute_refl_10cm_admits_28_and_names_it_when_refusing():
     # is IN it and that the refusal names the admitted set rather than a
     # bare "unsupported".
     message = str(caught.value)
-    assert "1, 6, 8, 10, 16, or 28" in message
+    from woof.core.refl import REFL_10CM_INPUT_SPECIES
+    assert all(str(selector) in message for selector in REFL_10CM_INPUT_SPECIES)
     assert "28" in message
 
 
@@ -672,16 +681,22 @@ def test_refl_10cm_is_bit_identical_under_two_very_different_nc_fields():
 
 
 @requires_gpu
-def test_mp28_and_mp8_reflectivity_agree_bitwise_on_identical_inputs():
-    """One WRF routine, so one WOOF answer.
+def test_mp28_echo_is_its_own_transcription_and_mp8s_stays_frozen():
+    """One WRF routine, two WOOF kernels, on purpose.
 
-    If mp=28 ever grew its own reflectivity branch, this is what would
-    catch it: the same state evaluated under both selectors must produce
-    the same bits, because in WRF it is literally the same call.
+    In WRF both selectors call the same ``calc_refl10cm``.  mp=8's kernel
+    (refl.cu, refl10cm_thompson_column) is byte-frozen and its arithmetic is
+    not WRF's (CUDA's pow, 720 where crg(4) = 720.000061, binary64 slopes and
+    radar constants); mp=28 runs its own transcription
+    (thompson_aerosol_state.cu, thompson_aa_refl10cm), which
+    tests/test_thompson_aerosol_sedim_refl.py holds to WRF's word on every
+    cell of its fixture.  So the two agree to the frozen kernel's rounding,
+    not necessarily bit for bit, and mp=28's answer is the transcription's.
     """
     import cupy as cp
 
     from woof.core.refl import compute_refl_10cm
+    from woof.core.thompson_aerosol_state import launch_aa_refl10cm
 
     try:
         cp.cuda.runtime.getDeviceCount()
@@ -721,7 +736,12 @@ def test_mp28_and_mp8_reflectivity_agree_bitwise_on_identical_inputs():
             state, _cfg(mp_physics=mp), temperature=temperature,
             pressure=state.p, thompson_graupel_number=graupel_number)
         out.append(cp.asnumpy(refl).copy())
-    assert np.array_equal(out[0], out[1])
+    state = _make()
+    direct = cp.zeros((nz, ny, nx), dtype=cp.float32)
+    launch_aa_refl10cm(state.qv, state.qr, state.nr, state.qs, state.qg,
+                       graupel_number, temperature, state.p, direct)
+    assert np.array_equal(out[1], cp.asnumpy(direct))
+    assert np.abs(out[0].astype(np.float64) - out[1]).max() < 1.0e-3
 
 
 # ---------------------------------------------------------------------------
@@ -791,11 +811,19 @@ def test_the_two_netcdf_name_maps_stand_in_the_declared_relation():
     from woof.io.wrf_output_schema import (
         HISTORY_FIELDS_BY_NETCDF_NAME, OUTPUT_FIELDS_BY_NETCDF_NAME,
         PRECIPITATION_OUTPUT_FIELDS, SCHEME_OUTPUT_FIELDS,
-        SURFACE_IDENTITY_OUTPUT_FIELDS, THOMPSON_AEROSOL_OUTPUT_FIELDS)
+        SFIRE_OUTPUT_FIELDS, SURFACE_IDENTITY_OUTPUT_FIELDS,
+        THOMPSON_AEROSOL_OUTPUT_FIELDS, WRF_INPUT_ECHO_OUTPUT_FIELDS)
 
     model_state_groups = {
         "THOMPSON_AEROSOL_OUTPUT_FIELDS": THOMPSON_AEROSOL_OUTPUT_FIELDS,
         "SURFACE_IDENTITY_OUTPUT_FIELDS": SURFACE_IDENTITY_OUTPUT_FIELDS,
+        # The SFIRE Registry rows (woof.io.sfire_schema), a model-state
+        # group the schema module declares by name.
+        "SFIRE_OUTPUT_FIELDS": SFIRE_OUTPUT_FIELDS,
+        # The WRF input rows wrf.exe repeats in every history frame (static
+        # words, coordinates, the SPP seed arrays), declared by name as
+        # WRF_INPUT_ECHO_OUTPUT_FIELDS (the exact chain, 2.9.1).
+        "WRF_INPUT_ECHO_OUTPUT_FIELDS": WRF_INPUT_ECHO_OUTPUT_FIELDS,
     }
     declared = set().union(*(set(group)
                              for group in model_state_groups.values()))
@@ -894,17 +922,20 @@ def test_mp28_is_a_translation_not_a_substitution():
 
     Classic Thompson pins ``nc`` at ``Nt_c = 100e6`` and runs Cooper
     nucleation; 28 carries prognostic nc/nwfa/nifa, CCN activation and
-    iceDeMott.  Because the mapped value equals the WRF value, PHYSICS.md's
-    "exactly three ratified substitutions" claim is untouched.
+    iceDeMott.  The mapped value equals the WRF value, so it adds no
+    substitution -- and since 2026-10-12 the microphysics map has none
+    at all (55, ISHMAEL, is refused by name instead of run as Morrison).
     """
     from woof.namelist_import import _MP_MAP
 
     assert _MP_MAP[28][0] == 28
     assert _MP_MAP[28][1] == _MP_MAP[28][2] == "Thompson aerosol-aware"
-    # The microphysics map's ONLY substitution stays 55 (ISHMAEL -> Morrison).
+    # The microphysics map substitutes nothing: every row runs the scheme
+    # its WRF number names.
     substitutions = {wrf for wrf, (mapped, _w, _g) in _MP_MAP.items()
                      if mapped != wrf}
-    assert substitutions == {55}
+    assert substitutions == set()
+    assert 55 not in _MP_MAP
 
 
 def test_every_wrf_mp28_aerosol_namelist_key_is_answered():
@@ -2094,7 +2125,18 @@ _REFL_DBZ_GATE = 2.0e-4
 #: in the deck now clears the flat 2.0e-04 dB gate and the exemption buys
 #: nothing.  Leaving the dict in place keeps `_REFL_DBZ_INHERITED_GATE.get`
 #: as the single lookup and makes re-adding an entry a deliberate act.
-_REFL_DBZ_INHERITED_GATE: dict[str, float] = {}
+#:
+#: RE-ADDED, DELIBERATELY, FOR THE DECLARED RAIN-GRAUPEL DIVERGENCE (lane/
+#: mp28-exact).  ``aero-cold-overlap`` is the one fixture where rain meets
+#: graupel; WRF v4.6.1 reads its rain-graupel collision tables out of bounds
+#: when the scheme is not hail aware (module_mp_thompson.F:465, :607-615,
+#: :2527-2545) and WOOF reads the slab the tables hold, so its rain, snow
+#: and graupel, and the echo they make, differ from WRF by that read alone
+#: (tests/test_thompson_aerosol_adapter.py::_G3_DECLARED_REFL_DB carries the
+#: same 1.585e-03 dB).  The bound is that measurement plus the 1% printing
+#: tolerance the G3 ratchet uses; every other fixture stays on the flat
+#: 2.0e-04 dB gate.
+_REFL_DBZ_INHERITED_GATE: dict[str, float] = {"aero-cold-overlap": 1.601e-03}
 
 
 def _refl_oracle_harness():
@@ -2137,9 +2179,10 @@ def test_refl_10cm_reproduces_wrfs_calc_refl10cm_on_all_nineteen_fixtures():
        it.)  A port that computed dBZ correctly but clamped at, say,
        -35.0000001 would pass a tolerance test and fail this one.
     2. THE SIGNAL AGREES.  The 102 levels with real returns must agree to
-       :data:`_REFL_DBZ_GATE`.  ``_REFL_DBZ_INHERITED_GATE`` is now EMPTY --
-       WP-13a closed the one fixture that needed it -- so this is the flat
-       gate on every fixture, with no exception at all.
+       :data:`_REFL_DBZ_GATE`.  ``_REFL_DBZ_INHERITED_GATE`` names one
+       fixture, ``aero-cold-overlap``, and only for the declared rain-graupel
+       divergence (WRF's out-of-bounds table read); WP-13a closed the rain
+       residual it once held, and every other fixture is on the flat gate.
     3. THE COMPARISON IS NOT VACUOUS.  The fixtures must actually contain
        strong returns; the oracle's maximum is 51.98 dBZ, and a suite of
        all-floor columns would satisfy 1 and 2 while proving nothing.
@@ -2321,7 +2364,9 @@ def test_the_reflectivity_residual_is_the_declared_rain_residual_in_db():
 
     difference = got - want
     level = int(np.argmax(np.abs(difference)))
-    assert not floor[level]
+    # Since mp=28 runs its own WRF-transcribed calc_refl10cm the column's
+    # echo is WRF's word at every level, so argmax lands anywhere.
+    assert not np.any(difference) or not floor[level]
 
     # 1. THE CLOSURE.  WP-13a's sedimentation-density fix put this column
     #    inside the flat gate with a 16x margin; it used to sit at 5.283e-04
@@ -2345,11 +2390,15 @@ def test_the_reflectivity_residual_is_the_declared_rain_residual_in_db():
     #    this column's biggest rain residual by far (3.155e-03) and WRF puts
     #    it AT the -35 dBZ floor, where mp_gt_driver:1461's clamp destroys the
     #    signal and both ports are required to be bitwise -35.0 above.
-    rain_eps = np.where(floor, 0.0, np.abs(2.0 * eps_qr - eps_nr))
-    assert level == int(np.argmax(rain_eps)), (level, int(np.argmax(rain_eps)))
-    assert floor[int(np.argmax(np.abs(2.0 * eps_qr - eps_nr)))], (
-        "the column's largest rain residual is no longer at the dBZ floor; "
-        "this test's restriction to non-floor levels needs re-deriving")
+    #    SINCE THE 2.8.7 ACCUMULATOR REWORK there is no rain residual left to
+    #    attribute to: qr and nr are bit-exact against WRF at every level of
+    #    this column, so the rain-moment prediction is identically zero and
+    #    what remains of |dBZ - WRF| is the temp_k
+    #    residual reaching ze_snow/ze_graupel plus float32 dBZ rounding,
+    #    bounded by assertion 3.  Asserted as that closure.
+    assert not np.any(eps_qr) and not np.any(eps_nr), (
+        "a rain residual is back on this column; restore the attribution "
+        "of the worst dB level to the worst rain-residual level")
 
     # 3. THE MECHANISM, in the only units that still resolve it.  At every
     #    non-floor level the measured dB residual may exceed the rain-moment
@@ -2395,7 +2444,14 @@ def test_the_reflectivity_residual_is_the_declared_rain_residual_in_db():
         "back above the float32 dBZ ulp and assertion 3's ratio test should "
         "be restored")
     assert abs(predicted[level]) <= 1.0e-5, predicted[level]
-    assert unexplained > 0.0
+    # 5. THE THIRD CLOSURE.  What used to remain above the prediction was the
+    #    frozen mp=8 echo's own arithmetic (CUDA's pow, crg(4) = 720 where
+    #    thompson_init leaves 720.000061, binary64 slopes) plus float32 dBZ
+    #    rounding.  mp=28 now evaluates calc_refl10cm with its own WRF
+    #    transcription (thompson_aa_refl10cm), and on this column the echo is
+    #    WRF's word at every level: nothing is left unexplained.
+    assert unexplained == 0.0, unexplained
+    assert np.array_equal(got, want)
 
 
 def test_the_go_chain_refuses_an_unpreparable_mp28_run_before_it_fetches(
@@ -2439,8 +2495,13 @@ def test_the_go_chain_refuses_an_unpreparable_mp28_run_before_it_fetches(
     assert "\nspecified = true\n" in written, written
     mp28 = written.replace("\nmp_physics = 10\n", "\nmp_physics = 28\n")
     assert mp28 != written
+    # By default the chain's own fetch stage acquires the pinned dataset
+    # (2.8.8 acceptance D-01), so the refusal is the OFFLINE case: a
+    # config that opted out of that acquisition with [fetch] wif = false.
+    assert "\n[fetch]\n" in mp28
+    offline = mp28.replace("\n[fetch]\n", "\n[fetch]\nwif = false\n")
     refused = tmp_path / "go-mp28-refused.toml"
-    refused.write_text(mp28, encoding="utf-8", newline="\n")
+    refused.write_text(offline, encoding="utf-8", newline="\n")
 
     with pytest.raises(go_cli.GoRefusal) as refusal:
         go_cli.plan_from_config(refused, outdir=tmp_path / "out")
@@ -2468,6 +2529,15 @@ def test_the_go_chain_refuses_an_unpreparable_mp28_run_before_it_fetches(
         encoding="utf-8", newline="\n")
     plan = go_cli.plan_from_config(opened, outdir=tmp_path / "out-ok")
     assert plan["domains"] == 1
+    assert "--wif" not in go_cli.fetch_command(plan)
+
+    # And without the opt-out the same config plans its acquisition
+    # instead of refusing: the fetch stage is handed --wif.
+    fetched = tmp_path / "go-mp28-fetched.toml"
+    fetched.write_text(mp28, encoding="utf-8", newline="\n")
+    plan = go_cli.plan_from_config(fetched, outdir=tmp_path / "out-fetch")
+    assert plan["wif_domains"] == (1,)
+    assert "--wif" in go_cli.fetch_command(plan)
 
 
 @pytest.mark.parametrize("via,origin", [

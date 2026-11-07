@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 def _require_column(value, name, shape, context):
@@ -55,12 +56,12 @@ def submit_noah_forcing(fields, *, p_if0, p_if1, temperature0, qv0, dz0,
     if ncol == 0:
         return
     context.submit_kernel(
-        "noah_forcing",
+        "wrf_exact_noah_forcing" if WRF_EXACT else "noah_forcing",
         {f"{name}_a": value for name, value in inputs.items()},
         {"freezing": float(np.float32(freezing)),
          "use_scheme_sr": int(sr_scheme is not None),
          "ny": ny, "nx": nx, "ncol": ncol},
-        exact_policy=False, grid_size=ncol, threads_per_group=128)
+        exact_policy=WRF_EXACT, grid_size=ncol, threads_per_group=128)
 
 
 def submit_noah_rain_clear(rainbl, pending) -> None:
@@ -75,10 +76,10 @@ def submit_noah_rain_clear(rainbl, pending) -> None:
     if ncol == 0:
         return
     context.submit_kernel(
-        "noah_rain_clear",
+        "wrf_exact_noah_rain_clear" if WRF_EXACT else "noah_rain_clear",
         {"rainbl_a": rainbl, "pending_a": pending},
         {"ny": shape[0], "nx": shape[1], "ncol": ncol},
-        exact_policy=False, grid_size=ncol, threads_per_group=128)
+        exact_policy=WRF_EXACT, grid_size=ncol, threads_per_group=128)
 
 
 def submit_noah_rain_add(rainbl, pending) -> None:

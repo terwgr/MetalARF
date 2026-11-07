@@ -699,7 +699,7 @@ kernel void noahmp_water_batch(
     constant NoahmpWaterBatchResources &r [[buffer(0)]],
     constant NoahmpWaterBatchParams &q [[buffer(1)]],
     uint idx [[thread_position_in_grid]]) {
-  if(idx>=uint(q.n))return;ulong pb=ulong(idx)*26ul,xb=ulong(idx)*76ul,ib=ulong(idx)*9ul,ob=ulong(idx)*73ul;
+  if(idx>=uint(q.n))return;ulong pb=ulong(idx)*26ul,xb=ulong(idx)*76ul,ib=ulong(idx)*9ul,ob=ulong(idx)*74ul;
   int urban=r.iin[ib+1],nroot=r.iin[ib+2],ist=r.iin[ib+3];
   WaterSnowCol c;c.isnow=r.iin[ib];c.snowh=r.fin[xb];c.sneqv=r.fin[xb+1];
   for(uint k=0;k<3;k++){c.snice[k]=r.fin[xb+2+k];c.snliq[k]=r.fin[xb+5+k];}
@@ -718,15 +718,15 @@ kernel void noahmp_water_batch(
   float qsnbot=0.0f,snoflow=0.0f,ponding1=0.0f,ponding2=0.0f;
   wssnowwater(c,dt,zsoil,imelt,ficeold,sfctmp,snowhin,qsnow,qsnfro,qsnsub,qrain,r.par[pb+24],r.par[pb+25],qsnbot,snoflow,ponding1,ponding2);
   for(uint k=0;k<4;k++){sh2o[k]=c.sh2o[k];sice[k]=c.sice[k];}
+  if(r.iin[ib+5]!=0){float dz0=c.dzsnso[3];sice[0]+=((qsdew-qseva)*dt)/(dz0*1000.0f);qsdew=0.0f;qseva=0.0f;if(sice[0]<0.0f){sh2o[0]+=sice[0];sice[0]=0.0f;}smc[0]=sh2o[0]+sice[0];}
   float qinsur=((ponding+ponding1+ponding2)/dt)*0.001f;
   if(c.isnow==0)qinsur+=(qsnbot+qsdew+qrain)*0.001f;else qinsur+=(qsnbot+qsdew)*0.001f;
-  if(r.iin[ib+5]!=0){float dz0=c.dzsnso[3];sice[0]+=((qsdew-qseva)*dt)/(dz0*1000.0f);qsdew=0.0f;qseva=0.0f;if(sice[0]<0.0f){sh2o[0]+=sice[0];sice[0]=0.0f;}smc[0]=sh2o[0]+sice[0];}
   qseva*=0.001f;
   for(int iz=0;iz<nroot;iz++)acc_e[iz]+=etran*btrani[iz]*0.001f;
-  acc_qinsur+=qinsur;acc_qseva+=qseva;float runsub=0.0f,runsrf=0.0f,qdrain=0.0f,wcnd[4];
+  acc_qinsur+=qinsur;acc_qseva+=qseva;float runsub=0.0f,runsrf=0.0f,qdrain=0.0f,soldrain=0.0f,wcnd[4];
   for(uint k=0;k<4;k++)dz[k]=c.dzsnso[3+k];
   if(ist==2){runsrf=0.0f;if(wslake>=W_WSLMAX)runsrf=acc_qinsur*1000.0f*dt;wslake=wslake+(acc_qinsur-acc_qseva)*1000.0f*dt-runsrf;}
-  else {wsoilwater(r.par+pb,urban,dt,zsoil,dz,acc_qinsur,acc_qseva,acc_e,sice,sh2o,smc,runsub,runsrf,qdrain,wcnd);runsub+=qdrain;for(uint k=0;k<4;k++)smc[k]=sh2o[k]+sice[k];runsrf*=dt;runsub*=dt;}
+  else {wsoilwater(r.par+pb,urban,dt,zsoil,dz,acc_qinsur,acc_qseva,acc_e,sice,sh2o,smc,runsub,runsrf,qdrain,wcnd);soldrain=qdrain*dt;runsub+=qdrain;for(uint k=0;k<4;k++)smc[k]=sh2o[k]+sice[k];runsrf*=dt;runsub*=dt;}
   runsub+=snoflow*dt;
   for(uint k=0;k<4;k++){c.sh2o[k]=sh2o[k];c.sice[k]=sice[k];r.fout[ob+37+k]=smc[k];r.fout[ob+47+k]=acc_e[k];}
   for(uint k=0;k<37;k++)r.fout[ob+k]=r.fin[xb+k];
@@ -739,6 +739,7 @@ kernel void noahmp_water_batch(
   r.fout[ob+57]=0.0f;r.fout[ob+58]=ponding1;r.fout[ob+59]=ponding2;r.fout[ob+60]=qsnbot;r.fout[ob+61]=qsnsub;r.fout[ob+62]=qsnfro;
   r.fout[ob+63]=qsubc;r.fout[ob+64]=qfroc;r.fout[ob+65]=qfrzc;r.fout[ob+66]=qmeltc;r.fout[ob+67]=qevac;r.fout[ob+68]=qdewc;
   r.fout[ob+69]=qseva;r.fout[ob+70]=qsdew;r.fout[ob+71]=qinsur;r.fout[ob+72]=snoflow;
+  r.fout[ob+73]=soldrain;
   r.iout[idx]=c.isnow;
 }
 

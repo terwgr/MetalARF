@@ -66,15 +66,31 @@ def _door(argv, *, env=None, timeout=600):
 
 
 class _Serve(http.server.BaseHTTPRequestHandler):
-    """Hand out exactly ``body`` for any path, in small writes."""
+    """Hand out exactly ``body`` for any path, in small writes.
+
+    Answers like a release host: a ``bytes=a-b`` range gets 206 with
+    ``Content-Range``.  The pinned table fetch (rw_fetch) reads the object
+    length from a one-byte range before it transfers, as GitHub release
+    assets, Hugging Face and NCAR all answer.
+    """
 
     body = b""
 
     def do_GET(self):                                    # noqa: N802
-        self.send_response(200)
-        self.send_header("Content-Length", str(len(self.body)))
+        header = self.headers.get("Range")
+        body = self.body
+        if header and header.startswith("bytes="):
+            first, _, last = header[len("bytes="):].partition("-")
+            first = int(first)
+            last = min(int(last), len(body) - 1) if last else len(body) - 1
+            self.send_response(206)
+            self.send_header("Content-Range", f"bytes {first}-{last}/{len(body)}")
+            body = body[first:last + 1]
+        else:
+            self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        view = memoryview(self.body)
+        view = memoryview(body)
         for start in range(0, len(view), 65536):
             self.wfile.write(view[start:start + 65536])
 
@@ -169,9 +185,12 @@ def test_the_setup_wrapper_captures_stdout_only(monkeypatch, capsys):
 def test_fetch_tables_streams_progress_before_it_refuses(local_host, tmp_path):
     """The real door, over a real socket, with the pinned bars intact.
 
-    The served bytes are not the pinned ones, so the command refuses --
-    which is the point: the byte counter has to reach the reader from
-    inside the transfer, not from the summary afterwards.
+    The served bytes are not the pinned ones, so the command refuses.  The
+    transfer (rw_fetch) reads the object's length before it moves a byte
+    and refuses a length the pin does not allow, so nothing is published;
+    the download line, with its size, still reaches the reader before the
+    refusal.  The counter moving inside a transfer is
+    test_a_table_download_counts_its_bytes_on_stderr's.
     """
 
     base, _body = local_host
@@ -193,8 +212,9 @@ def test_fetch_tables_streams_progress_before_it_refuses(local_host, tmp_path):
     done = _door(["fetch-tables"], env=env)
 
     assert done.returncode == 2, done.stdout + done.stderr
-    assert "refused and deleted" in done.stdout, done.stdout
-    assert "MiB" in done.stderr and "%" in done.stderr, done.stderr
+    assert "REFUSED" in done.stdout and "pin refused" in done.stdout, done.stdout
+    said = done.stdout + done.stderr
+    assert "downloading" in said and "MiB" in said, said
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +235,7 @@ def _fake_downloader(record):
     return download
 
 
-def test_the_table_route_names_each_object_it_lands(tmp_path):
+def test_the_table_route_names_each_object_it_lands(tmp_path, monkeypatch):
     """The wrfvet's 792 MB fetch printed nothing between the opening
     line and the manifest.  Every object gets a line now, in submission
     order, so a reader can tell a slow transfer from a hung one."""
@@ -224,10 +244,30 @@ def test_the_table_route_names_each_object_it_lands(tmp_path):
 
     plan = fetch_routes.resolve_request(
         "hrrr-prs", cycle=datetime(2026, 8, 16, 0), hours=1)
+    # Keep the host-slot waiter in this whole-route check deterministic.
+    from woof import fetch_pool
+    waiting = threading.Event()
+    initialize = fetch_pool._HostTurns.__init__
+    def host_turns(self, cap, indices):
+        initialize(self, cap, indices)
+        wait = self._cond.wait
+        def wait_for_turn(timeout=None):
+            waiting.set()
+            return wait(timeout)
+        self._cond.wait = wait_for_turn
+    monkeypatch.setattr(fetch_pool._HostTurns, "__init__", host_turns)
+    monkeypatch.setattr(fetch_pool, "host_worker_cap", lambda host, workers: 1)
+    download = _fake_downloader([])
+    first = threading.Lock()
+    def held_download(*args, **kwargs):
+        if first.acquire(blocking=False):
+            assert waiting.wait(10), "second transfer never waited for its host slot"
+        return download(*args, **kwargs)
     said: list[str] = []
-    fetch_routes.run_plan(plan, out=tmp_path,
-                          downloader=_fake_downloader([]),
+    fetch_routes.run_plan(plan, out=tmp_path, file_workers=2,
+                          downloader=held_download,
                           progress=said.append)
+    assert waiting.is_set()
 
     assert said, "the route said nothing at all"
     opening = said[0]

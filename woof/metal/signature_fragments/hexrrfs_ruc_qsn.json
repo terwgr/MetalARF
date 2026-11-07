@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ruc_tbq",
+      "source": "woof/metal/shaders/hexrrfs_ruc_tbq.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/ruc_lsm_8c9f1a8.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ruc_qsn",
+      "cuda_symbol": "land_qsn",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "tn",
+          "float",
+          "read"
+        ],
+        [
+          "tbq",
+          "float",
+          "read"
+        ],
+        [
+          "qsn",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tn": [
+          [
+            "nc"
+          ]
+        ],
+        "tbq": [
+          [
+            "5001"
+          ]
+        ],
+        "qsn": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

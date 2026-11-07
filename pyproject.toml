@@ -5,22 +5,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "recast-woof"
-version = "1.0.3"
-description = "Recast WOOF: GPU-native regional weather forecasting with WRF-class physics, data assimilation and native preprocessing, plus preview hex and global models"
+version = "1.1.5"
+description = "Recast WOOF: GPU-native regional weather forecasting with WRF-class physics, data assimilation and native preprocessing, plus the hex model (a GPU port of MPAS-Atmosphere v8.4.2) and its global configuration"
 readme = "README.md"
 license = "Apache-2.0"
 # Every licence whose terms ask for its text to travel with the copy ships
 # in the wheel and the sdist under the dist-info licenses/ folder.
-license-files = ["LICENSE", "NOTICE", "licenses/*"]
+license-files = ["LICENSE", "NOTICE", "licenses/*", "licenses/soundings/*"]
 requires-python = ">=3.11"
 # numpy>=2: the FP32 radiation chains rely on NEP-50 weak promotion.
 # jsonschema: every forecast validates its certification capsule.
 # scipy, pyshp: the vad-region dealiasing engine and the basemap reader.
 # cdsapi: the ERA5 route through the Copernicus CDS.
+# threadpoolctl: preparation workers size the numeric thread pools they load.
+# psutil: host memory and process accounting (the engine's own base set).
 # recast-woof-data: reference tables and map assets, pinned to this version.
 dependencies = ["numpy>=2.0", "netCDF4>=1.6", "matplotlib>=3.8",
-                "jsonschema>=4.0",
-                "scipy>=1.11", "pyshp>=2.3", "cdsapi>=0.7.7", "recast-woof-data==1.0.3"]
+                "jsonschema>=4.0", "threadpoolctl>=3.1",
+                "scipy>=1.11", "pyshp>=2.3", "cdsapi>=0.7.7", "psutil>=5.9", "recast-woof-data==1.1.5"]
 keywords = ["WRF", "WPS", "GRIB", "NetCDF", "weather", "CUDA", "MPAS", "data-assimilation"]
 classifiers = [
     "Environment :: GPU :: NVIDIA CUDA",
@@ -49,8 +51,14 @@ render = ["wrf-rust>=0.2.39,<0.3"]
 geog = ["rasterio>=1.3", "pyproj>=3.6"]
 obs = []
 dealias = []
-dev = ["pytest>=8.0", "pytest-xdist>=3.5", "psutil>=5.9", "pyyaml>=6.0"]
+dev = ["pytest>=8.0", "pytest-xdist>=3.5", "pyyaml>=6.0", "setuptools>=77", "ruff==0.13.3"]
 publish = ["huggingface_hub>=0.23", "h5py>=3.10"]
+# The CONUS NHDPlus V2.1 hydro provider reads EPA's .7z source archives.
+# py7zr and its codecs are LGPL-2.1-or-later, outside the permissive licences
+# the default install carries, so they are an explicit extra: without it
+# `--hydro on` on a CONUS domain prepares the worldwide fabric instead and
+# says why (woof.hydro.acquire).
+hydro-conus = ["py7zr>=1.0"]
 all-cu12 = ["recast-woof[gpu-cu12]", "recast-woof[render]"]
 all-cu13 = ["recast-woof[gpu-cu13]", "recast-woof[render]"]
 all = ["recast-woof[all-cu12]"]
@@ -82,18 +90,43 @@ woof = [
     # Prebuilt native bridge and Metal payloads are present only in a
     # platform wheel (setup.py validates manifests and sets the wheel tag).
     "libexec/bridges/*",
+    # (1.1.0 r13) engine 2.9.4's own package data: the ocean, hydro and timeline tables and the hydro kernels
+    # (`woof --help` stopped on the missing woof/ocean/rows.json in the r13 install check)
+    "hydro/*.json",
+    "ocean/*.json",
+    "timeline/*.json",
+    "hydro/*.cu",
+    "hydro/*.cuh",
+    "hydro/PET-LICENSE",
+    "hydro/PET-TERMS.md",
     "libexec/metal/*",
 ]
 "woof.metal" = ["native/*.h", "native/*.mm", "shaders/*.metal",
                  "shaders/*.metalh", "kernel_signatures.json",
                  "signature_fragments/*.json",
                  "generated/*.metalh", "generated/*.json"]
-"woof.core.kernels" = ["*.cu", "*.cuh", "LICENSE-third-party.txt"]
+"woof.core.kernels" = ["*.cu", "*.cuh", "**/*.cu", "**/*.cuh", "*.cpp", "**/NOTICE-*.txt", "LICENSE-third-party.txt"]
+"woof.ocean.waves" = ["*.cu", "*.json", "*.md", "native/*.rs", "native/*.sh", "native/NETCDF-COPYRIGHT", "examples/*.json"]
+# (1.1.4) engine 2.9.11's new package data: nudging's kernels (--nudging spectral stopped on a missing kernel
+# without them) and the wave preparation's public source table
+"woof.ocean.waves.data" = ["*.json", "*.md"]
+"woof.spectral_nudging" = ["*.cu", "WRF-NOTICE.txt"]
+"woof.ocean.surge" = ["kernels/*.cu", "examples/*.json", "examples/*.py", "*.md", "tests/*.c"]
+"woof.ocean.seaice" = ["*.cu", "README.md"]
+"woof.ocean.mixed_layer" = ["*.cu", "*.md", "WRF-NOTICE.txt"]
+"woof.hydro" = ["kernels/*.cu", "kernels/t-route-LICENSE.txt", "kernels/t-route-TERMS.txt"]
+"woof.hydro.noahowp" = ["*.cu", "schema.json", "LICENSE", "UPSTREAM-TERMS.md", "NOTICE", "parameters/*.TBL"]
+"woof.native_step" = ["*.c", "README.md"]
 "woof.obs" = ["data/**/*"]
 "woof.verify" = ["*.json"]
 "woof.certify" = ["*.json"]
 "woof.ingest" = ["*.md"]
-"woof.hex" = ["*.json", "data/**/*", "*.cu", "*.cuh"]
+# (1.1.0) hex 0.4.0's own package-data list (its pyproject), so the wheel carries what hex reads at run time:
+# native/upper_damping.rs (the forecast door refused "required ordinary file is missing" without it) and the
+# init_gpu kernels (**/*.cu). libexec: the hex release's compiled helpers, present only in a platform wheel
+# (stage_hex_helpers.py in the assembly stages them before that build).
+# (1.1.2) native/*.c as gpuwm-hex ships it: the whole-step submission source woof.hex.native_step builds from
+"woof.hex" = ["*.json", "**/*NOTICE*.txt", "data/*", "data/**/*", "libexec/*", "native/*.rs", "native/*.c", "*.cu", "*.cuh", "**/*.cu", "**/*.cuh"]
 "woof.globe" = [
     "*.cu",
     "*.cuh",
@@ -106,7 +139,8 @@ woof = [
     "radiance_tables/**/*",
     "semilag/*.cu",
 ]
-tools = ["prepare_hrrr_*.sh"]
+tools = ["prepare_hrrr_*.sh", "hydro_world/data/sources.v1.json", "hydro_world/data/recipes.v1.json",
+         "hydro_world_params/data/params.v1.json"]
 tilestream = ["output-scaling.json"]
 configs = ["**/*"]
 docs = ["mpas-seam.md"]

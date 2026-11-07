@@ -185,16 +185,16 @@ kernel void rrtm_lw_mm5atm(
                 r.pz[levbase + ulong(lay + 2)]);
         }
         const ulong src = inlay + ulong(p.nz - 1 - min(lay, p.nz - 1));
-        const float q = lay < p.nz ? max(r.qv[src], 1.0e-12f) : 5.0e-6f;
+        const float q = lay < p.nz ? max(r.qv[src], 1.0e-12f) * 1.607758f : 5.0e-6f;
         const float co2 = p.co2vmr;
         const float n2o = p.n2ovmr;
         const float ch4 = p.ch4vmr;
-        const float amm = (1.0f - q * 1.607758f) * 28.9644f
-                        + q * 1.607758f * 18.0154f;
+        const float amm = (1.0f - q) * 28.9644f
+                        + q * 18.0154f;
         const float coldry = (r.pz[levbase + ulong(lay)]
                              - r.pz[levbase + ulong(lay + 1)])
                            * 1.0e3f * 6.022e23f
-                           / (grav * amm * (1.0f + q * 1.607758f));
+                           / (grav * amm * (1.0f + q));
         r.coldry[dst] = coldry;
         float cloud_tau = 0.0f;
         if (lay < p.nz) {
@@ -217,7 +217,7 @@ kernel void rrtm_lw_mm5atm(
         }
         for (int m = 0; m < 35; ++m) r.wkl[dst * 35ul + ulong(m)] = 0.0f;
         for (int x = 0; x < 4; ++x) r.wx[dst * 4ul + ulong(x)] = 0.0f;
-        r.wkl[dst * 35ul] = q * 1.607758f * coldry;
+        r.wkl[dst * 35ul] = q * coldry;
         r.wkl[dst * 35ul + 1ul] = co2 * coldry;
         r.wkl[dst * 35ul + 2ul] = o3 * 0.603461f * coldry;
         r.wkl[dst * 35ul + 3ul] = n2o * coldry;
@@ -306,12 +306,12 @@ inline float rrtm_lw_interp8(device const float *tab, int nrow, int ng,
                               float fs, float f00, float f01,
                               float f10, float f11) {
     const float f000 = (1.0f - fs) * f00;
-    const float f100 = (1.0f - fs) * f10;
-    const float f010 = fs * f00;
+    const float f100 = fs * f00;
+    const float f010 = (1.0f - fs) * f10;
     const float f110 = fs * f10;
     const float f001 = (1.0f - fs) * f01;
-    const float f101 = (1.0f - fs) * f11;
-    const float f011 = fs * f01;
+    const float f101 = fs * f01;
+    const float f011 = (1.0f - fs) * f11;
     const float f111 = fs * f11;
     i0 = clamp(i0, 0, nrow - 1); i1 = clamp(i1, 0, nrow - 1);
     const int a0 = clamp(i0 + 1, 0, nrow - 1);
@@ -387,11 +387,11 @@ kernel void rrtm_lw_taumol_01_02(
     const int hi1 = ((jp - 13) * 5 + (jt - 1)) * p.nspb1;
     const int hi11 = ((jp - 12) * 5 + (jt1 - 1)) * p.nspb1;
     const int self = clamp(r.indself[i] - 1, 0, p.nself1 - 2);
-    const float selfterm = r.selffac[i] * (r.self1[ulong(self) * 8ul]
-        + r.selffrac[i] * (r.self1[ulong(self + 1) * 8ul]
-                           - r.self1[ulong(self) * 8ul]));
     const bool trop = lay + 1 <= r.laytrop[col];
     for (int g = 0; g < 8; ++g) {
+    const float selfterm = r.selffac[i] * (r.self1[ulong(self) * 8ul + ulong(g)]
+        + r.selffrac[i] * (r.self1[ulong(self + 1) * 8ul + ulong(g)]
+                           - r.self1[ulong(self) * 8ul + ulong(g)]));
         const float low = r.colh2o[i] * (rrtm_lw_interp4(
             r.absa1, p.nabsa1, 8, g, lo1, lo11,
             r.fac00[i], r.fac01[i], r.fac10[i], r.fac11[i])
@@ -426,10 +426,10 @@ kernel void rrtm_lw_taumol_01_02(
     const int hi2 = ((jp - 13) * 5 + (jt - 1)) * p.nspb2;
     const int hi21 = ((jp - 12) * 5 + (jt1 - 1)) * p.nspb2;
     const int self2 = clamp(r.indself[i] - 1, 0, p.nself2 - 2);
-    const float selfterm2 = r.selffac[i] * (r.self2[ulong(self2) * 14ul]
-        + r.selffrac[i] * (r.self2[ulong(self2 + 1) * 14ul]
-                           - r.self2[ulong(self2) * 14ul]));
     for (int g = 0; g < 14; ++g) {
+    const float selfterm2 = r.selffac[i] * (r.self2[ulong(self2) * 14ul + ulong(g)]
+        + r.selffrac[i] * (r.self2[ulong(self2 + 1) * 14ul + ulong(g)]
+                           - r.self2[ulong(self2) * 14ul + ulong(g)]));
         const float low = r.colh2o[i] * (rrtm_lw_interp4(
             r.absa2, p.nabsa2, 14, g, lo2, lo21,
             fc00, fc01, fc10, fc11) + selfterm2 + r.forfac[i] * r.forref2[g]);
@@ -481,12 +481,6 @@ kernel void rrtm_lw_taumol_03(
         r.tables, r.table_index, p.id_n2oref, jp, fp, w1, w2);
     const int i0 = ((jp - 1) * 5 + (jt - 1)) * p.nspa3 + jsl - 1;
     const int i1 = (jp * 5 + (jt1 - 1)) * p.nspa3 + jsl - 1;
-    const float self0 = rrtm_lw_table_value(r.tables, r.table_index,
-        p.id_self3, r.indself[i] - 1, 0);
-    const float self1 = rrtm_lw_table_value(r.tables, r.table_index,
-        p.id_self3, r.indself[i], 0);
-    const float continuum = r.selffac[i]
-        * (self0 + r.selffrac[i] * (self1 - self0));
     const float f00 = r.fac00[i], f01 = r.fac01[i];
     const float f10 = r.fac10[i], f11 = r.fac11[i];
     float combu, fsu; int jsu;
@@ -511,6 +505,12 @@ kernel void rrtm_lw_taumol_03(
     const int3 meta_a = rrtm_lw_table_info(r.table_index, p.id_absa);
     const int3 meta_b = rrtm_lw_table_info(r.table_index, p.id_absb);
     for (int g = 0; g < 16; ++g) {
+    const float self0 = rrtm_lw_table_value(r.tables, r.table_index,
+        p.id_self3, r.indself[i] - 1,g);
+    const float self1 = rrtm_lw_table_value(r.tables, r.table_index,
+        p.id_self3, r.indself[i],g);
+    const float continuum = r.selffac[i]
+        * (self0 + r.selffrac[i] * (self1 - self0));
         const float low = comb * rrtm_lw_interp8(
             r.tables + meta_a.x, p.nrowa3, 16, g, i0, i1, 10,
             fsl, f00, f01, f10, f11)
@@ -552,15 +552,15 @@ kernel void rrtm_lw_taumol_06(
     const int jp = r.jp[i], jt = r.jt[i], jt1 = r.jt1[i];
     const int i0 = ((jp - 1) * 5 + (jt - 1)) * p.nspa6;
     const int i1 = (jp * 5 + (jt1 - 1)) * p.nspa6;
-    const float self0 = rrtm_lw_table_value(r.tables,r.table_index,p.id_self6,
-                                             r.indself[i] - 1,0);
-    const float self1 = rrtm_lw_table_value(r.tables,r.table_index,p.id_self6,
-                                             r.indself[i],0);
-    const float continuum = r.selffac[i]
-        * (self0 + r.selffrac[i] * (self1 - self0));
     const bool trop = lay + 1 <= r.laytrop[col];
     const int3 meta = rrtm_lw_table_info(r.table_index,p.id_absa6);
     for (int g=0; g<8; ++g) {
+    const float self0 = rrtm_lw_table_value(r.tables,r.table_index,p.id_self6,
+                                             r.indself[i] - 1,g);
+    const float self1 = rrtm_lw_table_value(r.tables,r.table_index,p.id_self6,
+                                             r.indself[i],g);
+    const float continuum = r.selffac[i]
+        * (self0 + r.selffrac[i] * (self1 - self0));
         const float cfc = r.wx[i * 4ul + 1ul] * rrtm_lw_table_value(
             r.tables,r.table_index,p.id_cfc11,0,g)
           + r.wx[i * 4ul + 2ul] * rrtm_lw_table_value(
@@ -591,11 +591,6 @@ kernel void rrtm_lw_taumol_04_05(
     const int i1=(jp*5+(jt1-1))*p.nspa+js-1;
     const int3 ma=rrtm_lw_table_info(r.table_index,p.id_absa);
     const int3 ms=rrtm_lw_table_info(r.table_index,p.id_self);
-    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,
-                                        r.indself[i]-1,0);
-    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,
-                                        r.indself[i],0);
-    const float continuum=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
     float combu,fsu; int jsu;
     rrtm_lw_spec(r.colo3[i],r.colco2[i],p.strrat_high,4.0f,combu,jsu,fsu);
     float js_adj=float(jsu), fs_adj=fsu;
@@ -610,6 +605,11 @@ kernel void rrtm_lw_taumol_04_05(
     const int3 mb=rrtm_lw_table_info(r.table_index,p.id_absb);
     const float f00=r.fac00[i],f01=r.fac01[i],f10=r.fac10[i],f11=r.fac11[i];
     for(int g=0;g<p.ng;++g){
+    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,
+                                        r.indself[i]-1,g);
+    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,
+                                        r.indself[i],g);
+    const float continuum=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
         float low=comb*rrtm_lw_interp8(r.tables+ma.x,p.nrowa,p.ng,g,
             i0,i1,p.step_low,fs,f00,f01,f10,f11)+r.colh2o[i]*continuum;
         if(p.band==5) low+=r.wx[i*4ul]*rrtm_lw_table_value(
@@ -648,13 +648,13 @@ kernel void rrtm_lw_taumol_07(
     const int3 ma=rrtm_lw_table_info(r.table_index,p.id_absa);
     const int3 mb=rrtm_lw_table_info(r.table_index,p.id_absb);
     const int3 ms=rrtm_lw_table_info(r.table_index,p.id_self);
-    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,0);
-    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],0);
-    const float self=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
     const float f00=r.fac00[i],f01=r.fac01[i],f10=r.fac10[i],f11=r.fac11[i];
     const int hi0=((jp-13)*5+(jt-1))*p.nspb;
     const int hi1=((jp-12)*5+(jt1-1))*p.nspb;
     for(int g=0;g<12;++g){
+    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,g);
+    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],g);
+    const float self=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
       const float low=comb*rrtm_lw_interp8(r.tables+ma.x,p.nrowa,12,g,lo0,lo1,9,fs,
           f00,f01,f10,f11)+r.colh2o[i]*self+r.co2mult[i]*rrtm_lw_table_value(
           r.tables,r.table_index,p.id_co2,0,g);
@@ -688,9 +688,6 @@ kernel void rrtm_lw_taumol_08(
     const int i1=(jp*5+(jt1-1))*p.nspa;
     const int hi0=((jp-7)*5+(jt-1))*p.nspb;
     const int hi1=((jp-6)*5+(jt1-1))*p.nspb;
-    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,0);
-    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],0);
-    const float self=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
     const float nref0=rrtm_lw_table_value(r.tables,r.table_index,p.id_n2oref,jp-1,0);
     const float nref1=rrtm_lw_table_value(r.tables,r.table_index,p.id_n2oref,jp,0);
     const float h0=rrtm_lw_table_value(r.tables,r.table_index,p.id_h2oref,jp-1,0);
@@ -701,6 +698,9 @@ kernel void rrtm_lw_taumol_08(
     const float n2ou=r.coln2o[i]-r.colo3[i]*(nref0/o0+fp*(nref1/o1-nref0/o0));
     const float cfc=r.wx[i*4ul+2ul]*rrtm_lw_table_value(r.tables,r.table_index,p.id_cfc12,0,0);
     for(int g=0;g<8;++g){
+    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,g);
+    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],g);
+    const float self=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
       const float cfcg=r.wx[i*4ul+2ul]*rrtm_lw_table_value(r.tables,r.table_index,p.id_cfc12,0,g)
         +r.wx[i*4ul+3ul]*rrtm_lw_table_value(r.tables,r.table_index,p.id_cfc22,0,g);
       const float lo=r.colh2o[i]*rrtm_lw_interp4(r.tables+ma.x,p.nrowa,8,g,i0,i1,
@@ -733,13 +733,13 @@ kernel void rrtm_lw_taumol_10_11(
     const int3 ma=rrtm_lw_table_info(r.table_index,p.id_absa);
     const int3 mb=rrtm_lw_table_info(r.table_index,p.id_absb);
     const bool trop=lay+1<=r.laytrop[col];
+    for(int g=0;g<p.ng;++g){
     float self=0.0f;
     if(p.have_self!=0){
-      const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,0);
-      const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],0);
+      const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,g);
+      const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],g);
       self=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
     }
-    for(int g=0;g<p.ng;++g){
       const float low=r.colh2o[i]*(rrtm_lw_interp4(r.tables+ma.x,p.nrowa,p.ng,g,
           lo0,lo1,r.fac00[i],r.fac01[i],r.fac10[i],r.fac11[i])+self);
       const float high=r.colh2o[i]*rrtm_lw_interp4(r.tables+mb.x,p.nrowb,p.ng,g,
@@ -769,15 +769,15 @@ kernel void rrtm_lw_taumol_12_16(
     const int lo1=(jp*5+(jt1-1))*p.nspa;
     const int hi0=((jp-13)*5+(jt-1))*p.nspb;
     const int hi1=((jp-12)*5+(jt1-1))*p.nspb;
-    float continuum=0.0f;
-    if(p.have_self!=0){
-      const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,0);
-      const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],0);
-      continuum=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
-    }
     float comb=0.0f, fs=0.0f; int js=1;
     if(p.mode==0) rrtm_lw_spec(ga,gb,p.strrat,8.0f,comb,js,fs);
     for(int g=0;g<p.ng;++g){
+    float continuum=0.0f;
+    if(p.have_self!=0){
+      const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,g);
+      const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],g);
+      continuum=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
+    }
       float low=0.0f, high=0.0f, pl=0.0f, ph=0.0f;
       if(p.mode==0){
         low=comb*rrtm_lw_interp8(r.tables+ma.x,p.nrowa,p.ng,g,lo0+js-1,
@@ -805,7 +805,7 @@ kernel void rrtm_lw_taumol_09(
     uint tid [[thread_position_in_grid]]) {
     if(tid>=uint(p.ncell))return;
     const int col=int(tid)/p.nlay,lay=int(tid)-col*p.nlay;
-    const ulong i=ulong(tid),outbase=i*140ul+108ul;
+    const ulong i=ulong(tid),outbase=i*140ul+96ul;
     const int jp=r.jp[i],jt=r.jt[i],jt1=r.jt1[i];
     const bool trop=lay+1<=r.laytrop[col];
     float comb=0.0f,fs=0.0f;int js=1;
@@ -840,10 +840,10 @@ kernel void rrtm_lw_taumol_09(
     const int lo1=(jp*5+(jt1-1))*p.nspa+jsl-1;
     const int hi0=((jp-13)*5+(jt-1))*p.nspb;
     const int hi1=((jp-12)*5+(jt1-1))*p.nspb;
-    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,0);
-    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],0);
-    const float continuum=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
     for(int g=0;g<p.ng;++g){
+    const float s0=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i]-1,g);
+    const float s1=rrtm_lw_table_value(r.tables,r.table_index,p.id_self,r.indself[i],g);
+    const float continuum=r.selffac[i]*(s0+r.selffrac[i]*(s1-s0));
       const float low=comb*rrtm_lw_interp8(r.tables+ma.x,p.nrowa,p.ng,g,lo0,lo1,11,fsl,
         r.fac00[i],r.fac01[i],r.fac10[i],r.fac11[i])
         +r.colh2o[i]*continuum+n2omult*rrtm_lw_table_value(r.tables,r.table_index,p.id_absn2o,row,g);
@@ -875,6 +875,9 @@ kernel void rrtm_lw_rtrn_down(
     float radld = 0.0f;
     float radclrd = 0.0f;
     bool cloud_seen = false;
+    const ulong top = ulong(col) * ulong(p.nlay + 1) * ulong(p.ngpt) + ulong(p.nlay) * ulong(p.ngpt) + ulong(ig);
+    r.down[top] = 0.0f;
+    r.clear_down[top] = 0.0f;
     for (int lev = p.nlay - 1; lev >= 0; --lev) {
         const ulong cell = profile + ulong(lev);
         const ulong idx = spectral + ulong(lev) * ulong(p.ngpt);

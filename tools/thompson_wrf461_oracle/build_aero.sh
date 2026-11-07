@@ -85,7 +85,7 @@ if [ "$actual_ccn_bytes" != "35288" ]; then
   exit 2
 fi
 
-# The four classic-cache pins from woof/core/thompson_contract.py.
+# The four classic-cache pins from gpuwm/core/thompson_contract.py.
 QR_ACR_QG_SHA=89b779855847b2acdca1b40e24c5f1bd89b0c6ed105ca91a5a076d80c2437c3f
 QR_ACR_QS_SHA=47350be20bd59c9f31378dd5805ce7d35fd14bebcfafb4ade56626f6eed818d7
 FREEZEH2O_SHA=c235d1ce6f8750a671b2273d0e216ed3acf9a869bfd52a14676826f87aab5c02

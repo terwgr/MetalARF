@@ -102,6 +102,29 @@ def _read_boundary(path, initial, cfg):
                           forcing_interval_seconds=60, cfg=cfg)
 
 
+@_requires_netcdf_decoder
+def test_boundary_tables_share_one_bounded_rust_decode(tmp_path, monkeypatch):
+    cfg = _cfg()
+    initial = _read(_input(tmp_path / 'input', cfg), cfg)
+    boundary = _boundary(tmp_path / 'boundary', initial, cfg)
+    commands = []
+    original = wi.netcdf_bridge._run
+
+    def record(arguments, **kwargs):
+        if 'dump' in arguments and str(boundary) in arguments:
+            commands.append(arguments)
+        return original(arguments, **kwargs)
+
+    monkeypatch.setattr(wi.netcdf_bridge, '_run', record)
+    result = _read_boundary(boundary, initial, cfg)
+    # Times has its character policy; all numeric sides and tendencies fit
+    # in one existing byte-budgeted batch, reused by the second interval.
+    assert len(commands) == 2
+    assert commands[0][-1] == 'Times'
+    assert 'QNWFA_BXS' in commands[1] and 'QNIFA_BTYE' in commands[1]
+    assert len(result.intervals) == 2
+
+
 def test_aerosol_reader_and_surface_restore_preserve_supplied_words(tmp_path):
     cfg=_cfg(); path=_input(tmp_path/'wrfinput',cfg); initial=_read(path,cfg)
     from woof.core.state import DomainState
@@ -164,7 +187,7 @@ def test_the_namelist_door_refuses_black_carbon_in_the_same_words(tmp_path):
 
     _only, _citation, why = MP28_AEROSOL_SOURCE_OPTIONS['wif_input_opt']
     inp = (INPUT_TEXT
-           .replace(' mp_physics = 55, 55,', ' mp_physics = 28, 28,')
+           .replace(' mp_physics = 10, 10,', ' mp_physics = 28, 28,')
            .replace(' time_step = 60,',
                     ' time_step = 60,\n wif_input_opt = 2,'))
     wps_path = tmp_path/'namelist.wps'
@@ -397,7 +420,10 @@ def test_nested_finalizer_still_forces_every_supplied_scalar_back():
     from woof.boundary_fields import SCALAR_ARRAY_BOUNDARY_FIELDS
     from woof.ingest import lateral_bc
 
-    assert set(SCALAR_ARRAY_BOUNDARY_FIELDS) == {'nwfa', 'nifa', 'nc', 'nr', 'ni'}
+    # qke_adv joined with MYNN TKE advection (2.9.0): WRF's Registry scalar
+    # takes the same specified/nested boundary treatment when selected.
+    assert set(SCALAR_ARRAY_BOUNDARY_FIELDS) == {'nwfa', 'nifa', 'nc', 'nr', 'ni',
+                                                 'qke_adv'}
     fields = {'u': 0, 'v': 0, 'theta': 0, 'phi': 0, 'mu': 0,
               'qv': 0, 'nwfa': 0, 'nifa': 0}
     forced = []

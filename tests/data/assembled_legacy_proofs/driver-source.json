@@ -1,0 +1,489 @@
+{
+  "schema": "assembled-driver-native-word-proof-v1",
+  "capture_identity": {
+    "engine_commit": "6cbd5d8eb250378f06e5e8e46951920623c957eb",
+    "device": "b'NVIDIA RTX PRO 6000 Blackwell Server Edition'",
+    "compute_capability": [
+      12,
+      0
+    ],
+    "nvrtc_version": [
+      13,
+      2
+    ],
+    "cupy_version": "14.2.0",
+    "module_source_sha256": {
+      "smag2d": "2cdfe1e9b38cfd901a837460526bed5887285bb367593992fd95b95df15e3d24",
+      "diff_opt1": "9737655267fca7f30d0a4053008997de55a8e12f4fe552622a09f70ea994e271",
+      "acoustic": "22704608360351a64d84bbf90ed1574e8e62edb5b06f5deea85376d93fca5cf8"
+    },
+    "module_options": {
+      "smag2d": [
+        "-std=c++17",
+        "--fmad=false",
+        "--ftz=false",
+        "--prec-div=true",
+        "--prec-sqrt=true",
+        "-DGPUWM_WRF_EXACT_C_DIFFUSION=1"
+      ],
+      "diff_opt1": [
+        "-std=c++17",
+        "--fmad=false",
+        "--ftz=false",
+        "--prec-div=true",
+        "--prec-sqrt=true",
+        "-DGPUWM_WRF_EXACT_C_DIFFUSION=1"
+      ],
+      "acoustic": [
+        "-std=c++17"
+      ]
+    },
+    "strict": false,
+    "default_diffusion": true
+  },
+  "source_inputs": {
+    "woof/core/kernels/__init__.py": {
+      "bytes": 28570,
+      "sha256": "e44a76e72880e6cbacee4a3cf299ab7e1a0b418e737355b3b64bfd60358b67cc"
+    },
+    "woof/core/kernels/common.cuh": {
+      "bytes": 332,
+      "sha256": "c78b17cb02ef67a2ad24d19e06e1129d7d5bcda74b972b38470fd33a6e58ff43"
+    },
+    "woof/core/kernels/smag2d.cu": {
+      "bytes": 140826,
+      "sha256": "731d7f64e86af2d17344be7328fda2a3ecfd4f2e22371f6093128ca2f3192500"
+    },
+    "woof/core/constants.py": {
+      "bytes": 2979,
+      "sha256": "76c8c11d1a75d17fd54d0a80646cec9dde04f649247ec2347d3d32e6c0500e9e"
+    },
+    "woof/core/dycore.py": {
+      "bytes": 247314,
+      "sha256": "d4cc20c6a23c94f169228d19937724bb678b51b4e597495af09a1672ce8c263b"
+    },
+    "woof/wrf_exact.py": {
+      "bytes": 5198,
+      "sha256": "46a2451b5ac0408d8c1fb63ea801debd99c05a66bf110cb509f372020b1c3c57"
+    },
+    "woof/nvrtc_ptx_cache.py": {
+      "bytes": 10626,
+      "sha256": "78c42865a01763a13d0349321699913de51ba2465508900bbfc4c64794e61134"
+    },
+    "woof/verify/smallstep_oracle.py": {
+      "bytes": 6063,
+      "sha256": "f73c2a1e8996467fbe3a82fb6fa94cd3bf7d7d1d069fc66850d2cb3dd8a5d92d"
+    },
+    "woof/verify/diffusion_oracle.py": {
+      "bytes": 3429,
+      "sha256": "7b68ee8c1198f5f2110e1504cc119ba5e4cd4bd45ceccaae13019fe62df127bb"
+    },
+    "woof/core/fp32_ulp.py": {
+      "bytes": 7856,
+      "sha256": "e7a63f76f5457bddcb16ecf28288c25ba210a372aa31e5c8f6a5eb136f01cfe2"
+    },
+    "tools/assembled_legacy_replay.py": {
+      "bytes": 22314,
+      "sha256": "b53ef8e66b860b442b18e2a587419fd119f9518aa1d6300b425d4b4fb8fc6788"
+    },
+    "tools/wrf_diffusion_oracle/analysis_plot.py": {
+      "bytes": 1736,
+      "sha256": "bd244cd31299927cdb1c54973a75e2e718169e59345770497d3d084caa7120c9"
+    },
+    "tools/wrf_diffusion_oracle/build_common.py": {
+      "bytes": 5862,
+      "sha256": "fc1507ec15857edc554e46f562d4967c1b8bb091a0cbc7948a2b8967e2a36afd"
+    },
+    "tools/wrf_diffusion_oracle/cases.py": {
+      "bytes": 4976,
+      "sha256": "607f9d3a9f130240d7bde6a880e093e5108afea45964c5363461db67e4710262"
+    },
+    "tools/wrf_diffusion_oracle/constant_build.py": {
+      "bytes": 2717,
+      "sha256": "e018f5fd19ff0d8eccb9b99a2cb88e4aa10ae8c7b7d029299a09d2207a09cf4e"
+    },
+    "tools/wrf_diffusion_oracle/constant_cases.py": {
+      "bytes": 5804,
+      "sha256": "1e4097dc2ad406b4444165e43393fa7656504cb40e9b08118524e2800dc0cb46"
+    },
+    "tools/wrf_diffusion_oracle/constant_compare.py": {
+      "bytes": 3519,
+      "sha256": "b54adcc764f7bd7a06f41f18c95d066b6595a667ed0d1d7126656ec879d41c2a"
+    },
+    "tools/wrf_diffusion_oracle/deformation_arithmetic.py": {
+      "bytes": 3193,
+      "sha256": "c3e68aa89e02d2c7d306e7744a51286196366d7cf8b89de9bda003aabdfa61d2"
+    },
+    "tools/wrf_diffusion_oracle/deformation_build.py": {
+      "bytes": 1089,
+      "sha256": "f8e3378c69599589bd79b633cbbb34fdc337cdeecde20fbb3c3b0c16357f170c"
+    },
+    "tools/wrf_diffusion_oracle/deformation_compare.py": {
+      "bytes": 6791,
+      "sha256": "2dcd92c098f68ad41bb66b07e972bf2cb7d6f61bfe2d5d12e11bcf6861cce68b"
+    },
+    "tools/wrf_diffusion_oracle/deformation_make_cases.py": {
+      "bytes": 3252,
+      "sha256": "2ac7ac4cb5269c77e6d88ca132be4e156d9cfd230e599db66eec35a1d53ed8a6"
+    },
+    "tools/wrf_diffusion_oracle/deformation_mutations.py": {
+      "bytes": 3961,
+      "sha256": "f86f5d998ba9daa53ab06d28569ebb4e545a3fba883014cfd4a38252b2b48c4e"
+    },
+    "tools/wrf_diffusion_oracle/deformation_reference.py": {
+      "bytes": 3723,
+      "sha256": "bd6e86be17ac34202c80f3f488fbe4c60c101c76b69d44e0bafd6f36de72ea0b"
+    },
+    "tools/wrf_diffusion_oracle/deformation_seal.py": {
+      "bytes": 1868,
+      "sha256": "271f7bb67b269c344f57c797a4a8864a34d7dba72cdd9ed5070e92fc3f18059c"
+    },
+    "tools/wrf_diffusion_oracle/deformation_witness.py": {
+      "bytes": 1632,
+      "sha256": "9da94ee2f729fa97df567edd3a80a5c6dd378ea377f5b591ae6d6852fff93bb8"
+    },
+    "tools/wrf_diffusion_oracle/diff6_build.py": {
+      "bytes": 3396,
+      "sha256": "2750e1f63189cfd9352b33091dfbc2274810c89a8c7628bc9712291efe6e5fd4"
+    },
+    "tools/wrf_diffusion_oracle/diff6_cases.py": {
+      "bytes": 8362,
+      "sha256": "42e2479b9dfdc257ca5b80cf102e2472ab9dce51f6fd054897516977a7638907"
+    },
+    "tools/wrf_diffusion_oracle/diff6_compare.py": {
+      "bytes": 3772,
+      "sha256": "154cd17dd994b12ff683adfb26456219179f657540a19aed53afec3517698b73"
+    },
+    "tools/wrf_diffusion_oracle/diff6_fork_oracle.py": {
+      "bytes": 9488,
+      "sha256": "f720d1c0d14d9b5047e65a3ef1e519b630d43809c9315d259ae3d6eaa3de008a"
+    },
+    "tools/wrf_diffusion_oracle/driver_seal.py": {
+      "bytes": 1406,
+      "sha256": "e46036b5017ac5e6e053533ffcef30484a19bbd3cb079052310e35400824e3cd"
+    },
+    "tools/wrf_diffusion_oracle/gpu_owner.py": {
+      "bytes": 2515,
+      "sha256": "f85e7d429f85eb45b9caba3fada8d6c1e7a3b70a66926d2a589094c4d51b0330"
+    },
+    "tools/wrf_diffusion_oracle/horizontal_arithmetic.py": {
+      "bytes": 3437,
+      "sha256": "d0f8ec32f5c0e54dd9f5c685afb430d8dac45ab1f1c16b7ed1abf1a128a58278"
+    },
+    "tools/wrf_diffusion_oracle/horizontal_build.py": {
+      "bytes": 650,
+      "sha256": "85c5dd76b5a3a0751557d7c1d4f978cbf6323e44b0e5d199b8f54d833bb702be"
+    },
+    "tools/wrf_diffusion_oracle/horizontal_compare.py": {
+      "bytes": 10188,
+      "sha256": "872798204d05c730005b2df1bf26e60f13ce4eb77eeb61f333d6ec1507d06af7"
+    },
+    "tools/wrf_diffusion_oracle/horizontal_driver.py": {
+      "bytes": 8794,
+      "sha256": "8c45be543d19ea93a329fad86d59f52ec99de96a094f5736659e975754859388"
+    },
+    "tools/wrf_diffusion_oracle/horizontal_driver_build.py": {
+      "bytes": 544,
+      "sha256": "e8c71e05c413d3d531bade7d9822061226d3bcc4f171182beb6cb50b3e61f474"
+    },
+    "tools/wrf_diffusion_oracle/km1_oracle.py": {
+      "bytes": 23684,
+      "sha256": "7112b9ff3c438eb792aa11c3cecf960b903572a767d2903907f99d360b15e8ec"
+    },
+    "tools/wrf_diffusion_oracle/mix_full_fields_oracle.py": {
+      "bytes": 9460,
+      "sha256": "5054df4ddf27f0cf44b026ac39f0f9643f6fadc76d210406f35f96f6765a0647"
+    },
+    "tools/wrf_diffusion_oracle/model_smoke.py": {
+      "bytes": 3139,
+      "sha256": "13f6a41610a2e383f4c9faa7676b4b7db751c8963167b9a5734edd15de9818f3"
+    },
+    "tools/wrf_diffusion_oracle/rounding_attribution.py": {
+      "bytes": 14912,
+      "sha256": "fcd9830335795bfae581837a02ab73ca73d27b3ccf89d3555e9a1b041df5546e"
+    },
+    "tools/wrf_diffusion_oracle/upper_wind_fork_fixture.py": {
+      "bytes": 3579,
+      "sha256": "b2d34650d17dc29babe59e36da44990082f8c5e56cfe2bc906d7d9bacdfb0ef9"
+    },
+    "tools/wrf_diffusion_oracle/vertical_build.py": {
+      "bytes": 1514,
+      "sha256": "36ceee6dac3b272d0ec61d9922150cb499e753feced5cd18ab92f1e78776a0b7"
+    },
+    "tools/wrf_diffusion_oracle/vertical_capture.py": {
+      "bytes": 6703,
+      "sha256": "ee529a04d9978af76522a1600c7950e78964b0dffd208a10c20c20dfd8076fd5"
+    },
+    "tools/wrf_diffusion_oracle/vertical_compare.py": {
+      "bytes": 6441,
+      "sha256": "e83f5bb503adf8b36838d821d19b5814b3e84db811754f9021f7ffccab9fe6c9"
+    },
+    "tools/wrf_diffusion_oracle/vertical_driver.py": {
+      "bytes": 8258,
+      "sha256": "87f92a32a0cc3aa6a34b25966bb8440fc081b39c5ebcec793ba8852772962d55"
+    },
+    "tools/wrf_diffusion_oracle/vertical_driver_build.py": {
+      "bytes": 531,
+      "sha256": "d3bf346fffda6688f96509c19f16e9c75d53a95d843ac5e59a1a93c2cd8d165d"
+    },
+    "tools/wrf_diffusion_oracle/vertical_evolved.py": {
+      "bytes": 1133,
+      "sha256": "b40f21540d741af9b94e5cbb008404eeb90585cafee14a9e73690a1c220a8822"
+    },
+    "tools/wrf_diffusion_oracle/vertical_gpu.py": {
+      "bytes": 6267,
+      "sha256": "86e6b8967ddc96f6ca803c220f59941a15036d54dcc6cbe6676e62f1f495e869"
+    },
+    "tools/wrf_diffusion_oracle/vertical_reference.py": {
+      "bytes": 4362,
+      "sha256": "3cfd148980d4e480c4ff2cf092f3cdc3af9cca33833328b12763e050125ae675"
+    },
+    "tools/wrf_diffusion_oracle/vertical_w_control.py": {
+      "bytes": 9756,
+      "sha256": "f31870095d2a7c95d6b4ffc3f2234e12d132d47c10671c8a06cc9ba6d90708b7"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/manifest.json": {
+      "bytes": 14373,
+      "sha256": "195b3a45e8ef6e7ba3a6fb2f5359fd04e23782418c95d67c51947634f944c111"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_map_extremes-km2.npz": {
+      "bytes": 851151,
+      "sha256": "3250860d091e1f2db9170ff0734f3eb94787a56af7b06f1900eb43c3511e0336"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_map_extremes-km4.npz": {
+      "bytes": 827573,
+      "sha256": "6b97a9b5e131af3bee9336e5beb244011bdc671420b2d0f05900ebf2695ab89d"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_near_zero_flow-km2.npz": {
+      "bytes": 663479,
+      "sha256": "216816a14a1ca54cd5686b090648a15012eb97fc3e73b32bea2c7145ea0afe18"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_near_zero_flow-km4.npz": {
+      "bytes": 489145,
+      "sha256": "b2f7c151fac1dee7a1f23bfb566119e225ce3a75f4761c3d27bdc9531dce5a70"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_real_open-km2.npz": {
+      "bytes": 763634,
+      "sha256": "47364f4a6f6dc181035af1a3975367189388a5ce631e07674dc4a72c7c930dcd"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_real_open-km4.npz": {
+      "bytes": 753111,
+      "sha256": "e9d07c2e9c893eb6cb60ddddc921218a462bfa7e97db9cad2a9a9138b81adc74"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_real_periodic-km2.npz": {
+      "bytes": 842103,
+      "sha256": "e322596ec6b6e427e8d19eb1653ae5e23d78ed56af8f13ab75870814f28cc646"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_real_periodic-km4.npz": {
+      "bytes": 827968,
+      "sha256": "c2009d40f45be887b50ddb09f993af296da8c77ed8e61d78b3841b6ac55ef12d"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_southern_open-km2.npz": {
+      "bytes": 763656,
+      "sha256": "91b194869412dd63d9637a2e55af2da3978a2c68bb734982f4b4f591c3206363"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_southern_open-km4.npz": {
+      "bytes": 753702,
+      "sha256": "2ce01c408f1b607fb53d282e06ec9d61ce484af8cbe93f7941033e4116991007"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_steep_open-km2.npz": {
+      "bytes": 791261,
+      "sha256": "06a141e7c57bc3c311799b8fbf121d7032bd3557b22e4024eee6ee632afa5e89"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_steep_open-km4.npz": {
+      "bytes": 780876,
+      "sha256": "a3494a717e15a1c7d6bb11208cbe3149b6145128ec4098db6c1f7f03c49942b6"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_zero_flow-km2.npz": {
+      "bytes": 351122,
+      "sha256": "08b6b15bd680b5175f887fb441482e9be7447215ff397948f07a27ae9e0129b5"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/evolved_zero_flow-km4.npz": {
+      "bytes": 283067,
+      "sha256": "d07af564262ed0a1eb1087076d2d940d2fe0959aef7f45a258cc88bfe92130f6"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/map_extremes-km2.npz": {
+      "bytes": 807855,
+      "sha256": "d244f142501e36e4335b35feca7446f780f03a7bdcbc2f3cbb58f52c464ff143"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/map_extremes-km4.npz": {
+      "bytes": 789086,
+      "sha256": "e9b87524f25b1901a17fd8d09e1e29df21d97c96d8ab890d9079d2b4853dc25c"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/near_zero_flow-km2.npz": {
+      "bytes": 627792,
+      "sha256": "80460ada1a27094ab5fbfd83875b65d1d19ced0e6584367c53e2f2e3b2b61476"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/near_zero_flow-km4.npz": {
+      "bytes": 453057,
+      "sha256": "36ec89f80a1efa564b18243c9cfd02c01e8b358e4ef75be303ef98c045073313"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/real_open-km2.npz": {
+      "bytes": 720562,
+      "sha256": "8f4b44484ffc4dc9dd8e6c327f5e9e50a5c2451b6ad05c4b12f107bdc489a18f"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/real_open-km4.npz": {
+      "bytes": 714003,
+      "sha256": "622e0832d84639670c3ab503107097e2b7799eeb33f9604b92e54edab51b2937"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/real_periodic-km2.npz": {
+      "bytes": 799093,
+      "sha256": "1d003c12bb6a93678d5187cd763fcffe240423de258feb6f722fa4d1a080cc97"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/real_periodic-km4.npz": {
+      "bytes": 789985,
+      "sha256": "e5132d061d2e0e911a005be972c9c02f43d9b7c814a32e2d50094ba050f85ba4"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/southern_open-km2.npz": {
+      "bytes": 720720,
+      "sha256": "2c7b0772ab1beb87eca1e50912058468c75ec782292c701f8a1d5be459acec3f"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/southern_open-km4.npz": {
+      "bytes": 713858,
+      "sha256": "b568882da2424960217ad49d03c44141caf4b28ea4e42ec4beaa85eb92e21695"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/steep_open-km2.npz": {
+      "bytes": 748925,
+      "sha256": "4f0c94a3fb214dc195c58e4634e6f73278a7d141372e5163d4bc14c6da2025b9"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/steep_open-km4.npz": {
+      "bytes": 742637,
+      "sha256": "ebd53c51a4e0becf5f5bc56e0be8f0f4b81124273a3e9cd0e5b2b697b8ae366a"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/zero_flow-km2.npz": {
+      "bytes": 349425,
+      "sha256": "a988d31229bd69f35ea61a0977bb5e3be8a6e3ca780b1bc22397d51ae5ae9d91"
+    },
+    "tests/data/wrf471_diffusion/horizontal-driver/zero_flow-km4.npz": {
+      "bytes": 281370,
+      "sha256": "d65dc765d556513b20d04986386dc9f9a6c3ee74fa6319674e2b8b53b5e3fc13"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/manifest.json": {
+      "bytes": 12871,
+      "sha256": "a0c68944567069fd366fb4ff1dc2847c44adcda3f4247a70284d6048b1300334"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/real_open.npz": {
+      "bytes": 1328261,
+      "sha256": "3a472bc35ba481217a012469b666f5097d05c6814bbaab78e20dcf2949657913"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/real_periodic.npz": {
+      "bytes": 1514389,
+      "sha256": "cfcf47f3ee21b2ba8a083e2d2ff0c47432b2ef19514c34e2909b0cd22ef5624a"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/steep_open.npz": {
+      "bytes": 1341833,
+      "sha256": "c3528b2486e39c90b46f0d657dcb5262aa0f5267ef8143a2a414f16588318aee"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/map_extremes.npz": {
+      "bytes": 1511571,
+      "sha256": "588ef0e07b48ce25061e5055f229898273cf5319b4919108cb8fbea729a50cf4"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/zero_flow.npz": {
+      "bytes": 499342,
+      "sha256": "2a40c944d8df19d4c9a69599adbcbf344deeb0189cf6ebb9241bdd7077a56eb7"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/near_zero_flow.npz": {
+      "bytes": 861316,
+      "sha256": "8443a88404e64682a42cd12567db0ab11443bc393aaf340794ff93b767cdb612"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/southern_open.npz": {
+      "bytes": 1328254,
+      "sha256": "019cecf6da93ef5cb288b61a7de86acbeecc045e3222578d5e32684d0675dd6c"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_real_open.npz": {
+      "bytes": 1521608,
+      "sha256": "fade8fbb60cc5c9844c0eeaebd1f711faab730153c5b05998656f81b38f6e1c7"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_real_periodic.npz": {
+      "bytes": 1759413,
+      "sha256": "6799d156874c92a41676620176474b9c83ce4dcb092b647d009562b5265b01be"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_steep_open.npz": {
+      "bytes": 1534191,
+      "sha256": "4342b278ff98127040ee1b4fa649f0b0048bbd564ee55e7943eb8698d2bebae5"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_map_extremes.npz": {
+      "bytes": 1756863,
+      "sha256": "29d98d62fe326e94ea7dd57bf21abc8adab93ab92ce365eea0784faed37724ee"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_zero_flow.npz": {
+      "bytes": 501034,
+      "sha256": "65edaeddbdd86ec59cdd7581047577de062a86eee37e26a59cf470eb1d880ea9"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_near_zero_flow.npz": {
+      "bytes": 1001067,
+      "sha256": "e9a5e536bace37290fda0fd60fdb1a346cfa4855048089d5d5cf72ba78e81ee2"
+    },
+    "tests/data/wrf471_diffusion/vertical-driver/evolved_southern_open.npz": {
+      "bytes": 1522377,
+      "sha256": "8d1d1dc2c4bd6322bfdbcbb52e10b62c20ec7935fbd0b7995b7d3a6db7a81b95"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/manifest.json": {
+      "bytes": 8874,
+      "sha256": "2c6cff0b076a2915efcc00bea0ad14a44dfca82bdba13f5abb68c75722ffcce3"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_map_extremes.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_near_zero_flow.npz": {
+      "bytes": 10277,
+      "sha256": "37cc95f28257143369197ad6add7841fee0206cd182f7ce6acac829340d94bc7"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_real_open.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_real_periodic.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_southern_open.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_steep_open.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-evolved_zero_flow.npz": {
+      "bytes": 10242,
+      "sha256": "01ec056561e7f971f1e8f0f281fea00d772219c9b761eb7b7415a9288a384c0b"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-map_extremes.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-near_zero_flow.npz": {
+      "bytes": 10277,
+      "sha256": "37cc95f28257143369197ad6add7841fee0206cd182f7ce6acac829340d94bc7"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-real_open.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-real_periodic.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-southern_open.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-steep_open.npz": {
+      "bytes": 244868,
+      "sha256": "07ef29a617ddf901902d5d1dadb270d77a4f026ae6aae676c6283d7b12bde3f4"
+    },
+    "tests/data/wrf471_diffusion/km-mutations/deformation-zero_flow.npz": {
+      "bytes": 10242,
+      "sha256": "01ec056561e7f971f1e8f0f281fea00d772219c9b761eb7b7415a9288a384c0b"
+    }
+  },
+  "artifacts": {
+    "horizontal-driver.json": "2faca36db7816149d204e361c95d0e30755c7d4381251dececa3be4e6c061886",
+    "vertical-driver.json": "49343e3039c7b4c9106611875869cdc37e41e61ef069140759c70ad3ed6f4f26",
+    "km-mutations.json": "d8bd2017ba22f24750c551b829490ff24a8d565b44da56ebb802ff420dacc818",
+    "vertical-native-control.json": "cf914ed6b16ca594bfca126daecefe58b2a1d8e1229d3cd8732bbdcaf887db33"
+  },
+  "source_provenance": "Raw source hashes read from actual6cbd capture commit; current raw bytes equal committed capture source. Compiled module/options certified GPU measured. Historical GPU comparisons remain unchanged and refuse corrected old words."
+}

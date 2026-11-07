@@ -1,0 +1,124 @@
+"""``woof earth2-diagnose``: run NVIDIA Earth-2 diagnostic models on a WOOF export.
+
+The export is what ``woof export --earth2`` writes: Earth2Studio lexicon
+channels in the layout Earth2Studio's own IO backends write, so
+Earth2Studio's ``InferenceOutputSource`` reads it unchanged.  Which models
+can run, their Earth2Studio class and the channels they read are the
+``consumers`` rows of ``woof/authorities/earth2-models.v1.json``; adding a
+diagnostic is a row there, not code here.
+
+The models run in the Earth2Studio interpreter :mod:`woof.earth2_env`
+resolves: ``WOOF_EARTH2_PYTHON`` when set, else the managed environment
+(``woof setup --with-earth2``, or built on first use with the rows' extras),
+else this one when it can import ``earth2studio``.  Nothing here creates
+accounts or logs in; a row whose weights need an account is refused by name.
+
+Outputs, in ``--out``: one CF NetCDF per field diagnostic (``<row>.nc``,
+dims time/lat/lon, the row's output variables), one CSV of tracks per
+tracker row (``<row>-tracks.csv``), and ``earth2-diagnose.json`` (the rows,
+inputs, timings and value ranges).
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+TABLE = Path(__file__).with_name("authorities") / "earth2-models.v1.json"
+PYTHON_ENV = "WOOF_EARTH2_PYTHON"
+RUNNER = Path(__file__).with_name("earth2_diagnose_runner.py")
+
+
+def consumer_rows() -> dict:
+    return json.loads(TABLE.read_text(encoding="utf-8")).get("consumers", {})
+
+
+def resolve(names: str, accept_licence=()) -> list[str]:
+    from woof.earth2_licensing import require_licence
+
+    rows = consumer_rows()
+    wanted = [n.strip().lower() for n in names.split(",") if n.strip()]
+    if not wanted:
+        raise ValueError("--for needs one or more of: " + ", ".join(sorted(rows)))
+    out = []
+    for name in wanted:
+        if name not in rows:
+            raise ValueError(f"--for {name} is not a consumers row of {TABLE.name}; rows: "
+                             + ", ".join(sorted(rows)))
+        row = rows[name]
+        # A row whose weights are not permissive (restricted or unresolved
+        # terms) never runs by default: the exact licence must be named.
+        require_licence(name, row, accept_licence=accept_licence)
+        table = json.loads(TABLE.read_text(encoding="utf-8"))
+        authorities = [(key, authority) for key, authority in table["models"].items()
+                       if authority.get("kind") == "diagnostic"
+                       and authority.get("consumer", key) == name]
+        for key, authority in authorities:
+            if authority.get("runtime_refusal"):
+                raise ValueError(f"--for {name}: {authority['runtime_refusal']}")
+            from woof.earth2_licensing import require_licence
+            require_licence(key, authority, accept_licence=accept_licence)
+        if (row.get("weights") or {}).get("account_needed"):
+            raise ValueError(f"--for {name}: its weights need an account at "
+                             f"{row['weights'].get('host')}; this tool never creates one or logs in")
+        if row.get("role") == "conditioning":
+            raise ValueError(f"--for {name}: a conditioning consumer (a prognostic model that "
+                             "takes this export as its boundary forcing), not a diagnostic; "
+                             "run it through Earth2Studio with InferenceOutputSource as its "
+                             "conditioning_data_source")
+        out.append(name)
+    return out
+
+
+def earth2_python(names=()) -> str:
+    """The interpreter with earth2studio and the rows' extras, built on first use when missing.
+
+    Breakage (2.9.3 door 6, 2026-10-20): this probed only WOOF_EARTH2_PYTHON or this interpreter,
+    and nothing installed earth2studio, so a fresh install stopped with "no interpreter with
+    earth2studio".
+    """
+    from woof import earth2_env
+    rows = consumer_rows()
+    extras = [rows[name].get("earth2studio_extra") for name in names if name in rows]
+    return earth2_env.earth2_python("woof earth2-diagnose", extras=[e for e in extras if e],
+                                    provision=True)
+
+
+def main(args) -> int:
+    try:
+        names = resolve(args.consumers, getattr(args, "accept_licence", ()) or ())
+        python = earth2_python(names)
+    except (ValueError, RuntimeError) as exc:
+        print(f"woof earth2-diagnose: {exc}", file=sys.stderr)
+        return 2
+    store = Path(args.store).resolve()
+    if not store.exists():
+        print(f"woof earth2-diagnose: no export at {store}", file=sys.stderr)
+        return 2
+    out = Path(args.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    cmd = [python, "-I", str(RUNNER), "--store", str(store), "--table", str(TABLE),
+           "--for", ",".join(names), "--out", str(out), "--device", args.device]
+    return subprocess.call(cmd)
+
+
+def register_cli(sub) -> None:
+    parser = sub.add_parser(
+        "earth2-diagnose",
+        help="run NVIDIA Earth-2 diagnostic models (gust, precipitation, ClimateNet, TC tracker) on a WOOF export",
+        description=(
+            "Run Earth2Studio diagnostic models on the Earth2Studio-shaped store `woof export "
+            "--earth2` wrote. The models and the channels they read are the consumers rows of "
+            "earth2-models.v1.json. Runs in an Earth2Studio interpreter: WOOF_EARTH2_PYTHON when set, "
+            "else the managed environment `woof setup --with-earth2` builds (or the first run "
+            "builds it with the rows' extras; WOOF_EARTH2_FETCH=0 refuses instead)."),
+    )
+    parser.add_argument("store", help="the export (zarr or netcdf) written by woof export --earth2")
+    parser.add_argument("--for", dest="consumers", required=True, metavar="ROWS",
+                        help="consumers rows, comma separated, e.g. windgust-afno,precip-afno,climatenet,tc-tracker")
+    parser.add_argument("--out", required=True, metavar="DIR", help="output folder")
+    parser.add_argument("--device", default="cuda", help="torch device (default cuda)")
+    from woof.earth2_licensing import add_licence_argument
+    add_licence_argument(parser)
+    parser.set_defaults(func=main)

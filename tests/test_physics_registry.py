@@ -333,9 +333,12 @@ def test_every_repo_local_registry_citation_still_says_what_the_claim_says():
     # claims are about: the guard by its anchor, the WRF line as a declared
     # external citation.
     guard = [citation for citation, row in checker.RESOLVED.items()
-             if row == ("woof/core/kernels/ysu.cu", "kpbl < nz")]
+             if row == ("woof/core/kernels/ysu_480.cu", "kpbl < nz")]
     assert len(guard) == 1 and guard[0] in found, guard
-    assert "bl_ysu.F90:1315" in found
+    # bl_ysu.F90:1315 (the ctopo-absent drag arm) left the registry with the
+    # warning that cited it: lane/parity-286 put every YSU entry point on
+    # WRF's default ctopo arm, :1308.
+    assert "bl_ysu.F90:1315" not in found
     assert "bl_ysu.F90" in checker.EXTERNAL
     assert not [citation for citation in found
                 if citation in ("kernels/ysu.cu:252", "kernels/ysu.cu:1315")]
@@ -1371,26 +1374,26 @@ def test_registry_advertises_every_mixed_edge_accurately():
         (rule["parent_option_id"], rule["child_option_id"])
         for rule in rules
     }
-    assert len(rules) == len(pairs) == 72
+    assert len(rules) == len(pairs) == 110
     others = ("kessler-mp1", "wsm6-mp6", "thompson-mp8", "morrison-mp10",
               "nssl2-mp18", "milbrandt2mom-mp9", "wdm6-mp16",
-              "thompson-aerosol-mp28")
+              "thompson-aerosol-mp28", "lin-mp2", "wsm7-mp24")
     p3_pairs = {pair for pair in pairs if "p3-mp50" in pair}
     assert p3_pairs == {
         *((other, "p3-mp50") for other in others),
         *(("p3-mp50", other) for other in others),
     }
     my2_pairs = {pair for pair in pairs if "milbrandt2mom-mp9" in pair}
-    assert len(my2_pairs) == 16
-    for option_id in ("wdm6-mp16", "thompson-aerosol-mp28"):
-        assert len({pair for pair in pairs if option_id in pair}) == 16
+    assert len(my2_pairs) == 20
+    for option_id in ("wdm6-mp16", "thompson-aerosol-mp28", "lin-mp2", "wsm7-mp24"):
+        assert len({pair for pair in pairs if option_id in pair}) == 20
     ratified = [rule for rule in rules if rule["status"] == "ratified"]
     assert [(rule["parent_option_id"], rule["child_option_id"])
             for rule in ratified] == [("thompson-mp8", "nssl2-mp18")]
     experimental = [
         rule for rule in rules if rule["status"] == "experimental"
     ]
-    assert len(experimental) == 71
+    assert len(experimental) == 109
     assert {
         rule["maturity"] for rule in experimental
     } == {"experimental-runtime"}
@@ -1643,11 +1646,10 @@ def test_mynn_is_implemented_and_warns_rather_than_blocking():
     """Both halves run, and both say what has not been verified.
 
     ``implemented: true`` is what puts a scheme in a user's picker, so the
-    warnings carry the three things a user has to know before choosing it:
-    that no woof/WRF trajectory comparison exists, that four of the CUDA
-    leaves are not bitwise twins of their CPU references away from the oracle
-    fixtures, and that phim/phih still run on the host at 125 microseconds
-    per column.
+    warnings carry what a user has to know before choosing it: that no
+    woof/WRF trajectory comparison exists, and -- since lane/mynn-exact --
+    that the CUDA scheme is bitwise WRF v4.6.1 on every oracle, with the
+    test that holds it named; phim/phih run on the device.
     """
     components = physics_registry()["components"]
     for component in ("pbl", "surface_layer"):
@@ -1658,8 +1660,9 @@ def test_mynn_is_implemented_and_warns_rather_than_blocking():
         assert any("UNVERIFIED against a WRF forecast" in warning
                    for warning in option["warnings"]), component
     pbl_warnings = " ".join(components["pbl"]["options"]["mynn"]["warnings"])
-    assert "125 microseconds per column" in pbl_warnings
-    assert "NOT bitwise twins" in pbl_warnings
+    assert "bitwise WRF v4.6.1 on every oracle" in pbl_warnings
+    assert "tests/test_mynn_wrf461_exact_gpu.py" in pbl_warnings
+    assert "evaluated on the device" in pbl_warnings
 
 
 def test_noahmp_is_implemented_and_warns_rather_than_blocking():
@@ -1819,7 +1822,7 @@ def test_expert_settings_are_generic_but_selectors_cannot_claim_implementation()
         error["code"] for error in blocked["errors"]
     }
 
-    plan["domains"][0]["expert_overrides"] = {"selectors": {"mp_physics": 3}}
+    plan["domains"][0]["expert_overrides"] = {"selectors": {"mp_physics": 7}}
     blocked_value = validate_physics_plan(plan, registry=registry)
     assert blocked_value["launchable"] is False
     assert "unknown-selector-combination" in {
@@ -2160,16 +2163,38 @@ def test_mp28_is_registered_at_the_maturity_its_evidence_earns():
         assert parameter_is_implemented(declared[name]), name
 
 
-def test_mp28_publishes_its_measured_column_residuals_not_a_clean_claim():
-    """The gate is not green, and the registry has to say so in numbers.
+def test_mp28_publishes_its_measured_column_evidence_not_a_forecast_claim():
+    """The column gate is green; the registry says so in numbers, and no more.
 
-    ``implemented-unverified`` says "column-oracle-measured".  It does not say
-    "column-oracle-CLEAN", and the difference is the whole accuracy of the
-    label, so the measurement lives on the option where a user reads it
-    rather than only in a test file.  The published partition must cover every
-    committed fixture exactly once: a fixture that quietly leaves the residual
-    list without joining the clean list would otherwise vanish.
+    ``implemented-unverified`` says "column-oracle-measured".  Since the 2.8.6
+    accumulator rework the column deck is also CLEAN but for the gate's
+    declared divergence -- 21 of 22 at the flat gate with no allowance since
+    2.8.8 moved rain collecting graupel onto the one slab WRF's tables hold,
+    the 22nd (``aero-cold-overlap``) missing by that divergence alone -- and
+    the label still does not move, because a clean single-call deck is not a
+    forecast comparison.  The measurement
+    lives on the option where a user reads it rather than only in a test
+    file.  The published partition must cover every committed fixture
+    exactly once: a fixture that quietly leaves the residual list without
+    joining the clean list would otherwise vanish.
+
+    This test was ``..._not_a_clean_claim`` and asserted a residual existed,
+    which was the accurate claim until the rework closed the last four
+    fixtures; it now asserts the opposite, with the same partition checks.
+    The one residual it admits is the gate's own declared divergence
+    (``_G3_DECLARED_DIVERGENCE``), read back from the gate rather than
+    retyped, so a residual that is not declared there still fails here.
     """
+    import importlib.util
+
+    gate_spec = importlib.util.spec_from_file_location(
+        "_mp28_adapter_partition",
+        ROOT / "tests" / "test_thompson_aerosol_adapter.py")
+    gate = importlib.util.module_from_spec(gate_spec)
+    sys.modules.setdefault("_mp28_adapter_partition", gate)
+    gate_spec.loader.exec_module(gate)
+    declared = set(gate._G3_DECLARED_DIVERGENCE)
+
     evidence = _mp28_option()["extensions"]["column_oracle_evidence"]
     committed = _committed_aerosol_fixture_ids()
     spec = _spec_aerosol_fixture_ids()
@@ -2224,9 +2249,11 @@ def test_mp28_publishes_its_measured_column_residuals_not_a_clean_claim():
     assert not (clean & residual) and not (clean & carved) \
         and not (residual & carved)
 
-    # The point of the row: some fixtures do NOT clear the gate, and every
-    # residual is published as a number rather than as an adjective.
-    assert residual, "an empty residual list would be a clean claim"
+    # Every residual is published as a number rather than as an adjective.
+    # Since the 2.8.6 accumulator rework the only one is the gate's declared
+    # divergence, and the clean list is the rest of the deck.
+    assert residual == declared, evidence["residual_fixtures"]
+    assert clean == committed - declared
     for name, fields in evidence["residual_fixtures"].items():
         assert fields, name
         for field, value in fields.items():
@@ -2239,7 +2266,9 @@ def test_mp28_publishes_its_measured_column_residuals_not_a_clean_claim():
     # retired the relative carve-out it also used to sit under, so carved is
     # EMPTY and the assertion moves to `near` rather than being deleted.
     assert carved == set()
-    assert near == {"aero-reduces-to-classic"}
+    # Retired by the 2.8.6 accumulator rework: level 6 of
+    # aero-reduces-to-classic is bit-exact against WRF in qr and nr.
+    assert near == set()
     # ONE FIELD, not two.  This literal used to read ``{"qr", "nr_per_kg"}``
     # and stayed green for a wave after WP-13a's level-wise sedimentation
     # density took that fixture's ``qr`` to 1.788e-07 -- inside the FLAT
@@ -2252,8 +2281,7 @@ def test_mp28_publishes_its_measured_column_residuals_not_a_clean_claim():
     # applies``.
     # ONE LEVEL, not two.  Same second-opinion role the field-set assertion
     # above it used to play for the retired relative bound.
-    assert evidence["near_cancellation_bound"]["fixtures"] == {
-        "aero-reduces-to-classic": [6]}
+    assert evidence["near_cancellation_bound"]["fixtures"] == {}
 
     # THE TWO COUNTS, PUBLISHED SEPARATELY.  ``clean_fixtures`` is the
     # UNEXCEPTIONED list -- nothing held out, no bounds dict -- and the gated
@@ -2262,15 +2290,19 @@ def test_mp28_publishes_its_measured_column_residuals_not_a_clean_claim():
     # on the option and both are derived from the same partition here.
     assert evidence["clean_unexceptioned"] == len(clean)
     assert evidence["clean_as_gated"] == len(clean) + len(carved) + len(near)
-    assert evidence["clean_unexceptioned"] < evidence["fixtures"], (
-        "a clean count equal to the deck size is a clean claim, and the "
-        "residual table below contradicts it")
+    assert evidence["clean_unexceptioned"] == (
+        evidence["fixtures"] - len(declared)), (
+        "the gate clears the whole deck but its declared divergence with "
+        "nothing held out, so the published unexceptioned count must be the "
+        "deck size less that divergence")
+    # ...and the clean deck did NOT raise the label, which is the claim this
+    # row must never overstate.
+    assert _mp28_option()["maturity"] == "implemented-unverified"
 
     # EVERY departure from the flat gate is named, and each one says which
     # direction it moved.  An unpublished allowance is indistinguishable
     # from a hidden one.
     allowances = evidence["allowances"]
-    assert allowances, "the gate has allowances and publishes none"
     for allowance in allowances:
         # ``carved | near`` rather than ``carved`` alone: an allowance may be
         # a METRIC change published under near_cancellation_bound as well as
@@ -2293,11 +2325,13 @@ def test_mp28_publishes_its_measured_column_residuals_not_a_clean_claim():
     # in the retiring direction only: _END_TO_END_BOUNDS went live -> retired
     # when the inherited mp=8 sedimentation reconciliations took the residual
     # it covered from 5.700e-06 to 4.146e-07.
-    assert {a["gate_constant"] for a in allowances} == {
-        "_NEAR_CANCELLATION_LEVELS"}, allowances
+    # NONE live: the 2.8.6 accumulator rework retired the last one,
+    # _NEAR_CANCELLATION_LEVELS, when level 6 went bit-exact.
+    assert allowances == [], allowances
     retired = evidence["retired_allowances"]
     assert {a["gate_constant"] for a in retired} == {
-        "_END_TO_END_BOUNDS", "_REFL_DB_BOUNDS"}, retired
+        "_END_TO_END_BOUNDS", "_NEAR_CANCELLATION_LEVELS",
+        "_REFL_DB_BOUNDS"}, retired
     for allowance in retired:
         assert allowance["is"] is None and allowance["direction"], allowance
     assert not ({a["gate_constant"] for a in retired}
@@ -2624,7 +2658,8 @@ def test_mp28_plan_warns_at_every_deviation_rather_than_blocking():
     text = " ".join(emitted)
     for phrase in (
         "No matched REAL-DATA or NESTED WRF trajectory",
-        "THE COLUMN EVIDENCE IS NOT CLEAN",
+        "THE COLUMN EVIDENCE IS CLEAN BUT FOR ONE DECLARED DIVERGENCE; "
+        "THE FORECAST EVIDENCE IS NOT",
         "AEROSOL INPUT LIMITS",
         "woof/core/physics.py::initialize_physics",
         "HISTORICAL SYNTHETIC-PROFILE SENSITIVITY",
@@ -2642,6 +2677,10 @@ def test_mp28_plan_warns_at_every_deviation_rather_than_blocking():
     ):
         assert phrase in text, f"the mp=28 warnings no longer say: {phrase}"
     for retired_claim in (
+        # Retired by the 2.8.6 accumulator rework: every column but the
+        # declared divergence clears the flat gate, so the warning may no
+        # longer say they do not.
+        "THE COLUMN EVIDENCE IS NOT CLEAN",
         "carries NO aerosol inflow",
         "flag_qnc/flag_qnwfa/flag_qnifa to MYNN as literal False",
         "MIXED NESTING IS REFUSED BY NAME",
@@ -2711,8 +2750,13 @@ def test_mp28_mixed_nest_edge_is_published_by_registry_and_runtime_alike():
             assert seeded["nifa"] == 5.0e3
         else:
             # Leaving mp=28 needs no closure: the aerosol numbers are
-            # dropped and the target's own moments come from target mass.
-            assert set(seeded) == {"nr", "ni"}
+            # dropped, and rain and ice numbers are carried (both schemes
+            # are inverse-exponential in rain and cloud ice).
+            assert set(seeded) == set()
+            carried = {row["target_field"] for row in contract.species_actions()
+                       if row["action"] == "mapped"
+                       and row["reason"] == "shared_exponential_number_moment"}
+            assert carried == {"nr", "ni"}
 
     # The same-scheme edge, which was always admitted, on both authorities.
     uniform = validate_physics_plan(_mp28_tree_plan())

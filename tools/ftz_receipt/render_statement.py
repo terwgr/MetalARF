@@ -200,7 +200,7 @@ def package_tuples(inventory: dict) -> list[tuple[tuple, list[dict]]]:
     """Distinct literal option tuples over the shipped package surface."""
     groups: dict[tuple, list[dict]] = {}
     for record in inventory["sites"]:
-        if not record["file"].startswith("gpuwm/"):
+        if not record["file"].startswith("woof/"):
             continue
         options = record.get("options")
         key = tuple(options) if options else ()
@@ -422,13 +422,10 @@ def mirror_only_problems(text: str, receipt: dict) -> list[str]:
     return problems
 
 
-def release_exclusions(root: Path) -> list[str]:
-    path = root / "RELEASE-EXCLUDE.txt"
-    if not path.exists():
-        return []
-    return [line.strip() for line in path.read_text(encoding="utf-8")
-            .splitlines()
-            if line.strip() and not line.lstrip().startswith("#")]
+if __package__:
+    from .claim_census import release_exclusions
+else:
+    from claim_census import release_exclusions
 
 
 def _excluded(relpath: str, globs: list[str]) -> bool:

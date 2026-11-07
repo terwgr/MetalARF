@@ -11,7 +11,6 @@ moves its own fixture with it and no test can pre-ordain a pass.
 
 from __future__ import annotations
 
-import ast
 import copy
 import json
 from pathlib import Path
@@ -28,6 +27,40 @@ from woof.certify.verdict import (BOUND_KEYS, CONDITIONS,
 from woof.cli import main
 
 REPO_ROOT = fixtures.REPO_ROOT
+
+
+@pytest.fixture(autouse=True)
+def _a_witnessed_compile_platform(monkeypatch):
+    """The compile platform both sides read, on a process that has none.
+
+    These cells ask what the verdict binds and refuses, not what the
+    compile platform is; tests/test_certify_compile_platform.py owns the
+    live measurement and its refusals.  A process with no visible card
+    (the CPU legs run with CUDA hidden) measures no compute capability,
+    so the matched fixture is born un-witnessed and every passing cell
+    here collapsed to the compile-platform refusal (2373cc6a7 wired that
+    check in).  There, the fixture and certify read one synthetic,
+    complete fingerprint -- marked as such in every value -- instead of
+    the live one; a witnessing process keeps its live measurement.
+    """
+    if fixtures.this_process_can_witness_the_compile_platform():
+        return
+    from woof.certify import compile_platform
+    import numpy
+    synthetic = {
+        "nvrtc_build": "0.0.0",
+        "nvrtc_build_id": "CL-fixture",
+        "nvrtc_library_sha256": "f" * 64,
+        "cuda_driver_version": "0",
+        "device_compute_capability": "fixture",
+        "cupy_version": "0+fixture",
+        "numpy_version": numpy.__version__,
+    }
+    assert set(synthetic) == set(compile_platform.FINGERPRINT_KEYS)
+    measure = lambda: dict(synthetic)  # noqa: E731
+    monkeypatch.setattr(fixtures, "compile_platform_fingerprint", measure)
+    monkeypatch.setattr(verdict_module, "compile_platform_fingerprint",
+                        measure)
 
 
 def _run_certify(paths, out_verdict: Path | None = None) -> int:
@@ -491,36 +524,14 @@ def test_the_public_doc_lists_every_condition_the_code_declares():
 
 
 # --------------------------------------------------------------------------
-# AC6 -- the certification import path carries no case module
+# Independent certification digest
 # --------------------------------------------------------------------------
-
-def _imported_modules(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            names.add(node.module)
-    return names
-
-
-def test_nothing_under_certify_imports_a_case_module():
-    sources = sorted((REPO_ROOT / "woof" / "certify").rglob("*.py"))
-    assert sources, "woof/certify carries no modules to check"
-    offenders = {
-        path.name: sorted(name for name in _imported_modules(path)
-                          if name.startswith("woof.verify"))
-        for path in sources
-    }
-    assert not any(offenders.values()), offenders
-
 
 def test_the_temptation_the_criterion_names_is_still_there_to_resist():
     """The helper certify would have reused lives on a case module.
 
-    If this ever fails, the import-graph test above may have gone vacuous --
-    it would be asserting the absence of something that no longer exists.
+    The shared helper and the independent certification digest retain
+    the same canonical ordering.
     """
     chain = (REPO_ROOT / "woof" / "verify" / "cases"
              / "real74_chain.py").read_text(encoding="utf-8")

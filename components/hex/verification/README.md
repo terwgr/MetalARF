@@ -13,18 +13,25 @@
   byte-deterministic four-case test. It writes outside the repository unless
   explicitly pointed into it.
 - `schemas/` documents the two receipt contracts for external producers/hooks.
-- `engine-verdicts/` holds the records of the retired engine pin.  Until the
-  port and the engine moved into one distribution, every published `woof`
-  was measured against a sixteen-file seam manifest and one exact engine was
-  admitted.  `premeasure-273-20260913.json`, `repin-273-20260913.json`,
-  `premeasure-274-20260915.json`, `repin-274-20260915.json`,
-  `premeasure-280-20260929.json` and `repin-280-20260929.json` are those
-  measurements, kept because the seam changes they record are cited from
-  `docs/declared-divergences.md`.  The instrument that wrote them and the
-  admitted-engine table retired with the pin; the engine a run executes is
-  now measured and recorded (`woof.hex.engine_identity`), and the seam
-  contract is held by `tests/test_engine_seam_contract.py`.
-  Beside them, `seam-ab-*.json` are the outputs
+- `engine-verdicts/` is the output of `tools/measure_engine_verdicts.py`: one
+  JSON per measurement of every published `woof` against this port's
+  sixteen-file seam manifest, with the wheel files hashed, the tag commit,
+  the build-road verdict and the paths that moved.  `woof.hex.engine_pin`'s
+  table is spliced from the newest one and `tests/test_engine_pin.py`
+  re-renders it and demands equality, so the JSON is the table's source
+  rather than a copy of it.  `premeasure-273-20260913.json` is the 2.7 line
+  measured against the manifest 0.2.3 shipped (every 2.7 engine fails it);
+  `repin-273-20260913.json` is every engine measured against the 2.7.3
+  bytes (2.7.3 alone passes); `premeasure-274-20260915.json` is every
+  engine measured against the 2.7.3 bytes after 2.7.4 published (2.7.4
+  fails by two files); `repin-274-20260915.json` is every engine measured
+  against the 2.7.4 bytes (2.7.4 alone passes);
+  `premeasure-280-20260929.json` is every engine measured against the 2.7.4
+  bytes after 2.7.5 to 2.8.0 published (all four fail);
+  `repin-280-20260929.json` is every engine measured against the 2.8.0
+  bytes (2.8.0 alone passes, the table of record).
+  `admitted-engines.json` is the admitted-engine document; the public
+  release carries no row in it.  Beside them, `seam-ab-*.json` are the outputs
   of `tools/measure_engine_seam_ab.py`: the engine's column-batch seam driven
   on fixed columns under two engines and compared field by field, which is
   how a re-pin says which physics number moved and by how much (the

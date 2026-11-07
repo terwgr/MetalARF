@@ -6,7 +6,6 @@ preserves subnormal operands, results and comparisons; a live probe guards
 each device before first use. McICA retains its existing synchronizations.
 """
 
-from woof.core.cuda_numerics import require_cuda_numerics
 from functools import lru_cache
 from woof.core.device_cache import cuda_cache
 from inspect import signature
@@ -21,10 +20,11 @@ __all__ = ["lwrad_prep_batch_device", "swrad_prep_batch_device"]
 
 _SIGNATURES = {False: signature(ref.lwrad_prep_batch),
                True: signature(ref.swrad_prep_batch)}
+_PREFLIGHTED = set()
 
 
 @lru_cache(maxsize=None)
-def _gpu_module(device, cloud_form="wrf_461"):
+def _gpu_module(device, cloud_form="wrf_461", radii_units="meters"):
     """Direct NVRTC PTX load, no RawModule and no explicit -arch option.
 
     CuPy supplies the architecture itself. Duplicating it fails on NVRTC
@@ -38,6 +38,8 @@ def _gpu_module(device, cloud_form="wrf_461"):
     options = ("-std=c++17", "--ftz=false")
     if fork_cloud:
         options += ("-DRP_CLOUD_FORM=1",)
+    if radii_units == "microns":
+        options += ("-DRP_RADIUS_MICRONS=1",)
     with cp.cuda.Device(device):
         ptx, _ = compiler.compile_using_nvrtc(
             source, options, None,
@@ -45,6 +47,31 @@ def _gpu_module(device, cloud_form="wrf_461"):
         mod = cp.cuda.function.Module()
         mod.load(ptx.encode() if isinstance(ptx, str) else ptx)
     return mod
+
+
+def gpu_preflight(force=False):
+    """Prove subnormal multiplication, division and comparison on-card.
+
+    This first-use host read is intentional, like the legacy engines'
+    preflight. Subsequent prep calls do not read device data except the
+    SW day refusal and the existing McICA twin's own checks.
+    """
+    import cupy as cp
+    device = cp.cuda.runtime.getDevice()
+    if device in _PREFLIGHTED and not force:
+        return
+    x = np.array([1.e-30, 1.e-10, 1.e-39, 2.0, 0.0, -0.0], np.float32)
+    y = cp.empty(5, np.float32)
+    _gpu_module(device).get_function("rp_probe")(
+        (1,), (32,), (cp.asarray(x), y))
+    expected = np.array([x[0]*x[1], 1.0, x[2]/x[3],
+                         np.maximum(x[4], x[5]),
+                         np.minimum(x[4], x[5])], np.float32)
+    actual = cp.asnumpy(y).view(np.uint32)
+    if not np.array_equal(actual, expected.view(np.uint32)):
+        raise RuntimeError("legacy prep preflight failed: uint32 got %r want %r"
+                           % (actual.tolist(), expected.view(np.uint32).tolist()))
+    _PREFLIGHTED.add(device)
 
 
 def gpu_local_frame_bytes():
@@ -107,6 +134,13 @@ def _surface(cp, value, ncol, name):
 
 def _prep(sw, kw):
     import cupy as cp
+    # Deferral is an adapter-side option, not an argument of the NumPy
+    # oracle whose signature the rest of ``kw`` binds against.
+    kw = dict(kw)
+    defer = bool(kw.pop("defer_subcolumns", False))
+    radii_units = kw.pop("radii_units", "meters")
+    if radii_units not in ("meters", "microns"):
+        raise ValueError("radii_units must be meters or microns")
     bound = _SIGNATURES[sw].bind(**kw)
     bound.apply_defaults()
     k = bound.arguments
@@ -114,7 +148,7 @@ def _prep(sw, kw):
     hc, hi, hs = (int(k[n]) for n in ("has_reqc", "has_reqi", "has_reqs"))
     ref._require_radii(name, hc, hi, hs, k["re_cloud"], k["re_ice"], k["re_snow"])
     if sw:
-        ref._mp_guard(k["mp_physics"], allowed_extra=(85,))
+        ref._mp_guard(k["mp_physics"])
         if int(k["sf_surface_physics"]) == 8:
             raise NotImplementedError("sf_surface_physics=8 selects the SSiB "
                                       "albedo split outside this port's contract")
@@ -144,16 +178,20 @@ def _prep(sw, kw):
                        "xcoszen", "solcon", "obscur") if sw else
                       ("tsk", "emiss", "xland", "xice", "snow", "xlat"))}
     device = cp.cuda.runtime.getDevice()
-    require_cuda_numerics("legacy_prep")
-    mod = _gpu_module(device, k["rrtmg_cloud_optics_form"])
+    gpu_preflight()
+    mod = _gpu_module(device, k["rrtmg_cloud_optics_form"], radii_units)
     if sw:
         night = cp.empty(ncol, cp.uint8)
         mod.get_function("rp_day")(((ncol+127)//128,), (128,),
                                     (ncol, surf["xcoszen"], night))
-        if bool(night.any()):
-            raise ValueError("night column (coszen <= 0) in batch: swrad_prep_batch "
-                             "takes pre-gathered day columns only; route night "
-                             "columns through swrad_night_outputs")
+        def _night_verdict(any_night):
+            if bool(any_night):
+                raise ValueError("night column (coszen <= 0) in batch: swrad_prep_batch "
+                                 "takes pre-gathered day columns only; route night "
+                                 "columns through swrad_night_outputs")
+        # Read now, or once per radiation call (deferred_device_checks).
+        from woof.core.deferred_device_checks import check
+        check(night.any(), _night_verdict)
     inflg, iceflg = 2, 3
     if k["icloud"] != 0:
         if hc: inflg = 3
@@ -178,7 +216,8 @@ def _prep(sw, kw):
              for n in ("cldfrac", "clwpth", "ciwpth", "cswpth", "rel", "rei", "res")}
     args = (ncol, nk, nl, int(sw), int(k["icloud"]), int(k["warm_rain"]),
             *(int(k[n]) for n in ("f_qc", "f_qr", "f_qi", "f_qs")),
-            hc, hi, hs, inflg, iceflg, int(k["o3input"]), np.float32(k["g"]),
+            hc, hi, hs, inflg, iceflg, int(k["o3input"]),
+            int(ref._is_ferrier(k["mp_physics"])), np.float32(k["g"]),
             *(prof[n] for n in ("p3d", "p8w", "t3d", "t8w", "dz8w", "qv3d",
                                "qc3d", "qr3d", "qi3d", "qs3d", "cldfra3d", "o33d",
                                "re_cloud", "re_ice", "re_snow")),
@@ -195,18 +234,47 @@ def _prep(sw, kw):
     if generate is None:
         generate = (rrtmg_mcica.gpu_generate_sw_subcolumns if sw else
                     rrtmg_mcica.gpu_generate_lw_subcolumns)
-    bands = _bands(sw, ncol, nl)
-    mc = generate(1, ncol, nl, icld,
-                  rrtmg_mcica.SW_PERMUTESEED if sw else rrtmg_mcica.LW_PERMUTESEED,
-                  0, out["play"], cloud["cldfrac"], cloud["ciwpth"], cloud["clwpth"],
-                  cloud["cswpth"], cloud["rei"], cloud["rel"], cloud["res"], *bands,
-                  out["hgt"], int(k["idcor"]), juldat, surf["xlat"],
-                  layout="column")
     mc_keys = ("cldfmcl", "taucmcl", "ciwpmcl", "clwpmcl", "cswpmcl",
                "reicmcl", "relqmcl", "resnmcl")
     if sw:
         mc_keys += ("ssacmcl", "asmcmcl", "fsfcmcl")
-    out.update((name, mc[name]) for name in mc_keys)
+    hgt = out["hgt"]
+    idcor = int(k["idcor"])
+    seed = rrtmg_mcica.SW_PERMUTESEED if sw else rrtmg_mcica.LW_PERMUTESEED
+    ngpt = rrtmg_mcica.NGPTSW if sw else rrtmg_mcica.NGPTLW
+    # Deferred windows of the real device generator share one states pass
+    # over the whole batch (each column's stream depends on its own play
+    # only), instead of a one-thread-per-column launch per window.
+    base = getattr(generate, "func", generate)
+    span_states = (rrtmg_mcica.gpu_subcolumn_states(
+        ncol, nl, ngpt, seed, out["play"])
+        if defer and icld == rrtmg_mcica.MCICA_DEVICE_ICLD
+        and base in rrtmg_mcica.DEVICE_GENERATORS else None)
+
+    def subcolumns(w0, w1):
+        """The McICA slabs of prep columns [w0, w1).  Each column's
+        kissvec stream depends only on that column's own play profile and
+        the permute seed (rrtmg_mcica's chunking contract), so a window
+        holds the same bits as the same columns of a whole-batch call."""
+        rows = slice(int(w0), int(w1))
+        nw = int(w1) - int(w0)
+        extra = {} if span_states is None else {"states": span_states[rows]}
+        mc = generate(1, nw, nl, icld, seed, 0, out["play"][rows],
+                      cloud["cldfrac"][rows], cloud["ciwpth"][rows],
+                      cloud["clwpth"][rows], cloud["cswpth"][rows],
+                      cloud["rei"][rows], cloud["rel"][rows],
+                      cloud["res"][rows], *_bands(sw, nw, nl), hgt[rows],
+                      idcor, juldat, surf["xlat"][rows], layout="column",
+                      **extra)
+        return {name: mc[name] for name in mc_keys}
+
+    if defer:
+        # The adapter generates the slabs one engine window at a time, so
+        # this prep can span many engine chunks without holding
+        # (column, layer, g-point) slabs for all of them at once.
+        out["mcica_window"] = subcolumns
+    else:
+        out.update(subcolumns(0, ncol))
     side = "sw" if sw else "lw"
     out.update({"inflg"+side: inflg, "iceflg"+side: iceflg, "liqflg"+side: 1})
     if sw:
@@ -232,10 +300,16 @@ def _prep(sw, kw):
 
 
 def lwrad_prep_batch_device(**kw):
-    """LW prep with unchanged keys and five (column, layer, g-point) slabs."""
+    """LW prep with unchanged keys and five (column, layer, g-point) slabs.
+
+    ``defer_subcolumns=True`` returns, in place of the McICA slabs, a
+    callable ``mcica_window(w0, w1)`` that builds the slabs of prep
+    columns [w0, w1) on demand (same bits as the eager slabs' rows)."""
     return _prep(False, kw)
 
 
 def swrad_prep_batch_device(**kw):
-    """SW day batch prep, same keywords and return keys as the NumPy oracle."""
+    """SW day batch prep, same keywords and return keys as the NumPy oracle.
+
+    ``defer_subcolumns=True``: see :func:`lwrad_prep_batch_device`."""
     return _prep(True, kw)

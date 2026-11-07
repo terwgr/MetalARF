@@ -1,4 +1,4 @@
-//! A writer for the NetCDF classic formats: CDF-1, CDF-2 and CDF-5.
+//! Native Rust NetCDF emission: classic CDF-1/2/5 and fixed NetCDF-4 snapshots.
 //!
 //! # Why this crate exists
 //!
@@ -45,9 +45,9 @@
 //!
 //! # What is deliberately NOT here
 //!
-//! * **NetCDF-4 / HDF5 output.** A different container with a different
-//!   library surface; the classic formats are what a wrfout needs and
-//!   what every reader in the house can already parse.
+//! Fixed NetCDF-4 snapshots, including NC_STRING, use [`netcdf4`]. This
+//! independent container path does not alter classic serialization or the C ABI.
+//!
 //! * **Fill values on unwritten data.** netCDF-C pre-fills; this writer
 //!   refuses an unwritten region at `finish` instead. A tape with a hole
 //!   in it is a defect, not a default.
@@ -77,6 +77,9 @@
 //! * `rw_wrfbatch`, the production renderer, in
 //!   `tools/nc_rewrite_render_parity.py`.
 
+pub mod netcdf4;
+pub mod netcdf4_stream;
+mod hdf_checksum;
 mod capi;
 mod error;
 mod header;
@@ -93,4 +96,5 @@ pub use patch::{NcPatcher, PatchVar};
 pub use scan::scan_nonfinite;
 pub use schema::{name_is_valid, Attr, Dim, Schema, VarDef};
 pub use types::{AttrValue, NcFormat, NcType, VarData};
+pub use netcdf4_stream::{Nc4Options, Nc4Writer};
 pub use writer::NcWriter;

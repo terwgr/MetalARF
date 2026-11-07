@@ -1,7 +1,7 @@
 """The host path of a forecast step: checks on the device, read once.
 
 The profile of one step on the 43,884-cell point mesh
-(``evidence-gallery/hex-perf-profile-2026-09-13``) put a fifth of every step
+(the 2026-09-13 performance profile) put a fifth of every step
 in the host health gate (31 strided CuPy reductions, 28 stream drains), 36
 event synchronizes and a second launch of every recovery kernel in the timed
 launch path, 59 ``cudaGetDeviceProperties`` calls at 1.05 ms each from the
@@ -67,6 +67,7 @@ def _fake_cupy(monkeypatch, *, major: int, minor: int, counter: dict[str, int]):
 
     runtime = types.SimpleNamespace(
         getDeviceCount=lambda: 1,
+        getDevice=lambda: 0,
         getDeviceProperties=properties,
         runtimeGetVersion=lambda: 13_000,
         driverGetVersion=lambda: 13_030,

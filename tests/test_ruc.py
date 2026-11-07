@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+import warnings
 
 import numpy as np
 import pytest
@@ -1549,19 +1550,6 @@ def _run_snowseaice_case(fields, case: int):
     )
 
 
-def test_snow_sea_ice_step_matches_unmodified_wrf_bit_for_bit():
-    rows, cases, fields = _snowseaice_oracle("snowseaice.csv", 5)
-    assert len(rows) == 45
-    assert cases == (
-        "blended_thin_on_ice", "one_layer_on_ice", "two_layer_deep_on_ice",
-        "melting_on_ice", "sublimating_on_ice",
-    )
-    for case in range(len(cases)):
-        _assert_snowseaice_bitwise(
-            fields, cases, case, _run_snowseaice_case(fields, case)
-        )
-
-
 def test_snow_sea_ice_step_matches_unmodified_wrf_argument_contract():
     """The supplementary oracle pins the arguments snowseaice.csv leaves flat.
 
@@ -1690,7 +1678,12 @@ def test_snow_sea_ice_step_covers_every_snow_regime_and_rejects_drift():
 
 
 def test_snow_sea_ice_step_solves_independent_columns_together():
-    _, cases, fields = _snowseaice_oracle("snowseaice.csv", 5)
+    rows, cases, fields = _snowseaice_oracle("snowseaice.csv", 5)
+    assert len(rows) == 45
+    assert cases == (
+        "blended_thin_on_ice", "one_layer_on_ice", "two_layer_deep_on_ice",
+        "melting_on_ice", "sublimating_on_ice",
+    )
     selection = list(range(len(cases)))
     values = {
         name: np.ascontiguousarray(fields[name][:, selection])
@@ -1832,33 +1825,6 @@ def test_snow_temperature_step_matches_unmodified_wrf_bit_for_bit(fixture):
     rows, cases, fields = _snowtemp_oracle(fixture)
     assert cases == _SNOWTEMP_FIXTURES[fixture]
     assert len(rows) == len(cases) * 9
-    for case in range(len(cases)):
-        actual = ruc_snow_temperature_step(
-            _snowtemp_inputs(fields, [case]),
-            delt=float(fields["delt"][0, case]),
-            conflx=float(fields["conflx"][0, case]),
-            nroot=int(fields["nroot"][0, case]),
-            ilnb=int(fields["ilnb_before"][0, case]),
-            xlvm=float(fields["xlvm"][0, case]),
-            cvw=float(fields["cvw"][0, case]),
-        )
-        np.testing.assert_array_equal(
-            actual.tso[:, 0].view(np.uint32),
-            fields["tso_after"][:, case].view(np.uint32),
-            err_msg=f"{cases[case]}/tso",
-        )
-        for name, column in _SNOWTEMP_AFTER.items():
-            np.testing.assert_array_equal(
-                getattr(actual, name).view(np.uint32),
-                fields[column][0, case : case + 1].view(np.uint32),
-                err_msg=f"{cases[case]}/{name}",
-            )
-        assert int(actual.ilnb[0]) == int(fields["ilnb_after"][0, case])
-
-
-@pytest.mark.parametrize("fixture", sorted(_SNOWTEMP_FIXTURES))
-def test_snow_temperature_step_solves_every_regime_in_one_call(fixture):
-    _, cases, fields = _snowtemp_oracle(fixture)
     selection = list(range(len(cases)))
     actual = ruc_snow_temperature_step(
         _snowtemp_inputs(fields, selection),
@@ -2277,27 +2243,6 @@ def test_unmodified_wrf_snowsoil_oracle_covers_every_snow_regime():
 
 def test_snow_soil_step_matches_unmodified_wrf_bit_for_bit():
     _, cases, fields = _snowsoil_oracle()
-    for case in range(len(cases)):
-        actual = _snowsoil_call(fields, [case])
-        for name in _SNOWSOIL_PROFILE_OUTPUTS:
-            expected = fields.get(f"{name}_after", fields.get(name))
-            np.testing.assert_array_equal(
-                getattr(actual, name)[:, 0].view(np.uint32),
-                expected[:, case].view(np.uint32),
-                err_msg=f"{cases[case]}/{name}",
-            )
-        for name in _SNOWSOIL_COLUMN_OUTPUTS:
-            expected = fields.get(f"{name}_after", fields.get(name))
-            np.testing.assert_array_equal(
-                getattr(actual, name).view(np.uint32),
-                expected[0, case : case + 1].view(np.uint32),
-                err_msg=f"{cases[case]}/{name}",
-            )
-        assert int(actual.ilnb[0]) == int(fields["ilnb_after"][0, case])
-
-
-def test_snow_soil_step_solves_every_regime_in_one_batched_call():
-    _, cases, fields = _snowsoil_oracle()
     # Per-case calls cannot catch a column-stride defect; every case here
     # shares delt, conflx and cw, so they batch into one call.
     selection = list(range(len(cases)))
@@ -2496,24 +2441,13 @@ SFCTMP_STACK_CONTROL = (
     / "tests" / "data" / "ruc" / "oracle" / "sfctmp_stackfill.csv"
 )
 SFCTMP_DATASETS = {15: "MODIFIED_IGBP_MODIS_NOAH", 24: "USGS"}
-#: The only cells this port does not reproduce bitwise.  Measured, not chosen:
-#: both were traced OUT of the dispatch with probes that call the unmodified
-#: Fortran with exactly the arguments the dispatch hands its leaves.  See
-#: tools/ruc_wrf461_oracle/validate_sfctmp_oracle.py's UPSTREAM_RESIDUE for
-#: the derivation.  A listed cell may shrink; any unlisted cell fails.
-SFCTMP_UPSTREAM_RESIDUE = {
-    ("dew", 0, 15): 22,
-    ("eeta", 0, 15): 28,
-    ("evapl", 0, 15): 28,
-    ("fltot", 0, 15): 16384,
-    ("qcg", 0, 15): 28,
-    ("qfx", 0, 15): 17,
-    ("qsg", 0, 15): 17,
-    ("qvg", 0, 15): 17,
-    ("s", 0, 15): 2,
-    ("soilice", 1, 8): 1,
-    ("soiliqw", 1, 8): 1,
-}
+#: The cells this port does not reproduce bitwise against ``sfctmp.csv``:
+#: none.  The eleven cells that used to be pinned here (dew/eeta/evapl/fltot/
+#: qcg/qfx/qsg/qvg/s in the dense-new-snow case, soilice/soiliqw at level 8)
+#: were RUC's float64-rounded-once transcendentals, not the dispatch; with
+#: WOOF's float32 libm in their place (lane/verify-ruc-lsm) the fixture
+#: reproduces bitwise.  Any nonzero cell fails.
+SFCTMP_UPSTREAM_RESIDUE = {}
 SFCTMP_STACK_CONTROL_CELLS = {
     ("tsnav_after", 4), ("tsnav_after", 12), ("tsnav_after", 21),
     ("tsnav_after", 26), ("tsnav_after", 28),
@@ -2700,50 +2634,18 @@ LSMRUC_STACK_CONTROL = (
 LSMRUC_DATASETS = {0: "MODIFIED_IGBP_MODIS_NOAH", 1: "USGS"}
 #: The CSV names the ``keepfr3dflag`` argument ``keepfr``.
 LSMRUC_ALIAS = {"keepfr3dflag": "keepfr"}
-#: Every cell the driver does not reproduce bitwise, with the ULP measured on
-#: the pinned build.  Keyed ``(field, group, level)`` with ``group`` the
-#: 0-based index into the 48 (run, step, column) groups and ``level`` the
-#: 1-based soil level, 0 for column fields.
+#: Every cell the driver does not reproduce bitwise, keyed ``(field, group,
+#: level)`` with ``group`` the 0-based index into the 48 (run, step, column)
+#: groups and ``level`` the 1-based soil level, 0 for column fields: none.
 #:
-#: None of these is the driver's arithmetic.  25 of the 26 are a single
-#: function, ``woof.core.ruc._f32_tanh``, which ``ruc_snow_preparation``
-#: uses for WRF's ``:1520-1521`` new-snow density.  ``_f32_tanh``
-#: transcribes fdlibm's ``tanhf``; glibc 2.39's ``tanhf`` is a different
-#: implementation and returns 0.760541916 where the fdlibm form built from
-#: glibc's own ``expm1f`` returns 0.760541856, at the
-#: ``x = 0.9974991083145142`` this fixture reaches with ``tabs = 270 K``.
-#: Replacing ``_f32_tanh`` with a measured glibc ``tanhf`` table collapses
-#: this map to one cell of 1 ULP -- ``("grdflx", 21, 0)``, the separately
-#: documented ``exp``/``pow``/``log10`` class.  See
-#: ``tools/ruc_wrf461_oracle/validate_lsmruc_oracle.py``.
-LSMRUC_UPSTREAM_RESIDUE = {
-    ("rhosnf", 8, 0): 2,
-    ("rhosnf", 20, 0): 2,
-    ("rhosnf", 25, 0): 2,
-    ("rhosnf", 37, 0): 2,
-    ("snowfallac", 8, 0): 2,
-    ("snowfallac", 20, 0): 1,
-    ("snowfallac", 25, 0): 2,
-    ("snowfallac", 37, 0): 1,
-    ("snowh", 25, 0): 1,
-    ("snowh", 37, 0): 1,
-    ("snowc", 25, 0): 2,
-    ("snowc", 30, 0): 1,
-    ("snowc", 37, 0): 2,
-    ("qvg", 25, 0): 1,
-    ("qsg", 25, 0): 1,
-    ("qsfc", 25, 0): 1,
-    ("soilt1", 37, 0): 1,
-    ("tsnav", 37, 0): 256,
-    ("mavail", 39, 0): 1,
-    ("grdflx", 37, 0): 425,
-    ("grdflx", 21, 0): 1,
-    ("sh2o", 25, 2): 1,
-    ("sh2o", 37, 1): 27,
-    ("sh2o", 37, 2): 23,
-    ("tso", 37, 1): 1,
-    ("tso", 37, 2): 1,
-}
+#: The 26 cells that used to be pinned here were two functions, not the
+#: driver: ``_f32_tanh`` ran its reduction on a float64 ``expm1`` rounded once
+#: (25 cells, the new-snow density at ``:1520-1521`` and what it carried),
+#: and ``exp``/``pow``/``log10`` were float64 rounded once (``("grdflx", 21,
+#: 0)``).  With WOOF's float32 libm in their place (lane/verify-ruc-lsm) the
+#: fixture reproduces bitwise -- except SFCEVP, which WRF counts twice and
+#: WOOF once, graded through :func:`_lsmruc_expected`.
+LSMRUC_UPSTREAM_RESIDUE = {}
 #: The exact fields the nonzero stack fill moves.  ``tsnav`` is what WRF's
 #: uninitialised ``ilnb`` selects; ``tsnav_i`` is the same value carried into
 #: the next step's entry snapshot.
@@ -2771,6 +2673,34 @@ def _lsmruc_oracle(path):
             values = np.asarray([float(v) for v in raw], dtype=np.float32)
         field[name] = values.reshape(ncase, 9).T
     return groups, field
+
+
+def _lsmruc_wrf_single_count_sfcevp(field):
+    """WRF's SFCEVP word with its duplicated accumulation taken out.
+
+    module_sf_ruclsm.F adds ``qfx*dt`` to SFCEVP at ``:1095`` and again at
+    ``:1116`` on every land column (sea ice included), a WRF defect WOOF does
+    not copy.  The fixtures record WRF's doubled word; this is WRF's entry
+    value plus WRF's own ``qfx*dt`` once, in the same float32 expression, so a
+    comparison grades WOOF against the single count.  A water column
+    (``xland - 1.5 >= 0``) never touches SFCEVP and keeps WRF's word.
+    """
+
+    entry = field["sfcevp_i"][0]
+    dt = field["dt"][0].astype(np.float32)
+    once = (entry + (field["qfx"][0] * dt).astype(np.float32)).astype(
+        np.float32)
+    land = (field["xland"][0] - np.float32(1.5)) < np.float32(0.0)
+    return np.where(land, once, field["sfcevp"][0]).astype(np.float32)
+
+
+def _lsmruc_expected(field, name):
+    """The fixture's row for column output ``name``, (1, ncase), as WOOF is
+    graded: WRF's word, except SFCEVP's single count."""
+
+    if name == "sfcevp":
+        return _lsmruc_wrf_single_count_sfcevp(field)[None, :]
+    return field[name]
 
 
 def _lsmruc_call(field, case):
@@ -2826,7 +2756,7 @@ def test_lsmruc_matches_unmodified_wrf_except_the_pinned_upstream_residue():
                     )
         for name in RUC_DRIVER_COLUMN_STATE:
             got = np.asarray(getattr(actual, name), dtype=np.float32)
-            expected = field[name][0, case : case + 1]
+            expected = _lsmruc_expected(field, name)[0, case : case + 1]
             if got.view(np.uint32)[0] != expected.view(np.uint32)[0]:
                 residue[(name, case, 0)] = _sfctmp_ulp(got, expected)
     unexplained = {
@@ -2950,7 +2880,9 @@ def test_lsmruc_binds_every_driver_arm():
             field["sfcrunoff_i"][0, case]
         ):
             bound["runoff_accumulated"].append(case)
-        # :1095 and :1116 accumulate sfcevp twice with the same qfx.
+        # :1095 and :1116 accumulate sfcevp twice with the same qfx -- the
+        # WRF defect _lsmruc_wrf_single_count_sfcevp takes out; the fixture
+        # must reach it for that grading to mean anything.
         if xland - 1.5 < 0.0:
             dt = np.float32(field["dt"][0, case])
             qfx = np.float32(field["qfx"][0, case])
@@ -3045,7 +2977,7 @@ def test_lsmruc_replays_a_whole_call_as_one_twelve_column_domain():
                         )
         for name in RUC_DRIVER_COLUMN_STATE:
             got = np.asarray(getattr(actual, name), dtype=np.float32)
-            expected = field[name][0, columns]
+            expected = _lsmruc_expected(field, name)[0, columns]
             for offset, case in enumerate(cases):
                 if got[offset].view(np.uint32) != expected[offset].view(
                     np.uint32
@@ -3130,19 +3062,32 @@ def _lsmruc_same(left, right):
     )
 
 
+def test_lsmruc_evaporation_is_one_float32_increment():
+    from woof.core.ruc import ruc_land_surface_step
+    groups, fields = _lsmruc_oracle(LSMRUC_ORACLE)
+    for case in range(len(groups)):
+        values, options = _lsmruc_call(fields, case)
+        values["sfcevp"] = np.zeros_like(values["sfcevp"])
+        result = ruc_land_surface_step(values, **options)
+        if float(values["xland"][0]) < 1.5:
+            increment = np.float32(np.asarray(result.qfx) * np.float32(options["dt"]))
+            np.testing.assert_array_equal(np.asarray(result.sfcevp).view("u4"), increment.view("u4"))
+
+
 def test_lsmruc_mutation_control_is_the_port_not_the_fixture():
     """The null-mutant assertion the shipped mutation study did not have.
 
     ``validate_lsmruc_oracle.py`` used to score a mutant as killed when its
-    output was not bitwise-equal to ``lsmruc.csv``.  The port is not bitwise
-    against ``lsmruc.csv`` -- ``LSMRUC_UPSTREAM_RESIDUE`` is 26 cells of
-    ``ruc_snow_preparation``'s ``tanhf`` -- so the unmutated port was itself
-    "killed" and all 218 mutants scored as detected for free.  Against the
-    port's own output 30 of them survive.
+    output was not bitwise-equal to ``lsmruc.csv``.  The port was not bitwise
+    against ``lsmruc.csv`` then (26 residue cells), so the unmutated port was
+    itself "killed" and all 218 mutants scored as detected for free.  Against
+    the port's own output 30 of them survive.
 
-    This test pins both halves: the fixture cannot be the control while the
-    residue exists, and the identity mutation must survive the control that
-    replaces it.
+    The residue is gone (lane/verify-ruc-lsm) but the raw fixture is still
+    not the control: it carries WRF's doubled SFCEVP, which WOOF does not
+    copy.  This pins that the port equals the single-count fixture word for
+    word, differs from the raw one exactly in SFCEVP, and that the identity
+    mutation survives the port-output control.
     """
 
     groups, field = _lsmruc_oracle(LSMRUC_ORACLE)
@@ -3150,26 +3095,32 @@ def test_lsmruc_mutation_control_is_the_port_not_the_fixture():
     port = _lsmruc_replay(field, ncase)
 
     fixture = {}
+    single = {}
     for name in RUC_DRIVER_COLUMN_STATE:
         fixture[name] = np.ascontiguousarray(field[name][0], dtype=np.float32)
+        single[name] = np.ascontiguousarray(
+            _lsmruc_expected(field, name)[0], dtype=np.float32)
     for name in RUC_DRIVER_PROFILE_STATE:
         key = LSMRUC_ALIAS.get(name, name)
         fixture[name] = np.ascontiguousarray(
             field[key].T.reshape(-1), dtype=np.float32
         )
-    moved = sum(
-        int(np.count_nonzero(
-            port[name].view(np.uint32) != fixture[name].view(np.uint32)
-        ))
-        for name in port
+    for name in RUC_DRIVER_PROFILE_STATE:
+        single[name] = fixture[name]
+    assert _lsmruc_same(port, single), (
+        "the port differs from the single-count fixture: "
+        + str({name: int(np.count_nonzero(
+            port[name].view(np.uint32) != single[name].view(np.uint32)))
+            for name in port})
     )
-    assert moved == len(LSMRUC_UPSTREAM_RESIDUE), (
-        "the port and the fixture differ in a number of cells that is not the "
-        f"pinned upstream residue: {moved} vs {len(LSMRUC_UPSTREAM_RESIDUE)}"
-    )
-    assert not _lsmruc_same(port, fixture), (
-        "the fixture would now be a valid mutation control; the null-mutant "
-        "assertion below is what keeps that a measurement rather than a hope"
+    moved = {
+        name for name in port
+        if not np.array_equal(port[name].view(np.uint32),
+                              fixture[name].view(np.uint32))
+    }
+    assert moved == {"sfcevp"}, (
+        "against the raw fixture only WRF's doubled SFCEVP may differ: "
+        f"{sorted(moved)}"
     )
 
     for name in sorted(
@@ -3267,3 +3218,58 @@ def test_lsmruc_udrunoff_accumulator_is_measured_as_unbound():
         and int(field["ktau"][0, case]) > 1
         for case in range(len(groups))
     )
+
+
+def test_cold_start_array_path_matches_the_scalar_transcription_bit_for_bit():
+    """The forecast's whole-array ``ruclsminit`` against the column loop.
+
+    Land, frozen land, water (ISLTYP 14) and sea-ice columns, every soil
+    and vegetation category, temperatures either side of freezing: the two
+    must agree in every float32 word, or the array path is not the
+    transcription made fast but a different scheme.
+    """
+    from woof.core.ruc import (_cold_start_columns,
+                                _cold_start_columns_reference,
+                                load_ruc_parameters)
+
+    rng = np.random.default_rng(20261006)
+    ncol, nzs = 3000, 9
+    temperature = rng.uniform(250.0, 300.0, (nzs, ncol)).astype(np.float32)
+    # Columns that straddle freezing within the profile, and words right
+    # at the freezing point, where LOG's sign decides the branch.
+    temperature[:, :200] = np.linspace(
+        272.0, 275.0, nzs, dtype=np.float32)[:, None]
+    temperature[0, :50] = np.float32(273.15)
+    temperature[1, :50] = np.nextafter(np.float32(273.15), np.float32(0.0))
+    temperature[2, :50] = np.nextafter(np.float32(273.15), np.float32(400.0))
+    water = rng.uniform(0.0, 0.6, (nzs, ncol)).astype(np.float32)
+    water[:, 300:320] = np.float32(0.0)
+    soil = rng.integers(1, 20, ncol).astype(np.int32)
+    soil[400:450] = 14
+    vegetation = rng.integers(1, 22, ncol).astype(np.int32)
+    ice = np.zeros(ncol, dtype=np.float32)
+    ice[500:560] = rng.uniform(0.01, 1.0, 60).astype(np.float32)
+    ice[520:530] = np.float32(1.0)
+    soil[540:550] = 14
+    bundle = load_ruc_parameters()
+    kwargs = dict(bundle=bundle,
+                  vegetation=bundle.vegetation_for("MODIFIED_IGBP_MODIS_NOAH"))
+    with warnings.catch_warnings():
+        # A frozen water column (ISLTYP 14, SATPSI 0) must not reach the
+        # freezing curve: the reference never divides there, and a
+        # divide-by-zero RuntimeWarning at every winter launch is not
+        # "the same bits".
+        warnings.simplefilter("error", RuntimeWarning)
+        fast = _cold_start_columns(temperature, water, soil, vegetation, ice,
+                                   **kwargs)
+    slow = _cold_start_columns_reference(temperature, water, soil,
+                                         vegetation, ice, **kwargs)
+    for name, actual, expected in zip(("sh2o", "smfr3d", "mavail", "znt"),
+                                      fast, slow):
+        assert actual.dtype == np.float32 and actual.shape == expected.shape
+        np.testing.assert_array_equal(actual.view(np.uint32),
+                                      expected.view(np.uint32), err_msg=name)
+    # Both branches were exercised, in both paths.
+    assert np.any(fast[1] > np.float32(0.0))
+    assert np.any((fast[1] == np.float32(0.0)) & (ice == 0)[None, :]
+                  & (soil != 14)[None, :])

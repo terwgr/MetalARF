@@ -149,6 +149,9 @@ STATIC_NEST_DOWN = MappingProxyType({
     "SNOALB": "donor",         # maximum snow albedo, keyed to LU_INDEX
     "SOILTEMP": "donor",       # deep soil temperature
     "TMN": "donor",            # deep-layer soil temperature
+    "LAKE_DEPTH": "donor",     # depth carried with the parent's lake column
+    "LAKEMASK": "donor",       # same lake category as the donor land column
+    "SLOPECAT": "donor",       # soil-drainage category keyed to the column
     "MAPFAC_M": "grid", "MAPFAC_U": "grid", "MAPFAC_V": "grid",
     "F": "grid", "E": "grid", "SINALPHA": "grid", "COSALPHA": "grid",
 })
@@ -163,6 +166,7 @@ SURFACE_NEST_DOWN = MappingProxyType({
     "TSK": "donor", "TSLB": "donor", "SMOIS": "donor", "SH2O": "donor",
     "TMN": "donor", "SEAICE": "donor", "XLAND": "donor",
     "LANDMASK": "donor", "SNOW": "donor", "SNOWH": "donor",
+    "SST": "donor",
 })
 
 #: Near-surface diagnostics carried down from the PARENT'S OWN physics
@@ -259,7 +263,7 @@ def increment_registration(child_dc: DomainConfig, parent_run,
 
 
 def nest_down_analysis(background, analysed, child_dc: DomainConfig,
-                       parent_run, *, array_module=None) -> dict:
+                       parent_run, *, array_module=None, geometry_owner=None) -> dict:
     """What the parent's analysis adds to a child that keeps its own state.
 
     NOT the interpolated increment.  SINT is WRF's monotonicity-limited
@@ -304,6 +308,16 @@ def nest_down_analysis(background, analysed, child_dc: DomainConfig,
             registrations[stagger] = increment_registration(
                 child_dc, parent_run, stagger)
         registration = registrations[stagger]
+        if getattr(xp, "__woof_metal_array_module__", False):
+            if geometry_owner is None:
+                raise NestedForecastRefusal(
+                    "Metal analysis interpolation needs the child's geometry owner")
+
+            def alloc(label, shape, dtype):
+                return geometry_owner.scratch(
+                    shape, f"nest_sint_{label}_{stagger or 'm'}", dtype=dtype)
+
+            registration.device_tables(alloc=alloc)
         pair = []
         for side, source in (("background", background[name]),
                              ("analysed", analysed[name])):
@@ -321,11 +335,18 @@ def nest_down_analysis(background, analysed, child_dc: DomainConfig,
                     f"{stagger or 'mass'}-staggered registration this "
                     f"field takes expects {expected}")
             pair.append(values)
-        down_background = sint(xp.ascontiguousarray(
-            xp.asarray(pair[0], dtype=xp.float32)), registration)
-        down_analysed = sint(xp.ascontiguousarray(
-            xp.asarray(pair[1], dtype=xp.float32)), registration)
-        carried[name] = down_analysed - down_background
+        if getattr(xp, "__woof_metal_array_module__", False):
+            from woof.metal.da_state import binary
+
+            down_background = sint(xp.asarray(pair[0], dtype=xp.float32), registration)
+            down_analysed = sint(xp.asarray(pair[1], dtype=xp.float32), registration)
+            carried[name] = binary(down_analysed, down_background, subtract=True)
+        else:
+            down_background = sint(xp.ascontiguousarray(
+                xp.asarray(pair[0], dtype=xp.float32)), registration)
+            down_analysed = sint(xp.ascontiguousarray(
+                xp.asarray(pair[1], dtype=xp.float32)), registration)
+            carried[name] = down_analysed - down_background
     return carried
 
 
@@ -778,8 +799,23 @@ def child_land_inventory(static, surface, child_dc, parent_run) -> dict:
     surface_host = {name: np.asarray(
         value.get() if hasattr(value, "get") else value)
         for name, value in surface.fields.items()}
+    # Prepared caches may carry drag statistics for options this child does
+    # not run. Those aggregate statistics describe the parent's grid scale;
+    # replicating them onto a finer mesh would not construct fine orography.
+    from woof.static.orographic import OROGRAPHIC_ROWS, required_static_fields
+
+    required_drag = required_static_fields(
+        child_dc.run.topo_wind, child_dc.run.gwd_opt)
+    if required_drag:
+        raise NestedForecastRefusal(
+            "parent-inherited terrain cannot supply fine-grid orographic "
+            f"statistics for {list(required_drag)}; prepare per-domain "
+            "static fields for an active terrain-drag child")
+    unused_orography = sorted(set(static_host) & set(OROGRAPHIC_ROWS))
     child_static, grid_derived = nest_down_mapping(
-        static_host, STATIC_NEST_DOWN, registration, what="static")
+        {name: value for name, value in static_host.items()
+         if name not in OROGRAPHIC_ROWS},
+        STATIC_NEST_DOWN, registration, what="static")
     child_surface, _ = nest_down_mapping(
         surface_host, SURFACE_NEST_DOWN, registration, what="surface")
     # XLAND is a derived view of LANDMASK and the prepared-surface
@@ -802,6 +838,7 @@ def child_land_inventory(static, surface, child_dc, parent_run) -> dict:
             "static_fields": sorted(child_static),
             "surface_fields": sorted(child_surface),
             "grid_derived_fields": sorted(grid_derived),
+            "unused_orographic_fields": unused_orography,
             "donor_operator": "wrf-interp-fcni",
         },
     }
@@ -910,7 +947,9 @@ def build_nested_child(parent_node, child_dc, *, static, surface,
             "has a checkpoint")
     inventory = child_land_inventory(
         static, surface, child_dc, parent_node.cfg.run)
-    initialized = parent_only_init(child_dc, parent_node)
+    initialized = parent_only_init(
+        child_dc, parent_node,
+        array_module=getattr(parent_node.state, "_array_module", None))
     node = DomainNode(child_dc, initialized.grid, initialized.state,
                       clock, parent_node, [], None)
     node.coupler = NestCoupler(node, feedback=0)
@@ -943,7 +982,10 @@ def _initialize_child_physics(initialized, child_run, inventory,
     ``horizontal``, ``soil``) and ``parent_only_init`` returns none of
     them by construction.
     """
-    import cupy as cp
+    if getattr(initialized.state, "_metal_setup_state", False):
+        cp = initialized.state._array_module
+    else:
+        import cupy as cp
 
     from woof.core.diagnostics import update_diagnostics
     from woof.core.landuse import (initialize_landuse,
@@ -1001,11 +1043,12 @@ def _initialize_child_physics(initialized, child_run, inventory,
         glw=constant_glw_wm2,
         radiation_start_time=valid_time, radiation_latitude=lat,
         radiation_longitude=lon,
+        **({"frc_urb2d": static.get("FRC_URB2D")}
+           if int(getattr(child_run, "sf_urban_physics", 0)) == 1 else {}),
         **lake_physics_inputs(child_run, static),
         **ruc_mosaic_physics_inputs(
             child_run, static, landuse_attrs=landuse_identity,
             xice=fields["SEAICE"], fractional_seaice=True))
-    from woof.core.noah import noah_initial_snow_albedo
     from woof.core.landuse import surface_snow_albedo
     driver.fields["snoalb"][...] = cp.asarray(
         surface_snow_albedo(child_run, static, driver.noah_params),
@@ -1040,7 +1083,8 @@ def _nest_down_near_surface(driver, parent_driver, registration, cp) -> None:
                 "near-surface inventory this module nests down is not the "
                 "one the parent's driver allocates")
         driver.fields[name][...] = cp.asarray(
-            donor_nest_down(source.get() if hasattr(source, "get")
+            donor_nest_down(source.to_numpy() if hasattr(source, "to_numpy")
+                            else source.get() if hasattr(source, "get")
                             else source, registration),
             dtype=driver.fields[name].dtype)
 

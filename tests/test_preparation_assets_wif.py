@@ -74,16 +74,31 @@ def _staged_case(tmp_path, source):
     return plan, config
 
 
+def _intercept_transfers(monkeypatch, transfer):
+    """Route the table fetch's transfers (Rust rw_fetch ``asset`` and
+    ``encoded-asset`` calls) to ``transfer(url, output)``; a hash of a file
+    already on disk still runs the real tool."""
+    from woof import table_assets
+
+    real = table_assets._rw_asset
+
+    def routed(kind, *, on_progress=None, **options):
+        if kind in ("asset", "encoded-asset"):
+            return transfer(options["url"], options["output"])
+        return real(kind, on_progress=on_progress, **options)
+    monkeypatch.setattr(table_assets, "_rw_asset", routed)
+
+
 def _forbid_acquisition(monkeypatch):
     from woof import table_assets
 
     def unexpected(*args, **kwargs):
         pytest.fail("planning or dispatch acquired an actual asset")
     monkeypatch.setattr(table_assets, "stage_wif_dataset", unexpected)
-    monkeypatch.setattr(table_assets, "_transfer", unexpected)
+    _intercept_transfers(monkeypatch, unexpected)
 
 
-@pytest.mark.parametrize("source", ("hrrr-prs", "hrrr-native", "rap-native"))
+@pytest.mark.parametrize("source", ("hrrr-prs", "hrrr-native", "rap-native", "ecmwf-open-data"))
 def test_mapped_plan_declares_the_asset_without_acquiring_it(tmp_path, monkeypatch, source):
     from woof.runplan import resolve_plan
 
@@ -231,11 +246,12 @@ def test_a_shared_asset_cache_downloads_only_once(tmp_path, monkeypatch):
     payload = b"pinned input transaction"
     asset = TableAsset("asset.dat", len(payload), hashlib.sha256(payload).hexdigest())
     calls = []
-    def transfer(url, temp, pinned):
+    def transfer(url, temp):
         calls.append(url)
         time.sleep(0.05)
         temp.write_bytes(payload)
-    monkeypatch.setattr(table_assets, "_transfer", transfer)
+        return {"bytes": len(payload)}
+    _intercept_transfers(monkeypatch, transfer)
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: table_assets.fetch_asset_from_url(tmp_path, asset, "https://example.invalid/asset"), range(2)))
     assert results == [tmp_path / asset.filename] * 2
@@ -250,7 +266,7 @@ def test_a_corrupt_cached_asset_is_refused_and_preserved(tmp_path, monkeypatch):
     asset = TableAsset("asset.dat", len(payload), hashlib.sha256(payload).hexdigest())
     file = tmp_path / asset.filename
     file.write_bytes(b"changed")
-    monkeypatch.setattr(table_assets, "_transfer", lambda *args: pytest.fail("corrupt cache overwritten"))
+    _intercept_transfers(monkeypatch, lambda *args: pytest.fail("corrupt cache overwritten"))
     with pytest.raises(table_assets.TableAssetError, match="SHA-256"):
         table_assets.fetch_asset_from_url(tmp_path, asset, "https://example.invalid/asset")
     assert file.read_bytes() == b"changed"
@@ -284,3 +300,110 @@ def test_a_bad_compressed_download_leaves_no_installed_or_partial_file(tmp_path)
         table_assets.fetch_asset_from_url(cache, asset, source.as_uri(), compression="bz2")
     assert not (cache / asset.filename).exists()
     assert list(cache.glob("*fetch-partial*")) == []
+
+
+# -- 2.8.8 acceptance D-01: the prepared:go chain (GFS, ECMWF and every other
+# -- global source) acquires the dataset through its own fetch, as the HRRR
+# -- and staged chains do, instead of refusing on a box nobody hand-staged.
+
+def _go_chain_sources():
+    """Every source whose registry row puts it on the prepared:go chain."""
+    from woof.runplan import prepared_chain_for_source
+    from woof.source_drivability import intent_drivability
+
+    sources = []
+    for source in sorted(intent_drivability()):
+        try:
+            chain = prepared_chain_for_source(source)
+        except Exception:  # a source with no launch route has no chain
+            continue
+        if chain == "prepared:go":
+            sources.append(source)
+    return tuple(sources)
+
+
+_GO_CHAIN_SOURCES = _go_chain_sources()
+assert "gfs" in _GO_CHAIN_SOURCES, _GO_CHAIN_SOURCES
+
+
+def _go_chain_mp28_config(tmp_path, source):
+    """The wizard's own emission for ``source``, switched to mp=28."""
+    from woof.cli import main as cli_main
+    from woof.runplan import prepared_chain_for_source
+
+    assert prepared_chain_for_source(source) == "prepared:go"
+    cycle = "2026-07-29T12"
+    emitted = tmp_path / f"{source}-emitted.toml"
+    assert cli_main([
+        "domain", "--point=47.5,-111.3", "--card", "24gb", "--ladder", "12",
+        "--source", source, "--cycle", cycle, "--hours", "6",
+        "--out", str(emitted)]) == 0
+    written = emitted.read_text(encoding="utf-8")
+    assert "\nspecified = true\n" in written, written
+    mp28 = written.replace("\nmp_physics = 10\n", "\nmp_physics = 28\n")
+    assert mp28 != written
+    config = tmp_path / f"{source}-mp28.toml"
+    config.write_text(mp28, encoding="utf-8", newline="\n")
+    return config
+
+
+@pytest.mark.parametrize("source", _GO_CHAIN_SOURCES)
+def test_go_chain_defers_the_asset_to_its_fetch_stage(tmp_path, monkeypatch, source):
+    from woof import go_cli
+
+    cache = _empty_cache(tmp_path, monkeypatch)
+    _forbid_acquisition(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    config = _go_chain_mp28_config(tmp_path, source)
+    plan = go_cli.plan_from_config(config, outdir=tmp_path / "out")
+    assert plan["wif_domains"] == (1,)
+    command = go_cli.fetch_command(plan)
+    assert command[command.index("--source") + 1] == source
+    assert "--wif" in command
+    # Planned, not acquired: nothing is downloaded or created at this door.
+    assert not cache.exists()
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("source", _GO_CHAIN_SOURCES)
+def test_go_chain_plan_review_names_the_pending_asset(tmp_path, monkeypatch, source):
+    from woof.runplan import PLAN_SCHEMA, build_plan, resolve_plan
+
+    cache = _empty_cache(tmp_path, monkeypatch)
+    _forbid_acquisition(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    config = _go_chain_mp28_config(tmp_path, source)
+    document = {"schema": PLAN_SCHEMA, "name": "go-wif", "route": "prepared",
+                "config": {"path": str(config)}, "output_root": str(tmp_path / "run"),
+                "run_options": {"geog_root": str(tmp_path / "GEOG")}}
+    plan = build_plan(document, source="go-chain WIF acquisition gate", base_dir=tmp_path,
+                      sha256=hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest())
+    resolved, experiment, _ = resolve_plan(plan, require_inputs=False)
+    pending = next(row for row in resolved["automatic_resolutions"]
+                   if row["key"] == "wif_climatology")
+    assert pending["value"] == str(cache / "QNWFA_QNIFA_SIGMA_MONTHLY.dat")
+    assert pending["domains"] == [experiment.root.grid_id]
+    assert not cache.exists()
+
+
+def test_go_chain_offline_opt_out_keeps_the_refusal(tmp_path, monkeypatch):
+    from woof import go_cli
+
+    _empty_cache(tmp_path, monkeypatch)
+    _forbid_acquisition(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    config = _go_chain_mp28_config(tmp_path, "gfs")
+    text = config.read_text(encoding="utf-8")
+    assert "\n[fetch]\n" in text
+    config.write_text(text.replace("\n[fetch]\n", "\n[fetch]\nwif = false\n"),
+                      encoding="utf-8", newline="\n")
+    with pytest.raises(go_cli.GoRefusal, match="fetch-tables --wif"):
+        go_cli.plan_from_config(config, outdir=tmp_path / "out")
+
+
+def test_every_preparing_chain_acquires_the_asset():
+    from woof import runplan
+
+    preparing = {chain for chain in runplan._STREAMING_DELIVERY
+                 if chain.startswith("prepared:") and chain != "prepared:existing"}
+    assert preparing <= runplan._WIF_ACQUIRING_CHAINS

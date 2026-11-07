@@ -1,0 +1,158 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_stability_f32",
+      "module": "hexv842_mpas_bl_mynn_stability_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_stability_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_phim",
+      "resources": [
+        [
+          "zet",
+          "float",
+          "read"
+        ],
+        [
+          "dx",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "phim",
+          "float",
+          "read_write"
+        ],
+        [
+          "phih",
+          "float",
+          "read_write"
+        ],
+        [
+          "psig_bl",
+          "float",
+          "read_write"
+        ],
+        [
+          "psig_shcu",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zet": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pblh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phim": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phih": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psig_bl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psig_shcu": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_mpas_bl_mynn_stability_validate_f32",
+      "module": "hexv842_mpas_bl_mynn_stability_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_stability_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_scale_aware",
+      "resources": [
+        [
+          "zet",
+          "float",
+          "read"
+        ],
+        [
+          "dx",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zet": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pblh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

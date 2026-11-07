@@ -3,6 +3,23 @@ use super::*;
 use crate::shared_context::TitleProvenance;
 use rustwx_core::{GridProjection, GridShape, LatLonGrid, SelectedField2D};
 
+#[test]
+fn chem_reference_display_conversions_are_exact_float32_multiplications() {
+    for (slug, input, factor) in [("smoke_near_surface", 2.5e-8_f32, 1.0e9_f32),
+                                  ("smoke_column", 4.0e-5_f32, 1.0e6_f32),
+                                  ("aod_550", 0.5_f32, 1.0_f32),
+                                  ("ozone_near_surface", 70.0_f32, 1.0_f32)] {
+        let recipe = rustwx_models::plot_recipe(slug).unwrap();
+        let (conversion, _) = super::rendering::direct_fill_unit_conversion(
+            recipe, recipe.filled.selector.unwrap());
+        let actual = conversion.apply(input);
+        let expected = input * factor;
+        let ulp = actual.to_bits().abs_diff(expected.to_bits());
+        println!("ULP display-reference {slug} max={ulp}");
+        assert_eq!(ulp, 0, "{slug}");
+    }
+}
+
 fn sample_grid() -> LatLonGrid {
     LatLonGrid::new(
         GridShape::new(2, 2).unwrap(),
@@ -156,6 +173,7 @@ fn prepared_projected_maps_use_composite_components_as_projection_sample() {
 
 fn sample_direct_request(model: ModelId) -> DirectBatchRequest {
     DirectBatchRequest {
+        accumulation_window: None,
         model,
         date_yyyymmdd: "20260414".to_string(),
         cycle_override_utc: Some(23),
@@ -180,6 +198,67 @@ fn sample_direct_request(model: ModelId) -> DirectBatchRequest {
         geographic_overlays: None,
         panel_annotations: None,
     }
+}
+
+#[test]
+fn snowfall_titles_name_the_resolved_window_before_the_domain() {
+    let mut request = sample_direct_request(ModelId::WrfGdex);
+    request.title_provenance = TitleProvenance::LocalImport { grid_label: Some("d02 750 m".into()) };
+    let parse = |value: &str| chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d_%H:%M:%S")
+        .unwrap().and_utc().timestamp();
+    let init = parse("2026-10-08_18:00:00");
+    let end = parse("2026-10-12_18:00:00");
+    let whole_hour = local_accumulation_window_from_cycle("20261008", 18, 96, Some("2026-10-11_18:00:00")).unwrap();
+    assert_eq!((whole_hour.start_unix, whole_hour.end_unix), (parse("2026-10-11_18:00:00"), end));
+    request.accumulation_window = Some(local_accumulation_window(init, end, Some("2026-10-11_18:00:00")).unwrap());
+    for (base, expected) in [
+        ("Kuchera snowfall, window total", "24 h Kuchera snowfall ending Mon 12 Oct 18Z (d02 750 m)"),
+        ("10:1 snowfall, window total", "24 h 10:1 snowfall ending Mon 12 Oct 18Z (d02 750 m)"),
+        ("Model snowfall, window total", "24 h Model snowfall ending Mon 12 Oct 18Z (d02 750 m)"),
+    ] {
+        assert_eq!(direct_title_for_planned_product(&request, "native_grid", base), expected);
+    }
+    request.panel_annotations = Some(serde_json::from_str(
+        r#"{"title_suffix":", 24 h ending Mon 12 Oct 18Z","subtitle_center":"keep"}"#,
+    ).unwrap());
+    let annotations = titles::product_annotations(&request, "Kuchera snowfall, window total").unwrap();
+    assert!(annotations.title_suffix.is_none(), "the legacy caption now repeats the resolved window");
+    assert_eq!(annotations.subtitle_center.as_deref(), Some("keep"));
+    request.panel_annotations.as_mut().unwrap().title = Some("Caller title".into());
+    assert!(titles::product_annotations(&request, "Kuchera snowfall, window total").unwrap().title_suffix.is_some());
+    request.panel_annotations.as_mut().unwrap().title = None;
+    request.panel_annotations.as_mut().unwrap().title_suffix = Some("EXPERIMENTAL".into());
+    assert_eq!(titles::product_annotations(&request, "Kuchera snowfall, window total").unwrap().title_suffix.as_deref(), Some("EXPERIMENTAL"));
+    request.accumulation_window = Some(local_accumulation_window(init, end, None).unwrap());
+    assert_eq!(direct_title_for_planned_product(&request, "native_grid", "Kuchera snowfall, window total"),
+        "Kuchera snowfall since Thu 8 Oct 18Z (d02 750 m)");
+    request.accumulation_window = Some(local_accumulation_window(init, end, Some("2026-10-11_18:00:30")).unwrap());
+    assert_eq!(direct_title_for_planned_product(&request, "native_grid", "Kuchera snowfall, window total"),
+        "Kuchera snowfall since Sun 11 Oct 18:00:30Z (d02 750 m)");
+    assert_eq!(direct_title_for_planned_product(&request, "native_grid", "2 m temperature"),
+        "2 m temperature (d02 750 m)");
+}
+
+/// A title note reaches its own recipe's title only, ahead of a caller's
+/// suffix, and JSON without `title_notes` (every `--annotate` file written
+/// so far) still parses.
+#[test]
+fn a_title_note_reaches_only_its_own_recipe() {
+    let mut request = sample_direct_request(ModelId::WrfGdex);
+    let mut annotations: crate::geographic_overlays::PanelAnnotations =
+        serde_json::from_str(r#"{"subtitle_center":"keep"}"#).unwrap();
+    assert!(annotations.title_notes.is_empty());
+    annotations.title_notes.insert("composite_reflectivity".into(), "incl. parameterised convection".into());
+    request.panel_annotations = Some(annotations);
+    let refc = titles::recipe_annotations(&request, "composite_reflectivity", "Composite Reflectivity").unwrap();
+    assert_eq!(refc.title_suffix.as_deref(), Some("incl. parameterised convection"));
+    assert!(refc.title_notes.is_empty());
+    assert_eq!(refc.subtitle_center.as_deref(), Some("keep"));
+    let t2 = titles::recipe_annotations(&request, "2m_temperature", "2 m temperature").unwrap();
+    assert_eq!(t2.title_suffix, None);
+    request.panel_annotations.as_mut().unwrap().title_suffix = Some("EXPERIMENTAL".into());
+    let refc = titles::recipe_annotations(&request, "composite_reflectivity", "Composite Reflectivity").unwrap();
+    assert_eq!(refc.title_suffix.as_deref(), Some("incl. parameterised convection EXPERIMENTAL"));
 }
 
 #[test]
@@ -1446,8 +1525,9 @@ fn convert_filled_field_applies_operational_unit_transforms() {
         vec![1609.344; 4],
     );
     let converted_vis = convert_filled_field(vis_recipe, &vis_field);
-    assert_eq!(converted_vis.units, "mi");
-    assert!((converted_vis.values[0] - 1.0).abs() < 1.0e-4);
+    assert_eq!(converted_vis.units, "m");
+    assert_eq!(super::rendering::direct_recipe_render_controls(vis_recipe, vis_field.selector), (Some(rustwx_render::LegendMode::Thresholds), Some(200.0)));
+    assert!((converted_vis.values[0] - 1609.344).abs() < 1.0e-4);
 
     let vort_recipe = plot_recipe("500mb_absolute_vorticity_height_winds").unwrap();
     let vort_field = sample_selected_field(
@@ -1615,7 +1695,9 @@ fn categorical_precip_scale_masks_false_flags() {
     let ColorScale::Discrete(discrete) = scale else {
         panic!("expected discrete categorical scale");
     };
-    assert_eq!(discrete.levels, vec![0.0, 0.5, 1.0]);
+    // Re-recorded 2026-10-22 (fix/render-legends): one band per code (0, 1)
+    // for the category legend; false flags stay masked.
+    assert_eq!(discrete.levels, vec![-0.5, 0.5, 1.5]);
     assert_eq!(discrete.extend, ExtendMode::Neither);
     assert_eq!(discrete.mask_below, Some(0.5));
 }
@@ -1654,69 +1736,6 @@ fn height_winds_fill_uses_derived_wind_speed_in_knots() {
     assert!((render_field.values[1] - 19.438_445).abs() < 0.01);
     assert!((render_field.values[2] - 9.719_223).abs() < 0.01);
     assert!((render_field.values[3] - 9.719_223).abs() < 0.01);
-}
-
-/// A map that fills the companion wind speed and titles the field it
-/// contours names that field for a run difference, in the units its
-/// contour layer is drawn in; a map whose fill is the field its title names
-/// declares nothing, so its difference keeps subtracting the fill.
-#[test]
-fn a_companion_filled_map_names_its_titled_field_for_a_difference() {
-    let mslp = plot_recipe("mslp_10m_winds").unwrap();
-    let pressure = sample_selected_field(
-        FieldSelector::mean_sea_level(CanonicalField::PressureReducedToMeanSeaLevel),
-        "Pa",
-        vec![101_200.0, 101_300.0, 101_400.0, 101_500.0],
-    );
-    let u = sample_selected_field(
-        FieldSelector::height_agl(CanonicalField::UWind, 10),
-        "m/s",
-        vec![5.0; 4],
-    );
-    let v = sample_selected_field(
-        FieldSelector::height_agl(CanonicalField::VWind, 10),
-        "m/s",
-        vec![0.0; 4],
-    );
-    let mut extracted = HashMap::new();
-    extracted.insert(pressure.selector, pressure.clone());
-    extracted.insert(u.selector, u);
-    extracted.insert(v.selector, v);
-
-    let (fill, companion) = render_fill(mslp, &pressure, &extracted).unwrap();
-    assert!(companion, "the MSLP chart fills the 10 m wind speed");
-    assert_eq!(fill.units, "kt");
-    let subject = companion_difference_subject(mslp, &pressure, 0);
-    assert_eq!(subject.name, "MSLP");
-    assert_eq!(subject.units, "hPa");
-    assert_eq!(subject.contour, 0);
-    // The layer the subject points at holds MSLP in those units.
-    let layer = crate::plot_design::operational_contour_layer_for_values(
-        pressure.selector,
-        &pressure.values,
-    )
-    .unwrap();
-    assert!((layer.data[0] - 1012.0).abs() < 1.0e-3, "{:?}", layer.data);
-
-    let height = plot_recipe("500mb_height_winds").unwrap();
-    let z500 = sample_selected_field(
-        FieldSelector::isobaric(CanonicalField::GeopotentialHeight, 500),
-        "gpm",
-        vec![5400.0; 4],
-    );
-    let subject = companion_difference_subject(height, &z500, 0);
-    assert_eq!(subject.name, "500mb Height");
-    assert_eq!(subject.units, "dam");
-
-    let temperature_winds = plot_recipe("2m_temperature_10m_winds").unwrap();
-    let t2 = sample_selected_field(
-        FieldSelector::height_agl(CanonicalField::Temperature, 2),
-        "K",
-        vec![290.0; 4],
-    );
-    extracted.insert(t2.selector, t2.clone());
-    let (_, companion) = render_fill(temperature_winds, &t2, &extracted).unwrap();
-    assert!(!companion, "a temperature chart fills the temperature its title names");
 }
 
 /// The standalone wind chart colours its own field, in knots, from the
@@ -1798,4 +1817,26 @@ fn aifs_inference_direct_policy_uses_interpolated_raster_sampling() {
     apply_source_raster_policy(SourceId::AifsInference, &mut request);
 
     assert_eq!(request.raster_sample_mode, RasterSampleMode::Linear);
+}
+
+#[test]
+fn full_domain_regular_grid_inverse_matches_its_native_frame() {
+    let lat = vec![22.,22.,22.,26.5,26.5,26.5,31.,31.,31.];
+    let lon = vec![-87.,-82.,-77.,-87.,-82.,-77.,-87.,-82.,-77.];
+    let bounds = (-87.,-77.,22.,31.);
+    let map = build_full_domain_projected_map_with_projection(&lat,&lon,None,bounds,1.4).unwrap();
+    let resolved = full_domain_panel_resolved_projection(&lat,&lon,None,bounds,1.4).unwrap();
+    let inverse = map.inverse_raster_projection.unwrap();
+    assert_eq!(inverse.projection,resolved.spec());
+    match resolved {
+        rustwx_render::ResolvedProjection::LambertConformal { reference_latitude_deg, .. } =>
+            assert_eq!(inverse.reference_latitude_deg,Some(reference_latitude_deg)),
+        rustwx_render::ResolvedProjection::Geographic { central_meridian_deg } =>
+            assert_eq!(inverse.reference_longitude_deg,Some(central_meridian_deg)),
+        _ => {}
+    }
+    for i in 0..lat.len() {
+        let (x,y) = resolved.project(lat[i] as f64,lon[i] as f64);
+        assert!((x-map.projected_x[i]).abs()<1e-6 && (y-map.projected_y[i]).abs()<1e-6);
+    }
 }

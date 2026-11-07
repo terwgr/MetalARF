@@ -174,6 +174,28 @@ def fake_cupy(monkeypatch):
                        nvrtc_build=SYNTHETIC_PLATFORM[1])
     monkeypatch.setattr(compile_platform, "compile_platform_fingerprint",
                         lambda: dict(fingerprint))
+    # Noah-MP compiles at the direct-NVRTC boundary (woof.core.ieee_module,
+    # --ftz=false kept past CuPy's trailing override), not through
+    # cp.RawModule.  The stand-in keeps that boundary's contract -- refuse
+    # options without --ftz=false, take the strict options under
+    # GPUWM_WRF_EXACT, record the manifest row -- and hands the same Module
+    # double to the factories, so every count below still sees one compile.
+    from woof.core import ieee_module
+
+    def compile_module(source, options, module_key, log_stream=None):
+        from woof import wrf_exact
+        options = tuple(options)
+        if "--ftz=false" not in options:
+            raise ValueError("land kernels require --ftz=false")
+        if wrf_exact.ENABLED:
+            options = wrf_exact.effective_options(options)
+        module = Module(code=source, options=options)
+        module.compile(log_stream=log_stream)
+        manifest.record_module(module_key, source=source, options=options,
+                               module=module)
+        return module
+
+    monkeypatch.setattr(ieee_module, "compile_module", compile_module)
     manifest.reset_kernel_manifest()
     yield cp, events
     manifest.reset_kernel_manifest()
@@ -190,7 +212,7 @@ def fake_cupy(monkeypatch):
                     fn.cache_clear()
     module = sys.modules.get("woof.core.noahmp_slab_libm")
     if module is not None:
-        module._MODULE_CACHE = None
+        module._MODULE_CACHE.clear()
         module._KERNEL_CACHE.clear()
 
 
@@ -248,7 +270,12 @@ def test_reachable_runtime_factories_and_symbols_are_covered():
 
 def test_export_inventory_includes_inherited_globals():
     units = [ks.runtime_unit(name) for name in EXPECTED_PARTS]
-    assert sum(len(unit.exports) for unit in units) == 108
+    # 109 since the WRF 4.7 night snow-aging entry
+    # (noahmp_radiation_batch_night_age) joined noahmp_radiation's exports;
+    # 111 since 2.9.3: noahmp_vegeflux gained k_vegeflux_stc3 (300876fefd5,
+    # the WRF-lineage STC=3 leg) and k_vegeflux_masked (b3dd58fc9f3, the
+    # fixed-width masked dispatch), both kept by the speed2 merge de768fc2770.
+    assert sum(len(unit.exports) for unit in units) == 111
     leaves = set(ks.runtime_unit("noahmp_leaves").exports)
     for name in ks.COMPOSED_UNITS:
         assert leaves <= set(ks.runtime_unit(name).exports)
@@ -276,7 +303,7 @@ def test_actual_runtime_factory_compiles_authoritative_source(name, fake_cupy, m
         compiled = getattr(module, f"{short}_module")()
     elif name == "noahmp_libm_slab":
         from woof.core import noahmp_slab_libm as module
-        module._MODULE_CACHE = None
+        module._MODULE_CACHE.clear()
         compiled = module._module()
     elif name == "noahmp_vegeflux":
         from woof.core import noahmp_vegeflux_gpu as module
@@ -296,7 +323,7 @@ def test_actual_runtime_factory_compiles_authoritative_source(name, fake_cupy, m
     assert record["source_sha256"] == unit.identity()["source_sha256"]
     assert record["options"] == list(unit.options)
     if name == "noahmp_vegeflux":
-        assert unit.options == ("-std=c++14",)
+        assert unit.options == ("-std=c++14", "--ftz=false")
         assert unit.source == (ks.KERNEL_DIR / (name + ".cu")).read_text(encoding="ascii")
     if name == "noahmp_fluxprep":
         assert tuple(p for p, _ in unit.parts) == (name,)
@@ -745,8 +772,10 @@ def test_measure_live_reads_every_export_and_never_launches(fake_cupy):
     assert reading["frames"] == synthetic_frames()
     assert reading["unit_identity"] == prov.unit_identities()
     assert len(reading["functions"]) == 15
-    assert sum(len(rows) for rows in reading["functions"].values()) == 108
-    assert len([e for e in events if e[0] == "attributes"]) == 108
+    # 111 exports since 2.9.3 (k_vegeflux_stc3 and k_vegeflux_masked; see
+    # test_export_inventory_includes_inherited_globals).
+    assert sum(len(rows) for rows in reading["functions"].values()) == 111
+    assert len([e for e in events if e[0] == "attributes"]) == 111
     assert [e[0] for e in events].count("RawModule") == 15
     for name in EXPECTED_PARTS:
         unit = ks.runtime_unit(name)
@@ -1031,7 +1060,7 @@ def _cpu_only_check_parser(monkeypatch, exp, tmp_path):
     monkeypatch.setattr(pf, "config_forcing_schedule", lambda *a, **k: (3600.0, 2))
     monkeypatch.setattr(pf, "config_forcing_source", lambda *a, **k: None)
     monkeypatch.setattr(pf, "_load_experiment_any", lambda *a, **k: exp)
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: doctor.Check(
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **_kw: doctor.Check(
         "CUDA kernel headers", "info", "not judged -- device not touched",
         brief="device not touched", blocking=False))
     parser = argparse.ArgumentParser()
@@ -1143,9 +1172,12 @@ def test_the_live_card_is_read_once_per_process(monkeypatch):
 def test_existing_estimator_inventories_match_the_baseline(lsm, mp, monkeypatch):
     """40 domain inventories and 30 non-Noah-MP full estimates, hashed
     against digests the BASELINE tree produced (fixture ``baseline_commit``),
-    not this one.  The one field the baseline's profile did not have --
-    ``compile_platform``, ``None`` on every default profile -- is dropped
-    before hashing, so the numbers are what is compared."""
+    not this one. New metadata absent from that baseline is asserted empty
+    before projection: ``compile_platform`` and the uncoupled ``hydro_memory``
+    roster. All allocation numbers and frame inventories remain compared.
+    Coupled allocations are checked in test_hydro_memory_contract. Re-record each
+    scheme with ``python proof/node-reds-276/regen_estimator_baseline.py
+    . <mp> --write`` after explaining the allocation change."""
     monkeypatch.setattr(pf.sys, "platform", "linux")
     monkeypatch.setenv("GPUWM_NO_LOCAL_GPU", "1")
     fixture = json.loads((ROOT / "tests/fixtures/noahmp_estimator_baseline_snapshots.json")
@@ -1161,6 +1193,7 @@ def test_existing_estimator_inventories_match_the_baseline(lsm, mp, monkeypatch)
         estimate = pf.estimate_experiment(exp)
         as_dict = asdict(estimate)
         assert as_dict["local_memory_profile"].pop("compile_platform") is None
+        assert as_dict.pop("hydro_memory") is None
         row.update(frames=pf.kernel_local_frame_bytes(exp), estimate=as_dict,
                    alloc=estimate.alloc_estimate_bytes, peak=estimate.peak_envelope_bytes)
         assert snapshot(row) == fixture["full_estimate_sha256"][key], row

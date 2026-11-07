@@ -1,0 +1,46 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_sw_driver_tendency",
+      "module": "rrtmg_legacy_sw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_sw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+      "cuda_symbol": "rla_driver_sw_tendency",
+      "resources": [
+        [
+          "lw",
+          "float",
+          "read"
+        ],
+        [
+          "sw",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

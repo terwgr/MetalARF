@@ -100,6 +100,12 @@ _WRF471 = "WRF v4.7.1, not vendored here"
 #: ``bl_ysu.F90`` is WRF's ``phys/physics_mmm/bl_ysu.F90`` (the refactored YSU
 #: body ``module_bl_ysu.F`` wraps), which is why both spellings appear.
 EXTERNAL: dict[str, str] = {
+    "module_cu_g3.F": "WRF v4.6.1 phys/module_cu_g3.F",
+    "module_cu_nsas.F": _WRF,
+    'module_mp_fer_hires.F': _WRF,
+
+    # Port authorities verified in the read-only WRF v4.6.1 source.
+
     "bl_ysu.F90": _WRF,
     "module_bl_shinhong.F": _WRF,
     "module_bl_ysu.F": _WRF,
@@ -123,10 +129,15 @@ EXTERNAL: dict[str, str] = {
     "phys/module_bl_myjurb.F": _WRF,
     "phys/module_bl_mynn.F": _WRF,
     "module_mp_p3.F": _WRF,
-    "module_mp_thompson.F": _WRF,
+    # The bare module_mp_thompson.F row left with 2.8.9: the registry cites
+    # WRF's file as phys/module_mp_thompson.F, because the v4.4 Thompson
+    # oracle now vendors a module_mp_thompson.F of its own
+    # (tools/thompson_generation_oracle/upstream/), which a bare name would
+    # resolve to.
     "phys/module_mp_milbrandt2mom.F": _WRF,
     "phys/module_mp_thompson.F": _WRF,
     "module_mp_wdm6.F": _WRF,
+    "module_mp_wsm3.F": _WRF,
     "phys/module_mp_wdm6.F": _WRF,
     "phys/module_pbl_driver.F": _WRF,
     "phys/module_physics_init.F": _WRF,
@@ -148,7 +159,6 @@ EXTERNAL: dict[str, str] = {
     "share/module_check_a_mundo.F": _WRF,
     "module_check_a_mundo.F": _WRF,
     "module_mp_nssl_2mom.F": _WRF,
-    "share/module_model_constants.F": _WRF,
 }
 
 #: A bare filename that resolves to more than one file in this worktree, and
@@ -165,15 +175,12 @@ AMBIGUOUS: dict[str, str] = {}
 #: bless a drifted citation as correct, which is the failure this table exists
 #: to prevent.
 RESOLVED: dict[str, tuple[str, str]] = {
-    "kernels/ysu.cu:250": (
-        "woof/core/kernels/ysu.cu",
-        "us == 0.0f && hf == 0.0f && qf == 0.0f"),
+    # lane/ptx-stencils (merge 779bad3acc) moved the guard from :437 to :482; anchor unchanged.
+    "kernels/ysu_480.cu:482": ("woof/core/kernels/ysu_480.cu", "kpbl < nz"),
+    "module_ra_sw.F:193-203": ("woof/data/wrf_radiation/module_ra_sw.F", "QI1D(K)=QC1D(K)"),
     # YSU: the guard that skips the top-down block where WRF would read
     # thlix(i,k+2) one past an array declared kts:kte.  The anchor is the
     # guard condition the warning names.
-    "kernels/ysu.cu:437": (
-        "woof/core/kernels/ysu.cu",
-        "kpbl < nz"),
     # Shin-Hong: the two guards on WRF's out-of-bounds q2xk(kpbl+1) read --
     # the CPU authority's and the CUDA kernel's.  The anchor is the guard
     # condition the warning is about.
@@ -185,8 +192,12 @@ RESOLVED: dict[str, tuple[str, str]] = {
     # the column arrays moved into a global workspace) moved the kernel's
     # guard 58 lines: :1371 is now the `if (pblflg && k < kpbl)` loop body
     # and the `if (pblflg && kpbl < kte)` guard is at :1429.  Anchor
-    # unchanged.
-    "kernels/shinhong.cu:1429": (
+    # unchanged.  lane/verify-shinhong (the thx = tx/pi fix) moved it 8
+    # lines more, to :1437, and lane/verify-topo-wind (the topo_wind arm,
+    # shinhong_column_body<TOPO>, and sh_tanhf above the body) 161 more,
+    # to :1598.  Anchor unchanged.
+    "kernels/shinhong.cu:1602": (
+
         "woof/core/kernels/shinhong.cu",
         "kpbl < kte"),
     # Shin-Hong: the transcription of WRF's br .gt. 0.0 stability-regime
@@ -194,7 +205,9 @@ RESOLVED: dict[str, tuple[str, str]] = {
     "woof/verify/shinhong_ref.py:706": (
         "woof/verify/shinhong_ref.py",
         "br > F(0.0)"),
-    "tests/test_mynn_pbl_runtime.py:61": (
+    # :63 since 52ebcb7db/cafa72110 moved the dataclasses import above the
+    # fixture (it was :61); the anchor is the 5/5 selector pair it cites.
+    "tests/test_mynn_pbl_runtime.py:63": (
         "tests/test_mynn_pbl_runtime.py",
         "sf_sfclay_physics=5, sf_surface_physics=2"),
     # The two LES closures' transcription headers.  The anchor is the
@@ -249,10 +262,23 @@ RESOLVED: dict[str, tuple[str, str]] = {
     # one more line, to :1261 and :1355.  Anchors unchanged.)
     # (lane/cut286-fu-diff6-price: the workspace-priced sixth-order edge form
     # moved both six lines, to :1267 and :1361.  Anchors unchanged.)
-    "woof/core/dycore.py:1267": (
+    # (lane/ec-sfire: the open-boundary geopotential launcher moved both 17
+    # lines, to :1284 and :1378.  Anchors unchanged.)
+    # (lane/wrf-exact-start c501f4d34: the strict split big step's t - t0
+    # transport moved both ten lines, to :1294 and :1388.  Anchors unchanged.)
+    # The restored selected integration resolves these declarations at
+    # :1424 and :1518. Keep the original semantic anchors checked there.
+    # (golden/wrf-fixes moved both one line up and golden/ports-mp three
+    # down; on the combined 2.9.0 line they sat at :1425 and :1519, and
+    # after the 2.9.1 exact-chain intake at :1431 and :1525.
+    # Anchors unchanged.)
+    # (lane/hrrr-v4-output-fold 514f72e8be, RK descriptors passed as by-value
+    # host arrays and forecast-entry imports moved these anchors.  Anchors
+    # unchanged.)
+    "woof/core/dycore.py:1438": (
         "woof/core/dycore.py",
         "WRF v4.6.1 km_opt=2:"),
-    "woof/core/dycore.py:1361": (
+    "woof/core/dycore.py:1536": (
         "woof/core/dycore.py",
         "WRF v4.6.1 km_opt=3:"),
 }

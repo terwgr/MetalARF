@@ -153,15 +153,25 @@ def test_every_kernel_source_has_a_row_or_is_declared_unmeasurable():
     with no row in either table, so the gate that is supposed to notice a
     frame moving could not even enumerate it.
     """
+    from woof.core.kernels import _DEFAULT_SOURCE_MODULES
+    # <module>_default.cu is the default process's text of <module>,
+    # compiled and priced under <module>'s own name.
     sources = {path.stem for path in KERNEL_DIR.glob("*.cu")}
+    sources -= {f"{module}_default" for module in _DEFAULT_SOURCE_MODULES}
+    # These remain priced logical modules. The first two resolve retained
+    # files in kernels._unit_text; rrtmg_lw._lw_coalesced_source generates
+    # the third inside the same measured composed longwave translation unit.
+    sources |= {"ysu", "mynn_dmp_sibling", "rrtmg_lw_chain_coalesced"}
     priced = (set(pf.KERNEL_MAX_LOCAL_SIZE_BYTES)
               | set(pf.UNMEASURED_KERNEL_MODULES))
     assert sources - priced == set(), sorted(sources - priced)
     assert priced - sources == set(), sorted(priced - sources)
 
 
-def test_a_recorded_platform_is_recognised_from_its_own_fingerprint():
+def test_a_recorded_platform_is_recognised_from_its_own_fingerprint(monkeypatch):
     """The gate has to know whether THIS box is one of the recorded ones."""
+    from woof import wrf_exact
+    monkeypatch.setattr(wrf_exact, "ENABLED", False)
     row = pf.KERNEL_LOCAL_FRAME_RECORDINGS[0]
     fingerprint = {
         "device_compute_capability": row.compute_capability,
@@ -285,6 +295,21 @@ def test_parameter_scaler_has_a_measured_production_source_and_frame():
     assert hashlib.sha256(kernels.module_source("physics_params").encode()).hexdigest() == (
         kfr.PHYSICS_PARAMS_MEASURED_SOURCE_SHA256), (
             "parameter shader source changed; re-read driver attributes before replacing its profile")
+
+
+@pytest.mark.parametrize("module", ["pd_vertical_sl", "upper_wind_limiter"])
+def test_production_dycore_frames_keep_their_measured_composed_source(module):
+    from woof.core import kernel_frame_recordings as kfr, kernels
+
+    recording = kfr.SM120_NVRTC_13_4_92
+    assert recording.platform_key == ("120", "13.4.92")
+    assert recording.frames[module] == pf.KERNEL_MAX_LOCAL_SIZE_BYTES[module] == 0
+    assert module not in pf.UNMEASURED_KERNEL_MODULES
+    assert kernels.module_options(module) == ("-std=c++17",)
+    assert hashlib.sha256(kernels.module_source(module).encode()).hexdigest() \
+        == kfr.DYCORE_FRAME_MEASURED_SOURCE_SHA256[module], (
+            f"{module} composed source changed; read actual driver attributes "
+            "during a forecast before replacing its frame recording")
 
 
 def test_every_noahmp_composed_recording_is_its_own_platform_and_stays_out_of_the_standalone_tables():

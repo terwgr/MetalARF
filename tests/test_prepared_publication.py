@@ -126,17 +126,10 @@ def test_manifest_pin_refuses_missing_invalid_or_conflicting_identity(publicatio
         publication.manifest_pin(explicit, event)
 
 
-@pytest.mark.parametrize("second_pin", [PIN, OTHER_PIN])
+@pytest.mark.parametrize("second_pin", [PIN, OTHER_PIN, "not-a-sha"])
 def test_duplicate_release_markers_are_ambiguous_even_with_explicit_pin(publication, second_pin):
     event = event_with_pin()
     event["release"]["body"] += f"<!-- arwen-publication-sha256: {second_pin} -->"
-    with pytest.raises(publication.PublicationError):
-        publication.manifest_pin(PIN, event)
-
-
-def test_a_malformed_second_release_marker_is_not_ignored(publication):
-    event = event_with_pin()
-    event["release"]["body"] += "<!-- arwen-publication-sha256: not-a-sha -->"
     with pytest.raises(publication.PublicationError):
         publication.manifest_pin(PIN, event)
 
@@ -160,30 +153,22 @@ def test_manifest_refuses_another_schema_commit_repository_or_tag(publication, m
         load(publication, manifest)
 
 
-@pytest.mark.parametrize("missing", [
-    f"gpuwm-{VERSION}-py3-none-manylinux_2_28_x86_64.whl",
-    f"gpuwm-{VERSION}-py3-none-win_amd64.whl",
-    f"woof_data-{VERSION}.tar.gz",
+@pytest.mark.parametrize("section,key,missing", [
+    ("pypi", "artifacts", f"gpuwm-{VERSION}-py3-none-manylinux_2_28_x86_64.whl"),
+    ("pypi", "artifacts", f"gpuwm-{VERSION}-py3-none-win_amd64.whl"),
+    ("pypi", "artifacts", f"woof_data-{VERSION}.tar.gz"),
+    ("github", "assets", f"gpuwm-bridges-{TAG}-linux-x86_64.zip"),
+    ("github", "assets", f"gpuwm-bridges-{TAG}-win-x86_64.zip"),
+    ("github", "assets", "bridge-bundle-manifest.json"),
 ])
-def test_manifest_refuses_incomplete_pypi_set(publication, manifest, missing):
-    manifest["pypi"]["artifacts"] = [item for item in manifest["pypi"]["artifacts"] if item["filename"] != missing]
+def test_manifest_refuses_incomplete_asset_set(publication, manifest, section, key, missing):
+    manifest[section][key] = [item for item in manifest[section][key] if item["filename"] != missing]
     with pytest.raises(publication.PublicationError):
         load(publication, manifest)
 
 
 def test_manifest_refuses_same_count_but_wrong_distribution_version(publication, manifest):
     manifest["pypi"]["artifacts"][0] = row("gpuwm-9.8.8-py3-none-any.whl")
-    with pytest.raises(publication.PublicationError):
-        load(publication, manifest)
-
-
-@pytest.mark.parametrize("missing", [
-    f"gpuwm-bridges-{TAG}-linux-x86_64.zip",
-    f"gpuwm-bridges-{TAG}-win-x86_64.zip",
-    "bridge-bundle-manifest.json",
-])
-def test_manifest_refuses_missing_native_asset_contract(publication, manifest, missing):
-    manifest["github"]["assets"] = [item for item in manifest["github"]["assets"] if item["filename"] != missing]
     with pytest.raises(publication.PublicationError):
         load(publication, manifest)
 
@@ -360,7 +345,9 @@ def metadata_fixture(tmp_path, *, project="woof", readme="Prepared release docum
     config = f'[project]\nname = "{project}"\nreadme = "README.md"\n'
     if project == "recast-woof-data":
         config += 'dynamic = ["version"]\n[tool.setuptools.dynamic]\nversion = {file = ["woof_data/VERSION"]}\n'
-        (source_dir / "VERSION").write_text(VERSION + "\n", encoding="utf-8")
+        # the data distribution's import package is woof_data, where the dynamic version file lives
+        (project_root / "woof_data").mkdir(exist_ok=True)
+        (project_root / "woof_data" / "VERSION").write_text(VERSION + "\n", encoding="utf-8")
     else:
         config += f'version = "{VERSION}"\n'
     (project_root / "pyproject.toml").write_text(config, encoding="utf-8")
@@ -525,25 +512,112 @@ def native_wheel_fixture(tmp_path, *, platform="linux-x86_64", mutation=None):
 @pytest.mark.parametrize("platform", ["linux-x86_64", "win-x86_64"])
 def test_embedded_native_files_match_the_platform_pins(publication, tmp_path, platform):
     wheel, pins = native_wheel_fixture(tmp_path, platform=platform)
-    assert isinstance(publication.check_embedded_natives(wheel, pins, platform), dict)
+    assert isinstance(publication.check_embedded_natives(wheel, pins, platform, set()), dict)
+
+
+def _pin_bundle_only(pins, platform="linux-x86_64"):
+    """Pin one more binary that the wheel fixture does not embed."""
+    payload = b"fixture native bytes: fetched on demand"
+    pins["platforms"][platform]["binaries"].append({
+        "artifact": "rw_simradar", "filename": "rw_simradar", "kind": "executable",
+        "bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()})
+    return pins
+
+
+def test_an_on_demand_artifact_is_pinned_in_the_bundle_and_absent_from_the_wheel(publication, tmp_path):
+    """2.9.1: the 2.9.0 Linux wheel was 96,049,884 bytes of PyPI's 100,000,000
+    per file, so the observation-stream doors stay in the bundle and its pins
+    and leave the wheel; the first door that needs one stages it."""
+    wheel, pins = native_wheel_fixture(tmp_path)
+    result = publication.check_embedded_natives(wheel, pins, "linux-x86_64", set())
+    pins = _pin_bundle_only(pins)
+    excused = publication.check_embedded_natives(wheel, pins, "linux-x86_64", {"rw_simradar"})
+    assert result == excused == {"platform": "linux-x86_64", "artifacts": 2}
+
+
+def test_a_wheel_missing_a_pinned_artifact_is_not_excused_unless_the_source_declares_it(publication, tmp_path):
+    wheel, pins = native_wheel_fixture(tmp_path)
+    pins = _pin_bundle_only(pins)
+    with pytest.raises(publication.PublicationError, match="wheel-carried part of the proven bundle"):
+        publication.check_embedded_natives(wheel, pins, "linux-x86_64", set())
+
+
+def test_an_on_demand_artifact_must_be_pinned_or_fetch_cannot_install_it(publication, tmp_path):
+    wheel, pins = native_wheel_fixture(tmp_path)
+    with pytest.raises(publication.PublicationError, match="not pinned in the bundle"):
+        publication.check_embedded_natives(wheel, pins, "linux-x86_64", {"rw_simradar"})
+
+
+# Replaces test_a_wheel_exclusion_is_refused (45256c630): the six observation-
+# stream doors are on-demand bundle artifacts again, so a wheel exclusion is no
+# longer refused outright; what stays refused is a declaration that disagrees
+# with the wheel, here a wheel-carried artifact declared on demand.
+def test_a_wheel_carrying_an_on_demand_artifact_is_refused(publication, tmp_path):
+    """The declaration and the wheel must agree both ways."""
+    wheel, pins = native_wheel_fixture(tmp_path)
+    carried = pins["platforms"]["linux-x86_64"]["binaries"][0]["artifact"]
+    with pytest.raises(publication.PublicationError, match="wheel-carried part of the proven bundle"):
+        publication.check_embedded_natives(wheel, pins, "linux-x86_64", {carried})
+
+
+def test_the_on_demand_set_is_read_from_the_tagged_declaration(publication):
+    from woof import bridge_assets
+    repo = Path(__file__).resolve().parents[1]
+    # The last five are the default-on hydro door's provider tools, declared on
+    # demand by e81d769e735 (2.9.3 improve-1, default-on hydro never attached).
+    assert publication.on_demand_artifacts(repo) == {"rw_igra2", "rw_amv", "rw_ndbc", "rw_gnssro", "rw_wis2", "rw_prepbufr", "rw_madis",
+                                                    "rw_radar_feeds", "rw_mrms", "rw_stage4", "rw_asos", "rw_goes",
+                                                    "rw_opera", "rw_soundings", "rw_nextgen_verify",
+                                                    "rw_hydro_world", "rw_hydro_params", "rw_hydrofabric",
+                                                    "nextgen-reservoir-prepare", "rw_hydro_init",
+                                                    # 2.9.4 capability lanes, declared on demand: ocean
+                                                    # preparation (cap-waves-couple), ocean SST verification
+                                                    # (cap-slab-ocean), ice observation binding (cap-fzra),
+                                                    # storm-surge bathymetry (cap-surge).
+                                                    "rw_ocean", "rw_ocean_verify", "rw_ice_verify",
+                                                    "rw_bathy",
+                                                    # 2.9.4 (PyPI per-file limit): verification and
+                                                    # post-run doors no forecast reaches.
+                                                    "rw_hail", "rw_airnow", "rw_scoreboard",
+                                                    "rw_tc_fields", "rw_fire_indices",
+                                                    # Post-2.9.4 native Rust hydro output.
+                                                    "rw_nextgen_output",
+                                                    # 2.9.9 (PyPI per-file limit): the probability renderer.
+                                                    "rw_probgrid",
+                                                    # 2.9.10 (PyPI per-file limit): the Icechunk writer and
+                                                    # the woof hex RRFS init binaries.
+                                                    "rw_icechunk", "rw_mpas_init_v831",
+                                                    "rw_mpas_gsl_oro",
+                                                    # 2.9.11 (PyPI per-file limit): opt-in simulated
+                                                    # radar, ML export, the wind-farm table decoder
+                                                    # and the hydro door's payload library.
+                                                    "rw_simradar", "rw_mlexport", "rw-wind-table",
+                                                    "nextgen_hydrofabric",
+                                                    # WOOF 1.1.0 r16 (PyPI per-file limit).
+                                                    "rw_odim", "rw_mpas_geometry", "rw_mpas_convert",
+                                                    "rw_mpas_lbc"} == {
+        a.name for a in bridge_assets.on_demand_artifacts()}
+    # The global worker's packer stays in the wheel: a global run without it
+    # builds its statics natively (about 2,000 s at T255).
+    assert {"rw_globe_pack"} <= {a.name for a in bridge_assets.wheel_artifacts()}
 
 
 @pytest.mark.parametrize("mutation", ["missing-native", "changed-native", "extra-native", "missing-manifest", "wrong-platform", "wrong-artifact", "wrong-kind", "changed-manifest-hash", "duplicate-manifest-row"])
 def test_embedded_native_gate_rejects_wheel_bundle_disagreement(publication, tmp_path, mutation):
     wheel, pins = native_wheel_fixture(tmp_path, mutation=mutation)
     with pytest.raises(publication.PublicationError):
-        publication.check_embedded_natives(wheel, pins, "linux-x86_64")
+        publication.check_embedded_natives(wheel, pins, "linux-x86_64", set())
 
 
 def test_pure_wheel_must_not_hide_a_native_payload(publication, tmp_path):
     wheel, pins = native_wheel_fixture(tmp_path)
     with pytest.raises(publication.PublicationError):
-        publication.check_embedded_natives(wheel, pins, None)
+        publication.check_embedded_natives(wheel, pins, None, set())
 
 
 def test_pure_wheel_without_staged_native_files_passes(publication, tmp_path):
     repo, wheel = metadata_fixture(tmp_path)
-    assert isinstance(publication.check_embedded_natives(wheel, {"platforms": {}}, None), dict)
+    assert isinstance(publication.check_embedded_natives(wheel, {"platforms": {}}, None, set()), dict)
 
 
 def python_inventory_fixture(tmp_path, mutation=None):
@@ -575,5 +649,42 @@ def test_python_inventory_respects_declared_module_exclusions_without_running_se
 @pytest.mark.parametrize("mutation", ["omitted-runtime-module", "included-development-module"])
 def test_python_inventory_refuses_an_omission_or_excluded_probe(publication, tmp_path, mutation):
     repo, wheel = python_inventory_fixture(tmp_path, mutation)
+    with pytest.raises(publication.PublicationError):
+        publication.check_python_inventory(wheel, repo, "woof")
+
+
+def declaration_only_fixture(tmp_path, declared=True):
+    """A `docs` namespace package whose wheel payload is its package-data, beside a manifest that ships its examples."""
+    repo, wheel = metadata_fixture(tmp_path)
+    with (repo / "pyproject.toml").open("a", encoding="utf-8") as stream:
+        stream.write('\n[tool.setuptools.packages.find]\ninclude = ["woof", "woof.*", "docs"]\nnamespaces = true\n'
+                     '[tool.setuptools.package-data]\ndocs = ["seam.md"]\n')
+    (repo / "setup.py").write_text(
+        'DEVELOPMENT_MODULE_GLOBS: dict[str, tuple[str, ...]] = {}\n'
+        + ('DECLARATION_ONLY_DATA_PACKAGES: tuple[str, ...] = ("docs",)\n' if declared else '')
+        + 'raise AssertionError("inventory must inspect setup.py without executing it")\n',
+        encoding="utf-8",
+    )
+    (repo / "MANIFEST.in").write_text("recursive-include docs *.md *.py\n", encoding="utf-8")
+    (repo / "docs" / "examples").mkdir(parents=True)
+    (repo / "docs" / "seam.md").write_text("contract\n", encoding="utf-8")
+    (repo / "docs" / "examples" / "client.py").write_bytes(b'"""An example, shipped by the sdist."""\n')
+    source = b'"""Required runtime module."""\n'
+    (repo / "woof/core.py").write_bytes(source)
+    with zipfile.ZipFile(wheel, "a") as archive:
+        archive.writestr("woof/core.py", source)
+        archive.writestr("docs/seam.md", "contract\n")
+    return repo, wheel
+
+
+def test_python_inventory_follows_a_declaration_only_data_package(publication, tmp_path):
+    """2.9.2 cut: the verifier expected docs/integration-kit/examples/*.py from MANIFEST.in
+    while setup.py's build_py ships the docs package's declaration only."""
+    repo, wheel = declaration_only_fixture(tmp_path)
+    publication.check_python_inventory(wheel, repo, "woof")
+
+
+def test_python_inventory_still_expects_manifest_examples_without_the_declaration(publication, tmp_path):
+    repo, wheel = declaration_only_fixture(tmp_path, declared=False)
     with pytest.raises(publication.PublicationError):
         publication.check_python_inventory(wheel, repo, "woof")

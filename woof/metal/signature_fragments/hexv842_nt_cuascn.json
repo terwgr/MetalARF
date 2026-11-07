@@ -1,0 +1,132 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_cuascn",
+      "module": "hexv842_nt",
+      "source": "woof/metal/shaders/hexv842_nt_cuascn.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cuascn",
+      "resources": [
+        [
+          "inputs",
+          "float32",
+          "read"
+        ],
+        [
+          "surf_in_i",
+          "int32",
+          "read"
+        ],
+        [
+          "surf_in_f",
+          "float32",
+          "read"
+        ],
+        [
+          "levels",
+          "float32",
+          "read_write"
+        ],
+        [
+          "flags",
+          "int32",
+          "read_write"
+        ],
+        [
+          "surf_out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "mpas_llo3_start",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "inputs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surf_in_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surf_in_f": [
+          [
+            "any_1d"
+          ]
+        ],
+        "levels": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surf_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mpas_llo3_start": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

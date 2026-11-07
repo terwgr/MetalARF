@@ -23,6 +23,12 @@ import pytest
 
 from woof import geog_assets
 from woof.domain_wizard import GEOG_DATASETS
+
+#: The pins that stage the WRF builder's nine default directories, in table
+#: order: eight, because the two default soil-category directories
+#: (soilgrids/texture_top, texture_bot) are children of one archive.
+WRF_PINS = tuple(a.dataset for a in geog_assets.GEOG_ARCHIVES
+                 if a.dataset in geog_assets.archive_names_for_paths(GEOG_DATASETS))
 from woof.geog_assets import (
     GEOG_FETCH_MANIFEST_NAME,
     GEOG_FETCH_MANIFEST_SCHEMA,
@@ -178,16 +184,26 @@ def test_pin_table_binds_the_static_builders_dataset_list():
     # bar is containment, not equality.  Equality would make adding a
     # dataset for one builder look like a defect in the other.
     fetchable = geog_assets.geog_datasets()
-    missing = [name for name in GEOG_DATASETS if name not in fetchable]
-    assert not missing, f"unfetchable static-builder dataset(s): {missing}"
+    # A directory is fetchable when a pin stages it, at the top or as a
+    # declared child of a container archive (soilgrids/texture_top).
+    archive_names = geog_assets.archive_names_for_paths(GEOG_DATASETS)
+    assert archive_names <= set(fetchable)
     assert len(set(fetchable)) == len(fetchable), "duplicate pin"
+    # The wizard's list IS the builder's default selection.
+    from woof.static.build import _DEFAULT_GEOG_DIRS
+    assert set(GEOG_DATASETS) == set(_DEFAULT_GEOG_DIRS.values())
     # Which door needs a pin is a COLUMN of the table, not a branch in the
-    # code that reads it.  The WRF-scoped column is exactly the nine the
-    # WRF static builder opens: doctor's WRF-side completeness verdict is
-    # read straight off it, and a pin drifting into that column would have
-    # doctor demand a dataset that builder never opens.
+    # code that reads it.  The WRF-scoped column is exactly the pins that
+    # stage the nine the WRF static builder opens: a pin drifting into that
+    # column would have doctor demand a dataset that builder never opens.
     assert (geog_assets.datasets_required_by(geog_assets.GEOG_CONSUMER_WRF)
-            == GEOG_DATASETS)
+            == WRF_PINS)
+    # Licence: nothing on a door's required column, and nothing in the
+    # default fetch, carries a licence hold (the project owner, 2026-10-14/2026-10-21).
+    for archive in geog_assets.GEOG_ARCHIVES:
+        if archive.licence_hold:
+            assert not archive.required_by and not archive.fetch_by_default
+            assert "hf" not in archive.available_sources
     for archive in geog_assets.GEOG_ARCHIVES:
         assert archive.required_by or archive.optional_for, f"{archive.dataset} serves no door"
         unknown = set(archive.required_by + archive.optional_for) - set(geog_assets.GEOG_CONSUMERS)
@@ -251,6 +267,24 @@ def test_bnu_soil_pins_are_optional_ncar_data(dataset, size, digest, unpacked):
         f"https://www2.mmm.ucar.edu/wrf/src/wps_files/{dataset}.tar.bz2")
 
 
+def test_thirty_second_lai_pin_is_optional_ncar_data():
+    # The HRRR static source's off-grid recipe (modis_lai) reads it; the
+    # WRF door's mandatory nine do not change.
+    archive = geog_assets.archive_for("lai_modis_30s")
+    assert archive.filename == "lai_modis_30s.tar.bz2"
+    assert archive.archive_bytes == 749633975
+    assert archive.archive_sha256 == (
+        "b8188f06717767d5ed8898e5afb3a9b8b5ad46b888a530177f161ef3623acf75")
+    assert archive.required_by == ()
+    assert archive.optional_for == (geog_assets.GEOG_CONSUMER_WRF,)
+    assert archive.available_sources == ("ncar",)
+    assert parse_datasets("lai_modis_30s") == ("lai_modis_30s",)
+    assert "lai_modis_30s" not in parse_datasets("wrf")
+    assert "lai_modis_30s" not in geog_assets.MANDATORY_BUNDLE_DATASETS
+    assert archive_url(archive.filename, "ncar") == (
+        "https://www2.mmm.ucar.edu/wrf/src/wps_files/lai_modis_30s.tar.bz2")
+
+
 def test_explicit_bnu_soil_fetch_uses_ncar_and_records_both_archives(
         tmp_path, monkeypatch):
     from dataclasses import replace
@@ -285,21 +319,31 @@ def test_the_mesh_column_carries_every_dataset_the_mesh_door_opens():
     # is ARCHIVES, and one archive carries seven directories.  The two are
     # bound through the pin table's own child declarations, so a dataset
     # added to the engine's list without a mesh-scoped pin behind it is a
-    # tree doctor calls complete and the door then refuses.
-    from woof.rustwx_static import REQUIRED_GEOG_DATASETS, fetchable_for
+    # tree doctor calls complete and the door then refuses.  The scope is
+    # every dataset a mesh-door option reads: the native default and
+    # --legacy-static, whose with-lakes land use the static builder
+    # woof hex 0.4.0 ships also requires (2.9.1: scoped WRF-only, `woof
+    # fetch-geog --datasets mesh` staged an archive every hex point mesh
+    # refused).
+    from woof.rustwx_static import (
+        LEGACY_GEOG_DATASETS, REQUIRED_GEOG_DATASETS, fetchable_for)
 
     mesh_pins = set(geog_assets.datasets_required_by(
         geog_assets.GEOG_CONSUMER_MESH))
-    assert set(fetchable_for(REQUIRED_GEOG_DATASETS)) == mesh_pins
+    read = tuple(dict.fromkeys(REQUIRED_GEOG_DATASETS + LEGACY_GEOG_DATASETS))
+    assert set(fetchable_for(read)) == mesh_pins
     assert "soilgrids" in mesh_pins
+    assert "modis_landuse_20class_30s_with_lakes" in mesh_pins
 
 
-def test_the_soil_archive_is_required_by_the_mesh_door_only():
-    # The ruling: 13 GB unpacked is a sanctioned requirement for the mesh
-    # path, and invisible to a WRF-only install.
+def test_the_soil_archive_is_required_by_both_doors():
+    # 2026-10-21: the WRF builder's default soil categories are the
+    # SoilGrids tiles inside this archive (the FAO-based soiltype_*_30s are
+    # held out for their licence), so both doors require it.
     archive = geog_assets.archive_for("soilgrids")
-    assert archive.required_by == (geog_assets.GEOG_CONSUMER_MESH,)
-    assert "soilgrids" not in geog_assets.datasets_required_by(
+    assert archive.required_by == (geog_assets.GEOG_CONSUMER_WRF,
+                                   geog_assets.GEOG_CONSUMER_MESH)
+    assert "soilgrids" in geog_assets.datasets_required_by(
         geog_assets.GEOG_CONSUMER_WRF)
 
 
@@ -355,7 +399,10 @@ def test_the_mandatory_bundle_claims_only_what_was_walked():
     # --bundle serves the nine the 2026-07-29 walk found.  A pin added
     # later must not silently widen that claim, or --bundle extracts
     # nothing for it and reports success.
-    assert geog_assets.MANDATORY_BUNDLE_DATASETS == frozenset(GEOG_DATASETS)
+    assert geog_assets.MANDATORY_BUNDLE_DATASETS == frozenset((
+        "topo_gmted2010_30s", "modis_landuse_20class_30s_with_lakes",
+        "soiltype_top_30s", "soiltype_bot_30s", "greenfrac_fpar_modis",
+        "lai_modis_10m", "albedo_modis", "maxsnowalb_modis", "soiltemp_1deg"))
     assert "soilgrids" not in geog_assets.MANDATORY_BUNDLE_DATASETS
 
 
@@ -367,6 +414,13 @@ def test_single_dataset_pins_declare_no_children():
 
 def test_pins_are_real_digests_and_positive_sizes():
     for archive in geog_assets.GEOG_ARCHIVES:
+        if archive.producer:
+            # Built, not downloaded: no tarball to pin; the size quoted is
+            # the network read and the producer must exist.
+            assert archive.producer in geog_assets.GEOG_PRODUCERS
+            assert archive.filename == "" and archive.archive_sha256 == ""
+            assert archive.archive_bytes > 0 and archive.extracted_bytes > 0
+            continue
         assert len(archive.archive_sha256) == 64, archive.dataset
         int(archive.archive_sha256, 16)
         assert archive.archive_bytes > 0
@@ -396,7 +450,8 @@ def test_the_default_fetch_stages_the_soil_archive_too():
     sub = parser.add_subparsers(dest="cmd")
     geog_assets.register_cli(sub)
     args = parser.parse_args(["fetch-geog"])
-    assert parse_datasets(args.datasets) == geog_assets.geog_datasets()
+    assert parse_datasets(args.datasets) == tuple(
+        a.dataset for a in geog_assets.GEOG_ARCHIVES if a.fetch_by_default)
     assert "soilgrids" in parse_datasets(args.datasets)
 
 
@@ -404,15 +459,66 @@ def test_a_consumer_name_selects_that_doors_datasets():
     # The subset spelling for an operator who knows they only want WRF:
     # a consumer name off the table's own scoping column, not a per-door
     # flag.  `--datasets wrf` is the WRF-only escape from the 13 GB.
-    assert parse_datasets("wrf") == GEOG_DATASETS
-    assert "soilgrids" not in parse_datasets("wrf")
+    assert parse_datasets("wrf") == WRF_PINS
+    assert "soilgrids" in parse_datasets("wrf")
+    assert "soiltype_top_30s" not in parse_datasets("wrf")
     assert parse_datasets("mesh") == geog_assets.datasets_required_by(
         geog_assets.GEOG_CONSUMER_MESH)
-    # and it composes with explicit names, in canonical order
-    assert parse_datasets("wrf,soilgrids") == tuple(
-        archive.dataset for archive in geog_assets.GEOG_ARCHIVES if archive.required_by)
-    explicit = "wrf,soilgrids,lake_depth,bnu_soiltype_top,bnu_soiltype_bot"
-    assert parse_datasets(explicit) == geog_assets.geog_datasets()
+    # and it composes with explicit names and the other door, in canonical
+    # order (the mesh door's native static reads two land-use archives the
+    # WRF builder does not, so wrf plus the soil archive is no longer all)
+    assert parse_datasets("wrf,mesh") == tuple(
+        archive.dataset for archive in geog_assets.GEOG_ARCHIVES
+        if archive.required_by and archive.fetch_by_default)
+    assert parse_datasets("wrf,soilgrids") == WRF_PINS
+    explicit = ("wrf,mesh,lake_depth,orogwd3_10m,bnu_soiltype_top,"
+                "bnu_soiltype_bot,orogwd_10m,varsso_10m")
+    assert parse_datasets(explicit) == tuple(
+        a.dataset for a in geog_assets.GEOG_ARCHIVES if a.fetch_by_default)
+
+
+@pytest.mark.parametrize("dataset,size,digest,unpacked,children", [
+    ("orogwd_10m", 3332672,
+     "0e8c292c901e5148cb80849dc154d19cc885393658c5725741da597859777e5c",
+     46658851, 10),
+    ("orogwd3_10m", 14957055,
+     "0ffb24427670e4114a8a64dc7106c260152e35ad0f3176e1da4149ed9eb10c84",
+     93319204, 20),
+    ("varsso_10m", 783440,
+     "a2420ea9698a30afdb46a82a0c13961ca17603fb11a4e657c973cf2dff95c727",
+     6221332, 0),
+])
+def test_orographic_drag_pins_are_ncar_data_in_the_default_fetch(
+        dataset, size, digest, unpacked, children):
+    # WOOF Global's default suite (gwd_opt 3) reads orogwd_10m and
+    # orogwd3_10m; without these rows a bare `woof fetch-geog` left a
+    # fresh machine's default Global run refusing for want of them.
+    archive = geog_assets.archive_for(dataset)
+    assert archive.filename == f"{dataset}.tar.bz2"
+    assert (archive.archive_bytes, archive.archive_sha256,
+            archive.extracted_bytes) == (size, digest, unpacked)
+    assert len(archive.index_subdirs) == children
+    assert archive.required_by == ()
+    assert archive.optional_for == (geog_assets.GEOG_CONSUMER_WRF,)
+    assert archive.available_sources == ("ncar",)
+    assert not archive.in_mandatory_bundle
+    assert dataset in parse_datasets("all")
+    assert dataset not in parse_datasets("wrf")
+
+
+def test_the_orographic_children_are_the_static_builders_leaves():
+    # The child lists are the leaves woof/static/orographic.py opens
+    # under each dataset, so validation looks where the reader reads.
+    from woof.static import orographic
+
+    leaves: dict[str, set[str]] = {}
+    for row in orographic.OROGRAPHIC_ROWS.values():
+        top, _, leaf = row.rel_path["default"].partition("/")
+        leaves.setdefault(top, set()).add(leaf)
+    assert set(leaves) == {"orogwd_10m", "orogwd3_10m", "varsso_10m"}
+    for dataset, found in leaves.items():
+        expected = set(geog_assets.archive_for(dataset).index_subdirs) or {""}
+        assert found == expected, dataset
 
 
 def test_resolve_source_defaults_and_bundle_rules():
@@ -615,7 +721,7 @@ def test_fetch_prints_the_total_before_the_first_byte_moves(
         events.append("NETWORK")
         return inner(request)
 
-    fetch_geog(root=root, datasets=("alpha_ds", "beta_ds"), source="hf",
+    staged = fetch_geog(root=root, datasets=("alpha_ds", "beta_ds"), source="hf",
                progress=events.append, urlopen_fn=transport)
 
     totals = [line for line in events
@@ -628,60 +734,27 @@ def test_fetch_prints_the_total_before_the_first_byte_moves(
     assert "~4.0 KiB" in total                  # extracted_bytes pin (4096)
     # Printed before the first byte moved.
     assert events.index(total) < events.index("NETWORK")
+    assert staged == 1
 
 
-def test_fetch_skips_already_valid_datasets_without_network(
-        tmp_path, monkeypatch):
-    payload = _build_archive(("alpha_ds",))
-    monkeypatch.setattr(geog_assets, "GEOG_ARCHIVES",
-                        (_pin("alpha_ds", payload),))
-    root = tmp_path / "WPS_GEOG"
-    staged_dir = root / "alpha_ds"
-    staged_dir.mkdir(parents=True)
-    (staged_dir / "index").write_text(_INDEX_TEXT)
-
-    staged = fetch_geog(root=root, datasets=("alpha_ds",), source="hf",
-                        progress=lambda *_: None,
-                        urlopen_fn=_refusing_transport())
-    assert staged == 0
-
-
+@pytest.mark.parametrize("honor_range", [True, False], ids=["resume", "restart"])
 def test_fetch_resumes_a_partial_download_with_a_range_request(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, honor_range):
     payload = _build_archive(("alpha_ds",))
     monkeypatch.setattr(geog_assets, "GEOG_ARCHIVES",
                         (_pin("alpha_ds", payload),))
-    transport = _fake_transport({"alpha_ds.tar.bz2": payload})
+    transport = _fake_transport({"alpha_ds.tar.bz2": payload}, honor_range=honor_range)
     root = tmp_path / "WPS_GEOG"
     partial = root / geog_assets.ARCHIVE_SUBDIR / "alpha_ds.tar.bz2"
     partial.parent.mkdir(parents=True)
-    partial.write_bytes(payload[:100])
+    partial.write_bytes(payload[:100] if honor_range else b"garbage-prefix")
 
     staged = fetch_geog(root=root, datasets=("alpha_ds",), source="hf",
                         progress=lambda *_: None, urlopen_fn=transport)
 
     assert staged == 1
     (request,) = transport.calls
-    assert request.headers.get("Range") == "bytes=100-"
-    ok, _ = validate_dataset_dir(root, "alpha_ds")
-    assert ok
-
-
-def test_fetch_restarts_cleanly_when_the_server_ignores_range(
-        tmp_path, monkeypatch):
-    payload = _build_archive(("alpha_ds",))
-    monkeypatch.setattr(geog_assets, "GEOG_ARCHIVES",
-                        (_pin("alpha_ds", payload),))
-    transport = _fake_transport({"alpha_ds.tar.bz2": payload},
-                                honor_range=False)
-    root = tmp_path / "WPS_GEOG"
-    partial = root / geog_assets.ARCHIVE_SUBDIR / "alpha_ds.tar.bz2"
-    partial.parent.mkdir(parents=True)
-    partial.write_bytes(b"garbage-prefix")
-
-    staged = fetch_geog(root=root, datasets=("alpha_ds",), source="hf",
-                        progress=lambda *_: None, urlopen_fn=transport)
-    assert staged == 1
+    assert request.headers.get("Range") == f"bytes={100 if honor_range else len(b'garbage-prefix')}-"
     ok, _ = validate_dataset_dir(root, "alpha_ds")
     assert ok
 
@@ -1264,7 +1337,7 @@ def test_cli_list_mode_runs_offline_through_dispatch(tmp_path, capsys):
     out = capsys.readouterr().out
     assert code == 0
     assert "fetch-geog: total" in out
-    for dataset in GEOG_DATASETS:
+    for dataset in WRF_PINS:
         assert dataset in out
 
 
@@ -1317,6 +1390,47 @@ def test_list_totals_only_the_datasets_still_needed(tmp_path, capsys):
     assert (f"fetch-geog: total {archive.archive_bytes / 1024 ** 3:.2f} GiB "
             "download") in out
     assert f"for the 1 of {len(datasets)} dataset(s) still needed" in out
+
+
+@pytest.mark.parametrize("extra", [
+    ["--datasets", "mesh"],
+    ["--datasets", "mesh", "--source", "ncar"],
+    ["--source", "ncar", "--bundle"],
+    ["--datasets", "all", "--keep-archives"],
+    ["--static-source", "hrrr-conus-v4"],
+])
+def test_explain_prints_the_plan_and_touches_nothing(
+        tmp_path, monkeypatch, capsys, extra):
+    """Hex global run, 2026-10-16: `woof fetch-geog --explain` started a
+    13 GB download.  --explain is print-only on every path: exit 0, the plan
+    on stdout, no network and no writes."""
+    import socket
+
+    from woof.cli import main
+    from woof.static import external_source
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("--explain reached the network or the fetcher")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(geog_assets, "fetch_geog", refuse)
+    monkeypatch.setattr(geog_assets, "download_archive", refuse)
+    monkeypatch.setattr(geog_assets, "_rw_asset", refuse)
+    monkeypatch.setattr(external_source, "fetch_static_source", refuse)
+    root = tmp_path / "geog"
+    assert main(["fetch-geog", "--explain", "--root", str(root), *extra]) == 0
+    out = capsys.readouterr().out
+    assert not root.exists()
+    if "--static-source" in extra:
+        assert "would stage static source hrrr-conus-v4" in out
+    else:
+        assert "nothing was downloaded or written" in out
+    if extra[:2] == ["--datasets", "mesh"]:
+        # The two native land-use pins the hex static opens, with the
+        # host the fetch will really use (they are not on the mirror).
+        for name in ("modis_landuse_20class_30s", "landuse_30s"):
+            assert f"  needed  {name}: " in out
+            assert f"wps_files/{name}.tar.bz2" in out
 
 
 def test_cli_refuses_unknown_dataset_as_a_usage_error(tmp_path, capsys):
@@ -1418,12 +1532,78 @@ def test_the_mirror_publisher_knows_every_pinned_archive():
     snapshot.
     """
     tool = _publish_tool()
-    missing = [a.dataset for a in geog_assets.GEOG_ARCHIVES
-               if a.dataset not in tool._PROVENANCE]
+    # The mirror carries downloaded tarballs without a licence hold; a
+    # produced dataset has no tarball, and a held pin (FAO-UNESCO soil,
+    # ISLSCP-I soiltemp_1deg) is never republished.
+    mirrored = [a for a in geog_assets.GEOG_ARCHIVES
+                if a.producer is None and not a.licence_hold]
+    assert tool.GEOG_ARCHIVES == tuple(mirrored)
+    missing = [a.dataset for a in mirrored if a.dataset not in tool._PROVENANCE]
     assert missing == [], f"publisher has no provenance row for {missing}"
     stale = sorted(set(tool._PROVENANCE) - {a.dataset for a in geog_assets.GEOG_ARCHIVES})
     assert stale == [], f"publisher carries provenance for unpinned {stale}"
     readme = tool._readme_text()
-    for archive in geog_assets.GEOG_ARCHIVES:
+    for archive in mirrored:
         assert f"`{archive.filename}` | {archive.archive_bytes:,} | `{archive.archive_sha256}`" in readme
         assert f"| `{archive.dataset}` |" in readme
+    for name in ("soiltype_top_30s", "soiltype_bot_30s", "soiltemp_1deg",
+                 "soiltemp_era5_1deg"):
+        assert f"`{name}.tar.bz2`" not in readme
+
+
+def test_every_dataset_the_native_mpas_static_path_reads_is_pinned():
+    """The native static path is table work on both sides: the crate's
+    option table names a WPS_GEOG directory for every native selector, and
+    each must be a pin `woof fetch-geog` can stage through rw_fetch.
+
+    The breakage this prevents: a native selector (or the native default:
+    ``landuse_30s`` for the GWD statistics, ``modis_landuse_20class_30s``
+    for MODIFIED_IGBP_MODIS_NOAH) naming a directory no pin stages, so a
+    native static on a clean install stops at "WPS_GEOG index ... is
+    unreadable" with no fetch that could fix it.
+    """
+    import re
+    crate = Path(__file__).resolve().parents[1] / "tools/rustwx/crates/rw-mpas/src"
+    builder = (crate / "static_builder.rs").read_text(encoding="utf-8")
+    table = builder[builder.index("pub const MPAS_STATIC_SOURCE_TABLE"):]
+    table = table[:table.index("];")]
+    native = set(re.findall(r'\(\s*"[a-z-]+"\s*,\s*"[A-Za-z0-9_]+"\s*,\s*"([a-z0-9_]+)"\s*\)', table))
+    defaults = builder[builder.index("pub const GEOG_DATASET_TABLE"):]
+    defaults = defaults[:defaults.index("];")]
+    native |= set(re.findall(r'\(\s*"[a-z_0-9]+"\s*,\s*"([a-z0-9_]+)"\s*\)', defaults))
+    gwd = (crate / "native_gwd.rs").read_text(encoding="utf-8")
+    native |= set(re.findall(r'\(\s*"(?:GTOPO30|GMTED2010)"\s*,\s*"([a-z0-9_]+)"', gwd))
+    native |= set(re.findall(r'root\.join\("([a-z0-9_]+)"\)', gwd))
+    assert {"landuse_30s", "modis_landuse_20class_30s", "topo_30s",
+            "topo_gmted2010_30s"} <= native, native
+    pinned = set(geog_assets.geog_datasets())
+    for archive in geog_assets.GEOG_ARCHIVES:
+        pinned.update(archive.index_subdirs)
+    assert sorted(native - pinned) == []
+    for name in ("landuse_30s", "modis_landuse_20class_30s"):
+        archive = geog_assets.archive_for(name)
+        assert geog_assets.GEOG_CONSUMER_MESH in archive.required_by, name
+        assert archive.available_sources == ("ncar",) and not archive.in_mandatory_bundle
+    for name in ("topo_30s", "modis_landuse_20class_15s", "greenfrac",
+                 "albedo_ncep", "maxsnowalb"):
+        archive = geog_assets.archive_for(name)
+        assert archive.required_by == () and geog_assets.GEOG_CONSUMER_MESH in archive.optional_for
+        assert not archive.fetch_by_default, f"{name} would join the default fetch bill"
+        assert archive.download_source == "ncar" and archive.available_sources == ("ncar",)
+        assert not archive.in_mandatory_bundle
+
+
+def test_fetch_skips_already_valid_datasets_without_network(
+        tmp_path, monkeypatch):
+    payload = _build_archive(("alpha_ds",))
+    monkeypatch.setattr(geog_assets, "GEOG_ARCHIVES",
+                        (_pin("alpha_ds", payload),))
+    root = tmp_path / "WPS_GEOG"
+    staged_dir = root / "alpha_ds"
+    staged_dir.mkdir(parents=True)
+    (staged_dir / "index").write_text(_INDEX_TEXT)
+
+    staged = fetch_geog(root=root, datasets=("alpha_ds",), source="hf",
+                        progress=lambda *_: None,
+                        urlopen_fn=_refusing_transport())
+    assert staged == 0

@@ -554,6 +554,10 @@ def refusal(door: str, requirement: Requirement, *,
     action = (f"{door}: this command needs "
               f"{requirement.label}, which this install does not have.\n"
               f"  What needs it: {requirement.unlocks}.\n")
+    if requirement == GPU_RUNTIME:
+        from woof.forecast_gpu import ForecastGPURequired
+
+        action += f"  {ForecastGPURequired('CuPy is not installed')}\n"
     if before:
         action += f"  {before}\n"
     if requirement is GPU_RUNTIME and apple_silicon():
@@ -647,6 +651,7 @@ COMMAND_REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     # deep inside the runner instead of at the front door -- the exact
     # failure this table was added to close, re-opened by a new door.
     "sim": (GPU_RUNTIME,),
+    "fire-ideal": (GPU_RUNTIME,),
     "verify": (GPU_RUNTIME,),
     # Each of these integrates the model only through CUDA, so without a
     # row a Mac failed at a CuPy import after writing its run directory
@@ -671,6 +676,8 @@ _BEFORE = {
                "spawned."),
     "sim": ("Refusing here, before the prepared tree is opened and its "
             "identity recomputed."),
+    "fire-ideal": ("Refusing here, before the native sounding and ideal "
+                   "fire state are initialized on the card."),
     "verify": "Refusing here, before the case allocates anything.",
     "branch": "Refusing here, before the branched run directory is written.",
     "downscale": ("Refusing here, before the parent archive is read and "
@@ -690,6 +697,16 @@ def require_for_command(command: str) -> None:
     if not requirements:
         return
     require(f"woof {command}", *requirements, before=_BEFORE.get(command))
+    # The opt-out preserves host orchestration and declared-runtime checks;
+    # it is not evidence that an installed CuPy is absent or broken. Device
+    # allocation and step still refuse before any CUDA contact under it.
+    from woof.local_gpu import no_local_gpu
+
+    if (not no_local_gpu()
+            and command in ("run", "go", "sim", "resume", "ensemble", "fire-ideal")):
+        from woof.forecast_gpu import require_forecast_gpu
+
+        require_forecast_gpu()
 
 
 def unmet_run_requirements(backend: str = "cuda") -> tuple[Requirement, ...]:

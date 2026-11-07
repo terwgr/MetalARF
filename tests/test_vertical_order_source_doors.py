@@ -23,7 +23,15 @@ def test_explicit_order3_keeps_exact_current_staging_importer_bytes(tmp_path):
         extra_dynamics=" v_sca_adv_order = 3, 3,\n v_mom_adv_order = 3, 3,\n")
     omitted, _ = _import_with(tmp_path)
     assert explicit == omitted
-    assert hashlib.sha256(explicit.encode()).hexdigest() == baseline["explicit_order3"]
+    from wrf_clock_lines import WRF_CLOCK_BLOCK, without_wrf_clock_lines
+    assert WRF_CLOCK_BLOCK in explicit
+    # Pinned before 2026-10-12: the input now asks for Morrison by its own
+    # number (55 is refused) and the omitted lid is WRF's open top; with
+    # exactly those two lines put back the parent's hash holds.
+    from ishmael_retirement import with_retired_line
+    assert hashlib.sha256(with_retired_line(
+        without_wrf_clock_lines(explicit)).encode()
+                          ).hexdigest() == baseline["explicit_order3"]
 
 
 def test_root_recipe_defaults_preserve_explicit_shared_root_and_nest_choices():

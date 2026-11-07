@@ -6,10 +6,8 @@ member forecast driver is retained or advanced by this executor.
 """
 from __future__ import annotations
 
-from datetime import timedelta
 from dataclasses import asdict
 import math
-import time
 import numpy as np
 
 
@@ -62,7 +60,7 @@ class PreparedRealEnsemble:
             start_time=exp.start_time,landuse=bundle.landuse,cam_ozone=cam,
             column_chunk=exp.column_chunk,trace_gas_overrides=trace,
             constant_glw_wm2=declared_constant_glw(exp),fractional_seaice=bundle.fractional_seaice,
-            available_bytes=free())
+            available_bytes=free(),hydro_parent_geometry=grid)
         initializer_receipt = None
         if member_initializer is not None:
             initializer_receipt = member_initializer(state=batch,cfg=cfg,
@@ -79,6 +77,9 @@ class PreparedRealEnsemble:
         self.final_stability = None
 
     def step(self):
+        exchange = getattr(self, '_device_exchange', None)
+        if exchange is not None:
+            exchange.require_forecast_ready()
         clock = self.clock
         if clock.at_stop_time:
             raise ValueError('ensemble clock reached its declared stop time')
@@ -95,6 +96,17 @@ class PreparedRealEnsemble:
         clock.advance()
         self.batch.elapsed_seconds = clock.elapsed_seconds
         self.batch.clock['dtbc_fp32'] = clock.dtbc_fp32
+
+    def device_exchange(self, *, writable_fields):
+        """Borrow this retained batch between steps, keeping its prepared graph."""
+        from woof.ensemble.device_exchange import cuda_exchange
+        exchange = getattr(self, '_device_exchange', None)
+        if exchange is None:
+            exchange = cuda_exchange(self.batch, writable_fields=writable_fields)
+            self._device_exchange = exchange
+        elif exchange.writable != frozenset(writable_fields):
+            raise ValueError('cannot change writable field ownership on a live exchange')
+        return exchange
 
     def receipt(self):
         import cupy as cp
@@ -117,65 +129,3 @@ class PreparedRealEnsemble:
             return None
         from woof.core.refl import consume_refl_10cm
         return consume_refl_10cm(self.physics.state)
-
-
-def run_real_ensemble(*,inputs,members,output_directory,run_seconds,member_initializer,
-                      member_seeds,capture_initial_words,renderer,history_interval_seconds):
-    import cupy as cp
-    from pathlib import Path
-    from woof.ensemble.batch_product_output import PreparedEnsembleOutput
-    started = time.perf_counter()
-    if inputs.experiment.run_seconds != run_seconds or inputs.experiment.root.history_interval_s != history_interval_seconds:
-        raise ValueError('benchmark window or output cadence differs from the prepared clock authority')
-    runtime = PreparedRealEnsemble(inputs,members=members,member_seeds=member_seeds,
-                                   member_initializer=member_initializer)
-    initialized = time.perf_counter()
-    out = Path(output_directory)
-    out.mkdir(parents=True,exist_ok=False)
-    cfg,physics,clock = runtime.cfg,runtime.physics,runtime.clock
-    fields = physics.driver.fields
-    shape = (members,cfg.ny,cfg.nx)
-    latitude,longitude=inputs.grids[0].latlon_mass()
-    diagnostics = PreparedEnsembleOutput(u10=fields['u10'].reshape(shape),v10=fields['v10'].reshape(shape),
-        temperature2=fields['t2'].reshape(shape),rainnc=physics.driver.microphysics.rainnc.reshape(shape),
-        rainc=physics.driver.rainc.reshape(shape) if physics.driver.rainc is not None else None,
-        rainsh=fields.get('rainsh').reshape(shape) if fields.get('rainsh') is not None else None,
-        latitude=latitude,longitude=longitude,
-        members=members,available_bytes=int(cp.cuda.runtime.memGetInfo()[0])-(512<<20))
-    diagnostics.capture_initial_rain()
-    initial_words=[]
-    validation_seconds=0.
-    if capture_initial_words:
-        import hashlib
-        from woof.core.device_inventory import state_array_shapes
-        begin=time.perf_counter()
-        for member in range(members):
-            digest=hashlib.sha256()
-            for name in sorted(state_array_shapes(cfg)):
-                a=runtime.batch.member_view(name,member).get()
-                digest.update(name.encode());digest.update(a.dtype.str.encode());digest.update(str(a.shape).encode());digest.update(a.tobytes())
-            initial_words.append({'sha256':digest.hexdigest()})
-        validation_seconds=time.perf_counter()-begin
-    def frame():
-        valid=inputs.experiment.start_time+timedelta(seconds=clock.elapsed_seconds)
-        stamp=valid.strftime('%Y-%m-%d_%H-%M-%S')
-        runtime.consume_output_diagnostics()
-        diagnostics(path=out/f'products_{stamp}.nc',valid_time=valid.isoformat()+'Z',
-                    maps_directory=out/'maps',renderer=renderer)
-    while not clock.at_stop_time:
-        if clock.history_due():
-            frame()
-        runtime.step()
-    runtime.final_health = runtime.validator.require_healthy(phase='final')
-    runtime.final_stability = runtime.stability()
-    if clock.history_due():
-        frame()
-    cp.cuda.get_current_stream().synchronize()
-    elapsed=time.perf_counter()-started
-    if list(out.rglob('wrfout*')):
-        raise RuntimeError('aggregate-only ensemble unexpectedly wrote member histories')
-    return {'execution_mode':'true_member_batched','wall_seconds':elapsed,
-            'initialization_seconds':initialized-started,'validation_transfer_seconds':validation_seconds,
-            'initial_words':initial_words,'runtime':runtime.receipt(),
-            'output':diagnostics.receipt(hash_artifacts=False),'member_history_count':0,
-            'timing_scope':'backend entry through every finished Rust probability map; shared source preparation belongs to caller'}

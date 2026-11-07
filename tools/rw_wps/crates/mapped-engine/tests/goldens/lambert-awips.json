@@ -1175,7 +1175,7 @@
     }
   ],
   "libm_relative_tolerance": 1e-12,
-  "mapping": "gpuwm/authorities/rw-wps-rap-awip32-grib2.mapping.json",
+  "mapping": "woof/authorities/rw-wps-rap-awip32-grib2.mapping.json",
   "mapping_sha256": "5bc58e43b2cb997c2946aa28b2211ffca0a778c5543642c45dda919a94158de0",
   "materialization": {
     "frame_count": 3,

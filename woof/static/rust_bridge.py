@@ -47,6 +47,7 @@ STATIC_PYTHON_ENV: Final[str] = "WOOF_STATIC_PYTHON"
 #: answers the version probe but predates portable sampling cannot
 #: rebuild a prepared moving footprint with identical terrain and climatologies.
 ABI_MARKER: Final[bytes] = b"gpuwm_static_sampling_portable_v1"
+EXTRA_ABI_MARKER: Final[bytes] = b"gpuwm_static_extra_continuous_v1"
 
 #: Stagger codes (`types::Stagger` in the crate).
 STAGGER_MASS: Final[int] = 0
@@ -72,6 +73,50 @@ class StaticBridgeError(RuntimeError):
 #: process (fixed-means-default: a fallback run is a workaround and must
 #: say so, once per operation, never silently and never on every call).
 _REPORTED_FALLBACKS: set[str] = set()
+
+
+def global_source_donors(values, *, period, first, out_nx,
+                         south=0, north=0, vector=False):
+    """Select a global ring and its pole donors in parallel Rust code."""
+    source = np.ascontiguousarray(values, dtype=np.float64)
+    ny, nx = source.shape[-2:]
+    result = np.empty((*source.shape[:-2], ny + south + north, out_nx),
+                      dtype=np.float64)
+    library = load()
+    try:
+        select = library.gpuwm_static_global_donors_f64
+    except AttributeError:
+        raise StaticBridgeError(
+            "Rust static-fields lacks periodic pole donors; rebuild with "
+            + _checkout_build_command()) from None
+    pointer = ctypes.POINTER(ctypes.c_double)
+    select.argtypes = [pointer, pointer] + [ctypes.c_size_t] * 4 + [
+        ctypes.c_int64, ctypes.c_size_t, ctypes.c_size_t,
+        ctypes.c_size_t, ctypes.c_int32]
+    select.restype = ctypes.c_int32
+    code = select(source.ctypes.data_as(pointer), result.ctypes.data_as(pointer),
+                  source.size // (ny * nx), ny, nx, period,
+                  first, out_nx, south, north, int(vector))
+    _check(library, code, "Rust global pole donor selection")
+    return result
+
+
+def floor_ruc_layer_moisture(values):
+    """Copy and floor f32 RUC values through the Rust initialization seam."""
+    result = np.array(values, dtype=np.float32, order="C", copy=True)
+    library = load()
+    try:
+        floor = library.gpuwm_static_ruc_layer_moisture_floor
+    except AttributeError:
+        raise StaticBridgeError(
+            "Rust static-fields lacks the RUC layer moisture floor; an old bridge "
+            "would leave negative extrapolated SMOIS for cold start. Rebuild with "
+            + _checkout_build_command()) from None
+    floor.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_size_t]
+    floor.restype = ctypes.c_int32
+    if floor(result.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), result.size) != 0:
+        raise StaticBridgeError("Rust RUC layer moisture floor refused its array")
+    return result
 
 
 def route(operation: str):
@@ -288,6 +333,11 @@ def _bind_entry_points(library: ctypes.CDLL, *, u8p, u64p, f64p, size) -> None:
     library.gpuwm_static_grid_array.argtypes = [
         ctypes.c_uint64, ctypes.c_uint32, ctypes.c_uint32, f64p, size]
     library.gpuwm_static_grid_array.restype = ctypes.c_int32
+    # Additive ABI: older libraries retain their original native calls.
+    if hasattr(library, "gpuwm_static_grid_arrays"):
+        library.gpuwm_static_grid_arrays.argtypes = [
+            ctypes.c_uint64, ctypes.c_uint32, ctypes.c_uint32, f64p, size]
+        library.gpuwm_static_grid_arrays.restype = ctypes.c_int32
     library.gpuwm_static_grid_transform.argtypes = [
         ctypes.c_uint64, ctypes.c_uint32, f64p, f64p, size]
     library.gpuwm_static_grid_transform.restype = ctypes.c_int32
@@ -413,6 +463,103 @@ def grid_array(handle: int, stagger: int, kind: int,
     return out
 
 
+
+def grid_arrays(handle: int, stagger: int, kinds: tuple[int, ...],
+                ny: int, nx: int) -> tuple[np.ndarray, ...]:
+    """Read distinct derived fields with one native coordinate pass."""
+    library = load()
+    function = getattr(library, "gpuwm_static_grid_arrays", None)
+    if (function is None or len(set(kinds)) != len(kinds)
+            or any(kind < 0 or kind > 6 for kind in kinds)):
+        if function is None and "derived array batch" not in _REPORTED_FALLBACKS:
+            _REPORTED_FALLBACKS.add("derived array batch")
+            print("static geometry: library lacks derived-array batching; "
+                  "using the existing native array calls", file=sys.stderr)
+        return tuple(grid_array(handle, stagger, kind, ny, nx) for kind in kinds)
+    if not kinds:
+        return ()
+    ordered = sorted(kinds)
+    out = np.empty((len(ordered), int(ny), int(nx)), dtype=np.float64)
+    _check(library, function(
+        ctypes.c_uint64(handle), ctypes.c_uint32(stagger),
+        ctypes.c_uint32(sum(1 << kind for kind in ordered)),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), out.size),
+        f"grid_arrays[{stagger},{kinds}]")
+    arrays = dict(zip(ordered, out))
+    return tuple(arrays[kind] for kind in kinds)
+
+
+def wrf_cell_geometry(dx, dy, msftx=None, msfty=None, *, shape=None):
+    """Source-REAL WRF cell area and distance, computed in Rust once."""
+    library = load()
+    try:
+        function = library.gpuwm_static_wrf_cell_geometry
+    except AttributeError as error:
+        raise StaticBridgeError("native WRF history cell geometry requires the rebuilt static-fields bridge") from error
+    pointer = ctypes.POINTER(ctypes.c_float)
+    function.argtypes = [ctypes.c_float, ctypes.c_float, pointer, pointer,
+                         pointer, pointer, ctypes.c_size_t]
+    function.restype = ctypes.c_int
+    if shape is None:
+        x, y = np.asarray(msftx), np.asarray(msfty)
+        if x.shape != y.shape or x.ndim != 2:
+            raise ValueError("WRF cell geometry needs a horizontal shape")
+        shape = x.shape
+    if len(shape) != 2 or any(int(n) <= 0 for n in shape):
+        raise ValueError("WRF cell geometry needs a positive horizontal shape")
+    area = np.empty(tuple(map(int, shape)), np.float32)
+    distance = np.empty_like(area)
+    _check(library, function(float(dx), float(dy),
+           None, None, area.ctypes.data_as(pointer), distance.ctypes.data_as(pointer), area.size),
+           "wrf_cell_geometry")
+    return area, distance
+
+
+def wrf_noah_snow_albedo(max_alb, ivgtyp):
+    """Native Noah LSMINIT table replacement, seeded from Rust REAL4."""
+    library = load()
+    try:
+        function = library.gpuwm_static_wrf_noah_snow_albedo
+    except AttributeError as error:
+        raise StaticBridgeError("native Noah LSMINIT requires the rebuilt static-fields bridge") from error
+    pointer = ctypes.POINTER(ctypes.c_float)
+    index_pointer = ctypes.POINTER(ctypes.c_int32)
+    function.argtypes = [pointer, ctypes.c_size_t, index_pointer, pointer, ctypes.c_size_t]
+    function.restype = ctypes.c_int
+    table = np.ascontiguousarray(max_alb, dtype=np.float32)
+    indices = np.ascontiguousarray(ivgtyp, dtype=np.int32)
+    if table.ndim != 1 or indices.ndim != 2:
+        raise ValueError("native Noah snow albedo needs a category table and horizontal indices")
+    output = np.empty(indices.shape, np.float32)
+    _check(library, function(table.ctypes.data_as(pointer), table.size,
+           indices.ctypes.data_as(index_pointer), output.ctypes.data_as(pointer), output.size),
+           "wrf_noah_snow_albedo")
+    return output
+
+
+def grid_hydrofabric_json(handle: int) -> str:
+    """Setup-only projected mass-grid metadata from the executed native handle."""
+    library = load()
+    try:
+        entry = library.gpuwm_static_grid_hydrofabric_json
+    except AttributeError:
+        raise StaticBridgeError(
+            "Rust static-fields lacks the hydrofabric projected-grid export; "
+            "rebuild with " + _checkout_build_command()) from None
+    entry.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_size_t]
+    entry.restype = ctypes.c_int64
+    length = int(entry(ctypes.c_uint64(handle), None, 0))
+    if length < 0:
+        raise StaticBridgeError(f"grid_hydrofabric_json: {last_error(library)}")
+    buffer = (ctypes.c_uint8 * length)()
+    written = int(entry(ctypes.c_uint64(handle), buffer, length))
+    if written != length:
+        raise StaticBridgeError(
+            f"grid_hydrofabric_json rendered {written} bytes on a {length}-byte probe: "
+            + last_error(library))
+    return bytes(buffer).decode("utf-8")
+
+
 def grid_identity_probes_json(handle: int) -> str:
     """The corridor identity-probe JSON document for a grid handle."""
     library = load()
@@ -511,6 +658,82 @@ def build_orographic(grid_handle: int, request: dict,
                  ctypes.c_uint32(halo_code), ctypes.byref(handle)),
            "build_orographic")
     return int(handle.value)
+
+def require_extra_fields(library=None):
+    """Bind the optional contract without changing native library loading."""
+    library = load() if library is None else library
+    try:
+        marker = getattr(library, EXTRA_ABI_MARKER.decode("ascii"))
+        function = library.gpuwm_static_build_extra_fields
+    except AttributeError as error:
+        raise StaticBridgeError(
+            "this Rust library cannot build extra static fields; rebuild "
+            "static-fields and set WOOF_STATIC_BRIDGE to that library. "
+            + _checkout_build_command()) from error
+    marker.argtypes = []
+    marker.restype = ctypes.c_uint32
+    if marker() != 1:
+        raise StaticBridgeError("unsupported extra static fields contract; rebuild static-fields")
+    function.argtypes = [ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8),
+                         ctypes.c_size_t, ctypes.c_uint32,
+                         ctypes.POINTER(ctypes.c_uint64)]
+    function.restype = ctypes.c_int32
+    return library
+
+
+def scalar_reference_asin_f32(values) -> np.ndarray:
+    """Evaluate ASIN with the qualified native binary32 intrinsic contract.
+
+    The optional entry point leaves ordinary static loading unchanged. Three
+    scalar word probes distinguish the required rounding from a native runtime
+    that would change terrain fluxes or radiation-call solar declination.
+    """
+    library = load()
+    try:
+        entry = library.gpuwm_static_scalar_asin_f32
+    except AttributeError:
+        raise StaticBridgeError(
+            "the static-fields bridge lacks the strict scalar ASIN contract; "
+            "SLP_AZI and SWNORM before Noah, or solar COSZEN, would differ. Rebuild "
+            "static-fields from this checkout: " + _checkout_build_command()) from None
+    f32p = ctypes.POINTER(ctypes.c_float)
+    entry.argtypes = [f32p, f32p, ctypes.c_size_t]
+    entry.restype = ctypes.c_int32
+
+    def evaluate(array):
+        result = np.empty_like(array)
+        _check(library, entry(array.ctypes.data_as(f32p), result.ctypes.data_as(f32p),
+                              ctypes.c_size_t(array.size)), "scalar terrain rotation")
+        return result
+
+    probes = np.array([0xbd137442, 0xbd222103, 0xbd289002], dtype=np.uint32).view(np.float32)
+    expected = np.array([0xbd137c6b, 0xbd222bdc, 0xbd289c33], dtype=np.uint32)
+    if not np.array_equal(evaluate(probes).view(np.uint32), expected):
+        raise StaticBridgeError(
+            "this native scalar rounding changes SLP_AZI and SWNORM before "
+            "Noah, or solar COSZEN; it cannot match the scalar reference")
+    return evaluate(np.ascontiguousarray(values, dtype=np.float32))
+
+
+def scalar_rotation_asin_f32(values) -> np.ndarray:
+    """Retain the terrain caller while sharing its native scalar contract."""
+    return scalar_reference_asin_f32(values)
+
+
+def build_extra_fields(grid_handle: int, specs: list[dict],
+                       halo: int | None = None) -> dict[str, np.ndarray]:
+    """Build only the supplied rows, returning native float64 arrays."""
+    library = require_extra_fields()
+    buffer, length = _utf8(json.dumps(specs, allow_nan=False))
+    handle = ctypes.c_uint64(0)
+    _check(library, library.gpuwm_static_build_extra_fields(
+        ctypes.c_uint64(grid_handle), buffer, length,
+        ctypes.c_uint32(0xFFFFFFFF if halo is None else int(halo)),
+        ctypes.byref(handle)), "build_extra_fields")
+    try:
+        return fieldset_to_dict(handle.value)
+    finally:
+        fieldset_free(handle.value)
 
 
 def fieldset_to_dict(handle: int) -> dict[str, np.ndarray]:

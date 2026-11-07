@@ -1,30 +1,30 @@
-//! GDEX (NSF NCAR GDEX / THREDDS) data-source core: Stage 1a plumbing.
+//! GDEX (NSF NCAR GDEX / THREDDS) data-source core — Stage 1a plumbing.
 //!
 //! GDEX's web "Data Access" pages are a UI over a THREDDS Data Server (TDS).
 //! The machine API is the TDS catalog: every `catalog.html` has a
 //! `catalog.xml` twin. This module provides the tested, UI-free plumbing:
 //!
-//! 1. **Catalog crawl**: recursively fetch `catalog.xml`
+//! 1. **Catalog crawl** — recursively fetch `catalog.xml`
 //!    ([`fetch_and_parse_catalog`] for one level; [`crawl_dataset`] for a full,
 //!    disk-cached crawl). `<catalogRef xlink:href>` = subdir (resolved relative
 //!    and recursed), `<dataset urlPath>` = a leaf file (kept when the urlPath
 //!    ends with a data extension, dropping the stray scan `dump`).
-//! 2. **NCSS metadata + subset URL**: [`fetch_ncss_dataset`] parses the grid
+//! 2. **NCSS metadata + subset URL** — [`fetch_ncss_dataset`] parses the grid
 //!    `dataset.xml` (variables, lat/lon box, time span); [`ncss_subset_url`]
-//!    builds a subset request. NCSS grid rejects `accept=netcdf4` (HTTP 400):
+//!    builds a subset request. NCSS grid rejects `accept=netcdf4` (HTTP 400) —
 //!    this module always requests `accept=netcdf` (classic NetCDF-3, which
 //!    `netcrust` reads).
-//! 3. **Resumable download**: [`download_to_path`] streams a URL to a
+//! 3. **Resumable download** — [`download_to_path`] streams a URL to a
 //!    `.download` temp with HTTP `Range` resume, verifies the final size, and
 //!    atomically renames. Local paths sanitize `:` -> `_` (the leaf filenames
 //!    carry `:` which is illegal on NTFS).
-//! 4. **GDEX-strength retry**: the server 503s and returns empty 200 bodies
+//! 4. **GDEX-strength retry** — the server 503s and returns empty 200 bodies
 //!    under load; every catalog / NCSS / download-start request retries 5xx and
 //!    empty bodies with backoff.
 //!
 //! ## Ingest handoff (Stage 1b seam)
 //!
-//! This module lives in `data_source`, which `app_ui` depends on, so it must
+//! This module lives in `data_source`, which `app_ui` depends on — so it must
 //! not reach back into `app_ui` (that would be a dependency cycle). The
 //! download therefore stops at returning a local path
 //! ([`DownloadOutcome::path`]). Stage 1b, inside `app_ui`, feeds that path to
@@ -63,7 +63,7 @@ const NCSS_GRID_BASE: &str = "https://tds.gdex.ucar.edu/thredds/ncss/grid/";
 /// Leaf extensions kept by the crawl (drops the scan-root `dump` entry).
 const DATA_EXTENSIONS: &[&str] = &[".nc", ".grb", ".grib", ".grb2"];
 
-/// Crawl concurrency cap: the server is flaky; be polite (doc §5).
+/// Crawl concurrency cap — the server is flaky; be polite (doc §5).
 const GDEX_CRAWL_CONCURRENCY: usize = 4;
 
 /// Backoff schedule for the GDEX retry wrapper. `len + 1` total attempts (6):
@@ -203,18 +203,18 @@ pub struct DownloadOutcome {
 // ---------------------------------------------------------------------------
 
 /// One GDEX dataset the in-app browser can open. The registry is the single
-/// source of truth for dataset ids and their user-facing text: the browser's
+/// source of truth for dataset ids and their user-facing text — the browser's
 /// picker rows, tree-root label, and attribution header all render from here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GdexDataset {
-    /// GDEX/RDA dataset id (e.g. `d612005`): the THREDDS scan root lives at
+    /// GDEX/RDA dataset id (e.g. `d612005`) — the THREDDS scan root lives at
     /// `files/g/<id>/` (see [`dataset_catalog_url`]).
     pub id: &'static str,
     /// Short display name (picker rows and the browser's tree root).
     pub label: &'static str,
     /// One-line description (picker hover text).
     pub blurb: &'static str,
-    /// What the dataset's leaves are ("NetCDF" / "GRIB1"), a UI hint only;
+    /// What the dataset's leaves are ("NetCDF" / "GRIB1") — a UI hint only;
     /// the import gate decides per file.
     pub format: &'static str,
     /// Attribution line shown in the browser's header.
@@ -229,7 +229,7 @@ impl GdexDataset {
 }
 
 /// The datasets offered by the browser's picker. The FIRST entry is the
-/// default (CONUS II: the dataset the pre-picker browser was hardwired to;
+/// default (CONUS II — the dataset the pre-picker browser was hardwired to;
 /// its downloads stay flat in the cache root for that reason).
 ///
 /// Both ids verified against the live TDS on 2026-07-09:
@@ -240,7 +240,7 @@ pub const GDEX_DATASETS: &[GdexDataset] = &[
     GdexDataset {
         id: "d612005",
         label: "CONUS II (d612005)",
-        blurb: "NSF NCAR CONUS II regional climate WRF, present + future periods, NetCDF",
+        blurb: "NSF NCAR CONUS II regional climate WRF — present + future periods, NetCDF",
         format: "NetCDF",
         attribution: "NSF NCAR GDEX · CONUS II regional climate WRF (present + future) · \
                       CC-BY 4.0 · DOI 10.5065/49SN-8E08",
@@ -248,7 +248,7 @@ pub const GDEX_DATASETS: &[GdexDataset] = &[
     GdexDataset {
         id: "d626000",
         label: "ERA-20C (d626000)",
-        blurb: "ECMWF ERA-20C, 20th-century reanalysis 1900-2010, GRIB1",
+        blurb: "ECMWF ERA-20C — 20th-century reanalysis 1900-2010, GRIB1",
         format: "GRIB1",
         attribution: "NSF NCAR GDEX · ECMWF ERA-20C 20th-century reanalysis (1900-2010) · \
                       GRIB1 · rda.ucar.edu/datasets/d626000",
@@ -284,7 +284,7 @@ pub fn ncss_dataset_url(url_path: &str) -> String {
 }
 
 /// Build the NCSS subset request URL. Always ends with `accept=netcdf`
-/// (classic NetCDF-3: the grid endpoint rejects `netcdf4`). Parameters are
+/// (classic NetCDF-3 — the grid endpoint rejects `netcdf4`). Parameters are
 /// emitted in a fixed order (vars, bbox, time, accept) for deterministic URLs.
 pub fn ncss_subset_url(url_path: &str, subset: &NcssSubset) -> String {
     let mut params: Vec<(&str, String)> = Vec::new();
@@ -348,9 +348,9 @@ fn encode_query_value(value: &str) -> String {
 /// Classification of an HTTP response for the GDEX retry policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ResponseClass {
-    /// 2xx with a non-empty body: use it.
+    /// 2xx with a non-empty body — use it.
     Accept,
-    /// 5xx, or an empty 2xx body: transient, retry with backoff.
+    /// 5xx, or an empty 2xx body — transient, retry with backoff.
     Retry,
     /// A definite answer that is not success (4xx, redirects we won't follow).
     Fatal,
@@ -371,11 +371,11 @@ fn classify_response(status: u16, body_empty: bool) -> ResponseClass {
 
 /// One attempt's outcome for [`with_retry`].
 enum Attempt<T> {
-    /// Success: stop and return the value.
+    /// Success — stop and return the value.
     Accept(T),
-    /// Transient failure: sleep (if attempts remain) and try again.
+    /// Transient failure — sleep (if attempts remain) and try again.
     Retry(DataSourceError),
-    /// Permanent failure: stop and return the error immediately.
+    /// Permanent failure — stop and return the error immediately.
     Fatal(DataSourceError),
 }
 
@@ -760,7 +760,7 @@ pub fn download_leaf(leaf: &Leaf, cache_dir: &Path) -> Result<DownloadOutcome> {
     download_to_path(&leaf.download_url, &dest)
 }
 
-/// Chunk size for the cancellable copy loop: large enough that syscall
+/// Chunk size for the cancellable copy loop — large enough that syscall
 /// overhead is negligible on a multi-GB stream, small enough that a cancel
 /// lands within a fraction of a second at typical GDEX throughput.
 const COPY_CHUNK_BYTES: usize = 64 * 1024;
@@ -769,9 +769,9 @@ const COPY_CHUNK_BYTES: usize = 64 * 1024;
 /// flushed) to the writer during this call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CopyEnd {
-    /// The reader hit EOF: the copy ran to completion.
+    /// The reader hit EOF — the copy ran to completion.
     Complete(u64),
-    /// The cancel flag was observed between chunks: the copy stopped early.
+    /// The cancel flag was observed between chunks — the copy stopped early.
     /// Everything read so far was written and flushed; the writer is left
     /// intact (the resume contract depends on the partial temp surviving).
     Cancelled(u64),
@@ -819,8 +819,8 @@ pub fn download_to_path(url: &str, dest: &Path) -> Result<DownloadOutcome> {
 /// stops a multi-GB stream within one chunk instead of running to the end.
 ///
 /// On cancel the partial `.download` temp is flushed, closed, and LEFT IN
-/// PLACE (the next call for the same `dest` Range-resumes it exactly like an
-/// interrupted download) and `Err(`[`DataSourceError::DownloadCancelled`]`)`
+/// PLACE — the next call for the same `dest` Range-resumes it exactly like an
+/// interrupted download — and `Err(`[`DataSourceError::DownloadCancelled`]`)`
 /// is returned so callers can tell a user stop from a failure.
 pub fn download_to_path_with_cancel(
     url: &str,
@@ -937,7 +937,7 @@ pub fn download_to_path_with_cancel(
 }
 
 /// Best-effort `Content-Length` via HEAD (metadata client), retrying 5xx with
-/// the GDEX backoff: the server 503s readily on back-to-back requests, so a
+/// the GDEX backoff — the server 503s readily on back-to-back requests, so a
 /// single-shot HEAD would usually miss the size and defeat the size-verify /
 /// cache-hit shortcut. Any ultimate failure (exhausted retries, a 4xx, or a
 /// missing header) yields `None`; the download then relies on the GET's own
@@ -1109,7 +1109,7 @@ mod tests {
 
     #[test]
     fn dataset_registry_ids_are_unique_and_urls_well_formed() {
-        // The default (first) entry is CONUS II: the pre-picker dataset whose
+        // The default (first) entry is CONUS II — the pre-picker dataset whose
         // downloads are grandfathered flat in the cache root.
         assert_eq!(GDEX_DATASETS[0].id, "d612005");
 
@@ -1447,7 +1447,7 @@ mod tests {
     }
 
     /// Yields one prebuilt chunk per `read` call; optionally sets a shared
-    /// cancel flag as a side effect of returning the k-th chunk (1-based):
+    /// cancel flag as a side effect of returning the k-th chunk (1-based) —
     /// the user pressing Cancel while a chunk is in flight.
     struct ChunkReader {
         chunks: Vec<Vec<u8>>,
@@ -1485,7 +1485,7 @@ mod tests {
         }
     }
 
-    /// Records written bytes and counts `flush` calls: the cancel contract
+    /// Records written bytes and counts `flush` calls — the cancel contract
     /// requires the partial to be flushed before the copy returns.
     #[derive(Default)]
     struct FlushTracking {
@@ -1562,7 +1562,7 @@ mod tests {
         let payload: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
         let chunk = 4096;
 
-        // Pass 1, a fresh download (the 200 path: File::create) cancelled
+        // Pass 1 — a fresh download (the 200 path: File::create) cancelled
         // after 10 chunks. The partial temp must survive, exactly as written.
         let chunks: Vec<Vec<u8>> = payload.chunks(chunk).map(<[u8]>::to_vec).collect();
         let flag = Arc::new(AtomicBool::new(false));
@@ -1580,7 +1580,7 @@ mod tests {
             "the partial temp is kept on disk with every flushed byte"
         );
 
-        // Pass 2, the resume (the 206 path: append the remainder), as the
+        // Pass 2 — the resume (the 206 path: append the remainder), as the
         // next download_to_path call does after its Range request.
         let rest: Vec<Vec<u8>> = payload[have as usize..]
             .chunks(chunk)
@@ -1654,8 +1654,8 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Live proofs, run ONCE on a build node, never in CI (they hit the
-    // network; keep them LIGHT, no 156 MB pulls).
+    // Live proofs — run ONCE on a build node, never in CI (they hit the
+    // network; keep them LIGHT — no 156 MB pulls).
     //   cargo test -p data_source gdex -- --ignored
     // -----------------------------------------------------------------------
 
@@ -1720,7 +1720,7 @@ mod tests {
 
         // One decade dir of the 3-hourly surface analysis (~390 KB XML):
         // hundreds of .grb leaves, every one a fileServer download URL with an
-        // advertised size, what the picker's Download button consumes.
+        // advertised size — what the picker's Download button consumes.
         let decade = fetch_and_parse_catalog(ERA20C_DECADE_URL).expect("live era20c decade");
         eprintln!(
             "live e20c.oper.an.sfc.3hr/1900_1909: {} leaves",
@@ -1794,7 +1794,7 @@ mod tests {
         eprintln!("live HEAD Content-Length: {total}");
         assert!(total > 100_000_000, "the 00:00 file is ~156 MB");
 
-        // A 1 KB partial GET must return 206 with exactly 1024 bytes: proof
+        // A 1 KB partial GET must return 206 with exactly 1024 bytes — proof
         // the server honors Range (so an interrupted big download can resume).
         // Retry through the server's transient 503s (see the doc's flakiness
         // note) so the proof is stable.

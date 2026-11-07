@@ -1,0 +1,90 @@
+{
+  "kernels": [
+    {
+      "name": "evaluate_rational_boundary",
+      "module": "lbc_time_rational",
+      "source": "woof/metal/shaders/lbc_time_rational.metal",
+      "cuda_source": "woof/core/kernels/lbc_time.cu",
+      "cuda_symbol": "evaluate_rational_boundary",
+      "resources": [
+        [
+          "value",
+          "float",
+          "read"
+        ],
+        [
+          "tendency",
+          "float",
+          "read"
+        ],
+        [
+          "quadratic",
+          "float",
+          "read"
+        ],
+        [
+          "rate",
+          "float",
+          "read"
+        ],
+        [
+          "out_value",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_tendency",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "value": [
+          [
+            "count"
+          ]
+        ],
+        "tendency": [
+          [
+            "count"
+          ]
+        ],
+        "quadratic": [
+          [
+            "count"
+          ]
+        ],
+        "rate": [
+          [
+            "count"
+          ]
+        ],
+        "out_value": [
+          [
+            "count"
+          ]
+        ],
+        "out_tendency": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "seconds",
+          "float32"
+        ],
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

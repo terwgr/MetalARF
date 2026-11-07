@@ -56,13 +56,14 @@ def _host(a, dtype=np.float32):
 class MetalSW:
     """Legacy RRTMG SW engine bound to one :class:`SWTables` and context."""
 
-    def __init__(self, tab=None, xp: MetalArrayModule | None = None):
+    def __init__(self, tab=None, xp: MetalArrayModule | None = None, *, exact=False):
         self.tab = _sw.load_sw_tables() if tab is None else tab
         if table_header(self.tab) != _TABLE_HEADER.read_text(encoding="ascii"):
             raise ValueError("SW table packing differs from the compiled "
                              "rrtmg_legacy_sw_tables.metalh offsets")
         self.xp = xp or MetalArrayModule()
         self.context = self.xp.context
+        self.exact = bool(exact)
         packed, _ = _sw._pack_cuda_tables(self.tab)
         self.tab_d = self.xp.asarray(packed.astype(np.float32))
         self.ntab = int(packed.size)
@@ -83,7 +84,7 @@ class MetalSW:
     def _run(self, name, arrays, params, grid):
         return self.context.submit_kernel(
             f"rrtmg_legacy_sw_{name}", arrays, params,
-            exact_policy=False, grid_size=int(grid), threads_per_group=128)
+            exact_policy=self.exact, grid_size=int(grid), threads_per_group=128)
 
     def rrtmg_sw_batched_device(self, ncol, nlay, icld, play, plev, tlay,
                                 tlev, tsfc, h2ovmr, o3vmr, co2vmr, ch4vmr,

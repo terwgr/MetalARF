@@ -44,7 +44,7 @@ static inline bool ubmlw_solve(thread float *a, thread float *b, int n) {
 // WRF module_sf_bep_bem.F bb_long_rad/bb_gaussj (3455-3544, 3670+).
 // Window-aware longwave radiosity for two walls plus ground. Inputs use
 // per-column/per-direction packed canyon view factors and temperatures.
-// Source-only; needs integration with bb_modif_rad and the column caller.
+// The integrated column caller supplies only its active urban columns.
 kernel void urban_bem_longwave_fragment(
     constant UrbanBemLongwaveFragmentResources &r [[buffer(0)]],
     constant UrbanBemLongwaveFragmentParams &p [[buffer(1)]],
@@ -53,7 +53,7 @@ kernel void urban_bem_longwave_fragment(
     device const int *utype = r.utype;
     device const int *class_int = r.class_int;
     device const float *class_float = r.class_float;
-    device const int *nzu_class = r.nzu_class;
+    device const int *nzurban = r.nzurban;
     device const float *fwg = r.fwg;
     device const float *fww = r.fww;
     device const float *fgw = r.fgw;
@@ -72,16 +72,17 @@ kernel void urban_bem_longwave_fragment(
     if (item >= uint(ncol * 2)) return;
     const int col = int(item) / 2, dir = int(item) % 2;
     error[item] = 0;
+    if (r.active_cols[col] == 0) return;
     const int type = utype[col];
     if (nurbm < 1 || nurbm > 11 || type < 1 || type > nurbm) { error[item] = 3455; return; }
-    const int nz_u = nzu_class[uint(type - 1)];
+    const int nz_u = nzurban[col];
     const int nd = class_int[uint(type)];
     if (nz_u < 1 || nz_u > 18 || nd < 1 || nd > 2) { error[item] = 3455; return; }
     if (dir >= nd) return;
-    const float emw = class_float[109u + uint(type - 1)];
-    const float emg = class_float[98u + uint(type - 1)];
-    const float emwin = class_float[1062u + uint(type - 1)];
-    const float pwin = class_float[1084u + uint(type - 1)];
+    const float emw = class_float[110u + uint(type - 1)];
+    const float emg = class_float[99u + uint(type - 1)];
+    const float emwin = class_float[1063u + uint(type - 1)];
+    const float pwin = class_float[1085u + uint(type - 1)];
     const float rl = rl_field[col];
     const ulong pbase = ulong(col) * 19ul;
     const ulong vbase = (ulong(col) * 2ul + uint(dir)) * 18ul;
@@ -96,12 +97,12 @@ kernel void urban_bem_longwave_fragment(
         a[i * 37 + i] = 1.0f;
         for (int j = 0; j < nz_u; ++j)
             a[i * 37 + nz_u + j] = ubmlw_mul(ubmlw_mul(-refl,
-                fww[views + ulong(j) * 18ul + uint(i)]), pb[pbase + uint(j + 1)]);
+                fww[views + ulong(i) * 18ul + uint(j)]), pb[pbase + uint(j + 1)]);
         a[i * 37 + ground] = ubmlw_mul(-(1.0f - emg), fgw[vbase + uint(i)]);
         float rhs = ubmlw_add(ubmlw_mul(fsw[vbase + uint(i)], rl),
             ubmlw_mul(ubmlw_mul(ubmlw_mul(emg, fgw[vbase + uint(i)]), sigma), ubmlw_pow4(tg_av[ulong(col) * 2ul + uint(dir)])));
         for (int j = 0; j < nz_u; ++j) {
-            const float vf = fww[views + ulong(j) * 18ul + uint(i)];
+            const float vf = fww[views + ulong(i) * 18ul + uint(j)];
             const float window_emit = ubmlw_mul(ubmlw_mul(emw, ubmlw_sub(1.0f, pwin)), ubmlw_pow4(tw[walls + 18ul + uint(j)]));
             const float indoor_emit = ubmlw_mul(ubmlw_mul(emwin, pwin), ubmlw_pow4(twlev[walls + 18ul + uint(j)]));
             const float emit = ubmlw_mul(ubmlw_mul(ubmlw_mul(pb[pbase + uint(j + 1)], sigma), vf), ubmlw_add(window_emit, indoor_emit));
@@ -114,13 +115,13 @@ kernel void urban_bem_longwave_fragment(
         const int row = nz_u + i;
         for (int j = 0; j < nz_u; ++j)
             a[row * 37 + j] = ubmlw_mul(ubmlw_mul(-refl,
-                fww[views + ulong(j) * 18ul + uint(i)]), pb[pbase + uint(j + 1)]);
+                fww[views + ulong(i) * 18ul + uint(j)]), pb[pbase + uint(j + 1)]);
         a[row * 37 + row] = 1.0f;
         a[row * 37 + ground] = ubmlw_mul(-(1.0f - emg), fgw[vbase + uint(i)]);
         float rhs = ubmlw_add(ubmlw_mul(fsw[vbase + uint(i)], rl),
             ubmlw_mul(ubmlw_mul(ubmlw_mul(emg, fgw[vbase + uint(i)]), sigma), ubmlw_pow4(tg_av[ulong(col) * 2ul + uint(dir)])));
         for (int j = 0; j < nz_u; ++j) {
-            const float vf = fww[views + ulong(j) * 18ul + uint(i)];
+            const float vf = fww[views + ulong(i) * 18ul + uint(j)];
             const float wall_emit = ubmlw_mul(ubmlw_mul(emw, ubmlw_sub(1.0f, pwin)), ubmlw_pow4(tw[walls + uint(j)]));
             const float indoor_emit = ubmlw_mul(ubmlw_mul(emwin, pwin), ubmlw_pow4(twlev[walls + uint(j)]));
             const float emit = ubmlw_mul(ubmlw_mul(ubmlw_mul(pb[pbase + uint(j + 1)], sigma), vf), ubmlw_add(wall_emit, indoor_emit));
@@ -154,4 +155,5 @@ kernel void urban_bem_longwave_fragment(
     }
     rlg[ulong(col) * 2ul + uint(dir)] = b[ground];
     error[item] = 0;
+    if (r.active_cols[col] == 0) return;
 }

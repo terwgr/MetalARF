@@ -7,7 +7,21 @@ using namespace metal;
 static inline float nssl_div_rn(float a, float b) { return a / b; }
 #define IDX3(k,j,i) ((k) * ny * nx + (j) * nx + (i))
 
-template <int KMAX>
+
+// One scratch layout shared by the local tiers and deep device workspaces.
+// Categories run in source order and reuse the same fifteen column planes.
+struct NsslThreadScratch {
+    thread float *data;
+    int stride;
+    thread float *at(int slot) const { return data + slot * stride; }
+};
+struct NsslDeviceScratch {
+    device float *data;
+    int stride;
+    device float *at(int slot) const { return data + slot * stride; }
+};
+
+template <int KMAX, typename Scratch>
 static inline void nssl2_cloud_sediment_impl(
     const device float *  air_density,
     const device float *  temperature_k,
@@ -15,19 +29,19 @@ static inline void nssl2_cloud_sediment_impl(
     device float *  qndrop,
     const device float *  dz,
     device float *  cloud_surface_export,
-    float dt, int nz, int ny, int nx, int column_idx)
+    float dt, int nz, int ny, int nx, int column_idx, Scratch scratch)
 {
     const int column = column_idx;
     if (column >= ny * nx) return;
     const int j = column / nx;
     const int i = column - j * nx;
 
-    float rho[KMAX];
-    float cloud[KMAX];
-    float number[KMAX];
-    float velocity[KMAX];
-    float mass_flux[KMAX + 1];
-    float number_flux[KMAX + 1];
+    auto rho = scratch.at(0);
+    auto cloud = scratch.at(1);
+    auto number = scratch.at(2);
+    auto velocity = scratch.at(3);
+    auto mass_flux = scratch.at(4);
+    auto number_flux = scratch.at(5);
 
     const float pi = 3.14159265358979323846f;
     const float minimum_mass = 1000.0f * 0.523599f
@@ -141,7 +155,7 @@ static inline float nssl2_rain_z(
     return 120.0f * rho * rho * q * q / effective_number * z_factor;
 }
 
-template <int KMAX>
+template <int KMAX, typename Scratch>
 static inline void nssl2_rain_sediment_impl(
     const device float *  air_density,
     device float *  qr,
@@ -149,26 +163,26 @@ static inline void nssl2_rain_sediment_impl(
     const device float *  dz,
     device float *  rainnc,
     device float *  rainncv,
-    float dt, int nz, int ny, int nx, int column_idx)
+    float dt, int nz, int ny, int nx, int column_idx, Scratch scratch)
 {
     const int column = column_idx;
     if (column >= ny * nx) return;
     const int j = column / nx;
     const int i = column - j * nx;
 
-    float rho[KMAX];
-    float rain[KMAX];
-    float number[KMAX];
-    float mass_velocity[KMAX];
-    float number_velocity[KMAX];
-    float z_velocity[KMAX];
-    float mass_flux[KMAX + 1];
-    float number_flux[KMAX + 1];
-    float z_flux[KMAX + 1];
-    float mass_number_flux[KMAX + 1];
-    float z_initial[KMAX];
-    float z_advected[KMAX];
-    float number_mass_weighted[KMAX];
+    auto rho = scratch.at(0);
+    auto rain = scratch.at(1);
+    auto number = scratch.at(2);
+    auto mass_velocity = scratch.at(3);
+    auto number_velocity = scratch.at(4);
+    auto z_velocity = scratch.at(5);
+    auto mass_flux = scratch.at(6);
+    auto number_flux = scratch.at(7);
+    auto z_flux = scratch.at(8);
+    auto mass_number_flux = scratch.at(9);
+    auto z_initial = scratch.at(10);
+    auto z_advected = scratch.at(11);
+    auto number_mass_weighted = scratch.at(12);
 
     const float pi = 3.14159265358979323846f;
     const float minimum_volume =
@@ -317,7 +331,7 @@ static inline void nssl2_rain_sediment_impl(
     rainnc[column] += exported;
 }
 
-template <int KMAX>
+template <int KMAX, typename Scratch>
 static inline void nssl2_snow_sediment_impl(
     const device float *  air_density,
     device float *  qs,
@@ -325,23 +339,23 @@ static inline void nssl2_snow_sediment_impl(
     const device float *  dz,
     device float *  snownc,
     device float *  snowncv,
-    float dt, int nz, int ny, int nx, int column_idx)
+    float dt, int nz, int ny, int nx, int column_idx, Scratch scratch)
 {
     const int column = column_idx;
     if (column >= ny * nx) return;
     const int j = column / nx;
     const int i = column - j * nx;
 
-    float rho[KMAX];
-    float snow[KMAX];
-    float number[KMAX];
-    float mass_velocity[KMAX];
-    float number_velocity[KMAX];
-    float z_velocity[KMAX];
-    float mass_flux[KMAX + 1];
-    float number_flux[KMAX + 1];
-    float mass_number_flux[KMAX + 1];
-    float number_mass_weighted[KMAX];
+    auto rho = scratch.at(0);
+    auto snow = scratch.at(1);
+    auto number = scratch.at(2);
+    auto mass_velocity = scratch.at(3);
+    auto number_velocity = scratch.at(4);
+    auto z_velocity = scratch.at(5);
+    auto mass_flux = scratch.at(6);
+    auto number_flux = scratch.at(7);
+    auto mass_number_flux = scratch.at(8);
+    auto number_mass_weighted = scratch.at(9);
 
     const float minimum_volume =
         0.523599f * (0.01e-3f * 0.01e-3f * 0.01e-3f);
@@ -442,7 +456,7 @@ static inline void nssl2_snow_sediment_impl(
     snownc[column] += exported;
 }
 
-template <int KMAX>
+template <int KMAX, typename Scratch>
 static inline void nssl2_ice_sediment_impl(
     const device float *  air_density,
     device float *  qi,
@@ -450,22 +464,22 @@ static inline void nssl2_ice_sediment_impl(
     const device float *  dz,
     device float *  icenc,
     device float *  icencv,
-    float dt, int nz, int ny, int nx, int column_idx)
+    float dt, int nz, int ny, int nx, int column_idx, Scratch scratch)
 {
     const int column = column_idx;
     if (column >= ny * nx) return;
     const int j = column / nx;
     const int i = column - j * nx;
 
-    float rho[KMAX];
-    float ice[KMAX];
-    float number[KMAX];
-    float mass_velocity[KMAX];
-    float number_velocity[KMAX];
-    float mass_flux[KMAX + 1];
-    float number_flux[KMAX + 1];
-    float mass_number_flux[KMAX + 1];
-    float number_mass_weighted[KMAX];
+    auto rho = scratch.at(0);
+    auto ice = scratch.at(1);
+    auto number = scratch.at(2);
+    auto mass_velocity = scratch.at(3);
+    auto number_velocity = scratch.at(4);
+    auto mass_flux = scratch.at(5);
+    auto number_flux = scratch.at(6);
+    auto mass_number_flux = scratch.at(7);
+    auto number_mass_weighted = scratch.at(8);
 
     const float minimum_mass = 6.88e-13f;
     const float maximum_mass = 1.0e-8f;
@@ -646,7 +660,7 @@ static inline void nssl2_graupel_mm_coefficients(
     }
 }
 
-template <int KMAX, bool HAIL, bool CACHED = false>
+template <int KMAX, bool HAIL, typename Scratch, bool CACHED = false>
 static inline void nssl2_dense_frozen_sediment_impl(
     const device float *  air_density,
     device float *  qx,
@@ -655,28 +669,28 @@ static inline void nssl2_dense_frozen_sediment_impl(
     const device float *  dz,
     device float *  frozennc,
     device float *  frozenncv,
-    float dt, int nz, int ny, int nx, int column_idx)
+    float dt, int nz, int ny, int nx, int column_idx, Scratch scratch)
 {
     const int column = column_idx;
     if (column >= ny * nx) return;
     const int j = column / nx;
     const int i = column - j * nx;
 
-    float rho[KMAX];
-    float graupel[KMAX];
-    float number[KMAX];
-    float volume[KMAX];
-    float mass_velocity[KMAX];
-    float number_velocity[KMAX];
-    float z_velocity[KMAX];
-    float mass_flux[KMAX + 1];
-    float number_flux[KMAX + 1];
-    float volume_flux[KMAX + 1];
-    float z_flux[KMAX + 1];
-    float mass_number_flux[KMAX + 1];
-    float z_initial[KMAX];
-    float z_advected[KMAX];
-    float number_mass_weighted[KMAX];
+    auto rho = scratch.at(0);
+    auto graupel = scratch.at(1);
+    auto number = scratch.at(2);
+    auto volume = scratch.at(3);
+    auto mass_velocity = scratch.at(4);
+    auto number_velocity = scratch.at(5);
+    auto z_velocity = scratch.at(6);
+    auto mass_flux = scratch.at(7);
+    auto number_flux = scratch.at(8);
+    auto volume_flux = scratch.at(9);
+    auto z_flux = scratch.at(10);
+    auto mass_number_flux = scratch.at(11);
+    auto z_initial = scratch.at(12);
+    auto z_advected = scratch.at(13);
+    auto number_mass_weighted = scratch.at(14);
 
     const float pi = 3.14159265358979323846f;
     const float minimum_volume =
@@ -850,14 +864,42 @@ static inline void nssl2_dense_frozen_sediment_impl(
     frozennc[column] += exported;
 }
 
-template <int KMAX> static inline void nssl2_sediment_column(const device float *air_density, const device float *temperature_k, device float *state, const device float *dz, device float *ignored_accumulator, device float *category_export, float dt, int nz, int ny, int nx, int column_idx) {
+template <int KMAX, typename Scratch> static inline void nssl2_sediment_column(const device float *air_density, const device float *temperature_k, device float *state, const device float *dz, device float *ignored_accumulator, device float *category_export, float dt, int nz, int ny, int nx, int column_idx, Scratch scratch) {
  const int n=nz*ny*nx, ncol=ny*nx;
- nssl2_rain_sediment_impl<KMAX>(air_density,state+2*n,state+8*n,dz,ignored_accumulator,category_export,dt,nz,ny,nx,column_idx);
- nssl2_ice_sediment_impl<KMAX>(air_density,state+3*n,state+9*n,dz,ignored_accumulator,category_export+ncol,dt,nz,ny,nx,column_idx);
- nssl2_snow_sediment_impl<KMAX>(air_density,state+4*n,state+10*n,dz,ignored_accumulator,category_export+2*ncol,dt,nz,ny,nx,column_idx);
- nssl2_dense_frozen_sediment_impl<KMAX,false>(air_density,state+5*n,state+11*n,state+14*n,dz,ignored_accumulator,category_export+3*ncol,dt,nz,ny,nx,column_idx);
- nssl2_dense_frozen_sediment_impl<KMAX,true>(air_density,state+6*n,state+12*n,state+15*n,dz,ignored_accumulator,category_export+4*ncol,dt,nz,ny,nx,column_idx);
- nssl2_cloud_sediment_impl<KMAX>(air_density,temperature_k,state+n,state+7*n,dz,ignored_accumulator,dt,nz,ny,nx,column_idx);
+ nssl2_rain_sediment_impl<KMAX>(air_density,state+2*n,state+8*n,dz,ignored_accumulator,category_export,dt,nz,ny,nx,column_idx,scratch);
+ nssl2_ice_sediment_impl<KMAX>(air_density,state+3*n,state+9*n,dz,ignored_accumulator,category_export+ncol,dt,nz,ny,nx,column_idx,scratch);
+ nssl2_snow_sediment_impl<KMAX>(air_density,state+4*n,state+10*n,dz,ignored_accumulator,category_export+2*ncol,dt,nz,ny,nx,column_idx,scratch);
+ nssl2_dense_frozen_sediment_impl<KMAX,false>(air_density,state+5*n,state+11*n,state+14*n,dz,ignored_accumulator,category_export+3*ncol,dt,nz,ny,nx,column_idx,scratch);
+ nssl2_dense_frozen_sediment_impl<KMAX,true>(air_density,state+6*n,state+12*n,state+15*n,dz,ignored_accumulator,category_export+4*ncol,dt,nz,ny,nx,column_idx,scratch);
+ nssl2_cloud_sediment_impl<KMAX>(air_density,temperature_k,state+n,state+7*n,dz,ignored_accumulator,dt,nz,ny,nx,column_idx,scratch);
 }
-kernel void nssl2_sediment_all_64(constant Nssl2SedimentAll64Resources &r [[buffer(0)]], constant Nssl2SedimentAll64Params &p [[buffer(1)]], uint column [[thread_position_in_grid]]) { if(column>=uint(p.ny*p.nx)) return; nssl2_sediment_column<64>(r.air_density,r.temperature_k,r.state,r.dz,r.ignored_accumulator,r.category_export,p.dt,p.nz,p.ny,p.nx,int(column)); }
-kernel void nssl2_sediment_all_128(constant Nssl2SedimentAll128Resources &r [[buffer(0)]], constant Nssl2SedimentAll128Params &p [[buffer(1)]], uint column [[thread_position_in_grid]]) { if(column>=uint(p.ny*p.nx)) return; nssl2_sediment_column<128>(r.air_density,r.temperature_k,r.state,r.dz,r.ignored_accumulator,r.category_export,p.dt,p.nz,p.ny,p.nx,int(column)); }
+kernel void nssl2_sediment_all_64(
+    constant Nssl2SedimentAll64Resources &r [[buffer(0)]],
+    constant Nssl2SedimentAll64Params &p [[buffer(1)]],
+    uint column [[thread_position_in_grid]]) {
+    if(column>=uint(p.ny*p.nx))return;
+    thread float storage[15*(64+1)];
+    NsslThreadScratch scratch={storage,64+1};
+    nssl2_sediment_column<64>(r.air_density,r.temperature_k,r.state,r.dz,
+        r.ignored_accumulator,r.category_export,p.dt,p.nz,p.ny,p.nx,int(column),scratch);
+}
+kernel void nssl2_sediment_all_128(
+    constant Nssl2SedimentAll128Resources &r [[buffer(0)]],
+    constant Nssl2SedimentAll128Params &p [[buffer(1)]],
+    uint column [[thread_position_in_grid]]) {
+    if(column>=uint(p.ny*p.nx))return;
+    thread float storage[15*(128+1)];
+    NsslThreadScratch scratch={storage,128+1};
+    nssl2_sediment_column<128>(r.air_density,r.temperature_k,r.state,r.dz,
+        r.ignored_accumulator,r.category_export,p.dt,p.nz,p.ny,p.nx,int(column),scratch);
+}
+kernel void nssl2_sediment_all_256(
+    constant Nssl2SedimentAll256Resources &r [[buffer(0)]],
+    constant Nssl2SedimentAll256Params &p [[buffer(1)]],
+    uint lane [[thread_position_in_grid]]) {
+    if(lane>=uint(p.ncolumns))return;
+    NsslDeviceScratch scratch={r.workspace+lane*15u*uint(p.nz+1),p.nz+1};
+    nssl2_sediment_column<256>(r.air_density,r.temperature_k,r.state,r.dz,
+        r.ignored_accumulator,r.category_export,p.dt,p.nz,p.ny,p.nx,
+        p.column0+int(lane),scratch);
+}

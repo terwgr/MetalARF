@@ -1,0 +1,52 @@
+/* Correctly-rounded radix-10 logarithm function for binary32 value.
+
+Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
+
+This file is part of the CORE-MATH project
+(https://core-math.gitlabpages.inria.fr/).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+#ifndef HEXV842_MPAS_BL_MYNN_LOG10_METALH
+#define HEXV842_MPAS_BL_MYNN_LOG10_METALH
+#include "soft_binary64.metalh"
+constant ulong mynn_log10_tr[65] = {0x3ff0000000000000ul,0x3fef81f820000000ul,0x3fef07c1f0000000ul,0x3fee9131ac000000ul,0x3fee1e1e1e000000ul,0x3fedae6077000000ul,0x3fed41d41d000000ul,0x3fecd85689000000ul,0x3fec71c71c000000ul,0x3fec0e0704000000ul,0x3febacf915000000ul,0x3feb4e81b5000000ul,0x3feaf286bd000000ul,0x3fea98ef60000000ul,0x3fea41a41a000000ul,0x3fe9ec8e95000000ul,0x3fe999999a000000ul,0x3fe948b0fd000000ul,0x3fe8f9c190000000ul,0x3fe8acb90f000000ul,0x3fe8618618000000ul,0x3fe8181818000000ul,0x3fe7d05f41000000ul,0x3fe78a4c81000000ul,0x3fe745d174000000ul,0x3fe702e05c000000ul,0x3fe6c16c17000000ul,0x3fe6816817000000ul,0x3fe642c859000000ul,0x3fe6058160000000ul,0x3fe5c9882c000000ul,0x3fe58ed231000000ul,0x3fe5555555000000ul,0x3fe51d07eb000000ul,0x3fe4e5e0a7000000ul,0x3fe4afd6a0000000ul,0x3fe47ae148000000ul,0x3fe446f865000000ul,0x3fe4141414000000ul,0x3fe3e22cbd000000ul,0x3fe3b13b14000000ul,0x3fe3813814000000ul,0x3fe3521cfb000000ul,0x3fe323e34a000000ul,0x3fe2f684be000000ul,0x3fe2c9fb4e000000ul,0x3fe29e412a000000ul,0x3fe27350b9000000ul,0x3fe2492492000000ul,0x3fe21fb781000000ul,0x3fe1f7047e000000ul,0x3fe1cf06ae000000ul,0x3fe1a7b961000000ul,0x3fe1811812000000ul,0x3fe15b1e5f000000ul,0x3fe135c811000000ul,0x3fe1111111000000ul,0x3fe0ecf56c000000ul,0x3fe0c97150000000ul,0x3fe0a6810a000000ul,0x3fe0842108000000ul,0x3fe0624dd3000000ul,0x3fe0410410000000ul,0x3fe0204081000000ul,0x3fe0000000000000ul};
+constant ulong mynn_log10_tl[65] = {0xbd12000000000000ul,0x3f7b947689310dfaul,0x3f8b5e909c96d11bul,0x3f945f4f59ed1e08ul,0x3f9af5f92cbd8bc1ul,0x3fa0ba01a606dcdeul,0x3fa3ed119b9a29cdul,0x3fa714834298ed14ul,0x3faa30a9d983564cul,0x3fad41d512670665ul,0x3fb02428c0f65442ul,0x3fb1a23444eecb67ul,0x3fb31b30543f4bddul,0x3fb48f3ed39bfc2dul,0x3fb5fe8049a0e34bul,0x3fb769140a6a9f30ul,0x3fb8cf1836c98bdbul,0x3fba30a9d55540caul,0x3fbb8de4d1ee8167ul,0x3fbce6e4202ca20ful,0x3fbe3bc1accacd30ul,0x3fbf8c9683b5aafdul,0x3fc06cbd68ca9a03ul,0x3fc11142f19df6c5ul,0x3fc1b3e71fa7a913ul,0x3fc254b4d37a4677ul,0x3fc2f3b6912cbe9cul,0x3fc390f68311581aul,0x3fc42c7e7fffc53dul,0x3fc4c65808c78cd1ul,0x3fc55e8c50751beaul,0x3fc5f52445dec36cul,0x3fc68a288c3f1195ul,0x3fc71da17bdf0cadul,0x3fc7af973608af6eul,0x3fc84011952a250eul,0x3fc8cf1837a7e9f4ul,0x3fc95cb2891e436aul,0x3fc9e8e7b0f86974ul,0x3fca73beaa5db121ul,0x3fcafd3e39455867ul,0x3fcb856cf060d985ul,0x3fcc0c5134de1f90ul,0x3fcc91f1371bc934ul,0x3fcd1652ffcd3ee8ul,0x3fcd997c6f635e09ul,0x3fce1b733ab90ed0ul,0x3fce9c3ceadac7ebul,0x3fcf1bdeec43a29aul,0x3fcf9a5e7a5fa392ul,0x3fd00be05ac02ef5ul,0x3fd04a054d81a29eul,0x3fd087a0835957c5ul,0x3fd0c4b4570994e1ul,0x3fd101431aa1fe1bul,0x3fd13d4f08b98da2ul,0x3fd178da53edb85cul,0x3fd1b3e71e9f9d22ul,0x3fd1ee777defdeb7ul,0x3fd2288d7b48e205ul,0x3fd2622b0f52e469ul,0x3fd29b522a4c62deul,0x3fd2d404b0e30f4aul,0x3fd30c4478f3fbaful,0x3fd34413509f78dful};
+constant ulong mynn_log10_b[3] = {0x3fdbcb7b15d35067ul,0xbfcbcbb1cd29cbaful,0x3fc2870e2624ce4eul};
+constant ulong mynn_log10_c[7] = {0x3fdbcb7b1526e50eul,0xbfcbcb7b1526e53dul,0x3fc287a7636f3fa2ul,0xbfbbcb7b146a14b3ul,0x3fb63c627d5219cbul,0xbfb2880736c8762dul,0x3fafc1ecf913961aul};
+constant uint mynn_log10_powers[16]={0x501502f9u,0x41200000u,0x42c80000u,0u,0x447a0000u,0u,0x461c4000u,0x47c35000u,0u,0x49742400u,0u,0x4b189680u,0x4cbebc20u,0u,0x4e6e6b28u,0x3f800000u};
+static inline uint mynn_log10_bits(uint ux){
+uint ax=ux<<1;
+if(ax==0u)return 0xff800000u;
+if(ux==0x7f800000u)return ux;
+if(ax>0xff000000u)return ux|0x00400000u;
+if((ux&0x80000000u)!=0u)return 0xffc00000u;
+if(ux==mynn_log10_powers[(ux>>24)&15u]){uint je=uint(int(ux)>>23)-126u;je=(je*0x4d104d4u)>>28;return soft64_to_f32_bits(soft64_from_u32(je));}
+if(ux<0x00800000u){int n=int(clz(ux))-8;ux<<=n;ux-=uint(n<<23);}
+int e=(int(ux)>>23)-127;ulong m=ulong(ux&0x7fffffu),j=(m+(1ul<<16))>>17;
+ulong z=soft64_sub(soft64_mul((m<<29)|0x3ff0000000000000ul,mynn_log10_tr[j]),0x3ff0000000000000ul),z2=soft64_mul(z,z),ed=soft64_from_i32(e);
+ulong r=soft64_add(soft64_add(soft64_add(soft64_mul(ed,0x3fd34413509f79fful),mynn_log10_tl[j]),soft64_mul(z,mynn_log10_b[0])),soft64_mul(z2,soft64_add(mynn_log10_b[1],soft64_mul(z,mynn_log10_b[2]))));
+uint ub=soft64_to_f32_bits(r),lb=soft64_to_f32_bits(soft64_add(r,0x3ddaf23f00000000ul));
+if(ub!=lb){
+ulong f=soft64_mul(z,soft64_add(soft64_add(mynn_log10_c[0],soft64_mul(z,mynn_log10_c[1])),soft64_mul(z2,soft64_add(soft64_add(mynn_log10_c[2],soft64_mul(z,mynn_log10_c[3])),soft64_mul(z2,soft64_add(soft64_add(mynn_log10_c[4],soft64_mul(z,mynn_log10_c[5])),soft64_mul(z2,mynn_log10_c[6])))))));
+f=soft64_add(f,soft64_mul(0xbc90cee0ed4ca7e9ul,ed));f=soft64_add(f,soft64_sub(mynn_log10_tl[j],mynn_log10_tl[0]));
+ulong el=soft64_mul(ed,0x3fd34413509f7a00ul);r=soft64_add(el,f);ub=soft64_to_f32_bits(r);
+if((r&0xffffffful)==0ul){ulong dr=soft64_add(soft64_sub(el,r),f);r=soft64_add(r,soft64_mul(dr,0x4040000000000000ul));ub=soft64_to_f32_bits(r);}
+}return ub;}
+#endif

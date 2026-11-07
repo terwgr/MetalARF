@@ -8,6 +8,7 @@ recorded per hour and per quantity so another invocation can finish the run.
 from __future__ import annotations
 
 import argparse
+import functools
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
@@ -160,6 +161,93 @@ def _verifier_identity():
     return {"path": str(path.resolve()), "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
 
 
+RUN_REPORT_NAME = "report.json"
+
+
+def _identity_summary(identity, *, origin):
+    """Commit, tree and a dirty flag from one provenance identity mapping.
+
+    ``dirty`` counts TRACKED changes only (``??`` rows are run output, not
+    code) and is ``None`` when git was not asked, which is a different
+    statement from "clean".  When no commit can be named the reason says
+    which resolver answered instead, so a reader never mistakes a bare
+    content hash for a git id.
+    """
+    if not isinstance(identity, dict):
+        return {"origin": origin, "git_commit": None, "git_tree": None, "dirty": None,
+                "identity_source": None, "reason": "no provenance identity was recorded"}
+    status = identity.get("git_status_short")
+    tracked = None if status is None else [str(line) for line in status
+                                           if not str(line).startswith("??")]
+    summary = {"origin": origin, "git_commit": identity.get("git_commit"),
+               "git_tree": identity.get("git_tree"),
+               "dirty": None if tracked is None else bool(tracked),
+               "dirty_paths": tracked[:20] if tracked else [],
+               "identity_source": identity.get("identity_source")}
+    if identity.get("distribution_manifest_sha256"):
+        summary["distribution_manifest_sha256"] = identity["distribution_manifest_sha256"]
+    content = identity.get("installed_source_content")
+    if isinstance(content, dict) and content.get("content_sha256"):
+        summary["source_content_sha256"] = content["content_sha256"]
+    if not summary["git_commit"]:
+        summary["reason"] = (f"resolver {summary['identity_source'] or 'unknown'} names no git commit; "
+                             "run from a checkout, an editable install of one, or a sealed distribution")
+    return summary
+
+
+def _forecast_engine_identity(root: Path):
+    """The engine that MADE the scored frames, from the run's own report."""
+    path = Path(root) / RUN_REPORT_NAME
+    report = _read(path, None)
+    if not isinstance(report, dict):
+        return {"origin": str(path), "git_commit": None, "git_tree": None, "dirty": None,
+                "identity_source": None,
+                "reason": "the run folder has no forecast report naming its engine"}
+    summary = _identity_summary(report.get("runtime_source_identity"), origin=str(path))
+    # The run-plan path records its install in a ``provenance`` receipt
+    # block (woof.provenance_gate.receipt_block) rather than in
+    # ``runtime_source_identity``; its ``git`` mapping names the commit.
+    block = report.get("provenance")
+    git = block.get("git") if isinstance(block, dict) else None
+    if not summary["git_commit"] and isinstance(git, dict) and git.get("commit_full"):
+        summary.update(git_commit=git["commit_full"], dirty=git.get("dirty"),
+                       identity_source="provenance-receipt-git")
+        summary.pop("reason", None)
+        if git.get("branch"):
+            summary["branch"] = git["branch"]
+        if git.get("dirty") is None and git.get("dirty_unknown_reason"):
+            summary["dirty_unknown_reason"] = git["dirty_unknown_reason"]
+    if report.get("gpuwm_version"):
+        summary["gpuwm_version"] = report["gpuwm_version"]
+    return summary
+
+
+@functools.lru_cache(maxsize=1)
+def _verifier_engine_identity():
+    """The engine doing the scoring, as the package resolver names it."""
+    from woof.runtime_manifest import IdentityError, provenance
+
+    root = Path(__file__).resolve().parents[1]
+    try:
+        identity = provenance(root)
+    # The scorer's own name is a receipt line, never a reason to fail the
+    # scoring: any resolver error is recorded as the reason instead.
+    except (IdentityError, OSError, subprocess.SubprocessError, ValueError, LookupError) as error:
+        return {"origin": str(root), "git_commit": None, "git_tree": None, "dirty": None,
+                "identity_source": None, "reason": f"{type(error).__name__}: {error}"}
+    return _identity_summary(identity, origin=str(root))
+
+
+def _engine_line(identity) -> str:
+    if not identity:
+        return "unrecorded"
+    commit = identity.get("git_commit")
+    if not commit:
+        return f"no git commit ({identity.get('reason', 'unrecorded')})"
+    state = {True: "dirty", False: "clean", None: "worktree state not asked"}[identity.get("dirty")]
+    return f"git {commit} ({state})"
+
+
 def _signature(request: dict, *, include_metadata=True, include_verifier=True) -> str:
     """Bind result reuse to the request, durable inputs and native artifact."""
     versions = []
@@ -269,6 +357,40 @@ def discover_histories(root: Path, *, label="WOOF", paths=None,
     return frames
 
 
+def histories_before_restart(paths, cycle):
+    """This run's histories from before a checkpoint restart, beside its frames.
+
+    A run resumed from a checkpoint reports only the frames it wrote after the
+    restart. Its earlier hours are already on disk beside them; without them
+    those hours got no verification input and the first resumed hour no hourly
+    precipitation (2.9.1 audit: a killed ensemble member resumed from 13Z
+    lacked its 12Z and 13Z inputs and its 14Z precipitation_1h).
+    """
+    if cycle is None:
+        return []
+    start, first, reported = _time(cycle), {}, set()
+    for path in map(Path, paths):
+        matched = HISTORY_NAME.fullmatch(path.name)
+        if matched:
+            domain, date, hour, minute, second = matched.groups()
+            when = _time(f"{date}T{hour}:{minute}:{second}Z")
+            key = (path.parent, domain)
+            first[key] = min(first.get(key, when), when)
+            reported.add(path.resolve())
+    earlier = []
+    for (directory, domain), resumed in first.items():
+        if resumed <= start or not directory.is_dir():
+            continue
+        for path in sorted(directory.glob(f"wrfout_{domain}_*")):
+            matched = HISTORY_NAME.fullmatch(path.name)
+            if not matched or not path.is_file() or path.resolve() in reported:
+                continue
+            _, date, hour, minute, second = matched.groups()
+            if start <= _time(f"{date}T{hour}:{minute}:{second}Z") < resumed:
+                earlier.append(path)
+    return earlier
+
+
 def _assignments(values):
     result = {}
     for text in values or ():
@@ -338,14 +460,14 @@ def _timeout(seconds):
 
 def fetch_stations(request, bbox, folder, *, timeout, refresh=False) -> Path:
     from woof.obs.frontdoor import ASOS
-    from woof.obs.surface_networks import networks_for_bbox
+    from woof.obs.surface_networks import networks_for_domain
 
     folder.mkdir(parents=True, exist_ok=True)
     table = Path(request.get("station_table_path") or folder / "stations.json")
     if not table.is_file():
         if bbox is None:
             raise ValueError("station verification needs a native grid bbox or a frozen station table")
-        arguments = ["--networks", ",".join(networks_for_bbox(*bbox)),
+        arguments = ["--networks", ",".join(networks_for_domain(*bbox)),
                      "--bbox", ",".join(map(str, bbox)), "--out", str(table)]
         _door(ASOS, "stations", arguments, "gpuwm-obs.asos-stations.v1", timeout=timeout)
     when = _time(request["valid_time"])
@@ -476,6 +598,9 @@ def score_available(root: Path, *, requests=None, cycle=None, refresh=False,
         state.update(schema=STATE_SCHEMA, updated_at=_stamp(now),
                      retry_command=f"woof verify-visuals \"{root}\"", run_dir=str(root))
         entries = state.setdefault("hours", {})
+        engine_identity = {"forecast": _forecast_engine_identity(root),
+                           "verifier": _verifier_engine_identity()}
+        state["engine_identity"] = engine_identity
         requests = _preserve_inputs(root, requests, state, station_mode=station_mode, timeout=timeout,
                                    reference=reference, reference_dir=reference_dir)
         deadline = None if budget_seconds is None else time.monotonic() + budget_seconds
@@ -629,6 +754,7 @@ def score_available(root: Path, *, requests=None, cycle=None, refresh=False,
                              prepared_request=request,
                              artifacts=receipt.get("artifacts", []),
                              score_gaps=score_gaps,
+                             engine_identity=engine_identity,
                              status="ready" if _sources_complete(sources) else "partial")
                 entry.pop("reason", None)
             except (OSError, ValueError, RuntimeError, LookupError, subprocess.SubprocessError) as error:
@@ -671,6 +797,9 @@ def append_results(state, folder: Path):
                 continue
             text = f"\n\n{marker}\n\n## Observed verification, {hour['valid_time']}\n\n"
             text += f"Native receipt: `{hour['receipt_path']}`.\n\n"
+            engines = hour.get("engine_identity") or state.get("engine_identity") or {}
+            text += (f"Forecast engine: {_engine_line(engines.get('forecast'))}. "
+                     f"Scoring engine: {_engine_line(engines.get('verifier'))}.\n\n")
             for method_key in ("temperature_method", "station_interpolation", "wind_metric"):
                 if receipt.get(method_key):
                     text += f"{method_key.replace('_', ' ').capitalize()}: {receipt[method_key]}.\n\n"
@@ -756,7 +885,7 @@ def _finish_run(root, *, sections=None) -> dict | None:
                "retry_command": f'woof verify-visuals "{root}"'}
         _atomic_json(root / BACKGROUND_NAME, job)
         env = os.environ.copy()
-        env.update(CUDA_VISIBLE_DEVICES="", GPUWM_NO_LOCAL_GPU="1", GPUWM_VERIFY_VISUALS="0")
+        env.update(CUDA_VISIBLE_DEVICES="", GPUWM_NO_LOCAL_GPU="1", WOOF_VERIFY_VISUALS="0")
         package_root = str(Path(__file__).resolve().parent.parent)
         env["PYTHONPATH"] = os.pathsep.join(filter(None, (package_root, env.get("PYTHONPATH"))))
         options = {"start_new_session": True} if os.name != "nt" else {
@@ -964,6 +1093,7 @@ def _finish_worker(root, token, *, coverage_attempt=0):
             metadata = tomllib.loads(Path(config).read_text(encoding="utf-8"))
             cycle = metadata.get("experiment", {}).get("start_time")
         paths = [Path(path) for path in job.get("history_paths", [])]
+        paths = [*histories_before_restart(paths, cycle), *paths]
         requests = discover_histories(root, paths=paths or None, cycle=cycle, include_missing=bool(paths))
         if not job.get("expected_inputs"):
             job["expected_inputs"] = _expected_inputs([{"path": request["arms"][0]["path"]} for request in requests])

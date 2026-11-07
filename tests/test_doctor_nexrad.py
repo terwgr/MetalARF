@@ -174,16 +174,12 @@ def test_the_bundled_front_door_uses_the_resolution_ladders_own_env_var():
 
 
 def test_the_bundle_prose_counts_the_artifacts_it_actually_carries():
-    """The docstring is the contract a release engineer reads; keep it true.
+    """The artifact table is the roster; prose must not freeze its size.
 
-    The count and ``woof.bridge_assets`` prose move together when a
-    consumer joins or leaves the bundle. The engine's thirty-six artifacts
-    without the terminal workspace and the six global observation decoders
-    form the forty-two-artifact bundle.
+    Per-artifact doctor coverage and the release probes enforce completeness.
+    A prose count became stale at every intake, including the hydro artifacts.
     """
-
-    assert len(bridge_assets.BUNDLED_ARTIFACTS) == 42
-    assert "forty-two artifacts" in bridge_assets.__doc__
+    assert "declared native artifacts" in bridge_assets.__doc__
     for stale in ("eight artifacts", "nine artifacts", "nine files",
                   "ten artifacts", "ten files", "eleven artifacts",
                   "eleven files", "fourteen artifacts", "fourteen files",
@@ -203,9 +199,20 @@ def test_the_bundle_prose_counts_the_artifacts_it_actually_carries():
                   "thirty artifacts", "thirty files",
                   "thirty-one artifacts", "thirty-one files",
                   "thirty-two artifacts", "thirty-two files",
-                  "thirty-five artifacts", "thirty-five files",
                   "thirty-seven artifacts", "thirty-seven files",
-                  "thirty-eight artifacts", "thirty-eight files"):
+                  "thirty-eight artifacts", "thirty-eight files",
+                  "thirty-nine artifacts", "thirty-nine files",
+                  "forty artifacts", "forty files",
+                  "forty-two artifacts", "forty-two files",
+                  "forty-three artifacts", "forty-three files",
+                  "forty-four artifacts", "forty-four files",
+                  "forty-five artifacts", "forty-five files",
+                  "forty-six artifacts", "forty-six files",
+                  "forty-seven artifacts", "forty-seven files",
+                  "forty-eight artifacts", "forty-eight files",
+                  "fifty-five artifacts", "fifty-five files",
+                  "fifty-six artifacts", "fifty-six files",
+                  "fifty-seven artifacts", "fifty-seven files"):
         # Match the complete count, so "eight" does not reject "twenty-eight".
         assert re.search(r"(?<![a-z-])" + re.escape(stale) + r"(?![a-z-])",
                          bridge_assets.__doc__) is None

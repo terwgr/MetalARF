@@ -12,10 +12,10 @@
 //! beam rankings, markers, and engines.
 //!
 //! Phase 1 (spec §11 Milestone C) adds the module WITHOUT migrating any
-//! consumer: everything here is compiled-in data, the embedded US table
+//! consumer: everything here is compiled-in data — the embedded US table
 //! (`embedded_sites.rs`), the community research-feed table
 //! (`community_feeds.rs`), and the providers' embedded international
-//! tables, so every function is network-free and safe on the UI thread.
+//! tables — so every function is network-free and safe on the UI thread.
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -23,8 +23,8 @@ use std::sync::OnceLock;
 use crate::{community_feeds, embedded_sites, international};
 
 /// The US-operated Level-II network's country label. The embedded catalog
-/// is the NEXRAD/TDWR program plus community research feeds, including
-/// overseas military sites (RODN Kadena, RKJK Kunsan, PGUA Andersen),
+/// is the NEXRAD/TDWR program plus community research feeds — including
+/// overseas military sites (RODN Kadena, RKJK Kunsan, PGUA Andersen) —
 /// so this names the operating network, not the soil under the antenna.
 const US_NETWORK_COUNTRY: &str = "United States";
 
@@ -32,13 +32,13 @@ const US_NETWORK_COUNTRY: &str = "United States";
 /// `BeamCandidate.origin` (main.rs) already uses for non-CONUS rows.
 const RESEARCH_FEED_ORIGIN: &str = "research feed";
 
-/// TDWR ids in the embedded US Level-II catalog, as CATALOG DATA: the
+/// TDWR ids in the embedded US Level-II catalog, as CATALOG DATA — the
 /// replacement for `site_is_tdwr`'s `'T'`-prefix heuristic (main.rs),
 /// whose one documented exception (TJUA, San Juan's S-band WSR-88D) and
 /// undocumented leak class (JMA sites TAKA/TANE/TOJI share the prefix)
 /// both disappear once classification is a table lookup.
 ///
-/// Seeded by porting the current heuristic over `EMBEDDED_SITES`: every
+/// Seeded by porting the current heuristic over `EMBEDDED_SITES` — every
 /// `T`-prefixed id except TJUA, which keeps TLKA2 (Talkeetna) riding
 /// along exactly as v0.28.2 classifies it. The heuristic itself survives
 /// ONLY in this module's seed-pinning test (spec §11 C.1). Sorted, for
@@ -66,33 +66,36 @@ pub enum SiteRef {
 }
 
 /// The exhaustive-match lever. Deliberately NOT `#[non_exhaustive]`:
-/// adding a variant is a compile error at every consumer, that is the
+/// adding a variant is a compile error at every consumer — that is the
 /// type-system parity outcome.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SiteKind {
-    /// WSR-88D, incl. TJUA: the exception becomes catalog data.
+    /// WSR-88D, incl. TJUA — the exception becomes catalog data.
     Wsr88d,
-    /// Terminal Doppler, from [`TDWR_SITES`], NOT a `'T'`-prefix
+    /// Terminal Doppler, from [`TDWR_SITES`] — NOT a `'T'`-prefix
     /// heuristic.
     Tdwr,
-    /// Community research feed (`community_feeds.rs`: what
+    /// Community research feed (`community_feeds.rs` — what
     /// `community_feed_for_site()` recognizes today).
     Research,
     /// International registry site.
     Intl { provider_id: String },
 }
 
-/// Resolved site row: what pickers, beam rankings, markers, and engines
+/// Resolved site row — what pickers, beam rankings, markers, and engines
 /// consume.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SiteRecord {
+    /// Known weather-radar band. Unknown/mixed-band provider rows remain
+    /// None rather than being silently assigned S-band scattering.
+    pub band: Option<&'static str>,
     pub site: SiteRef,
     pub kind: SiteKind,
-    /// `"KTLX Norman"` | `"Ängelholm"`, the US grammar is `id name`, the
+    /// `"KTLX Norman"` | `"Ängelholm"` — the US grammar is `id name`, the
     /// international grammar is the provider's own picker label.
     pub label: String,
     /// Weak provenance suffix for rows outside the home catalog
-    /// (`"SMHI Sweden"`, `"research feed"`); `None` for WSR-88D/TDWR,
+    /// (`"SMHI Sweden"`, `"research feed"`); `None` for WSR-88D/TDWR —
     /// `BeamCandidate.origin` (main.rs) anticipated exactly this.
     pub origin: Option<String>,
     pub lat_lon: Option<(f32, f32)>,
@@ -105,7 +108,7 @@ pub struct SiteRecord {
 
 impl SiteRef {
     /// Settings/favorites encoding: `"KTLX"` | `"intl:smhi:angelholm"`.
-    /// Backward compatible: US ids never contain `':'`, so every
+    /// Backward compatible — US ids never contain `':'`, so every
     /// existing settings value parses as [`SiteRef::Us`].
     pub fn settings_key(&self) -> String {
         match self {
@@ -120,7 +123,7 @@ impl SiteRef {
     /// Decode a settings/favorites key. `':'`-free strings are bare US
     /// ids and normalize to uppercase exactly like [`crate::RadarSite::new`]
     /// (and like the favorites store, which uppercases bare keys on
-    /// write). `intl:{provider}:{site}` keys preserve case: ORD/SMHI
+    /// write). `intl:{provider}:{site}` keys preserve case — ORD/SMHI
     /// site ids are case-significant lowercase, JMA's uppercase. Total:
     /// malformed `':'` keys fall back to a (unresolvable) US ref rather
     /// than dropping the user's data.
@@ -142,8 +145,8 @@ impl SiteRef {
 }
 
 /// THE catalog lookup: resolve a ref against the compiled-in tables. No
-/// network (US rows come from the embedded catalog + community feeds,
-/// international rows from the providers' embedded tables) so this is
+/// network — US rows come from the embedded catalog + community feeds,
+/// international rows from the providers' embedded tables — so this is
 /// safe on the UI thread. `None` = not a compiled-in site (e.g. an S3
 /// listing surfaced a brand-new US site, or a saved key went stale). US
 /// lookup is case-insensitive (that world is case-insensitive today);
@@ -198,6 +201,7 @@ fn build_catalog() -> Vec<SiteRecord> {
     for &(id, name, latitude_deg, longitude_deg) in embedded_sites::EMBEDDED_SITES {
         seen_us_ids.insert(id.to_ascii_uppercase());
         records.push(SiteRecord {
+            band: if id.len()!=4 {None} else if matches!(us_catalog_site_kind(id),SiteKind::Tdwr) {Some("C")} else {Some("S")},
             site: SiteRef::Us {
                 level2_id: id.to_owned(),
             },
@@ -216,6 +220,7 @@ fn build_catalog() -> Vec<SiteRecord> {
             continue;
         }
         records.push(SiteRecord {
+            band: None,
             site: SiteRef::Us {
                 level2_id: feed.id.to_owned(),
             },
@@ -229,6 +234,7 @@ fn build_catalog() -> Vec<SiteRecord> {
     for provider in international::intl_providers() {
         for site in provider.static_sites() {
             records.push(SiteRecord {
+                band: PROVIDER_BANDS.iter().find(|(id,_)|*id==site.provider_id).map(|(_,band)|*band),
                 site: SiteRef::Intl {
                     provider_id: site.provider_id.to_owned(),
                     site_id: site.site_id.clone(),
@@ -249,6 +255,38 @@ fn build_catalog() -> Vec<SiteRecord> {
         }
     }
     records
+}
+
+// Agency metadata, not a geographic heuristic. Mixed-band networks need
+// per-site rows and are deliberately not assigned a network-wide band.
+// Sources: FMI radar network, DMI radar specifications, SMHI frequency-plan
+// response (2025-01-10), DWD network description (doi:10.5194/amt-18-5177-2025),
+// and SHMU radar-network technical poster (2025). See the engine radar docs.
+const PROVIDER_BANDS: &[(&str,&str)] = &[
+    ("dwd","C"),("fmi","C"),("dmi","C"),("smhi","C"),("shmu","C"),
+];
+
+#[cfg(test)]
+mod band_tests {
+    use super::*;
+    #[test]
+    fn weather_bands_do_not_follow_an_identifier_prefix() {
+        let band=|id:&str|resolve(&SiteRef::Us {level2_id:id.into()}).unwrap().band;
+        assert_eq!(band("TOKC"),Some("C"));
+        assert_eq!(band("TJUA"),Some("S"));
+        assert_eq!(band("TLKA2"),None);
+    }
+    #[test]
+    fn known_agency_rows_carry_c_band_and_mixed_providers_stay_unknown() {
+        let sites:Vec<_>=all_sites().collect();
+        for (provider,band) in PROVIDER_BANDS {
+            let rows:Vec<_>=sites.iter().filter(|s|matches!(&s.site,SiteRef::Intl {provider_id,..} if provider_id.as_str()==*provider)).collect();
+            assert!(!rows.is_empty(),"missing provider {provider}");
+            assert!(rows.iter().all(|s|s.band==Some(*band)));
+        }
+        assert!(sites.iter().filter(|s|matches!(&s.site,SiteRef::Intl {provider_id,..} if provider_id=="australia_nci"))
+            .all(|s|s.band.is_none()));
+    }
 }
 
 /// Kind of an embedded-US-catalog id: TDWR table membership, else
@@ -325,7 +363,7 @@ mod tests {
         assert_eq!(SiteRef::parse_settings_key("KTLX"), us("KTLX"));
         assert_eq!(SiteRef::parse_settings_key("ktlx"), us("KTLX"));
         assert_eq!(SiteRef::parse_settings_key(" ktlx "), us("KTLX"));
-        // A bare intl-LOOKING id is still a bare key, only the
+        // A bare intl-LOOKING id is still a bare key — only the
         // `intl:{provider}:{site}` grammar reaches the Intl variant.
         assert_eq!(SiteRef::parse_settings_key("deess"), us("DEESS"));
     }
@@ -343,7 +381,7 @@ mod tests {
             intl("jma", "TAKA")
         );
         assert_eq!(intl("jma", "TAKA").settings_key(), "intl:jma:TAKA");
-        // An uppercased corruption is NOT silently accepted as intl: it
+        // An uppercased corruption is NOT silently accepted as intl — it
         // falls back to a bare (unresolvable) US ref, stably.
         let corrupted = SiteRef::parse_settings_key("INTL:ORD:DEESS");
         assert_eq!(corrupted, us("INTL:ORD:DEESS"));
@@ -370,7 +408,7 @@ mod tests {
     #[test]
     fn tjua_is_a_wsr88d_not_a_tdwr() {
         // TJUA is San Juan's S-band WSR-88D (full 460 km range) and only
-        // happens to share the TDWR `T` prefix: the exception is now
+        // happens to share the TDWR `T` prefix — the exception is now
         // catalog data, not a special case at every gate.
         let record = resolve(&us("TJUA")).expect("TJUA resolves");
         assert_eq!(record.kind, SiteKind::Wsr88d);
@@ -504,7 +542,7 @@ mod tests {
         }
     }
 
-    /// US and international sites rank in ONE distance ordering, the
+    /// US and international sites rank in ONE distance ordering — the
     /// Okinawa interleave: JMA Itokazu (ITOK) sits nearer the probe point
     /// than Kadena AB's US-catalog RODN, with more JMA island-arc radars
     /// behind both.

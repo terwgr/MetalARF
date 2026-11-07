@@ -1,0 +1,77 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/bandwidth_glue.cu",
+      "cuda_symbol": "glue_total_theta",
+      "layout_version": 1,
+      "module": "wrf_exact_total_theta",
+      "name": "wrf_exact_total_theta",
+      "parameters": [
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_total_theta.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -4,17 +4,24 @@
 #include "rtt_pbl_height_bindings.metalh"
 #include "rtt_cone_fill_bindings.metalh"
 #include "rtt_probable_convection_bindings.metalh"
+#include "rtt_observed_depth_bindings.metalh"
 #include "rtt_tendency_bindings.metalh"
 #include "rtt_smooth_interior_bindings.metalh"
 #include "rtt_smooth_edges_bindings.metalh"
 #include "rtt_store_bindings.metalh"
 #include "rtt_column_flag_bindings.metalh"
+#include "rtt_strict_clear_bindings.metalh"
 #include "rtt_vinterp_bindings.metalh"
 #include "rtt_vinterp_edges_bindings.metalh"
 #include "rtt_apply_bindings.metalh"
+#include "lhn_observed_rate_bindings.metalh"
+#include "lhn_apply_bindings.metalh"
 #include "soft_binary32.metalh"
 #include "soft_binary64.metalh"
 #include "soft_glibc_pow64.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_pow.metalh"
 
 using namespace metal;
 
@@ -27,6 +34,10 @@ using namespace metal;
 
 static inline float fdiv_rn(float a, float b) {
     return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b)));
+}
+static inline float gfk_expf(float x) { return as_type<float>(soft_gfk_exp(as_type<uint>(x))); }
+static inline float gfk_powf(float x, float y) {
+    return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y)));
 }
 static inline ulong d_of(float v) { return soft64_from_f32_bits(as_type<uint>(v)); }
 static inline float f_of(ulong d) { return as_type<float>(soft64_to_f32_bits(d)); }
@@ -58,6 +69,10 @@ static inline float rtt_temperature(float theta, float p_hpa, ulong rd_over_cp) 
 
 static inline int rtt_krad_bot(float krad_bot_in, float pblh) {
     return int(fmax(krad_bot_in, pblh) + 0.5f);
+}
+
+static inline float rtt_bottom_in(float krad_bot_in, int ext) {
+    return ext != 0 ? 1.0f : krad_bot_in;
 }
 
 kernel void rtt_background(constant RttBackgroundResources &r [[buffer(0)]],
@@ -206,6 +221,32 @@ kernel void rtt_probable_convection(
     r.probable[col] = hit;
 }
 
+kernel void rtt_observed_depth(constant RttObservedDepthResources &r [[buffer(0)]],
+                               constant RttObservedDepthParams &p [[buffer(1)]],
+                               uint tid [[thread_position_in_grid]]) {
+    const int nz = p.nz;
+    const int ncol = p.ny * p.nx;
+    const int col = int(tid);
+    if (col >= ncol) return;
+    ulong dpint = 0ul;
+    for (int kf = 2; kf <= nz - 1; ++kf) {
+        const ulong at = ulong(kf - 1) * ulong(ncol) + ulong(col);
+        if (r.ref[at] > -100.0f)
+            dpint = soft64_add(dpint, soft64_mul(d_of(0.5f), d_of(
+                r.p[at - ulong(ncol)] - r.p[at + ulong(ncol)])));
+    }
+    r.ext[col] = soft64_greater_equal(dpint, r.dp[0]) ? 1 : 0;
+}
+
+kernel void rtt_strict_clear(constant RttStrictClearResources &r [[buffer(0)]],
+                             constant RttStrictClearParams &p [[buffer(1)]],
+                             uint tid [[thread_position_in_grid]]) {
+    const ulong n_below = ulong(p.nz - 1) * ulong(p.ny) * ulong(p.nx);
+    if (ulong(tid) >= n_below) return;
+    const float rf = r.ref[tid];
+    if (rf > -100.0f && soft64_less(d_of(rf), r.dp[0])) r.ges[tid] = 0.0f;
+}
+
 kernel void rtt_tendency(constant RttTendencyResources &r [[buffer(0)]],
                          constant RttTendencyParams &p [[buffer(1)]],
                          uint tid [[thread_position_in_grid]]) {
@@ -231,7 +272,8 @@ kernel void rtt_tendency(constant RttTendencyResources &r [[buffer(0)]],
             const float tbk = rtt_temperature(r.t[idx], r.p[idx], rd_over_cp);
             const bool skip = soft64_greater(d_of(tbk), warm_k)
                               && soft64_less(rd, warm_min_dbz);
-            if (!skip && (k + 1) >= rtt_krad_bot(p.krad_bot_in, r.pblh[col])) {
+            if (!skip && (k + 1) >= rtt_krad_bot(rtt_bottom_in(p.krad_bot_in, r.ext[col]),
+                                         r.pblh[col])) {
                 const ulong addsnow = soft64_mul(soft64_div(
                     soft_glibc_pow64(d_of(10.0f), soft64_div(rd, z_scale)),
                     z_divisor), z_factor);
@@ -329,7 +371,8 @@ kernel void rtt_column_flag(constant RttColumnFlagResources &r [[buffer(0)]],
         radyn = 0.0f;
         if (soft64_greater(radmax, nearby)) radyn = 1.0f;
         if (fabs(radyn) < 0.00001f) {
-            int kb = rtt_krad_bot(p.krad_bot_in, r.pblh[col]);
+            int kb = rtt_krad_bot(rtt_bottom_in(p.krad_bot_in, r.ext[col]),
+                                  r.pblh[col]);
             if (kb < 1) kb = 1;
             for (int kf = kb; kf <= nz - 1; ++kf)
                 r.ges[ulong(kf - 1) * ulong(ncol) + ulong(col)] = 0.0f;
@@ -425,10 +468,82 @@ kernel void rtt_apply(constant RttApplyResources &r [[buffer(0)]],
     if (idx >= n) return;
     const int k = int(idx / ncol);
     const int col = int(idx - ulong(k) * ncol);
-    const int j = col / nx, i = col - j * nx;
-    if (k >= p.nz - 1 || i < ring || i >= nx - ring || j < ring || j >= p.ny - ring)
+    const int j = col / nx + p.j0, i = col % nx + p.i0;
+    if (k >= p.nz - 1 || i < ring || i >= p.gnx - ring || j < ring || j >= p.gny - ring)
         return;
     const float v = r.slot[idx];
     if (v >= -1.0f && v <= 1.0f)
         r.thp[idx] = r.thp_before[idx] + (v * p.dt);
+}
+
+// Latent heat nudging (the comparison arm): the CUDA kernels with glibc's
+// powf and expf (the gfk routines) in place of the device libm.
+kernel void lhn_observed_rate(constant LhnObservedRateResources &r [[buffer(0)]],
+                              constant LhnObservedRateParams &p [[buffer(1)]],
+                              uint tid [[thread_position_in_grid]]) {
+    const int ncol = p.ny * p.nx;
+    const int col = int(tid);
+    if (col >= ncol) return;
+    float out = -1.0f;
+    for (int k = 0; k < p.nz; ++k) {
+        const ulong at = ulong(k) * ulong(ncol) + ulong(col);
+        if (r.h_agl[at] > p.max_height_m) break;
+        const float rf = r.ref[at];
+        if (rf > -100.0f) {
+            out = (rf >= 0.001f)
+                ? gfk_powf(fdiv_rn(gfk_powf(10.0f, rf * 0.1f), p.zr_a),
+                           fdiv_rn(1.0f, p.zr_b)) : 0.0f;
+            break;
+        }
+    }
+    r.rate[col] = out;
+}
+
+static inline float lhn_qsat(float t, float p) {
+    const float es = 611.2f * gfk_expf(fdiv_rn(17.67f * (t - 273.15f), t - 29.65f));
+    return fdiv_rn(0.622f * es, fmax(p - es, 1.0f));
+}
+
+kernel void lhn_apply(constant LhnApplyResources &r [[buffer(0)]],
+                      constant LhnApplyParams &p [[buffer(1)]],
+                      uint tid [[thread_position_in_grid]]) {
+    const int nx = p.nx, nz = p.nz, ring = p.ring;
+    const ulong ncol = ulong(p.ny) * ulong(nx);
+    const ulong n = ulong(nz) * ncol;
+    const ulong idx = ulong(tid);
+    if (idx >= n) return;
+    const int k = int(idx / ncol);
+    const int col = int(idx - ulong(k) * ncol);
+    const int j = col / nx, i = col - j * nx;
+    if (k >= nz - 1 || i < ring || i >= nx - ring || j < ring || j >= p.ny - ring)
+        return;
+    const float ro = r.rate_obs[col];
+    if (ro < 0.0f) return;
+    const float rm = fdiv_rn(r.rainncv[col] * 3600.0f, p.dt);
+    float alpha;
+    if (ro >= p.threshold && rm >= p.threshold) {
+        alpha = fmin(fmax(fdiv_rn(ro, rm), p.alpha_min), p.alpha_max);
+    } else if (ro < p.threshold && rm >= p.threshold) {
+        alpha = p.alpha_min;
+    } else {
+        return;
+    }
+    const float lh = r.thp[idx] - r.thp_before[idx];
+    if (!(lh > 0.0f)) return;
+    const float cap = p.cap_k_per_s * p.dt;
+    const float inc = fmin(fmax((alpha - 1.0f) * lh, -cap), cap);
+    if (inc == 0.0f) return;
+    const float base = r.thb[p.thb_full != 0 ? idx : ulong(k)];
+    const float exner = gfk_powf(r.p[idx] * 1.0e-5f, 0.285714f);
+    const float t_old = (base + r.thp[idx]) * exner;
+    const float t_new = (base + r.thp[idx] + inc) * exner;
+    r.qv[idx] = r.qv[idx] * fdiv_rn(lhn_qsat(t_new, r.p[idx]), lhn_qsat(t_old, r.p[idx]));
+    r.thp[idx] = r.thp[idx] + inc;
+    // Metal has uint32 atomics. Carry into the high word to preserve the
+    // CUDA uint64 cumulative count; the receipt reads after completion.
+    device atomic_uint *count = reinterpret_cast<device atomic_uint *>(r.counts)
+        + (inc > 0.0f ? 0 : 2);
+    const uint old = atomic_fetch_add_explicit(count, 1u, memory_order_relaxed);
+    if (old == 0xffffffffu)
+        atomic_fetch_add_explicit(count + 1, 1u, memory_order_relaxed);
 }

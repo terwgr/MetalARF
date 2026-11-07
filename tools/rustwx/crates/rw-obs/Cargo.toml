@@ -55,6 +55,11 @@ path = "src/bin/opera.rs"
 name = "rw_igra2"
 path = "src/bin/igra2.rs"
 
+# Scores WRF history frames against the rw_igra2 table (radiosonde levels).
+[[bin]]
+name = "rw_sonde_score"
+path = "src/bin/sonde_score.rs"
+
 [[bin]]
 name = "rw_amv"
 path = "src/bin/amv.rs"
@@ -80,7 +85,17 @@ path = "src/bin/wis2.rs"
 name = "rw_prepbufr"
 path = "src/bin/prepbufr.rs"
 
+# The MADIS public archive (aircraft, radiosondes, mesonets): the regional
+# analysis's conventional streams for dates NOMADS no longer serves.  Classic
+# NetCDF through the vendored `netcdf-reader`, gzip through flate2, GSI's
+# regional error table through `rw_obs::errtable`, rows in
+# `gpuwm-obs.table.v2`.
+[[bin]]
+name = "rw_madis"
+path = "src/bin/madis.rs"
+
 [dependencies]
+rustwx-calc = { path = "../rustwx-calc" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # `rust_backend` rather than the zlib C shim, matching rustwx-io and
 # rw-nexrad: these bins build --offline from the vendor closure and must not
@@ -123,5 +138,25 @@ obs-regrid = { path = "../obs-regrid" }
 static-fields = { path = "../static-fields" }
 wrf-core = { git = "https://github.com/FahrenheitResearch/wrf-rust.git", rev = "93bd2ca670c13fec35bcfc27a58108e6fd71c627", package = "wrf-core", default-features = false, features = ["pure-rust-reader"] }
 
-[dev-dependencies]
+rayon.workspace = true
+obs-score = { path = "../obs-score" }
 netcdf-writer = { path = "../netcdf-writer" }
+
+[dev-dependencies]
+
+
+[[bin]]
+name = "rw_airnow"
+path = "src/bin/airnow.rs"
+
+[[bin]]
+name = "rw_ice_verify"
+path = "src/bin/ice_verify.rs"
+
+[[bin]]
+name = "rw_hail"
+path = "src/bin/hail.rs"
+
+[[bin]]
+name = "rw_ocean_verify"
+path = "src/bin/ocean_verify.rs"

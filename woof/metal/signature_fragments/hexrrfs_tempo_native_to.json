@@ -1,0 +1,549 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_tail",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_tail.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_to",
+      "cuda_symbol": "tempo_to",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "prepared",
+          "float",
+          "read"
+        ],
+        [
+          "saved",
+          "float",
+          "read"
+        ],
+        [
+          "m_qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_nwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_nifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_ng",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_volg",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_theta_m",
+          "float",
+          "read_write"
+        ],
+        [
+          "m_rho_zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "mesh_zz",
+          "float",
+          "read"
+        ],
+        [
+          "mesh_zgrid",
+          "float",
+          "read"
+        ],
+        [
+          "d_exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_pressure_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_pressure_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_exner_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_rtheta_base",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_rtheta_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_dtheta_dt_mp",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_rt_diabatic_tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_surface_pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "d_tend_sfc_pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rthmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rqvmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rqcmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rqrmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rqimpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rqsmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rqgmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rnimpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rnrmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rncmpten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rnifampten",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_rnwfampten",
+          "float",
+          "read_write"
+        ],
+        [
+          "compmax",
+          "float",
+          "read_write"
+        ],
+        [
+          "comp",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "prepared": [
+          [
+            "20",
+            "nz",
+            "nc"
+          ]
+        ],
+        "saved": [
+          [
+            "12",
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_qv": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_qc": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_qr": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_qi": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_qs": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_qg": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_ni": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_nr": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_nc": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_nwfa": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_nifa": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_ng": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_volg": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_theta_m": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "m_rho_zz": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "mesh_zz": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "mesh_zgrid": [
+          [
+            "nz+1",
+            "nc"
+          ]
+        ],
+        "d_exner": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_pressure_base": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_pressure_p": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_exner_base": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_rtheta_base": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_rtheta_p": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_dtheta_dt_mp": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_rt_diabatic_tend": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "d_surface_pressure": [
+          [
+            "nc"
+          ]
+        ],
+        "d_tend_sfc_pressure": [
+          [
+            "nc"
+          ]
+        ],
+        "t_rthmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rqvmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rqcmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rqrmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rqimpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rqsmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rqgmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rnimpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rnrmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rncmpten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rnifampten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "t_rnwfampten": [
+          [
+            "nz",
+            "nc"
+          ]
+        ],
+        "compmax": [
+          [
+            "nc"
+          ]
+        ],
+        "comp": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "aerosol",
+          "int32"
+        ],
+        [
+          "hail",
+          "int32"
+        ],
+        [
+          "top",
+          "int32"
+        ],
+        [
+          "comp_enabled",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcv",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

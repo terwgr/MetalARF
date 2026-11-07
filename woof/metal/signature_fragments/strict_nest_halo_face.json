@@ -1,0 +1,138 @@
+{
+  "kernels": [
+    {
+      "name": "strict_nest_halo_face",
+      "module": "strict_nest_roundtrip_family",
+      "source": "woof/metal/shaders/strict_nest_roundtrip_family.metal",
+      "cuda_source": "woof/core/nest_round_trip.py",
+      "cuda_symbol": "couple_halo_faces",
+      "resources": [
+        [
+          "field",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "halo",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "mup": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "halo": [
+          [
+            "mny",
+            "mnx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "kind",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "mny",
+          "int32"
+        ],
+        [
+          "mnx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

@@ -24,6 +24,7 @@ resolver = "2"
 members = [
     "crates/rw-wps",
     "crates/mapped-engine",
+    "crates/projected-intermediate",
 ]
 # The vendored library crates are path dependencies of the members,
 # not workspace members: their donor manifests stay byte-identical.
@@ -48,11 +49,8 @@ thiserror = "2"
 # outside this workspace. No consumer-side checksum workaround is needed.
 
 [profile.release]
-# Same reasoning as tools/grib1_bridge: bridge binaries are package
-# data measured against wheel caps; debug symbols are the cheapest
-# weight to give back.  The ABI marker literal survives stripping.
-# WOOF: symbol tables go too (strip = "symbols"). Its platform wheel carries
-# six more decoders than the engine's and measured 103,610,312 bytes with
-# debuginfo stripping only; dropping symbols gives back 5.26 MB and keeps the
-# source-revision stamp, contract markers and exported ABI symbols.
+# Same reasoning as tools/rustwx: bridge binaries are package data
+# measured against PyPI's per-file limit, and the static symbol table is
+# the cheapest weight to give back.  The ABI marker literal and the
+# source-revision stamp are .rodata and survive a symbol strip.
 strip = "symbols"

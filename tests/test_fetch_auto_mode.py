@@ -25,8 +25,8 @@ class TransferReached(Exception):
     """The fetch got past every check and handed the plan to a transfer."""
 
 
-@pytest.mark.parametrize("source", fetch_routes.route_ids())
-def test_auto_is_the_default_full_file_route_on_every_table_source(source):
+@pytest.mark.parametrize("source", ["rap"])
+def test_auto_is_the_default_full_file_route_on_a_table_source(source):
     assert fetch_routes.resolve_mode(source, "auto") == "full-file"
     assert fetch_routes.resolve_mode(source, "auto") == fetch_routes.resolve_mode(source, None)
 
@@ -46,11 +46,6 @@ def test_a_table_source_fetch_with_auto_reaches_its_transfer(tmp_path, monkeypat
     with pytest.raises(TransferReached):
         fetch.fetch_main(args)
     assert plans[0].source_id == "rap" and plans[0].objects
-
-
-def test_an_unsupported_record_subset_still_refuses_in_its_own_words():
-    with pytest.raises(ValueError, match="idx-subset"):
-        fetch_routes.resolve_mode("gefs", "idx-subset")
 
 
 def _container_dispatch(tmp_path, monkeypatch, source, archive, mode):
@@ -93,12 +88,11 @@ def test_auto_on_gfs_and_gdas_takes_the_route_an_omitted_mode_takes(
     assert auto == default
 
 
-def test_gfs_record_subsetting_still_refuses(tmp_path, capsys):
-    from woof import cli
-
-    assert cli.main(["fetch", "--source", "gfs", "--cycle", "2026-07-28T06", "--hours", "3",
-                     "--out", str(tmp_path / "out"), "--mode", "idx-subset"]) == 2
-    assert "not a certified GFS route" in capsys.readouterr().err
+@pytest.mark.parametrize("source", fetch.GFS_CONTAINER_SOURCES)
+def test_gfs_idx_subset_takes_the_archive_objects_records(tmp_path, monkeypatch, source):
+    """--mode idx-subset was refused as uncertified; it is the archive route's records now."""
+    reached = _container_dispatch(tmp_path, monkeypatch, source, False, "idx-subset")
+    assert reached == ["archive whole objects"]
 
 
 @pytest.mark.parametrize("source", fetch.GFS_CONTAINER_SOURCES)
@@ -111,7 +105,7 @@ def test_auto_on_gfs_and_gdas_is_priced_as_the_default(monkeypatch, source, arch
     auto = download_budget.download_estimate(dict(request, mode="auto"))
     assert default["bytes"] is not None
     assert (auto["mode"], auto["bytes"]) == (default["mode"], default["bytes"])
-    assert default["mode"] == ("full-file" if archive else "grib-filter")
+    assert default["mode"] == ("idx-subset" if archive else "grib-filter")
 
 
 def test_hrrr_keeps_its_own_auto_probe_rule_in_pricing():

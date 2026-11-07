@@ -18,7 +18,7 @@
 //! scan task. The task is the fourth letter of the WMO bulletin header
 //! (`T_PAGZ60` -> task `Z`), and live decodes show what each task is:
 //!
-//! - task `Z` (`PAGZ`/`PAHZ`/`PAKZ`..., every 5 min): the FULL volume,
+//! - task `Z` (`PAGZ`/`PAHZ`/`PAKZ`..., every 5 min): the FULL volume —
 //!   12 PPI cuts, 360 radials, one moment per product file;
 //! - task `B` (`PAYB`/`PAHB`..., every 5 min): one supplemental 1.5° cut
 //!   at finer gate spacing (200 m vs 400 m);
@@ -29,7 +29,7 @@
 //! timestamp" cannot bind every supplemental cut. Instead the newest task-Z
 //! timestamp shared by required products anchors the frame; supplemental
 //! tasks are admitted only at exact timestamps shared by those products.
-//! Parts are ordered task-major: full volumes (`Z`) first so the
+//! Parts are ordered task-major — full volumes (`Z`) first so the
 //! 12-cut reflectivity PVOL is the merge base, then `B`, then `A`. The
 //! supplemental cuts either union in as new elevations (0.3°) or collide
 //! with a same-elevation full-volume cut of different gate geometry
@@ -219,8 +219,8 @@ struct ChmiProductListing {
 
 /// Fetch and parse every product directory listing for `site_id` (the one
 /// catalog probe both `latest` and `recent` run). The first entry is always
-/// the required `vol_z` listing with at least one parsed file (missing or
-/// empty required listings are errors) so callers can anchor frames on
+/// the required `vol_z` listing with at least one parsed file — missing or
+/// empty required listings are errors — so callers can anchor frames on
 /// `listings[0]`.
 fn fetch_product_listings(site_id: &str) -> Result<Vec<ChmiProductListing>, String> {
     let mut listings = Vec::new();
@@ -348,8 +348,8 @@ fn assemble_frame(
                 .map(|file| (listing.product_rank, file, listing.dir_url.as_str())),
         );
     }
-    // Task-major order: full volumes (Z) for every product first (the
-    // 12-cut reflectivity PVOL must be the merge base) then the
+    // Task-major order: full volumes (Z) for every product first — the
+    // 12-cut reflectivity PVOL must be the merge base — then the
     // supplemental B and A single-cut tasks.
     picks.sort_by_key(|(product_rank, file, _)| (task_rank(file.task), *product_rank));
     let parts: Vec<PlanPart> = picks

@@ -1,0 +1,7 @@
+{
+  "assets_sha256": "33d956cf340cd4d7e48ed40e3448d8f7dddec903008e00e56091ecc24e5e3ca0",
+  "engines": [],
+  "instrument": "tools/measure_engine_packet.py",
+  "instrument_sha256": "14f34bac23497943f462bd6150627143b34452932b6a40bb560c4c48ed103798",
+  "schema": "gpuwm-hex.prepared-engines/v1"
+}

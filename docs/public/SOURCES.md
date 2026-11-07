@@ -31,6 +31,7 @@ List the whole registry with `woof prep --list-sources`, or one row with
 | `aigfs` | `ai-gfs` | 6 h | f384 | global |
 | `aigefs` | `ai-gefs` | 6 h | f384 | global |
 | `ecmwf-open-data` | `ecmwf`, `ifs` | 3 h | f360 | global |
+| `ecmwf-ens` | `ifs-ens`, `ecmwf-ensemble` | 3 h | f360 | global, one perturbed member (`p01`..`p50`) |
 | `aifs` | `aifs-v2`, `aifs-single` | 6 h | f360 | global |
 | `rap` | `rap-awip32` | 1 h | f051 | AWIPS 221, 349x277 Lambert at 32 km (North America) |
 | `rap-native` | `rap-awp130bgrb` | 1 h | f051 | AWIPS 130, 451x337 Lambert at 13.545 km, 50 native hybrid levels (CONUS) |
@@ -39,6 +40,7 @@ List the whole registry with `woof prep --list-sources`, or one row with
 | `era5-l137` | `era5-model-level`, `era5-ml` | 1 h | analysis only | global |
 | `20crv3` | `20cr`, `twentycrv3`, `20crv3-member` | 3 h | analysis only | global |
 | `20crv3-cf` | `20crv3-netcdf`, `20cr-netcdf`, `20cr-cf` | 3 h | analysis only | global |
+| `earth2` | `earth2studio` | 6 h | as far as the model was run (f8784) | 0.25-degree global, or the crop the file carries |
 
 `rap-native` preserves RAP's 50 hybrid levels and their explicit pressure
 fields. The producer interpolates those levels horizontally onto AWIPS grid
@@ -103,16 +105,23 @@ bare grid rectangle would accept.
 
 ## Which sources `woof fetch` downloads
 
-Every row in the table above except `era5-l137`, `20crv3` and
-`20crv3-cf` (see "Sources with no fetch door" below). Fourteen of them are
-rows in the packaged acquisition-route document
+Every row in the table above except `era5-l137` and `20crv3` (see
+"Sources with no fetch door" below). Fifteen of them are rows in the
+packaged acquisition-route document
 (`woof/authorities/rw-wps-fetch-routes.v1.json`), read by the one engine
 in `woof/fetch_routes.py`; four keep the hand-written transports that
-predate it. `docs/public/DATA.md` publishes the working command for each.
+predate it, and `20crv3-cf` reads the NOAA PSL annual CF archive through
+the native CF subset contract (`woof/authorities/native-cf-fetch.v1.json`,
+1836 to 2015, 3-hourly). The route document has a sixteenth row,
+`rrfs-ens`: `woof fetch` downloads its public member subset, and the
+wizard does not plan it, because that column stops at 250 hPa and carries
+no land state (its registry row is `explicit_composition_required`).
+`docs/public/DATA.md` publishes the working command for each.
 
 | how the bytes arrive | sources |
 |---|---|
-| table route (whole published objects, in parallel) | `hrrr-prs`, `hrrr-native`, `rap`, `rap-native`, `rrfs`, `gefs`, `aigfs`, `aigefs`, `ecmwf-open-data`, `aifs`, `icon-global`, `icon-eu`, `icon-d2`, `gem-gdps` |
+| table route (whole published objects, in parallel) | `hrrr-prs`, `hrrr-native`, `rap`, `rap-native`, `rrfs`, `rrfs-ens`, `gefs`, `aigfs`, `aigefs`, `ecmwf-open-data`, `ecmwf-ens`, `aifs`, `icon-global`, `icon-eu`, `icon-d2`, `gem-gdps` |
+| native CF subset (the publisher's own subsetting service) | `20crv3-cf` (NOAA PSL THREDDS, annual per-variable files) |
 | hand-written transport (publisher-side subsetting) | `gfs`, `gdas` (NOMADS grib-filter or the S3 archive), `hrrr` (`.idx` byte ranges, live-cycle wait), `era5` (the public ARCO Zarr store with no key, or a Copernicus CDS retrieval under your own key) |
 
 `woof domain` emits the `[fetch]` table and the runnable step 1 for every
@@ -134,14 +143,13 @@ domain, which is a different question from how many bytes come down.
 
 ## Sources with no fetch door
 
-Four runnable rows refuse a download by name, and the refusal states the
+Three runnable rows refuse a download by name, and the refusal states the
 breakage rather than reporting a gap:
 
 | source | why there is no route | what to do instead |
 |---|---|---|
 | `era5-l137` | ERA5 model-level data is a queued Copernicus CDS MARS request (dataset `reanalysis-era5-complete`, `levtype=ml`), not files at a predictable URL, and the request runs under your own CDS account | submit the model-level request yourself into a folder DIR, fetch the same hours' surface analysis beside it with `woof fetch --source era5 --cycle CYCLE --hours HOURS --area AREA --retrieve --out DIR`, then `woof prep --source era5-l137 --source-root DIR --experiment-config CONFIG.toml --wps-namelist CONFIG.namelist.wps` |
 | `20crv3` | the every-member GRIB2 archive is not published on an anonymously readable public endpoint; only the ensemble-MEAN NetCDF distribution is, and a member state is not a mean | stage the member's files in DIR, then `woof prep --source 20crv3 --source-root DIR --author-only --author-input-manifest DIR/member-manifest.json`, which prints the `--source-manifest` pair the run binds |
-| `20crv3-cf` | the NOAA PSL NetCDF distribution is a per-year, per-variable reanalysis archive with no cycle and no forecast lead, so `--cycle`/`--hours` describe nothing in it | fill DIR with `tools/download_20crv3_native_subset.py` and its window flags plus `--output DIR` (it rebuilds the missing orography and land mask into `invariant.nc`), then `woof prep --source 20crv3-cf --source-root DIR --experiment-config CONFIG.toml --wps-namelist CONFIG.namelist.wps` |
 | `mapped` | the generic declarative adapter is not a product: it names no publisher, no bucket and no file grammar, so there is nothing to resolve | it *is* the door for bytes you already have -- supply the mapping and composition documents with the files (`--mapping`, `--composition`, `--provenance`, `--input`, `--supplement`) |
 
 `--source-root` binds the folder by the source's own row in
@@ -159,7 +167,7 @@ one and says which one it replaced. Each preparation keeps its own copy
 of the manifest it was made from. Adding a hand-staged source is a row
 there, not a code path.
 
-For `era5-l137`, `20crv3` and `20crv3-cf`, `woof domain` emits a
+For `era5-l137` and `20crv3`, `woof domain` emits a
 `[fetch]` table carrying the source, cycle, hours and the folder the
 bytes go in, and step 1 of the printed
 next-steps block is the staging note rather than a `woof fetch` line
@@ -226,6 +234,85 @@ Data: Deutscher Wetterdienst, https://opendata.dwd.de, CC BY 4.0. Anything
 you publish from it carries the attribution "Source: Deutscher
 Wetterdienst".
 
+## NVIDIA Earth-2 models
+
+`--source earth2` starts a forecast from an NVIDIA Earth-2 model run through
+Earth2Studio: FourCastNet 3, SFNO, Pangu, Aurora, FengWu, GraphCast or AIFS.
+It reads the NetCDF file Earth2Studio's own `NetCDF4Backend` writes, as
+written: one variable per field and level (`t850`, `z500`, `q700`, `u10m`,
+`msl`), dimensions `(time, lead_time, lat, lon)`, no units in the file
+(Earth2Studio's lexicon fixes them, and the packaged mapping carries that
+lexicon). A domain may start at any lead of the file: valid times are the
+initialization plus `lead_time`.
+
+These models publish no soil, land mask, orography, skin temperature, SST,
+sea ice, snow, surface pressure or 2 m humidity. The land surface comes from
+the ERA5 analysis at the model's initialization (the same rule the `aigfs`
+row applies with GDAS), and surface pressure is derived at every lead from
+the model's own mean-sea-level pressure at the analysis terrain.
+
+One command runs the model and fetches that analysis:
+
+```
+WOOF_EARTH2_PYTHON=/path/to/earth2studio-env/bin/python \
+woof fetch --source earth2 --model fcn3 --cycle 2015-09-27T00 --hours 96 \
+      --area 0,-105,55,-15 --out data/fcn3
+woof domain --source earth2 --polygon box.geojson --root-dx 2.5 --hours 48 \
+      --cycle 2015-09-27T00 --forecast-start-hour 48 --out storm.toml
+woof prep --source earth2 --input data/fcn3/earth2-fcn3-20150927T00.nc \
+      --geog-root ~/.local/share/woof/WPS_GEOG \
+      --supplement physical_analysis_surface_data=data/fcn3/analysis/era5-combined.nc \
+      --author-input-manifest data/fcn3/inputs.json \
+      --experiment-config storm.toml --wps-namelist storm.namelist.wps \
+      --output-root prepared
+woof sim prepared --experiment-config storm.toml \
+      --wps-namelist storm.namelist.wps --outdir forecast --render-products all
+```
+
+A file you produced with Earth2Studio yourself goes straight to `woof prep`
+with the ERA5 analysis at its initialization
+(`woof fetch --source era5 --era5-provider arco --retrieve --cycle INIT
+--hours 0 --area AREA`, over an area that contains the file's crop).
+`WOOF_EARTH2_PYTHON` names an environment with `earth2studio` and the
+model's extra installed; nothing is installed and no account is created.
+Which models qualify, where their weights live and what the others need is
+the table `woof/authorities/earth2-models.v1.json`; adding a model whose
+output carries the same vocabulary is a row there.
+
+`woof earth2` combines acquisition, track-based storm placement, preparation,
+simulation and native map rendering. Its `--dry-run --spec-out spec.json`
+writes the canonical job contract; `woof earth2 --spec spec.json --out DIR`
+runs that saved job. Runtime help lists the installed table rows.
+
+Completed fetch directories can be supplied with `--earth2-input DIR`, including
+with `--spec spec.json`. This runtime input does not change canonical JobSpec
+bytes. Model, cycle, initial data, member, horizon and artifact hashes must match;
+longer forecasts and spatial supersets are accepted. A bounded explicit input
+defines automatic search reach, and the authored parent and moving corridor
+must fit inside it before preparation starts. An incompatible explicit input
+refuses instead of launching replacement inference. Omitting it retains normal
+model acquisition when no matching cache exists.
+
+Completed fetch-v2 receipts can also be shared through
+`WOOF_EARTH2_FETCH_RECEIPTS=/path/to/earth2-run.json` (a path-separated list
+also works). Reuse checks the complete model row, cycle, initial data
+source, member, area, complete lead ladder and forecast file hashes. A longer
+forecast may supply the requested leads; automatic cache discovery does not
+replace a global storm search with a cropped forecast. The door reads shared arrays in place and
+writes its own preparation handoff. A copied acquisition directory may resolve
+retired producer paths relative to the original request output directory;
+forecast hashes remain mandatory and the original paths stay in relocation
+lineage. Original producer timings stay in the
+parent receipt; the current job records verification time and zero model time.
+The producer table digest is retained as lineage; an unrelated row added to
+the installed table does not invalidate an identical model row. Original
+single-member fetch-v1 receipts also require a checked installed default public
+weight revision, native seed policy, runtime version and native NetCDF clock
+and global extent. Nondefault loader settings without evidence are refused.
+The local index defaults to `fetch-receipts` inside the model weight cache;
+`WOOF_EARTH2_FETCH_CACHE` overrides that index directory. Retired arrays make
+an ordinary cache miss; changed retained bytes cause a named refusal.
+
 ## Adding a source
 
 Nothing in `woof/domain_wizard.py` names a model. A new row reaches this
@@ -254,3 +341,150 @@ it installs a synthetic registry row and drives the real CLI, checking
 that the emitted `namelist.wps` carries the cadence the row declared and
 that a regional variant refuses outside the window the row declared, with
 no code added anywhere.
+
+## Parameterized model sources
+
+A registry row can declare a model table. Its concrete source keys use
+`<row>-<model>` and model aliases use the same prefix. `earth2` reads
+`woof/authorities/earth2-models.v1.json`; bare model names are not source
+aliases. Each row retains its own output cadence and weight licence.
+Rows without a preparation profile refuse initialization with their declared
+missing inputs. Restricted or unresolved weight terms require an explicit
+`--accept-licence` naming those terms, before acquisition or planning.
+The shared decoder accepts whole multiples of its minimum cadence.
+
+| source | default output spacing | preparation profile | weight licence class |
+|---|---|---|---|
+| `earth2-fcn3` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-sfno` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-pangu` | 6 h | earth2-pl13-q-netcdf-v1 | research_only |
+| `earth2-aurora` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-fengwu` | 6 h | earth2-pl13-q-netcdf-v1 | unresolved |
+| `earth2-aifs` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-fuxi` | 6 h | earth2-pl13-rh-netcdf-v1 | unresolved |
+| `earth2-fcn` | 6 h | unavailable, see model table needs | unresolved |
+| `earth2-stormcast` | 1 h | unavailable, see model table needs | unresolved |
+| `earth2-corrdiff` | unspecified h | unavailable, see model table needs | unresolved |
+| `earth2-dlwp` | 6 h | unavailable, see model table needs | unresolved |
+| `earth2-atlas` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-atlas-si` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aifs2` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aifs-ens` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aifs2-ens` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aurora15` | 1 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aurora15-6h` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aurora15-ensemble` | 1 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-aurora15-ensemble-6h` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-gencast-mini` | 12 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-weathernext2` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-weathernext2-mini` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-dlesym` | 6 h | unavailable, see model table needs | permissive |
+| `earth2-ace2` | 6 h | unavailable, see model table needs | permissive |
+| `earth2-ucast` | 12 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-graphcast-operational` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-graphcast-small` | 6 h | earth2-pl13-q-netcdf-v1 | permissive |
+| `earth2-interpmodafno` | 1 h | unavailable, see model table needs | research_only |
+| `earth2-fuxi-s2s` | 24 h | unavailable, see model table needs | research_only |
+
+Hugging Face packages can be fetched independently of a forecast:
+
+```console
+woof hf-fetch fcn3
+woof hf-fetch hf://owner/model@revision
+woof hf-fetch hf://datasets/owner/dataset@revision/path
+```
+
+The Earth-2 table's `weights` object supplies `host: "huggingface"`,
+`repository`, `revision`, and `files` records containing `path`, `size`, and
+`sha256`. A null `sha256` denotes a small Git-stored file; its size and Git
+blob ID from the pinned API response are verified. LFS files are checked
+against both the table digest and the API digest. Dataset
+rows additionally set `repo_type: "dataset"`. With no file list the command
+fetches the repository, or the URL's file/directory prefix. Branches and tags
+resolve to a commit before transfers start. The cache is
+`WOOF_HF_CACHE` (default `~/.cache/woof/hf`), with a JSON receipt beside
+each commit directory. Dataset packages live under its `datasets/` prefix.
+Repeated fetches verify sizes and checksums before reusing files.
+
+Only `HF_TOKEN` or `HUGGING_FACE_HUB_TOKEN` from the environment supplies
+credentials. Public packages work anonymously; denied packages raise an error
+with the repository name and HTTP status. The command reads no token files.
+`--connections` or `WOOF_HF_CONNECTIONS` sets the HTTP pool size (default and
+maximum 30). Large files need at least two connections and download in
+parallel resumable ranges. Fetches share a host admission lock, including across different cache roots.
+`WOOF_HF_GOVERNOR` can relocate the lock file for an isolated environment. Interrupted `.part` files resume on the next invocation.
+
+For Earth-2 rows whose `weights.host` is `huggingface`, the forecast door
+fetches the pinned package and passes its local directory to the runtime.
+The runtime uses `Package(local_directory, cache=False)` and `load_model`,
+so it does not ask Earth2Studio to fetch a second package.
+
+The ensemble door accepts registry keys and aliases, including RAP's hourly
+cycles. Mixed families use `--source earth2-fcn3:18,gefs:18`, or `[ensemble]`
+`sources = [{source = "earth2-fcn3", members = 18}, {source = "gefs", members = 18}]`.
+Counts must sum to `--members` when it is supplied. A single uncounted source
+takes `--members`, with 36 as its default. Each family fills its own source,
+lagged-cycle and perturbation rungs. Member indices and seeds span all families.
+The first family supplies the geometry; every other family must cover it.
+
+Explicit storm names and ATCF ids also work with unlabelled model tracks.
+The generic cyclone selector looks up the NHC catalogue entry active at the
+cycle, then requires exactly one model track within 300 km of its cycle fix.
+The catalogue covers the Atlantic and eastern/central North Pacific. Ambiguous
+or absent matches refuse with the requested id and cycle. The receipt seals the
+catalogue and best-track references; model fixes drive the forecast and moving
+nest. `--storm auto` uses only model strength at the cycle and never consults
+this identity catalogue.
+
+Local schedulers may set `WOOF_EARTH2_STAGE_PREFIX` to a JSON object of stage names
+and argv prefixes. Each prefix wraps the public stage command; unspecified
+stages run normally. For example, a pool can admit `setup`, `prep` and `sim`
+while tracking and Rust rendering run on the CPU. Receipts separate admission
+wait from stage wall time and retain both the scheduler and underlying argv.
+This execution setting does not change the canonical JobSpec.
+
+<!-- model-sources:begin -->
+## Model source IDs
+
+Generated by `python tools/source_registry_doc.py` from the source registry.
+
+Rows share acquisition and preparation routes. Runtime availability and weight
+licence checks still apply; a listed ID does not imply a measured forecast.
+
+| Source | Model | Packaged profile |
+|---|---|---|
+| `earth2-fcn3` | FCN3 | `earth2-pl13-q-netcdf-v1` |
+| `earth2-sfno` | SFNO | `earth2-pl13-q-netcdf-v1` |
+| `earth2-pangu` | Pangu6 | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aurora` | Aurora | `earth2-pl13-q-netcdf-v1` |
+| `earth2-fengwu` | FengWu | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aifs` | AIFS | `earth2-pl13-q-netcdf-v1` |
+| `earth2-fuxi` | FuXi | `earth2-pl13-rh-netcdf-v1` |
+| `earth2-fcn` | FCN | Not declared |
+| `earth2-stormcast` | StormCast | `earth2-stormcast-hrrr-netcdf-v1` |
+| `earth2-corrdiff` | CorrDiff (km-scale diffusion downscaling) | Not declared |
+| `earth2-dlwp` | DLWP | Not declared |
+| `earth2-atlas` | Atlas CRPS, selected member | `earth2-pl13-q-netcdf-v1` |
+| `earth2-atlas-si` | Atlas stochastic interpolant | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aifs2` | AIFS2 | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aifs-ens` | AIFSENS | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aifs2-ens` | AIFS2ENS | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aurora15` | Aurora1p5 | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aurora15-6h` | Aurora1p5_6h | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aurora15-ensemble` | Aurora1p5Ensemble | `earth2-pl13-q-netcdf-v1` |
+| `earth2-aurora15-ensemble-6h` | Aurora1p5Ensemble_6h | `earth2-pl13-q-netcdf-v1` |
+| `earth2-gencast-mini` | GenCastMini | `earth2-pl13-q-netcdf-v1` |
+| `earth2-weathernext2` | WeatherNext2Cyclones | `earth2-pl13-q-netcdf-v1` |
+| `earth2-weathernext2-mini` | WeatherNext2CyclonesMini | `earth2-pl13-q-netcdf-v1` |
+| `earth2-dlesym` | DLESyMLatLon | Not declared |
+| `earth2-ace2` | ACE2ERA5 | Not declared |
+| `earth2-ucast` | UCast | `earth2-pl13-q-netcdf-v1` |
+| `earth2-graphcast-operational` | GraphCastOperational | `earth2-pl13-q-netcdf-v1` |
+| `earth2-graphcast-small` | GraphCastSmall | `earth2-pl13-q-netcdf-v1` |
+| `earth2-interpmodafno` | InterpModAFNO | Not declared |
+| `earth2-fuxi-s2s` | FuXiS2S | Not declared |
+| `earth2-stormcast-conus` | StormCastCONUS | `earth2-stormcast-conus-hrrr-netcdf-v1` |
+| `earth2-atlas-crps` | Atlas CRPS | `earth2-pl13-q-netcdf-v1` |
+| `earth2-derived-ws10m` | Derived 10 m wind speed | Not declared |
+| `earth2-windgust` | Wind Gust AFNO | Not declared |
+<!-- model-sources:end -->

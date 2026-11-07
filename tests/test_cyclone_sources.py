@@ -15,6 +15,7 @@ from woof.fetch import validate_fetch_hints
 from woof.companion_domains import VORTEX_PRESET
 from woof.source_adapters import get_source_adapter
 
+from cyclone_preset_fit import source_licence
 from cyclone_preset_fit import center, cycle_for, holds_the_preset_root
 
 
@@ -33,17 +34,18 @@ def refused_for_its_window(source):
 # refused by name and is not on the menu, so it is not walked here.
 @pytest.mark.parametrize("source", cs.source_ids())
 def test_all_fetchable_sources_author_valid_configuration(source):
-    if refused_for_its_window(source):
-        return
-    text, exp = tc.configuration_text(cycle=cycle_for(source), point=center(source),
-                                      forcing_source=source)
-    table = tomllib.loads(text)
-    assert table["fetch"]["source"] == source
-    validate_fetch_hints(table["fetch"], source="fixture")
-    assert table["fetch"].get("member") == cs.selected_member(source)
-    assert exp.run_seconds == 21600
-    assert [d.run.dx for d in exp.domains] == [12000., 3000.]
-    assert {k: v for k, v in table["domain"][1]["follow"].items() if k != "track"} == VORTEX_PRESET
+    with source_licence(source):
+        if refused_for_its_window(source):
+            return
+        text, exp = tc.configuration_text(cycle=cycle_for(source), point=center(source),
+                                          forcing_source=source)
+        table = tomllib.loads(text)
+        assert table["fetch"]["source"] == source
+        validate_fetch_hints(table["fetch"], source="fixture")
+        assert table["fetch"].get("member") == cs.selected_member(source)
+        assert exp.run_seconds == 21600
+        assert [d.run.dx for d in exp.domains] == [12000., 3000.]
+        assert {k: v for k, v in table["domain"][1]["follow"].items() if k != "track"} == VORTEX_PRESET
 
 
 @pytest.mark.parametrize("source", cs.source_ids())
@@ -57,14 +59,15 @@ def test_the_plan_route_is_the_one_the_authored_configuration_belongs_to(source)
     config-driven route.  The route is the source row's, so it is the one
     the setup's own configuration needs.
     """
+    with source_licence(source):
 
-    if refused_for_its_window(source):
-        return
-    text, _exp = tc.configuration_text(cycle=cycle_for(source), point=center(source),
-                                       forcing_source=source)
-    table = tomllib.loads(text)
-    assert cs.plan_route(source) == (
-        "experiment" if "case_data" in table else "prepared")
+        if refused_for_its_window(source):
+            return
+        text, _exp = tc.configuration_text(cycle=cycle_for(source), point=center(source),
+                                           forcing_source=source)
+        table = tomllib.loads(text)
+        assert cs.plan_route(source) == (
+            "experiment" if "case_data" in table else "prepared")
 
 
 def test_gfs_storms_run_on_the_prepared_route():
@@ -143,7 +146,9 @@ def test_source_menu_uses_routes_and_member_grammar():
     # fetchable row that then refuses for want of an initialization route
     # would be a dead door.
     assert set(options) == set(cs.source_ids())
-    assert set(options) <= set(routes.all_fetchable_sources())
+    from woof.source_adapters import source_adapters
+    owners = {r.source_id for r in source_adapters() if r.acquisition_owner}
+    assert set(options) <= set(routes.all_fetchable_sources()) | owners
     for source in set(routes.all_fetchable_sources()) - set(options):
         with pytest.raises(ValueError, match="--list-sources"):
             cs.source_adapter(source)
@@ -166,14 +171,15 @@ def test_cli_source_and_member_selection_reaches_map(capsys):
 
 @pytest.mark.parametrize("source", cs.source_ids())
 def test_wps_interval_uses_same_registry_value_as_fetch_and_memory(source):
-    from woof.hrrr_prepared_bundle import render_wps_namelist
-    if refused_for_its_window(source):
-        return
-    _, experiment = tc.configuration_text(cycle=cycle_for(source), point=center(source),
-                                          forcing_source=source)
-    interval = get_source_adapter(source).forcing_interval_seconds
-    text = render_wps_namelist(experiment, interval_seconds=interval)
-    assert f" interval_seconds = {int(interval)}," in text
+    with source_licence(source):
+        from woof.hrrr_prepared_bundle import render_wps_namelist
+        if refused_for_its_window(source):
+            return
+        _, experiment = tc.configuration_text(cycle=cycle_for(source), point=center(source),
+                                              forcing_source=source)
+        interval = get_source_adapter(source).forcing_interval_seconds
+        text = render_wps_namelist(experiment, interval_seconds=interval)
+        assert f" interval_seconds = {int(interval)}," in text
 
 
 @pytest.mark.parametrize("interval", [0, -1, 0.5, float("nan"), float("inf")])
@@ -193,7 +199,8 @@ def test_combined_grib_source_declares_real_forcing_and_wps(tmp_path):
     data = raw["case_data"]
     from woof.fetch import era5_combined_name
     # The declared file is the one the declared provider publishes.
-    expected = (Path(raw["fetch"]["out"]).resolve()
+    # [fetch].out is relative to the configuration, as forcing is (D-11).
+    expected = ((out.parent / raw["fetch"]["out"]).resolve()
                 / era5_combined_name(raw["fetch"].get("era5_provider")))
     assert (out.parent / data["forcing"][0]).resolve() == expected
     assert data["forcing_interval_s"] == raw["fetch"]["cadence"]*3600
@@ -239,3 +246,23 @@ def test_a_reanalysis_cyclone_reads_the_keyless_store_and_declares_the_file_it_p
     table = tomllib.loads(text)
     assert table["fetch"]["era5_provider"] == "arco"
     assert table["case_data"]["forcing"][0].endswith(era5_combined_name("arco"))
+
+
+def test_restricted_source_requires_exact_licence_in_cyclone_cli(capsys):
+    from woof.earth2_licensing import model_row
+    source = next(s for s in cs.source_ids()
+                  if s.startswith("earth2-") and model_row(s)[1].get("licence_class") == "research_only")
+    licence = model_row(source)[1]["weights"]["licence"]
+    parser = argparse.ArgumentParser()
+    tc.register_cli(parser.add_subparsers())
+    argv = ["cyclone-setup", "--source", source, "--cycle", cycle_for(source),
+            "--point=18,-65", "--hours", "1", "--card", "96gb", "--tiles", "off"]
+    for acceptance in ([], ["--accept-licence", "wrong licence"]):
+        assert tc.main(parser.parse_args(argv + acceptance)) == 1
+        assert "--accept-licence" in json.loads(capsys.readouterr().out)["error"]
+    assert tc.main(parser.parse_args(argv + ["--accept-licence", licence])) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["source"] == source and result["forecast_started"] is False
+    # Acceptance is invocation-local; it cannot leak into the next plan.
+    with pytest.raises(ValueError, match="--accept-licence"):
+        tc.configuration_text(cycle=cycle_for(source), point=(18., -65.), forcing_source=source)

@@ -88,21 +88,22 @@ fn usage() -> String {
          --sweeps         relaxation budget (default 300)\n\
          --omega          over-relaxation factor (default 1.4; 1.0 is plain Lloyd)\n\
          --triangulation  how the Delaunay is kept between relaxation sweeps.\n\
-        \x20                 rebuild (DEFAULT, class A) rebuilds it from scratch every sweep.\n\
-        \x20                 That is what every registered mesh was generated with and the\n\
-        \x20                 only setting that reproduces one byte for byte.\n\
-        \x20                 incremental (class B) keeps the facets and repairs them by Lawson\n\
-        \x20                 flips. SAME triangulation, but each cell keeps the ring ROTATION\n\
-        \x20                 it had where a rebuild re-rolls it for about 27% of cells, so the\n\
-        \x20                 FILE differs. Use it for a mesh that has never existed; never to\n\
-        \x20                 regenerate one with a registered SHA-256.\n\n\
+        \x20                 incremental (DEFAULT) keeps the facets and repairs them by Lawson\n\
+        \x20                 flips. rebuild rebuilds the hull from scratch every sweep (slower).\n\
+        \x20                 Rings start at their smallest neighbour index, so both arms write\n\
+        \x20                 the same bytes. Meshes generated before 2026-10-16 used the old\n\
+        \x20                 ring rotation and are not reproduced byte for byte by either.\n\n\
          THE REGIONAL CULL\n\
          --cull-parent    cut a limited-area mesh out of an existing global grid or static\n\
+         --cull-provenance-grid GRID  bind static provenance to the final regional grid\n\
         \x20                 file instead of generating one. Byte-matches the native\n\
         \x20                 MPAS-Limited-Area v2.2 cull for the same region: bdyMask rings\n\
         \x20                 0..7, parent-subset ordering, contiguous reindex, 0 sentinels\n\
         \x20                 on outermost-ring connectivity, and the METIS graph file.\n\
-         --region         the piece to keep, as a Shape row -- the SAME rows a spec's\n\
+         --cull-mark-parent GRID  mark the region on this file of the same mesh (its\n\
+        \x20                 binary64 coordinates) instead of the parent's own, so a binary32\n\
+        \x20                 native static is cut to the grid cut's cells and rings\n\
+         --region        the piece to keep, as a Shape row -- the SAME rows a spec's\n\
         \x20                 refinement regions use, so a new region is data, never code:\n\
         \x20                 {{\"kind\": \"polygon\", \"vertices_deg\": [[50,-129],[50,-65],...]}}\n\
         \x20                 {{\"kind\": \"cap\", \"center_deg\": [39,-98], \"radius_km\": 1200}}\n\
@@ -347,8 +348,8 @@ fn run() -> Result<String, String> {
         }
         lloyd.omega = v;
     }
-    // THE CLASS SWITCH. Default `rebuild`; see `hull::TriangulationMode` for
-    // why a faster default would silently lapse every registered mesh digest.
+    // THE ARM SWITCH. Default `incremental`; both arms write the same bytes
+    // (see `hull::TriangulationMode`).
     if let Some(v) = args.get("triangulation") {
         lloyd.triangulation = rw_mpas::mesh::hull::TriangulationMode::parse(v)?;
     }
@@ -597,11 +598,15 @@ fn cull_region(args: &Args, parent: &str) -> Result<String, String> {
         }
     }
 
-    let receipt = rw_mpas::mesh::cull::cull_file(
+    let provenance_grid: Option<PathBuf> = args.get("cull-provenance-grid").map(PathBuf::from);
+    let mark_parent: Option<PathBuf> = args.get("cull-mark-parent").map(PathBuf::from);
+    let receipt = rw_mpas::mesh::cull::cull_file_marked_on(
         Path::new(parent),
         &shape,
         &out,
         graph.as_deref(),
+        provenance_grid.as_deref(),
+        mark_parent.as_deref(),
     )
     .map_err(|e| e.to_string())?;
 

@@ -354,7 +354,9 @@ def _builder_to_the_first_nest(monkeypatch):
             ("woof.core.model._forcing_cadence_seconds", lambda catalog: 10800.0),
             ("woof.experiment.pre_spawn_experiment", lambda e: active),
             ("woof.vertical_adaptation.refuse_tree_off_the_experiment_coordinate", lambda *a, **k: None),
-            ("woof.core.clock.resolve_clock", lambda *a, **k: SimpleNamespace(clocks=lambda: clocks)),
+            # A real TickClock carries tick_den; the builder reads the declared tree's (dormant d02 included)
+            # as the startup tree's tick floor since 801ccab134.
+            ("woof.core.clock.resolve_clock", lambda *a, **k: SimpleNamespace(clocks=lambda: clocks, tick_den=1)),
             ("woof.core.clock.build_schedule", lambda *a, **k: None),
             ("woof.core.preflight.estimate_experiment", lambda *a, **k: estimate),
             ("woof.core.state.build_shared_dycore_state_workspace", lambda domains: empty),

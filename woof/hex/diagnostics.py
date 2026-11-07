@@ -50,12 +50,14 @@ def edge_signs_on_vertices(mesh: object) -> FloatArray:
     """Transcribe ``mpas_atm_core.F:1172-1184`` for 0-based connectivity."""
     edges = _mesh_array(mesh, "edgesOnVertex").astype(np.int64, copy=False)
     vertices = _mesh_array(mesh, "verticesOnEdge").astype(np.int64, copy=False)
-    signs = np.zeros(edges.shape, dtype=np.float64)
-    for vertex in range(edges.shape[0]):
-        for slot, edge in enumerate(edges[vertex]):
-            if edge >= 0:
-                signs[vertex, slot] = 1.0 if vertices[edge, 1] == vertex else -1.0
-    return signs
+    # Whole-array form of the per-vertex, per-slot loop (the same 1.0 / -1.0 / 0.0 words). THE COST THIS
+    # REMOVES (RRFS hrrrv5 mv3km, V6000, 2026-10-28): the Python loop ran ~0.5 s per dycore build for 413k
+    # vertices on one core (about 5 s on NOAA's conus3km).  An edge index outside verticesOnEdge raises
+    # IndexError, as the loop did.
+    active = edges >= 0
+    upper = vertices[np.where(active, edges, 0), 1]
+    owner = np.arange(edges.shape[0], dtype=np.int64)[:, None]
+    return np.where(active, np.where(upper == owner, 1.0, -1.0), 0.0).astype(np.float64, copy=False)
 
 
 def kite_indices_for_cells(mesh: object) -> NDArray[np.int64]:

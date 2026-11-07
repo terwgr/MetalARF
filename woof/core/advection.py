@@ -89,7 +89,7 @@ def _launch(func: str, q, ru, rv, rw, tend, rdnw, fnm, fnp,
         has_msf = msf is not None
     if msf is None:
         msf = cp.ones(msf_shape, dtype=DTYPE)
-    kern = get_kernel("advection", func)
+    kern = get_kernel("advection", func, (nz, ny, nx))
     grid = ((n_i + _TPB - 1) // _TPB, n_j, n_k)
     kern(grid, (_TPB, 1, 1),
          (q, ru, rv, rw, tend, cp.asarray(rdnw, dtype=DTYPE),
@@ -136,18 +136,13 @@ def launch_flux_div_scalar(q, ru, rv, rw, tend, coord, dx, dy,
             "open_x": int(bool(open_x)), "open_y": int(bool(open_y)),
             "has_msf": int(bool(has_msf)), "spec": int(bool(spec)),
         }
-        # Order 3 is the established default kernel and remains available in
-        # older bundles.  Only the opt-in order-5 path uses the new ABI.
-        kernel_name = "flux_div_scalar"
-        if int(vorder) == 5:
-            parameters["vorder"] = int(vorder)
-            kernel_name = "flux_div_scalar_vorder"
+        kernel_name = _metal_advection_name("flux_div_scalar", vorder, parameters)
         q.buffer.context.submit_kernel(
             kernel_name,
             {"q": q, "ru": ru, "rv": rv, "rw": rw, "tend": tend,
              "rdnw": coord.rdnw, "fnm": coord.fnm, "fnp": coord.fnp,
              "msf": msf},
-            parameters, exact_policy=WRF_ADVECTION_EXACT,
+            parameters, exact_policy=WRF_EXACT,
             grid_size=nz * ny * nx)
         return
 
@@ -192,6 +187,17 @@ def _require_metal_vorder(func, vorder):
             f"{VERTICAL_ADV_ORDERS}, got {vorder}")
 
 
+def _metal_advection_name(func, vorder, parameters):
+    if WRF_EXACT:
+        parameters["vorder"] = int(vorder)
+        mode = "on" if WRF_ADVECTION_EXACT else "off"
+        return f"wrf_exact_advection_{mode}_{func}"
+    if int(vorder) == 5:
+        parameters["vorder"] = int(vorder)
+        return func + "_vorder"
+    return func
+
+
 def _launch_metal_advection(func, q, ru, rv, rw, tend, rdnw, fnm, fnp,
                             dx, dy, nz, ny, nx, n_i, open_x, open_y,
                             msf, has_msf, msf_shape, spec, vorder=3):
@@ -218,16 +224,13 @@ def _launch_metal_advection(func, q, ru, rv, rw, tend, rdnw, fnm, fnp,
         "open_x": int(bool(open_x)), "open_y": int(bool(open_y)),
         "has_msf": int(bool(has_msf)), "spec": int(bool(spec)),
     }
-    kernel_name = func
-    if int(vorder) == 5:
-        parameters["vorder"] = int(vorder)
-        kernel_name += "_vorder"
+    kernel_name = _metal_advection_name(func, vorder, parameters)
     field = {"flux_div_u": "u", "flux_div_v": "v", "flux_div_w": "w"}[func]
     vertical_spacing = "rdn" if func == "flux_div_w" else "rdnw"
     q.buffer.context.submit_kernel(
         kernel_name, {field: q, "ru": ru, "rv": rv, "rw": rw, "tend": tend,
               vertical_spacing: rdnw, "fnm": fnm, "fnp": fnp, "msf": msf},
-        parameters, exact_policy=WRF_ADVECTION_EXACT,
+        parameters, exact_policy=WRF_EXACT,
         # V has ny+1 staggered rows; launching the mass-grid count leaves
         # its final row-band/levels unwritten. U and W already have q.size
         # points too, so the actual target extent is the shared launch count.
@@ -288,7 +291,7 @@ def launch_flux_div_w(w, ru, rv, rw, tend, coord, dx, dy,
             msf, has_msf, (ny, nx), spec, vorder)
 
 
-def build_metal_stage_fluxes(state, cfg, *, periodic_faces=False):
+def build_metal_stage_fluxes(state, cfg, *, periodic_faces=False, first_stage=False):
     """Build coupled ``ru``, ``rv``, and diagnosed ``ww`` on Metal.
 
     ``periodic_faces`` is reserved for the legacy advection-only caller,
@@ -305,47 +308,67 @@ def build_metal_stage_fluxes(state, cfg, *, periodic_faces=False):
     ru = state.scratch((nz, ny, nx + 1), "rk_ru")
     rv = state.scratch((nz, ny + 1, nx), "rk_rv")
     ww = state.scratch((nz + 1, ny, nx), "rk_ww")
+    v_map = state.msfv_inv if WRF_EXACT else state.msfv
     arrays = (state.mup, state.mub2d, mux, muy, state.u, state.v,
-              state.c1h, state.c2h, state.msfu, state.msfv,
+              state.c1h, state.c2h, state.msfu, v_map,
               ru, rv, state.dnw, state.msft, ww)
     if not all(isinstance(value, MetalArray) for value in arrays):
         raise TypeError("Metal stage flux resources cannot mix backends")
     context = state._array_module.context
+    prefix = "wrf_exact_" if WRF_EXACT else ""
     forced = bool(getattr(cfg, "specified", False)
                   or getattr(cfg, "nested", False))
     boundary_x = bool(cfg.open_x or forced) and not periodic_faces
     boundary_y = bool(cfg.open_y or forced) and not periodic_faces
+    faces = {"mup": state.mup, "mub2d": state.mub2d, "mux": mux, "muy": muy}
+    face_params = {"wrf_exact": int(WRF_EXACT), "boundary_x": int(boundary_x),
+                   "boundary_y": int(boundary_y), "ny": ny, "nx": nx}
+    if WRF_EXACT:
+        faces["halo"] = state.mup
+        face_params.update(omega=0, use_halo=0)
+    context.submit_kernel(prefix + "stage_face_masses", faces, face_params,
+                          exact_policy=WRF_EXACT, grid_size=ny * nx)
+
+    def couple(face_x, face_y, flux_x, flux_y):
+        context.submit_kernel(
+            prefix + "couple_ru",
+            {"u": state.u, "c1h": state.c1h, "c2h": state.c2h,
+             "mux": face_x, "msfu": state.msfu, "ru": flux_x},
+            {"has_msf": int(state.has_msf), "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT, grid_size=nz * ny * (nx + 1))
+        context.submit_kernel(
+            prefix + "couple_rv",
+            {"v": state.v, "c1h": state.c1h, "c2h": state.c2h,
+             "muy": face_y, "msfv": v_map, "rv": flux_y},
+            {"has_msf": int(state.has_msf), "reciprocal": int(WRF_EXACT),
+             "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT, grid_size=nz * (ny + 1) * nx)
+
+    couple(mux, muy, ru, rv)
+    omega_ru, omega_rv = ru, rv
+    if WRF_EXACT:
+        # calc_ww_cp owns a distinct face-mass tree and optional saved halo.
+        from woof.core.dycore import WRF_MU_HALO_SLOT
+        halo = state.existing_scratch(WRF_MU_HALO_SLOT) if first_stage else None
+        omega_mux = state.scratch((ny, nx + 1), "rk_ww_mux")
+        omega_muy = state.scratch((ny + 1, nx), "rk_ww_muy")
+        omega_ru = state.scratch(ru.shape, "rk_ww_ru")
+        omega_rv = state.scratch(rv.shape, "rk_ww_rv")
+        context.submit_kernel(
+            prefix + "stage_face_masses",
+            {"mup": state.mup, "mub2d": state.mub2d,
+             "mux": omega_mux, "muy": omega_muy,
+             "halo": state.mup if halo is None else halo},
+            {**face_params, "omega": 1, "use_halo": int(halo is not None)},
+            exact_policy=True, grid_size=ny * nx)
+        couple(omega_mux, omega_muy, omega_ru, omega_rv)
     context.submit_kernel(
-        "stage_face_masses",
-        {"mup": state.mup, "mub2d": state.mub2d,
-         "mux": mux, "muy": muy},
-        {"wrf_exact": int(WRF_EXACT),
-         "boundary_x": int(boundary_x),
-         "boundary_y": int(boundary_y),
-         "ny": ny, "nx": nx},
-        exact_policy=WRF_EXACT, grid_size=ny * nx)
-    context.submit_kernel(
-        "couple_ru",
-        {"u": state.u, "c1h": state.c1h, "c2h": state.c2h,
-         "mux": mux, "msfu": state.msfu, "ru": ru},
-        {"has_msf": int(state.has_msf), "nz": nz, "ny": ny, "nx": nx},
-        exact_policy=WRF_EXACT, grid_size=nz * ny * (nx + 1))
-    context.submit_kernel(
-        "couple_rv",
-        {"v": state.v, "c1h": state.c1h, "c2h": state.c2h,
-         "muy": muy, "msfv": state.msfv, "rv": rv},
-        {"has_msf": int(state.has_msf),
-         "reciprocal": int(WRF_EXACT),
-         "nz": nz, "ny": ny, "nx": nx},
-        exact_policy=WRF_EXACT, grid_size=nz * (ny + 1) * nx)
-    context.submit_kernel(
-        "omega_column_scan",
-        {"ru": ru, "rv": rv, "dnw": state.dnw, "c1h": state.c1h,
+        prefix + "omega_column_scan",
+        {"ru": omega_ru, "rv": omega_rv, "dnw": state.dnw, "c1h": state.c1h,
          "msft": state.msft, "ww": ww},
         {"rdx": float(np.float32(1.0) / np.float32(cfg.dx)),
          "rdy": float(np.float32(1.0) / np.float32(cfg.dy)),
-         "nz": nz, "ny": ny, "nx": nx,
-         "has_msf": int(state.has_msf)},
+         "nz": nz, "ny": ny, "nx": nx, "has_msf": int(state.has_msf)},
         exact_policy=WRF_EXACT, grid_size=ny * nx)
     return ru, rv, ww
 

@@ -3,6 +3,9 @@
 #include "soft_binary64.metalh"
 #include "soft_gfk_pow.metalh"
 #include "soft_libm64.metalh"
+#include "soft_glibc_pow64.metalh"
+#include "soft_gfk_log.metalh"
+#include "thompson_aerosol_exner_libm.metalh"
 #include "thompson_aerosol_state_family_bindings.metalh"
 
 using namespace metal;
@@ -33,10 +36,10 @@ static inline float thompson_aa_effrad_narrow(ulong x) {
     return as_type<float>(soft64_to_f32_bits(x));
 }
 
-// WRF REAL(4)**REAL(4), lowered by gfortran to a correctly rounded powf.
+// The shared CUDA helper pins the FMA powf core on float words.
 static inline float thompson_aa_effrad_powf(float x, float y) {
-    return thompson_aa_effrad_narrow(soft64_plm_pow(
-        thompson_aa_effrad_widen(x), thompson_aa_effrad_widen(y)));
+    return as_type<float>(thompson_exner_powf_bits(as_type<uint>(x),
+                                                 as_type<uint>(y)));
 }
 
 static inline int thompson_aa_effrad_inu_c(float nc_m3) {
@@ -732,10 +735,24 @@ kernel void thompson_aa_wrf39_effective_radius(
     r.effs[tid] = fmax(9.99e-6f, fmin(reqs, 999.0e-6f)) * 1.0e6f;
 }
 
-static inline ulong thompson_aa_wrf39_log10(float x) {
-    const ulong value = soft64_from_f32_bits(as_type<uint>(float(x)));
-    const ulong ten = soft64_from_f32_bits(as_type<uint>(10.0f));
-    return soft64_div(soft64_plm_log(value), soft64_plm_log(ten));
+static inline float thompson_aa_wrf39_log10(float xf) {
+    uint hx = as_type<uint>(xf);
+    const uint x = hx;
+    int k = 0;
+    if (hx < 0x00800000u || (hx & 0x80000000u)) {
+        if ((hx & 0x7fffffffu) == 0u) return as_type<float>(0xff800000u);
+        if (hx & 0x80000000u) return as_type<float>(0x7fc00000u);
+        k -= 25;
+        hx = soft32_mul(x, 0x4c000000u);
+    }
+    if (hx > 0x7f7fffffu) return as_type<float>(soft32_add(x, x));
+    k += int(hx >> 23) - 127;
+    const int i = int((uint(k) & 0x80000000u) >> 31);
+    hx = (hx & 0x007fffffu) | (uint(0x7f - i) << 23);
+    const uint y = soft64_to_f32_bits(soft64_from_i32(k + i));
+    const uint z = soft32_add(soft32_mul(0x3ede5bd9u, soft_gfk_log(hx)),
+                              soft32_mul(y, 0x355427dbu));
+    return as_type<float>(soft32_add(z, soft32_mul(y, 0x3e9a2080u)));
 }
 
 // NOAA-EMC WRF 3.9 fork :2031-2054/:3110-3133/:5486-5510. One thread
@@ -769,8 +786,7 @@ kernel void thompson_aa_wrf39_graupel_intercept(
             if (p.mode == 1 && rain_number <= p.r2) {
                 const ulong lamr_seed = soft64_from_f32_bits(as_type<uint>(
                     thompson_aa_div(p.mvd_numerator, 1.0e-3f)));
-                const ulong lamr3 = soft64_mul(soft64_mul(lamr_seed, lamr_seed),
-                                               lamr_seed);
+                const ulong lamr3 = soft_glibc_pow64(lamr_seed, 0x4008000000000000ul);
                 const ulong seeded = soft64_div(soft64_mul(
                     soft64_from_f32_bits(as_type<uint>(thompson_aa_mul(
                         0.16666667163372040f, rain_mass))), lamr3),
@@ -803,13 +819,11 @@ kernel void thompson_aa_wrf39_graupel_intercept(
             ? thompson_aa_mul(r.qg[index], rho) : p.r1;
         float xslw1 = 0.01f;
         if (k > k0 && has_rain && mvd_r > 100.0e-6f) {
-            const float log_mvd = as_type<float>(soft64_to_f32_bits(
-            thompson_aa_wrf39_log10(mvd_r)));
+            const float log_mvd = thompson_aa_wrf39_log10(mvd_r);
             xslw1 = thompson_aa_add(4.01f, log_mvd);
         }
         const float rg_log_arg = fmax(5.0e-5f, rg);
-        const float log_rg = as_type<float>(soft64_to_f32_bits(
-            thompson_aa_wrf39_log10(rg_log_arg)));
+        const float log_rg = thompson_aa_wrf39_log10(rg_log_arg);
         const float ygra1 = thompson_aa_add(4.31f, log_rg);
         const float numerator = thompson_aa_mul(
             thompson_aa_mul(300.0f, xslw1), ygra1);
@@ -821,9 +835,8 @@ kernel void thompson_aa_wrf39_graupel_intercept(
             thompson_aa_mul(10.0f, ygra1));
         const float zans1 = thompson_aa_add(
             3.1f, thompson_aa_div(100.0f, sum));
-        ulong n0_exp = soft64_plm_pow(
-            soft64_from_f32_bits(as_type<uint>(10.0f)),
-            soft64_from_f32_bits(as_type<uint>(zans1)));
+        ulong n0_exp = thompson_aa_effrad_widen(
+            thompson_aa_effrad_powf(10.0f, zans1));
         const ulong n0_floor = soft64_from_f32_bits(as_type<uint>(p.gonv_min));
         const ulong n0_ceil = soft64_from_f32_bits(as_type<uint>(p.gonv_max));
         if (soft64_less(n0_exp, n0_floor)) n0_exp = n0_floor;
@@ -838,7 +851,7 @@ kernel void thompson_aa_wrf39_graupel_intercept(
                 soft64_from_f32_bits(as_type<uint>(6.0f)));
             const ulong slope_base = soft64_div(slope_num,
                 soft64_from_f32_bits(as_type<uint>(rg)));
-            const ulong lamg = soft64_plm_pow(
+            const ulong lamg = soft_glibc_pow64(
                 slope_base, soft64_from_f32_bits(as_type<uint>(0.25f)));
             const ulong ilamg = soft64_div(
                 soft64_from_f32_bits(as_type<uint>(1.0f)), lamg);

@@ -1,0 +1,94 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_cudtdqn",
+      "module": "hexv842_nt_cudtdqn",
+      "source": "woof/metal/shaders/hexv842_nt_cudtdqn.metal",
+      "cuda_source": "woof/hex/mpasphys/ntiedtke_v842.py",
+      "cuda_symbol": "ntiedtke_cudtdqn",
+      "resources": [
+        [
+          "in",
+          "float",
+          "read"
+        ],
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ktopm2",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

@@ -44,10 +44,10 @@ from pathlib import Path
 
 from woof import bridges
 from woof.bridges import (RUSTWX_CRATE_RELATIVE, artifact_remedy,
-                           default_bridge_dir,
-                           legacy_bridge_candidates, lazy_build_hints,
+                           lazy_build_hints,
                            rustwx_build_hint,
-                           executable_name, packaged_bridge_dir)
+                           executable_name)
+from woof.rustwx import _candidates, crate_dir
 
 #: Environment variables naming prebuilt binaries.
 ENSEMBLE_ENV = "WOOF_RW_ENSBATCH"
@@ -62,6 +62,15 @@ OBSGRID_NAME = "rw_obsgrid"
 #: third sibling for the same reason the other two exist: two inputs of
 #: two formats on one grid is neither one run's frames nor N members.
 COMPARE_NAME = "rw_compare"
+
+#: The nowcast frames converter: a 2D reflectivity NetCDF nowcast written
+#: out as the ``gpuwm-obs.nowcast-frames.v1`` contract
+#: (``docs/nowcast-frames.md``), the only form the comparison engine's
+#: ``frames:`` panel reads.  Same workspace and same ladder as the three
+#: engines above; a converter rather than a renderer, so it is not a flag
+#: on ``rw_compare``.
+NOWCAST_FRAMES_ENV = "WOOF_RW_NOWCAST_FRAMES"
+NOWCAST_FRAMES_NAME = "rw_nowcast_frames"
 
 #: ``CARGO_BUILD_HINT``: the one-liner that builds them.  Same workspace
 #: as the batch renderer, so one cargo invocation produces all three.
@@ -101,6 +110,14 @@ COMPARE_ABI_MARKER = (
     "MATCH\tSOURCE\tFINISHED\t"
     "gpuwm-rw-compare-presentation-v1\t--theme")
 
+#: The converter's ``--abi`` line: its one subcommand and every flag this
+#: wrapper may pass.  Bound to the Rust ``ABI_MARKER`` constant and to
+#: :data:`woof.bridges.BRIDGE_ABI_MARKERS` by tests.
+NOWCAST_FRAMES_ABI_MARKER = (
+    "gpuwm-rw-nowcast-frames-v1\tfrom-netcdf\t--netcdf\t--out\t"
+    "--source-id\t--lattice\t--variable\t--lat\t--lon\t--issue\t"
+    "--causal\t--receipt\t--source-kind\t--package\t--revision")
+
 #: Ensemble products, in the order ``all`` expands to.
 ENSEMBLE_PRODUCTS = ("mean", "spread", "prob", "pmm", "paintball")
 
@@ -114,37 +131,13 @@ ENSEMBLE_PRODUCTS = ("mean", "spread", "prob", "pmm", "paintball")
 #: no binary to ask -- so a caller states a list it can prove rather
 #: than none at all.  A field added to ``ensbatch.rs`` is reachable
 #: without touching this tuple.
-ENSEMBLE_FIELDS = ("refl", "uh", "precip", "t2", "wspd10")
+ENSEMBLE_FIELDS = ("refl", "uh", "precip", "t2", "wspd10", "visibility", "fog_prob")
 
 #: Observation-grid products.
 OBSGRID_PRODUCTS = ("z-composite", "coverage-depth", "radar-overlap",
                     "vr-lowest", "radar-contribution")
 
 _PROBE_TIMEOUT_S = 20
-
-
-def crate_dir() -> Path:
-    """The vendored Rusty Weather workspace of a source checkout."""
-
-    return Path(__file__).resolve().parent.parent / "tools" / "rustwx"
-
-
-def _candidates(env_var: str, name: str) -> tuple[Path, ...]:
-    filename = executable_name(name)
-    candidates: list[Path] = []
-    override = os.environ.get(env_var)
-    if override:
-        candidates.append(Path(override))
-    root = Path(__file__).resolve().parent.parent
-    candidates.extend((
-        crate_dir() / "target" / "release" / filename,
-        crate_dir() / "target" / "debug" / filename,
-        root / "libexec" / "bridges" / filename,
-        packaged_bridge_dir() / filename,
-        default_bridge_dir() / filename,
-        *legacy_bridge_candidates(filename),
-    ))
-    return tuple(candidates)
 
 
 def _find(env_var: str, name: str) -> Path | None:
@@ -190,7 +183,7 @@ def compare_remedy() -> str:
 
 
 def probe_compare_bin(path: Path) -> tuple[bool, str]:
-    return _probe(path, COMPARE_ABI_MARKER, COMPARE_NAME)
+    return _probe(path, COMPARE_ABI_MARKER, COMPARE_NAME, COMPARE_ENV)
 
 
 def require_compare_bin() -> Path:
@@ -262,6 +255,49 @@ def require_compare_reference_bin() -> Path:
     return path
 
 
+def find_nowcast_frames_bin() -> Path | None:
+    return _find(NOWCAST_FRAMES_ENV, NOWCAST_FRAMES_NAME)
+
+
+def nowcast_frames_remedy() -> str:
+    return artifact_remedy(
+        env_var=NOWCAST_FRAMES_ENV,
+        filename=executable_name(NOWCAST_FRAMES_NAME),
+        subject="the nowcast frames converter",
+        crate_relative=RUSTWX_CRATE_RELATIVE, one_liner=rustwx_build_hint(),
+        artifact=NOWCAST_FRAMES_NAME)
+
+
+def probe_nowcast_frames_bin(path: Path) -> tuple[bool, str]:
+    return _probe(path, NOWCAST_FRAMES_ABI_MARKER, NOWCAST_FRAMES_NAME,
+                  NOWCAST_FRAMES_ENV)
+
+
+def require_nowcast_frames_bin() -> Path:
+    """The nowcast frames converter, resolved and proven, or a refusal.
+
+    Breakage the refusal prevents: a build from another checkout whose
+    ``--abi`` line differs would accept or reject a flag this wrapper
+    passes and write a root the comparison sheets read under another
+    contract.  There is no Python converter to fall back to; the frames
+    are written in Rust or not at all.
+    """
+
+    try:
+        path = find_nowcast_frames_bin()
+    except FileNotFoundError as error:
+        raise RuntimeError(f"{error}  {nowcast_frames_remedy()}") from error
+    if path is None:
+        raise RuntimeError(
+            f"NetCDF nowcasts become frames roots through the rust "
+            f"converter {NOWCAST_FRAMES_NAME}, and it is not built or "
+            f"staged.  {nowcast_frames_remedy()}")
+    usable, evidence = probe_nowcast_frames_bin(path)
+    if not usable:
+        raise RuntimeError(f"{path}: {evidence}")
+    return path
+
+
 def ensemble_remedy() -> str:
     return artifact_remedy(
         env_var=ENSEMBLE_ENV, filename=executable_name(ENSEMBLE_NAME),
@@ -276,8 +312,15 @@ def obsgrid_remedy() -> str:
         crate_relative=RUSTWX_CRATE_RELATIVE, one_liner=rustwx_build_hint())
 
 
-def _probe(path: Path, marker: str, name: str) -> tuple[bool, str]:
-    """``--abi``: is this binary runnable, and does it speak our grammar?"""
+def _probe(path: Path, marker: str, name: str,
+           env_var: str) -> tuple[bool, str]:
+    """``--abi``: is this binary runnable, and does it speak our grammar?
+
+    The contract line is compared exactly.  A ``GPUWM_BRIDGE_SOURCE_REV``
+    line after it (``rw_ensbatch`` prints one) is not part of the
+    contract: it is judged by the shared stamp check, so a build from
+    another checkout is still refused, naming both revisions.
+    """
 
     launchable, why = bridges.launchable(path)
     if not launchable:
@@ -288,13 +331,23 @@ def _probe(path: Path, marker: str, name: str) -> tuple[bool, str]:
                                timeout=_PROBE_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError) as error:
         return False, f"{name} --abi did not run: {error}"
+    from woof import provenance_gate
+
     answer = (probe.stdout or "").strip()
-    if probe.returncode != 0 or answer != marker:
+    contract, revision = provenance_gate.split_abi_answer(answer)
+    if probe.returncode != 0 or contract != marker:
         detail = answer or f"exit {probe.returncode} with no --abi line"
         return False, (
             f"launches, but --abi does not match the contract this woof "
             f"expects ({detail}) -- it is a build from another checkout.  "
             f"REBUILD it from this one: {rustwx_build_hint()}")
+    if revision is not None:
+        refusal = provenance_gate.abi_revision_refusal(
+            path, revision, env_var=env_var)
+        if refusal is not None:
+            return False, (
+                f"launches and --abi matches the contract, but {refusal}.  "
+                f"REBUILD it from this one: {rustwx_build_hint()}")
     return True, "--abi matches the contract"
 
 
@@ -353,11 +406,11 @@ def _lane_refusal(name: str, failure: str, remedy: str,
 
 
 def probe_ensemble_bin(path: Path) -> tuple[bool, str]:
-    return _probe(path, ENSEMBLE_ABI_MARKER, ENSEMBLE_NAME)
+    return _probe(path, ENSEMBLE_ABI_MARKER, ENSEMBLE_NAME, ENSEMBLE_ENV)
 
 
 def probe_obsgrid_bin(path: Path) -> tuple[bool, str]:
-    return _probe(path, OBSGRID_ABI_MARKER, OBSGRID_NAME)
+    return _probe(path, OBSGRID_ABI_MARKER, OBSGRID_NAME, OBSGRID_ENV)
 
 
 def list_ensemble_fields(engine: Path) -> dict[str, dict]:
@@ -391,6 +444,11 @@ def list_ensemble_fields(engine: Path) -> dict[str, dict]:
             if key == "default_threshold":
                 try:
                     row["default_threshold"] = float(value)
+                except ValueError:
+                    continue
+            elif key == "default_thresholds":
+                try:
+                    row["default_thresholds"] = tuple(float(v) for v in value.split(","))
                 except ValueError:
                     continue
             elif key == "unit_slug":
@@ -570,11 +628,29 @@ def run_ensemble_renderer(
         elif line.startswith("PAINTBALL_LEGEND\t"):
             report["paintball_legend"] = line.split("\t", 1)[1]
     if result.returncode != 0 and not failures:
-        tail = [line for line in (result.stderr or "").splitlines()
-                if line.strip()]
         failures.append(
-            f"{manifest}: {tail[-1] if tail else f'exit {result.returncode}'}")
+            f"{manifest}: {engine_failure_reason(result.stderr, result.returncode)}")
     return written, failures, skipped, report
+
+
+def engine_failure_reason(stderr: str, returncode: int) -> str:
+    """The line that says why an engine exited non-zero.
+
+    ``rw_ensbatch`` answers an argument or roster problem with the reason
+    and then its two-line usage text, so the last line of stderr is the
+    usage line.  Reported as the failure, it told an operator nothing (a
+    v2 ensemble's refused roster read as "rw_ensbatch --list-fields |
+    --help | --abi").  The usage text is cut off and the last line before
+    it is the reason.
+    """
+
+    lines = [line.strip() for line in (stderr or "").splitlines()
+             if line.strip()]
+    for index, line in enumerate(lines):
+        if line.startswith("usage:"):
+            lines = lines[:index]
+            break
+    return lines[-1] if lines else f"exit {returncode} with no message"
 
 
 def run_obsgrid_renderer(
@@ -629,19 +705,21 @@ def run_obsgrid_renderer(
                                "lat": float(parts[3]),
                                "lon": float(parts[4])})
     if result.returncode != 0 and not failures:
-        tail = [line for line in (result.stderr or "").splitlines()
-                if line.strip()]
+        # rw_obsgrid prints its usage after an argument error too.
         failures.append(
-            f"{obs}: {tail[-1] if tail else f'exit {result.returncode}'}")
+            f"{obs}: {engine_failure_reason(result.stderr, result.returncode)}")
     return written, failures, skipped, roster
 
 
 __all__ = [
-    "CARGO_BUILD_HINT", "COMPARE_ABI_MARKER", "COMPARE_ENV", "COMPARE_NAME",
+    "CARGO_BUILD_HINT", "COMPARE_ABI_MARKER", "COMPARE_ENV", "COMPARE_NAME",  # noqa: F822 -- module __getattr__
     "compare_remedy", "find_compare_bin", "probe_compare_bin",
     "probe_compare_reference_bin", "require_compare_bin",
     "require_compare_reference_bin",
     "ENSEMBLE_ABI_MARKER", "ENSEMBLE_ENV",
+    "NOWCAST_FRAMES_ABI_MARKER", "NOWCAST_FRAMES_ENV", "NOWCAST_FRAMES_NAME",
+    "find_nowcast_frames_bin", "nowcast_frames_remedy",
+    "probe_nowcast_frames_bin", "require_nowcast_frames_bin",
     "ENSEMBLE_FIELDS", "ENSEMBLE_NAME", "ENSEMBLE_PRODUCTS",
     "OBSGRID_ABI_MARKER", "OBSGRID_ENV", "OBSGRID_NAME", "OBSGRID_PRODUCTS",
     "crate_dir", "ensemble_remedy", "ensemble_workaround_notice",

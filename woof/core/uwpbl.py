@@ -35,7 +35,6 @@ device and refused here by name rather than returning a corrupted column.
 
 from __future__ import annotations
 
-from functools import lru_cache
 from woof.core.device_cache import cuda_cache
 
 try:
@@ -77,12 +76,6 @@ UWPBL_MASS_INPUTS = ("u", "v", "th", "rho", "qv", "qc", "qi", "qnc", "qni",
 UWPBL_FULL_INPUTS = ("p8w", "z_at_w")
 #: Surface float32 inputs, (ny, nx).
 UWPBL_SURFACE_INPUTS = ("hfx", "qfx", "ust", "ht")
-
-#: WRF's cold start: camuwpblinit sets TKE_PBL = epsq2 = 0.2
-#: (module_bl_camuwpbl_driver.F:1061-1073, module_model_constants.F:92);
-#: the diffusivities and the residual stress start at zero and the first
-#: step re-zeroes them anyway (driver.F:436-441, :465-468).
-UWPBL_TKE_COLD_START = 0.2
 
 
 @cuda_cache(maxsize=None, ready=True)
@@ -268,7 +261,8 @@ def uwpbl_radiation_cloud_fraction(atmosphere, cfg, out) -> None:
 
         cldfra = cal_cldfra1(view("qv"), view("qc"), view("qi"), view("qs"),
                              view("temperature"), view("pressure"),
-                             f_qc=True, f_qi=f_qi, f_qs=f_qs)
+                             f_qc=True, f_qi=f_qi, f_qs=f_qs,
+                             mp_physics=int(cfg.mp_physics))
         out[...] = cldfra.view(out.shape)
         return
 
@@ -277,5 +271,6 @@ def uwpbl_radiation_cloud_fraction(atmosphere, cfg, out) -> None:
 
     cldfra = cal_cldfra1(flat("qv"), flat("qc"), flat("qi"), flat("qs"),
                          flat("temperature"), flat("pressure"),
-                         f_qc=True, f_qi=f_qi, f_qs=f_qs)
+                         f_qc=True, f_qi=f_qi, f_qs=f_qs,
+                         mp_physics=int(cfg.mp_physics))
     out[...] = cldfra.reshape(out.shape)

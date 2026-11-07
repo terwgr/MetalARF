@@ -27,7 +27,7 @@
         ["half_val", "float32"], ["has_msf", "int32"],
         ["periodic", "int32"], ["f_lo", "int32"], ["f_hi", "int32"],
         ["legacy", "int32"], ["nz", "int32"], ["ny", "int32"],
-        ["nx", "int32"]
+        ["nx", "int32"], ["strict", "int32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,
@@ -60,7 +60,7 @@
         ["half_val", "float32"], ["has_msf", "int32"],
         ["periodic", "int32"], ["f_lo", "int32"], ["f_hi", "int32"],
         ["legacy", "int32"], ["nz", "int32"], ["ny", "int32"],
-        ["nx", "int32"]
+        ["nx", "int32"], ["strict", "int32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

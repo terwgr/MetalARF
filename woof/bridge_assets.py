@@ -3,21 +3,26 @@
 A PLATFORM wheel now ships the compiled Rust itself: the artifacts below
 are staged into ``woof/libexec/bridges`` by
 ``tools/stage_wheel_bridges.py`` before the wheel is built, so on a
-platform a bundle exists for, ``pip install recast-woof`` is already complete
-and this command has nothing left to do.
-
-It remains the route for everyone else: the ``py3-none-any`` fallback
+platform a bundle exists for, ``pip install recast-woof`` carries every declared
+artifact but the on-demand observation-stream doors (:func:`on_demand_artifacts`),
+which the first door that needs them stages from the bundle by itself.  This
+command remains the route for everyone else: the ``py3-none-any`` fallback
 wheel, which pip resolves wherever no platform bundle is published,
 carries no binaries at all.  Before either existed, the only way to get
 the GRIB decoders, the CPU preprocessing library, the fetch backbone,
 the batch renderer, the two radar front doors, the MRMS, Stage-IV,
 surface, GOES and European-composite front doors, the NetCDF decoder,
 the mapped decode engine, the Zarr reader, the observation remap, the
-isobaric-height reader, the ML dataset exporter, the
-simulated radar and the terminal workspace onto a
+isobaric-height reader, the radar superob, the native GRIB2 and ML dataset
+exporters, the nowcast frames converter, the global globe packer, the
+observation scorecard, the forecast verification scorer, the simulated
+radar, the regular-grid intermediate producer, the MPAS point renderer, the
+TEMPO initialization library, the projected MET intermediate library, the
+seven observation-stream doors, the radar feed listings and the terminal
+workspace onto a
 wheel install was to clone the repository and run ``cargo build`` -- a
 Rust toolchain, a 2.5 GB checkout and a few minutes of compiling, for
-forty-two files.
+the declared native files.
 ``woof fetch-bridges`` is the same trade :mod:`woof.table_assets`
 already makes for the externalized physics tables: the artifacts are
 published as versioned GitHub release assets, their exact size and
@@ -26,7 +31,7 @@ byte is verified against those pins *before* anything is installed.
 
 What is staged, and where
 -------------------------
-One bundle per platform, holding the forty-two artifacts of
+One bundle per platform, holding the declared native artifacts of
 :data:`BUNDLED_ARTIFACTS`, staged into :func:`woof.bridges
 .default_bridge_dir` (``~/.woof/bridges/<release>-<bundle digest>``)
 -- the staged rung of the resolution ladder every consumer already
@@ -237,6 +242,23 @@ class BundledArtifact:
     (:data:`woof.bridges.BRIDGE_ABI_MARKERS`), which is a property of the
     bytes and names the ABI this release speaks, on top of the size and
     SHA-256 every artifact is pinned by.
+
+    ``on_demand`` says the platform wheel does not carry the artifact.  It
+    stays in this roster, in each platform bundle and in its pins, so every
+    proof of the bundle still covers it; the first door that needs it stages
+    it by itself (:func:`woof.bridges.fetch_on_demand`, the pinned ZIP
+    member alone, verified against the packaged size and SHA-256), and
+    ``woof fetch-bridges --partial --artifact NAME`` or a plain
+    ``woof fetch-bridges`` stages it ahead of time.  Breakage this
+    prevents: the 2.9.0 Linux wheel was 96,049,884 bytes against PyPI's
+    100,000,000-byte per-file limit, and the six observation-stream doors
+    marked below compress to about 9.7 MB together, so carried in the wheel
+    they would make it unpublishable; left out of every package, as they
+    were in 2.9.0, buoys, radiosondes, motion vectors, occultations, WIS2
+    and prepbufr could not be fetched from an install at all.  Only an
+    artifact no forecast reaches may be marked: a decoder, a writer or the
+    renderer marked here would make a bare install refuse its own forecast.
+    :func:`wheel_artifacts` is the one place the two sets are told apart.
     """
 
     name: str
@@ -245,6 +267,7 @@ class BundledArtifact:
     env_var: str
     consumer: str
     vendored: bool = False
+    on_demand: bool = False
 
 
 #: The artifacts a bundle carries (every BundledArtifact below), in build order: the five
@@ -302,6 +325,80 @@ class BundledArtifact:
 #: the four binaries were produced by the cut, probed by nothing, and
 #: thrown away at the end of the job.
 BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
+    BundledArtifact("rw-wind-table", "executable", "tools/wind-table",
+                    "WOOF_RW_WIND_TABLE", "wind turbine inventories and WRF Fitch tables",
+                    # 2.9.11 (PyPI per-file limit): see rw_simradar. Opt-in
+                    # (--wind-farms); woof.wind_inputs stages it on first use.
+                    on_demand=True),
+    # 2.9.3: the Linux wheel measured 110,716,883 bytes against PyPI's 100,000,000-byte per-file limit
+    # (rw_soundings and the NextGen tools are new), so the five observation front doors served by
+    # woof.obs.frontdoor (rw_mrms, rw_stage4, rw_asos, rw_goes, rw_opera), the sounding window renderer
+    # and the NextGen gauge verifier are on demand: pinned in the bundle, staged on first use.
+    # 2.9.4: the Linux wheel measured 100,878,471 bytes (the cut's wheel-size pre-gate; rw_hail and
+    # rw_fire_indices are new, rw_wrfbatch grew), so five verification and post-run doors no forecast
+    # reaches are on demand too: rw_hail and rw_airnow (woof.obs.frontdoor), rw_scoreboard
+    # (woof scoreboard), rw_tc_fields (woof tc-tracks) and rw_fire_indices (woof.fire_danger_state).
+    # WOOF 1.1.0 r16: the r15 Linux wheel measured 138,837,702 bytes (the hex helpers joined it), so with
+    # the hex helpers moved to their own release archive (woof.hex.helpers) four more are on demand:
+    # rw_odim (woof.obs.frontdoor, European radar only) and rw_mpas_geometry, rw_mpas_convert and
+    # rw_mpas_lbc, which every hex door reads from the hex helpers first (woof.hex.engines rung 3);
+    # woof.mpas_mesh and the hex rung 4 stage them on first use.
+    BundledArtifact(
+        "nextgen_hydrofabric", "library", "tools/nextgen_hydrofabric",
+        "WOOF_HYDROFABRIC_LIBRARY",
+        "NextGen prepared numeric payload transport into caller-owned memory",
+        # 2.9.11 (PyPI per-file limit): see rw_simradar. Hydro is opt-in
+        # (--hydro on) and its other tools are already on demand;
+        # woof.hydrofabric stages this library on its first load. The
+        # terminal workspace stays in the wheel: the publish workflow's
+        # platform smoke draws `woof tui --snapshot` from the installed
+        # wheel before the release's bundle is public.
+        on_demand=True),
+    BundledArtifact(
+        "rw_nextgen_output", "library", "tools/nextgen_output",
+        "WOOF_NEXTGEN_OUTPUT_LIBRARY", "coupled hydro history and restart publication",
+        on_demand=True),
+    BundledArtifact(
+        "arwen_nextgen_forcing", "library", "tools/nextgen_forcing",
+        "WOOF_NEXTGEN_FORCING_BRIDGE",
+        "NextGen external forcing preparation and catchment area regridding"),
+    BundledArtifact(
+        "rw_nextgen_verify", "executable", "tools/nextgen_verify",
+        "WOOF_NEXTGEN_VERIFY", "NextGen streamflow observation verification",
+        on_demand=True),
+    # 2.9.3 (improve-1, default-on hydro never attached): the default hydro door builds
+    # the covering fabric, its parameters, its reservoirs and its initial water with
+    # these five provider tools, which no install could find (woof.hydro.door probe:
+    # "builder executable rw_hydro_world not found"). On demand, staged by the door's
+    # first preparation, so the wheel stays under PyPI's per-file limit.
+    BundledArtifact(
+        "rw_hydro_world", "executable", "tools/hydro_world",
+        "WOOF_RW_HYDRO_WORLD", "hydro fabric builder (default-on hydro door)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_hydro_params", "executable", "tools/hydro_world_params",
+        "GPUWM_RW_HYDRO_PARAMS", "hydro catchment parameters (default-on hydro door)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_hydrofabric", "executable", "tools/nextgen_hydrofabric",
+        "WOOF_RW_HYDROFABRIC", "hydro routing and reservoir preparation (default-on hydro door)",
+        on_demand=True),
+    BundledArtifact(
+        "nextgen-reservoir-prepare", "executable", "tools/nextgen_reservoir_prepare",
+        "GPUWM_NEXTGEN_RESERVOIR_PREPARE", "hydro reservoir preparation (default-on hydro door)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_hydro_init", "executable", "tools/hydro_world_init",
+        "WOOF_RW_HYDRO_INIT", "hydro initial water state (default-on hydro door)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_ocean", "executable", "tools/ocean_prepare",
+        "GPUWM_RW_OCEAN", "Ocean bathymetry and atmospheric forcing preparation",
+        on_demand=True),
+    BundledArtifact(
+        "rw_bathy", "executable", "tools/rw-bathy",
+        "WOOF_RW_BATHY", "storm-surge bathymetry ingest and products (woof.ocean.surge)",
+        on_demand=True),
     BundledArtifact(
         "grib1_bridge", "executable", bridges.CRATE_RELATIVE,
         bridges.BRIDGE_ENV["grib1_bridge"],
@@ -311,6 +408,12 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
         bridges.BRIDGE_ENV["gdt101_remap"],
         "unstructured GDT-101 source normalization "
         "(woof go --source icon-global or icon-d2)"),
+    # 2.9.0 (box/rrfs-shape) defect: public initial-condition preparation needs this producer,
+    # but fetch-bridges previously omitted the already-built executable.
+    BundledArtifact(
+        "met_intermediate", "executable", bridges.CRATE_RELATIVE,
+        bridges.BRIDGE_ENV["met_intermediate"],
+        "regular-grid meteorological intermediates for native initialization"),
     BundledArtifact(
         "gfs_grib2_bridge", "executable", bridges.CRATE_RELATIVE,
         bridges.BRIDGE_ENV["gfs_grib2_bridge"],
@@ -336,14 +439,30 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
         "rw_fetch", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_FETCH", "woof fetch --engine rust"),
     BundledArtifact(
+        "rw_globe_pack", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_GLOBE_PACK", "global globe frames and verified statics publication"),
+    BundledArtifact(
         "rw_wrfbatch", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_WRFBATCH", "woof render --engine rust"),
+    BundledArtifact(
+        "rw_ensbatch", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_ENSEMBLE_RENDERER",
+        "ensemble diagnostic reduction and aggregate product rendering"),
+    BundledArtifact(
+        "rw_probgrid", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_PROBGRID", "post-processed probability maps on a fixed ladder (WOOF severe ML)",
+        # 2.9.9 (PyPI per-file limit): no forecast reaches it, and carried in the
+        # wheel it took the Linux platform wheel past 100,000,000 bytes.
+        on_demand=True),
     BundledArtifact(
         "rw_compare", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_COMPARE", "native reference panels and observation overlays"),
     BundledArtifact(
         "rw_verify", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_VERIFY", "woof verify-visuals and completed-run verification"),
+    BundledArtifact(
+        "rw_scorecard", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_SCORECARD", "woof obs scorecard and paired case bootstrap"),
     # The simulated radar.  Beam tracing, field sampling, the Level II,
     # CfRadial and ODIM writers and the PPI images all run in it, so a
     # bundle without it is an install whose `[simulated_radar]` table and
@@ -352,68 +471,62 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
     # Environment variable spelled to match woof.rustwx's resolver.
     BundledArtifact(
         "rw_simradar", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_SIMRADAR", "WOOF simulated radar volumes and PPI images"),
+        "WOOF_RW_SIMRADAR", "WOOF simulated radar volumes and PPI images",
+        # 2.9.11 (PyPI per-file limit): the C- and X-band scattering tables
+        # compiled into it (14.5 MB of float tables) took it from 6.2 to
+        # 16.6 MB compressed, and with the CUDA 12/13 kernel packs (8.3 MB)
+        # the Linux platform wheel measured 118,951,005 bytes against
+        # 100,000,000.  Simulated radar is opt-in ([simulated_radar], woof
+        # simulated-radar, woof.simulated_radar.simulate); every door
+        # reaches it through rustwx.require_simulated_radar_binary, which
+        # stages it from this release's bundle on its first use. With it,
+        # rw_mlexport, rw-wind-table and nextgen_hydrofabric on demand, about 96.1 MB.
+        on_demand=True),
     BundledArtifact(
         "rw_nexrad", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_NEXRAD", "radar observation ingest (the DA nowcast)"),
     BundledArtifact(
         "rw_odim", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_ODIM",
-        "European polar volumes (woof obs radar)"),
+        "European polar volumes (woof obs radar)",
+        on_demand=True),
     BundledArtifact(
         "rw_mrms", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_MRMS", "MRMS composite reflectivity (woof obs mrms)"),
+        "WOOF_RW_MRMS", "MRMS composite reflectivity (woof obs mrms)",
+        on_demand=True),
     BundledArtifact(
         "rw_stage4", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_STAGE4",
-        "Stage-IV precipitation (woof obs stage4)"),
+        "Stage-IV precipitation (woof obs stage4)",
+        on_demand=True),
     BundledArtifact(
         "rw_asos", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_ASOS",
-        "ASOS/METAR surface observations (woof obs asos)"),
+        "ASOS/METAR surface observations (woof obs asos)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_ice_verify", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_ICE_VERIFY", "freezing-rain and ice observation binding",
+        on_demand=True),
+    BundledArtifact(
+        "rw_hail", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_HAIL", "MRMS MESH and SPC hail size verification",
+        on_demand=True),
+    BundledArtifact(
+        "rw_airnow", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_AIRNOW",
+        "AirNow hourly air-quality observations",
+        on_demand=True),
     BundledArtifact(
         "rw_goes", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_GOES",
-        "GOES ABI cloud-water-path packs (woof obs goes)"),
+        "GOES ABI cloud-water-path packs (woof obs goes)",
+        on_demand=True),
     BundledArtifact(
         "rw_opera", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_OPERA",
-        "European composite reflectivity (woof obs opera)"),
-    # The global model's observation doors.  Their crates are on this
-    # line (``crates/rw-atms``, and the gnssro, ndbc, igra2, amv and wis2
-    # bins of ``crates/rw-obs``), each entry point stamps the source
-    # revision through its crate's build.rs, and ``cargo build --release
-    # --locked`` at ``tools/rustwx`` already builds all six.  None of them
-    # was in this tuple, so the bundle threw them away, and on a clean
-    # wheel install ``woof global doctor`` exited 1 naming all six as not
-    # staged: the global model's observation fetch, subscription,
-    # microwave leg and every DA cycle had no decoder, and the remedy it
-    # printed downloaded a companion bundle nobody publishes.
-    BundledArtifact(
-        "rw_atms", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_ATMS",
-        "ATMS microwave radiances (woof global microwave, da cycle)"),
-    BundledArtifact(
-        "rw_gnssro", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_GNSSRO",
-        "GNSS radio occultation (woof global obs fetch, da cycle)"),
-    BundledArtifact(
-        "rw_ndbc", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_NDBC",
-        "marine buoys and coastal stations (woof global obs fetch, da cycle)"),
-    BundledArtifact(
-        "rw_igra2", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_IGRA2",
-        "radiosonde soundings (woof global obs fetch, da cycle)"),
-    BundledArtifact(
-        "rw_amv", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_AMV",
-        "atmospheric motion vectors (woof global obs fetch, da cycle)"),
-    BundledArtifact(
-        "rw_wis2", "executable", bridges.RUSTWX_CRATE_RELATIVE,
-        "WOOF_RW_WIS2",
-        "WIS2 surface and upper-air feeds (woof global obs subscribe, "
-        "da cycle)"),
+        "European composite reflectivity (woof obs opera)",
+        on_demand=True),
     # The NetCDF decoder.  It joined this list the moment NetCDF decode
     # moved off `netCDF4.Dataset` and onto `netcrust`: from that commit
     # `rw-wps --source netcdf` and every mapped NetCDF route REFUSE
@@ -536,6 +649,20 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
         "WOOF_ISOBARIC_BRIDGE",
         "isobaric heights read between layer interfaces (vortex tracker, "
         "GNSS-RO operator, verification maps)"),
+    # The RADAR SUPEROB.  It joined this list the moment the superob
+    # stage of the radar observation build flipped onto the Rust crate by
+    # default.  The stage refuses rather than falls back when the library
+    # is absent (the numpy module is the parity reference and an explicit
+    # opt-out, WOOF_SUPEROB_PYTHON=1), so a wheel without it could not
+    # build one radar observation: every radar DA cycle would refuse an
+    # hour in.  Environment variable spelled to match
+    # woof.obs.superob_bridge.SUPEROB_BRIDGE_ENV; a test binds the two
+    # (tests/test_bridge_fetch.py).
+    BundledArtifact(
+        "rw_superob", "library", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_SUPEROB_BRIDGE",
+        "radar superob, merge and region-global dealias (the default "
+        "radar observation build)"),
     # The four MPAS binaries of the first wave (the fifth, the
     # lateral-boundary producer, is the last entry in this tuple and
     # carries its own note), and `rw_mpas_convert` is the artifact this
@@ -569,6 +696,12 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
     # count and sha256.  Shipping the generator without the static
     # builder ships a command whose output nothing accepts.
     BundledArtifact(
+        "rw_mpas_physics_pool", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_MPAS_PHYSICS_POOL", "MPAS Registry pool transport"),
+    BundledArtifact(
+        "rw_mpas_stream", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_MPAS_STREAM", "MPAS native stream transport"),
+    BundledArtifact(
         "rw_mpas_static", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_MPAS_STATIC",
         "the matching MPAS static (woof mesh)"),
@@ -579,7 +712,8 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
     BundledArtifact(
         "rw_mpas_geometry", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_MPAS_GEOMETRY",
-        "MPAS reconstruction geometry"),
+        "MPAS reconstruction geometry",
+        on_demand=True),
     BundledArtifact(
         "rw_mpas_hostprep", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_MPAS_HOSTPREP",
@@ -587,7 +721,8 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
     BundledArtifact(
         "rw_mpas_convert", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_MPAS_CONVERT",
-        "MPAS history onto the renderer's tape"),
+        "MPAS history onto the renderer's tape",
+        on_demand=True),
     # The lateral-boundary producer, and the plainest repeat of the
     # failure every paragraph above describes.  Its SOURCE has been in
     # this tree since the limited-area lane landed
@@ -609,19 +744,181 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
     BundledArtifact(
         "rw_mpas_lbc", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_MPAS_LBC",
-        "MPAS lateral boundaries for a limited-area mesh"),
+        "MPAS lateral boundaries for a limited-area mesh",
+        on_demand=True),
+    # The RRFS-MPAS init door's two engines (woof hex init --physics-suite
+    # hrrrv5): the fork's init_atmosphere in Rust, and the GSL drag
+    # statistics generator.  Source-only bins reach no pip install, so
+    # without these rows the door's producer is unreachable.
+    BundledArtifact(
+        "rw_mpas_init_v831", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_MPAS_INIT_V831",
+        "RRFS-MPAS initial conditions and boundaries (the fork's init_atmosphere)",
+        # 2.9.10 (PyPI per-file limit): carried in the wheel, it and
+        # rw_mpas_gsl_oro (~3.0 MB compressed together) took the Linux platform
+        # wheel (2.9.9: 98,751,849 bytes) past 100,000,000 bytes. Only the
+        # woof hex RRFS init door reaches them, and it stages them on first use.
+        on_demand=True),
+    BundledArtifact(
+        "rw_mpas_gsl_oro", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_MPAS_GSL_ORO",
+        "GSL orographic drag statistics (ugwp_oro_data.nc) for the RRFS suites",
+        # 2.9.10 (PyPI per-file limit): see rw_mpas_init_v831 above.
+        on_demand=True),
+    # 2.9.0.  The woof hex product door draws soundings and meteograms
+    # with this binary and nothing else.  As a source-only cargo bin it
+    # reached no pip install: `woof hex doctor` exited 1 naming it and
+    # `woof fetch-bridges` could not supply it.
+    BundledArtifact(
+        "rw_hex_points", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_HEX_POINTS",
+        "soundings and meteograms at named points from MPAS native history "
+        "(the woof hex product door)"),
+    # 2.9.1.  The projected MET intermediate library (crate
+    # projected-intermediate in the engine workspace), loaded through
+    # ctypes by `woof hex intermediate` for every projected source (HRRR
+    # and any other Lambert regional model).  It regrids the decoder's
+    # window onto the hex point target with the engine's own exact donors,
+    # rotates the winds to earth and writes and verifies the MET file.  It
+    # was built by nothing that shipped, so on 2.9.0 a pip install could
+    # start hex only from lat-lon sources: `woof hex intermediate --source
+    # hrrr` exited 2 with "librw_projected_intermediate.so was not found".
+    # Environment variable spelled to match the one woof hex resolves.
+    BundledArtifact(
+        "rw_projected_intermediate", "library", "tools/rw_wps",
+        "WOOF_PROJECTED_INTERMEDIATE_BRIDGE",
+        "projected-source MET intermediates for hex point runs "
+        "(woof hex intermediate --source hrrr)"),
+    # 2.9.0.  TEMPO's tempo_init port (crate rw-tempo), loaded through
+    # ctypes by woof.core.tempo_rust whenever a run selects TEMPO.  It was
+    # built by every cut and carried by no bundle, so TEMPO -- and the
+    # rrfs-v2-hex-tempo preset with it -- could not initialize from a pip
+    # install: the loader's last word was "build it from a checkout".
+    # Environment variable spelled to match
+    # woof.core.tempo_rust.TEMPO_BRIDGE_ENV.
+    BundledArtifact(
+        "rw_tempo", "library", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_TEMPO_BRIDGE",
+        "TEMPO microphysics initialization tables (mp TEMPO, the "
+        "rrfs-v2-hex-tempo preset)"),
+    # The native GRIB2 exporter (2.8.7, crate rw-grib2export): reads
+    # history, computes every product with the clean-room post-processor
+    # rw-post (GPU by default, CPU reference path) and packs GRIB2 in Rust.
+    # An install without it cannot run `export-grib2`, `go --grib2` or
+    # `render --grib2-out`.
+    BundledArtifact(
+        "rw_grib2export", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_GRIB2EXPORT", "native GRIB2 history export (woof export-grib2)"),
+    # The nowcast frames converter (2.8.7, crate rw-wrfbatch): a 2D
+    # reflectivity NetCDF nowcast written out as the
+    # `gpuwm-obs.nowcast-frames.v1` contract, the only form the
+    # comparison sheets (`rw_compare --panel LABEL=frames:ROOT@VALID`) and
+    # the radar-heating adapter read.  Without this row the cut built it,
+    # probed nothing and threw it away, so a wheel install had no way to
+    # put a NetCDF nowcast on a StormScope | WOOF | HRRR | MRMS sheet.
+    # Environment variable spelled to match
+    # woof.rustwx_lanes.NOWCAST_FRAMES_ENV; a test binds the two.
+    BundledArtifact(
+        "rw_nowcast_frames", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_NOWCAST_FRAMES",
+        "NetCDF nowcasts as frames roots for the comparison sheets "
+        "(rw_nowcast_frames from-netcdf)"),
     # The ML dataset exporter.  Every array operation `woof ml-export`
     # performs happens in it (the history read, the vertical interpolation,
     # the regrid, the Zarr and ZIP writing), so a bundle without it is an
     # install whose `ml-export` can only refuse.  Environment variable
     # spelled to match woof.ml_export.BINARY_ENV; a test binds the two.
     BundledArtifact(
+        "rw_icechunk", "executable", "tools/rw_icechunk",
+        "WOOF_RW_ICECHUNK", "atomic native history output (Icechunk)",
+        # 2.9.10 (PyPI per-file limit): ~10.8 MB compressed per platform wheel,
+        # for an opt-in output (--output-format icechunk); its first use stages it.
+        on_demand=True),
+    BundledArtifact(
         "rw_mlexport", "executable", bridges.RUSTWX_CRATE_RELATIVE,
         "WOOF_RW_MLEXPORT",
-        "machine-learning dataset export (woof ml-export)"),
+        "machine-learning dataset export (woof ml-export)",
+        # 2.9.11 (PyPI per-file limit): see rw_simradar. A post-run door no
+        # forecast reaches; woof ml-export stages it on its first use.
+        on_demand=True),
+    BundledArtifact(
+        "rw_tc_fields", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_TC_FIELDS", "completed-output cyclone field mapping (woof tc-tracks)",
+        on_demand=True),
+    # The sounding window renderer (the website sounding window drawn from
+    # plain run output).  Environment variable spelled to match
+    # woof.soundings.ENV; the doctor line resolves through that module.
+    BundledArtifact(
+        "rw_soundings", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_SOUNDINGS", "website-style sounding windows (woof soundings)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_scoreboard", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_SCOREBOARD", "incremental forecast verification (woof scoreboard)",
+        on_demand=True),
     BundledArtifact(
         "rw_zarr", "executable", "tools/zarr_bridge",
         "WOOF_RW_ZARR", "regular-grid Zarr acquisition and forcing record decode"),
+    # 2.9.1.  The observation-stream doors of `woof obs streams` and the
+    # local data assimilation (woof.obs.streams, woof.da.obs_conventional).
+    # Until 2.9.1 they were in no wheel and no bundle, so `woof obs streams
+    # fetch --stream ndbc` (and every stream but METAR) refused on any install
+    # with a cargo build from a clone.  On demand: see BundledArtifact.
+    # Environment variables spelled to match woof.obs.frontdoor; a test
+    # binds the two.
+    BundledArtifact(
+        "rw_igra2", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_IGRA2", "IGRA2 radiosondes (woof obs streams fetch --stream igra2)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_amv", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_AMV", "GOES derived motion winds (woof obs streams fetch --stream goes-dmw)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_ndbc", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_NDBC", "NDBC buoys and ships (woof obs streams fetch --stream ndbc)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_ocean_verify", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "GPUWM_RW_OCEAN_VERIFY", "ocean SST verification (woof.ocean.mixed_layer.verify)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_gnssro", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_GNSSRO",
+        "GNSS radio occultation (woof obs streams fetch --stream gnss-ro / cdaac-ro)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_wis2", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_WIS2", "the WIS2 global feed (woof obs streams fetch --stream wis2)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_prepbufr", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_PREPBUFR", "NCEP prepbufr conventional observations (local DA)",
+        on_demand=True),
+    # 2.9.2.  MADIS aircraft, radiosondes and mesonets from the public
+    # real-time and archive files (woof obs streams fetch --stream
+    # madis-acars / madis-raob / madis-mesonet).  The door was built in the
+    # tree and reached by nothing: the stream table called MADIS
+    # account-gated, which the public files never were.
+    BundledArtifact(
+        "rw_madis", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_MADIS",
+        "MADIS aircraft, radiosondes and mesonets (woof obs streams fetch --stream madis-*)",
+        on_demand=True),
+    # 2.9.2.  The listings that feed rw_odim: without them a European volume
+    # was reachable only by a URL the user already knew, so the polar-volume
+    # door had no live or archive route.  BowEcho's catalog adapters plus
+    # FMI/DMI archive lookup; its build.rs stamps the source revision.  On
+    # demand: no forecast reaches it, and it carries an HTTP client.
+    BundledArtifact(
+        "rw_radar_feeds", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_RW_RADAR_FEEDS",
+        "national radar-volume feed listings (woof obs radar-feeds)",
+        on_demand=True),
+    BundledArtifact(
+        "rw_fire_indices", "executable", bridges.RUSTWX_CRATE_RELATIVE,
+        "WOOF_FIRE_INDICES", "stateful Canadian FWI and KBDI (woof.fire_danger_state)",
+        on_demand=True),
 )
 
 
@@ -640,6 +937,9 @@ BUNDLED_ARTIFACTS: tuple[BundledArtifact, ...] = (
 #: read, so a third library cannot be added to `BUNDLED_ARTIFACTS` and
 #: quietly inherit some other library's handshake.
 LIBRARY_ABI: dict[str, tuple[str, int]] = {
+    "rw_nextgen_output": ("rw_nextgen_output_abi_version", 1),
+    "nextgen_hydrofabric": ("arwen_hydrofabric_abi_version", 1),
+    "arwen_nextgen_forcing": ("arwen_forcing_abi_version", 1),
     "gpuwm_preprocess_cpu": ("gpuwm_preprocess_cpu_abi_version", 1),
     "region_global_dealias": ("bw_abi_version", 1),
     # Matches woof.io.nc_writer_bridge.NCWRITE_ABI; a test binds them.
@@ -652,7 +952,30 @@ LIBRARY_ABI: dict[str, tuple[str, int]] = {
     "obs_score": ("gpuwm_obsscore_abi_version", 1),
     # Matches woof.isobaric_bridge.ISOBARIC_ABI; a test binds them.
     "rw_isobaric": ("gpuwm_isobaric_abi_version", 1),
+    # Matches woof.core.tempo_rust.ABI_VERSION.
+    "rw_tempo": ("gpuwm_tempo_abi_version", 1),
+    # Matches woof.obs.superob_bridge.SUPEROB_ABI; a test binds them.
+    "rw_superob": ("gpuwm_superob_abi_version", 1),
+    # Exported by crates/projected-intermediate/src/lib.rs.
+    "rw_projected_intermediate": ("gpuwm_projected_intermediate_abi_version", 1),
 }
+
+
+def wheel_artifacts() -> tuple[BundledArtifact, ...]:
+    """The artifacts a platform wheel carries, in roster order.
+
+    Every declared artifact except the on-demand ones.  Staging into the
+    package, the packaged ``BUNDLE.json`` and every check of an installed
+    or built wheel's native inventory read this, so the set is decided
+    once.  The bundle and the pins are not narrowed by it: they carry
+    :data:`BUNDLED_ARTIFACTS` whole.
+    """
+    return tuple(artifact for artifact in BUNDLED_ARTIFACTS if not artifact.on_demand)
+
+
+def on_demand_artifacts() -> tuple[BundledArtifact, ...]:
+    """The artifacts the bundle carries and the platform wheel does not."""
+    return tuple(artifact for artifact in BUNDLED_ARTIFACTS if artifact.on_demand)
 
 
 def library_abi_for(name: str) -> tuple[str, int]:
@@ -1179,29 +1502,145 @@ def verify_source_revision(payload: bytes, *, expected: str,
 #: What it is for.  A release cut reuses a binary built at an earlier
 #: commit when every path listed for its crate is byte-identical (the
 #: same git object) at the commit being released, so a release that
-#: changed one Python file does not recompile forty-two unchanged
+#: changed one Python file does not recompile forty-five unchanged
 #: binaries.  A path missing from this table is a binary that could be
 #: reused while carrying a stale copy of that file, so
 #: ``tests/test_native_build_inputs.py`` re-derives the outside inputs
 #: from the Cargo manifests and the Rust sources and refuses any it does
 #: not find covered here.
 NATIVE_BUILD_INPUTS: dict[str, tuple[str, ...]] = {
-    "tools/grib1_bridge": ("tools/grib1_bridge", "tools/preparation_resources.rs"),
+    # Its crates.io closure resolves to the rustwx vendor tree (tools/wind-table/.cargo/config.toml).
+    "tools/wind-table": ("tools/wind-table", "tools/rustwx/vendor/crates-io"),
+    "tools/rw_icechunk": ("tools/rw_icechunk",),  # completed below, after tools/rustwx
+    "tools/nextgen_hydrofabric": ("tools/nextgen_hydrofabric",),
+    "tools/nextgen_verify": ("tools/nextgen_verify",),
+    "tools/grib1_bridge": ("tools/grib1_bridge", "tools/preparation_resources.rs",
+                           "tools/rustwx/vendor/crates-io"),
     "tools/rustwx": ("tools/rustwx", "tools/grib1_bridge/vendor/grib-core",
-                     "tools/preparation_resources.rs"),
+                     "tools/preparation_resources.rs",
+                     # static-fields' SFIRE debug controls include the
+                     # native oracle fixtures (sfire_debug.rs).
+                     "tools/sfire_wrf471_oracle/fixtures/debug",
+                     # rw-superob links the region-global solver by path;
+                     # rw_wps and the Zarr bridge reach it through this
+                     # workspace, so they list it too (the inputs test
+                     # walks the closure).
+                     "tools/region_global_dealias",
+                     # rw-mpas init reads its RUC soil and aerosol oracle columns by
+                     # include_str! (golden/hex-rrfs, 2.9.0).
+                     "woof/data/ruc/oracle/soil_ingest.csv",
+                     "woof/data/thompson/oracle-aero/aero-init-profile-column.csv",
+                     # rw-wrfbatch's build.rs embeds the engine version it
+                     # reads from the root pyproject.toml (0c1fc01f9), so a
+                     # version bump must rebuild every crate that reaches it.
+                     "pyproject.toml",
+                     # 2.9.4 capabilities campaign include_str! tables:
+                     # lane/cap-hubwind's hub-height products, observations,
+                     # TKE sources and turbine power curves (rw-wrfbatch,
+                     # rustwx-calc), the WPS archive layouts (rustwx-models
+                     # archives.rs) and the SFIRE input-field and Albers CRS
+                     # authorities (static-fields landfire.rs, raster).
+                     "woof/data/hubwind_observations.json",
+                     "woof/data/hubwind_products.json",
+                     "woof/data/hubwind_tke_sources.json",
+                     "woof/data/turbine_power_curves.json",
+                     "woof/authorities/rw-wps-archive-layouts.v1.json",
+                     "woof/authorities/sfire-albers-crs.v1.json",
+                     "woof/authorities/sfire-input-fields.v1.json"),
     # The shared NetCDF reader (netcrust and its HDF5 reader) lives under
     # tools/rustwx/vendor since the array-ceiling work; rw_wps and the Zarr
     # bridge build against it by path.
-    "tools/rw_wps": ("tools/rw_wps", "tools/grib1_bridge/vendor/grib-core",
+    "tools/rw_wps": ("tools/rw_wps", "tools/rustwx/vendor/crates-io",
+                     "tools/grib1_bridge/vendor/grib-core",
                      "tools/preparation_resources.rs",
-                     "tools/rustwx/vendor/netcrust"),
+                     # projected-intermediate compiles grib1_bridge's WPS
+                     # intermediate writer in by #[path] (2.9.1).
+                     "tools/grib1_bridge/src/wps_intermediate.rs",
+                     "tools/rustwx/vendor/netcrust",
+                     "tools/sfire_wrf471_oracle/fixtures/debug",
+                     "tools/region_global_dealias",
+                     # mapped-engine's grib.rs embeds the two packaged
+                     # HRRR mappings (2ed5afdc7's HRRRv1 corner test).
+                     "woof/authorities/rw-wps-hrrr-prs-grib2.mapping.json",
+                     "woof/authorities/rw-wps-hrrr-native-grib2.mapping.json",
+                     "woof/data/ruc/oracle/soil_ingest.csv",
+                     "woof/data/thompson/oracle-aero/aero-init-profile-column.csv",
+                     "woof/data/hubwind_observations.json",
+                     "woof/data/hubwind_products.json",
+                     "woof/data/hubwind_tke_sources.json",
+                     "woof/data/turbine_power_curves.json",
+                     "woof/authorities/rw-wps-archive-layouts.v1.json",
+                     "woof/authorities/sfire-albers-crs.v1.json",
+                     "woof/authorities/sfire-input-fields.v1.json",
+                     "pyproject.toml"),
     "tools/region_global_dealias": ("tools/region_global_dealias",),
     "tools/zarr_bridge": (
-        "tools/zarr_bridge", "tools/rustwx/crates/netcdf-writer",
+        "tools/zarr_bridge", "tools/rustwx/vendor/crates-io",
+        "tools/rustwx/crates/netcdf-writer",
         "tools/rw_wps", "tools/grib1_bridge/vendor/grib-core",
+        "tools/grib1_bridge/src/wps_intermediate.rs",
         "tools/preparation_resources.rs",
-        "tools/rustwx/vendor/netcrust"),
+        "tools/rustwx/vendor/netcrust",
+        "tools/sfire_wrf471_oracle/fixtures/debug",
+        "tools/region_global_dealias",
+        "woof/authorities/rw-wps-hrrr-prs-grib2.mapping.json",
+        "woof/authorities/rw-wps-hrrr-native-grib2.mapping.json",
+        "woof/data/ruc/oracle/soil_ingest.csv",
+        "woof/data/thompson/oracle-aero/aero-init-profile-column.csv",
+        "woof/data/hubwind_observations.json",
+        "woof/data/hubwind_products.json",
+        "woof/data/hubwind_tke_sources.json",
+        "woof/data/turbine_power_curves.json",
+        "woof/authorities/rw-wps-archive-layouts.v1.json",
+        "woof/authorities/sfire-albers-crs.v1.json",
+        "woof/authorities/sfire-input-fields.v1.json",
+        "pyproject.toml"),
 }
+
+# The forcing and gauge tools reach the shared reader, and optional forcing
+# subset tools also reach the writer. Keep their workspace's full conservative
+# dependency closure, including optional features, rather than pricing reuse
+# only for a default build. The closure test treats a workspace as one unit.
+for _hydro_crate in ("tools/nextgen_forcing", "tools/nextgen_verify"):
+    NATIVE_BUILD_INPUTS[_hydro_crate] = (
+        _hydro_crate, *NATIVE_BUILD_INPUTS["tools/rustwx"])
+
+# Gauge discovery and matching also compile the worldwide fabric reader.
+NATIVE_BUILD_INPUTS["tools/nextgen_verify"] += ("tools/hydro_world",)
+
+# The default-on hydro door's provider tools (2.9.3 improve-1).
+NATIVE_BUILD_INPUTS["tools/hydro_world"] = ("tools/hydro_world",)
+NATIVE_BUILD_INPUTS["tools/nextgen_output"] = (
+    "tools/nextgen_output", *NATIVE_BUILD_INPUTS["tools/rustwx"])
+NATIVE_BUILD_INPUTS["tools/hydro_world_params"] = ("tools/hydro_world_params", "tools/hydro_world")
+NATIVE_BUILD_INPUTS["tools/nextgen_reservoir_prepare"] = ("tools/nextgen_reservoir_prepare",)
+# The initial-state tool reads NetCDF through the shared reader, so it keeps the
+# renderer workspace's closure, as the forcing and gauge tools do.
+NATIVE_BUILD_INPUTS["tools/hydro_world_init"] = (
+    "tools/hydro_world_init", "tools/hydro_world", *NATIVE_BUILD_INPUTS["tools/rustwx"])
+
+# These bridges compile the pinned static projection library, including its
+# embedded database. A change there must invalidate every dependent artifact.
+for _hydro_crate in ("tools/hydro_world", "tools/hydro_world_params",
+                     "tools/hydro_world_init", "tools/nextgen_hydrofabric",
+                     "tools/nextgen_verify"):
+    NATIVE_BUILD_INPUTS[_hydro_crate] += ("tools/hydro_proj",)
+    if "tools/rustwx/vendor/crates-io" not in NATIVE_BUILD_INPUTS[_hydro_crate]:
+        NATIVE_BUILD_INPUTS[_hydro_crate] += ("tools/rustwx/vendor/crates-io",)
+
+# The 2.9.4 ocean preparation (lane/cap-slab-ocean, rw_ocean) and bathymetry
+# (rw_bathy) tools build against the renderer workspace's shared NetCDF
+# reader, static-fields and the NetCDF writer by path, so they keep that
+# workspace's closure, as the hydro tools do.
+NATIVE_BUILD_INPUTS["tools/ocean_prepare"] = (
+    "tools/ocean_prepare", *NATIVE_BUILD_INPUTS["tools/rustwx"])
+NATIVE_BUILD_INPUTS["tools/rw-bathy"] = (
+    "tools/rw-bathy", *NATIVE_BUILD_INPUTS["tools/rustwx"])
+# rw_icechunk builds against the shared NetCDF reader (tools/rustwx/vendor/netcrust) and resolves its registry
+# crates from tools/rustwx/vendor/crates-io (its .cargo/config.toml); reaching into tools/rustwx reaches its
+# inputs too (tests/test_native_build_inputs.py closure rule, red for rw_icechunk at the EB4 tip 00c11b5330).
+NATIVE_BUILD_INPUTS["tools/rw_icechunk"] = (
+    "tools/rw_icechunk", *NATIVE_BUILD_INPUTS["tools/rustwx"])
 
 
 #: Paths inside a crate root that its build never reads: packed into the
@@ -2377,12 +2816,49 @@ def _fetch_bridges_main(args) -> int:
     # would act on a picture that is about to change.
     try:
         with bridge_owner(dest, progress=print):
-            return _stage_estate(args, pins, bundle, dest)
+            if getattr(args, "partial", False):
+                if getattr(args, "from_dir", None) or getattr(args, "keep_bundle", False):
+                    raise BridgeAssetError("--partial cannot be combined with --from or --keep-bundle; partial fetch installs pinned members through HTTP ranges")
+                from .bridge_partial import fetch_partial
+                fetch_partial(pins, bundle, dest, getattr(args, "artifact", None))
+                return 0
+            if getattr(args, "artifact", None):
+                raise BridgeAssetError("--artifact requires --partial")
+            code = _stage_estate(args, pins, bundle, dest)
+            if code == 0 and getattr(args, "dest", None) is None:
+                code = _stage_hex_helpers(args)
+            return code
     except BridgeFolderUnwritable as error:
         return _unwritable_estate(bundle, dest, error)
     except BridgeAssetError as error:
         print(f"woof fetch-bridges: REFUSED: {error}")
         return 2
+
+
+def _stage_hex_helpers(args) -> int:
+    """Stage the hex model's helpers too, when this wheel leaves them to the release.
+
+    A PyPI platform wheel carries their pins, not the helpers
+    (:mod:`woof.hex.helpers`; WOOF 1.1.0 r16, PyPI's per-file limit), so the
+    command that stages this release's natives ahead of time stages them as
+    well: from ``--from DIR`` when it holds the helper archive, else from the
+    release.  An ops wheel that carries them, and an install with no pins,
+    have nothing to do here.
+    """
+
+    try:
+        from woof.hex import helpers
+    except Exception:                                # noqa: BLE001
+        return 0
+    pins = helpers.load_pins()
+    if pins is None or helpers.packaged():
+        return 0
+    try:
+        helpers.stage(pins, from_dir=getattr(args, "from_dir", None), progress=print)
+    except Exception as error:                       # noqa: BLE001
+        print(f"woof fetch-bridges: REFUSED: the hex helpers ({pins['bundle']['filename']}): {error}")
+        return 2
+    return 0
 
 
 def _print_verified(bundle: BundlePin, dest: Path, staged: list,
@@ -2560,6 +3036,14 @@ def register_cli(subparsers) -> None:
              "the default on its own; anywhere else needs the "
              "per-artifact environment variables)")
     parser.add_argument(
+        "--partial", action="store_true",
+        help="fetch only missing or stale pinned binaries with HTTP byte ranges; "
+             "map assets require a full fetch and servers must support ranges")
+    parser.add_argument(
+        "--artifact", action="append", metavar="NAME",
+        help="with --partial, select this artifact (repeatable); renderer "
+             "launchers also fetch their shared rw_wrfbatch executable")
+    parser.add_argument(
         "--keep-bundle", action="store_true",
         help=f"keep the verified archive under <dest>/{ARCHIVE_SUBDIR} "
              "after staging (default: remove it)")
@@ -2592,4 +3076,5 @@ __all__ = [
     "stage_from_bundle", "stage_from_dir",
     "stage_from_loose_files", "staging_available", "verify_contract_marker",
     "verify_pinned_file", "verify_source_revision",
+    "on_demand_artifacts", "wheel_artifacts",
 ]

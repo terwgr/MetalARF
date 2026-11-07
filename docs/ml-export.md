@@ -20,6 +20,9 @@ woof ml-export run/wrfout --out ml/x --levels model --variables +vertical_veloci
 woof ml-export --list                                            # level sets, variables, naming schemes
 ```
 
+Platform wheels carry the native exporter. Fallback installs can obtain it
+with `woof fetch-bridges --partial --artifact rw_mlexport`.
+
 Inputs can be history files, folders holding them (searched for
 `wrfout_dNN_*`), gzip-compressed history files, or ZIPs whose members are
 history files. A compressed or archived frame is unpacked just before it is
@@ -40,6 +43,7 @@ read and deleted just after, so the disk holds one frame at a time.
 | `--config` | the run's configuration file; its SHA-256 is recorded | none |
 | `--zip` | also write `<out>-ml.zip` | off |
 | `--overwrite`, `--skip-unavailable`, `--threads` | replace an earlier export; write what the files can make and record the rest; worker threads | off, off, every core |
+| `--chunk-yx` | `auto`, `full` (one chunk per plane), or `NY,NX` cells | `auto`: 512 x 512 tiles when a plane has more than 1024 x 1024 cells, one chunk otherwise |
 | `--append`, `--finalize` | add frames to the export in `--out` one call at a time, then close it | |
 
 `--append` then `--finalize` writes exactly the bytes one call over the same
@@ -66,7 +70,11 @@ previous time, metres of water, empty at the first time),
 another) and `total_column_water_vapour`. Static, dims `(y, x)`:
 `geopotential_at_surface` and `land_sea_mask`. With `--levels model` the
 model's own mass levels are kept with no interpolation and `pressure` is
-added.
+added. On model levels only, `radar_reflectivity` (ERA5-style name `refl`,
+dBZ, option: `--variables +radar_reflectivity`) is the history file's
+`REFL_10CM`; it needs a history preset that keeps that field (`severe`
+does, `minimal` does not). It is not offered on pressure levels, where
+interpolating dBZ would define a new reflectivity convention.
 
 For a moving native grid, interval and six-hour precipitation compare
 accumulators at the same geographic points. Newly exposed ground has NaN
@@ -157,8 +165,15 @@ ds = xr.open_zarr(zarr.storage.ZipStore("ml/my-run-ml.zip", mode="r"), group="my
 ```
 
 Zarr format 2 with consolidated metadata, which xarray reads under
-zarr-python 2.18 and 3. Chunks hold one time and every level of one
-variable, so one training sample is one read per variable; arrays are
+zarr-python 2.18 and 3. Chunks hold one time and up to a 64 MiB block of
+levels of one variable. Planes larger than 1024 x 1024 cells (a 3 km
+CONUS or 1 km domain) are split into 512 x 512 tiles by default, so a
+training loader reading a patch decompresses only the tiles it touches:
+on a synthetic 2700 x 4500 x 8 export, random 256 x 256 patches through
+an NVIDIA DALI pipeline took 3.4 to 4.2 s per batch of eight with
+whole-plane chunks and 0.32 to 0.44 s with tiles over two runs, with
+identical values. `--chunk-yx full`
+keeps the earlier whole-plane layout. Arrays are
 float32, compressed losslessly with Blosc (Zstandard, byte shuffle). The
 ZIP stores its entries uncompressed so it can be read in place.
 
@@ -237,3 +252,90 @@ Time scales with columns times model levels, and the 250 m frame peaked
 at 2.7 GB of memory. Stored size scales with the number of columns: about
 150 to 200 bytes per column per frame (smooth fields compress further),
 and `era5-37` two to two and a half times WB13.
+
+## Earth2Studio diagnostic and conditioning exports
+
+`woof export` uses this same Rust exporter, pressure interpolation and regrid.
+The naming scheme, target grids and consumer inputs are table rows. List them
+with `woof export --list`.
+
+```sh
+woof export history/ --earth2 e2s-latlon-0.25 \
+  --for windgust-afno,precip-afno,climatenet,tc-tracker --channels tp06 --out earth2/
+woof export history/ --earth2 e2s-healpix --for climatenet --out healpix/
+woof export regional/ --earth2 e2s-hrrr-3km --for stormcast-conus --out conditioning/
+woof export regional/ --earth2 e2s-native --channels t2m,tcwv,z500 --out native/
+```
+
+Without `--for` or `--channels`, the default is 11 surface channels and
+z/t/q/u/v/w/r at 50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850,
+925 and 1000 hPa. `--for` takes the union of the consumers' input channels;
+`--channels` adds channels to that union. Adding a consumer means adding a row
+under `consumers` in `woof/authorities/earth2-models.v1.json`. Existing variable
+operators resolve its channels without consumer-specific dispatch. Pressure
+suffixes are in hPa, and other pressure levels can use the same templates.
+
+The Earth2Studio 0.19.0 lexicon defines z as geopotential (m2 s-2), w as
+pressure vertical velocity (Pa s-1), relative humidity as percent, and tp06 as
+six-hour accumulated water depth in metres. The exporter follows those units.
+An initial frame without a preceding six-hour window has NaN tp06. The 100 m
+winds are earth relative and interpolated linearly in height above ground
+between the bracketing mass-level winds. Columns without a bracket are missing.
+
+| profile | spatial dimensions | convention |
+|---|---|---|
+| `e2s-latlon-0.25` | `lat=721, lon=1440` | latitude 90 to -90, longitude 0 to 359.75 |
+| `e2s-healpix` | `face=12, height=64, width=64` | DLESyM nside 64, Earth2Grid HEALPIX_PAD_XY |
+| `e2s-native` | `y, x` | original fixed regional grid, 2-D lat/lon coordinates |
+| `e2s-hrrr-3km` | `hrrr_y=1059, hrrr_x=1799` | Earth2Studio HRRR spherical Lambert grid, 3 km |
+
+Fixed profiles use parallel Rust bilinear interpolation, with periodic
+longitude on global inputs and NaN outside regional coverage. Use a regional
+history that covers the conditioning footprint required by the consumer.
+The AFNO consumers request 720 latitude rows; select `lat=slice(90,-89.75)`
+when passing the 721-row global export into their model input.
+
+Each domain is a consolidated Zarr format 3 store with one variable per channel
+and dimensions `(time, lead_time, spatial dimensions)`. `time` is the forecast
+initialization and `lead_time` its offset. Format 3 carries the dimension names
+Earth2Studio's Zarr backend reads. Open the store using Earth2Studio itself:
+
+```python
+import numpy as np
+from earth2studio.data import InferenceOutputSource
+from earth2studio.io import ZarrBackend
+
+source = InferenceOutputSource('earth2/d01.zarr', engine='zarr')
+array = source(np.array(['2024-05-22T00'], dtype='datetime64[ns]'),
+               np.array(['t2m', 'tcwv', 'z500']))
+# array dimensions: time, variable, lat, lon; time here is VALID time
+backend = ZarrBackend('earth2/d01.zarr')
+```
+
+`InferenceOutputSource` is the 0.19.0 loader for per-channel inference-output
+files. `DataArrayFile` expects a pre-stacked DataArray and is a different file
+contract. `xarray.open_zarr` also reads these stores. The receipt records input
+hashes, channels, grid parameters and per-frame timings. Common input selection,
+thread, chunk, append, finalize, overwrite and ZIP options are shared with
+`ml-export`. Consumer rows include weight locations and checkpoint licence
+information; exporting fields does not download or run checkpoints.
+
+For a curvilinear conditioning source already on the requested model grid,
+Earth2Studio 0.19.0 needs its legacy coordinate dictionary reconciled. Its
+interpolation path asks for `_lat`/`_lon`, while its HRRR source supplies
+`lat`/`lon`, and then drops spatial keys the conditioning caller requires.
+Use the generic compatibility context around inference:
+
+```python
+from woof.earth2_io import pregridded_conditioning
+
+# model.conditioning_data_source = InferenceOutputSource('conditioning/d01.zarr', engine='zarr')
+with pregridded_conditioning():
+    output, coordinates = model(input_tensor, input_coordinates)
+```
+
+This checks both geographic coordinates and selects the requested index
+window before delegating to Earth2Studio's tensor conversion. For StormCast's
+default CONUS window that is rows 17:1041 and columns 3:1795. Regridding has
+already happened in the Rust exporter. The context changes no installed files
+and restores the original Earth2Studio conversion when it exits.

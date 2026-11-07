@@ -202,8 +202,27 @@ _WORKER_RANGE_TEXT = (
     f"pipeline workers must be 1..{MAX_PIPELINE_WORKERS} or 'auto'")
 
 
+#: Operator override for the decoder's worker count, for a shared host.
+#: Breakage it prevents: on a shared 8-card box (Vast V8X, 2026-10-27) the
+#: HRRR decoder ran 8 workers at ~19-24 GB resident because ``woof go``
+#: passes 8 explicitly; the kernel OOM killer took it 20+ times while other
+#: jobs held the memory, and every kill threw away a 4-10 min preparation.
+#: The value is any number the range accepts, or ``auto``; the receipt
+#: records that it came from the environment.
+PIPELINE_WORKERS_ENV = "WOOF_PIPELINE_WORKERS"
+
+
 def resolve_workers(value: str) -> tuple[int, dict[str, object]]:
     capacity = cgroup_capacity()
+    override = os.environ.get(PIPELINE_WORKERS_ENV, "").strip()
+    # the receipt's "requested" stays the caller's own value: the preparation
+    # validator (prepare_hrrr_wrf._validated_worker_receipts) checks it against
+    # the count it passed, so an override that rewrote it failed every
+    # preparation after ~10 min with "HRRR decoder worker receipt is malformed"
+    # (Vast V8X 2026-10-27); the override is recorded beside it.
+    requested = str(value).strip().lower()
+    if override:
+        value = override
     text = str(value).strip().lower()
     if text == "auto":
         cpu = capacity["cpu_quota_cores"]
@@ -222,8 +241,12 @@ def resolve_workers(value: str) -> tuple[int, dict[str, object]]:
         if workers not in range(1, MAX_PIPELINE_WORKERS + 1):
             raise ValueError(_WORKER_RANGE_TEXT)
         policy = "explicit"
-    return workers, {"requested": text, "selected": workers,
-                     "policy": policy, "cgroup": capacity}
+    receipt = {"requested": requested, "selected": workers,
+               "policy": policy, "cgroup": capacity}
+    if override:
+        receipt["policy"] = policy + f" ({PIPELINE_WORKERS_ENV})"
+        receipt["override"] = {"env": PIPELINE_WORKERS_ENV, "value": text}
+    return workers, receipt
 
 
 def _parse_manifest(path: Path) -> dict[str, str]:
@@ -713,10 +736,24 @@ class HrrrPipelineProducer:
 
     def __init__(self, *, decoder: Path, series: Path, output: Path,
                  signals: Path, cycle: str, window: tuple[int, int, int, int],
-                 workers: str, log: Path, admissions: Path | None = None):
+                 workers: str, log: Path, admissions: Path | None = None,
+                 analyzed_aerosol: bool = False, extras: tuple[str, ...] = ()):
         #: As posted (:class:`PostedLeadAdmitter`): the folder the decoder
         #: waits in for each lead's admission.
         self.admissions = admissions
+        #: The configuration's preparation reads HRRR's analyzed aerosol
+        #: pair (:func:`woof.preparation_assets.analyzed_aerosol_domains`),
+        #: so the decoder selects QNWFA/QNIFA when a lead publishes them
+        #: (``--analyzed-aerosol``).  Off, it never does, 2.8.6's
+        #: inventory: NCEP masks PMTF with a GRIB2 bitmap at some leads of
+        #: some cycles, and a pair read unasked at the reference lead
+        #: stopped an as-posted series at the first masked later lead.
+        self.analyzed_aerosol = bool(analyzed_aerosol)
+        #: Records the caller's configuration reads beyond the default
+        #: inventory (``--extras``: the decoder's request-only tables, e.g.
+        #: HRRR's own number concentrations QNC/QNI/QNR and its 2 m RH for
+        #: an HRRR start).  Requested and unpublished is the decoder's refusal.
+        self.extras = tuple(str(name) for name in extras)
         self.decoder = decoder
         self.series = series
         series_rows = _parse_series(series)
@@ -810,6 +847,27 @@ class HrrrPipelineProducer:
                 if self._log_status == "not opened":
                     self._log_status = "written"
 
+    def decoder_argv(self) -> tuple[str, ...]:
+        """The decoder command this producer launches."""
+
+        i0, i1, j0, j1 = self.window
+        request = ("--analyzed-aerosol",) if self.analyzed_aerosol else ()
+        if self.extras:
+            request += ("--extras", ",".join(self.extras))
+        if self.admissions is None:
+            return (
+                str(self.decoder), *request, "--series-workers-ready",
+                str(self.workers), str(self.series), str(self.output),
+                str(self.signals), self.cycle,
+                str(i0), str(i1), str(j0), str(j1),
+            )
+        return (
+            str(self.decoder), *request, "--series-workers-posted",
+            str(self.workers), str(self.series), str(self.output),
+            str(self.signals), str(self.admissions), self.cycle,
+            str(i0), str(i1), str(j0), str(j1),
+        )
+
     def start(self) -> None:
         for path, label in ((self.output, "output"), (self.signals, "signals")):
             if path.exists():
@@ -827,20 +885,7 @@ class HrrrPipelineProducer:
         except OSError as error:
             self._log_status = (
                 f"unavailable: {type(error).__name__}: {error}")
-        i0, i1, j0, j1 = self.window
-        if self.admissions is None:
-            self.argv = (
-                str(self.decoder), "--series-workers-ready", str(self.workers),
-                str(self.series), str(self.output), str(self.signals),
-                self.cycle, str(i0), str(i1), str(j0), str(j1),
-            )
-        else:
-            self.argv = (
-                str(self.decoder), "--series-workers-posted",
-                str(self.workers), str(self.series), str(self.output),
-                str(self.signals), str(self.admissions), self.cycle,
-                str(i0), str(i1), str(j0), str(j1),
-            )
+        self.argv = self.decoder_argv()
         self.started = time.perf_counter()
         try:
             self.process = subprocess.Popen(
@@ -982,9 +1027,18 @@ class HrrrPipelineProducer:
                 f"invalid producer preflight timestamp: {producer_seconds!r}")
         self.preflight = values
         staging_root = self._validated_staging_root()
-        from woof.ingest.native_supplements import gate_soil_surface_fields
-        soil_surface_count = len(gate_soil_surface_fields(
-            _read_tsv(staging_root / "gate.txt")))
+        from woof.ingest.native_supplements import (
+            gate_optional_hybrid_fields, gate_optional_surface_fields,
+            gate_soil_surface_fields)
+        staged_gate = _read_tsv(staging_root / "gate.txt")
+        extra_fields = tuple(name for name in staged_gate.get("extra_fields", "").split(",") if name)
+        if sorted(extra_fields) != sorted(self.extras):
+            raise ValueError(
+                f"pipeline producer gate declares extras {extra_fields}, not the requested {self.extras}")
+        soil_surface_count = (len(gate_soil_surface_fields(staged_gate))
+                              + len(gate_optional_hybrid_fields(staged_gate))
+                              + len(gate_optional_surface_fields(staged_gate))
+                              + len(extra_fields))
         self.hour_payload_files = {
             hour: count + soil_surface_count
             for hour, count in self._base_hour_payload_files.items()}
@@ -1077,8 +1131,10 @@ class HrrrPipelineProducer:
             staging_cleanup = f"retained:{type(error).__name__}:{error}"
         else:
             staging_cleanup = "removed"
+        from woof.ingest.hrrr import aerosol_fill_receipt
         return {
             "status": "PASS",
+            "aerosol_missing": aerosol_fill_receipt(_read_tsv(self.output / "gate.txt")),
             "source_forecast_hours": list(self.series_hours),
             "model_forcing_hours": list(range(self.series_count)),
             "workers": self.worker_receipt,

@@ -1,0 +1,236 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_thompson_precip_f32",
+      "module": "hexv842_mpas_thompson_precip_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_thompson_precip_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/thompson_v842.py",
+      "cuda_symbol": "mpas_thompson_precip",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "work_rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_precipw",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "diag_sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "i_rainnc",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_rainncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_snownc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_snowncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_graupelnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_graupelncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "work_sr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_precipw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_rainncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_snownc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_snowncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_graupelnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_graupelncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "diag_sr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "i_rainnc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "phase",
+          "int32"
+        ],
+        [
+          "l_acrain",
+          "int32"
+        ],
+        [
+          "correct_wb3",
+          "int32"
+        ],
+        [
+          "bucket",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

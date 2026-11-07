@@ -46,6 +46,7 @@ from woof.runtime_manifest import RUNTIME_SCHEMA
 # here would have been a second copy inside the declaration that exists
 # to end second copies.
 from woof.rustwx_fetch import FETCH_ENV as _FETCH_BACKBONE_ENV
+from woof.rustwx_fetch import FETCH_ABI_MARKER as _FETCH_BACKBONE_ABI
 PYTHON_DISTRIBUTION = "rw-wps"
 
 
@@ -208,11 +209,7 @@ _BRIDGE_ABI_MARKERS = {
     # usage line while emitting a record missing, say, ``mode_reason``
     # would pass a usage-only probe and then break the manifest author
     # after a distribution had already been built and installed.
-    "rw_fetch": (
-        b"gpuwm-rw-fetch-record-v1\tmode\tmode_reason\tsource\tgrib_url\t"
-        b"idx_url\tidx_sha256\tidx_record_count\tselected_record_count\t"
-        b"ranges\tsha256"
-    ),
+    "rw_fetch": _FETCH_BACKBONE_ABI.encode("ascii"),
 }
 
 
@@ -346,7 +343,7 @@ def distribution_contract(
             # masked chain, the native HRRR route's soil stencil, and the
             # lake skin search with the water-temperature blends, the
             # water repairs and the per-body assembly.
-            "masked_surface_chain": "rust-wps-masked-chain-f64-v2",
+            "masked_surface_chain": "rust-wps-masked-chain-f64-v3",
             "masked_bilinear_stencil": "rust-masked-bilinear-stencil-f64-v1",
             "water_blend": "rust-water-blend-f64-v3",
         },
@@ -1144,7 +1141,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     # A runtime check whose own runtime is unnamed is not a check.
     from woof.provenance_gate import announce_for_main
 

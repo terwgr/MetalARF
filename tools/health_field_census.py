@@ -59,10 +59,10 @@ therefore identical with and without them.
 
 WHAT THE CEILING COSTS
 ----------------------
-``MAX_HEALTH_FIELDS`` sizes seven fixed ``integration_health_*`` device slots
-per ``DomainState`` -- 48 KiB per domain at 1024, reported as
+``MAX_HEALTH_FIELDS`` sizes eight fixed ``integration_health_*`` device slots
+per ``DomainState`` -- 60 KiB per domain at 1024, reported as
 ``ceiling_metadata_bytes_per_domain``.  That is the entire resource cost:
-raising the ceiling to 2048 would add 48 KiB per domain, 192 KiB across a
+raising the ceiling to 2048 would add 60 KiB per domain, 240 KiB across a
 four-domain nest.  The ceiling is a tripwire against unnoticed inventory
 growth, not a VRAM constraint, and anyone who needs to raise it should say so
 rather than reach for the descriptor count.
@@ -491,7 +491,7 @@ def family_breakdown(names) -> dict[str, int]:
 def load_any_experiment(path: Path):
     """Load an experiment TOML with or without a ``[case_data]`` table.
 
-    ``[case_data]`` is popped and DISCARDED rather than validated.  The
+    Companion tables are validated by the production experiment loader. The
     descriptor inventory is a property of the configuration's shape, not of
     whether this machine happens to hold the case's forcing files, and
     ``load_experiment_case`` refuses to return an experiment whose declared
@@ -502,17 +502,12 @@ def load_any_experiment(path: Path):
     census reads (dimensions, nest topology, per-domain physics, spec_bdy_
     width, run_seconds) comes from the validated ``ExperimentConfig``.
     """
-    import tomllib
-
     from woof.config import load_config
-    from woof.experiment import (build_experiment, experiment_from_run_config,
+    from woof.experiment import (load_experiment, experiment_from_run_config,
                                   is_experiment_toml)
 
     if is_experiment_toml(path):
-        with open(path, "rb") as handle:
-            raw = tomllib.load(handle)
-        raw.pop("case_data", None)
-        return build_experiment(raw, source=str(path))
+        return load_experiment(path)
     return experiment_from_run_config(load_config(path), datetime(1970, 1, 1))
 
 
@@ -733,7 +728,13 @@ def _domain_clocks(experiment) -> dict:
     return resolve_clock(experiment).clocks()
 
 
-def experiment_census(path: Path, selections=None) -> dict:
+def _census_one_selection(item):
+    path, selection = item
+    install_host_array_backend()
+    return experiment_census(path, selections=[selection])
+
+
+def experiment_census(path: Path, selections=None, *, workers=1) -> dict:
     """Measure every selectable combination on every domain of ``path``.
 
     Combinations the production validators reject (an LSM without a surface
@@ -745,7 +746,7 @@ def experiment_census(path: Path, selections=None) -> dict:
     Combinations that go OVER the ceiling are recorded in ``over_ceiling``,
     never in ``rejected``.
     """
-    from woof.core.health import MAX_HEALTH_FIELDS
+    from woof.core.health import FSBM_HEALTH_FIELDS, MAX_HEALTH_FIELDS
     from woof.core.preflight import (DEFAULT_FORCING_INTERVAL_SECONDS,
                                       lbc_intervals)
 
@@ -757,6 +758,30 @@ def experiment_census(path: Path, selections=None) -> dict:
     clocks = _domain_clocks(experiment)
     if selections is None:
         selections = selectable_matrix(experiment.domains[0].run)
+
+    if workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        selections = list(selections)
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            parts = list(pool.map(_census_one_selection,
+                                  ((path, selection) for selection in selections),
+                                  chunksize=4))
+        report = dict(parts[0])
+        for key in ("rows", "rejected", "over_ceiling", "own_ceiling_rows"):
+            report[key] = [row for part in parts for row in part[key]]
+        shared = [row for row in report["rows"]
+                  if row["ceiling"] == report["max_health_fields"]]
+        worst = max(shared, key=lambda row: row["peak"]) if shared else None
+        report["worst_selection"] = None if worst is None else worst["selection"]
+        report["worst_count"] = 0 if worst is None else worst["peak"]
+        report["headroom"] = report["max_health_fields"] - report["worst_count"]
+        expected = [selection.key() for selection in selections]
+        actual = [row["selection"] for row in report["rows"] + report["rejected"]]
+        actual += [row["selection"] for row in report["over_ceiling"]
+                   if row["selection"] not in actual]
+        if sorted(expected) != sorted(actual):
+            raise RuntimeError("parallel census lost or duplicated a matrix selection")
+        return report
 
     rows = []
     rejected = []
@@ -793,8 +818,21 @@ def experiment_census(path: Path, selections=None) -> dict:
                      "km_opt": selection.km_opt,
                      "per_domain": per_domain,
                      "peak": max(per_domain.values()),
+                     # A FAST_SBM domain validates against its own,
+                     # larger ceiling (woof/core/health.py
+                     # FSBM_HEALTH_FIELDS), so it is held to that one.
+                     "ceiling": (FSBM_HEALTH_FIELDS
+                                 if int(selection.mp_physics) == 30
+                                 else MAX_HEALTH_FIELDS),
                      "breakdown": breakdown})
-    worst = max(rows, key=lambda row: row["peak"]) if rows else None
+    for row in rows:
+        if row["peak"] > row["ceiling"]:
+            over_ceiling.append({"selection": row["selection"],
+                                 "grid_id": None, "count": row["peak"],
+                                 "reason": f"over its own ceiling "
+                                           f"{row['ceiling']}"})
+    shared = [row for row in rows if row["ceiling"] == MAX_HEALTH_FIELDS]
+    worst = max(shared, key=lambda row: row["peak"]) if shared else None
     return {
         "config": str(path),
         "max_health_fields": MAX_HEALTH_FIELDS,
@@ -823,6 +861,10 @@ def experiment_census(path: Path, selections=None) -> dict:
         "rows": rows,
         "rejected": rejected,
         "over_ceiling": over_ceiling,
+        "own_ceiling_rows": [
+            {"selection": row["selection"], "peak": row["peak"],
+             "ceiling": row["ceiling"]}
+            for row in rows if row["ceiling"] != MAX_HEALTH_FIELDS],
         "worst_selection": None if worst is None else worst["selection"],
         "worst_count": 0 if worst is None else worst["peak"],
         "headroom": (MAX_HEALTH_FIELDS
@@ -833,7 +875,7 @@ def experiment_census(path: Path, selections=None) -> dict:
 def descriptor_metadata_bytes(cfg, *, n_lbc_intervals: int = 0) -> int:
     """Device bytes one domain spends on the fixed descriptor tables.
 
-    This is what ``MAX_HEALTH_FIELDS`` actually costs: the seven
+    This is what ``MAX_HEALTH_FIELDS`` actually costs: the eight
     ``integration_health_*`` metadata slots are sized by the ceiling, not by
     the measured count, and they are per ``DomainState``.  Raising the
     ceiling raises this, and on this hardware VRAM is a correctness bar.
@@ -853,6 +895,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("config", type=Path,
                         help="experiment TOML to measure")
+    parser.add_argument("--workers", type=int, default=1, choices=range(1, 17),
+                        help="independent CPU constructors, maximum 16; no GPU")
     parser.add_argument("--json", action="store_true",
                         help="emit the full census as JSON")
     parser.add_argument("--breakdown", action="store_true",
@@ -884,10 +928,10 @@ def _measure(args) -> int:
         experiment = load_any_experiment(args.config)
         anchor = selection_from_key(args.around)
         sample = neighbourhood_sample_matrix(experiment.domains[0].run, anchor)
-        census = experiment_census(args.config, selections=sample)
+        census = experiment_census(args.config, selections=sample, workers=args.workers)
         census["sampled_around"] = anchor.key()
     else:
-        census = experiment_census(args.config)
+        census = experiment_census(args.config, workers=args.workers)
         census["sampled_around"] = None
     if args.json:
         json.dump(census, sys.stdout, indent=2, sort_keys=True)

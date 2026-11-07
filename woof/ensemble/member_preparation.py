@@ -3,19 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 
 from woof.ensemble.recipes import SourceRecipe, SourceTrajectory
-
-
-def _sha(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+from woof.ensemble.physical_fields import sha256_of_file as _sha
 
 
 def _utc(value):

@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "urban_bep_bem_upward_rad_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
+#include "soft_gfk_pow.metalh"
 using namespace metal;
 #pragma clang fp contract(off)
 
@@ -8,6 +9,7 @@ static inline float ubr_add(float a, float b) { return as_type<float>(soft32_add
 static inline float ubr_sub(float a, float b) { return as_type<float>(soft32_sub(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubr_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubr_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
+static inline float ubr_gfk_pow4(float x) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(4.0f))); }
 static inline float ubr_pow4(float x) { float x2 = ubr_mul(x, x); return ubr_mul(x2, x2); }
 
 // WRF module_sf_bep_bem.F bb_upward_rad (5288-5352). This BEM caller packs
@@ -42,7 +44,7 @@ kernel void urban_bep_bem_upward_rad_fragment(
     device const int *utype = r.utype;
     device const int *class_int = r.class_int;
     device const float *class_float = r.class_float;
-    device const int *nzu_class = r.nzu_class;
+    device const int *nzurban = r.nzurban;
     device const float *rld = r.rld;
     device const float *rs = r.rs;
     device const int *active_cols = r.active_cols;
@@ -64,8 +66,8 @@ kernel void urban_bep_bem_upward_rad_fragment(
         error[item] = 7101; return;
     }
     const int ndu = class_int[uint(type)];
-    const int nzu = nzu_class[uint(type - 1)];
-    if (ndu < 1 || ndu > 2 || nzu < 1 || nzu >= 18) {
+    const int nzu = nzurban[item];
+    if (ndu < 1 || ndu > 2 || nzu < 1 || nzu > 18) {
         error[item] = 7102; return;
     }
     const ulong c2 = ulong(item) * 2ul;
@@ -73,14 +75,14 @@ kernel void urban_bep_bem_upward_rad_fragment(
     const ulong c2z = ulong(item) * 36ul;
     const ulong pbase = ulong(item) * 19ul;
     const uint cls = uint(type - 1);
-    const float emg_u = class_float[98u + cls], albg_u = class_float[65u + cls];
-    const float emw_u = class_float[109u + cls], albw_u = class_float[76u + cls];
-    const float emr_u = class_float[120u + cls], albr_u = class_float[87u + cls];
-    const float emwind_u = class_float[1062u + cls], albwind_u = class_float[1073u + cls];
-    const float pwin_u = class_float[1084u + cls];
-    const float grf = class_float[1205u + cls], pvf = class_float[1216u + cls];
+    const float emg_u = class_float[99u + cls], albg_u = class_float[66u + cls];
+    const float emw_u = class_float[110u + cls], albw_u = class_float[77u + cls];
+    const float emr_u = class_float[121u + cls], albr_u = class_float[88u + cls];
+    const float emwind_u = class_float[1063u + cls], albwind_u = class_float[1052u + cls];
+    const float pwin_u = class_float[1085u + cls];
+    const float grf = class_float[1206u + cls], pvf = class_float[1217u + cls];
 
-    for (int iz = 0; iz <= nzu; ++iz) {
+    for (int iz = 0; iz < nzu; ++iz) {
         for (int id = 0; id < ndu; ++id) {
             if (tr_av[c2z + ulong(iz) * 2ul + uint(id)] < 100.0f) {
                 error[item] = 10;
@@ -93,7 +95,7 @@ kernel void urban_bep_bem_upward_rad_fragment(
     for (int id = 0; id < ndu; ++id) {
         const ulong c = c2 + uint(id);
         const float wb = ubr_add(ws[c], bs[c]);
-        const float tg4 = ubr_pow4(tg_av[c]);
+        const float tg4 = ubr_gfk_pow4(tg_av[c]);
         rl_emit = ubr_sub(rl_emit, ubr_div(ubr_div(ubr_mul(ubr_add(
             ubr_mul(ubr_mul(emg_u, p.sigma), tg4), ubr_mul(ubr_sub(1.0f, emg_u), rlg[c])), ws[c]), wb), float(ndu)));
         rl_inc = ubr_add(rl_inc, ubr_div(ubr_div(ubr_mul(rlg[c], ws[c]), wb), float(ndu)));
@@ -105,15 +107,15 @@ kernel void urban_bep_bem_upward_rad_fragment(
 
         for (int iz = 1; iz < nzu; ++iz) {
             const ulong zc = c2z + ulong(iz) * 2ul + uint(id);
-            const float tr4 = ubr_pow4(tr_av[zc]);
+            const float tr4 = ubr_gfk_pow4(tr_av[zc]);
             const float panel4 = ubr_pow4(tpvlev[zc]);
-            const float rl_surface = ubr_add(ubr_add(
+            const float rl_surface = ubr_add(ubr_add(ubr_add(
                 ubr_mul(ubr_mul(ubr_mul(emr_u, p.sigma), ubr_sub(1.0f, pvf)), tr4),
                 ubr_mul(ubr_mul(ubr_mul(0.79f, p.sigma), pvf), panel4)),
-                ubr_add(ubr_mul(ubr_mul(ubr_sub(1.0f, emr_u), rld[item]), ubr_sub(1.0f, pvf)),
-                    ubr_mul(ubr_mul(ubr_sub(1.0f, 0.79f), pvf), rld[item])));
-            rl_emit = ubr_sub(rl_emit, ubr_div(ubr_div(ubr_mul(rl_surface,
-                ss[pbase + uint(iz)]), bs[c]), ubr_mul(wb, float(ndu))));
+                ubr_mul(ubr_mul(ubr_sub(1.0f, emr_u), rld[item]), ubr_sub(1.0f, pvf))),
+                ubr_mul(ubr_mul(ubr_sub(1.0f, 0.79f), pvf), rld[item]));
+            rl_emit = ubr_sub(rl_emit, ubr_div(ubr_div(ubr_mul(ubr_mul(rl_surface,
+                ss[pbase + uint(iz)]), bs[c]), wb), float(ndu)));
             rl_inc = ubr_add(rl_inc, ubr_div(ubr_div(ubr_mul(ubr_mul(rld[item], ss[pbase + uint(iz)]), bs[c]), wb), float(ndu)));
             const float roof_sw = ubr_add(ubr_mul(ubr_mul(ubr_sub(1.0f, albr_u), rs[item]), ubr_sub(1.0f, pvf)),
                 ubr_mul(ubr_mul(ubr_sub(1.0f, 0.11f), rs[item]), pvf));
@@ -124,9 +126,9 @@ kernel void urban_bep_bem_upward_rad_fragment(
                 ubr_mul(ubr_mul(emr_u, rld[item]), ubr_sub(1.0f, pvf))),
                 ubr_mul(ubr_mul(ubr_mul(pvf, emr_u), p.sigma), panel4)),
                 ubr_mul(ubr_mul(emr_u, p.sigma), tr4));
-            const float gflr1 = ubr_add(ubr_mul(ubr_sub(1.0f, grf), sfr[zc]),
-                ubr_mul(ubr_add(sfrv[zc], lfrv[zc]), grf));
-            const float gflr = ubr_add(gflr0, ubr_add(gflr1, ubr_mul(ubr_sub(1.0f, grf), lfr[zc])));
+            float gflr = ubr_add(gflr0, ubr_mul(ubr_sub(1.0f, grf), sfr[zc]));
+            gflr = ubr_add(gflr, ubr_mul(ubr_add(sfrv[zc], lfrv[zc]), grf));
+            gflr = ubr_add(gflr, ubr_mul(ubr_sub(1.0f, grf), lfr[zc]));
             grdflx_urb = ubr_sub(grdflx_urb, ubr_div(ubr_div(ubr_mul(ubr_mul(gflr,
                 ss[pbase + uint(iz)]), bs[c]), wb), float(ndu)));
         }
@@ -137,8 +139,8 @@ kernel void urban_bep_bem_upward_rad_fragment(
             const ulong z = pbase + uint(iz + 1);
             const float walls_rl = ubr_add(rlw[w0], rlw[w1]);
             const float walls_rs = ubr_add(rsw[w0], rsw[w1]);
-            const float walls_t4 = ubr_add(ubr_pow4(tw[w0]), ubr_pow4(tw[w1]));
-            const float wind_t4 = ubr_add(ubr_pow4(twlev[w0]), ubr_pow4(twlev[w1]));
+            const float walls_t4 = ubr_add(ubr_gfk_pow4(tw[w0]), ubr_gfk_pow4(tw[w1]));
+            const float wind_t4 = ubr_add(ubr_gfk_pow4(twlev[w0]), ubr_gfk_pow4(twlev[w1]));
             const float win_sf = ubr_add(sfw[w0], sfw[w1]);
             const float wind_sf = ubr_add(sfwind[w0], sfwind[w1]);
             const float pressure = pb[z];
@@ -147,8 +149,8 @@ kernel void urban_bep_bem_upward_rad_fragment(
             const float wall_lw_inc = ubr_mul(ubr_add(
                 ubr_mul(ubr_sub(1.0f, emw_u), ubr_sub(1.0f, pwin_u)),
                 ubr_mul(pwin_u, ubr_sub(1.0f, emwind_u))), walls_rl);
-            rl_emit = ubr_sub(rl_emit, ubr_div(ubr_div(ubr_mul(ubr_add(wall_lw_em, wall_lw_inc),
-                p.dz_u), pressure), ubr_mul(wb, float(ndu))));
+            rl_emit = ubr_sub(rl_emit, ubr_div(ubr_div(ubr_mul(ubr_mul(
+                ubr_add(wall_lw_em, wall_lw_inc), p.dz_u), pressure), wb), float(ndu)));
             rl_inc = ubr_add(rl_inc, ubr_div(ubr_div(ubr_mul(ubr_mul(walls_rl, p.dz_u), pressure), wb), float(ndu)));
             const float wall_abs = ubr_mul(ubr_add(ubr_mul(ubr_sub(1.0f, albw_u), ubr_sub(1.0f, pwin_u)),
                 ubr_mul(ubr_sub(1.0f, albwind_u), pwin_u)), walls_rs);

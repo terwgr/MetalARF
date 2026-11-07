@@ -1,0 +1,496 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_ysu_column_f32",
+      "module": "hexv842_mpas_ysu_column_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_ysu_column_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/ysu_v842.py",
+      "cuda_symbol": "ysu_v842_columns",
+      "resources": [
+        [
+          "dz8w2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "pi2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "tx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qix",
+          "float",
+          "read_write"
+        ],
+        [
+          "utnp",
+          "float",
+          "read_write"
+        ],
+        [
+          "vtnp",
+          "float",
+          "read_write"
+        ],
+        [
+          "ttnp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvtnp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qctnp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qitnp",
+          "float",
+          "read_write"
+        ],
+        [
+          "p2di",
+          "float",
+          "read_write"
+        ],
+        [
+          "p2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "hpbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "ust",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "xland",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "wspd",
+          "float",
+          "read_write"
+        ],
+        [
+          "br",
+          "float",
+          "read_write"
+        ],
+        [
+          "psim",
+          "float",
+          "read_write"
+        ],
+        [
+          "psih",
+          "float",
+          "read_write"
+        ],
+        [
+          "psfcpa",
+          "float",
+          "read_write"
+        ],
+        [
+          "kpbl1d",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ux",
+          "float",
+          "read_write"
+        ],
+        [
+          "vx",
+          "float",
+          "read_write"
+        ],
+        [
+          "rthraten",
+          "float",
+          "read_write"
+        ],
+        [
+          "ctopo",
+          "float",
+          "read_write"
+        ],
+        [
+          "ctopo2",
+          "float",
+          "read_write"
+        ],
+        [
+          "exch_hx",
+          "float",
+          "read_write"
+        ],
+        [
+          "exch_mx",
+          "float",
+          "read_write"
+        ],
+        [
+          "u10",
+          "float",
+          "read_write"
+        ],
+        [
+          "v10",
+          "float",
+          "read_write"
+        ],
+        [
+          "uox",
+          "float",
+          "read_write"
+        ],
+        [
+          "vox",
+          "float",
+          "read_write"
+        ],
+        [
+          "wstar",
+          "float",
+          "read_write"
+        ],
+        [
+          "delta",
+          "float",
+          "read_write"
+        ],
+        [
+          "workspace",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz8w2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qix": [
+          [
+            "any_1d"
+          ]
+        ],
+        "utnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vtnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ttnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvtnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qctnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qitnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p2di": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ust": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wspd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "br": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psim": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psih": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psfcpa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kpbl1d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthraten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ctopo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ctopo2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exch_hx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exch_mx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u10": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v10": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uox": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vox": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wstar": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "offset",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "f_qc",
+          "int32"
+        ],
+        [
+          "f_qi",
+          "int32"
+        ],
+        [
+          "topdown",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "g",
+          "float32"
+        ],
+        [
+          "rovcp",
+          "float32"
+        ],
+        [
+          "rovg",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "ep1",
+          "float32"
+        ],
+        [
+          "ep2",
+          "float32"
+        ],
+        [
+          "karman",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

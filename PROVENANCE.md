@@ -192,26 +192,38 @@ bytes are outside the numerical oracle.
   `-ftz=true` to whatever the caller passed, at
   `cupy.cuda.compiler` line 585 (`options += ('-ftz=true',)`), after the
   caller's options, and NVRTC honours the last occurrence.
-  The inventory records 9 distinct caller-supplied option tuples across the 71
-  compile sites in the shipped package, each listed here with a site that
-  supplies it:
+  The inventory records 13 distinct caller-supplied option tuples across the
+  209 compile sites in the shipped package, each listed here with a site
+  that supplies it:
   - no caller options -- `woof/core/attribute_tracking.py:99`
-    (xp.ElementwiseKernel), and 37 other site(s)
-  - `-std=c++17` -- `woof/core/kernels/__init__.py:226` (cp.RawModule), and
-    10 other site(s)
+    (xp.ElementwiseKernel), and 157 other site(s)
+  - `-std=c++17` -- `woof/core/acoustic_fusion.py:403` (cp.RawModule), and
+    13 other site(s)
   - `--std=c++17` -- `woof/ensemble/batch_perturbation.py:51`
-    (xp.RawModule), and 8 other site(s)
-  - `-std=c++17` `--ftz=false` -- `woof/core/rrtmg_legacy.py:942`
-    (_cc.compile_using_nvrtc), and 4 other site(s)
-  - `-fmad=false` -- `woof/core/dycore.py:300` (cp.ElementwiseKernel), and
-    2 other site(s)
-  - `-std=c++17` `--ftz=true` -- `woof/core/mynn_pbl_gpu.py:364`
-    (cp.RawKernel), and 1 other site(s)
-  - `--ftz=true` -- `woof/core/morrison.py:39` (cp.ElementwiseKernel)
-  - `-std=c++17` `--fmad=false` -- `woof/core/kernels/__init__.py:192`
+    (xp.RawModule), and 11 other site(s)
+  - `--std=c++11` -- `woof/hex/cuda_courant_fullstep_lts.py:52`
+    (cp.RawKernel), and 5 other site(s)
+  - `-std=c++17` `--ftz=false` -- `woof/core/chem_plumerise_cache.py:37`
+    (compiler.compile_using_nvrtc), and 5 other site(s)
+  - `-fmad=false` -- `woof/core/dycore.py:306` (cp.ElementwiseKernel), and 2
+    other site(s)
+  - `--fmad=false` -- `woof/hex/moving_vertical_cuda.py:21` (cp.RawKernel),
+    and 1 other site(s)
+  - `-std=c++17` `--fmad=false` -- `woof/core/kernels/__init__.py:689`
+    (cp.RawModule), and 1 other site(s)
+  - `-std=c++17` `--fmad=false` `--ftz=false` --
+    `woof/core/thompson_fork.py:109` (compiler.compile_using_nvrtc), and 1
+    other site(s)
+  - `--fmad=false` `-std=c++14` -- `woof/da/letkf_device.py:363`
     (cp.RawModule)
-  - `-std=c++17` `-fmad=false` -- `woof/core/nest_interp.py:261`
-    (cp.RawModule)
+  - `--std=c++17` a target flag built from the device architecture at run
+    time -- `woof/ocean/waves/model.py:73` (cp.RawModule)
+  - `-std=c++17` `--ftz=false` `--fmad=false` --
+    `woof/core/kernels/__init__.py:805` (compiler.compile_using_nvrtc)
+  - a target flag built from the device architecture at run time a target
+    flag built from the device architecture at run time --
+    `woof/hex/mpasphys/surface_update_v842.py:148`
+    (compiler.compile_using_nvrtc)
   `R5` and `R1` are kernels inside ONE compiled object -- same device, same
   flags, one compile -- and they did not measure alike, so on this device
   the outcome follows the instruction the compiler emitted rather than the
@@ -259,6 +271,93 @@ bytes are outside the numerical oracle.
   rain-sedimentation kernel; fallout velocities still use the updated
   environmental density.  This is a numerical-ordering seam, not an external
   WRF runtime dependency.
+
+## Operational WRF 3.9 fork Thompson tables (release assets, 2.8.7)
+
+`thompson_version = "wrf_39_noaa"` reads its own four lookup tables
+(`woof/core/thompson_contract.py`, `FORK_TABLE_ASSETS`, table set
+`wrf-3.9-noaa-fork-thompson-gfortran15-v1`).  From 2.8.7 every release
+carries them as assets named `thompson-wrf39-noaa-<table>`
+(`tools/release/cut/fork_tables.py`), and `woof.thompson_fork_assets`
+downloads them from the engine's own release, then from v2.8.7, verifying
+each file's size and SHA-256 against those pins before installing it into
+`~/.woof/tables/thompson-wrf39-noaa` (or `WOOF_THOMPSON_FORK_TABLE_ROOT`).
+
+- **Source**: the HRRR (NOAA GSL) fork of WRF's `module_mp_thompson.F`,
+  NOAA-EMC/HRRR tag `v4.1.21` (commit
+  `a131d6c7f6ebf57ae3c43f198229ad6afdf4d886`),
+  `sorc/hrrr_wrfarw.fd/WRFV3.9/phys/module_mp_thompson.F` sha256
+  `4d60011188443eb432294f7693beb64bdbc8f812541a15c7800013060c877283` and
+  `module_mp_radar.F` sha256
+  `08329c87604b234efab53f7986163a4f6050f58823da9099cb464163c1920f08`, with
+  the v4.6.1 `CCN_ACTIVATE.BIN` (sha256
+  `f2b8d3916560f9046f89f8ac5f32c5292a1800498fd75301e422f147c82a3dbd`).
+- **Licence**: the fork's `WRFV3.9/README` (blob
+  `cd40a3a3b28a15d5bb52f1d9b6f2bb25505a55d0` at that tag) opens with the
+  WRF Public Domain Notice, word for word the text of
+  `licenses/LICENSE-WRF-public-domain.txt`; neither source file has a
+  copyright line, a licence clause or a use restriction, and the HRRR
+  repository has no licence file of its own that says otherwise.  The
+  tables ship under the WRF notice (NOTICE).
+- **Generator**: the fork's own `thompson_init`, compiled unmodified, called
+  by `tools/thompson_fork_oracle/generate_tables.F90` (sha256
+  `65a0925b31003ae24135e1a0c69c48ccc08e03b0195c6a3c3282c3a5d0c03f77`) and
+  built by `tools/thompson_fork_oracle/build.sh` (sha256
+  `e454ac55c752c0f927fa457319a2364d1568bed8af9bff98650da696020558e3`) with
+  `stub_wrf.F90` (sha256
+  `e377d142027d294cb5d259f02c2c04ef68d698ff98816ba04de263af003396ba`);
+  harness commit `43d87c73cf72554044108c74bb647d79a415916f`.  GNU Fortran
+  15.2.0 (Ubuntu 15.2.0-16ubuntu1), glibc 2.43-2ubuntu2.4, Linux x86_64,
+  `-O2 -fno-tree-vectorize`, no libmvec symbols (the build refuses a
+  binary that links libmvec, which changes the table bits).
+- **Tables** (bytes, sha256):
+  `qr_acr_qg.dat` 51,518,256
+  `8b9b5039ec560748c6261cc9ecbc4366332473a9a1d0666ee5a7f04686abf402`;
+  `qr_acr_qs.dat` 33,118,944
+  `39b4fd363d440a867cc8c37a22ebf2651c8ffcf54f8c05ab7a6f5e753e630ac0`;
+  `freezeH2O.dat` 254,944,848
+  `28c12192251969cd79a02e08e3174f26113de51490689f728cfc44af9cf76b2c`;
+  `thompson_aux_tables.dat` 6,164,536
+  `13d304911e5322fb5bcc2a0639effc20ad5381c59f076ced2386b56f2fb441ae`.
+- **Reproduction**: a development machine's receipt
+  (`tools/thompson_fork_oracle/PROVENANCE-node2.txt`) recorded these four
+  digests; on 2026-10-06 two independent `build.sh` runs on a development machine (same
+  compiler and libc, kernel 7.0.0-31) from a fresh download of the two
+  fork sources produced byte-identical tables with the same four digests.
+  The generator binaries' own digests differ from a development machine's receipt; the
+  tables do not.  `woof.thompson_fork_build` repeats this
+  build from the same pinned sources when no release answers, and its
+  output must equal the same pins or it is refused.
+
+## Operational HRRR v4 CONUS static file (release asset, 2.8.7)
+
+The static-source row `hrrr-conus-v4`
+(`woof/data/static_sources/static-sources.v1.toml`), which the HRRR
+adapters select by default, pins NCO's operational HRRR v4 CONUS geogrid
+output.  NCO serves it from a versioned folder that moves with every HRRR
+code bump (the v4.1.19 path already returns 404), so 2.8.7 publishes the
+same file, unmodified, as the release asset
+`hrrr-conus-v4-hrrr_geo_em.d01.nc` (`tools/release/cut/static_mirror.py`),
+and the row names
+https://github.com/recastsystems/woof/releases/download/v2.8.7/hrrr-conus-v4-hrrr_geo_em.d01.nc
+as its mirror.  The fetch tries NCO first, then the mirror, and installs
+bytes from either only when they match the row's size and SHA-256.  Only
+the 2.8.7 release carries the file; later releases point at it there.
+
+- **Source**: NOAA/NCEP NCO production tree,
+  https://www.nco.ncep.noaa.gov/pmb/codes/nwprod/hrrr.v4.1.21/fix/conus/hrrr_geo_em.d01.nc
+  (served with `Last-Modified: Tue, 15 Jul 2025 17:56:18 GMT`).
+- **Licence**: operational HRRR v4 static data made by NOAA/NCEP and NOAA
+  GSL, a work of the United States Government and in the public domain
+  (NOTICE).  Redistributed unmodified.
+- **File**: `hrrr_geo_em.d01.nc`, 1,112,724,420 bytes, sha256
+  `a785b53fdb8493e376b88ece6e166ddd8046588dd1c0062181141bf2b012f6e2`.
+- **How it was made**: as the row's `provenance` key records it: GEOGRID
+  V3.9.1 output with HRRR's own land use, soil, vegetation and terrain
+  choices and GSL's drag fields grafted in.
+- **Acquisition for the 2.8.7 cut**: downloaded on 2026-10-07 from the NCO
+  URL above on a Linux node, its size and SHA-256 checked against the pin
+  before the cut staged it.
 
 ## Deliberate runtime deviations from WRF v4.6.1
 
@@ -454,10 +553,12 @@ bytes are outside the numerical oracle.
 
 #### D3c. Physics substitutions and comparison scope
 
-- The importer maps mp 55 (ISHMAEL) to Morrison 2-moment and ra_lw/ra_sw 4
-  (RRTMG) to RTE+RRTMGP, emitting a structured `SubstitutionReport`; every
-  other unimplemented scheme id is a hard error.  These are **model-form
-  changes with no error bound**.  bl_pbl 11 (Shin-Hong) was a third
+- The importer maps ra_lw/ra_sw 4 (RRTMG) to RTE+RRTMGP, emitting a
+  structured `SubstitutionReport`; every other unimplemented scheme id is a
+  hard error.  That is a **model-form change with no error bound**.  mp 55
+  (ISHMAEL) was mapped to Morrison 2-moment the same way until 2026-10-12;
+  it is now refused by name, and a configuration that runs Morrison in its
+  place asks for mp 10.  bl_pbl 11 (Shin-Hong) was a third
   substitution (to YSU) until the Shin-Hong port; it now imports natively
   as 11 and runs the ported scheme.  The campaign-era configs and
   comparisons below predate that admission and record the substitution
@@ -596,7 +697,7 @@ bytes are outside the numerical oracle.
   the XIG/XJG tables) is precomputed ONCE at registration
   (`woof/core/nest_interp.py` `sint_offsets`/`register_nest`), built in
   FP64 on host and stored FP32 on device; the FP64 verification mirrors
-  (`woof/verify/npref.py`) consume the SAME FP32-rounded tables so the
+  (`woof/verify/npref.py`, in upstream WOOF; MetalARF does not carry it) consume the SAME FP32-rounded tables so the
   N1 fp32_floor oracle stays discriminating (architecture §D, F6
   amendment; ratified deviations list).  ONLY geometry is precomputed:
   the DONOR/TR4 flux and min/max-limiter arithmetic is field-dependent
@@ -655,6 +756,16 @@ bytes are outside the numerical oracle.
   arbitrate REAL-faithful internals against the gate design.
 
 ### D7. Noah sea-ice runtime thermodynamics are not implemented (Phase 5, lane L4)
+
+- **RETIRED in 2.8.6 (lane/parity-noah)**: `seaice_noah` and `SFLX_SEAICE`
+  are ported as `noah_seaice_column` (`woof/core/kernels/noah.cu`) on WRF's
+  default namelist path (seaice_albedo_opt, seaice_thickness_opt and
+  seaice_snowdepth_opt 0, fractional_seaice 0) and run after both `lsm` and
+  `lsm_mosaic`, with the model time step, as the surface driver orders them.
+  It is graded against a WRF v4.6.1 column oracle
+  (`tools/noah_seaice_wrf461_oracle`, 24 columns x 3 fixtures) by
+  `tests/test_noah_seaice_wrf461_parity.py`.  The text below records the
+  deviation as it stood before the port.
 
 - **WRF initialization semantics, verified in the bundled v4.6.1 source**:
   for `fractional_seaice=0`, `adjust_for_seaice_post` uses an XICE threshold
@@ -1056,96 +1167,63 @@ oversight, and each says what would close it.
   column fixtures -- the 19 the port spec names plus three `wp08-*` columns
   from the same oracle build -- driven end to end through the shipped adapter
   and compared on 23 quantities each at a flat 2.0e-6 relative / 2.0e-4 dB
-  gate.  **18 of 22 clear every quantity with nothing held out** (16 of the 19
-  `aero-*`, plus `wp08-freeze` and `wp08-melt`).
+  gate.  **21 of 22 clear every quantity with nothing held out** (18 of the
+  19 `aero-*`, plus `wp08-freeze`, `wp08-melt` and `wp08-nusweep`), and the
+  gated count is the same 21 of 22: no allowance remains.  The 22nd,
+  `aero-cold-overlap`, misses by the declared rain-graupel divergence alone:
+  WRF v4.6.1 reads its rain-graupel collision tables out of bounds when the
+  scheme is not hail aware (`module_mp_thompson.F:465`, `:607-615`,
+  `:2527-2545`) and WOOF reads the one slab the tables hold, so it reads `qr`
+  5.070e-04, `nr` 5.066e-04, `qi` 1.618e-04, `qg` 8.776e-05, `effi`
+  5.394e-05, `ni` 1.464e-05, `effs` 6.574e-06 and 1.585e-03 dB of
+  reflectivity from WRF; with WRF's read emulated in a measurement copy of
+  the tree it clears all 23 quantities.  An RTX 4090 (sm_89) and an RTX 5070
+  Ti (sm_120) read the whole table identically.
 
-  ONE fixture, `aero-reduces-to-classic`, clears only under two named
-  allowances, taking the gated count to 19 of 22: `nr` 5.700e-06 at 0-based
-  level 5 under a 1.0e-5 bound, and 0-based level 6 held to 32 ULP of the
-  entry value instead of a relative bound (measured 14.9 ULP for `qr`, 4.05
-  for `nr`).  NOTHING WAS EVER WIDENED and one allowance has been RETIRED.
-  The relative bound went 2.5e-03 -> 1.0e-04 -> 1.0e-05 with its `qr` entry
-  DELETED; the dB bound went 1.0e-02 -> 1.0e-03 and is now gone entirely,
-  because the residual it existed for measures 3.242e-05 dB, inside the flat
-  2.0e-4 dB gate.  Two mechanisms did that, both found and closed rather than
-  tolerated: `module_mp_thompson.F:3490` overwrites `rho(k)` inside the
-  condensation loop while `:3384-3388` had already frozen the rain moments
-  from the pre-condensation density, and the adapter was not passing that
-  entry density through (pre-fix `qr` 1.915e-03 / `nr` 1.922e-03 at level 5);
-  and WRF builds the rain mass and number sedimentation consumes at
-  `:3237-3238` from the `:3193` tau+1 density for every level with rain and
-  rebuilds them at `:3568`/`:3570` from the post-condensation density only
-  inside the `:3501-3502` gate, where WOOF wrote the post-condensation one
-  unconditionally (that took `qr` 7.813e-05 -> 1.788e-07 and `nr` 4.832e-05 ->
-  5.700e-06).  The remaining allowance replaced a bare SKIP of level 6, which
-  is strictly more than the skip asserted.
+  WHAT CLOSED THE LAST FOUR (the 2.8.6 accumulator rework).  WRF's
+  `mp_thompson` never writes a hydrometeor during the call: every process
+  adds to a running tendency (`qcten`, `qrten`, `nrten`, `qiten`, `niten`),
+  every stage reads `X1d + Xten*DT`, and the terminal apply
+  (`module_mp_thompson.F:3972-4053`) rounds each species once, with the size
+  bounds after the `:3943-3966` phase cleanup.  The port applied each stage
+  to the state in turn, so a species was rounded once per stage, and the
+  rain and ice fallout it shared with mp=8 folded the terminal size bounds in
+  before the freeze.  mp=28 now carries the five tendencies, runs the
+  `:3033-3055` / `:3070-3091` balances in tendency form, has its own
+  tendency-form rain and ice fallout, applies once in a terminal kernel, and
+  takes the cold network's rain-conservation ratio as REAL as `:1615`
+  declares it.  The fork generation keeps its in-place rain and ice and the
+  frozen mp=8 kernel file is unchanged.  Measured: `aero-cloud-freeze-nc` `qc`
+  4.926e-06 -> bit-exact; `aero-cold-overlap` `qc` / `nc` / `effc` at level 4
+  (1.000e+00 / 1.000e+00 / 8.102e-01, one float32 ULP of cloud flipping
+  `:4007`) and `nr` 1.261e-04 / `qr` 4.443e-05 at level 6 -> bit-exact in
+  2.8.6, before 2.8.8 moved rain collecting graupel onto the one slab WRF's
+  tables hold (the declared divergence above); `wp08-nusweep` `qr` 4.642e-06 -> 5.532e-07; `wp08-freeze` `nr` level 0
+  4.006e-07 -> bit-exact; `aero-reduces-to-classic` level 6 bit-exact in `qr`
+  and `nr`, which retired the last allowance.
 
-  THE ATTRIBUTION OF WHAT SURVIVES CHANGED, AND THE OLD ONE IS NOW FALSE.
-  This register used to record the residual as pre-existing and not introduced
-  by the aerosol port, because the frozen mp=8 pipeline reproduced WRF's `qr`
-  bitwise at levels 2-3 on the identical entry column.  That was true and is
-  not any more, because mp=28 got BETTER: it is now bit-exact against WRF at
-  `qr` levels 1, 2 and 4 and at `nr` level 1, where mp=8 is 7.61e-05,
-  4.00e-05, 6.27e-05 and 4.63e-05 away, and over levels 0-7 it is at least as
-  near WRF as mp=8 at every level and strictly nearer at seven of eight.  The
-  surviving `nr` 5.700e-06 is therefore NOT inherited and is not claimed to
-  be; it sits at level 5 alone, the one level where the step removes 49.75% of
-  the rain number without emptying it, and it is 27.5 ULP of the entry value
-  where every other unexcluded level is 0-3 ULP.  It changed again on
-  2026-09-23: the classic rain evaporation now writes the `L_qr` hand-off too
-  and the mp=8 adapter launches the same fallout forms, so mp=28 and mp=8 are
-  bitwise identical in `qr` and `nr` at levels 0-5 and differ only at the
-  near-cancellation level 6, both under one ULP of the entry value from WRF
-  there (measured 2026-09-24 on an RTX 5070 Ti and an RTX 4090 alike).
+  THE ALLOWANCES, ALL RETIRED, NONE EVER WIDENED.  The relative bound on
+  `aero-reduces-to-classic` went 2.5e-03 -> 1.0e-04 -> 1.0e-05 with its `qr`
+  entry deleted, and was retired at the 1.4.1 merge (level 5 `nr` 5.700e-06
+  -> 4.146e-07); the dB bound went 1.0e-02 -> 1.0e-03 and was retired when
+  the residual fell to 3.242e-05 dB; the near-cancellation bound, which
+  replaced a bare SKIP of level 6 with 32 ULP of the entry value, was retired
+  by the 2.8.6 accumulator rework.  The mechanisms closed on the way were
+  found rather than tolerated: `module_mp_thompson.F:3490` overwrites
+  `rho(k)` inside the condensation loop while `:3384-3388` had already frozen
+  the rain moments from the pre-condensation density (pre-fix `qr` 1.915e-03
+  / `nr` 1.922e-03 at level 5); WRF builds the rain mass and number
+  sedimentation consumes at `:3237-3238` from the `:3193` tau+1 density for
+  every level with rain and rebuilds them at `:3568`/`:3570` only inside the
+  `:3501-3502` gate (`qr` 7.813e-05 -> 1.788e-07, `nr` 4.832e-05 ->
+  5.700e-06); and WRF's terminal apply is `q1d(k) = q1d(k) + qten(k)*DT`
+  with no FMA in the `gfortran -O2` oracle, which nvrtc used to contract.
 
-  THREE MISS, published field by field:
-  `aero-cold-overlap` (`qc` 1.000e+00, `nc` 1.000e+00, `effc` 8.102e-01,
-  `nr` 1.261e-04, `qr` 4.443e-05),
-  `aero-cloud-freeze-nc` (`qc` 4.926e-06) and
-  `wp08-nusweep` (`qr` 4.642e-06).  `wp08-freeze` (`nr` 2.724e-06) left
-  the list on 2026-09-23 when the rain fallout was handed WRF's `L_qr`
-  (level 0 now 4.006e-07, 5 ULP, on the RTX 4090 and RTX 5090 alike;
-  8.012e-08, 1 ULP, on the host build of the kernels).  NO SURFACE ACCUMULATION MISSES ON ANY
-  FIXTURE any more: `RAINNC`, `RAINNCV` and `SR` are bitwise identical to WRF
-  on all 22 columns and `SNOWNC`/`SNOWNCV` and `GRAUPELNC`/`GRAUPELNCV` peak
-  at 6.285e-08 and 7.062e-08.  Earlier revisions of this register carried
-  `rainnc`/`rainncv`/`sr` rows on two fixtures and noted they were one number
-  seen three ways (`module_mp_thompson.F:1298`, `:1299`, `:1308`); the note
-  was right and the rows are gone.
-
-  WHAT MOVED IN THIS REVISION, INCLUDING WHAT GOT WORSE.  The sedimentation
-  density fix above closed `aero-drop-evap` and `aero-ice-demott-idxin`
-  outright (both now clear the flat gate on all 23 quantities) and took
-  `aero-cloud-freeze-nc` from six rows to one.  Separately, WRF's terminal
-  apply at `:3973-4023` is `q1d(k) = q1d(k) + qten(k)*DT` and the `gfortran
-  -O2` baseline-x86-64 oracle has no FMA instruction, so `qten*DT` is rounded
-  to REAL(4) first; nvrtc contracted it in the cold and warm source networks
-  and now does not.  That made `aero-nc-cap`'s `qc`/`nc` and
-  `aero-ice-demott-idxin`'s surface accumulators BITWISE exact -- and it COST
-  one cell, recorded rather than absorbed: `aero-cold-overlap`'s `qr` at level
-  6 GREW, 3.667e-05 -> 4.443e-05 (1.477 -> 1.789 ULP of the entry value).
-  Reverting that one line restores the old number and simultaneously loses
-  four of the improvements above, two of which are exact, so the pin is kept
-  and the growth is published.
-
-  `aero-cold-overlap`'s full-scale rows are a ONE-ULP disagreement reported by
-  a relative metric, and they are recorded rather than allowanced.  Measured
-  at 0-based level 4: the level enters with `qc` = 2.3252160e-04 kg/kg and
-  `nc` = 9.1306704e+07 per kg; WRF ends the step with `qc` =
-  1.4551915228366852e-11 kg/kg -- exactly 2^-36, exactly 1.000 float32 ULP of
-  the entry value -- and `nc` = 1.8333361 per kg, while woof ends at exactly
-  0.0 (`nc`: 0.229 ULP).  `effc` follows: with no cloud water woof takes the
-  2.49 um floor while WRF's remainder gives 1.31176e-05 m.  One mechanism,
-  three views.  Its OTHER residual is separate and real, at level 6, where the
-  rain number falls 255.407 -> 0.0739 per kg (0.611 ULP for `nr`, 1.789 for
-  `qr`).  `aero-cloud-freeze-nc`'s single surviving row is the SECOND float32
-  rounding of `qc` inside one step: WRF rounds once at `:3975` from a `qcten`
-  carrying the source network and the condensation together, while WOOF
-  applies the source network to `qc` and then applies the condensation to the
-  already-rounded value.  Named, measured, and not closed -- the accumulator
-  would need a scratch slot in `woof/core/preflight.py` and a resequencing of
-  `thompson_aerosol_sed.cu`'s cloud sedimentation, neither of which was this
-  package's to edit.
+  NO SURFACE ACCUMULATION MISSES ON ANY FIXTURE: `RAINNC`, `RAINNCV` and `SR`
+  are bitwise identical to WRF on all 22 columns.  Earlier revisions of this
+  register carried `rainnc`/`rainncv`/`sr` rows on two fixtures and noted
+  they were one number seen three ways (`module_mp_thompson.F:1298`,
+  `:1299`, `:1308`); the note was right and the rows are gone.
 
   Three preregistered matched woof/WRF mp=28 comparisons have run on an
   idealized, single-domain, doubly periodic case. Their declared outcomes
@@ -1485,7 +1563,7 @@ reported separately in `docs/public/VERIFICATION.md`.
 | entry | key (mechanism-named) | faithful -> patched | evidence today | promotion |
 |---|---|---|---|---|
 | **L3** gray-zone PBL | `bl_pbl_physics` (existing selector; no new key) | 1 (YSU) -> 11 (Shin-Hong 2015 scale-aware) | 1.5.2 headline; CPU authority max-ULP-0 against the byte-frozen `module_bl_shinhong.F`; partition ladder inside registered Honnert-envelope bands (`docs/public/receipts/grayzone/PHASE1-SHINHONG-20260803.md`); maturity implemented-unverified.  At dx 3000 m the scheme sits above its gated ladder, which is stated in the arm's registration and is exactly what an obs referee is for.  **Route:** the composition an L3 arm resolves to is registered as `thompson-mp8-shinhong-mm5-noah-rrtmg-legacy-v1` (wrf-matched-run-candidate, template_only, HRRR-only), which is what makes the arm runnable: its three refusing gates (emission physics, root-preparation profile, certified hierarchy slice) now admit it, each by an enumerated admission keyed to that registration rather than a widened rail. | UNDECIDED |
-| **L4** 6th-order filter off the moist scalars | `moist_mix6_off` (WRF's own spelling) | `.false.` -> `.true.` | WRF v4.6.1 `Registry/Registry.EM_COMMON:2889` declares it verbatim: `rconfig   logical  moist_mix6_off   namelist,dynamics  max_domains  .false. rh  "moist_mix6_off"  "de-activate 6th-order horizontal filter for moisture"`.  It gates one call (`sixth_order_diffusion` on the moist array, `dyn_em/module_em.F:1421`, reached from `dyn_em/solve_em.F:2230`) so theta and the WRF `scalar`-package tracers keep their own filters.  This is therefore a **configuration-policy patch**: the WRF arm could be configured to match, and the battery tests it as an WOOF-DEFAULT candidate rather than as a capability.  Precedent: D-L4 ratified diff6 default-OFF in LES configs (`docs/superpowers/specs/P6-LES-DECISIONS-RATIFIED.md:35-39`).  The roadmap's "Sc-deck scales" framing has **no receipt in this tree** (verified: `diff_6th` and stratocumulus never co-occur; the Sc-deck finding is a SASE result, `woof/verify/sase_ref.py:1280-1292`), so the entry is registered on WRF-community evidence plus D-L4 and is measured at 3 km. | UNDECIDED |
+| **L4** 6th-order filter off the moist scalars | `moist_mix6_off` (WRF's own spelling) | `.false.` -> `.true.` | WRF v4.6.1 `Registry/Registry.EM_COMMON:2889` declares it verbatim: `rconfig   logical  moist_mix6_off   namelist,dynamics  max_domains  .false. rh  "moist_mix6_off"  "de-activate 6th-order horizontal filter for moisture"`.  It gates one call (`sixth_order_diffusion` on the moist array, `dyn_em/module_em.F:1421`, reached from `dyn_em/solve_em.F:2230`) so theta and the WRF `scalar`-package tracers keep their own filters.  This is therefore a **configuration-policy patch**: the WRF arm could be configured to match, and the battery tests it as an WOOF-DEFAULT candidate rather than as a capability.  Precedent: D-L4 ratified diff6 default-OFF in LES configs (`docs/superpowers/specs/P6-LES-DECISIONS-RATIFIED.md:35-39`).  The roadmap's "Sc-deck scales" framing has **no receipt in this tree** (verified: `diff_6th` and stratocumulus never co-occur; the Sc-deck finding is a SASE result, `woof/verify/sase_ref.py:1280-1292`, in upstream WOOF; MetalARF does not carry it), so the entry is registered on WRF-community evidence plus D-L4 and is measured at 3 km. | UNDECIDED |
 | **L5** SASE closure | `bl_pbl_physics` -> 900 plus six mandatory companions (`docs/public/PHYSICS.md:718-723`) | 1 (YSU + `km_opt` 4) -> 900 | implemented-unverified on the WRF-conformance ladder (no WRF counterpart; this does not rule out code verification against its own reference implementation or validation against observations); met 2 of 7 frozen bars on its reference case; its first real-data forecast failed the health gate at 1 h. | **DID NOT QUALIFY.**  Registered entry gate: SASE earns battery arms only after one full 24 h battery-shape integration completes with `status: PASS`.  Until then it is scored on zero cases and reported as "did not qualify" -- accurate, and cheaper than crashed arms.  It is also not a bit-flip, so it enters as its own overlay and is deliberately not a member of patch-set v1. |
 
 ### Class C. Knob exists, dormant (not in the battery suite)

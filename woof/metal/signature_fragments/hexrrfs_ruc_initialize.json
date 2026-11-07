@@ -1,0 +1,148 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_ruc_initialize",
+      "source": "woof/metal/shaders/hexrrfs_ruc_initialize.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/ruc_lsm_8c9f1a8.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_ruc_initialize",
+      "cuda_symbol": "init_rucinit",
+      "threads_per_group": 32,
+      "resources": [
+        [
+          "ivgtyp",
+          "int32",
+          "read"
+        ],
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "xice",
+          "float",
+          "read"
+        ],
+        [
+          "tslb",
+          "float",
+          "read"
+        ],
+        [
+          "smois",
+          "float",
+          "read"
+        ],
+        [
+          "tables",
+          "float",
+          "read"
+        ],
+        [
+          "sh2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "smfr3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "mavail",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ivgtyp": [
+          [
+            "nc"
+          ]
+        ],
+        "isltyp": [
+          [
+            "nc"
+          ]
+        ],
+        "xice": [
+          [
+            "nc"
+          ]
+        ],
+        "tslb": [
+          [
+            "nsl",
+            "nc"
+          ]
+        ],
+        "smois": [
+          [
+            "nsl",
+            "nc"
+          ]
+        ],
+        "tables": [
+          [
+            "955"
+          ]
+        ],
+        "sh2o": [
+          [
+            "nsl",
+            "nc"
+          ]
+        ],
+        "smfr3d": [
+          [
+            "nsl",
+            "nc"
+          ]
+        ],
+        "mavail": [
+          [
+            "nc"
+          ]
+        ],
+        "znt": [
+          [
+            "nc"
+          ]
+        ],
+        "error": [
+          [
+            "1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "nsl",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

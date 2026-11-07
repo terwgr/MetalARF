@@ -1,0 +1,302 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_driver_pre_f32",
+      "module": "hexv842_mpas_bl_mynn_driver_pre_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_driver_pre_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_bl_mynn_run",
+      "resources": [
+        [
+          "dz1",
+          "float",
+          "read"
+        ],
+        [
+          "th1",
+          "float",
+          "read"
+        ],
+        [
+          "sqv1",
+          "float",
+          "read"
+        ],
+        [
+          "sqc1",
+          "float",
+          "read"
+        ],
+        [
+          "sqi1",
+          "float",
+          "read"
+        ],
+        [
+          "sqs1",
+          "float",
+          "read"
+        ],
+        [
+          "ex1",
+          "float",
+          "read"
+        ],
+        [
+          "ust1",
+          "float",
+          "read"
+        ],
+        [
+          "qv1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs1",
+          "float",
+          "read_write"
+        ],
+        [
+          "sqw",
+          "float",
+          "read_write"
+        ],
+        [
+          "thl",
+          "float",
+          "read_write"
+        ],
+        [
+          "thetav",
+          "float",
+          "read_write"
+        ],
+        [
+          "qke1",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh1",
+          "float",
+          "read_write"
+        ],
+        [
+          "sm1",
+          "float",
+          "read_write"
+        ],
+        [
+          "el_pbl1",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsq1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsq1",
+          "float",
+          "read_write"
+        ],
+        [
+          "cov1",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra_bl1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi_bl1",
+          "float",
+          "read_write"
+        ],
+        [
+          "zw",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sqv1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sqc1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sqi1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sqs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ex1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ust1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thetav": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sh1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sm1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "el_pbl1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tsq1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qsq1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cov1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cldfra_bl1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc_bl1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi_bl1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "xlvcp",
+          "float32"
+        ],
+        [
+          "xlscp",
+          "float32"
+        ],
+        [
+          "cold",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

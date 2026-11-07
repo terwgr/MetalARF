@@ -1,0 +1,128 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_rrtmg_lw_final_f32",
+      "module": "hexv842_mpas_rrtmg_lw_final_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_rrtmg_lw_final_f32.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_rtrn_final_coalesced",
+      "resources": [
+        [
+          "pz",
+          "float",
+          "read"
+        ],
+        [
+          "totuflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "totdflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "totuclfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "totdclfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "fnet",
+          "float",
+          "read_write"
+        ],
+        [
+          "fnetc",
+          "float",
+          "read_write"
+        ],
+        [
+          "htr",
+          "float",
+          "read_write"
+        ],
+        [
+          "htrc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "totuflux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "totdflux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "totuclfl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "totdclfl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnet": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnetc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "htr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "htrc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "fluxfac",
+          "float32"
+        ],
+        [
+          "heatfac",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+#ifndef WOOF_THOMPSON_AEROSOL_EXNER_LIBM_METALH
+#define WOOF_THOMPSON_AEROSOL_EXNER_LIBM_METALH
+
+// FMA powf core transcribed from thompson_aerosol_libm.cuh and the Arm
+// optimized-routines powf/exp2f cores and tables imported by glibc 2.39.
+// Copyright (c) 2017-2018, Arm Limited.
+// SPDX-License-Identifier: MIT
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+// Keep the ordinary shared powf graph unchanged. This Exner entry uses
+// the aerosol source's explicit binary64 fused operations on soft64 words.
+#include "soft_gfk_pow.metalh"
+
+static inline ulong thompson_exner_powf_log2_bits(uint ix) {
+    const uint tmp = ix - 0x3f330000u;
+    const int i = int((tmp >> 19) & 15u);
+    const uint top = tmp & 0xff800000u;
+    const uint iz = ix - top;
+    const int k = as_type<int>(top) >> 23;
+    const ulong z = soft64_from_f32_bits(iz);
+    const ulong r = soft64_fma(z, soft_gfk_powf_invc[i], 0xbff0000000000000ul);
+    const ulong y0 = soft64_add(soft_gfk_powf_logc[i], soft_gfk_i32_to_f64_bits(k));
+    const ulong r2 = soft64_mul(r, r);
+    const ulong y = soft64_fma(soft_gfk_powf_a[0], r, soft_gfk_powf_a[1]);
+    const ulong p = soft64_fma(soft_gfk_powf_a[2], r, soft_gfk_powf_a[3]);
+    const ulong r4 = soft64_mul(r2, r2);
+    ulong q = soft64_fma(soft_gfk_powf_a[4], r, y0);
+    q = soft64_fma(p, r2, q);
+    return soft64_fma(y, r4, q);
+}
+
+static inline ulong thompson_exner_powf_exp2_bits(ulong xd, ulong sign_bias) {
+    const ulong shift = 0x42e8000000000000ul;
+    ulong kd = soft64_add(xd, shift);
+    const ulong ki = kd;
+    kd = soft64_sub(kd, shift);
+    const ulong r = soft64_sub(xd, kd);
+    ulong t = SOFT_GFK_EXP2F_TAB[uint(ki & 31ul)];
+    t += (ki + sign_bias) << 47u;
+    const ulong z = soft64_fma(0x3fac6af84b912394ul, r, 0x3fcebfce50fac4f3ul);
+    const ulong r2 = soft64_mul(r, r);
+    ulong y = soft64_fma(0x3fe62e42ff0c52d6ul, r, 0x3ff0000000000000ul);
+    y = soft64_fma(z, r2, y);
+    return soft64_mul(y, t);
+}
+
+static inline uint thompson_exner_powf_bits(uint x, uint y)
+{
+    uint sign_bias = 0u;
+    uint ix = x;
+    const uint iy = y;
+    if (ix - 0x00800000u >= 0x7f800000u - 0x00800000u
+        || soft_gfk_zeroinfnan(iy)) {
+        if (soft_gfk_zeroinfnan(iy)) {
+            if (2u * iy == 0u) return 0x3f800000u;
+            if (ix == 0x3f800000u) return 0x3f800000u;
+            if (2u * ix > 2u * 0x7f800000u
+                || 2u * iy > 2u * 0x7f800000u)
+                return soft32_add(x, y);
+            if (2u * ix == 2u * 0x3f800000u) return 0x3f800000u;
+            if ((2u * ix < 2u * 0x3f800000u)
+                == ((iy & 0x80000000u) == 0u)) return 0u;
+            return soft32_mul(y, y);
+        }
+        if (soft_gfk_zeroinfnan(ix)) {
+            uint x2 = soft32_mul(x, x);
+            if ((ix & 0x80000000u) != 0u && soft_gfk_checkint(iy) == 1)
+                x2 ^= 0x80000000u;
+            return (iy & 0x80000000u) != 0u
+                ? soft32_div(0x3f800000u, x2) : x2;
+        }
+        if ((ix & 0x80000000u) != 0u) {
+            const int yint = soft_gfk_checkint(iy);
+            if (yint == 0) return 0x7fc00000u;
+            if (yint == 1) sign_bias = 1u << (5 + 11);
+            ix &= 0x7fffffffu;
+        }
+        if (ix < 0x00800000u) {
+            ix = soft32_mul(x, 0x4b000000u) & 0x7fffffffu;
+            ix -= 23u << 23;
+        }
+    }
+
+    const ulong logx = thompson_exner_powf_log2_bits(ix);
+    const ulong ylogx = soft64_mul(soft64_from_f32_bits(y), logx);
+    const uint hi = uint((ylogx >> 47) & 0xfffful);
+    if (hi >= uint((0x405f800000000000ul >> 47) & 0xfffful)) {
+        if (soft64_greater(ylogx, 0x405fffffffd1d571ul))
+            return sign_bias != 0u ? 0xff800000u : 0x7f800000u;
+        if (soft64_less_equal(ylogx, 0xc062c00000000000ul))
+            return sign_bias != 0u ? 0x80000000u : 0u;
+    }
+    return soft64_to_f32_bits(thompson_exner_powf_exp2_bits(
+        ylogx, ulong(sign_bias)));
+}
+
+#endif

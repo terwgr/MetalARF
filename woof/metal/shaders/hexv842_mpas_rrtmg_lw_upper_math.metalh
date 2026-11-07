@@ -1,0 +1,166 @@
+#ifndef WOOF_MPAS_LW_UPPER_MATH_METALH
+#define WOOF_MPAS_LW_UPPER_MATH_METALH
+#include "soft_gfk_pow.metalh"
+static uint lw_upper_fmod_bits(uint x, uint y) {
+    const uint sign=x & 0x80000000u;
+    uint ax=x & 0x7fffffffu, ay=y & 0x7fffffffu;
+    if (soft32_is_nan(x)) return soft32_quiet_nan(x);
+    if (soft32_is_nan(y)) return soft32_quiet_nan(y);
+    if (ax==0x7f800000u || ay==0u) return soft32_qnan();
+    if (ay==0x7f800000u || ax<ay) return x;
+    if (ax==ay) return sign;
+    Soft32Decoded a=soft32_decode(x), b=soft32_decode(y);
+    uint m=a.significand; int e=a.exponent;
+    while(e>b.exponent) {
+        if(m>=b.significand) m-=b.significand;
+        if(m==0u) return sign;
+        m <<= 1; --e;
+    }
+    if(m>=b.significand) m-=b.significand;
+    if(m==0u) return sign;
+    while(m<0x800000u) {m<<=1;--e;}
+    return soft32_pack_extended(sign!=0u,e,m<<3);
+}
+
+static inline float lw_upper_fmod(float x, float y) { return as_type<float>(lw_upper_fmod_bits(as_type<uint>(x),as_type<uint>(y))); }
+static inline float rlw_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x),as_type<uint>(y))); }
+static inline float rlw_pow4(float x)
+{
+    float x2 = RLW_MU(x, x);
+    return RLW_MU(x2, x2);
+}
+#define KA3_0609(tab, j, i, g) \
+    tab[((j) - 1) + 9 * ((i) - 1) + 171 * ((g) - 1)]
+
+
+struct RlwSpecFac0609 {
+    float f0p, f1p, f2p, f0t, f1t, f2t;
+};
+
+static inline RlwSpecFac0609 rlw_specfac_0609(float specparm, float fsl,
+                                           float facp, float fact)
+{
+    RlwSpecFac0609 r;
+    if (specparm < 0.125f) {
+        float p = RLW_SU(fsl, 1.0f);              // p = fs - 1
+        float p4 = rlw_pow4(p);                   // p**4
+        float fk0 = p4;
+        float fk1 = RLW_SU(RLW_SU(1.0f, p), RLW_MU(2.0f, p4));
+        float fk2 = RLW_AD(p, p4);
+        r.f0p = RLW_MU(fk0, facp);
+        r.f1p = RLW_MU(fk1, facp);
+        r.f2p = RLW_MU(fk2, facp);
+        r.f0t = RLW_MU(fk0, fact);
+        r.f1t = RLW_MU(fk1, fact);
+        r.f2t = RLW_MU(fk2, fact);
+    } else if (specparm > 0.875f) {
+        float p = -fsl;                           // p = -fs
+        float p4 = rlw_pow4(p);
+        float fk0 = p4;
+        float fk1 = RLW_SU(RLW_SU(1.0f, p), RLW_MU(2.0f, p4));
+        float fk2 = RLW_AD(p, p4);
+        r.f0p = RLW_MU(fk0, facp);
+        r.f1p = RLW_MU(fk1, facp);
+        r.f2p = RLW_MU(fk2, facp);
+        r.f0t = RLW_MU(fk0, fact);
+        r.f1t = RLW_MU(fk1, fact);
+        r.f2t = RLW_MU(fk2, fact);
+    } else {
+        r.f0p = RLW_MU(RLW_SU(1.0f, fsl), facp);
+        r.f0t = RLW_MU(RLW_SU(1.0f, fsl), fact);
+        r.f1p = RLW_MU(fsl, facp);
+        r.f1t = RLW_MU(fsl, fact);
+        r.f2p = 0.0f;                             // unused in else branch
+        r.f2t = 0.0f;
+    }
+    return r;
+}
+
+
+static inline float rlw_ninemajor_0609(float specparm, float speccomb,
+                                    RlwSpecFac0609 f,
+                                    device const float* absa, int ind, int ig)
+{
+    float s;
+    if (specparm < 0.125f) {
+        s = RLW_MU(f.f0p, A2(absa, 585, ind, ig));
+        s = RLW_AD(s, RLW_MU(f.f1p, A2(absa, 585, ind + 1, ig)));
+        s = RLW_AD(s, RLW_MU(f.f2p, A2(absa, 585, ind + 2, ig)));
+        s = RLW_AD(s, RLW_MU(f.f0t, A2(absa, 585, ind + 9, ig)));
+        s = RLW_AD(s, RLW_MU(f.f1t, A2(absa, 585, ind + 10, ig)));
+        s = RLW_AD(s, RLW_MU(f.f2t, A2(absa, 585, ind + 11, ig)));
+    } else if (specparm > 0.875f) {
+        s = RLW_MU(f.f2p, A2(absa, 585, ind - 1, ig));
+        s = RLW_AD(s, RLW_MU(f.f1p, A2(absa, 585, ind, ig)));
+        s = RLW_AD(s, RLW_MU(f.f0p, A2(absa, 585, ind + 1, ig)));
+        s = RLW_AD(s, RLW_MU(f.f2t, A2(absa, 585, ind + 8, ig)));
+        s = RLW_AD(s, RLW_MU(f.f1t, A2(absa, 585, ind + 9, ig)));
+        s = RLW_AD(s, RLW_MU(f.f0t, A2(absa, 585, ind + 10, ig)));
+    } else {
+        s = RLW_MU(f.f0p, A2(absa, 585, ind, ig));
+        s = RLW_AD(s, RLW_MU(f.f1p, A2(absa, 585, ind + 1, ig)));
+        s = RLW_AD(s, RLW_MU(f.f0t, A2(absa, 585, ind + 9, ig)));
+        s = RLW_AD(s, RLW_MU(f.f1t, A2(absa, 585, ind + 10, ig)));
+    }
+    return RLW_MU(speccomb, s);
+}
+#define RLW1316_A3(tab, j, i, g) \
+    tab[((j) - 1) + 9 * ((i) - 1) + 171 * ((g) - 1)]
+
+
+static inline float rlw_nine_major_b1316(float specparm, float fsv,
+                                      float facp, float fact,
+                                      device const float* absa, int ind, int ig,
+                                      float speccomb)
+{
+    if (specparm < 0.125f) {
+        float p = RLW_SU(fsv, 1.0f);
+        float p4 = rlw_pow4(p);
+        float fk0 = p4;
+        float fk1 = RLW_SU(RLW_SU(1.0f, p), RLW_MU(2.0f, p4));
+        float fk2 = RLW_AD(p, p4);
+        float fac0p = RLW_MU(fk0, facp);
+        float fac1p = RLW_MU(fk1, facp);
+        float fac2p = RLW_MU(fk2, facp);
+        float fac0t = RLW_MU(fk0, fact);
+        float fac1t = RLW_MU(fk1, fact);
+        float fac2t = RLW_MU(fk2, fact);
+        float s = RLW_MU(fac0p, A2(absa, 585, ind, ig));
+        s = RLW_AD(s, RLW_MU(fac1p, A2(absa, 585, ind + 1, ig)));
+        s = RLW_AD(s, RLW_MU(fac2p, A2(absa, 585, ind + 2, ig)));
+        s = RLW_AD(s, RLW_MU(fac0t, A2(absa, 585, ind + 9, ig)));
+        s = RLW_AD(s, RLW_MU(fac1t, A2(absa, 585, ind + 10, ig)));
+        s = RLW_AD(s, RLW_MU(fac2t, A2(absa, 585, ind + 11, ig)));
+        return RLW_MU(speccomb, s);
+    } else if (specparm > 0.875f) {
+        float p = -fsv;
+        float p4 = rlw_pow4(p);
+        float fk0 = p4;
+        float fk1 = RLW_SU(RLW_SU(1.0f, p), RLW_MU(2.0f, p4));
+        float fk2 = RLW_AD(p, p4);
+        float fac0p = RLW_MU(fk0, facp);
+        float fac1p = RLW_MU(fk1, facp);
+        float fac2p = RLW_MU(fk2, facp);
+        float fac0t = RLW_MU(fk0, fact);
+        float fac1t = RLW_MU(fk1, fact);
+        float fac2t = RLW_MU(fk2, fact);
+        float s = RLW_MU(fac2p, A2(absa, 585, ind - 1, ig));
+        s = RLW_AD(s, RLW_MU(fac1p, A2(absa, 585, ind, ig)));
+        s = RLW_AD(s, RLW_MU(fac0p, A2(absa, 585, ind + 1, ig)));
+        s = RLW_AD(s, RLW_MU(fac2t, A2(absa, 585, ind + 8, ig)));
+        s = RLW_AD(s, RLW_MU(fac1t, A2(absa, 585, ind + 9, ig)));
+        s = RLW_AD(s, RLW_MU(fac0t, A2(absa, 585, ind + 10, ig)));
+        return RLW_MU(speccomb, s);
+    } else {
+        float fac0p = RLW_MU(RLW_SU(1.0f, fsv), facp);
+        float fac0t = RLW_MU(RLW_SU(1.0f, fsv), fact);
+        float fac1p = RLW_MU(fsv, facp);
+        float fac1t = RLW_MU(fsv, fact);
+        float s = RLW_MU(fac0p, A2(absa, 585, ind, ig));
+        s = RLW_AD(s, RLW_MU(fac1p, A2(absa, 585, ind + 1, ig)));
+        s = RLW_AD(s, RLW_MU(fac0t, A2(absa, 585, ind + 9, ig)));
+        s = RLW_AD(s, RLW_MU(fac1t, A2(absa, 585, ind + 10, ig)));
+        return RLW_MU(speccomb, s);
+    }
+}
+#endif

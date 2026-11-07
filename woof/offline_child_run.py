@@ -20,14 +20,12 @@ import os
 from pathlib import Path
 import signal
 import sys
-import threading
 import time
-
-import netCDF4
 from typing import Mapping
 
 import numpy as np
 
+from woof.io.netcdf_serialization import netCDF4  # first use only (D-10)
 from woof import downscale_pricing
 from woof.aerosol_source_receipt import aerosol_source_report_entry
 from woof.config import (
@@ -361,6 +359,11 @@ class _ChildProgress:
         #: Every frame after the analysis, drawn as it lands
         #: (:mod:`woof.live_products`), armed beside the early render.
         self._live_products = None
+        #: The any-point column store, written as frames land (:mod:`woof.live_columns`).
+        self._columns = None
+        #: Which of the child's frames carry the 3-D state, from its own [output]
+        #: (:class:`woof.live_columns.StateFrames`); ``None`` takes every frame.
+        self.columns_frames = None
         #: How far the forecast got, from the last progress sample that
         #: carried a step number.  ``None`` until the first one, which
         #: is the state a child refused before its first step is in --
@@ -658,10 +661,42 @@ class _ChildProgress:
         stops it itself (:func:`woof.go_cli._render_stage`).
         """
 
+        self.stop_columns(halt=halt)
         live = self._live_products
         if live is None:
             return None
         return live.halt() if halt else live.stop()
+
+    def stop_columns(self, *, halt: bool = False) -> None:
+        """Settle column receipts before publishing the terminal event.
+
+        Columns run even without pictures. Leaving them to close() put a
+        columns_written event after the stop and abandoned no-picture passes.
+        """
+        columns, self._columns = self._columns, None
+        if columns is not None:
+            try:
+                s = columns.halt() if halt else columns.stop()
+                self.emit("columns_written", files=s["files"], bytes=s["bytes"], seconds=s["seconds"],
+                          failed=len(s["failed"]), out=s["out"])
+            except Exception as error:  # noqa: BLE001 - a store never fails the child
+                self.warn("columns_not_written", str(error))
+
+    def _column_frame(self, fields) -> None:
+        """The child's any-point column store (rw-store v2), written beside its frames for every output hour."""
+        try:
+            if self._columns is None and self.outdir is not None:
+                from woof.live_columns import LiveColumns, columns_enabled
+                if not columns_enabled():
+                    return
+                self._columns = LiveColumns(Path(self.outdir) / "columns", warn=self.warn,
+                                            frames=self.columns_frames)
+            if self._columns is not None:
+                self._columns.frame_committed(domain=int(fields["domain"]), valid_time=fields["valid_time"],
+                                              path=fields["path"])
+        except Exception as error:  # noqa: BLE001 - telemetry never fails
+            self.warn("columns_not_written", f"committed frame could not be queued: {error}",
+                      frame=str(fields.get("path")))
 
     def halt_renders(self) -> bool:
         """End every render this child started, for a stop.
@@ -694,6 +729,7 @@ class _ChildProgress:
         if live is not None:
             live.halt()
             ended = not live.running and ended
+        self.stop_columns(halt=True)
         return end_stage_processes() and ended
 
     def stopped(self, *, stage: str, message: str, signal_name: str,
@@ -786,6 +822,7 @@ class _ChildProgress:
         # it rather than the root of a hierarchy it does not have.
         self._root_domain = int(fields["domain"])
         self.emit("output_committed", **fields)
+        self._column_frame(fields)
         claimed = False
         if self._first_products is not None:
             claimed = bool(self._first_products.frame_committed(
@@ -1166,9 +1203,11 @@ def child_cadence(cfg, *, health_interval_seconds: float | None = None
 
     ``run_seconds``, ``output_interval_s`` and ``restart_interval_s`` must
     each be a whole number of ``dt`` steps, and so must the health interval
-    when the caller has one.  A derived child inherits these from its
-    parent with ``dt`` divided by the ratio, so exactness is preserved; a
-    hand-written ``--child-config`` can break it, and that used to be
+    when the caller has one.  A derived child's step is chosen to land on
+    every one of these (``woof.downscale.child_clock_step``: the largest
+    step no longer than the parent's ``dt`` over the ratio that they are
+    all whole numbers of); a hand-written ``--child-config`` can break
+    it, and that used to be
     found only at run start.  ``woof downscale`` reviews with this
     function and the runner integrates on its answer, so the two doors
     cannot disagree about the same clock.  ``restart_interval_s`` unset or
@@ -2276,6 +2315,17 @@ def _parent_grid_metadata(path: Path) -> tuple[float, float, dict[str, object]]:
     return dx, dy, attrs
 
 
+def _history_refl_10cm(state, cfg, ticks):
+    """Consume mature reflectivity, or write WRF's tick-zero initial field."""
+    from woof.core.refl import consume_refl_10cm, refl_10cm_is_stashed, analysis_refl_10cm
+    from woof.core.physics_inventory import REFL_10CM_MICROPHYSICS
+    if refl_10cm_is_stashed(state):
+        return consume_refl_10cm(state)
+    if ticks == 0 and state.qv is not None and cfg.mp_physics in REFL_10CM_MICROPHYSICS:
+        return analysis_refl_10cm(state, cfg, shape=(cfg.nz, cfg.ny, cfg.nx))
+    return None
+
+
 def _output_fields(state, initial, refl_field=None,
                    surface=None) -> dict[str, np.ndarray]:
     from woof.io.wrfout import state_frame
@@ -2322,10 +2372,23 @@ def _output_fields(state, initial, refl_field=None,
 def _write_frame(path: Path, state, cfg, initial, valid_time,
                  projection_attrs: dict[str, object], placement,
                  refl_field=None, surface=None,
-                 history_selection=None) -> None:
+                 history_selection=None, simulation_start=None,
+                 history_parent_start=None) -> None:
     from woof.io.wrfout import WrfoutWriter
 
     attrs = dict(projection_attrs)
+    # A segment of a moving step-down (woof.moving_downscale) writes the
+    # history of ONE moving nest: the forecast's start, and the segment's
+    # place on its parent's lattice rather than in the cropped window it
+    # was run in.  Written as the window place and the segment's own start,
+    # every segment read to the renderer as a separate run, so no window
+    # that spans a segment start (1 h rain, the 1 h maxima) was drawn on
+    # the moving 1 km and 333 m grids of a WOOF setup-following run at any
+    # hour (production run_54ce6aa98bdfdfe9, 2026-10-27).
+    start = simulation_start or initial.valid_time
+    i_start, j_start = (
+        (placement.i_parent_start, placement.j_parent_start)
+        if history_parent_start is None else history_parent_start)
     if surface is not None:
         # The land-use table identity, forwarded from the child's own
         # surface source.  read_child_surface_state requires these four as
@@ -2345,15 +2408,19 @@ def _write_frame(path: Path, state, cfg, initial, valid_time,
     attrs.update({
         "GRID_ID": np.int32(cfg.grid_id),
         "PARENT_ID": np.int32(0),
-        "I_PARENT_START": np.int32(placement.i_parent_start),
-        "J_PARENT_START": np.int32(placement.j_parent_start),
+        "I_PARENT_START": np.int32(i_start),
+        "J_PARENT_START": np.int32(j_start),
         "PARENT_GRID_RATIO": np.int32(placement.parent_grid_ratio),
         "DT": np.float32(cfg.dt),
         "HYBRID_OPT": np.int32(cfg.hybrid_opt),
         "ETAC": np.float32(cfg.etac),
-        "START_DATE": initial.valid_time.strftime("%Y-%m-%d_%H:%M:%S"),
-        "SIMULATION_START_DATE": initial.valid_time.strftime(
-            "%Y-%m-%d_%H:%M:%S"),
+        # One forecast, one start: a moving step-down's segments continue
+        # the forecast begun at the child's start the way a moving nest
+        # continues across its moves, so START_DATE (which XTIME counts
+        # from) is that start on every segment too, as in a moving nest's
+        # history.
+        "START_DATE": start.strftime("%Y-%m-%d_%H:%M:%S"),
+        "SIMULATION_START_DATE": start.strftime("%Y-%m-%d_%H:%M:%S"),
         "GPUWM_OFFLINE_CHILD": np.int32(1),
     })
     frame = _output_fields(state, initial, refl_field=refl_field,
@@ -2960,6 +3027,7 @@ def _finish_child_render(progress: "_ChildProgress", *,
     """
 
     if progress.render_plan is None:
+        progress.stop_columns()
         return
     from woof.go_cli import GoStageFailed
     from woof.runplan import _finish_render
@@ -3145,6 +3213,8 @@ def _run(args: argparse.Namespace,
     history_selection = load_history_selection(args.child_config)
     history_selection.warn_lost_products(
         HISTORY_VOCABULARY, where=f"child d{cfg.grid_id:02d}")
+    from woof.live_columns import StateFrames
+    progress.columns_frames = StateFrames.for_selection(history_selection)
     require_offline_child_root_forcing(cfg)
     # WHICH GEOGRAPHY the child is built on, resolved at admission through
     # the one function plan review resolved it with, so the two doors
@@ -3159,7 +3229,8 @@ def _run(args: argparse.Namespace,
         static_policy = load_child_static_policy(
             args.child_config, cfg,
             terrain=getattr(args, "child_terrain", None),
-            geog_root=getattr(args, "geog_root", None))
+            geog_root=getattr(args, "geog_root", None),
+            highres_cache=getattr(args, "highres_cache", None))
         require_geog_tree(static_policy, cfg=cfg)
     except (ChildGeographyError, ValueError) as error:
         raise OfflineChildContractError(str(error)) from error
@@ -3541,6 +3612,23 @@ def _run(args: argparse.Namespace,
                                            or cfg.usemonalb
                                            or cfg.rdlai2d) else {}))
     ozone_routing = _child_ozone_routing(driver)
+    # A WARM START (woof.offline_child_warm): an earlier child of this one,
+    # at a nearby placement, carries what it integrated over the ground both
+    # share.  Applied here -- after the cold-start child and its driver are
+    # whole, before the stepper fills any store -- so a moving step-down's
+    # segment continues the forecast instead of spinning up again.
+    warm_receipt = None
+    warm = getattr(args, "warm_start", None)
+    if warm is not None:
+        from woof.offline_child_warm import WarmStartRefusal, apply_warm_start
+
+        try:
+            warm_receipt = apply_warm_start(
+                child, cfg, driver, checkpoint=warm["checkpoint"],
+                shift=warm["shift"], strip=warm.get("strip"))
+        except WarmStartRefusal as error:
+            raise OfflineChildContractError(str(error)) from error
+        _log("child_warm_start", **_jsonable(warm_receipt))
     synchronize()
     # ``[tiles]``, wired exactly the way the prepared front doors wire it
     # (woof.prepared_single_domain_forecast: decide ONCE, hand the decision
@@ -3588,12 +3676,14 @@ def _run(args: argparse.Namespace,
         # initial condition under a later timestamp -- correct inventory,
         # correct Times, no forecast.  Zero and a getattr when resident.
         streaming.refresh_streamed_state(stepper, child)
-        refl = (consume_refl_10cm(child)
-                if refl_10cm_is_stashed(child) else None)
+        refl = _history_refl_10cm(child, cfg, clock.ticks)
         path = outdir / wrfout_filename(valid, domain_id=cfg.grid_id)
         _write_frame(path, child, cfg, initial, valid,
                      projection_attrs, placement, refl_field=refl,
-                     surface=surface, history_selection=history_selection)
+                     surface=surface, history_selection=history_selection,
+                     simulation_start=getattr(args, "simulation_start", None),
+                     history_parent_start=getattr(args, "history_parent_start",
+                                                  None))
         output_paths.append(path)
         # History-interval reset of the UP_HELI_MAX window (no-op unless
         # the child config enables nwp_diagnostics; the synchronous
@@ -3813,6 +3903,9 @@ def _run(args: argparse.Namespace,
         # to work out from parent_id whether a parent field was involved.
         # None means the child's radiation carries no ozone routing.
         "child_ozone_routing": ozone_routing,
+        # A segment of a moving step-down: the earlier child it continued
+        # and what was carried.  None for a cold start.
+        "warm_start": _jsonable(warm_receipt),
         "child_surface_source": (
             None if surface is None else dict(surface.receipt)),
         # WHICH TERRAIN the child ran on: its own static geography (the
@@ -3938,6 +4031,12 @@ def _parser() -> argparse.ArgumentParser:
                              "geography is built from (default: the child "
                              "config's [static] geog_root, else the staged "
                              "tree)")
+    parser.add_argument("--highres-cache", type=Path, default=None,
+                        help="the folder the child's high-resolution terrain "
+                             "tiles and land-cover rasters are read from and "
+                             "cached in (default: the child config's "
+                             "[static.highres] cache_root, else the engine's "
+                             "per-user cache)")
     parser.add_argument("--health-interval-seconds", type=float, default=60.0)
     parser.add_argument("--render-products", default=None, metavar="LIST",
                         dest="render_products",
@@ -3960,8 +4059,43 @@ def _parser() -> argparse.ArgumentParser:
                              "is an upper bound and the card's own "
                              "allocation then decides; a child state too big "
                              "to build at all is still refused")
+    parser.add_argument("--warm-from", type=Path, default=None,
+                        dest="warm_from", metavar="CHECKPOINT",
+                        help="carry this earlier child's state onto the "
+                             "ground it shares with this one "
+                             "(woof.offline_child_warm); needs --warm-shift")
+    parser.add_argument("--warm-shift", default=None, dest="warm_shift",
+                        metavar="DI,DJ",
+                        help="this child's placement minus the earlier "
+                             "one's, in child cells")
+    parser.add_argument("--warm-strip", type=Path, default=None,
+                        dest="warm_strip", metavar="NPZ",
+                        help="accumulated precipitation for the freshly "
+                             "covered strip, per slot")
     parser.add_argument("--outdir", type=Path, required=True)
     return parser
+
+
+def warm_start_argument(warm_from, warm_shift, warm_strip=None):
+    """The runner's ``warm_start`` entry from the three flags, or None."""
+    if warm_from is None and warm_shift is None:
+        if warm_strip is not None:
+            raise OfflineChildContractError(
+                "--warm-strip belongs to a warm start: pass --warm-from and "
+                "--warm-shift with it")
+        return None
+    if warm_from is None or warm_shift is None:
+        raise OfflineChildContractError(
+            "a warm start needs both --warm-from CHECKPOINT and --warm-shift "
+            "DI,DJ (the move in child cells)")
+    from woof.offline_child_warm import parse_warm_shift
+
+    try:
+        shift = parse_warm_shift(warm_shift)
+    except ValueError as error:
+        raise OfflineChildContractError(str(error)) from None
+    return {"checkpoint": Path(warm_from), "shift": shift,
+            "strip": None if warm_strip is None else Path(warm_strip)}
 
 
 def main(argv=None) -> int:
@@ -3970,6 +4104,8 @@ def main(argv=None) -> int:
         print(json.dumps(_CAPABILITIES, sort_keys=True))
         return 0
     args = _parser().parse_args(arguments)
+    args.warm_start = warm_start_argument(
+        args.warm_from, args.warm_shift, args.warm_strip)
     from woof.core.resident_admission import memory_gate_override
 
     try:

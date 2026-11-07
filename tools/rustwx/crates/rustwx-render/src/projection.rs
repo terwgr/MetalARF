@@ -668,6 +668,24 @@ impl ProjectionProjector {
         }
     }
 
+    /// The meridian where this projection's plane is cut, `central + 180`,
+    /// or `None` for a projection with no cut (polar stereographic wraps
+    /// the full circle continuously).  Every cut projection here maps a
+    /// longitude through `normalize_longitude_deg(lon - central)`, so a
+    /// point just west of this meridian lands on one edge of the plane and
+    /// a point just east of it on the opposite edge.
+    pub(crate) fn seam_longitude_deg(self) -> Option<f64> {
+        let central = match self {
+            Self::Geographic(projector) => projector.central_meridian_deg(),
+            Self::Robinson(projector) => projector.central_meridian_deg(),
+            Self::AlbersEqualArea(projector) => projector.central_meridian_deg(),
+            Self::LambertConformal(projector) => projector.spec_central_meridian_deg(),
+            Self::Mercator(projector) => projector.central_meridian_deg(),
+            Self::PolarStereographic(_) => return None,
+        };
+        central.is_finite().then(|| normalize_longitude_deg(central + 180.0))
+    }
+
     pub(crate) fn unproject(self, x: f64, y: f64) -> Option<(f64, f64)> {
         match self {
             Self::Geographic(projector) => projector.unproject(x, y),
@@ -735,24 +753,6 @@ impl ProjectionProjector {
 }
 
 impl MapExtent {
-    pub fn from_wrf(
-        proj: &LambertConformal,
-        cen_lat: f64,
-        cen_lon: f64,
-        nx: usize,
-        ny: usize,
-        dx: f64,
-        dy: f64,
-    ) -> Self {
-        let (xc, yc) = proj.project(cen_lat, cen_lon);
-        Self {
-            x_min: xc - dx * (nx as f64 - 1.0) / 2.0,
-            x_max: xc + dx * (nx as f64 - 1.0) / 2.0,
-            y_min: yc - dy * (ny as f64 - 1.0) / 2.0,
-            y_max: yc + dy * (ny as f64 - 1.0) / 2.0,
-        }
-    }
-
     pub fn from_bounds(x_min: f64, x_max: f64, y_min: f64, y_max: f64, target_ratio: f64) -> Self {
         let data_width = x_max - x_min;
         let data_height = y_max - y_min;

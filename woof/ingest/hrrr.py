@@ -11,7 +11,7 @@ rotated into the target Lambert basis.
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import hashlib
 import sys
@@ -63,6 +63,28 @@ HRRR_CLOUD_ICE_GATES = (
     "PASS discipline=0 category=1 parameter=82 level_type=105",
     "PASS discipline=0 category=6 parameter=0 level_type=105",
 )
+
+
+def native_domain_coverage(latitude, longitude):
+    """Whether every geographic target mass point has the native grid halo.
+
+    Pure geometric test, no download or device use. Include all domain and
+    lateral strip points. Coordinates are projected with the same Lambert
+    transform used by the native horizontal plan, then converted to zero
+    based fractional indices. False lets the source resolver try the next
+    row boundary source or emit the absent boundary receipt.
+    """
+    from .native_extras import inside_native_grid
+    from .hrrr_target import HRRR_SOURCE_NX, HRRR_SOURCE_NY
+    latitude = np.asarray(latitude)
+    longitude = np.asarray(longitude)
+    if latitude.shape != longitude.shape:
+        raise ValueError("coverage coordinate shapes differ; prevents testing a different domain footprint")
+    if not latitude.size or not np.isfinite(latitude).all() or not np.isfinite(longitude).all():
+        return False
+    x, y = hrrr_source_grid().latlon_to_ij(latitude, longitude)
+    return inside_native_grid((np.asarray(x) - 1).ravel(), (np.asarray(y) - 1).ravel(),
+                              nx=HRRR_SOURCE_NX, ny=HRRR_SOURCE_NY)
 
 
 def _sha256(path: Path) -> str:
@@ -144,9 +166,20 @@ def _read_gate(root: Path) -> dict[str, str]:
         if key in values:
             raise ValueError(f"duplicate gate.txt key {key!r}")
         values[key] = value
+    from .native_extras import gate_extra_fields
+    from .native_supplements import (gate_optional_hybrid_fields,
+                                     gate_optional_surface_fields)
+
+    # 561 records, plus 50 for each optional hybrid field the decoder
+    # declared (the analyzed aerosol number pair), 50 for each native
+    # extra record a caller requested (--extras) and one for each optional
+    # surface field (the cycle's PBL height).
+    optional_hybrid = gate_optional_hybrid_fields(values)
     required = {
         "status": "PASS",
-        "atmosphere_selected_per_time": "561",
+        "atmosphere_selected_per_time": str(
+            561 + 50 * (len(optional_hybrid) + len(gate_extra_fields(values)))
+            + len(gate_optional_surface_fields(values))),
         "hybrid_levels": "50",
         "soil_selected_per_time": "18",
         "window_shape": None,
@@ -169,6 +202,29 @@ def _read_gate(root: Path) -> dict[str, str]:
     if not values["cross_time_inventory"].startswith("PASS"):
         raise ValueError("gate.txt cross-time inventory did not pass")
     return values
+
+
+def aerosol_fill_receipt(gate: Mapping[str, str]) -> dict[str, object] | None:
+    """Final native bitmap repair counters, bound by the bridge gate hash."""
+    policy = gate.get("aerosol_missing_policy")
+    if policy is None:
+        return None  # Historical bridges predate the repair receipt.
+    fields = {}
+    for name in ("QNWFA", "QNIFA"):
+        counts = {}
+        for stage in ("masked", "nearest_neighbor", "four_pt", "average_4pt", "zero"):
+            key = f"aerosol_{name}_{stage}"
+            try:
+                counts[stage] = int(gate[key])
+            except (KeyError, ValueError) as error:
+                raise ValueError(f"missing or invalid aerosol fill counter {key}") from error
+            if counts[stage] < 0:
+                raise ValueError(f"negative aerosol fill counter {key}")
+        if counts["masked"] != sum(counts[stage] for stage in
+                ("nearest_neighbor", "four_pt", "average_4pt", "zero")):
+            raise ValueError(f"{name} aerosol fill counts do not sum to the masked count")
+        fields[name] = counts
+    return {"policy": policy, "fields": fields}
 
 
 def _parse_window(gate: Mapping[str, str]) -> tuple[int, int, int, int]:
@@ -209,6 +265,11 @@ class HrrrNativeSnapshot:
     ny: int
     nx: int
     fields: Mapping[str, np.ndarray]
+    extra_fields: tuple[str, ...] = ()
+    #: Compatibility for historical bridges that withheld a masked pair.
+    #: New bridges repair requested aerosol masks and never emit these
+    #: withholding keys. An old artifact still names its missing payload.
+    withheld_fields: Mapping[str, str] = field(default_factory=dict)
 
     def source_cell_latlon(self, rows, cols):
         """Geographic coordinates of cells in this declared source window."""
@@ -220,6 +281,8 @@ class HrrrNativeSnapshot:
         if self.forecast_hour not in range(49):
             raise ValueError("the native bridge supports source leads f00..f48")
         object.__setattr__(self, "fields", MappingProxyType(dict(self.fields)))
+        object.__setattr__(self, "withheld_fields",
+                           MappingProxyType(dict(self.withheld_fields)))
 
 
 def _gate_forecast_hours(gate: Mapping[str, str]) -> tuple[int, ...]:
@@ -287,10 +350,42 @@ def _load_verified_hrrr_native_window(
     for name in _ATMOSPHERE_3D:
         fields[name] = _map_f32(
             atmosphere_dir / f"{name}.f32le", (50, ny, nx))
+    from .native_extras import gate_extra_fields
+    extras = gate_extra_fields(gate)
+    for name in extras:
+        payload = atmosphere_dir / f"{name}.f32le"
+        if manifest_entries is not None and payload.relative_to(root) not in manifest_entries:
+            raise ValueError(f"extra payload is not manifest-bound; prevents unauthenticated tracer input: {payload}")
+        fields[name] = _map_f32(payload, (50, ny, nx))
     for name in _ATMOSPHERE_2D:
         fields[name] = _map_f32(
             atmosphere_dir / f"{name}.f32le", (ny, nx))
-    from .native_supplements import gate_supplement_fields
+    from .native_supplements import gate_optional_surface_fields
+    for name in gate_optional_surface_fields(gate):
+        payload = atmosphere_dir / f"{name}.f32le"
+        if manifest_entries is not None and payload.relative_to(root) not in manifest_entries:
+            raise ValueError(f"optional surface payload is not bound by the bridge manifest: {payload}")
+        fields[name] = _map_f32(payload, (ny, nx))
+    from .native_supplements import (gate_optional_hybrid_fields,
+                                     gate_supplement_fields,
+                                     gate_withheld_optional_hybrid_fields)
+    withheld = gate_withheld_optional_hybrid_fields(gate)
+    for name in gate_optional_hybrid_fields(gate):
+        payload = atmosphere_dir / f"{name}.f32le"
+        if manifest_entries is not None and payload.relative_to(root) not in manifest_entries:
+            raise ValueError(f"analyzed aerosol payload is not bound by the bridge manifest: {payload}")
+        fields[name] = _map_f32(payload, (50, ny, nx))
+        mask = atmosphere_dir / f"{name}.mask"
+        requires_mask = "source_mask_preserved_for_target_mapping" in gate.get("aerosol_missing_policy", "")
+        if requires_mask and not mask.is_file():
+            raise ValueError(f"{name} source bitmap is missing: {mask}; using native zero fills as valid donors would bypass the METGRID chain")
+        if mask.exists():
+            if manifest_entries is not None and mask.relative_to(root) not in manifest_entries:
+                raise ValueError(f"aerosol source bitmap is not manifest-bound: {mask}")
+            if mask.stat().st_size != 50 * ny * nx:
+                raise ValueError(f"aerosol source bitmap has the wrong shape: {mask}")
+            fields[name + "_SOURCE_MASK"] = np.memmap(mask, mode="r", dtype=np.uint8, shape=(50, ny, nx))
+
     for name in gate_supplement_fields(gate):
         payload = atmosphere_dir / f"{name}.f32le"
         if manifest_entries is not None and payload.relative_to(root) not in manifest_entries:
@@ -312,6 +407,8 @@ def _load_verified_hrrr_native_window(
         ny=ny,
         nx=nx,
         fields=fields,
+        extra_fields=extras,
+        withheld_fields=withheld,
     )
 
 
@@ -408,9 +505,17 @@ def hrrr_source_grid() -> LambertGrid:
 IDENTITY_SNAP_LIMIT_CELLS = 0.5
 
 
-def _snap_to_native_lattice(global_x, global_y, *, nx: int, ny: int):
+def _snap_to_native_lattice(global_x, global_y, *, nx: int, ny: int,
+                            placement=None):
     """The identity route's coordinates: every target point on its own
     native lattice position, exactly, from the target array's shape.
+
+    ``placement`` (:class:`woof.ingest.hrrr_target.NativeLatticePlacement`,
+    default the whole ``ny`` x ``nx`` grid) is the native rectangle the
+    target's mass grid occupies: a boundary strip of the native grid is
+    its own mass, u or v shape, offset by ``(i0, j0)``.  Its faces that
+    lie inside the native grid read their two neighbours; only a face
+    past the native grid's own edge takes the edge cell.
 
     ``(ny, nx)`` is the mass grid: point ``(j, i)`` is source cell
     ``(j, i)``, fraction 0, so the parabolic and bilinear operators
@@ -426,20 +531,31 @@ def _snap_to_native_lattice(global_x, global_y, *, nx: int, ny: int):
     global_x = np.asarray(global_x, dtype=np.float64)
     global_y = np.asarray(global_y, dtype=np.float64)
     shape = tuple(global_x.shape)
-    if shape == (ny, nx):
+    if placement is None:
+        i0, j0, mass_nx, mass_ny = 0, 0, nx, ny
+    else:
+        i0, j0 = int(placement.i0), int(placement.j0)
+        mass_nx, mass_ny = int(placement.nx), int(placement.ny)
+        if not (0 <= i0 and i0 + mass_nx <= nx
+                and 0 <= j0 and j0 + mass_ny <= ny):
+            raise ValueError(
+                f"the placement i={i0}..+{mass_nx}, j={j0}..+{mass_ny} "
+                f"is not inside the {ny} x {nx} native grid")
+    if shape == (mass_ny, mass_nx):
         offset_x, offset_y = 0.0, 0.0
-    elif shape == (ny, nx + 1):
+    elif shape == (mass_ny, mass_nx + 1):
         offset_x, offset_y = -0.5, 0.0
-    elif shape == (ny + 1, nx):
+    elif shape == (mass_ny + 1, mass_nx):
         offset_x, offset_y = 0.0, -0.5
     else:
         raise ValueError(
             "the identity route maps the native grid's mass, u or v "
-            f"staggering ({ny} x {nx}, {ny} x {nx + 1} or {ny + 1} x {nx}); "
+            f"staggering ({mass_ny} x {mass_nx}, {mass_ny} x "
+            f"{mass_nx + 1} or {mass_ny + 1} x {mass_nx}); "
             f"got a target of shape {shape}")
     rows, cols = np.indices(shape, dtype=np.float64)
-    exact_x = cols + offset_x
-    exact_y = rows + offset_y
+    exact_x = cols + offset_x + i0
+    exact_y = rows + offset_y + j0
     distance = float(max(np.abs(exact_x - global_x).max(),
                          np.abs(exact_y - global_y).max()))
     if not distance <= IDENTITY_SNAP_LIMIT_CELLS:
@@ -456,11 +572,13 @@ def _snap_to_native_lattice(global_x, global_y, *, nx: int, ny: int):
 
 def _projected_index_geometry(snapshot: HrrrNativeSnapshot,
                               target_lat, target_lon, *,
-                              identity: bool = False):
+                              identity: bool = False, placement=None):
     """Resolve exact zero-based HRRR-window interpolation coordinates.
 
     ``identity`` (the target is the native grid itself,
-    :func:`woof.ingest.hrrr_target.native_grid_identity`): the
+    :func:`woof.ingest.hrrr_target.native_grid_identity`, or a whole-cell
+    piece of it whose ``placement`` is given,
+    :func:`woof.ingest.hrrr_target.native_lattice_placement`): the
     coordinates are snapped onto the native lattice
     (:func:`_snap_to_native_lattice`) and no interpolation halo past the
     window is demanded, because every operator clamps its stencil at
@@ -483,16 +601,36 @@ def _projected_index_geometry(snapshot: HrrrNativeSnapshot,
                 f"window, got i={snapshot.i_start}..+{snapshot.nx}, "
                 f"j={snapshot.j_start}..+{snapshot.ny}")
         global_x, global_y, _snap = _snap_to_native_lattice(
-            global_x, global_y, nx=HRRR_SOURCE_NX, ny=HRRR_SOURCE_NY)
+            global_x, global_y, nx=HRRR_SOURCE_NX, ny=HRRR_SOURCE_NY,
+            placement=placement)
     global_ix = np.floor(global_x).astype(np.int64)
     global_iy = np.floor(global_y).astype(np.int64)
     ix = global_ix - snapshot.i_start
     iy = global_iy - snapshot.j_start
-    if not identity and (
-            np.min(ix - 1) < 0 or np.max(ix + 2) >= snapshot.nx
-            or np.min(iy - 1) < 0 or np.max(iy + 2) >= snapshot.ny):
-        raise ValueError(
-            "HRRR bridge window lacks the four-point interpolation halo")
+    if not identity:
+        from woof.ingest.hrrr_target import HRRR_SOURCE_NX, HRRR_SOURCE_NY
+
+        # The bilinear cell must be inside the window always.  The rest
+        # of the four-point parabolic halo may be missing only where the
+        # window edge is HRRR's own edge: there metgrid's sixteen-point
+        # stencil leaves the source and falls back to four-point bilinear
+        # (_parabolic_stencil_leaves_window); anywhere else a short
+        # window is a crop defect.
+        if (np.min(ix) < 0 or np.max(ix + 1) >= snapshot.nx
+                or np.min(iy) < 0 or np.max(iy + 1) >= snapshot.ny):
+            raise ValueError(
+                "HRRR bridge window lacks the bilinear donor cell")
+        native_edges = (
+            (np.min(ix - 1) < 0, snapshot.i_start == 0),
+            (np.max(ix + 2) >= snapshot.nx,
+             snapshot.i_start + snapshot.nx == HRRR_SOURCE_NX),
+            (np.min(iy - 1) < 0, snapshot.j_start == 0),
+            (np.max(iy + 2) >= snapshot.ny,
+             snapshot.j_start + snapshot.ny == HRRR_SOURCE_NY))
+        if any(short and not at_native_edge
+               for short, at_native_edge in native_edges):
+            raise ValueError(
+                "HRRR bridge window lacks the four-point interpolation halo")
     if identity:
         # A whole-cell position on the last column floors to nx - 1,
         # whose bilinear partner nx would be read (unweighted) by the
@@ -543,6 +681,56 @@ def _wps_oned_cpu(x, a, b, c, d):
     return np.asarray(np.where(all_four, regular, out), dtype=np.float32)
 
 
+def _parabolic_stencil_leaves_window(ix, iy, nx: int, ny: int, *,
+                                     identity: bool):
+    """Targets whose four-point parabolic stencil leaves the source window.
+
+    Only an interpolated window can have them, and only at HRRR's own
+    edge (:func:`_projected_index_geometry` refuses a short crop
+    anywhere else).  There WPS metgrid's ``sixteen_pt`` finds a stencil
+    point outside the source and the interp sequence falls through to
+    ``four_pt``, bilinear from the inner 2 x 2, which is what these
+    targets get.  Before, the window refused every such target, so a
+    domain one row inside the HRRR grid was refused although its
+    bilinear donors are all inside.  The identity route keeps its own
+    clamped stencil (its documented rule; every whole-cell position reads
+    one cell).  ``None`` when no target is affected.
+    """
+
+    if identity:
+        return None
+    ix = np.asarray(ix)
+    iy = np.asarray(iy)
+    leaves = ((ix - 1 < 0) | (ix + 2 > nx - 1)
+              | (iy - 1 < 0) | (iy + 2 > ny - 1))
+    return leaves if bool(leaves.any()) else None
+
+
+def _bilinear_at(field, lead, iy, ix, fy, fx, xp):
+    """The bilinear branch of the projected operators, for some targets."""
+
+    one = xp.float32(1.0)
+    lower = ((one - fx) * field[lead + (iy, ix)]
+             + fx * field[lead + (iy, ix + 1)])
+    upper = ((one - fx) * field[lead + (iy + 1, ix)]
+             + fx * field[lead + (iy + 1, ix + 1)])
+    return ((one - fy) * lower + fy * upper).astype(xp.float32, copy=False)
+
+
+def _metgrid_edge_fallback(result, field, edge, iy, ix, fy, fx, xp):
+    """Replace ``result`` at the ``edge`` targets by four-point bilinear."""
+
+    if edge is None:
+        return result
+    lead = (slice(None),) * (field.ndim - 2)
+    rows, cols = xp.nonzero(edge)
+    values = _bilinear_at(field, lead, iy[rows, cols], ix[rows, cols],
+                          fy[rows, cols], fx[rows, cols], xp)
+    result = result.copy()
+    result[lead + (rows, cols)] = values
+    return result
+
+
 #: What actually evaluated a projected-source horizontal apply.  It goes
 #: into the mapping report, because "the CPU backend" stopped being one
 #: answer the moment the operator got a second implementation.
@@ -588,12 +776,13 @@ class _ProjectedGpuPlan:
     operator = PROJECTED_OPERATOR_CUDA
 
     def __init__(self, snapshot: HrrrNativeSnapshot, target_lat, target_lon,
-                 *, identity: bool = False):
+                 *, identity: bool = False, placement=None):
         cp = _cupy()
         self.route = "identity" if identity else "interpolated"
         (x, y, ix, iy, nearest_ix, nearest_iy,
          global_ix, global_iy) = _projected_index_geometry(
-             snapshot, target_lat, target_lon, identity=identity)
+             snapshot, target_lat, target_lon, identity=identity,
+             placement=placement)
         global_x = x + snapshot.i_start
         global_y = y + snapshot.j_start
         self.source_shape = (snapshot.ny, snapshot.nx)
@@ -609,6 +798,9 @@ class _ProjectedGpuPlan:
         self.fy = cp.asarray(global_y - global_iy, dtype=cp.float32)
         self.nearest_ix = cp.asarray(nearest_ix, dtype=cp.int32)
         self.nearest_iy = cp.asarray(nearest_iy, dtype=cp.int32)
+        edge = _parabolic_stencil_leaves_window(
+            ix, iy, snapshot.nx, snapshot.ny, identity=identity)
+        self.edge = None if edge is None else cp.asarray(edge)
 
     def apply(self, field, *, method="parabolic"):
         cp = _cupy()
@@ -649,8 +841,10 @@ class _ProjectedGpuPlan:
                       for jx in xindices]
             rows.append(_wps_oned_gpu(fx, *values))
         result = _wps_oned_gpu(fy, *rows)
-        return cp.where(result == tiny, zero, result).astype(
+        result = cp.where(result == tiny, zero, result).astype(
             cp.float32, copy=False)
+        return _metgrid_edge_fallback(result, field, self.edge, self.iy,
+                                      self.ix, self.fy, self.fx, cp)
 
     def masked_bilinear_stencil(
             self, source_valid, target_apply, *, fallback_radius=8,
@@ -686,11 +880,12 @@ class _ProjectedCpuPlan:
     """
 
     def __init__(self, snapshot: HrrrNativeSnapshot, target_lat, target_lon,
-                 backend, *, identity: bool = False):
+                 backend, *, identity: bool = False, placement=None):
         self.route = "identity" if identity else "interpolated"
         (x, y, ix, iy, nearest_ix, nearest_iy,
          global_ix, global_iy) = _projected_index_geometry(
-             snapshot, target_lat, target_lon, identity=identity)
+             snapshot, target_lat, target_lon, identity=identity,
+             placement=placement)
         global_x = x + snapshot.i_start
         global_y = y + snapshot.j_start
         self.source_shape = (snapshot.ny, snapshot.nx)
@@ -703,6 +898,8 @@ class _ProjectedCpuPlan:
         self.fy = np.asarray(global_y - global_iy, dtype=np.float32)
         self.nearest_ix = nearest_ix.astype(np.int32)
         self.nearest_iy = nearest_iy.astype(np.int32)
+        self.edge = _parabolic_stencil_leaves_window(
+            ix, iy, snapshot.nx, snapshot.ny, identity=identity)
         self._native = None
         self.operator = PROJECTED_OPERATOR_NUMPY
         builder = getattr(backend, "indexed_donor_plan", None)
@@ -729,7 +926,15 @@ class _ProjectedCpuPlan:
             raise ValueError(
                 "method must be 'nearest', 'bilinear', or 'parabolic'")
         if self._native is not None:
-            return self._native.apply(field, method=method)
+            result = self._native.apply(field, method=method)
+            if method == "parabolic":
+                # The bridge clamps the stencil; the few targets whose
+                # stencil leaves HRRR's own edge take metgrid's bilinear
+                # fallback here, exactly as the NumPy reference does.
+                result = _metgrid_edge_fallback(
+                    np.asarray(result, dtype=np.float32), field, self.edge,
+                    self.iy, self.ix, self.fy, self.fx, np)
+            return result
         return self._apply_numpy(field, method=method)
 
     def _apply_numpy(self, field, *, method="parabolic"):
@@ -779,8 +984,10 @@ class _ProjectedCpuPlan:
                       for jx in xindices]
             rows.append(_wps_oned_cpu(fx, *values))
         result = _wps_oned_cpu(fy, *rows)
-        return np.asarray(np.where(result == tiny, zero, result),
-                          dtype=np.float32)
+        result = np.asarray(np.where(result == tiny, zero, result),
+                            dtype=np.float32)
+        return _metgrid_edge_fallback(result, field, self.edge, self.iy,
+                                      self.ix, self.fy, self.fx, np)
 
     def masked_bilinear_stencil(
             self, source_valid, target_apply, *, fallback_radius=8,
@@ -1600,9 +1807,16 @@ def interpolate_hrrr_to_lambert(
         soil_mapping_report: MutableMapping[str, object] | None = None,
         surface_fallback_radius: int = 8,
         backend="cuda", workers: int | None = None,
+        chem_rows=(), chem_source=None,
         cpu_bridge: Path | str | None = None,
-        target_name: str = DEFAULT_SOIL_TARGET_NAME) -> HorizontalSnapshot:
+        target_name: str = DEFAULT_SOIL_TARGET_NAME,
+        lattice_parent: LambertGrid | None = None) -> HorizontalSnapshot:
     """Interpolate a verified HRRR window to one WRF Lambert C grid.
+
+    ``chem_rows`` are active species rows; ``chem_source`` is the selected
+    SourceRow. Its density parameters drive conversion before mapping.
+    ``boundary_tracers`` on the returned snapshot carries row-unit mass-grid
+    arrays for initialize_real or an independently prepared boundary time.
 
     Atmospheric continuous fields use WPS's overlapping-parabolic operator.
     Soil uses non-negative bilinear weights restricted to source land; a
@@ -1622,11 +1836,18 @@ def interpolate_hrrr_to_lambert(
     different targets whose soil refusals must not be confusable: a
     coastal domain's all-water west strip once aborted a preparation
     with a sentence naming neither the strip nor the domain.
+
+    ``lattice_parent`` is the domain ``grid`` was cut from (a boundary
+    strip's domain).  When that domain is the native grid, the strip
+    takes the identity route its domain took
+    (:func:`woof.ingest.hrrr_target.native_lattice_placement`).
     """
     if not isinstance(snapshot, HrrrNativeSnapshot):
         raise TypeError("snapshot must be an HrrrNativeSnapshot")
     if not isinstance(grid, LambertGrid):
         raise TypeError("grid must be a LambertGrid")
+    if chem_rows and chem_source is None:
+        raise ValueError("active boundary rows need the selected source row; prevents conversion from an ambiguous source")
     from woof.ingest.preprocess_backend import resolve_preprocess_backend
 
     engine = resolve_preprocess_backend(
@@ -1638,23 +1859,30 @@ def interpolate_hrrr_to_lambert(
     plan_type = (
         _ProjectedGpuPlan if getattr(engine, "name", None) == "cuda"
         else _ProjectedCpuPlan)
-    # The target IS the native grid: copy index for index
-    # (woof.ingest.hrrr_target.native_grid_identity).
-    from woof.ingest.hrrr_target import native_grid_identity
+    # The target IS the native grid, or a whole-cell piece of it (one of
+    # the native grid's own boundary strips): copy index for index
+    # (woof.ingest.hrrr_target.native_lattice_placement).  Declaring it
+    # only for the whole grid sent that grid's boundary strips down the
+    # interpolated route, which refused their edge points (acceptance
+    # D-05, 2.8.8).
+    from woof.ingest.hrrr_target import native_lattice_placement
 
-    identity = native_grid_identity(grid)
+    placement = native_lattice_placement(grid, parent=lattice_parent)
+    identity = placement is not None
     if plan_type is _ProjectedGpuPlan:
         mass_plan = plan_type(snapshot, mass_lat, mass_lon,
-                              identity=identity)
-        u_plan = plan_type(snapshot, u_lat, u_lon, identity=identity)
-        v_plan = plan_type(snapshot, v_lat, v_lon, identity=identity)
+                              identity=identity, placement=placement)
+        u_plan = plan_type(snapshot, u_lat, u_lon, identity=identity,
+                           placement=placement)
+        v_plan = plan_type(snapshot, v_lat, v_lon, identity=identity,
+                           placement=placement)
     else:
         mass_plan = plan_type(snapshot, mass_lat, mass_lon, engine,
-                              identity=identity)
+                              identity=identity, placement=placement)
         u_plan = plan_type(snapshot, u_lat, u_lon, engine,
-                           identity=identity)
+                           identity=identity, placement=placement)
         v_plan = plan_type(snapshot, v_lat, v_lon, engine,
-                           identity=identity)
+                           identity=identity, placement=placement)
     source = snapshot.fields
     _require_source_physical_ranges(source)
     target_landmask = np.asarray(target_landmask)
@@ -1670,7 +1898,10 @@ def interpolate_hrrr_to_lambert(
     # library under both backends: the CPU backend's own library and
     # worker count, or the ladder's library on every CPU under CUDA.  A
     # library without the stencil is refused here, before any field.
-    from woof.ingest.horiz import _masked_chain_for_backend
+    from woof.ingest.horiz import (
+        _coastal_surface_match, _masked_chain_for_backend,
+        _WPS_FULL_CHAIN, _WPS_SNOW_CHAIN,
+    )
 
     stencil_native, stencil_workers = _stencil_engine(
         *_masked_chain_for_backend(engine))
@@ -1694,11 +1925,29 @@ def interpolate_hrrr_to_lambert(
                 error, snapshot, target_name, target_land.shape)
         ) from error
     out: dict[str, object] = {}
+    coastal_repairs: dict[str, dict[str, int]] = {}
+    operators: dict[str, str] = {}
     for name in (
             "PRES", "HGT", "TT",
             "SPFH", "PSFC", "SOILHGT", "SKINTEMP", "SNOW", "SNOWH",
             "T2", "Q2"):
         out[name] = mass_plan.apply(source[name], method="parabolic")
+        operators[name] = "parabolic"
+        if name in {"T2", "Q2", "SKINTEMP", "SNOW", "SNOWH"}:
+            # Surface anchors and skin keep coastal land/water support;
+            # snow takes METGRID.TBL's land-only support and water fill.
+            # The exact projected donor split remains the original plan's.
+            snow = name in {"SNOW", "SNOWH"}
+            chain = _WPS_SNOW_CHAIN if snow else _WPS_FULL_CHAIN
+            donor_y, donor_x = mass_plan.iy, mass_plan.ix
+            fraction_y, fraction_x = mass_plan.fy, mass_plan.fx
+            out[name], coastal_repairs[name] = _coastal_surface_match(
+                source[name], out[name], source_land, target_land,
+                donor_y, donor_x, fraction_y, fraction_x, engine=engine,
+                native=stencil_native, workers=stencil_workers,
+                method="parabolic", chain=chain, land_only=snow,
+                closed_edges=sum(_EDGE_BITS[edge] for edge in _native_edges_of(snapshot)))
+            operators[name] = "parabolic;coastal-matching:" + "+".join(chain)
     _zero_snow_undershoot(out, source, xp, target_name=target_name,
                           valid_time=snapshot.valid_time)
     # WPS METGRID.TBL routes hydrometeor mass through
@@ -1708,8 +1957,58 @@ def interpolate_hrrr_to_lambert(
         out["PMSL"] = mass_plan.apply(source["PMSL"], method="parabolic")
     if "VEGFRA" in source:
         out["VEGFRA"] = mass_plan.apply(source["VEGFRA"], method="bilinear")
+    # The PBL height the HRRR cycle carried into its analysis: the initial
+    # physics state seeds PBLH from it, as HRRR's own cycled wrfinput does
+    # (woof.ingest.hrrr_physics._seeded_initial_pblh).  Bilinear keeps it
+    # non-negative and inside the source's range.
+    if "PBLH" in source:
+        out["PBLH"] = mass_plan.apply(source["PBLH"], method="bilinear")
+    # The cycle's low/middle/high cloud cover (%): the initial CLDFRA's
+    # cover (woof.ingest.hrrr_physics._seed_initial_cldfra).
+    for name in ("LCDC", "MCDC", "HCDC"):
+        if name in source:
+            out[name] = mass_plan.apply(source[name], method="bilinear")
     for name in ("QC", "QI", "QR", "QS", "QG"):
         out[name] = mass_plan.apply(source[name], method="bilinear")
+    aerosol_mapping_counts = {}
+    # The analyzed aerosol number pair, when the bridge published it.
+    # Native finite payloads retain nearest interpolation. Where the bridge
+    # preserved a source bitmap, the Rust chain sees the original mask at
+    # fractional target coordinates before any zero may become a donor.
+    for name in ("QNWFA", "QNIFA"):
+        if name in source:
+            mask = source.get(name + "_SOURCE_MASK")
+            if mask is None:
+                out[name] = mass_plan.apply(source[name], method="nearest")
+            else:
+                mapped, counts = stencil_native.missing_value_chain(
+                    source[name], mask, mass_plan.y_host, mass_plan.x_host,
+                    workers=stencil_workers)
+                nearest = mass_plan.apply(source[name], method="nearest")
+                nearest_valid = mass_plan.apply(mask, method="nearest")
+                out[name] = xp.where(nearest_valid != 0, nearest,
+                                     xp.asarray(mapped, dtype=xp.float32))
+                aerosol_mapping_counts[name] = dict(zip(
+                    ("nearest_neighbor", "four_pt", "average_4pt", "zero"),
+                    [int(v) for v in counts.sum(axis=0)]))
+            from woof.ingest.host_arrays import deepest_level
+
+            surface = deepest_level(
+                out["PRES"], out[name],
+                workers=getattr(engine, "host_step_workers", None))
+            if surface is None:
+                deepest = xp.argmax(out["PRES"], axis=0)[None, ...]
+                surface = xp.take_along_axis(out[name], deepest, axis=0)[0]
+            out[name + "_SFC"] = surface
+    for name in snapshot.extra_fields:
+        out[name] = mass_plan.apply(source[name], method="bilinear")
+    from .native_extras import map_boundary_rows
+    # The files' cycle picks the source's units epoch (HRRR wrfnat MASSDEN
+    # was ug m-3 before 2021-12-21 14Z under the same kg m-3 label).
+    boundary_tracers = map_boundary_rows(
+        source, chem_rows, chem_source, mass_plan,
+        cycle=snapshot.valid_time - timedelta(hours=snapshot.forecast_hour),
+        cpu_bridge=cpu_bridge)
     # Do not derive/map RH here.  With FLAG_SH, real.exe diagnoses rh_gc from
     # the already horizontally mapped SPECHUMD, TT, and PRES.  initialize_real
     # mirrors that order; retaining a separately mapped 50-level RH field is
@@ -1726,6 +2025,17 @@ def interpolate_hrrr_to_lambert(
         source["LANDSEA"], method="nearest")
     out["LANDSEA"] = engine.float32(target_landmask)
     out["XICE"] = mass_plan.apply(source["XICE"], method="nearest")
+    # Sea ice takes matching water support and fill on coastal land. Exact
+    # nearest donors decide whether the original result needs correction;
+    # the masked four-point chain retains the actual fractional target.
+    out["XICE"], coastal_repairs["XICE"] = _coastal_surface_match(
+        source["XICE"], out["XICE"], ~source_land, ~target_land,
+        mass_plan.iy, mass_plan.ix, mass_plan.fy, mass_plan.fx,
+        engine=engine, native=stencil_native, workers=stencil_workers,
+        method="nearest", chain=_WPS_SNOW_CHAIN, land_only=True,
+        closed_edges=sum(_EDGE_BITS[edge] for edge in _native_edges_of(snapshot)),
+        nearest_y=mass_plan.nearest_iy, nearest_x=mass_plan.nearest_ix)
+    operators["XICE"] = "nearest;coastal-matching:" + "+".join(_WPS_SNOW_CHAIN)
     source_sina, source_cosa = _source_window_rotation(snapshot)
 
     def map_grid_relative_wind(u_name, v_name):
@@ -1785,6 +2095,8 @@ def interpolate_hrrr_to_lambert(
         # of magnitude in wall time -- so a receipt that only said "cpu"
         # could not tell a slow run from a fast one after the fact.
         "projected_horizontal_operator": mass_plan.operator,
+        "aerosol_missing": aerosol_mapping_counts,
+        "coastal_surface_repairs": coastal_repairs,
         "wind_rotation": {
             "policy": (
                 "source_grid_to_earth_then_earth_to_target_grid; "
@@ -1823,6 +2135,10 @@ def interpolate_hrrr_to_lambert(
         valid_time=snapshot.valid_time,
         levels_hpa=HRRR_HYBRID_LEVELS,
         fields=out,
+        boundary_tracers=boundary_tracers,
+        withheld_fields=getattr(snapshot, "withheld_fields", None) or None,
+        horizontal_operators=operators,
+        masked_field_repairs=coastal_repairs,
     )
 
 

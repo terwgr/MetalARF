@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 def _validate(arrays, context):
@@ -39,7 +40,7 @@ def submit_uh_step(u, v, w, ph, phb, msfu, msfv, ht, dn, dnw, fnm, fnp,
     ncol = ny * nx
     if not ncol:
         return
-    context.submit_kernel("uh_columns", arrays={
+    context.submit_kernel("wrf_exact_uh_columns" if WRF_EXACT else "uh_columns", arrays={
         "u": u, "v": v, "w": w, "ph": ph, "phb": phb,
         "msfu": msfu, "msfv": msfv, "ht": ht, "dn": dn, "dnw": dnw,
         "fnm": fnm, "fnp": fnp, "uh": uh, "usecol": use,
@@ -64,11 +65,11 @@ def submit_uh_fold(uh, use, target):
     ncol = ny * nx
     if not ncol:
         return
-    context.submit_kernel("uh_smooth_max", {
+    context.submit_kernel("wrf_exact_uh_smooth_max" if WRF_EXACT else "uh_smooth_max", {
         "uh": uh, "usecol": use, "up_heli_max": target,
     }, {"ny": ny, "nx": nx}, exact_policy=True,
        grid_size=ncol, threads_per_group=128)
-    context.submit_kernel("uh_boundary_copy", {
+    context.submit_kernel("wrf_exact_uh_boundary_copy" if WRF_EXACT else "uh_boundary_copy", {
         "field": target,
     }, {"ny": ny, "nx": nx, "ncol": ncol}, exact_policy=True,
        grid_size=ncol, threads_per_group=128)

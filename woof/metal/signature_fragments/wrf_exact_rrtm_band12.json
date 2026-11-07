@@ -1,0 +1,417 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_rrtm_lw_taumol_01_02",
+      "module": "wrf_exact_rrtm_band12",
+      "source": "woof/metal/shaders/wrf_exact_rrtm_band12.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "source_only_helper": true,
+      "resources": [
+        [
+          "colh2o",
+          "float",
+          "read"
+        ],
+        [
+          "coldry",
+          "float",
+          "read"
+        ],
+        [
+          "fac00",
+          "float",
+          "read"
+        ],
+        [
+          "fac01",
+          "float",
+          "read"
+        ],
+        [
+          "fac10",
+          "float",
+          "read"
+        ],
+        [
+          "fac11",
+          "float",
+          "read"
+        ],
+        [
+          "forfac",
+          "float",
+          "read"
+        ],
+        [
+          "selffac",
+          "float",
+          "read"
+        ],
+        [
+          "selffrac",
+          "float",
+          "read"
+        ],
+        [
+          "jp",
+          "int32",
+          "read"
+        ],
+        [
+          "jt",
+          "int32",
+          "read"
+        ],
+        [
+          "jt1",
+          "int32",
+          "read"
+        ],
+        [
+          "indself",
+          "int32",
+          "read"
+        ],
+        [
+          "laytrop",
+          "int32",
+          "read"
+        ],
+        [
+          "absa1",
+          "float",
+          "read"
+        ],
+        [
+          "absb1",
+          "float",
+          "read"
+        ],
+        [
+          "self1",
+          "float",
+          "read"
+        ],
+        [
+          "forref1",
+          "float",
+          "read"
+        ],
+        [
+          "fraca1",
+          "float",
+          "read"
+        ],
+        [
+          "fracb1",
+          "float",
+          "read"
+        ],
+        [
+          "absa2",
+          "float",
+          "read"
+        ],
+        [
+          "absb2",
+          "float",
+          "read"
+        ],
+        [
+          "self2",
+          "float",
+          "read"
+        ],
+        [
+          "forref2",
+          "float",
+          "read"
+        ],
+        [
+          "fraca2",
+          "float",
+          "read"
+        ],
+        [
+          "fracb2",
+          "float",
+          "read"
+        ],
+        [
+          "refparam2",
+          "float",
+          "read"
+        ],
+        [
+          "corr1",
+          "float",
+          "read"
+        ],
+        [
+          "corr2",
+          "float",
+          "read"
+        ],
+        [
+          "taug",
+          "float",
+          "read_write"
+        ],
+        [
+          "pfrac",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "colh2o": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "coldry": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac00": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac01": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac10": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac11": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "forfac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "selffac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "selffrac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jp": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt1": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "indself": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "laytrop": [
+          [
+            "ncol"
+          ]
+        ],
+        "absa1": [
+          [
+            "nabsa1",
+            "8"
+          ]
+        ],
+        "absb1": [
+          [
+            "nabsb1",
+            "8"
+          ]
+        ],
+        "self1": [
+          [
+            "nself1",
+            "8"
+          ]
+        ],
+        "forref1": [
+          [
+            "8"
+          ]
+        ],
+        "fraca1": [
+          [
+            "8"
+          ]
+        ],
+        "fracb1": [
+          [
+            "8"
+          ]
+        ],
+        "absa2": [
+          [
+            "nabsa2",
+            "14"
+          ]
+        ],
+        "absb2": [
+          [
+            "nabsb2",
+            "14"
+          ]
+        ],
+        "self2": [
+          [
+            "nself2",
+            "14"
+          ]
+        ],
+        "forref2": [
+          [
+            "14"
+          ]
+        ],
+        "fraca2": [
+          [
+            "13",
+            "14"
+          ]
+        ],
+        "fracb2": [
+          [
+            "14"
+          ]
+        ],
+        "refparam2": [
+          [
+            "13"
+          ]
+        ],
+        "corr1": [
+          [
+            "ncorr"
+          ]
+        ],
+        "corr2": [
+          [
+            "ncorr"
+          ]
+        ],
+        "taug": [
+          [
+            "ncol",
+            "nlay",
+            "140"
+          ]
+        ],
+        "pfrac": [
+          [
+            "ncol",
+            "nlay",
+            "140"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ngpt",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "nspa1",
+          "int32"
+        ],
+        [
+          "nspb1",
+          "int32"
+        ],
+        [
+          "nspa2",
+          "int32"
+        ],
+        [
+          "nspb2",
+          "int32"
+        ],
+        [
+          "nabsa1",
+          "int32"
+        ],
+        [
+          "nabsb1",
+          "int32"
+        ],
+        [
+          "nself1",
+          "int32"
+        ],
+        [
+          "nabsa2",
+          "int32"
+        ],
+        [
+          "nabsb2",
+          "int32"
+        ],
+        [
+          "nself2",
+          "int32"
+        ],
+        [
+          "ncorr",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

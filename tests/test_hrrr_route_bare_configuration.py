@@ -18,6 +18,8 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+from functools import lru_cache
+import shutil
 import tomllib
 from pathlib import Path
 
@@ -35,13 +37,11 @@ from woof.toml_document import emit_experiment_toml
 from test_runplan_hrrr_tree import _Observer, _plan, _stage
 
 
-def _authored(tmp_path):
-    """A nested HRRR configuration exactly as `woof domain` writes it."""
-
-    plan = _plan(tmp_path)
-    with contextlib.redirect_stdout(io.StringIO()):
-        config, _ = generate_intent_config(plan, destination=tmp_path / "authored")
-    return plan, config
+#: A fetched-source receipt in the real fetch's shape.  Since abf04433ed8
+#: (parallel cache reuse) the chain snapshots it (launch_supplements.
+#: hrrr_source_manifest) right after the fetch, so a placeholder byte is a
+#: malformed manifest that stops the chain before the preparation stage.
+_FETCHED_SUMS = "0" * 64 + "  hrrr.t12z.wrfprsf00.grib2\n"
 
 
 def _bare(config, *, keep_wps=False, edit=None):
@@ -67,10 +67,15 @@ def _experiment(config):
                                 source=str(config))
 
 
-def _moist_cq_the_namelists_cannot_state(raw):
-    """The explicit verification opt-out has no WRF namelist spelling."""
+def _relax_w_the_namelists_cannot_state(raw):
+    """The nest-style boundary relaxation of w has no WRF namelist spelling.
 
-    raw["shared"]["moist_cq"] = False
+    (moist_cq = false was this example until the forecast read it from
+    the TOML: it joined ROUTE_FORECAST_TOML_FIELDS, so it no longer
+    refuses.)
+    """
+
+    raw["shared"]["relax_w"] = True
 
 
 def _drive_chain(plan, config, exp, monkeypatch, observer=None):
@@ -88,7 +93,7 @@ def _drive_chain(plan, config, exp, monkeypatch, observer=None):
     def fake_fetch(arguments, run_dir, **_kwargs):
         out = Path(arguments[arguments.index("--out") + 1])
         out.mkdir(parents=True, exist_ok=True)
-        (out / "SHA256SUMS").write_text("x", encoding="utf-8")
+        (out / "SHA256SUMS").write_text(_FETCHED_SUMS, encoding="utf-8")
         return {}
 
     monkeypatch.setattr(go_cli, "run_stage", run_stage)
@@ -104,8 +109,8 @@ def _drive_chain(plan, config, exp, monkeypatch, observer=None):
 
 
 def test_a_bare_configuration_runs_from_namelists_written_into_its_run_folder(
-        tmp_path, monkeypatch):
-    plan, config = _authored(tmp_path)
+        tmp_path, monkeypatch, authored):
+    plan, config = authored
     written = _bare(config, keep_wps=True)
     exp = _experiment(config)
 
@@ -129,8 +134,8 @@ def test_a_bare_configuration_runs_from_namelists_written_into_its_run_folder(
 
 
 def test_a_bare_configuration_with_no_wps_namelist_gets_one_rendered(
-        tmp_path, monkeypatch):
-    plan, config = _authored(tmp_path)
+        tmp_path, monkeypatch, authored):
+    plan, config = authored
     _bare(config)
     staged = _drive_chain(plan, config, _experiment(config), monkeypatch)
 
@@ -164,9 +169,9 @@ def _front_door_sees_the_gpu_runtime(monkeypatch):
 
 
 def test_the_dry_run_and_the_real_run_refuse_what_the_namelists_cannot_carry(
-        tmp_path, monkeypatch, capsys):
-    plan, config = _authored(tmp_path)
-    _bare(config, keep_wps=True, edit=_moist_cq_the_namelists_cannot_state)
+        tmp_path, monkeypatch, capsys, authored):
+    plan, config = authored
+    _bare(config, keep_wps=True, edit=_relax_w_the_namelists_cannot_state)
     exp = _experiment(config)
     capsys.readouterr()
 
@@ -186,7 +191,7 @@ def test_the_dry_run_and_the_real_run_refuse_what_the_namelists_cannot_carry(
 
     assert len(dry) == 1
     for said in (dry[0], real[0], str(chain.value)):
-        assert "moist_cq" in said
+        assert "relax_w" in said
         assert "namelist.input" in said or "namelist_input" in said
         assert '[fetch] source = "hrrr-prs"' in said
     # The same sentence at both doors, and the real run refused before it
@@ -204,7 +209,7 @@ def test_the_way_out_is_read_off_the_source_table():
 
 
 def test_an_imported_configuration_gets_the_namelists_it_was_imported_from(
-        tmp_path):
+        tmp_path, authored):
     """`woof import-namelist` writes radiation in the aggregate spelling.
 
     The route's renderer wrote that as ``ra_lw_physics = -1``, which its
@@ -214,7 +219,7 @@ def test_an_imported_configuration_gets_the_namelists_it_was_imported_from(
 
     from woof.namelist_import import import_namelists
 
-    _plan_unused, config = _authored(tmp_path)
+    _plan_unused, config = authored
     paths = route_input_paths(config)
     text, _report = import_namelists(paths["wps_namelist"],
                                      paths["namelist_input"], name="uploaded")
@@ -268,13 +273,13 @@ def _config_plan(tmp_path, config):
 
 
 def test_a_child_with_no_radt_resolves_and_runs_on_its_effective_cadence(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, authored):
     from woof.config import effective_radt_minutes
     from woof.hrrr_route_inputs import run_route_inputs
     from woof.namelist_import import parse_namelist_text
     from woof.runplan import resolve_plan
 
-    plan, config = _authored(tmp_path)
+    plan, config = authored
     _bare(config, edit=_child_states_no_radiation_cadence)
     exp = _experiment(config)
     raw = tomllib.loads(config.read_text(encoding="utf-8"))
@@ -321,7 +326,7 @@ class _Warnings(_Observer):
 
 
 def test_a_partial_set_says_the_namelists_beside_it_are_not_what_runs(
-        tmp_path, monkeypatch):
+        tmp_path, monkeypatch, authored):
     """A hand-edited namelist.input beside an incomplete set does not run.
 
     The run writes the whole set from the configuration, so an edit to
@@ -329,7 +334,7 @@ def test_a_partial_set_says_the_namelists_beside_it_are_not_what_runs(
     says which files it did not read and where the set it ran is.
     """
 
-    plan, config = _authored(tmp_path)
+    plan, config = authored
     beside = route_input_paths(config)
     beside["target_domain"].unlink()
     observer = _Warnings()
@@ -346,8 +351,8 @@ def test_a_partial_set_says_the_namelists_beside_it_are_not_what_runs(
 
 
 def test_a_complete_set_is_read_where_it_sits_and_says_nothing(
-        tmp_path, monkeypatch):
-    plan, config = _authored(tmp_path)
+        tmp_path, monkeypatch, authored):
+    plan, config = authored
     observer = _Warnings()
     staged = _drive_chain(plan, config, _experiment(config), monkeypatch,
                           observer=observer)
@@ -356,3 +361,94 @@ def test_a_complete_set_is_read_where_it_sits_and_says_nothing(
             == str(route_input_paths(config)["namelist_input"]))
     assert not [said for said in observer.said
                 if said[0] == "route_inputs_rendered"]
+
+
+def test_a_set_written_before_the_configuration_changed_is_not_what_runs(
+        tmp_path, monkeypatch, authored):
+    """``[shared] gsd_diagnostics = 1`` added after the door wrote the set.
+
+    WOOF canary run_0771cd8814b6e7f8 (HRRR 2026-03-10 12Z, 3 km + 1 km):
+    ``woof domain`` wrote the configuration and its complete set, the
+    worker then turned on the hourly storm maxima in the TOML, and the run
+    read the stale set.  The root preparation reads the TOML, the
+    hierarchy read d01 from the set, and the binding refused the run after
+    the fetch and the root preparation: "native namelist d01 trajectory
+    controls differ from the sealed root preparation: run.gsd_diagnostics".
+    """
+
+    import re
+
+    from woof.hrrr_configuration import resolve_root_experiment
+    from woof.hrrr_hierarchy_direct import (
+        _native_experiment, _sealed_root_rrtmg_compatibility,
+        _sealed_root_rrtmg_variant, _validated_root_preparation_binding)
+    from woof.ingest.hrrr_target import load_hrrr_target_domain
+    from woof.ingest.prepared_cache import prepared_domain_config_identity
+    from woof.vertical_contract import explicit_vertical_from_wrf_namelist
+
+    plan, config = authored
+    beside = route_input_paths(config)
+    door_set = {role: path.read_bytes() for role, path in beside.items()}
+    # The worker's own edit (severe_ml.with_storm_maxima), after the door.
+    text = config.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^\[shared\]\s*$", "[shared]\ngsd_diagnostics = 1",
+                  text, count=1)
+    config.write_text(text, encoding="utf-8")
+    exp = _experiment(config)
+    assert [domain.run.gsd_diagnostics for domain in exp.domains] == [1] * len(exp.domains)
+    assert b"gsd_diagnostics" not in door_set["namelist_input"]
+
+    observer = _Warnings()
+    staged = _drive_chain(plan, config, exp, monkeypatch, observer=observer)
+
+    prepare = _stage(staged, "prepare")
+    hierarchy = _stage(staged, "hierarchy")
+    used = route_input_paths(plan.run_dir / "chain" / "route-inputs" / config.name)
+    assert prepare[prepare.index("--namelist-input") + 1] == str(used["namelist_input"])
+    assert hierarchy[hierarchy.index("--namelist-input") + 1] == str(used["namelist_input"])
+    assert "gsd_diagnostics" in used["namelist_input"].read_text(encoding="utf-8")
+    # The door's set beside the configuration is left as it was.
+    assert {role: path.read_bytes() for role, path in beside.items()} == door_set
+    (code, message, fields), = [said for said in observer.said
+                                if said[0] == "route_inputs_rendered"]
+    assert fields["disagreeing"] == ["run.gsd_diagnostics"]
+    assert "run.gsd_diagnostics" in message
+
+    # The binding the hierarchy runs, on what the two stages now read: the
+    # root preparation's d01 from the TOML, the hierarchy's from the set.
+    target = load_hrrr_target_domain(used["target_domain"])
+    root, _tables = resolve_root_experiment(
+        target=target,
+        vertical=explicit_vertical_from_wrf_namelist(
+            used["namelist_input"], expected_nz=target.nz, context="test"),
+        namelist_input=used["namelist_input"], start_time=exp.start_time,
+        run_seconds=int(exp.run_seconds), experiment_config=config,
+        wps_namelist=used["wps_namelist"],
+        history_interval_seconds=int(exp.domains[0].history_interval_s))
+    sealed = {"domain_config": prepared_domain_config_identity(root.root),
+              "namelist_sha256": "a" * 64}
+    native, _resolved, _report = _native_experiment(
+        used["wps_namelist"], used["namelist_input"],
+        rrtmg_variant=_sealed_root_rrtmg_variant(sealed),
+        rrtmg_compatibility=_sealed_root_rrtmg_compatibility(sealed))
+    assert [domain.run.gsd_diagnostics for domain in native.domains] == [1] * len(exp.domains)
+    _validated_root_preparation_binding(sealed, native.domains[0])
+
+
+@pytest.fixture(scope="module")
+def authored_template(tmp_path_factory):
+    @lru_cache(maxsize=1)
+    def template():
+        # Generate after function-scoped geography and device stubs are active.
+        root = tmp_path_factory.mktemp("hrrr-authored")
+        with contextlib.redirect_stdout(io.StringIO()):
+            return generate_intent_config(_plan(root), destination=root / "authored")[0]
+    return template
+
+
+@pytest.fixture
+def authored(tmp_path, authored_template):
+    template = authored_template()
+    destination = tmp_path / "authored"
+    shutil.copytree(template.parent, destination)
+    return _plan(tmp_path), destination / template.name

@@ -1,0 +1,66 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_prep",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_prep.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_pack",
+      "cuda_symbol": "tempo_pack",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "prepared",
+          "float",
+          "read_write"
+        ],
+        [
+          "packed",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "prepared": [
+          [
+            "20",
+            "nz",
+            "nc"
+          ]
+        ],
+        "packed": [
+          [
+            "17",
+            "nz",
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "presence",
+          "int32"
+        ],
+        [
+          "phase",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

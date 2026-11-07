@@ -300,12 +300,17 @@ def _bridge_manifest_extension(*, predecessor: Path, suffix: Path,
     suffix_gate = dict(row.split("\t", 1) for row in
                        (suffix / "gate.txt").read_text().splitlines() if row)
     suffix_fields = gate_supplement_fields(suffix_gate)
+    # The cycle's PBL height (HPBL) is one more atmosphere payload when the
+    # wrfnat publishes it (hrrr_grib2_bridge OPTIONAL_SURFACE_SPECS).
+    from woof.ingest.native_supplements import gate_optional_surface_fields
+    suffix_surface_fields = gate_optional_surface_fields(suffix_gate)
     suffix_soil_fields = gate_soil_surface_fields(suffix_gate)
     optional_soil_count = len(suffix_soil_fields)
     if suffix_fields and ("supplement-inventory.tsv" not in old_entries
                           or "supplement-inventory.tsv" not in suffix_entries):
         raise ValueError("supplement selection receipt is not bound by predecessor/suffix manifests")
-    if atmosphere_count != 22 + len(suffix_fields) or soil_count != 2 + optional_soil_count:
+    if (atmosphere_count != 22 + len(suffix_fields) + len(suffix_surface_fields)
+            or soil_count != 2 + optional_soil_count):
         raise ValueError(
             "suffix bridge lacks its declared atmosphere/supplement and soil fields")
     if set(retained) & set(appended):
@@ -790,6 +795,15 @@ def _positive_finite_seconds(raw: str) -> float:
     return value
 
 
+def _positive_count_within(count, bound) -> bool:
+    """Whether ``count`` is a whole positive count no larger than ``bound``."""
+
+    def whole(value):
+        return isinstance(value, int) and not isinstance(value, bool)
+
+    return whole(count) and whole(bound) and 1 <= count <= bound
+
+
 def _validated_worker_receipts(
         preparation_report: dict[str, object], *, selected_backend: str,
         requested_preprocess_workers: int | None,
@@ -815,10 +829,18 @@ def _validated_worker_receipts(
             and preprocess_receipt["backend"] != selected_backend):
         raise RuntimeError(
             "HRRR preparation backend differs from the public selector")
+    # A CPU count is held to AT MOST its request and budget, never to
+    # equality: the backend caps its count by the CPUs and memory it
+    # measures when it is built, and a busy host can narrow either after
+    # the budget was taken (the host held cores 0-3 of a running session
+    # scope).  "f00 mapping used 20 native workers; expected 24" refused
+    # such a run although the count moves no byte.  More than the request
+    # or the budget is the oversubscription these checks exist for.
+    cpu_workers = preprocess_receipt.get("workers")
     if (requested_preprocess_workers is not None
             and preprocess_receipt["backend"] == "cpu"
-            and preprocess_receipt.get("workers")
-            != requested_preprocess_workers):
+            and not _positive_count_within(
+                cpu_workers, requested_preprocess_workers)):
         raise RuntimeError(
             "HRRR CPU preparation worker receipt differs from the request")
     if (not isinstance(preprocess_worker_budget, dict)
@@ -843,7 +865,7 @@ def _validated_worker_receipts(
                 or isinstance(peak_native, bool)
                 or not isinstance(peak_native, int)
                 or peak_native < 1
-                or effective_total != preprocess_receipt.get("workers")
+                or not _positive_count_within(cpu_workers, effective_total)
                 or not isinstance(jobs, list)
                 or len(jobs) != 1 + 2 * final_hour
                 or any(
@@ -1717,8 +1739,17 @@ def _require_microphysics_tables(profile: str) -> None:
 
     switches = (single_domain_runtime_switches(profile)
                 if isinstance(profile, str) else vars(profile))
-    if int(switches["mp_physics"]) == THOMPSON_MP_PHYSICS:
+    mp_physics = int(switches["mp_physics"])
+    if mp_physics == THOMPSON_MP_PHYSICS:
         require_thompson_tables(assets=CLASSIC_TABLE_ASSETS)
+    elif mp_physics == 28:
+        # mp=28 reads the classic set plus CCN_ACTIVATE.BIN from the same
+        # root; staged here (first use) before the forcing download, not
+        # refused at root preparation after it.
+        from woof.core.thompson_aerosol_contract import AEROSOL_TABLE_ASSETS
+
+        require_thompson_tables(
+            assets=(*CLASSIC_TABLE_ASSETS, *AEROSOL_TABLE_ASSETS))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1749,7 +1780,19 @@ def _configured_defaults(args):
     if args.run_seconds is None:
         args.run_seconds = configured.run_seconds
     if args.history_interval_seconds is None:
-        args.history_interval_seconds = configured.root.history_interval_s
+        args.history_interval_seconds = (configured.root.full_history_interval_s
+                                         or configured.root.history_interval_s)
+
+
+def _validate_prepared_history_cadence(preparation_report, configured):
+    # The benchmark reports the parsed writer alarm. With a quick look,
+    # that alarm is shorter than the full-frame interval passed as an
+    # override to the experiment document.
+    observed = preparation_report.get("history_interval_seconds")
+    if (isinstance(observed, bool) or not isinstance(observed, (int, float))
+            or float(observed) != float(configured.root.history_interval_s)):
+        raise RuntimeError(
+            "HRRR prepared-cache history cadence differs from the request")
 
 
 #: What this wrapper hands a chained native preparation
@@ -1767,6 +1810,16 @@ def _chains(args) -> bool:
     """
 
     from woof.ingest.boundary_stream import chained_enabled, forecast_installed
+
+    config=getattr(args,'experiment_config',None)
+    if config is not None:
+        from woof.experiment import load_experiment
+        if load_experiment(config).nudging is not None:
+            return False  # full-domain analysis series are published with the sealed bundle
+    elif getattr(args,'namelist_input',None) is not None:
+        from woof.namelist_import import parse_namelist,active_nudging_selectors
+        if active_nudging_selectors(parse_namelist(args.namelist_input).get('fdda',{})):
+            return False
 
     return (not args.sealed_prepared_cache
             and getattr(args, "physical_input_store", None) is None
@@ -2006,6 +2059,14 @@ def _run_configured(args):
     if (configured.root.run.sf_lake_physics == 1
             and configured.root.run.use_lakedepth == 1):
         static_arguments.append("--lake-depth")
+    # The terrain-drag statistics the configured physics reads (gwd_opt,
+    # topo_wind).  Without them the forecast seam refused the prepared root
+    # after the whole preparation (prepared_terrain_drag_missing; QA R4).
+    from woof.static.orographic import required_static_fields
+    drag_fields = required_static_fields(
+        configured.root.run.topo_wind or 0, configured.root.run.gwd_opt or 0)
+    if drag_fields:
+        static_arguments += ["--orographic", ",".join(drag_fields)]
     static_domain_arguments = ([] if args.domain_spec is None else [
         "--domain-spec", str(args.domain_spec.resolve())])
     geometry_receipt = output / "native-geometry-receipt.json"
@@ -2077,6 +2138,17 @@ def _run_configured(args):
                     *static_arguments,
                 ], env)
             else:
+                if drag_fields:
+                    stored = json.loads(static_receipt.read_text(
+                        encoding="utf-8")).get("array_sha256", {})
+                    missing_drag = [name for name in drag_fields
+                                    if name not in stored]
+                    if missing_drag:
+                        raise ValueError(
+                            "prepared_terrain_drag_missing: the static cache "
+                            f"{static_cache} has no {', '.join(missing_drag)} "
+                            "required by the configured terrain drag; build "
+                            "the static from --geog-root instead")
                 _link_file_create(static_cache, sealed_static)
                 _link_file_create(static_receipt, sealed_receipt)
             static_cache = sealed_static
@@ -2222,14 +2294,7 @@ def _run_configured(args):
         if _sha256(snapshot) != args.source_manifest_sha256.lower():
             raise ValueError(
                 "source manifest changed during sealed preparation")
-    observed_history_interval = preparation_report.get(
-        "history_interval_seconds")
-    if (isinstance(observed_history_interval, bool)
-            or not isinstance(observed_history_interval, (int, float))
-            or float(observed_history_interval)
-            != float(args.history_interval_seconds)):
-        raise RuntimeError(
-            "HRRR prepared-cache history cadence differs from the request")
+    _validate_prepared_history_cadence(preparation_report, configured)
     (preprocess_receipt, preprocess_worker_budget,
      pipeline_worker_receipt) = _validated_worker_receipts(
          preparation_report,

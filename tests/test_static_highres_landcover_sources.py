@@ -336,6 +336,22 @@ def test_every_landcover_row_targets_the_engine_inventory():
         "annual-nlcd"].crosswalk
 
 
+def test_nlcd_developed_open_space_is_grassland_without_an_urban_canopy():
+    # NLCD 21 is under 20 % impervious.  As ISURBAN it gave whole airport and
+    # suburban cells Noah's bulk-urban soil, and the SF template's ASOS cells
+    # stayed +5.4 F too warm all night (CITY-NIGHT-TEMP-2026-10-28.md).
+    from woof.static.highres import landcover_legend
+
+    plain, count = landcover_legend("annual-nlcd", sf_urban_physics=0)
+    assert count == MODIS21_CATEGORY_COUNT
+    assert plain[21] == 10
+    assert {plain[raw] for raw in (22, 23, 24)} == {MODIS21_ISURBAN}
+    # An urban canopy still takes 21 as low-density urban (its area
+    # fraction comes from the impervious-class midpoint).
+    canopy, _ = landcover_legend("annual-nlcd", sf_urban_physics=1)
+    assert canopy[21] == canopy[22] != 10
+
+
 def test_the_notice_and_data_page_carry_the_land_cover_licence():
     root = Path(__file__).resolve().parent.parent
     notice = (root / "NOTICE").read_text(encoding="utf-8")
@@ -392,6 +408,15 @@ SOURCE_SEA = (4, 3)
 SOURCE_LAKE_ON_BASELINE_OCEAN = (6, N - 1)
 
 
+def _uniform_soil_fractions(sources, weights, grid, *, category_count):
+    ny, nx = grid.e_sn - 1, grid.e_we - 1
+    fractions = np.zeros((category_count, ny, nx))
+    fractions[5] = 1.0
+    return fractions, {"raw_component_total_percent_min": 100.0,
+                       "raw_component_total_percent_max": 100.0,
+                       "valid_source_pixels": ny * nx}
+
+
 def _stub_categories(monkeypatch):
     def fake_categories(source, grid, mapping, *, category_count):
         ny, nx = grid.e_sn - 1, grid.e_we - 1
@@ -404,18 +429,10 @@ def _stub_categories(monkeypatch):
             fractions[category - 1, row + halo, col + halo] = 1.0
         return fractions
 
-    def fake_soil(sources, weights, grid, *, category_count):
-        ny, nx = grid.e_sn - 1, grid.e_we - 1
-        fractions = np.zeros((category_count, ny, nx))
-        fractions[5] = 1.0
-        return fractions, {"raw_component_total_percent_min": 100.0,
-                           "raw_component_total_percent_max": 100.0,
-                           "valid_source_pixels": ny * nx}
-
     monkeypatch.setattr(highres_module, "resample_mapped_categories",
                         fake_categories)
     monkeypatch.setattr(highres_module, "soilgrids_category_fractions",
-                        fake_soil)
+                        _uniform_soil_fractions)
 
 
 @pytest.mark.parametrize("rule, sea, lake", [
@@ -752,16 +769,8 @@ def test_cells_past_the_tiles_edges_take_the_baseline(tmp_path,
     window = derive_landcover_window(raster, bbox, tmp_path / "cache")
     assert landcover_window_audit(window)["clipped_to_raster"] is True
 
-    def fake_soil(sources, weights, grid, *, category_count):
-        ny, nx = grid.e_sn - 1, grid.e_we - 1
-        fractions = np.zeros((category_count, ny, nx))
-        fractions[5] = 1.0
-        return fractions, {"raw_component_total_percent_min": 100.0,
-                           "raw_component_total_percent_max": 100.0,
-                           "valid_source_pixels": ny * nx}
-
     monkeypatch.setattr(highres_module, "soilgrids_category_fractions",
-                        fake_soil)
+                        _uniform_soil_fractions)
     baseline = _noah_baseline(n - 1)
     baseline["LU_INDEX"][:] = 12.0
     baseline["LANDMASK"][:] = 1.0

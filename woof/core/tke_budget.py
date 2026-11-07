@@ -151,6 +151,24 @@ def accumulate(state, cfg) -> None:
     # update formed (mub2d broadcasts for flat terrain).
     mu0 = state.scratch((ny, nx), "tke_budget_mu0")
     mu = state.scratch((ny, nx), "tke_budget_mu")
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.bandwidth_family import add_array
+        mu0[...] = state.mub2d
+        mu[...] = state.mub2d
+        add_array(state.mup0, mu0)
+        add_array(state.mup, mu)
+        steps = state.scratch((1,), "tke_budget_steps", dtype=np.float64)
+        from woof.wrf_exact import ENABLED as WRF_EXACT
+        state._array_module.context.submit_kernel(
+            "wrf_exact_tke_budget_accumulate" if WRF_EXACT else "tke_budget_accumulate",
+            dict(terms=terms, tke0=state.tke0, tke=state.tke, raw=raw,
+                 mu0=mu0, mu=mu, c1=state.c1h, c2=state.c2h,
+                 acc=acc, steps=steps),
+            dict(rdt=np.float32(1.0 / cfg.dt), nfield=len(TERM_FIELDS),
+                 nz=nz, ny=ny, nx=nx),
+            exact_policy=WRF_EXACT, grid_size=nz*len(TERMS)*_TPB,
+            threads_per_group=_TPB)
+        return
     mu0[...] = state.mub2d + state.mup0
     mu[...] = state.mub2d + state.mup
     grid = (nz, len(TERMS), 1)
@@ -206,7 +224,9 @@ def drain(state, cfg, *, reset_window: bool = True) -> dict | None:
 
 
 def _host(value) -> np.ndarray:
-    if hasattr(value, "get"):
+    if hasattr(value, "to_numpy"):
+        value = value.to_numpy()
+    elif hasattr(value, "get"):
         value = value.get()
     return np.asarray(value)
 

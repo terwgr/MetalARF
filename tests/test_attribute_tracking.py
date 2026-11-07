@@ -184,6 +184,30 @@ def test_canonical_host_uses_full_arrays_and_never_resident_methods():
     assert fix.center_parent_ij == (25., 19.) and fix.extremum == 305.
 
 
+def test_canonical_host_drains_the_owner_before_tracking():
+    """THE BREAKAGE: ``domain_field`` returned a canonical facade's host array
+    without draining its owner.  2.8.7's ``StreamedDomain.impose_clock``
+    drained after every step (67e213588) and hid it; without that drain a
+    ranked parent's mirror is the last drain's, and a tracker reading it
+    steers on a field no step since has written.
+    """
+    slab = np.full((3, 2, 50), 9999.)
+    template = SimpleNamespace(thp=slab, thb=slab.copy())
+    volume = np.zeros((3, 40, 50))
+    live = CanonicalStoreState(template, SimpleNamespace(nx=50, ny=40, nz=3),
+        store={"state/thp": volume}, geography={"setup/thb": np.full_like(volume, 300.)},
+        scalars={}, inventory={"state/thp": template.thp},
+        geography_inventory={"setup/thb": template.thb})
+    calls = []
+    def drain():
+        calls.append("drained")
+        volume[:, 19, 25] = 5.
+    live._streamed_domain = SimpleNamespace(_run=SimpleNamespace(drain=drain))
+    fix = st.StormTracker(config()).locate(live, footprint(), 0.)
+    assert calls, "the canonical facade was read without a drain"
+    assert fix.center_parent_ij == (25., 19.) and fix.extremum == 305.
+
+
 @pytest.mark.parametrize("bad", ["missing", "shape", "level", "base"])
 def test_invalid_live_state_refuses_before_tracking(bad):
     live, cfg = state(), config()
@@ -270,3 +294,15 @@ def test_attribute_track_admission_has_position_only_semantics():
     raw["relocation"]["track"]["output_level"] = [850.]
     with pytest.raises(ValueError, match="refuses output_level"):
         _build(raw, domains=_domains(sfclay=0))
+
+
+def test_pressure_tracking_controls_remain_in_public_identity():
+    from woof.experiment import _public_config_value
+    cfg = st.FollowConfig(field="pressure", threshold=1000., search_margin_cells=10,
+        min_shift_cells=1, max_shift_cells=6, cooldown_seconds=20.,
+        level_hpa=0., pressure_center="minimum", fallback_level_hpa=850., fallback_deficit_m=30.)
+    document = _public_config_value(cfg)
+    assert not set(document) & ATTRIBUTE_KEYS
+    assert document["pressure_center"] == "minimum"
+    assert document["fallback_level_hpa"] == 850.
+    assert document["fallback_deficit_m"] == 30.

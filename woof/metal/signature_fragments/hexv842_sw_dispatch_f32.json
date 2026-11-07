@@ -1,0 +1,356 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_sw_day_select_i32",
+      "module": "hexv842_sw_dispatch_f32",
+      "source": "woof/metal/shaders/hexv842_sw_dispatch_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_sw_v842.py",
+      "cuda_symbol": "_sunlit_batches",
+      "resources": [
+        [
+          "cosine",
+          "float",
+          "read"
+        ],
+        [
+          "indices",
+          "int32",
+          "read_write"
+        ],
+        [
+          "count",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cosine": [
+          [
+            "any_1d"
+          ]
+        ],
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ],
+        "count": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_sw_day_gather_f32",
+      "module": "hexv842_sw_dispatch_f32",
+      "source": "woof/metal/shaders/hexv842_sw_dispatch_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_sw_v842.py",
+      "cuda_symbol": "_sunlit_batches",
+      "resources": [
+        [
+          "indices",
+          "int32",
+          "read"
+        ],
+        [
+          "layers_in",
+          "float",
+          "read"
+        ],
+        [
+          "interfaces_in",
+          "float",
+          "read"
+        ],
+        [
+          "height_in",
+          "float",
+          "read"
+        ],
+        [
+          "fields_in",
+          "float",
+          "read"
+        ],
+        [
+          "cosine_in",
+          "float",
+          "read"
+        ],
+        [
+          "surface_in",
+          "float",
+          "read"
+        ],
+        [
+          "layers_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "interfaces_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "height_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "cosine_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "latitude_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ],
+        "layers_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interfaces_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "height_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fields_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cosine_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "layers_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interfaces_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "height_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cosine_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "albedo_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "latitude_out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nd",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv842_sw_day_scatter_f32",
+      "module": "hexv842_sw_dispatch_f32",
+      "source": "woof/metal/shaders/hexv842_sw_dispatch_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_sw_v842.py",
+      "cuda_symbol": "_sunlit_batches",
+      "resources": [
+        [
+          "indices",
+          "int32",
+          "read"
+        ],
+        [
+          "scalars_in",
+          "float",
+          "read"
+        ],
+        [
+          "tendency_in",
+          "float",
+          "read"
+        ],
+        [
+          "up",
+          "float",
+          "read"
+        ],
+        [
+          "upc",
+          "float",
+          "read"
+        ],
+        [
+          "down",
+          "float",
+          "read"
+        ],
+        [
+          "downc",
+          "float",
+          "read"
+        ],
+        [
+          "scalars_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "tendency_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "profiles_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "up": [
+          [
+            "any_1d"
+          ]
+        ],
+        "upc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "down": [
+          [
+            "any_1d"
+          ]
+        ],
+        "downc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "profiles_out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nd",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

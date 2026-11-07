@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from woof.wrf_exact import ADVECTION_ENABLED
+from woof.wrf_exact import ENABLED as WRF_EXACT, ADVECTION_ENABLED
 
 
 def _require_state(state):
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal PD advection requires a Metal DomainState")
-    if ADVECTION_ENABLED:
-        raise NotImplementedError(
-            "Metal PD advection does not implement WRF exact arithmetic")
 
 
 def submit_pd_fluxes(q, q0, ru, rv, rw, mut, coord, dx, dy, dt,
@@ -40,7 +37,18 @@ def submit_pd_fluxes(q, q0, ru, rv, rw, mut, coord, dx, dy, dt,
               "open_x": int(bool(open_x)), "open_y": int(bool(open_y)),
               "vorder": int(vorder),
               "nz": nz, "ny": ny, "nx": nx}
-    return coord._array_module.context.submit_kernel(
+    context = coord._array_module.context
+    if WRF_EXACT:
+        stem = "wrf_exact_pd_on_" if ADVECTION_ENABLED else "wrf_exact_pd_off_"
+        result = context.submit_kernel(
+            stem + "pd_fluxes", arrays, params, exact_policy=True,
+            grid_size=(nz + 1) * (ny + 1) * (nx + 1))
+        if vorder == 5:
+            result = context.submit_kernel(
+                stem + "pd_vertical_sl", arrays, params, exact_policy=True,
+                grid_size=(nz + 1) * (ny + 1) * (nx + 1))
+        return result
+    return context.submit_kernel(
         "pd_fluxes", arrays, params, exact_policy=False,
         grid_size=(nz + 1) * (ny + 1) * (nx + 1))
 
@@ -66,6 +74,12 @@ def submit_pd_renorm_apply(q0, mu_old, fxl, fxc, fyl, fyc, fzl, fzc,
               "dt": float(np.float32(dt)), "has_msf": int(bool(has_msf)),
               "open_x": int(bool(open_x)), "open_y": int(bool(open_y)),
               "nz": nz, "ny": ny, "nx": nx}
+    if WRF_EXACT:
+        if ADVECTION_ENABLED:
+            arrays.update(mub=coord.mub2d, mup_old=coord.mup0)
+        entry = "wrf_exact_pd_on_pd_renorm_apply" if ADVECTION_ENABLED else "wrf_exact_pd_off_pd_renorm_apply"
+    else:
+        entry = "pd_renorm_apply"
     return coord._array_module.context.submit_kernel(
-        "pd_renorm_apply", arrays, params, exact_policy=False,
+        entry, arrays, params, exact_policy=WRF_EXACT,
         grid_size=nz * ny * nx)

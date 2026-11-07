@@ -1,0 +1,58 @@
+/* Correctly-rounded hyperbolic tangent function for binary32 value.
+
+Copyright (c) 2022-2025 Alexei Sibidanov.
+
+This file is part of the CORE-MATH project
+(https://core-math.gitlabpages.inria.fr/).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+
+#ifndef HEXV842_MPAS_BL_MYNN_TANH_METALH
+#define HEXV842_MPAS_BL_MYNN_TANH_METALH
+#include "soft_binary32.metalh"
+#include "soft_binary64.metalh"
+constant ulong mynn_tanh_cn[8]={0x3ff0000000000000ul,0x3fc30877b8b72d33ul,0x3f7694aa09ae9e5eul,0x3f14101377abb729ul,0x3e9e0392b1db0018ul,0x3e12533756e546f7ul,0x3d6d62e5abe6ae8aul,0x3c9b06be534182deul};
+constant ulong mynn_tanh_cd[8]={0x3ff0000000000000ul,0x3fded99131b0ebeaul,0x3fa0d27ed6c95a69ul,0x3f47cbdaca0e9fccul,0x3edb4e60b892578eul,0x3e5a6f707c5c71abul,0x3dc35a8b6e2cd94cul,0x3d0ca8230677aa01ul};
+static inline uint mynn_tanh_bits(uint x) {
+    uint ax=x&0x7fffffffu,e=(x>>23)&0xffu;
+    if(e==255u) {if(ax>0x7f800000u)return soft32_add(x,x);return (x&0x80000000u)|0x3f800000u;}
+    // For |x|<2^-25 the source fmaf rounds to x: its nonzero
+    // correction is strictly less than half an ulp, including subnormal x.
+    if(e<102u)return x;
+    if(e<115u) {
+        float f=as_type<float>(x),f2=mpas_mul(f,f);
+        return as_type<uint>(fma(f,mpas_mul(-0x1.555556p-2f,f2),f));
+    }
+    if(ax>0x41102cb3u)return soft32_sub((x&0x80000000u)|0x3f800000u,(x&0x80000000u)|0x33000000u);
+    ulong z=soft64_from_f32_bits(x),z2=soft64_mul(z,z),z4=soft64_mul(z2,z2),z8=soft64_mul(z4,z4);
+    ulong n0=soft64_add(mynn_tanh_cn[0],soft64_mul(z2,mynn_tanh_cn[1]));
+    ulong n2=soft64_add(mynn_tanh_cn[2],soft64_mul(z2,mynn_tanh_cn[3]));
+    ulong n4=soft64_add(mynn_tanh_cn[4],soft64_mul(z2,mynn_tanh_cn[5]));
+    ulong n6=soft64_add(mynn_tanh_cn[6],soft64_mul(z2,mynn_tanh_cn[7]));
+    n0=soft64_add(n0,soft64_mul(z4,n2));n4=soft64_add(n4,soft64_mul(z4,n6));n0=soft64_add(n0,soft64_mul(z8,n4));
+    ulong d0=soft64_add(mynn_tanh_cd[0],soft64_mul(z2,mynn_tanh_cd[1]));
+    ulong d2=soft64_add(mynn_tanh_cd[2],soft64_mul(z2,mynn_tanh_cd[3]));
+    ulong d4=soft64_add(mynn_tanh_cd[4],soft64_mul(z2,mynn_tanh_cd[5]));
+    ulong d6=soft64_add(mynn_tanh_cd[6],soft64_mul(z2,mynn_tanh_cd[7]));
+    d0=soft64_add(d0,soft64_mul(z4,d2));d4=soft64_add(d4,soft64_mul(z4,d6));d0=soft64_add(d0,soft64_mul(z8,d4));
+    return soft64_to_f32_bits(soft64_div(soft64_mul(z,n0),d0));
+}
+#endif

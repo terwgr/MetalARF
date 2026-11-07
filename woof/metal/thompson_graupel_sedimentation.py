@@ -3,13 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .array import MetalArray
-
-
-def _overlap(a: MetalArray, b: MetalArray) -> bool:
-    return (a.buffer is b.buffer
-            and a.byte_offset < b.byte_offset + b.nbytes
-            and b.byte_offset < a.byte_offset + a.nbytes)
+from .array import MetalArray, overlaps
 
 
 def submit_thompson_graupel_sedimentation(
@@ -54,7 +48,7 @@ def submit_thompson_graupel_sedimentation(
     names = tuple(arrays)
     for pos, left_name in enumerate(names):
         for right_name in names[pos + 1:]:
-            if _overlap(arrays[left_name], arrays[right_name]):
+            if overlaps(arrays[left_name], arrays[right_name]):
                 raise ValueError(f"restricted Thompson graupel resources overlap: {left_name}, {right_name}")
     dt32 = np.float32(dt)
     if not np.isfinite(dt32) or dt32 <= 0.0:

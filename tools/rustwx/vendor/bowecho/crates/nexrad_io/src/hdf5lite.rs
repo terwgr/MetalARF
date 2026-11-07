@@ -1,4 +1,4 @@
-//! Minimal read-only HDF5 parser, just enough for ODIM_H5 polar volumes.
+//! Minimal read-only HDF5 parser — just enough for ODIM_H5 polar volumes.
 //!
 //! The workspace has no HDF5 dependency (the C library is a heavy, awkward
 //! build input on Windows CI), and ODIM files exercise a small, stable
@@ -10,7 +10,7 @@
 //! (The HDF Group, "HDF5 File Format Specification Version 3.0";
 //! <https://support.hdfgroup.org/documentation/hdf5/latest/_f_m_t3.html>):
 //!
-//! - Superblock v0/v1 (v2/v3 (the 1.10+ "latest" layout) is detected and
+//! - Superblock v0/v1 (v2/v3 — the 1.10+ "latest" layout — is detected and
 //!   rejected with a clear error).
 //! - Version 1 object headers, including continuation blocks.
 //! - Version 2 object headers ("OHDR", with "OCHK" continuation blocks and
@@ -178,7 +178,7 @@ impl<'a> H5File<'a> {
         let version = *bytes.get(8).ok_or_else(|| truncated(8, 1, bytes.len()))?;
         if version > 1 {
             // Real-world note: netCDF-4 files (modern CfRadial 1.x and all
-            // CfRadial 2, written by Radx/netCDF) carry this superblock,
+            // CfRadial 2, written by Radx/netCDF) carry this superblock —
             // every public CfRadial sample checked in 2026 does. Point
             // those users at the conversion that actually works.
             return Err(invalid(
@@ -396,7 +396,7 @@ impl<'a> H5File<'a> {
             .checked_add(8 + 2 * self.offset_size)
             .ok_or_else(|| invalid(0, "HDF5 group B-tree cursor overflow"))?;
         for _ in 0..entries {
-            cursor += self.length_size; // key (heap offset): unused here
+            cursor += self.length_size; // key (heap offset) — unused here
             let child = read_offset(self.bytes, cursor, self.offset_size)?;
             cursor += self.offset_size;
             if level == 0 {
@@ -559,8 +559,8 @@ impl<'a> H5File<'a> {
     /// size-of-chunk-0 (1/2/4/8 bytes per flags bits 0-1) | messages |
     /// checksum (u32, Jenkins lookup3 over the chunk from the signature on).
     ///
-    /// Messages: type (u8, v1 uses u16), size (u16), flags (u8),
-    /// [creation order (u16) when header flags bit 2], body, with NO
+    /// Messages: type (u8 — v1 uses u16), size (u16), flags (u8),
+    /// [creation order (u16) when header flags bit 2], body — with NO
     /// inter-message 8-byte alignment (v1 pads). A trailing gap smaller
     /// than one message header may precede the checksum. Continuation
     /// messages (0x0010) point at "OCHK" blocks: signature (4) | messages |
@@ -1440,7 +1440,7 @@ fn copy_chunk(
     offsets: &[usize],
     element_size: usize,
 ) {
-    // Treat the dataset as (outer, row) where row = innermost dimension,
+    // Treat the dataset as (outer, row) where row = innermost dimension —
     // sufficient for the 1-D/2-D arrays polar volumes use; higher ranks
     // copy via the same row loop with composite outer indices.
     let rank = dims.len();
@@ -1565,7 +1565,7 @@ fn read_offset(bytes: &[u8], at: usize, size: usize) -> Result<u64> {
 }
 
 /// Little-endian unsigned integer of `size` bytes WITHOUT the undefined-
-/// address sentinel mapping of [`read_offset`], for sizes and lengths,
+/// address sentinel mapping of [`read_offset`] — for sizes and lengths,
 /// where an all-ones value is a value, not "undefined".
 fn read_uint(bytes: &[u8], at: usize, size: usize) -> Result<u64> {
     let raw = checked_range(bytes, at, size)?;
@@ -1576,7 +1576,7 @@ fn read_uint(bytes: &[u8], at: usize, size: usize) -> Result<u64> {
     Ok(value)
 }
 
-/// Bob Jenkins' lookup3 `hashlittle` over little-endian words: the
+/// Bob Jenkins' lookup3 `hashlittle` over little-endian words — the
 /// H5_checksum_lookup3 metadata checksum used by v2 object headers and
 /// their continuation blocks (and other 1.8+ structures).
 fn jenkins_lookup3(data: &[u8]) -> u32 {
@@ -1734,7 +1734,7 @@ mod tests {
     }
 
     /// Unlike `read_offset`, `read_uint` must NOT map all-ones to the
-    /// undefined sentinel: 0xFF is a legal 1-byte chunk size.
+    /// undefined sentinel — 0xFF is a legal 1-byte chunk size.
     #[test]
     fn read_uint_keeps_all_ones_values() {
         assert_eq!(read_uint(&[0xFF], 0, 1).unwrap(), 0xFF);

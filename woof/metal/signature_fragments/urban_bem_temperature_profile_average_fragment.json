@@ -22,7 +22,7 @@
         "utype": [["ncol"]],
         "class_float": [[1320]],
         "tg": [["ncol", 10, 2]],
-        "tr": [["ncol", 5, 18, 2]],
+        "tr": [["ncol", 10, 18, 2]],
         "trv": [["ncol", 10, 18, 2]],
         "tg_av": [["ncol", 2]],
         "tr_av": [["ncol", 18, 2]],

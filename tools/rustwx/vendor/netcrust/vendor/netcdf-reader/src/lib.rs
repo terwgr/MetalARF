@@ -394,6 +394,15 @@ impl NcFile {
         }
     }
 
+    /// Read exact NC_CHAR bytes, preserving embedded/trailing NUL and non-UTF8.
+    pub fn read_variable_char_bytes(&self, name: &str) -> Result<Vec<u8>> {
+        match &self.inner {
+            NcFileInner::Classic(c) => c.read_variable_char_bytes(name),
+            #[cfg(feature = "netcdf4")]
+            NcFileInner::Nc4(n) => n.read_variable_char_bytes(name),
+        }
+    }
+
     /// Read a string variable as a single string.
     ///
     /// Use [`NcFile::read_variable_as_strings`] when the variable contains
@@ -506,6 +515,22 @@ impl NcFile {
             NcFileInner::Classic(c) => c.read_variable_slice_as_f64(name, selection),
             #[cfg(feature = "netcdf4")]
             NcFileInner::Nc4(n) => n.read_variable_slice_as_f64(name, selection),
+        }
+    }
+
+    /// [`Self::read_variable_slice_as_f64`] with each overlapping NetCDF-4
+    /// chunk decompressed once, in parallel.  Classic formats read as
+    /// [`Self::read_variable_slice_as_f64`] does.
+    #[cfg(feature = "rayon")]
+    pub fn read_variable_slice_as_f64_parallel(
+        &self,
+        name: &str,
+        selection: &NcSliceInfo,
+    ) -> Result<ArrayD<f64>> {
+        match &self.inner {
+            NcFileInner::Classic(c) => c.read_variable_slice_as_f64(name, selection),
+            #[cfg(feature = "netcdf4")]
+            NcFileInner::Nc4(n) => n.read_variable_slice_as_f64_parallel(name, selection),
         }
     }
 

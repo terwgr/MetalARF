@@ -161,7 +161,8 @@ def metgrid_soil(case, cfg, *, fractional_seaice):
         num_soil_layers=soil_layer_count(cfg), soil_type=static['SCT_DOM'],
         deep_soil_temperature=static['TMN'], soil_layer_contract=contract,
         landmask=static['LANDMASK'], terrain=static['HGT_M'], source_orography=case.source_orography,
-        water_temperature_policy='wrf_compat', fractional_seaice=fractional_seaice)
+        water_temperature_policy='wrf_compat', fractional_seaice=fractional_seaice,
+        seaice_threshold=float(getattr(cfg, 'seaice_threshold', 100.0)))
     return static, replace(case.snapshot, fields=fields), canonical_noah_surface(prepared), contract
 
 
@@ -601,7 +602,13 @@ def prepare_metem_run(run, directory, *, run_seconds=None, preprocess_backend=No
             if max(np.max(np.abs(lat-case.statics['XLAT_M'])), np.max(np.abs((lon-case.statics['XLONG_M']+180)%360-180))) > .005:
                 raise ValueError(f'{case.path.name}: met_em coordinates disagree with the resolved domain-tree layout')
             series[index] = met_em_series_identity(case)
+            # grid=: the mass-point lat/lon just checked against the
+            # met_em file.  An mp=28 run on the WIF climatology builds
+            # nwfa/nifa from it; without it a met_em lacking QNWFA/QNIFA
+            # refused "could not derive the model mass-point
+            # latitudes/longitudes" while holding them.
             result = initialize_real(case.snapshot, cfg, coord, case.terrain,
+                grid={'XLAT_M': lat, 'XLONG_M': lon},
                 source_orography=case.source_orography, p_top=exp.vertical.p_top,
                 preprocess_backend=backend, state_backend='preprocess',
                 boundary_only=index != 0,
@@ -733,6 +740,8 @@ def run_metem_forecast(directory, outdir, *, run_seconds=None, restart=None,
     # and outdir.mkdir, so a met_em carrying a field this build cannot
     # transport was refused once the run had started.
     check_analyzed_scalar_capabilities(run)
+    from woof.tables import _ensure_for_load as ensure
+    ensure(run.experiment)
     # Plan review, and before the card: a refused --outdir used to be
     # an errno raised inside the worker child, minutes after this
     # process had reserved a GPU for it.
@@ -899,8 +908,8 @@ def main(argv=None):
         return 2
 
 
-if __name__ == '__main__':
-    raise SystemExit(main())
+
+
 
 
 def _smooth_cg_case(exp, case, held: dict):
@@ -928,3 +937,7 @@ def _smooth_cg_case(exp, case, held: dict):
     statics = dict(case.statics)
     statics["HGT_M"] = terrain
     return replace(case, terrain=terrain, statics=MappingProxyType(statics))
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

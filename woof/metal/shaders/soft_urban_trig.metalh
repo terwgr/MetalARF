@@ -1,0 +1,66 @@
+// ======================================================================
+// THIRD-PARTY NOTICE. Parts of this file are hand transcriptions of
+// third-party work. ArWen distributes the file under the Apache License
+// 2.0; the notices below belong to the transcribed parts and are kept
+// here because their own licences require it. Full texts are in the
+// repository NOTICE, licenses/, and beside the code in
+// gpuwm/core/kernels/LICENSE-third-party.txt.
+//
+// Arm optimized-routines: glibc_sinf / glibc_cosf and their data tables.
+// github.com/ARM-software/optimized-routines: math/sinf.c, math/cosf.c,
+// math/sincosf.h, math/sincosf_data.c, published in 2018 and imported
+// into glibc in August 2018; transcribed here from glibc 2.43
+// sysdeps/ieee754/flt-32/s_sinf.c, s_cosf.c, s_sincosf.h,
+// sincosf_poly.h and s_sincosf_data.c (x86 FMA IFUNC variant).
+//
+// Copyright (c) 2018-2024, Arm Limited.
+// Copyright (c) 2018-2019, Arm Limited.
+// SPDX-License-Identifier: MIT
+//
+// Taken under the MIT branch of Arm's grant, as glibc_flt32.cuh is.
+// The algorithm, constants and tables reproduce Arm's work; glibc's
+// integration macros, aliases and IFUNC wrapper are not transcribed.
+// Arm 5e8389113b47 (2018), MIT relicensing 11253b0b9d6b,
+// current fe09d4e7ed62. The full permission notice is reproduced in
+// licenses/LICENSE-Arm-optimized-routines-MIT.txt and the files above.
+//
+// CORE-MATH MIT transcriptions from sysdeps/ieee754/flt-32/:
+// e_asinf.c and s_asincosf_data.c (src/binary32/asin/asinf.c, bc385c2);
+// e_acosf.c (src/binary32/acos/acosf.c, 56dd347);
+// s_atanf.c (src/binary32/atan/atanf.c, a8066a5);
+// s_tanf.c (src/binary32/tan/tanf.c, 59d21d7).
+// Copyright (c) 2022-2024 Alexei Sibidanov.
+// Copyright (c) 2023-2024 Alexei Sibidanov.
+// Full text: licenses/LICENSE-CORE-MATH-MIT.txt.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+// No SunPro FDLIBM code is used.
+// ======================================================================
+// Target: Ubuntu GLIBC 2.43-2ubuntu2.4, x86-64 AVX2+FMA, FE_TONEAREST.
+// sinf/cosf use __sinf_fma/__cosf_fma. The other four scalar functions
+// have no CPU IFUNC. Floating exceptions and errno are not device outputs.
+// Arithmetic is pinned to the selected libm machine instructions, not CUDA
+// trig builtins. Use -std=c++17. No FADD/FMUL macros are defined here.
+
+#ifndef WOOF_SOFT_URBAN_TRIG_METALH
+#define WOOF_SOFT_URBAN_TRIG_METALH
+#include "soft_glibc_solar_trig.metalh"
+
+static inline uint soft_urban_atanf(uint x) { return soft_glibc_solar_atanf(x); }
+static inline uint soft_urban_acosf(uint x) { return soft_glibc_solar_acosf(x); }
+static inline uint soft_urban_tanf(uint x) { return soft_glibc_solar_tanf(x); }
+#endif

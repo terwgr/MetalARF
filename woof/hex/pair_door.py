@@ -110,7 +110,7 @@ LEG_NAMES: tuple[str, str] = ("control", "treatment")
 #: Forecast-door destinations this door derives per leg rather than
 #: forwarding.  They are the ONLY tokens allowed to differ between the two
 #: legs besides the source table itself.
-PER_LEG_FLAGS: tuple[str, ...] = ("--out", "--scratch")
+PER_LEG_FLAGS: tuple[str, ...] = ("--out", "--scratch", "--icechunk-store")
 
 #: Forecast-door arguments the pair door owns and therefore refuses on its
 #: own command line, mapped to what a user should have written instead.  A
@@ -159,6 +159,10 @@ class PairRefusal(MpasPortError):
 
 def _refuse(message: str) -> PairRefusal:
     return PairRefusal(message)
+
+
+#: What ``write_summary`` returns when a leg left no frame to difference.
+NO_FRAMES_WEIGHTING = "no frames to weight"
 
 
 def sha256_file(path: Path) -> str:
@@ -220,7 +224,7 @@ def authored_forecast_argv(arguments: argparse.Namespace) -> list[str]:
 
     argv: list[str] = []
     for action in _forecast_actions():
-        if action.dest in OWNED_BY_THIS_DOOR or action.dest == "scratch":
+        if action.dest in OWNED_BY_THIS_DOOR or action.dest in ("scratch", "icechunk_store"):
             continue
         if SOURCE_TABLE_FLAG in action.option_strings:
             # The one authored-but-not-shared token: the treatment leg adds
@@ -486,7 +490,7 @@ def leg_plans(request: PairRequest) -> tuple[LegPlan, ...]:
                 scratch=scratch,
                 log=directory / "forecast.log",
                 argv=tuple(argv),
-                command=tuple([sys.executable, "-m", "hexcore", "forecast", *argv]),
+                command=tuple([sys.executable, "-m", "woof.hex", "forecast", *argv]),
             )
         )
     return tuple(plans)
@@ -595,6 +599,11 @@ def resolve_pair_request(arguments: argparse.Namespace) -> PairRequest:
         "--scratch", str(treatment_scratch),
         SOURCE_TABLE_FLAG, str(source_table),
     ]
+    from woof.output_formats import options
+    _, store = options(arguments)
+    if store is not None:
+        for leg, argv in (("control", control_argv), ("treatment", treatment_argv)):
+            argv.extend(("--icechunk-store", str(store).rstrip("/") + "/" + leg))
     identity = assert_pair_identity(control_argv, treatment_argv)
 
     grid = getattr(arguments, "grid", None)
@@ -763,6 +772,15 @@ def run_pair(
     )
     print(f"MANIFEST {manifest_path}", flush=True)
     print(f"SUMMARY {summary_path}", flush=True)
+    if weighting == NO_FRAMES_WEIGHTING:
+        # THE BREAKAGE THIS PREVENTS (hex parity run group 7, #27): a pair whose legs left no frames this door
+        # can read printed "NO COMPARISON" and still exited 0, so a caller counted an empty experiment as done.
+        empty = [name for name in LEG_NAMES if not legs[name]["history"]]
+        raise _refuse(
+            f"NO COMPARISON: the {' and '.join(empty)} leg(s) exited 0 but left no history frame in "
+            f"{', '.join(str(legs[name]['out']) for name in empty)}, so there is nothing to difference.  "
+            f"The manifest ({manifest_path}) and the legs' logs say what each leg wrote."
+        )
     return manifest
 
 
@@ -915,7 +933,7 @@ def write_summary(
         destination.write_text(
             "\n".join(lines) + "\n", encoding="utf-8", newline="\n"
         )
-        return "no frames to weight"
+        return NO_FRAMES_WEIGHTING
 
     control_names = [path.name for path in control_history]
     treatment_names = [path.name for path in treatment_history]

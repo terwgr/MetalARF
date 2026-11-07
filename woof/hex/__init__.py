@@ -1,6 +1,6 @@
 """GPU-native variable-resolution atmospheric model core.
 
-A CUDA port of the MPAS-Atmosphere v8.4.1 dynamical core, with a NumPy CPU
+A CUDA port of the MPAS-Atmosphere v8.4.2 dynamical core, with a NumPy CPU
 authority beside it for the operators that are verified against
 source-extracted fixtures.
 
@@ -43,6 +43,14 @@ except PackageNotFoundError:  # pragma: no cover - uninstalled source tree
     __version__ = "0+unknown"
 
 __evidence__ = "component-specific"
+
+# Every Rust and OpenMP child hex starts (vertical build, rw_mpas_init, static,
+# remap) sizes its pool from RAYON_NUM_THREADS / OMP_NUM_THREADS.  Hold them to
+# the container's CPU quota before any child starts: 257 threads on a 61-core
+# quota stalled a 15 km init for an hour (cpu_budget.py has the measurement).
+from .cpu_budget import bind_thread_defaults as _bind_thread_defaults
+
+_bind_thread_defaults()
 
 # Keep package metadata lightweight: importing ``woof.hex`` must not eagerly
 # import the full driver, SciPy regridder, or NetCDF output stack.

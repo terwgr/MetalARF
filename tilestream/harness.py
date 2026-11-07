@@ -180,11 +180,13 @@ def halo_radius(cfg) -> int:
     if ns % 2 != 0:
         raise ValueError(f"time_step_sound must be even, got {ns}")
     radius = 10 + 3 * ns // 2
-    if int(getattr(cfg, "nwp_diagnostics", 0) or 0):
+    if (int(getattr(cfg, "nwp_diagnostics", 0) or 0)
+            or int(getattr(cfg, "gsd_diagnostics", 0) or 0)):
         from woof.core.uh_diag import UH_DIAGNOSTIC_HALO_CELLS
 
         radius += UH_DIAGNOSTIC_HALO_CELLS
-    return radius
+    from tilestream.sfire import dependency_halo
+    return max(radius, dependency_halo(cfg))
 
 
 # --------------------------------------------------------------------------
@@ -675,7 +677,8 @@ def declare_offline_gsw(driver, cfg) -> None:
 
 def make_physics_state(cfg, seed: int = DEFAULT_SEED, *,
                        geography: Geography | None = None, start_time=None,
-                       coord=None, array_module=None, **initialize_kwargs):
+                       coord=None, poison: str = "noise", array_module=None,
+                       **initialize_kwargs):
     """``(state, driver)`` on a real projection, real terrain and real lat/lon.
 
     ``geography=None`` delegates verbatim to
@@ -711,6 +714,16 @@ def make_physics_state(cfg, seed: int = DEFAULT_SEED, *,
     downstream notices.  ``tilestream.realdata.make_real_tile_state`` records
     the same trap for the dynamics-only lane.
 
+    ``poison`` names the fill of the seeded fields.  ``"noise"`` is the
+    seeded Gaussian every gate integrates.  ``"constant"`` writes each
+    field's amplitude as one constant and the sounding columns without
+    noise: as obviously not weather as the noise, and for a buffer every
+    one of whose carriers is gathered from a prepared store before it serves
+    a tile (:func:`woof.core.streaming.prepared_tile_state_factory`) the
+    noise bought nothing but its cost -- 16.5 s of host random numbers per
+    rank at HRRR's 1799x1059x50, measured on box S 2026-10-06, before step 1
+    could start.
+
     ``initialize_kwargs`` are forwarded to ``initialize_physics`` untouched.
     """
     from datetime import datetime, timezone
@@ -740,10 +753,19 @@ def make_physics_state(cfg, seed: int = DEFAULT_SEED, *,
                            terrain_z=geography.terrain)
     state = init_at_rest(cfg, coord, base, array_module=array_module)
     install_geography(state, geography)
+    if poison not in ("noise", "constant"):
+        raise ValueError(f"poison must be 'noise' or 'constant', got {poison!r}")
+    constant = poison == "constant"
     rng = np.random.default_rng(seed)
+
+    def noise(shape):
+        return np.zeros(shape) if constant else rng.standard_normal(shape)
 
     def fill(name, amp, xdup, ydup):
         arr = getattr(state, name)
+        if constant:
+            arr[...] = amp
+            return
         vals = amp * rng.standard_normal(arr.shape)
         if xdup:
             vals[..., -1] = vals[..., 0]
@@ -781,14 +803,13 @@ def make_physics_state(cfg, seed: int = DEFAULT_SEED, *,
         qv_col = wk82_sounding(z_col)[1]
         state.qv[...] = cp.asarray(
             np.maximum(qv_col[:, None, None]
-                       * (1.0 + 0.20 * rng.standard_normal(state.qv.shape)),
+                       * (1.0 + 0.20 * noise(state.qv.shape)),
                        1e-9), dtype=state.qv.dtype)
         if getattr(state, "qc", None) is not None:
             blob = 4.0e-4 * np.exp(-((z_col - 4000.0) / 2500.0) ** 2)
             state.qc[...] = cp.asarray(
                 np.maximum(blob[:, None, None]
-                           * (1.0 + 0.3 * rng.standard_normal(
-                               state.qc.shape)), 0.0),
+                           * (1.0 + 0.3 * noise(state.qc.shape)), 0.0),
                 dtype=state.qc.dtype)
         update_diagnostics(state)
 

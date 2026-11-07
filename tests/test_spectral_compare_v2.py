@@ -26,8 +26,10 @@ from woof.verify import spectral_compare
 # pin is refused by name rather than reinterpreted.
 SUPERSEDED_V2_PINS_SHA256 = (
     "51517e31336c7b415efe4cc969f62f740b003d95bc2ad14ea88f54f7849b0f5c")
+#: RE-PINNED for Recast WOOF: the rename moved the package name in IMPLEMENTATION_PINS's prose and
+#: nothing else.  As the engine froze it: 697f8e9e.
 COMMITTED_V2_PINS_SHA256 = (
-    "697f8e9e2a0d6baef4ea5681263549875fd1b3ac3e38a54ce42042ad8c6d4f89")
+    "376a89d9117bb53bad782b8166e0c40c866c535f6c3d319e7d4dba28a68f4b1e")
 
 DX = 1000.0
 N = 128

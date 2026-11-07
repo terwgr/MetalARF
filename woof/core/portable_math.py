@@ -43,7 +43,7 @@ import numpy as np
 
 __all__ = ["IMPLEMENTATION", "FALLBACK_IMPLEMENTATION", "implementation",
            "worker_limit", "cpu_bridge_scope", "current_cpu_bridge_binding",
-           "run_with_cpu_bridge_binding", "exp", "log", "log1p", "log10", "sin", "cos",
+           "run_with_cpu_bridge_binding", "run_with_shared_cpu_bridge_binding", "exp", "log", "log1p", "log10", "sin", "cos",
            "tan", "arcsin", "arccos", "arctan", "arctan2", "power"]
 
 #: The implementation name a receipt records for the library route.
@@ -155,6 +155,27 @@ def run_with_cpu_bridge_binding(binding, function, *args, **kwargs):
             _cpu_bridge_binding.reset(token)
 
 
+def run_with_shared_cpu_bridge_binding(binding, function, *args, **kwargs):
+    """Carry the caller's math library AND its worker cap into one background job.
+
+    :func:`run_with_cpu_bridge_binding` pins a private worker to one native
+    thread, because it is one of several running side by side.  A single
+    job that runs beside its caller (the HRRR hydrometeor disposition
+    receipt) is not one of many: pinned to one thread, its 50 per-level
+    replays of the CPU vertical operator ran on one core for 120-170 s of a
+    full-CONUS start while the start waited for it (V58, 2026-10-21).
+    Native results do not depend on the worker count.
+    """
+    from woof.ingest.cpu_backend import cpu_bridge_scope as native_bridge_scope
+    with native_bridge_scope(None if binding is None else binding.path,
+                             worker_cap=None if binding is None else binding.worker_cap):
+        token = _cpu_bridge_binding.set(binding)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _cpu_bridge_binding.reset(token)
+
+
 def _load():
     """The configured library, or None with the reason kept for the warning."""
     global _library, _resolved, _absent_reason
@@ -241,7 +262,17 @@ def worker_limit(workers: int):
         _worker_limit.reset(token)
 
 
-def _workers(workers: int | None) -> int:
+#: Elements one automatically chosen worker is given at least.  Fanning a
+#: small array out over every core costs more than the arithmetic: measured
+#: on a 122-core box, a 24,336-element powf took 7.6 ms on the automatic
+#: count and 1.3 ms on 1 to 4 workers (82,944 elements: 6.6 ms against
+#: 1.7 ms), and the forecast's host math (RUC's 2-m Exner powers) asks for
+#: arrays this size every step.  Applies only when nobody named a count; a
+#: thread count never changes an element (see worker_limit).
+AUTOMATIC_ELEMENTS_PER_WORKER = 16384
+
+
+def _workers(workers: int | None, size: int | None = None) -> int:
     if workers is not None:
         value = _positive_workers(workers)
     else:
@@ -254,6 +285,8 @@ def _workers(workers: int | None) -> int:
         else:
             from woof.ingest.cpu_backend import automatic_workers
             value = automatic_workers()
+            if size is not None:
+                value = max(1, min(value, int(size) // AUTOMATIC_ELEMENTS_PER_WORKER))
     binding = _cpu_bridge_binding.get()
     return value if binding is None or binding.worker_cap is None else min(value, binding.worker_cap)
 
@@ -364,7 +397,7 @@ def _unary(name: str, values, out, workers):
     entry = (library.gpuwm_portable_unary_f32 if single
              else library.gpuwm_portable_unary_f64)
     code = entry(_UNARY_CODES[name], array.ctypes.data, result.ctypes.data,
-                 array.size, _workers(workers))
+                 array.size, _workers(workers, array.size))
     if code != 0:
         raise RuntimeError(
             f"portable {name} failed in the CPU preprocessing library "
@@ -411,7 +444,7 @@ def _binary(name: str, left, right, out, workers):
              else library.gpuwm_portable_binary_f64)
     code = entry(_BINARY_CODES[name], operands[0].ctypes.data,
                  operands[0].size, operands[1].ctypes.data, operands[1].size,
-                 result.ctypes.data, result.size, _workers(workers))
+                 result.ctypes.data, result.size, _workers(workers, result.size))
     if code != 0:
         raise RuntimeError(
             f"portable {name} failed in the CPU preprocessing library "

@@ -21,28 +21,8 @@ mod stored_plane_fixture;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(tag: &str) -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "rw-catalog-keywords-{tag}-{}-{nonce}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&path).unwrap();
-        Self(path)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
+mod support;
+use support::Scratch;
 
 fn render(root: &Path, tag: &str, products: &str, inputs: &[PathBuf]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rw_wrfbatch"))
@@ -93,7 +73,7 @@ fn ends_in_hash(stem: &str) -> bool {
 
 #[test]
 fn all_draws_the_named_products_and_no_stored_variable() {
-    let scratch = Scratch::new("all");
+    let scratch = Scratch::new("rw-catalog-keywords", "all");
     let wrfout = stored_plane_fixture::write(&scratch.0);
     let output = render(&scratch.0, "all", "all", &[wrfout]);
     let (stdout, stderr) = text(&output);
@@ -112,7 +92,7 @@ fn all_draws_the_named_products_and_no_stored_variable() {
 
 #[test]
 fn the_variables_keyword_draws_stored_variables_named_without_a_hash() {
-    let scratch = Scratch::new("variables");
+    let scratch = Scratch::new("rw-catalog-keywords", "variables");
     let wrfout = stored_plane_fixture::write(&scratch.0);
     let output = render(&scratch.0, "variables", "variables", &[wrfout]);
     let (stdout, stderr) = text(&output);
@@ -143,7 +123,7 @@ fn the_variables_keyword_draws_stored_variables_named_without_a_hash() {
 
 #[test]
 fn a_catalog_keyword_leaves_out_windows_the_run_cannot_close() {
-    let scratch = Scratch::new("windowed");
+    let scratch = Scratch::new("rw-catalog-keywords", "windowed");
     let inputs = six_hour_series(&scratch.0);
     for keyword in ["windowed", "all"] {
         let output = render(&scratch.0, keyword, keyword, &inputs);
@@ -166,7 +146,7 @@ fn a_catalog_keyword_leaves_out_windows_the_run_cannot_close() {
 
 #[test]
 fn a_named_window_longer_than_the_run_is_refused_in_the_runs_own_terms() {
-    let scratch = Scratch::new("named");
+    let scratch = Scratch::new("rw-catalog-keywords", "named");
     let inputs = six_hour_series(&scratch.0);
     let output = render(&scratch.0, "named", "qpf_24h,qpf_1h", &inputs);
     let (stdout, stderr) = text(&output);
@@ -196,7 +176,7 @@ fn a_named_window_longer_than_the_run_is_refused_in_the_runs_own_terms() {
 
 #[test]
 fn every_skip_line_names_the_file_of_its_own_frame() {
-    let scratch = Scratch::new("frames");
+    let scratch = Scratch::new("rw-catalog-keywords", "frames");
     let inputs = six_hour_series(&scratch.0);
     let output = render(&scratch.0, "frames", "qpf_6h", &inputs);
     let (stdout, stderr) = text(&output);
@@ -240,11 +220,38 @@ fn wrfout_rows() -> std::collections::HashMap<String, (String, String)> {
 fn the_fileless_catalog_says_which_products_a_wrfout_can_ever_draw() {
     let rows = wrfout_rows();
     let selectable = rusty_weather::render_all::known_product_slugs();
-    assert_eq!(rows.len(), selectable.len(), "one row per selectable slug");
-    // The General preset's three that never drew: no wrfout import writes
-    // their fields.
-    for slug in ["10m_wind_gusts", "precipitation_type", "cloud_cover"] {
-        assert_eq!(rows[slug].0, "missing", "{slug}: {:?}", rows[slug]);
+    // The coupled fire's maps (fire_perimeter, fire_ros, fire_heat_flux,
+    // `sfire::PRODUCTS`) are selectable too: `--products` and `all`/`direct`
+    // route them to the SFIRE renderer, `selectable_slugs=` counts them, and
+    // a5bbff276 (lane/ec-sfire, merged in 3a5020327) gave each its own
+    // fileless WRFOUT row.  They are not in the rusty-weather vocabulary.
+    // lane/cap-fire-fuels added the fire-grid fuel and terrain maps.
+    let fire: Vec<&str> = rw_wrfbatch::sfire::PRODUCTS.iter().map(|row| row.0).collect();
+    assert_eq!(
+        fire,
+        ["fire_perimeter", "fire_ros", "fire_heat_flux", "fire_fuel", "fire_terrain"]
+    );
+    for slug in &fire {
+        assert!(!selectable.iter().any(|known| known.as_str() == *slug), "{slug}");
+        assert_eq!(rows[*slug].0, "eligible", "{slug}: {:?}", rows[*slug]);
+    }
+    // lane/cap-hubwind's native hub-height products are selectable the same
+    // way, each with its own fileless WRFOUT row.
+    let hubwind = rw_wrfbatch::hubwind_products::product_catalog();
+    for slug in &hubwind {
+        assert_eq!(rows[slug.as_str()].0, "eligible", "{slug}: {:?}", rows[slug.as_str()]);
+    }
+    assert_eq!(
+        rows.len(),
+        selectable.len() + fire.len() + hubwind.len(),
+        "one row per selectable slug"
+    );
+    // No wrfout import writes the aggregate cloud-cover selector.
+    assert_eq!(rows["cloud_cover"].0, "missing", "{:?}", rows["cloud_cover"]);
+    // The winter import now writes the canonical gust and categorical
+    // precipitation selectors. Its real-frame contract is in winter.rs.
+    for slug in ["10m_wind_gusts", "precipitation_type"] {
+        assert_eq!(rows[slug], ("drawable".to_string(), "0".to_string()), "{slug}");
     }
     // And the products the retired NEEDS/PLANNED reading wrongly called
     // undrawable, beside the layer cloud panel that does draw.
@@ -276,7 +283,7 @@ fn the_fileless_catalog_says_which_products_a_wrfout_can_ever_draw() {
 fn every_selector_a_real_import_writes_is_one_the_plan_names() {
     use rw_wrfbatch::wrf_process::{WrfProcessMessage, WrfProcessOptions, spawn_process_paths};
 
-    let scratch = Scratch::new("plan");
+    let scratch = Scratch::new("rw-catalog-keywords", "plan");
     let wrfout = stored_plane_fixture::write(&scratch.0);
     let store = scratch.0.join("store");
     let options = WrfProcessOptions::default().normalized();

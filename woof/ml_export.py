@@ -38,10 +38,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from woof.bridges import (RUSTWX_CRATE_RELATIVE, accept_resolved,
-                           artifact_remedy, default_bridge_dir,
-                           legacy_bridge_candidates,
-                           executable_name, packaged_bridge_dir,
+                           artifact_remedy, executable_name,
+                           fetch_on_demand, on_demand_failure,
                            rustwx_build_hint)
+from woof.rustwx import _candidates, crate_dir
 
 #: The table folder, relative to the package.
 TABLE_DIR = Path(__file__).resolve().parent / "data" / "ml_export"
@@ -55,7 +55,7 @@ REQUEST_SCHEMA = "ml-export.request/v1"
 #: what changes when the contract does.  Spelled to match
 #: ``rw_mlexport::ABI``; a test binds the three.
 ABI_MARKER = ("rw_mlexport --request REQUEST.json schema=ml-export.request/v1 "
-              "modes=run,append,finalize progress=jsonl")
+              "modes=run,append,finalize progress=jsonl earth2=per-channel-v1")
 
 #: Environment variable naming a prebuilt binary.
 BINARY_ENV = "WOOF_RW_MLEXPORT"
@@ -77,16 +77,6 @@ class MlExportRefusal(RuntimeError):
 # The binary
 # ---------------------------------------------------------------------------
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent
-
-
-def crate_dir() -> Path:
-    """The renderer workspace of a checkout (may not exist)."""
-
-    return _repo_root() / RUSTWX_CRATE_RELATIVE
-
-
 @dataclass(frozen=True)
 class Binary:
     """``rw_mlexport``: its resolution ladder and its remedy.
@@ -101,20 +91,7 @@ class Binary:
     subject: str = "the ML dataset exporter"
 
     def candidates(self) -> tuple[Path, ...]:
-        filename = executable_name(self.name)
-        found: list[Path] = []
-        override = os.environ.get(self.env_var)
-        if override:
-            found.append(Path(override))
-        found.extend((
-            crate_dir() / "target" / "release" / filename,
-            crate_dir() / "target" / "debug" / filename,
-            _repo_root() / "libexec" / "bridges" / filename,
-            packaged_bridge_dir() / filename,
-            default_bridge_dir() / filename,
-            *legacy_bridge_candidates(filename),
-        ))
-        return tuple(found)
+        return _candidates(self.env_var, self.name)
 
     def find(self) -> Path | None:
         """The first existing candidate; a named override that is missing
@@ -376,7 +353,28 @@ def _options_text(args) -> str:
         parts.append(f"--end {args.end}")
     if args.skip_unavailable:
         parts.append("--skip-unavailable")
+    if getattr(args, "chunk_yx", "auto") not in (None, "auto"):
+        parts.append(f"--chunk-yx {args.chunk_yx}")
     return " ".join(parts)
+
+
+def parse_chunk_yx(text: str | None) -> list[int] | None:
+    """``--chunk-yx``: ``auto`` (None), ``full`` ([0, 0]) or ``NY,NX``."""
+
+    if text is None or text == "auto":
+        return None
+    if text == "full":
+        return [0, 0]
+    parts = text.replace("x", ",").split(",")
+    try:
+        ny, nx = (int(p) for p in parts)
+    except ValueError:
+        raise MlExportRefusal(
+            f"--chunk-yx {text} is not auto, full or two cell counts like 256,256") from None
+    if ny <= 0 or nx <= 0:
+        raise MlExportRefusal(
+            f"--chunk-yx {text} has a zero or negative edge; give two positive cell counts")
+    return [ny, nx]
 
 
 def build_request(args, tables: Tables | None = None) -> dict:
@@ -428,6 +426,7 @@ def build_request(args, tables: Tables | None = None) -> dict:
         "skip_unavailable": bool(args.skip_unavailable),
         "threads": args.threads,
         "spacings_deg": tables.spacings,
+        "chunk_yx": parse_chunk_yx(getattr(args, "chunk_yx", None)),
         "provenance": {
             "engine": engine_name(),
             "exporter_version": engine_version(),
@@ -546,23 +545,28 @@ def register_cli(sub) -> None:
             "WeatherBench 2 names and units, earth-relative winds and ERA5's below-ground "
             "fill, ready for xarray.open_zarr.  " + tables_note),
     )
+    add_arguments(parser)
+
+
+def add_arguments(parser, *, earth2=False) -> None:
     parser.add_argument("inputs", nargs="*", metavar="INPUT",
                         help="history files, folders holding them, .gz history files, or ZIPs")
     parser.add_argument("--out", type=Path, metavar="DIR",
                         help="the export folder (one dNN.zarr per domain, README.txt, receipt)")
-    parser.add_argument("--levels", default=None, metavar="SET",
-                        help="wb13 (default), era5-37, model, model:LIST, or hPa list")
-    parser.add_argument("--variables", default=None, metavar="LIST",
-                        help="default, all, +NAME,... or NAME,... (table ids or names)")
-    parser.add_argument("--grid", default="native", metavar="GRID",
-                        help="native (default), latlon, or latlon:DEG")
+    if not earth2:
+        parser.add_argument("--levels", default=None, metavar="SET",
+                            help="wb13 (default), era5-37, model, model:LIST, or hPa list")
+        parser.add_argument("--variables", default=None, metavar="LIST",
+                            help="default, all, +NAME,... or NAME,... (table ids or names)")
+        parser.add_argument("--grid", default="native", metavar="GRID",
+                            help="native (default), latlon, or latlon:DEG")
+        parser.add_argument("--names", default=None, metavar="SCHEME",
+                            help="wb2 (default, WeatherBench 2 long names) or era5 (short names)")
+        parser.add_argument("--layout", default="analysis", choices=("analysis", "forecast"),
+                            help="analysis: time is valid time; forecast: WeatherBench 2's "
+                                 "time + prediction_timedelta")
     parser.add_argument("--regrid", default="bilinear", choices=("bilinear", "area-mean"),
                         help="latlon method (default bilinear)")
-    parser.add_argument("--names", default=None, metavar="SCHEME",
-                        help="wb2 (default, WeatherBench 2 long names) or era5 (short names)")
-    parser.add_argument("--layout", default="analysis", choices=("analysis", "forecast"),
-                        help="analysis: time is valid time; forecast: WeatherBench 2's "
-                             "time + prediction_timedelta")
     parser.add_argument("--domains", default=None, metavar="LIST", help="e.g. d01,d02")
     parser.add_argument("--every", type=_positive_hours, default=None, metavar="HOURS",
                         help="keep frames on multiples of HOURS from the run's start")
@@ -576,6 +580,9 @@ def register_cli(sub) -> None:
                         help="replace an earlier export in --out")
     parser.add_argument("--skip-unavailable", action="store_true",
                         help="write the variables the files can make and record the rest")
+    parser.add_argument("--chunk-yx", default="auto", metavar="SHAPE",
+                        help="horizontal chunk shape: auto (default; 512x512 tiles for planes "
+                             "over 1024x1024 cells, one chunk otherwise), full, or NY,NX")
     parser.add_argument("--threads", type=int, default=None, metavar="N",
                         help="worker threads (default: every core)")
     parser.add_argument("--append", action="store_true",
@@ -615,6 +622,24 @@ def main(args) -> int:
         return EXIT_OK
     args.levels = args.levels or tables.levels["default"]
     args.names = args.names or tables.names["default"]
+    scheme = next((r for r in tables.names["schemes"] if r["id"] == args.names), {})
+    if "grid_profiles" in scheme:
+        from woof import earth2_export
+        try:
+            args.earth2 = scheme["grid_profiles"][args.grid]
+            level_set = parse_levels(args.levels, tables)
+            if level_set["kind"] != "pressure":
+                raise MlExportRefusal("Earth2Studio channel names require pressure levels")
+            selected = select_variables(args.variables, tables, level_set["kind"])
+            args.channels = ",".join(
+                row["names"][args.names].format(level=level)
+                for row in selected
+                for level in (level_set["hpa"] if "{level}" in row["names"][args.names] else [None]))
+            args.consumers = None
+            return earth2_export.main(args)
+        except (KeyError, MlExportRefusal) as error:
+            print(f"ml-export refused: {error}; use export --earth2 PROFILE to select a fixed Earth2 grid", file=sys.stderr)
+            return EXIT_REFUSED
     if args.out is None:
         print("ml-export refused: --out is required (the export folder)", file=sys.stderr)
         return EXIT_REFUSED
@@ -625,11 +650,18 @@ def main(args) -> int:
         return EXIT_REFUSED
     try:
         exe = BINARY.find()
+        if (exe is None and not os.environ.get(BINARY.env_var)
+                and fetch_on_demand(BINARY.name)):
+            # On demand since 2.9.11 (PyPI per-file limit): pinned in this
+            # release's bundle, staged by the first export that needs it.
+            exe = BINARY.find()
     except FileNotFoundError as error:
         print(f"ml-export: {error}", file=sys.stderr)
         return EXIT_NOT_STAGED
     if exe is None:
-        print(f"ml-export: {BINARY.subject} ({BINARY.name}) is not built or not staged.\n"
+        failure = on_demand_failure(BINARY.name)
+        print(f"ml-export: {BINARY.subject} ({BINARY.name}) is not built or not staged"
+              + (f" ({failure})" if failure else "") + ".\n"
               f"{BINARY.remedy()}", file=sys.stderr)
         return EXIT_NOT_STAGED
     ok, why = BINARY.probe(exe)

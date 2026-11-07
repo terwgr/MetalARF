@@ -34,8 +34,10 @@ for _i, _name in enumerate(DIAGNOSTICS):
     SLOT[_name] = len(RATES) + _i
 NSLOTS = len(RATES) + len(DIAGNOSTICS)
 
-#: thompson_aa_cold_network: every cell with entry T < 273.15 K.
-COLD = {
+#: The classic cold kernel's local names for the cold rates
+#: (thompson.cu's thompson_frozen_vapor_cloud_network, which the mp=28 cold
+#: network was first built from): the mp=8 readback below uses them.
+COLD_LOCALS = {
     "pri_ide": "ice_rate", "prs_ide": "ice_to_snow_rate",
     "pni_ide": "ice_number_rate",
     "prs_iau": "autoconversion_rate", "pni_iau": "autoconversion_number_rate",
@@ -76,8 +78,20 @@ COLD = {
 #: update block, so it is read back there.
 COLD_SHADOW = {"png_gde": "graupel_vapor_number_rate"}
 
-#: thompson_aa_warm_source_network: every cell with entry T >= 273.15 K.
-WARM = {
+#: thompson_aa_cold_network (v4.6.1): every cell with entry T < 273.15 K.
+#: The level function keeps every rate under its WRF name in its
+#: ThompsonAaLevel ``L`` (thompson_aerosol_common.cuh); they are read back
+#: where WRF's conservation limiters are done.
+COLD = {name: f"L.{name}" for name in RATES
+        if name not in ("prw_vcd", "pnc_wcd", "prv_rev", "pnr_rev")}
+
+#: thompson_aa_warm_source_network (v4.6.1): every cell with entry
+#: T >= 273.15 K, through the same ThompsonAaLevel ``L`` as the cold network.
+WARM = {name: f"L.{name}" for name in RATES
+        if name not in ("prw_vcd", "pnc_wcd", "prv_rev", "pnr_rev")}
+
+#: The warm kernel's earlier local names (mp=8's warm kernel carries them).
+WARM_LOCALS = {
     "prr_wau": "autoconversion_rate", "pnr_wau": "autoconversion_number_rate",
     "prr_rcw": "rain_cloud_rate", "pnr_rcr": "rain_self_number_rate",
     "pnc_wau": "cloud_autoconversion_number_sink",
@@ -106,11 +120,11 @@ RAIN_EVAPORATION = {"prv_rev": "prv_rev", "pnr_rev": "pnr_rev"}
 #: the anchor, which must occur exactly once in the module's source.
 ANCHORS = {
     "thompson_aerosol_cold": [
-        ("    qi[idx] = fmaxf(0.0f, thompson_aa_add(qi[idx],\n", COLD),
-        ("        graupel_number_shadow[idx] = thompson_aa_add("
-         "initial_number_per_kg,\n", COLD_SHADOW)],
+        # Where every cold rate is final: after WRF's conservation
+        # limiters, before the tendencies are formed.
+        ("    // HOST READBACK ANCHOR: every rate final.\n", COLD)],
     "thompson_aerosol_warm": [
-        ("    snow_melt_marker[idx] = snow_melt_rate > 0.0 ? 1.0f : 0.0f;\n",
+        ("    // HOST READBACK ANCHOR: every warm-level rate final.\n",
          WARM)],
     "thompson_aerosol_sat": [
         ("    const float prw = (float)prw_vcd;\n", CONDENSATION),
@@ -121,64 +135,24 @@ ANCHORS = {
 }
 
 # ---------------------------------------------------------------------------
-# mp_physics=8: the classic kernels of the shared thompson.cu.
+# mp_physics=8: the classic unit, woof/core/kernels/thompson_classic.cu.
 # ---------------------------------------------------------------------------
 
-#: The WRF rates that reach nothing but the droplet number and the two
-#: aerosol numbers, which classic Thompson does not carry (mp_gt_driver
-#: writes nc, nwfa and nifa back only when is_aerosol_aware, :1316-1340), and
-#: Koop homogeneous freezing of deliquesced aerosol, which :2635 forms only
-#: when is_aerosol_aware.  The mp=8 port computes none of them.  Their one
-#: indirect route into the state, the droplet number the cloud freezing below
-#: HGFR hands the ice (:3959, ``xnc = nc1d + ncten*DT``), is graded through
-#: the final ice number instead.
+#: The aerosol scavenging rates: they reach only nwfaten and nifaten, which
+#: mp_gt_driver writes back only when is_aerosol_aware (:1316-1340).  The
+#: unit reads them back as zero.  Every other rate is carried, droplet
+#: number and Koop terms included (WRF forms them for classic Thompson too).
 NOT_CARRIED_MP8 = (
-    "pnc_wcd", "pnc_wau", "pnc_rcw", "pnc_scw", "pnc_gcw",
     "pna_rca", "pna_sca", "pna_gca", "pnd_rcd", "pnd_scd", "pnd_gcd",
-    "pri_iha", "pni_iha",
 )
 
-#: thompson_frozen_vapor_cloud_network: every cell with entry T < 273.15 K.
-#: The classic cold kernel is the one the mp=28 cold network was built
-#: from, so its locals carry the same names; the aerosol terms are absent.
-COLD_MP8 = {name: expr for name, expr in COLD.items()
-            if name not in NOT_CARRIED_MP8}
-
-#: thompson_warm_frozen_source_network: every cell with entry T >= 273.15 K.
-WARM_MP8 = {name: expr for name, expr in WARM.items()
-            if name not in NOT_CARRIED_MP8}
-
-#: thompson_cloud_saturation_adjust_impl keeps the adjustment in mixing
-#: ratio (``clap``, kg/kg); WRF's rate is ``prw_vcd = clap*odt`` (:3412,
-#: and ``-rc*orho*odt`` where the cloud would empty, :3473, which the kernel
-#: forms as ``clap = -rc/rho``).  The readback is ``clap`` and
-#: ``real_column_parity`` divides it by the step: ``PER_STEP_MP8``.
-CONDENSATION_MP8 = {"prw_vcd": "clap"}
-PER_STEP_MP8 = ("prw_vcd",)
-
-#: thompson_rain_evaporation_impl.
-RAIN_EVAPORATION_MP8 = {"prv_rev": "evaporation_rate",
-                        "pnr_rev": "number_rate"}
-
-ANCHORS_MP8 = {
-    "thompson": [
-        ("    qi[idx] = fmaxf(0.0f, qi[idx]\n"
-         "        + (float)((nucleation_rate + hm_mass_rate\n", COLD_MP8),
-        ("        graupel_number_shadow[idx] = initial_number_per_kg\n"
-         "            + (float)(number_rate * (double)orho) * dt;\n",
-         COLD_SHADOW),
-        ("    snow_melt_marker[idx] = snow_melt_rate > 0.0 ? 1.0f : 0.0f;\n",
-         WARM_MP8),
-        ("    if (condensation_marker != nullptr) {\n"
-         "        condensation_marker[idx] = clap > 0.0f ? 1.0f : 0.0f;\n",
-         CONDENSATION_MP8),
-        ("    if (ssatw >= -1.0e-15f) return;\n\n"
-         "    const float orho = 1.0f / rho;\n"
-         "    const float rr = qr[idx] * rain_density;\n",
-         {"ssatw_rev": "ssatw"}),
-        ("    const float qr_tendency = (float)(-evaporation_rate);\n",
-         RAIN_EVAPORATION_MP8)],
-}
+#: The classic unit carries WRF's own rate locals and publishes every one
+#: from its source, under ``#ifdef GPUWM_HOST_RATES`` (thompson_classic.cu:
+#: the sixty-four of cp1 after the conservation limiters, then prw_vcd,
+#: pnc_wcd, prv_rev and pnr_rev of cp2 after the rain evaporation), in
+#: RATES order.  Nothing is inserted, so its anchor list is empty.
+ANCHORS_MP8 = {"thompson_classic": []}
+PER_STEP_MP8 = ()
 
 #: The anchor set of each scheme.
 ANCHORS_BY_MP = {28: ANCHORS, 8: ANCHORS_MP8}
@@ -199,7 +173,7 @@ def _block(rate_map: dict[str, str]) -> str:
 
 def instrument(module: str, text: str, mp: int = 28) -> str:
     """The module source with the rate readback inserted."""
-    for anchor, rate_map in ANCHORS_BY_MP[mp][module]:
+    for anchor, rate_map in ANCHORS_BY_MP[mp].get(module, []):
         count = text.count(anchor)
         if count != 1:
             raise ValueError(
@@ -216,8 +190,7 @@ def instrumented_modules(mp: int = 28) -> tuple[str, ...]:
     return tuple(ANCHORS_BY_MP[mp])
 
 
-__all__ = ["ANCHORS", "ANCHORS_BY_MP", "ANCHORS_MP8", "COLD", "COLD_MP8",
-           "COLD_SHADOW", "CONDENSATION", "CONDENSATION_MP8",
-           "DIAGNOSTICS", "NOT_CARRIED", "NOT_CARRIED_MP8", "NSLOTS",
-           "PER_STEP", "RAIN_EVAPORATION", "RAIN_EVAPORATION_MP8", "SLOT",
-           "WARM", "WARM_MP8", "instrument", "instrumented_modules"]
+__all__ = ["ANCHORS", "ANCHORS_BY_MP", "ANCHORS_MP8", "COLD",
+           "COLD_SHADOW", "CONDENSATION", "DIAGNOSTICS", "NOT_CARRIED",
+           "NOT_CARRIED_MP8", "NSLOTS", "PER_STEP", "RAIN_EVAPORATION",
+           "SLOT", "WARM", "instrument", "instrumented_modules"]

@@ -1,0 +1,100 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_nt_cuddrafn",
+      "module": "hexv842_nt_cuddrafn",
+      "source": "woof/metal/shaders/hexv842_nt_cuddrafn.metal",
+      "cuda_source": "woof/hex/mpasphys/ntiedtke_v842.py",
+      "cuda_symbol": "ntiedtke_cuddrafn",
+      "resources": [
+        [
+          "inputs",
+          "float",
+          "read"
+        ],
+        [
+          "surf_i",
+          "int32",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "status",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "inputs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surf_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "status": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

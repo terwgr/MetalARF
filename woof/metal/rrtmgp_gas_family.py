@@ -82,17 +82,16 @@ def _metal_gas_tables(context, tables):
 
 def submit_interpolation(arrays, *, press_ref_trop, ncell, ntemp, npres,
                          reference=False):
-    """Run either independent interpolation transcription, writing metadata."""
+    """Write interpolation metadata with the selected arithmetic policy."""
     name = ("rrtmgp_interpolation_inline_reference" if reference else
             "rrtmgp_interpolation_prepass")
+    if WRF_EXACT:
+        name = "rrtmgp_exact_interpolation"
     values, context = _resource_views(arrays, _INTERPOLATION)
     parameters = {"press_ref_trop": float(np.float32(press_ref_trop)),
                   "ncell": int(ncell), "ntemp": int(ntemp),
                   "npres": int(npres)}
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal RRTMGP interpolation does not implement WRF exact math")
-    return context.submit_kernel(name, values, parameters, exact_policy=False,
+    return context.submit_kernel(name, values, parameters, exact_policy=WRF_EXACT,
                                  grid_size=int(ncell))
 
 
@@ -101,15 +100,14 @@ def submit_gas_optics(arrays, parameters, *, reference=False):
     values, context = _resource_views(arrays, _GAS_OPTICS)
     name = ("rrtmgp_gas_optics_reference" if reference else
             "rrtmgp_gas_optics")
+    if WRF_EXACT:
+        name = "rrtmgp_exact_gas_optics"
     ncol, nlay, ngpt = (int(parameters[k]) for k in ("ncol", "nlay", "ngpt"))
     params = {k: int(v) for k, v in parameters.items()}
     params["rayleigh_len"] = int(arrays["rayleigh"].size)
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal RRTMGP gas optics does not implement WRF exact math")
     return context.submit_kernel(
         name, values, params,
-        exact_policy=False, grid_size=ncol * nlay * ngpt)
+        exact_policy=WRF_EXACT, grid_size=ncol * nlay * ngpt)
 
 
 def submit_tables_gas_optics(tables, arrays, parameters, *, reference=False):
@@ -170,9 +168,6 @@ def submit_gas_vmr_fill(arrays, *, h2o_scale, h2o_index, o3_index,
     """Fuse VMR population, preserving the source's binary64 ozone cast."""
     from .array import MetalArray
 
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal RRTMGP VMR fill does not implement WRF exact math")
     if set(arrays) != set(_VMR_FILL):
         raise ValueError("RRTMGP VMR fill resource names do not match")
     o3 = arrays["o3_words"]
@@ -198,8 +193,9 @@ def submit_gas_vmr_fill(arrays, *, h2o_scale, h2o_index, o3_index,
         "ntrace": ntrace, "ncells": ncells, "nslot": nslot,
         "no3_words": 2 * ncells,
     }
+    name = "rrtmgp_exact_gas_vmr_fill" if WRF_EXACT else "rrtmgp_gas_vmr_fill"
     return context.submit_kernel(
-        "rrtmgp_gas_vmr_fill", values, parameters, exact_policy=False,
+        name, values, parameters, exact_policy=WRF_EXACT,
         grid_size=ncells * nslot)
 
 

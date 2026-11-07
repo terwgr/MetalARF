@@ -52,7 +52,7 @@ def configuration(combo, *, urban=False, turbulence=None, sfclay_option=None,
         sf_lake_physics=int(sf_lake_physics), alb_sol=int(alb_sol),
         spp_lsm=int(spp_lsm), spp_conv=int(spp_conv),
         sf_urban_physics=_urban_option(urban),
-        cudt_minutes=0. if cu in (3, 16) else 5.,
+        cudt_minutes=0. if cu in (3, 5, 6, 16) else 5.,
         sf_sfclay_physics=(2 if pbl == 2 else
                            int(sfclay_option) if sfclay_option is not None else
                            91 if any((mp, pbl, lsm, cu, ra)) else 0),
@@ -178,6 +178,17 @@ def initialize(state, cfg, *, gates_only=False, noahmp_glacier_smoke=False):
                 lakemask=np.ones((cfg.ny, cfg.nx), np.float32),
                 lake_depth=np.full((cfg.ny, cfg.nx), 50., np.float32),
                 lake_iswater=16, radiation_latitude=latitude)
+        if cfg.sf_urban_physics or 90 in (cfg.ra_lw_physics, cfg.ra_sw_physics):
+            # These schemes consume time and geographic position even with
+            # a declared constant sky. Include active city cells for urban.
+            options.update(
+                radiation_start_time=datetime(2026, 1, 1, 12, tzinfo=timezone.utc),
+                radiation_latitude=np.full((cfg.ny, cfg.nx), 35., np.float32),
+                radiation_longitude=np.full((cfg.ny, cfg.nx), -100., np.float32))
+            if cfg.sf_urban_physics:
+                from woof.core.urban_tables import urban_category_set
+                categories = urban_category_set("MODIFIED_IGBP_MODIS_NOAH", isurban=13)
+                options["ivgtyp"] = np.full((cfg.ny, cfg.nx), categories.isurban, np.int32)
         # Explicit idealized constant-sky forcing, never a real-data claim.
         initialize_physics(state, cfg, glw=300., swdown=0., **options)
 

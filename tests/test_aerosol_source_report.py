@@ -198,16 +198,23 @@ def test_the_fallback_and_the_inapplicable_scheme_are_not_the_same_absence(
         monkeypatch, tmp_path):
     """THE DISTINCTION, asserted as a difference rather than as two facts.
 
-    An mp=28 run that searched for the dataset and found none DID run
-    without aerosol data: that is reported loudly, with the reason the
-    search failed.  A WSM6 run reports nothing at all.  A reader holding
-    the two receipts must be able to separate them, and this is the
-    comparison that proves they can.
+    An mp=28 run that finds no dataset (and cannot download it) no longer
+    runs on the synthetic profile with a warning: it is refused, naming the
+    dataset and the deliberate way out (a real-data
+    mp=28 run, 2026-10-23).  The synthetic profile taken BY NAME is reported loudly as
+    requested; a WSM6 run reports nothing at all.  A reader holding the
+    receipts must be able to separate them.
     """
-    _empty_wif_search(monkeypatch, tmp_path)
-    result, cfg = _analyzed_hrrr_real_init(28)
-    assert cfg.mp_physics == 28
+    from woof.ingest.wif_climatology import MissingWifClimatologyDataset
 
+    _empty_wif_search(monkeypatch, tmp_path)
+    with pytest.raises(MissingWifClimatologyDataset) as refused:
+        _analyzed_hrrr_real_init(28)
+    assert "QNWFA_QNIFA_SIGMA_MONTHLY.dat" in str(refused.value)
+    assert "mp28_aerosol_source='synthetic'" in str(refused.value)
+
+    result, cfg = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
+    assert cfg.mp_physics == 28
     fallback = {}
     fallback.update(aerosol_source_report_entry(
         result.aerosol_initialization, mp_physics=cfg.mp_physics,
@@ -221,14 +228,8 @@ def test_the_fallback_and_the_inapplicable_scheme_are_not_the_same_absence(
     assert entry["recorded"] is True
     assert entry["dataset_used"] is False
     assert entry["synthetic_fallback_in_use"] is True
-    assert entry["synthetic_fallback_requested"] is False
+    assert entry["synthetic_fallback_requested"] is True
     assert entry["aerosol_source"] == "thompson_init-synthetic-profile"
-    # It says WHY there was no dataset, concretely.  A fallback whose
-    # reason is "unavailable" is a fallback nobody can act on.
-    assert entry["dataset"]["resolved"] is False
-    assert "QNWFA_QNIFA_SIGMA_MONTHLY.dat" in (
-        entry["dataset"]["fallback_reason"])
-    assert entry["dataset"]["candidates"]
 
 
 def test_an_unrecorded_receipt_is_not_reported_as_no_dataset():
@@ -284,12 +285,11 @@ def test_every_report_writer_that_carries_the_key_uses_the_shared_builder():
 def test_the_three_late_wired_routes_take_the_one_shared_resolver():
     """TASK TWO's standing claim, as a gate rather than a commit message.
 
-    Two of the three initialization routes that were never wired now pass
+    The three initialization routes that were never wired now pass
     ``grid=`` -- the same single front door the production real routes
-    use, which is what makes ``resolve_wif_climatology`` the one resolver.
-    The third is deliberately NOT wired and carries its reason inline; the
-    thing that must never happen there is a SECOND resolver appearing to
-    compensate.
+    use, which is what makes ``resolve_wif_climatology`` the one resolver
+    (the HRRR boundary strips last, with their own geodesy).  The thing
+    that must never happen is a SECOND resolver appearing beside it.
     """
     from pathlib import Path
 
@@ -308,8 +308,10 @@ def test_the_three_late_wired_routes_take_the_one_shared_resolver():
         encoding="utf-8")
     # The full-domain state IS wired.
     assert 'met, dc.run, coord, static["HGT_M"], grid=grid,' in benchmark
-    # The boundary-strip construction is not, and says so by name.
-    assert "NO ``grid=`` HERE, AND THAT IS THE DECISION" in benchmark
+    # The boundary strips take the same door with their own rectangle of
+    # the mass-point geodesy: an mp=28 strip under the WIF climatology
+    # refused in every boundary worker before (no lat/lon to honour it).
+    assert '**({} if strip_geodesy is None else {"grid": strip_geodesy})' in benchmark
     # And nothing anywhere reintroduces the retired second resolver.
     for name in ("woof/verify/cases/real74_d01.py",
                  "tools/hrrr_state_proof.py",
@@ -487,7 +489,7 @@ def test_the_report_block_is_a_single_key(monkeypatch, tmp_path):
     that a bundle tool has to find by name.
     """
     _empty_wif_search(monkeypatch, tmp_path)
-    result, cfg = _analyzed_hrrr_real_init(28)
+    result, cfg = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     before = {"schema": "test-report-v1", "status": "PASS"}
     report = dict(before)
     report.update(aerosol_source_report_entry(
@@ -505,7 +507,7 @@ def test_the_receipt_travels_whole(monkeypatch, tmp_path):
     that has exited.
     """
     _empty_wif_search(monkeypatch, tmp_path)
-    result, cfg = _analyzed_hrrr_real_init(28)
+    result, cfg = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     entry = aerosol_source_report_entry(
         result.aerosol_initialization, mp_physics=cfg.mp_physics,
         when_unrecorded="unused")[AEROSOL_SOURCE_KEY]

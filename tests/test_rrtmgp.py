@@ -408,6 +408,44 @@ def test_above_model_profiles_match_wrf_v461_lw_and_sw_construction():
                                rtol=0.0, atol=1.0e-7)
 
 
+def test_above_model_ladder_stays_above_the_floor_for_a_low_column_top():
+    """A column top below the declared p_top's ladder keeps positive layers.
+
+    Breakage: the MPAS column seam hands a top pressure per column and one
+    declared p_top.  On the global 30 km mesh (2026-10-11) the columns whose
+    top sat more than 4 hPa below the declared value got a negative
+    above-model interface and RRTMGP longwave returned non-finite heating.
+    """
+    from woof.core.rrtmgp import (
+        RRTMGP_TOA_PRESSURE_PA, _extend_above_model_profile)
+
+    tops = np.array([1150.0, 700.0, 801.0, 1600.0], np.float32)
+    ncol, nz = tops.size, 6
+    plev = np.stack([np.linspace(100000.0, top, nz + 1) for top in tops]).astype(np.float32)
+    play = (0.5 * (plev[:, :-1] + plev[:, 1:])).astype(np.float32)
+    tlay = np.broadcast_to(np.linspace(288.0, 225.0, nz, dtype=np.float32), (ncol, nz)).copy()
+    tlev = np.broadcast_to(np.linspace(290.0, 224.0, nz + 1, dtype=np.float32), (ncol, nz + 1)).copy()
+    qv = np.full((ncol, nz), 3.0e-6, np.float32)
+
+    lw = _extend_above_model_profile(
+        play, plev, tlay, tlev, qv, p_top=1150.0, kind="lw",
+        pressure_floor=RRTMGP_TOA_PRESSURE_PA, xp=np, validate_top=False)
+    assert lw.upper_nlay == 3
+    upper = lw.plev[:, nz:]
+    assert np.all(np.isfinite(lw.plev)) and np.all(np.isfinite(lw.tlev))
+    assert np.all(np.diff(upper, axis=1) < 0.0)
+    assert np.all(upper[:, -1] == np.float32(RRTMGP_TOA_PRESSURE_PA))
+    assert np.all(lw.play[:, nz:] > RRTMGP_TOA_PRESSURE_PA)
+    # WRF's 4-hPa ladder is untouched wherever it stays above the floor.
+    for col in (0, 3):
+        np.testing.assert_array_equal(
+            upper[col, 1:3], np.float32(tops[col]) - np.array([400.0, 800.0], np.float32))
+    # The low tops share their own span evenly instead.
+    np.testing.assert_allclose(
+        upper[1, 1:3], 700.0 + (RRTMGP_TOA_PRESSURE_PA - 700.0) * np.array([1, 2]) / 3.0,
+        rtol=1.0e-6)
+
+
 def test_above_model_profile_guard_and_model_flux_slice():
     from woof.core.rrtmgp import (
         RRTMGP_TOA_PRESSURE_PA, _extend_above_model_profile,
@@ -973,10 +1011,22 @@ def test_real74_model_top_downward_flux_cpu_reference(monkeypatch):
     assert lw_flux.flux_dn[0, -1] == 0.0
     assert lw_flux.flux_dn[0, 49] == pytest.approx(
         14.954168109470562, rel=2.0e-13)
+    # Re-pinned from 684.8520566535782 (TOA) and 659.7770259926568 (100 hPa):
+    # SOLCON is WRF's REAL(4) radconst word (woof.core.rrtmg_legacy.radconst,
+    # the device kernel's own float32 operation order) since the WRF 4.8
+    # solar generation became the default (7c936f94a0a); the float64 formula
+    # it replaced sat 8.6e-9 relative above the word WRF computes.  The SW
+    # solve is linear in the solar source, so both fluxes scale by that
+    # ratio; the longwave is untouched.
     assert sw_flux.flux_dn[0, -1] == pytest.approx(
-        684.8520566535782, rel=2.0e-13)
+        684.8520507812499, rel=2.0e-13)
+    # Re-pinned by lane/verify-rte-rrtmgp from 659.7770262288319: the SW
+    # solar source table is now set_solar_variability evaluated in float32
+    # (as the single-precision reference does), which moves 64 of its 224
+    # g-point weights by 1 ULP; the spectral redistribution moves the
+    # 100-hPa flux by 2.4e-7 W m-2 (3.6e-10 relative).  TOA is unchanged.
     assert sw_flux.flux_dn[0, 49] == pytest.approx(
-        659.7770262288319, rel=2.0e-13)
+        659.7770205715113, rel=2.0e-13)
 
 
 @pytest.mark.gpu
@@ -2061,7 +2111,15 @@ def test_rfmip_clear_sky_full_profile_acceptance():
         actuals[name] = actual
         residual = actual - reference
         assert np.sqrt(np.mean(residual * residual)) <= 0.01, name
-        assert np.max(np.abs(residual)) <= 0.05, name
+        # 0.06, not 0.05: the reference files are the double-precision
+        # RTE-RRTMGP-181204 run, and the upstream code WOOF matches word
+        # for word (fa107a1, single precision; tests/
+        # test_rrtmgp_upstream_oracle_gpu.py) itself reaches 0.05188 W m-2 on
+        # rsd against them (its own rrtmgp_rfmip_sw example, gfortran 13.3,
+        # measured on W1 by lane/verify-rte-rrtmgp; rsu 0.0253, rld 0.00058,
+        # rlu 0.00061).  The bound still refuses a real defect: any error
+        # above single-precision rounding of this size fails it.
+        assert np.max(np.abs(residual)) <= 0.06, name
 
     # Heating is diagnosed from the same broadband level fluxes as the driver.
     dp = np.abs(np.diff(plev, axis=1))[None]
@@ -2588,8 +2646,16 @@ def test_solar_constant_matches_wrf_radconst():
 
 
 def _wrf_v461_coszen_oracle(valid_time, latitude_deg, longitude_deg,
-                             hour_offset_seconds=0.0):
-    """Literal CPU oracle for real74's WRF radconst/calc_coszen path."""
+                             hour_offset_seconds=0.0, generation="wrf_461"):
+    """Literal CPU oracle for WRF's radconst/calc_coszen path.
+
+    ``generation`` picks the equation-of-time phase and sin(2da) coefficient
+    (woof.core.solar.SOLAR_GENERATIONS): WRF 4.6.1's julian - 1 and 0.04089,
+    or WRF 4.8's julian - 0.5 and 0.040849, the default since 7c936f94a0a.
+    """
+    from woof.core.solar import SOLAR_GENERATIONS
+    phase = SOLAR_GENERATIONS[generation]["phase_days"]
+    sin_two = SOLAR_GENERATIONS[generation]["sin_two_coefficient"]
     hour = (valid_time.hour + valid_time.minute / 60.0
             + valid_time.second / 3600.0
             + valid_time.microsecond / 3.6e9)
@@ -2602,10 +2668,10 @@ def _wrf_v461_coszen_oracle(valid_time, latitude_deg, longitude_deg,
         solar_longitude = dpd * (julian + 285.0)
     declination = np.arcsin(
         np.sin(23.5 * degrad) * np.sin(solar_longitude * degrad))
-    da = 2.0 * np.pi * (julian - 1.0) / 365.0
+    da = 2.0 * np.pi * (julian - phase) / 365.0
     equation = 229.18 * (
         0.000075 + 0.001868 * np.cos(da) - 0.032077 * np.sin(da)
-        - 0.014615 * np.cos(2.0 * da) - 0.04089 * np.sin(2.0 * da))
+        - 0.014615 * np.cos(2.0 * da) - sin_two * np.sin(2.0 * da))
     local_time = (hour + hour_offset_seconds / 3600.0
                   + equation / 60.0 + np.asarray(longitude_deg) / 15.0)
     hour_angle = 15.0 * (local_time - 12.0) * degrad
@@ -2625,7 +2691,13 @@ def _wrf_v461_coszen_oracle(valid_time, latitude_deg, longitude_deg,
 )
 def test_cosine_zenith_matches_wrf_v461_cpu_oracle(
         monkeypatch, valid_time, offset_seconds):
-    """Pin WRF v4.6.1 radconst/calc_coszen without requiring a GPU."""
+    """Pin WRF v4.6.1 radconst/calc_coszen without requiring a GPU.
+
+    ``solar_generation = "wrf_461"`` is the numpy transcription this test
+    pins.  The default generation (wrf_480, 7c936f94a0a) is a device
+    kernel graded word for word against both releases' Fortran in
+    tests/test_solar_generation_gpu.py; it has no CPU form to pin here.
+    """
     import sys
     from types import SimpleNamespace
     from datetime import datetime
@@ -2641,7 +2713,7 @@ def test_cosine_zenith_matches_wrf_v461_cpu_oracle(
     instant = datetime.fromisoformat(valid_time)
 
     got = radiation._cosine_zenith(
-        instant, hour_offset_seconds=offset_seconds)
+        instant, hour_offset_seconds=offset_seconds, generation="wrf_461")
     expected = _wrf_v461_coszen_oracle(
         instant, latitude, longitude, offset_seconds)
     np.testing.assert_allclose(got, expected, rtol=0.0, atol=2.0e-7)
@@ -2659,7 +2731,8 @@ def test_cosine_zenith_keeps_wrf_fixed365_leap_phase_and_clamps(monkeypatch):
     radiation = object.__new__(RRTMGPRadiation)
     radiation.latitude_deg = np.array([[35.0]], np.float32)
     radiation.longitude_deg = np.array([[-97.0]], np.float32)
-    common = dict(hour_offset_seconds=0.0)
+    # The numpy (wrf_461) transcription; see the oracle test above.
+    common = dict(hour_offset_seconds=0.0, generation="wrf_461")
     nonleap_day61 = radiation._cosine_zenith(
         datetime(1975, 3, 2, 6), **common)
     leap_day61 = radiation._cosine_zenith(
@@ -2679,7 +2752,7 @@ def test_cosine_zenith_keeps_wrf_fixed365_leap_phase_and_clamps(monkeypatch):
     radiation.latitude_deg = np.array(
         [[np.rad2deg(declination)]], np.float32)
     radiation.longitude_deg = np.array([[-equation / 4.0]], np.float32)
-    mu = radiation._cosine_zenith(instant)
+    mu = radiation._cosine_zenith(instant, generation="wrf_461")
     assert mu[0, 0] == 1.0
     assert np.all((-1.0 <= mu) & (mu <= 1.0))
 
@@ -2751,11 +2824,13 @@ def test_rrtmgp_zenith_midpoint_and_solcon_scaling():
     # 3514-3541 -- declin/EOT from call-time julian).
     assert seen["valid_time"] == datetime(1974, 4, 3, 18, 12)
     assert seen["offset"] == 360.0
-    # Independent CPU transcription of WRF v4.6.1 radconst/calc_coszen at
-    # the first grid point (40N, 100W).  Declination/EOT use CALL time;
+    # Independent CPU transcription of WRF radconst/calc_coszen at the
+    # first grid point (40N, 100W), in the default generation (WRF 4.8's
+    # phase and coefficient, 7c936f94a0a).  Declination/EOT use CALL time;
     # the hour angle alone receives the six-minute radiation midpoint.
     expected_mu = _wrf_v461_coszen_oracle(
-        datetime(1974, 4, 3, 18, 12), 40.0, -100.0, 360.0)
+        datetime(1974, 4, 3, 18, 12), 40.0, -100.0, 360.0,
+        generation="wrf_480")
     got_mu = float(cp.asnumpy(zenith(
         datetime(1974, 4, 3, 18, 12), hour_offset_seconds=360.0))[0, 0])
     assert got_mu == pytest.approx(expected_mu, abs=5.0e-6)
@@ -2763,7 +2838,12 @@ def test_rrtmgp_zenith_midpoint_and_solcon_scaling():
         radiation.sw_tables.solar_source, dtype=np.float64)))
     solcon = RRTMGPRadiation._solar_constant(
         datetime(1974, 4, 3) + timedelta(hours=18, minutes=12))
-    radiation._solar_constant = lambda valid_time: 2.0 * solcon
+    # The default generation keeps SOLCON on the card: the call scales its
+    # solar source by _solar_constant_device (a float32 0-d device array,
+    # capture-safe since 2.9.0 round 2), never by the host _solar_constant,
+    # so that is the knob to double.
+    radiation._solar_constant_device = (
+        lambda valid_time: cp.asarray(2.0 * solcon, dtype=cp.float32))
     doubled = radiation(atmosphere=atmosphere, fields=fields, state=state,
                         cfg=cfg)
     swdown_base = cp.asnumpy(base.swdown)
@@ -3754,8 +3834,12 @@ def test_preflight_prices_radius_columns_for_exactly_the_schemes_that_use_them()
         # One state carrying every field any scheme's coupling asks for, so
         # the only thing that varies between the two calls is effi.
         state = SimpleNamespace(
-            elapsed_seconds=0.0, qc=qc, qi=qi, qs=qs,
-            qr=cp.zeros(shape, cp.float32),
+            # Registry.EM_COMMON:3017: WSM3 has combined qc/qr only.
+            elapsed_seconds=0.0,
+            qc=qc + qi if mp_physics == 3 else qc,
+            qi=cp.zeros_like(qi) if mp_physics == 3 else qi,
+            qs=cp.zeros_like(qs) if mp_physics == 3 else qs,
+            qr=qs if mp_physics == 3 else cp.zeros(shape, cp.float32),
             nc=cp.full(shape, 1.0e8, cp.float32),
             nr=cp.full(shape, 1.0e3, cp.float32),
             ni=cp.full(shape, 1.0e5, cp.float32),
@@ -3828,8 +3912,9 @@ def test_rte_buffered_fold_geometries_match_partials(ncol, monkeypatch):
             meta = r._interpolation_metadata(tables, play, tlay, validate=False)
             src = r._planck_sources(tables, play, plev, tlay, tlev, tsfc,
                                     vmr, metadata=meta, validate=False, out=None)
-            planck = r.PlanckInputs(tables=tables, play=play, tlay=tlay,
-                                   tlev=tlev, tsfc=tsfc, vmr=vmr, metadata=meta)
+            planck = r.PlanckInputs(tables=tables, play=play, plev=plev,
+                                   tlay=tlay, tlev=tlev, tsfc=tsfc, vmr=vmr,
+                                   metadata=meta)
         else:
             mu = cp.asarray(rng.uniform(0.1, 0.95, (ncol, nlay)), dtype=r.DTYPE)
         mask = cp.asarray(rng.integers(0, 2, shape), dtype=cp.bool_)
@@ -3950,18 +4035,37 @@ def test_in_solver_planck_matches_the_kernel():
     """The LW solver's derived Planck sources equal the standalone kernel's.
 
     The workspace driver passes ``PlanckInputs`` and the solver evaluates
-    lay/lev/sfc_source in registers, with every FP operation pinned to the
-    standalone kernel's SASS (rrtmgp_planck_common.cuh).  This test holds
-    the two implementations together bitwise at the flux level -- and
-    because that header is a COPY of arithmetic living in rrtmgp_gas.cu,
-    it is also the tripwire for the two ever drifting apart.
+    lay/lev/sfc_source in registers through the same device words the
+    standalone kernel calls (rrtmgp_planck_common.cuh, included by both
+    units, both compiled without contraction).  This test holds the two
+    paths together bitwise at the flux level, the tripwire for a future
+    edit that gives one of them its own arithmetic again.
+
+    That shared header is the GPUWM_WRF_EXACT=1 composition
+    (woof.core.kernels: a default process builds rrtmgp_rte from
+    rrtmgp_planck_common_default.cuh, 2.9.1's pinned intrinsics, beside
+    rrtmgp_gas's verbatim helpers, and compiles rrtmgp_gas with
+    contraction), so the test runs itself in a strict process when it is
+    not already in one.
     """
+    import os
+    import subprocess
+    import sys
+
     import cupy as cp
 
     import woof.core.rrtmgp as rrtmgp
 
     if not hasattr(cp, "RawModule"):
         pytest.skip("device-only path")
+    if os.environ.get("GPUWM_WRF_EXACT") != "1":
+        env = dict(os.environ, GPUWM_WRF_EXACT="1")
+        run = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+             f"{__file__}::test_in_solver_planck_matches_the_kernel"],
+            env=env, capture_output=True, text=True)
+        assert run.returncode == 0, run.stdout[-4000:] + run.stderr[-2000:]
+        return
     D = rrtmgp.DTYPE
     tables = rrtmgp.load_gas_tables("lw")
     ngpt = tables.ngpt
@@ -3992,8 +4096,8 @@ def test_in_solver_planck_matches_the_kernel():
                                      vmr, metadata=meta, validate=False,
                                      out=None)
         planck = rrtmgp.PlanckInputs(
-            tables=tables, play=play, tlay=tlay, tlev=tlev, tsfc=tsfc,
-            vmr=vmr, metadata=meta)
+            tables=tables, play=play, plev=plev, tlay=tlay, tlev=tlev,
+            tsfc=tsfc, vmr=vmr, metadata=meta)
         for top_at_1 in (False, True):
             a = rrtmgp._lw_rte(tau, src.lay_source, src.lev_source,
                                src.sfc_source, emis, top_at_1=top_at_1,

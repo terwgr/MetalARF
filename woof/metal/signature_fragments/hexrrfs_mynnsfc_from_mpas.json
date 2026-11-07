@@ -1,0 +1,90 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_mynnsfc_coupling",
+      "source": "woof/metal/shaders/hexrrfs_mynnsfc_coupling.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/sf_mynnsfc_v600.py",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_mynnsfc_from_mpas",
+      "cuda_symbol": "mynnsfc_from_mpas",
+      "resources": [
+        [
+          "fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "sea",
+          "float",
+          "read_write"
+        ],
+        [
+          "density",
+          "float",
+          "read"
+        ],
+        [
+          "sst",
+          "float",
+          "read"
+        ],
+        [
+          "ice",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fields": [
+          [
+            "68",
+            "ncol"
+          ]
+        ],
+        "sea": [
+          [
+            "68",
+            "ncol"
+          ]
+        ],
+        "density": [
+          [
+            "ncol"
+          ]
+        ],
+        "sst": [
+          [
+            "ncol"
+          ]
+        ],
+        "ice": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "len_disp",
+          "float32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ],
+        [
+          "fraction",
+          "int32"
+        ]
+      ]
+    }
+  ]
+}

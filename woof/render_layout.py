@@ -241,6 +241,15 @@ _EXACT_TIME = re.compile(
     r"^(?P<product>.+)_valid_(?P<stamp>\d{8}_\d{6})z"
     r"_lead_\d{3,}h\d{2}m\d{2}s$")
 
+#: A native SFIRE panel's file name (``rw-wrfbatch`` ``sfire::map_path``):
+#: ``<product>_<YYYYMMDD>T<HHMMSS>.png``, the stamp being the frame's own
+#: valid time, filed by the engine itself under
+#: ``<domain>/<product>/<YYYYMMDD>/``.  Every fire product (perimeter,
+#: rate of spread, heat flux, fuel, fire-grid terrain) is drawn per frame
+#: under this name, the static fuel and terrain maps included.
+NATIVE_PANEL = re.compile(
+    r"(?P<product>[a-z][a-z0-9_]+)_(?P<stamp>[0-9]{8}T[0-9]{6})\.png")
+
 
 def fs_path(path, *, descend: bool = False) -> str:
     """``path`` spelled so a filesystem call accepts it at ANY length.
@@ -394,12 +403,19 @@ def history_frames(root) -> list["HistoryFrame"]:
     that nest reported that it published no history after writing a
     full one.
 
-    Two things this does that a bare ``rglob`` does not.
+    Three things this does that a bare ``rglob`` does not.
 
-    It SKIPS the writer's in-flight temporaries (``wrfout*.tmp*``,
+    It SKIPS readiness JSON sidecars and the writer's in-flight temporaries (``wrfout*.tmp*``,
     ``woof.io.wrfout``'s own spelling) and anything that is not a
     regular file, so a half-written frame is never handed to a reader
     as though it were finished.
+
+    It SKIPS every frame under a dot-prefixed folder, the rule
+    :func:`woof.io.wrfout.is_wrfout_frame` makes: ``.quarantine`` holds
+    swept frames and a head-bound attempt the forecast discarded
+    (:data:`woof.prepared_domain_tree_forecast.STREAMED_ATTEMPT_PARENT`),
+    whose frames carry the sealed forecast's names and are not its
+    history.
 
     It orders on ``(name, episode)`` rather than on the path string.
     ``p.name`` already carries domain-then-valid-time, so it is the time
@@ -418,9 +434,11 @@ def history_frames(root) -> list["HistoryFrame"]:
         return []
     found: list[HistoryFrame] = []
     for path in walk_root.rglob("wrfout_d*"):
-        if ".tmp" in path.name or not path.is_file():
+        if ".tmp" in path.name or path.suffix.lower() == ".json" or not path.is_file():
             continue
         relative = path.relative_to(walk_root)
+        if any(part.startswith(".") for part in relative.parts[:-1]):
+            continue
         grid = _HISTORY_NAME.match(path.name)
         found.append(HistoryFrame(
             root / relative,
@@ -663,9 +681,18 @@ def engine_output_time(name: str) -> datetime.datetime | None:
     999 h is read in full (``f1000`` is 1000 hours, not 100), which is
     the same three-or-more-digit grammar ``_HEAD`` pins.
 
-    The instant is naive UTC, as the engine writes it.
+    The instant is naive UTC, as the engine writes it.  A native SFIRE
+    panel (:data:`NATIVE_PANEL`) carries its valid time as
+    ``YYYYMMDDTHHMMSS`` and is read from that stamp.
     """
 
+    native = NATIVE_PANEL.fullmatch(Path(name).name)
+    if native is not None:
+        try:
+            return datetime.datetime.strptime(
+                native.group("stamp"), "%Y%m%dT%H%M%S")
+        except ValueError:
+            return None
     stem = Path(name).stem
     head = _DELIVERED_NAME.match(stem)
     if head is None:

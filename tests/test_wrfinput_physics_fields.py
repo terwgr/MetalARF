@@ -56,6 +56,34 @@ def _read(path, cfg):
                             require_complete=False)
 
 
+def test_native_drag_statistics_are_preserved_and_reach_the_active_initializer(tmp_path):
+    from woof.static.orographic import required_static_fields
+    cfg=_cfg(gwd_opt=3)
+    names=required_static_fields(0,3)
+    values={name:np.arange(cfg.ny*cfg.nx,dtype=np.float32).reshape(cfg.ny,cfg.nx)+i*.125
+            for i,name in enumerate(names)}
+    values['HGT']=np.full((cfg.ny,cfg.nx),250.,np.float32)
+    restored=_read(_input(tmp_path/'drag-input',cfg,values),cfg)
+    carried=wi.wrfinput_terrain_drag_inputs(restored,cfg)['terrain_drag_static']
+    for name in names:
+        np.testing.assert_array_equal(np.asarray(carried[name],dtype=np.float32).view('u4'),values[name].view('u4'))
+    np.testing.assert_array_equal(carried['HGT_M'],values['HGT'])
+
+
+def test_native_drag_rejects_missing_or_wrong_column_geometry(tmp_path):
+    cfg=_cfg(gwd_opt=3)
+    with pytest.raises(ValueError,match='CONLS'):
+        wi.wrfinput_terrain_drag_inputs(SimpleNamespace(raw={'HGT':np.zeros((4,6))}),cfg)
+    path=_input(tmp_path/'wrong-drag',cfg,{'CONLS':np.ones((cfg.nx,cfg.ny),np.float32)},
+                dimensions_override={'CONLS':('west_east','south_north')})
+    with pytest.raises(ValueError,match='CONLS.*shape mismatch'):
+        _read(path,cfg)
+
+
+def test_off_drag_does_not_change_existing_initialization_arguments():
+    assert wi.wrfinput_terrain_drag_inputs(SimpleNamespace(raw={}),_cfg())=={}
+
+
 def test_microphysics_off_admits_only_passive_vapor_when_moist():
     cfg = _cfg(mp_physics=0)
     vapor = frozenset(("QVAPOR",))
@@ -113,7 +141,7 @@ def test_reader_retains_exact_ruc_and_mynn_words_and_inactive_advected_record(tm
         # float32 value is represented exactly and restores to the same word.
         np.testing.assert_array_equal(result.raw[name], value)
         np.testing.assert_array_equal(result.raw[name].astype('f4').view('u4'), value.view('u4'))
-        assert (name in result.mapped_variables) is (name != 'qke_adv')
+        assert name in result.mapped_variables
 
 
 @pytest.mark.parametrize('name', ['ACRUNOFF', 'RHOSNF', 'SNOWFALLAC', 'SOILT1', 'qke', 'QKE', 'qke_adv'])
@@ -150,13 +178,12 @@ def test_new_fields_require_their_selected_consumer_and_qke_aliases_must_agree(t
         _read(path, cfg)
 
 
-def test_qke_adv_names_unsupported_operation_for_active_or_unresolved_selection(tmp_path):
+def test_qke_adv_is_retained_for_the_selected_transport(tmp_path):
     cfg = _cfg(); path = _input(tmp_path/'input', cfg, _values(cfg))
-    with pytest.raises(NotImplementedError, match='qke_adv transport.*MYNN feedback'):
-        _read(path, replace(cfg, bl_mynn_tkeadvect=True))
-    with pytest.raises(ValueError, match='explicit bl_mynn_tkeadvect=False'):
-        wi.read_wrfinput(path, cfg=None, expected_dimensions=_dimensions(cfg),
-                         require_complete=False)
+    restored = _read(path, replace(cfg, bl_mynn_tkeadvect=True))
+    np.testing.assert_array_equal(restored.raw['qke_adv'], _values(cfg)['qke_adv'])
+    wi.read_wrfinput(path, cfg=None, expected_dimensions=_dimensions(cfg),
+                     require_complete=False)
 
 
 def _surface_values(cfg):
@@ -182,10 +209,13 @@ def test_actual_initializer_forwards_supplied_fields_and_preserves_absent_cold_s
               for name, value in values.items() if name != 'qke_adv'}
     fields.update(albbck=np.zeros((cfg.ny,cfg.nx), np.float32),
                   lai=np.zeros((cfg.ny,cfg.nx), np.float32))
-    driver = SimpleNamespace(fields=fields, rainc=None)
+    driver = SimpleNamespace(fields=fields, rainc=None, ruc_params=None)
     monkeypatch.setitem(sys.modules, 'cupy', np)
     monkeypatch.setitem(sys.modules, 'woof.core.physics', SimpleNamespace(
+        physics_driver_required=lambda cfg: True,
         initialize_physics=lambda *args, **kwargs: driver))
+    monkeypatch.setitem(sys.modules, "woof.core.ruc_runtime", SimpleNamespace(
+        ruc_cold_start=lambda *args,**kwargs: None))
     assert wi.initialize_wrfinput_physics(object(), restored, cfg) is driver
     for name, value in values.items():
         if name == 'qke_adv':
@@ -254,3 +284,48 @@ def test_file_qke_reaches_actual_mynn_column_arguments(tmp_path, monkeypatch, qk
 
     monkeypatch.setattr(mynn_pbl_runtime, 'mynn_bl_driver_cuda', consume)
     with pytest.raises(_ConsumerReached): step(state, cfg)
+
+
+def _cloud(cfg):
+    shape = cfg.nz, cfg.ny, cfg.nx
+    layer = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+    return {'QC_BL': layer * np.float32(1.e-6) + np.float32(1.e-5),
+            'CLDFRA_BL': (layer % 7) * np.float32(.125)}
+
+
+def test_a_cycled_start_reads_the_mynn_subgrid_cloud_and_a_cold_one_passes_it(tmp_path):
+    """RunConfig.cycling (audit P18/A10): the input QC_BL and CLDFRA_BL reach
+    the physics carriers the first radiation call and the gsd_41 MYNN first
+    call read; a cold start passes them through unread, as before."""
+    cycled = _cfg(bl_mynn_version='gsd_41', cycling=True)
+    cloud = _cloud(cycled)
+    path = _input(tmp_path/'input', cycled, _surface_values(cycled) | cloud)
+    restored = _read(path, cycled)
+    for name, value in cloud.items():
+        np.testing.assert_array_equal(
+            restored.raw[name].astype('f4').view('u4'), value.view('u4'))
+    cold = _read(path, replace(cycled, cycling=False))
+    assert not (set(cloud) & set(cold.raw))
+
+
+def test_a_cycled_start_forwards_the_subgrid_cloud_to_the_physics_fields(
+        tmp_path, monkeypatch):
+    cfg = _cfg(bl_mynn_version='gsd_41', cycling=True)
+    cloud = _cloud(cfg)
+    restored = _read(_input(tmp_path/'input', cfg,
+                            _surface_values(cfg) | cloud), cfg)
+    fields = {name.lower(): np.full(value.shape, -77., np.float32)
+              for name, value in cloud.items()}
+    fields.update(albbck=np.zeros((cfg.ny, cfg.nx), np.float32),
+                  lai=np.zeros((cfg.ny, cfg.nx), np.float32))
+    driver = SimpleNamespace(fields=fields, rainc=None, ruc_params=None)
+    monkeypatch.setitem(sys.modules, 'cupy', np)
+    monkeypatch.setitem(sys.modules, 'woof.core.physics', SimpleNamespace(
+        physics_driver_required=lambda cfg: True,
+        initialize_physics=lambda *args, **kwargs: driver))
+    monkeypatch.setitem(sys.modules, "woof.core.ruc_runtime", SimpleNamespace(
+        ruc_cold_start=lambda *args,**kwargs: None))
+    assert wi.initialize_wrfinput_physics(object(), restored, cfg) is driver
+    for name, value in cloud.items():
+        np.testing.assert_array_equal(fields[name.lower()].view('u4'),
+                                      value.view('u4'))

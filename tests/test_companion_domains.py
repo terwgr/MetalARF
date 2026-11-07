@@ -798,7 +798,12 @@ def test_every_option_carries_the_registrys_own_couplings():
         for option in component["options"] if option["refused_when"]}
     turbulence = {"closure-supplied", "constant-k", "smagorinsky-2d",
                   "smagorinsky-3d", "tke-1.5-order"}
-    assert set(carriers) == {("microphysics", "off")} | {
+    # FAST_SBM carries the registry's RTE+RRTMGP refusal (its remedy is the
+    # legacy RRTMG pair) until its bin cloud optics are qualified; Lin
+    # (mp2) carries it because it produces no effective radii.
+    assert set(carriers) == {("microphysics", "off"),
+                             ("microphysics", "fast-sbm-mp30"),
+                             ("microphysics", "lin-mp2")} | {
         ("turbulence", option) for option in turbulence}
     for option in turbulence:
         rules = carriers[("turbulence", option)]

@@ -73,7 +73,8 @@ import numpy as np
 from woof.core.noahmp_energy import (CPAIR, GRAV, HSUB, HVAP, MPE, NSNOW,
                                       NSOIL, RW, SB, TFRZ, Z0)
 from woof.core.noahmp_slab_libm import (fmn, fmx, slab_arrays, slab_expf,
-                                         slab_powf, slab_sqrtf, slab_tanhf)
+                                         slab_metal_context, slab_powf,
+                                         slab_sqrtf, slab_tanhf)
 
 
 def _f32(value):
@@ -222,8 +223,11 @@ def energy_seg2(s, g):
                      _f32(1.0e6), rsurf)
     psi = (-s["psisat"][:, 0]) \
         * slab_powf(fmx(_f32(0.01), sh2o0) / smcmax0, -s["bexp"][:, 0])
-    rhsur = fsno + ((_ONE - fsno)
-                    * slab_expf((psi * _f32(GRAV)) / (_f32(RW) * s["tg"])))
+    from woof.core.noahmp_slab_libm import slab_add_product
+    # The exponential may be subnormal. CuPy's multiply would flush it
+    # before BARE_FLUX scales RHSUR into QSFC; retain both WRF roundings.
+    rhsur = slab_add_product(fsno, _ONE - fsno,
+                            slab_expf((psi * _f32(GRAV)) / (_f32(RW) * s["tg"])))
     # :2204-2206
     rsurf = cp.where(s["urban_flag"] & (s["snowh"] == _ZERO),
                      _f32(1.0e6), rsurf)
@@ -281,7 +285,84 @@ def energy_seg3(s, g, e, v, b):
 # seg4: PHASECHANGE's return to ENERGY's return
 # ---------------------------------------------------------------------------
 
+
+_ENERGY_MASK_KERNELS = {}
+
+
 def energy_seg4(s, g, e, out):
+    """Batch snow, root and night masks, preserving the existing arithmetic."""
+    if slab_metal_context() is not None:
+        # Metal's slab composition already uses host binary32 arrays. Keep
+        # the authoritative expressions for scaling and masked word copies.
+        return _energy_seg4_reference(s, g, e, out)
+
+    import cupy as cp
+    from woof.core.noahmp_kernel_sources import compile_generated_slab_kernel
+
+    names = ("hcpct", "imelt", "snicev", "snliqv", "epore",
+             "fsrv", "fsrg", "bgap", "wgap")
+    n = int(s["isnow"].size)
+    nlay = NSNOW + NSOIL
+    # Preserve the general array spelling for wider or unusual carriers.
+    if (any(out[k].dtype != (cp.int32 if k == "imelt" else cp.float32)
+            for k in names) or e["btrani"].dtype != cp.float32
+            or s["isnow"].dtype != cp.int32 or s["nroot"].dtype != cp.int32
+            or s["isnow"].shape != (n,) or s["nroot"].shape != (n,)
+            or s["cosz"].shape != (n,)
+            or any(out[k].shape != (n, width) for k, width in
+                   (("hcpct", nlay), ("imelt", nlay), ("snicev", NSNOW),
+                    ("snliqv", NSNOW), ("epore", NSNOW)))
+            or e["btrani"].shape != (n, NSOIL)
+            or any(out[k].shape != (n,) for k in names[-4:])):
+        return _energy_seg4_reference(s, g, e, out)
+
+    # Keep these exact CuPy operations, including their rounding and FTZ
+    # behavior. The generated kernel below performs only predicate tests and
+    # word copies, so signed zeros and NaN payloads pass through unchanged.
+    result = {"eflxb": out["eflxb"] * e["dt_soil"]}
+    night = cp.ascontiguousarray(s["cosz"] <= _ZERO)
+    values = tuple(cp.ascontiguousarray(out[k]) for k in names)
+    roots = cp.ascontiguousarray(e["btrani"])
+    isnow = cp.ascontiguousarray(s["isnow"])
+    nroot = cp.ascontiguousarray(s["nroot"])
+    result.update({k: cp.empty_like(v) for k, v in zip(names, values)})
+    result["btrani"] = cp.empty_like(roots)
+    if n:
+        device = cp.cuda.runtime.getDevice()
+        key = (device, NSNOW, NSOIL)
+        kernel = _ENERGY_MASK_KERNELS.get(key)
+        if kernel is None:
+            args = ", ".join(f"const unsigned int* v{k}, unsigned int* o{k}"
+                             for k in range(len(names)))
+            lines = []
+            for k, width in enumerate((nlay, nlay, NSNOW, NSNOW, NSNOW)):
+                for j in range(width):
+                    lines.append(
+                        f"o{k}[{width}LL*c+{j}] = "
+                        f"({j-NSNOW+1} > isnow[c]) ? "
+                        f"v{k}[{width}LL*c+{j}] : 0u;")
+            for k in range(5, len(names)):
+                lines.append(f"o{k}[c] = night[c] ? 0u : v{k}[c];")
+            for j in range(NSOIL):
+                lines.append(
+                    f"rout[{NSOIL}LL*c+{j}] = ({j+1} <= nroot[c]) ? "
+                    f"roots[{NSOIL}LL*c+{j}] : 0u;")
+            source = ('extern "C" __global__ void noahmp_energy_masks('
+                      'int n, const int* isnow, const int* nroot, '
+                      'const bool* night, const unsigned int* roots, '
+                      f'unsigned int* rout, {args}) {{ '
+                      'int c=blockDim.x*blockIdx.x+threadIdx.x; '
+                      'if(c>=n)return; ' + "\n".join(lines) + '}')
+            kernel = compile_generated_slab_kernel(source, "noahmp_energy_masks")
+            _ENERGY_MASK_KERNELS[key] = kernel
+        arrays = tuple(a for k, v in zip(names, values)
+                       for a in (v, result[k]))
+        kernel(((n+127)//128,), (128,),
+               (np.int32(n), isnow, nroot, night, roots, result["btrani"], *arrays))
+    return result
+
+
+def _energy_seg4_reference(s, g, e, out):
     """EFLXB's scaling and the slots WRF leaves undefined.
 
     WRF does not initialise the layers above ISNOW; woof produces the defined

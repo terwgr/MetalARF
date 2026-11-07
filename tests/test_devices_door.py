@@ -410,10 +410,38 @@ def test_default_authority_and_fingerprint_base_golden(name, authority, fingerpr
         base_wps_namelist=path.with_suffix(".namelist.wps"),
         physics_profile=plan["profile"], output_directory=destination)
     payload = (destination / "experiment.toml").read_bytes()
-    assert hashlib.sha256(payload).hexdigest() == authority
+    # the emitter's comment lines name WOOF where the golden's named the engine (tests/woof_engine_spelling.py)
+    from woof_engine_spelling import engine_spelling
+    assert hashlib.sha256(engine_spelling(payload.decode("utf-8")).encode("utf-8")).hexdigest() == authority
     assert (destination / "namelist.wps").read_bytes() == path.with_suffix(".namelist.wps").read_bytes()
     exp = load_experiment(destination / "experiment.toml")
-    assert experiment_fingerprint(exp, SimpleNamespace(run_provenance={})) == fingerprint
+    # The retained golden predates 48847c9eb's local_face default. Inverse
+    # only that declared value move, and prove the live identity binds it.
+    assert all(domain.run.terrain_clock == "local_face" for domain in exp.domains)
+    # ... and 2.9.0's WRF 4.7/4.8 upstream-fix defaults (golden/wrf-fixes):
+    # the golden was recorded under WRF 4.6.1's equation of time, YSU
+    # entrainment, Noah-MP daylight-only snow aging and SLUCM rain floors.
+    # Each declared move binds the live identity on its own.
+    assert all(domain.run.solar_generation == "wrf_480" for domain in exp.domains)
+    old_sun = replace(exp, domains=tuple(replace(
+        domain, run=replace(domain.run, solar_generation="wrf_461",
+                            ysu_version="wrf_461", noahmp_snow_age="wrf_461",
+                            urban_water_balance="wrf_471",
+                            # 2.9.7: correct-mode HN1 (F22), read under the
+                            # default Thompson; the golden predates it.
+                            hydrometeor_handover_numbers=False))
+        for domain in exp.domains))
+    historical = replace(old_sun, domains=tuple(replace(
+        domain, run=replace(domain.run, terrain_clock="measured"))
+        for domain in old_sun.domains))
+    catalog = SimpleNamespace(run_provenance={})
+    # The 2.9.4 capabilities campaign's RunConfig keys, each at its default,
+    # are the only later identity move (named per lane in test_water_overlay).
+    from test_water_overlay import without_the_capability_campaign_keys
+    without_the_capability_campaign_keys(monkeypatch, exp)
+    assert experiment_fingerprint(exp, catalog) != experiment_fingerprint(old_sun, catalog)
+    assert experiment_fingerprint(old_sun, catalog) != experiment_fingerprint(historical, catalog)
+    assert experiment_fingerprint(historical, catalog) == fingerprint
 
 
 def test_host_staging_and_prepared_store_products(exp, rank_api):
@@ -1104,7 +1132,7 @@ def test_split_check_without_a_card_budget_fails_closed(rank_api, monkeypatch, c
     from woof.core import devices, preflight
     from woof.core.devices_memory import GIB
 
-    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda: SimpleNamespace(
+    monkeypatch.setattr(doctor, "_cuda_headers_check", lambda **_kw: SimpleNamespace(
         status="verified", detail="CUDA compilation is available", action=None))
     reading = ({"visible_count": 2, "cards": {0: {"free_bytes": 95 * GIB}}}
                if partial_probe else None)
@@ -1142,3 +1170,37 @@ def test_ranked_constructor_refuses_unbuilt_physics_before_cuda_import(exp, monk
     with pytest.raises(DevicesRefused, match=selector):
         RankedRun(None, cfg, options=DeviceOptions(count=2, ids=(0, 0)),
                   scalars=None, geography=None, template=None)
+
+
+def test_a_split_tree_that_does_not_fit_is_refused_by_name(rank_api, monkeypatch, capsys):
+    """The tree runner's per-card admission raises ``DevicesRefused``.
+
+    The named breakage: ``_admit_devices_tree`` raised a name it never
+    imported, so a nested ``[devices]`` tree too big for its cards died on
+    ``NameError: name 'DevicesRefused' is not defined`` instead of the
+    refusal that says which card is over (shipped in 2.8.7; found by
+    tests/test_no_undefined_names.py).  Runs the real pricing with a
+    stand-in CUDA runtime whose cards hold 1 GiB each.
+    """
+    import sys
+    from woof.core import device_probe, preflight
+    from woof.core.devices_memory import GIB
+    from woof.core.resident_admission import MEMORY_GATE_OVERRIDE_ENV
+    from woof.prepared_domain_tree_forecast import _admit_devices_tree
+
+    class Device:
+        def __init__(self, dev): self.dev = dev
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+    runtime = SimpleNamespace(getDeviceCount=lambda: 2,
+                              memGetInfo=lambda: (1 * GIB, 2 * GIB))
+    monkeypatch.setitem(sys.modules, "cupy", SimpleNamespace(
+        cuda=SimpleNamespace(Device=Device, runtime=runtime)))
+    monkeypatch.setattr(device_probe, "cuda_device_identity", lambda dev: None)
+    monkeypatch.setattr(preflight, "host_available_bytes", lambda: 512 * GIB)
+    monkeypatch.delenv(MEMORY_GATE_OVERRIDE_ENV, raising=False)
+    tree = replace(_tree(), devices=DeviceOptions(count=2, ids=(0, 1)))
+    with pytest.raises(DevicesRefused, match=r"card 0: REFUSED"):
+        _admit_devices_tree(tree, (1, 2), forcing_intervals=None,
+                            forcing_interval_seconds=3600.0, source=None)
+    assert "split on cards [0, 1]" in capsys.readouterr().out

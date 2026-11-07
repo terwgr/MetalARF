@@ -10,12 +10,13 @@ in its key order, and every refusal's words and facts.
 """
 from __future__ import annotations
 
-import ast
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
+
+from test_water_blend_native import _runtime_oracle_importers
 
 from woof.ingest import hrrr
 from woof.ingest.cpu_backend import (
@@ -336,8 +337,13 @@ def test_a_receipt_names_no_entry_its_library_lacks():
     assert live["workers"] == 3
 
 
-def test_the_cuda_backend_takes_host_workers_for_its_host_steps():
+def test_the_cuda_backend_takes_host_workers_for_its_host_steps(monkeypatch):
     from woof.ingest import preprocess_backend
+
+    # The argument check is asked of a machine that allows its card: since
+    # 083ac7cd0 a cuda request meets GPUWM_NO_LOCAL_GPU first, and the CPU
+    # legs set it.  Nothing here constructs a device context.
+    monkeypatch.delenv("GPUWM_NO_LOCAL_GPU", raising=False)
 
     backend = preprocess_backend.CudaPreprocessBackend(host_workers=5)
     native, workers = backend.wps_masked_chain_engine()
@@ -365,24 +371,7 @@ def test_the_sealed_distribution_runs_the_stencil_at_both_worker_counts():
 
 def test_nothing_at_run_time_imports_the_stencil_oracle_or_a_tree():
     """The NumPy builder is a test oracle, never a silent runtime fallback."""
-    offenders = []
-    for base in ("woof", "tilestream", "tools"):
-        for path in sorted((ROOT / base).rglob("*.py")):
-            relative = path.relative_to(ROOT).as_posix()
-            if relative.startswith("woof/verify/"):
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-            if "hrrr_stencil_oracle" not in text:
-                continue
-            for node in ast.walk(ast.parse(text)):
-                names = []
-                if isinstance(node, ast.Import):
-                    names = [alias.name for alias in node.names]
-                elif isinstance(node, ast.ImportFrom):
-                    names = [node.module or ""] + [
-                        alias.name for alias in node.names]
-                if any("hrrr_stencil_oracle" in name for name in names):
-                    offenders.append(relative)
+    offenders = _runtime_oracle_importers()["hrrr_stencil_oracle"]
     assert offenders == []
     source = (ROOT / "woof" / "ingest" / "hrrr.py").read_text(
         encoding="utf-8")

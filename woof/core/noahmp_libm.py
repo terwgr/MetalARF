@@ -140,11 +140,14 @@ __all__ = [
     "GLIBC_VERSION",
     "f32",
     "logf",
+    "logf_array",
     "log10f",
     "expf",
+    "expf_array",
     "powf",
     "powf_array",
     "atanf",
+    "atanf_correctly_rounded",
     "sqrtf",
     "expm1f",
     "tanhf",
@@ -395,6 +398,88 @@ def logf(x) -> np.float32:
     return F(y)
 
 
+#: Elements per block of :func:`logf_array` scratch.  Bounds the binary64
+#: temporaries at a few MiB whatever the field's size.
+_LOGF_ARRAY_BLOCK = 1 << 20
+_LOGF_TAB_INVC = np.asarray([row[0] for row in _LOGF_TAB], dtype=np.float64)
+_LOGF_TAB_LOGC = np.asarray([row[1] for row in _LOGF_TAB], dtype=np.float64)
+
+
+def logf_array(x) -> np.ndarray:
+    """:func:`logf` over a NumPy array, the same bits element for element.
+
+    e_logf.c's main path evaluated in binary64 and integer array arithmetic,
+    operation for operation as :func:`logf` evaluates it: each product and
+    sum rounded once, as in the C, and NumPy's elementwise loops never
+    contract a multiply and an add into one rounding.  Elements the C
+    handles specially (exactly 1, zero, negative, subnormal, infinite, NaN)
+    go through :func:`logf` itself; a physical field has none of them, so
+    the field pays the array path only.
+
+    Written for ``ruclsminit``'s freezing curve (:func:`woof.core.ruc.
+    ruc_initialize_cold_start`), which took :func:`logf` once per soil level
+    per column: about 30 microseconds of CPython per column, which is a
+    minute of card idle on HRRR's 1.9 million columns at every launch.
+    """
+    value = np.asarray(x, dtype=np.float32)
+    out = np.empty(value.shape, dtype=np.float32)
+    flat = np.ascontiguousarray(value).reshape(-1)
+    flat_out = out.reshape(-1)
+    if flat.size == 0:
+        return out
+    block = min(_LOGF_ARRAY_BLOCK, flat.size)
+    for start in range(0, flat.size, block):
+        stop = min(start + block, flat.size)
+        _logf_block(flat[start:stop], flat_out[start:stop])
+    return out
+
+
+def _logf_block(flat_x: np.ndarray, out: np.ndarray) -> None:
+    """:func:`logf` of one contiguous 1-D float32 block, into ``out``."""
+    ix = flat_x.view(np.uint32)
+    # e_logf.c: ``if (ix - 0x00800000 >= 0x7f800000 - 0x00800000)`` takes
+    # the special path; ``ix == 0x3f800000`` answers exactly zero.
+    ordinary = np.subtract(ix, np.uint32(0x00800000)) < np.uint32(
+        0x7F800000 - 0x00800000)
+    ordinary &= ix != np.uint32(0x3F800000)
+    if ordinary.all():
+        special = None
+        ixf = ix
+    else:
+        special = np.flatnonzero(~ordinary)
+        ixf = ix[ordinary]
+    tmp = np.subtract(ixf, np.uint32(_LOGF_OFF))
+    i = (tmp >> np.uint32(23 - 4)) & np.uint32(15)
+    k = tmp.view(np.int32) >> np.int32(23)
+    iz = np.subtract(ixf, tmp & np.uint32(0xFF800000))
+    invc = _LOGF_TAB_INVC[i]
+    logc = _LOGF_TAB_LOGC[i]
+    z = iz.view(np.float32).astype(np.float64)
+    r = z * invc
+    r -= 1.0
+    y0 = k.astype(np.float64) * _LOGF_LN2
+    y0 += logc
+    r2 = r * r
+    y = _LOGF_A[1] * r
+    y += _LOGF_A[2]
+    y = _logf_fma_free(_LOGF_A[0], r2, y)
+    y0 += r
+    y = _logf_fma_free(y, r2, y0)
+    if special is None:
+        out[...] = y.astype(np.float32)
+    else:
+        out[ordinary] = y.astype(np.float32)
+        for index in special:
+            out[index] = logf(flat_x[index])
+
+
+def _logf_fma_free(a, b, c):
+    """``a * b + c`` as two roundings, the way the C and :func:`logf` do it."""
+    product = a * b
+    product += c
+    return product
+
+
 def log10f(x) -> np.float32:
     """glibc 2.39 ``log10f`` (still the 1993 SunPro FP32 reduction)."""
     value = F(x)
@@ -457,6 +542,56 @@ def expf(x) -> np.float32:
     xd = float(value)
     z = _EXP2F_INVLN2_SCALED * xd
     return F(_exp2_core(z, _EXP2F_SHIFT, _EXP2F_POLY_SCALED, 0))
+
+
+def expf_array(x) -> np.ndarray:
+    """:func:`expf` over a NumPy array, the same bits element for element.
+
+    The main path of :func:`expf` evaluated in binary64 and integer array
+    arithmetic, operation for operation as :func:`expf` and
+    :func:`_exp2_core` evaluate it: each product and sum rounded once, and
+    NumPy's elementwise loops
+    never contract a multiply and an add into one rounding.  The two
+    saturating branches (overflow to +inf above 0x1.62e42ep6, underflow to
+    +0 below -0x1.9fe368p6) are applied as masks, exactly the C's tests;
+    infinities and NaN go through :func:`expf` itself.
+
+    Written for P3's rain-table generation (woof/core/p3_tables.py), which
+    takes ``exp(-lamr*dia)`` three million times at start-up; NumPy's own
+    float32 ``exp`` is a different function there and moved the tables
+    (module_mp_p3.F:652-656).
+    """
+    value = np.ascontiguousarray(np.asarray(x, dtype=np.float32))
+    flat = value.reshape(-1)
+    out = np.empty(flat.shape, dtype=np.float32)
+    if flat.size == 0:
+        return out.reshape(value.shape)
+    finite = np.isfinite(flat)
+    over = finite & (flat > _asfloat(0x42B17218))
+    under = finite & (flat < -_asfloat(0x42CFF1B4))
+    core = finite & ~over & ~under
+    xd = flat[core].astype(np.float64)
+    z = _EXP2F_INVLN2_SCALED * xd
+    kd = z + _EXP2F_SHIFT                       # kd = xd + shift
+    ki = kd.view(np.uint64).copy()
+    kd = kd - _EXP2F_SHIFT                      # kd -= shift
+    r = z - kd
+    t = _EXP2F_TAB_U64[(ki & np.uint64(_EXP2F_N - 1)).astype(np.intp)]
+    t = t + (ki << np.uint64(52 - 5))           # sign_bias 0
+    sd = t.view(np.float64)
+    zz = _EXP2F_POLY_SCALED[0] * r
+    zz = zz + _EXP2F_POLY_SCALED[1]
+    r2 = r * r
+    y = _EXP2F_POLY_SCALED[2] * r
+    y = y + 1.0
+    zz = zz * r2
+    y = zz + y
+    out[core] = (y * sd).astype(np.float32)
+    out[over] = np.float32(np.inf)
+    out[under] = np.float32(0.0)
+    for position in np.flatnonzero(~finite):
+        out[position] = expf(flat[position])
+    return out.reshape(value.shape)
 
 
 def _powf_log2(ix: int) -> float:
@@ -598,7 +733,7 @@ def powf_array(x, y) -> np.ndarray:
     out = np.empty(shape, dtype=np.float32)
     if not out.size:
         return out
-    workers = pm._workers(None)
+    workers = pm._workers(None, out.size)
 
     def apply(left, right, target):
         left = np.ascontiguousarray(left, dtype=np.float32)
@@ -861,6 +996,81 @@ def atanf(x) -> np.float32:
     z = F(_ATANF_HI[idx]
           - F(F(F(value * F(s1 + s2)) - _ATANF_LO[idx]) - value))
     return F(-z) if hx < 0 else z
+
+
+# ---------------------------------------------------------------------------
+# atanf, correctly rounded -- CORE-MATH src/binary32/atan/atanf.c (a8066a5),
+# the routine glibc 2.41 and later ship as sysdeps/ieee754/flt-32/s_atanf.c.
+# MIT; notice in woof/core/kernels/LICENSE-third-party.txt section 6, the
+# same routine glibc_trig_flt32.cuh's glibc_atanf transcribes for the device.
+#
+# A WRF built on glibc 2.41 or later takes this atanf where one built on
+# glibc 2.39 takes :func:`atanf` above; the two disagree on 816 of
+# MYJSFCINIT's 10001 PSIM arguments (woof.core.myjsfc_tables).  Python
+# floats are IEEE binary64 and every operation below rounds once, as the C
+# does with each double operation separately rounded.
+# ---------------------------------------------------------------------------
+_ATANF_CR_CN = tuple(float.fromhex(h) for h in (
+    "0x1.51eccde075d67p-2", "0x1.a76bb5637f2f2p-1", "0x1.81e0eed20de88p-1",
+    "0x1.376c8ca67d11dp-2", "0x1.aec7b69202ac6p-5", "0x1.9561899acc73ep-9",
+    "0x1.bf9fa5b67e6p-16"))
+_ATANF_CR_CD = tuple(float.fromhex(h) for h in (
+    "0x1.51eccde075d66p-2", "0x1.dfbdd7b392d28p-1", "0x1p+0",
+    "0x1.fd22bf0e89b54p-2", "0x1.d91ff8b576282p-4", "0x1.653ea99fc9bbp-7",
+    "0x1.1e7fcc202340ap-12"))
+_ATANF_CR_PI2 = float.fromhex("0x1.921fb54442d18p+0")
+
+
+def _fmaf_exact(a, b, c) -> np.float32:
+    """float32 fmaf: a*b+c formed exactly, rounded once to binary32."""
+    from fractions import Fraction
+    return F(Fraction(float(a)) * Fraction(float(b)) + Fraction(float(c)))
+
+
+def atanf_correctly_rounded(x) -> np.float32:
+    """Correctly rounded binary32 ``atanf`` (glibc 2.41 and later)."""
+    value = F(x)
+    t = int(_asuint(value))
+    e = (t >> 23) & 0xFF
+    ta = t & 0x7FFFFFFF
+    if ta >= 0x4C700518:
+        if ta > 0x7F800000:
+            with np.errstate(invalid="ignore"):
+                return F(value + value)                 # NaN, quieted
+        return F(math.copysign(_ATANF_CR_PI2, float(value)))
+    if e < 127 - 13:
+        if e < 127 - 25:
+            if not (t << 1) & 0xFFFFFFFF:
+                return value
+            return _fmaf_exact(-value, abs(value), value)
+        return _fmaf_exact(F(F(-float.fromhex("0x1.555556p-2")) * value),
+                           F(value * value), value)
+    gt = e >= 127
+    z = float(value)
+    if gt:
+        z = 1.0 / z
+    z2 = z * z
+    z4 = z2 * z2
+    z8 = z4 * z4
+    cn, cd = _ATANF_CR_CN, _ATANF_CR_CD
+    cn0 = cn[0] + z2 * cn[1]
+    cn2 = cn[2] + z2 * cn[3]
+    cn4 = cn[4] + z2 * cn[5]
+    cn0 = cn0 + z4 * cn2
+    cn4 = cn4 + z4 * cn[6]
+    cn0 = (cn0 + z8 * cn4) * z
+    cd0 = cd[0] + z2 * cd[1]
+    cd2 = cd[2] + z2 * cd[3]
+    cd4 = cd[4] + z2 * cd[5]
+    cd0 = cd0 + z4 * cd2
+    cd4 = cd4 + z4 * cd[6]
+    cd0 = cd0 + z8 * cd4
+    r = cn0 / cd0
+    if not gt:
+        return F(r)
+    r = (math.copysign(float.fromhex("0x1.0fdaa22168c23p-7"), z) - r) \
+        + math.copysign(float.fromhex("0x1.9p0"), z)
+    return F(r)
 
 
 # ---------------------------------------------------------------------------

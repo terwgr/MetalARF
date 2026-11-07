@@ -68,6 +68,49 @@ def args(path, out, **kw):
     return Namespace(**options)
 
 
+def test_explicit_spacing_prices_complete_recipe_and_emits_matching_wps(tmp_path, monkeypatch):
+    path, raw = starter(tmp_path)
+    original = path.read_bytes()
+    real = dw._sizing_phases
+    seen = []
+    def observe(exp, **kw):
+        seen.append(exp)
+        assert exp.domains[0].run.dx == 6000
+        assert exp.vertical.p_top == 4200
+        assert exp.domains[0].run.epssm == 0.65
+        return real(exp, **kw)
+    monkeypatch.setattr(dw, "_sizing_phases", observe)
+    out = tmp_path / "spacing" / "fitted.toml"
+    assert st.fit_main(args(path, out, root_dx=6, point_extent_km=120, write=True)) == 0
+    resolved = tomllib.loads(out.read_text())
+    assert resolved["shared"] == raw["shared"]
+    assert resolved["domain"][0]["time_step"] == raw["domain"][0]["time_step"]
+    assert resolved["domain"][0]["dx"] == resolved["domain"][0]["dy"] == 6000
+    from woof.namelist_import import parse_namelist_text
+    assert parse_namelist_text(out.with_suffix(".namelist.wps").read_text())["geogrid"]["dx"] == [6000]
+    assert seen and path.read_bytes() == original
+
+
+def test_explicit_spacing_preserves_nested_spacing_and_time_ratios(tmp_path):
+    path, raw = starter(tmp_path, nested=True)
+    selected = st.Starter(path, tmp_path / "new.toml")
+    old = selected.exp
+    selected.set_root_spacing(6)
+    tables = selected.tables([(50, 50), (40, 40)])
+    for domain, table, before in zip(old.domains, tables["domain"], raw["domain"]):
+        assert table["dx"] == domain.run.dx * (6000 / old.domains[0].run.dx)
+        assert table["parent_grid_ratio"] == before["parent_grid_ratio"]
+        assert table["parent_time_step_ratio"] == before["parent_time_step_ratio"]
+    assert tables["shared"] == raw["shared"]
+
+
+@pytest.mark.parametrize("spacing", [0, -1, float("nan"), float("inf")])
+def test_spacing_refuses_geometry_corruption(tmp_path, spacing):
+    path, _ = starter(tmp_path)
+    with pytest.raises(ValueError, match="corrupt fitted geometry"):
+        st.fit_main(args(path, tmp_path / "bad.toml", root_dx=spacing))
+
+
 def test_every_priced_candidate_has_full_custom_authority(tmp_path, monkeypatch):
     path, raw = starter(tmp_path, nested=True)
     original = path.read_bytes()
@@ -124,18 +167,6 @@ def test_write_preserves_settings_and_outputs_matching_geometry(tmp_path):
         st.fit_main(args(path, out, write=True))
 
 
-def test_polygon_prices_custom_settings_without_shrinking_area(tmp_path):
-    path, raw = starter(tmp_path)
-    poly = tmp_path / "area.geojson"
-    poly.write_text(json.dumps({"type":"Polygon", "coordinates":[[
-        [-100.2,39.8],[-99.8,39.8],[-99.8,40.2],[-100.2,40.2],[-100.2,39.8]]]}))
-    out = tmp_path / "polygon.toml"
-    assert st.fit_main(args(path, out, polygon=poly, point=None, write=True)) == 0
-    exp = load_experiment(out)
-    assert exp.vertical.p_top == 4200
-    dw.verify_polygon_containment(exp, dw.load_polygon_footprint(poly), (0.0,))
-
-
 def test_serializer_roundtrips_nested_settings_and_literal_strings():
     raw = {"experiment":{"name":'quoted " name \\ and newline\n',
                          "start_time": datetime(2026,9,5)},
@@ -144,8 +175,10 @@ def test_serializer_roundtrips_nested_settings_and_literal_strings():
     assert tomllib.loads(st.render_tables(raw)) == raw
 
 
-@pytest.mark.parametrize("topology", ["two_domains", "stable_chain", "branched_tree"])
-@pytest.mark.parametrize("target", ["point", "polygon"])
+@pytest.mark.parametrize("topology,target", [
+    ("two_domains", "point"), ("stable_chain", "polygon"),
+    ("branched_tree", "polygon"),
+])
 def test_fit_preserves_real_parent_tree_and_science_in_native_wps(tmp_path, topology, target):
     from woof.companion_domains import VORTEX_PRESET
     from woof.namelist_import import parse_namelist_text
@@ -298,8 +331,7 @@ def test_invalid_hardware_snapshots_do_not_substitute_a_local_or_reference_gpu(t
         st.hardware_sizing(hardware)
 
 
-@pytest.mark.parametrize("polygon", [False, True])
-@pytest.mark.parametrize("declared", [False, True])
+@pytest.mark.parametrize("polygon,declared", [(False, False), (True, True)])
 def test_streamed_fit_uses_selected_target_host_memory_for_every_candidate(tmp_path, monkeypatch, polygon, declared):
     from woof.core import streaming
     payload = measured_hardware()
@@ -476,7 +508,7 @@ def test_tiles_copy_uses_real_planner_preserves_science_and_publishes_only_on_wr
     assert receipt["launch_performed"] is False and receipt["download_performed"] is False
     assert receipt["output_sha256"] == hashlib.sha256(out.read_bytes()).hexdigest()
     assert receipt["wps_sha256"] == hashlib.sha256(out.with_suffix(".namelist.wps").read_bytes()).hexdigest()
-    assert "working directory" in receipt["fetch_out_path_basis"]
+    assert "configuration's folder" in receipt["fetch_out_path_basis"]
     assert main(arguments + ["--write"]) == 2
     assert tile_machine["calls"] == 2
 

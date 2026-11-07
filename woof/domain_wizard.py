@@ -24,8 +24,9 @@ GRIB1 route, i.e. ERA5 today.  GFS/HRRR downloads (``woof fetch``) feed
 the ``rw-wps``/``woof-wrf-init`` native initialization front door, which
 consumes the same ``[experiment]``/``[[domain]]`` tables but not
 ``[case_data]``.  The wizard therefore emits ``[case_data]`` only for
-``--source era5`` and prints the exact accurate next step for every source
-instead of pretending a pipeline exists.
+``--source era5``. An explicit geography root is saved in that table for
+ERA5 and in ``[static].geog_root`` for every other source, so the printed
+next command uses the same tree without another flag.
 
 Sizing conventions (all documented, none silent):
 
@@ -67,6 +68,7 @@ from __future__ import annotations
 
 from woof.physics_registry import canonical_template_id
 
+import argparse
 import json
 import hashlib
 import math
@@ -97,7 +99,7 @@ from woof.core.preflight import (
                                   estimate_phases,
                                   profile_from_device_probe,
                                   unknown_platform_note)
-from woof.cli_numbers import positive_float, positive_int
+from woof.cli_numbers import positive_float, positive_float_list, positive_int
 from woof.experiment import ExperimentConfig, build_experiment
 from woof.explain import explain_enabled, muted_warnings, warn
 from woof.fetch import parse_cycle
@@ -129,6 +131,7 @@ from woof.physics_menu import (WIZARD_PHYSICS_PROFILES,
 from woof.grid_requirements import FIFTH_ORDER_STENCIL_AXIS, boundary_axis
 from woof.source_adapters import (get_source_adapter, source_adapters,
                                    source_forcing_interval_seconds,
+                                   wizard_cadence_named_source_ids,
                                    wizard_planable_source_ids)
 # config_source_coverage_refusal and its geometry live in source_coverage so
 # the RW-WPS wheel, which excludes this module, can review a config too.
@@ -382,6 +385,38 @@ def fit_headroom_bytes(budget_bytes: int) -> int:
     return int(FIT_HEADROOM_FRACTION * max(0, int(budget_bytes)))
 
 
+def vram_reserve_gib(vram_gib: float) -> float:
+    """Flat VRAM reserve (GiB) by card capacity: WDDM/driver/CUDA context
+    plus the near-capacity stability ceiling of consumer cards.
+
+    RETIRED as the sizing path's reserve on 2026-08-01, and kept for the
+    callers that have no experiment to price (``woof downscale``'s
+    standalone child fit) and for the "your card is too small before we
+    even start" refusal.  A FLAT figure was the whole of defect 4: the
+    reserve's overhead term tracks the local-memory backing store of the
+    SELECTED KERNEL SET, which measured 1.93 GiB for WSM6+MYNN and 3.94
+    for NSSL2 double-moment -- so a fit loop assuming a flat 4.0 sized
+    both NSSL2 profiles against one budget and then verified them against
+    a smaller one, at every card size.  The sizing path now prices the
+    reserve from the candidate experiment itself
+    (:func:`woof.core.preflight.ReservePolicy.n0_alloc`), which is the
+    same call ``woof check`` makes, so the two cannot disagree.
+
+    The small-card figure was 3.0 GiB and it was a promise the preflight
+    would not keep: ``ReservePolicy.n0_alloc`` charges the CUDA context
+    plus the widest launched kernel's local-memory backing store plus a
+    retention residual, which lands at 3.5-3.6 GiB on exactly those 12
+    and 16 GiB cards.  Sizing a layout against a 3.0 GiB reserve and then
+    handing it to a preflight applying 3.55 is how a test host G pilot got a
+    wizard-certified config whose own check said the envelope did not
+    fit.  4.0 -- the figure the 24 GiB tier already uses -- clears the
+    measured reserve on both small tiers with about 0.45 GiB to spare.
+    """
+    if vram_gib <= 24.0:
+        return 4.0
+    return 6.0
+
+
 #: Projection auto-selection bands (absolute latitude of --point):
 #: below MERCATOR_MAX_LAT the Lambert cone is ill-conditioned and the
 #: wizard selects Mercator; above LAMBERT_MAX_LAT it selects polar
@@ -390,13 +425,9 @@ def fit_headroom_bytes(budget_bytes: int) -> int:
 #: are oracle-gated against the pinned WRF v4.6.1 module_llxy.F
 #: (tests/test_projection_oracle.py).
 MERCATOR_MAX_LAT, LAMBERT_MAX_LAT = 25.0, 60.0
-#: Cells of clearance between the domain footprint and the projection
-#: pole; a domain containing (or touching) the pole is refused -- the
-#: lat-lon source interpolation and static-tile windowing are not
-#: pole-capable (genuine limit, not a projection-math one).  The number
-#: and the measurement that reads it live beside the projection math
-#: (:mod:`woof.static.projection`), because plan review refuses the
-#: same footprint and the two answers have to be one answer.
+#: Clearance from the Lambert projection pole, shared with plan review.
+#: Polar stereographic supports a cap containing its hemisphere's pole;
+#: its forcing and static windows retain periodic longitude donors.
 _POLE_CLEARANCE_CELLS = POLE_CLEARANCE_CELLS
 
 #: Cells of pole clearance the point FIT sizes to, as distinct from the
@@ -623,7 +654,7 @@ def planable_sources() -> tuple[str, ...]:
     return wizard_planable_source_ids()
 
 
-def resolve_source(raw: str) -> str:
+def resolve_source(raw: str, *, cadence_h: int | None = None) -> str:
     """RAW (an id or a registry alias) as the canonical source id.
 
     Fail-closed in three named ways, because "invalid choice: 'rap'" is a
@@ -635,9 +666,16 @@ def resolve_source(raw: str) -> str:
     * a registered row with no runnable route says what the row says about
       itself, so the reader learns the state of that model rather than the
       state of this parser;
-    * a registered runnable row with no declared forcing cadence names the
-      missing fact, because emitting ``interval_seconds`` for it would be a
-      guess about boundary times the source may never publish.
+    * a registered runnable row with no declared forcing cadence plans
+      only with ``cadence_h`` (the caller's ``--cadence HOURS``): its
+      spacing is whatever the history files it is handed carry, so the
+      caller names it and that number becomes the ``interval_seconds``
+      written.  Without one the refusal names the flag, because emitting
+      a guessed ``interval_seconds`` would ask the preparation for
+      boundary times the inputs may not carry.  Breakage: ``woof domain
+      --source hex-global`` exited 2 even with ``--cadence 3``, so the
+      documented ``woof prep --source hex-global`` line had no config to
+      point at (2.9.2 hex-as-source door test).
     """
 
     try:
@@ -657,16 +695,17 @@ def resolve_source(raw: str) -> str:
                if adapter.composition_requirement else "")
             + f".  A configuration emitted for it could not be prepared by "
               f"anything; plan with one of {', '.join(planable_sources())}")
-    if adapter.forcing_interval_seconds is None:
+    if adapter.forcing_interval_seconds is None and cadence_h is None:
         raise ValueError(
-            f"--source {adapter.source_id}: this route's boundary cadence "
-            "comes from the mapping document a caller supplies, not from "
-            "the registry, so this door has no interval_seconds to write "
-            "and the namelist.wps it emitted would name boundary times the "
-            "inputs may not carry.  Plan with the named source your mapping "
-            f"describes ({', '.join(planable_sources())}), or author the "
-            "namelist beside the mapping")
-    return adapter.source_id
+            f"--source {adapter.source_id}: this source declares no native "
+            "boundary cadence (its spacing is whatever the history files "
+            "you hand `woof prep` carry), so this door has no "
+            "interval_seconds to write until you name it: pass --cadence "
+            "HOURS, the spacing of those files (a woof hex export written "
+            "every 3 h is --cadence 3).  The sources that declare their own "
+            f"cadence ({', '.join(planable_sources())}) need no --cadence")
+    from woof.source_adapters import canonical_source_token
+    return canonical_source_token(raw)
 
 
 def source_has_fetch_front_door(source: str) -> bool:
@@ -681,7 +720,7 @@ def source_has_fetch_front_door(source: str) -> bool:
 
     from woof.fetch import fetch_front_door_sources
 
-    return source in fetch_front_door_sources()
+    return get_source_adapter(source).source_id in fetch_front_door_sources()
 
 
 def source_credential_notes(source: str) -> list[str]:
@@ -746,6 +785,39 @@ def source_reaches_forecast_leads(source: str) -> bool:
     """
 
     return get_source_adapter(source).max_forecast_hour > 0
+
+
+def forecast_start_hour_refusal(source: str, start_hour: int,
+                                hours: float) -> str | None:
+    """Why a run of ``hours`` cannot begin at lead f{start_hour}, or None.
+
+    One spelling for every door that takes ``--forecast-start-hour`` (the
+    domain wizard and ``--recipe``), asked from the source's registry row
+    before any cycle is resolved or byte fetched.
+    """
+
+    if start_hour < 0:
+        return "--forecast-start-hour must be a nonnegative forecast lead"
+    if start_hour and not source_reaches_forecast_leads(source):
+        return (
+            f"--forecast-start-hour: {source} publishes no forecast "
+            "leads (its registry row declares max_forecast_hour = 0), so "
+            "every time in it is an analysis at its own valid time and "
+            "there is no lead to begin at; name the analysis time you want "
+            "with --cycle")
+    horizon = get_source_adapter(source).max_forecast_hour
+    if horizon and start_hour + hours > horizon:
+        # Named here, from the source's own declared horizon, rather than
+        # after the acquisition.  gdas stops at f009 and rap at f051; a
+        # window that walks past either is a window the product never
+        # published, and it used to be discovered by whichever stage first
+        # went looking for the missing lead.
+        return (
+            f"--hours {hours} beginning at f{start_hour:03d} reaches "
+            f"f{start_hour + hours:03d}, past {source}'s declared "
+            f"f{horizon:03d} horizon; shorten the window, start earlier, or "
+            "choose a source with a longer forecast")
+    return None
 
 
 def _fetch_cadence_h(source: str, start_hour: int,
@@ -853,12 +925,9 @@ DEFAULT_RESTART_INTERVAL_S = 3600.0
 _MIN_SCALE, _MAX_SCALE = 0.55, 64.0
 
 #: The nine WPS_GEOG dataset directories the static builder opens (the
-#: ``default`` geog_data_res selector; woof/static/build.py).
-GEOG_DATASETS = (
-    "topo_gmted2010_30s", "modis_landuse_20class_30s_with_lakes",
-    "soiltype_top_30s", "soiltype_bot_30s", "greenfrac_fpar_modis",
-    "lai_modis_10m", "albedo_modis", "maxsnowalb_modis", "soiltemp_1deg",
-)
+#: ``default`` geog_data_res selector; woof/static/build.py), relative to
+#: the geog root -- one list, kept by woof.geog_assets.
+from woof.geog_assets import WRF_DEFAULT_GEOG_DIRS as GEOG_DATASETS  # noqa: E402
 
 #: Certified 49-mass-level vertical coordinate (50 full eta levels) --
 #: the reference configuration's ladder.  Eta is normalized, so one
@@ -1679,12 +1748,6 @@ def _parse_point(raw: str) -> tuple[float, float]:
     if not -90.0 <= lat <= 90.0:
         raise ValueError(
             f"--point latitude {lat:g} must lie within [-90, 90]")
-    if abs(lat) == 90.0:
-        raise ValueError(
-            f"--point latitude {lat:g} is the pole itself; a domain "
-            "containing the pole is unsupported (lat-lon source "
-            "interpolation and static-tile windowing are not "
-            "pole-capable) -- move --point off the pole")
     if not -180.0 <= lon <= 180.0:
         if -360.0 <= lon <= 360.0:
             # float(): _wrap180 is array code (np.where) and returns a 0-d
@@ -1758,11 +1821,6 @@ def _geojson_position(value, label: str,
     if not -90.0 <= lat <= 90.0:
         raise ValueError(
             f"--polygon {label} latitude {lat:g} must lie within [-90, 90]")
-    if abs(lat) == 90.0:
-        raise ValueError(
-            f"--polygon {label} reaches the pole itself; a domain containing "
-            "a pole is unsupported (lat-lon source interpolation and "
-            "static-tile windowing are not pole-capable)")
     if not -180.0 <= lon <= 180.0:
         if not -360.0 <= lon <= 360.0:
             raise ValueError(
@@ -2197,16 +2255,15 @@ def radiation_cadence_advisory(profile: str | None,
     wins at load).
 
     Silent for a single domain: nothing inherits, and the physics
-    summary already speaks the root's radt.  There is no radiation-off
-    condition because no shipped suite is radiation-off: every profile
-    in the registry runs at least shortwave (the ``*-no-radiation-*``
-    names mean longwave OFF, Dudhia shortwave still on, radt = 1), so
-    radt paces real work in every nested emission.
+    summary already speaks the root's radt.  Radiation-off compositions are silent because their cadence schedules no work.
     """
 
     if int(domains) < 2:
         return []
     switches = profile_switches(profile)
+    from woof.physics_menu import radiation_scheme_ids
+    if not any(radiation_scheme_ids(switches)):
+        return []
     return [
         f"radt {float(switches['radt']):g} min on all {int(domains)} "
         "domains: nests inherit the root's radiation cadence rather than "
@@ -2294,6 +2351,34 @@ def root_time_step_s(ref_lat: float,
     return seconds_per_km(ref_lat) * Fraction(float(root_dx_m)) / 1000
 
 
+def nest_history_interval_at(nest_history_interval_s, nest_index: int,
+                             nests: int | None = None) -> float:
+    """The history interval of the ``nest_index``-th nest (0 is d02).
+
+    ``nest_history_interval_s`` is what ``--nest-history-interval``
+    parsed to: ``None`` (the default for every nest), one number (every
+    nest), or one number per nest, outer to inner.  A list whose length
+    is not the number of nests is refused by name: a 3-domain ladder
+    given three intervals would otherwise drop or invent one.
+    """
+    value = nest_history_interval_s
+    if value is None:
+        return float(DEFAULT_NEST_HISTORY_INTERVAL_S)
+    if isinstance(value, (list, tuple)):
+        if nests is not None and len(value) != nests:
+            raise ValueError(
+                f"--nest-history-interval names {len(value)} intervals but "
+                f"the ladder has {nests} nest(s); give one per nest, outer "
+                "to inner, or one value for every nest")
+        if nest_index >= len(value):
+            raise ValueError(
+                f"--nest-history-interval names {len(value)} intervals but "
+                f"the ladder has a nest number {nest_index + 1}; give one "
+                "per nest, outer to inner, or one value for every nest")
+        return float(value[nest_index])
+    return float(value)
+
+
 def derived_time_step_s(ref_lat: float, root_dx_m: float, *,
                         run_seconds: float, ratios: tuple[int, ...],
                         history_interval_s: float | None = None,
@@ -2314,15 +2399,15 @@ def derived_time_step_s(ref_lat: float, root_dx_m: float, *,
         raise ValueError("the derived root time step must be positive")
     root_history = (DEFAULT_ROOT_HISTORY_INTERVAL_S if history_interval_s is None
                     else float(history_interval_s))
-    child_history = (DEFAULT_NEST_HISTORY_INTERVAL_S if nest_history_interval_s is None
-                     else float(nest_history_interval_s))
+    child_histories = [nest_history_interval_at(nest_history_interval_s, i,
+                                                len(ratios))
+                       for i in range(len(ratios))]
     # Fraction() raises OverflowError on an infinity and ValueError on a
     # NaN, neither naming the interval; the parser refuses both by option
     # name, and a programmatic caller gets a named sentence here.  The
     # nest interval is read only when there is a nest.
     intervals = [("history interval", root_history)]
-    if ratios:
-        intervals.append(("nest history interval", child_history))
+    intervals.extend(("nest history interval", child) for child in child_histories)
     for name, value in intervals:
         if not (math.isfinite(value) and value > 0):
             raise ValueError(f"the {name} must be a finite number of seconds "
@@ -2330,7 +2415,7 @@ def derived_time_step_s(ref_lat: float, root_dx_m: float, *,
     # Match the loader's exact event representations; no epsilon or rounding.
     periods = [Fraction(str(run_seconds)), Fraction(root_history)]
     ratio_product = 1
-    for ratio in ratios:
+    for ratio, child_history in zip(ratios, child_histories):
         ratio_product *= ratio
         periods.append(Fraction(child_history) * ratio_product)
     if restart_interval_s:
@@ -2661,10 +2746,8 @@ def _domain_tables(dims: list[tuple[int, int]],
                 "parent_grid_ratio": ratio,
                 "parent_time_step_ratio": ratio, "nx": nx, "ny": ny,
                 "specified": False, "nested": True,
-                "history_interval_s": (
-                    DEFAULT_NEST_HISTORY_INTERVAL_S
-                    if nest_history_interval_s is None
-                    else float(nest_history_interval_s)),
+                "history_interval_s": nest_history_interval_at(
+                    nest_history_interval_s, index - 1, len(ratios)),
                 "epssm": epssm,
                 "radt": radt[index], "cu_physics": 0,
                 "diff_6th_factor": diff6[index],
@@ -2869,7 +2952,8 @@ def parse_custom_ladder(*, root_dx_km, chain, ladder: str):
 GRAY_ZONE_DX_KM = 1.0
 
 
-def gray_zone_advisory(chain_km, shared: dict) -> list[str]:
+def gray_zone_advisory(chain_km, shared: dict, les_below_m: float | None = None,
+                       les_closure: str | None = None) -> list[str]:
     """One accurate sentence when a domain lands in the PBL gray zone.
 
     Advisory, never a refusal: sub-kilometre nests are exactly what this
@@ -2911,13 +2995,39 @@ def gray_zone_advisory(chain_km, shared: dict) -> list[str]:
 
     if not shared.get("bl_pbl_physics"):
         return []
-    below = [dx for dx in chain_km if dx < GRAY_ZONE_DX_KM]
+    # The domains the door writes the LES closure on run PBL off, so they
+    # are not in the gray zone and are not counted as running the 1-D
+    # scheme.  The advisory used to be computed before the closure was
+    # written and told a 3 -> 1 -> 0.333 -> 0.111 km tree that BOTH
+    # sub-kilometre nests ran bl_pbl_physics = 5 while d04 was PBL off
+    # with km_opt 3.
+    les = set(les_domain_indices(chain_km, les_below_m))
+    les_line = []
+    if les:
+        name = DEFAULT_LES_CLOSURE if les_closure is None else str(les_closure)
+        listed = ", ".join(f"d{i + 1:02d} {float(chain_km[i]) * 1000:.0f} m"
+                           for i in sorted(les))
+        les_line = [
+            f"LES: {len(les)} domain(s) at or below {float(les_below_m):g} m "
+            f"({listed}) run PBL off with the {LES_CLOSURE_WORDS[name]} "
+            "closure, mix_isotropic = 1 and surface fluxes from the surface "
+            "layer, so their boundary-layer eddies are resolved, not "
+            "parameterized"
+            + (f"; the coarser domains keep bl_pbl_physics = "
+               f"{shared['bl_pbl_physics']}." if len(les) < len(chain_km)
+               else ".")]
+    below = [dx for i, dx in enumerate(chain_km)
+             if dx < GRAY_ZONE_DX_KM and i not in les]
     if not below:
-        return []
+        return les_line
     finest = min(below)
+    listed = ", ".join(f"d{i + 1:02d} {float(dx) * 1000:.0f} m"
+                       for i, dx in enumerate(chain_km)
+                       if dx < GRAY_ZONE_DX_KM and i not in les)
     return [
         f"GRAY ZONE: {len(below)} domain(s) refine below "
-        f"{GRAY_ZONE_DX_KM:g} km (finest {finest * 1000:.0f} m) with the "
+        f"{GRAY_ZONE_DX_KM:g} km (finest {finest * 1000:.0f} m"
+        + (f"; {listed}" if les else "") + ") with the "
         f"1-D PBL scheme bl_pbl_physics = {shared['bl_pbl_physics']} "
         "active, so boundary-layer eddies are partly resolved by the "
         "dynamics and simultaneously parameterized as if they were not. "
@@ -2945,7 +3055,7 @@ def gray_zone_advisory(chain_km, shared: dict) -> list[str]:
         "changed part-way through a campaign you intend to resume. Until "
         "you do, treat sub-kilometre PBL structure as indicative rather "
         "than quantitative.",
-    ]
+    ] + les_line
 
 
 #: Grid spacing (km) below which operational convection-permitting
@@ -3170,29 +3280,10 @@ def _footprint_contains_pole(projection: dict, nx: int, ny: int,
                              root_dx_m: float = ROOT_DX_M,
                              margin_cells: float = _POLE_CLEARANCE_CELLS
                              ) -> bool:
-    """Does this root contain (or come within ``margin_cells`` of) the
-    projection pole?
+    """Measure the projection pole in the root plane.
 
-    The predicate behind :func:`_pole_clearance_refusal`, split out
-    because two other callers need to ASK it without refusing.
-
-    A pole-containing footprint spans every longitude, so it also trips
-    the 180-degree servable-crop bound, and the crop bound's remedy
-    ("size a narrower domain") is the wrong instruction for a domain
-    whose problem is the singularity inside it.
-
-    The point fit asks it too, with a wider margin
-    (``_FIT_POLE_CLEARANCE_CELLS``), so that the SIZE it chooses stays
-    inside the projection's usable envelope instead of growing past it
-    and being refused afterwards.
-
-    The geometry itself is
-    :func:`woof.static.projection.footprint_contains_pole`, shared with
-    plan review: a hand-authored root that encloses a pole is refused
-    when the experiment loads, and a door measuring the footprint
-    differently from the loader is how a configuration passes review and
-    dies at the door that prepares it.  This wrapper only supplies the
-    door's root-spacing default.
+    The same geometry bounds Lambert fitting and identifies a polar cap
+    whose forcing box must include every meridian and the pole latitude.
     """
 
     return footprint_contains_pole(projection, nx, ny, root_dx_m,
@@ -3221,7 +3312,9 @@ def point_request_bound(projection: dict, nx: int, ny: int,
       minimum layout contains it.
 
     * a maximum extent, ``max_extent_km`` (``--point-extent-km``,
-      default :data:`POINT_FIT_MAX_EXTENT_KM`).  A point carries no
+      default :data:`POINT_FIT_MAX_EXTENT_KM`), checked on the longer
+      root axis: the root keeps the 5:4 shape of :func:`_dims_for_scale`,
+      so the shorter (y) axis comes out at 0.8 of it.  A point carries no
       extent at all, so "as much ground as this card can hold" is an
       answer to a question nobody asked; with streaming on it is not
       even bounded by the card.
@@ -3264,23 +3357,37 @@ def point_request_bound(projection: dict, nx: int, ny: int,
                 f"{float(max_extent_km):.0f} km a point request "
                 "is sized to (raise --point-extent-km, or draw the area "
                 "to ask for more ground)")
-    if _footprint_contains_pole(projection, nx, ny, root_dx_m,
-                                _FIT_POLE_CLEARANCE_CELLS):
+    if projection["map_proj"] != "polar" and _footprint_contains_pole(
+            projection, nx, ny, root_dx_m, _FIT_POLE_CLEARANCE_CELLS):
         pole = "north" if projection["truelat1"] >= 0.0 else "south"
         return (POINT_FIT_PROJECTION_SCOPE,
                 f"a {nx} x {ny} root at {dx_km:g} km reaches the "
-                f"{pole} pole, where lat-lon source interpolation "
-                "and static-tile windowing are not pole-capable")
+                f"{pole} pole, where Lambert longitude is singular; "
+                "use --projection polar for a pole-enclosing domain")
     # Asked after the pole: a footprint around the pole also winds a
     # full turn, and the pole is the accurate name for that one.
     span_deg = footprint_longitude_span(projection, nx, ny, root_dx_m)
-    if span_deg >= 360.0:
+    if projection["map_proj"] != "polar" and span_deg >= 360.0:
         return (POINT_FIT_BAND_SCOPE,
                 f"a {nx} x {ny} root at {dx_km:g} km runs "
                 f"{span_deg:.0f} degrees of longitude, more than once "
                 "around the globe, so its grid would hold the same "
                 "ground twice and integrate the two copies apart")
     return None
+
+
+def _shorter_axis_note(nx: int, ny: int, dx_km: float) -> str:
+    """The extent of the shorter root axis, for a non-square root.
+
+    The extent a point note quotes is the LONGER axis (the one
+    ``--point-extent-km`` bounds); a 5:4 root's other axis is 0.8 of it,
+    and a note quoting one number for a non-square root read as if both
+    axes had it."""
+
+    if nx == ny:
+        return ""
+    return (f" on the longer axis, {min(nx, ny) * dx_km:.0f} km on the "
+            "shorter")
 
 
 def point_fit_cap_note(scope: str, dims, root_dx_m: float = ROOT_DX_M,
@@ -3313,26 +3420,27 @@ def point_fit_cap_note(scope: str, dims, root_dx_m: float = ROOT_DX_M,
     nx, ny = dims[0]
     dx_km = float(root_dx_m) / 1000.0
     extent_km = max(nx, ny) * dx_km
+    axes = _shorter_axis_note(nx, ny, dx_km)
     if scope == POINT_FIT_EXTENT_SCOPE:
         return (f"point request: extent capped at {extent_km:.0f} km "
-                f"({nx}x{ny} at {dx_km:g} km), memory allows more; raise "
+                f"({nx}x{ny} at {dx_km:g} km){axes}, memory allows more; raise "
                 f"--point-extent-km or draw the ground you want with "
                 f"--polygon for a larger domain")
     if scope == POINT_FIT_PROJECTION_SCOPE:
         return (f"point request: extent capped at {extent_km:.0f} km "
-                f"({nx}x{ny} at {dx_km:g} km) to stay clear of the "
+                f"({nx}x{ny} at {dx_km:g} km){axes} to stay clear of the "
                 f"projection pole, memory allows more; move --point "
                 f"equatorward for a larger domain")
     if scope == POINT_FIT_BAND_SCOPE:
         return (f"point request: extent capped at {extent_km:.0f} km "
-                f"({nx}x{ny} at {dx_km:g} km) so the root runs less than "
+                f"({nx}x{ny} at {dx_km:g} km){axes} so the root runs less than "
                 f"once around the globe, memory allows more; this is the "
                 f"widest root a point can take")
     if scope == POINT_FIT_FLOOR_SCOPE:
         asked = ("the requested extent" if point_extent_km is None
                  else f"--point-extent-km {float(point_extent_km):g}")
         return (f"point request: root extent {extent_km:.0f} km "
-                f"({nx}x{ny} at {dx_km:g} km) is the smallest root this "
+                f"({nx}x{ny} at {dx_km:g} km){axes} is the smallest root this "
                 f"ladder hosts, larger than {asked}; a finer root "
                 f"spacing gives a smaller root")
     raise ValueError(f"not a point-request bound: {scope!r}")
@@ -3346,30 +3454,21 @@ def point_extent_note(dims, root_dx_m: float = ROOT_DX_M,
     nx, ny = dims[0]
     dx_km = float(root_dx_m) / 1000.0
     return (f"point request: extent {max(nx, ny) * dx_km:.0f} km "
-            f"({nx}x{ny} at {dx_km:g} km), inside --point-extent-km "
+            f"({nx}x{ny} at {dx_km:g} km)"
+            f"{_shorter_axis_note(nx, ny, dx_km)}, inside --point-extent-km "
             f"{float(point_extent_km):.0f}")
 
 
 def _pole_clearance_refusal(projection: dict, nx: int, ny: int,
                             root_dx_m: float = ROOT_DX_M,
                             target_option: str = "--point") -> None:
-    """Refuse a root footprint that contains (or nearly touches) the
-    projection pole -- a genuine pipeline limit (lat-lon source
-    interpolation and static windowing are not pole-capable), not a
-    projection-math one.  Mercator never reaches a pole.
+    """Keep Lambert roots clear of their singular projection pole.
 
-    The remedy it names changed with 2.7.3, because the old one stopped
-    being one.  It used to offer "choose a smaller layout (--vram-gib /
-    a shallower --ladder)", which was true while an unbounded point fit
-    could grow a mid-latitude request into the pole: a smaller card then
-    did clear it.  The fit now shrinks off the projection's polar
-    envelope by itself (:func:`point_request_bound`), so every request
-    that still reaches here has already been sized to the smallest
-    layout its ladder has, and a smaller card cannot make it smaller --
-    it can only refuse it for a different reason.  A drawn footprint was
-    never shrinkable at all.  So the sentence names the one thing that
-    moves: the centre, or the drawing.
+    A polar stereographic root is regular through its hemisphere's pole
+    and uses periodic source and static donors. Mercator cannot reach it.
     """
+    if projection["map_proj"] == "polar":
+        return
     if _footprint_contains_pole(projection, nx, ny, root_dx_m):
         pole_lat = 90.0 if projection["truelat1"] >= 0.0 else -90.0
         drawn = target_option == "--polygon"
@@ -3382,9 +3481,9 @@ def _pole_clearance_refusal(projection: dict, nx: int, ny: int,
         raise ValueError(
             f"the fitted root domain ({nx} x {ny} mass points at "
             f"{float(root_dx_m) / 1000:g} km) contains or touches the "
-            f"{'north' if pole_lat > 0 else 'south'} pole; lat-lon "
-            "source interpolation and static-tile windowing are not "
-            f"pole-capable -- move {target_option} away from the pole; "
+            f"{'north' if pole_lat > 0 else 'south'} pole on Lambert; "
+            "its longitude is singular there. Use --projection polar "
+            f"or move {target_option} away from the pole; "
             f"{remedy}")
 
 
@@ -3497,16 +3596,20 @@ def _fetch_area(projection: dict, nx: int, ny: int,
     lat_c, lon_c = _root_grid(projection, nx, ny, root_dx_m).latlon_c()
     center = float(projection["ref_lon"])
     lon_u, span = _margined_longitude_span(lon_c, center, margin_deg)
-    full_longitude = span > 180.0 and allow_full_longitude
+    contains_pole = (projection["map_proj"] == "polar"
+                     and _footprint_contains_pole(
+                         projection, nx, ny, root_dx_m, 0.0))
+    full_longitude = (contains_pole or span > 180.0) and allow_full_longitude
     if span > 180.0 and not full_longitude:
         raise ValueError(
             f"the root domain's forcing footprint spans {span:.1f} "
             "degrees of longitude; boxes wider than 180 degrees cannot "
             "be served as a single source crop -- shrink the "
             f"configuration or move {target_option} equatorward")
-    # Pole-clear, not pole-touching: the box a user is handed must not
-    # name the singularity the pipeline refuses (see POLE_CLEARANCE_DEG).
-    pole_clear = max_fetch_abs_lat(root_dx_m)
+    # A polar cap includes the pole row. Lambert keeps its established
+    # clearance from the singular longitude at the cone tip.
+    pole_clear = (90.0 if projection["map_proj"] == "polar"
+                  else max_fetch_abs_lat(root_dx_m))
     lat_s = max(-pole_clear, float(lat_c.min()) - margin_deg)
     lat_n = min(pole_clear, float(lat_c.max()) + margin_deg)
     if notes is not None:
@@ -3517,8 +3620,12 @@ def _fetch_area(projection: dict, nx: int, ny: int,
                 notes.append(
                     f"the suggested forcing box's {edge} edge was clamped "
                     f"from {raw:.2f} to {clamped:.2f} to stay "
-                    f"{pole_clearance_deg(root_dx_m):.2f} deg clear of "
-                    "the pole")
+                    f"the {pole_clear:g}-degree latitude limit")
+    if contains_pole:
+        if projection["truelat1"] >= 0.0:
+            lat_n = 90.0
+        else:
+            lat_s = -90.0
     lon_w = float(_wrap180(float(lon_u.min()) - margin_deg))
     lon_e = float(_wrap180(float(lon_u.max()) + margin_deg))
     if lon_e == -180.0:
@@ -3584,12 +3691,15 @@ def fetch_area_hint(projection: dict, nx: int, ny: int, *, source: str,
 
     from woof.fetch import AREA_HINT_DECIMALS, source_coverage_envelope
 
+    coverage = source_coverage_envelope(source)
     area = _fetch_area(
         projection, nx, ny, margin_deg=_fetch_margin_deg(source),
         notes=notes, root_dx_m=root_dx_m, target_option=target_option,
-        coverage=source_coverage_envelope(source),
+        coverage=coverage,
         coverage_label=source.upper(), coverage_notes=coverage_notes,
-        allow_full_longitude=str(source).strip().lower() == "gfs")
+        allow_full_longitude=(str(source).strip().lower() == "gfs"
+                              or (projection["map_proj"] == "polar"
+                                  and coverage is None)))
     return ",".join(f"{value:.{AREA_HINT_DECIMALS}f}" for value in area)
 
 
@@ -3696,8 +3806,14 @@ def render_config(*, name: str, start_time: datetime, hours: int,
                   acknowledgements: tuple[str, ...] = (),
                   physics_mix: dict | None = None,
                   clock: str = "fixed",
-                  noah_mosaic_options=None) -> str:
+                  noah_mosaic_options=None,
+                  les_below_m: float | None = None,
+                  les_closure: str | None = None) -> str:
     """The emitted TOML text (the exact bytes the wizard validates).
+
+    ``les_below_m``/``les_closure`` only shape the header's turbulence
+    advisory, so it describes the closure :func:`with_les_closure` writes
+    afterwards; the closure itself is written by that function.
 
     ``clock`` is ``woof domain --clock`` (:func:`clock_decision`).  An
     adaptive emission writes ``use_adaptive_time_step = true`` into
@@ -3749,11 +3865,17 @@ def render_config(*, name: str, start_time: datetime, hours: int,
             raise ValueError("--nz must be at least 4 (the vertical stencil width)")
         shared["nz"] = nz
         shared["eta_levels"] = tuple(float(level) for level in levels)
-    from woof.physics_source_defaults import (land_scoped_defaults,
+    from woof.physics_source_defaults import (authored_ruc_defaults,
+                                               land_scoped_defaults,
                                                recipe_physics_defaults)
     shared.update(land_scoped_defaults(
         recipe_physics_defaults((fetch_hints or {}).get("source")),
-        shared.get("sf_surface_physics")))
+        shared.get("sf_surface_physics"), shared.get("mp_physics")))
+    # A RUC suite from any source starts the ground vapour from the air
+    # (physics_source_defaults.AUTHORED_RUC_DEFAULTS); a source recipe that
+    # states it keeps its value.
+    for key, value in authored_ruc_defaults(shared.get("sf_surface_physics")).items():
+        shared.setdefault(key, value)
     if tiles is not None and tiles not in {"off", "auto", "on"}:
         raise ValueError("--tiles must be off, auto, or on")
     # The vertical default is bounded by the source's certified column:
@@ -4000,7 +4122,7 @@ def render_config(*, name: str, start_time: datetime, hours: int,
             "are cheap).\n")
     for line in retired:
         header += f"# {line}\n"
-    for line in gray_zone_advisory(chain_km, shared):
+    for line in gray_zone_advisory(chain_km, shared, les_below_m, les_closure):
         header += f"# {line}\n"
     for line in cumulus_gray_zone_advisory(chain_km, cu_by_domain):
         header += f"# {line}\n"
@@ -4194,6 +4316,216 @@ def with_surface_flux_option(text: str, isftcflx: int | None) -> str:
                                  if not line.lstrip().startswith("isftcflx")] + lines[end:]
     note = f"# Surface flux over water: isftcflx = {value}, {ISFTCFLX_WORDS[value]}.\n"
     lines[start + 1:start + 1] = [note, f"isftcflx = {value}\n"]
+    return "".join(lines)
+
+
+#: The resolved-turbulence closure a domain at or below the LES spacing
+#: takes (docs/public/LES.md; configs/les_nest_250m_km3.toml's child, the
+#: recipe the gray-zone advisory names): 3-D Smagorinsky with the 1-D PBL
+#: off, one isotropic mixing length, and surface fluxes from the surface
+#: layer.  Per domain, so a PBL parent carries a PBL-off child.
+LES_CLOSURE = (("km_opt", 3), ("bl_pbl_physics", 0), ("c_s", 0.25),
+               ("mix_isotropic", 1), ("mix_upper_bound", 0.1), ("isfflx", 1))
+#: The same recipe on WRF's 1.5-order prognostic TKE closure (km_opt 2,
+#: c_k at its Registry 0.15): the second closure docs/public/LES.md
+#: measures, kernel-checked against FP64 and within 0.1-0.3 % of WRF em_les
+#: at 100 m.
+LES_CLOSURE_TKE = (("km_opt", 2), ("bl_pbl_physics", 0),
+                   ("mix_isotropic", 1), ("mix_upper_bound", 0.1),
+                   ("isfflx", 1))
+#: ``--les-closure`` spelling -> the keys an LES domain takes.
+LES_CLOSURES = {"smagorinsky": LES_CLOSURE, "tke": LES_CLOSURE_TKE}
+DEFAULT_LES_CLOSURE = "smagorinsky"
+#: The spacing at and below which ``woof domain`` writes LES_CLOSURE on a
+#: domain unless ``--les-below-m 0`` (the advisory's "coarse LES" bound).
+DEFAULT_LES_BELOW_M = 250.0
+#: Words for the closure, for the file header and stdout.
+LES_CLOSURE_WORDS = {"smagorinsky": "3-D Smagorinsky (km_opt 3)",
+                     "tke": "1.5-order prognostic TKE (km_opt 2)"}
+
+
+def les_closure_keys(closure: str | None) -> tuple:
+    """The (key, value) pairs ``closure`` writes, or a refusal naming the choices."""
+    name = DEFAULT_LES_CLOSURE if closure is None else str(closure)
+    try:
+        return LES_CLOSURES[name]
+    except KeyError:
+        raise ValueError(f"--les-closure must be one of "
+                         f"{', '.join(sorted(LES_CLOSURES))}, got {closure!r}") from None
+
+
+def les_domain_indices(chain_km, below_m: float | None) -> list[int]:
+    """Indices of the domains ``woof domain`` writes the LES closure on.
+
+    Every real-data domain at or below ``below_m``, the root included: a
+    root this fine is the top grid of a run fed by specified boundaries
+    (the hex add-nest's single WOOF grid, an API single grid), which used
+    to keep the suite's 1-D PBL at LES spacing because the rule skipped
+    index 0.
+    """
+    if not below_m:
+        return []
+    return [i for i, dx_km in enumerate(chain_km)
+            if float(dx_km) * 1000.0 <= float(below_m)]
+
+
+def _domain_blocks(lines: list[str]) -> list[tuple[int, int]]:
+    """(start, end) line spans of every ``[[domain]]`` block, in order."""
+    starts = [i for i, line in enumerate(lines)
+              if line.strip() in ("[[domain]]", '[["domain"]]')]
+    spans = []
+    for start in starts:
+        end = next((i for i in range(start + 1, len(lines))
+                    if lines[i].lstrip().startswith("[")), len(lines))
+        spans.append((start, end))
+    return spans
+
+
+def _domain_spacings_m(text: str) -> list[float]:
+    """Each [[domain]]'s grid spacing in metres, in file order."""
+    raw = tomllib.loads(text)
+    domains = raw.get("domain", [])
+    by_id = {int(d["grid_id"]): d for d in domains}
+    out = []
+    for d in domains:
+        dx, node = None, d
+        ratio = 1
+        while node is not None:
+            if "dx" in node:
+                dx = float(node["dx"]) / ratio
+                break
+            ratio *= int(node.get("parent_grid_ratio", 1))
+            node = by_id.get(int(node.get("parent_id", 0)))
+        out.append(float("nan") if dx is None else dx)
+    return out
+
+
+def _block_value(lines: list[str], start: int, end: int, key: str):
+    """The raw right-hand side of ``key`` inside one [[domain]] block, or None."""
+    for line in lines[start + 1:end]:
+        if ("=" in line and not line.lstrip().startswith("#")
+                and line.split("=", 1)[0].strip() == key):
+            return line.split("=", 1)[1].split("#", 1)[0].strip()
+    return None
+
+
+def with_les_closure(text: str, below_m: float | None,
+                     closure: str | None = None,
+                     inflow_seeding: bool = True) -> str:
+    """``text`` with the LES closure on every domain at or below ``below_m``.
+
+    The fix for the door only ADVISING the closure: a 100 m nest written
+    by this door ran the parent's 1-D PBL inside an LES grid unless the
+    user edited the file (WOOF run-controls feasibility, defect 6).  A key
+    the block already writes is kept, and ``below_m`` ``None`` or 0 leaves
+    the text as is.
+
+    The root takes it too when it is a real-data grid (``specified =
+    true``): the hex add-nest and the API's single grid are the top domain
+    of their run, and skipping index 0 left them on the suite's 1-D PBL at
+    any spacing.  An idealised root (periodic or open sides) is still
+    never changed.
+
+    ``inflow_seeding`` writes ``inflow_perturbation = true`` on an LES
+    nest whose parent still runs the 1-D PBL: the generator's own
+    applicability (woof.core.inflow_perturbation.parent_pbl_refusal), and
+    the handoff it was built for.  Measured: on the shipped 250 m child
+    the resolved-turbulence profile reached its plateau inside the domain
+    in 4 of 4 afternoon frames with it on and 1 of 4 with it off
+    (docs/superpowers/receipts/les/inflow-generator/PILOT-ON-2026-08-04.md,
+    G4 REDUCED), for wall time inside run-to-run noise (468.0 s against
+    466.9 s, PROOFS-2026-08-04.md).  An LES nest under an LES parent is
+    left off: the parent's resolved eddies are its inflow turbulence.
+    """
+    if not below_m:
+        return text
+    keys = les_closure_keys(closure)
+    name = DEFAULT_LES_CLOSURE if closure is None else str(closure)
+    spacings = _domain_spacings_m(text)
+    lines = text.splitlines(keepends=True)
+    spans = _domain_blocks(lines)
+    raw = tomllib.loads(text)
+    domains = raw.get("domain", [])
+    shared_pbl = int(raw.get("shared", {}).get("bl_pbl_physics", 0) or 0)
+    # Seeding is measured on resident state only (the pilot and its
+    # proofs); a streamed tree ([tiles] on/auto) keeps it off until a
+    # streamed LES nest has run with it.
+    streamed = str(raw.get("tiles", {}).get("mode", "off")) not in ("off", "")
+    inflow_seeding = bool(inflow_seeding) and not streamed
+    les = {i for i, dx in enumerate(spacings) if dx <= float(below_m)}
+    if 0 in les:
+        start, end = spans[0]
+        if str(_block_value(lines, start, end, "specified")).lower() != "true":
+            les.discard(0)
+    index_of = {int(d.get("grid_id", i + 1)): i for i, d in enumerate(domains)}
+    for index in reversed(range(len(spans))):
+        if index not in les:
+            continue
+        start, end = spans[index]
+        present = {line.split("=", 1)[0].strip() for line in lines[start + 1:end]
+                   if "=" in line and not line.lstrip().startswith("#")}
+        keep = [f"{key} = {_toml_value(value)}\n" for key, value in keys
+                if key not in present]
+        parent = (index_of.get(int(domains[index].get("parent_id", 0) or 0))
+                  if index < len(domains) else None)
+        parent_pbl = None
+        if parent is not None and parent not in les:
+            pstart, pend = spans[parent]
+            own = _block_value(lines, pstart, pend, "bl_pbl_physics")
+            parent_pbl = shared_pbl if own is None else int(float(own))
+        seed = (inflow_seeding and index != 0 and parent_pbl
+                and "inflow_perturbation" not in present)
+        if seed:
+            keep.append("inflow_perturbation = true\n")
+        if not keep:
+            continue
+        what = "nest" if index else "grid"
+        note = (f"# LES closure: {spacings[index]:g} m is at or below "
+                f"{float(below_m):g} m, so this {what} resolves its boundary "
+                f"layer (PBL off, {LES_CLOSURE_WORDS[name]}).\n")
+        if seed:
+            note += ("# Inflow seeding on: the parent runs a 1-D PBL, so "
+                     "cell perturbations on the inflow faces start the "
+                     "turbulence the smooth parent inflow lacks.\n")
+        insert = end
+        while insert > start + 1 and not lines[insert - 1].strip():
+            insert -= 1
+        lines[insert:insert] = [note, *keep]
+    return "".join(lines)
+
+
+def with_quicklook(text: str, every_s: float | None,
+                   history_vars: tuple[str, ...] | None = None) -> str:
+    """``text`` with the quick-look stream on its FINEST domain.
+
+    ``quicklook = { every_s, history_vars }`` (woof.experiment
+    DomainConfig.full_history_interval_s): the finest domain keeps its
+    full frames at its history interval and writes the subset every
+    ``every_s`` between them.  ``None`` leaves the text as is.
+    """
+    if every_s is None:
+        return text
+    lines = text.splitlines(keepends=True)
+    spans = _domain_blocks(lines)
+    if not spans:
+        raise ValueError("the emitted config has no [[domain]] to carry "
+                         "--quicklook-interval")
+    spacings = _domain_spacings_m(text)
+    finest = min(range(len(spans)), key=lambda i: spacings[i])
+    start, end = spans[finest]
+    if any(line.split("=", 1)[0].strip() == "quicklook"
+           for line in lines[start + 1:end]):
+        return text
+    table = {"every_s": float(every_s)}
+    if history_vars:
+        table["history_vars"] = list(history_vars)
+    value = "{ " + ", ".join(f"{k} = {_toml_value(v)}" for k, v in table.items()) + " }"
+    note = (f"# Quick-look stream: the subset every {float(every_s):g} s "
+            "between this domain's full frames (quicklook/wrfout_dNN_*).\n")
+    insert = end
+    while insert > start + 1 and not lines[insert - 1].strip():
+        insert -= 1
+    lines[insert:insert] = [note, f"quicklook = {value}\n"]
     return "".join(lines)
 
 
@@ -4704,9 +5036,10 @@ def fit_ladder(*, ladder: str | None = None, free_bytes: int, hours: int,
     so a shallower ladder offered as a way out of a memory refusal is
     priced with the suite it would run rather than this ladder's.
 
-    ``point_extent_km`` is the largest root extent per axis the point
-    request is sized to (``--point-extent-km``); see
-    :func:`point_request_bound`.
+    ``point_extent_km`` is the largest root extent the point request is
+    sized to (``--point-extent-km``), on the longer root axis (x); the
+    root keeps the 5:4 shape of :func:`_dims_for_scale`, so y is 0.8 of
+    it.  See :func:`point_request_bound`.
 
     ``device_profile`` is the CARD the non-pool terms are priced against
     -- the one this machine MEASURED when no ``--card``/``--vram-gib``
@@ -4747,6 +5080,11 @@ def fit_ladder(*, ladder: str | None = None, free_bytes: int, hours: int,
     high-latitude cyclone request into the projection pole on a large card
     while the bisecting search shrank away from it -- the same door
     answering the same question two ways.
+
+    ``candidate_builder(dims)`` optionally supplies a complete, already
+    validated experiment from an editable template. It replaces canned
+    rendering BEFORE every price call; no profile substitution is attempted.
+    Template-owned boundary/stencil requirements travel with the geometry.
 
     Takes FREE VRAM, not a budget: the reserve is a property of the
     candidate experiment (see :func:`sizing_budget_bytes`), so it cannot
@@ -5356,16 +5694,16 @@ def _buffer_cells(grid, footprint: PolygonFootprint,
     latitude_reach = math.degrees(buffer_m / EARTH_RADIUS_M)
     south = footprint.south - latitude_reach
     north = footprint.north + latitude_reach
-    if south <= -90.0 or north >= 90.0:
+    if grid.map_proj != "polar" and (south <= -90.0 or north >= 90.0):
         edge = "south" if south <= -90.0 else "north"
         raise ValueError(
             f"--buffer-km {buffer_km:g} on this footprint reaches the "
-            f"{edge} pole; lat-lon source interpolation and static-tile "
-            "windowing are not pole-capable")
+            f"{edge} pole on Lambert; use --projection polar "
+            "for a buffered domain enclosing a pole")
     # These projections are conformal and their scale depends on latitude.
     # Taking the maximum over the whole buffered latitude range makes a
     # ground-distance buffer no smaller in projected grid cells.
-    scale = _maximum_map_factor(grid, south, north)
+    scale = _maximum_map_factor(grid, max(-90.0, south), min(90.0, north))
     return buffer_m * scale / float(grid.dx)
 
 
@@ -5500,8 +5838,18 @@ def verify_polygon_containment(exp: ExperimentConfig,
 def _fit_source_projection(projection: dict, source: str,
                            root_dx_m: float) -> dict:
     """Fit about the projection and cell center exact-source emission uses."""
+    from woof.source_adapters import source_coverage_window
+    from woof.source_coverage import points_outside
     from woof.static.source_defaults import align_source_projection
 
+    # A point the source does not cover has no source cells to align to,
+    # and the coverage refusal below names the source, where the target
+    # lands in its index space and the way out.  Aligned first (0eae0f675),
+    # such a point met the static source's "N cells off the source's mass
+    # points" instead, which names none of them.
+    if bool(points_outside(source_coverage_window(source),
+                           projection["ref_lat"], projection["ref_lon"])):
+        return projection
     # 6a69b356f, lane/hrrr-statics, aligns exact-spacing emission to the
     # source projection and lattice. Root dimensions have an even quantum,
     # so a 2x2 planning window establishes their half-cell center before
@@ -5903,7 +6251,8 @@ def _missing_case_inputs(out: Path, case_data: dict) -> list[str]:
     return missing
 
 
-def gray_zone_headline(chain_km, shared: dict) -> list[str]:
+def gray_zone_headline(chain_km, shared: dict, les_below_m: float | None = None,
+                       les_closure: str | None = None) -> list[str]:
     """The gray-zone advisory's first clause: the finding, no mechanism.
 
     The full :func:`gray_zone_advisory` sentence is four printed lines
@@ -5918,10 +6267,8 @@ def gray_zone_headline(chain_km, shared: dict) -> list[str]:
     worse than no headline.
     """
 
-    full = gray_zone_advisory(chain_km, shared)
-    if not full:
-        return []
-    return [full[0].split(", so ", 1)[0] + "."]
+    full = gray_zone_advisory(chain_km, shared, les_below_m, les_closure)
+    return [line.split(", so ", 1)[0] + "." for line in full]
 
 
 def cumulus_gray_zone_headline(chain_km, cu_physics_by_domain
@@ -5938,9 +6285,11 @@ def cumulus_gray_zone_headline(chain_km, cu_physics_by_domain
 
 
 def _print_geog_help() -> None:
-    print("  static geography: woof reads a locally staged NCAR WPS_GEOG "
-          "tree; `woof fetch-geog` downloads and stages it (~1.3 GB "
-          "compressed, ~16 GB unpacked, resumable).  The geog_root "
+    from woof.geog_assets import datasets_required_by, size_phrase
+    print("  static geography: woof reads a locally staged WPS_GEOG "
+          "tree; `woof fetch-geog` downloads and stages it ("
+          + size_phrase(datasets_required_by("wrf"))
+          + " for the WRF door, resumable).  The geog_root "
           "directory must contain these dataset directories:")
     print("    " + ", ".join(GEOG_DATASETS))
 
@@ -6003,6 +6352,87 @@ def _profile_help_route_note() -> str:
 #: state two sources' defaults as literal text and a route gate moving
 #: would have left it lying.
 DEFAULT_WIZARD_SOURCE = "era5"
+#: What a bare `woof domain` runs on when the default source's keyless
+#: store does not hold the requested window yet (ERA5 trails real time by
+#: about a week): the public forecast source every box can fetch.
+DEFAULT_WIZARD_FALLBACK_SOURCE = "gfs"
+
+
+def _keyless_default_source(args) -> None:
+    """On a computer with no CDS key, the default reads a keyless source.
+
+    The CDS is a keyed job API: a bare `woof domain` wrote a CDS-only
+    [fetch] table and the first `woof go` stopped at acquisition on
+    any computer without ~/.cdsapirc, while `woof doctor` reported the
+    keyless ARCO store available.  With no key:
+
+    * ERA5 is read from Google's keyless ARCO store (the same reanalysis
+      from 1940), unless a provider or the CDS-only ensemble members
+      were named.
+    * A window the store does not hold yet (ERA5 is published about a
+      week behind real time, so yesterday's date failed outright at the
+      fetch, after the plan had been accepted) runs on the fallback
+      source when the source itself was not named, and is refused here,
+      naming the store's newest cycle, when `--source era5` was.
+
+    With a key the table is exactly what it always was.  Each choice is
+    said in one sentence, so the reader knows which source runs and why.
+    """
+
+    from woof.fetch import (cds_credentials_path, cds_credentials_present,
+                             resolve_latest_cycle)
+
+    if (args.source != DEFAULT_WIZARD_SOURCE
+            or getattr(args, "era5_provider", None) is not None
+            or getattr(args, "era5_product", None) == "ensemble_members"
+            or cds_credentials_present()):
+        return
+    keyless = (f"source: ERA5 from Google's keyless ARCO store, because no "
+               f"Copernicus CDS key was found at {cds_credentials_path()} "
+               "(add one, or pass --era5-provider cds, to use the CDS)")
+    args.era5_provider = "arco"
+    raw = str(args.cycle).strip()
+    cycle = None if raw.lower() == "latest" else parse_cycle(raw, args.source)
+    start_hour = getattr(args, "forecast_start_hour", None) or 0
+    hours = int(getattr(args, "hours", 0) or 0)
+    newest = None
+    if cycle is not None:
+        try:
+            newest = resolve_latest_cycle(
+                args.source, start_hour + hours, provider="arco",
+                **({"start_hour": start_hour} if start_hour else {}))
+        except (RuntimeError, OSError, ValueError):
+            # The store's bounds could not be read; the fetch itself
+            # checks the same attribute and says so.
+            newest = None
+    if cycle is None or newest is None or cycle <= newest:
+        print(keyless)
+        return
+    window = (f"{cycle:%Y-%m-%dT%H}Z through "
+              f"{cycle + timedelta(hours=start_hour + hours):%Y-%m-%dT%H}Z")
+    reason = (f"ERA5 for {window} is not in Google's keyless ARCO store yet "
+              f"(its newest cycle covering a {start_hour + hours} h window is "
+              f"{newest:%Y-%m-%dT%H}Z; ERA5 is published about a week behind "
+              f"real time) and no Copernicus CDS key was found at "
+              f"{cds_credentials_path()}")
+    if getattr(args, "source_explicit", False):
+        raise ValueError(
+            f"--source {args.source}: {reason}. The fetch would stop at that "
+            f"store's coverage. Choose a cycle up to {newest:%Y-%m-%dT%H}Z, "
+            f"pass --source {DEFAULT_WIZARD_FALLBACK_SOURCE}, or fetch again "
+            "once the store publishes the window.")
+    args.source = DEFAULT_WIZARD_FALLBACK_SOURCE
+    args.era5_provider = None
+    print(f"source: {args.source.upper()}, because {reason} "
+          f"(--source {DEFAULT_WIZARD_SOURCE} keeps ERA5 and waits for it)")
+
+
+class _DeclaredSourceAction(argparse.Action):
+    """Keep the ordinary default and distinguish an explicit forcing choice."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, values)
+        namespace.source_explicit = True
 
 
 def _profile_help_default_note() -> str:
@@ -6173,8 +6603,14 @@ def resolve_sizing_budget(card: str | None, vram_gib: float | None, *,
         if not math.isfinite(capacity) or capacity <= 0:
             raise ValueError(f"--vram-gib {capacity:g} is not a size: "
                              "pass a finite positive card capacity in GiB")
-        return SizingBudget(capacity, int(card_assumed_free_gib(capacity) * GIB),
-                            None, None)
+        from woof.core.device_probe import pool_lease_budget_bytes
+        free = int(card_assumed_free_gib(capacity) * GIB)
+        lease = pool_lease_budget_bytes()
+        note = None
+        if lease is not None:
+            free = min(free, lease)
+            note = f"domain: sizing against the pool lease budget {lease / 2**20:g} MiB"
+        return SizingBudget(capacity, free, None, note)
     words = _capacity_words(tuple(declare))
     probe = device_memory_probe_subprocess()
     total = probe.get("total_bytes") if isinstance(probe, dict) else None
@@ -6188,6 +6624,8 @@ def resolve_sizing_budget(card: str | None, vram_gib: float | None, *,
                 + (f" or declare {words['slash']} to size for another machine."
                    if declare else "."))
         measured = total / GIB
+        from woof.core.device_probe import sizing_free_memory
+        free, lease_note = sizing_free_memory(free)
         # The SAME probe answer, used WHOLE.  Reading the capacity out of
         # it and dropping the shader census beside it is exactly how a
         # measured 68-SM card came to be priced on a 170-SM profile.
@@ -6204,7 +6642,7 @@ def resolve_sizing_budget(card: str | None, vram_gib: float | None, *,
             f"domain: {lead} the "
             f"measured local card ({card_words}{measured:g} GiB total, "
             f"{free / GIB:.2f} GiB available)"
-            f"{tail}{basis}"), measured=True)
+            f"{tail}{basis}" + (f"; {lease_note}" if lease_note else "")), measured=True)
     reason = (device_memory_probe_reason()
               or "the local card could not be measured")
     # The whole reason, not a word in it: a probe that failed on a CuPy
@@ -6299,26 +6737,37 @@ def _supplied_forcing_schedule(args, start_time):
 def _check_emitted_config(out: Path, sizing: SizingBudget, *,
                           target_machine=None, remote_hardware=False) -> int:
     """Check with the same sizing sample, retaining its measured device profile."""
+    from woof.cli import EXIT_GEOGRAPHY_MISSING
     from woof.core.mynn_pbl_scratch import (
         mynn_pricing_memory, mynn_pricing_total_bytes)
 
     with mynn_pricing_memory(total_bytes=mynn_pricing_total_bytes(
             sizing.vram_gib, measured=sizing.measured or remote_hardware),
                              free_bytes=sizing.free_bytes):
-        return _check_emitted_config_for_card(
+        rc, geography_missing_only = _check_emitted_config_for_card(
             out, sizing, target_machine=target_machine,
             remote_hardware=remote_hardware)
+    # Creation must succeed before fetch-geog can read this configuration.
+    # The geography-only verdict means memory passed. A refused tiled plan
+    # also uses 6, so retain the check's origin rather than just its number.
+    # Its dataset list and exact remedy have already been printed once.
+    if rc == EXIT_GEOGRAPHY_MISSING and geography_missing_only:
+        print("woof check: geography staging is the next step; "
+              "the configuration was created. Follow the remedy above "
+              "before running.")
+        return 0
+    if rc == 0:
+        print("woof check: PASS (rc 0)")
+    return rc
 
 
 def _check_emitted_config_for_card(out: Path, sizing: SizingBudget, *,
                                   target_machine=None,
-                                  remote_hardware=False) -> int:
-    from woof.cli import build_parser, main as cli_main
+                                  remote_hardware=False) -> tuple[int, bool]:
+    from woof.cli import build_parser
 
     argv = ["check", str(out), "--free-gib", f"{sizing.free_bytes / GIB:.17g}",
             "--vram-gib", f"{sizing.vram_gib:.17g}"]
-    if not sizing.measured and not remote_hardware:
-        return cli_main(argv)
     # This is an in-process handoff, not a new CLI option. The composed
     # handler still runs input preflight before the memory check.
     args = build_parser().parse_args(argv)
@@ -6327,7 +6776,8 @@ def _check_emitted_config_for_card(out: Path, sizing: SizingBudget, *,
     if remote_hardware:
         args._shared_target_machine = target_machine
         args._target_hardware_supplied = True
-    return args.func(args)
+    rc = args.func(args)
+    return rc, getattr(args, "_geography_missing_only", False)
 
 
 def _domain_target_hardware(args, sizing_budget=None):
@@ -6381,11 +6831,33 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
     figure rather than the printed sizing line.
     """
 
+    from woof.earth2_licensing import check_namespace
+    check_namespace(args)
+    les_below_m = getattr(args, "les_below_m", None)
+    les_closure = getattr(args, "les_closure", None)
+    les_closure_keys(les_closure)
     # FIRST, before any geometry: the source name becomes a registry row,
     # or the run stops with the registry's own words.  Everything below
     # reads the row -- coverage, cadence, forecast horizon -- so a name
     # that never resolved would have been re-guessed at four later points.
-    args.source = resolve_source(args.source)
+    if getattr(args, "recipe", None):
+        from woof.region_recipe import domain_recipe_main
+        return domain_recipe_main(args)
+    if getattr(args, "smoke", False):
+        # Breakage it prevents: the plain wizard composes no HRRR-Smoke set,
+        # so the flag would be read by nothing.
+        raise ValueError("--smoke requires --recipe; it turns HRRR-Smoke on in the emitted recipe")
+    if getattr(args, "region", None) or getattr(args, "spacing_km", None):
+        raise ValueError("--region and --spacing-km require --recipe; otherwise the requested recipe settings would be lost")
+    if getattr(args, "point", None) is None and getattr(args, "polygon", None) is None:
+        raise ValueError("one of --point LAT,LON or --polygon GEOJSON is required "
+                         "(or --recipe ID, optionally with --region/--polygon and "
+                         "--spacing-km); without a target there is no domain to fit")
+    from woof.source_adapters import source_for_cycle
+    args.source = source_for_cycle(args.source, getattr(args, "cycle", None))
+    args.source = resolve_source(args.source,
+                                 cadence_h=getattr(args, "cadence", None))
+    _keyless_default_source(args)
     nz = getattr(args, "nz", None)
     tiles = getattr(args, "tiles", None)
     if nz is not None and nz < 4:
@@ -6447,32 +6919,14 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
     # complete through lead + length and a bad lead should not spend a
     # network round trip to be refused.
     start_hour = getattr(args, "forecast_start_hour", None) or 0
-    if start_hour < 0:
-        raise ValueError(
-            "--forecast-start-hour must be a nonnegative forecast lead")
-    if start_hour and not source_reaches_forecast_leads(args.source):
-        raise ValueError(
-            f"--forecast-start-hour: {args.source} publishes no forecast "
-            "leads (its registry row declares max_forecast_hour = 0), so "
-            "every time in it is an analysis at its own valid time and "
-            "there is no lead to begin at; name the analysis time you want "
-            "with --cycle")
-    horizon = get_source_adapter(args.source).max_forecast_hour
-    if horizon and start_hour + args.hours > horizon:
-        # Named here, from the source's own declared horizon, rather than
-        # after the acquisition.  gdas stops at f009 and rap at f051; a
-        # window that walks past either is a window the product never
-        # published, and it used to be discovered by whichever stage first
-        # went looking for the missing lead.
-        raise ValueError(
-            f"--hours {args.hours} beginning at f{start_hour:03d} reaches "
-            f"f{start_hour + args.hours:03d}, past {args.source}'s declared "
-            f"f{horizon:03d} horizon; shorten the window, start earlier, or "
-            "choose a source with a longer forecast")
+    lead_refusal = forecast_start_hour_refusal(args.source, start_hour, args.hours)
+    if lead_refusal:
+        raise ValueError(lead_refusal)
     from woof.fetch import era5_combined_name, validate_fetch_hints
     acquisition = {"source": args.source, "cycle": args.cycle,
                    "hours": args.hours, "forecast_start_hour": start_hour}
-    for key in ("member", "cadence", "era5_product", "era5_provider"):
+    for key in ("member", "cadence", "era5_product", "era5_provider",
+                *(hint[0] for hint in get_source_adapter(args.source).acquisition_hints)):
         value = getattr(args, key, None)
         if value is not None:
             acquisition[key] = value
@@ -6928,7 +7382,8 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
         "out": _relative_or_absolute(data_dir, Path.cwd()),
     }
     from woof import fetch_routes
-    for key in ("era5_product", "era5_provider", "retrieve", "member"):
+    for key in ("era5_product", "era5_provider", "retrieve", "member",
+                *(hint[0] for hint in get_source_adapter(args.source).acquisition_hints)):
         if key in acquisition:
             fetch_hints[key] = acquisition[key]
     if args.source in fetch_routes.route_ids():
@@ -6968,6 +7423,14 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
     if emitted_fetch_hints is not None and local_source:
         emitted_fetch_hints = {k: v for k, v in emitted_fetch_hints.items()
                                if k != "out"}
+    # The TOML's out is relative to the TOML, as [case_data].forcing is;
+    # the printed fetch command below keeps the working-directory form,
+    # because it is pasted here.  D-11 (2.8.8 acceptance): writing the
+    # working-directory form into the file made a config emitted to
+    # sub/experiment.toml run only from the folder it was written in.
+    if emitted_fetch_hints is not None and "out" in emitted_fetch_hints:
+        emitted_fetch_hints = {**emitted_fetch_hints,
+                               "out": _relative_or_absolute(data_dir, out.parent)}
     # Prove every emitted hint against the REAL fetch validators before
     # anything is written.  A config the wizard cannot fetch is a config
     # whose printed step 1 exits 2, and that shipped twice: any lead not
@@ -7034,10 +7497,25 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
         history_interval_s=args.history_interval,
         nest_history_interval_s=args.nest_history_interval,
         acknowledgements=acknowledgements, nz=nz, tiles=tiles,
-        physics_mix=physics_mix, clock=clock)
+        physics_mix=physics_mix, clock=clock,
+        les_below_m=les_below_m, les_closure=les_closure)
     text = with_surface_flux_option(text, getattr(args, "isftcflx", None))
+    text = with_les_closure(text, les_below_m, les_closure,
+                            inflow_seeding=getattr(args, "les_inflow_seeding",
+                                                   "on") != "off")
+    text = with_quicklook(text, getattr(args, "quicklook_interval", None),
+                          getattr(args, "quicklook_vars", None))
     from woof.static.source_defaults import with_source_static_defaults_text
     text = with_source_static_defaults_text(text, args.source)
+    if args.geog_root and case_data is None:
+        # D2: the prepared routes have no [case_data], but must retain
+        # the explicit tree for check and the printed go command alike.
+        root_line = ("geog_root = "
+                     + _toml_value(_posix(Path(args.geog_root).resolve())) + "\n")
+        if "\n[static]\n" in text:
+            text = text.replace("\n[static]\n", "\n[static]\n" + root_line, 1)
+        else:
+            text += "\n[static]\n" + root_line
     smoothing_spec = getattr(args, "terrain_smoothing", None)
     smoothing_precision = getattr(args, "terrain_smoothing_precision", None)
     if smoothing_spec or smoothing_precision:
@@ -7055,6 +7533,14 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
             for setting in settings))
     # Round-trip the exact bytes through the real loader before writing.
     exp = experiment_from_text(text, source=str(out))
+    terrain_autosmooth = []
+    if (getattr(args, "geog_root", None)
+            and (Path(args.geog_root) / "topo_gmted2010_30s" / "index").is_file()):
+        from woof.static.terrain_autosmooth import survey_domain_terrain
+        terrain_autosmooth = survey_domain_terrain(
+            exp, Path(args.geog_root), smoothing_settings=(
+                tuple(with_precision(setting, smoothing_precision) for setting in settings)
+                if smoothing_spec is not None or smoothing_precision is not None else ()))
     # The clock rides on the header line, as the extent does: a line of
     # its own would push the default emission past its screen.
     clock_words = (", adaptive time step"
@@ -7181,6 +7667,13 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
     print(f"wrote {out}"
           + (f" (+ {', '.join(p.name for p in written[1:])})"
              if len(written) > 1 else ""))
+    if terrain_autosmooth:
+        terrain_receipt_path = out.with_suffix(".terrain-autosmooth.json")
+        _write_atomic(terrain_receipt_path, json.dumps({
+            "schema": "gpuwm-domain-terrain-autosmooth-survey-v1",
+            "terrain_source": "local WPS_GEOG survey; final overlays rechecked in prepare",
+            "domains": terrain_autosmooth,
+        }, indent=2, sort_keys=True) + "\n")
     # The printed command must be pasteable as-is from THIS directory.
     # A relative data path that climbs out of the cwd silently targets
     # the wrong place when pasted from anywhere else, so it is printed
@@ -7230,8 +7723,11 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
                             if start_hour else "")
                          + (f"--member {fetch_hints['member']} "
                              if "member" in fetch_hints else "")
+                         + "".join(f"--{key.replace('_', '-')} {shlex.quote(str(fetch_hints[key]))} "
+                                   for key, *_ in get_source_adapter(args.source).acquisition_hints
+                                   if key in fetch_hints)
                          + top_flag
-                          + f"--out {_printed_path(printed_out)}")
+                         + f"--out {_printed_path(printed_out)}")
     else:
         # NOT a `woof fetch` line.  This source has a runnable profile
         # and no download route, and printing a command that refuses is
@@ -7240,8 +7736,7 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
         # geometry, levels, physics and boundary cadence below are
         # complete, so a hand-staged directory of this cycle's files runs
         # the same chain every other mapped source runs.
-        spacing_h = int(
-            source_forcing_interval_seconds(args.source)) // 3600
+        spacing_h = int(interval) // 3600
         fetch_command = "\n".join((
             f"# stage {args.source}'s bytes for cycle "
             f"{fetch_hints['cycle']} yourself into",
@@ -7321,9 +7816,9 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
                  "validity'.")
     for note in area_notes:
         warn(note,
-             why="lat-lon source interpolation and static-tile windowing "
-                 "are not pole-capable, so a box touching the pole is "
-                 "not a box the pipeline can honour.")
+             why="forcing must cover the complete projected footprint and "
+                 "its interpolation donors, including every longitude "
+                 "when a polar stereographic grid encloses a pole.")
     for note in coverage_notes:
         # Advisory, never a refusal: the DOMAIN was already bounded by
         # source coverage during fitting, so only the margined bbox --
@@ -7382,7 +7877,8 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
             print(line)
         for note in radiation_cadence_advisory(profile, len(dims)):
             print(f"advisory: {note}")
-        for note in gray_zone_advisory(chain_km, shared):
+        for note in gray_zone_advisory(chain_km, shared, les_below_m,
+                                       les_closure):
             print(f"advisory: {note}")
         for note in cumulus_gray_zone_advisory(chain_km, cu_by_domain):
             print(f"advisory: {note}")
@@ -7391,7 +7887,8 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
         # the whole advisory in its header comment either way, so the
         # reasoning is never only one flag away -- it is also in the
         # file, next to the settings it is about.
-        for note in gray_zone_headline(chain_km, shared):
+        for note in gray_zone_headline(chain_km, shared, les_below_m,
+                                       les_closure):
             print(f"advisory: {note}")
         for note in cumulus_gray_zone_headline(chain_km, cu_by_domain):
             print(f"advisory: {note}")
@@ -7433,7 +7930,6 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
                   "lost: fix the gap that check names, then re-run "
                   "`woof check` on the same file.", flush=True)
             return rc
-        print("woof check: PASS (rc 0)")
     else:
         deferred = _missing_case_inputs(out, case_data)
         if deferred:
@@ -7458,8 +7954,19 @@ def domain_main(args, *, sizing_budget: SizingBudget | None = None,
                       "then re-run `woof check` on the same file.",
                       flush=True)
                 return rc
-            print("woof check: PASS (rc 0)")
 
+    # Preserve the caller's explicit terms in executable follow-up commands.
+    # Otherwise a successful restricted-source plan prints a fetch/go that
+    # immediately refuses the same source for missing acceptance.
+    licence_flags = "".join(
+        f" --accept-licence {shlex.quote(licence)}"
+        for licence in (getattr(args, "accept_licence", ()) or ()))
+    if licence_flags:
+        if fetch_command.startswith("woof fetch "):
+            first, *remaining = fetch_command.splitlines()
+            fetch_command = "\n".join((first + licence_flags, *remaining))
+        if run_command.startswith("woof go "):
+            run_command += licence_flags
     _print_next_steps(fetch_command, check_command, run_command,
                       source=args.source, deferred=bool(deferred),
                       explain=explain,
@@ -7479,11 +7986,15 @@ def _print_next_steps(fetch_command: str, check_command: str,
     the source registry and appear before the next command when needed.
     """
 
+    # The CDS key is the CDS transport's; a fetch from the keyless ARCO
+    # store needs none, and telling that user to go and get one sends them
+    # to register for an account the command never reads.
+    keyless = "--era5-provider arco" in fetch_command
     if (not explain and run_command.startswith("woof go ")
             and fetch_command.startswith("woof fetch ")):
         print("\nConfiguration created. Review it before launching; "
               "Run checks current GPU memory before downloading.")
-        for note in source_credential_notes(source):
+        for note in ([] if keyless else source_credential_notes(source)):
             print(note)
         print("Preview the plan without downloading or running:")
         print(f"  {run_command} --dry-run")
@@ -7507,10 +8018,6 @@ def _print_next_steps(fetch_command: str, check_command: str,
     print(f"  1. {acquire[0]}")
     for line in acquire[1:]:
         print(f"     {line}")
-    # The CDS key is the CDS transport's; a fetch from the keyless ARCO
-    # store needs none, and telling that user to go and get one sends them
-    # to register for an account the command never reads.
-    keyless = "--era5-provider arco" in fetch_command
     for note in ([] if keyless else source_credential_notes(source)):
         print(f"     {note}")
     print(f"  2. {check_command}"
@@ -7539,16 +8046,51 @@ def register_cli(subparsers) -> None:
         "domain",
         help="wizard: emit an experiment TOML for a point or polygon + GPU budget, "
              "sized by the in-process VRAM estimator")
-    target = parser.add_mutually_exclusive_group(required=True)
+    # Acquisition extensions belong to registry rows, including a route's
+    # model key and generated-member roster. The emitted fetch table and
+    # the source's ordinary CLI consume these same declarations.
+    for adapter in source_adapters():
+        for name, kind, default, description in adapter.acquisition_hints:
+            flag = "--" + name.replace("_", "-")
+            if flag not in parser._option_string_actions:
+                parser.add_argument(flag, type={"string": str, "integer": int,
+                    "number": float}[kind], default=None, help=description)
+    # Not required at parse time: --recipe takes --region or --polygon
+    # (or neither, for its row's own declared region), never --point, and
+    # region_recipe.domain_recipe_main names exactly what is missing.  An
+    # argparse-required group refused a bare --recipe with "one of the
+    # arguments --region --point --polygon is required" before that check
+    # could speak.  domain_main checks the target for the plain wizard.
+    target = parser.add_mutually_exclusive_group(required=False)
+    target.add_argument("--region", metavar="ID|GEOJSON",
+                        help="with --recipe: region row id (e.g. US) or local "
+                             "polygon GeoJSON the recipe is laid out on; "
+                             "requires --spacing-km")
+    parser.add_argument("--recipe", metavar="ID|TOML",
+                        help="complete recipe from the packaged table or a local "
+                             "TOML, laid out on --region (or --polygon) at "
+                             "--spacing-km; a packaged row given neither uses "
+                             "its declared default region and spacing "
+                             "(hrrr_v4_gsd41: US at 3 km), stated in the "
+                             "output and the receipt")
+    from woof.smoke_execution import SMOKE_FLAG_HELP
+    parser.add_argument("--smoke", action="store_true", default=False,
+                        help="with --recipe: " + SMOKE_FLAG_HELP)
+    parser.add_argument("--region-table", type=Path, default=None,
+                        help="region JSON table override; adding a region requires data only")
+    parser.add_argument("--recipe-table", type=Path, default=None,
+                        help="recipe registry override; new recipes and aerosol policies are data")
+    parser.add_argument("--spacing-km", type=positive_float, default=None,
+                        help="with --recipe: grid spacing in kilometres; "
+                             "required whenever --region or --polygon is given "
+                             "with --recipe")
     target.add_argument("--point", metavar="LAT,LON",
                         help="domain center in decimal degrees. |lat| 90 "
                              "is refused. A point carries no extent, so "
                              "the fit chooses one: the largest layout "
                              "the budget affords, capped at "
                              "--point-extent-km per axis, "
-                             "kept clear of the projection pole, "
-                             "where lat-lon source interpolation and "
-                             "static-tile windowing do not work, and "
+                             "kept within the projection envelope, and "
                              "kept to less than one trip around the "
                              "globe in longitude. These "
                              "caps SHRINK the domain rather than refuse "
@@ -7567,7 +8109,9 @@ def register_cli(subparsers) -> None:
     parser.add_argument(
         "--point-extent-km", type=point_extent_argument,
         default=POINT_FIT_MAX_EXTENT_KM, metavar="KM",
-        help="largest root extent per axis a --point request is sized to "
+        help="largest root extent a --point request is sized to, on the "
+             "longer root axis (x); the root keeps the ladder's 5:4 shape, "
+             "so y is 0.8 of it "
              f"(default {POINT_FIT_MAX_EXTENT_KM:.0f}).  The projection "
              "pole, one trip around the globe, the source's coverage and "
              "the card still bound the fit; an extent below the smallest "
@@ -7704,13 +8248,43 @@ def register_cli(subparsers) -> None:
              "exact rational dt and refuses the emitted file otherwise, "
              "before it is written")
     parser.add_argument(
-        "--nest-history-interval", type=positive_float, default=None,
-        metavar="SECONDS",
-        help="the same, for every NESTED domain (default "
-             f"{DEFAULT_NEST_HISTORY_INTERVAL_S:g}).  Nests write more "
+        "--nest-history-interval", type=positive_float_list, default=None,
+        metavar="SECONDS[,SECONDS...]",
+        help="the same, for the NESTED domains (default "
+             f"{DEFAULT_NEST_HISTORY_INTERVAL_S:g}): one value for every "
+             "nest, or one per nest, outer to inner (1800,600 is d02 "
+             "every 30 min and d03 every 10 min).  Nests write more "
              "often than the root by default because resolving what the "
              "root cannot, over a shorter window, is the point of "
              "running one.  Ignored for a single-domain ladder")
+    parser.add_argument(
+        "--quicklook-interval", type=positive_float, default=None,
+        metavar="SECONDS",
+        help="a quick-look stream on the FINEST domain: a small subset "
+             "(--quicklook-vars) every SECONDS between its full frames, "
+             "written to quicklook/wrfout_dNN_<time>.  Must divide that "
+             "domain's history interval.  Measured 13 B a cell against "
+             "172 for a full frame")
+    parser.add_argument(
+        "--quicklook-vars", default=None, metavar="VAR[,VAR...]",
+        type=lambda text: tuple(v.strip() for v in text.split(",") if v.strip()),
+        help="the quick-look subset's wrfout variables (default: "
+             "REFL_10CM, UP_HELI_MAX, U10, V10, T2, Q2, PSFC, RAINNC, RAINC)")
+    parser.add_argument(
+        "--les-below-m", type=float, default=DEFAULT_LES_BELOW_M,
+        metavar="METRES",
+        help="write the resolved-turbulence closure (PBL off, a 3-D "
+             "closure, isotropic mixing) on every real-data domain at or "
+             f"below this spacing (default {DEFAULT_LES_BELOW_M:g} m; 0 never)")
+    parser.add_argument(
+        "--les-closure", choices=tuple(sorted(LES_CLOSURES)),
+        default=DEFAULT_LES_CLOSURE,
+        help="the 3-D closure an LES domain runs: smagorinsky (km_opt 3, "
+             "the default) or tke (km_opt 2, 1.5-order prognostic TKE)")
+    parser.add_argument(
+        "--les-inflow-seeding", choices=("on", "off"), default="on",
+        help="cell perturbations on the inflow faces of an LES nest whose "
+             "parent runs a 1-D PBL (default on)")
     parser.add_argument("--sf-surface-mosaic", type=int, choices=(0, 1), default=None,
                         help="Noah land-use tiles on every grid (WRF sf_surface_mosaic)")
     parser.add_argument("--mosaic-cat", type=int, default=None,
@@ -7747,6 +8321,7 @@ def register_cli(subparsers) -> None:
                         help="forecast length (run_seconds = N*3600)")
     parser.add_argument(
         "--source", default=DEFAULT_WIZARD_SOURCE, metavar="SOURCE",
+        action=_DeclaredSourceAction,
         # NO `choices=`, deliberately.  This used to be
         # choices=("gfs", "hrrr", "era5") while the product shipped
         # sixteen runnable sources, so argparse answered `--source rap`
@@ -7756,8 +8331,11 @@ def register_cli(subparsers) -> None:
         # and a new row reach this door with no edit here.
         help="forcing source: any registered source id or alias -- "
              + ", ".join(wizard_planable_source_ids())
-             + " today (`woof prep --list-sources` lists the whole "
-               "registry).  It "
+             + " today, plus "
+             + ", ".join(wizard_cadence_named_source_ids())
+             + " with --cadence naming the spacing of the history files "
+               "it will be handed (`woof prep --list-sources` lists the "
+               "whole registry).  It "
                "sets the boundary cadence written into the companion "
                "namelist.wps, bounds the domain by the source's own grid "
                "where that grid is regional, and (era5) declares "
@@ -7778,9 +8356,12 @@ def register_cli(subparsers) -> None:
     parser.add_argument("--era5-product", choices=("reanalysis", "ensemble_members"), default=None,
                         help="explicit ERA5 product; default reanalysis has no member axis")
     parser.add_argument("--era5-provider", choices=("cds", "arco"), default=None,
-                        help="ERA5 provider; ensemble_members requires CDS")
+                        help="ERA5 provider (default: cds when a Copernicus CDS key is present, otherwise the keyless arco store); ensemble_members requires CDS")
     parser.add_argument("--cadence", type=positive_int, default=None, metavar="HOURS",
-                        help="boundary spacing in whole hours, validated against the selected product")
+                        help="boundary spacing in whole hours, validated against the selected product; "
+                             "required for a source that declares no cadence of its own "
+                             f"({', '.join(wizard_cadence_named_source_ids())}), where it is "
+                             "the spacing of the history files handed to woof prep")
     parser.add_argument("--member", default=None,
                         help="ensemble trajectory member; defaults to the route's control")
     parser.add_argument("--forecast-start-hour", type=int, default=None,
@@ -7827,7 +8408,7 @@ def register_cli(subparsers) -> None:
                              "WPS's float32")
     parser.add_argument("--geog-root", type=Path, default=None,
                         metavar="DIR",
-                        help="staged WPS_GEOG tree (default "
+                        help="staged WPS_GEOG tree, saved for every source (default "
                              "${GPUWM_CASE_DATA_ROOT}/WPS_GEOG)")
     parser.set_defaults(func=domain_main)
     return parser

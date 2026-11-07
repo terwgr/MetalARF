@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "name": "da_state_binary",
+      "module": "da_state",
+      "source": "woof/metal/shaders/da_state.metal",
+      "cuda_source": "woof/ensemble/increments.py",
+      "cuda_symbol": "apply_increments",
+      "resources": [
+        [
+          "left",
+          "float",
+          "read"
+        ],
+        [
+          "right",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "left": [
+          [
+            "n"
+          ]
+        ],
+        "right": [
+          [
+            "n"
+          ]
+        ],
+        "out": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "subtract",
+          "int32"
+        ]
+      ],
+      "arithmetic_policies": [
+        "default"
+      ],
+      "layout_version": 1,
+      "threads_per_group": 128
+    }
+  ]
+}

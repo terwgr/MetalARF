@@ -51,7 +51,6 @@ answering about ``decode``, because ``decode`` and ``compose`` now agree.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -60,6 +59,8 @@ import pytest
 from woof import bridges, mapped_direct, mapped_engine_bridge, source_cli
 from woof.ingest.source_coverage import PREPARATION_REFUSAL_EXIT_CODE
 from woof.source_adapters import source_adapters
+from woof import earth2_licensing
+from _reserved_drives import gauntlet_staging_root
 
 
 #: Every registered source whose runner is the mapped composition route.
@@ -74,10 +75,9 @@ COMPOSITION_SOURCES = tuple(sorted(
 
 #: The staged real-byte tree the parity battery reads, same environment
 #: contract.
-STAGING = Path(os.environ.get(
-    "GPUWM_MODEL_GAUNTLET_STAGING",
-    str(Path.home() / "gpuwm-model-gauntlet-staging"),
-))
+#: The staging root, never one on or linked onto a reserved drive
+#: (tests/_reserved_drives.py names the breakage).
+STAGING = gauntlet_staging_root()
 
 #: Staged real-byte trees, as ``source -> (directory, cycle, hours)``.
 #:
@@ -200,13 +200,37 @@ def _prep_argv(source, *, inputs, output_root, work, supplements=None,
     ``supplements`` defaults to ``inputs`` because the in-band-terrain
     profiles bind the same files twice; a source whose terrain arrives
     as a separate invariant object passes its own list.
+
+    A model row whose weights are not permissive refuses any door until
+    its exact licence is named (woof.earth2_licensing.require_licence,
+    exit 78).  That gate is tested in test_earth2_licensing; here such a
+    row carries its own opt-in, read from the table, so the forwarding
+    claim is still measured on every registered row.
     """
 
     argv = ["--source", source]
+    found = earth2_licensing.model_row(source) if source.startswith("earth2-") else None
+    if found and found[1].get("licence_class", "unresolved") != "permissive":
+        licence = (found[1].get("weights") or {}).get("licence", "unresolved weight licence")
+        argv += ["--accept-licence", licence]
     for path in inputs:
         argv += ["--input", str(path)]
     for path in (inputs if supplements is None else supplements):
         argv += ["--supplement", str(path)]
+    # A composition that declares a companion is refused at the door
+    # without the companion's files, so a bare prep names them under the
+    # companion binding's own role, as the fetch handoff does.
+    from woof.source_authorities import packaged_composition
+
+    from woof.source_adapters import get_source_adapter
+
+    profile = get_source_adapter(source).packaged_profile
+    if profile is not None:
+        for binding in packaged_composition(profile).get(
+                "field_sources", {}).values():
+            if "companion" in binding:
+                argv += ["--supplement",
+                         f"{binding['data_role']}=/data/companion.grib2"]
     return argv + [
         "--wps-namelist", str(work / "namelist.wps"),
         "--geog-root", str(work / "WPS_GEOG"),

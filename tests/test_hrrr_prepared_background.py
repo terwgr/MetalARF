@@ -294,10 +294,11 @@ def _bind_synthetic_geometry(monkeypatch):
         lambda exp, wps, source_name=None: object())
     monkeypatch.setattr(
         runner, "verify_native_static_receipt",
-        lambda receipt, static, grid, cfg: None)
+        lambda receipt, static, grid, cfg: {"status": "PASS"})
     monkeypatch.setattr(
         runner, "load_native_static_cache",
-        lambda path, grid, ny, nx: {"LANDMASK": np.zeros((ny, nx))})
+        lambda path, grid, ny, nx: {
+            "LANDMASK": np.zeros((ny, nx)), "HGT_M": np.zeros((ny, nx))})
 
 
 def _preflight(bundle: _Bundle, **overrides):
@@ -821,7 +822,7 @@ def test_the_prepare_front_door_forwards_the_portable_opt_in(tmp_path):
             preprocess_backend=None, preprocess_workers=None,
             cpu_preprocess_bridge=None, sealed_prepared_cache=False,
             extend_root_preparation=None, ack=(), pipeline_workers=None,
-            wps_namelist=None, child_workers=None,
+            wps_namelist=None, child_workers=None, no_stock_wrf_export=False,
         )
         base.update(extra)
         return argparse.Namespace(**base)

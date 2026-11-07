@@ -1,0 +1,153 @@
+#include <metal_stdlib>
+#include "rrtmg_legacy_sw_inatm_bindings.metalh"
+#include "rrtmg_legacy_sw_cldprmc_bindings.metalh"
+#include "rrtmg_legacy_sw_setcoef_bindings.metalh"
+#include "rrtmg_legacy_sw_laysolfr_bindings.metalh"
+#include "rrtmg_legacy_sw_taumol_bindings.metalh"
+#include "rrtmg_legacy_sw_sfluxzen_bindings.metalh"
+#include "rrtmg_legacy_sw_spcvmc_bindings.metalh"
+#include "rrtmg_legacy_sw_accum_bindings.metalh"
+#include "rrtmg_legacy_sw_post_bindings.metalh"
+#include "soft_binary32.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_exp.metalh"
+#include "rrtmg_legacy_sw_tables.metalh"
+
+using namespace metal;
+
+// Legacy RRTMG SW (WRF ra_sw_physics = 4): Metal twin of the batched _b
+// kernels of woof/core/kernels/rrtmg_sw.cu.  The CUDA unit rounds every
+// FP32 add/sub/mul as a single IEEE .rn instruction with gradual underflow
+// (the direct-beam transmittance chain really produces subnormals), and
+// its glibc logf/expf run their binary64 steps as separate __d*_rn ops.
+// Here AD/SU/MU/DV/SQ give soft32's values (RN-even, subnormals kept,
+// independent of the GPU's FP32 denormal mode; see rsw_add) and soft64
+// for the libm's double steps (mul then add, no FMA, as in the CUDA rsw_
+// transcription -- NOT the fused gfk_ variants).
+
+typedef float real;
+
+#define RSW_F(bits) as_type<float>(bits)
+#define RSW_U(x) as_type<uint>(x)
+
+// The GPU's FP32 add/sub/mul/div/sqrt (safe math mode, precise fp32
+// functions, no contraction) are RN-even like soft32 but flush subnormal
+// operands and results to zero.  Each operation therefore takes the
+// hardware result when both operands and the result are finite with
+// magnitude >= 2^-125, and the soft32 result otherwise (zeros, subnormals,
+// the boundary band, Inf and NaN).  Every value is the soft32 value.
+static inline bool rsw_hw_ok(float v)
+{ const float m = fabs(v); return m >= 0x1p-125f && m <= 0x1.fffffep127f; }
+static inline float rsw_add(float a, float b)
+{ const float r = a + b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_add(RSW_U(a), RSW_U(b))); }
+static inline float rsw_sub(float a, float b)
+{ const float r = a - b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_sub(RSW_U(a), RSW_U(b))); }
+static inline float rsw_mul(float a, float b)
+{ const float r = a * b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_mul(RSW_U(a), RSW_U(b))); }
+static inline float rsw_div(float a, float b)
+{ const float r = a / b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_div(RSW_U(a), RSW_U(b))); }
+static inline float rsw_sqrt(float a)
+{ const float r = sqrt(a);
+  return (a > 0.0f && rsw_hw_ok(a) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_sqrt(RSW_U(a))); }
+#define AD(a, b) rsw_add((float)(a), (float)(b))
+#define SU(a, b) rsw_sub((float)(a), (float)(b))
+#define MU(a, b) rsw_mul((float)(a), (float)(b))
+#define DV(a, b) rsw_div((float)(a), (float)(b))
+#define SQ(a) rsw_sqrt((float)(a))
+#define EQ0(x) ((RSW_U(x) & 0x7fffffffu) == 0u)
+
+#define RSW_NGPT 112
+#define RSW_NBND 14
+#define RSW_MXMOL 38
+#define RSW_NMOL 7
+
+// glibc 2.39 logf as rsw_log: binary64 steps as separate RN mul/add.
+static inline real rsw_log(real x)
+{
+    uint ix = RSW_U(x);
+    if (ix == 0x3f800000u) return 0.0f;
+    if (ix - 0x00800000u >= 0x7f800000u - 0x00800000u) {
+        if (ix * 2u == 0u) return RSW_F(0xff800000u);
+        if (ix == 0x7f800000u) return x;
+        if ((ix & 0x80000000u) != 0u || ix * 2u >= 0xff000000u)
+            return RSW_F(0x7fc00000u);
+        ix = RSW_U(MU(x, 8388608.0f));
+        ix -= 23u << 23;
+    }
+    const uint tmp = ix - 0x3f330000u;
+    const uint i = (tmp >> 19) & 15u;
+    const int k = int(tmp) >> 23;
+    const uint iz = ix - (tmp & 0xff800000u);
+    const ulong z = soft64_from_f32_bits(iz);
+    const ulong r = soft64_sub(soft64_mul(z, SOFT_GFK_LOGF_INVC[i]),
+                               0x3ff0000000000000ul);
+    const ulong y0 = soft64_add(SOFT_GFK_LOGF_LOGC[i],
+        soft64_mul(soft64_from_i32(k), SOFT_GFK_LOGF_LN2));
+    const ulong r2 = soft64_mul(r, r);
+    ulong y = soft64_add(soft64_mul(SOFT_GFK_LOGF_A1, r), SOFT_GFK_LOGF_A2);
+    y = soft64_add(soft64_mul(SOFT_GFK_LOGF_A0, r2), y);
+    y = soft64_add(soft64_mul(y, r2), soft64_add(y0, r));
+    return RSW_F(soft64_to_f32_bits(y));
+}
+
+static inline ulong rsw_exp2_core(ulong xd)
+{
+    const ulong shift = 0x4338000000000000ul;          // 0x1.8p+52
+    ulong kd = soft64_add(xd, shift);
+    const ulong ki = kd;
+    kd = soft64_sub(kd, shift);
+    const ulong r = soft64_sub(xd, kd);
+    ulong t = SOFT_GFK_EXP2F_TAB[uint(ki & 31ul)];
+    t += ki << 47u;
+    const ulong s = t;
+    const ulong z = soft64_add(soft64_mul(0x3ebc6af84b912394ul, r),
+                               0x3f2ebfce50fac4f3ul);
+    const ulong r2 = soft64_mul(r, r);
+    ulong y = soft64_add(soft64_mul(0x3f962e42ff0c52d6ul, r),
+                         0x3ff0000000000000ul);
+    y = soft64_add(soft64_mul(z, r2), y);
+    return soft64_mul(y, s);
+}
+
+static inline real rsw_exp(real x)
+{
+    const uint abstop = (RSW_U(x) >> 20) & 0x7ffu;
+    if (abstop >= (RSW_U(88.0f) >> 20)) {
+        if (RSW_U(x) == 0xff800000u) return 0.0f;
+        if (abstop >= (0x7f800000u >> 20)) return AD(x, x);
+        if (x > RSW_F(0x42b17218u)) return RSW_F(0x7f800000u);
+        if (x < -RSW_F(0x42cff1b4u)) return 0.0f;
+    }
+    const ulong xd = soft64_from_f32_bits(RSW_U(x));
+    const ulong z = soft64_mul(0x40471547652b82feul, xd);
+    return RSW_F(soft64_to_f32_bits(rsw_exp2_core(z)));
+}
+
+
+#include "hexv842_sw_sflux_body.metalh"
+#include "hexv842_sw_sfluxzen_f32_bindings.metalh"
+kernel void hexv842_sw_sfluxzen_f32(
+    constant Hexv842SwSfluxzenF32Resources &r [[buffer(0)]],
+    constant Hexv842SwSfluxzenF32Params &p [[buffer(1)]],
+    uint tid [[thread_position_in_grid]]) {
+    const long idx = long(tid);
+    if (idx >= long(p.ncol) * RSW_NGPT) return;
+    const int col = int(idx / RSW_NGPT);
+    const int iw = int(idx % RSW_NGPT);
+    const ulong o = ulong(col) * ulong(p.nl);
+    rsw_sfluxzen_body(iw, p.nl, r.laytrop[col], r.tab, r.ngb,
+        r.laysolfr + ulong(col) * RSW_NBND,
+        r.jp + o, r.jt + o, r.jt1 + o,
+        r.colh2o + o, r.colco2 + o, r.colch4 + o, r.colo2 + o,
+        r.colo3 + o, r.fac00 + o, r.fac01 + o, r.fac10 + o,
+        r.fac11 + o, r.sfluxzen + ulong(col) * RSW_NGPT);
+}

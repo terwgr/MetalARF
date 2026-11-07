@@ -86,7 +86,7 @@ from woof.core.ruc import (RUC_DRIVER_ARW_FORCING,
                             ruc_initialize_cold_start, ruc_soil_geometry)
 from woof.core.ruc_contract import (NUM_SOIL_LAYERS,
                                      RUC_PACKAGE_STATE_FIELDS,
-                                     RUC_SOIL_LEVELS_M,
+                                     RUC_SOIL_LEVELS_M as RUC_SOIL_LEVELS_M,
                                      WRF_SUPPORTED_NUM_SOIL_LAYERS)
 from woof.core.surface_forcing import SurfacePrecipitationForcing
 
@@ -355,15 +355,6 @@ RUC_RUNTIME_RESTRICTIONS: tuple[tuple[str, str, str], ...] = (
         "on that fixture the five are unobservable and ilnb is not.",
     ),
     (
-        "sfcevp_is_double_counted_on_purpose",
-        "SFCEVP advances by 2*QFX*dt per call.",
-        "module_sf_ruclsm.F accumulates it twice, at :1095 and again at "
-        ":1116, with nothing in between changing qfx.  That is a duplicated "
-        "statement rather than undefined behaviour, so woof reproduces it "
-        "and oracle/lsmruc.csv pins it.  A user integrating SFCEVP as a "
-        "water budget must halve it.",
-    ),
-    (
         "sfcdiags_ruclsm_flux_branch_only",
         "The flux=.true. arms of SFCDIAGS_RUCLSM are transcribed.",
         "flux is a hardcoded local (module_sf_sfcdiags_ruclsm.F:47-48), so "
@@ -605,6 +596,47 @@ class RucRuntimeParameters:
         return identity
 
 
+#: ``ruclsminit`` results by input content, for this process.
+_COLD_STARTS: dict = {}
+#: ``id(bundle) -> (bundle, digest)``; the bundle is held so its id is not reused.
+_BUNDLE_DIGESTS: dict = {}
+
+
+def _cold_start_once(inputs, params):
+    """:func:`ruc_initialize_cold_start` of ``inputs``, computed once per
+    process for the same input bytes, land-use dataset and parameter bundle.
+
+    Breakage it removes: a DA card server wires every member leg from the
+    same prepared cache, and each wire re-ran the scalar ``ruclsminit``
+    transcription over the whole slab -- several seconds of one host core
+    per member leg (7.4 s under the profiler on a rented box, 2026-10-06) with the
+    card idle.  The function is pure (it copies its inputs), so the stored
+    result is the recomputed one byte for byte.
+    """
+    import hashlib
+
+    entry = _BUNDLE_DIGESTS.get(id(params.bundle))
+    if entry is None or entry[0] is not params.bundle:
+        entry = (params.bundle, hashlib.sha256(
+            repr(params.bundle).encode("utf-8")).hexdigest())
+        _BUNDLE_DIGESTS.clear()
+        _BUNDLE_DIGESTS[id(params.bundle)] = entry
+    digest = hashlib.sha256()
+    for array in inputs:
+        array = np.ascontiguousarray(array)
+        digest.update(f"{array.dtype.str}{array.shape}".encode("ascii"))
+        digest.update(array.tobytes())
+    key = (digest.hexdigest(), str(params.dataset_identifier), entry[1])
+    cold = _COLD_STARTS.get(key)
+    if cold is None:
+        cold = ruc_initialize_cold_start(
+            *inputs, mminlu=params.dataset_identifier,
+            parameters=params.bundle)
+        _COLD_STARTS.clear()
+        _COLD_STARTS[key] = cold
+    return cold
+
+
 def ruc_cold_start(fields, *, params: RucRuntimeParameters) -> None:
     """``ruclsminit`` over the whole slab, on the host.
 
@@ -650,10 +682,9 @@ def ruc_cold_start(fields, *, params: RucRuntimeParameters) -> None:
             f"RUC cold start got a {resolved}-level soil column but the "
             f"runtime parameters resolved {params.num_soil_layers} levels; "
             "the slab and the geometry must be the same run")
-    cold = ruc_initialize_cold_start(
-        slab["tslb"], slab["smois"], slab["isltyp"], slab["ivgtyp"],
-        slab["xice"], mminlu=params.dataset_identifier,
-        parameters=params.bundle)
+    cold = _cold_start_once(
+        tuple(slab[name] for name in ("tslb", "smois", "isltyp", "ivgtyp",
+                                      "xice")), params)
     if metal:
         fields["sh2o"][...] = np.ascontiguousarray(cold.sh2o)
         fields["smfr3d"][...] = np.ascontiguousarray(cold.smfr3d)
@@ -699,6 +730,46 @@ def ruc_device_sfctmp_sets():
     return (RUC_SFCTMP_DEVICE_LEAVES_RESIDENT,
             RUC_SFCTMP_DEVICE_STAGES_RESIDENT,
             RUC_DEVICE_ARRAYS)
+
+
+def _validate_runtime_options(
+        mosaic_lu, mosaic_soil, lakemodel, flag_sm_adj, spp_lsm,
+        ruc_irrigation, ruc_soilprop, ruc_qvg_cold_start,
+        ruc_2m_diagnostic, ruc_snow):
+    # Second line behind validate_run_config, at the seam that consumes each
+    # value, so the registry's citation of this file is true for all five.
+    from woof.core.ruc_mosaic import irrigation_form, mosaic_option
+    mosaic_option(mosaic_lu, "mosaic_lu")
+    mosaic_option(mosaic_soil, "mosaic_soil")
+    mosaic_option(lakemodel, "lakemodel")
+    irrigation_form(ruc_irrigation)
+    from woof.core.ruc_tier import (ruc_2m_diagnostic_form,
+                                     ruc_qvg_cold_start_form, ruc_snow_form,
+                                     ruc_soilprop_form)
+    ruc_soilprop_form(ruc_soilprop)
+    ruc_qvg_cold_start_form(ruc_qvg_cold_start)
+    ruc_2m_diagnostic_form(ruc_2m_diagnostic)
+    ruc_snow_form(ruc_snow)
+    from woof.core.ruc_spp import validate_spp_mode
+    enabled_spp = validate_spp_mode(spp_lsm)
+    if int(flag_sm_adj) != 0:
+        # Not a runtime knob at all: share/module_soil_pre.F:2063 reads it
+        # inside init_soil_3_real, i.e. in real.exe.  It is refused here
+        # rather than accepted-and-ignored so a plan that asks for it is told,
+        # and it stays refused now that a RUC ingest exists -- LSMRUC is a
+        # timestep, and by the time it runs the adjustment has either already
+        # happened at setup or never will.  It belongs to
+        # woof.ingest.ruc_soil.remap_soil_to_ruc_levels, whose
+        # moisture_adjustment argument implements it at max_ulp 0.
+        raise ValueError(
+            f"flag_sm_adj={flag_sm_adj}: this is a real.exe knob "
+            "(share/module_soil_pre.F:2063, RUC soil-moisture adjustment "
+            "from a Noah initial state) and not an LSMRUC argument.  Ask for "
+            "it at setup, through "
+            "woof.ingest.ruc_soil.remap_soil_to_ruc_levels"
+            "(moisture_adjustment=True)")
+
+    return enabled_spp
 
 
 def ruc_lsm_step(
@@ -752,38 +823,10 @@ def ruc_lsm_step(
                 "from a source whose static catalogue carries LAI12M, or set "
                 "rdlai2d=false for SOILVEGIN's table LAI")
         params._seeded_lai_verified = True
-    # Second line behind validate_run_config, at the seam that consumes each
-    # value, so the registry's citation of this file is true for all five.
-    from woof.core.ruc_mosaic import irrigation_form, mosaic_option
-    mosaic_option(mosaic_lu, "mosaic_lu")
-    mosaic_option(mosaic_soil, "mosaic_soil")
-    mosaic_option(lakemodel, "lakemodel")
-    irrigation_form(ruc_irrigation)
-    from woof.core.ruc_tier import (ruc_2m_diagnostic_form,
-                                     ruc_qvg_cold_start_form, ruc_snow_form,
-                                     ruc_soilprop_form)
-    ruc_soilprop_form(ruc_soilprop)
-    ruc_qvg_cold_start_form(ruc_qvg_cold_start)
-    ruc_2m_diagnostic_form(ruc_2m_diagnostic)
-    ruc_snow_form(ruc_snow)
-    from woof.core.ruc_spp import validate_spp_mode
-    enabled_spp = validate_spp_mode(spp_lsm)
-    if int(flag_sm_adj) != 0:
-        # Not a runtime knob at all: share/module_soil_pre.F:2063 reads it
-        # inside init_soil_3_real, i.e. in real.exe.  It is refused here
-        # rather than accepted-and-ignored so a plan that asks for it is told,
-        # and it stays refused now that a RUC ingest exists -- LSMRUC is a
-        # timestep, and by the time it runs the adjustment has either already
-        # happened at setup or never will.  It belongs to
-        # woof.ingest.ruc_soil.remap_soil_to_ruc_levels, whose
-        # moisture_adjustment argument implements it at max_ulp 0.
-        raise ValueError(
-            f"flag_sm_adj={flag_sm_adj}: this is a real.exe knob "
-            "(share/module_soil_pre.F:2063, RUC soil-moisture adjustment "
-            "from a Noah initial state) and not an LSMRUC argument.  Ask for "
-            "it at setup, through "
-            "woof.ingest.ruc_soil.remap_soil_to_ruc_levels"
-            "(moisture_adjustment=True)")
+    enabled_spp = _validate_runtime_options(
+        mosaic_lu, mosaic_soil, lakemodel, flag_sm_adj, spp_lsm,
+        ruc_irrigation, ruc_soilprop, ruc_qvg_cold_start,
+        ruc_2m_diagnostic, ruc_snow)
 
     if enabled_spp:
         # The retained orchestration stays on the GPU. The disabled route
@@ -840,38 +883,10 @@ def _ruc_lsm_step_reference(
 
     if int(itimestep) < 1:
         raise ValueError("LSMRUC ktau is one-based and starts at 1")
-    # Second line behind validate_run_config, at the seam that consumes each
-    # value, so the registry's citation of this file is true for all five.
-    from woof.core.ruc_mosaic import irrigation_form, mosaic_option
-    mosaic_option(mosaic_lu, "mosaic_lu")
-    mosaic_option(mosaic_soil, "mosaic_soil")
-    mosaic_option(lakemodel, "lakemodel")
-    irrigation_form(ruc_irrigation)
-    from woof.core.ruc_tier import (ruc_2m_diagnostic_form,
-                                     ruc_qvg_cold_start_form, ruc_snow_form,
-                                     ruc_soilprop_form)
-    ruc_soilprop_form(ruc_soilprop)
-    ruc_qvg_cold_start_form(ruc_qvg_cold_start)
-    ruc_2m_diagnostic_form(ruc_2m_diagnostic)
-    ruc_snow_form(ruc_snow)
-    from woof.core.ruc_spp import validate_spp_mode
-    enabled_spp = validate_spp_mode(spp_lsm)
-    if int(flag_sm_adj) != 0:
-        # Not a runtime knob at all: share/module_soil_pre.F:2063 reads it
-        # inside init_soil_3_real, i.e. in real.exe.  It is refused here
-        # rather than accepted-and-ignored so a plan that asks for it is told,
-        # and it stays refused now that a RUC ingest exists -- LSMRUC is a
-        # timestep, and by the time it runs the adjustment has either already
-        # happened at setup or never will.  It belongs to
-        # woof.ingest.ruc_soil.remap_soil_to_ruc_levels, whose
-        # moisture_adjustment argument implements it at max_ulp 0.
-        raise ValueError(
-            f"flag_sm_adj={flag_sm_adj}: this is a real.exe knob "
-            "(share/module_soil_pre.F:2063, RUC soil-moisture adjustment "
-            "from a Noah initial state) and not an LSMRUC argument.  Ask for "
-            "it at setup, through "
-            "woof.ingest.ruc_soil.remap_soil_to_ruc_levels"
-            "(moisture_adjustment=True)")
+    _validate_runtime_options(
+        mosaic_lu, mosaic_soil, lakemodel, flag_sm_adj, spp_lsm,
+        ruc_irrigation, ruc_soilprop, ruc_qvg_cold_start,
+        ruc_2m_diagnostic, ruc_snow)
 
     names_2d = tuple(RUC_STATE_BINDING) + (
         "swdown", "glw", "chs", "chs2", "cqs2", "flqc", "flhc", "cpm",
@@ -895,7 +910,8 @@ def _ruc_lsm_step_reference(
     device["albbck"], ice = _ruc_seaice_albedo_override(
         device["albbck"], device["xice"], params.seaice_albedo_default,
         arrays=cp, xice_threshold=params.xice_threshold)
-    ice_component = ice & (device["xice"] <= np.float32(1.0))
+    ice_component = (ice & (device["xice"] <= np.float32(1.0))
+                     & (params.fractional_seaice == 1))
     ice_fraction = device["xice"]
     # module_surface_driver.F:3461-3473.  The static optics are grid-cell
     # blends; LSMRUC must receive the full ice component.

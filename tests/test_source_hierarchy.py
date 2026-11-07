@@ -13,6 +13,24 @@ import woof.source_hierarchy as source_hierarchy
 from woof.preprocess_policy import HOST_TILED_CPU_REASON
 
 
+def _stub_child_preparation(monkeypatch, nest_init, preprocess_backend):
+    """Flat static fields isolate the child backend receipt contract."""
+    monkeypatch.setattr(preprocess_backend, "_gpu_runtime_installed", lambda: True)
+    # The CUDA stack here is a stand-in, so this machine allows its card:
+    # since 083ac7cd0 the backend choice honours GPUWM_NO_LOCAL_GPU first,
+    # and the CPU legs set it.
+    monkeypatch.delenv("GPUWM_NO_LOCAL_GPU", raising=False)
+    # HGT_M: since c1227a11a the child door checks the terrain slope before
+    # building a coordinate; a flat plane needs no pass.
+    monkeypatch.setattr(nest_init, "build_static_for_domain", lambda *_a: {
+        "LU_INDEX": np.ones((2, 2)), "HGT_M": np.zeros((2, 2))})
+    monkeypatch.setattr(nest_init, "geog_selection_from_catalog", lambda *_a:
+                        SimpleNamespace(landuse_global_attrs=lambda: {"ISLAKE": 21}))
+    monkeypatch.setattr(nest_init, "interpolate_era5_to_lambert", lambda *_a, **_k:
+                        SimpleNamespace(fields={}))
+    monkeypatch.setattr(nest_init, "_child_soil_mesh", lambda *_a: None)
+
+
 @pytest.mark.parametrize("requested,backend,reason", [
     ("auto", "cpu", "no CUDA device is visible here"),
     ("cpu", "cpu", HOST_TILED_CPU_REASON),
@@ -41,14 +59,7 @@ def test_each_child_preserves_root_backend_selection(
 
     monkeypatch.setattr(preprocess_backend, "ParallelCpuPreprocessBackend", Backend)
     monkeypatch.setattr(preprocess_backend, "CudaPreprocessBackend", Backend)
-    monkeypatch.setattr(preprocess_backend, "_gpu_runtime_installed", lambda: True)
-    monkeypatch.setattr(nest_init, "build_static_for_domain", lambda *_a: {
-        "LU_INDEX": np.ones((2, 2))})
-    monkeypatch.setattr(nest_init, "geog_selection_from_catalog", lambda *_a:
-                        SimpleNamespace(landuse_global_attrs=lambda: {"ISLAKE": 21}))
-    monkeypatch.setattr(nest_init, "interpolate_era5_to_lambert", lambda *_a, **_k:
-                        SimpleNamespace(fields={}))
-    monkeypatch.setattr(nest_init, "_child_soil_mesh", lambda *_a: None)
+    _stub_child_preparation(monkeypatch, nest_init, preprocess_backend)
     for grid_id in (2, 3):
         child = SimpleNamespace(
             grid_id=grid_id, start_time=catalog.valid_times[0],
@@ -96,14 +107,7 @@ def test_a_child_on_another_backend_records_its_own_selection(
                         backend_named("cpu"))
     monkeypatch.setattr(preprocess_backend, "CudaPreprocessBackend",
                         backend_named("cuda"))
-    monkeypatch.setattr(preprocess_backend, "_gpu_runtime_installed", lambda: True)
-    monkeypatch.setattr(nest_init, "build_static_for_domain", lambda *_a: {
-        "LU_INDEX": np.ones((2, 2))})
-    monkeypatch.setattr(nest_init, "geog_selection_from_catalog", lambda *_a:
-                        SimpleNamespace(landuse_global_attrs=lambda: {"ISLAKE": 21}))
-    monkeypatch.setattr(nest_init, "interpolate_era5_to_lambert", lambda *_a, **_k:
-                        SimpleNamespace(fields={}))
-    monkeypatch.setattr(nest_init, "_child_soil_mesh", lambda *_a: None)
+    _stub_child_preparation(monkeypatch, nest_init, preprocess_backend)
     child = SimpleNamespace(
         grid_id=2, start_time=catalog.valid_times[0],
         run=SimpleNamespace(moist=True, terrain_opt=1))
@@ -524,16 +528,25 @@ def test_regular_source_hierarchy_emits_corridors_only_on_opt_in(
         written["grid_ids"] = [build.grid_id for build in builds]
         return set_receipt
 
+    moved = []
     monkeypatch.setattr(
         corridor_module, "build_child_statics_corridor", fake_build)
     monkeypatch.setattr(
         corridor_module, "write_statics_corridor_set", fake_write)
+    monkeypatch.setattr(
+        source_hierarchy, "move_statics_corridor_set",
+        lambda source, target: moved.append((Path(source), Path(target))))
 
     result, _ = _call(tmp_path, monkeypatch, statics_corridor="all")
     assert dict(result.statics_corridor_receipt) == set_receipt
     assert written["grid_ids"] == [2, 3]
+    # Sealed beside the artifact folder BEFORE the children initialize
+    # (plan call 5: each corridor child is born on its crop), then moved in
+    # after the artifact join, which refuses an existing artifact folder.
     assert written["directory"] == (
-        tmp_path / "artifacts" / "statics-corridor")
+        tmp_path / "artifacts.statics-corridor-pending")
+    assert moved == [(tmp_path / "artifacts.statics-corridor-pending",
+                      tmp_path / "artifacts" / "statics-corridor")]
     assert calls == [(2, 60, "d02-grid"), (3, 60, "d03-grid")]
 
     calls.clear()
@@ -582,6 +595,10 @@ def test_a_chained_head_builds_the_corridor_its_seal_copies(
 
     monkeypatch.setattr(
         corridor_module, "build_child_statics_corridor", fake_build)
+    # The stand-in builds carry no corridor geometry, so no child is born
+    # on them; the set's sealing and copying is this test's question.
+    monkeypatch.setattr(source_hierarchy, "corridor_birth_statics",
+                        lambda *a: {})
 
     # The one-shot tree: the reference set.
     oneshot, _ = _call(tmp_path, monkeypatch, statics_corridor="all")

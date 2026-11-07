@@ -23,9 +23,18 @@ import tempfile
 IMAGE = ("quay.io/pypa/manylinux_2_28_x86_64@sha256:"
          "53390351aeb4688114b02c36a23b3e6ce1166ee9b7afc5df1a4f776354fc764c")
 RUST_VERSION = "1.94.0"
-WORKSPACES = ("tools/grib1_bridge", "tools/rustwx",
-              "tools/region_global_dealias", "tools/rw_wps",
-              "tools/zarr_bridge")
+# region_global_dealias builds before rustwx: both reach the dealias crate,
+# and dealias's panic = "abort" profile left in a shared target broke a later
+# rustwx build at a new revision into the same target (reproduced by 2.9.0
+# lane A7: rustwx, then dealias, then rustwx again).  The cut's own sorted
+# order already builds dealias first.
+WORKSPACES = ("tools/grib1_bridge", "tools/region_global_dealias",
+              "tools/rustwx", "tools/rw_icechunk", "tools/rw_wps",
+              "tools/zarr_bridge", "tools/nextgen_hydrofabric",
+              "tools/nextgen_forcing", "tools/nextgen_verify", "tools/nextgen_output",
+              "tools/hydro_world", "tools/hydro_world_params",
+              "tools/nextgen_reservoir_prepare", "tools/hydro_world_init",
+              "tools/ocean_prepare", "tools/rw-bathy", "tools/wind-table")
 CONTEXT_NAME = ".arwen-manylinux-build-context.json"
 CONTEXT_SCHEMA = "arwen.manylinux.build-context.v1"
 

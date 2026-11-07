@@ -43,8 +43,9 @@ from typing import Mapping, Sequence
 import uuid
 from weakref import WeakValueDictionary
 
-import netCDF4
 import numpy as np
+
+from woof.io.netcdf_serialization import netCDF4  # first use only (D-10)
 
 from woof import netcdf_bridge
 from woof.core import constants as _model_constants
@@ -364,6 +365,7 @@ _FROZEN_CONTRACT_MOIST_MEMBERS = frozenset({
 })
 
 _PACKAGE_FIELD_METADATA = {
+    "CWM": ("Total condensate mixing ratio", "kg kg-1"),
     "QHAIL": ("Hail mixing ratio", "kg kg-1"),
     "QNDROP": ("Droplet number mixing ratio", "# kg-1"),
     "QNICE": ("Ice Number concentration", "# kg-1"),
@@ -399,6 +401,14 @@ _PACKAGE_FIELD_METADATA = {
     "QNWFA2D": ("water-friendly aerosol number tendency", "# kg(-1) s(-1)"),
     "QNIFA2D": ("ice-friendly aerosol number tendency", "# kg(-1) s(-1)"),
 }
+
+# Pure WRF FAST_SBM spectral fields, Registry/registry.sbm:318.
+from woof.core.fast_sbm_contract import BIN_SPECIES as _FSBM_BIN_SPECIES
+_PACKAGE_FIELD_METADATA.update({"EFF_RADIUS":("Effective Radius","Microns"),"ICE_EFF_RADIUS":("Ice Effective Radius","Microns"),"TOT_EFF_RADIUS":("Tot Effective Radius","Microns")})
+_PACKAGE_FIELD_METADATA.update({
+    name:("Spectral bin " + name, "  kg-1" if name.startswith("ff8") else "  kg kg-1")
+    for name in _FSBM_BIN_SPECIES
+})
 
 #: Inventoried wrfinput members ``_PACKAGE_FIELD_METADATA`` has NO row for,
 #: each with the defect that leaves it out.  ``_physics_contract_bundle``
@@ -455,6 +465,7 @@ _require_agreement_with_the_registry()
 
 def _physics_contract_bundle(
         contract_bundle: Mapping[str, object], mp_physics: int,
+        run_config: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Extend the frozen WSM6 NetCDF declarations for one WRF package.
 
@@ -544,6 +555,19 @@ def _physics_contract_bundle(
         spec["attributes"]["units"] = units
         input_contract["variables"].append(spec)
 
+    # WRF Registry.EM_COMMON:91,1181-1210: the selected drag scheme
+    # reads these real-valued mass-grid statistics from wrfinput.
+    from woof.static.orographic import required_static_fields
+    cfg = run_config or {}
+    for name in required_static_fields(cfg.get("topo_wind", 0), cfg.get("gwd_opt", 0)):
+        if name not in input_names:
+            spec = copy.deepcopy(surface_prototype)
+            spec["name"] = name
+            spec["attributes"]["description"] = f"Subgrid orographic statistic {name}"
+            spec["attributes"]["units"] = (
+                "m2" if name == "VAR_SSO" else "m" if name.startswith("VAR") else "")
+            input_contract["variables"].append(spec)
+
     bdy_names = {item["name"] for item in bdy_contract["variables"]}
     bdy_prototypes = [
         item for item in bdy_contract["variables"]
@@ -571,6 +595,30 @@ def _physics_contract_bundle(
 
 def _contract_payload_sha256(contract: Mapping[str, object]) -> str:
     return hashlib.sha256(_canonical(contract).encode("utf-8")).hexdigest()
+
+
+def resolved_physics_contract_sha256(mp_physics: int) -> str:
+    """The ``resolved_physics_contract_sha256`` an export manifest records.
+
+    The digest of the frozen contract resolved for one microphysics
+    package, and nothing else: the exporters write it and the forecast's
+    preflight (:func:`woof.prepared_single_domain_forecast.
+    _resolved_wrf_direct_contract_sha256`) recomputes it from mp_physics
+    alone, so both call this one function.  What the written files add to
+    that contract from the run configuration -- the terrain-drag
+    statistics ``topo_wind`` / ``gwd_opt`` read (``run_config`` of
+    :func:`_physics_contract_bundle`) and the land categories the static
+    has (:func:`_land_category_contract`) -- stays out of it; the export
+    binds those through ``prepared_header_sha256``, whose cache identity
+    records the run configuration.  Breakage this prevents: a digest taken
+    over the drag-extended contract made every forecast whose run has
+    ``gwd_opt`` 1 or 3 (the HRRR recipes' gwd_opt = 3) finish and then
+    exit rc=1 at the seal's preflight with "proof export source hashes
+    differ from preparation" (2.9.10, hrrr_v4_gsd41 on hrrr-native).
+    """
+
+    return _contract_payload_sha256(
+        _physics_contract_bundle(_load_contract(), int(mp_physics)))
 
 
 def _load_static_geometry_receipt(
@@ -949,8 +997,16 @@ def _date_text(value: datetime) -> str:
 
 
 def _dimensions(contract: Mapping[str, object], *, nx: int, ny: int,
-                nz: int, num_soil_layers: int = 4
+                nz: int, num_soil_layers: int = 4,
+                bdy_width: int | None = None,
                 ) -> dict[str, int | None]:
+    """The file's dimension extents: the frozen contract's, resized.
+
+    ``bdy_width`` is the run's ``spec_bdy_width``, the wrfbdy strip
+    width (real.exe sizes ``bdy_width`` from it).  ``None`` keeps the
+    contract's own extent, which is what a wrfinput (no such dimension)
+    and the tools that rebuild the frozen file ask for.
+    """
     overrides = {
         "Time": None,
         "west_east": nx,
@@ -961,10 +1017,61 @@ def _dimensions(contract: Mapping[str, object], *, nx: int, ny: int,
         "bottom_top_stag": nz + 1,
         "soil_layers_stag": num_soil_layers,
     }
+    if bdy_width is not None:
+        overrides["bdy_width"] = int(bdy_width)
     return {
         item["name"]: overrides.get(item["name"], int(item["length"]))
         for item in contract["dimensions"]
     }
+
+
+def _land_category_contract(
+        input_contract: Mapping[str, object],
+        fields: Mapping[str, np.ndarray],
+) -> tuple[Mapping[str, object], dict[str, object]]:
+    """The wrfinput contract and global attributes for the land use written.
+
+    ``fields`` are the wrfinput fields (:func:`_wrfinput_fields`), whose
+    LANDUSEF is the prepared static's own.
+
+    real.exe sizes ``land_cat_stag`` and states ``NUM_LAND_CAT`` from
+    ``num_land_cat``, the category count of the met_em land use, so a
+    stock wrfinput holds exactly the LANDUSEF planes its land use has.
+    The frozen contract is the 21-category MODIS reference file.  An
+    urban canopy run prepares MODIS plus WRF's built types 51-61
+    (``woof.static.highres.landcover_legend``: 61 planes, the
+    NUM_LAND_CAT the forecast's own history files state), and the
+    15 arc-second MODIS set has 20 planes and no lake class
+    (ISLAKE = -1, :func:`woof.native_wrf_contract.native_landuse_identity`).
+    Writing either into the frozen 21 stopped the companion export after
+    the forecast had run ("LANDUSEF source shape (61, 170, 170) !=
+    (21, 170, 170)").  A 21-category static gets the contract back
+    unchanged and no attribute, so its files keep their bytes; so do
+    fields with no LANDUSEF, which the writer fills at the contract's own
+    shape.  The resolved physics contract, whose digest the preparation
+    records and checks, stays as it is: land use is not physics.
+    """
+    landusef = fields.get("LANDUSEF")
+    if landusef is None:
+        return input_contract, {}
+    categories = int(np.shape(landusef)[0])
+    frozen = {
+        item["name"]: int(item["length"])
+        for item in input_contract["dimensions"]
+    }["land_cat_stag"]
+    if categories == frozen:
+        return input_contract, {}
+    from woof.native_wrf_contract import native_landuse_identity
+
+    contract = copy.deepcopy(dict(input_contract))
+    for item in contract["dimensions"]:
+        if item["name"] == "land_cat_stag":
+            item["length"] = categories
+    attributes = {"NUM_LAND_CAT": categories}
+    islake = native_landuse_identity(fields)["ISLAKE"]
+    if islake != contract["global_attributes"]["ISLAKE"]:
+        attributes["ISLAKE"] = islake
+    return contract, attributes
 
 
 def _prepared_vertical_contract(
@@ -1058,8 +1165,10 @@ def _global_updates(*, valid_time: datetime, nx: int, ny: int, nz: int,
                     dx: float, dy: float, dt: float,
                     geometry: Mapping[str, object],
                     physics_selection: Mapping[str, object] | None = None,
+                    run_config: Mapping[str, object] | None = None,
                     ) -> dict[str, object]:
     stamp = _date_text(valid_time)
+    cfg = dict(run_config or {})
     updates = {
         # WRF's input gate recognizes versioned initial data from the TITLE
         # token itself.  Preserve an accurate producer label while retaining
@@ -1088,6 +1197,12 @@ def _global_updates(*, valid_time: datetime, nx: int, ny: int, nz: int,
         "DY": dy,
         "DT": dt,
         "GHG_INPUT": 0,
+        # These are this run's choices, never the prototype file's values.
+        # GHG_INPUT remains 0: the engine uses analytic year-dependent gas
+        # concentrations, not WRF's optional CAMtr file (ghg_input=1).
+        "SURFACE_INPUT_SOURCE": 3,
+        "DIFF_OPT": int(cfg.get("diff_opt", 2)),
+        "DIFF_6TH_SLOPEOPT": int(cfg.get("diff_6th_slopeopt", 0)),
         "CEN_LAT": geometry["center_lat"],
         "CEN_LON": geometry["center_lon"],
         "TRUELAT1": geometry["truelat1"],
@@ -1339,8 +1454,48 @@ def _resolved_prototype_value(
         f"{array.shape} that cannot serve derived shape {target_shape}")
 
 
+def _run_start_vegetation(cache: PreparedCache,
+                          static: Mapping[str, np.ndarray],
+                          valid_time: datetime,
+                          run_config: Mapping[str, object] | None,
+                          ) -> dict[str, np.ndarray]:
+    """VEGFRA, LAI and ALBBCK as the prepared forecast starts with them.
+
+    The forecast takes the analyzed vegetation fraction when its start
+    source carries one (``woof.ingest.vegetation.initial_vegetation_
+    fraction``), otherwise GREENFRAC interpolated to the start date, and
+    LAI and the background albedo interpolated to the date as real.exe
+    does (module_initialize_real.F:1192, :1322-1335).  The export used the
+    calendar month's raw value of each instead, so the pair described
+    another land surface than the run that wrote it: on the 2024-05-21 18Z
+    HRRR-start crop VEGFRA differed by 12 % RMS (up to 37 %) and stock WRF's
+    latent heat flux by 89 W m-2 RMS after ten minutes.
+    """
+    from types import SimpleNamespace
+
+    from woof.core.landuse import monthly_background_albedo, surface_leaf_area
+    from woof.ingest.vegetation import initial_vegetation_fraction
+
+    analyzed = ({"VEGFRA": np.asarray(cache.array("met/VEGFRA"))}
+                if "met/VEGFRA" in cache._arrays else {})
+    vegfra = initial_vegetation_fraction(
+        SimpleNamespace(fields=analyzed), static, valid_time)
+    run = SimpleNamespace(**dict(run_config or {}))
+    return {
+        "VEGFRA": np.asarray(vegfra, dtype=np.float64),
+        "LAI": np.asarray(surface_leaf_area(run, static["LAI12M"], valid_time),
+                          dtype=np.float64),
+        "ALBBCK": np.asarray(monthly_background_albedo(
+            static["ALBEDO12M"], static["LANDMASK"], valid_time),
+            dtype=np.float64),
+    }
+
+
 def _surface_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
-                    month_index: int) -> dict[str, np.ndarray]:
+                    valid_time: datetime,
+                    run_config: Mapping[str, object] | None = None,
+                    ) -> dict[str, np.ndarray]:
+    vegetation = _run_start_vegetation(cache, static, valid_time, run_config)
     declared = {
         name.removeprefix("surface/")
         for name in cache._arrays
@@ -1358,16 +1513,14 @@ def _surface_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
         }
         land = result["LANDMASK"] >= 0.5
         green = np.asarray(static["GREENFRAC"], dtype=np.float64)
-        albedo = np.asarray(static["ALBEDO12M"], dtype=np.float64)
-        lai12 = np.asarray(static["LAI12M"], dtype=np.float64)
         snoalb = np.asarray(static["SNOALB"], dtype=np.float64) / 100.0
         result.update({
-            "VEGFRA": 100.0 * green[month_index],
+            "VEGFRA": vegetation["VEGFRA"],
             "SHDMAX": 100.0 * np.max(green, axis=0),
             "SHDMIN": 100.0 * np.min(green, axis=0),
             "SHDAVG": 100.0 * np.mean(green, axis=0),
-            "ALBBCK": albedo[month_index] / 100.0,
-            "LAI": lai12[month_index],
+            "ALBBCK": vegetation["ALBBCK"],
+            "LAI": vegetation["LAI"],
             "SNOALB": np.where(land, np.maximum(snoalb, 0.08), 0.08),
         })
         return result
@@ -1405,8 +1558,6 @@ def _surface_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
     valid_tmn = np.isfinite(tmn) & (tmn >= 170.0) & (tmn <= 400.0)
     tmn = np.where(land & valid_tmn, tmn, tsk)
     green = np.asarray(static["GREENFRAC"], dtype=np.float64)
-    albedo = np.asarray(static["ALBEDO12M"], dtype=np.float64)
-    lai12 = np.asarray(static["LAI12M"], dtype=np.float64)
     snoalb = np.asarray(static["SNOALB"], dtype=np.float64) / 100.0
     snoalb = np.where(land, np.maximum(snoalb, 0.08), 0.08)
     return {
@@ -1418,12 +1569,12 @@ def _surface_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
         "SEAICE": xice,
         "XLAND": np.where(effective_land, 1.0, 2.0),
         "LANDMASK": effective_land.astype(np.float64),
-        "VEGFRA": 100.0 * green[month_index],
+        "VEGFRA": vegetation["VEGFRA"],
         "SHDMAX": 100.0 * np.max(green, axis=0),
         "SHDMIN": 100.0 * np.min(green, axis=0),
         "SHDAVG": 100.0 * np.mean(green, axis=0),
-        "ALBBCK": albedo[month_index] / 100.0,
-        "LAI": lai12[month_index],
+        "ALBBCK": vegetation["ALBBCK"],
+        "LAI": vegetation["LAI"],
         "SNOALB": snoalb,
     }
 
@@ -1477,12 +1628,73 @@ def _require_rebuilt_footprint(geometry: Mapping[str, object],
             f"geometry receipt recorded: {drift}")
 
 
+def _terrain_drag_export_fields(static, cfg, shape):
+    """Carry required prepared statistics without inventing missing values."""
+    from woof.static.orographic import required_static_fields
+    result = {}
+    for name in required_static_fields(cfg.get("topo_wind", 0), cfg.get("gwd_opt", 0)):
+        if name not in static:
+            raise ValueError(f"WRF export missing required terrain-drag statistic {name}")
+        value = np.asarray(static[name], dtype=np.float32)
+        if value.shape != shape or not np.isfinite(value).all():
+            raise ValueError(f"WRF export invalid terrain-drag statistic {name}: {value.shape}, expected {shape}")
+        result[name] = value
+    if "VAR_SSO" in result:
+        result["GOT_VAR_SSO"] = np.asarray(1, dtype=np.int32)
+    return result
+
+
+def _lake_export_fields(static, cfg, mask):
+    """Preserve prepared bathymetry and its WRF presence flag."""
+    depth = static.get("LAKE_DEPTH")
+    if depth is None:
+        if cfg.get("sf_lake_physics", 0) and cfg.get("use_lakedepth", 0) and np.any(mask):
+            raise ValueError("WRF export missing required lake bathymetry LAKE_DEPTH")
+        return {}
+    depth = np.asarray(depth, dtype=np.float32)
+    if depth.shape != mask.shape or not np.isfinite(depth).all():
+        raise ValueError("WRF export invalid lake bathymetry LAKE_DEPTH")
+    return {"LAKE_DEPTH": depth, "LAKE_DEPTH_FLAG": np.asarray(1, dtype=np.int32)}
+
+
+def _real_exe_extrapolation_constants(dn, dnw, fnp, fnm) -> dict[str, np.ndarray]:
+    """CF1, CF2, CF3, CFN and CFN1 as real.exe writes them for THIS column.
+
+    ``module_initialize_real.F:3734-3742`` (v4.6.1), FP32 in Fortran's
+    left-to-right order; Fortran index ``k`` is ``[k - 1]`` here.  wrf.exe
+    never recomputes them: the surface (CF1-3) and model-top (CFN/CFN1)
+    extrapolations of every step read the file's words.  The writer used to
+    leave all five to the contract's prototype, a template's values for some
+    other vertical grid (a 44-level export carried CFN 1.4764977 where
+    its own DN/DNW give 1.4612311), so wrf.exe ran a different top boundary
+    than the levels it was handed.
+    """
+    f32 = np.float32
+    dn = np.asarray(dn, dtype=f32).reshape(-1)
+    dnw = np.asarray(dnw, dtype=f32).reshape(-1)
+    fnp = np.asarray(fnp, dtype=f32).reshape(-1)
+    fnm = np.asarray(fnm, dtype=f32).reshape(-1)
+    dn2, dn3, dnw1 = dn[1], dn[2], dnw[0]
+    cof1 = f32(f32(f32(f32(f32(2.0) * dn2) + dn3) / f32(dn2 + dn3)) * dnw1)
+    cof1 = f32(cof1 / dn2)
+    cof2 = f32(f32(f32(dn2 / f32(dn2 + dn3)) * dnw1) / dn3)
+    top_dn, top_dnw = dn[-1], dnw[-1]
+    return {
+        "CF1": np.asarray(f32(fnp[1] + cof1)),
+        "CF2": np.asarray(f32(f32(fnm[1] - cof1) - cof2)),
+        "CF3": np.asarray(cof2),
+        "CFN": np.asarray(f32(f32(f32(f32(0.5) * top_dnw) + top_dn) / top_dn)),
+        "CFN1": np.asarray(f32(-f32(f32(f32(0.5) * top_dnw) / top_dn))),
+    }
+
+
 def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
                      geometry: Mapping[str, object],
                      valid_time: datetime, *,
                      p_top: float, mp_physics: int = 6,
                      sf_surface_physics: int = 2,
                      num_soil_layers: int = 4,
+                     run_config: Mapping[str, object] | None = None,
                      ) -> dict[str, np.ndarray]:
     u = cache.array("state/u")
     v = cache.array("state/v")
@@ -1535,8 +1747,7 @@ def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
     t2 = np.asarray(cache.array("met/T2"), dtype=np.float64)
     u10_face = np.asarray(cache.array("met/U10"), dtype=np.float64)
     v10_face = np.asarray(cache.array("met/V10"), dtype=np.float64)
-    month_index = valid_time.month - 1
-    surface = _surface_fields(cache, static, month_index)
+    surface = _surface_fields(cache, static, valid_time, run_config)
     soil_depths, soil_thicknesses = _direct_export_soil_geometry(
         sf_surface_physics, num_soil_layers)
     soil_shape_drift = {
@@ -1560,6 +1771,15 @@ def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
     # (module_initialize_real.F:3108-3131): a land column whose soil map
     # says water carries silty clay loam, never water soil under land.
     soil = _wrf_soil_category(static["SCT_DOM"], lu)
+    # Match the model's existing WRF sea-ice category rule, including the
+    # fractional-ice threshold when that policy is selected.
+    from types import SimpleNamespace
+    from woof.core.landuse import ruc_fractional_seaice
+    fractional_ice = ruc_fractional_seaice(SimpleNamespace(**dict(run_config or {})))
+    ice = np.asarray(surface["SEAICE"]) >= (0.02 if fractional_ice else 0.5)
+    lu = np.where(ice, 15, lu).astype(np.int32)
+    soil = np.where(ice, 16, soil).astype(np.int32)
+    surface["SNOALB"] = np.where(ice, 0.75, surface["SNOALB"])
     landmask = surface["LANDMASK"]
     snow = np.asarray(
         surface["SNOW"] if "SNOW" in surface else cache.array("met/SNOW"),
@@ -1616,9 +1836,12 @@ def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
         "C4H": cache.array("coord/c4h"),
         "C3F": cache.array("coord/c3f"),
         "C4F": cache.array("coord/c4f"),
+        **_real_exe_extrapolation_constants(
+            cache.array("coord/dn"), cache.array("coord/dnw"),
+            cache.array("coord/fnp"), cache.array("coord/fnm")),
         "Q2": cache.array("result/surface_qv"),
         "T2": t2,
-        "TH2": t2 * (_P0 / psfc) ** _RCP,
+        "TH2": t2 * (_P0 / total_pressure[0]) ** _RCP,
         "PSFC": psfc,
         "U10": 0.5 * (u10_face[:, :-1] + u10_face[:, 1:]),
         "V10": 0.5 * (v10_face[:-1, :] + v10_face[1:, :]),
@@ -1655,7 +1878,12 @@ def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
         "MAPFAC_UY": static["MAPFAC_U"],
         "MAPFAC_VX": static["MAPFAC_V"],
         "MAPFAC_VY": static["MAPFAC_V"],
-        "MF_VX_INV": 1.0 / np.asarray(static["MAPFAC_V"], dtype=np.float64),
+        # real.exe's word: 1./msfvx in FP32 of the stored FP32 map factor
+        # (module_initialize_real.F:580).  wrf.exe couples v with this array
+        # (couple_momentum, calc_ww_cp, rk_addtend_dry, the emdiv filter);
+        # the float64 reciprocal rounded once differed from it in 4,560 of
+        # 12,120 d01 words and moved every coupled v flux.
+        "MF_VX_INV": np.float32(1.0) / np.asarray(static["MAPFAC_V"], dtype=np.float32),
         "F": static["F"],
         "E": static["E"],
         "SINALPHA": static["SINALPHA"],
@@ -1666,7 +1894,7 @@ def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
         "ALBBCK": surface["ALBBCK"],
         "TMN": surface["TMN"],
         "XLAND": surface["XLAND"],
-        "SNOWC": (snow > 0.0).astype(np.float64),
+        "SNOWC": (snow >= 10.0).astype(np.float64),
         "LANDMASK": landmask,
         "LAKEMASK": lake_mask.astype(np.float64),
         "SST": surface["TSK"],
@@ -1708,13 +1936,14 @@ def _wrfinput_fields(cache: PreparedCache, static: Mapping[str, np.ndarray],
             if state_key is not None and state_key in cache._arrays
             else np.zeros(shape, dtype=np.float32)
         )
+    result.update(_terrain_drag_export_fields(static, run_config or {}, (ny, nx)))
+    result.update(_lake_export_fields(static, run_config or {}, lake_mask))
     return result
 
 
-def _lbc_to_wrf(cache: PreparedCache, interval_index: int, logical: str,
-                side: str, kind: str) -> np.ndarray:
-    value = np.asarray(
-        cache.array(f"lbc/{interval_index}/{logical}/{side}/{kind}"))
+def _side_to_wrf(value: np.ndarray, logical: str, side: str) -> np.ndarray:
+    """One gpuwm-oriented side table in WRF's ``(width, z, side)`` layout."""
+    value = np.asarray(value)
     if side in {"west", "east"}:
         if logical == "mu":
             return value[0].T
@@ -1724,21 +1953,133 @@ def _lbc_to_wrf(cache: PreparedCache, interval_index: int, logical: str,
     return np.transpose(value, (1, 0, 2))
 
 
-def _wrfbdy_fields(cache: PreparedCache,
-                   interval_index: int) -> dict[str, np.ndarray]:
+def _lbc_to_wrf(cache: PreparedCache, interval_index: int, logical: str,
+                side: str, kind: str) -> np.ndarray:
+    return _side_to_wrf(
+        cache.array(f"lbc/{interval_index}/{logical}/{side}/{kind}"),
+        logical, side)
+
+
+#: The wrfbdy fields the export carries, WRF name to prepared logical name.
+_WRFBDY_EXPORT_FIELDS = {
+    "U": "u", "V": "v", "PH": "phi", "T": "theta",
+    "MU": "mu", "QVAPOR": "qv",
+}
+_WRFBDY_SUFFIX_SIDES = {"XS": "west", "XE": "east",
+                        "YS": "south", "YE": "north"}
+
+
+def _wrfbdy_export_fields(cache: PreparedCache, inventory,
+                          contract: Mapping[str, object]) -> dict[str, str]:
+    """The wrfbdy fields this cache's export carries, WRF to logical name.
+
+    The dynamics and water vapour always.  The Thompson-aerosol numbers
+    (QNWFA, QNIFA) when the prepared boundary carries them: the run forced
+    them at its lateral boundary, which is what WRF does under
+    ``aer_init_opt > 0`` (``use_aero_icbc``), real.exe writing their
+    coupled tables (main/real_em.F:888-899) and wrf.exe relaxing toward
+    them (dyn_em/solve_em.F:2804-2806).  Written as zeros instead, a stock
+    run relaxed its aerosol numbers toward none at every boundary, and the
+    WRF-input door refused the pair as a mixed one.
+    """
+    from woof.boundary_fields import AEROSOL_BOUNDARY_FIELDS
+
+    fields = dict(_WRFBDY_EXPORT_FIELDS)
+    by_state = {field.state_key: field.netcdf_name
+                for field in inventory.wrfinput_fields
+                if field.state_key is not None}
+    declared = {item["name"] for item in contract["variables"]}
+    for logical in AEROSOL_BOUNDARY_FIELDS:
+        if f"lbc/0/{logical}/west/value" not in cache._arrays:
+            continue
+        wrf_name = by_state.get(logical)
+        if wrf_name is None or f"{wrf_name}_BXS" not in declared:
+            raise ValueError(
+                f"the prepared boundary forces {logical} but the "
+                f"mp_physics={inventory.mp_physics} wrfbdy contract has no "
+                f"table for it; the export cannot carry that boundary")
+        fields[wrf_name] = logical
+    return fields
+
+
+def _initial_boundary_head(wrfinput_fields: Mapping[str, np.ndarray],
+                           export_fields: Mapping[str, str]
+                           ) -> dict[str, np.ndarray]:
+    """real.exe's first wrfbdy record for the wrfinput this export writes.
+
+    The single definition the WRF-input door checks against
+    (:func:`woof.ingest.wrfinput.wrf_initial_boundary_head`), applied to
+    the FP32 values the file will hold, under the export's own
+    ``USE_THETA_M``.
+    """
+    from woof.ingest.wrfinput import wrf_initial_boundary_head
+
+    layouts = {logical: (wrf_name,)
+               for wrf_name, logical in export_fields.items()}
+    names = {"MU", "MUB", "C1H", "C2H", "C1F", "C2F",
+             "MAPFAC_M", "MAPFAC_U", "MAPFAC_V", *export_fields}
+    raw = {name: np.asarray(wrfinput_fields[name], dtype=np.float32)
+           for name in names}
+    return wrf_initial_boundary_head(
+        raw, layouts, moist_theta=EXPORT_USE_THETA_M == 1)
+
+
+def _wrfbdy_fields(cache: PreparedCache, interval_index: int, *,
+                   initial_head: Mapping[str, np.ndarray] | None = None,
+                   duration_seconds: float | None = None,
+                   export_fields: Mapping[str, str] | None = None,
+                   ) -> dict[str, np.ndarray]:
+    """One wrfbdy record from the prepared boundary tables.
+
+    ``initial_head`` (record 0 only) replaces the first record's values with
+    the coupling of the exported wrfinput, as real.exe's first record always
+    is (main/real_em.F:866-899), and re-derives that record's tendencies so
+    the end of the first interval stays the prepared one: WRFDA's
+    da_update_bc law for a start state that is not the one the boundary was
+    built from, ``BT' = (B + BT*dt - B') / dt``.  The prepared head is a
+    different atmosphere whenever the start state was replaced after the
+    boundary was built (a separate initial analysis, ``--initial-inputs``),
+    and a pair whose first record is not its own wrfinput is one no WRF
+    tool writes: the WRF-input door refuses it as a mixed pair.
+    """
+    if initial_head is not None and (
+            interval_index != 0 or duration_seconds is None
+            or not float(duration_seconds) > 0.0):
+        raise ValueError(
+            "the initial boundary head replaces record 0 only and needs "
+            "that record's positive duration")
     result: dict[str, np.ndarray] = {}
-    wrf_to_logical = {
-        "U": "u", "V": "v", "PH": "phi", "T": "theta",
-        "MU": "mu", "QVAPOR": "qv",
-    }
-    suffix_to_side = {"XS": "west", "XE": "east",
-                      "YS": "south", "YE": "north"}
-    for wrf_name, logical in wrf_to_logical.items():
-        for suffix, side in suffix_to_side.items():
-            result[f"{wrf_name}_B{suffix}"] = _lbc_to_wrf(
-                cache, interval_index, logical, side, "value")
-            result[f"{wrf_name}_BT{suffix}"] = _lbc_to_wrf(
-                cache, interval_index, logical, side, "tendency")
+    if export_fields is None:
+        export_fields = _WRFBDY_EXPORT_FIELDS
+    for wrf_name, logical in export_fields.items():
+        for suffix, side in _WRFBDY_SUFFIX_SIDES.items():
+            prefix = f"lbc/{interval_index}/{logical}/{side}"
+            if initial_head is None:
+                value = cache.array(f"{prefix}/value")
+                tendency = cache.array(f"{prefix}/tendency")
+            else:
+                from woof.ingest.wrfinput import _boundary_strip
+
+                prepared = np.asarray(cache.array(f"{prefix}/value"),
+                                      dtype=np.float64)
+                prepared_tendency = np.asarray(
+                    cache.array(f"{prefix}/tendency"), dtype=np.float64)
+                width = (prepared.shape[-1] if side in {"west", "east"}
+                         else prepared.shape[-2])
+                value = _boundary_strip(
+                    initial_head[logical], side, width)
+                if value.shape != prepared.shape:
+                    raise ValueError(
+                        f"exported initial {wrf_name} {side} strip "
+                        f"{value.shape} != prepared boundary table "
+                        f"{prepared.shape}")
+                duration = float(duration_seconds)
+                end = prepared + duration * prepared_tendency
+                tendency = (end - value.astype(np.float64)) / duration
+            result[f"{wrf_name}_B{suffix}"] = _side_to_wrf(
+                value, logical, side)
+            result[f"{wrf_name}_BT{suffix}"] = _side_to_wrf(
+                tendency, logical, side)
     return result
 
 
@@ -1779,12 +2120,24 @@ def _write_wrfbdy(path: Path, contract: Mapping[str, object],
                   cache: PreparedCache,
                   boundary_times: list[datetime],
                   boundary_interval_seconds: int,
-                  engine: str | None = None) -> None:
+                  engine: str | None = None, *,
+                  initial_head: Mapping[str, np.ndarray] | None = None,
+                  export_fields: Mapping[str, str] | None = None,
+                  ) -> None:
+    """``initial_head`` (:func:`_initial_boundary_head` of the wrfinput
+    written beside this file) makes record 0 that file's own coupling;
+    every export passes it, with the ``export_fields`` it was built for."""
     dataset = _create_dataset(path, contract, dimensions, global_updates,
                               engine)
     try:
         for time_index, boundary_time in enumerate(boundary_times):
-            fields = _wrfbdy_fields(cache, time_index)
+            fields = (_wrfbdy_fields(cache, time_index,
+                                     export_fields=export_fields)
+                      if time_index != 0 or initial_head is None else
+                      _wrfbdy_fields(
+                          cache, 0, initial_head=initial_head,
+                          duration_seconds=boundary_interval_seconds,
+                          export_fields=export_fields))
             stamp = _date_text(boundary_time)
             next_stamp = _date_text(
                 boundary_time
@@ -1861,6 +2214,9 @@ def _domain_global_attributes(updates: Mapping[str, object]) \
             "MP_PHYSICS", "RA_LW_PHYSICS", "RA_SW_PHYSICS",
             "SF_SFCLAY_PHYSICS", "SF_SURFACE_PHYSICS",
             "BL_PBL_PHYSICS", "CU_PHYSICS",
+            # Stated only when the static's land use is not the frozen
+            # 21 categories (:func:`_land_category_contract`).
+            "NUM_LAND_CAT", "ISLAKE",
         )
         if name in updates
     )
@@ -1938,7 +2294,8 @@ def _validate_file(path: Path, contract: Mapping[str, object], *,
                    num_soil_layers: int = 4,
                    expected_global_attributes: Mapping[str, object]
                    | None = None,
-                   engine: str | None = None) -> dict[str, object]:
+                   engine: str | None = None,
+                   bdy_width: int | None = None) -> dict[str, object]:
     """Read the published file back and check it against the contract.
 
     The header half -- global attributes, variable inventory and order,
@@ -1950,7 +2307,7 @@ def _validate_file(path: Path, contract: Mapping[str, object], *,
     engine = resolve_wrfinput_engine(engine)
     expected_dimensions = _dimensions(
         contract, nx=nx, ny=ny, nz=nz,
-        num_soil_layers=num_soil_layers)
+        num_soil_layers=num_soil_layers, bdy_width=bdy_width)
     attribute_types = contract["global_attribute_types"]
     with _open_for_validation(path, engine) as dataset:
         if expected_global_attributes is not None:
@@ -2105,17 +2462,53 @@ def validate_stock_wrf_export_config(
             f"unsupported {label} microphysics: {error}",
             unsupported={"mp_physics": (cfg.get("mp_physics"), None)},
         ) from None
+    # spec_bdy_width is NOT pinned (U-E6).  It was required to be 5, the
+    # width of the frozen v4.6.1 file the contract was read from, so every
+    # HRRR-recipe preparation (spec_bdy_width = 10, spec_zone 1 +
+    # relax_zone 9, as the operational HRRR namelist) had its companion
+    # export refused.  The wrfbdy strip width is just the bdy_width
+    # dimension: real.exe sizes it from spec_bdy_width, and the export
+    # sizes it from the prepared boundary tables (_prepared_bdy_width).
     required = {"hybrid_opt": 2, "hypsometric_opt": 2,
-                "specified": root, "nested": not root, "spec_bdy_width": 5}
+                "specified": root, "nested": not root}
     if not configured_suite:
         required.update({"bl_pbl_physics": 1, "sf_sfclay_physics": 91,
                          "sf_surface_physics": 2})
     mismatch = {name: (cfg.get(name), expected)
                 for name, expected in required.items() if cfg.get(name) != expected}
+    width = cfg.get("spec_bdy_width")
+    zones = (cfg.get("spec_zone", 1), cfg.get("relax_zone", 4))
+    if (isinstance(width, bool) or not isinstance(width, int) or width < 1
+            or not all(isinstance(zone, int) for zone in zones)
+            or width < zones[0] + zones[1]):
+        # The strip must hold the specified and relaxation zones, the
+        # rule woof.config.validate_run_config applies to every run.
+        mismatch["spec_bdy_width"] = (
+            width, f">= spec_zone + relax_zone = {zones[0]} + {zones[1]}")
     if mismatch:
         raise StockWrfExportUnsupported(
             f"unsupported {label} configuration: {mismatch}", unsupported=mismatch)
     return inventory
+
+
+def _prepared_bdy_width(cache: PreparedCache, cfg: Mapping[str, object],
+                        interval_index: int) -> int:
+    """The wrfbdy strip width: the prepared tables', which must be the run's.
+
+    One width, read off the first boundary record's theta west strip
+    (woof side layout ``(z, y, width)``), and refused if it is not the
+    ``spec_bdy_width`` the cache's configuration records: a stock WRF
+    namelist states that number, and a file sized from anything else is
+    one wrf.exe would read with the wrong strip.
+    """
+    prefix = f"lbc/{interval_index}/theta/west/value"
+    shape = cache._arrays[prefix]["shape"]
+    width = int(shape[-1])
+    if width != int(cfg["spec_bdy_width"]):
+        raise ValueError(
+            f"prepared boundary tables are {width} rows wide but the cache "
+            f"records spec_bdy_width = {cfg['spec_bdy_width']}")
+    return width
 
 
 def _prepared_domain_context(artifact: PreparedDomainArtifacts, domain,
@@ -2196,6 +2589,7 @@ def _hierarchy_global_updates(*, valid_time: datetime, cfg,
         geometry=geometry,
         physics_selection={"selectors": recorded_physics_selectors(
             cfg, label=f"d{domain.grid_id:02d} direct-export")},
+        run_config=cfg,
     )
     updates.update({
         "GRID_ID": domain.grid_id,
@@ -2311,20 +2705,24 @@ def export_prepared_wrf_hierarchy(
             physics_inventory = stock_wrf_physics_inventory(
                 int(cfg["mp_physics"]))
             domain_contract_bundle = _physics_contract_bundle(
-                contract_bundle, physics_inventory.mp_physics)
+                contract_bundle, physics_inventory.mp_physics, cfg)
             input_contract = domain_contract_bundle["wrfinput"]
             name = f"wrfinput_d{domain.grid_id:02d}"
             if domain.grid_id != 1:
-                dimensions = _dimensions(
-                    input_contract, nx=int(cfg["nx"]), ny=int(cfg["ny"]),
-                    nz=int(cfg["nz"]))
                 updates = _hierarchy_global_updates(
                     valid_time=domain_valid_time, cfg=cfg, geometry=geometry,
                     domain=domain)
                 with np.load(artifact.static_cache, allow_pickle=False) as static:
                     fields = _wrfinput_fields(
                         cache, static, geometry, domain_valid_time, p_top=p_top,
-                        mp_physics=physics_inventory.mp_physics)
+                        mp_physics=physics_inventory.mp_physics,
+                        run_config=cfg)
+                    input_contract, land_attributes = \
+                        _land_category_contract(input_contract, fields)
+                    updates.update(land_attributes)
+                    dimensions = _dimensions(
+                        input_contract, nx=int(cfg["nx"]), ny=int(cfg["ny"]),
+                        nz=int(cfg["nz"]))
                     _write_wrfinput(
                         staging / name, input_contract, dimensions,
                         updates, fields, _date_text(domain_valid_time),
@@ -2344,8 +2742,11 @@ def export_prepared_wrf_hierarchy(
                 "mp_physics": physics_inventory.mp_physics,
                 "microphysics": physics_inventory.scheme,
                 "start_time": _date_text(domain_valid_time),
+                # The package's contract, not the drag-extended one the
+                # file was written to (resolved_physics_contract_sha256).
                 "resolved_physics_contract_sha256":
-                    _contract_payload_sha256(domain_contract_bundle),
+                    resolved_physics_contract_sha256(
+                        physics_inventory.mp_physics),
             }
 
         hierarchy = [{
@@ -2524,7 +2925,7 @@ def export_prepared_wrf(prepared_cache, static_cache, geometry_receipt,
     physics_inventory = validate_stock_wrf_export_config(
         cfg, configured_suite=physics_selection is not None)
     contract_bundle = _physics_contract_bundle(
-        _load_contract(), physics_inventory.mp_physics)
+        _load_contract(), physics_inventory.mp_physics, cfg)
     interval_indices = _forcing_interval_indices(
         cache, boundary_interval_seconds)
     _forcing_offsets, forcing_key = _forcing_offsets_from_identity(identity)
@@ -2578,6 +2979,7 @@ def export_prepared_wrf(prepared_cache, static_cache, geometry_receipt,
         dx=float(cfg["dx"]), dy=float(cfg["dy"]), dt=float(cfg["dt"]),
         geometry=geometry,
         physics_selection=selection_selectors,
+        run_config=cfg,
     )
     num_soil_layers = int(cfg.get("num_soil_layers", 4))
     sf_surface_physics = int(cfg["sf_surface_physics"])
@@ -2590,8 +2992,10 @@ def export_prepared_wrf(prepared_cache, static_cache, geometry_receipt,
                 cache, static, geometry, valid_time, p_top=p_top,
                 mp_physics=physics_inventory.mp_physics,
                 sf_surface_physics=sf_surface_physics,
-                num_soil_layers=num_soil_layers)
-            input_contract = contract_bundle["wrfinput"]
+                num_soil_layers=num_soil_layers, run_config=cfg)
+            input_contract, land_attributes = _land_category_contract(
+                contract_bundle["wrfinput"], wrfinput_fields)
+            updates.update(land_attributes)
             input_dimensions = _dimensions(
                 input_contract, nx=nx, ny=ny, nz=nz,
                 num_soil_layers=num_soil_layers)
@@ -2599,13 +3003,18 @@ def export_prepared_wrf(prepared_cache, static_cache, geometry_receipt,
                 staging / "wrfinput_d01", input_contract, input_dimensions,
                 updates, wrfinput_fields, stamp, engine)
         bdy_contract = contract_bundle["wrfbdy"]
+        bdy_width = _prepared_bdy_width(cache, cfg, interval_indices[0])
         bdy_dimensions = _dimensions(
             bdy_contract, nx=nx, ny=ny, nz=nz,
-            num_soil_layers=num_soil_layers)
+            num_soil_layers=num_soil_layers, bdy_width=bdy_width)
+        export_fields = _wrfbdy_export_fields(
+            cache, physics_inventory, bdy_contract)
         _write_wrfbdy(
             staging / "wrfbdy_d01", bdy_contract, bdy_dimensions,
             updates, cache, boundary_times, boundary_interval_seconds,
-            engine)
+            engine, export_fields=export_fields,
+            initial_head=_initial_boundary_head(
+                wrfinput_fields, export_fields))
         files = {
             "wrfinput_d01": _validate_file(
                 staging / "wrfinput_d01", input_contract,
@@ -2620,7 +3029,7 @@ def export_prepared_wrf(prepared_cache, static_cache, geometry_receipt,
                 num_soil_layers=num_soil_layers,
                 expected_global_attributes=_domain_global_attributes(
                     updates),
-                engine=engine),
+                engine=engine, bdy_width=bdy_width),
         }
         limitations = [
             "single specified projected domain only (lambert stock-WRF-gated; mercator/polar exports oracle-gated, not yet stock-WRF-gated)",
@@ -2664,8 +3073,11 @@ def export_prepared_wrf(prepared_cache, static_cache, geometry_receipt,
                 "static_cache_sha256": actual_static_sha256,
                 "geometry_receipt_sha256": _sha256(geometry_path),
                 "contract_sha256": _sha256(_CONTRACT_PATH),
+                # The package's contract, not the drag-extended one the
+                # files were written to (resolved_physics_contract_sha256).
                 "resolved_physics_contract_sha256":
-                    _contract_payload_sha256(contract_bundle),
+                    resolved_physics_contract_sha256(
+                        physics_inventory.mp_physics),
             },
             "files": files,
             "limitations": limitations,

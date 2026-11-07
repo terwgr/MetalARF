@@ -13,6 +13,14 @@ _apply_thompson_aerosol`` for mp=28, ``woof.core.microphysics.
 _apply_thompson`` for mp=8) through the host backend, exactly as
 ``real_column_parity`` does.
 
+mp=8 runs woof/core/kernels/thompson_classic.cu, a transcription of WRF
+itself, so its rule columns are not checked against a restatement of the
+rule here: ``make_rule_fixture_mp8.py`` runs the same kinds of columns
+through WRF's own classic driver and
+tests/test_thompson_real_column_host_parity.py holds the unit word for word
+to those answers.  The ``mp`` arguments below remain for mp=28 and for the
+thompson.cu kernels mp=28 shares.
+
 Bare line numbers are WRF v4.6.1's ``phys/module_mp_thompson.F``.
 
 usage: rule_checks.py [CHECK ...]      prints one JSON object
@@ -350,6 +358,27 @@ def check_warm_ice_number(mp):
         float(cols["qi"][0, k]), float(cols["ni"][0, k]),
         float(inp["T"][0, k]), float(inp["p"][0, k]),
         float(cols["qv"][0, k])) for k in levels]
+    if mp == 28:
+        # mp=28 (v4.6.1) carries the balance as WRF does, in tendency form:
+        # niten = (xni - ni1d*rho)*odts*orho, then ni1d + niten*DT, all REAL.
+        # Where the entry number is far above the bound (level 4: 1e9 per
+        # kg against ~1.07e6) that subtraction cancels to the float32 ulp of
+        # the entry, so WRF's own answer sits ~9e-5 from the exact target;
+        # the expectation is WRF's arithmetic, not the exact target.
+        f32 = np.float32
+        dt = f32(cols["dt"])
+        tendency_form = []
+        for k, target in zip(levels, want):
+            temp = float(inp["T"][0, k])
+            rho = f32(f32(0.622) * f32(inp["p"][0, k]) / (
+                f32(287.04) * f32(temp)
+                * (f32(max(float(cols["qv"][0, k]), 1.0e-10)) + f32(0.622))))
+            ni1d = f32(cols["ni"][0, k])
+            xni = f32(target * float(rho))
+            niten = f32(f32(f32(xni - f32(ni1d * rho)) * f32(f32(1.0) / dt))
+                        * f32(f32(1.0) / rho))
+            tendency_form.append(float(f32(ni1d + f32(niten * dt))))
+        want = tendency_form
     return {"temperature": [float(inp["T"][0, k]) for k in levels],
             "ni_after_sources": [float(got[k]) for k in levels],
             "ni_balance": want}
@@ -357,16 +386,11 @@ def check_warm_ice_number(mp):
 
 CHECKS = {
     "G_no_micro_column_mp28": lambda: check_no_micro_column(28),
-    "G_no_micro_column_mp8": lambda: check_no_micro_column(8),
     "T_terminal_graupel_zero": check_terminal_graupel_zero,
     "Awarm_ice_number_mp28": lambda: check_warm_ice_number(28),
-    "Awarm_ice_number_mp8": lambda: check_warm_ice_number(8),
     "J_melt_before_r1_mp28": lambda: check_condensate_at_or_below_r1_melts(28),
-    "J_melt_before_r1_mp8": lambda: check_condensate_at_or_below_r1_melts(8),
     "I_melting_snow_blend_mp28": lambda: check_melting_snow_blend(28),
-    "I_melting_snow_blend_mp8": lambda: check_melting_snow_blend(8),
     "P_presence_mp28": lambda: check_presence_is_the_mixing_ratio(28),
-    "P_presence_mp8": lambda: check_presence_is_the_mixing_ratio(8),
     "R_classic_rain_presence": check_classic_rain_presence_export,
 }
 

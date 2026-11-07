@@ -1,5 +1,8 @@
 // New Tiedtke (WRF cu_physics=16), Metal stage family.
 #include <metal_stdlib>
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
 #include "ntiedtke_prep_bindings.metalh"
 #include "ntiedtke_convert_bindings.metalh"
 #include "ntiedtke_cuinin_bindings.metalh"
@@ -32,6 +35,10 @@
 #include "ntiedtke_driver_rain_merge_bindings.metalh"
 using namespace metal;
 #pragma clang fp contract(off)
+
+static inline float gfk_exp(float x) { return as_type<float>(soft_gfk_exp(as_type<uint>(x))); }
+static inline float gfk_log(float x) { return as_type<float>(soft_gfk_log(as_type<uint>(x))); }
+static inline float gfk_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
 
 static inline float nt_add(float a,float b){return a+b;}
 static inline float nt_mul(float a,float b){return a*b;}
@@ -73,7 +80,7 @@ static inline void nt_scale_factors(float dx, device float *sf, device float *sf
 
     if (dx < NT_DXREF) {
         float ratio = nt_div(NT_DXREF, dx);
-        float base = nt_add(1.06133f, log(ratio));
+        float base = nt_add(1.06133f, gfk_log(ratio));
         /* **3 on an INTEGER exponent: gfortran emits a multiply chain, not
          * powf.  Left to right, so (base*base)*base. */
         *sf = nt_mul(nt_mul(base, base), base);
@@ -226,10 +233,10 @@ static inline float nt_foelhm(float tt, thread const NtConst &c) {
 static inline float nt_foeewm(float tt, thread const NtConst &c) {
 
     const float a = nt_foealfa(tt);
-    const float el = exp(nt_div(
+    const float el = gfk_exp(nt_div(
         nt_mul(NT_C3LES, nt_add(tt, -NT_TMELT)),
         nt_add(tt, -NT_C4LES)));
-    const float ei = exp(nt_div(
+    const float ei = gfk_exp(nt_div(
         nt_mul(NT_C3IES, nt_add(tt, -NT_TMELT)),
         nt_add(tt, -NT_C4IES)));
     return nt_mul(c.c2es, nt_add(nt_mul(a, el),
@@ -402,9 +409,9 @@ static inline void nt_cuadjtqn1(thread float *pt, thread float *pq, float psp, t
     float zl = nt_div(1.0f, nt_add(*pt, -NT_C4LES));
     float zi = nt_div(1.0f, nt_add(*pt, -NT_C4IES));
     float a = nt_foealfa(*pt);
-    float el = exp(nt_mul(nt_mul(NT_C3LES,
+    float el = gfk_exp(nt_mul(nt_mul(NT_C3LES,
                                            nt_add(*pt, -NT_TMELT)), zl));
-    float ei = exp(nt_mul(nt_mul(NT_C3IES,
+    float ei = gfk_exp(nt_mul(nt_mul(NT_C3IES,
                                            nt_add(*pt, -NT_TMELT)), zi));
     float zqsat = nt_mul(c.c2es,
         nt_add(nt_mul(a, el), nt_mul(nt_add(1.0f, -a), ei)));
@@ -425,9 +432,9 @@ static inline void nt_cuadjtqn1(thread float *pt, thread float *pq, float psp, t
         zl = nt_div(1.0f, nt_add(*pt, -NT_C4LES));
         zi = nt_div(1.0f, nt_add(*pt, -NT_C4IES));
         a = nt_foealfa(*pt);
-        el = exp(nt_mul(nt_mul(NT_C3LES,
+        el = gfk_exp(nt_mul(nt_mul(NT_C3LES,
                                          nt_add(*pt, -NT_TMELT)), zl));
-        ei = exp(nt_mul(nt_mul(NT_C3IES,
+        ei = gfk_exp(nt_mul(nt_mul(NT_C3IES,
                                          nt_add(*pt, -NT_TMELT)), zi));
         zqsat = nt_mul(c.c2es,
             nt_add(nt_mul(a, el), nt_mul(nt_add(1.0f, -a), ei)));
@@ -455,9 +462,9 @@ static inline void nt_cuadjtqn1_device(device float *pt, device float *pq, float
     float zl = nt_div(1.0f, nt_add(*pt, -NT_C4LES));
     float zi = nt_div(1.0f, nt_add(*pt, -NT_C4IES));
     float a = nt_foealfa(*pt);
-    float el = exp(nt_mul(nt_mul(NT_C3LES,
+    float el = gfk_exp(nt_mul(nt_mul(NT_C3LES,
                                            nt_add(*pt, -NT_TMELT)), zl));
-    float ei = exp(nt_mul(nt_mul(NT_C3IES,
+    float ei = gfk_exp(nt_mul(nt_mul(NT_C3IES,
                                            nt_add(*pt, -NT_TMELT)), zi));
     float zqsat = nt_mul(c.c2es,
         nt_add(nt_mul(a, el), nt_mul(nt_add(1.0f, -a), ei)));
@@ -478,9 +485,9 @@ static inline void nt_cuadjtqn1_device(device float *pt, device float *pq, float
         zl = nt_div(1.0f, nt_add(*pt, -NT_C4LES));
         zi = nt_div(1.0f, nt_add(*pt, -NT_C4IES));
         a = nt_foealfa(*pt);
-        el = exp(nt_mul(nt_mul(NT_C3LES,
+        el = gfk_exp(nt_mul(nt_mul(NT_C3LES,
                                          nt_add(*pt, -NT_TMELT)), zl));
-        ei = exp(nt_mul(nt_mul(NT_C3IES,
+        ei = gfk_exp(nt_mul(nt_mul(NT_C3IES,
                                          nt_add(*pt, -NT_TMELT)), zi));
         zqsat = nt_mul(c.c2es,
             nt_add(nt_mul(a, el), nt_mul(nt_add(1.0f, -a), ei)));
@@ -662,8 +669,8 @@ static inline void nt_body_ntiedtke_cutypen(int i, device const float *pqen, dev
             const float root = nt_add(0.001f, -nt_mul(part1, part2));
             if (part2 < 0.0f) {
                 /* conw = 1.2*root**t13 -- a genuine cube root through powf,
-                 * so pow(glibc's) and not CUDA's. */
-                const float conw = nt_mul(1.2f, pow(root, NT_T13));
+                 * so gfk_pow(glibc's) and not CUDA's. */
+                const float conw = nt_mul(1.2f, gfk_pow(root, NT_T13));
                 const float deltt = max(nt_div(
                     nt_mul(1.5f, hfx[i]),
                     nt_mul(nt_mul(rho, c.cpd), conw)), 0.0f);
@@ -1067,12 +1074,12 @@ static inline void nt_body_ntiedtke_closure(int i, device const int *ldcum, devi
                 nt_mul(c.g, nt_add(NTK(pmfu, jk), NTK(pmfd, jk)))));
             zcape1[i] = nt_add(zcape1[i], nt_mul(
                 nt_add(
-                    nt_div(nt_add(NTK(ptu, jk), -NTK(ptenh, jk)),
-                              NTK(ptenh, jk)),
-                    nt_add(nt_mul(c.vtmpc1,
-                                        nt_add(NTK(pqu, jk),
-                                                  -NTK(pqenh, jk))),
-                              -NTK(plu, jk))),
+                    nt_add(
+                        nt_div(nt_add(NTK(ptu, jk), -NTK(ptenh, jk)),
+                               NTK(ptenh, jk)),
+                        nt_mul(c.vtmpc1,
+                               nt_add(NTK(pqu, jk), -NTK(pqenh, jk)))),
+                    -NTK(plu, jk)),
                 zdp));
         }
         if (deep && jk >= kcbot[i]) {
@@ -1524,9 +1531,9 @@ static inline void nt_body_ntiedtke_cuascn(int i, device const float *pten, devi
                 const float zarg = nt_mul(rq, rq);
                 const float zd = (zarg < 25.0f)
                     ? nt_mul(nt_mul(zzco,
-                          nt_add(1.0f, -exp(-zarg))), zdfi)
+                          nt_add(1.0f, -gfk_exp(-zarg))), zdfi)
                     : nt_mul(zzco, zdfi);
-                const float zint = exp(-zd);
+                const float zint = gfk_exp(-zd);
                 float zlnew = nt_add(nt_mul(zluold, zint),
                     nt_mul(nt_div(zc, zd), nt_add(1.0f, -zint)));
                 zlnew = max(0.0f, min(NTC(plu, jk), zlnew));
@@ -1541,7 +1548,7 @@ static inline void nt_body_ntiedtke_cuascn(int i, device const float *pten, devi
 
         /* :2219-2236  rain fallout */
         if (llo1 && zlrain_cur > 0.0f) {
-            const float zvw = nt_mul(21.18f, pow(zlrain_cur, 0.2f));
+            const float zvw = nt_mul(21.18f, gfk_pow(zlrain_cur, 0.2f));
             const float zvi = nt_mul(z_cwifrac, zvw);
             const float zalfaw = nt_foealfa(NTC(ptu, jk));
             const float zvv = nt_add(nt_mul(zalfaw, zvw),
@@ -1550,7 +1557,7 @@ static inline void nt_body_ntiedtke_cuascn(int i, device const float *pten, devi
             const float zwu = min(15.0f, sqrt(
                 nt_mul(2.0f, max(0.1f, kup_cur))));
             const float zd = nt_div(zvv, zwu);
-            const float zint = exp(-zd);
+            const float zint = gfk_exp(-zd);
             float zrnew = nt_add(nt_mul(zrold, zint),
                 nt_mul(nt_div(zprecip, zd), nt_add(1.0f, -zint)));
             zrnew = max(0.0f, min(zlrain_cur, zrnew));
@@ -2189,7 +2196,7 @@ static inline void nt_body_ntiedtke_cuflxn(int i, device const int *kcbot, devic
                 nt_mul(nt_mul(nt_mul(zcpecons,
                     max(0.0f, nt_add(NTC(pqsen, jk), -NTC(pqen, jk)))),
                     NT_ZCUCOV),
-                    pow(zbase, 0.5777f)),
+                    gfk_pow(zbase, 0.5777f)),
                 zdp);
             float zrnew = nt_add(zrfl, -zdrfl1);
             const float zrmin = nt_add(zrfl,

@@ -23,15 +23,7 @@ import numpy as np
 
 from woof.ensemble.batch_storage import BatchArraySpec, BatchMemoryPlan, BatchStorage
 from woof.ensemble.batch_state import _temporal_key
-
-
-def _positive(value, name):
-    if isinstance(value, (bool, np.bool_)):
-        raise TypeError(f"{name} must be an integer")
-    result = index(value)
-    if result <= 0:
-        raise ValueError(f"{name} must be positive")
-    return result
+from woof.ensemble.batch_storage import _positive_count as _positive
 
 
 def _scalar(value):
@@ -207,6 +199,7 @@ def rrtmgp_call_memory_inventory(cfg, *, members, ny, nx, p_top, column_chunk,
     # than hiding them in a per-member multiplier.
     extra = {"returned/rthratenlw": ((nz, cells), 4),
              "returned/rthratensw": ((nz, cells), 4),
+             "returned/cldfra": ((nz, cells), 4),
              **{f"returned/{name}": ((cells,), 4) for name in
                 ("swdown", "glw", "gsw", "coszen", "olr", "swddir", "swddif")},
              "shortwave/daylight_indices": ((cells,), 8),

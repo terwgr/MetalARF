@@ -8,6 +8,10 @@ import pytest
 
 from woof.domain_wizard import render_config
 from woof.namelist_import import import_namelists
+from ishmael_retirement import requested_by_own_number, without_retired_line
+from test_audit_parent_generic_bytes import without_import_capability_lines
+from wrf_clock_lines import without_wrf_clock_lines
+from woof_engine_spelling import engine_spelling
 
 
 FIXTURES = Path(__file__).parent / "fixtures/tolerance_parent_byte_controls"
@@ -19,6 +23,27 @@ NAMELISTS = (
 SOURCES = ("gfs", "era5", "rap", "rrfs")
 PROFILE = "thompson-mp8-ysu-mm5-noah-rte-rrtmgp-v1"
 
+#: What a recipe source's own request row adds to an ordinary emission
+#: since the parent was pinned.  e19441c1e gave rap the operational fork's
+#: surface-layer generation (woof/data/physics_sources/
+#: request-defaults.v1.toml, request gsl_wrf39_rap), which every RAP-sourced
+#: configuration declares whatever its surface layer; its Thompson
+#: generation is mp_physics=28-scoped and does not reach this profile.
+#: Everything else in these bytes is still the parent's.
+RECIPE_GENERATION_LINES = {
+    "rap": ("wsm6_hail_opt = 0\n",
+            'wsm6_hail_opt = 0\nmynn_sfclay_variant = "gsl_wrf39"\n'),
+}
+
+
+def without_recipe_generation(source, emitted):
+    """``emitted`` with the source row's declared generation taken back out."""
+    if source not in RECIPE_GENERATION_LINES:
+        return emitted
+    parent, now = RECIPE_GENERATION_LINES[source]
+    assert emitted.count(now) == 1, (source, emitted)
+    return emitted.replace(now, parent)
+
 
 def _controls(group, matrix_name):
     payload = (FIXTURES / matrix_name).read_bytes()
@@ -29,14 +54,14 @@ def _controls(group, matrix_name):
     return json.loads(payload), pins
 
 
-def _assert_old_bytes(group, pins, key, emitted):
+def _assert_old_bytes(group, pins, key, emitted, *, retired=lambda old: old):
     row = pins["cases"][key]
     relative = Path(row["file"])
     assert len(relative.parts) == 1 and relative.suffix == ".toml"
     old = (FIXTURES / group / relative).read_bytes()
     assert len(old) == row["bytes"]
     assert hashlib.sha256(old).hexdigest() == row["sha256"]
-    assert emitted.encode("utf-8") == old
+    assert engine_spelling(without_wrf_clock_lines(emitted)).encode("utf-8") == retired(old)
 
 
 @pytest.mark.parametrize("case", NAMELISTS)
@@ -45,9 +70,11 @@ def test_ordinary_namelist_bytes_match_tolerance_original_parent(case, tmp_path)
     documents = matrix["namelists"][case]
     wps, inp = tmp_path / "namelist.wps", tmp_path / "namelist.input"
     wps.write_bytes(documents["wps"].encode("utf-8"))
-    inp.write_bytes(documents["input"].encode("utf-8"))
+    inp.write_bytes(requested_by_own_number(documents["input"]).encode("utf-8"))
     emitted, _ = import_namelists(wps, inp)
-    _assert_old_bytes("original-nine", pins, "namelist/" + case, emitted)
+    _assert_old_bytes("original-nine", pins, "namelist/" + case,
+                      without_import_capability_lines(emitted),
+                      retired=without_retired_line)
 
 
 @pytest.mark.parametrize("source", SOURCES)
@@ -63,4 +90,5 @@ def test_ordinary_ysu_noah_recipe_bytes_match_tolerance_original_parent(source):
         root_dx_m=recipe["root_dx_m"], fetch_hints={"source": source},
         case_data=None, profile=recipe["profile"],
     )
-    _assert_old_bytes("stable-recipes", pins, "recipe/" + source, emitted)
+    _assert_old_bytes("stable-recipes", pins, "recipe/" + source,
+                      without_recipe_generation(source, emitted))

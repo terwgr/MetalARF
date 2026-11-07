@@ -172,25 +172,6 @@ def test_decoded_window_validation_is_the_engine_s_own_spelling():
     assert match.group(1) == WINDOW_DECODED_VALIDATION
 
 
-def test_window_fallback_provider_does_not_retain_cached_atmosphere_cycle(source):
-    import gc
-    import weakref
-    _, bundle = source
-    enabled = gc.isenabled()
-    gc.disable()
-    try:
-        sequence = bundle.regular_snapshots().for_grids((target(),))
-        snapshot = sequence[0]
-        reference = weakref.ref(snapshot.fields["T"])
-        del sequence
-        assert reference() is not None
-        del snapshot
-        assert reference() is None
-    finally:
-        if enabled:
-            gc.enable()
-
-
 def test_plane_reader_has_no_full_atmospheric_allocation_and_keeps_global_median(source, monkeypatch):
     import weakref
     _, bundle = source
@@ -323,7 +304,8 @@ def _rust_window_inventory():
 def test_the_three_window_inventories_are_one_list():
     from woof.ingest.atmospheric_window import CANONICAL_ATMOSPHERIC_FIELDS
     from woof.ingest.analyzed_numbers import CANONICAL_NUMBER_FIELDS
-    from woof.mapped_source import HYDROMETEOR_LEGACY_NAMES
+    from woof.mapped_source import (HYDROMETEOR_LEGACY_NAMES,
+                                     VERTICAL_VELOCITY_LEGACY_NAMES)
 
     legacy_of = {
         "air_temperature": "T", "air_pressure": "PRES",
@@ -331,6 +313,7 @@ def test_the_three_window_inventories_are_one_list():
         "northward_wind": "V", "geopotential_height": "GHT",
         **HYDROMETEOR_LEGACY_NAMES,
         **CANONICAL_NUMBER_FIELDS,
+        **{name: value[0] for name, value in VERTICAL_VELOCITY_LEGACY_NAMES.items()},
     }
     assert frozenset(legacy_of) == CANONICAL_ATMOSPHERIC_FIELDS
     assert frozenset(legacy_of.values()) == ATMOSPHERIC_FIELDS

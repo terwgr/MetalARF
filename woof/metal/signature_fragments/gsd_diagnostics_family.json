@@ -1,0 +1,1545 @@
+{
+  "kernels": [
+    {
+      "name": "gsd_prepare",
+      "module": "gsd_diagnostics",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_diagnostics.cu",
+      "cuda_symbol": "gsd_prepare",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "ph",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "pw",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "wind10",
+          "float",
+          "read_write"
+        ],
+        [
+          "wind80",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "ph": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "wind10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wind80": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "phb3",
+          "int32"
+        ],
+        [
+          "thb3",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "diagflag",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_columns",
+      "module": "gsd_diagnostics",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_diagnostics.cu",
+      "cuda_symbol": "gsd_columns",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "ph",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "znw",
+          "float",
+          "read"
+        ],
+        [
+          "density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "wind10",
+          "float",
+          "read"
+        ],
+        [
+          "wind80",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "qcbl",
+          "float",
+          "read"
+        ],
+        [
+          "cfbl",
+          "float",
+          "read"
+        ],
+        [
+          "u10",
+          "float",
+          "read"
+        ],
+        [
+          "v10",
+          "float",
+          "read"
+        ],
+        [
+          "pw",
+          "float",
+          "read_write"
+        ],
+        [
+          "wspdmax",
+          "float",
+          "read_write"
+        ],
+        [
+          "umax",
+          "float",
+          "read_write"
+        ],
+        [
+          "vmax",
+          "float",
+          "read_write"
+        ],
+        [
+          "wup",
+          "float",
+          "read_write"
+        ],
+        [
+          "wdn",
+          "float",
+          "read_write"
+        ],
+        [
+          "wmean",
+          "float",
+          "read_write"
+        ],
+        [
+          "wsum",
+          "float",
+          "read_write"
+        ],
+        [
+          "count",
+          "float",
+          "read_write"
+        ],
+        [
+          "grplmax",
+          "float",
+          "read_write"
+        ],
+        [
+          "refmax",
+          "float",
+          "read_write"
+        ],
+        [
+          "refm10",
+          "float",
+          "read_write"
+        ],
+        [
+          "ltg1max",
+          "float",
+          "read_write"
+        ],
+        [
+          "ltg2max",
+          "float",
+          "read_write"
+        ],
+        [
+          "ltg1",
+          "float",
+          "read_write"
+        ],
+        [
+          "ltg2",
+          "float",
+          "read_write"
+        ],
+        [
+          "wspd10",
+          "float",
+          "read_write"
+        ],
+        [
+          "wspd80",
+          "float",
+          "read_write"
+        ],
+        [
+          "lwp",
+          "float",
+          "read_write"
+        ],
+        [
+          "iwp",
+          "float",
+          "read_write"
+        ],
+        [
+          "maxcf",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailk1",
+          "float",
+          "read_write"
+        ],
+        [
+          "hail2d",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "znw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "wind10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wind80": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qcbl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cfbl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "pw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "wspdmax": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "umax": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vmax": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wdn": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wmean": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wsum": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "count": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "grplmax": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "refmax": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "refm10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ltg1max": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ltg2max": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ltg1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ltg2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wspd10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wspd80": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lwp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "iwp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "maxcf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailk1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hail2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "phb3",
+          "int32"
+        ],
+        [
+          "thb3",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ptop",
+          "float32"
+        ],
+        [
+          "diagflag",
+          "int32"
+        ],
+        [
+          "icloud_bl",
+          "int32"
+        ],
+        [
+          "thompson",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_lightning3",
+      "module": "gsd_diagnostics",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_diagnostics.cu",
+      "cuda_symbol": "gsd_lightning3",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read"
+        ],
+        [
+          "b",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "ma",
+          "float",
+          "read"
+        ],
+        [
+          "mb",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "any_2d"
+          ]
+        ],
+        "b": [
+          [
+            "any_2d"
+          ]
+        ],
+        "out": [
+          [
+            "any_2d"
+          ]
+        ],
+        "ma": [
+          [
+            "1"
+          ]
+        ],
+        "mb": [
+          [
+            "1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_reflectivity",
+      "module": "gsd_diagnostics",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_diagnostics.cu",
+      "cuda_symbol": "gsd_reflectivity",
+      "resources": [
+        [
+          "refl",
+          "float",
+          "read_write"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "rainc",
+          "float",
+          "read"
+        ],
+        [
+          "composite",
+          "float",
+          "read_write"
+        ],
+        [
+          "at1",
+          "float",
+          "read_write"
+        ],
+        [
+          "at4",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "refl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ht": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "composite": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "at1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "at4": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "phb3",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_vorticity",
+      "module": "gsd_helicity",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_helicity.cu",
+      "cuda_symbol": "gsd_vorticity",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "ph",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "ph": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "dn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dnw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_uh_columns",
+      "module": "gsd_helicity",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_helicity.cu",
+      "cuda_symbol": "gsd_uh_columns",
+      "resources": [
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "ph",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "uh",
+          "float",
+          "read_write"
+        ],
+        [
+          "usecol",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ht": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "uh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "usecol": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "lower",
+          "float32"
+        ],
+        [
+          "upper",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_uh_fold",
+      "module": "gsd_helicity",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_helicity.cu",
+      "cuda_symbol": "gsd_uh_fold",
+      "resources": [
+        [
+          "uh",
+          "float",
+          "read"
+        ],
+        [
+          "use",
+          "float",
+          "read"
+        ],
+        [
+          "maximum",
+          "float",
+          "read_write"
+        ],
+        [
+          "minimum",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "uh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "use": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "maximum": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "minimum": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gsd_vorticity_fold",
+      "module": "gsd_helicity",
+      "source": "woof/metal/shaders/gsd_diagnostics_family.metal",
+      "cuda_source": "woof/core/kernels/gsd_helicity.cu",
+      "cuda_symbol": "gsd_vorticity_fold",
+      "resources": [
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "ph",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "maximum",
+          "float",
+          "read_write"
+        ],
+        [
+          "max01",
+          "float",
+          "read_write"
+        ],
+        [
+          "total_steps",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ht": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "maximum": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "max01": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "total_steps": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "idump",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

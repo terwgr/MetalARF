@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -65,7 +66,7 @@ def test_every_preset_is_a_create_page_suite_the_engine_admits():
 
 
 @pytest.mark.parametrize("choices, door, words", [
-    ({"pbl": "myj"}, "configuration", "requires sf_sfclay_physics=2"),
+    ({"pbl": "myj", "surface_layer": "revised-mm5"}, "configuration", "requires sf_sfclay_physics=2"),
     ({"cumulus": "grell-freitas", "pbl": "off"}, "configuration", "requires a PBL scheme"),
     ({"radiation": "off"}, "radiation-off-land-surface", "radiation switched entirely OFF"),
     ({"microphysics": "sase"}, "registry", "Not implemented"),
@@ -81,8 +82,111 @@ def test_an_invalid_combination_gets_the_engines_refusal_and_valid_neighbours(ch
 
 
 def test_the_nearest_repair_keeps_what_was_chosen():
+    verdict = pc.check({"choices": {"pbl": "myj", "cumulus": "off", "surface_layer": "revised-mm5"}})
+    assert verdict["valid"] is False
+    assert verdict["neighbours"]
+    # Each repair changes one of the two clashing picks and keeps the cumulus the caller chose.
+    for row in verdict["neighbours"]:
+        assert set(row["choices"]) <= {"pbl", "surface_layer"} and "cumulus" not in row["choices"], row
+
+
+def test_a_pbl_choice_brings_the_surface_layer_it_needs():
+    """U-E4: MYJ alone runs, with the Eta surface layer its registry option requires."""
     verdict = pc.check({"choices": {"pbl": "myj"}})
-    assert verdict["neighbours"][0]["choices"] == {"surface_layer": "eta-similarity"}
+    assert verdict["valid"], verdict.get("refusal")
+    assert verdict["resolved"]["surface_layer"] == "eta-similarity"
+
+
+@pytest.mark.parametrize("suite, family, choice, follows", [
+    # U-E4 (customer run_5f83d3dcf5f1cec3): each of these was refused at
+    # every source and spacing because the choice left behind a part of the
+    # suite that belonged to the scheme it replaced.
+    ("thompson-mp8-ysu-mm5-noah-rrtmg-legacy-v1", "pbl", "myj", {"sf_sfclay_physics": 2}),
+    ("wsm6-mynn-mynn-noah-rte-rrtmgp-implemented-unverified-v1", "pbl", "ysu", {"sf_sfclay_physics": 1}),
+    ("wsm6-mynn-mynn-noah-rte-rrtmgp-implemented-unverified-v1", "pbl", "shinhong", {"sf_sfclay_physics": 1}),
+    ("thompson-mp8-ysu-mm5-noah-rte-rrtmgp-v1", "microphysics", "lin-mp2",
+     {"ra_rrtmg_variant": "rrtmg_legacy", "wrf_rrtmg_compatibility": "wrf-rrtmg-4-4-legacy-v1"}),
+    ("thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1", "microphysics", "thompson-mp8",
+     {"mp_physics": 8, "thompson_version": "wrf_461", "thompson_fork_snow_fall": "blend"}),
+    ("thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1", "microphysics", "wsm6-mp6", {"mp_physics": 6}),
+    ("thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1", "radiation", "rte-rrtmgp",
+     {"ra_rrtmg_variant": "rte-rrtmgp"}),
+    ("thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1", "radiation", "new-goddard", {"ra_lw_physics": 5}),
+    ("thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1", "radiation", "wrf-rrtm-dudhia", {"ra_lw_physics": 1}),
+    ("thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1", "pbl", "ysu",
+     {"bl_pbl_physics": 1, "sf_sfclay_physics": 1, "bl_mynn_version": "wrf_461"}),
+])
+def test_one_scheme_choice_on_a_suite_runs_with_what_it_brings(suite, family, choice, follows):
+    verdict = pc.check({"source": "gfs", "suite": suite, "choices": {family: choice}, "dx_km": 3})
+    assert verdict["valid"], verdict.get("refusal")
+    changed = verdict["changed_from_suite"]
+    assert {key: changed.get(key, pc._suite_switches(suite).get(key)) for key in follows} == follows
+    # The HRRR suite keeps its PBL scalar mixing: the new scheme's own
+    # scalars are diffused (woof.config.SCALAR_PBLMIX_SPECIES).
+    if suite.startswith("thompson-mp28-mynn-gsd41"):
+        assert "scalar_pblmix" not in changed
+
+
+def test_a_suites_scheme_generation_leaves_with_the_lineage_it_came_from():
+    """The HRRR suite's NOAA WRF 3.9 fork Thompson does not outlive its MYNN.
+
+    Swapping that suite's PBL to YSU (with Noah and KF) ran the fork under
+    a label reading only "Thompson aerosol-aware", so a request for WRF's
+    mp28 got a different Thompson generation and a quarter less rain.
+    """
+
+    suite = "thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1"
+    suite_switches = pc._suite_switches(suite)
+    assert suite_switches["thompson_version"] == "wrf_39_noaa"
+
+    def resolved(choices, settings=None):
+        verdict = pc.check({"source": "gfs", "suite": suite, "choices": choices,
+                            "settings": settings or {}, "dx_km": 9})
+        assert verdict["valid"], verdict.get("refusal")
+        changed = verdict["changed_from_suite"]
+        return {key: changed.get(key, suite_switches.get(key)) for key in (
+            "thompson_version", "thompson_fork_snow_fall", "bl_pbl_physics", "sf_sfclay_physics",
+            "wif_input_opt", "ra_rrtmg_variant", "scalar_pblmix")}
+
+    wrf = {"pbl": "ysu", "land_surface": "noah", "cumulus": "kain-fritsch"}
+    for choices in (wrf, {**wrf, "microphysics": "thompson-aerosol-mp28"}):
+        mix = resolved(choices)
+        assert mix["thompson_version"] == "wrf_461" and mix["thompson_fork_snow_fall"] == "blend", choices
+        # The rest of what the suite set stays: WIF aerosol, legacy RRTMG, scalar PBL mixing.
+        assert (mix["bl_pbl_physics"], mix["sf_sfclay_physics"], mix["wif_input_opt"],
+                mix["ra_rrtmg_variant"], mix["scalar_pblmix"]) == (1, 1, 1, "rrtmg_legacy", 1), choices
+    # A choice that keeps every scheme carrying the lineage keeps the fork.
+    assert resolved({"cumulus": "kain-fritsch"})["thompson_version"] == "wrf_39_noaa"
+    # A request that wants the fork in the mix says so, and gets it.
+    asked = resolved(wrf, {"thompson_version": "wrf_39_noaa", "thompson_fork_snow_fall": "wrf_39_noaa"})
+    assert asked["thompson_version"] == asked["thompson_fork_snow_fall"] == "wrf_39_noaa"
+
+
+def test_a_wrf_mp28_selection_on_the_hrrr_suite_composes_wrf_461_thompson_and_says_which():
+    """The selection a WRF 4.6 user made: the HRRR-lineage mp28 suite with
+    YSU, Noah, Kain-Fritsch and surface layer 1 (revised MM5).  It ran HRRR's
+    WRFV3.9 fork Thompson under a label that never named it."""
+
+    suite = "thompson-mp28-mynn-gsd41-mynn-ruc-rrtmg-legacy-v1"
+    label = physics_registry()["templates"][suite]["label"]
+    assert label.startswith("HRRR WRFV3.9 aerosol Thompson"), label
+    asked = {"pbl": "ysu", "land_surface": "noah", "cumulus": "kain-fritsch",
+             "surface_layer": "revised-mm5"}
+    mix = pc.check({"source": "gfs", "suite": suite, "choices": asked, "dx_km": 9})
+    assert mix["valid"], mix.get("refusal")
+    toml = tomllib.loads(mix["experiment_toml"])
+    shared = toml.get("shared", toml)
+    assert shared["thompson_version"] == "wrf_461" and shared["sf_sfclay_physics"] == 1
+    assert "WRFV3.9" not in mix["words"]
+    # The untouched suite composes exactly its own settings, fork included,
+    # and its words say which Thompson it runs.
+    kept = pc.check({"source": "gfs", "suite": suite, "dx_km": 9})
+    assert kept["valid"] and kept["changed_from_suite"] == {}
+    shared = tomllib.loads(kept["experiment_toml"])
+    shared = shared.get("shared", shared)
+    assert shared["thompson_version"] == shared["thompson_fork_snow_fall"] == "wrf_39_noaa"
+    assert "HRRR's WRFV3.9 version" in kept["words"]
+    assert kept["named_suite_label"] == label
 
 
 def test_a_name_the_registry_does_not_have_is_refused_in_plain_words():
@@ -139,9 +243,10 @@ def test_the_gui_serves_the_catalog_and_the_check(gui):
     response, body = request(server, "GET", "/api/physics", timeout=60)
     assert response.status == 200 and body["scheme_count"] == pc.catalog()["scheme_count"]
     assert "physics-catalog --json" in body["command"]
-    response, body = request(server, "POST", "/api/physics/check", body={"choices": {"pbl": "myj"}}, timeout=60)
+    response, body = request(server, "POST", "/api/physics/check",
+                             body={"choices": {"pbl": "myj", "surface_layer": "revised-mm5"}}, timeout=60)
     assert response.status == 200 and body["check"]["valid"] is False
-    assert body["check"]["neighbours"][0]["choices"] == {"surface_layer": "eta-similarity"}
+    assert body["check"]["neighbours"]
     response, body = request(server, "POST", "/api/physics/check", body={"choices": {"pbl": "nope"}}, timeout=60)
     assert response.status == 400 and "nope" in body["message"]
 
@@ -250,7 +355,8 @@ def test_the_mix_goes_into_an_experiment_file_the_loader_accepts(tmp_path):
     after = tomllib.loads(text)
     assert {k for k in after["shared"] if after["shared"][k] != before["shared"].get(k)} == {"mp_physics"}
     with pytest.raises(pc.CatalogError, match="requires sf_sfclay_physics=2"):
-        pc.apply_to_experiment(source.read_text(encoding="utf-8"), {"choices": {"pbl": "myj"}})
+        pc.apply_to_experiment(source.read_text(encoding="utf-8"),
+                               {"choices": {"pbl": "myj", "surface_layer": "revised-mm5"}})
 
 
 def test_a_run_from_an_experiment_file_records_the_files_physics(tmp_path):
@@ -555,7 +661,7 @@ def test_a_composed_physics_choice_lands_in_the_plan_and_beside_it(composer):
 
 def test_a_composed_set_that_does_not_run_is_refused_before_anything_is_written(composer):
     server, runner = composer
-    refused = {**DRAFT, "name": "mix2", "physics_choices": {"pbl": "myj"}}
+    refused = {**DRAFT, "name": "mix2", "physics_choices": {"pbl": "myj", "surface_layer": "revised-mm5"}}
     response, answer = request(server, "POST", "/api/create/start", body=refused, timeout=120)
     assert response.status == 422 and "sf_sfclay_physics=2" in answer["message"], answer
     assert "Physics step" in answer["fix"]
@@ -623,7 +729,8 @@ def test_a_mix_is_sized_as_it_runs_and_a_refused_one_as_the_forms_set(composer):
     response, answer = request(server, "POST", "/api/create/fit", body=body, timeout=120)
     assert response.status == 200, answer
     assert sized[-1]["config"]["intent"]["physics_choices"] == THOMPSON_MYJ_ETA
-    response, answer = request(server, "POST", "/api/create/fit", body={**body, "physics_choices": {"pbl": "myj"}},
+    response, answer = request(server, "POST", "/api/create/fit",
+                               body={**body, "physics_choices": {"pbl": "myj", "surface_layer": "revised-mm5"}},
                                timeout=120)
     assert response.status == 200, answer
     assert "physics_choices" not in sized[-1]["config"]["intent"]
@@ -775,7 +882,8 @@ def test_the_wizard_writes_picked_schemes_on_every_size_it_tries_and_keeps_a_nes
     assert "no suite is asserted" in printed.getvalue()
     refused = build_parser().parse_args([
         "domain", "--point", "35.5,-97.5", "--source", "gfs", "--cycle", "2026-09-24T18", "--hours", "1",
-        "--card", "16gb", "--physics-choices", '{"pbl": "myj"}', "--out", str(tmp_path / "no.toml")])
+        "--card", "16gb", "--physics-choices", '{"pbl": "myj", "surface_layer": "revised-mm5"}',
+        "--out", str(tmp_path / "no.toml")])
     refused.interactive = False
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(ValueError, match="sf_sfclay_physics=2"):
         domain_main(refused)
@@ -825,7 +933,16 @@ def test_a_mix_from_hrrr_is_written_as_the_route_runs_it_and_passes_its_round_tr
     from woof.experiment import load_experiment
     from woof.hrrr_route_inputs import route_input_paths, verify_round_trip
 
-    verdict = pc.check({"choices": THOMPSON_MYJ_ETA, "dx_km": 3, "source": "hrrr"})
+    # The mix is made over the suite HRRR bound by default until 4193eb0da
+    # made it the GSD MYNN 4.1 suite.  Its scalar_pblmix=1 was coupled to
+    # mp_physics=28 only, so the same mix was refused over that default
+    # until U-E4; now the scheme's own scalars are diffused and the fork
+    # Thompson generation goes back to its default with mp_physics 28.
+    over_default = pc.check({"choices": THOMPSON_MYJ_ETA, "dx_km": 3, "source": "hrrr"})
+    assert over_default["valid"], over_default.get("refusal")
+    assert over_default["changed_from_suite"]["thompson_version"] == "wrf_461"
+    base = "thompson-mp8-ysu-mm5-noah-rte-rrtmgp-v1"
+    verdict = pc.check({"suite": base, "choices": THOMPSON_MYJ_ETA, "dx_km": 3, "source": "hrrr"})
     assert verdict["valid"] and verdict["named_suite"] is None
     assert verdict["changed_from_suite"].get("moist_cq", True) is True
     # A route that reads the configuration itself runs the row's value.
@@ -836,6 +953,7 @@ def test_a_mix_from_hrrr_is_written_as_the_route_runs_it_and_passes_its_round_tr
     with contextlib.redirect_stdout(printed):
         rc = _domain(["--source", "hrrr", "--cycle", "2026-07-29T18", "--hours", "1", "--root-dx", "3",
                       "--chain", "3", "--card", "32gb", "--point", "38.0,-98.0",
+                      "--physics-profile", base,
                       "--physics-choices", json.dumps(THOMPSON_MYJ_ETA), "--out", str(out)])
     assert rc == 0, printed.getvalue()
     exp = load_experiment(out)

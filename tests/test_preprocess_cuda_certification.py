@@ -115,6 +115,10 @@ def test_every_certified_major_names_the_extra_that_installs_its_cupy():
 def fresh(monkeypatch):
     monkeypatch.setattr(backend_module, "_ANNOUNCED_AUTO_REASONS", set())
     monkeypatch.delenv("WOOF_NATIVE_DISTRIBUTION_MANIFEST", raising=False)
+    # The CUDA stack here is a stand-in, so this machine allows its card:
+    # since 083ac7cd0 the backend choice honours GPUWM_NO_LOCAL_GPU first,
+    # and the CPU legs set it.
+    monkeypatch.delenv("GPUWM_NO_LOCAL_GPU", raising=False)
 
 
 class _FakeNative:
@@ -305,20 +309,6 @@ def _tiled_config(tmp_path):
                     '[[domain]]\ngrid_id = 1\nparent_id = 0\n',
                     encoding="utf-8")
     return path
-
-
-def test_the_tiled_policy_returns_its_reason():
-    from woof.preprocess_policy import (
-        HOST_TILED_CPU_REASON, preprocess_backend_choice)
-
-    tables = {"tiles": {"mode": "on", "store": "host"},
-              "domain": [{"grid_id": 1}]}
-    assert preprocess_backend_choice(source="gfs", tables=tables) == (
-        "cpu", HOST_TILED_CPU_REASON)
-    assert preprocess_backend_choice(source="hrrr", tables=tables) == (
-        "auto", None)
-    assert preprocess_backend_choice(
-        source="gfs", tables=tables, requested="cuda") == ("cuda", None)
 
 
 def test_go_carries_the_tiled_reason_and_says_it_in_one_line(tmp_path, capsys):

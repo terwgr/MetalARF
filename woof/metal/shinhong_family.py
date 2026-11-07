@@ -174,7 +174,3 @@ def submit_shinhong_validate_outputs(values, status: MetalArray) -> int:
     return int(status.to_numpy()[0])
 
 
-def submit_shinhong_column_topo(*args, **kwargs):
-    """Fail closed for the unimplemented topo-wind arm."""
-    raise NotImplementedError(
-        "Metal Shin-Hong topo-wind arm B is unavailable; no CPU fallback is provided")

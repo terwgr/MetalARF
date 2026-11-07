@@ -567,13 +567,13 @@ def apply_nonmicrophysics_sppt_components(patterns: Mapping, tendencies: Mapping
     """Apply windowed samples of one full-domain pattern at each stagger."""
     if tendency_scope != "nonmicrophysics" or set(patterns) != {"u", "v", "theta", "qv"} or set(tendencies) != set(patterns):
         raise ValueError("windowed SPPT needs every original nonmicrophysics component")
-    import cupy as cp
     result = {}
     for name, values in tendencies.items():
         pattern = patterns[name]
+        cp, device = _module_of(pattern)
         if (not isinstance(pattern, cp.ndarray) or pattern.ndim != 2 or pattern.dtype != cp.float32
                 or not isinstance(values, cp.ndarray) or values.dtype != cp.float32
-                or values.ndim != 3 or values.device.id != pattern.device.id
+                or values.ndim != 3 or _module_of(values)[1] != device
                 or values.shape[-2:] != pattern.shape):
             raise ValueError("windowed SPPT component does not match its actual tendency shape/device")
         if not bool(cp.all(cp.isfinite(pattern) & (cp.abs(pattern) <= 1.0)).item()):

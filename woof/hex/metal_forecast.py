@@ -20,6 +20,29 @@ from typing import Any
 import numpy as np
 
 
+def _write_metal_snapshot(runner, path, snapshot, static, *, valid_time, physics_identity):
+    """Use the shared history layout with the executing backend's metadata."""
+    from netCDF4 import Dataset
+
+    scheduled = dict(snapshot, valid_time=_start_stamp(valid_time))
+    runner.proof.write_snapshot_netcdf(path, scheduled, static, _hash_file=False)
+    with Dataset(path, "r+") as dataset:
+        dataset.setncattr("source", "WOOF Hex Metal port")
+        dataset.setncattr("backend", "metal")
+        dataset.setncattr("kernel_arithmetic", "metal_ordinary")
+        dataset.setncattr("physics_mode", physics_identity["physics_mode"])
+        generations = physics_identity["source_generations"]
+        dataset.setncattr("solar_generation", generations["solar"])
+        dataset.setncattr("ysu_version", generations["ysu"])
+        dataset.setncattr("noahmp_snow_age", generations["noahmp_snow_age"])
+        dataset.setncattr("physics_configuration_sha256",
+                         physics_identity["configuration_sha256"])
+        dataset.setncattr("physics_source_generations", json.dumps(generations, sort_keys=True))
+        dataset.setncattr("gf_seam_parity_closed", "false")
+    return {"path": str(path), "bytes": path.stat().st_size,
+            "sha256": runner.proof.sha256_file(path)}
+
+
 def _initial_time(dataset: Any) -> datetime:
     raw = None
     if "initial_time" in dataset.variables:
@@ -46,12 +69,17 @@ def _initial_time(dataset: Any) -> datetime:
 # Forecast flags this route reads.  ``--repo`` is accepted and unused on
 # every backend.
 _IMPLEMENTED = frozenset({
+    "physics_mode", "physics_correct_skip",
     "mesh", "backend", "init", "init_source", "start_time", "hours",
     "history_every_minutes", "out", "receipt", "case_label", "repo",
     "horiz_mixing", "checkpoint", "restart", "lbc_dir",
     "grid", "static", "convection", "pbl_cadence",
+    "dt", "time_integration_order", "acoustic_substeps", "radiation_seconds",
+    "monotonic",
     "local_timestep", "local_timestep_rates", "local_timestep_buffer_rings",
-    "preflight", "preset", "stop_on_refusal",
+    "local_timestep_classing",
+    "preflight", "preset", "stop_on_refusal", "physics_backend", "source_table",
+    "physics_suite", "physics", "orographic_statistics",
 })
 
 # Flags that configure CUDA machinery Metal does not have, and why.
@@ -65,18 +93,17 @@ _CUDA_ONLY = {
     "device_bytes_per_cell": ("is a CUDA card admission term; Metal admits "
                               "against WOOF_METAL_MEMORY_FRACTION of its "
                               "working set"),
-    "local_timestep_classing": "is an instrument of the CUDA local-timestep lane",
 }
 
 
-def _refuse_unimplemented(arguments: Any, refuse: Any) -> None:
+def _refuse_unimplemented(arguments: Any, refuse: Any, *, implemented=_IMPLEMENTED) -> None:
     from .forecast_door import add_forecast_arguments
 
     parser = argparse.ArgumentParser(add_help=False)
     add_forecast_arguments(parser)
     for action in parser._actions:
         dest = action.dest
-        if dest in _IMPLEMENTED or not hasattr(arguments, dest):
+        if dest in implemented or not hasattr(arguments, dest):
             continue
         if getattr(arguments, dest) != action.default:
             if dest in _CUDA_ONLY:
@@ -108,7 +135,9 @@ def _start_stamp(value: datetime) -> str:
 
 def _restart_setup(host: Any, paths: dict[str, Path], *,
                    local_timestep: bool, rates: Any, rings: int,
-                   known: dict[str, str] | None = None) -> dict[str, Any]:
+                   known: dict[str, str] | None = None,
+                   classing_path: Path | None = None,
+                   orographic_statistics: Path | None = None) -> dict[str, Any]:
     """Bind the dynamics configuration and caller-owned static carriers.
 
     ``known`` holds digests already taken (the authority check), by role.
@@ -133,7 +162,11 @@ def _restart_setup(host: Any, paths: dict[str, Path], *,
         "grid_sha256": digest(paths["grid"]),
         "static_sha256": digest(paths["static"]),
         "init_sha256": digest(paths["init"]),
-        "local_timestep": ({"rates": list(rates), "buffer_rings": int(rings)}
+        **({"orographic_statistics_sha256": digest(orographic_statistics)}
+           if orographic_statistics is not None else {}),
+        "local_timestep": ({"rates": list(rates), "buffer_rings": int(rings),
+                            **({"classing_sha256": digest(classing_path)}
+                               if classing_path is not None else {})}
                            if local_timestep else None),
     }
 
@@ -143,11 +176,21 @@ def run_metal_forecast(arguments: Any) -> int:
     from netCDF4 import Dataset
 
     from .forecast_door import (
-        DRIVERS_DIR, _load_module, _refuse, _schedule, load_registry,
+        DRIVERS_DIR, _load_module, _refuse, _schedule, load_registry, resolve_door_physics,
     )
     from .mesh import Mesh
 
+    from .mpasphys.forecast_v842 import native_route
+    native_config, native_text = native_route(arguments, default_mode='correct')
+    if native_config is not None:
+        from .mpasphys.metal_door_v842 import run_forecast as run_native_metal
+        return run_native_metal(arguments, native_config, native_text)
     _refuse_unimplemented(arguments, _refuse)
+    from .forecast_door import _physics_mode_fields
+    from . import numerics
+    mode_fields = _physics_mode_fields(arguments)
+    if numerics.is_strict():
+        raise _refuse("Metal Hex strict numerics has no complete arithmetic contract")
     mesh_name = getattr(arguments, "mesh", None)
     if not mesh_name:
         raise _refuse("--mesh is required for --backend metal; name a registered MPAS mesh row")
@@ -165,6 +208,16 @@ def run_metal_forecast(arguments: Any) -> int:
     if mesh_name not in registry:
         raise _refuse(f"--mesh {mesh_name!r} is not registered")
     row = registry[mesh_name]
+    physics, _, _ = resolve_door_physics(arguments, mesh_name, row.nominal_dx_m)
+    from .physics_backend_admission import DEFAULT_BACKEND
+    from .physics_default import arwen_suite
+    if (getattr(arguments, "physics_suite", None) == arwen_suite()
+            and getattr(arguments, "physics_backend", None) not in (None, DEFAULT_BACKEND)):
+        raise _refuse(f"--physics-suite {arwen_suite()} and --physics-backend name different rows")
+    if physics is not None:
+        arguments.physics_backend = physics.backend_row
+    elif getattr(arguments, "physics_backend", None) is None:
+        arguments.physics_backend = DEFAULT_BACKEND
     binding_module = _load_module(
         "mpas_mesh_binding", DRIVERS_DIR / "mpas_mesh_binding.py"
     )
@@ -175,7 +228,29 @@ def run_metal_forecast(arguments: Any) -> int:
     history_minutes = getattr(arguments, "history_every_minutes", None)
     if history_minutes is None:
         raise _refuse("--history-every-minutes is required for --backend metal")
-    steps, _ = _schedule(float(hours), int(history_minutes), row.dt_seconds, mesh_name)
+    from . import mpas_defaults
+    from .forecast_door import default_step_selectors, resolve_schedule
+    from .global_door import default_step_cap
+
+    schedule = resolve_schedule(arguments, None)
+    radiation_seconds = getattr(arguments, "radiation_seconds", None)
+    if radiation_seconds is None:
+        radiation_seconds = mpas_defaults.DEFAULT_RADIATION_SECONDS
+    try:
+        dt_selection = mpas_defaults.resolve_dt(
+            getattr(arguments, "dt", None),
+            nominal_dx_m=(None if row.nominal_dx_m is None
+                          else float(row.nominal_dx_m)),
+            row_dt_seconds=float(row.dt_seconds),
+            radiation_seconds=float(radiation_seconds))
+        dt_selection = default_step_cap(
+            dt_selection, default_step_selectors(physics, arguments),
+            radiation_seconds=float(radiation_seconds))
+    except ValueError as error:
+        raise _refuse(str(error)) from None
+    dt_selection["registered_row_dt_seconds"] = float(row.dt_seconds)
+    dt_seconds = float(dt_selection["dt_seconds"])
+    steps, _ = _schedule(float(hours), float(history_minutes), dt_seconds, mesh_name)
     if _memory_admission(arguments, init, _refuse):
         return 0
 
@@ -231,10 +306,6 @@ def run_metal_forecast(arguments: Any) -> int:
         raise _refuse(f"--lbc-dir is for limited-area rows; {mesh_name} is global")
     lbc_paths: list[str] | None = None
     if regional:
-        if getattr(arguments, "local_timestep", False):
-            raise _refuse(
-                "--local-timestep has no limited-area acoustic entrypoints on "
-                "--backend metal; run it on a global row")
         lbc_paths = sorted(str(path) for path in Path(lbc_dir).glob("lbc.*.nc"))
         if not lbc_paths:
             raise _refuse(f"--lbc-dir {lbc_dir} holds no lbc.*.nc")
@@ -242,9 +313,12 @@ def run_metal_forecast(arguments: Any) -> int:
         arguments, binding_module=binding_module, mesh_name=mesh_name,
         row=row, init=init, init_source=init_source,
         valid_time=valid_time, hours=float(hours),
-        history_minutes=int(history_minutes), steps=steps, out=out,
+        history_minutes=float(history_minutes), steps=steps, out=out,
+        dt_selection=dt_selection, schedule=schedule,
+        radiation_seconds=float(radiation_seconds),
         receipt_path=receipt_path, checkpoint=checkpoint,
-        horiz_mixing=horiz_mixing, lbc_paths=lbc_paths)
+        horiz_mixing=horiz_mixing, lbc_paths=lbc_paths, physics=physics,
+        mode_fields=mode_fields)
 
 def _memory_admission(arguments: Any, init: Path, refuse: Any) -> bool:
     """Refuse a mesh the device cannot hold; True when only a preflight."""
@@ -258,14 +332,23 @@ def _memory_admission(arguments: Any, init: Path, refuse: Any) -> bool:
     with Dataset(init, mode="r") as dataset:
         n_cells = len(dataset.dimensions["nCells"])
         n_levels = len(dataset.dimensions["nVertLevels"])
+    from .drivers.run_cuda_v841_forecast import resolve_run_row
+    from .physics_backend_admission import DEFAULT_BACKEND
+    backend_row, _, _ = resolve_run_row(
+        getattr(arguments, "physics_backend", None) or DEFAULT_BACKEND,
+        getattr(arguments, "source_table", None))
+    adapter = backend_row.load_metal_adapter()
+    extra_bytes = adapter.additional_memory_bytes(backend_row, n_cells, n_levels)
     context = MetalContext()
     try:
-        estimate = estimate_hex(n_cells, n_levels, context)
+        estimate = estimate_hex(n_cells, n_levels, context,
+                                additional_bytes=extra_bytes)
     finally:
         context.close()
     if getattr(arguments, "preflight", False):
         print(json.dumps({
-            "backend": "metal", "cells": n_cells, "levels": n_levels,
+            "backend": "metal", "physics_backend": backend_row.name,
+            "cells": n_cells, "levels": n_levels,
             "estimated_peak_bytes": estimate.peak_bytes,
             "limit_bytes": estimate.limit_bytes,
             "fits_device": estimate.fits_device}))
@@ -285,8 +368,11 @@ def _memory_admission(arguments: Any, init: Path, refuse: Any) -> bool:
 def _run_physics(
     arguments: Any, *, binding_module: Any, mesh_name: str, row: Any,
     init: Path, init_source: str, valid_time: datetime, hours: float,
-    history_minutes: int, steps: int, out: Path, receipt_path: Path,
+    history_minutes: float, steps: int, out: Path, receipt_path: Path,
+    dt_selection: dict[str, Any], schedule: dict[str, Any],
+    radiation_seconds: float,
     checkpoint: Path | None, horiz_mixing: str, lbc_paths: list[str] | None,
+    physics: Any, mode_fields: dict[str, Any],
 ) -> int:
     """The full physics row, as the CUDA forecast runs it."""
 
@@ -308,7 +394,8 @@ def _run_physics(
     from . import metal_v841_launch
     from .metal_driver_v841 import MetalGfDynamicsTendenciesV841
 
-    stride = history_minutes * 60 // int(row.dt_seconds)
+    dt_seconds = float(dt_selection["dt_seconds"])
+    stride = int(round(history_minutes * 60 / dt_seconds))
     restart = getattr(arguments, "restart", None)
     restored = restored_saved = restored_physics = None
     first_step = 0
@@ -325,11 +412,11 @@ def _run_physics(
                 "static and configuration cannot be checked; write the "
                 "checkpoint again with --checkpoint")
         elapsed = float(restored.time_seconds)
-        first_step = int(round(elapsed / float(row.dt_seconds)))
-        if first_step * float(row.dt_seconds) != elapsed:
+        first_step = int(round(elapsed / dt_seconds))
+        if first_step * dt_seconds != elapsed:
             raise _refuse(
                 f"--restart {restart} time {elapsed} s is not a whole number "
-                f"of {row.dt_seconds:.0f} s steps")
+                f"of {dt_seconds:g} s steps")
         if first_step % stride:
             raise _refuse(
                 f"--restart {restart} is at step {first_step}, which is not a "
@@ -345,7 +432,8 @@ def _run_physics(
                 "the host preparation reads the MPAS grid and static files")
         paths[dest] = Path(value).expanduser().resolve(strict=True)
     runner = importlib.import_module("woof.hex.drivers.run_cuda_v841_forecast")
-    convection = str(getattr(arguments, "convection", "auto") or "auto")
+    convection = (str(getattr(arguments, "convection", "auto") or "auto")
+                  if physics is None else physics.convection)
     # The preset resolves into the surface/PBL cadence, as on CUDA; an
     # explicit --pbl-cadence wins.
     from . import forecast_preset
@@ -356,11 +444,14 @@ def _run_physics(
         raise _refuse(str(error)) from None
     pbl_cadence = getattr(arguments, "pbl_cadence", None)
     if pbl_cadence is None:
-        pbl_cadence = forecast_preset.pbl_cadence_request(preset, row.dt_seconds)
+        pbl_cadence = forecast_preset.pbl_cadence_request(preset, dt_seconds)
     try:
         binding_module.bind_mesh(
             runner.proof, mesh_name, grid=paths["grid"], static=paths["static"],
-            forecast=runner, convection=convection, pbl_cadence=pbl_cadence)
+            forecast=runner, convection=convection, pbl_cadence=pbl_cadence,
+            dt_seconds=dt_seconds, radiation_seconds=radiation_seconds,
+            time_integration_order=schedule["order"],
+            acoustic_substeps=schedule["substeps"])
     except binding_module.MeshBindingError as error:
         raise _refuse(f"the mesh bind refused: {error}") from None
     local_timestep = bool(getattr(arguments, "local_timestep", False))
@@ -369,20 +460,42 @@ def _run_physics(
     rings = int(getattr(arguments, "local_timestep_buffer_rings", 1))
     if rings < 1:
         raise _refuse("--local-timestep-buffer-rings must be at least 1")
+    classing_raw = getattr(arguments, "local_timestep_classing", None)
+    classing_path = (None if classing_raw is None
+                     else Path(classing_raw).expanduser().absolute())
+    if classing_path is not None:
+        if not local_timestep:
+            raise _refuse("--local-timestep-classing needs --local-timestep")
+        if not classing_path.is_file():
+            raise _refuse(f"--local-timestep-classing {classing_path} is not a file")
     authority = runner.verify_forecast_authorities(paths)
     # Taken once by the authority check; reused, not re-hashed.
     known_digests = {role: record.get("sha256")
                      for role, record in authority["files"].items()}
+    oro_arg = getattr(arguments, "orographic_statistics", None)
+    oro_path = None if oro_arg is None else Path(oro_arg).expanduser().resolve(strict=True)
     host = runner.prepare_forecast_host(
         paths, authority, start_time_text=getattr(arguments, "start_time", None),
         horiz_mixing=horiz_mixing, convection=convection,
         pbl_cadence=pbl_cadence or "auto", local_timestep=local_timestep,
         local_timestep_rates=rates, local_timestep_buffer_rings=rings,
-        lbc_paths=lbc_paths)
+        lbc_paths=lbc_paths,
+        physics_backend=getattr(arguments, "physics_backend", "wsm6_column"),
+        source_table=getattr(arguments, "source_table", None),
+        orographic_statistics=oro_path, physics=physics,
+        **mode_fields, radiation_seconds=radiation_seconds,
+        time_integration_order=schedule["order"],
+        acoustic_substeps=schedule["substeps"],
+        monotonic=schedule["monotonic"])
+    # The shared CUDA preparer omits exact-mode kwargs for its frozen ABI.
+    # Metal must still resolve its RunConfig independently of new defaults.
+    host["constructor_values"].update(mode_fields)
     # Hashing the grid, static and init files is only needed to bind a
     # checkpoint or check a restart against one.
     setup = (_restart_setup(host, paths, local_timestep=local_timestep,
-                            rates=rates, rings=rings, known=known_digests)
+                            rates=rates, rings=rings, known=known_digests,
+                            classing_path=classing_path,
+                            orographic_statistics=oro_path)
              if restored_physics is not None or checkpoint is not None else None)
     if restored_physics is not None and restored_physics["setup"] != setup:
         raise _refuse(
@@ -403,7 +516,14 @@ def _run_physics(
         driver, backend = stack["driver"], stack["backend"]
         scalar_names = stack["scalar_names"]
         # None, rebinding nothing, unless the config asks for local time stepping.
-        lts = attach_local_timestep_metal(driver, grid_path=str(paths["grid"]))
+        classing = None
+        if classing_path is not None:
+            from .lts_v841 import classify_from_grid_file_with_rates
+            classing = classify_from_grid_file_with_rates(
+                str(paths["grid"]), str(classing_path), rates=rates,
+                buffer_rings=rings)
+        lts = attach_local_timestep_metal(
+            driver, grid_path=str(paths["grid"]), classing=classing)
         # The attachment rebinds module-level dycore entry points; put them
         # back when the run ends, however it ends.
         cleanup.callback(detach_local_timestep_metal, driver)
@@ -438,18 +558,19 @@ def _run_physics(
                 expect_refl10cm=expect_refl10cm,
                 solve_cells=stack["solve_cells"], solve_edges=stack["solve_edges"])
             path = out / f"history.{step:06d}.nc"
-            runner.proof.write_snapshot_netcdf(
-                path, snapshot, static,
-                source="MPAS-A v8.4.1 full-physics Metal port")
+            _write_metal_snapshot(
+                runner, path, snapshot, static,
+                valid_time=valid_time + timedelta(seconds=step * dt_seconds),
+                physics_identity=backend.physics_identity)
             frames.append({"step": step, "file": path.name,
                            "valid_time": (valid_time + timedelta(
-                               seconds=step * float(row.dt_seconds))).isoformat()})
+                               seconds=step * dt_seconds)).isoformat()})
 
         def refused(error: Exception, step: int, where: str,
                     last_committed: int) -> dict[str, Any]:
             # Recorded verbatim; no guard is relaxed.
             return {"refused": True, "refused_in": where, "step": step,
-                    "model_seconds": step * float(row.dt_seconds),
+                    "model_seconds": step * dt_seconds,
                     "exception": type(error).__name__, "message": str(error),
                     "last_committed_step": last_committed}
 
@@ -525,7 +646,20 @@ def _run_physics(
         "refusal": refusal,
         "case_label": getattr(arguments, "case_label", None),
         "physics": {
+            "physics_mode": mode_fields["physics_mode"],
+            "correct_mode": backend.correct_mode_receipt,
+            "noahmp_statics": backend.noahmp_statics_receipt,
+            "solar_generation": backend.physics_identity["source_generations"]["solar"],
+            "ysu_version": backend.physics_identity["source_generations"]["ysu"],
+            "noahmp_snow_age": backend.physics_identity["source_generations"]["noahmp_snow_age"],
+            "configuration_sha256": backend.physics_identity["configuration_sha256"],
+            "source_generations": backend.physics_identity["source_generations"],
+            "numerics": "metal_ordinary",
             "row": host.get("physics_backend"),
+            "resolution": host.get("physics_resolution"),
+            "suite": host.get("physics_suite"),
+            "orographic_statistics": host["constructor_receipt"].get("orographic_statistics"),
+            "land_surface": getattr(backend, "land_surface_receipt", None),
             "scalars": list(scalar_names),
             "convection": host.get("convection"),
             "pbl_cadence": host.get("pbl_cadence"),
@@ -535,7 +669,8 @@ def _run_physics(
         "horiz_mixing": horiz_mixing,
         "local_timestep": None if not local_timestep else {
             "rates": list(rates), "buffer_rings": rings,
-            "attached": lts is not None},
+            "attached": lts is not None,
+            "execution": None if lts is None else lts.receipt()},
         "limited_area": lbc_paths is not None,
         "lbc_intervals": None if lbc_paths is None else len(lbc_paths),
         "mesh": mesh_name,
@@ -545,7 +680,10 @@ def _run_physics(
         "init_source": init_source,
         "initial_time": valid_time.isoformat(),
         "hours": hours,
-        "dt_seconds": float(row.dt_seconds),
+        "dt_seconds": dt_seconds,
+        "dt_selection": dt_selection,
+        "schedule": schedule,
+        "radiation_seconds": radiation_seconds,
         "steps": last_step - first_step,
         "first_step": first_step,
         "restart": None if restart is None else str(Path(restart).resolve()),
@@ -580,7 +718,8 @@ def _run_physics(
 
 def _forecast_index(out: Path, frames: list[dict[str, Any]],
                     paths: dict[str, Path],
-                    known: dict[str, str] | None = None) -> dict[str, Any]:
+                    known: dict[str, str] | None = None,
+                   classing_path: Path | None = None) -> dict[str, Any]:
     """Frame files with their SHA-256s, valid-time labels and authorities.
 
     ``known`` holds the authority digests the run already took, by role.
@@ -638,6 +777,6 @@ def _write_f000_frame(runner: Any, host: Any, stack: Any, static: Any,
         runner.complete_f000_surface_diagnostics(
             snapshot, host["f000_start_humidity"]))
     path = out / "history.000000.nc"
-    runner.proof.write_snapshot_netcdf(
-        path, snapshot, static, source="MPAS-A v8.4.1 full-physics Metal port")
+    _write_metal_snapshot(runner, path, snapshot, static, valid_time=valid_time,
+                          physics_identity=stack["backend"].physics_identity)
     return {"step": 0, "file": path.name, "valid_time": valid_time.isoformat()}

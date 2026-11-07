@@ -49,7 +49,7 @@ KEYED_BY_COMPILER_OR_CARD = {
     "tests/test_sase_gpu.py::test_dynamic_solve_device_real_lift_golden",
     "tests/test_feedback.py::test_feedback_zero_output_is_pinned_and_costs_nothing",
     "tests/test_ysu_wrf461_parity.py::test_ysu_cuda_column_holds_its_measured_distance_from_wrf",
-    "tests/test_ysu_wrf461_parity.py::test_ysu_momentum_is_this_far_from_wrfs_own_ctopo_driver_path",
+    "tests/test_ysu_wrf461_parity.py::test_ysu_is_bitwise_wrf_outside_the_flushed_subnormal_lanes",
     "tests/test_noah_wrf461_parity.py::test_noah_cuda_column_holds_its_measured_distance_from_wrf",
 }
 #: Two more max-ULP tables asserted for equality that the set had missed
@@ -73,21 +73,15 @@ NTIEDTKE_DEVICE_BITWISE = {
     "tests/test_ntiedtke_cloud_depth_parity.py::test_kernel_flip_and_sum_are_exact",
     "tests/test_ntiedtke_cuascn_parity.py::test_kernel_level_outputs_are_bitwise",
     "tests/test_ntiedtke_cuascn_parity.py::test_kernel_integer_outputs_and_wup_are_exact",
-    "tests/test_ntiedtke_cuddrafn_parity.py::test_kernel_level_outputs_are_bitwise",
-    "tests/test_ntiedtke_cuddrafn_parity.py::test_kernel_prfl_is_bitwise",
     "tests/test_ntiedtke_cudlfsn_parity.py::test_kernel_level_outputs_are_bitwise",
     "tests/test_ntiedtke_cudlfsn_parity.py::test_kernel_scalars_are_exact",
     "tests/test_ntiedtke_cudlfsn_parity.py::test_the_kernel_LEAVES_untouched_class2_levels_alone",
-    "tests/test_ntiedtke_cudtdqn_parity.py::test_kernel_outputs_are_bitwise",
-    "tests/test_ntiedtke_cududvn_parity.py::test_kernel_outputs_are_bitwise",
     "tests/test_ntiedtke_cuflxn_parity.py::test_kernel_level_outputs_are_bitwise",
     "tests/test_ntiedtke_cuflxn_parity.py::test_kernel_precipitation_fluxes_are_bitwise",
     "tests/test_ntiedtke_cuflxn_parity.py::test_kernel_prain_is_bitwise",
     "tests/test_ntiedtke_kedis_parity.py::test_kernel_ptte_is_bitwise",
     "tests/test_ntiedtke_mprofile_parity.py::test_kernel_outputs_are_bitwise",
     "tests/test_ntiedtke_mrescale_parity.py::test_kernel_outputs_are_bitwise",
-    "tests/test_ntiedtke_post_conversion_parity.py::test_kernel_is_bitwise",
-    "tests/test_ntiedtke_post_run_parity.py::test_kernel_is_bitwise",
     "tests/test_ntiedtke_prep_parity.py::test_cuda_cuinin_is_bitwise",
     "tests/test_ntiedtke_prep_parity.py::test_cuda_cutypen_is_bitwise_across_all_ktype_arms",
     "tests/test_ntiedtke_prep_parity.py::test_cuda_cubasmcn_is_bitwise_on_both_sides_of_the_guard",
@@ -676,7 +670,7 @@ def _shapes():
     looking for the shape.
     """
     back = chr(92)
-    return ("/ho" + "me/account/agent-scratch/card-stage",
+    return ("/ho" + "me/account/work/card-stage",
             "C:" + back + "Users" + back + "account" + back + "work" + back + "tree")
 
 

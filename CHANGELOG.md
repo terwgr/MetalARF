@@ -1,5 +1,66 @@
 # Changelog
 
+## Metal port of WOOF 1.1.5 (unreleased)
+
+Carries upstream WOOF 1.1.5 and extends the Metal backend. Ported kernels are
+mechanical translations of the CUDA units, compared word for word with that
+source compiled for the host; [METAL_FEATURES.md](METAL_FEATURES.md) records
+the coverage, limits and remaining refusals of each item. The Global model,
+removed upstream, is kept here (`woof global`).
+
+Microphysics on Metal:
+
+- WSM3, WSM5, WSM7 and WSM6R; Purdue Lin and Ferrier-Aligo; classic Thompson
+  `wrf_44` up to 256 levels; TEMPO (`mp_physics=900`) up to 512 levels with
+  reflectivity; ordinary FAST_SBM (`mp_physics=30`).
+- Complete aerosol Thompson (`mp_physics=28`) sources, fallout and
+  reflectivity; WSM6 and WDM6 conservative surface return; NSSL sedimentation
+  through 256 levels; hail diagnostics.
+
+Boundary layer, surface and cumulus on Metal:
+
+- CCPP sa-TKE-EDMF (`bl_pbl_physics=901`), the WRF 4.8 YSU generation, GSD
+  MYNN mixing lengths and cloud options, MYNN TKE advection, `gwd_opt=3`
+  with `spp_pbl`.
+- Grell 3D, original Tiedtke and New SAS cumulus; Grell-Freitas to 256 levels;
+  New Tiedtke source arithmetic.
+- Noah sea-ice columns, prognostic sea ice, the ocean mixed layer and the
+  3DPWP ocean; source-initialized lake state; the WRF 4.8 urban canopy,
+  corrected urban water balance, Noah BEP+BEM and the Noah mosaic SLUCM;
+  Noah-MP night snow aging.
+
+Radiation, dynamics and diagnostics on Metal:
+
+- Goddard radiation, RRTMGP with `icloud=2`, WRF 4.8 solar geometry and
+  eclipse obscuration; corrected classic RRTM longwave.
+- Exact Smagorinsky coefficients and stresses, constant-K diffusion,
+  rational-time-law lateral boundaries.
+- Interval precipitation buckets, lightning options 1, 2, 3 and 11,
+  `gsd_diagnostics=1` and Grell 3D convective diagnostics.
+- A strict-arithmetic profile for selected dry and moist dynamics, mixing,
+  NSSL, Noah and radiation combinations; full WRF-exact mode stays refused.
+
+Runs, data assimilation and Hex:
+
+- Start Metal runs from WRF restart files; hydrostatic rebalance, IAU,
+  perturbation and latent heat nudging on Metal states; IAU into nests.
+- Run prepared multi-domain trees through `woof go --backend metal`, and
+  host-staged child warm starts.
+- Ensemble products on Metal members: the CUDA product engine's files, maps
+  and member diagnostics; `cyclone_products` and `sounding_points` stay CUDA
+  only.
+- Coupled SFIRE fire (`ifire=2`) on Metal, including `woof fire-ideal
+  --backend metal` and its restart; the bulk smoke tracer and firebrand
+  spotting stay CUDA only.
+- Hex on Metal: correct and exact physics modes, upstream 1.1 generation
+  defaults, the aerosol Thompson, MYNN/RUC/GSL and synthesized GSD 4.1
+  column suites, and one generic WSM6/YSU/Noah-MP/RRTMG plan, all bound to
+  restart identity. Native `mpasphys` stays closed.
+- Reconcile shared runtime, DA member ownership, radiation boundary fluxes,
+  cloud-fraction diagnostics and restart carriers with the upstream 1.1 APIs,
+  and refuse unported physics generations and corrections by name.
+- Reject nonfinite trajectories in the public restart-identity checker.
+
 ## MetalARF 1.0.4
 
 Added:
@@ -242,8 +303,230 @@ Notes:
   domain with the same physics runs.
 - Documentation is consolidated: one backend guide replaces scattered
   CUDA-only hardware notes.
+## 1.1.5 (2026-10-31)
 
-## 1.0.3
+WOOF 1.1.5 stays on engine 2.9.11 and the hex model 0.4.11. Forecast answers do not change.
+
+Fixed:
+
+- A hex run missing its geography now tells you to run `woof fetch-geog`.
+  Other messages, tables and pages that named a command WOOF does not install
+  name the `woof` command.
+- The README said the hex model runs only on CUDA 13. It runs on either extra.
+- Comments, docs and test records are tidied, and stray bytecode is gone from
+  the source tree.
+
+## 1.1.4 (2026-10-31)
+
+WOOF 1.1.4 takes engine 2.9.11 and the hex model 0.4.11. Forecast answers change.
+
+New:
+
+- Hex runs NOAA's RRFS v2 `hrrrv5` suite with no native library, from
+  RRFS's own start state, on zoom globes and on any region (circle, ellipse
+  or drawn outline), on one card or several.
+- Wind farms (`--wind-farms uswtdb|PATH`, opt-in): turbine drag and
+  turbulence inside the boundary layer, with turbine and farm power in
+  history, on regional runs and hex globes.
+- Nudging toward the source analyses (`--nudging spectral|grid`, opt-in).
+- Simulated radar at C- and X-band as well as S-band.
+- Optional Icechunk output (`--output-format netcdf,icechunk`).
+
+Changed:
+
+- History frames are written lossless-compressed: the same values in about
+  a third of the disk. `--history-compression none` writes classic frames.
+- Starts from HRRR, GFS, GDAS, GEFS, RRFS, IFS, AIFS and ERA5 download only
+  the records they read (an HRRR start moves about 40 % of the bytes); the
+  prepared start is unchanged.
+- Hex multi-card runs use one process per card and scale on any Python.
+
+Fixed:
+
+- Hail: HAILCAST now uses the hail stone model NOAA's operational HRRR runs,
+  by default. WRF 4.6.1's model melted most stones before they reached the
+  ground and left thin, broken hail swaths; it is still selectable with
+  `hailcast_version = "wrf_461"`. HAILCAST is a diagnostic, so the forecast
+  itself does not change.
+- Runs with Kain-Fritsch cumulus and Thompson microphysics no longer show
+  the cumulus scheme's drizzle as 20-30 dBZ echoes or strips along a coarse
+  grid's edges.
+- A source that carries cloud and rain (HRRR and others) no longer streams
+  convective cells in through the grid's edges as straight rain bands.
+- Nest-downs at 600 m or finer take 100 m land cover and soil, and those at
+  250 m or finer run as LES.
+- A nested run on a source that posts lead by lead starts on the first
+  leads instead of waiting for the cycle's last one.
+- HRRR-recipe runs with a companion export no longer exit 1 after a
+  finished forecast.
+- A case prepares the same lake temperatures from a cold or a warm cache.
+- Starts from ECMWF open data and AIFS have sea ice.
+- Sea-level pressure maps are smoothed over high terrain.
+- Soundings show MOSHE as `--` without an inflow layer and colour the MCS
+  Index the right way round.
+- Hex starts from GFS and HRRR begin with the source's cloud, rain, ice,
+  snow and graupel, so the first radar map shows the starting storms.
+- Hex storm-following regions on MPAS physics move about four times faster.
+
+## 1.1.3 (2026-10-28)
+
+WOOF 1.1.3 takes engine 2.9.9 and the hex model 0.4.9. Forecast answers change.
+
+New:
+
+- A hurricane map theme, `woof-light-tc`: 10 m wind bands with edges at 34,
+  50, 64, 83, 96, 113 and 137 kt, and isobars every 4 hPa.
+
+Fixed:
+
+- Forecasts that start a RUC or Noah land surface from another model's soil
+  (ERA5, GFS, GEFS, IFS and others) map its soil moisture onto the land
+  model's own scale, so the surface no longer starts too wet and too cold.
+- Every physics choice the catalog offers runs.
+- Runs of 48 h or longer with sea ice on the grid start again.
+- A moving step-down draws hourly window products such as 1 h rain, over the
+  ground the grid reached during the hour.
+- A restart continues a checkpoint taken while GFS boundaries were still
+  streaming, and runs that keep one checkpoint set no longer stop on a
+  missing checkpoint.
+- A forecast no longer waits up to five minutes on a stuck kernel warm-up,
+  and no longer spins a CPU core while it waits for the card.
+- The column store, GFS preparation, analysis bundles and restart checksums
+  run on every core.
+- Hex on MPAS physics no longer stops with non-finite columns after weeks of
+  model time, and a checkpoint resumes under a changed timestep.
+- Hex 30 km globes no longer run out of GPU memory, and large ranks fit a
+  32 GB card.
+- Hex local time stepping picks the fastest plan for the mesh: a 96 -> 3 km
+  zoom globe runs about 1.2x faster than the fixed step on MPAS physics.
+- Hex zoom globes rotate a stored mesh instead of generating one, and
+  MPAS-physics start-up and history output run on every core.
+- Hex storm-following runs no longer stop when a reused member is unsafe
+  for the storm.
+- A stalled hex source download is retried after 10 s instead of 300 s.
+
+## 1.1.2 (2026-10-27)
+
+WOOF 1.1.2 takes engine 2.9.8 and the hex model 0.4.8. Forecast answers change.
+
+New:
+
+- Hex runs MPAS physics by default: a run that names no physics runs
+  MPAS-A's `convection_permitting` suite on the GPU. The regional model's
+  physics stays one flag away; `woof hex physics list` shows every suite.
+
+Fixed:
+
+- `woof hex` with MPAS physics (the default), `woof hex physics list` and
+  `woof hex physics resolve` no longer stop with "No module named 'hexcore'".
+  The RRFS physics route, the ocean mixed layer, the UGWP orographic drag
+  tables and the hex preparation cache work again too.
+- Hex local time stepping on the full step, column-suite restore and
+  rollback, product redraws after a moving run's controller restarts, and
+  settings handed to hex child processes work again.
+- `install.sh` and `install.ps1` run `woof` (they called the old command
+  name), and package version lookups and documentation links name
+  recast-woof.
+- `pip install recast-woof` installs threadpoolctl and psutil, and the
+  `hydro-conus` extra exists.
+- `python -m tools.import_sweep` and `tools/battery/run_stage1.py` run on
+  the public tree, and the test suite is green on it.
+- Everything engine 2.9.8 and hex 0.4.6, 0.4.7 and 0.4.8 fix, as their notes
+  list it. Among them: storm-following runs no longer refuse a move, a cycle
+  that is not posted yet is fetched from the next source, and GOES-17 ABI
+  windows fetch.
+
+## 1.1.1 (2026-10-25)
+
+WOOF 1.1.1 takes engine 2.9.7 and the hex model 0.4.5. Forecast answers change.
+
+New:
+
+- Soundings at any point and hour after a run: every run and ensemble member
+  writes a column store that `woof soundings` draws from.
+- Run controls: per-nest history intervals, a quick-look stream between full
+  frames, an LES closure below 250 m, the storm nest size and an inner nest.
+- Moving nest-downs: `woof downscale --follow storm|parent|fixed|target` and
+  `--warm-from`. Children finer than 4 km default to the HRRR-shape suite.
+- IFS HRES open data at 0.1 degree, and RRFS ensemble members that start with
+  their same-cycle deterministic companion.
+- Branched ensembles (`woof ensemble --branch-from`) share each card among
+  several members and draw their maps on every core.
+- A cyclone rain swath product, and 5 km CONUS forecasts that stream on a
+  32 GB card.
+- Hex: the MPAS physics route runs every hex shape (limited-area and
+  storm-following regions, ensembles, local time stepping, Hex with Regional,
+  restart, IAU, stochastic physics, two or more cards) and runs faster.
+- Hex with Regional in three shapes: a nest placed at launch, a nest added
+  mid-run, and a nest that spawns when a storm attribute crosses a threshold.
+- Hex doors start from any posted forecast hour (`--lead-hours`) of GFS, GEFS,
+  IFS, IFS ENS, AIFS and AIFS ENS; regions take drawn shapes and can be kept
+  as inits; maps stream from the first hour.
+
+Changed:
+
+- The spectral global model (`woof global`) is retired. Global forecasts run
+  on `woof hex global`, which exports to the regional model on both physics
+  routes.
+
+Fixed:
+
+- Everything engine 2.9.6 and 2.9.7 and hex 0.4.4 and 0.4.5 fix, as their
+  notes list it. Among them: `woof go` no longer waits on a RAP or HRRR native
+  cycle that has already posted, preparation has no single-core stages, and
+  hex exports on the MPAS physics route carry terrain height and
+  reflectivity.
+
+## 1.1.0 (2026-10-23)
+
+WOOF 1.1.0 takes engine 2.9.5 and the hex model 0.4.3. Forecast answers change.
+
+New:
+
+- `woof hex` carries the GPU port of MPAS-Atmosphere v8.4.2: both physics
+  suites and their scheme options, initialization and static fields, IAU,
+  limited-area boundaries, streams, restart and diagnostics. WOOF's own
+  physics stays the default suite.
+- `woof hex global --row R --cycle C --work-dir W` runs a global forecast end
+  to end: mesh, static, start, forecast, products, export and score. It is the
+  main global model; the spectral `woof global` stays a full option.
+- From hex 0.4.2 and 0.4.3: one-command limited-area forecasts
+  (`woof hex regional`, `woof hex country --region`), variable-resolution
+  global meshes, storm-following regions and ensembles (`woof hex moving`,
+  `woof hex moving-ensemble`), subseasonal ensembles with weekly products and
+  scores, a mixed-layer ocean and sea ice on the mesh, aerosol transport in
+  global forecasts, keyless ERA5 starts, and an 80-level high-top row.
+- WoFS-shape ensembles (`woof ensemble --recipe wofs`) from any start source,
+  with ensemble soundings, and hurricane ensembles with cyclone products.
+- From engine 2.9.4: the packaged HRRR recipe follows operational HRRR v4
+  physics; `woof race` and `woof standby`; storm-following 1 km nests
+  (`woof go --storm-nests N`); HRRR-Smoke with `--smoke`; coupled hydro wherever a
+  hydrofabric covers the domain, opt-in with `--hydro on`; coupled ocean waves and storm surge (`woof ocean run`); a GPU
+  mixed-layer ocean and prognostic sea ice; live aerosol optics; solar
+  eclipse shading; hail size and HAILCAST; storm tracks fetched automatically
+  (`woof cyclone-setup --storm auto|ID|NAME`) and `woof go --cyclone-products`;
+  new default products (IVT, IWV, freezing level, atmospheric rivers,
+  visibility and fog, snowfall, heat index, WBGT, HDWI, Haines, lightning
+  threat); hub-height wind and solar power products; fire danger indices;
+  archived GFS, dated GEFS and ECMWF ENS sources; polar stereographic domains;
+  and `woof setup --with-geog`, a permissively licensed default geography set.
+
+Changed:
+
+- Coupled hydro is opt-in: a run has no hydro unless it asks with
+  `--hydro on`.
+- The bridge bundle carries the engine's tools and the global model's
+  observation decoders. Maps read `WOOF 1.1.0`.
+
+Fixed:
+
+- Everything engine 2.9.4 and 2.9.5 and hex 0.4.2 and 0.4.3 fix, as their
+  notes list it. From 2.9.5: coastal sea surface temperatures in the
+  mixed-layer ocean no longer drift, hydro start-up runs its spin-up on the
+  GPU, and `install.sh` installs the required Rust when the system Rust is
+  too old.
+
+## 1.0.3 (2026-10-06)
 
 WOOF runs the operational HRRR configuration: its static file, its
 Thompson, MYNN, RUC, surface-layer and radiation forms, its fixed 20 s
@@ -459,7 +742,7 @@ Fixed:
   verification and validation against observations; old physics profile
   IDs are accepted as aliases.
 
-## 1.0.2
+## 1.0.2 (2026-10-02)
 
 WRF-fidelity fixes correct moisture pressure terms, edge vertical velocity,
 diffusion and map factors, and the 2 m humidity cap. Forecast answers change.
@@ -634,7 +917,7 @@ Available since 1.0.1:
   `[case_data] preprocess_backend`, and `--preprocess-workers` sets decode
   concurrency. A 48 h HRRR decode on 24 cores took 140 s instead of 480 s.
 
-## 1.0.1
+## 1.0.1 (2026-10-01)
 
 The engine's speed work, forecasts that start before their inputs finish
 posting, and the fixes made since 1.0.0.
@@ -708,7 +991,7 @@ Fixed:
 - A global receipt's `libraries` block records the `recast-woof` version.
   1.0.0 receipts recorded `recast-woof-data` and not the package itself.
 
-## 1.0.0
+## 1.0.0 (2026-09-29)
 
 Recast WOOF 1.0.0 is the regional engine of release 2.8.0 and the fixes made
 since, under the WOOF name, with the hex and global models inside it and the

@@ -268,7 +268,7 @@ fn write_wrfout_metadata(
 }
 
 fn table_rows() -> Vec<VariableRow> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../gpuwm/data/ml_export/variables.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../woof/data/ml_export/variables.json");
     let text = std::fs::read_to_string(&path).expect("the variables table");
     let doc: Value = serde_json::from_str(&text).unwrap();
     serde_json::from_value(doc["rows"].clone()).unwrap()
@@ -289,7 +289,7 @@ fn request(inputs: Vec<PathBuf>, out: &Path, variables: Vec<VariableRow>, hpa: V
         zip: false,
         variables,
         levels: LevelSpec { set: "custom".into(), kind: LevelKind::Pressure, hpa, model_levels: vec![] },
-        grid: GridRequest { kind: GridKind::Native, deg: None, method: RegridMethod::Bilinear },
+        grid: GridRequest { target: None, kind: GridKind::Native, deg: None, method: RegridMethod::Bilinear },
         names: "wb2".into(),
         layout: Layout::Analysis,
         domains: None,
@@ -299,6 +299,7 @@ fn request(inputs: Vec<PathBuf>, out: &Path, variables: Vec<VariableRow>, hpa: V
         skip_unavailable: false,
         threads: None,
         spacings_deg: vec![0.05, 0.1, 0.25],
+        chunk_yx: None,
         provenance: Provenance {
             history_attributes: BTreeMap::new(),
             history_engines: BTreeMap::new(),
@@ -551,7 +552,7 @@ fn table_metadata_aliases_preserve_provenance_and_refuse_mixed_runs() {
     let mut paths = Vec::new();
     let mut digests = Vec::new();
     let names: Value = serde_json::from_str(&std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../gpuwm/data/ml_export/names.json")
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../woof/data/ml_export/names.json")
     ).unwrap()).unwrap();
     for prefix in ["GPUWM", "WOOF"] {
         let path = dir.join(format!("{prefix}-wrfout_d01_2026-09-29_00_00_00"));
@@ -708,7 +709,7 @@ fn a_latlon_regrid_reproduces_uniform_fields_and_lands_on_the_lattice() {
     let files = inputs(&dir);
     let out = dir.join("ll");
     let mut r = request(files, &out, rows(&["2m_temperature", "total_precipitation", "land_sea_mask", "temperature"]), vec![500]);
-    r.grid = GridRequest { kind: GridKind::Latlon, deg: Some(0.25), method: RegridMethod::AreaMean };
+    r.grid = GridRequest { target: None, kind: GridKind::Latlon, deg: Some(0.25), method: RegridMethod::AreaMean };
     r.domains = Some(vec!["d01".into()]);
     run(r);
     let store = out.join("d01.zarr");
@@ -773,7 +774,7 @@ fn an_area_mean_regrid_holds_each_cells_true_area_mean() {
     for method in [RegridMethod::AreaMean, RegridMethod::Bilinear] {
         let out = dir.join(format!("{method:?}"));
         let mut r = request(vec![path.clone()], &out, rows(&["2m_temperature"]), vec![500]);
-        r.grid = GridRequest { kind: GridKind::Latlon, deg: Some(deg), method };
+        r.grid = GridRequest { target: None, kind: GridKind::Latlon, deg: Some(deg), method };
         run(r);
         let store = out.join("d01.zarr");
         let read_f64 = |name: &str| -> Vec<f64> {
@@ -886,7 +887,7 @@ fn a_moving_nest_keeps_coordinates_per_time_and_refuses_a_fixed_box() {
     let lon1 = read_f32(&store, "longitude", "1.0.0");
     assert!(lon1[0] > lon0[0], "the second time's grid sits east of the first");
     let mut r = request(vec![first, second], &dir.join("ll"), rows(&["temperature"]), vec![500]);
-    r.grid = GridRequest { kind: GridKind::Latlon, deg: Some(0.1), method: RegridMethod::Bilinear };
+    r.grid = GridRequest { target: None, kind: GridKind::Latlon, deg: Some(0.1), method: RegridMethod::Bilinear };
     let mut sink = |_: Value| {};
     let err = execute(r, &mut sink).unwrap_err();
     assert!(err.is_refusal() && err.message().contains("moving nest"), "{err}");
@@ -979,4 +980,144 @@ fn a_file_without_eta_levels_keeps_the_mass_level_geopotential_and_says_so() {
     assert!(geopotential["vertical_interpolation"].as_str().unwrap().contains("mass levels"));
     assert!(json(&store.join(".zattrs")).get("geopotential_vertical_interpolation").is_none());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Reassemble a tiled array's `[levels?, ny, nx]` plane stack for time `t`
+/// from its chunk files, using the chunk shape its `.zarray` declares.
+fn untile(store: &Path, array: &str, t: Option<usize>, ny: usize, nx: usize) -> Vec<f32> {
+    let meta = json(&store.join(array).join(".zarray"));
+    let shape: Vec<usize> = meta["shape"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as usize).collect();
+    let chunks: Vec<usize> = meta["chunks"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap() as usize).collect();
+    let n = shape.len();
+    let (ty, tx) = (chunks[n - 2], chunks[n - 1]);
+    let has_levels = n == 4;
+    let (levels, per) = if has_levels { (shape[1], chunks[1]) } else { (1, 1) };
+    let mut out = vec![f32::NAN; levels * ny * nx];
+    for lc in 0..levels.div_ceil(per) {
+        for iy in 0..ny.div_ceil(ty) {
+            for ix in 0..nx.div_ceil(tx) {
+                let mut key = Vec::new();
+                if let Some(t) = t {
+                    key.push(t.to_string());
+                }
+                if has_levels {
+                    key.push(lc.to_string());
+                }
+                key.push(iy.to_string());
+                key.push(ix.to_string());
+                let values = read_f32(store, array, &key.join("."));
+                assert_eq!(values.len(), per * ty * tx, "{array} chunk {key:?} is not full-size");
+                for l in 0..per {
+                    let level = lc * per + l;
+                    if level >= levels {
+                        continue;
+                    }
+                    for r in 0..ty {
+                        for c in 0..tx {
+                            let (y, x) = (iy * ty + r, ix * tx + c);
+                            if y < ny && x < nx {
+                                out[(level * ny + y) * nx + x] = values[(l * ty + r) * tx + c];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn tiled_chunks_hold_the_whole_plane_values_and_append_matches_run() {
+    let dir = scratch("tiled");
+    let files = inputs(&dir);
+    let ids = ["temperature", "u_component_of_wind", "2m_temperature", "total_precipitation", "land_sea_mask"];
+    let whole = dir.join("whole");
+    run(request(files.clone(), &whole, rows(&ids), vec![850, 500]));
+    let tiled = dir.join("tiled");
+    let mut r = request(files.clone(), &tiled, rows(&ids), vec![850, 500]);
+    r.chunk_yx = Some([5, 7]);
+    run(r);
+    // Default stays whole-plane on these small grids.
+    let t_meta = json(&whole.join("d01.zarr/temperature/.zarray"));
+    assert_eq!(t_meta["chunks"].as_array().unwrap()[2..], [serde_json::json!(D01.ny), serde_json::json!(D01.nx)]);
+    let tiled_meta = json(&tiled.join("d01.zarr/temperature/.zarray"));
+    assert_eq!(tiled_meta["chunks"].as_array().unwrap()[2..], [serde_json::json!(5), serde_json::json!(7)]);
+    assert_eq!(json(&tiled.join("d01.zarr/land_sea_mask/.zarray"))["chunks"], serde_json::json!([5, 7]));
+    assert_eq!(json(&tiled.join("d01.zarr/below_ground/.zarray"))["chunks"].as_array().unwrap()[2..], [serde_json::json!(5), serde_json::json!(7)]);
+    for (store, d, frames) in [("d01.zarr", &D01, 3usize), ("d02.zarr", &D02, 2)] {
+        for t in 0..frames {
+            for array in ["temperature", "u_component_of_wind", "2m_temperature", "total_precipitation"] {
+                let a = untile(&whole.join(store), array, Some(t), d.ny, d.nx);
+                let b = untile(&tiled.join(store), array, Some(t), d.ny, d.nx);
+                assert_eq!(a.len(), b.len());
+                for (x, y) in a.iter().zip(&b) {
+                    assert!(x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()), "{store} {array} t={t}");
+                }
+            }
+        }
+        let a = untile(&whole.join(store), "land_sea_mask", None, d.ny, d.nx);
+        let b = untile(&tiled.join(store), "land_sea_mask", None, d.ny, d.nx);
+        assert_eq!(a, b);
+    }
+    // Frame-at-a-time with tiles writes the same bytes as one tiled run.
+    let many = dir.join("many");
+    for file in &files {
+        let mut r = request(vec![file.clone()], &many, rows(&ids), vec![850, 500]);
+        r.mode = Mode::Append;
+        r.chunk_yx = Some([5, 7]);
+        run(r);
+    }
+    let mut r = request(vec![], &many, rows(&ids), vec![850, 500]);
+    r.mode = Mode::Finalize;
+    r.chunk_yx = Some([5, 7]);
+    run(r);
+    for store in ["d01.zarr", "d02.zarr"] {
+        let a = rw_mlexport::zipout::collect(&tiled.join(store), "s").unwrap();
+        let b = rw_mlexport::zipout::collect(&many.join(store), "s").unwrap();
+        assert_eq!(a.iter().map(|x| &x.0).collect::<Vec<_>>(), b.iter().map(|x| &x.0).collect::<Vec<_>>());
+        for ((name, pa), (_, pb)) in a.iter().zip(&b) {
+            assert_eq!(std::fs::read(pa).unwrap(), std::fs::read(pb).unwrap(), "{store} {name}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+
+#[test]
+fn earth2_layout_opens_in_the_019_loader() {
+    let python=match std::env::var("GPUWM_EARTH2_TEST_PYTHON") {Ok(p)=>p,Err(_)=>{eprintln!("set GPUWM_EARTH2_TEST_PYTHON to exercise Earth2Studio's loader");return;}};
+    let dir=scratch("earth2-loader");
+    let input=dir.join("wrfout_d01_2026-09-29_00:00:00");
+    let d=Domain{id:1,nx:25,ny:25,nz:30,dx:12000.};
+    write_wrfout(&input,&d,&[0,6],true);
+    let mut vars=rows(&["2m_temperature","total_column_water_vapour","geopotential"]);
+    for row in &mut vars {
+        let name=if row.id=="geopotential" {row.pressure_hpa=Some(500);"z500"} else if row.id=="2m_temperature" {"t2m"}else{"tcwv"};
+        row.names.insert("earth2".into(),name.into());
+    }
+    let out=dir.join("out");
+    let mut r=request(vec![input],&out,vars,vec![500]);
+    r.names="earth2".into();r.layout=Layout::Earth2;
+    r.grid.kind=GridKind::Latlon;
+    r.grid.target=Some(serde_json::json!({"kind":"latlon","shape":[3,4],"dims":["lat","lon"],"lat0":38.,"lon0":262.,"dlat":-0.25,"dlon":0.25}));
+    run(r);
+    let check=std::process::Command::new(python).arg("-B").arg("-c").arg(r#"
+import sys,numpy as np
+from earth2studio.data import InferenceOutputSource
+from earth2studio.io import ZarrBackend
+backend=ZarrBackend(sys.argv[1])
+assert backend["t2m"].shape==(1,2,3,4)
+source=InferenceOutputSource(sys.argv[1],engine='zarr')
+a=source(np.array(['2026-09-29T06:00:00'],dtype='datetime64[ns]'),np.array(['t2m','tcwv','z500'])).load()
+assert a.dims==('time','variable','lat','lon'),a.dims
+assert a.shape==(1,3,3,4),a.shape
+assert np.isfinite(a).all()
+assert np.allclose(a.sel(variable='t2m'),290.)
+assert float(a.sel(variable='tcwv').min())>0
+assert float(a.sel(variable='z500').min())>10000
+print(a.coords)
+"#).arg(out.join("d01.zarr")).output().unwrap();
+    assert!(check.status.success(),"{}\n{}",String::from_utf8_lossy(&check.stdout),String::from_utf8_lossy(&check.stderr));
+    println!("{}",String::from_utf8_lossy(&check.stdout));
 }

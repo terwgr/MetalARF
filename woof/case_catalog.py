@@ -30,7 +30,13 @@ SCHEMA = "arwen.case-catalog.v1"
 TIERS = ("lower", "recommended", "upper")
 MAX_CATALOG_BYTES = 128 * 1024 * 1024
 SCHEMA_PATH = Path(__file__).parent / "data" / "case-catalog" / "schema.json"
-BUILTIN_CATALOG_PATH = SCHEMA_PATH.with_name("historical.zip")
+#: The bundled historical catalog ships in the recast-woof-data companion since
+#: 2.8.7 (woof.data_assets.COMPANION_TREES): with three new native
+#: executables the woof manylinux wheel crossed PyPI's 100,000,000-byte
+#: limit, and this 2.73 MB ZIP is incompressible data.  ``None`` resolves it
+#: through woof.data_assets.data_path; a path set here wins (tests).
+BUILTIN_CATALOG_RELATIVE = "case-catalog/historical.zip"
+BUILTIN_CATALOG_PATH: Path | None = None
 _ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,127}\Z")
 _CONTROL_TEXT = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)),
@@ -42,10 +48,19 @@ class CatalogError(ValueError):
 
 
 def builtin_catalog_path() -> Path:
-    """The historical catalog shipped inside every installed engine wheel."""
-    path = BUILTIN_CATALOG_PATH.resolve()
+    """The historical catalog every install carries (in the recast-woof-data companion)."""
+    from woof import data_assets
+
+    path = BUILTIN_CATALOG_PATH
+    if path is None:
+        try:
+            path = data_assets.data_path(BUILTIN_CATALOG_RELATIVE)
+        except ImportError as error:
+            raise CatalogError(f"The bundled historical case catalog is missing; reinstall WOOF. {error}") from error
+    path = Path(path).resolve()
     if not path.is_file():
-        raise CatalogError("The bundled historical case catalog is missing; reinstall WOOF.")
+        raise CatalogError("The bundled historical case catalog is missing; reinstall WOOF: "
+                           + data_assets.companion_reinstall_command())
     return path
 
 
@@ -632,6 +647,11 @@ def _write_geometry_case(selection: dict, *, case_id: str, staged: Path,
         hints["cadence"] = cadence
     if lead:
         hints["forecast_start_hour"] = lead
+    provider = (selection["source_option"].get("metadata") or {}).get("era5_provider")
+    if source == "era5" and provider:
+        # A catalog option may name its ERA5 provider (the keyless ARCO reader
+        # or the CDS); the fetch validates the value like any [fetch] table.
+        hints["era5_provider"] = provider
     if wizard.source_fetch_takes_a_crop_box(source):
         hints["area"] = area
     case_data = None

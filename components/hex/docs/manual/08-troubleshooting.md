@@ -24,27 +24,30 @@ The messages in this section describe the CUDA path. For Metal installation and 
 
 
 **`MISSING cupy (the CUDA lane)`**: you installed the base package without
-a CUDA extra, or with the wrong one. `pip install "recast-woof[gpu-cu13]"`:
-the CUDA forecast path requires CUDA 13. This refusal applies to the CUDA
-route only; the Metal route does not need CuPy.
+a CUDA extra. `pip install "recast-woof[gpu]"`, which is `gpu-cu12` and runs on
+a CUDA 12 or CUDA 13 driver; doctor names the extra for the driver it reads
+(`gpu-cu13` on a CUDA 13 driver).
 
 **`MISSING cupy (the CUDA lane): cupy imports but carries CUDA runtime
-12090`**, a CuPy built for CUDA 12 is installed. It imports cleanly, probes
-cleanly, runs cuBLAS, and is then refused by name at forecast launch with
-`CudaRefusal: cuda.runtime_version=12090 < required 13000`. Doctor prints
-the removal first because pip leaves both wheels installed and import order,
-not intent, picks the winner:
+13020, and this box's driver serves CUDA 12`**, `cupy-cuda13x` is installed
+on a CUDA 12 driver. It imports, and every device call then stops with
+`cudaErrorInsufficientDriver`. Doctor prints the removal first because pip
+leaves both wheels installed and import order, not intent, picks the winner:
 
 ```
-  pip uninstall -y cupy-cuda12x
-  pip install "recast-woof[gpu-cu13]"
+  pip uninstall -y cupy-cuda13x
+  pip install "recast-woof[gpu-cu12]"
 ```
 
-**`MISSING cupy (the CUDA lane): this box's driver serves CUDA 12`**, not a
-pip problem. `cupy-cuda13x` needs a driver serving CUDA 13, and the CUDA-12
-wheel is refused by the runtime floor, so no install command opens the CUDA
-lane on this machine. Update the NVIDIA driver, or run the CUDA lane on a
-machine that has one. Doctor deliberately offers no `pip install` line here.
+**`cudaErrorInsufficientDriver: CUDA driver version is insufficient for CUDA
+runtime version`** at a forecast, the same case, met at the door instead of
+in doctor. Same remedy.
+
+**`MISSING cupy (the CUDA lane): this box's driver serves CUDA 11`**, not a
+pip problem. Both wheels need a driver serving CUDA 12 or newer, so no
+install command opens the CUDA lane on this machine. Update the NVIDIA
+driver, or run the CUDA lane on a machine that has one. Doctor deliberately
+offers no `pip install` line here.
 
 **`MISSING rw_mpas_init ... not found on any rung`** (likewise
 `rw_mpas_convert`, `rw_wrfbatch`): the Rust engines are not staged. The
@@ -186,7 +189,7 @@ in the package since 0.3.2; drop `--repo` from the command.
 install is damaged; reinstall recast-woof.
 
 **`no woof is installed in this interpreter and --gpuwm-checkout was not
-given`**: install the engine with the `pip install` line the refusal
+given`**: install the pinned engine with the `pip install` line the refusal
 prints.
 
 **`--gpuwm-checkout ... is not a directory`**: the flag names a woof tree;
@@ -197,12 +200,40 @@ installed`**: you pointed `--gpuwm-checkout` at an unpacked tarball or a
 copied `site-packages`. Neither names the bytes it holds (no commit, no pip
 record). Leave the flag unset, or clone the tag.
 
-**`the tree at ... does not carry N of the 16 engine seam files`**: the
-tree passed as `--gpuwm-checkout` (or the install) is not a whole woof
-engine: the run records the digest of every seam file and cannot name one
-that is absent. Leave the flag unset to run on the installed engine, or point
-it at a git clone of woof. `woof hex doctor` reports the same gap before a
-run as **`MISSING woof seam files`**.
+**A woof other than the one this port was measured against** runs (since
+2026-10-10). The door used to refuse with `the woof at ... is woof X, and
+this port's physics seam is pinned to woof 2.8.7`; a different engine
+version names no breakage, so the refusal is retired. The one engine refusal
+left is an engine whose radiation helper set no row of this release admits:
+it names the installed version, the version this release was measured on and
+both remedies (`pip install "recast-woof==X"`, or the woof hex release that admits
+the installed engine). The run's receipt
+records the comparison under `arwen_engine_pin`: the version the engine
+declares, the version this port was measured against, whether the sixteen
+seam files match (`matches_measured_row`), and which moved or are absent.
+`woof hex doctor` prints the same comparison as an information line, not a
+blocking gap. The x4 full-physics proof still requires the exact measured
+bytes for its measured physics seam. It measures hex self-reproducibility
+and broad native full-physics consistency. Native dry-step agreement uses
+`verify-dycore`: 0 differing words against the strict native, per-field limits
+against an optimised one.
+
+**`the woof at ... carries no woof/core/mpas_column_batch.py`**: the tree
+is not a woof the physics seam can call. Leave `--gpuwm-checkout` unset to
+run on the installed engine, or point it at a woof source tree.
+
+**`unstable mesh/timestep combination refused before CUDA allocation`**: the
+message gives one or both Courant numbers, measured from the mesh's own
+smallest `dcEdge`, and ends with the remedies that apply. The acoustic limit
+is the forward-backward limit of the sub-step on the hexagonal grid; above
+it a sound wave grows, and more `--acoustic-substeps` or a smaller `--dt`
+closes it. The advective bound is an estimate: it assumes a largest wind
+(125 m/s unless the mesh row or `--max-wind` says otherwise) and carries a
+one-dimensional limit to a hexagon by a swept-area factor. The message says
+which wind the requested step is good for; if the case's winds stay below
+that, pass `--max-wind` with the case's own bound. The `--dt` it recommends
+is the largest whole-second step under both limits that divides the
+radiation interval.
 
 **`--out ... exists`** / **`--scratch ... exists`**, both must be fresh.
 A second run into an existing output tree can be read as the first one's
@@ -232,12 +263,12 @@ device even to measure it.
 
 ## Forecast lane
 
-**Launch refusal naming a seam file that is missing, or dirty in a git
-clone**: the engine tree cannot be named. A missing file has no digest, and a
-dirty one has bytes no commit holds. Reinstall the engine, or commit or
-restore the file in the clone. A provider row's own manifest still refuses a
-moved byte (`does not match the proven manifest`); that row's provider owns
-the fix.
+**Launch refusal naming a seam file with expected and found digests
+(`does not match the proven manifest ... re-prove before running`), or a
+dirty pinned file**: the installed engine, or the clone passed as
+`--gpuwm-checkout`, is not the pinned engine, or the clone is dirty in a
+pinned file. Install the pinned engine (or check out the pinned tag and
+restore the bytes); do not edit the pin.
 
 **`requested dt=... s` timestep admission refusal**: the declared timestep
 fails the geometry gate against the file's real `min(dcEdge)`; the refusal
@@ -290,16 +321,17 @@ delivered tree; use the default sibling or point it elsewhere.
 ## When output exists but looks wrong
 
 That is not a refusal: it is chapter 3.3. Check the declared divergences
-before suspecting your run: higher explicit rain, a condensate surplus and an
-upper-level warm drift are the declared, measured differences from native
-physics, with their referees named. And chapter 6.4: reading the receipt's
+before suspecting your run: on the default WOOF physics route, higher explicit
+rain, a condensate surplus and an upper-level warm drift are the declared,
+measured differences from native MPAS physics, with their referees named. The
+MPAS suites do not carry them. And chapter 6.4: reading the receipt's
 nonclaims tells you what the run never promised.
 
 **Precipitation needs its own paragraph, because the two referees disagree in
-sign and the older one is the retired one.** Against native MPAS-A this port's
-domain-mean precipitation runs about **15 % dry**: a global mean against
-another model, and model parity was retired as a goal on 2026-08-20. Against
-observations, which is the verification of record, it is the other way round:
+sign and only one of them is the WOOF route's referee.** Against native
+MPAS-A the WOOF route's domain-mean precipitation runs about **15 % dry**: a
+global mean against another model's physics. Against observations, which is
+the verification of record for WOOF's physics, it is the other way round:
 scored on 2026-08-25 against NCEP/EMC Stage-IV hourly QPE over CONUS, the port
 is **wet in all four cases** (+0.0247 mm/h paired, 95 % [+0.0041, +0.0606]),
 and its frequency bias at 1 mm/h is above one in three of the four

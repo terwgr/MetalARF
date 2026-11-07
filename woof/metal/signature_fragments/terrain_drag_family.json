@@ -75,8 +75,8 @@
       "layout_version": 1,
       "module": "terrain_drag_family",
       "name": "gwdo_gsl_column",
-      "parameters": [["dxmeter", "float32"], ["deltim", "float32"], ["g", "float32"], ["cp", "float32"], ["rd", "float32"], ["fv", "float32"], ["pi_c", "float32"], ["kpblmax", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["nstat", "int32"]],
-      "resources": [["u", "float", "read"], ["v", "float", "read"], ["t", "float", "read"], ["qv", "float", "read"], ["p", "float", "read"], ["p_interface", "float", "read"], ["pi", "float", "read"], ["zi", "float", "read"], ["dz", "float", "read"], ["var", "float", "read"], ["oc1", "float", "read"], ["oa4", "float", "read"], ["ol4", "float", "read"], ["varss", "float", "read"], ["oc1ss", "float", "read"], ["oa4ss", "float", "read"], ["ol4ss", "float", "read"], ["sina", "float", "read"], ["cosa", "float", "read"], ["xland", "float", "read"], ["br", "float", "read"], ["hpbl", "float", "read"], ["kpbl", "int32", "read"], ["du", "float", "read_write"], ["dv", "float", "read_write"]],
+      "parameters": [["dxmeter", "float32"], ["deltim", "float32"], ["g", "float32"], ["cp", "float32"], ["rd", "float32"], ["fv", "float32"], ["pi_c", "float32"], ["kpblmax", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["nstat", "int32"], ["has_rstoch", "int32"]],
+      "resources": [["u", "float", "read"], ["v", "float", "read"], ["t", "float", "read"], ["qv", "float", "read"], ["p", "float", "read"], ["p_interface", "float", "read"], ["pi", "float", "read"], ["zi", "float", "read"], ["dz", "float", "read"], ["var", "float", "read"], ["oc1", "float", "read"], ["oa4", "float", "read"], ["ol4", "float", "read"], ["varss", "float", "read"], ["oc1ss", "float", "read"], ["oa4ss", "float", "read"], ["ol4ss", "float", "read"], ["sina", "float", "read"], ["cosa", "float", "read"], ["xland", "float", "read"], ["br", "float", "read"], ["hpbl", "float", "read"], ["kpbl", "int32", "read"], ["rstoch", "float", "read"], ["du", "float", "read_write"], ["dv", "float", "read_write"]],
       "shapes": {
         "u": [["nz", "ny", "nx"]],
         "v": [["nz", "ny", "nx"]],
@@ -100,6 +100,7 @@
         "xland": [["ny", "nx"]],
         "br": [["ny", "nx"]],
         "hpbl": [["ny", "nx"]],
+        "rstoch": [["ny", "nx"]],
         "du": [["nz", "ny", "nx"]],
         "dv": [["nz", "ny", "nx"]],
         "kpbl": [["ny", "nx"]]

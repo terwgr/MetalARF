@@ -62,7 +62,6 @@ tools/arwen-tui/target/
 # `cargo build --locked` in a fresh clone died on a missing checksum.
 # Mirror crates under vendor/crates-io are never built in place.
 tools/rw_wps/vendor/netcrust/target/
-tools/rw_wps/vendor/netcrust/vendor/*/target/
 !tools/rustwx/vendor/**
 # ... but not build output or a lock file cargo drops there when an
 # excluded vendor crate is built on its own manifest.  Build the
@@ -79,6 +78,7 @@ tools/rustwx/vendor/wx-radar/Cargo.lock
 # still ship; their bytecode does not.
 tools/grib1_bridge/vendor/**/__pycache__/
 tools/rustwx/vendor/**/__pycache__/
+tools/rw_wps/vendor/**/__pycache__/
 
 # Scratch for live acceptance runs (fetched GRIB, decoded arrays, prepared
 # wrfinput/wrfbdy).  Real data, reproducible from the commands in the
@@ -116,3 +116,9 @@ tools/arwen-ui-vendor/**/__pycache__/
 # Metal ABI headers: tools/build_metal_backend.py regenerates them from
 # woof/metal/kernel_signatures.json before every shader compile.
 woof/metal/generated/*.metalh
+# Local coordinator brief; the source copy lives in lane scratch.
+/NEXTGEN-BRIEF.md
+
+
+# Pre-port netCDF-C hydro schema/data identity reference.
+!tools/nextgen_output/tests/fixtures/*.nc

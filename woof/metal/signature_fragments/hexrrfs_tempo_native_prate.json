@@ -1,0 +1,140 @@
+{
+  "kernels": [
+    {
+      "module": "hexrrfs_tempo_native_diagnostics",
+      "source": "woof/metal/shaders/hexrrfs_tempo_native_diagnostics.metal",
+      "cuda_source": "woof/hex/mpasphys/rrfs/tempo_v303.py",
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "name": "hexrrfs_tempo_native_prate",
+      "cuda_symbol": "tempo_prate",
+      "threads_per_group": 64,
+      "resources": [
+        [
+          "step",
+          "float",
+          "read"
+        ],
+        [
+          "total",
+          "float",
+          "read"
+        ],
+        [
+          "peak",
+          "float",
+          "read_write"
+        ],
+        [
+          "rolling",
+          "float",
+          "read_write"
+        ],
+        [
+          "ave1",
+          "float",
+          "read_write"
+        ],
+        [
+          "ave5",
+          "float",
+          "read_write"
+        ],
+        [
+          "ave10",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "step": [
+          [
+            "nc"
+          ]
+        ],
+        "total": [
+          [
+            "nc"
+          ]
+        ],
+        "peak": [
+          [
+            "nc"
+          ]
+        ],
+        "rolling": [
+          [
+            "longest",
+            "nc"
+          ],
+          [
+            "1"
+          ]
+        ],
+        "ave1": [
+          [
+            "nc"
+          ]
+        ],
+        "ave5": [
+          [
+            "nc"
+          ]
+        ],
+        "ave10": [
+          [
+            "nc"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "longest",
+          "int32"
+        ],
+        [
+          "has_rolling",
+          "int32"
+        ],
+        [
+          "n1",
+          "int32"
+        ],
+        [
+          "n5",
+          "int32"
+        ],
+        [
+          "n10",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "time1",
+          "float32"
+        ],
+        [
+          "time5",
+          "float32"
+        ],
+        [
+          "time10",
+          "float32"
+        ]
+      ]
+    }
+  ]
+}

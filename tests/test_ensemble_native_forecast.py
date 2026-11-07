@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from types import SimpleNamespace
+import contextlib
 import sys
 
 import numpy as np
@@ -71,8 +72,13 @@ class _Health:
     status_mask: int = 0
 
 
-@pytest.mark.parametrize("begin,end,expected", [(0, None, (0, 24, 48)), (12, 36, (12, 36)), (0, 24, (0, 24))])
-@pytest.mark.parametrize("observe_counters", [False, True])
+# Keep every history window with counters, plus the counter-free executor path.
+@pytest.mark.parametrize("observe_counters,begin,end,expected", [
+    pytest.param(False, 0, None, (0, 24, 48), id="False-0-None-expected0"),
+    pytest.param(True, 0, None, (0, 24, 48), id="True-0-None-expected0"),
+    pytest.param(True, 12, 36, (12, 36), id="True-12-36-expected1"),
+    pytest.param(True, 0, 24, (0, 24), id="True-0-24-expected2"),
+])
 def test_executor_uses_original_history_window_and_advances_each_clock_once(monkeypatch, begin, end, expected, observe_counters):
     import woof.ensemble.native_forecast as module
     spec = DomainTicks(1, 0, 1, 12, np.float32(12), 24, None, None, None,
@@ -109,8 +115,26 @@ def test_executor_uses_original_history_window_and_advances_each_clock_once(monk
         field = physics.driver.refl_10cm
         physics.driver.refl_10cm = None
         return field
+    physics.state.qv = np.zeros((3, 20, 6), np.float32)
+    # Since 18dbe1d5449 tick zero diagnoses the initial hydrometeors on the
+    # GPU (checked in tests/test_earth2_export.py); this test owns routing.
+    views = []
+
+    @contextlib.contextmanager
+    def analysis_diagnostic_view():
+        # 8068aac6772: the packed batch admits refl_t and tiles thb for
+        # exactly the analysis call.
+        views.append("open")
+        yield
+        views.append("closed")
+    physics.state.analysis_diagnostic_view = analysis_diagnostic_view
+
+    def analysis_refl_10cm(state):
+        assert state is physics.state and views == ["open"]
+        return np.full(state.qv.shape, -7, np.float32)
     monkeypatch.setitem(sys.modules, "woof.core.refl", SimpleNamespace(
-        consume_refl_10cm=consume, refl_10cm_stash_is_due=lambda ticks, **kwargs: ticks != 0))
+        consume_refl_10cm=consume, analysis_refl_10cm=analysis_refl_10cm,
+        refl_10cm_stash_is_due=lambda ticks, **kwargs: ticks != 0))
     monkeypatch.setitem(sys.modules, "woof.core.uh_diag", SimpleNamespace(
         reset_up_heli_max=lambda state: resets.append((clock.ticks, state.member))))
     class Stability:
@@ -179,7 +203,8 @@ def test_executor_uses_original_history_window_and_advances_each_clock_once(monk
         if tick:
             assert field.shape == (3, 5, 6) and np.all(field == tick)
         else:
-            assert field is None
+            assert field.shape == (3, 5, 6) and np.all(field == -7)
+    assert views == (["open", "closed"] if any(tick == 0 for tick, _m, _f in captures) else [])
 
 
 @pytest.mark.parametrize("stage", ["pack", "health"])

@@ -1,0 +1,134 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/openbc.cu",
+      "cuda_symbol": "w_damp",
+      "layout_version": 1,
+      "module": "wrf_exact_w_damp",
+      "name": "wrf_exact_w_damp",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "w_damp_on",
+          "float32"
+        ],
+        [
+          "w_crit_cfl",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "rw_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "rw_t": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ww": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_w_damp.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

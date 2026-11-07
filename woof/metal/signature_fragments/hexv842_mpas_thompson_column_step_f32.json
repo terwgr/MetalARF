@@ -1,0 +1,686 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_thompson_column_step_f32",
+      "module": "hexv842_mpas_thompson_column_step_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_thompson_column_step_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/thompson_v842.py",
+      "cuda_symbol": "mpas_thompson_step",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "th",
+          "float",
+          "read_write"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainprod",
+          "float",
+          "read_write"
+        ],
+        [
+          "evapprod",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_cloud",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_ice",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_snow",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ntc",
+          "float",
+          "read"
+        ],
+        [
+          "muc",
+          "float",
+          "read"
+        ],
+        [
+          "input_tcg_racg",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tmr_racg",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tcr_gacr",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tmg_gacr",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_racg",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_gacr",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tcs_racs1",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tmr_racs1",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tcs_racs2",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tmr_racs2",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tcr_sacr1",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tms_sacr1",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tcr_sacr2",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tms_sacr2",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_racs1",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_racs2",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_sacr1",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_sacr2",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tpi_qrfz",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tni_qrfz",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tpg_qrfz",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_qrfz",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tpi_qcfz",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tni_qcfz",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tpi_ide",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tps_iaus",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tni_iaus",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_t_efrw",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_t_efsw",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tpc_wev",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnc_wev",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnr_rev",
+          "uint64",
+          "read"
+        ],
+        [
+          "input_tnccn_act",
+          "float",
+          "read"
+        ],
+        [
+          "ws_f",
+          "float",
+          "read_write"
+        ],
+        [
+          "ws_d",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "ws_b",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pii": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainprod": [
+          [
+            "any_1d"
+          ]
+        ],
+        "evapprod": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_cloud": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_ice": [
+          [
+            "any_1d"
+          ]
+        ],
+        "re_snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snownc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snowncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ntc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "muc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tcg_racg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tmr_racg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tcr_gacr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tmg_gacr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_racg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_gacr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tcs_racs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tmr_racs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tcs_racs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tmr_racs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tcr_sacr1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tms_sacr1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tcr_sacr2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tms_sacr2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_racs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_racs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_sacr1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_sacr2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tpi_qrfz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tni_qrfz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tpg_qrfz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_qrfz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tpi_qcfz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tni_qcfz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tpi_ide": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tps_iaus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tni_iaus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_t_efrw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_t_efsw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tpc_wev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnc_wev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnr_rev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input_tnccn_act": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ws_f": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ws_d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ws_b": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "has_reqc",
+          "int32"
+        ],
+        [
+          "has_reqi",
+          "int32"
+        ],
+        [
+          "has_reqs",
+          "int32"
+        ],
+        [
+          "first",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ]
+    }
+  ]
+}

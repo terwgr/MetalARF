@@ -1,5 +1,69 @@
 # woof native GRIB bridges
 
+## Generic selector stacks
+
+`gpuwm_grib2_stack(input_path, spec_json_path, output_dir)` is exported by
+`gpuwm_preprocess_cpu`, the CPU library that already ships with the engine.
+Its three arguments are NUL-terminated UTF-8 paths. The SPEC consumes schema
+`gpuwm-grib2-stack-v1`. Selectors contain raw parameter identifiers, optional
+constituent and aerosol identifiers, level type and optional level lists.
+Null identifiers impose no constraint; null levels select every level present.
+Explicit level lists require each level at every selected time. Keys must be
+unique ASCII letters, digits, underscores or hyphens.
+
+The library visits each envelope once. It decodes selected data in f64 and rounds
+once to little-endian f32, retaining bitmap NaNs and stored scan order. Stacks
+have C-order shape `(nlevel, ny, nx)` with ascending levels. Only rectangular
+grid template 3.0 is accepted. Empty selectors, missing requested levels,
+duplicate time/level records, mixed PDTs, grids or coefficients within a key,
+existing output directories and valid-time filename collisions refuse before
+output creation. Inventory, dump and stack metadata report ground/water-surface
+levels as zero, matching ecCodes even when the encoded scale/value are missing;
+the decoder retains its stored descriptors. Calendar-relative forecast units refuse. Statistical products
+use the encoded interval end as valid time. Nonzero return codes report the
+refusal through `gpuwm_bridge_last_error`; panics are caught at the C boundary.
+
+Names are `<key>__YYYY-MM-DDTHHMMSSZ.f32le`, using portable basic ISO time.
+`stack.json` lists output hashes, levels, PDT, actual selector identifiers,
+reference time, forecast step/unit, valid time and encoded grid metadata.
+Its `coordinate_values` map stores coefficients once per key.
+Each output retains `time_processing`, scoped
+`decoder_all_statistical_specifications`: the encoded interval end,
+`number_of_time_ranges`, `number_of_missing_values` and ordered `time_ranges`.
+Each range carries the raw statistical-process code, increment-type code,
+range unit/length and increment unit/value. Missing sentinels and unknown codes
+remain raw; no sample count or rate is inferred. Instantaneous products have
+null header counts and an empty range list. The existing first-range summary
+fields remain available, with seconds null for calendar-relative units or a
+missing length. Complete declared descriptors are required, independently of
+NV coordinate-tail bytes. Equal valid times do not establish equal processing
+windows: levels differing in any descriptor or missing count refuse before
+output publication. This encoded witness does not qualify a weather product
+for hydro forcing without provider interval and geometry bindings. Field
+decoding and rounding are unchanged; no rate conversion or interpolation is
+performed. Descriptor layout follows the
+[NCEP PDT 4.8](https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_temp4-8.shtml)
+and [PDT 4.11](https://www.nco.ncep.noaa.gov/pmb/docs/grib2/grib2_doc/grib2_temp4-11.shtml)
+tables.
+`woof.grib2_stack.stack_grib2(input_file, select, output_dir)` calls
+`CpuPreprocessBackend.grib2_stack` through the already loaded CPU library.
+It retains the SPEC beside the output for review, verifies hashes and sizes,
+and returns frozen `StackedField` objects with lazy read-only `.array` mappings
+and float64 axes. A missing `gpuwm_grib2_stack` symbol raises a rebuild remedy;
+there is no fallback or additional executable to package. ABI remains 1.
+Field values are never transformed in Python. Consumers must inspect scan mode
+when the stored order differs from geographic row-major order.
+
+## Generic pressure and linear combination operators
+
+`src/chem_remap.rs` exports exactly `gpuwm_hybrid_full_pressure_f32` and
+`gpuwm_weighted_combination_f32` through ABI 1. Both validate inputs before
+writing, compute in f64 and round once to f32. Their serial arithmetic order is
+independent of worker count. Model level k lies between half levels k-1 and k.
+Linear combinations support a humidity divisor with finite humidity in [0,1)
+and propagate field NaNs. The ctypes methods require the symbols by name and
+have no Python field arithmetic fallback. No registry dependency was added.
+
 One Rust crate (`grib1_bridge`, library name `gpuwm_preprocess_cpu`) holding
 every CPU-side GRIB decode boundary woof uses.  `woof.ingest.grib`,
 `woof.ingest.hrrr`, and `woof.gfs_direct` consume the raw little-endian
@@ -58,14 +122,15 @@ spatial validation still belongs to normal input preflight.
 The same crate builds `gpuwm_preprocess_cpu` (`libgpuwm_preprocess_cpu.so`,
 `gpuwm_preprocess_cpu.dll`), which `woof.ingest.cpu_backend` loads through
 ctypes.  Besides the horizontal, vertical and WRF-real transforms of the CPU
-preprocessing backend, it carries `gpuwm_wps_masked_chain_f64` and
+preprocessing backend, it carries `gpuwm_wps_masked_chain_f64`, its
+inland-water reach form `gpuwm_wps_masked_chain_reach_f64` and
 `gpuwm_wps_land_unit_scan_f64` (`src/wps_masked.rs`): WPS metgrid's masked
 chain for soil moisture and temperature, snow, skin temperature and sea ice,
 in float64, parallel across target cells with a result that does not depend
 on the worker count.  BOTH preprocessing backends map those fields through
 it, so a library without the entry is refused by name.  Its values and
 repair counts are byte-identical to the NumPy transcription kept as the test
-oracle (`woof/verify/wps_masked_oracle.py`); the search takes its walk
+oracle (`woof/verify/wps_masked_oracle.py`, in upstream WOOF; MetalARF does not carry it); the search takes its walk
 once per start cell and squares a distance as `dx * dx`, as the oracle's
 shared-walk search does.
 
@@ -74,7 +139,7 @@ shared-walk search does.
 the native HRRR route: surface-matched corner weights, the nearest land
 donor for a land cell with none, and the report's counts, byte-identical to
 the NumPy builder kept as its test oracle
-(`woof/verify/hrrr_stencil_oracle.py`).
+(`woof/verify/hrrr_stencil_oracle.py`, in upstream WOOF; MetalARF does not carry it).
 
 `src/water_blend.rs` carries the water surfaces: `gpuwm_lake_water_nearest_f64`
 (the search for the nearest source water cell of each model lake, whose
@@ -86,7 +151,7 @@ four-neighbour sweep that closes a water body's holes from its own cells),
 water-temperature overlay) and `gpuwm_label_components_8` (the 8-connected
 labelling of water bodies, one thread, labels in the row-major order of each
 body's first cell).  Each is byte-identical to the NumPy code kept
-as its test oracle (`woof/verify/water_blend_oracle.py`) at any worker
+as its test oracle (`woof/verify/water_blend_oracle.py`, in upstream WOOF; MetalARF does not carry it) at any worker
 count, and a library without them is refused by name.
 
 `src/water_repair.rs` carries the rest of the water-temperature assembly:

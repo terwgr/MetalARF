@@ -8,7 +8,7 @@
     "arwen_3km_conus": {
       "status": "committed-run-receipt",
       "evidence": "docs/public/receipts/obsbattery/grounding-3km-conus-run-report.json",
-      "evidence_sha256": "93d980e69492dce1b3118633c5beeb475328fcba3ba09966a0d5ec96a9a2257e",
+      "evidence_sha256": "bc00995c0b13b6e32421247773afbb41c1ef2485a8ad158f302d37a7aa39539b",
       "engine": "gpuwm 1.4.1",
       "device": "RTX 5090",
       "source": "gfs",

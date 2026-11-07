@@ -35,8 +35,10 @@ def test_gates_single_sourced_from_case_modules():
     not turn into a failing driver test.  What is pinned is that the cases
     that were registered by hand are still reachable, and that every
     discovered case's gate table is well formed."""
-    assert {"straka", "igw", "hill2d", "moist_bubble", "wk82",
-            "real74_d01"} <= set(cli._CASES)
+    from _woof_snapshot import left_out
+    # a case module the tree leaves out (Recast WOOF carries no real-case module) is not registered
+    assert {case for case in ("straka", "igw", "hill2d", "moist_bubble", "wk82", "real74_d01")
+            if not left_out(f"woof/verify/cases/{case}.py")} <= set(cli._CASES)
     assert set(cli._GATES) == set(cli._CASES)
     for name, mod in cli._CASES.items():
         assert cli._GATES[name] is mod.GATES, name
@@ -107,8 +109,11 @@ def test_cli_exit_codes(monkeypatch, capsys):
 def test_cli_case_choices():
     """The Phase 2 cases are wired into the verify subcommand; an unknown
     case is an argparse usage error (exit 2)."""
+    from _woof_snapshot import left_out
     for case in ("straka", "igw", "hill2d", "moist_bubble", "wk82",
                  "real74_d01"):
+        if left_out(f"woof/verify/cases/{case}.py"):
+            continue  # a case module the tree leaves out is not wired in
         assert case in cli._GATES, case
     with pytest.raises(SystemExit) as exc:
         cli.main(["verify", "nosuchcase"])

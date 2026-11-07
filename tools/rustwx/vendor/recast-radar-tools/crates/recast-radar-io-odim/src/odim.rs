@@ -45,7 +45,7 @@
 //! - The `range` coordinate holds gate centres: `rstart` (the start of the
 //!   first bin: metres in ODIM_H5 v2.4, km before) plus half a `rscale` (bin
 //!   spacing in metres). Implausibly large km values are reinterpreted as
-//!   metres: see `first_gate_m_from_rstart`.
+//!   metres — see `first_gate_m_from_rstart`.
 //! - `nyquist_velocity(time)` broadcasts `how/NI` (dataset, else root).
 //! - Every attribute a coordinate or a typed slot does not take is kept
 //!   verbatim, whatever its datatype (string arrays, compound members as
@@ -63,7 +63,7 @@
 //!   attribute and plane of the corpus against h5py.
 //! - Planes are stored verbatim (design note 7.2): no rewrite pass, so the
 //!   raw arrays hash equal to xradar's. Some IRIS exporters (AEMET Spain,
-//!   IRIS 10.3) copy the REFLECTIVITY `what` group onto the velocity plane:
+//!   IRIS 10.3) copy the REFLECTIVITY `what` group onto the velocity plane —
 //!   the VRADH `nodata`/`undetect` carry the dBZ sentinels (e.g. 95.5 / -32)
 //!   while no-echo velocity gates are filled with the physical `offset`
 //!   (0 m/s for gain=1/offset=0). Those fill gates match neither declared
@@ -72,7 +72,7 @@
 //!   opt-in post-pass that masks a velocity gate sitting on `offset` when
 //!   the co-located reflectivity gate is no-echo, and only when the velocity
 //!   sentinels equal the reflectivity sentinels (the copied-what-group
-//!   signature): genuine 0 m/s gates with echo, and conformant writers with
+//!   signature) — genuine 0 m/s gates with echo, and conformant writers with
 //!   distinct velocity sentinels, are untouched.
 //!
 //! Known limitations (explicit, not silent): non-polar objects (ELEV/RHI
@@ -1210,8 +1210,8 @@ fn plane_sentinels(field: &Field) -> (Option<f64>, Option<f64>, f64) {
 /// verbatim. The velocity and reflectivity planes are the highest-priority
 /// ones of each kind (`canonical_field`). Guarded by the copied-what-group
 /// signature (velocity sentinels equal the reflectivity sentinels) so
-/// conformant writers (which give velocity its own distinct sentinels,
-/// already masked by the coding) are never touched. Also a no-op for a
+/// conformant writers — which give velocity its own distinct sentinels,
+/// already masked by the coding — are never touched. Also a no-op for a
 /// sweep whose two planes do not share ray/gate geometry.
 pub fn recover_copied_whatgroup_velocity_nodata(volume: &mut Volume) -> usize {
     volume
@@ -1299,7 +1299,7 @@ fn mask_offset_fill_without_echo(velocity: &mut Field, reflectivity: &Field, off
 }
 
 /// Set one flat gate index to the field's fill code: `_FillValue` for
-/// integer storage (unchanged when the plane declares none, nothing
+/// integer storage (unchanged when the plane declares none — nothing
 /// transparent to write), `_FillValue` else NaN for float storage.
 fn mask_gate_no_data(field: &mut Field, index: usize) {
     match &mut field.data {
@@ -1363,7 +1363,7 @@ pub(crate) fn canonical_quantity(quantity: &str) -> Option<CanonicalMoment> {
         "WRADH" | "WRADV" | "WRAD" => Some(CanonicalMoment::SpectrumWidth),
         // The unfiltered dual-pol spellings come in both orders in the
         // wild: spec-style trailing U (ZDRU) and DWD's leading U (UZDR,
-        // URHOHV, live opendata.dwd.de sweep files, 2026-06-12).
+        // URHOHV — live opendata.dwd.de sweep files, 2026-06-12).
         "ZDR" | "ZDRU" | "UZDR" => Some(CanonicalMoment::DifferentialReflectivity),
         "RHOHV" | "RHOHVU" | "URHOHV" => Some(CanonicalMoment::CorrelationCoefficient),
         "PHIDP" | "PHIDPU" | "UPHIDP" => Some(CanonicalMoment::DifferentialPhase),
@@ -1414,7 +1414,7 @@ pub(crate) struct SiteIdentity {
 /// Pick site id + display name out of the `/what` `source` attribute:
 /// comma-separated "TYP:value" identifier pairs (spec Table 3), e.g.
 /// "WMO:02606,RAD:SE50,PLC:Karlskrona,NOD:sekkr". Preference is
-/// NOD > RAD > WMO regardless of pair order: operational files (RMI
+/// NOD > RAD > WMO regardless of pair order — operational files (RMI
 /// Belgium, met.no) list WMO first but NOD is the canonical OPERA site
 /// code (validated against bejab/norst sample volumes).
 pub(crate) fn site_identity_from_source(source: &str) -> SiteIdentity {

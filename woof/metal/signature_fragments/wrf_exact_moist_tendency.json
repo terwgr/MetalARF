@@ -1,0 +1,73 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_moist_tendency",
+      "module": "moist",
+      "source": "woof/metal/shaders/wrf_exact_moist_tendency.metal",
+      "cuda_source": "woof/core/moist.py",
+      "cuda_symbol": "_advance_species_wrf",
+      "resources": [
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "tend": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "source": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

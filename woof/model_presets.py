@@ -1,0 +1,426 @@
+"""Source-pinned model configurations, read from packaged metadata.
+
+The registry distinguishes a configuration specification from a qualified
+runtime. Export never substitutes schemes or disables requested switches.
+Unimplemented requirements refuse a launch before allocating a device.
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime
+import json
+from pathlib import Path
+import re
+from urllib.parse import urlparse
+from urllib.request import urlopen
+
+REGISTRY = Path(__file__).with_name("data") / "model_presets" / "registry.v1.json"
+SCHEMA = "gpuwm-model-presets-v1"
+#: A declared divergence is physics that runs its own way rather than the
+#: pinned source (the 2026-08-20 ruling: physics parity is retired, the
+#: verification of record is observation skill), or the hex dycore that
+#: ruling keeps pinned to MPAS-A v8.4.1 instead of a fork's own MPAS.  It is reported by every
+#: verb that reports blockers, and never blocks a launch: what keeps it
+#: in view is that it is named, not that it refuses.
+DIVERGENCE_KEYS = ("id", "component", "pinned", "runs", "reason", "follow_up")
+#: A runtime row names the package that carries its runners and the release
+#: range they were written for.  THE BREAKAGE THIS PREVENTS (2.9.0 door
+#: audit): with no woof hex installed, ``preset list`` and ``preset check``
+#: said the preset was launchable with 0 blockers, then ``preset prepare``
+#: stopped with "runner 'woof.hex.preset_prepare' is not installed"; and
+#: woof hex 0.3.3, the newest release a bare ``pip install woof hex``
+#: could reach, ships neither runner.
+PAIRED_KEYS = ("distribution", "minimum", "below")
+
+
+def load_registry() -> dict:
+    document = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    if document.get("schema") != SCHEMA:
+        raise ValueError("model preset registry schema differs")
+    names = set()
+    for row in document["presets"]:
+        if row["id"] in names:
+            raise ValueError("duplicate model preset identifier")
+        names.add(row["id"])
+        heights = row["vertical"]["interfaces_m"]
+        if (len(heights) != row["vertical"]["layers"] + 1
+                or heights[0] != 0
+                or any(a >= b for a, b in zip(heights, heights[1:]))
+                or heights[-1] != row["vertical"]["top_m"]):
+            raise ValueError("model preset vertical interfaces disagree with layer count or top")
+        for requirement in row["requirements"]:
+            if type(requirement["implemented"]) is not bool or not requirement["breakage"]:
+                raise ValueError("every model preset requirement needs an implementation flag and breakage")
+        if not row["requirements"]:
+            raise ValueError("a model preset must declare its runtime requirements")
+        identifiers = [requirement["id"] for requirement in row["requirements"]]
+        for divergence in row.get("declared_divergences", []):
+            if set(divergence) != set(DIVERGENCE_KEYS) or not all(
+                    isinstance(divergence[key], str) and divergence[key]
+                    for key in DIVERGENCE_KEYS):
+                raise ValueError(
+                    "every declared divergence names its component, the pinned source, "
+                    "what runs instead, why and the follow-up")
+            identifiers.append(divergence["id"])
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("model preset requirement and divergence identifiers collide")
+        runtime = row.get("runtime")
+        if runtime is not None:
+            paired = runtime.get("paired_package")
+            if (not isinstance(paired, dict) or set(paired) != set(PAIRED_KEYS)
+                    or not all(isinstance(paired[key], str) and paired[key]
+                               for key in PAIRED_KEYS)
+                    or not _release(paired["minimum"]) < _release(paired["below"])):
+                raise ValueError(
+                    "a model preset runtime row names the package that carries its runners "
+                    "and the release range they were written for")
+    return document
+
+
+def preset(name: str) -> dict:
+    for row in load_registry()["presets"]:
+        if row["id"] == name:
+            return row
+    raise ValueError(f"unknown model preset {name!r}")
+
+
+def _release(version: str) -> tuple[int, ...]:
+    match = re.match(r"\d+(?:\.\d+)*", version)
+    if match is None:
+        raise ValueError(f"not a release version: {version!r}")
+    numbers = [int(part) for part in match.group(0).split(".")]
+    while len(numbers) > 1 and numbers[-1] == 0:
+        numbers.pop()
+    return tuple(numbers)
+
+
+def _in_range(version: str, minimum: str, below: str) -> bool:
+    try:
+        from packaging.version import InvalidVersion, Version
+    except ImportError:
+        try:
+            return _release(minimum) <= _release(version) < _release(below)
+        except ValueError:
+            return False
+    try:
+        return Version(minimum) <= Version(version) < Version(below)
+    except InvalidVersion:
+        return False
+
+
+def _distribution_version(distribution: str) -> str | None:
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
+
+
+def _module_error(module: str) -> str | None:
+    """Why ``module`` cannot be imported, or ``None`` when it can be found.
+
+    ``find_spec`` imports the parent packages, so a package whose own import
+    fails is reported with its error rather than as merely absent.
+    """
+    from importlib.util import find_spec
+    try:
+        if find_spec(module) is not None:
+            return None
+        return "it is not installed"
+    except ModuleNotFoundError as error:
+        if error.name and (module == error.name or module.startswith(error.name + ".")):
+            return "it is not installed"
+        return f"importing it fails: {type(error).__name__}: {error}"
+    except Exception as error:  # a broken parent package is a finding, not a crash
+        return f"importing it fails: {type(error).__name__}: {error}"
+
+
+def paired_package(row: dict) -> dict | None:
+    """The package a runtime row runs through, and the installed release."""
+    runtime = row.get("runtime")
+    if runtime is None:
+        return None
+    paired = runtime["paired_package"]
+    installed = _distribution_version(paired["distribution"])
+    requires = f">={paired['minimum']},<{paired['below']}"
+    return {"distribution": paired["distribution"], "requires": requires,
+            "installed": installed,
+            "install": f'pip install "{paired["distribution"]}{requires}"'}
+
+
+def install_blockers(row: dict) -> list[dict]:
+    """What on this machine stops the row's runners, before any GPU is touched.
+
+    A runner that will not import, or a paired package outside the range the
+    row's runners were written for, blocks ``prepare`` and ``run`` exactly as
+    an unimplemented requirement does, so ``list`` and ``check`` say so.
+    """
+    paired = paired_package(row)
+    if paired is None:
+        return []
+    runtime = row["runtime"]
+    name, installed = paired["distribution"], paired["installed"]
+    blockers = []
+    if installed is not None and not _in_range(
+            installed, runtime["paired_package"]["minimum"],
+            runtime["paired_package"]["below"]):
+        blockers.append({
+            "id": "paired-package-release",
+            "implemented": False,
+            "site": f"{name} {installed}",
+            "breakage": (f"{name} {installed} is installed; this preset's preparation and "
+                         f"forecast runners are the ones {name}{paired['requires']} ships"),
+            "remedy": paired["install"]})
+    for key, verb in (("prepare_module", "prepare"), ("runner_module", "run")):
+        module = runtime.get(key)
+        if not module:
+            continue
+        error = _module_error(module)
+        if error is None:
+            continue
+        where = (f"{name} is not installed" if installed is None
+                 else f"{name} {installed} is installed")
+        blockers.append({
+            "id": f"{verb}-runner-importable",
+            "implemented": False,
+            "site": module,
+            "breakage": f"`woof preset {verb}` runs {module}, and {error} ({where})",
+            "remedy": paired["install"]})
+    return blockers
+
+
+def launch_blockers(row: dict) -> list[dict]:
+    return ([requirement for requirement in row["requirements"]
+             if not requirement["implemented"]] + install_blockers(row))
+
+
+def declared_divergences(row: dict) -> list[dict]:
+    return list(row.get("declared_divergences", []))
+
+
+def verify_sources(row: dict) -> list[dict]:
+    """Verify pinned public source bytes, not forecast or implementation parity."""
+    import hashlib
+    results = []
+    for source in row["sources"]:
+        parsed = urlparse(source["url"])
+        parts = parsed.path.strip("/").split("/")
+        if (parsed.scheme != "https" or parsed.netloc != "github.com"
+                or len(parts) < 5 or parts[2] != "blob"
+                or re.fullmatch(r"[0-9a-f]{40}", parts[3]) is None
+                or parsed.query or parsed.fragment):
+            raise ValueError("model preset source must name a pinned public GitHub blob")
+        url = "https://raw.githubusercontent.com/" + "/".join(parts[:2] + parts[3:])
+        try:
+            with urlopen(url, timeout=30) as stream:
+                payload = stream.read(2_000_001)
+            if len(payload) > 2_000_000:
+                raise ValueError("model preset source exceeds the metadata source size limit")
+            actual = hashlib.sha256(payload).hexdigest()
+            results.append({"url": source["url"], "sha256": actual,
+                            "matches": actual == source["sha256"]})
+        except OSError as error:
+            results.append({"url": source["url"], "matches": False,
+                            "error": str(error)})
+    return results
+
+
+def _fortran(value) -> str:
+    if type(value) is bool:
+        return ".true." if value else ".false."
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        import math
+        if not math.isfinite(value):
+            raise ValueError("non-finite model preset namelist value")
+        return repr(value)
+    if isinstance(value, str) and not any(c in value for c in "\r\n\x00"):
+        return "'" + value.replace("'", "''") + "'"
+    raise ValueError("unsupported model preset namelist value")
+
+
+def namelist(row: dict, *, start: str, seconds: int) -> str:
+    """Emit the requested native configuration without changing its physics."""
+    try:
+        parsed = datetime.strptime(start, "%Y-%m-%d_%H:%M:%S")
+    except ValueError as error:
+        raise ValueError("start must be UTC YYYY-MM-DD_HH:MM:SS") from error
+    if parsed.strftime("%Y-%m-%d_%H:%M:%S") != start:
+        raise ValueError("start must use zero-padded UTC fields")
+    dt = row["namelist"]["nhyd_model"]["config_dt"]
+    if type(seconds) is not int or seconds <= 0 or seconds % dt:
+        raise ValueError(f"seconds must be a positive integer multiple of timestep {dt}")
+    days, rest = divmod(seconds, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes, rest = divmod(rest, 60)
+    duration = f"{days:03d}_{hours:02d}:{minutes:02d}:{rest:02d}"
+    identifier = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
+    lines = []
+    for group, settings in row["namelist"].items():
+        if not identifier.fullmatch(group):
+            raise ValueError("invalid model preset namelist group")
+        settings = dict(settings)
+        if group == "nhyd_model":
+            settings.update(config_start_time=start, config_run_duration=duration)
+        lines.append("&" + group)
+        for key, value in settings.items():
+            if not identifier.fullmatch(key):
+                raise ValueError("invalid model preset namelist key")
+            lines.append(f"    {key} = {_fortran(value)}")
+        lines.append("/")
+    return "\n".join(lines) + "\n"
+
+
+def main(args: argparse.Namespace) -> int:
+    if args.preset_action == "list":
+        print(json.dumps({"schema": SCHEMA, "presets": [
+            {"id": row["id"], "status": row["status"],
+             "launchable": not launch_blockers(row)}
+            for row in load_registry()["presets"]]}, indent=2))
+        return 0
+    row = preset(args.name)
+    if args.preset_action == "prepare":
+        import subprocess
+        return subprocess.call(prepare_command(row, args))
+    if args.preset_action == "run":
+        blockers = launch_blockers(row)
+        # --experimental runs past unmet physics requirements; nothing runs past
+        # a runner that is not there.
+        if blockers and (install_blockers(row) or not args.experimental):
+            print(json.dumps({"preset": row["id"], "launchable": False,
+                              "blockers": blockers,
+                              "paired_package": paired_package(row),
+                              "declared_divergences": declared_divergences(row)},
+                             indent=2))
+            return 3
+        command = launch_command(row, args)
+        import subprocess
+        return subprocess.call(command)
+    if args.preset_action == "show":
+        print(json.dumps(row, indent=2))
+        return 0
+    if args.preset_action == "verify-sources":
+        results = verify_sources(row)
+        print(json.dumps({"preset": row["id"], "sources": results}, indent=2))
+        return 0 if all(item["matches"] for item in results) else 3
+    if args.preset_action == "check":
+        blockers = launch_blockers(row)
+        print(json.dumps({"preset": row["id"], "status": row["status"],
+                          "launchable": not blockers, "blockers": blockers,
+                          "paired_package": paired_package(row),
+                          "declared_divergences": declared_divergences(row)}, indent=2))
+        return 3 if blockers else 0
+    text = namelist(row, start=args.start, seconds=args.seconds)
+    if args.out is None:
+        print(text, end="")
+    else:
+        # Never truncate an existing configuration through an export command.
+        with args.out.open("x", encoding="utf-8", newline="\n") as stream:
+            stream.write(text)
+    return 0
+
+
+def register_cli(subparsers) -> None:
+    command = subparsers.add_parser(
+        "preset", help="inspect and export source-pinned model configurations")
+    verbs = command.add_subparsers(dest="preset_action", required=True)
+    listing = verbs.add_parser("list", help="list specifications and launch status")
+    listing.set_defaults(func=main)
+    for action in ("show", "check", "verify-sources"):
+        verb = verbs.add_parser(action, help={
+            "show": "show settings, sources and requirements",
+            "check": "report unmet runtime requirements without allocating a GPU",
+            "verify-sources": "verify the pinned public metadata source hashes"}[action])
+        verb.add_argument("name")
+        verb.set_defaults(func=main)
+    export = verbs.add_parser("export", help="emit native namelist without substitutions")
+    export.add_argument("name")
+    export.add_argument("--start", required=True, help="UTC YYYY-MM-DD_HH:MM:SS")
+    export.add_argument("--seconds", required=True, type=int)
+    export.add_argument("--out", type=Path)
+    export.set_defaults(func=main)
+    prepare = verbs.add_parser("prepare", help="prepare public inputs through the paired hex package")
+    prepare.add_argument("name")
+    prepare.add_argument("--cycle", required=True, help="UTC YYYYMMDDHH")
+    prepare.add_argument("--mesh", required=True)
+    prepare.add_argument("--hours", type=int, default=6)
+    prepare.add_argument("--out", type=Path, required=True)
+    prepare.set_defaults(func=main)
+    run = verbs.add_parser("run", help="run a table-defined configuration through the hex forecast door")
+    run.add_argument("name")
+    run.add_argument("--experimental", action="store_true",
+                     help="run despite unmet requirements; a preset with none launches without it")
+    run.add_argument("--mesh", required=True)
+    for name in ("grid", "static", "init", "lbc-dir", "invariant", "out"):
+        run.add_argument("--" + name, type=Path, required=True)
+    run.add_argument("--start-time", required=True)
+    run.add_argument("--init-source", required=True)
+    run.add_argument("--hours", type=float, required=True)
+    run.add_argument("--history-every-minutes", type=int, default=60)
+    run.add_argument("--card", required=True)
+    run.add_argument("--fingerprint-every", type=int,
+                     help="full-field hash cadence in steps; defaults to each history endpoint")
+    run.set_defaults(func=main)
+
+
+def _refuse_on_install_blockers(row: dict) -> None:
+    blockers = install_blockers(row)
+    if blockers:
+        raise ValueError("; ".join(item["breakage"] for item in blockers)
+                         + f"; install the paired package: {blockers[0]['remedy']}")
+
+
+def launch_command(row: dict, args: argparse.Namespace) -> list[str]:
+    """Translate one metadata arm into the existing measured forecast door.
+
+    The experimental arm carries all source refusals in its measurement receipt.
+    It never changes the native specification or registers an earned anchor.
+    """
+    import math
+    import sys
+    runtime = row.get("runtime")
+    if runtime is None or args.mesh not in runtime["meshes"]:
+        raise ValueError("model preset has no runtime row for the requested mesh")
+    settings = runtime["meshes"][args.mesh]
+    dt = settings["dt_seconds"]
+    seconds = args.hours * 3600
+    if (not math.isfinite(seconds) or seconds <= 0
+            or abs(seconds / dt - round(seconds / dt)) > 1e-9):
+        raise ValueError("hours must contain a positive whole number of model steps")
+    datetime.strptime(args.start_time, "%Y-%m-%d_%H:%M:%S")
+    root = Path(__file__).resolve().parents[1]
+    module = runtime["runner_module"]
+    _refuse_on_install_blockers(row)
+    fingerprint = getattr(args, "fingerprint_every", None)
+    if fingerprint is None:
+        fingerprint = int(round(args.history_every_minutes * 60 / dt))
+    if fingerprint < 1:
+        raise ValueError("fingerprint cadence must be positive to retain matched endpoint hashes")
+    command = [sys.executable, "-m", module, "--measurement-mint", "--dt", str(dt),
+               "--card", args.card, "--fingerprint-every", str(fingerprint), "--report",
+               str(args.out.with_name(args.out.name + ".measurement.json")), "--", "forecast",
+               "--mesh", args.mesh, "--physics-suite", runtime["physics_suite"],
+               "--gpuwm-checkout", str(root), "--scratch",
+               str(args.out.with_name(args.out.name + "-scratch")), "--stop-on-refusal"]
+    for flag in ("grid", "static", "init", "lbc_dir", "invariant", "out",
+                 "start_time", "init_source", "hours", "history_every_minutes"):
+        command.extend(["--" + flag.replace("_", "-"), str(getattr(args, flag))])
+    for flag, value in {**runtime["forecast_options"], **settings["forecast_options"]}.items():
+        if isinstance(value, bool):
+            if value:
+                command.append("--" + flag)
+        else:
+            command.extend(["--" + flag, str(value)])
+    return command
+
+
+def prepare_command(row: dict, args: argparse.Namespace) -> list[str]:
+    """Select only the packaged preparation entry and its metadata row."""
+    import sys
+    runtime = row.get("runtime", {})
+    module = runtime.get("prepare_module")
+    if not module or args.mesh not in runtime.get("meshes", {}):
+        raise ValueError("model preset has no preparation row for this mesh")
+    _refuse_on_install_blockers(row)
+    return [sys.executable, "-m", module, "--source-profile", runtime["source_profile"],
+            "--physics-suite", runtime["physics_suite"], "--cycle", args.cycle,
+            "--mesh", args.mesh, "--hours", str(args.hours), "--out", str(args.out)]

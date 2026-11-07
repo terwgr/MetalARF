@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 def submit_prepare_physics_atmosphere(state):
@@ -80,13 +81,13 @@ def submit_prepare_physics_atmosphere(state):
         raise TypeError("Metal total_mu preparation did not return a MetalArray")
 
     context.submit_kernel(
-        "physics_atmosphere_prepare", arrays,
+        "wrf_exact_physics_atmosphere_prepare" if WRF_EXACT else "physics_atmosphere_prepare", arrays,
         {"nz": nz, "ny": ny, "nx": nx,
          "thb_3d": int(len(state.thb.shape) == 3),
          "phb_3d": int(len(state.phb.shape) == 3),
          **{f"has_{name}": has[name] for name in species},
          "p_top": np.float32(state.p_top)},
-        exact_policy=False, grid_size=ny * nx)
+        exact_policy=WRF_EXACT, grid_size=ny * nx)
 
     return {
         "theta": outputs["theta"], "temperature": outputs["temperature"],

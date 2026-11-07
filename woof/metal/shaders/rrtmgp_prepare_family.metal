@@ -7,6 +7,7 @@
 #include "rrtmgp_prepare_pack_columns_bindings.metalh"
 #include "rrtmgp_prepare_clamp_top_bindings.metalh"
 #include "rrtmgp_prepare_interface_temperatures_bindings.metalh"
+#include "exact_binary32.metalh"
 #include "soft_libm64.metalh"
 
 using namespace metal;
@@ -70,6 +71,16 @@ static inline ulong prep_d32(float value) {
     return soft64_from_f32_bits(as_type<uint>(value));
 }
 
+static inline float lw_upper_pressure(float top, float floor, int nlay, int level) {
+    if (level == 0) return top;
+    if (level == nlay) return floor;
+    if (top - 400.0f * float(nlay - 1) <= floor) {
+        const Exact32 fraction = Exact32(float(level)) / Exact32(float(nlay));
+        return as_type<float>((Exact32(top) + (Exact32(floor) - Exact32(top)) * fraction).bits);
+    }
+    return top - 400.0f * float(level);
+}
+
 static inline ulong prep_interp_climo(float pressure_hpa,
                                       device const float *p,
                                       device const float *t, int n) {
@@ -99,10 +110,8 @@ inline ulong prepare_lw_interface_temperature(constant R &r,
     if (lev <= m)
         return prep_d32(r.tlev[col * (m + 1) + lev]);
 
-    const int j = lev - m - 1;
     const float top = r.plev[col * (m + 1) + m];
-    float pressure = top - 400.0f * float(j + 1);
-    if (j == u - 1) pressure = p.pressure_floor;
+    const float pressure = lw_upper_pressure(top, p.pressure_floor, u, lev - m);
     const ulong climo_top = prep_interp_climo(
         top * 0.01f, r.climo_pressure, r.climo_temperature, p.nclimo);
     const ulong climo_lev = prep_interp_climo(
@@ -124,10 +133,8 @@ inline void prepare_lw_cell(constant R &r, constant P &p, uint index) {
         r.out_plev[outlev] = r.plev[col * (m + 1) + lev];
         r.out_tlev[outlev] = prep_d32(r.tlev[col * (m + 1) + lev]);
     } else {
-        const int j = lev - m - 1;
         const float top = r.plev[col * (m + 1) + m];
-        float pressure = top - 400.0f * float(j + 1);
-        if (j == u - 1) pressure = p.pressure_floor;
+        const float pressure = lw_upper_pressure(top, p.pressure_floor, u, lev - m);
         r.out_plev[outlev] = pressure;
         const float ptop_hpa = top * 0.01f;
         const float plev_hpa = pressure * 0.01f;
@@ -148,9 +155,8 @@ inline void prepare_lw_cell(constant R &r, constant P &p, uint index) {
         } else {
             const int j = lev - m;
             const float top = r.plev[col * (m + 1) + m];
-            const float lower = top - 400.0f * float(j);
-            float upper = top - 400.0f * float(j + 1);
-            if (j == u - 1) upper = p.pressure_floor;
+            const float lower = lw_upper_pressure(top, p.pressure_floor, u, j);
+            const float upper = lw_upper_pressure(top, p.pressure_floor, u, j + 1);
             r.out_play[outcell] = 0.5f * (lower + upper);
             r.out_qv[outcell] = r.qv[col * m + m - 1];
             // Neighboring interface temperatures are written by other

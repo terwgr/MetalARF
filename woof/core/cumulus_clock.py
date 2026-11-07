@@ -98,26 +98,30 @@ _ADVANCE = None
 _CLEAR = None
 
 
+def _compile_kernel(source, operation):
+    import cupy as cp
+    from woof.certify.kernel_manifest import record_module
+    from woof.core.kernels import _compile_observed
+
+    module = cp.RawModule(code=source, options=())
+    key = f"woof.core.cumulus_clock:{operation}"
+    _compile_observed(module, key)
+    record_module(key, source=source, options=(), module=module)
+    return module.get_function(f"cumulus_clock_{operation}")
+
+
+def _advance_kernel():
+    return _compile_kernel(_ADVANCE_SOURCE, "advance")
+
+
+def _clear_kernel():
+    return _compile_kernel(_CLEAR_SOURCE, "clear")
+
+
 def _kernels():
     global _ADVANCE, _CLEAR
     if _ADVANCE is None:
-        import cupy as cp
-        from woof.certify.kernel_manifest import record_module
-        from woof.core.kernels import _compile_observed
-
-        # Forecast translation units, so the kernel manifest records them
-        # (tests/test_kernel_manifest.py SITE_FILES): RawModules, the
-        # compile a RawKernel of the same source and options makes.
-        advance = cp.RawModule(code=_ADVANCE_SOURCE, options=())
-        _compile_observed(advance, "woof.core.cumulus_clock:advance")
-        record_module("woof.core.cumulus_clock:advance",
-                      source=_ADVANCE_SOURCE, options=(), module=advance)
-        clear = cp.RawModule(code=_CLEAR_SOURCE, options=())
-        _compile_observed(clear, "woof.core.cumulus_clock:clear")
-        record_module("woof.core.cumulus_clock:clear",
-                      source=_CLEAR_SOURCE, options=(), module=clear)
-        _ADVANCE = advance.get_function("cumulus_clock_advance")
-        _CLEAR = clear.get_function("cumulus_clock_clear")
+        _ADVANCE, _CLEAR = _advance_kernel(), _clear_kernel()
     return _ADVANCE, _CLEAR
 
 

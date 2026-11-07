@@ -262,14 +262,24 @@ def test_sources_are_resolvable_and_public_reference_covers_every_recipe():
             source = citations[key]
             assert source["title"] and source["publisher"] and source["supports"]
             if not source["url"].startswith("https://"):
-                assert (ROOT / source["url"]).is_file()
+                # the catalog is a data record and keeps the engine's package path (gpuwm/...);
+                # in this tree the package is woof/
+                url = source["url"]
+                if url.startswith("gpuwm/") and not (ROOT / url).exists():
+                    url = "woof/" + url[len("gpuwm/"):]
+                from _woof_snapshot import left_out
+                if left_out(url):
+                    continue  # a cited source this tree leaves out (the terminal UI's own sources)
+                assert (ROOT / url).is_file(), source["url"]
 
 
 def test_research_capability_manifest_is_bound_to_the_actual_import_and_window_contracts():
     assert CAPABILITIES["schema"] == "arwen.research.diagnostics.v1"
     assert CAPABILITIES["authority_normalization"] == "UTF-8 with LF line endings"
     for path, expected in CAPABILITIES["authority"].items():
-        assert hashlib.sha256((ROOT / path).read_text(encoding="utf-8").encode("utf-8")).hexdigest() == expected, path
+        assert hashlib.sha256((ROOT / path).read_text(encoding="utf-8").encode("utf-8")).hexdigest() == expected, (
+            f"{path}: review the import/window contracts, then run "
+            "python -m tools.battery.record_research_authority")
     assert {name for name in RESEARCH_PRODUCTS if not name.startswith("var:")} <= NATIVE_PRODUCTS
     assert {name for name in RESEARCH_PRODUCTS if name.startswith("var:")} == {
         "var:wrf_lapse_rate_0_3km", "var:wrf_lapse_rate_700_500"}

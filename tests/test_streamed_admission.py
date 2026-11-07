@@ -539,13 +539,81 @@ def test_check_on_a_config_that_does_not_stream_is_byte_identical(
     # hundredths of this config's 10,617,756,432 B subtotal).
     # The atmosphere's separate density array adds 4*49*550*550 =
     # 59,290,000 B, or 66,997,700 B with the unchanged 1.13 pool margin.
-    assert payload["peak_envelope_bytes"] == 15231327813
-    assert payload["observed_peak_envelope_bytes"] == 15231327813
-    assert payload["alloc_estimate_bytes"] == 12065062469
+    # RULINGS 1 (history CLDFRA, 2.8.7): the driver's held (nz, ny, nx)
+    # radiation cloud-fraction buffer is priced too, another 4*49*550*550 =
+    # 59,290,000 B, or 66,997,700 B with the margin, on every number below.
+    # The strict health gate's rim geometry table (strict-ncar-health,
+    # a677ad4e1) is the integration_health_rim scratch slot, (1024, 3) FP32
+    # words = 12,288 B per domain, 13,885 B of estimate and of envelope with
+    # the 1.13 pool margin.  With only that slot removed from
+    # scratch_slot_registry this config reproduces every previous pin.
+    # The WRF exact chain's history rows (2.9.1) add P_HYD and RTHRATEN, two
+    # 4*49*550*550 = 59,290,000 B planes, eight 550x550 surface planes (the
+    # ACHFX/ACLHF/ACGRDFLX accumulators, SST, SSTSK, SWNORM, XICEM, REFD_MAX)
+    # and six 0-d SCM forcing scalars: 128,260,024 B, 144,934,935 B with the
+    # 1.13 pool margin (15,417,758,278 before).  Its 3-D PBL and cumulus
+    # tendency rows are strict-only (physics_inventory.history_tendency_rows).
+    # The retention residual carries 3 % of that addition (4,348,048 B), and the
+    # history frame grows by the chain rows written (1,447,476,780 B before).
+    # The WRF 4.6.1 Kain-Fritsch port (golden/parity, lane/verify-kain-fritsch)
+    # keeps 66 column arrays in its workspace where the kernel it replaced
+    # kept 52: 14 * 49 levels * (170 SMs * 256 columns) * 4 B = 119,418,880 B
+    # more reserve on this configuration, which runs KF on its root.  The
+    # allocation estimate does not move.
+    # The six 0-d SCM forcing scalars (24 B) are strict-only too (scm_forcing_fields).
+    # 2.9.2 RRTMGP boundary flux history (830a31ec155) adds 33 surface
+    # carriers, 39,930,000 B, plus a 19,360,000 B boundary-flux stack
+    # and 14,875,000 B of chunk-local clear-sky transients. The 74,165,000 B
+    # subtotal adds 83,806,450 B after the unchanged 1.13 pool margin.
+    # This mp=10 fixture has no WSM6 workspace contribution.
+    # Shared tendency backings (c563a6f8860, 2.9.3): radiation's logical
+    # zero ru/rv/rqv/rqc share one contiguous backing and held KF's ru/rv
+    # another, so each backing is priced once at its largest shape.  The
+    # radiation rv, rqv and rqc planes and the KF rv plane leave the
+    # subtotal: 59,397,800 + 2 x 59,290,000 + 59,397,800 = 237,375,600 B,
+    # or 268,234,428 B of estimate and of envelope with the unchanged
+    # 1.13 pool margin (15,646,499,635 before).
+    # 04e65faa5ff (cap-solar): default SWDDIR/SWDDNI/SWDDIF history, three
+    # 550x550 FP32 planes, 3,630,000 B.  97e9a3ca061 (cap-hail): HAILCAST is
+    # automatic at this 3-km spacing; its persistent and rebuilt diagnostic
+    # slots are 17 550x550 planes (20,570,000 B) and four 49x550x550 volumes
+    # (hail_density/height/temperature/zero, 237,160,000 B).  The 261,360,000
+    # B subtotal is 295,336,800 B with the 1.13 pool margin (12,092,580,983
+    # before).  The hail kernel's 7,392-B frame is now the widest (Morrison
+    # 5,120 B): (7,392 - 5,120) * 170 SMs * 1,536 threads = 593,264,640 B more
+    # local-memory reservation, so the envelope moves by 888,601,440 B
+    # (15,378,265,207 before).
+    # 2.9.7 HN1 (F22, dac8d35028): the specified ring forces a Morrison
+    # number back with its mass, so the boundary tables now carry nr/ni/ns/ng
+    # beside the five masses: 4 x 2 x (2 x 49 x 550 x 5 + 2 x 49 x 5 x 550)
+    # FP32 = 17,248,000 B for the retained interval, 19,490,240 B with the
+    # 1.13 pool margin (16,266,866,647 before).
+    # paper/conus-suite-exact (2.9.11): the stored MF_VX_INV plane msfv_inv,
+    # 4 x 551 x 550 = 1,212,200 B, 1,369,786 B with the 1.13 pool margin
+    # (16,286,356,887 before).
+    assert payload["peak_envelope_bytes"] == 16287726673
+    assert payload["observed_peak_envelope_bytes"] == 16287726673
+    # HN1's four Morrison number tables (above) move the estimate by the
+    # same 19,490,240 B (12,387,917,783 before).
+    # paper/conus-suite-exact (2.9.11): msfv_inv moves it by the same 1,369,786 B.
+    assert payload["alloc_estimate_bytes"] == 12408777809
     # The reserve's 0.03 retention term follows the estimate: A163 moved
     # it by 0.03 x -212,355,128 = -6,370,653 B.
-    # The density addition raises its retention reserve by 2,009,931 B.
-    assert payload["reserve_bytes"] == 3528217219
+    # The density addition raises its retention reserve by 2,009,931 B, and
+    # the CLDFRA buffer by the same 2,009,931 B again; the rim table by
+    # 416 B.
+    # The SCM scalars leaving the default estimate move the 0.03 retention term by 1 B.
+    # The RRTMGP addition raises its 0.03 retention reserve by 2,514,194 B.
+    # The shared tendency backings lower it by 0.03 x 268,234,428 =
+    # 8,047,033 B.
+    # The cap-solar + cap-hail allocations raise it by 0.03 x 295,336,800 =
+    # 8,860,104 B and the hail frame's local memory by 593,264,640 B
+    # (3,648,461,654 before).
+    # HN1's number tables raise it by 0.03 x 19,490,240 = 584,707 B
+    # (4,250,586,398 before).
+    # msfv_inv (paper/conus-suite-exact, 2.9.11) raises it by 0.03 x 1,369,786
+    # = 41,094 B (4,251,171,105 before).
+    assert payload["reserve_bytes"] == 4251212199
     assert payload["budget_bytes"] == _FITS_STREAMED_GIB * GIB
     assert payload["gates"]["alloc_estimate_le_wddm_budget"] is False
     assert rc == 1
@@ -562,7 +630,9 @@ def test_check_on_a_config_that_does_not_stream_is_byte_identical(
     assert (estimate.domains[0].category_bytes("lbc")
             - preflight.estimate_experiment(
                 exp, vram_gib=None).domains[0].category_bytes("lbc")
-            == 21_560_000)
+            # five masses, plus HN1's four Morrison numbers forced back with
+            # them (17,248,000 B, 2.9.7)
+            == 21_560_000 + 17_248_000)
     assert payload["alloc_estimate_bytes"] == estimate.alloc_estimate_bytes
 
     # Attribution control. Before 267900003, domain_kernel_modules checked
@@ -579,7 +649,9 @@ def test_check_on_a_config_that_does_not_stream_is_byte_identical(
             == radiation_modules)
     assert radiation_modules <= set(frames)
     assert frames["rrtmgp_rte"] == 3600
-    assert frames["morrison"] == max(frames.values()) == 5120
+    # cap-hail (97e9a3ca061): the automatic HAILCAST frame is the widest.
+    assert frames["hail"] == max(frames.values()) == 7392
+    assert frames["morrison"] == 5120
     with monkeypatch.context() as old_accounting:
         # Remove only the newly reachable module accounting, preserving all
         # physics selectors, arrays, workspace prices and admission logic.
@@ -588,7 +660,7 @@ def test_check_on_a_config_that_does_not_stream_is_byte_identical(
         old_frames = preflight.kernel_local_frame_bytes(exp)
         assert old_frames == {name: size for name, size in frames.items()
                               if name not in radiation_modules}
-        assert old_frames["morrison"] == max(old_frames.values()) == 5120
+        assert old_frames["hail"] == max(old_frames.values()) == 7392
         old_estimate = preflight.estimate_experiment(
             exp, vram_gib=None, boundary_species=species)
         old_rc, old_payload = _check(capsys, config, "--budget-gib",
@@ -597,11 +669,12 @@ def test_check_on_a_config_that_does_not_stream_is_byte_identical(
     # The command without the radiation modules gives every pin above,
     # with the same refusal: they are narrower than Morrison, so they
     # change nothing this configuration is charged. The density allocation
-    # and its unchanged pool and retention margins remain present in both.
-    assert old_payload["peak_envelope_bytes"] == 15231327813
-    assert old_payload["observed_peak_envelope_bytes"] == 15231327813
-    assert old_payload["alloc_estimate_bytes"] == 12065062469
-    assert old_payload["reserve_bytes"] == 3528217219
+    # and its unchanged pool and retention margins remain present in both,
+    # as does the priced CLDFRA buffer, and the strict-rim health table.
+    assert old_payload["peak_envelope_bytes"] == 16287726673
+    assert old_payload["observed_peak_envelope_bytes"] == 16287726673
+    assert old_payload["alloc_estimate_bytes"] == 12408777809
+    assert old_payload["reserve_bytes"] == 4251212199
     assert old_rc == rc == 1
     assert old_estimate == estimate
     for key in ("peak_envelope_bytes", "observed_peak_envelope_bytes",
@@ -666,7 +739,12 @@ def test_an_unconfigured_run_is_priced_exactly_as_it_always_was(tmp_path):
 #: the omission admits and the run dies on, and the FORECAST is what has
 #: to bind here or the leg is measuring the ingest term instead.  The
 #: tests do not pin either figure: they re-add both from the terms.
-_FITS_STEADY_NOT_PEAK_BYTES = int(9.0 * GIB)
+#: 9.0 GiB until 97e9a3ca061 (cap-hail): automatic HAILCAST at 3 km adds
+#: its diagnostic slots and the widest (7,392-B) kernel frame to the hold
+#: between radiation calls, 8.54 -> 9.24 GB (9,237,835,900 B), past the
+#: 9.13-GB sizing budget 9.0 GiB gives; the peak is 13.45 GB.  9.5 GiB
+#: (9.66-GB budget) straddles them again.
+_FITS_STEADY_NOT_PEAK_BYTES = int(9.5 * GIB)
 
 #: ``--budget-gib`` whose 8.80 GiB envelope budget straddles the same
 #: pair: the hold without radiation storage fits it and the priced peak

@@ -38,6 +38,11 @@ NATIVE_STATIC_REQUIRED = frozenset({
     "SOILTEMP", "TMN",
 })
 
+# Optional Rust-sampled dust statics travel with a chemistry-enabled prepared
+# footprint. They are one inventory: a partial set cannot rebuild its process
+# state after relocation. An ordinary cache retains exactly its old fields.
+NATIVE_CHEM_STATIC_PLANES = {"EROD": 3, "CLAYFRAC": 1, "SANDFRAC": 1}
+
 # The portable native-static contract is deliberately constrained to the
 # 21-category MODIS/Noah land-use table and the 16-category Noah soil table.
 # These values are the WRF table identities implied by the exact category
@@ -49,6 +54,23 @@ NATIVE_LANDUSE_IDENTITY = {
     "ISLAKE": 21,
     "ISICE": 15,
 }
+
+
+def native_landuse_identity(static=None) -> dict:
+    """:data:`NATIVE_LANDUSE_IDENTITY` for one prepared static.
+
+    The native caches carry the MODIS table.  Its 20-category set without
+    the lake class (the 15 arc-second land use geog_data_res = 'modis_15s'
+    selects) has no category 21, and geogrid writes ISLAKE = -1 for it.
+    Handed the constant's 21, RUC's mosaic land use indexed LANDUSEF[20] of
+    a 20-plane static and the forecast stopped ("index 20 is out of bounds
+    for axis 0 with size 20").  Every other static gets the constant.
+    """
+    identity = dict(NATIVE_LANDUSE_IDENTITY)
+    landusef = None if static is None else static.get("LANDUSEF")
+    if landusef is not None and int(np.shape(landusef)[0]) == 20:
+        identity["ISLAKE"] = -1
+    return identity
 
 _NATIVE_STATIC_MASS_2D = frozenset({
     "HGT_M", "LANDMASK", "LU_INDEX", "SCT_DOM", "SCB_DOM", "SNOALB",
@@ -273,7 +295,8 @@ def write_native_static_cache(
 
 
 def write_native_geometry_receipt(
-        path: Path, grid, cfg, static_path: Path) -> dict[str, object]:
+        path: Path, grid, cfg, static_path: Path, *,
+        terrain_autosmooth=None) -> dict[str, object]:
     """Atomically write the standard geometry/static binding receipt."""
 
     path = Path(path)
@@ -290,6 +313,8 @@ def write_native_geometry_receipt(
         "status": "PASS",
         "geometry": native_geometry_contract(grid, cfg),
         "static_sampling_contract": current_sampling_contract(),
+        **({"terrain_autosmooth": terrain_autosmooth}
+           if terrain_autosmooth is not None else {}),
         "cache": {
             "path": static_path.name,
             "bytes": static_path.stat().st_size,
@@ -339,13 +364,17 @@ def native_static_export_fields(
     """
 
     result = dict(fields)
-    generated = {
-        "MAPFAC_M": grid.mapfac_m(),
-        "MAPFAC_U": grid.mapfac_u(),
-        "MAPFAC_V": grid.mapfac_v(),
-    }
-    generated["F"], generated["E"] = grid.coriolis_m()
-    generated["SINALPHA"], generated["COSALPHA"] = grid.rotation_m()
+    from woof.static.projection import ProjectedGrid
+    if isinstance(grid, ProjectedGrid):
+        generated = grid.native_static_geometry()
+    else:
+        generated = {
+            "MAPFAC_M": grid.mapfac_m(),
+            "MAPFAC_U": grid.mapfac_u(),
+            "MAPFAC_V": grid.mapfac_v(),
+        }
+        generated["F"], generated["E"] = grid.coriolis_m()
+        generated["SINALPHA"], generated["COSALPHA"] = grid.rotation_m()
     for name, value in generated.items():
         if name in result:
             stored = np.asarray(result[name], dtype=np.float64)
@@ -390,13 +419,76 @@ def _landuse_category_count(landusef) -> int:
     classes.  The table identity (MMINLU, ISWATER, ISLAKE, ISICE) is the same
     table's; any other count still fails the shape check below.  Which legend
     a run may use is bound by the prepared-static identity, not here.
+
+    The GEOG tree's MODIS land use without its lake class (the 15
+    arc-second set geog_data_res = 'modis_15s' selects) has 20 categories,
+    as geogrid stamps it; the forecast refused that static ("LANDUSEF has
+    shape (20, ...), expected (21, ...)") until 2.9.1, so NOAA's operational
+    HRRR namelist.wps could import and then not prepare.
     """
+    from woof.static.build import _LANDUSE_CATEGORY_COUNTS
+
     count = int(np.shape(landusef)[0])
+    if count in set(_LANDUSE_CATEGORY_COUNTS.values()):
+        return count
     if count != _NATIVE_STATIC_CATEGORY_COUNT["LANDUSEF"]:
         from woof.core.landuse import load_landuse_table
         if count == int(load_landuse_table().lucats):
             return count
     return _NATIVE_STATIC_CATEGORY_COUNT["LANDUSEF"]
+
+
+# Small archives and caller-provided mappings keep their serial read order.
+_NATIVE_STATIC_PARALLEL_BYTES = 32 * 1024 * 1024
+
+
+def _decode_native_static_fields(fields, names):
+    """Decode large NPZ members concurrently without changing validation."""
+    names = sorted(names)
+    workers = 1
+    if type(fields) is np.lib.npyio.NpzFile and len(names) > 1:
+        members = fields.zip.NameToInfo
+        size = sum(members[name if name in members else name + ".npy"].file_size
+                   for name in names)
+        if size >= _NATIVE_STATIC_PARALLEL_BYTES:
+            available = (len(os.sched_getaffinity(0))
+                         if hasattr(os, "sched_getaffinity") else os.cpu_count())
+            workers = min(8, available or 1, len(names))
+    # Each worker reads through its OWN handle on the archive file.  One
+    # NpzFile shared across threads raced on Python 3.12.3: the forecast of
+    # a full-grid HRRR (1797x1057, 1.93 GB native-static.npz) failed at
+    # preflight with "BadZipFile: Overlapped entries: 'CONLS.npy' (possible
+    # zip bomb)" from zipfile's overlap check reading the shared cursor
+    # (V54, 2026-10-19).  An archive with no file path stays serial.
+    path = getattr(getattr(fields, "zip", None), "filename", None)
+    if workers > 1 and not (isinstance(path, (str, os.PathLike))
+                            and os.path.isfile(path)):
+        workers = 1
+    if workers == 1:
+        return {name: np.asarray(fields[name], dtype=np.float64)
+                for name in names}
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    local = threading.local()
+    opened = []
+    opened_lock = threading.Lock()
+
+    def decode(name):
+        handle = getattr(local, "npz", None)
+        if handle is None:
+            handle = local.npz = np.load(path, allow_pickle=False)
+            with opened_lock:
+                opened.append(handle)
+        return np.asarray(handle[name], dtype=np.float64)
+    # map preserves the serial field/error order, and shutdown joins all
+    # readers before their handles close, including on failure.
+    try:
+        with ThreadPoolExecutor(max_workers=workers,
+                                thread_name_prefix="native-static") as pool:
+            return dict(zip(names, pool.map(decode, names)))
+    finally:
+        for handle in opened:
+            handle.close()
 
 
 def validate_native_static_fields(
@@ -416,17 +508,21 @@ def validate_native_static_fields(
     if missing:
         raise KeyError(f"native static fields are missing {missing}")
     from woof.static.orographic import OROGRAPHIC_ROWS
+    chem_fields = set(NATIVE_CHEM_STATIC_PLANES) & set(fields)
+    if chem_fields and chem_fields != set(NATIVE_CHEM_STATIC_PLANES):
+        raise ValueError(
+            "native static chemistry fields are incomplete: missing "
+            f"{sorted(set(NATIVE_CHEM_STATIC_PLANES) - chem_fields)}")
     # The sub-grid orographic statistics ride the same cache when a domain's
     # terrain-drag options asked the build for them (woof.static.orographic);
     # a cache without them is every other domain's, unchanged.
     retained = (NATIVE_STATIC_REQUIRED
                 | (_NATIVE_STATIC_GEOMETRY & set(fields))
                 | ({"LAKE_DEPTH", "LAKEMASK", "SLOPECAT"} & set(fields))
+                | chem_fields
+                | ({"FRC_URB2D"} & set(fields))
                 | (set(OROGRAPHIC_ROWS) & set(fields)))
-    result = {
-        name: np.asarray(fields[name], dtype=np.float64)
-        for name in sorted(retained)
-    }
+    result = _decode_native_static_fields(fields, retained)
     landuse_categories = _landuse_category_count(result["LANDUSEF"])
     expected_shapes = {
         **{name: (ny, nx) for name in _NATIVE_STATIC_MASS_2D},
@@ -447,6 +543,10 @@ def validate_native_static_fields(
         "LAKE_DEPTH": (ny, nx),
         "LAKEMASK": (ny, nx),
         "SLOPECAT": (ny, nx),
+        "EROD": (3, ny, nx),
+        "CLAYFRAC": (ny, nx),
+        "SANDFRAC": (ny, nx),
+        "FRC_URB2D": (ny, nx),
     }
     for name, value in result.items():
         expected = expected_shapes[name]
@@ -458,6 +558,10 @@ def validate_native_static_fields(
             raise ValueError(f"static field {name} contains non-finite values")
     if not np.isin(result["LANDMASK"], (0.0, 1.0)).all():
         raise ValueError("static field LANDMASK must be exactly binary")
+    if "FRC_URB2D" in result and (
+            result["FRC_URB2D"].min() < 0.0
+            or result["FRC_URB2D"].max() > 1.0):
+        raise ValueError("static field FRC_URB2D is outside 0..1")
     for name, upper in (("LU_INDEX", landuse_categories), ("SCT_DOM", 16),
                         ("SCB_DOM", 16)):
         value = result[name]
@@ -531,18 +635,15 @@ def verify_native_static_receipt(
     return receipt
 
 
-def validate_native_lambert_contracts(
-    exp, wps_namelist: Path, *, source_name: str,
-    source_top_pressure_pa: float | None = None,
-):
-    """Return every domain grid after exact geometry/eta validation.
+def validate_wps_geometry(exp, wps_namelist: Path, *, source_name: str):
+    """Return every domain grid once the WPS namelist IS the experiment's geometry.
 
-    The returned tuple is parent-before-child in the same order as
-    ``exp.domains``.  Geometry is compared against the standard WPS namelist
-    one domain at a time; a missing, extra, reordered, or numerically drifting
-    domain is a hard error.  All domains currently share the experiment's one
-    explicit vertical coordinate, matching :class:`ExperimentConfig`'s
-    fail-closed vertical-refinement policy.
+    The geometry half of :func:`validate_native_lambert_contracts`, on its
+    own: projection, domain count, identity, parent slots and every grid
+    number, compared exactly.  It says nothing about the vertical ladder,
+    so a door that renders a ``namelist.wps`` from a configuration can hold
+    the bytes to the forecast stage's own geometry comparison without
+    refusing for a ladder the namelist does not carry.
     """
 
     label = source_name.upper()
@@ -605,7 +706,26 @@ def validate_native_lambert_contracts(
             drift[f"d{domain.grid_id:02d}"] = domain_drift
     if drift:
         raise ValueError(f"WPS/experiment domain geometry mismatch: {drift}")
+    return expected_grids
 
+
+def validate_native_lambert_contracts(
+    exp, wps_namelist: Path, *, source_name: str,
+    source_top_pressure_pa: float | None = None,
+):
+    """Return every domain grid after exact geometry/eta validation.
+
+    The returned tuple is parent-before-child in the same order as
+    ``exp.domains``.  Geometry is compared against the standard WPS namelist
+    one domain at a time; a missing, extra, reordered, or numerically drifting
+    domain is a hard error.  All domains currently share the experiment's one
+    explicit vertical coordinate, matching :class:`ExperimentConfig`'s
+    fail-closed vertical-refinement policy.
+    """
+
+    expected_grids = validate_wps_geometry(exp, wps_namelist,
+                                           source_name=source_name)
+    label = source_name.upper()
     vertical = exp.vertical
     if vertical.hybrid_opt != 2:
         raise ValueError(

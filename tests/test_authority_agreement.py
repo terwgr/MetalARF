@@ -171,7 +171,25 @@ _SHARED_CODES = frozenset({
     # on the resolved settings.  Unclassified, every mosaic_urban_canopy
     # override was reported as a disagreement it is not.
     "noah-mosaic-pairing",
+    # Consumer requirements are also checked by validate_run_config.
+    "parameter-consumer",
     "parameter-value",
+    # The SPP consumer law, shared the same way: plan review calls
+    # woof.config's validate_spp_config, the function validate_run_config
+    # calls, on the resolved settings.  Before it did, 340 reachable plans
+    # with spp_conv=1 or spp_pbl=1 and no consuming scheme were offered as
+    # launchable and refused at the run door.
+    "spp-consumer",
+    # The scalar_pblmix consumer pair and the gsd_41/spp_pbl exclusion,
+    # shared by the same construction (woof.config's
+    # validate_scalar_pblmix_consumer and validate_mynn_generation_spp).
+    "pbl-coupling",
+    # The lightning package's producer law, shared by the same construction:
+    # plan review calls woof.lightning_contract.validate_lightning, the
+    # function validate_run_config calls.  Before it did, 602 reachable plans
+    # on the 2.9.0 round-2 tree offered lightning_option 1, 2 or 11 with no
+    # reflectivity or cumulus cloud top as launchable.
+    "lightning-dependency",
     "unimplemented-selector",
     "unknown-selector-combination",
 })
@@ -474,6 +492,44 @@ def _compare(label: str, report: dict, disagreements: list[str],
                     f"{shared}, validate_run_config says OK")
 
 
+_CORE_WALK = None
+
+
+def _core_walk_slice(bounds):
+    return _CORE_WALK(*bounds)
+
+
+def _walk_across_cores(walk, total: int) -> tuple[int, list[str]]:
+    """Run ``walk(start, stop)`` over ``[0, total)`` on every core, in order."""
+    global _CORE_WALK
+    import multiprocessing
+    import os
+
+    workers = min(os.cpu_count() or 1, 32)
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        # Under pytest -n N this worker is already one of N: a 24-process fork pool here
+        # multiplied one -n 2 run into 26 processes on a shared 24-core box (slim campaign, 2026-10-20).
+        workers = min(workers, 2)
+    if total < 2 * workers or "fork" not in multiprocessing.get_all_start_methods():
+        return walk(0, total)
+    slices = max(1, workers * 4)
+    size = -(-total // slices)
+    bounds = [(start, min(start + size, total))
+              for start in range(0, total, size)]
+    _CORE_WALK = walk
+    try:
+        with multiprocessing.get_context("fork").Pool(workers) as pool:
+            parts = pool.map(_core_walk_slice, bounds, chunksize=1)
+    finally:
+        _CORE_WALK = None
+    found: list[str] = []
+    walked = 0
+    for count, part in parts:
+        walked += count
+        found.extend(part)
+    return walked, found
+
+
 def _component_option_ids(registry: dict) -> dict[str, list[str]]:
     return {
         component_id: sorted(component["options"])
@@ -513,21 +569,33 @@ def test_exhaustive_component_cross_product_agrees_on_every_combination(
     monkeypatch.setattr(registry_module, "registry_sha256", fixture_hash)
     monkeypatch.setitem(globals(), "registry_sha256", fixture_hash)
 
-    disagreements: list[str] = []
-    combinations = 0
-    for values in itertools.product(*(options[c] for c in component_ids)):
-        components = dict(zip(component_ids, values))
-        combinations += 1
-        plan = _single_domain_plan(
-            registry, _PERMISSIVE_RUNNER, "any-source", template_id,
-            components=components)
-        report = validate_physics_plan(plan, registry=registry)
-        _compare(repr(components), report, disagreements, registry=registry,
-                 monkeypatch=monkeypatch)
-
+    option_lists = [options[c] for c in component_ids]
     expected = 1
-    for component_id in component_ids:
-        expected *= len(options[component_id])
+    for option_list in option_lists:
+        expected *= len(option_list)
+
+    def walk(start: int, stop: int) -> tuple[int, list[str]]:
+        found: list[str] = []
+        walked = 0
+        for values in itertools.islice(
+                itertools.product(*option_lists), start, stop):
+            components = dict(zip(component_ids, values))
+            walked += 1
+            plan = _single_domain_plan(
+                registry, _PERMISSIVE_RUNNER, "any-source", template_id,
+                components=components)
+            report = validate_physics_plan(plan, registry=registry)
+            _compare(repr(components), report, found, registry=registry,
+                     monkeypatch=monkeypatch)
+        return walked, found
+
+    # The product is tens of thousands of plans, each a few milliseconds
+    # of pure Python: on one core it outran the suite's timeout (a 1,200 s
+    # serial run did not finish), leaving one xdist worker busy while the
+    # rest idled.  Forked workers share the fixture and the monkeypatches
+    # above; the slices are walked in product order and joined in order,
+    # so the record is the one serial walk would write.
+    combinations, disagreements = _walk_across_cores(walk, expected)
     assert combinations == expected, (
         f"the cross-product enumerated {combinations} of {expected} "
         "combinations")
@@ -913,7 +981,9 @@ def test_every_install_state_code_is_raised_by_a_run_door(
     empty.mkdir()
     monkeypatch.setenv(physics_compat.THOMPSON_TABLE_ROOT_ENV, str(empty))
     mp8_tree = SimpleNamespace(domains=(
-        SimpleNamespace(grid_id=1, run=SimpleNamespace(mp_physics=8)),))
+        SimpleNamespace(grid_id=1, run=SimpleNamespace(
+            mp_physics=8, thompson_version="wrf_461",
+            thompson_table_dir=None)),))
     with pytest.raises(FileNotFoundError) as missing:
         prepared_domain_tree_forecast._verify_thompson_assets(mp8_tree)
     said = str(missing.value)
@@ -1133,10 +1203,16 @@ def test_the_gate_fails_when_the_runtime_authority_is_the_wrong_one():
     assert report["launchable"] is True, report["errors"]
 
     settings = dict(report["resolved_domains"][0]["settings"])
-    # km_opt=1 with the template's zero khdif/kvdif is fine; km_opt=4 with a
-    # nonzero one is exactly what validate_run_config refuses, and the registry
-    # spec for khdif is a bare non-negative number, so it cannot see it.
+    # The template's km_opt=4 under diff_opt=2 takes a nonzero khdif as
+    # written (WRF ignores it there; WRF's own fire namelists set it).  Under
+    # diff_opt=1 the same khdif is exactly what validate_run_config refuses
+    # (WRF's diff_opt=1 vertical diffusion would read the constants), and the
+    # registry spec for khdif is a bare non-negative number, so it cannot see
+    # it.
+    assert settings["km_opt"] == 4
+    settings["diff_opt"] = 1
     settings["khdif"] = 100.0
+    settings["diff_opt"] = 1  # WRF ignores these constants under diff_opt=2.
     assert _config_refusal(settings, nested=False) is not None
     forged = deepcopy(report)
     forged["resolved_domains"][0]["settings"] = settings
@@ -1290,13 +1366,21 @@ def _observed_and_absences(consumer: str):
             0: "no land surface, no parameter bundle"}
     if consumer == "microphysics_transition.PORTED_MP_PHYSICS":
         from woof.core import microphysics_transition as mt
-        return "microphysics", mt.PORTED_MP_PHYSICS, {
-            0: "no hydrometeors to close a mixed edge over"}
+        absences = dict(mt.MIXED_EDGE_ABSENCES)
+        absences.update({mp: ": ".join(mt._UNVALIDATED_MIXED_EDGE_REASONS[mp])
+                         for mp in mt.UNVALIDATED_MIXED_EDGE_SELECTORS})
+        return "microphysics", mt.PORTED_MP_PHYSICS, absences
     if consumer == "obsop.CLEAR_AIR_FLOOR_DBZ":
         from woof.da import obsop
+        from woof.microphysics_schemes import NAMED_MP_IDS
         return "microphysics", obsop.CLEAR_AIR_FLOOR_DBZ, {
             0: "no microphysics, no operator",
-            50: "not one number (CLEAR_AIR_FLOOR_IS_NOT_ONE_NUMBER)"}
+            30: ("FAST_SBM writes no REFL_10CM, so radar DA has no H(x) and "
+                 "no clear-air floor to read on mp_physics=30 (the cited "
+                 "absence in woof.da.obsop._require_agreement_with_the_registry)"),
+            **{mp: "named scheme: its Z is fused with the step "
+               "(obsop.NATIVE_Z_NOT_SEPARABLE_FROM_THE_STEP), radar DA "
+               "refuses it, no floor is read" for mp in NAMED_MP_IDS}}
     if consumer == "refl.REFL_10CM_INPUT_SPECIES + SCHEME_NATIVE_REFL_10CM":
         from woof.core import refl
         return "microphysics", (set(refl.REFL_10CM_INPUT_SPECIES)
@@ -1316,8 +1400,11 @@ def _observed_and_absences(consumer: str):
         return "microphysics", offline_child.OFFLINE_CHILD_MP_PHYSICS, absences
     if consumer == "wrf_physics_inventory._INVENTORIES":
         from woof.wrf_physics_inventory import supported_stock_wrf_mp_physics
+        from woof.microphysics_schemes import NAMED_MP_IDS
         return "microphysics", supported_stock_wrf_mp_physics(), {
-            mp: "export-only scope (audit R-014)" for mp in (0, 1, 9, 16)}
+            mp: "export-only scope (audit R-014)" for mp, row in
+            consumer_rows_by_selector("microphysics", "stock_wrf_export").items()
+            if row.get("inventoried") is not True}
     if consumer == "physics_compat._GLW_CONSUMING_SURFACE_SCHEMES":
         from woof.physics_compat import _GLW_CONSUMING_SURFACE_SCHEMES
         return "land_surface", _GLW_CONSUMING_SURFACE_SCHEMES, {
@@ -1496,7 +1583,8 @@ def test_the_consumer_row_gate_refuses_a_missing_row_before_step_0(monkeypatch):
 
 
 def test_every_implemented_scheme_couples_to_rte_rrtmgp_at_plan_review():
-    """No cloud_optics row publishes a null coupling any more, and every
+    """No cloud_optics row publishes a null coupling except the one judged
+    exclusions (FAST_SBM and Purdue Lin, refused at the run door), and every other
     implemented scheme passes the 4/4 RTE+RRTMGP pairing on the DEFAULT
     variant at plan review.
 
@@ -1515,14 +1603,19 @@ def test_every_implemented_scheme_couples_to_rte_rrtmgp_at_plan_review():
     assert rows, "no cloud_optics rows published"
     uncoupled = sorted(mp for mp, row in rows.items()
                        if row["rte_rrtmgp_coupling"] is None)
-    assert uncoupled == [], (
-        "a scheme publishes a null RTE+RRTMGP coupling again; the last one "
-        f"(mp=9) was retired by writing its row: {uncoupled}")
+    # FAST_SBM (mp=30) is the one JUDGED exclusion: its bin effective-radius
+    # integrals are not qualified, so woof.core.rrtmgp records it in
+    # _NO_CLOUD_OPTICS_COUPLING and both authorities refuse the RTE+RRTMGP
+    # pairing (measured below) with the legacy-RRTMG remedy.  Any other
+    # null is a gap, as it was when mp=9 was retired by writing its row.
+    assert uncoupled == [2, 30], (
+        "a scheme publishes a null RTE+RRTMGP coupling other than the "
+        f"judged FAST_SBM and Lin exclusions: {uncoupled}")
+    assert rows[30]["rte_rrtmgp_refusal"] is not None
+    # Lin (mp=2) has no effective-radius output at all (Registry.EM_COMMON:3016).
+    assert "Lin supplies no effective radii" in rows[2]["rte_rrtmgp_refusal"]
     assert rows[9]["rte_rrtmgp_coupling"] == "milbrandt2"
     assert rows[9]["rte_rrtmgp_refusal"] is None
-    # The legacy arm's declaration is WRF's fact and did not move: WRF
-    # hands RRTMG no Milbrandt-Yau radii (has_reqc=0), so the legacy port
-    # computes its own, as it always did.
     assert rows[9]["legacy_declares_radii"] is False
     for mp in sorted(rows):
         if mp == 0:
@@ -1532,7 +1625,12 @@ def test_every_implemented_scheme_couples_to_rte_rrtmgp_at_plan_review():
                       bl_pbl_physics=1, sf_sfclay_physics=91,
                       sf_surface_physics=2, num_soil_layers=4)
         refusal = _config_refusal(dict(kwargs), nested=False)
-        assert refusal is None, (mp, refusal)
+        if rows[mp]["rte_rrtmgp_coupling"] is None:
+            # The run door refuses before step 0, naming the remedy.
+            assert refusal is not None and "cloud-optics" in refusal, (mp, refusal)
+            assert "rrtmg_legacy" in refusal, (mp, refusal)
+        else:
+            assert refusal is None, (mp, refusal)
         legacy = _config_refusal(
             dict(kwargs, ra_rrtmg_variant="rrtmg_legacy"), nested=False)
         assert legacy is None, (mp, legacy)
@@ -2045,10 +2143,11 @@ def test_the_preflight_reflectivity_rail_agrees_with_the_operator():
     from woof.core.refl import (REFL_10CM_INPUT_SPECIES,
                                  SCHEME_NATIVE_REFL_10CM)
 
+    from woof.core.column_schemes import COLUMN_SCHEMES
     assert set(preflight._REFLECTIVITY_MICROPHYSICS) == set(
-        REFL_10CM_INPUT_SPECIES)
+        REFL_10CM_INPUT_SPECIES) - set(COLUMN_SCHEMES)
     assert set(preflight._SELF_REFLECTIVITY_MICROPHYSICS) == set(
-        SCHEME_NATIVE_REFL_10CM)
+        SCHEME_NATIVE_REFL_10CM) | set(COLUMN_SCHEMES)
     # mp=18 in particular: it computes its own dBZ, so it must never be
     # charged refl.cu's frame.
     assert 18 not in preflight._REFLECTIVITY_MICROPHYSICS
@@ -2082,8 +2181,8 @@ def test_the_consumer_export_for_the_rust_crates_matches_the_registry():
         assert row["option_id"] == option_id
         inventory = consumer_rows_by_selector("microphysics", "stock_wrf_export")[mp]
         assert row["stock_wrf_export_inventoried"] is bool(inventory["inventoried"])
-    # HAILNC is filled by exactly the two hail-bearing schemes.
-    assert export["scheme_bound_precipitation_fields"]["HAILNC"] == [9, 18]
+    # HAILNC is filled by the three admitted hail-bearing schemes.
+    assert export["scheme_bound_precipitation_fields"]["HAILNC"] == [9, 18, 24]
 
 
 def test_every_transcribed_axis_covers_the_selectable_set_or_declares_why():

@@ -1,12 +1,13 @@
 """CUDA runtime, capability, compilation-cache, and launch authority.
 
-CuPy's process-global default cache can serialize unrelated NVRTC jobs on
-Windows.  This module gives every process an isolated cache directory unless
-``MPAS_PORT_CUDA_CACHE_DIR`` or ``CUPY_CACHE_DIR`` is explicitly declared.
+CuPy cubins persist across process launches. A user-owned architecture cache
+is used unless ``MPAS_PORT_CUDA_CACHE_DIR`` or ``CUPY_CACHE_DIR`` is declared.
+CuPy keys compiled images by compiler inputs, including source and options.
 The in-process :class:`KernelCache` then owns compiled RawModule functions.
 """
 
 from __future__ import annotations
+from woof.hex import numerics as _hex_numerics
 
 from dataclasses import dataclass
 import hashlib
@@ -46,9 +47,8 @@ def _cache_directory(device_id: int, compute: tuple[int, int], raw: str | Path |
         declared = os.environ.get("CUPY_CACHE_DIR")
     if declared is None:
         declared = (
-            Path(tempfile.gettempdir())
-            / "mpas-port-cupy-cache"
-            / f"pid-{os.getpid()}-device-{device_id}-sm_{compute[0]}{compute[1]}"
+            Path.home() / ".cache" / "woof hex" / "cuda"
+            / f"sm_{compute[0]}{compute[1]}"
         )
     result = Path(declared).expanduser().resolve()
     result.mkdir(parents=True, exist_ok=True)
@@ -110,13 +110,23 @@ def forget_admissions() -> None:
 
 def require_cuda(
     *,
-    device_id: int = 0,
+    device_id: int | None = None,
     min_compute: tuple[int, int] = (12, 0),
     required_compute: tuple[int, int] | None = None,
-    min_runtime_version: int = 13_000,
+    min_runtime_version: int = 12_000,
     cache_dir: str | Path | None = None,
 ) -> CudaCapability:
     """Select a real CUDA device or refuse with the failing capability name.
+
+    The runtime floor is CUDA 12, the oldest major this distribution's
+    extras install (``gpu-cu12``, cupy-cuda12x) and the oldest CuPy 14
+    supports.  It was 13000 until 0.4.0, a value that named no breakage:
+    the kernels need nothing a CUDA 12 toolkit lacks (plain stream capture,
+    and the NVRTC flags ``--fmad=false --ftz=false --prec-div=true
+    --prec-sqrt=true -std=c++17``), and it refused every CUDA 12 driver,
+    which is the driver many operational centres run.  Whether this
+    install's NVRTC can build for the card is the toolchain question that
+    can actually break a run, and it is asked of NVRTC itself below.
 
     An admission is measured once per process for each distinct argument
     set and answered from memory after that.  The dycore's translation
@@ -124,13 +134,15 @@ def require_cuda(
     59 times a forecast step on the 43,884-cell point mesh, and
     ``cudaGetDeviceProperties`` costs 1.05 ms a call on the CUDA 13.3
     driver: 62-82 ms of host time per 0.38 s step, measured in
-    ``evidence-gallery/hex-perf-profile-2026-09-13``, spent re-deciding a
+    the 2026-09-13 performance profile, spent re-deciding a
     question whose answer cannot change while the process lives.  A
     refusal is never memoised, so a refused configuration is re-measured
     every time it is asked.
     """
 
     cp = _cupy()
+    if device_id is None:
+        device_id = int(cp.cuda.runtime.getDevice())
     key = (
         int(device_id),
         tuple(int(v) for v in min_compute),
@@ -148,6 +160,11 @@ def require_cuda(
     if device_id < 0 or device_id >= count:
         raise CudaRefusal(f"cuda.device_id={device_id} is outside [0,{count})")
     cp.cuda.Device(device_id).use()
+    # Blocking sync, not CUDA's spin wait: a spinning host thread held one core
+    # at 100 % for the whole GPU-bound step loop (cuda_backend/schedule.py).
+    from .schedule import apply as _apply_wait_mode
+
+    _apply_wait_mode(device_id)
     properties = cp.cuda.runtime.getDeviceProperties(device_id)
     compute = (int(properties["major"]), int(properties["minor"]))
     # Architectures at or above the floor keep the original checks unchanged.
@@ -286,7 +303,7 @@ class KernelCache:
         *,
         capability: CudaCapability | None = None,
         cache_dir: str | Path | None = None,
-        base_options: Sequence[str] = ("--std=c++17", "--fmad=false"),
+        base_options: Sequence[str] | None = None,
     ) -> None:
         self.capability = (
             require_cuda(cache_dir=cache_dir) if capability is None else capability
@@ -297,7 +314,12 @@ class KernelCache:
             cache_dir or self.capability.cache_directory,
         )
         self.cache_directory = selected_cache
-        self.base_options = tuple(str(option) for option in base_options)
+        # None: the process's numerics mode (woof.hex.numerics; fast by default, strict for bitwise proofs).
+        self.base_options = tuple(str(option) for option in (
+            _hex_numerics.kernel_base() if base_options is None else base_options))
+        from .aot import Pack, install
+        self._aot_pack = Pack()
+        install(_cupy(), self._aot_pack)
         try:
             self._compile_manifest = CompileManifest(compile_platform_binding())
         except CompileContractError as error:
@@ -308,6 +330,14 @@ class KernelCache:
         self._kernels: dict[str, Any] = {}
         self._compile_seconds: dict[str, float] = {}
         self._observed: dict[str, _PostLaunchKernel] = {}
+        #: Resolution memo: (name, module_key, source, options) -> (kernel_key, kernel, module_key).
+        #: A repeat request with the same arguments returns the kernel its first resolution produced,
+        #: skipping the two sha256 passes over the source and the manifest bookkeeping that the first
+        #: resolution already recorded. Breakage it prevents: U-MPASPHYS-1, every per-step launch on
+        #: the MPAS-physics route re-hashed its whole translation unit on the forecast's one host thread.
+        self._resolved: dict[tuple[Any, ...], tuple[str, Any, str]] = {}
+        # Operational timing belongs outside the byte-identity manifest.
+        self._load_timings: list[dict[str, Any]] = []
         #: Optional per-launch observer, set only by the regional lane.  When
         #: None -- which is every global-lane cache -- ``raw_kernel`` returns
         #: the bare CuPy kernel and nothing about resolution changes.
@@ -348,6 +378,23 @@ class KernelCache:
         module_key: str,
         options: Sequence[str] = (),
     ) -> Any:
+        memo_key = (name, module_key, source, tuple(str(value) for value in options))
+        hit = self._resolved.get(memo_key)
+        if hit is not None:
+            return self._observe(hit[0], hit[1], name, hit[2])
+        kernel = self._raw_kernel_resolve(name, source, module_key=module_key, options=options)
+        kernel_key = f"{self._module_key(source, memo_key[3])}:{name}"
+        self._resolved[memo_key] = (kernel_key, self._kernels[kernel_key], validate_module_key(module_key))
+        return kernel
+
+    def _raw_kernel_resolve(
+        self,
+        name: str,
+        source: str,
+        *,
+        module_key: str,
+        options: Sequence[str] = (),
+    ) -> Any:
         try:
             stable_module_key = validate_module_key(module_key)
         except CompileContractError as error:
@@ -379,42 +426,111 @@ class KernelCache:
                 ) from error
             return self._observe(kernel_key, cached, name, stable_module_key)
         module = self._modules.get(compiled_key)
+        load_source = "jit"
+        load_reason = None
+        aot_entry = None
+        capture = None
+        shared = shared_key = module_bank = None
+        effective_compile = None
+        started = time.perf_counter()
+        if (module is None and os.environ.get('WOOF_HEX_MOVING_RESIDENT') == '1'
+                and os.environ.get('WOOF_HEX_MOVING_KERNEL_MODULES', '1') != '0'):
+            from .. import moving_kernel_modules as module_bank
+            from .aot import effective_options
+            shared_key = (self.capability.device_id, compiled_key, stable_module_key,
+                          getattr(self._aot_pack, 'resident_identity', None),
+                          tuple(effective_options(requested_options)))
+            shared = module_bank.get(shared_key)
+            if shared is not None:
+                module, effective_compile, load_source = shared
         if module is None:
             os.environ["CUPY_CACHE_DIR"] = str(self.cache_directory)
-            module = cp.RawModule(
-                code=source,
-                options=requested_options,
-                backend="nvrtc",
-                enable_cooperative_groups=False,
+            module, load_reason, aot_entry = self._aot_pack.load(
+                cp, self.cache_directory, stable_module_key, source,
+                requested_options, self.capability.sm,
             )
-        started = time.perf_counter()
+            if module is not None:
+                load_source = "aot"
+            else:
+                module = cp.RawModule(
+                    code=source,
+                    options=requested_options,
+                    backend="nvrtc",
+                    enable_cooperative_groups=False,
+                )
         if compiled_key in self._modules:
             kernel = module.get_function(name)
+        elif shared is not None:
+            kernel = module.get_function(name)
+            self._compile_manifest.record_effective_compile(stable_module_key, effective_compile)
+        elif aot_entry is not None:
+            kernel = module.get_function(name)
+            effective_compile = aot_entry['effective_compile']
+            self._compile_manifest.record_effective_compile(
+                stable_module_key, aot_entry["effective_compile"])
         else:
             with NvrtcCompileCapture() as capture:
                 kernel = module.get_function(name)
             try:
+                effective_compile = capture.evidence(hashlib.sha256(source.encode('utf-8')).hexdigest())
                 self._compile_manifest.record_effective_compile(
                     stable_module_key,
-                    capture.evidence(
-                        hashlib.sha256(source.encode("utf-8")).hexdigest()
-                    ),
+                    effective_compile,
                 )
             except CompileContractError as error:
                 raise CudaRefusal(
                     f"cuda.compile_manifest refused: {error}"
                 ) from error
-        cp.cuda.runtime.deviceSynchronize()
+        # A shared module was published only after its first synchronization.
+        # Resolving another bare function queues no work and must not drain
+        # the running class's stream merely because a new class cache asks.
+        if shared is None:
+            cp.cuda.runtime.deviceSynchronize()
+        if module_bank is not None and shared is None and effective_compile is not None:
+            module_bank.put(shared_key, module, effective_compile, load_source)
         elapsed = time.perf_counter() - started
+        if compiled_key not in self._modules and shared is None:
+            from .aot import mark
+            mark(load_source, stable_module_key, elapsed, reason=load_reason)
         self._modules[compiled_key] = module
         self._kernels[kernel_key] = kernel
         self._compile_seconds[kernel_key] = elapsed
+        self._load_timings.append({
+            "module_key": stable_module_key, "kernel": name,
+            "module_cache_key": compiled_key, "device": self.capability.device_id,
+            "module_load_seconds": elapsed,
+            "route": load_source, "aot_miss_reason": load_reason,
+            "nvrtc_calls": None if capture is None else len(capture.observations),
+            "nvrtc_seconds": None if capture is None else capture.elapsed_seconds,
+            "cache_status": ("moving_resident_module" if shared is not None else "resident_module" if compiled_key in self._modules
+                and capture is None and aot_entry is None else
+                "aot" if aot_entry is not None else
+                "nvrtc_compile" if capture is not None and capture.observations else
+                "not_observed" if capture is None or capture.unavailable_reason else
+                "nvrtc_not_called_possible_disk_hit"),
+        })
         _KERNEL_COMPILE_SECONDS[id(kernel)] = elapsed
         try:
             self._compile_manifest.record_kernel(stable_module_key, name)
         except CompileContractError as error:
             raise CudaRefusal(f"cuda.compile_manifest refused: {error}") from error
         return self._observe(kernel_key, kernel, name, stable_module_key)
+
+    def record_shape_origin(
+        self, module_key: str, generic_source: str,
+        dimensions: Sequence[tuple[str, int]],
+    ) -> None:
+        """Record which generic source a shape-specialized module came from."""
+
+        try:
+            self._compile_manifest.record_shape_origin(
+                module_key,
+                generic_source_sha256=hashlib.sha256(
+                    generic_source.encode("utf-8")).hexdigest(),
+                dimensions=dimensions,
+            )
+        except CompileContractError as error:
+            raise CudaRefusal(f"cuda.compile_manifest refused: {error}") from error
 
     def raw_kernels(
         self,
@@ -444,7 +560,13 @@ class KernelCache:
     def compile_seconds(self, kernel: Any) -> float:
         return float(_KERNEL_COMPILE_SECONDS.get(id(kernel), 0.0))
 
+    def timing_receipt(self) -> dict[str, Any]:
+        return {"cache_directory": str(self.cache_directory),
+                "loads": [dict(row) for row in self._load_timings],
+                "scope": "host module resolution includes synchronization; NVRTC calls are nested, not additive"}
+
     def clear_memory_cache(self) -> None:
+        self._resolved.clear()
         self._kernels.clear()
         self._modules.clear()
         self._compile_seconds.clear()
@@ -502,7 +624,7 @@ def launch_checked(
     No event is recorded and nothing is synchronized: the launch is queued
     and the host moves on.  This is the step path's launch; ``launch_timed``
     below is the benchmark's, and the difference is what the profile
-    measured (``evidence-gallery/hex-perf-profile-2026-09-13``): every
+    measured (the 2026-09-13 performance profile): every
     recovery kernel that went through ``launch_timed`` with
     ``timing_repeats=1`` was launched twice, event-synchronized twice and
     stream-synchronized once, 36 host stalls and 10.7 ms of repeated device

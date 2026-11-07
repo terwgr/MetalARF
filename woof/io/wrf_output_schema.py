@@ -91,15 +91,19 @@ class WrfOutputField:
         raise ValueError(f"no WRF FieldType for NetCDF type {self.dtype!r}")
 
 
+def _output_field(name, description, units, registry):
+    """The ordinary real, unstaggered history row; exceptions stay explicit."""
+    return WrfOutputField(name, "f4", "", description, units, registry,
+                          wrf_history=True)
+
+
 #: MYNN's carried PBL state and plume diagnostics (``bl_pbl_physics=5``).
 #: ``KPBL`` and ``RMOL`` are shared surface-layer/PBL rows rather than MYNN's
 #: own, which is why they cite EM_COMMON blocks far from the MYNN one.
 MYNN_PBL_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
-    "qke": WrfOutputField(
-        "QKE", "f4", "",
-        'twice TKE from MYNN',
-        'm2 s-2',
-        "Registry.EM_COMMON:1119", wrf_history=True),
+    "qke": _output_field(
+               'QKE', 'twice TKE from MYNN',
+               'm2 s-2', 'Registry.EM_COMMON:1119'),
     "tsq": WrfOutputField(
         "TSQ", "f4", "",
         'liquid water pottemp variance',
@@ -115,11 +119,20 @@ MYNN_PBL_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
         'total water-liquid water pottemp covariance',
         'K kg/kg',
         "Registry.EM_COMMON:1127", wrf_history=False),
+    "u10e": WrfOutputField(
+        "U10E", "f4", "", "Special U at 10 M from MYJSFC", "m s-1",
+        "Registry.EM_COMMON:1069", wrf_history=True),
+    "v10e": WrfOutputField(
+        "V10E", "f4", "", "Special V at 10 M from MYJSFC", "m s-1",
+        "Registry.EM_COMMON:1070", wrf_history=True),
     "el_pbl": WrfOutputField(
         "EL_PBL", "f4", "Z",
         'Length scale from PBL',
         'm',
         "Registry.EM_COMMON:1232", wrf_history=True),
+    "tke_pbl": WrfOutputField(
+        "TKE_PBL", "f4", "Z", "TKE from PBL", "m2 s-2",
+        "Registry.EM_COMMON:1231", wrf_history=True),
     "sh3d": WrfOutputField(
         "SH3D", "f4", "",
         'Stability function for heat',
@@ -155,21 +168,15 @@ MYNN_PBL_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
         'EXCHANGE COEFFICIENTS ',
         'm2 s-1',
         "Registry.EM_COMMON:1058", wrf_history=False),
-    "maxwidth": WrfOutputField(
-        "MAXWIDTH", "f4", "",
-        'Maximum plume width',
-        'm',
-        "Registry.EM_COMMON:1147", wrf_history=True),
-    "maxmf": WrfOutputField(
-        "MAXMF", "f4", "",
-        'Maximum mass-flux (neg: all dry, pos: moist)',
-        'm/s * area',
-        "Registry.EM_COMMON:1146", wrf_history=True),
-    "ztop_plume": WrfOutputField(
-        "ZTOP_PLUME", "f4", "",
-        'Height of tallest plume',
-        'm',
-        "Registry.EM_COMMON:1148", wrf_history=True),
+    "maxwidth": _output_field(
+                    'MAXWIDTH', 'Maximum plume width',
+                    'm', 'Registry.EM_COMMON:1147'),
+    "maxmf": _output_field(
+                 'MAXMF', 'Maximum mass-flux (neg: all dry, pos: moist)',
+                 'm/s * area', 'Registry.EM_COMMON:1146'),
+    "ztop_plume": _output_field(
+                      'ZTOP_PLUME', 'Height of tallest plume',
+                      'm', 'Registry.EM_COMMON:1148'),
     "ktop_plume": WrfOutputField(
         "KTOP_PLUME", "i4", "",
         'k-level of highest pentrating plume',
@@ -192,91 +199,57 @@ MYNN_PBL_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
 #: EM_COMMON rather than registry.noahmp: WRF declares it once for P-X, Noah
 #: and Noah-MP together, and the comment one line above it says so.
 NOAHMP_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
-    "tvxy": WrfOutputField(
-        "TV", "f4", "",
-        'vegetation leaf temperature',
-        'K',
-        "registry.noahmp:3", wrf_history=True),
-    "tgxy": WrfOutputField(
-        "TG", "f4", "",
-        'bulk ground temperature',
-        'K',
-        "registry.noahmp:4", wrf_history=True),
-    "canicexy": WrfOutputField(
-        "CANICE", "f4", "",
-        'intercepted ice mass',
-        'mm',
-        "registry.noahmp:5", wrf_history=True),
-    "canliqxy": WrfOutputField(
-        "CANLIQ", "f4", "",
-        'intercepted liquid water',
-        'mm',
-        "registry.noahmp:6", wrf_history=True),
-    "eahxy": WrfOutputField(
-        "EAH", "f4", "",
-        'canopy air vapor pressure',
-        'pa',
-        "registry.noahmp:7", wrf_history=True),
-    "tahxy": WrfOutputField(
-        "TAH", "f4", "",
-        'canopy air temperature',
-        'K',
-        "registry.noahmp:8", wrf_history=True),
-    "cmxy": WrfOutputField(
-        "CM", "f4", "",
-        'surf. exchange coeff. for momentum',
-        'm/s',
-        "registry.noahmp:9", wrf_history=True),
-    "chxy": WrfOutputField(
-        "CH", "f4", "",
-        'surf. exchange coeff. for heat',
-        'm/s',
-        "registry.noahmp:10", wrf_history=True),
-    "fwetxy": WrfOutputField(
-        "FWET", "f4", "",
-        'wetted or snowed canopy fraction',
-        '-',
-        "registry.noahmp:11", wrf_history=True),
-    "sneqvoxy": WrfOutputField(
-        "SNEQVO", "f4", "",
-        'snow mass at last time step',
-        'mm',
-        "registry.noahmp:12", wrf_history=True),
-    "alboldxy": WrfOutputField(
-        "ALBOLD", "f4", "",
-        'snow albedo at last timestep',
-        '-',
-        "registry.noahmp:13", wrf_history=True),
-    "qsnowxy": WrfOutputField(
-        "QSNOWXY", "f4", "",
-        'snowfall on the ground',
-        'mm/s',
-        "registry.noahmp:14", wrf_history=True),
-    "qrainxy": WrfOutputField(
-        "QRAINXY", "f4", "",
-        'rainfall on the ground',
-        'mm/s',
-        "registry.noahmp:15", wrf_history=True),
-    "wslakexy": WrfOutputField(
-        "WSLAKE", "f4", "",
-        'lake water storage',
-        'mm',
-        "registry.noahmp:16", wrf_history=True),
-    "waxy": WrfOutputField(
-        "WA", "f4", "",
-        'water in the acquifer',
-        'mm',
-        "registry.noahmp:18", wrf_history=True),
-    "xsaixy": WrfOutputField(
-        "XSAI", "f4", "",
-        'stem area index',
-        '-',
-        "registry.noahmp:30", wrf_history=True),
-    "taussxy": WrfOutputField(
-        "TAUSS", "f4", "",
-        'non-dimensional snow age',
-        '',
-        "registry.noahmp:31", wrf_history=True),
+    "tvxy": _output_field(
+                'TV', 'vegetation leaf temperature',
+                'K', 'registry.noahmp:3'),
+    "tgxy": _output_field(
+                'TG', 'bulk ground temperature',
+                'K', 'registry.noahmp:4'),
+    "canicexy": _output_field(
+                    'CANICE', 'intercepted ice mass',
+                    'mm', 'registry.noahmp:5'),
+    "canliqxy": _output_field(
+                    'CANLIQ', 'intercepted liquid water',
+                    'mm', 'registry.noahmp:6'),
+    "eahxy": _output_field(
+                 'EAH', 'canopy air vapor pressure',
+                 'pa', 'registry.noahmp:7'),
+    "tahxy": _output_field(
+                 'TAH', 'canopy air temperature',
+                 'K', 'registry.noahmp:8'),
+    "cmxy": _output_field(
+                'CM', 'surf. exchange coeff. for momentum',
+                'm/s', 'registry.noahmp:9'),
+    "chxy": _output_field(
+                'CH', 'surf. exchange coeff. for heat',
+                'm/s', 'registry.noahmp:10'),
+    "fwetxy": _output_field(
+                  'FWET', 'wetted or snowed canopy fraction',
+                  '-', 'registry.noahmp:11'),
+    "sneqvoxy": _output_field(
+                    'SNEQVO', 'snow mass at last time step',
+                    'mm', 'registry.noahmp:12'),
+    "alboldxy": _output_field(
+                    'ALBOLD', 'snow albedo at last timestep',
+                    '-', 'registry.noahmp:13'),
+    "qsnowxy": _output_field(
+                   'QSNOWXY', 'snowfall on the ground',
+                   'mm/s', 'registry.noahmp:14'),
+    "qrainxy": _output_field(
+                   'QRAINXY', 'rainfall on the ground',
+                   'mm/s', 'registry.noahmp:15'),
+    "wslakexy": _output_field(
+                    'WSLAKE', 'lake water storage',
+                    'mm', 'registry.noahmp:16'),
+    "waxy": _output_field(
+                'WA', 'water in the acquifer',
+                'mm', 'registry.noahmp:18'),
+    "xsaixy": _output_field(
+                  'XSAI', 'stem area index',
+                  '-', 'registry.noahmp:30'),
+    "taussxy": _output_field(
+                   'TAUSS', 'non-dimensional snow age',
+                   '', 'registry.noahmp:31'),
     "isnowxy": WrfOutputField(
         "ISNOW", "i4", "",
         'no. of snow layer',
@@ -307,91 +280,57 @@ NOAHMP_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
         'layer-bottom depth from snow surf',
         'm',
         "registry.noahmp:21", wrf_history=True),
-    "t2mvxy": WrfOutputField(
-        "T2V", "f4", "",
-        '2 meter temperature over canopy',
-        'K',
-        "registry.noahmp:32", wrf_history=True),
-    "t2mbxy": WrfOutputField(
-        "T2B", "f4", "",
-        '2 meter temperature over bare ground',
-        'K',
-        "registry.noahmp:33", wrf_history=True),
-    "q2mvxy": WrfOutputField(
-        "Q2V", "f4", "",
-        '2 meter mixing ratio over canopy',
-        'kg kg-1',
-        "registry.noahmp:34", wrf_history=True),
-    "q2mbxy": WrfOutputField(
-        "Q2B", "f4", "",
-        '2 meter mixing ratio over bare ground',
-        'kg kg-1',
-        "registry.noahmp:35", wrf_history=True),
-    "tradxy": WrfOutputField(
-        "TRAD", "f4", "",
-        'surface radiative temperature',
-        'K',
-        "registry.noahmp:36", wrf_history=True),
-    "fsaxy": WrfOutputField(
-        "FSA", "f4", "",
-        'total absorbed solar radiation',
-        'W/m2',
-        "registry.noahmp:47", wrf_history=True),
-    "firaxy": WrfOutputField(
-        "FIRA", "f4", "",
-        'total net longwave rad',
-        'W/m2',
-        "registry.noahmp:48", wrf_history=True),
-    "ecanxy": WrfOutputField(
-        "ECAN", "f4", "",
-        'evaporation of intercepted water',
-        'mm/s',
-        "registry.noahmp:44", wrf_history=True),
-    "edirxy": WrfOutputField(
-        "EDIR", "f4", "",
-        'ground surface evaporation rate',
-        'mm/s',
-        "registry.noahmp:45", wrf_history=True),
-    "etranxy": WrfOutputField(
-        "ETRAN", "f4", "",
-        'transpiration rate',
-        'mm/s',
-        "registry.noahmp:46", wrf_history=True),
-    "runsfxy": WrfOutputField(
-        "RUNSF", "f4", "",
-        'surface runoff',
-        'mm/s',
-        "registry.noahmp:42", wrf_history=True),
-    "runsbxy": WrfOutputField(
-        "RUNSB", "f4", "",
-        'subsurface runoff',
-        'mm/s',
-        "registry.noahmp:43", wrf_history=True),
-    "fvegxy": WrfOutputField(
-        "FVEG", "f4", "",
-        'Noah-MP vegetation fraction',
-        '',
-        "registry.noahmp:40", wrf_history=True),
-    "rssunxy": WrfOutputField(
-        "RSSUN", "f4", "",
-        'sunlit stomatal resistance',
-        's/m',
-        "registry.noahmp:53", wrf_history=True),
-    "rsshaxy": WrfOutputField(
-        "RSSHA", "f4", "",
-        'shaded stomatal resistance',
-        's/m',
-        "registry.noahmp:54", wrf_history=True),
-    "chvxy": WrfOutputField(
-        "CHV", "f4", "",
-        'vegetated heat exchange coefficient',
-        'm/s',
-        "registry.noahmp:59", wrf_history=True),
-    "chbxy": WrfOutputField(
-        "CHB", "f4", "",
-        'bare-ground heat exchange coefficient',
-        'm/s',
-        "registry.noahmp:60", wrf_history=True),
+    "t2mvxy": _output_field(
+                  'T2V', '2 meter temperature over canopy',
+                  'K', 'registry.noahmp:32'),
+    "t2mbxy": _output_field(
+                  'T2B', '2 meter temperature over bare ground',
+                  'K', 'registry.noahmp:33'),
+    "q2mvxy": _output_field(
+                  'Q2V', '2 meter mixing ratio over canopy',
+                  'kg kg-1', 'registry.noahmp:34'),
+    "q2mbxy": _output_field(
+                  'Q2B', '2 meter mixing ratio over bare ground',
+                  'kg kg-1', 'registry.noahmp:35'),
+    "tradxy": _output_field(
+                  'TRAD', 'surface radiative temperature',
+                  'K', 'registry.noahmp:36'),
+    "fsaxy": _output_field(
+                 'FSA', 'total absorbed solar radiation',
+                 'W/m2', 'registry.noahmp:47'),
+    "firaxy": _output_field(
+                  'FIRA', 'total net longwave rad',
+                  'W/m2', 'registry.noahmp:48'),
+    "ecanxy": _output_field(
+                  'ECAN', 'evaporation of intercepted water',
+                  'mm/s', 'registry.noahmp:44'),
+    "edirxy": _output_field(
+                  'EDIR', 'ground surface evaporation rate',
+                  'mm/s', 'registry.noahmp:45'),
+    "etranxy": _output_field(
+                   'ETRAN', 'transpiration rate',
+                   'mm/s', 'registry.noahmp:46'),
+    "runsfxy": _output_field(
+                   'RUNSF', 'surface runoff',
+                   'mm/s', 'registry.noahmp:42'),
+    "runsbxy": _output_field(
+                   'RUNSB', 'subsurface runoff',
+                   'mm/s', 'registry.noahmp:43'),
+    "fvegxy": _output_field(
+                  'FVEG', 'Noah-MP vegetation fraction',
+                  '', 'registry.noahmp:40'),
+    "rssunxy": _output_field(
+                   'RSSUN', 'sunlit stomatal resistance',
+                   's/m', 'registry.noahmp:53'),
+    "rsshaxy": _output_field(
+                   'RSSHA', 'shaded stomatal resistance',
+                   's/m', 'registry.noahmp:54'),
+    "chvxy": _output_field(
+                 'CHV', 'vegetated heat exchange coefficient',
+                 'm/s', 'registry.noahmp:59'),
+    "chbxy": _output_field(
+                 'CHB', 'bare-ground heat exchange coefficient',
+                 'm/s', 'registry.noahmp:60'),
     "fpicexy": WrfOutputField(
         "FPICE", "f4", "",
         'fraction of ice in precipitation',
@@ -422,16 +361,12 @@ NOAHMP_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
         'bottom soil heat flux',
         'W/m2',
         "registry.noahmp:209", wrf_history=False),
-    "soilenergy": WrfOutputField(
-        "SOILENERGY", "f4", "",
-        'energy content in soil relative to 273.16',
-        'kJ/m2',
-        "registry.noahmp:201", wrf_history=True),
-    "snowenergy": WrfOutputField(
-        "SNOWENERGY", "f4", "",
-        'energy content in snow relative to 273.16',
-        'kJ/m2',
-        "registry.noahmp:202", wrf_history=True),
+    "soilenergy": _output_field(
+                      'SOILENERGY', 'energy content in soil relative to 273.16',
+                      'kJ/m2', 'registry.noahmp:201'),
+    "snowenergy": _output_field(
+                      'SNOWENERGY', 'energy content in snow relative to 273.16',
+                      'kJ/m2', 'registry.noahmp:202'),
     "rs": WrfOutputField(
         "RS", "f4", "",
         'SURFACE RESISTANCE',
@@ -447,31 +382,23 @@ NOAHMP_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
 #: range citation is exact, resolves to the same block, and does not smuggle
 #: a banned literal past a gate by reformatting it.
 _RUC_REGISTRY_FIELDS: dict[str, WrfOutputField] = {
-    "soilt1": WrfOutputField(
-        "SOILT1", "f4", "",
-        'TEMPERATURE INSIDE SNOW ',
-        'K',
-        "Registry.EM_COMMON:1970-1977", wrf_history=True),
-    "rhosnf": WrfOutputField(
-        "RHOSNF", "f4", "",
-        'DENSITY OF FROZEN PRECIP',
-        'kg/m^3',
-        "Registry.EM_COMMON:1003", wrf_history=True),
-    "snowfallac": WrfOutputField(
-        "SNOWFALLAC", "f4", "",
-        'RUN-TOTAL ACCUMULATED SNOWFALL [mm]',
-        '',
-        "Registry.EM_COMMON:1004", wrf_history=True),
+    "soilt1": _output_field(
+                  'SOILT1', 'TEMPERATURE INSIDE SNOW ',
+                  'K', 'Registry.EM_COMMON:1970-1977'),
+    "rhosnf": _output_field(
+                  'RHOSNF', 'DENSITY OF FROZEN PRECIP',
+                  'kg/m^3', 'Registry.EM_COMMON:1003'),
+    "snowfallac": _output_field(
+                      'SNOWFALLAC', 'RUN-TOTAL ACCUMULATED SNOWFALL [mm]',
+                      '', 'Registry.EM_COMMON:1004'),
     "precipfr": WrfOutputField(
         "PRECIPFR", "f4", "",
         'TIME-STEP FROZEN PRECIP [mm]',
         '',
         "Registry.EM_COMMON:1005", wrf_history=False),
-    "acrunoff": WrfOutputField(
-        "ACRUNOFF", "f4", "",
-        'ACCUMULATED RUNOFF',
-        'kg m-2',
-        "Registry.EM_COMMON:866", wrf_history=True),
+    "acrunoff": _output_field(
+                    'ACRUNOFF', 'ACCUMULATED RUNOFF',
+                    'kg m-2', 'Registry.EM_COMMON:866'),
     "tsnav": WrfOutputField(
         "TSNAV", "f4", "",
         'AVERAGE SNOW TEMPERATURE ',
@@ -580,30 +507,24 @@ RUC_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
 #: not omit the variable, and downstream tooling that computes
 #: ``RAINC + RAINNC`` is entitled to that.
 PRECIPITATION_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
-    "RAINC": WrfOutputField(
-        "RAINC", "f4", "",
-        "ACCUMULATED TOTAL CUMULUS PRECIPITATION",
-        "mm", "Registry.EM_COMMON:1579", wrf_history=True),
-    "RAINSH": WrfOutputField(
-        "RAINSH", "f4", "",
-        "ACCUMULATED SHALLOW CUMULUS PRECIPITATION",
-        "mm", "Registry.EM_COMMON:1580", wrf_history=True),
-    "RAINNC": WrfOutputField(
-        "RAINNC", "f4", "",
-        "ACCUMULATED TOTAL GRID SCALE PRECIPITATION",
-        "mm", "Registry.EM_COMMON:1581", wrf_history=True),
-    "SNOWNC": WrfOutputField(
-        "SNOWNC", "f4", "",
-        "ACCUMULATED TOTAL GRID SCALE SNOW AND ICE",
-        "mm", "Registry.EM_COMMON:1590", wrf_history=True),
-    "GRAUPELNC": WrfOutputField(
-        "GRAUPELNC", "f4", "",
-        "ACCUMULATED TOTAL GRID SCALE GRAUPEL",
-        "mm", "Registry.EM_COMMON:1591", wrf_history=True),
-    "HAILNC": WrfOutputField(
-        "HAILNC", "f4", "",
-        "ACCUMULATED TOTAL GRID SCALE HAIL",
-        "mm", "Registry.EM_COMMON:1592", wrf_history=True),
+    "RAINC": _output_field(
+                 'RAINC', 'ACCUMULATED TOTAL CUMULUS PRECIPITATION',
+                 'mm', 'Registry.EM_COMMON:1579'),
+    "RAINSH": _output_field(
+                  'RAINSH', 'ACCUMULATED SHALLOW CUMULUS PRECIPITATION',
+                  'mm', 'Registry.EM_COMMON:1580'),
+    "RAINNC": _output_field(
+                  'RAINNC', 'ACCUMULATED TOTAL GRID SCALE PRECIPITATION',
+                  'mm', 'Registry.EM_COMMON:1581'),
+    "SNOWNC": _output_field(
+                  'SNOWNC', 'ACCUMULATED TOTAL GRID SCALE SNOW AND ICE',
+                  'mm', 'Registry.EM_COMMON:1590'),
+    "GRAUPELNC": _output_field(
+                     'GRAUPELNC', 'ACCUMULATED TOTAL GRID SCALE GRAUPEL',
+                     'mm', 'Registry.EM_COMMON:1591'),
+    "HAILNC": _output_field(
+                  'HAILNC', 'ACCUMULATED TOTAL GRID SCALE HAIL',
+                  'mm', 'Registry.EM_COMMON:1592'),
 }
 
 #: Aerosol-aware Thompson's four aerosol carriers (``mp_physics=28``,
@@ -665,22 +586,18 @@ PRECIPITATION_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
 #: absent: it exists only under ``wif_input_opt=2``
 #: (Registry/registry.new3d_wif:82), which ``woof.config`` fails closed on.
 THOMPSON_AEROSOL_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
-    "QNWFA": WrfOutputField(
-        "QNWFA", "f4", "",
-        "water-friendly aerosol number con",
-        "  kg(-1)", "registry.new3d_wif:87", wrf_history=True),
-    "QNIFA": WrfOutputField(
-        "QNIFA", "f4", "",
-        "ice-friendly aerosol number con",
-        "  kg(-1)", "registry.new3d_wif:89", wrf_history=True),
-    "QNWFA2D": WrfOutputField(
-        "QNWFA2D", "f4", "",
-        "Surface aerosol number conc emission",
-        "kg-1 s-1", "Registry.EM_COMMON:492", wrf_history=True),
-    "QNIFA2D": WrfOutputField(
-        "QNIFA2D", "f4", "",
-        "Surface dust number conc emission",
-        "kg-1 s-1", "Registry.EM_COMMON:493", wrf_history=True),
+    "QNWFA": _output_field(
+                 'QNWFA', 'water-friendly aerosol number con',
+                 '  kg(-1)', 'registry.new3d_wif:87'),
+    "QNIFA": _output_field(
+                 'QNIFA', 'ice-friendly aerosol number con',
+                 '  kg(-1)', 'registry.new3d_wif:89'),
+    "QNWFA2D": _output_field(
+                   'QNWFA2D', 'Surface aerosol number conc emission',
+                   'kg-1 s-1', 'Registry.EM_COMMON:492'),
+    "QNIFA2D": _output_field(
+                   'QNIFA2D', 'Surface dust number conc emission',
+                   'kg-1 s-1', 'Registry.EM_COMMON:493'),
 }
 
 
@@ -735,18 +652,15 @@ SURFACE_IDENTITY_OUTPUT_FIELDS: dict[str, WrfOutputField] = {
         "IVGTYP", "i4", "",
         "DOMINANT VEGETATION CATEGORY",
         "", "Registry.EM_COMMON:857", wrf_history=True),
-    "TMN": WrfOutputField(
-        "TMN", "f4", "",
-        "SOIL TEMPERATURE AT LOWER BOUNDARY",
-        "K", "Registry.EM_COMMON:1939", wrf_history=True),
-    "VEGFRA": WrfOutputField(
-        "VEGFRA", "f4", "",
-        "VEGETATION FRACTION",
-        "", "Registry.EM_COMMON:859", wrf_history=True),
-    "SEAICE": WrfOutputField(
-        "SEAICE", "f4", "",
-        "SEA ICE FLAG",
-        "", "Registry.EM_COMMON:842", wrf_history=True),
+    "TMN": _output_field(
+               'TMN', 'SOIL TEMPERATURE AT LOWER BOUNDARY',
+               'K', 'Registry.EM_COMMON:1939'),
+    "VEGFRA": _output_field(
+                  'VEGFRA', 'VEGETATION FRACTION',
+                  '', 'Registry.EM_COMMON:859'),
+    "SEAICE": _output_field(
+                  'SEAICE', 'SEA ICE FLAG',
+                  '', 'Registry.EM_COMMON:842'),
 }
 
 
@@ -808,7 +722,7 @@ PHYSICS_SELECTOR_GLOBALS: tuple[WrfSelectorGlobal, ...] = (
     WrfSelectorGlobal("SF_SURFACE_MOSAIC", "Registry.EM_COMMON:2532",
                       "config", "sf_surface_mosaic"),
     WrfSelectorGlobal("SF_OCEAN_PHYSICS", "Registry.EM_COMMON:2614",
-                      "unimplemented"),
+                      "config", "sf_ocean_physics"),
     WrfSelectorGlobal("BL_PBL_PHYSICS", "Registry.EM_COMMON:2469",
                       "config", "bl_pbl_physics"),
     WrfSelectorGlobal("CU_PHYSICS", "Registry.EM_COMMON:2488",
@@ -822,17 +736,187 @@ PHYSICS_SELECTOR_GLOBALS: tuple[WrfSelectorGlobal, ...] = (
 #: The three inventories belong to three different selectors, so a key in two
 #: of them would mean two schemes disagreeing about one array's identity; the
 #: merge refuses that rather than letting dict order decide.
-SCHEME_OUTPUT_FIELDS: dict[str, WrfOutputField] = {}
-SOLAR_ALBEDO_OUTPUT_FIELDS = {
-    "albsol": WrfOutputField(
-        "ALBSOL", "f4", "", "albedo corrected for solar angle", "",
-        "Registry.EM_COMMON:1586 (HRRR v4.1.21)", wrf_history=True),
-    "albbcksol": WrfOutputField(
-        "ALBBCKSOL", "f4", "", "BACKGROUND ALBEDO corrected for solar angle", "",
-        "Registry.EM_COMMON:1587 (HRRR v4.1.21)", wrf_history=True),
+OCEAN_OUTPUT_FIELDS = {
+    'tml': _output_field(
+               'TML', 'OCEAN MIXED-LAYER TEMPERATURE',
+               'K', 'Registry.EM_COMMON:2107'),
+    't0ml': _output_field(
+                'T0ML', 'INITIAL OCEAN MIXED-LAYER TEMPERATURE',
+                'K', 'Registry.EM_COMMON:2108'),
+    'hml': _output_field(
+               'HML', 'OCEAN MIXED-LAYER DEPTH',
+               'm', 'Registry.EM_COMMON:2109'),
+    'h0ml': _output_field(
+                'H0ML', 'INITIAL OCEAN MIXED-LAYER DEPTH',
+                'm', 'Registry.EM_COMMON:2110'),
+    'huml': _output_field(
+                'HUML', 'OCEAN MIXED-LAYER DEPTH * U-CURRENT',
+                ' m2s-1 ', 'Registry.EM_COMMON:2111'),
+    'hvml': _output_field(
+                'HVML', 'OCEAN MIXED-LAYER DEPTH * V-CURRENT',
+                ' m2s-1 ', 'Registry.EM_COMMON:2112'),
+    'tmoml': _output_field(
+                 'TMOML', 'OCEAN LAYER MEAN TEMPERATURE   ',
+                 'K', 'Registry.EM_COMMON:2113'),
 }
-for _group in (MYNN_PBL_OUTPUT_FIELDS, NOAHMP_OUTPUT_FIELDS,
-               RUC_OUTPUT_FIELDS, SOLAR_ALBEDO_OUTPUT_FIELDS):
+PWP_OUTPUT_FIELDS = {
+    'om_tmp': WrfOutputField('OM_TMP', "f4", "", 'OCEAN TEMPERATURE', 'K', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_s': WrfOutputField('OM_S', "f4", "", 'OCEAN SALINITY', 'PSU', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_u': WrfOutputField('OM_U', "f4", "", 'OCEAN X CURRENT', 'm s-1', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_v': WrfOutputField('OM_V', "f4", "", 'OCEAN Y CURRENT', 'm s-1', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_depth': WrfOutputField('OM_DEPTH', "f4", "", 'OCEAN LAYER BOTTOM DEPTH', 'm', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_density': WrfOutputField('OM_DENSITY', "f4", "", 'OCEAN DENSITY', 'kg m-3', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_tini': WrfOutputField('OM_TINI', "f4", "", 'INITIAL OCEAN TEMPERATURE', 'K', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_sini': WrfOutputField('OM_SINI', "f4", "", 'INITIAL OCEAN SALINITY', 'PSU', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+    'om_ml': WrfOutputField('OM_ML', "f4", "", 'OCEAN MIXED LAYER DEPTH', 'm', "WRF v4.6.1 module_sf_3dpwp.F", wrf_history=True),
+}
+OCEAN_DIAGNOSTIC_FIELDS = {
+    'ocean_sst': WrfOutputField('OCEAN_SST', "f4", "", 'PROGNOSTIC OCEAN SURFACE TEMPERATURE; LAND AND LAKES MISSING', 'K', "coupled ocean diagnostics", wrf_history=True),
+    'ocean_sst_change': WrfOutputField('OCEAN_SST_CHANGE', "f4", "", 'OCEAN SURFACE TEMPERATURE CHANGE FROM COUPLED INITIAL STATE', 'K', "coupled ocean diagnostics", wrf_history=True),
+}
+SCHEME_OUTPUT_FIELDS: dict[str, WrfOutputField] = {}
+from woof.io.wrf_input_history_schema import (WRF_INPUT_HISTORY_ROWS,
+                                              WRF_INITIALIZED_HISTORY_ROWS)
+WRF_INPUT_ECHO_OUTPUT_FIELDS = {
+    name: WrfOutputField(name, row["dtype"], row["stagger"], row["description"],
+                         row["units"], row["registry"], wrf_history=True)
+    for name, row in (WRF_INPUT_HISTORY_ROWS | WRF_INITIALIZED_HISTORY_ROWS).items()
+}
+CUMULUS_RATE_OUTPUT_FIELDS = {}
+for _offset, (_key, _description, _units) in enumerate((
+        ("rucuten", "X WIND", "m s-2"), ("rvcuten", "Y WIND", "m s-2"),
+        ("rthcuten", "THETA", "K s-1"), ("rqvcuten", "Q_V", "kg kg-1 s-1"),
+        ("rqrcuten", "Q_R", "kg kg-1 s-1"), ("rqccuten", "Q_C", "kg kg-1 s-1"),
+        ("rqscuten", "Q_S", "kg kg-1 s-1"), ("rqicuten", "Q_I", "kg kg-1 s-1"))):
+    CUMULUS_RATE_OUTPUT_FIELDS[_key] = WrfOutputField(
+        _key.upper(), "f4", "", _description + " TENDENCY DUE TO CUMULUS PARAMETERIZATION",
+        _units, f"Registry.EM_COMMON:{1565 + _offset}", wrf_history=False)
+RADIATION_BOUNDARY_OUTPUT_FIELDS = {}
+for _side,_wave,_first in (("sw","SHORTWAVE",1813),("lw","LONGWAVE",1825)):
+    for _offset,(_suffix,_direction,_edge) in enumerate((
+            ("upt","UPWELLING","TOP"),("uptc","UPWELLING CLEAR SKY","TOP"),
+            ("dnt","DOWNWELLING","TOP"),("dntc","DOWNWELLING CLEAR SKY","TOP"),
+            ("upb","UPWELLING","BOTTOM"),("upbc","UPWELLING CLEAR SKY","BOTTOM"),
+            ("dnb","DOWNWELLING","BOTTOM"),("dnbc","DOWNWELLING CLEAR SKY","BOTTOM"))):
+        _key=_side+_suffix
+        _line=_first+_offset+_offset//2
+        RADIATION_BOUNDARY_OUTPUT_FIELDS[_key]=WrfOutputField(
+            _key.upper(),"f4","",f"INSTANTANEOUS {_direction} {_wave} FLUX AT {_edge}",
+            "W m-2",f"Registry.EM_COMMON:{_line}",wrf_history=True)
+        _acline=(1781 if _side=="sw" else 1789)+_offset
+        RADIATION_BOUNDARY_OUTPUT_FIELDS["ac"+_key]=WrfOutputField(
+            "AC"+_key.upper(),"f4","",f"ACCUMULATED {_direction} {_wave} FLUX AT {_edge}",
+            "J m-2",f"Registry.EM_COMMON:{_acline}",wrf_history=True)
+
+PHYSICS_PRESSURE_OUTPUT_FIELDS = {
+    "p_hyd": _output_field(
+                 'P_HYD', 'hydrostatic pressure',
+                 'Pa', 'Registry.EM_COMMON:376'),
+}
+SURFACE_ENERGY_OUTPUT_FIELDS = {
+    "achfx": _output_field(
+                 'ACHFX', 'ACCUMULATED UPWARD HEAT FLUX AT THE SURFACE',
+                 'J m-2', 'Registry.EM_COMMON:1964'),
+    "aclhf": _output_field(
+                 'ACLHF', 'ACCUMULATED UPWARD LATENT HEAT FLUX AT THE SURFACE',
+                 'J m-2', 'Registry.EM_COMMON:1967'),
+    "acgrdflx": _output_field(
+                    'ACGRDFLX', 'ACCUMULATED GROUND HEAT FLUX',
+                    'J m-2', 'Registry.EM_COMMON:862'),
+}
+PBL_RATE_OUTPUT_FIELDS = {
+    "rublten": WrfOutputField("RUBLTEN","f4","",
+        "X WIND TENDENCY DUE TO PBL PARAMETERIZATION","m s-2","Registry.EM_COMMON:1855",False),
+    "rvblten": WrfOutputField("RVBLTEN","f4","",
+        "Y WIND TENDENCY DUE TO PBL PARAMETERIZATION","m s-2","Registry.EM_COMMON:1856",False),
+    "rthblten": WrfOutputField("RTHBLTEN","f4","",
+        "THETA TENDENCY DUE TO PBL PARAMETERIZATION","K s-1","Registry.EM_COMMON:1857",False),
+    "rqvblten": WrfOutputField("RQVBLTEN","f4","",
+        "Q_V TENDENCY DUE TO PBL PARAMETERIZATION","kg kg-1 s-1","Registry.EM_COMMON:1858",False),
+    "rqcblten": WrfOutputField("RQCBLTEN","f4","",
+        "Q_C TENDENCY DUE TO PBL PARAMETERIZATION","kg kg-1 s-1","Registry.EM_COMMON:1859",False),
+    "rqiblten": WrfOutputField("RQIBLTEN","f4","",
+        "Q_I TENDENCY DUE TO PBL PARAMETERIZATION","kg kg-1 s-1","Registry.EM_COMMON:1860",False),
+}
+SCM_FORCING_OUTPUT_FIELDS = {}
+for _offset, _stem in enumerate(("hfx","lh","tsk")):
+    _label={"hfx":"sensible heat flux","lh":"latent heat flux",
+            "tsk":"skin temperature"}[_stem]
+    for _tendency in (False,True):
+        _key=_stem+"_force"+("_tend" if _tendency else "")
+        SCM_FORCING_OUTPUT_FIELDS[_key]=WrfOutputField(
+            _key.upper(),"f4","","SCM ideal surface "+_label+(" tendency" if _tendency else ""),
+            "W m-2 s-1" if _tendency else "W m-2",
+            f"Registry.EM_COMMON:{278+_offset+(3 if _tendency else 0)}",True)
+INACTIVE_DIAGNOSTIC_OUTPUT_FIELDS = {
+    "sstsk": _output_field(
+                 'SSTSK', 'SKIN SEA SURFACE TEMPERATURE',
+                 'K', 'Registry.EM_COMMON:880'),
+    "refd_max": _output_field(
+                    'REFD_MAX', 'MAX DERIVED RADAR REFL',
+                    'dbZ', 'Registry.EM_COMMON:2082'),
+}
+NOAH_OUTPUT_FIELDS = {
+    "smcrel": WrfOutputField(
+        "SMCREL", "f4", "Z", "RELATIVE SOIL MOISTURE", "",
+        "Registry.EM_COMMON:841", wrf_history=True),
+    "sfcrunoff": _output_field(
+                     'SFROFF', 'SURFACE RUNOFF',
+                     'mm', 'Registry.EM_COMMON:855'),
+    "udrunoff": _output_field(
+                    'UDROFF', 'UNDERGROUND RUNOFF',
+                    'mm', 'Registry.EM_COMMON:856'),
+    "acsnom": _output_field(
+                  'ACSNOM', 'ACCUMULATED MELTED SNOW',
+                  'kg m-2', 'Registry.EM_COMMON:867'),
+    "noahres": _output_field(
+                   'NOAHRES', 'RESIDUAL OF THE NOAH SURFACE ENERGY BUDGET',
+                   'W m{-2}', 'Registry.EM_COMMON:1851'),
+}
+CARRIED_SURFACE_OUTPUT_FIELDS = {
+    "sst": _output_field(
+               'SST', 'SEA SURFACE TEMPERATURE',
+               'K', 'Registry.EM:15'),
+    "xicem": _output_field(
+                 'XICEM', 'SEA ICE FLAG (PREVIOUS STEP)',
+                 '', 'Registry.EM_COMMON:844'),
+    "coszen": _output_field(
+                  'COSZEN', 'COS of SOLAR ZENITH ANGLE',
+                  'dimensionless', 'Registry.EM_COMMON:997'),
+    "lai": _output_field(
+               'LAI', 'LEAF AREA INDEX',
+               'm-2/m-2', 'Registry.EM_COMMON:1022'),
+    "albedo": _output_field(
+                  'ALBEDO', 'ALBEDO',
+                  '', 'Registry.EM_COMMON:1845'),
+    "albbck": _output_field(
+                  'ALBBCK', 'BACKGROUND ALBEDO',
+                  '', 'Registry.EM_COMMON:1847'),
+    "emiss": _output_field(
+                 'EMISS', 'SURFACE EMISSIVITY',
+                 '', 'Registry.EM_COMMON:1849'),
+    "xland": _output_field(
+                 'XLAND', 'LAND MASK (1 FOR LAND, 2 FOR WATER)',
+                 '', 'Registry.EM_COMMON:1946'),
+}
+SOLAR_ALBEDO_OUTPUT_FIELDS = {
+    "albsol": _output_field(
+                  'ALBSOL', 'albedo corrected for solar angle',
+                  '', 'Registry.EM_COMMON:1586 (HRRR v4.1.21)'),
+    "albbcksol": _output_field(
+                     'ALBBCKSOL', 'BACKGROUND ALBEDO corrected for solar angle',
+                     '', 'Registry.EM_COMMON:1587 (HRRR v4.1.21)'),
+}
+for _group in (CARRIED_SURFACE_OUTPUT_FIELDS, NOAH_OUTPUT_FIELDS, RADIATION_BOUNDARY_OUTPUT_FIELDS,
+               CUMULUS_RATE_OUTPUT_FIELDS,
+               PHYSICS_PRESSURE_OUTPUT_FIELDS,
+               SURFACE_ENERGY_OUTPUT_FIELDS,
+               PBL_RATE_OUTPUT_FIELDS,
+               SCM_FORCING_OUTPUT_FIELDS,
+               INACTIVE_DIAGNOSTIC_OUTPUT_FIELDS,
+               MYNN_PBL_OUTPUT_FIELDS, NOAHMP_OUTPUT_FIELDS,
+               RUC_OUTPUT_FIELDS, SOLAR_ALBEDO_OUTPUT_FIELDS,
+               OCEAN_OUTPUT_FIELDS, PWP_OUTPUT_FIELDS, OCEAN_DIAGNOSTIC_FIELDS):
     for _key, _field in _group.items():
         _clash = SCHEME_OUTPUT_FIELDS.get(_key)
         if _clash is not None and _clash != _field:
@@ -855,6 +939,22 @@ for _group in (MYNN_PBL_OUTPUT_FIELDS, NOAHMP_OUTPUT_FIELDS,
 #: which is what mp=28's four aerosol carriers are -- go in
 #: :data:`HISTORY_FIELDS_BY_NETCDF_NAME` below instead of here, so that pin
 #: keeps meaning what it says.  The writer consults the wider map.
+# WRF restart-only diagnostics are published as an explicit history extension.
+for _key, _description, _units, _line in (
+    ("gd_cloud", "CLOUD WATER/ICE MIXING RAIO IN GD CLOUD", "kg kg-1", 1653),
+    ("gd_cloud2", "TEST for GD CLOUD", "kg kg-1", 1654),
+    ("gd_cldfr", "GD CLOUD Fraction", " ? ", 1655),
+    ("raincv_a", "taveragd TIME-STEP CUMULUS PRECIPITATION", "mm", 1656),
+    ("raincv_b", "taveragd TIME-STEP CUMULUS PRECIPITATION", "mm", 1657),
+    ("gd_cloud_a", "taveragd CLOUD WATER MIXING RAIO IN GD CLOUD", "kg kg-1", 1658),
+    ("gd_cloud2_a", "taveragd cloud ice mix ratio in GD", "kg kg-1", 1659),
+    ("qc_cu", "CLOUD WATER MIXING RATIO FROM A CU SCHEME", "kg kg-1", 1660),
+    ("qi_cu", "CLOUD ICE MIXUNG RATIO FROM A CU SCHEME", "kg kg-1", 1661),
+):
+    SCHEME_OUTPUT_FIELDS[_key] = WrfOutputField(_key.upper(), "f4", "", _description,
+        _units, f"Registry.EM_COMMON:{_line}", False)
+
+
 OUTPUT_FIELDS_BY_NETCDF_NAME: dict[str, WrfOutputField] = {}
 for _group in (SCHEME_OUTPUT_FIELDS, PRECIPITATION_OUTPUT_FIELDS):
     for _key, _field in _group.items():
@@ -881,8 +981,15 @@ for _group in (SCHEME_OUTPUT_FIELDS, PRECIPITATION_OUTPUT_FIELDS):
 #: members, plus two ``misc`` 2-D surface fields), not scheme diagnostics,
 #: so only the second question includes them.
 HISTORY_FIELDS_BY_NETCDF_NAME: dict[str, WrfOutputField] = {}
+from woof.io.sfire_schema import SFIRE_REGISTRY_FIELDS
+SFIRE_OUTPUT_FIELDS = {
+    name: WrfOutputField(name, NETCDF_DTYPE_BY_REGISTRY_TYPE[row[0]], row[1],
+                         row[2], row[3], row[4], wrf_history=row[5])
+    for name, row in SFIRE_REGISTRY_FIELDS.items()
+}
 for _group in (OUTPUT_FIELDS_BY_NETCDF_NAME, THOMPSON_AEROSOL_OUTPUT_FIELDS,
-               SURFACE_IDENTITY_OUTPUT_FIELDS):
+               WRF_INPUT_ECHO_OUTPUT_FIELDS,
+               SURFACE_IDENTITY_OUTPUT_FIELDS, SFIRE_OUTPUT_FIELDS):
     for _key, _field in _group.items():
         _clash = HISTORY_FIELDS_BY_NETCDF_NAME.get(_field.netcdf_name)
         if _clash is not None and _clash != _field:
@@ -914,7 +1021,44 @@ def netcdf_names(keys) -> tuple[str, ...]:
 #: (tests/test_native_wrf_distribution.py) went red on it.  A metadata
 #: table is data; the module that carries it must not drag a writer
 #: behind it.
+#: Extra attributes on the history CLDFRA variable.  The field is the
+#: cloud fraction the model's radiation radiated through, computed on
+#: radiation's cadence (radt), which is coarser than the history cadence:
+#: a frame between radiation calls carries the most recent call's field,
+#: and the initial frame, written before the first radiation call,
+#: carries zeros (as WRF's own t=0 wrfout does).  A reader that needs the
+#: fraction AT the initial time diagnoses it instead.
+RADIATION_CLDFRA_ATTRIBUTES: dict[str, str] = {
+    "source": ("radiation cloud fraction, 0 to 1: icloud=1 cal_cldfra1, "
+               "with the MYNN subgrid cloud merged where icloud_bl=1"),
+    "sampling": ("held between radiation calls: each frame carries the "
+                 "field from the most recent radiation call at or before "
+                 "its valid time (radiation runs every radt minutes)"),
+    "initial_frame": ("zero before the first radiation call; the "
+                      "initial-time frame is written before it"),
+}
+
 REGISTRY_VAR_META: dict[str, tuple[str, str]] = {
+    "POWER": ("WIND TURBINE POWER PER GRID CELL", "W"),
+    "WIND_TKE_SOURCE": ("TURBINE ADDED TKE RATE", "m2 s-3"),
+    "WIND_TKE_SOURCE_MAX": ("VERTICAL MAXIMUM TURBINE ADDED TKE RATE", "m2 s-3"),
+    "TURBINE_POWER": ("POWER PER TURBINE; ordered by wind-farm receipt turbine_ids", "W"),
+    "TURBINE_HUB_WIND": ("HUB HEIGHT WIND SPEED PER TURBINE", "m s-1"),
+    "TURBINE_FARM_INDEX": ("ONE BASED FARM INDEX; ordered by wind-farm receipt farm_ids", "1"),
+    "TURBINE_HUB_HEIGHT": ("TURBINE HUB HEIGHT ABOVE GROUND", "m"),
+    "FARM_POWER": ("SUM OF TURBINE POWER PER FARM", "W"),
+    "FARM_HUB_WIND": ("ARITHMETIC MEAN HUB HEIGHT WIND PER FARM", "m s-1"),
+    "IC_FLASHCOUNT": ("Accumulated IC flash count", "#"),
+    "CG_FLASHCOUNT": ("Accumulated CG flash count", "#"),
+    "IC_FLASHRATE": ("IC flash rate", "#/s"),
+    "CG_FLASHRATE": ("CG flash rate", "#/s"),
+    "LPI": ("Lightning Potential Index", "m^2 s-2"),
+    # Correct mode, finding WB1 (woof/core/thompson_cloud_booking.py): no
+    # WRF Registry row (WRF drops the flux); the MPAS-A port of the same fix
+    # books it as cloudnc/cloudncv.  Present only in a correct-mode
+    # Thompson run.
+    "CLOUDNC": ("ACCUMULATED CLOUD WATER SETTLED TO THE SURFACE", "mm"),
+    "CLOUDNCV": ("CLOUD WATER SETTLED TO THE SURFACE IN THE LAST CALL", "mm"),
     "U": ("x-wind component", "m s-1"),
     "V": ("y-wind component", "m s-1"),
     "W": ("z-wind component", "m s-1"),
@@ -979,13 +1123,42 @@ REGISTRY_VAR_META: dict[str, tuple[str, str]] = {
     "TSLB": ("SOIL TEMPERATURE", "K"),
     "SMOIS": ("SOIL MOISTURE", "m3 m-3"),
     "SH2O": ("SOIL LIQUID WATER", "m3 m-3"),
+    # WRF v4.7.1 Registry.EM_COMMON CANWAT has the history flag h.
+    "CANWAT": ("CANOPY WATER", "kg m-2"),
     "SWDOWN": ("DOWNWARD SHORT WAVE FLUX AT GROUND SURFACE", "W m-2"),
+    "ECOBSC": ("SOLAR ECLIPSE OBSCURATION FRACTION", "1"),
+    "ECMASK": ("ECLIPSE MASK: 0 NONE, 1 PARTIAL, 2 TOTAL, 3 ANNULAR", "1"),
     "GLW": ("DOWNWARD LONG WAVE FLUX AT GROUND SURFACE", "W m-2"),
     # Registry.EM_COMMON:1839, transcribed verbatim beside its two
     # surface-flux neighbours.  ``ij`` mass grid, no stagger, real -- so
     # the dimension table and the FieldType default already describe it
     # correctly and it needs no row of its own.
     "OLR": ("TOA OUTGOING LONG WAVE", "W m-2"),
+    'SWDDNI': ('Shortwave surface downward direct normal irradiance', 'W m-2'),
+    'SWDDIR': ('Shortwave surface downward direct irradiance', 'W m-2'),
+    'SWDDIF': ('Shortwave surface downward diffuse irradiance', 'W m-2'),
+    'TLWDN': ('TOA LW downwelling flux', 'W m-2'),
+    'TLWUP': ('TOA LW upwelling flux', 'W m-2'),
+    'SLWDN': ('Surface LW downwelling flux', 'W m-2'),
+    'SLWUP': ('Surface LW upwelling flux', 'W m-2'),
+    'TSWDN': ('TOA SW downwelling flux', 'W m-2'),
+    'TSWUP': ('TOA SW upwelling flux', 'W m-2'),
+    'SSWDN': ('Surface SW downwelling flux', 'W m-2'),
+    'SSWUP': ('Surface SW upwelling flux', 'W m-2'),
+    "RTHRATEN": ("THETA TENDENCY DUE TO RADIATION", "K s-1"),
+    "SR": ("fraction of frozen precipitation", ""),
+    "THM": ("perturbation dry potential temperature", "K"),
+    "PC": ("perturbation dry air mass in column", "Pa"),
+    "O3_GFS_DU": ("Total ozone from GFS", "Dobson Units"),
+    # Registry.EM_COMMON:1699 (``ikj``, ``irh``), verbatim: mass grid, no
+    # stagger, real, unitless.  Written where a radiation scheme that
+    # computes a cloud fraction runs; see RADIATION_CLDFRA_ATTRIBUTES.
+    "CLDFRA": ("CLOUD FRACTION", ""),
+    "AOD5502D": ("Column aerosol optical depth at 550 nm", ""),
+    "AOD5503D": ("Aerosol optical depth in RRTMG band 10", ""),
+    "ANGEXP2D": ("Aerosol Angstrom exponent", ""),
+    "AERSSA2D": ("Aerosol single scattering albedo", ""),
+    "AERASY2D": ("Aerosol asymmetry parameter", ""),
     # Registry.EM_COMMON:1715, written where slope_rad = 1 runs.
     "SWNORM": ("NORMAL SHORT WAVE FLUX AT GROUND SURFACE (SLOPE-DEPENDENT)",
                "W m-2"),
@@ -999,6 +1172,28 @@ REGISTRY_VAR_META: dict[str, tuple[str, str]] = {
     "HFX": ("UPWARD HEAT FLUX AT THE SURFACE", "W m-2"),
     "QFX": ("UPWARD MOISTURE FLUX AT THE SURFACE", "kg m-2 s-1"),
     "LH": ("LATENT HEAT FLUX AT THE SURFACE", "W m-2"),
+    "ALBEDO": ("ALBEDO", ""),
+    "EMISS": ("SURFACE EMISSIVITY", ""),
+    "GSW": ("NET SHORT WAVE FLUX AT GROUND SURFACE", "W m-2"),
+    "AODTOT": ("TOTAL AEROSOL OPTICAL DEPTH AT 550 NM", "1"),
+    "FRC_URB2D": ("URBAN FRACTION", "dimensionless"),
+    "SH_URB": ("SENSIBLE HEAT FLUX FROM URBAN SFC", "W m{-2}"),
+    "LH_URB": ("LATENT HEAT FLUX FROM URBAN SFC", "W m{-2}"),
+    "G_URB": ("GROUND HEAT FLUX INTO URBAN", "W m{-2}"),
+    "RN_URB": ("NET RADIATION ON URBAN SFC", "W m{-2}"),
+    "TS_URB": ("SKIN TEMPERATURE", "K"),
+    "TR_URB": ("ROOF SURFACE TEMPERATURE", "K"),
+    "TB_URB": ("WALL SURFACE TEMPERATURE", "K"),
+    "TG_URB": ("ROAD SURFACE TEMPERATURE", "K"),
+    "TC_URB": ("CANOPY AIR TEMPERATURE", "K"),
+    "TVG_URB": ("VEGETATED GROUND SURFACE TEMPERATURE", "K"),
+    "TT_URB": ("TREE TEMPERATURE", "K"),
+    "XXXVG_URB": ("VEGETATED GROUND STABILITY", "dimensionless"),
+    "TVGL_URB": ("VEGETATED GROUND LAYER TEMPERATURE", "K"),
+    "SMG_URB": ("VEGETATED GROUND SOIL MOISTURE", "dimensionless"),
+    "CMCG_URB": ("VEGETATED GROUND CANOPY INTERCEPTION", "m"),
+    "FLXHUMVG_URB": ("VEGETATED GROUND HUMIDITY FLUX", "m s-1"),
+    "FLXHUMT_URB": ("TREE HUMIDITY FLUX", "m s-1"),
     "TKE_SASE": ("SASE prognostic subgrid turbulence kinetic energy",
                  "m2 s-2"),
     "TKE_SHINHONG": ("Shin-Hong published subgrid turbulence kinetic "
@@ -1065,8 +1260,66 @@ REGISTRY_VAR_META: dict[str, tuple[str, str]] = {
     "P_TOP": ("PRESSURE TOP OF THE MODEL", "Pa"),
     "ZNU": ("eta values on half (mass) levels", ""),
     "ZNW": ("eta values on full (w) levels", ""),
+    # Static grid, coordinate and surface words wrf.exe writes to every
+    # history frame (WRF v4.6.1 wrfout attributes, verbatim).  The WRF-file
+    # doors write the input file's own words for the static rows
+    # (woof.io.history_layout.WRF_FILE_STATIC_HISTORY_FIELDS); XLAND and
+    # LAKEMASK are the live surface masks.
+    "ZS": ('DEPTHS OF CENTERS OF SOIL LAYERS', 'm'),
+    "DZS": ('THICKNESSES OF SOIL LAYERS', 'm'),
+    "FNM": ('upper weight for vertical stretching', ''),
+    "FNP": ('lower weight for vertical stretching', ''),
+    "RDNW": ('inverse d(eta) values between full (w) levels', ''),
+    "RDN": ('inverse d(eta) values between half (mass) levels', ''),
+    "DNW": ('d(eta) values between full (w) levels', ''),
+    "DN": ('d(eta) values between half (mass) levels', ''),
+    "CFN": ('extrapolation constant', ''),
+    "CFN1": ('extrapolation constant', ''),
+    "CF1": ('2nd order extrapolation constant', ''),
+    "CF2": ('2nd order extrapolation constant', ''),
+    "CF3": ('2nd order extrapolation constant', ''),
+    "C1H": ('half levels, c1h = d bf / d eta, using znw', 'Dimensionless'),
+    "C2H": ('half levels, c2h = (1-c1h)*(p0-pt)', 'Pa'),
+    "C1F": ('full levels, c1f = d bf / d eta, using znu', 'Dimensionless'),
+    "C2F": ('full levels, c2f = (1-c1f)*(p0-pt)', 'Pa'),
+    "C3H": ('half levels, c3h = bh', 'Dimensionless'),
+    "C4H": ('half levels, c4h = (eta-bh)*(p0-pt), using znu', 'Pa'),
+    "C3F": ('full levels, c3f = bf', 'Dimensionless'),
+    "C4F": ('full levels, c4f = (eta-bf)*(p0-pt), using znw', 'Pa'),
+    "RDX": ('INVERSE X GRID LENGTH', 'm-1'),
+    "RDY": ('INVERSE Y GRID LENGTH', 'm-1'),
+    "RESM": ('TIME WEIGHT CONSTANT FOR SMALL STEPS', ''),
+    "ZETATOP": ('ZETA AT MODEL TOP', ''),
+    "T00": ('BASE STATE TEMPERATURE', 'K'),
+    "P00": ('BASE STATE PRESSURE', 'Pa'),
+    "TLP": ('BASE STATE LAPSE RATE', ''),
+    "TISO": ('TEMP AT WHICH THE BASE T TURNS CONST', 'K'),
+    "TLP_STRAT": ('BASE STATE LAPSE RATE (DT/D(LN(P)) IN STRATOSPHERE', 'K'),
+    "P_STRAT": ('BASE STATE PRESSURE AT BOTTOM OF STRATOSPHERE', 'Pa'),
+    "MAPFAC_MX": ('Map scale factor on mass grid, x direction', ''),
+    "MAPFAC_MY": ('Map scale factor on mass grid, y direction', ''),
+    "MAPFAC_UX": ('Map scale factor on u-grid, x direction', ''),
+    "MAPFAC_UY": ('Map scale factor on u-grid, y direction', ''),
+    "MAPFAC_VX": ('Map scale factor on v-grid, x direction', ''),
+    "MAPFAC_VY": ('Map scale factor on v-grid, y direction', ''),
+    "MF_VX_INV": ('Inverse map scale factor on v-grid, x direction', ''),
+    "CLAT": ('COMPUTATIONAL GRID LATITUDE, SOUTH IS NEGATIVE', 'degree_north'),
+    "VAR": ('STANDARD DEVIATION OF SUBGRID-SCALE OROGRAPHY', 'm'),
+    "VAR_SSO": ('variance of subgrid-scale orography', 'm2'),
+    "SHDMAX": ('ANNUAL MAX VEG FRACTION', ''),
+    "SHDMIN": ('ANNUAL MIN VEG FRACTION', ''),
+    "PCB": ('base state dry air mass in column', 'Pa'),
+    "XLAND": ('LAND MASK (1 FOR LAND, 2 FOR WATER)', ''),
+    "LAKEMASK": ('LAKE MASK (1 FOR LAKE, 0 FOR NON-LAKE)', ''),
 }
 
+
+from woof.core.output_diagnostics import HISTORY as _OUTPUT_HISTORY
+REGISTRY_VAR_META.update({symbol: (description, units)
+    for symbol, units, description in _OUTPUT_HISTORY.values()})
+from woof.core.hail import HISTORY as _HAIL_HISTORY
+REGISTRY_VAR_META.update({symbol: (description, units)
+    for symbol, units, description in _HAIL_HISTORY.values()})
 
 __all__ = [
     "HISTORY_FIELDS_BY_NETCDF_NAME",
@@ -1076,6 +1329,7 @@ __all__ = [
     "OUTPUT_FIELDS_BY_NETCDF_NAME",
     "PHYSICS_SELECTOR_GLOBALS",
     "PRECIPITATION_OUTPUT_FIELDS",
+    "RADIATION_CLDFRA_ATTRIBUTES",
     "REGISTRY_VAR_META",
     "RUC_OUTPUT_FIELDS",
     "SCHEME_OUTPUT_FIELDS",
@@ -1087,3 +1341,15 @@ __all__ = [
     "WrfSelectorGlobal",
     "netcdf_names",
 ]
+
+# Ocean rows append native history metadata without changing atmosphere fields.
+from woof.ocean.door import rows as _ocean_rows
+REGISTRY_VAR_META.update({row["history_name"]: (row["title"], row.get("storage_units", row["units"]))
+                          for row in _ocean_rows()["products"].values()})
+# Prognostic sea-ice extensions, no WRF Registry identity is claimed.
+from woof.ocean.seaice import OUTPUT as _SEAICE_OUTPUT
+for _key, (_external, _units) in _SEAICE_OUTPUT.items():
+    _schema = WrfOutputField(_external, "f4", "", _external, _units, "", False)
+    SCHEME_OUTPUT_FIELDS[_key] = _schema
+    OUTPUT_FIELDS_BY_NETCDF_NAME[_external] = _schema
+    HISTORY_FIELDS_BY_NETCDF_NAME[_external] = _schema

@@ -23,9 +23,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = "tools/battery/stage1_files.txt"
 NATIVE_MANIFEST = "tools/battery/stage1_native_files.txt"
 # These controls keep the public job coupled to the maintained release list.
-CONTRACT_FILES = ("tests/test_ci_workflow.py", "tests/test_public_ci_contract.py",
-                  # CPU-only SASE budgeting must never import the CuPy launcher.
-                  "tests/test_sase_preflight_no_cupy.py")
+# Recast WOOF ships none of the engine's CI workflows (its public tree carries only
+# the publish workflows), so the two CI-contract files stay with the engine.
+CONTRACT_FILES = (# CPU-only SASE budgeting must never import the CuPy launcher.
+                  "tests/test_sase_preflight_no_cupy.py",)
 
 
 def listed_files(root: pathlib.Path = ROOT, manifest: str = MANIFEST) -> list[str]:
@@ -46,13 +47,24 @@ def listed_files(root: pathlib.Path = ROOT, manifest: str = MANIFEST) -> list[st
 
 
 def publication_files(root: pathlib.Path = ROOT) -> list[str]:
+    if not (root / ".github/workflows/ci.yml").is_file():
+        # Recast WOOF: no engine CI workflow, so no publication job to add; Stage 1 is the
+        # maintained manifest and the contract file above.
+        return []
     # Import only the existing workflow parser. Its replay entry point, which
     # provisions a checkout, is never called by this selection runner.
     import importlib.util
     spec = importlib.util.spec_from_file_location("stage1_publication_parser", ROOT / "tools/ci_test_replay.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    _marker, files = module.parse_test_job((root / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
+    # Tag-time smoke is deliberately narrower. Keep R5 and the CI CPU lanes
+    # on the full contract list, including carried-packet and native-input
+    # guards that are not in stage1_files.txt.
+    import yaml
+    ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    nightly = ci["jobs"]["publication_contracts"]
+    script = "\n".join(step.get("run", "") for step in nightly["steps"])
+    _marker, files = module.parse_test_job(script)
     return files
 
 

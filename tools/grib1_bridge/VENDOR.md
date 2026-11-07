@@ -63,3 +63,31 @@ sums, and subtract-then-cast state assignments over independent cells.
 nonzero masks with bounded scratch. Independent fields may run in parallel;
 each SHA-256 stream retains its original byte order. NaN and signed-zero
 extrema keep NumPy's original reduction semantics in the Python wrapper.
+
+## Observed lake ice: `miniz_oxide` and `adler2`
+
+`src/ims_snow_ice.rs` reads the IMS daily snow and ice analysis (NSIDC
+G02156), which is published gzip-compressed, and streams it through
+`miniz_oxide`'s raw-deflate inflater after parsing the gzip header itself.
+`miniz_oxide 0.8.9` (MIT OR Zlib OR Apache-2.0) and its one dependency
+`adler2 2.0.1` (0BSD OR MIT OR Apache-2.0) are copied unchanged, with their
+Cargo checksums and licences, from the same versions already vendored in
+`rw_wps`. Its optional SIMD checksum is not enabled.
+
+## Shared offline registry (wave 3)
+
+Registry dependencies now resolve from `../rustwx/vendor/crates-io`.
+The private duplicate registry is removed without changing Cargo.lock.
+Existing canonical sources and licence texts are retained. Follow the
+scratch-vendoring instructions for all consumers in `tools/rustwx/VENDOR.md`
+when adding dependencies; never regenerate the shared registry in place.
+
+## Native WPS GRIB2 arithmetic (2.9.10)
+
+The vendored grib-core adds `unpack_message_wps32` for integer-packed WPS
+intermediate output. It shares integer reconstruction and validation with
+`unpack_message`, then applies g2lib's binary32 scaling. Existing binary64
+entry points retain their arithmetic and missing-value behavior. Only
+`met_intermediate` selects this entry and native GRIB2 zero bitmap fill;
+GRIB1 keeps its sentinel. GFS headers use the GRIB2 generating process.
+See `tests/WPS-UNGRIB-IDENTITY.md` for the native contract and regressions.

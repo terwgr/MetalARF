@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from woof import kernel_compile_notice as notice
 from woof import progress
 
@@ -79,15 +81,18 @@ def test_run_plan_relays_the_compile_as_a_declared_warning(tmp_path,
 def test_the_loader_compiles_through_the_observer():
     """Every loader site compiles through it, so every get_kernel is seen.
 
-    The sites are load_module, the CLM lake's own --fmad=false site and the
-    integer-define tier: each RawModule the loader builds is observed beside
-    its compile.
+    The sites are load_module, the no-FMA site (the CLM lake and, since
+    01402fcb1, the YSU, Shin-Hong and MYNN oracle units), the integer-define
+    tier and, since 01402fcb1, the integer-define tier of a no-FMA unit
+    (the gsd_41 MYNN generation), and the SLUCM/BEP no-FTZ site (the WRF
+    4.8 urban water balance, golden/wrf-fixes): each RawModule the loader
+    builds is observed beside its compile.
     """
 
     source = (Path(__file__).resolve().parents[1] / "woof" / "core"
               / "kernels" / "__init__.py").read_text(encoding="utf-8")
     sites = source.count("cp.RawModule(")
-    assert sites == 3
+    assert sites == 5
     assert source.count("_compile_observed(mod, ") == sites
     assert "mod.compile()" not in source
 
@@ -153,7 +158,7 @@ def test_every_shipped_profile_hands_initialize_physics_a_longwave_it_accepts(
     monkeypatch.setattr(grid, "make_vertical_coord", lambda *a, **k: "coord")
     monkeypatch.setattr(grid, "make_base_state", lambda *a, **k: "base")
     monkeypatch.setattr(moist, "init_moist_balanced", lambda *a, **k: "state")
-    monkeypatch.setattr(dycore, "step", lambda state, cfg: None)
+    monkeypatch.setattr(dycore, "step", lambda state, cfg, **kwargs: None)
     handed = []
 
     def initialize_physics(state, cfg, **kwargs):
@@ -180,16 +185,16 @@ def test_every_shipped_profile_hands_initialize_physics_a_longwave_it_accepts(
             assert glw == DECLARED_CONSTANT_GLW_WM2, profile
             assert "declared constant" in said, profile
             declared += 1
-    assert declared == 13
+    from woof.domain_wizard import profile_switches
+    from types import SimpleNamespace
+    assert declared == sum(not radiation_scheme_ids(SimpleNamespace(**profile_switches(profile)))[0]
+                           for profile in physics_menu.shipped_profiles())
 
 
-def test_all_profiles_exits_by_what_failed_and_runs_past_it(
-        monkeypatch, tmp_path, capsys):
+def _cold_profile_cache(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
-    from woof import kernel_compile_notice as notice
-    from woof import physics_menu, warm_kernels
-    from woof.cli import build_parser
+    from woof import physics_menu
 
     _stand_in_cupy(monkeypatch)
     monkeypatch.setattr(notice, "current_compute_capability", lambda: "120")
@@ -198,7 +203,15 @@ def test_all_profiles_exits_by_what_failed_and_runs_past_it(
     monkeypatch.setattr(notice, "kernel_cache_state",
                         lambda cache, **k: SimpleNamespace(
                             entries_for_capability=0))
-    profiles = physics_menu.shipped_profiles()
+    return physics_menu.shipped_profiles()
+
+
+def test_all_profiles_exits_by_what_failed_and_runs_past_it(
+        monkeypatch, tmp_path, capsys):
+    from woof import warm_kernels
+    from woof.cli import build_parser
+
+    profiles = _cold_profile_cache(monkeypatch, tmp_path)
     ran = []
 
     def run(profile, levels):
@@ -238,20 +251,10 @@ def test_a_profile_reading_an_unstaged_table_is_named_and_the_pass_goes_on(
     whole pass with a traceback at the first Thompson suite; it is a
     property of the suites that read the table, not of the card."""
 
-    from types import SimpleNamespace
-
-    from woof import kernel_compile_notice as notice
-    from woof import physics_menu, warm_kernels
+    from woof import warm_kernels
     from woof.cli import build_parser
 
-    _stand_in_cupy(monkeypatch)
-    monkeypatch.setattr(notice, "current_compute_capability", lambda: "120")
-    monkeypatch.setattr(notice, "cupy_kernel_cache_dir", lambda: tmp_path)
-    monkeypatch.setattr(notice, "scan_kernel_cache", lambda cache: (0, 0))
-    monkeypatch.setattr(notice, "kernel_cache_state",
-                        lambda cache, **k: SimpleNamespace(
-                            entries_for_capability=0))
-    profiles = physics_menu.shipped_profiles()
+    profiles = _cold_profile_cache(monkeypatch, tmp_path)
     unstaged = profiles[0]
     ran = []
 
@@ -273,3 +276,84 @@ def test_a_profile_reading_an_unstaged_table_is_named_and_the_pass_goes_on(
         "remedy": warm_kernels.MISSING_ASSET_REMEDY}]
     assert "woof fetch-tables" in warm_kernels.MISSING_ASSET_REMEDY
     assert len(report["profiles"]) == len(profiles) - 1
+
+
+# ---------------------------------------------------------------------------
+# Side by side: `warm-kernels` held ONE core for 186 s+ warming an image on
+# an RTX PRO 6000 box (2026-10-16) because every profile compiled after the
+# last.  The profiles now warm in parallel worker processes; the report keeps
+# the requested order and the same failure handling.  Threads stand in for
+# the spawned processes here (a stand-in cannot reach a spawned child).
+
+
+def _side_by_side(monkeypatch, tmp_path, worker):
+    import concurrent.futures
+    from types import SimpleNamespace
+
+    from woof import kernel_compile_notice as notice
+    from woof import warm_kernels
+
+    _stand_in_cupy(monkeypatch)
+    monkeypatch.setattr(notice, "current_compute_capability", lambda: "120")
+    monkeypatch.setattr(notice, "cupy_kernel_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(notice, "scan_kernel_cache", lambda cache: (0, 0))
+    monkeypatch.setattr(notice, "kernel_cache_state",
+                        lambda cache, **k: SimpleNamespace(entries_for_capability=0))
+    monkeypatch.setattr(warm_kernels, "profile_workers", lambda count: 3)
+    monkeypatch.setattr(warm_kernels, "_profile_worker", worker)
+
+    class Threads(concurrent.futures.ThreadPoolExecutor):
+        def __init__(self, workers, mp_context=None):
+            assert mp_context.get_start_method() == "spawn"  # CUDA cannot fork
+            super().__init__(workers)
+
+    monkeypatch.setattr(concurrent.futures, "ProcessPoolExecutor", Threads)
+    return warm_kernels
+
+
+def test_profiles_warm_side_by_side_and_report_in_order(monkeypatch, tmp_path):
+    import threading
+
+    names = ("a", "b", "c", "d")
+    inside, peak, lock = [0], [0], threading.Lock()
+    gate = threading.Barrier(3, timeout=5)
+
+    def worker(profile, levels):
+        with lock:
+            inside[0] += 1
+            peak[0] = max(peak[0], inside[0])
+        if profile != "d":
+            gate.wait()  # three profiles are inside at once
+        with lock:
+            inside[0] -= 1
+        if profile == "b":
+            return {"profile": profile, "refused": "stand-in refusal", "seconds": 0.1, "direct_events": []}
+        return {"profile": profile, "longwave": "computed by ra_lw_physics=4", "seconds": 0.1,
+                "direct_events": [], "nvrtc_compiles": 7}
+
+    warm_kernels = _side_by_side(monkeypatch, tmp_path, worker)
+    report = warm_kernels.warm_kernels(names)
+    assert peak[0] == 3 and report["workers"] == 3
+    assert [row["profile"] for row in report["profiles"]] == ["a", "c", "d"]
+    assert all(row["kernels_compiled"] == 7 for row in report["profiles"])
+    assert report["failed"] == [{"profile": "b", "error": "stand-in refusal"}]
+
+
+def test_a_device_fault_in_one_worker_stops_the_pass(monkeypatch, tmp_path):
+    def worker(profile, levels):
+        if profile == "b":
+            return {"profile": profile, "fatal": "b: CUDARuntimeError: stand-in", "seconds": 0.1,
+                    "direct_events": []}
+        return {"profile": profile, "longwave": "x", "seconds": 0.1, "direct_events": []}
+
+    warm_kernels = _side_by_side(monkeypatch, tmp_path, worker)
+    with pytest.raises(RuntimeError, match="CUDARuntimeError: stand-in"):
+        warm_kernels.warm_kernels(("a", "b", "c"))
+
+
+def test_one_profile_or_no_card_answer_keeps_the_single_pass(monkeypatch):
+    from woof import warm_kernels
+
+    _stand_in_cupy(monkeypatch)  # the stand-in card answers no memory query
+    assert warm_kernels.profile_workers(1) == 1
+    assert warm_kernels.profile_workers(28) == 1

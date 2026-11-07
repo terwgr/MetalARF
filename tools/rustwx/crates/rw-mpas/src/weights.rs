@@ -15,6 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
+use rayon::prelude::*;
 
 use crate::error::{MpasError, MpasResult};
 use crate::window::{Window, MPAS_EARTH_RADIUS_M};
@@ -281,6 +282,30 @@ pub fn detect_index_base(min: i64, max: i64, count: usize, name: &str) -> MpasRe
     )))
 }
 
+/// A limited-area mesh's boundary rings: `bdyMaskCell` per cell, 0 for the
+/// interior and 1-7 for MPAS's `nBdyLayers` (rings 1-5 the relaxation zone,
+/// 6-7 the specified zone).  `None` when the file has no `bdyMaskCell` or
+/// every cell is interior (a global mesh), so nothing changes for those.
+pub fn read_boundary_rings(path: &Path) -> MpasResult<Option<Vec<i32>>> {
+    let file = netcrust::File::open(path)?;
+    if file.variable("bdyMaskCell").is_none() {
+        return Ok(None);
+    }
+    let raw = file.read_f64("bdyMaskCell")?;
+    if raw
+        .iter()
+        .any(|v| !v.is_finite() || *v < 0.0 || *v > 7.0 || v.fract() != 0.0)
+    {
+        return Err(MpasError::Refusal(format!(
+            "mesh {} bdyMaskCell holds a value that is not a ring 0..7; a boundary zone \
+             read from it would hide or draw the wrong cells",
+            path.display()
+        )));
+    }
+    let rings: Vec<i32> = raw.iter().map(|v| *v as i32).collect();
+    Ok(if rings.iter().any(|&r| r > 0) { Some(rings) } else { None })
+}
+
 /// Read one horizontal spacing per cell off a mesh file, in metres.
 ///
 /// The file's own `sphere_radius` decides the units: a grid file written on
@@ -435,11 +460,13 @@ pub fn read_mesh_cell_spacing(path: &Path) -> MpasResult<MeshSpacing> {
     })
 }
 
-fn unit_vector(lat_deg: f64, lon_deg: f64) -> [f64; 3] {
+pub(crate) fn unit_vector(lat_deg: f64, lon_deg: f64) -> [f64; 3] {
     let lat = lat_deg * RAD;
     let lon = lon_deg * RAD;
-    let cos_lat = lat.cos();
-    [cos_lat * lon.cos(), cos_lat * lon.sin(), lat.sin()]
+    // The vendored `libm`, not the platform C library: see the note at the
+    // top of window.rs. The nearest-cell index map is built from these.
+    let cos_lat = libm::cos(lat);
+    [cos_lat * libm::cos(lon), cos_lat * libm::sin(lon), libm::sin(lat)]
 }
 
 // ---------------------------------------------------------------------------
@@ -575,7 +602,7 @@ impl KdTree {
 
     /// Index of the nearest stored point to `target`, by squared chord
     /// distance, with the distance.
-    fn nearest(&self, target: [f64; 3]) -> (u32, f64) {
+    pub(crate) fn nearest(&self, target: [f64; 3]) -> (u32, f64) {
         let mut best = (u32::MAX, f64::INFINITY);
         self.search(0, self.order.len(), target, &mut best);
         best
@@ -686,6 +713,45 @@ impl NearestCellWeights {
         Ok(marked)
     }
 
+    /// Hide the window points whose nearest cell is in a limited-area
+    /// mesh's boundary zone (`bdyMaskCell` 1-7, see [`read_boundary_rings`]),
+    /// on top of the footprint.  Returns how many points this newly hides.
+    ///
+    /// Those cells are not a forecast: rings 6-7 are overwritten from the
+    /// boundary file every step and rings 1-5 are relaxed toward it, so a map
+    /// of them shows the parent's interpolated state run through the
+    /// microphysics, not the limited-area model's weather.  The operational
+    /// limited-area products do not draw them either (RRFS posts its
+    /// products on a grid inside the computational domain).
+    ///
+    /// THE BREAKAGE THIS PREVENTS, MEASURED (2026-10-28, RRFS hrrrv5 on the
+    /// lam7k cut of conus3km, 2023-03-31 12Z from GFS): composite reflectivity
+    /// was >= 15 dBZ in 93% of the specified-zone cells at 15Z, hex and native
+    /// MPAS-Model-rrfs alike, against 0% in MRMS there and 17% in the
+    /// interior; on the 206,726-cell mv3km cut the same zone drew a
+    /// continuous 30-45 dBZ wall down the east edge.  A reader takes a ring
+    /// of echo around the frame for weather.
+    pub fn mask_boundary_zone(&mut self, rings: &[i32]) -> MpasResult<usize> {
+        if rings.len() != self.n_cells {
+            return Err(MpasError::Refusal(format!(
+                "the boundary zone needs one bdyMaskCell per cell; got {} for {} cells",
+                rings.len(),
+                self.n_cells
+            )));
+        }
+        if self.off_mesh.is_empty() {
+            self.off_mesh = vec![false; self.cell_index.len()];
+        }
+        let mut marked = 0usize;
+        for (outside, &cell) in self.off_mesh.iter_mut().zip(self.cell_index.iter()) {
+            if !*outside && rings[cell as usize] > 0 {
+                *outside = true;
+                marked += 1;
+            }
+        }
+        Ok(marked)
+    }
+
     /// How far the FURTHEST point that is still on the mesh had to reach.
     /// With a footprint marked this is the accurate resample quality figure;
     /// [`Self::max_distance_km`] then describes points nobody will see.
@@ -725,19 +791,36 @@ impl NearestCellWeights {
         }
         let points = self.cell_index.len();
         let mut out = vec![0.0f32; levels * points];
-        for level in 0..levels {
-            let target = &mut out[level * points..(level + 1) * points];
-            for (slot, &cell) in self.cell_index.iter().enumerate() {
-                target[slot] = values[cell as usize * levels + level];
-            }
-            if !self.off_mesh.is_empty() {
-                for (slot, &outside) in self.off_mesh.iter().enumerate() {
-                    if outside {
-                        target[slot] = OFF_MESH_FILL;
-                    }
-                }
-            }
+        if points == 0 {
+            return Ok(out);
         }
+        // Each level's plane is filled on its own, so levels (and row bands of
+        // one plane) run in parallel and write disjoint slots: the same bytes
+        // as one thread.
+        use rayon::prelude::*;
+        const BAND: usize = 64 * 1024;
+        out.par_chunks_mut(points)
+            .enumerate()
+            .for_each(|(level, plane)| {
+                plane
+                    .par_chunks_mut(BAND)
+                    .enumerate()
+                    .for_each(|(band, target)| {
+                        let first = band * BAND;
+                        let cells = &self.cell_index[first..first + target.len()];
+                        for (slot, &cell) in target.iter_mut().zip(cells) {
+                            *slot = values[cell as usize * levels + level];
+                        }
+                        if !self.off_mesh.is_empty() {
+                            let outside = &self.off_mesh[first..first + target.len()];
+                            for (slot, &outside) in target.iter_mut().zip(outside) {
+                                if outside {
+                                    *slot = OFF_MESH_FILL;
+                                }
+                            }
+                        }
+                    });
+            });
         Ok(out)
     }
 }
@@ -799,17 +882,23 @@ pub fn build_weights(
         .collect();
     let tree = KdTree::build(cells);
 
-    let mut cell_index = vec![0i32; ny * nx];
-    let mut distance_km = vec![0.0f32; ny * nx];
-    for slot in 0..ny * nx {
-        let target = unit_vector(target_latitude[slot], target_longitude[slot]);
-        let (idx, chord_squared) = tree.nearest(target);
-        cell_index[slot] = idx as i32;
-        // Chord to great-circle, on the mesh's physical radius.
-        let chord = chord_squared.sqrt();
-        let great_circle = 2.0 * (chord / 2.0).clamp(0.0, 1.0).asin() * MPAS_EARTH_RADIUS_M / 1000.0;
-        distance_km[slot] = great_circle as f32;
-    }
+    // THE COST THIS REMOVES (conus12km limited-area mesh, 157,859 cells, global 0.25 degree window,
+    // 2026-10-17): the 1,038,240 nearest-cell queries ran one after another on one core for 495 s. A
+    // target far outside a limited-area mesh is nearly equidistant from every cell, so the k-d tree can
+    // prune almost nothing and each query walks most of the tree. The queries are independent, so they
+    // run on every core; each slot's answer is computed exactly as before and lands in the same slot,
+    // so the weights (and their digest) are the same bytes.
+    let (cell_index, distance_km): (Vec<i32>, Vec<f32>) = (0..ny * nx)
+        .into_par_iter()
+        .map(|slot| {
+            let target = unit_vector(target_latitude[slot], target_longitude[slot]);
+            let (idx, chord_squared) = tree.nearest(target);
+            // Chord to great-circle, on the mesh's physical radius.
+            let chord = chord_squared.sqrt();
+            let great_circle = 2.0 * libm::asin((chord / 2.0).clamp(0.0, 1.0)) * MPAS_EARTH_RADIUS_M / 1000.0;
+            (idx as i32, great_circle as f32)
+        })
+        .unzip();
     if cell_index
         .iter()
         .any(|&i| i < 0 || i as usize >= mesh.n_cells())
@@ -882,6 +971,33 @@ mod tests {
             assert_eq!(got as usize, best.0, "index differs");
             assert_eq!(got_d, best.1, "distance differs");
         }
+    }
+
+    /// Points whose nearest cell sits in rings 1-7 are hidden; interior
+    /// points and points already off the footprint keep their state.
+    #[test]
+    fn the_boundary_zone_hides_ring_points_only() {
+        let mut weights = NearestCellWeights {
+            window_name: "t".into(),
+            window: Window::named("focus").unwrap(),
+            target_latitude: vec![0.0; 4],
+            target_longitude: vec![0.0; 4],
+            cell_index: vec![0, 1, 2, 2],
+            distance_km: vec![0.0; 4],
+            off_mesh: vec![false, false, false, true],
+            mesh_sha256: String::new(),
+            mesh_path: String::new(),
+            mesh_angle_units: AngleUnits::Declared,
+            n_cells: 3,
+            ny: 2,
+            nx: 2,
+            weights_sha256: String::new(),
+            build_seconds: 0.0,
+        };
+        // cell 0 interior, cell 1 relaxation ring 3, cell 2 specified ring 7
+        assert_eq!(weights.mask_boundary_zone(&[0, 3, 7]).unwrap(), 2);
+        assert_eq!(weights.off_mesh, vec![false, true, true, true]);
+        assert!(weights.mask_boundary_zone(&[0, 3]).is_err(), "one ring per cell");
     }
 
     #[test]

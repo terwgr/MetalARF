@@ -219,24 +219,30 @@ def mode_frames() -> dict:
 
     import cupy as cp  # noqa: F401  -- load_module needs it
 
-    from woof.core.kernels import load_module
+    from woof.core.kernels import load_module, kernel_local_size_bytes
+    from woof.core.preflight import (PRODUCTION_LOADED_KERNEL_UNITS,
+                                      load_production_kernel_unit)
 
     kdir = ROOT / "woof" / "core" / "kernels"
     frames: dict[str, int] = {}
     uncompilable: list[str] = []
     for path in sorted(kdir.glob("*.cu")):
         try:
-            module = load_module(path.stem)
+            if path.stem in PRODUCTION_LOADED_KERNEL_UNITS:
+                # Compiled only through its own loader; measure that image.
+                module, text = load_production_kernel_unit(path.stem)
+            else:
+                module, text = load_module(path.stem), path.read_text()
         except Exception:  # noqa: BLE001
             uncompilable.append(path.stem)
             continue
         widest = 0
-        for name in sorted(set(_SYMBOL.findall(path.read_text()))):
+        for name in sorted(set(_SYMBOL.findall(text))):
             try:
-                attributes = module.get_function(name).attributes
+                local_bytes = kernel_local_size_bytes(module.get_function(name))
             except Exception:  # noqa: BLE001
                 continue
-            widest = max(widest, int(attributes["local_size_bytes"]))
+            widest = max(widest, local_bytes)
         frames[path.stem] = widest
     return {
         "mode": "frames",

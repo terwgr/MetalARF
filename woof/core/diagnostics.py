@@ -6,6 +6,7 @@ import numpy as np
 
 from woof.core import constants as c
 from woof.core.kernels import get_kernel
+from woof.core.device_cache import cuda_cache
 from woof.core.noahmp_libm import log1pf_array, powf_array
 from woof.core.state import DomainState
 from woof.wrf_exact import DIAGNOSTICS_ENABLED
@@ -14,8 +15,8 @@ _THREADS = 256
 
 
 def update_diagnostics(state: DomainState, hypsometric_opt: int = 1,
-                       window: tuple[int, int, int, int] | None = None
-                       ) -> None:
+                       window: tuple[int, int, int, int] | None = None,
+                       muts=None, *, preparation: bool = False) -> None:
     """Recompute ``p``, ``al``, ``alt`` in place from (thp, php, mup[, qv]).
 
     General hybrid/terrain form: the kernel consumes the 2-D dry mass
@@ -42,6 +43,15 @@ def update_diagnostics(state: DomainState, hypsometric_opt: int = 1,
     the whole domain, and the full-domain launch is arithmetic-identical
     to the pre-window kernel.  The consumer is the two-way-feedback
     finalize, whose restriction changes only the columns under the nest.
+
+    ``muts`` (strict diagnostics only) is WRF's ``grid%muts`` as the last
+    acoustic loop left it, ``MUT + MU''`` (advance_mu_t).  WRF's
+    calc_p_rho_phi reads that word, not ``mub + mu_2``; the two differ in
+    a few columns and move ``al``/``p`` there.  Without it the column mass
+    is ``mub + mu``, start_em's spelling.  Ignored outside strict mode.
+
+    ``preparation`` keeps the host FP32 operation order and pinned log1p/pow
+    on CUDA too. The opt-in WRF-exact diagnostics arm retains its own maths.
     """
     if hypsometric_opt not in (1, 2):
         raise ValueError(
@@ -55,13 +65,32 @@ def update_diagnostics(state: DomainState, hypsometric_opt: int = 1,
         return
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.diagnostics import submit_calc_p_alpha
-        submit_calc_p_alpha(state, hypsometric_opt, window)
+        submit_calc_p_alpha(state, hypsometric_opt, window, muts=muts)
         return
     nz, ny, nx = state.p.shape
     j0, i0, nyw, nxw = _validated_window(window, ny, nx)
     moist = state.qv is not None
-    kernel = get_kernel("diagnostics", "calc_p_alpha")
     blocks = (nxw * nyw + _THREADS - 1) // _THREADS
+    if DIAGNOSTICS_ENABLED and muts is not None:
+        if getattr(state, "p_perturbation", None) is None:
+            import cupy as cp
+            state.p_perturbation = cp.empty_like(state.p)
+        get_kernel("diagnostics", "calc_p_alpha_carried_muts")(
+            (blocks,), (_THREADS,),
+            (state.thp, state.php, state.mup, state.thb, state.phb,
+             state.alb, state.pb, muts, state.rdnw, state.c1h, state.c2h,
+             state.c3h, state.c4h, state.c3f, state.c4f,
+             state.qv if moist else state.thp,
+             np.float32(0.0 if state.p_top is None else state.p_top),
+             np.int32(hypsometric_opt), np.int32(moist),
+             np.int32(state.thb.ndim == 3),
+             np.int32(nz), np.int32(ny), np.int32(nx),
+             np.int32(j0), np.int32(i0), np.int32(nyw), np.int32(nxw),
+             state.p, state.al, state.alt, state.p_perturbation))
+        return
+    kernel = (_preparation_module().get_function("calc_p_alpha")
+              if preparation and not DIAGNOSTICS_ENABLED else
+              get_kernel("diagnostics", "calc_p_alpha", (nz, ny, nx)))
     args = (state.thp, state.php, state.mup,
             state.thb, state.phb, state.dphb_resid, state.alb)
     if DIAGNOSTICS_ENABLED:
@@ -82,6 +111,28 @@ def update_diagnostics(state: DomainState, hypsometric_opt: int = 1,
             state.p_perturbation = cp.empty_like(state.p)
         args += (state.p_perturbation,)
     kernel((blocks,), (_THREADS,), args)
+
+
+@cuda_cache(maxsize=None)
+def _preparation_module():
+    """Compile the existing EOS with the same FP32 maths as host preparation."""
+    import cupy as cp
+    from pathlib import Path
+    from woof.core.kernels import _preamble
+    from woof.certify.kernel_manifest import record_module
+
+    directory = Path(__file__).parent / "kernels"
+    source = (_preamble() + "\n#define GPUWM_PREPARATION_EOS 1\n"
+              + "\n".join((directory / name).read_text(encoding="utf-8")
+                          for name in ("glibc_flt32.cuh", "portable_libm64.cuh",
+                                       "diagnostics.cu")))
+    options = ("-std=c++17", "--fmad=false", "--ftz=false",
+               "-DGPUWM_PREPARATION_IDENTITY=1")
+    module = cp.RawModule(code=source, options=options)
+    module.compile()
+    record_module("woof.core.diagnostics:preparation", source=source,
+                  options=options, module=module)
+    return module
 
 
 def _validated_window(window, ny: int, nx: int) -> tuple[int, int, int, int]:

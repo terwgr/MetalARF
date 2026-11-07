@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 import numpy as np
 import pytest
-from tests.physics_reference.uwpbl_oracle import load
-from tests.physics_reference.uwpbl_ref.vdiff import compute_vdiff
+from woof.verify.uwpbl_oracle import load
+from woof.verify.uwpbl_ref.vdiff import compute_vdiff
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,7 +36,7 @@ def records():
     directory = os.environ.get('UWPBL_ORACLE_DIR')
     if not directory:
         pytest.skip('UWPBL_ORACLE_DIR is unset')
-    alias_stem=ROOT/'tests/data/uwpbl/oracle/vdiff_alias'
+    alias_stem=ROOT/'tests/data/oracles/uwpbl/vdiff_alias'
     alias=load(alias_stem) if alias_stem.with_suffix('.bin').exists() else None
     for grid in ['g35','g44','g61']:
         stem = Path(directory)/f'cases-{grid}-spy'

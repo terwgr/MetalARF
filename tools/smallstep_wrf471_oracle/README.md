@@ -73,7 +73,7 @@ compute_89, compute_90 and compute_120 under the loader's and the RawModule
 options, with NVRTC 13.4 and 12.9
 (`tools/kernel_ptx_identity/receipts/oracle-smallstep-2.8.2-nvrtc{13.4,12.9}.json`).
 The workspace witness and the pressure-term mutation patch the default compile's
-view of the module (`woof/verify/default_kernel_source.py`);
+view of the module (`woof/verify/default_kernel_source.py`, in upstream WOOF; MetalARF does not carry it);
 `vertical-eos-causal.json` is a diagnostic and keeps the source its transforms
 were applied to.
 

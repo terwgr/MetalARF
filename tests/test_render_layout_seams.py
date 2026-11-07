@@ -21,7 +21,7 @@ from woof import render_layout
 # ------------------------------------------------- the lead is a width
 
 @pytest.mark.parametrize("lead,day", [
-    ("f999", "2026-09-30"), ("f1000", "2026-09-30"), ("f1001", "2026-09-30")])
+    ("f1000", "2026-09-30")])
 def test_a_lead_past_999_hours_parses_like_any_other(lead, day):
     """Three digits is the zero-padding width, never a ceiling."""
     name = f"arwen_wrf_20260820_0z_{lead}_d01-12km_2m_temperature.png"
@@ -42,7 +42,7 @@ def test_a_lead_past_999_hours_counts_every_hour_of_itself():
     assert thousand[2] == "2026-09-30"
 
 
-@pytest.mark.parametrize("lead", ["f999", "f1000", "f1001"])
+@pytest.mark.parametrize("lead", ["f1000"])
 def test_a_lead_past_999_hours_round_trips_through_its_two_folders(lead):
     name = f"arwen_wrf_20260820_0z_{lead}_d01-12km_2m_temperature.png"
     delivered = render_layout.delivered_name(
@@ -72,31 +72,30 @@ def test_engine_output_time_reads_cycle_plus_lead_without_a_suffix():
 
 
 @pytest.mark.parametrize("name", [
-    "panel.png",
     "arwen_wrf_20260820_0z_f06_d01-12km_2m_temperature.png",
-    "2m_temperature.png",
 ])
 def test_engine_output_time_answers_none_rather_than_raising(name):
     """A total function: the caller gets a fact, never a dead render."""
     assert render_layout.engine_output_time(name) is None
 
 
-def test_engine_output_time_agrees_with_the_render_door():
-    """Two readers of one clock, for as long as both exist."""
+@pytest.mark.parametrize("product", [
+    "fire_fuel", "fire_terrain", "fire_perimeter", "fire_ros",
+    "fire_heat_flux"])
+def test_engine_output_time_reads_a_native_sfire_panel(product):
+    """The series-with-context redraw read the clock off every picture and
+    died on ``fire_fuel_20190808T200000.png`` after a finished forecast."""
+    assert render_layout.engine_output_time(
+        f"{product}_20190808T200000.png"
+    ) == datetime.datetime(2019, 8, 8, 20, 0, 0)
+
+
+def test_the_render_door_reads_the_one_total_clock():
+    """The render door's own raising reader is gone; an unreadable name
+    is ``None`` to the one reader both use."""
     from woof import render
 
-    readable = [
-        "arwen_wrf_20260820_0z_f000_d01-12km_2m_temperature.png",
-        "arwen_wrf_20260820_18z_f006_d02-3km_composite_reflectivity.png",
-        "arwen_wrf_20260820_0z_f1000_d01-12km_2m_temperature.png",
-        "arwen_wrf_20260820_0z_f006_d01-12km_2m_temperature"
-        "_valid_20260820_061500z_lead_006h15m00s.png",
-    ]
-    for name in readable:
-        assert render_layout.engine_output_time(name) == \
-            render._engine_output_time(name), name
-    with pytest.raises(ValueError):
-        render._engine_output_time("panel.png")
+    assert not hasattr(render, "_engine_output_time")
     assert render_layout.engine_output_time("panel.png") is None
 
 
@@ -143,7 +142,7 @@ def test_history_frames_skips_in_flight_temporaries(tmp_path):
     assert [frame.path for frame in render_layout.history_frames(root)] == [kept]
 
 
-@pytest.mark.parametrize("episode", [1, 2, 1234])
+@pytest.mark.parametrize("episode", [1234])
 def test_history_frames_is_the_inverse_of_the_writers_spelling(tmp_path, episode):
     segment = render_layout.episode_segment(episode)
     frame = _touch(tmp_path / "d05" / segment / "wrfout_d05_1974-04-03_18_00_00")

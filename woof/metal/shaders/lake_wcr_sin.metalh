@@ -1,0 +1,107 @@
+#ifndef WOOF_LAKE_WCR_SIN_METALH
+#define WOOF_LAKE_WCR_SIN_METALH
+#include "thompson_aerosol_soft8.metalh"
+// The source wcr_sin reduction applies for |x| < 2^20; lake latitudes are within this domain.
+typedef Soft8 W;
+struct LakeWcrDD { W h,l; };
+static inline W lw_bits(ulong b) { return W::fromBits(b); }
+static inline LakeWcrDD lw_sum(W a,W b) { W s=a+b,bb=s-a; return {s,(a-(s-bb))+(b-bb)}; }
+static inline LakeWcrDD lw_fast_sum(W a,W b) { W s=a+b; return {s,b-(s-a)}; }
+static inline LakeWcrDD lw_prod(W a,W b) { W p=a*b; return {p,lw_bits(soft64_fma(a.bits,b.bits,(-p).bits))}; }
+static inline LakeWcrDD lw_neg(LakeWcrDD a) { return {-a.h,-a.l}; }
+static inline LakeWcrDD lw_add(LakeWcrDD a,LakeWcrDD b) {
+ LakeWcrDD s=lw_sum(a.h,b.h),t=lw_sum(a.l,b.l);s=lw_sum(s.h,s.l+t.h);return lw_sum(s.h,s.l+t.l);
+}
+static inline LakeWcrDD lw_mul(LakeWcrDD a,LakeWcrDD b) {
+ LakeWcrDD p=lw_prod(a.h,b.h);return lw_fast_sum(p.h,p.l+(a.h*b.l+a.l*b.h));
+}
+constant ulong wcr_lake_fact_h[30] = {
+0x3ff0000000000000ul,
+0x3ff0000000000000ul,
+0x3fe0000000000000ul,
+0x3fc5555555555555ul,
+0x3fa5555555555555ul,
+0x3f81111111111111ul,
+0x3f56c16c16c16c17ul,
+0x3f2a01a01a01a01aul,
+0x3efa01a01a01a01aul,
+0x3ec71de3a556c734ul,
+0x3e927e4fb7789f5cul,
+0x3e5ae64567f544e4ul,
+0x3e21eed8eff8d898ul,
+0x3de6124613a86d09ul,
+0x3da93974a8c07c9dul,
+0x3d6ae7f3e733b81ful,
+0x3d2ae7f3e733b81ful,
+0x3ce952c77030ad4aul,
+0x3ca6827863b97d97ul,
+0x3c62f49b46814157ul,
+0x3c1e542ba4020225ul,
+0x3bd71b8ef6dcf572ul,
+0x3b90ce396db7f853ul,
+0x3b4761b41316381aul,
+0x3aff2cf01972f578ul,
+0x3ab3f3ccdd165fa9ul,
+0x3a688e85fc6a4e5aul,
+0x3a1d1ab1c2dccea3ul,
+0x39d0a18a2635085dul,
+0x398259f98b4358adul
+};
+constant ulong wcr_lake_fact_l[30] = {
+0x0000000000000000ul,
+0x0000000000000000ul,
+0x0000000000000000ul,
+0x3c65555555555555ul,
+0x3c45555555555555ul,
+0x3c01111111111111ul,
+0xbbef49f49f49f49ful,
+0x3b6a01a01a01a01aul,
+0x3b3a01a01a01a01aul,
+0xbb6c154f8ddc6c00ul,
+0x3b3cbbc05b4fa99aul,
+0xbafc062e06d1f209ul,
+0xbac2aec959e14c06ul,
+0x3a8f28e0cc748ebeul,
+0x3a305d6f8a2efd1ful,
+0x39e1d8656b0ee8cbul,
+0x39a1d8656b0ee8cbul,
+0x398ac981465ddc6cul,
+0x394eec01221a8b0bul,
+0x38f2650f61dbdcb4ul,
+0x387ea72b4afe3c2ful,
+0xb87d043ae40c4647ul,
+0xb83aebcdbd20331cul,
+0xb7d3423c7d91404ful,
+0xb789ada5fcc1ab14ul,
+0xb7458ddadf344487ul,
+0xb7071c37ebd16540ul,
+0x36a054d0c78aea14ul,
+0x366b9e2e28e1aa54ul,
+0x362eaf8c39dd9bc5ul
+};
+
+static inline LakeWcrDD lw_fact(int i,int sign) {
+ LakeWcrDD v={lw_bits(wcr_lake_fact_h[i]),lw_bits(wcr_lake_fact_l[i])};return sign & 1 ? lw_neg(v) : v;
+}
+static inline ulong lake_wcr_sin_bits(ulong bits) {
+ W x=lw_bits(bits), zero=lw_bits(0ul);
+ if (soft64_is_zero(bits) || soft64_is_nan(bits)) return (x+x).bits;
+ if (soft64_is_infinite(bits)) return (x-x).bits;
+ if ((bits & 0x7ffffffffffffffful) >= 0x4130000000000000ul) return 0x7ff8000000000000ul;
+ W nd=lw_bits(soft64_rint_bits((x*lw_bits(0x3fe45f306dc9c883ul)).bits));
+ LakeWcrDD r={x,zero};
+ if (!soft64_is_zero(nd.bits)) {
+  LakeWcrDD p=lw_prod(nd,lw_bits(0x3ff921fb54442d18ul));
+  r=lw_add(lw_sum(x,-p.h),{-p.l,zero});
+  r=lw_add(r,lw_neg(lw_prod(nd,lw_bits(0x3c91a62633145c07ul))));
+  r=lw_add(r,{-(nd*lw_bits(0xb91f1976b7ed8fbcul)),zero});
+ }
+ int q=soft64_to_i32_rz(nd.bits).value & 3;
+ LakeWcrDD r2=lw_mul(r,r),v;
+ if(q & 1) {v=lw_fact(28,14);for(int n=13;n>=0;--n)v=lw_add(lw_mul(v,r2),lw_fact(2*n,n));}
+ else {v=lw_fact(29,14);for(int n=13;n>=0;--n)v=lw_add(lw_mul(v,r2),lw_fact(2*n+1,n));v=lw_mul(v,r);}
+ if(q & 2)v=lw_neg(v);
+ // wcr_round computes the same h+l even when its ambiguity interval straddles.
+ return (v.h+v.l).bits;
+}
+#endif

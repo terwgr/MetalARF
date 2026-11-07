@@ -1,10 +1,10 @@
-//! Minimal read-only classic netCDF parser, just enough for CfRadial 1.x.
+//! Minimal read-only classic netCDF parser — just enough for CfRadial 1.x.
 //!
 //! Implements the netCDF classic file format per the Unidata "NetCDF Classic
 //! Format Specification" (a.k.a. CDF-1) and its 64-bit-offset variant
 //! (CDF-2): <https://docs.unidata.ucar.edu/netcdf-c/current/file_format_specifications.html>.
 //! CDF-5 (64-bit data, `CDF\x05`) is detected and rejected with a clear
-//! error: radar moment files do not use it. All values are big-endian.
+//! error — radar moment files do not use it. All values are big-endian.
 //!
 //! Supported: dimension/attribute/variable lists, the six classic types
 //! (byte, char, short, int, float, double), fixed-size variables, and
@@ -123,7 +123,7 @@ impl NcVar {
 /// Parsed header of a classic netCDF file plus the backing bytes.
 pub struct Nc3File<'a> {
     bytes: &'a [u8],
-    /// (name, length), the record dimension stores its per-file length
+    /// (name, length) — the record dimension stores its per-file length
     /// (`numrecs`), not zero.
     pub dims: Vec<(String, usize)>,
     pub record_dim: Option<usize>,

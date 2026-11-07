@@ -346,7 +346,9 @@ def test_setup_takes_each_steps_own_defaults_not_a_transcription():
     from woof import geog_assets
 
     geog = setup_cli.step_namespace("woof.geog_assets")
-    assert geog.datasets == "all"
+    # fetch-geog's own default, read off its parser: "default" (the WRF
+    # and mesh set) since 86a30395d made the dust datasets opt-in.
+    assert geog.datasets == "default"
     assert geog.bundle is False
     assert geog.root is None
     # The handler travels with the namespace, so there is no name to drift.

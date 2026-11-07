@@ -27,9 +27,9 @@ import re
 import numpy as np
 import pytest
 
-from tests.physics_reference.uwpbl_oracle import (
+from woof.verify.uwpbl_oracle import (
     load, dims, step_arrays, MASS_OUTPUTS, FULL_OUTPUTS, SURFACE_OUTPUTS)
-from tests.physics_reference.uwpbl_ref.driver import camuwpbl_step, _F32Boundary
+from woof.verify.uwpbl_ref.driver import camuwpbl_step, _F32Boundary
 from test_uwpbl_launcher_wrf471_parity import _launch
 from test_uwpbl_wrf471_parity import _host_libm_is_the_oracles
 
@@ -935,7 +935,7 @@ FIXTURE_SHA256 = {
 
 def _fixture():
     directory = Path(os.environ.get('UWPBL_ORACLE_DIR')
-                     or ROOT/'tests/data/uwpbl/oracle')
+                     or ROOT/'tests/data/oracles/uwpbl')
     stem = directory/'cases-sub35'
     for suffix in ('.bin', '.manifest'):
         if not Path(str(stem)+suffix).is_file():
@@ -978,23 +978,40 @@ def test_unflushed_cpu_equals_every_oracle_word():
 @pytest.mark.gpu
 @REQUIRES_ORACLE_LIBM
 def test_product_equals_ftz_cpu_and_pins_every_oracle_mismatch():
+    """Default arithmetic: the pinned FTZ words.  Strict arithmetic: none.
+
+    Under GPUWM_WRF_EXACT=1 the loader compiles with --ftz=false
+    (woof/wrf_exact.py STRICT_OPTIONS), so nothing flushes: the product
+    must equal the UNFLUSHED CPU reference and the oracle on every word.
+    Grading the strict build against the flushed reference failed on the
+    W1 verification host (2026-10-07) although the strict product equalled
+    WRF on all 24,192 words: the test, not the product, was wrong there.
+    """
     pytest.importorskip('cupy')
+    from woof import wrf_exact
+    flush = not wrf_exact.ENABLED
     fx = _fixture()
     ncol, nk, nsteps = dims(fx)
     different, words = set(), 0
+    label = 'FTZ' if flush else 'strict, unflushed'
     for step in range(1, nsteps+1):
         a = step_arrays(fx, step)
-        reference = camuwpbl_step(a, ftz=True)
+        reference = camuwpbl_step(a, ftz=flush)
         got = _launch(a, nk, ncol)
         assert set(got) == set(FIELDS)
         for name in FIELDS:
-            words += _assert_words(got[name], reference[name], f'FTZ s{step} {name}')
+            words += _assert_words(got[name], reference[name], f'{label} s{step} {name}')
         different |= _positions(got, a, step)
+    assert words == 24192
+    if not flush:
+        assert different == set(), sorted(different)[:20]
+        print(f'strict product vs unflushed CPU and vs oracle: {words} words, '
+              '0 mismatches, max ULP 0')
+        return
     counts = {name: sum(word[2] == name for word in different) for name in FIELDS}
     assert counts == EXPECTED_COUNTS
     assert different == EXPECTED_WORDS, (
         f'added={sorted(different-EXPECTED_WORDS)}, removed={sorted(EXPECTED_WORDS-different)}')
-    assert words == 24192
     print(f'product vs FTZ CPU: {words} words, 0 mismatches, max ULP 0; '
           f'product vs oracle: {len(different)} pinned mismatches; {counts}')
 
@@ -1004,7 +1021,7 @@ def test_packaged_subnormal_fixture_words():
     if os.environ.get('UWPBL_ORACLE_DIR'):
         pytest.skip('Fixture hashes apply to the packaged files')
     for name, expected in FIXTURE_SHA256.items():
-        assert hashlib.sha256((ROOT/'tests/data/uwpbl/oracle'/name).read_bytes()).hexdigest() == expected
+        assert hashlib.sha256((ROOT/'tests/data/oracles/uwpbl'/name).read_bytes()).hexdigest() == expected
 
 
 def test_float32_boundary_site_counts():
@@ -1020,7 +1037,9 @@ def test_float32_boundary_site_counts():
     # Also pin executable source so a plain float operator cannot bypass
     # the vocabulary count. Comment and whitespace changes remain harmless.
     executable_sha256 = {
-        'uwpbl_driver.cuh': '130bd34417073be18cebcf8ab4744259381b5cfe96a6ec715c5dc1b0aecce7ba',
+        # Re-pinned 2026-10-07: the calm-wind guard (tests/test_uwpbl_calm_wind.py)
+        # adds one R8 comparison and assignment, no float32 boundary call.
+        'uwpbl_driver.cuh': '800d92ea72aeb6d6721d49e93794687b89167db342ffddf9c778dcd60944fb3d',
         'uwpbl.cu': '844ff2858dbee2657978f3913f43a431f673e90d1dcfc2fc0543e25750362bb5',
     }
     total = 0

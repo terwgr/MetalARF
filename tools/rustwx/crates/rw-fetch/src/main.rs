@@ -23,6 +23,11 @@
 mod net;
 mod plan;
 mod record;
+mod stream;
+mod assets;
+mod bz2par;
+mod objects;
+mod cyclone;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -37,7 +42,7 @@ use wx_core::download::TransferProgress;
 
 use rustwx_core::{CycleSpec, ModelId, ModelRunRequest, ResolvedUrl, SourceId};
 
-use net::{grib_framed, hex_digest, publish, select_contains, select_exact, Fetcher};
+use net::{publish, select_contains, select_exact, Fetcher};
 use plan::{decide, Decision, Mode, ModeRequest};
 use record::{
     CycleRecord, DedupRecord, FetchRecord, FileRecord, LatestReport, ProbeHour, ProbeRecord,
@@ -58,11 +63,21 @@ pub static GPUWM_BRIDGE_SOURCE_REV_STAMP: &str =
 
 const USAGE: &str = "\
 usage: rw_fetch <fetch|probe|latest> [OPTIONS]
+       rw_fetch object --url URL --output FILE
+       rw_fetch asset --url URL --output FILE --bytes N --sha256 HEX
+       rw_fetch encoded-asset --url URL --output FILE
+       rw_fetch hash --input FILE [--bytes N --sha256 HEX]
+       rw_fetch unpack --input ARCHIVE --output NEW_DIR --datasets NAME,NAME
+       rw_fetch unpack-audit --input ARCHIVE --output NEW_DIR --datasets NAME,NAME
+       rw_fetch decode --input FILE --output NEW_FILE --codec <zstd|bz2|gz>
+       rw_fetch <inventory|objects> --request JSON   (public-object NDJSON)
+       rw_fetch <cyclone-tracks|cyclone-score> --request JSON
        rw_fetch --version | --help | --abi
 
   fetch    download a model-run window and print a fetch record
   probe    report the transport decision for each hour, moving no payload
   latest   report the newest cycle serving every hour through --through
+  object   stream a GRIB2 object and print its digest and envelope receipt
 
 common options
   --model NAME            hrrr, gfs, gdas, rap, nam, ... (rustwx model id)
@@ -96,6 +111,7 @@ While an object moves, fetch prints `rw_fetch-progress fHHH RECEIVED TOTAL`
 on stderr about once a second (TOTAL is - until the size is known).
 
 environment
+  GPUWM_FETCH_NO_IDLE_CONNECTIONS  close idle sockets under the engine box cap
   RUSTWX_DOWNLOAD_STREAMS N       chunk streams per object (default 16)
   RUSTWX_DOWNLOAD_STALL_SECONDS S a connection that delivers under 64 KiB
                                   in S seconds (default 30) is dropped and
@@ -185,6 +201,27 @@ fn failure_text(failure: &Failure) -> String {
 fn main() -> ExitCode {
     let _ = std::hint::black_box(GPUWM_BRIDGE_SOURCE_REV_STAMP);
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|x| x == "cyclone-score") {
+        return match cyclone::score(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(reason) => {eprintln!("rw_fetch cyclone-score: {reason}"); ExitCode::from(EXIT_REFUSED)}
+        };
+    }
+    if args.first().is_some_and(|x| x == "cyclone-tracks") {
+        return match cyclone::run(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(reason) => {eprintln!("rw_fetch cyclone-tracks: {reason}"); ExitCode::from(EXIT_REFUSED)}
+        };
+    }
+    if matches!(args.first().map(String::as_str), Some("inventory" | "objects")) {
+        return match objects::run(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(reason) => {
+                eprintln!("rw_fetch: {reason}");
+                ExitCode::from(EXIT_REFUSED)
+            }
+        };
+    }
     match run(&args) {
         Ok(document) => {
             println!("{document}");
@@ -216,6 +253,8 @@ fn run(args: &[String]) -> Result<String, Failure> {
         // is in the built image.
         "--abi" => Ok(FETCH_RECORD_ABI.to_string()),
         "fetch" => command_fetch(&options()?),
+        "object" => command_object(&options()?),
+        "asset" | "encoded-asset" | "hash" | "unpack" | "unpack-audit" | "decode" => assets::command(&args[0], &args[1..]),
         "probe" => Ok(command_probe(&options()?)?),
         "latest" => Ok(command_latest(&options()?)?),
         other => Err(Failure::Usage(format!("unknown subcommand {other:?}"))),
@@ -242,6 +281,8 @@ struct Options {
     out: Option<PathBuf>,
     cache_dir: Option<PathBuf>,
     keep_idx: bool,
+    url: Option<String>,
+    output: Option<PathBuf>,
 }
 
 impl Default for ModeRequest {
@@ -309,6 +350,8 @@ impl Options {
                 "--out" => options.out = Some(PathBuf::from(value!())),
                 "--cache-dir" => options.cache_dir = Some(PathBuf::from(value!())),
                 "--keep-idx" => options.keep_idx = true,
+                "--url" => options.url = Some(value!()),
+                "--output" => options.output = Some(PathBuf::from(value!())),
                 other => return Err(format!("unknown option {other:?}")),
             }
             index += 1;
@@ -640,10 +683,10 @@ fn command_fetch(options: &Options) -> Result<String, Failure> {
             // The probes above moved a few bytes of their own; the count
             // a reader sees is this object's payload.
             reporter.object(hour);
-            let (bytes, ranges, selected, idx_sidecar) = match mode {
+            let (receipt, ranges, selected, idx_sidecar) = match mode {
                 Mode::FullFile => (
                     fetcher
-                        .get_full_file(&candidate.grib_url)
+                        .stream_full_file(&candidate.grib_url, &destination)
                         .map_err(Failure::from)?,
                     Vec::new(),
                     None,
@@ -671,25 +714,14 @@ fn command_fetch(options: &Options) -> Result<String, Failure> {
                         }
                         chosen
                     };
-                    let (bytes, ranges) = fetcher
-                        .get_idx_subset(&candidate.grib_url, payload, &selection)
+                    let (receipt, ranges) = fetcher
+                        .stream_idx_subset(&candidate.grib_url, payload, &selection, &destination)
                         .map_err(Failure::from)?;
                     let idx_name = format!("{name}.idx");
                     write_idx(&out, &idx_name, &payload.text)?;
-                    (bytes, ranges, Some(selection.len()), Some(idx_name))
+                    (receipt, ranges, Some(selection.len()), Some(idx_name))
                 }
             };
-
-            if !grib_framed(&bytes) {
-                return Err(format!(
-                    "{name}: the assembled payload is not a complete GRIB2 stream \
-                     ({} bytes, mode {})",
-                    bytes.len(),
-                    mode.as_str()
-                )
-                .into());
-            }
-            publish(&destination, &bytes)?;
 
             if options.keep_idx && idx_sidecar.is_none() {
                 if let Some(payload) = payload.as_ref() {
@@ -701,8 +733,11 @@ fn command_fetch(options: &Options) -> Result<String, Failure> {
                 forecast_hour: hour,
                 name: name.clone(),
                 path: destination.display().to_string(),
-                bytes: bytes.len() as u64,
-                sha256: hex_digest(&bytes),
+                bytes: receipt.bytes,
+                sha256: receipt.sha256,
+                grib2_messages: receipt.grib2_messages,
+                last_byte_unix: receipt.last_byte_unix,
+                publication: receipt.publication,
                 source: candidate.source.to_string(),
                 grib_url: candidate.grib_url.clone(),
                 idx_url: candidate.idx_url.clone(),
@@ -767,6 +802,20 @@ fn command_fetch(options: &Options) -> Result<String, Failure> {
         wall_seconds: started.elapsed().as_secs_f64(),
     };
     Ok(serde_json::to_string_pretty(&document).map_err(|error| format!("{error}"))?)
+}
+
+fn command_object(options: &Options) -> Result<String, Failure> {
+    let url = options.url.as_deref().ok_or_else(|| Failure::Usage("object needs --url".into()))?;
+    let path = options.output.as_deref().ok_or_else(|| Failure::Usage("object needs --output".into()))?;
+    if let Some(parent) = path.parent() { std::fs::create_dir_all(parent).map_err(|e| Failure::Refused(e.to_string()))?; }
+    let fetcher = Fetcher::new(options.cache_dir.as_deref())?;
+    let reporter = ProgressReporter::start(fetcher.progress(), Box::new(|line| eprint!("{line}")));
+    reporter.object(0);
+    let receipt = fetcher.stream_full_file(url, path)?;
+    reporter.finish();
+    let mut document = serde_json::to_value(&receipt).map_err(|e| Failure::Refused(e.to_string()))?;
+    document["streams_used"] = serde_json::json!(fetcher.streams_used());
+    serde_json::to_string(&document).map_err(|e| Failure::Refused(e.to_string()))
 }
 
 /// The `rw_fetch-progress` lines `fetch` prints while an object moves.
@@ -1221,6 +1270,128 @@ mod tests {
         );
         assert_eq!(failure.exit_status(), EXIT_REFUSED);
         assert!(failure.message().starts_with("f018: no source served this object"));
+    }
+
+    /// Two GRIB2 messages of `each` bytes, framed so Section 0 states
+    /// the length and the message ends in `7777`.
+    fn two_messages(each: u64) -> Vec<u8> {
+        let mut object = Vec::new();
+        for _ in 0..2 {
+            let mut message = b"GRIB\0\0\0\x02".to_vec();
+            message.extend(each.to_be_bytes());
+            message.resize(each as usize - 4, 0);
+            message.extend(b"7777");
+            object.extend(message);
+        }
+        object
+    }
+
+    /// An origin that answers ranges the way S3 does: a range reaching
+    /// past the end is clipped to the object, and the clipped span and
+    /// the total are stated in Content-Range.  `idx` is served whole.
+    fn s3_like_origin(object: Vec<u8>, idx: String) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut request = Vec::new();
+                let mut byte = [0u8; 1];
+                while !request.ends_with(b"\r\n\r\n") {
+                    if stream.read(&mut byte).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    request.push(byte[0]);
+                }
+                let text = String::from_utf8_lossy(&request).to_string();
+                let path = text.split_whitespace().nth(1).unwrap_or("").to_string();
+                let range = text.lines().find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("range: bytes=")
+                        .map(str::to_string)
+                });
+                let reply = if path.ends_with(".idx") {
+                    let mut reply = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        idx.len()
+                    )
+                    .into_bytes();
+                    reply.extend(idx.as_bytes());
+                    reply
+                } else if let Some(range) = range {
+                    let total = object.len() as u64;
+                    let (first, last) = range.trim().split_once('-').unwrap();
+                    let first: u64 = first.parse().unwrap();
+                    let last = last
+                        .parse::<u64>()
+                        .map_or(total - 1, |last| last.min(total - 1));
+                    let mut reply = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {first}-{last}/{total}\r\n\
+                         Content-Length: {}\r\nConnection: close\r\n\r\n",
+                        last - first + 1
+                    )
+                    .into_bytes();
+                    reply.extend(&object[first as usize..=last as usize]);
+                    reply
+                } else {
+                    let mut reply = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        object.len()
+                    )
+                    .into_bytes();
+                    reply.extend(&object);
+                    reply
+                };
+                let _ = stream.write_all(&reply);
+            }
+        });
+        format!("http://{address}")
+    }
+
+    /// An index that ends exactly where the object ends is proven complete
+    /// against an origin that clips a past-the-end range, as S3 does.  The
+    /// old proof asked for one byte past the last message, the clipped
+    /// answer read as a foreign span, and every HRRR object on S3 was
+    /// refused for --mode idx-subset ("index coverage could not be proven").
+    #[test]
+    fn a_complete_index_is_proven_against_an_origin_that_clips_past_the_end() {
+        let object = two_messages(100);
+        let idx = "1:0:d=2026100221:PRES:1 hybrid level:anl:\n\
+                   2:100:d=2026100221:PRES:2 hybrid level:anl:\n"
+            .to_string();
+        let origin = s3_like_origin(object, idx);
+        let (facts, payload) = Fetcher::for_test().probe_object(
+            &format!("{origin}/hrrr.t21z.wrfnatf00.grib2"),
+            Some(&format!("{origin}/hrrr.t21z.wrfnatf00.grib2.idx")),
+            true,
+        );
+        assert!(payload.is_some(), "{facts:?}");
+        assert_eq!(facts.idx_covers_object, Some(true), "{facts:?}");
+        assert_eq!(facts.object_bytes, Some(200));
+        let Decision::Take(mode, _) = decide(ModeRequest::IdxSubset, &facts, 1) else {
+            panic!("a complete index is taken");
+        };
+        assert_eq!(mode, Mode::IdxSubset);
+    }
+
+    /// A genuinely short index still refuses: the object carries a message
+    /// the index never lists, and a subset would silently drop it.
+    #[test]
+    fn a_short_index_is_still_refused_against_that_origin() {
+        let object = two_messages(100);
+        let idx = "1:0:d=2026100221:PRES:1 hybrid level:anl:\n".to_string();
+        let origin = s3_like_origin(object, idx);
+        let (facts, _payload) = Fetcher::for_test().probe_object(
+            &format!("{origin}/hrrr.t21z.wrfnatf00.grib2"),
+            Some(&format!("{origin}/hrrr.t21z.wrfnatf00.grib2.idx")),
+            true,
+        );
+        assert_eq!(facts.idx_covers_object, Some(false), "{facts:?}");
+        let Decision::Refuse(reason) = decide(ModeRequest::IdxSubset, &facts, 1) else {
+            panic!("a short index is refused");
+        };
+        assert!(reason.contains("silently drop trailing records"), "{reason}");
     }
 
     /// One reply per connection, in order, from a local origin.

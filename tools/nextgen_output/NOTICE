@@ -1,0 +1,31 @@
+WOOF NextGen output
+
+Per-nexus CSV contract modified from NOAA-OWP/ngen:
+  https://github.com/NOAA-OWP/ngen
+  pin be11a180565a78ff069d855b0b5dbfc23845e7d8
+  src/utilities/output/PerNexusCsvOutputMgr.cpp
+  Copyright (C) 2025-2026 Lynker
+  Created by Robert Bartel on 12/5/25.
+  Apache License, Version 2.0.
+
+t-route stream-output NetCDF/CSV/Parquet contracts modified from NOAA-OWP/t-route:
+  https://github.com/NOAA-OWP/t-route
+  pin 12a8eae0cdfed437143c590659fa7077605a5e70
+  src/troute-network/troute/nhd_io.py, write_flowveldepth_netcdf
+  src/troute-nwm/src/nwm_routing/output.py, _parquet_output_format_converter
+  Apache License, Version 2.0.
+
+Changes: original Rust serializers, batched CPU formatting/transposition,
+GPU history capture, primitive-array resident checkpoint envelope and C ABI.
+No withdrawn WRF-Hydro code, schemas, fixtures or native runtime are used.
+
+NetCDF containers: the project's netcdf-writer and netcdf-reader Rust crates.
+The HDF5 byte grammar follows the HDF Group file-format specification and the
+NetCDF-4 dimension-scale mapping. The metadata checksum is seeded from the
+project's hdf5-reader (Jenkins lookup3). No netCDF-C/HDF5 C/zlib C sources or
+native runtime are built or distributed by this crate.
+
+Parquet container: Apache Arrow parquet-rs 56.2.0, Apache-2.0.
+Its complete Apache notice is retained in PARQUET-NOTICE.txt.
+Snappy-Rust snap 1.1.2 is BSD-3-Clause; SNAP-NOTICE.txt retains its notice.
+No Apache/Pandas/PyArrow creator identity is claimed for WOOF-generated files.

@@ -1,0 +1,132 @@
+#ifndef WOOF_HAILCAST_SUPPORT_METALH
+#define WOOF_HAILCAST_SUPPORT_METALH
+
+#include "soft_binary32.metalh"
+#include "soft_binary64.metalh"
+#include "soft_libm64.metalh"
+#include "soft_glibc_pow64.metalh"
+#include "soft_glibc_solar_trig.metalh"
+#include "soft_gfk_exp.metalh"
+#include "p3_reference_pow.metalh"
+using namespace metal;
+
+// Counterpart of woof/core/kernels/hailcast_support.cuh. HAILCAST keeps its
+// droplet diameter and a few intermediates in double. Metal has no FP64, so
+// the same operator-shaped transcription runs on the project's integer-only
+// binary64. FP32 operations stay native: the library is built with safe math,
+// precise functions and no contraction. FP32 powf and expf are the soft
+// implementations that match the Darwin libm; logf and log10f are evaluated
+// in binary64 and rounded once.
+struct HailR8 {
+    ulong bits;
+    HailR8() : bits(0ul) {}
+    HailR8(ulong value) : bits(value) {}
+    HailR8(int value) : bits(soft64_from_i32(value)) {}
+    HailR8(float value) : bits(soft64_from_f32_bits(as_type<uint>(value))) {}
+    operator float() const { return as_type<float>(soft64_to_f32_bits(bits)); }
+};
+#define HAIL_D(value_bits) HailR8(ulong(value_bits))
+
+static inline HailR8 operator+(HailR8 a, HailR8 b) { return HailR8(soft64_add(a.bits, b.bits)); }
+static inline HailR8 operator-(HailR8 a, HailR8 b) { return HailR8(soft64_sub(a.bits, b.bits)); }
+static inline HailR8 operator*(HailR8 a, HailR8 b) { return HailR8(soft64_mul(a.bits, b.bits)); }
+static inline HailR8 operator/(HailR8 a, HailR8 b) { return HailR8(soft64_div(a.bits, b.bits)); }
+static inline HailR8 operator-(HailR8 a) { return HailR8(soft64_negate_bits(a.bits)); }
+#define HAIL_R8_MIXED(OP, RESULT) \
+static inline RESULT operator OP(HailR8 a, float b) { return a OP HailR8(b); } \
+static inline RESULT operator OP(float a, HailR8 b) { return HailR8(a) OP b; } \
+static inline RESULT operator OP(HailR8 a, int b) { return a OP HailR8(b); } \
+static inline RESULT operator OP(int a, HailR8 b) { return HailR8(a) OP b; }
+HAIL_R8_MIXED(+, HailR8)
+HAIL_R8_MIXED(-, HailR8)
+HAIL_R8_MIXED(*, HailR8)
+HAIL_R8_MIXED(/, HailR8)
+static inline bool operator<(HailR8 a, HailR8 b) { return soft64_less(a.bits, b.bits); }
+static inline bool operator>(HailR8 a, HailR8 b) { return soft64_greater(a.bits, b.bits); }
+static inline bool operator<=(HailR8 a, HailR8 b) { return soft64_less_equal(a.bits, b.bits); }
+static inline bool operator>=(HailR8 a, HailR8 b) { return soft64_greater_equal(a.bits, b.bits); }
+static inline bool operator==(HailR8 a, HailR8 b) { return soft64_equal(a.bits, b.bits); }
+HAIL_R8_MIXED(<, bool)
+HAIL_R8_MIXED(>, bool)
+HAIL_R8_MIXED(<=, bool)
+HAIL_R8_MIXED(>=, bool)
+HAIL_R8_MIXED(==, bool)
+#undef HAIL_R8_MIXED
+
+static inline HailR8 hail_fabs(HailR8 a) { return HailR8(soft64_abs_bits(a.bits)); }
+static inline HailR8 hail_fmax(HailR8 a, HailR8 b) { return a > b ? a : b; }
+static inline HailR8 hail_exp(HailR8 a) { return HailR8(soft64_plm_exp(a.bits)); }
+static inline HailR8 hail_log(HailR8 a) { return HailR8(soft64_plm_log(a.bits)); }
+// glibc's correctly rounded pow, as the Linux oracle calls it.
+static inline HailR8 hail_pow(HailR8 a, HailR8 b) { return HailR8(soft_glibc_pow64(a.bits, b.bits)); }
+// cbrt: pow seed plus one Newton step in binary64.
+static inline HailR8 hail_cbrt(HailR8 a)
+{
+    if (!(a > 0)) return a;
+    const HailR8 third = HAIL_D(0x3fd5555555555555ul);
+    HailR8 y = hail_pow(a, third);
+    return y - (y * y * y - a) / (HailR8(3) * y * y);
+}
+
+static inline float hail_f32(HailR8 a) { return float(a); }
+static inline HailR8 hail_f64(float a) { return HailR8(a); }
+
+// CUDA's math library at float precision, as lake_support.cuh names it.
+// expf as the Darwin libm computes it: the exp2 stage of its powf, on x*128/ln2.
+static inline float lake_exp(float a)
+{
+    const uint bits = as_type<uint>(a);
+    if ((bits & 0x7fffffffu) >= 0x42ae0000u) return as_type<float>(soft_gfk_exp(bits));
+    const ulong scaled = soft64_mul(soft64_from_f32_bits(bits), 0x40671547652b82feul);
+    const Soft64Decoded dec = soft64_decode(scaled);
+    const int shift = 52 - dec.exponent;
+    ulong magnitude = shift > 63 ? 0ul : (dec.significand >> uint(shift));
+    if (shift > 0 && shift <= 63
+            && (dec.significand & ((1ul << uint(shift)) - 1ul)) >= (1ul << uint(shift - 1)))
+        ++magnitude;
+    const int n = (scaled >> 63u) != 0ul ? -int(magnitude) : int(magnitude);
+    const ulong fraction = soft64_sub(scaled, soft_gfk_i32_to_f64_bits(n));
+    const ulong factor = p3_reference_exp_table[uint(n) & 127u] + (ulong(long(n)) << 45u);
+    const ulong polynomial = soft64_fma(p3_reference_exp_coeff[0], fraction, p3_reference_exp_coeff[1]);
+    return as_type<float>(soft64_to_f32_bits(soft64_fma(soft64_mul(polynomial, fraction), factor, factor)));
+}
+static inline float lake_log(float a) { return hail_f32(hail_log(hail_f64(a))); }
+static inline HailR8 lake_log(HailR8 a) { return hail_log(a); }
+static inline float lake_log10(float a)
+{ return hail_f32(hail_log(hail_f64(a)) / HAIL_D(0x40026bb1bbb55516ul)); }
+static inline float lake_sin(float a)
+{ return as_type<float>(soft_glibc_solar_sinf(as_type<uint>(a))); }
+static inline float hail_sqrtf(float a)
+{ return as_type<float>(soft32_sqrt(as_type<uint>(a))); }
+
+// The probe's host build folds powf(x, 0.5f) into a correctly rounded sqrtf,
+// as the compiler does for any constant 0.5 exponent; the Darwin powf itself
+// differs from it in 0.7% of arguments.
+static inline float lake_pow(float a, float b)
+{
+    if (as_type<uint>(b) == 0x3f000000u && a != 0.f && !isinf(a)) return hail_sqrtf(a);
+    return as_type<float>(p3_reference_pow_bits(as_type<uint>(a), as_type<uint>(b)));
+}
+static inline float lake_pow(float a, int b) { return lake_pow(a, float(b)); }
+static inline float lake_pow(int a, float b) { return lake_pow(float(a), b); }
+static inline HailR8 lake_pow(HailR8 a, HailR8 b) { return hail_pow(a, b); }
+static inline HailR8 lake_pow(HailR8 a, float b) { return hail_pow(a, hail_f64(b)); }
+static inline HailR8 lake_pow(HailR8 a, int b) { return hail_pow(a, HailR8(b)); }
+
+static inline int lake_div(int a, int b) { return a / b; }
+static inline float lake_div(float a, float b) { return a / b; }
+static inline HailR8 lake_div(HailR8 a, HailR8 b) { return a / b; }
+template<class A, class B> static inline auto lake_div(A a, B b) -> decltype(a + b)
+{ using T = decltype(a + b); return lake_div(T(a), T(b)); }
+static inline float lake_abs(float a) { return a < 0 ? -a : a; }
+template<class A, class B> static inline auto lake_max(A a, B b) -> decltype(a + b)
+{ return a > b ? a : b; }
+
+// One-based column storage, as HAILCAST's Fortran addresses it.
+template<class T, int N> struct HailStorage {
+    T storage[N];
+    thread T& operator()(int k) { return storage[k - 1]; }
+    thread const T& operator()(int k) const { return storage[k - 1]; }
+};
+
+#endif

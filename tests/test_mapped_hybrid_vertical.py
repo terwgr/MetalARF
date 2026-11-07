@@ -330,21 +330,15 @@ def test_hydrostatic_height_requires_a_hybrid_vertical(tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_hybrid_descriptor_accepts_interface_coefficients():
+@pytest.mark.parametrize("a, b", [
+    (A_HALF, B_HALF),
+    ((5000.0, 2000.0, 0.0), (0.1, 0.5, 0.99)),
+], ids=["interface", "full-level"])
+def test_hybrid_descriptor_accepts_interface_coefficients(a, b):
     _validate_vertical("atmosphere", VerticalDescriptor(
         coordinate="hybrid", level_count=NLEV,
         level_values=(1.0, 2.0, 3.0),
-        a_coefficients=A_HALF, b_coefficients=B_HALF,
-        positive="down", units="1",
-    ))
-
-
-def test_hybrid_descriptor_accepts_full_level_coefficients():
-    _validate_vertical("atmosphere", VerticalDescriptor(
-        coordinate="hybrid", level_count=NLEV,
-        level_values=(1.0, 2.0, 3.0),
-        a_coefficients=(5000.0, 2000.0, 0.0),
-        b_coefficients=(0.1, 0.5, 0.99),
+        a_coefficients=a, b_coefficients=b,
         positive="down", units="1",
     ))
 
@@ -538,6 +532,25 @@ def test_hybrid_pressure_is_the_mean_of_its_bounding_half_levels(tmp_path):
     # strictly monotonic: pressure decreases with level index toward the top
     assert np.all(np.diff(values, axis=0) > 0.0)
     assert any("@coordinate.vertical" in item for item in references)
+
+
+def test_interface_velocity_keeps_signed_nonmonotonic_updrafts(tmp_path):
+    mapping, collection = _collection_with_fields(tmp_path)
+    values = np.broadcast_to(np.array([0., 10., -6., 0.])[:, None, None],
+                             (4, NY, NX)).copy()
+    field = CanonicalField(name="interface_w", units="m s-1",
+        axes=("half_level", "y", "x"), location="mass", staggering="z",
+        values=values, missing_count=0, source_references=("source-w",))
+    target = {"units": {"source": "m s-1", "target": "m s-1",
+                        "scale": 1.0, "offset": 0.0},
+              "source_axes": ["vertical", "y", "x"],
+              "target_axes": ["vertical", "y", "x"],
+              "missing": {"kind": "reject"}}
+    operation = {"operation": "mass_from_interfaces", "source": "interface_w"}
+    result, axes, references = _evaluate_derivation(operation,
+        {"interface_w": field}, collection, target, "vertical_velocity")
+    np.testing.assert_array_equal(result[:, 0, 0], [5., 2., -3.])
+    assert axes == ("vertical", "y", "x") and references == ("source-w",)
 
 
 def test_full_level_coefficients_materialize_pressure_directly(tmp_path):

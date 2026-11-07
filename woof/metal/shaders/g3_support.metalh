@@ -1,0 +1,63 @@
+#ifndef WOOF_G3_SUPPORT_METALH
+#define WOOF_G3_SUPPORT_METALH
+// Metal counterparts of the helpers in g3.cu that C++ lambdas provide there.
+// G3Col is one workspace level array: element k of slot s of tile thread t
+// lives at ws[s*(nz+1)*nt + t + k*nt].
+#include "cumulus_support.metalh"
+
+static inline float aa_div(float a, float b) { return cu_div(a, b); }
+static inline float aa_div(float a, int b) { return cu_div(a, float(b)); }
+static inline float aa_div(int a, float b) { return cu_div(float(a), b); }
+static inline int aa_div(int a, int b) { return a / b; }
+
+struct G3Col {
+    device float *p;
+    int s;
+    device float &operator()(int k) const {
+        return p[long(k) * long(s)];
+    }
+    device float &at(int k) const {
+        return p[long(k) * long(s)];
+    }
+};
+
+static inline device float &g3_colat(G3Col c, int k) { return c(k); }
+
+static inline G3Col g3_slot(device float *ws, int nz, int nt, int tid, int s)
+{
+    G3Col c;
+    c.p = ws + long(s) * long(nz + 1) * long(nt) + tid;
+    c.s = nt;
+    return c;
+}
+
+static inline float g3_lin(device const float *lev_in, long lev_stride,
+                           long plane, int nx, int f, int k, int ii, int jj)
+{
+    return lev_in[long(f) * lev_stride + long(k - 1) * plane + long(jj) * nx + ii];
+}
+
+static inline float g3_at(long plane, int nx, device const float *f, int k,
+                          int ii, int jj)
+{
+    return f[long(k - 1) * plane + long(jj) * nx + ii];
+}
+
+static inline float g3_rcut(long plane, int nx, int ny, int cugd_spread,
+                            device const float *ten, device const float *tens,
+                            int k, int ii, int jj)
+{
+    float r = g3_at(plane, nx, ten, k, ii, jj);
+    if (cugd_spread > 0) {
+        for (int nn = -1; nn <= 1; ++nn) {
+            int jdo = min(max(jj + nn, 0), ny - 1);
+            for (int kk = -1; kk <= 1; ++kk) {
+                int ido = min(max(ii + kk, 0), nx - 1);
+                r = r + 1.f * g3_at(plane, nx, tens, k, ido, jdo);
+            }
+        }
+    }
+    if (cugd_spread == 0) r = r + g3_at(plane, nx, tens, k, ii, jj);
+    return r;
+}
+#endif

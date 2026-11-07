@@ -147,7 +147,8 @@ def make_config(*, nx=96, ny=96, nz=64, dx=100.0, ztop=2400.0, dt=0.5,
                 drag_coefficient=DRAG_COEFFICIENT, c_s=C_S,
                 km_opt=3, c_k=0.10, surface="prescribed",
                 tke_budget=0, restart_interval_s=0.0,
-                lateral="periodic") -> RunConfig:
+                lateral="periodic", diff_opt=2,
+                km_opt_zero_acknowledgement="") -> RunConfig:
     if surface not in ("prescribed", "most"):
         raise ValueError(
             f"surface must be 'prescribed' (isfflx=0 constant drag/heat) "
@@ -162,8 +163,9 @@ def make_config(*, nx=96, ny=96, nz=64, dx=100.0, ztop=2400.0, dt=0.5,
     return RunConfig(
         nx=nx, ny=ny, nz=nz, dx=dx, dy=dx, ztop=ztop, dt=dt,
         run_seconds=minutes * 60.0,
-        km_opt=km_opt, mix_isotropic=1, c_s=c_s, c_k=c_k,
+        km_opt=km_opt, diff_opt=diff_opt, mix_isotropic=1, c_s=c_s, c_k=c_k,
         bl_pbl_physics=0,
+        km_opt_zero_acknowledgement=km_opt_zero_acknowledgement,
         sf_sfclay_physics=1 if most else 0,
         # em_les surface analog: MOST needs a marine-ish moisture field
         # for SFCLAY's flux branches; mp stays off (moist transport only).
@@ -610,7 +612,7 @@ def _write_outputs(result, cfg, outdir: Path, tag: str) -> None:
 
 
 def _restart_check(cfg: RunConfig, *, seed: int, split_minutes: float,
-                   outdir: Path, tag: str) -> int:
+                   outdir: Path, tag: str, backend: str = "cuda") -> int:
     """Run the engine's restart standard against a live LES trajectory.
 
     Straight-through vs stop/checkpoint/restore-into-a-fresh-state/finish,
@@ -619,10 +621,16 @@ def _restart_check(cfg: RunConfig, *, seed: int, split_minutes: float,
     clock.  Byte equality is the standard; anything else is a failure that
     names the fields that moved, never a tolerance.
     """
+    from woof.verify.metal_adapter import CaseBackend
+
+    with CaseBackend(backend) as selected:
+        return _restart_check_active(cfg, seed=seed, split_minutes=split_minutes,
+                                     outdir=outdir, tag=tag, array_module=selected.arrays)
+
+
+def _restart_check_active(cfg, *, seed, split_minutes, outdir, tag, array_module):
     import hashlib
-
-    import cupy as cp
-
+    from woof.verify.metal_adapter import as_host
     from woof.core.dycore import run_steps
     from woof.io import restart as restart_io
 
@@ -636,12 +644,12 @@ def _restart_check(cfg: RunConfig, *, seed: int, split_minutes: float,
             f"{cfg.run_seconds / 60.0} min run")
 
     wall0 = time.monotonic()
-    straight = build(cfg, seed=seed)
+    straight = build(cfg, seed=seed, array_module=array_module)
     run_steps(straight, cfg, n_total)
     reference = restart_io.write_restart(
         outdir / f"cbl_{tag}_reference.npz", straight, cfg)
 
-    split = build(cfg, seed=seed)
+    split = build(cfg, seed=seed, array_module=array_module)
     run_steps(split, cfg, n_split)
     checkpoint = restart_io.write_restart(
         outdir / f"cbl_{tag}_checkpoint.npz", split, cfg)
@@ -649,11 +657,11 @@ def _restart_check(cfg: RunConfig, *, seed: int, split_minutes: float,
     # A FRESH state, exactly as a resumed process would build it: the
     # carrier starts at its cold-start zero and must be overwritten by the
     # archive, not by the trajectory.
-    resumed_state = build(cfg, seed=seed)
-    cold_tke = float(cp.abs(resumed_state.tke).max()) \
+    resumed_state = build(cfg, seed=seed, array_module=array_module)
+    cold_tke = float(np.abs(as_host(resumed_state.tke)).max()) \
         if getattr(resumed_state, "tke", None) is not None else None
     info = restart_io.restore_restart(checkpoint, resumed_state, cfg)
-    restored_tke = float(cp.abs(resumed_state.tke).max()) \
+    restored_tke = float(np.abs(as_host(resumed_state.tke)).max()) \
         if getattr(resumed_state, "tke", None) is not None else None
     run_steps(resumed_state, cfg, n_total - n_split)
     resumed = restart_io.write_restart(
@@ -662,6 +670,11 @@ def _restart_check(cfg: RunConfig, *, seed: int, split_minutes: float,
 
     def _members(path):
         with np.load(path, allow_pickle=False) as data:
+            for key in data.files:
+                value = data[key]
+                if value.dtype.kind in "fc" and not np.isfinite(value).all():
+                    raise RuntimeError(
+                        f"restart identity is invalid: {key} contains nonfinite values")
             return {key: bytes(np.ascontiguousarray(data[key]).tobytes())
                     for key in data.files
                     if key != "__gpuwm_restart_header__"}
@@ -744,6 +757,9 @@ def main(argv=None) -> int:
     import argparse
     parser = argparse.ArgumentParser(
         description="Dry convective boundary layer, km_opt=3 LES")
+    parser.add_argument("--backend", choices=("cuda", "metal"), default="cuda")
+    parser.add_argument("--diff-opt", type=int, choices=(1, 2), default=2,
+                        help="1 = coordinate surfaces, 2 = metric stress mixing")
     parser.add_argument("--nx", type=int, default=96)
     parser.add_argument("--ny", type=int, default=96)
     parser.add_argument("--nz", type=int, default=64)
@@ -754,9 +770,12 @@ def main(argv=None) -> int:
     parser.add_argument("--heat-flux", type=float, default=HEAT_FLUX)
     parser.add_argument("--drag", type=float, default=DRAG_COEFFICIENT)
     parser.add_argument("--cs", type=float, default=C_S)
-    parser.add_argument("--km-opt", type=int, default=3, choices=(2, 3),
+    parser.add_argument("--km-opt", type=int, default=3, choices=(0, 2, 3, 4),
                         help="LES closure: 3 = 3-D Smagorinsky, 2 = "
-                             "1.5-order prognostic TKE")
+                             "1.5-order prognostic TKE, 4 = 2-D Smagorinsky, "
+                             "0 = acknowledged no-horizontal-mixing control")
+    parser.add_argument("--km-opt-zero-acknowledgement", default="",
+                        help="the upstream KM_OPT_ZERO_ACK literal required with --km-opt 0")
     parser.add_argument("--surface", default="prescribed",
                         choices=("prescribed", "most"),
                         help="lower boundary: prescribed = isfflx=0 "
@@ -794,12 +813,14 @@ def main(argv=None) -> int:
                       heat_flux=args.heat_flux, drag_coefficient=args.drag,
                       c_s=args.cs, km_opt=args.km_opt, c_k=args.ck,
                       surface=args.surface, lateral=args.lateral,
-                      tke_budget=1 if args.tke_budget else 0)
+                      tke_budget=1 if args.tke_budget else 0,
+                      diff_opt=args.diff_opt,
+                      km_opt_zero_acknowledgement=args.km_opt_zero_acknowledgement)
 
     if args.restart_check is not None:
         return _restart_check(cfg, seed=args.seed,
                               split_minutes=args.restart_check,
-                              outdir=args.out, tag=args.tag)
+                              outdir=args.out, tag=args.tag, backend=args.backend)
 
     def progress(done, total, rep):
         if done % max(total // 40, 1) < max(
@@ -810,7 +831,7 @@ def main(argv=None) -> int:
 
     result = _integrate(cfg, seed=args.seed,
                         sample_every_s=args.sample_every,
-                        progress=progress)
+                        progress=progress, backend=args.backend)
     args.out.mkdir(parents=True, exist_ok=True)
     _write_outputs(result, cfg, args.out, tag=args.tag)
     m = result["metrics"]

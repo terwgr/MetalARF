@@ -15,6 +15,7 @@ import inspect
 from pathlib import Path
 import re
 import time
+from datetime import timedelta
 
 from woof.ensemble.execution import (
     MemberRunControl, execute_member_packing, failed_member_rows, member_run_scope,
@@ -115,6 +116,9 @@ def _prepared_component_route_plan(member_inputs, *, card, collector, array_modu
     from woof.ensemble.admission import ordinary_memory_model_from_estimate
     from woof.ensemble.prepared_component_reservation import plan_prepared_component_reservation
     from woof.ensemble.production_memory import ordinary_ensemble_memory_model
+    from woof.ensemble.optional_routing import enabled_for
+    if any(enabled_for(value) for value in member_inputs.values()):
+        return None, "NextGen requires the original resident hydro driver for each member"
     if stochastic_provider is not None and any(stochastic_provider.enabled_for_experiment(value.experiment)
                                                for value in member_inputs.values()):
         return None, "active stochastic rates require their original per-member driver callbacks; packed production has no stochastic leaf handoff"
@@ -159,31 +163,21 @@ def _prepared_component_route_plan(member_inputs, *, card, collector, array_modu
 
 
 
-#: What a Metal ensemble publishes: the member mean and spread of these.
-METAL_ENSEMBLE_PRODUCTS = "10 m wind, 2 m temperature and rain"
-#: What it publishes of them.
-METAL_ENSEMBLE_STATISTICS = "mean, spread, min, max and threshold probabilities"
-
-
 def metal_request_refusal(request) -> str | None:
     """What a Metal ensemble cannot produce from ``request``, or ``None``.
 
     Asked before any member is prepared, so a requested product is
     refused rather than dropped.
     """
-    from woof.ensemble.metal_output import METAL_PRODUCT_FIELDS
-
-    unpublished = sorted(set(request.thresholds or {})
-                         - set(METAL_PRODUCT_FIELDS))
     asked = [name for name, wanted in (
-        ("retain_member_diagnostics", request.retain_member_diagnostics),
-        (f"thresholds for {', '.join(unpublished)}", bool(unpublished)),
+        ("cyclone_products", request.cyclone_products),
+        ("sounding_points", request.sounding_points),
     ) if wanted]
     if not asked:
         return None
-    return (f"A Metal ensemble publishes the {METAL_ENSEMBLE_STATISTICS} of "
-            f"{METAL_ENSEMBLE_PRODUCTS} only, so it cannot honour "
-            + ", ".join(asked) + ". Next: remove that setting, or run the ensemble on CUDA.")
+    return ("A Metal ensemble does not make " + ", ".join(asked)
+            + ": they read CUDA device state. Next: remove that setting, or run the ensemble on CUDA.")
+
 
 class PreparedEnsembleSession:
     """The worker and source-provider interface, independent of a CLI route.
@@ -237,6 +231,7 @@ class PreparedEnsembleSession:
         self._stochastic_authorities = {}
         self._stochastic_input_bindings = {}
         self._surface_receipts = {}
+        self._initial_receipts = {}
         self._member_land_layouts = {}
         if self.stochastic_provider is None and self.request.stochastic is not None:
             from woof.ensemble.stochastic_model import StochasticModelProvider
@@ -249,12 +244,15 @@ class PreparedEnsembleSession:
         if len(self.member_order) != self.request.members:
             raise ValueError("requested member count differs from the verified source roster")
         if (self.request.member_variants
+                and self.request.recipe != "wofs"
                 and input_provider is None and member_roster is None and source_execution is None):
             raise ValueError("member_variants selects each member's own land and surface state, "
                              "and this session has no bound member inputs: every member would "
                              "run one prepared land column under its variant's name. "
                              "Next: woof ensemble CONFIG --recipe member-roster")
-        if ((self.request.sources or self.request.perturbation is not None)
+        from woof.ensemble.initial_perturbation import is_initial_perturbation
+        if ((self.request.sources or (self.request.perturbation is not None
+                                    and not is_initial_perturbation(self.request.perturbation)))
                 and input_provider is None and member_roster is None and source_execution is None):
             # Breakage it prevents: the request names a source (or a
             # perturbation) per member, and this session would run every
@@ -262,8 +260,39 @@ class PreparedEnsembleSession:
             from woof.ensemble_admission import unbound_sources_refusal
             raise ValueError(unbound_sources_refusal())
 
+    def _member_metadata(self, inputs_by_member):
+        """The per-member rows a collector records beside its products."""
+        if self.source_execution is not None:
+            metadata = tuple(self.source_execution.member_metadata.values())
+        elif self.member_roster is not None:
+            metadata = self.member_roster.receipts
+        elif self.request.retain_member_diagnostics:
+            from woof.ensemble.seeds import member_seed
+            metadata = tuple({"member_id": member,
+                "seed": member_seed(self.request.base_seed, member),
+                "source": getattr(prepared, "source", None),
+                "prepared_authority_sha256": dict(getattr(prepared, "authority_sha256", {}) or {}),
+                "prepared_head_sha256": getattr(prepared, "prepared_head_sha256", None)}
+                for member, prepared in inputs_by_member.items())
+        else:
+            metadata = ()
+        if self.request.provenance:
+            previous = {row.get("member_id", row.get("member")): row for row in metadata}
+            metadata = tuple({**previous.get(member, {}), **self.request.provenance[member],
+                              "member_id": member} for member in self.member_order)
+        if self.request.trajectories and any("weight" in row for row in self.request.trajectories):
+            previous = {row["member_id"]: row for row in metadata}
+            metadata = tuple({**previous.get(member, {}), "member_id": member,
+                "weight": self.request.trajectories[position]["weight"],
+                "stratum": self.request.trajectories[position].get("stratum")}
+                for position, member in enumerate(self.member_order))
+        return metadata
+
     def _random_members(self, experiment):
         """Does stochastic physics make this session's members differ?"""
+        from woof.ensemble.initial_perturbation import is_initial_perturbation
+        if is_initial_perturbation(self.request.perturbation):
+            return True
         selected = any(getattr(domain.run, f"spp_{name}", 0)
                        for domain in getattr(experiment, "domains", ()) or ()
                        for name in ("conv", "pbl", "lsm"))
@@ -304,6 +333,11 @@ class PreparedEnsembleSession:
             "would run the same prepared inputs."))
 
     def run_prepared(self, runner, inputs, *, output_directory=None, **runner_options):
+        from woof.ensemble.initial_perturbation import is_initial_perturbation
+        experiment = getattr(inputs, "experiment", None)
+        if self.stochastic_provider is not None:
+            experiment = self.stochastic_provider.configure_experiment(experiment)
+        self._require_member_inputs(experiment)
         state_backend = str(runner_options.pop("state_backend", "cuda")).strip().lower()
         array_module = runner_options.pop("array_module", None)
         if state_backend == "metal":
@@ -312,10 +346,16 @@ class PreparedEnsembleSession:
                 runner_options=runner_options)
         if state_backend != "cuda":
             raise ValueError(f"unsupported ensemble state backend {state_backend!r}")
-        self._require_member_inputs(getattr(inputs, "experiment", None))
         started = time.perf_counter()
+        started_monotonic = time.monotonic()
         out = Path(output_directory or self.output_directory)
         out.mkdir(parents=True, exist_ok=True)
+        if self.request.recipe == "wofs":
+            from woof.ensemble.checkpoint_fill import CheckpointFill
+            self._checkpoint_fill = CheckpointFill(out / "parents")
+        if self.request.sounding_points:
+            from woof.soundings import binary
+            binary()
         if (out / "ensemble-run.json").exists() and self.restart_roster is None:
             raise FileExistsError("ensemble output already exists; use a new run directory")
         exp = inputs.experiment
@@ -351,7 +391,24 @@ class PreparedEnsembleSession:
             exp = inputs.experiment
             member_inputs_by_id = {member: self._configured_member_inputs(prepared)
                                   for member, prepared in member_inputs_by_id.items()}
+        from woof.ensemble.lineage import bind_runtime_stochastic
+        self.request = bind_runtime_stochastic(self.request, {
+            member: self._stochastic_authorities[id(prepared)]
+            for member, prepared in member_inputs_by_id.items()
+            if id(prepared) in self._stochastic_authorities})
         self._remember_member_land_layouts(member_inputs_by_id)
+        from woof.ensemble.calibration_admission import random_warnings
+        warnings = random_warnings(perturbation=self.request.perturbation,
+                                   stochastic=self.request.stochastic)
+        if (not warnings and self.stochastic_provider is not None and any(
+                self.stochastic_provider.enabled_for_experiment(prepared.experiment)
+                for prepared in member_inputs_by_id.values())):
+            from woof.ensemble_admission import UNCALIBRATED_SPREAD_WARNING
+            warnings = [UNCALIBRATED_SPREAD_WARNING]
+        if warnings:
+            import sys
+            for warning in warnings:
+                print("WARNING ensemble: " + warning, file=sys.stderr, flush=True)
         checkpoint_members = self.restart_roster is not None or any(
             float(getattr(prepared.experiment, "restart_interval_s", 0) or 0) > 0
             for prepared in member_inputs_by_id.values())
@@ -365,52 +422,80 @@ class PreparedEnsembleSession:
             if self.restart_roster is not None:
                 resumed = restart_roster.verify_roster(self.restart_roster, identities, root=out)
                 resume_rows = {row["member_id"]: row for row in resumed["members"]}
+                # The run kept writing after this roster sealed (the next
+                # frame, the history ledger, checkpoint retirement); put the
+                # sealed files back before the collector reads them.
+                restored = restart_roster.restore_roster(resumed, root=out)
+                if restored["restored"] or restored["removed_after_seal"]:
+                    import sys
+                    print(f"ensemble: resume restored {len(restored['restored'])} of "
+                          f"{len(resumed['files'])} sealed file(s) the run changed after the roster "
+                          f"seal and removed {len(restored['removed_after_seal'])} checkpoint or "
+                          f"diagnostic file(s) written after it", file=sys.stderr, flush=True)
             restart_roster.atomic_json(out / restart_roster.IDENTITIES, identities)
             restart_roster.atomic_json(out / restart_roster.INPUTS, {"schema": restart_roster.CONTRACT,
                 "members": [{"member_id": member, **{name: str(getattr(prepared, name, "") or "")
                     for name in ("prepared_root", "experiment_config", "wps_namelist")}}
                     for member, prepared in member_inputs_by_id.items()]})
-        variants = []
-        seen_variants = set()
-        for prepared in member_inputs_by_id.values():
-            key = (id(prepared.experiment), getattr(prepared, "boundary_interval_seconds", None))
-            if key not in seen_variants:
-                seen_variants.add(key)
-                variants.append(prepared)
         if self.collector is None:
             from woof import rustwx
             from woof.ensemble.batch_product_output import HeadlineDiagnosticCollector
             renderer = self.renderer or rustwx.find_renderer()
             if renderer is None:
                 raise RuntimeError(rustwx.renderer_remedy())
-            if self.source_execution is not None:
-                metadata = tuple(self.source_execution.member_metadata.values())
-            elif self.member_roster is not None:
-                metadata = self.member_roster.receipts
-            elif self.request.retain_member_diagnostics:
-                from woof.ensemble.seeds import member_seed
-                metadata = tuple({"member_id": member,
-                    "seed": member_seed(self.request.base_seed, member),
-                    "source": getattr(prepared, "source", None),
-                    "prepared_authority_sha256": dict(getattr(prepared, "authority_sha256", {}) or {}),
-                    "prepared_head_sha256": getattr(prepared, "prepared_head_sha256", None)}
-                    for member, prepared in member_inputs_by_id.items())
-            else:
-                metadata = ()
+            metadata = self._member_metadata(member_inputs_by_id)
             self.collector = HeadlineDiagnosticCollector(out, members=self.request.members,
                 renderer=renderer, start_time=exp.start_time,
-                thresholds=self.request.thresholds,
+                thresholds=self.request.thresholds, comparison=self.request.comparison,
                 keep_member_files=self.request.keep_member_files,
                 member_order=self.member_order,
                 member_metadata=metadata,
                 retain_member_diagnostics=self.request.retain_member_diagnostics,
+                columns_end_time=exp.start_time + timedelta(seconds=float(exp.run_seconds)),
                 **({"resume": True} if resumed is not None else {}))
+        if self.request.cyclone_products and 'common_grid' in self.request.cyclone_products:
+            from woof.tc_accumulator import validate_swath_request
+            validate_swath_request(self.request.cyclone_products)
+            if resumed is not None:
+                raise ValueError('every-step ensemble swaths require an uninterrupted run; their diagnostic archive is not in the restart roster')
+            grid_id = self.request.cyclone_products.get('grid_id', 2)
+            if not any(domain.grid_id == grid_id for domain in exp.domains):
+                raise ValueError(f'cyclone swath grid_id {grid_id} is absent from the member domains')
+            self.collector.cyclone_request = self.request.cyclone_products
+        from woof.ensemble.optional_routing import member_settings, member_settings_scope, activation_receipt
+        # Snapshot metadata before admission threads: ContextVars need not be
+        # inherited by the worker on every supported Python runtime.
+        hydro_settings = {member: member_settings(prepared)
+                          for member, prepared in member_inputs_by_id.items()}
+        # One atmosphere Experiment can serve distinct prepared hydro tables.
+        # Keep those variants for admission, while sharing identical metadata.
+        variant_members, seen_variants = [], {}
+        for member, prepared in member_inputs_by_id.items():
+            key = (id(prepared.experiment), getattr(prepared, "boundary_interval_seconds", None))
+            settings = hydro_settings[member]
+            seen = seen_variants.setdefault(key, [])
+            if settings not in seen:
+                seen.append(settings)
+                variant_members.append((member, prepared))
+        variants = tuple(prepared for _, prepared in variant_members)
+        nextgen = [settings is not None and settings.get("enabled") is True
+                   for settings in hydro_settings.values()]
+        if any(nextgen) or self.request.hydro is not None:
+            if not all(nextgen):
+                raise ValueError("NextGen ensemble products require hydro enabled for every member")
+            from woof.ensemble.nextgen_capture import NextGenCollector
+            if not isinstance(self.collector, NextGenCollector):
+                self.collector = NextGenCollector(self.collector, self.member_order,
+                    options=self.request.hydro, array_module=self.array_module)
         if resumed is not None:
             restore = getattr(self.collector, "restore_resume", None)
             if not callable(restore):
                 raise ValueError("ensemble continuation needs its durable diagnostic collector, including completed members")
             restore()
         member_archive = getattr(self.collector, "member_archive", None)
+        if self.request.recipe == "wofs":
+            from woof.ensemble.wofs_recipe import prewarm_member_kernels
+            prewarm_member_kernels(prepared.experiment for prepared in member_inputs_by_id.values())
         if member_archive is not None:
             for member, prepared in member_inputs_by_id.items():
                 member_archive.expect_member_forecast(member, prepared.experiment)
@@ -462,23 +547,36 @@ class PreparedEnsembleSession:
                                                                         if prepared.experiment is not exp))
                         from woof.core.mynn_pbl_scratch import mynn_pricing_memory
                         with mynn_pricing_memory(total_bytes=card.total_bytes, free_bytes=card.available_bytes):
-                            estimates = tuple((estimate_experiment(prepared.experiment,
-                                forcing_interval_seconds=prepared.boundary_interval_seconds,
-                                profile=profile, vram_gib=card.total_bytes / (1024 ** 3)), prepared.experiment)
-                                for prepared in variants)
+                            estimates = []
+                            for member, prepared in variant_members:
+                                with member_settings_scope(prepared, inherited_settings=hydro_settings[member]):
+                                    estimates.append((estimate_experiment(prepared.experiment,
+                                        forcing_interval_seconds=prepared.boundary_interval_seconds,
+                                        profile=profile, vram_gib=card.total_bytes / (1024 ** 3)), prepared.experiment))
                         estimate, forecast_exp = estimates[0]
                         priced, external, margin = ordinary_ensemble_memory_model(estimate, forecast_exp, self.collector,
                             inventory_id=f"ordinary-ensemble-device-{card.device_id}",
                             stochastic_provider=self.stochastic_provider,
-                            fft_workspace_bytes=fft_workspaces.get(card.device_id, 0), other_variants=estimates[1:])
+                            fft_workspace_bytes=fft_workspaces.get(card.device_id, 0), other_variants=estimates[1:],
+                            initial_wind=is_initial_perturbation(self.request.perturbation))
                         model[card.device_id] = priced
                         ordinary_admissions[card.device_id] = (external, margin)
         cards = tuple(cards)
-        if checkpoint_members:
-            # One member owns the durable diagnostic snapshot until its
-            # roster seals. Another card may otherwise retire pending packs
-            # while this member's checkpoint is being hashed and carried.
+        if (checkpoint_members and len(cards) > 1
+                and not callable(getattr(self.collector, "checkpoint_hold", None))):
+            # A roster seal hashes the files the collector snapshot names.
+            # Members on other cards could retire those pending packs between
+            # the snapshot and the hash unless the collector holds their
+            # submissions (restart_roster.checkpoint_hold). The production
+            # collector does; a collector without that hold stays on one card.
+            import sys
+            print(f"ensemble: checkpointed members use one card (device {cards[0].device_id}) of "
+                  f"{len(cards)}: this diagnostic collector has no checkpoint_hold, so its snapshot "
+                  "could name packs another card retires. Set restart_interval_s = 0 to use every card, "
+                  "or use the default ensemble diagnostic collector.", file=sys.stderr, flush=True)
             cards = cards[:1]
+            if isinstance(model, Mapping):
+                model = {card.device_id: model[card.device_id] for card in cards}
         resolved_request = replace(self.request, member_device_ids=tuple(card.device_id for card in cards))
         from woof.ensemble.progress import (
             EnsembleProgressAdapter, MemberTerminalProgress, progress_host)
@@ -510,13 +608,18 @@ class PreparedEnsembleSession:
                     checkpoint=(resolve_file(out, row["checkpoint"]) if row["status"] == "checkpoint" else None))
         has_radar = any(radar_enabled(prepared) for prepared in member_inputs_by_id.values())
         native = (self.native_executor is not None and self.source_execution is None
-                  and not has_radar and not checkpoint_members)
-        original_reasons = {}
+                  and not has_radar and not checkpoint_members and not any(nextgen))
+        original_reasons = ({member: ["NextGen retains its original per-member resident driver"]
+                             for member in member_inputs_by_id} if any(nextgen) else {})
         # These selections already require the original model. Diagnose them
         # before starting a first-member native probe so all ordinary members
         # can enter the admitted concurrent wave together.
         from woof.ensemble.ordinary_execution import OrdinaryRecipeExecution
         original_source = self.source_execution is None or isinstance(self.source_execution, OrdinaryRecipeExecution)
+        if getattr(self.collector, 'cyclone_request', None) is not None:
+            native = False
+            original_reasons = {member: ['every-step cyclone swaths retain each original member callback']
+                                for member in member_inputs_by_id}
         if self.request.members > 1 and self.native_executor is None and original_source:
             from woof.ensemble.suite_capabilities import plan_suite
             for member, prepared in member_inputs_by_id.items():
@@ -528,7 +631,7 @@ class PreparedEnsembleSession:
                 if len(domains) > 1:
                     reasons.append("nested members retain the original parent FORCE, child clocks and feedback")
                 if reasons:
-                    original_reasons[member] = list(dict.fromkeys(reasons))
+                    original_reasons[member] = list(dict.fromkeys(original_reasons.get(member, []) + reasons))
         ordinary_cuda_available = cp is not None and callable(getattr(getattr(cp, "cuda", None), "Stream", None))
         from woof.ensemble.ordinary_concurrency import plan_ordinary_concurrency
         concurrency_plans = {member: plan_ordinary_concurrency(prepared.experiment)
@@ -536,7 +639,10 @@ class PreparedEnsembleSession:
         for member, concurrency in concurrency_plans.items():
             if not concurrency.eligible and member in original_reasons:
                 original_reasons[member].extend(concurrency.reasons)
-        concurrent_ordinary = bool(not checkpoint_members and original_reasons and ordinary_cuda_available
+        checkpoint_concurrent = (not checkpoint_members or
+            callable(getattr(self.collector, "checkpoint_hold", None)))
+        concurrent_ordinary = bool(checkpoint_concurrent and
+            (original_reasons or checkpoint_members or self.request.recipe == "wofs") and ordinary_cuda_available
             and not has_radar and original_source and all(
                 int(getattr(getattr(prepared.experiment, "devices", None), "count", 1)) <= 1
                 for prepared in member_inputs_by_id.values())
@@ -549,9 +655,11 @@ class PreparedEnsembleSession:
                 with scope(card.device_id):
                     cp.cuda.get_current_stream().synchronize()
                     cp.get_default_memory_pool().free_all_blocks()
+        from woof.ensemble.packing_policy import ordinary_member_policy
+        ordinary_cap, cap_policy = ordinary_member_policy(self.request, concurrent=concurrent_ordinary)
         packing = pack_members(self.request.members, tuple(cards), model, batched=native,
             concurrent_ordinary=concurrent_ordinary,
-            max_ordinary_members_per_device=self.request.max_ordinary_members_per_device,
+            max_ordinary_members_per_device=ordinary_cap,
             reason=("qualified native member executor" if native else
                     "posted member sources retain original native initialization and streaming seals"
                     if self.source_execution is not None else
@@ -592,8 +700,12 @@ class PreparedEnsembleSession:
                     "member_ids": list(ids), "eligible": decision is not None,
                     "ordinary_reason": reason, "complete_native_rk_graph": False,
                     **({} if decision is None else {"memory": decision.reservation.receipt()})})
-        manifest = {"schema": "gpuwm-ensemble-run.v1", "status": "running",
+        from woof.ensemble.lineage import lineage_summary
+        manifest = {"lineage": lineage_summary(self.request.provenance), "schema": "gpuwm-ensemble-run.v1", "status": "running",
+                    "hydro_activation": [dict(member_id=member, **activation_receipt(hydro_settings[member]))
+                                         for member in self.member_order],
                     "request": self.request.receipt(), "packing": packing.receipt(),
+                    "ordinary_member_cap_policy": cap_policy,
                     **({} if not self.request.member_variants else {"member_variants": [
                         self._variant_receipt(member) for member in self.member_order]}),
                     # Stated only by an engine gate that runs copies on purpose.
@@ -630,6 +742,20 @@ class PreparedEnsembleSession:
             manifest["prepared_component_waves"] = []
             if component_plans:
                 manifest["time_step_policy"] = "original per-member adaptive clocks; native components join only ready compatible groups"
+        if warnings:
+            manifest["warnings"] = warnings
+        if self._initial_receipts or self.request.perturbation is not None and is_initial_perturbation(self.request.perturbation):
+            manifest["initial_perturbations"] = []
+        provenance_directories = set()
+        for row in self.request.provenance:
+            member_directory = out / "members" / f"member-{row['member']:04d}"
+            # Claim once before execution. Only a verified restart may reuse an
+            # existing directory; ordinary runners below use this same claim.
+            member_directory.mkdir(parents=True, exist_ok=self.restart_roster is not None)
+            provenance_directories.add(member_directory)
+            _atomic_json(member_directory / "member-provenance.json", row)
+            if row.get("parent_family"):
+                print(f"ensemble lineage: m{row['member']:04d} {row['parent_family']} {row['model_key']} family_weight={row['family_weight']:g}")
         _atomic_json(out / "ensemble-run.json", manifest)
         if original_reasons:
             import sys
@@ -642,35 +768,36 @@ class PreparedEnsembleSession:
         manifest_lock = threading.Lock()
         bootstrap_owners, bootstrap_receipts = [], []
 
-        def ordinary_inputs(member_inputs, batch):
-            """Admission changes only the original execution-only tile door."""
-            from woof.ensemble.prepared_execution import ordinary_member_execution_inputs
-            external_margin = ordinary_admissions.get(batch.device_id)
-            if external_margin is None:
-                if batch.execution_mode != "ordinary_streamed_member":
-                    return member_inputs, None
-                supplied = model[batch.device_id] if isinstance(model, Mapping) else model
-                external = tuple(component for component in supplied.components
-                                 if component.category in ("products", "health", "stochastic"))
-                if external:
-                    external_margin = (external, supplied.allocator_margin)
-            if external_margin is None:
-                from woof.ensemble.production_memory import ordinary_output_memory_components
-                from woof.ensemble.admission import AllocatorMargin
-                from woof.core.preflight import FORECAST_POOL_HEADROOM
-                external_margin = (ordinary_output_memory_components(member_inputs.experiment, self.collector),
-                    AllocatorMargin.from_fraction(str(FORECAST_POOL_HEADROOM - 1),
-                        evidence="original pool headroom for additional ensemble output reservations"))
-            if (batch.execution_mode == "ordinary_streamed_member" and self.stochastic_provider is not None
-                    and self.stochastic_provider.enabled_for_experiment(member_inputs.experiment)):
-                from woof.ensemble.production_memory import ordinary_stochastic_streamed_inputs
-                return ordinary_stochastic_streamed_inputs(member_inputs, batch=batch,
-                    external_components=external_margin[0], allocator_margin=external_margin[1],
-                    stochastic_provider=self.stochastic_provider,
-                    fft_workspace_bytes=fft_workspaces.get(batch.device_id, 0),
-                    device_profile=profiles.get(batch.device_id))
-            return ordinary_member_execution_inputs(member_inputs, batch=batch,
-                external_components=external_margin[0], allocator_margin=external_margin[1])
+        def ordinary_inputs(member_inputs, batch, *, member):
+            """Price the tile door in the same hydro scope as its forecast."""
+            with member_settings_scope(member_inputs, inherited_settings=hydro_settings[member]):
+                from woof.ensemble.prepared_execution import ordinary_member_execution_inputs
+                external_margin = ordinary_admissions.get(batch.device_id)
+                if external_margin is None:
+                    if batch.execution_mode != "ordinary_streamed_member":
+                        return member_inputs, None
+                    supplied = model[batch.device_id] if isinstance(model, Mapping) else model
+                    external = tuple(component for component in supplied.components
+                                     if component.category in ("products", "health", "stochastic"))
+                    if external:
+                        external_margin = (external, supplied.allocator_margin)
+                if external_margin is None:
+                    from woof.ensemble.production_memory import ordinary_output_memory_components
+                    from woof.ensemble.admission import AllocatorMargin
+                    from woof.core.preflight import FORECAST_POOL_HEADROOM
+                    external_margin = (ordinary_output_memory_components(member_inputs.experiment, self.collector),
+                        AllocatorMargin.from_fraction(str(FORECAST_POOL_HEADROOM - 1),
+                            evidence="original pool headroom for additional ensemble output reservations"))
+                if (batch.execution_mode == "ordinary_streamed_member" and self.stochastic_provider is not None
+                        and self.stochastic_provider.enabled_for_experiment(member_inputs.experiment)):
+                    from woof.ensemble.production_memory import ordinary_stochastic_streamed_inputs
+                    return ordinary_stochastic_streamed_inputs(member_inputs, batch=batch,
+                        external_components=external_margin[0], allocator_margin=external_margin[1],
+                        stochastic_provider=self.stochastic_provider,
+                        fft_workspace_bytes=fft_workspaces.get(batch.device_id, 0),
+                        device_profile=profiles.get(batch.device_id))
+                return ordinary_member_execution_inputs(member_inputs, batch=batch,
+                    external_components=external_margin[0], allocator_margin=external_margin[1])
 
         # The automatic factory's first original initializer also needs the
         # cold zero-fit overlay. This wrapper is reused for its ordinary tails.
@@ -693,7 +820,7 @@ class PreparedEnsembleSession:
                 batch = MemberBatch(0, device, (0,), mode,
                     need if mode == "ordinary_member" else None, card.available_bytes,
                     "cold admission for an unused original per-card bootstrap")
-            member_inputs, overlay = ordinary_inputs(member_inputs, batch)
+            member_inputs, overlay = ordinary_inputs(member_inputs, batch, member=member)
             options[progress_key] = (None if capture is None else progress_adapter.callback_for_member(member))
             result = runner(member_inputs, output_directory=output_directory, **options)
             if overlay is not None and overlay.get("changed"):
@@ -731,7 +858,7 @@ class PreparedEnsembleSession:
             return InitializedCardBootstrap(holder["inputs"], holder["node"], holder["evidence"])
 
         automatic = None
-        if (not checkpoint_members and not has_radar and self.source_execution is None and self.native_executor is None and hasattr(inputs, "execution_plan")
+        if (not any(nextgen) and not checkpoint_members and not has_radar and self.source_execution is None and self.native_executor is None and hasattr(inputs, "execution_plan")
                 and self.cards is None and self.memory_model is None
                 and not component_plans
                 and not (original_reasons and ordinary_cuda_available)):
@@ -852,6 +979,13 @@ class PreparedEnsembleSession:
                     record = dict(record, member_variant=self._variant_receipt(member))
             if batch.execution_mode != "member_batched" and member in self._surface_receipts:
                 record = dict(record, surface_perturbation=self._surface_receipts[member])
+            if batch.execution_mode != "member_batched" and member in self._initial_receipts:
+                record = dict(record, initial_perturbation=self._initial_receipts[member])
+            branch = getattr(self, "_checkpoint_fill", None)
+            if branch is not None and member in branch.receipts:
+                record = dict(record, checkpoint_branches=list(branch.receipts[member].values()))
+                if branch.reconstructions.get(member):
+                    record = dict(record, checkpoint_reconstructions=list(branch.reconstructions[member]))
             if batch.execution_mode != "member_batched" and overlay is not None and overlay.get("changed"):
                 record = dict(record, ensemble_execution_overlay=overlay)
             if batch.execution_mode != "member_batched" and capture.counter_calendars:
@@ -877,15 +1011,39 @@ class PreparedEnsembleSession:
                     manifest["completed_member_results"].append({"member_id": member, "result": record})
                 manifest["surface_perturbations"] = [self._surface_receipts[member]
                     for member in self.member_order if member in self._surface_receipts]
+                if self._initial_receipts:
+                    manifest["initial_perturbations"] = [self._initial_receipts[member]
+                        for member in self.member_order if member in self._initial_receipts]
                 if self.source_execution is not None:
                     manifest["posted_source_execution"] = self.source_execution.receipt()
                 _atomic_json(out / "ensemble-run.json", manifest)
                 if checkpoint_members:
                     from woof.ensemble.restart_roster import seal
                     save = getattr(self.collector, "save_resume", None)
-                    if callable(save):
-                        save()
-                    seal(out)
+                    try:
+                        seal(out, collector=self.collector if callable(save) else None)
+                    except TimeoutError:
+                        # The product drain is still busy past its bounded
+                        # hold. As in CheckpointProgress, the snapshot is
+                        # deferred and the previous roster stays the durable
+                        # one: the end-of-run path drains with no bound
+                        # (require_complete) and then seals the completed
+                        # tree. An unbounded wait here would hold the
+                        # collector lock and stop every other member's frame
+                        # submissions for the whole backlog. A finished
+                        # member must not fail the run on this
+                        # (run_4a75cc2fe19d92f7, 6 h HRRR WoFS with a 1 km
+                        # nest, 2026-10-28).
+                        reason = "product drain exceeded bounded checkpoint hold"
+                        manifest.setdefault("ensemble_checkpoint_deferrals", []).append(
+                            {"member_ids": list(batch.member_indices), "at": "member_completion",
+                             "reason": reason})
+                        if isinstance(record, dict):
+                            record = dict(record, ensemble_checkpoint_deferred=reason)
+                            if batch.execution_mode != "member_batched":
+                                # Appended above under this same lock.
+                                manifest["completed_member_results"][-1]["result"] = record
+                        _atomic_json(out / "ensemble-run.json", manifest)
             return record
 
         def execute_admitted(batch):
@@ -906,8 +1064,14 @@ class PreparedEnsembleSession:
                     if resume.get("status") == "completed":
                         return resume["result"]
                     member_inputs = member_inputs_by_id[member]
-                    member_inputs, overlay = ordinary_inputs(member_inputs, batch)
+                    member_inputs, overlay = ordinary_inputs(member_inputs, batch, member=member)
                     initialize = self._initialization_callback(member)
+                    if any(nextgen):
+                        previous_initialize = initialize
+                        def initialize(**kwargs):
+                            self.collector.bind_member(member_id=member, **kwargs)
+                            if previous_initialize is not None:
+                                previous_initialize(**kwargs)
                     retained_models = []
                     if concurrent_ordinary:
                         previous = initialize
@@ -920,7 +1084,8 @@ class PreparedEnsembleSession:
                                 previous(**kwargs)
                     capture = MemberOutputCapture(self.collector.submit, member,
                         member_history_required(member_inputs, self.request.keep_member_files),
-                        initialize_callback=initialize)
+                        initialize_callback=initialize,
+                        provenance=(self.request.provenance[member] if self.request.provenance else None))
                     options = dict(runner_options)
                     options["first_products"] = None
                     member_progress = progress_adapter.callback_for_member(member)
@@ -936,18 +1101,22 @@ class PreparedEnsembleSession:
                     if first_result is not None and member == first_result.first_member_id:
                         result = first_result.report
                     else:
-                        member_out.mkdir(parents=True, exist_ok=self.restart_roster is not None)
+                        if member_out not in provenance_directories:
+                            member_out.mkdir(parents=True, exist_ok=self.restart_roster is not None)
                         # Every original member retains its own model until
                         # its queue completes, including concurrent waves.
-                        with finished_member_release(cp), member_output_scope(capture):
+                        from woof.ensemble.timeline import member_timeline
+                        with finished_member_release(cp), member_output_scope(capture), member_timeline(
+                                member_out, member=member, card=batch.device_id):
                             if self.source_execution is None:
-                                result = runner(member_inputs, output_directory=member_out, **options)
+                                with member_settings_scope(member_inputs, inherited_settings=hydro_settings[member]):
+                                    result = runner(member_inputs, output_directory=member_out, **options)
                             else:
                                 def forecast(actual_inputs):
                                     nonlocal overlay
                                     actual_inputs = self._configured_member_inputs(actual_inputs)
                                     authority = self._stochastic_authorities.get(id(actual_inputs))
-                                    actual_inputs, overlay = ordinary_inputs(actual_inputs, batch)
+                                    actual_inputs, overlay = ordinary_inputs(actual_inputs, batch, member=member)
                                     with manifest_lock:
                                         if authority is not None:
                                             rows = {row["member_id"]: row for row in
@@ -957,7 +1126,8 @@ class PreparedEnsembleSession:
                                                 rows[index] for index in self.member_order if index in rows]
                                         manifest["posted_source_execution"] = self.source_execution.receipt()
                                         _atomic_json(out / "ensemble-run.json", manifest)
-                                    return runner(actual_inputs, output_directory=member_out, **options)
+                                    with member_settings_scope(actual_inputs, inherited_settings=hydro_settings[member]):
+                                        return runner(actual_inputs, output_directory=member_out, **options)
                                 result = self.source_execution.run_member(member, forecast=forecast,
                                     observer=options.get(progress_key))
                     if self.request.keep_member_files:
@@ -971,6 +1141,14 @@ class PreparedEnsembleSession:
                                 grid_id=int(match.group(1)), episode=episode)
                 return finalize_member_result(batch, result, member_inputs=member_inputs,
                     capture=capture, member_out=member_out, overlay=overlay)
+
+        def publish_member_provenance():
+            # Refresh the directories claimed above after execution stops,
+            # including pending members when a forecast fails or is interrupted.
+            # Never recreate or silently accept another directory here.
+            for row in self.request.provenance:
+                directory = out / "members" / f"member-{row['member']:04d}"
+                _atomic_json(directory / "member-provenance.json", row)
 
         def surface_inventory():
             from woof.ensemble.surface_recipe import surface_realization_inventory
@@ -1007,6 +1185,8 @@ class PreparedEnsembleSession:
                 results = execute_member_packing(packing, execute, control=run_control)
                 completed_records = [{"packing": batch.receipt(), "result": result}
                                      for batch, result in results]
+            publish_member_provenance()
+            products_started = time.monotonic()
             products = self.collector.finish_run()
             self.collector.require_complete()
             if self.source_execution is not None:
@@ -1027,6 +1207,22 @@ class PreparedEnsembleSession:
             manifest["surface_perturbations"] = [self._surface_receipts[member]
                 for member in self.member_order if member in self._surface_receipts]
             manifest["surface_realization_inventory"] = surface_inventory()
+            if any(nextgen):
+                manifest["nextgen"] = self.collector.nextgen_points.receipt()
+                manifest["nextgen"]["resident_inventory"] = self.collector.resident_inventory.receipt()
+            if self._initial_receipts:
+                manifest["initial_perturbations"] = [self._initial_receipts[member]
+                    for member in self.member_order if member in self._initial_receipts]
+            if self.request.sounding_points:
+                from woof.soundings import render_run
+                manifest["products"]["soundings"] = str(render_run(
+                    out, points=self.request.sounding_points, out=out / "render"))
+            if self.request.cyclone_products is not None:
+                from woof.ensemble.cyclone_products import render_roster
+                products["cyclone"] = render_roster(out, self.request.trajectories,
+                    self.request.cyclone_products, member_order=self.member_order,
+                    history_ledger=self.collector.history_ledger)
+            manifest["timing_seconds"] = self._timing_seconds(started_monotonic, products_started)
             _atomic_json(out / "ensemble-run.json", manifest)
             self.last_manifest = manifest
             self.last_output_directory = out
@@ -1036,8 +1232,19 @@ class PreparedEnsembleSession:
                 "requested_run_seconds": float(exp.run_seconds),
                 "members_completed": list(manifest["members_completed"]),
                 "ensemble_manifest": "ensemble-run.json"})
+            if checkpoint_members:
+                # The completed tree is the durable one. The roster last
+                # sealed at the final member's completion named files that
+                # finish_run then retired (the worker-only coordinates.nc)
+                # and the ensemble-run.json this PASS manifest replaced, so a
+                # completed rc-0 run failed its own restart validator
+                # (2.9.0 ensemble showcase, restart_roster.verify_roster).
+                from woof.ensemble.restart_roster import seal
+                save = getattr(self.collector, "save_resume", None)
+                seal(out, collector=self.collector if callable(save) else None)
             return manifest
         except BaseException as error:
+            publish_member_provenance()
             cancel = getattr(self.collector, "cancel_products", None)
             if cancel is not None:
                 cancel()
@@ -1056,15 +1263,48 @@ class PreparedEnsembleSession:
                                                    if member not in completed])
             manifest["surface_perturbations"] = [self._surface_receipts[member]
                 for member in self.member_order if member in self._surface_receipts]
+            if self._initial_receipts:
+                manifest["initial_perturbations"] = [self._initial_receipts[member]
+                    for member in self.member_order if member in self._initial_receipts]
             manifest["surface_realization_inventory"] = surface_inventory()
             _atomic_json(out / "ensemble-run.json", manifest)
             if checkpoint_members:
                 from woof.ensemble.restart_roster import seal
                 save = getattr(self.collector, "save_resume", None)
                 if callable(save):
-                    save()
-                    seal(out)
+                    # The roster seal waits for the product worker this
+                    # handler just cancelled, so it can raise that
+                    # cancellation ("product process exited -15").  It must
+                    # not replace the error that stopped the run: a user saw
+                    # only the -15 while the member's own error sat unread
+                    # in ensemble-run.json (fresh-install QA, 2026-10-12).
+                    try:
+                        seal(out, collector=self.collector)
+                    except Exception as seal_error:
+                        note = (f"the restart roster could not be sealed after "
+                                f"this failure: {type(seal_error).__name__}: "
+                                f"{seal_error}")
+                        manifest["restart_roster_seal_error"] = note
+                        _atomic_json(out / "ensemble-run.json", manifest)
+                        error.add_note(note)
             raise
+
+    def _timing_seconds(self, started, products_started):
+        """Where this run's wall went, as stage_timing.timing_coverage reads it.
+
+        A door that fetched and prepared the members hands its own clocks
+        (``door_stage_clock``), so ``total`` is the door's whole wall and the
+        forecast is timed from the door's forecast stage; without one, the
+        session's own forecast and products.
+        """
+        now = time.monotonic()
+        clock = getattr(self, "door_stage_clock", None)
+        if clock is None:
+            return {"forecast": products_started - started,
+                    "products": now - products_started, "total": now - started}
+        return {"plan": clock["plan"], "fetch": clock["fetch"], "prepare": clock["prepare"],
+                "forecast": products_started - clock["forecast_started"],
+                "products": now - products_started, "total": now - clock["started"]}
 
     def completed_products(self):
         """Verify durable aggregate manifests before a door closes rendering."""
@@ -1093,9 +1333,16 @@ class PreparedEnsembleSession:
 
     def _initialization_callback(self, member_id, *, seed=None, prepared_member=None, array_module=None):
         from woof.ensemble.surface_recipe import is_surface_recipe
+        from woof.ensemble.initial_perturbation import is_initial_perturbation, initial_perturbation_callback
         from woof.ensemble.member_variants import member_surface_options
         surface_options = member_surface_options(self.request, member_id)
-        if self.stochastic_provider is None and not is_surface_recipe(surface_options):
+        wind = (self.request.member_variants[member_id].get("wind", 0.)
+                if self.request.member_variants else 0.)
+        initial_options = ({"kind": "uniform-wind", "amplitude": wind} if wind else self.request.perturbation)
+        checkpoint_fill = (self.request.recipe == "wofs" and self.request.provenance
+                           and self.request.provenance[member_id]["rung"] == "perturbation")
+        if (self.stochastic_provider is None and not is_surface_recipe(surface_options)
+                and not is_initial_perturbation(initial_options) and not checkpoint_fill):
             return None
         prepared = (prepared_member if prepared_member is not None else None
                     if self.member_roster is None else self.member_roster.select((member_id,))[0])
@@ -1105,6 +1352,8 @@ class PreparedEnsembleSession:
         def initialize(*, model=None, prepared_case=None, state=None, cfg=None, grid=None, clock=None):
             binding = (self.source_execution.stochastic_member_binding(member_id)
                        if self.source_execution is not None else prepared)
+            if self.stochastic_provider is None:
+                return
             if model is not None:
                 self.stochastic_provider.bind_model(model=model, member_id=member_id,
                     seed=seed, prepared_member=binding)
@@ -1119,10 +1368,23 @@ class PreparedEnsembleSession:
                 receipt = dict(receipt, member_variant=self._variant_receipt(member_id,
                     seed=seed, prepared_member=prepared))
             self._surface_receipts[member_id] = receipt
-        return surface_initialization_callback(selected, member_id=member_id, seed=seed,
+        callback = surface_initialization_callback(selected, member_id=member_id, seed=seed,
             previous=(None if self.stochastic_provider is None else initialize),
             record=record,
             array_module=(self.array_module if array_module is None else array_module))
+        if is_initial_perturbation(initial_options):
+            def record_initial(receipt):
+                self._initial_receipts[member_id] = receipt
+                if self.last_manifest is not None:
+                    self.last_manifest["initial_perturbations"] = [self._initial_receipts[member]
+                        for member in self.member_order if member in self._initial_receipts]
+            callback = initial_perturbation_callback(initial_options,
+                member_id=member_id, seed=seed, previous=callback,
+                record=record_initial, array_module=(self.array_module if array_module is None else array_module))
+        if checkpoint_fill:
+            callback = self._checkpoint_fill.callback(self.request.provenance[member_id],
+                member_id=member_id, previous=callback)
+        return callback
 
     def _member_seed(self, member_id, *, seed=None, prepared_member=None):
         """Keep a supplied/source seed authoritative through member callbacks."""
@@ -1145,8 +1407,11 @@ class PreparedEnsembleSession:
                     seed=seed, prepared_member=prepared_member),
                 "name": variant["name"], "physics": dict(variant["physics"]),
                 "surface": dict(variant["surface"]),
+                **({"wind": variant["wind"]} if variant.get("wind") else {}),
                 **({} if member_id not in self._member_land_layouts else {
-                    "resolved_land": [dict(row) for row in self._member_land_layouts[member_id]]})}
+                    "resolved_land": [dict(row) for row in self._member_land_layouts[member_id]]}),
+                **({} if member_id not in getattr(self, "_member_physics_selections", {}) else {
+                    "resolved_physics": self._member_physics_selections[member_id]})}
 
     def _remember_member_land_layouts(self, member_inputs):
         """Record each member's loaded domain selectors before initialization."""
@@ -1159,15 +1424,27 @@ class PreparedEnsembleSession:
              "num_soil_layers": soil_layer_count(domain.run)}
             for domain in inputs.experiment.domains]
             for member, inputs in member_inputs.items()}
+        self._member_physics_selections = {}
+        from woof.ensemble.member_variants import LAND_KEYS
+        from woof.microphysics_schemes import resolve_mp_physics
         for member, rows in self._member_land_layouts.items():
             requested = self.request.member_variants[member]["physics"]
-            for row in rows:
+            selected_rows = []
+            for row, domain in zip(rows, member_inputs[member].experiment.domains):
+                selected = {"grid_id": row["grid_id"]}
                 for key, value in requested.items():
-                    if row[key] != value:
+                    actual = row[key] if key in LAND_KEYS else getattr(domain.run, key)
+                    expected = resolve_mp_physics(value) if key == "mp_physics" else value
+                    if actual != expected:
                         raise ValueError(
                             f"member {member} domain {row['grid_id']} requests {key}={value}, "
-                            f"but its input provider bound {key}={row[key]}; "
-                            "the wrong land column would run this member's forecast")
+                            f"but its input provider bound {key}={actual}; " +
+                            ("the wrong land column would run this member's forecast" if key in LAND_KEYS
+                             else "the wrong physics selection would run this member's forecast"))
+                    selected[key] = actual
+                selected_rows.append(selected)
+            if set(requested) - LAND_KEYS:
+                self._member_physics_selections[member] = selected_rows
 
     def _configured_member_inputs(self, inputs):
         if self.stochastic_provider is None:
@@ -1186,11 +1463,11 @@ class PreparedEnsembleSession:
             self._stochastic_authorities[id(bound)] = authority
         return bound
 
-    def _provide_configured_input(self, **kwargs):
-        return self._configured_member_inputs(self.input_provider(**kwargs))
-
     def run_experiment(self, runner, experiment, case_data, output_directory, **runner_options):
         """Reuse native source preparation around the original runtime door."""
+        if self.request.recipe == "wofs" and self.input_provider is None:
+            from woof.ensemble.wofs_recipe import runtime_member_provider
+            self.input_provider = runtime_member_provider(self.request)
         self._require_member_inputs(experiment)
         from woof.ensemble.runtime_preparation import RuntimeMemberInputs, RuntimePreparationSource
         from woof.runtime import ExperimentRunSummary
@@ -1234,14 +1511,7 @@ class PreparedEnsembleSession:
             ensemble_manifest_sha256=hashlib.sha256(ensemble_manifest.read_bytes()).hexdigest())
 
     def _admit_metal_stochastic(self, experiment, array_module, runner_options):
-        """Refuse [tiles] and price the host pattern work, before any member runs."""
-        from woof.core import streaming
-        if any(streaming.options_for_domain(domain, getattr(experiment, "tiles", None)).enabled
-               for domain in experiment.domains):
-            raise ValueError(
-                "Metal stochastic physics runs on resident domains; its windowed "
-                "patterns for [tiles] are CUDA only. Next: remove [tiles], or run "
-                "the ensemble on CUDA")
+        """Price the shared host pattern owner before resident or tiled members run."""
         selected = self.stochastic_provider.configure_experiment(experiment)
         if not self.stochastic_provider.enabled_for_experiment(selected):
             return
@@ -1249,9 +1519,9 @@ class PreparedEnsembleSession:
         from woof.metal import memory_gate as metal_memory
         runs = [domain.run for domain in selected.domains]
         gate = metal_memory.estimate_runs(
-            runs, array_module.context, stochastic_rates=(
-                self.stochastic_provider.sppt is not None
-                or self.stochastic_provider.skebs_psi is not None))
+            runs, array_module.context, p_top=selected.vertical.p_top,
+            stochastic_rates=(self.stochastic_provider.sppt is not None
+                              or self.stochastic_provider.skebs_psi is not None))
         refusal = metal_memory.refusal_text(
             gate, [(int(run.nx), int(run.ny), int(run.nz)) for run in runs])
         if refusal is not None and not runner_options.get("no_memory_gate"):
@@ -1289,10 +1559,21 @@ class PreparedEnsembleSession:
                         f"Metal stochastic physics is admitted per member experiment, "
                         f"and member {member}'s inputs carry none")
                 self._admit_metal_stochastic(experiment, array_module, runner_options)
-        self.collector = self.collector or __import__(
-            "woof.ensemble.metal_output", fromlist=["MetalEnsembleCollector"]
-        ).MetalEnsembleCollector(out, self.request.members,
-                                 thresholds=self.request.thresholds)
+        if self.collector is None:
+            from woof import rustwx
+            from woof.ensemble.metal_output import MetalEnsembleCollector
+            renderer = self.renderer or rustwx.find_renderer()
+            if renderer is None:
+                raise RuntimeError(rustwx.renderer_remedy())
+            self.collector = MetalEnsembleCollector(out, members=self.request.members,
+                renderer=renderer, start_time=inputs.experiment.start_time,
+                thresholds=self.request.thresholds, comparison=self.request.comparison,
+                keep_member_files=self.request.keep_member_files,
+                member_order=self.member_order,
+                member_metadata=self._member_metadata(member_inputs),
+                retain_member_diagnostics=self.request.retain_member_diagnostics,
+                columns_end_time=(inputs.experiment.start_time
+                                  + timedelta(seconds=float(inputs.experiment.run_seconds))))
         started = time.perf_counter()
         completed = []
         from woof.ensemble.radar_output import member_history_required

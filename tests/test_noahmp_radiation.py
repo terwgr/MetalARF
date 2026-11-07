@@ -1,6 +1,6 @@
 """max_ulp-0 gate for the Noah-MP shortwave-radiation leaves.
 
-Every row of every fixture under ``tests/data/noahmp/oracle/`` was produced by
+Every row of every fixture under ``tests/data/oracles/noahmp/`` was produced by
 the unmodified (visibility-patched only) WRF-4.6.1 module; see
 ``tools/noahmp_wrf461_oracle/build_radiation.sh``.  Inputs and outputs are
 stored as IEEE-754 binary32 bit patterns, so nothing here parses a decimal.
@@ -30,7 +30,7 @@ from woof.core.noahmp_radiation import (
     twostream,
 )
 
-ORACLE = Path(__file__).resolve().parents[1] / "tests" / "data" / "noahmp" / "oracle"
+ORACLE = Path(__file__).resolve().parents[1] / "tests" / "data" / "oracles" / "noahmp"
 
 F = np.float32
 
@@ -518,7 +518,9 @@ def test_logf_has_not_forked_between_the_two_libm_modules():
     offenders = {}
     for path in sorted((root / "woof").rglob("*.py")):
         rel = path.relative_to(root).as_posix()
-        if rel == _LIBM_OWNER:
+        if rel == _LIBM_OWNER or rel.startswith("woof/hex/"):
+            # woof/hex is the hex model folded in, with its own pinned numerics;
+            # the merge this guards is the regional engine's.
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))

@@ -249,13 +249,24 @@ def test_the_fit_admits_the_child_the_card_measuredly_ran():
     holds; a fit that refuses a run the card completes is the defect.
     """
 
+    from woof.core.preflight import DeviceLocalMemoryProfile
+
+    # This is the measured-card route. Omitting its profile prices the
+    # declared-card 170-SM reference, not the 68-SM card that ran the child.
+    profile = DeviceLocalMemoryProfile("RTX 3080", 68, 1536, 1024)
     parent = {"nx": 386, "ny": 308, "dx": 12000.0, "dy": 12000.0}
-    size, _ = _fit_child_size(
+    size, estimate = _fit_child_size(
         parent, dict(_MEASURED_PARENT_CONFIG), j0=154, i0=193, ratio=3,
-        run_seconds=7200.0, output_interval_s=900.0, vram_gib=10.0)
+        run_seconds=7200.0, output_interval_s=900.0, vram_gib=10.0,
+        profile=profile)
     assert size >= 342, (
         f"the fit admits {size}x{size} where the card measuredly ran "
         "342x342 whole")
+    assert estimate.peak_envelope_bytes <= _budget_bytes(10.0)[1]
+    declared_size, _ = _fit_child_size(
+        parent, dict(_MEASURED_PARENT_CONFIG), j0=154, i0=193, ratio=3,
+        run_seconds=7200.0, output_interval_s=900.0, vram_gib=10.0)
+    assert declared_size < size
 
 
 def test_downscale_cli_dry_run_child_config_mode(tmp_path, capsys):
@@ -389,29 +400,7 @@ def test_runner_namespace_threads_the_acceptance_provenance(
         return {"result": "PASS"}
 
     monkeypatch.setattr(offline_child_run, "run", fake_run)
-    start = datetime(1974, 4, 3, 12)
-    for index in range(3):
-        _history(tmp_path / f"wrfout_d03_1974-04-03_{12 + index:02d}_00_00",
-                 start + timedelta(hours=index), ny=18, nx=20)
-    namelist = tmp_path / "namelist.input"
-    namelist.write_text("&physics\n mp_physics = 8,\n/\n", encoding="utf-8")
-    child_toml = tmp_path / "child.toml"
-    parent = {"nx": 20, "ny": 18, "dx": 1000.0, "dy": 1000.0}
-    merged = _derive_child_run_config(
-        _PARENT_CONFIG, parent=parent, ratio=1, child_nx=12, child_ny=10,
-        run_seconds=600.0, output_interval_s=300.0)
-    child_toml.write_text(_render_child_toml(merged), encoding="utf-8")
-    assert cli_main([
-        "downscale", str(tmp_path), "--parent-domain", "3",
-        "--parent-namelist", str(namelist),
-        "--child-config", str(child_toml), "--ratio", "1",
-        "--i-parent-start", "4", "--j-parent-start", "4",
-        # The fixture archive's coordinates are no real projection and no
-        # WPS_GEOG tree is staged: a child of it runs on its parent's
-        # terrain, the route this door test is about.
-        "--parent-terrain",
-        "--accept-parent-cadence",
-        "--out", str(tmp_path / "child-run")]) == 0
+    assert cli_main(_child_door(tmp_path)) == 0
     capsys.readouterr()
     namespace = captured["namespace"]
     assert namespace.accepted_parent_cadence is True
@@ -904,7 +893,7 @@ def _point_args(tmp_path, *, ny=18, nx=20):
     return [
         "downscale", str(tmp_path),
         "--parent-restart", str(restart),
-        "--point", "39.5,-84.0",
+        "--point", "39.5,-84.0", "--physics-profile", "parent",
         "--ratio", "1", "--child-size", "12,10",
         # _history's compact archive has two levels; the runnable child
         # requires at least four and declares its own remapping ladder.
@@ -1056,7 +1045,7 @@ def _controller_point_args(tmp_path, *, restart, extra):
     return [
         "downscale", str(tmp_path),
         "--parent-restart", restart,
-        "--point", "39.5,-84.0",
+        "--point", "39.5,-84.0", "--physics-profile", "parent",
         "--ratio", "1",
         "--child-levels", "4,2.5",
         "--hours", "0.25", "--output-interval-seconds", "900",
@@ -1379,7 +1368,7 @@ def test_a_downscaled_run_is_accepted_as_a_parent(tmp_path, capsys):
              dt=3.0, run_seconds=7200.0, nested=False, specified=True))
     assert cli_main([
         "downscale", str(child_run), "--parent-domain", "2",
-        "--parent-restart", "latest", "--point", "39.5,-84.0",
+        "--parent-restart", "latest", "--point", "39.5,-84.0", "--physics-profile", "parent",
         "--ratio", "1", "--child-size", "12,10", "--child-levels", "4,2.5",
         "--hours", "0.25", "--output-interval-seconds", "900",
         "--out", str(tmp_path / "grandchild" / "child-run"), "--dry-run"]) == 0
@@ -1487,10 +1476,15 @@ def test_the_review_refuses_a_child_clock_that_is_not_whole_steps(
             "--accept-parent-cadence",
             "--out", str(tmp_path / out), "--dry-run"])
 
-    # dt is 5 s: 302 s of output interval is 60.4 steps.
-    uneven_output = _derive_child_run_config(
+    # dt is 5 s: 302 s of output interval, written into the file by hand,
+    # is 60.4 steps.  (A DERIVED child asked for 302 s takes a step that
+    # lands on it -- downscale.child_clock_step -- so the uneven clock is
+    # the hand-written file's own.)
+    uneven_output = dict(_derive_child_run_config(
         _PARENT_CONFIG, parent=parent, ratio=1, child_nx=12, child_ny=10,
-        run_seconds=600.0, output_interval_s=302.0)
+        run_seconds=600.0, output_interval_s=300.0),
+        output_interval_s=302.0)
+    assert uneven_output["dt"] == 5.0
     assert review(uneven_output, "uneven-output") == 2
     captured = capsys.readouterr()
     assert "output_interval_s/dt must be a positive integer" in captured.err
@@ -1624,7 +1618,7 @@ def test_the_parents_restart_is_the_member_of_the_domain_the_frames_come_from(
     def door(run: Path, domain: int, out: str) -> int:
         return cli_main([
             "downscale", str(run), "--parent-domain", str(domain),
-            "--parent-restart", "latest", "--point", "39.5,-84.0",
+            "--parent-restart", "latest", "--point", "39.5,-84.0", "--physics-profile", "parent",
             "--ratio", "1", "--child-size", "12,10", "--child-levels", "4,2.5",
             "--hours", "0.25", "--output-interval-seconds", "900",
             "--out", str(tmp_path / out / "child-run"), "--dry-run"])
@@ -1722,30 +1716,8 @@ def _downscale_with_receipts(tmp_path, monkeypatch, *, extra=(),
     monkeypatch.setattr(go_cli, "_render_stage", fake_render_stage)
     monkeypatch.setattr(offline_child_run, "_run", fake_child)
 
-    start = datetime(1974, 4, 3, 12)
-    for index in range(3):
-        _history(tmp_path / f"wrfout_d03_1974-04-03_{12 + index:02d}_00_00",
-                 start + timedelta(hours=index), ny=18, nx=20)
-    namelist = tmp_path / "namelist.input"
-    namelist.write_text("&physics\n mp_physics = 8,\n/\n", encoding="utf-8")
-    child_toml = tmp_path / "child.toml"
-    merged = _derive_child_run_config(
-        _PARENT_CONFIG,
-        parent={"nx": 20, "ny": 18, "dx": 1000.0, "dy": 1000.0},
-        ratio=1, child_nx=12, child_ny=10,
-        run_seconds=600.0, output_interval_s=300.0)
-    child_toml.write_text(_render_child_toml(merged), encoding="utf-8")
     out = tmp_path / "child-run"
-    code = cli_main([
-        "downscale", str(tmp_path), "--parent-domain", "3",
-        "--parent-namelist", str(namelist),
-        "--child-config", str(child_toml), "--ratio", "1",
-        "--i-parent-start", "4", "--j-parent-start", "4",
-        # The fixture archive's coordinates are no real projection and no
-        # WPS_GEOG tree is staged: a child of it runs on its parent's
-        # terrain, the route this door test is about.
-        "--parent-terrain",
-        "--accept-parent-cadence", "--out", str(out), *extra])
+    code = cli_main(_child_door(tmp_path) + list(extra))
     events = [
         _json.loads(line) for line
         in (out / "events.jsonl").read_text(encoding="utf-8").splitlines()
@@ -1817,29 +1789,7 @@ def test_the_door_hands_the_runner_the_spec_it_resolved(
         return {"result": "PASS"}
 
     monkeypatch.setattr(offline_child_run, "run", fake_run)
-    start = datetime(1974, 4, 3, 12)
-    for index in range(3):
-        _history(tmp_path / f"wrfout_d03_1974-04-03_{12 + index:02d}_00_00",
-                 start + timedelta(hours=index), ny=18, nx=20)
-    namelist = tmp_path / "namelist.input"
-    namelist.write_text("&physics\n mp_physics = 8,\n/\n", encoding="utf-8")
-    child_toml = tmp_path / "child.toml"
-    merged = _derive_child_run_config(
-        _PARENT_CONFIG,
-        parent={"nx": 20, "ny": 18, "dx": 1000.0, "dy": 1000.0},
-        ratio=1, child_nx=12, child_ny=10,
-        run_seconds=600.0, output_interval_s=300.0)
-    child_toml.write_text(_render_child_toml(merged), encoding="utf-8")
-    door = [
-        "downscale", str(tmp_path), "--parent-domain", "3",
-        "--parent-namelist", str(namelist),
-        "--child-config", str(child_toml), "--ratio", "1",
-        "--i-parent-start", "4", "--j-parent-start", "4",
-        # The fixture archive's coordinates are no real projection and no
-        # WPS_GEOG tree is staged: a child of it runs on its parent's
-        # terrain, the route this door test is about.
-        "--parent-terrain",
-        "--accept-parent-cadence"]
+    door = _child_door(tmp_path)[:-2]
     assert cli_main(door + ["--out", str(tmp_path / "a")]) == 0
     assert captured["namespace"].render_products == "all"
     assert cli_main(door + ["--out", str(tmp_path / "b"),

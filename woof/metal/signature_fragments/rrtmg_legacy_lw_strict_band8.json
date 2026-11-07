@@ -1,0 +1,244 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_strict_band8",
+      "module": "rrtmg_legacy_lw_strict_gas",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_strict_gas.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_taugb06_09.cu",
+      "cuda_symbol": "rlw_taugb8",
+      "resources": [
+        [
+          "laytrop_v",
+          "int32",
+          "read"
+        ],
+        [
+          "fs",
+          "float",
+          "read"
+        ],
+        [
+          "isv",
+          "int32",
+          "read"
+        ],
+        [
+          "wx",
+          "float",
+          "read"
+        ],
+        [
+          "chi_mls",
+          "float",
+          "read"
+        ],
+        [
+          "absa",
+          "float",
+          "read"
+        ],
+        [
+          "absb",
+          "float",
+          "read"
+        ],
+        [
+          "selfref",
+          "float",
+          "read"
+        ],
+        [
+          "forref",
+          "float",
+          "read"
+        ],
+        [
+          "ka_mco2",
+          "float",
+          "read"
+        ],
+        [
+          "kb_mco2",
+          "float",
+          "read"
+        ],
+        [
+          "ka_mn2o",
+          "float",
+          "read"
+        ],
+        [
+          "kb_mn2o",
+          "float",
+          "read"
+        ],
+        [
+          "ka_mo3",
+          "float",
+          "read"
+        ],
+        [
+          "cfc12",
+          "float",
+          "read"
+        ],
+        [
+          "cfc22adj",
+          "float",
+          "read"
+        ],
+        [
+          "fracrefa",
+          "float",
+          "read"
+        ],
+        [
+          "fracrefb",
+          "float",
+          "read"
+        ],
+        [
+          "gas_tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "fracs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "laytrop_v": [
+          [
+            "ncol"
+          ]
+        ],
+        "fs": [
+          [
+            "33",
+            "ncol",
+            "nl"
+          ]
+        ],
+        "isv": [
+          [
+            "6",
+            "ncol",
+            "nl"
+          ]
+        ],
+        "wx": [
+          [
+            "ncol",
+            "4",
+            "nl"
+          ]
+        ],
+        "chi_mls": [
+          [
+            "413"
+          ]
+        ],
+        "absa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "absb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "selfref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "forref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ka_mco2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kb_mco2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ka_mn2o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kb_mn2o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ka_mo3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cfc12": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cfc22adj": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fracrefa": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fracrefb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gas_tau": [
+          [
+            "ncol",
+            "nl",
+            "140"
+          ]
+        ],
+        "fracs": [
+          [
+            "ncol",
+            "nl",
+            "140"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "oneminus",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

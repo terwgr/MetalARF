@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Mapping
+from woof.ensemble.physical_fields import sha256_of_file as _digest
 
 
 def member_contract(source: str, member: str | None = None):
@@ -22,14 +23,6 @@ def member_contract(source: str, member: str | None = None):
     return adapter, grammar, selection
 
 
-def _digest(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def verify_handoff(hints: Mapping, handoff: Mapping, *, out: Path) -> dict | None:
     """Inspect actual input bytes, never infer identity from a member filename.
 
@@ -45,6 +38,12 @@ def verify_handoff(hints: Mapping, handoff: Mapping, *, out: Path) -> dict | Non
 
     contract = member_contract(str(hints["source"]), hints.get("member"))
     if contract is None:
+        from importlib import import_module
+        from woof.source_adapters import get_source_adapter
+        owner = get_source_adapter(str(hints["source"])).acquisition_owner
+        verify = getattr(import_module(owner), "verify_handoff", None) if owner else None
+        if verify is not None:
+            return verify(hints, handoff, out=out)
         return None
     adapter, grammar, selection = contract
     if handoff.get("source") != adapter.source_id or handoff.get("member") != selection:
@@ -106,7 +105,7 @@ def verify_unchanged(receipt: Mapping | None) -> None:
     expected_list = "".join(f"{row['path']}\n" for row in files)
     if Path(receipt["input_list"]).read_text(encoding="utf-8") != expected_list:
         raise MemberIdentityRefusal("Verified member input-list changed during preparation")
-    for row in files:
+    for row in (*files, *receipt.get("dependency_files", ())):
         if _digest(Path(row["path"])) != row["sha256"]:
             raise MemberIdentityRefusal(f"Member input changed during preparation: {row['path']}")
 

@@ -26,6 +26,7 @@ _TABLE_SHAPES = {
         "rain_to_ice_mass", "rain_to_ice_number", "rain_to_graupel_mass",
         "rain_to_graupel_number")},
     "rain_cloud_efficiency": (100, 100),
+    "snow_cloud_efficiency": (100, 100),
     "cloud_to_ice_mass": (37, 100, 45, 55),
     "cloud_to_ice_number": (37, 100, 45, 55),
 }
@@ -85,18 +86,19 @@ def _checked_resources(state: dict[str, MetalArray], tables: dict[str, MetalArra
         if array.buffer.context is not context:
             raise ValueError("Thompson cold tables and state must share one Metal context")
 
-    resources = {name: state[name].view((state[name].size,))
-                 for name in _STATE_NAMES}
+    resources = {name: array.view((array.size,))
+                 for name, array in state.items()}
     resources.update(tables)
     # The CUDA signature uses restrict for all resources. Reject overlapping
-    # views before asking Metal to bind them, including table/table aliases.
+    # state views before binding them. Read-only coefficient tables may alias.
     items = list(resources.items())
     for i, (left_name, left) in enumerate(items):
         if left.nbytes == 0:
             continue
         left_start, left_end = left.byte_offset, left.byte_offset + left.nbytes
         for right_name, right in items[:i]:
-            if left.buffer.handle != right.buffer.handle or right.nbytes == 0:
+            if (left.buffer.handle != right.buffer.handle or right.nbytes == 0
+                    or (left_name in tables and right_name in tables)):
                 continue
             right_start = right.byte_offset
             right_end = right_start + right.nbytes
@@ -127,18 +129,34 @@ def submit_cold_network(
         rain_to_graupel_mass: MetalArray, rain_to_graupel_number: MetalArray,
         rain_cloud_efficiency: MetalArray, cloud_to_ice_mass: MetalArray,
         cloud_to_ice_number: MetalArray, dt: float, size: int, *,
-        wrf39: bool = False):
+        wrf39: bool = False, snow_cloud_efficiency=None,
+        qcten=None, qrten=None, nrten=None, qiten=None, niten=None,
+        qvten=None, tten=None, qsten=None, qgten=None, ngten=None):
     """Submit the complete production network with every live mp=28 table.
 
     Arrays are flattened as storage views without converting the float64
     Fortran-order coefficient tables. Entry aerosol/droplet state is read-only;
     tendencies remain additive scratch for the terminal balance stage.
     """
-    state_values = locals()
-    state = {name: state_values[name] for name in _STATE_NAMES}
-    tables = {name: state_values[name] for name in _TABLE_NAMES}
     if not isinstance(wrf39, (bool, np.bool_)):
         raise TypeError("Thompson cold wrf39 selector must be boolean")
+    state_values = locals()
+    state = {name: state_values[name] for name in _STATE_NAMES}
+    if snow_cloud_efficiency is None:
+        if not wrf39:
+            raise ValueError("the v4.6.1 cold network needs snow_cloud_efficiency")
+        state_values["snow_cloud_efficiency"] = rain_cloud_efficiency
+    tables = {name: state_values[name] for name in _TABLE_NAMES}
+    optional = {name: state_values[name] for name in (
+        "qcten", "qrten", "nrten", "qiten", "niten", "qvten", "tten",
+        "qsten", "qgten", "ngten")}
+    for group in (("qrten", "nrten", "qiten", "niten"),
+                  ("qvten", "tten"), ("qsten", "qgten", "ngten")):
+        present = sum(optional[name] is not None for name in group)
+        if present not in (0, len(group)):
+            raise ValueError(f"{group} must be supplied together")
+    state.update({name: array for name, array in optional.items()
+                  if array is not None})
     resources, n = _checked_resources(state, tables, size, wrf39=bool(wrf39))
     if isinstance(dt, (bool, np.bool_)):
         raise TypeError("Thompson cold dt must be a positive scalar")
@@ -148,11 +166,16 @@ def submit_cold_network(
         raise TypeError("Thompson cold dt must be a positive scalar") from exc
     if not np.isfinite(dt32) or dt32 <= 0.0:
         raise ValueError("Thompson cold dt must be finite, positive, and representable as float32")
+    for name, array in optional.items():
+        if array is None:
+            resources[name] = resources["pressure"]
+    parameters = {"size": n, "dt": float(dt32)}
+    parameters.update({"has_" + name: int(array is not None)
+                       for name, array in optional.items()})
     return qi.buffer.context.submit_kernel(
-        "thompson_aa_cold_network", resources,
-        {"n": n, "dt": float(dt32), "wrf39": int(wrf39)},
-        exact_policy=False,
-        grid_size=n, threads_per_group=64)
+        "thompson_aa_cold_network" + ("_wrf39" if wrf39 else ""),
+        resources, parameters, exact_policy=False,
+        grid_size=n, threads_per_group=32)
 
 
 

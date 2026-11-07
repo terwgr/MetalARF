@@ -11,10 +11,27 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from woof.wrf_exact import ENABLED as WRF_EXACT
+
+def _refuse_unported_strict_stage():
+    if WRF_EXACT:
+        raise NotImplementedError("strict classic RRTM stage is not supported")
+
 
 _TABLE_CACHE = {}
 _INT32_RESOURCES = {"itr", "ngb0", "jp", "jt", "jt1", "indself",
                     "laytrop", "layswtch", "laylow", "table_index"}
+
+
+def _check_layer_geometry(ncol, nlay, context=None):
+    """Keep all layer and spectral launch extents representable in int32."""
+    if (ncol < 1 or nlay < 1
+            or ncol * (nlay + 1) * 140 > np.iinfo(np.int32).max):
+        raise ValueError("classic RRTM Metal geometry exceeds int32 launch extents")
+    if context is not None and ncol * (nlay + 1) * 140 * 4 > context.max_buffer_length:
+        raise ValueError("classic RRTM Metal spectral workspace exceeds the device buffer limit")
+
+
 _TAUMOL_BLOB_CACHE = {}
 
 
@@ -119,7 +136,8 @@ def upload_taumol_blob(context, tables):
         add(f"absb{band}", tables.absb.get(band, absent_band_table))
         add(f"self{band}", tables.selfrefc.get(band, absent_band_table))
     for name in sorted(tables.combined):
-        add(f"combined:{name}", tables.combined[name])
+        value = np.asarray(tables.combined[name])
+        add(f"combined:{name}", value[None, :] if value.ndim == 1 else value)
     for band in range(1, 17):
         for stream in ("A", "B"):
             name = f"combined:FRACREF{stream}C{band}"
@@ -173,9 +191,9 @@ def submit_t8w(t, z_interface, fnm, fnp):
     output = MetalArray(context.buffer(max(ncol * (nz + 1) * 4, 4)),
                         (ncol, nz + 1), np.float32)
     context.submit_kernel(
-        "rrtm_lw_t8w", {**arrays, "tw": output},
+        "wrf_exact_rrtm_lw_t8w" if WRF_EXACT else "rrtm_lw_t8w", {**arrays, "tw": output},
         {"ncol": ncol, "nz": nz, "nlev": nz + 1,
-         "ncell": ncol * (nz + 1)}, exact_policy=False,
+         "ncell": ncol * (nz + 1)}, exact_policy=WRF_EXACT,
         grid_size=ncol * (nz + 1), threads_per_group=128)
     return output
 
@@ -190,11 +208,13 @@ def submit_mm5atm(*, t, p_pa, dz, qv, qc, qr, qi, qs, qg, cldfra,
         raise TypeError("classic RRTM MM5ATM needs packed layer columns")
     ncol, nz = t.shape
     nlayers = int(nlayers)
-    if nlayers < nz or nlayers > 256:
+    if nlayers < nz:
         raise ValueError("classic RRTM MM5ATM buffer geometry is unsupported")
+    _check_layer_geometry(ncol, nlayers)
     arrays = {name: value for name, value in locals().copy().items()
               if isinstance(value, MetalArray)}
     context = _validate(arrays)
+    _check_layer_geometry(ncol, nlayers, context)
     for name in ("p_pa", "dz", "qv", "qc", "qr", "qi", "qs", "qg", "cldfra"):
         _shape(arrays[name], (ncol, nz), name)
     for name in ("tw", "pw_pa"):
@@ -213,15 +233,27 @@ def submit_mm5atm(*, t, p_pa, dz, qv, qc, qr, qi, qs, qg, cldfra,
     _shape(ppwrkh, (32,), "ppwrkh")
     if pprof.ndim != 1 or tprof.shape != pprof.shape:
         raise ValueError("classic RRTM standard-atmosphere tables disagree")
+    if WRF_EXACT:
+        inputs = ("t", "p_pa", "dz", "qv", "qc", "qr", "qi", "qs", "qg",
+                  "cldfra", "tw", "pw_pa", "tsfc", "emiss", "o3wrk",
+                  "ppwrkh", "pprof", "tprof")
+        for name in inputs:
+            values = arrays[name].to_numpy()
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM MM5ATM requires finite {name}")
+            if name in ("t", "p_pa") and np.any(values <= 0):
+                raise ValueError(f"strict classic RRTM MM5ATM requires positive {name}")
+        if not all(np.isfinite(value) for value in (co2vmr, n2ovmr, ch4vmr, r, g)) or r <= 0 or g <= 0:
+            raise ValueError("strict classic RRTM MM5ATM requires finite gases and positive constants")
     context.submit_kernel(
-        "rrtm_lw_mm5atm", arrays,
+        "wrf_exact_rrtm_lw_mm5atm" if WRF_EXACT else "rrtm_lw_mm5atm", arrays,
         {"ncol": ncol, "nz": nz, "nlay": nlayers,
          "nprof": pprof.size, "ncell": ncol,
          "co2vmr": float(np.float32(co2vmr)),
-         "n2ovmr": float(np.float32(n2ovmr / 0.658090) * np.float32(0.658090)),
-         "ch4vmr": float(np.float32(ch4vmr / 1.805423) * np.float32(1.805423)),
+         "n2ovmr": float(np.float32(n2ovmr / (float(np.float32(0.658090)) if WRF_EXACT else 0.658090)) * np.float32(0.658090)),
+         "ch4vmr": float(np.float32(ch4vmr / (float(np.float32(1.805423)) if WRF_EXACT else 1.805423)) * np.float32(1.805423)),
          "r": float(np.float32(r)), "g": float(np.float32(g))},
-        exact_policy=False, grid_size=ncol, threads_per_group=128)
+        exact_policy=WRF_EXACT, grid_size=ncol, threads_per_group=128)
 
 
 def submit_setcoef(*, pavel, tavel, coldry, wkl, preflog, tref):
@@ -229,6 +261,8 @@ def submit_setcoef(*, pavel, tavel, coldry, wkl, preflog, tref):
     if not isinstance(pavel, MetalArray) or pavel.ndim != 2:
         raise TypeError("classic RRTM SETCOEF needs packed layer arrays")
     ncol, nlay = pavel.shape
+    if WRF_EXACT and nlay == 0:
+        raise ValueError("strict classic RRTM SETCOEF needs at least one layer")
     arrays = {"pavel": pavel, "tavel": tavel, "coldry": coldry,
               "wkl": wkl, "preflog": preflog, "tref": tref}
     context = _validate(arrays)
@@ -237,6 +271,13 @@ def submit_setcoef(*, pavel, tavel, coldry, wkl, preflog, tref):
     _shape(wkl, (ncol, nlay, 35), "wkl")
     _shape(preflog, (59,), "preflog")
     _shape(tref, (59,), "tref")
+    if WRF_EXACT:
+        for name, value in arrays.items():
+            values = value.to_numpy()
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM SETCOEF requires finite {name}")
+            if name in ("pavel", "tavel", "coldry") and np.any(values <= 0):
+                raise ValueError(f"strict classic RRTM SETCOEF requires positive {name}")
     outputs = {}
     for name in ("colh2o", "colco2", "colo3", "coln2o", "colch4",
                  "colo2", "co2mult", "fac00", "fac01", "fac10", "fac11",
@@ -251,9 +292,9 @@ def submit_setcoef(*, pavel, tavel, coldry, wkl, preflog, tref):
                                    (ncol,), np.int32)
     arrays.update(outputs)
     context.submit_kernel(
-        "rrtm_lw_setcoef", arrays,
+        "wrf_exact_rrtm_lw_setcoef" if WRF_EXACT else "rrtm_lw_setcoef", arrays,
         {"ncol": ncol, "nlay": nlay, "ncell": ncol},
-        exact_policy=False, grid_size=ncol, threads_per_group=128)
+        exact_policy=WRF_EXACT, grid_size=ncol, threads_per_group=128)
     return outputs
 
 
@@ -262,6 +303,14 @@ def submit_taumol_01_02(*, coef, tables):
     colh2o = coef["colh2o"]
     ncol, nlay = colh2o.shape
     context = _validate({"colh2o": colh2o})
+    if WRF_EXACT:
+        for name in ("colh2o", "coldry", "fac00", "fac01", "fac10", "fac11",
+                     "forfac", "selffac", "selffrac"):
+            values = coef[name].to_numpy()
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+            if name == "coldry" and np.any(values <= 0):
+                raise ValueError("strict classic RRTM GASABS requires positive coldry")
     host_tables = upload_tables(context, tables)
     arrays = {name: coef[name] for name in (
         "colh2o", "coldry", "fac00", "fac01", "fac10", "fac11",
@@ -298,7 +347,7 @@ def submit_taumol_01_02(*, coef, tables):
     outputs["pfrac"].fill(0.0)
     arrays.update(outputs)
     context.submit_kernel(
-        "rrtm_lw_taumol_01_02", arrays,
+        "wrf_exact_rrtm_lw_taumol_01_02" if WRF_EXACT else "rrtm_lw_taumol_01_02", arrays,
         {"ncol": ncol, "nlay": nlay, "ngpt": 140,
          "ncell": ncol * nlay, "nspa1": int(tables.nspa[0]),
          "nspb1": int(tables.nspb[0]), "nspa2": int(tables.nspa[1]),
@@ -309,7 +358,7 @@ def submit_taumol_01_02(*, coef, tables):
          "nabsa2": int(tables.absa[2].shape[0]),
          "nabsb2": int(tables.absb[2].shape[0]),
          "nself2": int(tables.selfrefc[2].shape[0]),
-         "ncorr": int(tables.corr1.shape[0])}, exact_policy=False,
+         "ncorr": int(tables.corr1.shape[0])}, exact_policy=WRF_EXACT,
         grid_size=ncol * nlay, threads_per_group=128)
     return outputs
 
@@ -319,6 +368,16 @@ def submit_taumol_03(*, coef, tables, taug, pfrac):
     ncol, nlay = coef["colh2o"].shape
     context = _validate({"colh2o": coef["colh2o"], "taug": taug,
                          "pfrac": pfrac})
+    if WRF_EXACT:
+        names = ("colh2o", "colco2", "coln2o", "fac00", "fac01", "fac10",
+                 "fac11", "forfac", "selffac", "selffrac")
+        host = {name: coef[name].to_numpy() for name in names}
+        for name, values in host.items():
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        if (np.any(host["colh2o"] < 0) or np.any(host["colco2"] < 0)
+                or np.any((host["colh2o"] == 0) & (host["colco2"] == 0))):
+            raise ValueError("strict classic RRTM band 3 requires nonnegative, nonzero combined carriers")
     table_values, table_index, ids = upload_taumol_blob(context, tables)
     names = ("colh2o", "colco2", "coln2o", "fac00", "fac01", "fac10",
              "fac11", "forfac", "selffac", "selffrac", "jp", "jt",
@@ -350,8 +409,8 @@ def submit_taumol_03(*, coef, tables, taug, pfrac):
               "id_co2ref": tid("statics:TAUGB3__CO2REF"),
               "id_n2oref": tid("statics:TAUGB3__N2OREF"),
               "id_etaref": tid("statics:TAUGB3__ETAREF")}
-    context.submit_kernel("rrtm_lw_taumol_03", arrays, params,
-                          exact_policy=False, grid_size=ncol * nlay,
+    context.submit_kernel("wrf_exact_rrtm_lw_taumol_03" if WRF_EXACT else "rrtm_lw_taumol_03", arrays, params,
+                          exact_policy=WRF_EXACT, grid_size=ncol * nlay,
                           threads_per_group=128)
 
 
@@ -360,6 +419,13 @@ def submit_taumol_06(*, coef, wx, tables, taug, pfrac):
     ncol, nlay = coef["colh2o"].shape
     context = _validate({"colh2o": coef["colh2o"], "wx": wx,
                          "taug": taug, "pfrac": pfrac})
+    if WRF_EXACT:
+        for name in ("colh2o", "co2mult", "fac00", "fac01", "fac10", "fac11",
+                     "selffac", "selffrac"):
+            if not np.all(np.isfinite(coef[name].to_numpy())):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        if not np.all(np.isfinite(wx.to_numpy())):
+            raise ValueError("strict classic RRTM GASABS requires finite wx")
     values, table_index, ids = upload_taumol_blob(context, tables)
     names = ("colh2o", "co2mult", "fac00", "fac01", "fac10", "fac11",
              "selffac", "selffrac", "jp", "jt", "jt1", "indself", "laytrop")
@@ -380,14 +446,28 @@ def submit_taumol_06(*, coef, wx, tables, taug, pfrac):
         "id_cfc12": tid("combined:CFC12C6"),
         "id_co2": tid("combined:ABSCO2C6"),
         "id_frac": tid("combined:FRACREFAC6")}
-    context.submit_kernel("rrtm_lw_taumol_06", arrays, params,
-        exact_policy=False, grid_size=ncol*nlay, threads_per_group=128)
+    context.submit_kernel("wrf_exact_rrtm_lw_taumol_06" if WRF_EXACT else "rrtm_lw_taumol_06", arrays, params,
+        exact_policy=WRF_EXACT, grid_size=ncol*nlay, threads_per_group=128)
 
 
 def submit_taumol_04_05(*, coef, wx, tables, taug, pfrac):
     """Submit classic RRTM bands 4 and 5 through their shared key-species path."""
     ncol,nlay=coef["colh2o"].shape
     context=_validate({"colh2o":coef["colh2o"],"wx":wx,"taug":taug,"pfrac":pfrac})
+    if WRF_EXACT:
+        names = ("colh2o", "colco2", "colo3", "fac00", "fac01", "fac10",
+                 "fac11", "selffac", "selffrac")
+        host = {name: coef[name].to_numpy() for name in names}
+        for name, values in host.items():
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        water, co2, ozone = (host[name] for name in ("colh2o", "colco2", "colo3"))
+        if (np.any(water < 0) or np.any(co2 < 0) or np.any(ozone < 0)
+                or np.any((water == 0) & (co2 == 0))
+                or np.any((ozone == 0) & (co2 == 0))):
+            raise ValueError("strict classic RRTM bands 4–5 require nonnegative, nonzero combined carriers")
+        if not np.all(np.isfinite(wx.to_numpy())):
+            raise ValueError("strict classic RRTM GASABS requires finite wx")
     values,index,ids=upload_taumol_blob(context,tables)
     names=("colh2o","colco2","colo3","fac00","fac01","fac10","fac11",
         "selffac","selffrac","jp","jt","jt1","indself","laytrop")
@@ -396,6 +476,9 @@ def submit_taumol_04_05(*, coef, wx, tables, taug, pfrac):
     context=_validate(arrays,context=context)
     for name in names:_shape(arrays[name],(ncol,) if name=="laytrop" else (ncol,nlay),name)
     _shape(wx,(ncol,nlay,4),"wx")
+    if WRF_EXACT:
+        _shape(taug,(ncol,nlay,140),"taug")
+        _shape(pfrac,(ncol,nlay,140),"pfrac")
     for band, offset, ng, lowratio, highratio, nspaix, nspbix, stephi, special in (
             (4,38,14,850.577,35.7416,3,3,6,1),
             (5,52,16,90.4894,0.900502,4,4,5,0)):
@@ -411,13 +494,23 @@ def submit_taumol_04_05(*, coef, wx, tables, taug, pfrac):
            "id_fraca":int(ids[f"combined:FRACREFAC{band}"]),
            "id_fracb":int(ids[f"combined:FRACREFBC{band}"]),
            "id_ccl4":int(ids.get("combined:CCL4C5",0))}
-        context.submit_kernel("rrtm_lw_taumol_04_05",arrays,p,
-            exact_policy=False,grid_size=ncol*nlay,threads_per_group=128)
+        context.submit_kernel("wrf_exact_rrtm_lw_taumol_04_05" if WRF_EXACT else "rrtm_lw_taumol_04_05",arrays,p,
+            exact_policy=WRF_EXACT,grid_size=ncol*nlay,threads_per_group=128)
 
 
 def submit_taumol_07(*,coef,tables,taug,pfrac):
     ncol,nlay=coef["colh2o"].shape
     context=_validate({"colh2o":coef["colh2o"],"taug":taug,"pfrac":pfrac})
+    if WRF_EXACT:
+        names = ("colh2o", "colo3", "co2mult", "fac00", "fac01", "fac10", "fac11", "selffac", "selffrac")
+        host = {name: coef[name].to_numpy() for name in names}
+        for name, values in host.items():
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        water, ozone = host["colh2o"], host["colo3"]
+        if (np.any(water < 0) or np.any(ozone < 0)
+                or np.any((water == 0) & (ozone == 0))):
+            raise ValueError("strict classic RRTM band 7 requires nonnegative, nonzero combined carriers")
     values,index,ids=upload_taumol_blob(context,tables)
     names=("colh2o","colo3","co2mult","fac00","fac01","fac10","fac11",
         "selffac","selffrac","jp","jt","jt1","indself","laytrop")
@@ -425,6 +518,9 @@ def submit_taumol_07(*,coef,tables,taug,pfrac):
     arrays.update({"tables":values,"table_index":index,"taug":taug,"pfrac":pfrac})
     context=_validate(arrays,context=context)
     for name in names:_shape(arrays[name],(ncol,) if name=="laytrop" else (ncol,nlay),name)
+    if WRF_EXACT:
+        _shape(taug,(ncol,nlay,140),"taug")
+        _shape(pfrac,(ncol,nlay,140),"pfrac")
     params={"ncol":ncol,"nlay":nlay,"ncell":ncol*nlay,
         "nspa":int(tables.nspa[6]),"nspb":int(tables.nspb[6]),
         "nrowa":int(tables.absa[7].shape[0]),"nrowb":int(tables.absb[7].shape[0]),
@@ -432,13 +528,20 @@ def submit_taumol_07(*,coef,tables,taug,pfrac):
         "id_self":int(ids["self7"]),"id_co2":int(ids["combined:ABSCO2C7"]),
         "id_fraca":int(ids["combined:FRACREFAC7"]),
         "id_fracb":int(ids["combined:FRACREFBC7"])}
-    context.submit_kernel("rrtm_lw_taumol_07",arrays,params,
-        exact_policy=False,grid_size=ncol*nlay,threads_per_group=128)
+    context.submit_kernel("wrf_exact_rrtm_lw_taumol_07" if WRF_EXACT else "rrtm_lw_taumol_07",arrays,params,
+        exact_policy=WRF_EXACT,grid_size=ncol*nlay,threads_per_group=128)
 
 
 def submit_taumol_08(*,coef,wx,tables,taug,pfrac):
     ncol,nlay=coef["colh2o"].shape
     context=_validate({"colh2o":coef["colh2o"],"wx":wx,"taug":taug,"pfrac":pfrac})
+    if WRF_EXACT:
+        for name in ("colh2o", "colo3", "coln2o", "co2mult", "fac00", "fac01",
+                     "fac10", "fac11", "selffac", "selffrac"):
+            if not np.all(np.isfinite(coef[name].to_numpy())):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        if not np.all(np.isfinite(wx.to_numpy())):
+            raise ValueError("strict classic RRTM GASABS requires finite wx")
     values,index,ids=upload_taumol_blob(context,tables)
     names=("colh2o","colo3","coln2o","co2mult","fac00","fac01","fac10",
         "fac11","selffac","selffrac","jp","jt","jt1","indself","layswtch")
@@ -446,6 +549,10 @@ def submit_taumol_08(*,coef,wx,tables,taug,pfrac):
     arrays.update({"wx":wx,"tables":values,"table_index":index,"taug":taug,"pfrac":pfrac})
     context=_validate(arrays,context=context)
     for name in names:_shape(arrays[name],(ncol,) if name=="layswtch" else (ncol,nlay),name)
+    if WRF_EXACT:
+        _shape(wx,(ncol,nlay,4),"wx")
+        _shape(taug,(ncol,nlay,140),"taug")
+        _shape(pfrac,(ncol,nlay,140),"pfrac")
     params={"ncol":ncol,"nlay":nlay,"ncell":ncol*nlay,
         "nspa":int(tables.nspa[7]),"nspb":int(tables.nspb[7]),
         "nrowa":int(tables.absa[8].shape[0]),"nrowb":int(tables.absb[8].shape[0]),
@@ -456,13 +563,17 @@ def submit_taumol_08(*,coef,wx,tables,taug,pfrac):
         "id_co2a":int(ids["combined:ABSCO2AC8"]),"id_co2b":int(ids["combined:ABSCO2BC8"]),
         "id_n2oa":int(ids["combined:ABSN2OAC8"]),"id_n2ob":int(ids["combined:ABSN2OBC8"]),
         "id_fraca":int(ids["combined:FRACREFAC8"]),"id_fracb":int(ids["combined:FRACREFBC8"])}
-    context.submit_kernel("rrtm_lw_taumol_08",arrays,params,
-        exact_policy=False,grid_size=ncol*nlay,threads_per_group=128)
+    context.submit_kernel("wrf_exact_rrtm_lw_taumol_08" if WRF_EXACT else "rrtm_lw_taumol_08",arrays,params,
+        exact_policy=WRF_EXACT,grid_size=ncol*nlay,threads_per_group=128)
 
 
 def submit_taumol_10_11(*,coef,tables,taug,pfrac):
     ncol,nlay=coef["colh2o"].shape
     context=_validate({"colh2o":coef["colh2o"],"taug":taug,"pfrac":pfrac})
+    if WRF_EXACT:
+        for name in ("colh2o", "fac00", "fac01", "fac10", "fac11", "selffac", "selffrac"):
+            if not np.all(np.isfinite(coef[name].to_numpy())):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
     values,index,ids=upload_taumol_blob(context,tables)
     names=("colh2o","fac00","fac01","fac10","fac11","selffac","selffrac",
         "jp","jt","jt1","indself","laytrop")
@@ -470,6 +581,9 @@ def submit_taumol_10_11(*,coef,tables,taug,pfrac):
     arrays.update({"tables":values,"table_index":index,"taug":taug,"pfrac":pfrac})
     context=_validate(arrays,context=context)
     for name in names:_shape(arrays[name],(ncol,) if name=="laytrop" else (ncol,nlay),name)
+    if WRF_EXACT:
+        _shape(taug,(ncol,nlay,140),"taug")
+        _shape(pfrac,(ncol,nlay,140),"pfrac")
     for band,offset,ng,have_self in ((10,108,6,0),(11,114,8,1)):
         params={"ncol":ncol,"nlay":nlay,"ncell":ncol*nlay,"offset":offset,
           "ng":ng,"nspa":int(tables.nspa[band-1]),"nspb":int(tables.nspb[band-1]),
@@ -478,13 +592,31 @@ def submit_taumol_10_11(*,coef,tables,taug,pfrac):
           "id_absb":int(ids[f"absb{band}"]),"id_self":int(ids[f"self{band}"]),
           "id_fraca":int(ids[f"combined:FRACREFAC{band}"]),
           "id_fracb":int(ids[f"combined:FRACREFBC{band}"])}
-        context.submit_kernel("rrtm_lw_taumol_10_11",arrays,params,
-          exact_policy=False,grid_size=ncol*nlay,threads_per_group=128)
+        context.submit_kernel("wrf_exact_rrtm_lw_taumol_10_11" if WRF_EXACT else "rrtm_lw_taumol_10_11",arrays,params,
+          exact_policy=WRF_EXACT,grid_size=ncol*nlay,threads_per_group=128)
 
 
 def submit_taumol_12_16(*,coef,tables,taug,pfrac):
     ncol,nlay=coef["colh2o"].shape
     context=_validate({"colh2o":coef["colh2o"],"taug":taug,"pfrac":pfrac})
+    if WRF_EXACT:
+        names = ("colh2o", "colco2", "coln2o", "colch4", "fac00", "fac01",
+                 "fac10", "fac11", "selffac", "selffrac")
+        host = {name: coef[name].to_numpy() for name in names}
+        for name, values in host.items():
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        for name in ("colh2o", "colco2", "coln2o", "colch4"):
+            if np.any(host[name] < 0):
+                raise ValueError("strict classic RRTM bands 12–16 require nonnegative carriers")
+        for a,b,ratio in (("colh2o","colco2",0.009736757),
+                          ("colh2o","coln2o",16658.87),
+                          ("coln2o","colco2",0.2883201),
+                          ("colh2o","colch4",830.411)):
+            with np.errstate(over="ignore", under="ignore"):
+                combined = host[a] + np.float32(ratio) * host[b]
+            if np.any(~np.isfinite(combined)) or np.any(combined == 0):
+                raise ValueError("strict classic RRTM bands 12–16 require finite nonzero combined carriers")
     values,index,ids=upload_taumol_blob(context,tables)
     names=("colh2o","colco2","coln2o","colch4","fac00","fac01",
         "fac10","fac11","selffac","selffrac","jp","jt","jt1",
@@ -493,6 +625,9 @@ def submit_taumol_12_16(*,coef,tables,taug,pfrac):
     arrays.update({"tables":values,"table_index":index,"taug":taug,"pfrac":pfrac})
     context=_validate(arrays,context=context)
     for name in names:_shape(arrays[name],(ncol,) if name=="laytrop" else (ncol,nlay),name)
+    if WRF_EXACT:
+        _shape(taug,(ncol,nlay,140),"taug")
+        _shape(pfrac,(ncol,nlay,140),"pfrac")
     # Bands 12, 13, 15 and 16 use a low-pressure key-species mixture only.
     configs=((12,122,8,1,2,0.009736757,0),
              (13,130,4,1,3,16658.87,0),
@@ -509,13 +644,23 @@ def submit_taumol_12_16(*,coef,tables,taug,pfrac):
           "have_self":1,"id_absa":int(ids[f"absa{band}"]),"id_absb":int(ids[f"absb{band}"]),
           "id_self":int(ids[f"self{band}"]),"id_fraca":int(ids[f"combined:FRACREFAC{band}"]),
           "id_fracb":int(ids[f"combined:FRACREFBC{band}"])}
-        context.submit_kernel("rrtm_lw_taumol_12_16",arrays,params,
-          exact_policy=False,grid_size=ncol*nlay,threads_per_group=128)
+        context.submit_kernel("wrf_exact_rrtm_lw_taumol_12_16" if WRF_EXACT else "rrtm_lw_taumol_12_16",arrays,params,
+          exact_policy=WRF_EXACT,grid_size=ncol*nlay,threads_per_group=128)
 
 
 def submit_taumol_09(*,coef,tables,taug,pfrac):
     ncol,nlay=coef["colh2o"].shape
     context=_validate({"colh2o":coef["colh2o"],"taug":taug,"pfrac":pfrac})
+    if WRF_EXACT:
+        names = ("colh2o", "colch4", "coln2o", "fac00", "fac01", "fac10", "fac11", "selffac", "selffrac")
+        host = {name: coef[name].to_numpy() for name in names}
+        for name, values in host.items():
+            if not np.all(np.isfinite(values)):
+                raise ValueError(f"strict classic RRTM GASABS requires finite {name}")
+        water, methane = host["colh2o"], host["colch4"]
+        if (np.any(water < 0) or np.any(methane < 0)
+                or np.any((water == 0) & (methane == 0))):
+            raise ValueError("strict classic RRTM band 9 requires nonnegative, nonzero combined carriers")
     values,index,ids=upload_taumol_blob(context,tables)
     names=("colh2o","colch4","coln2o","fac00","fac01","fac10","fac11",
         "selffac","selffrac","jp","jt","jt1","indself","laytrop","layswtch","laylow")
@@ -523,6 +668,9 @@ def submit_taumol_09(*,coef,tables,taug,pfrac):
     arrays.update({"tables":values,"table_index":index,"taug":taug,"pfrac":pfrac})
     context=_validate(arrays,context=context)
     for name in names:_shape(arrays[name],(ncol,) if name in ("laytrop","layswtch","laylow") else (ncol,nlay),name)
+    if WRF_EXACT:
+        _shape(taug,(ncol,nlay,140),"taug")
+        _shape(pfrac,(ncol,nlay,140),"pfrac")
     params={"ncol":ncol,"nlay":nlay,"ncell":ncol*nlay,"nspa":int(tables.nspa[8]),
       "nspb":int(tables.nspb[8]),"nrowa":int(tables.absa[9].shape[0]),
       "nrowb":int(tables.absb[9].shape[0]),"ng":12,
@@ -531,8 +679,8 @@ def submit_taumol_09(*,coef,tables,taug,pfrac):
       "id_ch4ref":int(ids["statics:TAUGB9__CH4REF"]),"id_n2oref":int(ids["statics:TAUGB9__N2OREF"]),
       "id_eta":int(ids["statics:TAUGB9__ETAREF"]),"id_absn2o":int(ids["combined:ABSN2OC9"]),
       "id_fraca":int(ids["combined:FRACREFAC9"]),"id_fracb":int(ids["combined:FRACREFBC9"])}
-    context.submit_kernel("rrtm_lw_taumol_09",arrays,params,
-      exact_policy=False,grid_size=ncol*nlay,threads_per_group=128)
+    context.submit_kernel("wrf_exact_rrtm_lw_taumol_09" if WRF_EXACT else "rrtm_lw_taumol_09",arrays,params,
+      exact_policy=WRF_EXACT,grid_size=ncol*nlay,threads_per_group=128)
 
 
 def submit_taumol_all(*,coef,wx,tables):
@@ -550,16 +698,30 @@ def submit_taumol_all(*,coef,wx,tables):
     return outputs
 
 
-def submit_make_itr(taug, *, bpade=1.0 / 0.278):
+def submit_make_itr(taug, *, bpade=None):
     """Build GASABS's rounded 0..5000 Pade table index on Metal."""
+    if bpade is None:
+        bpade = float(np.float32(1.0) / np.float32(0.278)) if WRF_EXACT else 1.0 / 0.278
     context=_validate({"taug":taug})
     if taug.ndim!=3 or taug.shape[-1]!=140:
         raise ValueError("classic RRTM optical depths must have shape (ncol,nlay,140)")
+    _check_layer_geometry(int(taug.shape[0]), int(taug.shape[1]), context)
+    if WRF_EXACT:
+        values=taug.to_numpy()
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            rounded_bpade=np.float32(bpade)
+            od=np.float32(1.66)*values
+            denom=rounded_bpade+od
+        if (not np.all(np.isfinite(values)) or not np.isfinite(rounded_bpade)
+                or rounded_bpade <= 0):
+            raise ValueError("strict classic RRTM Pade index requires finite optical depth and positive bpade")
+        if np.any((od > 0) & (~np.isfinite(od) | ~np.isfinite(denom))):
+            raise ValueError("strict classic RRTM Pade index requires finite positive optical-depth arithmetic")
     npoint=int(np.prod(taug.shape,dtype=np.int64))
     itr=MetalArray(context.buffer(max(npoint*4,4)),taug.shape,np.int32)
-    context.submit_kernel("rrtm_lw_make_itr",{"taug":taug,"itr":itr},
+    context.submit_kernel("wrf_exact_rrtm_lw_make_itr" if WRF_EXACT else "rrtm_lw_make_itr",{"taug":taug,"itr":itr},
         {"npoint":npoint,"bpade":float(np.float32(bpade))},
-        exact_policy=False,grid_size=npoint,threads_per_group=128)
+        exact_policy=WRF_EXACT,grid_size=npoint,threads_per_group=128)
     return itr
 
 
@@ -574,9 +736,9 @@ def submit_rtrn_down(*, pfrac, pz, tz, tavel, cldfrac, taucloud, itr,
     storage; the subsequent up-pass and broadband reduction are separate
     ordered submissions.
     """
+    _refuse_unported_strict_stage()
     ncol, nlay = int(ncol), int(nlay)
-    if ncol < 1 or nlay < 1 or nlay > 256:
-        raise ValueError("classic RRTM LW Metal supports 1..256 layers")
+    _check_layer_geometry(ncol, nlay)
     ngpt = 140
     arrays = {
         "pfrac": pfrac, "pz": pz, "tz": tz, "tavel": tavel,
@@ -617,9 +779,9 @@ def submit_rtrn_up(*, pfrac, tavel, cldfrac, semiss, tbound, totplnk,
                    down, clear_down, up,
                    ncol, nlay):
     """Run RTRN's upward pass over the saved downward source terms."""
+    _refuse_unported_strict_stage()
     ncol, nlay = int(ncol), int(nlay)
-    if ncol < 1 or nlay < 1 or nlay > 256:
-        raise ValueError("classic RRTM LW Metal supports 1..256 layers")
+    _check_layer_geometry(ncol, nlay)
     arrays = {"pfrac": pfrac, "tavel": tavel, "cldfrac": cldfrac,
               "semiss": semiss, "tbound": tbound, "totplnk": totplnk,
               "delwave": delwave, "ngb0": ngb0, "bbu": bbu,
@@ -650,6 +812,7 @@ def submit_rtrn_up(*, pfrac, tavel, cldfrac, semiss, tbound, totplnk,
 def submit_rtrn_fluxes(*, pz, up, down, exner, rthratenlw, glw, olr,
                        ncol, nmodel, nlay, ny, nx, heatfac, fluxfac):
     """Reduce g-points to fluxes, heating, GLW and model-top OLR."""
+    _refuse_unported_strict_stage()
     ncol, nmodel, nlay, ny, nx = map(int, (ncol, nmodel, nlay, ny, nx))
     if (ncol != ny * nx or nmodel < 1 or nmodel > nlay
             or up.shape != (ncol, nlay + 1, 140)
@@ -671,16 +834,104 @@ def submit_rtrn_fluxes(*, pz, up, down, exner, rthratenlw, glw, olr,
         threads_per_group=128)
 
 
+def _submit_strict_rtrn_transfer(*, pfrac, pz, tz, tavel, cldfrac, taucloud, itr,
+                                 tbound, semiss, totplnk, delwave, tau_table,
+                                 tf_table, trans_table, ngb0, exner, rthratenlw,
+                                 glw, olr, ncol, nmodel, nlay, ny, nx, heatfac,
+                                 bpade, fluxfac):
+    """Private strict transfer pending end-to-end adapter admission."""
+    ncol, nmodel, nlay, ny, nx = map(int, (ncol, nmodel, nlay, ny, nx))
+    inputs = {name: value for name, value in locals().copy().items() if name in (
+        'pfrac', 'pz', 'tz', 'tavel', 'cldfrac', 'taucloud', 'itr', 'tbound',
+        'semiss', 'totplnk', 'delwave', 'tau_table', 'tf_table', 'trans_table',
+        'ngb0', 'exner', 'rthratenlw', 'glw', 'olr')}
+    context = _validate(inputs)
+    _check_layer_geometry(ncol, nlay, context)
+    if ncol != ny * nx or not 1 <= nmodel <= nlay:
+        raise ValueError('strict classic RRTM transfer geometry disagrees')
+    shapes = {'pfrac': (ncol, nlay, 140), 'itr': (ncol, nlay, 140),
+              'pz': (ncol, nlay + 1), 'tz': (ncol, nlay + 1),
+              'tavel': (ncol, nlay), 'cldfrac': (ncol, nlay),
+              'taucloud': (ncol, nlay), 'tbound': (ncol,), 'semiss': (ncol, 16),
+              'totplnk': (181, 16), 'delwave': (16,), 'ngb0': (140,),
+              'tau_table': (5001,), 'tf_table': (5001,), 'trans_table': (5001,),
+              'exner': (ncol, nmodel), 'rthratenlw': (nmodel, ny, nx),
+              'glw': (ny, nx), 'olr': (ny, nx)}
+    for name, shape in shapes.items():
+        _shape(inputs[name], shape, name)
+    host = {name: value.to_numpy() for name, value in inputs.items()
+            if name not in ('rthratenlw', 'glw', 'olr')}
+    for name, values in host.items():
+        if not np.all(np.isfinite(values)):
+            raise ValueError(f'strict classic RRTM transfer requires finite {name}')
+    for name in ('tz', 'tavel', 'tbound'):
+        if np.any((host[name] < 160) | (host[name] > 340)):
+            raise ValueError('strict classic RRTM transfer temperature is outside the Planck table')
+    if (np.any((host['itr'] < 0) | (host['itr'] > 5000))
+            or np.any((host['ngb0'] < 0) | (host['ngb0'] >= 16))
+            or np.any(host['exner'] == 0)
+            or np.any(host['pz'][:, :-1] == host['pz'][:, 1:])):
+        raise ValueError('strict classic RRTM transfer indices or denominators are invalid')
+    if (not all(np.isfinite(np.float32(value)) for value in (heatfac, bpade, fluxfac))
+            or np.float32(bpade) <= 0):
+        raise ValueError('strict classic RRTM transfer constants are invalid')
+    with np.errstate(over='ignore', invalid='ignore'):
+        cloud_od = np.float32(1.66) * host['taucloud']
+        odsm = host['tau_table'][host['itr']] + cloud_od[..., None]
+        denominator = np.float32(bpade) + odsm
+        pressure_delta = host['pz'][:, :-1] - host['pz'][:, 1:]
+    cloudy = host['cldfrac'] > 0
+    if (np.any(host['taucloud'][cloudy] < 0)
+            or np.any(~np.isfinite(odsm[cloudy]))
+            or np.any(~np.isfinite(denominator[cloudy]))
+            or np.any(denominator[cloudy] == 0)
+            or np.any(~np.isfinite(pressure_delta))):
+        raise ValueError('strict classic RRTM transfer optical depth or pressure arithmetic is invalid')
+    scratch = {}
+    for name, shape in (
+        *((name, (ncol, nlay, 140)) for name in ('bbu', 'bbutot', 'atot', 'abss')),
+        *((name, (ncol, nlay + 1, 140)) for name in ('down', 'clear_down', 'up', 'clear_up')),
+        *((name, (ncol, nlay + 1)) for name in ('htr', 'clear_htr', 'clear_up_flux', 'clear_down_flux')),
+    ):
+        scratch[name] = MetalArray(context.buffer(int(np.prod(shape)) * 4), shape, np.float32)
+    arrays = {**inputs, **scratch}
+    def submit(stage, names, params, grid):
+        context.submit_kernel('wrf_exact_rrtm_lw_rtrn_' + stage,
+                              {name: arrays[name] for name in names.split()}, params,
+                              exact_policy=True, grid_size=grid, threads_per_group=128)
+    params = {'ncol': ncol, 'nlay': nlay, 'ngpt': 140, 'ncell': ncol * 140}
+    submit('down', 'pfrac pz tz tavel cldfrac taucloud itr tbound semiss totplnk delwave tau_table tf_table trans_table ngb0 bbu bbutot atot abss down clear_down',
+           {**params, 'bpade': float(np.float32(bpade))}, ncol * 140)
+    submit('up', 'pfrac tavel cldfrac semiss tbound totplnk delwave ngb0 bbu bbutot atot abss taucloud down clear_down up clear_up',
+           params, ncol * 140)
+    submit('fluxes', 'pz up down exner rthratenlw glw olr clear_up clear_down clear_up_flux clear_down_flux htr clear_htr',
+           {'ncol': ncol, 'nmodel': nmodel, 'nlay': nlay, 'ny': ny, 'nx': nx,
+            'ncell': ncol * (nlay + 1), 'heatfac': float(np.float32(heatfac)),
+            'fluxfac': float(np.float32(fluxfac))}, ncol * (nlay + 1))
+    return scratch
+
+
 def submit_rtrn_transfer(*, pfrac, pz, tz, tavel, cldfrac, taucloud, itr,
                          tbound, semiss, totplnk, delwave, tau_table,
                          tf_table, trans_table, ngb0, exner, rthratenlw,
                          glw, olr, ncol, nmodel, nlay, ny, nx, heatfac,
                          bpade, fluxfac):
     """Allocate and submit classic RRTM's RTRN transfer/flux tail."""
+    if WRF_EXACT:
+        return _submit_strict_rtrn_transfer(
+            pfrac=pfrac, pz=pz, tz=tz, tavel=tavel, cldfrac=cldfrac,
+            taucloud=taucloud, itr=itr, tbound=tbound, semiss=semiss,
+            totplnk=totplnk, delwave=delwave, tau_table=tau_table,
+            tf_table=tf_table, trans_table=trans_table, ngb0=ngb0,
+            exner=exner, rthratenlw=rthratenlw, glw=glw, olr=olr,
+            ncol=ncol, nmodel=nmodel, nlay=nlay, ny=ny, nx=nx,
+            heatfac=heatfac, bpade=bpade, fluxfac=fluxfac)
     ncol, nlay = int(ncol), int(nlay)
+    _check_layer_geometry(ncol, nlay)
     if pfrac.shape != (ncol, nlay, 140):
         raise ValueError("classic RRTM LW pfrac shape does not match geometry")
     context = _validate({"pfrac": pfrac})
+    _check_layer_geometry(ncol, nlay, context)
     scratch = {}
     for name, shape in (
             ("bbu", (ncol, nlay, 140)),

@@ -20,6 +20,8 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+from concurrent.futures import ProcessPoolExecutor
+import os
 import json
 import pathlib
 import re
@@ -39,6 +41,8 @@ from woof.config import (  # noqa: E402
     GF_CLOSURE_MEMBERS,
     MOSAIC_URBAN_CANOPY_DEFAULT,
     MOSAIC_URBAN_CANOPY_RULES,
+    URBAN_WATER_BALANCE_DEFAULT,
+    URBAN_WATER_BALANCE_GENERATIONS,
     MP28_AEROSOL_SOURCES as MP28_AEROSOL_SOURCES,
 )
 from woof.physics_registry import (  # noqa: E402
@@ -80,12 +84,49 @@ from woof.wrf461_compatibility import (  # noqa: E402
 # type / enum / minimum / default taken from woof's own accepted sets
 # (woof/config.py validate_run_config), not from WRF's wider sets.
 IMPLEMENTED: dict[str, dict] = {
+    "solar_generation": {
+        "type": "string", "enum": ["wrf_480", "wrf_461"], "default": "wrf_480",
+        "component_id": "radiation",
+        "warnings": ["wrf_480 uses WRF 4.8 calc_coszen: julian minus 0.5, coefficient 0.040849. wrf_461 retains julian minus 1 and coefficient 0.04089 for reproduction. A change refuses an incompatible restart."]},
+    "ysu_version": {
+        "type": "string", "enum": ["wrf_480", "wrf_461"], "default": "wrf_480",
+        "component_id": "pbl", "read_when": {"bl_pbl_physics": 1},
+        "warnings": ["wrf_480 is the corrected default: WRF 4.8 pinned MMM "
+                     "550b5b4 removes the 0.2 offset and caps top-down entrainment "
+                     "efficiency at 0.4. wrf_461 under default arithmetic "
+                     "reproduces 2.8.9's YSU kernel (kernels/ysu_default.cu) under its "
+                     "restart identity; under GPUWM_WRF_EXACT=1 it is unmodified "
+                     "WRF 4.6.1 bl_ysu_run word for word, under its own restart "
+                     "identity. Changing generation changes tendencies and is "
+                     "refused on restart."]},
+    "noahmp_snow_age": {
+        "type": "string", "enum": ["wrf_470", "wrf_461"],
+        "default": "wrf_470", "component_id": "land_surface",
+        "read_when": {"sf_surface_physics": 4},
+        "warnings": ["Snow-aging call placement only. wrf_470 moves SNOW_AGE "
+                     "and SNOW_AGE_GLACIER before the solar branch, as WRF "
+                     "v4.7.0 and v4.7.1 do. wrf_461 preserves daylight-only "
+                     "aging. Neither selects the complete Noah-MP 5.1.2 "
+                     "model. A flip is refused on restart because TAUSS and "
+                     "the following dawn's BATS albedo would change."]},
+    "scalar_adv_opt": {
+        "type": "integer", "enum": [1], "default": 1,
+        "consuming_read": "woof/core/moist.py"},
+    "bl_mynn_tkeadvect": {
+        "type": "boolean", "enum": [False, True], "default": False,
+        "component_id": "pbl",
+        "read_when": {"bl_pbl_physics": 5, "bl_mynn_tkeadvect": True},
+        "warnings": ["Advects QKE_ADV through the scalar RK transport and copies it into and out of MYNN."]},
     "bl_mynn_mixlength": {
         "type": "integer", "enum": [1, 2], "default": 1,
         "component_id": "pbl", "read_when": {"bl_pbl_physics": 5}},
     "scalar_pblmix": {
         "type": "integer", "enum": [0, 1], "default": 0,
-        "component_id": "pbl", "read_when": {"bl_pbl_physics": 5}},
+        "component_id": "pbl", "consuming_read": "woof/core/physics.py",
+        "description": "WRF post-PBL diff4d of the mp=28 nc/ni/nwfa/nifa "
+                       "scalars on the selected scheme's lower-interface "
+                       "EXCH_H (consumer row scalar_diffusion_exchange). No "
+                       "PBL and SASE are declared no-ops."},
     "bl_mynn_version": {
         "type": "string", "enum": ["wrf_461", "gsd_41"], "default": "wrf_461",
         "component_id": "pbl", "read_when": {"bl_pbl_physics": 5},
@@ -114,6 +155,15 @@ IMPLEMENTED: dict[str, dict] = {
                      "conversion 0.5*q as written (no square); false, the "
                      "default, takes 0.5*q**2 as its option 1 and every "
                      "later generation do."]},
+    "cycling": {
+        "type": "boolean", "default": False,
+        "component_id": "pbl",
+        "read_when": {"bl_pbl_physics": 5, "bl_mynn_version": "gsd_41"},
+        "warnings": ["WRF &time_control cycling. true keeps the start's "
+                     "QKE (unless its lowest-level maximum is below "
+                     "0.0002), QC_BL and CLDFRA_BL at the first MYNN call, "
+                     "as the operational WRF 3.9 fork does. Refused with "
+                     "the v4.6.1 MYNN, whose cycled start zeroes them."]},
     "mynn_sfclay_variant": {
         "type": "string", "enum": ["wrf_461", "gsl_wrf39"],
         "default": "wrf_461",
@@ -129,6 +179,19 @@ IMPLEMENTED: dict[str, dict] = {
                      "psih's lower limit at the first level. Over rough land "
                      "(forest, urban) on stable nights the two give "
                      "different u* and exchange coefficients."]},
+    "urban_ucm_generation": {
+        "type": "string", "enum": ["wrf_471", "wrf_480"], "default": "wrf_471",
+        "component_id": "urban", "read_when": {"sf_urban_physics": 1},
+        "warnings": ["wrf_480 selects WRF v4.8.0 ground vegetation, tree shading and canopy flux feedback with declared defined entry memory; changing generation refuses restart."]},
+    "urban_treeoption": {"type": "integer", "enum": [-1, 0, 1], "default": -1,
+        "component_id": "urban", "read_when": {"sf_urban_physics": 1, "urban_ucm_generation": "wrf_480"}},
+    "urban_ttscheme": {"type": "integer", "enum": [-1, 0, 1], "default": -1,
+        "component_id": "urban", "read_when": {"sf_urban_physics": 1, "urban_ucm_generation": "wrf_480"}},
+    "urban_fvg": {"type": "number", "minimum": -1.0, "maximum": 1.0, "default": -1.0,
+        "component_id": "urban", "read_when": {"sf_urban_physics": 1, "urban_ucm_generation": "wrf_480"}},
+    "urban_table_dir": {"type": "string", "default": "", "component_id": "urban",
+        "read_when": {"sf_urban_physics": 1},
+        "warnings": ["Explicit URBPARM entries replace the pinned release table and their decoded coefficient words bind restart. Empty retains the generation's pinned bundled tables."]},
     # acoustic / small step
     "time_step_sound": {"type": "integer", "minimum": 2, "default": 4},
     "smdiv": {"type": "number", "minimum": 0.0, "default": 0.1},
@@ -219,11 +282,22 @@ IMPLEMENTED: dict[str, dict] = {
     # surface shortwave at every radiation call and evaluates it at the
     # current sun on every step (woof.core.swint); aer_opt 3 hands the
     # legacy RRTMG shortwave per-band aerosol optics from the Thompson
-    # aerosol numbers (woof.core.rrtmg_aerosol_optics).  aer_opt 1 and 2
-    # are untranscribed WRF branches and refuse by name
+    # aerosol numbers (woof.core.rrtmg_aerosol_optics).  aer_opt 1 is the
+    # root-domain six-type climatology and aer_opt 2 the user AOD/Angstrom
+    # producer (woof.core.aer_opt2), both on legacy RRTMG shortwave only
     # (woof.config.validate_radiation_driver_options).
     "swint_opt": {"type": "integer", "enum": [0, 1], "default": 0},
-    "aer_opt": {"type": "integer", "enum": [0, 3], "default": 0},
+    "aer_opt": {"type": "integer", "enum": [0, 1, 2, 3], "default": 0,
+                "implementation_rows": {"aeropt1": {
+                    "value": 1, "state": ["aerodm"], "outputs": ["AODTOT"],
+                    "doors": {"ra_sw_physics": 4, "ra_rrtmg_variant": "rrtmg_legacy", "nested": False},
+                    "authority": "WRF 4.6.1 Registry.EM_COMMON:3240 and phys/module_radiation_driver.F:1826",
+                    "rrtmgp": "refused: no checked six-type mapping"},
+                    "aeropt2": {
+                    "value": 2, "state": [], "outputs": ["AOD5503D", "AOD5502D", "ANGEXP2D", "AERSSA2D", "AERASY2D"],
+                    "doors": {"ra_sw_physics": 4, "ra_rrtmg_variant": "rrtmg_legacy"},
+                    "authority": "WRF 4.6.1 phys/module_radiation_driver.F, the aer_opt = 2 aerosol_in branch",
+                    "rrtmgp": "refused: no checked user-aerosol spectral mapping"}}},
     "alb_sol": {
         "type": "integer", "enum": [0, 1], "default": 0,
         "warnings": [
@@ -244,6 +318,13 @@ IMPLEMENTED: dict[str, dict] = {
         "read_when": {"ra_rrtmg_variant": "rrtmg_legacy"},
         "consuming_read": "woof/core/rrtmg_legacy.py",
         "description": "Source form of the legacy RRTMG cloud wrapper: WRF v4.6.1 or the NOAA WRFV3.9 fork's shortwave radius defaults, snow ice fraction and Thompson cold-start radii."},
+    "rrtmg_aer3_type_source": {
+        "type": "string", "enum": ["rural", "landmask"],
+        "default": "rural", "component_id": "radiation",
+        "read_when": {"aer_opt": 3, "ra_sw_physics": 4,
+                      "ra_rrtmg_variant": "rrtmg_legacy"},
+        "consuming_read": "woof/core/rrtmg_legacy.py",
+        "description": "Aerosol type of the aer_opt=3 shortwave optics: rural type 1 everywhere (the NOAA WRFV3.9 HRRR fork) or the NOAA MPAS fork's land/water type, rural over land and maritime over water."},
     # WRF v4.7.1 sub-grid terrain drag (woof.core.terrain_drag, lane
     # 282-terrain-drag), off by default: topo_wind under YSU, gwd_opt under
     # every PBL scheme.
@@ -348,6 +429,41 @@ IMPLEMENTED: dict[str, dict] = {
         "read_when": {"sf_lake_physics": 1},
         "warnings": ["Minimum water-cell elevation in metres used by WRF "
                      "when the input does not provide a lake mask."]},
+    # WRF &physics sf_ocean_physics = 1: the 1-D ocean mixed layer
+    # (phys/module_sf_oml.F, called by module_sf_ocean_driver.F after the
+    # land surface and before the lake).  2 is the 3-D PWP ocean, run on
+    # the GPU by woof/ocean/mixed_layer (pwp.cu).
+    "sf_ocean_physics": {
+        "type": "integer", "enum": [0, 1, 2], "default": 0,
+        "component_id": "land_surface", "consuming_read": "woof/core/physics.py",
+        "warnings": ["Option 1 runs WRF Pollard OML1D; option 2 runs CUDA "
+                     "3DPWP circulation and vertical mixing with prognostic "
+                     "temperature, salinity and currents. Both couple SST to "
+                     "TSK every surface step. An absent ocean analysis is a "
+                     "loudly labelled configured uniform MLD fallback. Full "
+                     "TC and observation qualification is pending."]},
+    "seaice_prognostic": {'type': 'boolean', 'default': True, 'per_domain': False, 'component_id': 'land_surface', 'consuming_read': 'woof/ocean/seaice/__init__.py', 'warnings': ['Prognostic thermodynamic ice and snow on non-lake ocean cells, activated when initial ocean ice is present. False selects prescribed sea ice.']},
+    "seaice_initial_thickness": {'type': 'number', 'default': 1.0, 'minimum': 0.0, 'per_domain': False, 'component_id': 'land_surface', 'consuming_read': 'woof/ocean/seaice/__init__.py', 'warnings': ['Uniform initial ice thickness prior in metres unless an input thickness field is supplied; not an observation.']},
+    "seaice_new_ice_thickness": {'type': 'number', 'default': 0.5, 'minimum': 0.0, 'per_domain': False, 'component_id': 'land_surface', 'consuming_read': 'woof/ocean/seaice/__init__.py', 'warnings': ['New-ice thickness in metres used for thermodynamic concentration growth.']},
+    "seaice_ocean_heat_flux": {'type': 'number', 'default': 2.0, 'per_domain': False, 'component_id': 'land_surface', 'consuming_read': 'woof/ocean/seaice/__init__.py', 'warnings': ['Prescribed basal ocean-to-ice heat flux in W m-2; no ocean circulation or seasonal skill is implied.']},
+    "oml_hml0": {
+        "type": "number", "default": 50.0,
+        "component_id": "land_surface", "consuming_read": "woof/core/surface_ocean.py",
+        "read_when": {"sf_ocean_physics": 1},
+        "warnings": ["Initial mixed-layer depth in metres (WRF default 50). "
+                     "0 or less reads a 2-D H0ML from the input file."]},
+    "oml_gamma": {
+        "type": "number", "default": 0.14,
+        "component_id": "land_surface", "consuming_read": "woof/core/physics.py",
+        "read_when": {"sf_ocean_physics": 1},
+        "warnings": ["Deep-water lapse rate below the mixed layer in K/m "
+                     "(WRF default 0.14); must be positive."]},
+    "oml_relaxation_time": {
+        "type": "number", "default": 0.0,
+        "component_id": "land_surface", "consuming_read": "woof/core/physics.py",
+        "read_when": {"sf_ocean_physics": 1},
+        "warnings": ["Relaxation time in seconds back to the initial "
+                     "mixed-layer state; 0 (WRF default) means none."]},
     "mosaic_lu": {
         "type": "integer", "enum": [0, 1], "default": 0,
         "component_id": "land_surface", "read_when": {"sf_surface_physics": 3},
@@ -475,6 +591,16 @@ IMPLEMENTED: dict[str, dict] = {
                      "largest urban tile type's URBPARM urban fraction, a "
                      "woof option WRF does not have; the 10 m wind override "
                      "stays on dominant-urban cells."]},
+    "urban_water_balance": {
+        "type": "string", "enum": list(URBAN_WATER_BALANCE_GENERATIONS),
+        "default": URBAN_WATER_BALANCE_DEFAULT, "component_id": "urban",
+        "read_when": {"sf_urban_physics": 1},
+        "consuming_read": "woof/core/urban_ucm.py",
+        "warnings": ["wrf_480 removes the three rain-positive impervious-store "
+                     "clamps so evaporation may exceed weak rainfall. wrf_471 "
+                     "reproduces the older clamps. Both retain rho_air/1000. "
+                     "This selects water balance only, not WRF 4.8 vegetation "
+                     "or trees. A generation change refuses an SLUCM restart."]},
     "rdmaxalb": {
         "type": "boolean", "default": True,
         "warnings": [
@@ -494,6 +620,10 @@ IMPLEMENTED: dict[str, dict] = {
 }
 
 # Existing declarations that were looser than woof's real accepted set.
+# User aerosol controls (aer_opt = 2) are owned here, so a rebuild from the
+# release registry cannot lose the namelist rows carried by the optics port.
+IMPLEMENTED.update({'aer_type': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 1, 'enum': [1, 2, 3], 'per_domain': False, 'type': 'integer'}, 'aer_aod550_opt': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 1, 'enum': [1, 2], 'per_domain': False, 'type': 'integer'}, 'aer_aod550_val': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 0.12, 'per_domain': False, 'type': 'number'}, 'aer_angexp_opt': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 1, 'enum': [1, 2, 3], 'per_domain': False, 'type': 'integer'}, 'aer_angexp_val': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 1.3, 'per_domain': False, 'type': 'number'}, 'aer_ssa_opt': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 1, 'enum': [1, 2, 3], 'per_domain': False, 'type': 'integer'}, 'aer_ssa_val': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 0.85, 'per_domain': False, 'type': 'number'}, 'aer_asy_opt': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 1, 'enum': [1, 2, 3], 'per_domain': False, 'type': 'integer'}, 'aer_asy_val': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 0.9, 'per_domain': False, 'type': 'number'}, 'aer_auxinput15': {'consuming_read': 'woof/core/aer_opt2.py', 'default': '', 'per_domain': False, 'type': 'string'}, 'aer_auxinput15_interval': {'consuming_read': 'woof/core/aer_opt2.py', 'default': 0, 'per_domain': False, 'type': 'integer'}})
+
 TIGHTEN: dict[str, dict] = {
     "ra_physics": {"type": "integer", "enum": [0, 4, 90], "default": 0},
     # -v2 is the assembly resolution of 2026-07-28 (woof/physics_compat.py
@@ -883,7 +1013,7 @@ TIGHTEN: dict[str, dict] = {
         "measurement. The oracle campaign is the declared next stage, as it "
         "was for Shin-Hong and Grell-Freitas."),
     },
-    "icloud": {"type": "integer", "enum": [0, 1], "default": 1},
+    "icloud": {"type": "integer", "enum": [0, 1, 2], "default": 1},
     "radt": {"type": "number", "minimum": 0.0, "default": 0.0},
     "radt_minutes": {"type": "number", "minimum": 0.0, "default": 12.0},
     "bldt": {"type": "number", "minimum": 0.0, "default": 0.0},
@@ -902,6 +1032,17 @@ TIGHTEN: dict[str, dict] = {
             "member of cup_forcing_ens_3d alone: WRF's own code path, "
             "implemented but not verified against a WRF run."]},
     "ishallow": {"type": "integer", "enum": [0, 1], "default": 0},
+    # Grell 3D's subsidence-spreading width (Registry.EM_COMMON:2543,
+    # default 1); read only where cu_physics = 5.  1 is no spreading; > 1
+    # selects G3's high-resolution arm.  WRF defines every integer.
+    "cugd_avedx": {"type": "integer", "default": 1, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "maxiens": {"type": "integer", "default": 1, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "maxens": {"type": "integer", "default": 3, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "maxens2": {"type": "integer", "default": 3, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "maxens3": {"type": "integer", "default": 16, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "ensdim": {"type": "integer", "default": 144, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "cu_diag": {"type": "integer", "default": 0, "enum": [0, 1], "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
+    "convtrans_avglen_m": {"type": "number", "default": 30.0, "component_id": "cumulus", "read_when": {"cu_physics": 5}, "inactive_value_policy": "require-default"},
 }
 
 WRF_TYPE = {"integer": "integer", "real": "number",
@@ -926,11 +1067,6 @@ UNIMPLEMENTED_LEDGER: dict[str, tuple[str, str]] = {
         "Not a WRF v4.6.1 namelist option. BRCR_UB is a YSU scheme-internal "
         "constant compiled into the existing kernel, so there is no legal "
         "WRF user setting to expose."),
-    "cu_diag": (
-        "c",
-        "The cumulus-diagnostics subsystem is absent: woof carries none of "
-        "WRF's per-step/per-output convective diagnostic accumulators, "
-        "restart state, or wrfout variables."),
     "cu_rad_feedback": (
         "c",
         "KF radiation feedback needs persistent convective cloud fraction, "
@@ -1206,7 +1342,7 @@ SKIP = {"woof/physics_registry.py"}
 CONFIG = "woof/config.py"
 
 _files: list[str] | None = None
-_sources: dict[str, tuple[str, frozenset[str]] | None] = {}
+_sources: dict[str, tuple[str, frozenset[str], frozenset[str]] | None] = {}
 
 
 def _searchable_files() -> list[str]:
@@ -1255,7 +1391,7 @@ def _identifiers(tree: ast.AST) -> frozenset[str]:
     return frozenset(names)
 
 
-def _source(rel: str) -> tuple[str, frozenset[str]] | None:
+def _source(rel: str) -> tuple[str, frozenset[str], frozenset[str]] | None:
     """Prose-stripped code and identifier set, or None if it proves nothing."""
     if rel not in _sources:
         path = MODEL / rel
@@ -1274,8 +1410,26 @@ def _source(rel: str) -> tuple[str, frozenset[str]] | None:
                 # never propose one.
                 _sources[rel] = None
             else:
-                _sources[rel] = (code, _identifiers(tree))
+                _sources[rel] = (code, _identifiers(tree),
+                                 frozenset(re.findall(r"\b\w+\b", code)))
     return _sources[rel]
+
+
+def preload_sources(jobs: int) -> None:
+    """Parse independent citation sources on the available CPUs.
+
+    Workers return facts only; the parent preserves the sorted path order
+    and the existing citation ranking. One worker is the serial reference.
+    """
+    files = [rel for rel in _searchable_files() if rel not in _sources]
+    if not files:
+        return
+    if jobs == 1:
+        for rel in files:
+            _source(rel)
+        return
+    with ProcessPoolExecutor(max_workers=min(jobs, len(files))) as pool:
+        _sources.update(zip(files, pool.map(_source, files, chunksize=8)))
 
 
 def reads_knob(rel: str, name: str) -> bool:
@@ -1290,7 +1444,7 @@ def reads_knob(rel: str, name: str) -> bool:
     source = _source(rel)
     if source is None:
         return False
-    return re.search(rf"\b{re.escape(name)}\b", source[0]) is not None
+    return name in source[2]
 
 
 def _rank(rel: str, name: str) -> int:
@@ -1766,28 +1920,65 @@ def _surface_coupling_warnings(registry: dict) -> None:
 #:     absolute difference.
 #:   * ``wp08-freeze`` and ``wp08-nusweep`` were published for the first time.
 #:
-#: THE UNEXCEPTIONED CLEAN SET.  18 of 22: sixteen of the nineteen spec'd
-#: ``aero-*`` fixtures plus ``wp08-freeze`` and ``wp08-melt``.  ``wp08-freeze``
-#: joined on 2026-09-23 when the rain fallout was handed WRF's L_qr (see the
-#: note on MP28_G3_RESIDUALS).  The 1.4.1 merge did NOT change
-#: this set -- ``aero-reduces-to-classic`` still needs level 6 taken in ULPs
-#: -- but it did retire the OTHER allowance that fixture rested on, so the
-#: gated count of 18 now costs one allowance instead of two.  This tuple is asserted EQUAL to
-#: the gate's own ``_G3_UNEXCEPTIONED_CLEAN`` by
+#: THE UNEXCEPTIONED CLEAN SET.  22 of 22, since the 2.8.6 accumulator
+#: rework: every committed fixture clears the flat 2.0e-6 / 2.0e-4 dB gate on
+#: all 23 compared quantities with nothing held out.  It was 18 of 22 before
+#: it (sixteen of the nineteen spec'd ``aero-*`` fixtures plus
+#: ``wp08-freeze`` and ``wp08-melt``); the four that joined are
+#: ``aero-cloud-freeze-nc``, ``aero-cold-overlap``, ``aero-reduces-to-classic``
+#: and ``wp08-nusweep``, and the note on MP28_G3_RESIDUALS says what closed
+#: each.  This tuple is asserted EQUAL to the gate's own
+#: ``_G3_UNEXCEPTIONED_CLEAN`` by
 #: ``tests/test_physics_md_aerosol_claims.py::
 #: test_the_published_clean_counts_are_the_gates_own_counts``, so it cannot be
 #: a transcription that drifts.
+#:
+#: AND NOW 21 OF 22 (2.8.8).  ``aero-cold-overlap`` LEFT: it is the declared
+#: rain-graupel divergence (the gate's ``_G3_DECLARED_DIVERGENCE``).  WRF
+#: v4.6.1 reads its rain-graupel collision tables out of bounds when the
+#: scheme is not hail aware (dimNRHG = 1, idx_bg = 5;
+#: module_mp_thompson.F:465, :607-615, :2527-2545) and WOOF reads the one
+#: slab the tables hold.  This registry kept publishing the fixture as clean
+#: after the gate moved it; re-measured through the shipped adapter on an
+#: RTX 4090 (sm_89) and an RTX 5070 Ti (sm_120), the unexceptioned table
+#: reads 21 of 22 with that fixture the one miss, at exactly the values
+#: MP28_G3_RESIDUALS publishes.
 MP28_G3_CLEAN = (
-    "aero-ccn-activate", "aero-ccn-sweep", "aero-drop-evap",
+    "aero-ccn-activate", "aero-ccn-sweep", "aero-cloud-freeze-nc",
+    "aero-drop-evap",
     "aero-ice-demott-dep", "aero-ice-demott-idxin", "aero-ice-koop",
     "aero-init-profile", "aero-nc-accrete", "aero-nc-auto", "aero-nc-cap",
-    "aero-nc-effrad", "aero-nc-sed", "aero-scav-frozen", "aero-scav-rain",
+    "aero-nc-effrad", "aero-nc-sed", "aero-reduces-to-classic",
+    "aero-scav-frozen", "aero-scav-rain",
     "aero-sfc-emit", "aero-warm-overlap", "wp08-freeze", "wp08-melt",
+    "wp08-nusweep",
 )
 
 #: Fixtures that do NOT clear 2e-6 on every field, with every field that
-#: misses and its measured maximum relative difference.  THREE of
-#: twenty-two.
+#: misses and its measured maximum relative difference.  NONE of twenty-two
+#: from the 2.8.6 accumulator rework until 2.8.8 declared the rain-graupel
+#: divergence; ONE since (the note at the end of this comment).
+#:
+#: WHAT CLOSED THEM.  WRF's mp_thompson never writes a hydrometeor during the
+#: call: every process adds to a running tendency (qcten, qrten, nrten,
+#: qiten, niten), every stage reads X1d + Xten*DT, and the terminal apply
+#: (module_mp_thompson.F:3972-4053) rounds each species once, with the size
+#: bounds after the :3943-3966 phase cleanup.  The port applied each stage to
+#: the state in turn, so a species was rounded once per stage, and the rain
+#: and ice fallout it shared with mp=8 folded the terminal size bounds in
+#: before the freeze.  mp=28 (v4.6.1 generation) now carries those five
+#: tendencies, runs the :3033-3055 / :3070-3091 balances in tendency form,
+#: has its own tendency-form rain and ice fallout, applies once in a terminal
+#: kernel, and takes the cold network's rain-conservation ratio as REAL as
+#: :1615 declares it.  Measured on the shipped adapter, RTX 5090 and RTX 4090
+#: identical: aero-cloud-freeze-nc qc 4.926e-06 -> 0 (bit-exact);
+#: aero-cold-overlap qc / nc / effc at level 4 and qr / nr at level 6 -> 0;
+#: wp08-nusweep qr 4.642e-06 -> 5.532e-07; aero-reduces-to-classic qr / nr at
+#: level 6 bit-exact, retiring the near-cancellation allowance.  The frozen
+#: mp=8 kernel file thompson.cu is unchanged.
+#:
+#: THE TEXT BELOW IS THE RECORD OF WHAT CLOSED, kept because the numbers are
+#: still quoted as history in the public documents.
 #:
 #: ``aero-cold-overlap``'s 1.000e+00 rows are the accurate publication of a
 #: sub-ulp disagreement and are recorded rather than allowanced.  MEASURED
@@ -1857,12 +2048,22 @@ MP28_G3_CLEAN = (
 #: Level 0 nr went 2.724e-06 (34 ulp) to 4.006e-07 (5 ulp) on a card (RTX
 #: 4090 and RTX 5090 alike; 8.012e-08, 1 ulp, on the host build of the
 #: kernels) and the fixture left this table.
+#:
+#: ONE ROW SINCE 2.8.8, AND IT IS THE DECLARED DIVERGENCE, not a rounding
+#: residual: ``aero-cold-overlap``, the one fixture carrying rain and graupel
+#: together, where WOOF reads the rain-graupel slab WRF's tables hold and WRF
+#: reads past it (see MP28_G3_CLEAN).  The values are the gate's own
+#: ``_G3_RESIDUALS`` in the 16-field contract shape, re-measured through the
+#: shipped adapter on an RTX 4090 (sm_89) and an RTX 5070 Ti (sm_120) and
+#: identical on both; its reflectivity misses by 1.585e-03 dB.  With WRF's
+#: read emulated in a measurement copy of the tree (never shipped) the
+#: fixture clears all 23 quantities, so nothing else in it differs.
 MP28_G3_RESIDUALS: dict[str, dict[str, float]] = {
-    "aero-cloud-freeze-nc": {"qc": 4.926e-06},
     "aero-cold-overlap": {
-        "qc": 1.000e+00, "nc_per_kg": 1.000e+00, "effc_m": 8.102e-01,
-        "qr": 4.443e-05, "nr_per_kg": 1.261e-04},
-    "wp08-nusweep": {"qr": 4.642e-06},
+        "qr": 5.070e-04, "qi": 1.618e-04,
+        "qg": 8.776e-05, "ni_per_kg": 1.464e-05, "nr_per_kg": 5.066e-04,
+        "effi_m": 5.394e-05, "effs_m": 6.574e-06,
+    },
 }
 
 #: The one fixture that clears the gate only through a carved-out bound, and
@@ -1912,10 +2113,10 @@ MP28_G3_CARVED_OUT: dict[str, dict[str, float]] = {
     # The full sequence, none of it a widening: 2.5e-03 on {qr, nr_per_kg}
     # -> 1.0e-04 -> (qr deleted, nr 1.0e-05) -> GONE.
     #
-    # aero-reduces-to-classic is still NOT in MP28_G3_CLEAN: it still needs
-    # _NEAR_CANCELLATION_LEVELS, which holds 0-based level 6 to 32 ULP of the
-    # entry value rather than to a relative bound, and that is now the port's
-    # only remaining departure from the flat gate anywhere in the deck.
+    # aero-reduces-to-classic joined MP28_G3_CLEAN at the 2.8.6 accumulator
+    # rework: _NEAR_CANCELLATION_LEVELS, which held 0-based level 6 to 32 ULP
+    # of the entry value, is retired because that level is now bit-exact
+    # against WRF in qr and nr.  No departure from the flat gate remains.
 }
 
 MP28_OPTION_ID = "thompson-aerosol-mp28"
@@ -2069,66 +2270,42 @@ def _thompson_aerosol_mp28(registry: dict) -> None:
                 "carved_out_bound": {
                     name: dict(fields)
                     for name, fields in sorted(MP28_G3_CARVED_OUT.items())},
-                # The gate's SECOND relaxation, published because an
-                # unpublished one is indistinguishable from a hidden one.
-                # It is not a widened tolerance: it is a different metric at
-                # one level where the relative one is below float32
-                # resolution, and it is bound to the gate's own constants by
+                # The gate's SECOND relaxation, RETIRED by the 2.8.6
+                # accumulator rework.  Kept as a record with no fixtures so a
+                # reader of an older registry finds where it went; it is
+                # bound to the gate's own constants by
                 # tests/test_physics_registry.py::
                 # test_mp28_publishes_the_near_cancellation_relaxation_too.
                 "near_cancellation_bound": {
-                    "fixtures": {"aero-reduces-to-classic": [6]},
+                    "fixtures": {},
                     "ulps_of_entry_value": 32.0,
-                    "measured": {
-                        "aero-reduces-to-classic": {
-                            "qr_ulp": 0.585, "nr_per_kg_ulp": 0.159}},
-                    "why": (
-                        "aero-reduces-to-classic level 6 enters with qr = "
-                        "3.1695777e-07 kg/kg and evaporates 99.958% of it in "
-                        "one 10 s step, so the surviving value is the "
-                        "difference of two nearly equal float32 numbers and "
-                        "the relative error in the difference is the "
-                        "relative error in the rate amplified by 1/(1 - "
-                        "0.99958) = 2370 -- which puts a 2e-06 relative gate "
-                        "below the float32 resolution of the entry value "
-                        "itself. The bound is therefore stated in ULPS OF "
-                        "THE ENTRY VALUE. This level used to be skipped "
-                        "outright; it is bounded rather than skipped because "
-                        "mp=28 now produces 1.3384e-10 there against WRF's "
-                        "1.3426e-10, where it used to produce exactly 0."),
+                    "measured": {},
+                    "retired": (
+                        "aero-reduces-to-classic level 6 used to be held to "
+                        "32 ulps of the entry value (measured 0.585 qr / "
+                        "0.159 nr) because 99.958% of the level's rain "
+                        "evaporates in one 10 s step. The 2.8.6 accumulator "
+                        "rework applies qrten/nrten once, as WRF does, and "
+                        "the level is now bit-exact against WRF in qr and "
+                        "nr, so the bound buys nothing."),
                 },
-                # EVERY DEPARTURE FROM THE FLAT GATE, NAMED.  ONE, on one
-                # fixture, and it is needed for that one fixture.
-                # Published here because an unpublished allowance is
-                # indistinguishable from a hidden one, and because every one
-                # that ever moved in this port moved STRICTER.
-                #
-                # THIS LIST WAS THREE, THEN TWO, AND IS NOW ONE.  The
-                # 1.4.1 merge retired ``_END_TO_END_BOUNDS``: it carried
-                # aero-reduces-to-classic's nr_per_kg at 2.5e-03, then
-                # 1.0e-04, then 1.0e-05, and the inherited mp=8 rain
-                # sedimentation reconciliations (5e4af4e3, cb765336) took
-                # the residual it covered from 5.700e-06 to 4.146e-07 --
-                # inside the flat 2.0e-06 gate -- so the dict buys nothing
-                # and is now empty.  Before that, ``_REFL_DB_BOUNDS``
-                # was RETIRED, not relaxed: it carried aero-reduces-to-
-                # classic at 1.0e-02 dB, then 1.0e-03 dB, and WP-13a's
-                # level-wise sedimentation density took the residual it
-                # covered to 3.242e-05 dB -- inside the flat 2.0e-4 dB gate
-                # -- so the dict buys nothing and is now empty.  The gate's
-                # own ``_G3_ALLOWANCES`` is the authority and
-                # tests/test_physics_registry.py::
+                # EVERY DEPARTURE FROM THE FLAT GATE, NAMED.  NONE since the
+                # 2.8.6 accumulator rework; every one that ever existed is in
+                # retired_allowances, and every one moved STRICTER before it
+                # went.  The gate's own ``_G3_ALLOWANCES`` is the authority
+                # and tests/test_physics_registry.py::
                 # test_mp28_evidence_publishes_the_allowances_the_gate_
                 # actually_has reads it back.
-                "allowances": [
+                "allowances": [],
+                "retired_allowances": [
                     {"name": "near_cancellation_bound",
                      "gate_constant": "_NEAR_CANCELLATION_LEVELS",
                      "fixtures": ["aero-reduces-to-classic"],
-                     "was": "level 6 skipped outright",
-                     "is": "level 6 held to 32 ulps of the entry value",
-                     "direction": "strictly more than the skip asserted"},
-                ],
-                "retired_allowances": [
+                     "was": "level 6 held to 32 ulps of the entry value",
+                     "is": None,
+                     "direction": "retired by the 2.8.6 accumulator rework; "
+                                  "the level is bit-exact against WRF in qr "
+                                  "and nr"},
                     {"name": "carved_out_bound",
                      "gate_constant": "_END_TO_END_BOUNDS",
                      "fixtures": ["aero-reduces-to-classic"],
@@ -2148,20 +2325,25 @@ def _thompson_aerosol_mp28(registry: dict) -> None:
                 ],
                 # The two counts, stated separately, because conflating them
                 # is how a port claims a clean number it did not earn.
-                "clean_unexceptioned": 18,
-                "clean_as_gated": 19,
+                "clean_unexceptioned": len(MP28_G3_CLEAN),
+                "clean_as_gated": len(MP28_G3_CLEAN),
                 "clean_counts_note": (
-                    "18 of 22 clear a FLAT 2.0e-6 relative / 2.0e-4 dB gate "
+                    "21 of 22 clear a FLAT 2.0e-6 relative / 2.0e-4 dB gate "
                     "on all 23 quantities with no bounds dict, no excluded "
-                    "level and no per-fixture carve-out -- 16 of the 19 "
-                    "spec'd aero-* fixtures plus wp08-freeze and wp08-melt. "
-                    "19 of 22 clear "
-                    "it with the ONE allowance above applied; that allowance "
-                    "buys exactly one fixture, aero-reduces-to-classic, and "
-                    "is required for it. The second allowance this note used "
-                    "to name was retired at the 1.4.1 merge and is in "
-                    "retired_allowances. clean_fixtures below is the "
-                    "UNEXCEPTIONED list."),
+                    "level and no per-fixture carve-out -- 18 of the 19 "
+                    "spec'd aero-* fixtures plus wp08-freeze, wp08-melt and "
+                    "wp08-nusweep. The 22nd, aero-cold-overlap, misses by "
+                    "the declared rain-graupel divergence alone (WRF v4.6.1 "
+                    "reads its rain-graupel collision tables out of bounds "
+                    "when the scheme is not hail aware; WOOF reads the one "
+                    "slab the tables hold) and is published in "
+                    "residual_fixtures; with WRF's read emulated in a "
+                    "measurement copy of the tree it clears all 23 "
+                    "quantities. The gated count is the same 21 of 22: there "
+                    "is no allowance left, and the three that ever existed "
+                    "are in retired_allowances. A clean column deck is not a "
+                    "forecast validation; the maturity stays "
+                    "implemented-unverified on the forecast evidence."),
                 # No longer None.  docs/public/wrf-comparison/
                 # mp28-matched-trajectory.md is a matched IDEALIZED forecast
                 # against unmodified WRF v4.6.1, and it publishes its own
@@ -2518,42 +2700,48 @@ def _thompson_aerosol_mp28(registry: dict) -> None:
             "bounded is NOT correct: a scheme with a systematically wrong "
             "activation rate passes every one of those checks for two hours. "
             "The bounds are WRF's, but they are clamps, not answers.",
-            "THE COLUMN EVIDENCE IS NOT CLEAN, and the numbers are published "
-            "rather than summarised. Driven end to end through the shipped "
+            "THE COLUMN EVIDENCE IS CLEAN BUT FOR ONE DECLARED DIVERGENCE; "
+            "THE FORECAST EVIDENCE IS NOT. "
+            "Driven end to end through the shipped "
             "adapter, 22 fixtures x 23 quantities, at a flat 2.0e-6 relative "
-            "/ 2.0e-4 dB gate with nothing held out: 18 of 22 clear every "
-            "quantity (16 of the 19 spec'd aero-* fixtures, plus wp08-freeze "
-            "and wp08-melt). "
-            "aero-reduces-to-classic clears only through the port's ONE "
-            "surviving named allowance -- 0-based level 6 held to 32 ulps of "
-            "its entry value instead of the relative metric, measured 0.585 "
-            "(qr) and 0.159 (nr) -- taking the gated count to 19 of 22. The "
-            "relative bound that used to sit beside it was RETIRED at the "
-            "1.4.1 merge: the mp=8 lane's two rain sedimentation "
-            "reconciliations (5e4af4e3, cb765336), inherited in the frozen "
-            "kernel mp=28 shares for fallout, took level 5's nr from "
-            "5.700e-06 to 4.146e-07, inside the flat gate. THREE MISS "
-            "OUTRIGHT -- aero-cold-overlap qc 1.000e+00 / nc 1.000e+00 / "
-            "effc 8.102e-01 (all three are ONE branch flip at 0-based level "
-            "4, where WRF ends with 1.4551915228366852e-11 kg/kg of cloud "
-            "water -- exactly one float32 ulp of the entry value -- and "
-            "woof ends at exactly zero, so the qc1d <= R1 test at "
-            "phys/module_mp_thompson.F:4007 sends "
-            "the two implementations down opposite arms and a relative "
-            "metric reports full scale on a one-ulp difference) plus "
-            "nr 1.261e-04 / qr 4.443e-05 at level 6; "
-            "aero-cloud-freeze-nc qc 4.926e-06; wp08-nusweep qr 4.642e-06 "
-            "(2.3x the gate). wp08-freeze, which missed at nr 2.724e-06, "
-            "left the list on 2026-09-23 when the rain fallout was handed "
-            "WRF's L_qr (level 0 now 1 ulp from WRF). Every one of "
-            "the surviving residuals now sits where the field is either "
-            "CREATED FROM ZERO inside the step or driven to near-total "
-            "consumption; after the aero-ice-koop withdrawal recorded at the "
-            "end of this warning there is no surviving residual in the "
-            "rate-disagreement class at all. That is stated, not "
-            "used: no bound is relaxed for it. WHAT MOVED SINCE THE LAST "
-            "PUBLISHED SET, and it is a REAL PORT FIX this time -- TWO of "
-            "them, both in mp=28-owned kernels. WP-13a restored WRF's "
+            "/ 2.0e-4 dB gate with nothing held out: 21 of 22 clear every "
+            "quantity (18 of the 19 spec'd aero-* fixtures, plus "
+            "wp08-freeze, wp08-melt and wp08-nusweep), with no allowance "
+            "anywhere, on an RTX 4090 and an RTX 5070 Ti identically. The "
+            "22nd, aero-cold-overlap, the one fixture carrying rain and "
+            "graupel together, misses by the declared rain-graupel "
+            "divergence alone: WRF v4.6.1 reads its rain-graupel collision "
+            "tables out of bounds when the scheme is not hail aware "
+            "(dimNRHG = 1, idx_bg = 5; phys/module_mp_thompson.F:465, "
+            ":607-615, :2527-2545) and WOOF reads the one slab the tables "
+            "hold, so it reads qr 5.070e-04, nr 5.066e-04, qi 1.618e-04, qg "
+            "8.776e-05, effi 5.394e-05, ni 1.464e-05, effs 6.574e-06 and "
+            "1.585e-03 dB of reflectivity from WRF; with WRF's read emulated "
+            "in a measurement copy of the tree it clears all 23 quantities. "
+            "The 2.8.6 accumulator "
+            "rework closed the last four: WRF's mp_thompson never writes a "
+            "hydrometeor during the call -- every process adds to qcten, "
+            "qrten, nrten, qiten or niten and the terminal apply "
+            "(phys/module_mp_thompson.F:3972-4053) rounds each species once, "
+            "with the size bounds after the :3943-3966 phase cleanup -- "
+            "while the port applied each stage in place and so rounded a "
+            "species once per stage. mp=28 now carries the five tendencies "
+            "and applies them once, and takes the cold network's "
+            "rain-conservation ratio as REAL as :1615 declares it. "
+            "aero-cloud-freeze-nc qc 4.926e-06 -> bit-exact; "
+            "aero-cold-overlap qc / nc / effc at level 4 (one float32 ulp "
+            "of cloud flipping the qc1d <= R1 test at :4007) and nr "
+            "1.261e-04 / qr 4.443e-05 at level 6 -> bit-exact in 2.8.6, "
+            "before 2.8.8 moved rain collecting graupel onto the one slab "
+            "WRF's tables hold (the declared divergence above, which is "
+            "what the fixture misses by now); "
+            "wp08-nusweep qr 4.642e-06 -> 5.532e-07; "
+            "aero-reduces-to-classic level 6 bit-exact in qr and nr, which "
+            "retired the port's last named allowance (32 ulps of the entry "
+            "value). The frozen mp=8 kernel file is unchanged. A clean "
+            "single-call deck is not a forecast validation: the maturity "
+            "stays implemented-unverified. BEFORE THAT, TWO REAL PORT "
+            "FIXES, both in mp=28-owned kernels. WP-13a restored WRF's "
             "LEVEL-WISE sedimentation density: WRF forms the "
             "working rain mass and number twice -- "
             "phys/module_mp_thompson.F:3237-3238 from the :3193 TAU+1 "
@@ -2582,7 +2770,7 @@ def _thompson_aerosol_mp28(registry: dict) -> None:
             "reverting that one line also loses all four of "
             "aero-ice-demott-idxin's improvements, two of which are bitwise; "
             "in ulps of the entry value the move is 1.477 -> 1.789. "
-            "AND WHAT MOVED BEFORE THAT, WHICH WAS NOT "
+            "AND WHAT MOVED BEFORE THOSE, WHICH WAS NOT "
             "A PHYSICS FIX: aero-ice-koop, published by four waves of this "
             "registry as the port's largest genuine physics gap at qi "
             "1.612e-03 / ni 1.764e-03 / effi 5.093e-05, now measures "
@@ -2650,16 +2838,23 @@ def _thompson_aerosol_mp28(registry: dict) -> None:
             "current WIF route. Runtime coupling is not evidence of a "
             "matched real-data or nested WRF forecast.",
             "MYNN aerosol-number mixing is optional. bl_mynn_mixscalars=0 "
-            "is the default. Setting it to 1 mixes nc/nwfa/nifa using the "
-            "WRF qn solves, and is admitted only with bl_pbl_physics=5, "
-            "mp_physics=28 and bldt=0. This is component code verification, "
-            "not validation against observations.",
-            "PBL number mixing is selectable for mp_physics=28 with MYNN: "
-            "scalar_pblmix=1 applies WRF post-PBL diffusion through exch_h "
-            "to nc/ni/nwfa/nifa; bl_mynn_mixscalars=1 instead selects "
-            "MYNN scalar plume transport. Both default to 0 and require "
-            "bldt=0. WRF disables the former when the latter is active, "
-            "so selecting both is refused.",
+            "is the default (WRF v4.6.1 Registry.EM_COMMON:2479). Setting "
+            "it to 1 mixes nc/ni/nwfa/nifa using the WRF qn solves under "
+            "bl_pbl_physics=5 with mp_physics=28 (then bldt=0 is required); "
+            "under a microphysics with no number species (mp_physics 0, 1, "
+            "6) the key is WRF's no-op and the key-0 path runs; under a "
+            "scheme WRF mixes only in part (8, 9, 10, 16, 18, 50) it is "
+            "refused by name (config.MYNN_QN_FLAG_SPECIES). This is "
+            "component code verification, not validation against "
+            "observations.",
+            "PBL number mixing is selectable for mp_physics=28: "
+            "scalar_pblmix=1 applies WRF post-PBL diffusion through the "
+            "selected scheme's exch_h (YSU, MYJ, MYNN, UW, Shin-Hong) "
+            "to nc/ni/nwfa/nifa and mixes nothing with no PBL scheme or "
+            "under SASE; bl_mynn_mixscalars=1 instead selects "
+            "MYNN scalar plume transport. Both default to 0 and, when they "
+            "mix, require bldt=0. WRF disables the former when the latter "
+            "is active, so selecting both is refused.",
             "MIXED NESTING uses the registered transition policy. Entry "
             "into mp_physics=28 from a non-aerosol parent requires a declared "
             "aerosol source; same-scheme nesting carries the parent state. "
@@ -2669,7 +2864,7 @@ def _thompson_aerosol_mp28(registry: dict) -> None:
             "not a defect on either side. mp=28's RSLF/RSIF saturation Horner "
             "chains are contraction-pinned while mp=8's stay FMA-contracted, "
             "so the two schemes' saturation vapour pressures differ by one "
-            "ulp. That matters because module_mp_thompson.F:3401 opens the "
+            "ulp. That matters because phys/module_mp_thompson.F:3401 opens the "
             "whole condensation/CCN-activation block on ssatw > 1.E-15 (:185) "
             "-- one ulp flips a branch. mp=28 matches WRF's own gfortran "
             "-O2 arithmetic; mp=8 retains its FMA-contracted saturation "
@@ -3217,13 +3412,12 @@ def _milbrandt2mom_mp9(registry: dict) -> None:
     and is dispatched by ``woof/core/microphysics.py`` on
     ``mp_physics == 9``.
 
-    ``maturity: implemented-unverified`` -- and no higher, for the plainest
-    possible reason: NO oracle exists yet.  Unlike mp=28 (column-oracle
-    measured, residuals published) or Morrison (ULP table against the real
-    Fortran), this option's evidence today is a column smoke through the
-    shipped seams plus float64 self-consistency.  It may not claim
-    ``wrf-matched-run-candidate`` and it may not imply the column evidence is
-    conformance evidence, because there is no comparison to conform to.
+    ``maturity: implemented-unverified`` -- and no higher.  The column port
+    is bitwise against WRF v4.6.1's own mp_milbrandt2mom_driver on 603
+    oracle columns (tools/milbrandt2_wrf461_oracle,
+    tests/test_milbrandt2_wrf461_exact_gpu.py), under the default build and
+    the strict one, but no forecast-trajectory comparison against WRF
+    exists, which is the same line TEMPO's row draws.
 
     ``reachability: component-override`` -- computed, not chosen.  No
     template selects mp=9 and ``DEFAULT_TEMPLATE_ID`` is untouched, so the
@@ -3248,6 +3442,18 @@ def _milbrandt2mom_mp9(registry: dict) -> None:
                 "two-moment in all six hydrometeors, separate graupel AND "
                 "hail, continental CCN (CCNtype=2), Meyers+contact primary "
                 "ice nucleation, non-spherical snow"),
+            "column_oracle_evidence": {
+                "authority": (
+                    "WRF v4.6.1 d66e442 phys/module_mp_milbrandt2mom.F, "
+                    "mp_milbrandt2mom_driver, compiled with WRF's GNU flags "
+                    "(-O2 -ftree-vectorize -funroll-loops), object "
+                    "byte-identical to the one a WRF build links"),
+                "columns": 603,
+                "strict_build": "bitwise on every output word",
+                "default_build": "bitwise on every output word",
+                "harness": "tools/milbrandt2_wrf461_oracle",
+                "test": "tests/test_milbrandt2_wrf461_exact_gpu.py",
+            },
             # ``arwen_radiation_constraint`` RETIRED with the refusal it
             # described: the RTE+RRTMGP adapter now carries the scheme's
             # own cloud-optics row (woof.core.rrtmgp ``9: "milbrandt2"``),
@@ -3265,7 +3471,26 @@ def _milbrandt2mom_mp9(registry: dict) -> None:
         "scientific_evidence": "none",
         "selectors": {"mp_physics": 9},
         "warnings": [
-            "NO ORACLE HAS BEEN RUN. This option is a line-by-line "
+            "COLUMN ORACLE: BITWISE. WRF v4.6.1's own "
+            "mp_milbrandt2mom_driver (the object WRF's GNU build links, "
+            "gfortran 13.3, glibc 2.39, no FMA) and this port, through its "
+            "shipped launcher, return bit-identical output on every field "
+            "(qv, the six masses, the six numbers, theta, Zet, the eight "
+            "precipitation accumulators and SR) for 603 distinct columns "
+            "(91 named-regime and edge-case columns at dt 20 s and 60 s, "
+            "512 randomised columns at 50 and 80 levels), 5 to 10 "
+            "successive calls each, on an RTX PRO 6000, under the default "
+            "build and under GPUWM_WRF_EXACT=1. Getting there replaced "
+            "CUDA's expf/logf/log10f/powf with WOOF's own gfk_* functions, "
+            "followed gfortran's evaluation of powers (REAL**2.0 is a "
+            "multiply, integer powers by the power tree, powers before "
+            "products), multiplied by WRF's idt where the port divided by "
+            "dt, spelled NINT as round-half-away, and compiled the unit "
+            "without FMA contraction. There is NO forecast-trajectory "
+            "comparison against WRF. The earlier column smoke (finiteness, "
+            "boundedness, moment-vs-mass consistency, a water budget on "
+            "three seeding layouts) is in tests/test_milbrandt2.py. This "
+            "option is a line-by-line "
             "transcription of the byte-frozen WRF v4.6.1 "
             "phys/module_mp_milbrandt2mom.F:841-3485 "
             "(mp_milbrandt2mom_main), :564-836 "
@@ -3283,12 +3508,7 @@ def _milbrandt2mom_mp9(registry: dict) -> None:
             "source/sink lines at "
             "phys/module_mp_milbrandt2mom.F:2721-2728 carry no mass and "
             "cannot appear in a water budget at all. The layouts and the "
-            "measured per-term margins are in tests/test_milbrandt2.py. "
-            "There is NO "
-            "comparison against the WRF Fortran: no ULP table, "
-            "no column oracle, no matched forecast trajectory. The oracle "
-            "campaign is the declared next stage, as it was for Shin-Hong "
-            "and Grell-Freitas before their measurements landed.",
+            "measured per-term margins are in tests/test_milbrandt2.py.",
             "PINNED IDENTITY, not a subset. WRF exposes no namelist for any "
             "Milbrandt-Yau switch: mp_milbrandt2mom_driver hard-codes "
             "CCNtype=2 (continental, "
@@ -3358,7 +3578,292 @@ def _milbrandt2mom_mp9(registry: dict) -> None:
         ],
     }
 
+WSM7_OPTION_ID = "wsm7-mp24"
+
+
+def _wsm7_mp24(registry: dict) -> None:
+    """Register WSM7 (mp_physics=24) from its WSM-family table row.
+
+    ``implemented: true`` -- the column kernel is
+    ``woof/core/kernels/wsm7.cu`` (WRF v4.6.1 phys/module_mp_wsm7.F in
+    WRF's operation order), run by the table-driven
+    ``woof/core/wsm_family.py`` from its row in
+    ``woof/data/wsm_family/schemes.json``; no per-scheme adapter exists.
+
+    ``maturity: implemented-unverified`` -- the column is graded word for
+    word against WRF's own Fortran (tools/wsm7_wrf461_column_oracle), but
+    no matched ArWen-versus-WRF forecast trajectory exists, and the ladder
+    reserves the higher rungs for that.
+
+    Reachability is computed from the registered WSM7 suite and runner
+    overrides. The suite retains the component evidence ceiling.
+    """
+    from woof.core.wsm_family_constants import scheme_metadata
+
+    wsm7 = scheme_metadata(24)
+    options = registry["components"]["microphysics"]["options"]
+    options[WSM7_OPTION_ID] = {
+        "asset_requirements": [],
+        "constraints": {"required_settings": {"moist": True}},
+        "extensions": {
+            "wrf_package": (
+                "Registry/Registry.EM_COMMON binds mp_physics==24 to the "
+                "wsm7scheme package: moist qv,qc,qr,qi,qs,qg,qh and state "
+                "re_cloud,re_ice,re_snow"),
+            "prognostic_species": {
+                "transported": ["qi", "qs", "qg", "qh"],
+                "not_ported": [],
+                "note": (
+                    "WSM7 is WSM6's six-class mass set plus a separate hail "
+                    "class qh. Nothing in the WRF package is left out."),
+            },
+            "wsm_family_row": {
+                "table": "woof/data/wsm_family/schemes.json",
+                "unit": wsm7["unit"],
+                "kernel_species": list(wsm7["kernel_species"]),
+                "precipitating_classes": list(wsm7["precip"]),
+                "level_tiers": list(wsm7["level_tiers"]),
+                "words": "woof/data/wsm_family/" + wsm7["words_file"],
+            },
+            "declared_divergences": [dict(d) for d in wsm7["declared_divergences"]],
+        },
+        "implemented": True,
+        "label": "WSM7 single-moment with hail / MP24",
+        "maturity": "implemented-unverified",
+        "parameters": {
+            "moist": True,
+            "moist_cq": True,
+        },
+        "reachability": {"state": "component-override"},
+        "scientific_evidence": "none",
+        "selectors": {"mp_physics": 24},
+        "warnings": [
+            "COLUMN ORACLE, NOT A FORECAST MATCH. The CUDA kernel is graded "
+            "word for word against WRF v4.6.1 phys/module_mp_wsm7.F built "
+            "with gfortran -O0 (tools/wsm7_wrf461_column_oracle, "
+            "tests/test_wsm7_wrf461_column_exact.py): 108 columns over 45 "
+            "and 72 levels, five time-step configurations, every output "
+            "field of every step, in the strict and the default build. No "
+            "matched WOOF-versus-WRF forecast trajectory exists for WSM7.",
+            "TWO DECLARED DIVERGENCES FROM WRF, default-on. D1: the PLM "
+            "sedimentation remap searches every arrival interface and the "
+            "column top, so no layer drops its arriving mass; WRF's search "
+            "stops one interface short and deletes that mass (the same "
+            "search WSM6 and WDM6 carry). D2: REFL_10CM includes hail's "
+            "dry-ice Rayleigh term with WSM7's own hail size distribution; "
+            "WRF's refl10cm_wsm7 leaves the hail class out. The kernel is "
+            "graded against WRF's Fortran with exactly these two "
+            "substitutions, and differs from unmodified WRF only in the "
+            "columns the oracle's probe arm identifies (D1) and in "
+            "hail-bearing reflectivity (D2).",
+        ],
+    }
+
+
+    options[WSM7_OPTION_ID]["physics_identity_extension"] = {"transitions": True}
+    # RETIRED: the lane's named suite "wsm7-ysu-revised-mm5-noah-rrtmg-
+    # legacy-v1" (Thompson legacy with WSM7, revised MM5, Grell-Freitas).
+    # It was declared only on the native HRRR benchmark route, whose runner
+    # replays a transcribed native namelist per profile and refused it
+    # ("unsupported native HRRR physics profile"; no _PROFILE_SWITCH_HOMES
+    # for clos_choice/ishallow).  WSM7 is reached, like WSM3, WSM5, WSM6R
+    # and Ferrier-Aligo, as mp_physics=24 (namelist import, component
+    # override).  The builder is seeded from the tracked registry, so the
+    # id is removed explicitly here and from every route below.
+    registry["templates"].pop(WSM7_RETIRED_TEMPLATE_ID, None)
+
+
+#: The retired WSM7 suite id (see _wsm7_mp24); kept so the seeded registry
+#: and every route declaration lose it on each build.
+WSM7_RETIRED_TEMPLATE_ID = "wsm7-ysu-revised-mm5-noah-rrtmg-legacy-v1"
+
+
+WSM3_OPTION_ID = "wsm3-mp3"
+
+
+def _wsm3_mp3(registry: dict) -> None:
+    """Register WSM3 (mp_physics=3) at exactly the maturity it has earned.
+
+    ``implemented: true`` -- the column kernel is
+    ``woof/core/kernels/wsm3.cu``, a word-for-word port of the byte-
+    unmodified WRF v4.6.1 ``phys/module_mp_wsm3.F``; the adapter is
+    ``woof/core/wsm3.py``; ``woof/core/microphysics.py`` dispatches on
+    ``mp_physics == 3``; the namelist importer maps 3 natively.
+
+    ``maturity: implemented-unverified`` -- the COLUMN scheme is graded word
+    for word against its gfortran oracle (the warning below gives the
+    numbers); no whole-model WRF trajectory comparison has been run, which
+    is what the label withholds.
+
+    ``reachability: component-override`` -- computed, not chosen: no
+    template registers mp_physics=3, so the option is reached as a
+    per-domain override, which is what an imported namelist produces.
+    """
+
+    options = registry["components"]["microphysics"]["options"]
+    options[WSM3_OPTION_ID] = {
+        "asset_requirements": [],
+        "constraints": {"required_settings": {"moist": True}},
+        "extensions": {
+            "wrf_package": (
+                "Registry/Registry.EM_COMMON:3017 binds mp_physics==3 to "
+                "the wsm3scheme package: moist qv,qc,qr plus state "
+                "re_cloud,re_ice,re_snow"),
+            "prognostic_species": {
+                "transported": [],
+                "not_ported": [],
+                "note": (
+                    "WSM3 is the simple-ice scheme: qc is cloud water at or "
+                    "above 0 C and cloud ice below it, qr is rain at or "
+                    "above 0 C and snow below it. It carries no qi, qs or "
+                    "qg, so the Registry's F_QI, F_QS and F_QG are false, "
+                    "and module_physics_init.F leaves warm_rain false."),
+            },
+        },
+        "implemented": True,
+        "label": "WSM3 simple ice / MP3",
+        "maturity": "implemented-unverified",
+        "parameters": {"moist": True, "moist_cq": True},
+        "reachability": {"state": "component-override"},
+        "scientific_evidence": "none",
+        "selectors": {"mp_physics": 3},
+        "warnings": [
+            "COLUMN ORACLE, NOT A TRAJECTORY. The CUDA kernel is graded word "
+            "for word against WRF v4.6.1 module_mp_wsm3.F compiled by "
+            "gfortran 13.3.0 at -O0 over 77 columns x 45 levels and five "
+            "time steps (tools/wsm3_wrf461_column_oracle, "
+            "tests/test_wsm3_wrf461_column_exact.py). No whole-model "
+            "comparison with a WRF forecast has been run.",
+            "DECLARED DIVERGENCE D1, a WRF water-loss defect fixed default-"
+            "on: WRF adds the cloud-ice fallout to the surface only when "
+            "the lowest level is below 0 C (module_mp_wsm3.F:604-607), but "
+            "the semi-Lagrangian CFL limiter lets ice fall out of a warm "
+            "lowest level beneath a cold one, and WRF then counts that ice "
+            "nowhere. woof counts it as rain. Only RAINNC, RAINNCV and SR "
+            "move; the oracle's second reference build carries exactly this "
+            "one-line change. GPUWM_WRF_EXACT=1 retains stock WRF surface "
+            "accounting and is graded against unmodified WRF on every word; "
+            "default arithmetic differences are reported separately.",
+            "DECLARED DIVERGENCE D2, undefined behaviour fixed: with the "
+            "melting level at the model top and rising air there, WRF moves "
+            "the freezing level to kte+1 and reads its temperature array out "
+            "of bounds (module_mp_wsm3.F:572-592); woof freezes at the top "
+            "level.",
+            "DECLARED DIVERGENCE D3: default sedimentation includes the "
+            "last arrival interface, zero-density extension and kt >= kb, "
+            "using the delivered WSM6/WDM6 upper-cell search repair. "
+            "GPUWM_WRF_EXACT=1 retains the stock search for comparison "
+            "against unmodified WRF.",
+            "RADIATION: WSM3 hands its three radii to RRTMG "
+            "(WSM3SCHEME is in module_physics_init.F's use_mp_re list), and "
+            "WRF's radiation wrappers move cold qc into qi and cold qr into "
+            "qs for a scheme without F_QI and without warm_rain before "
+            "reading them (module_ra_sw.F:193-203). The species flags woof "
+            "publishes for mp=3 are WRF's; the Dudhia, RRTM and RTE+RRTMGP "
+            "conversion keyed on them is the radiation side's work.",
+            "REFL_10CM: WRF computes none for WSM3. woof's is its own "
+            "diagnostic: refl10cm_wsm6 on WSM3's phase split of qr (rain at "
+            "or above 0 C, snow below, no graupel), whose intercepts and "
+            "densities are WSM3's own (woof.core.refl."
+            "wsm3_precipitation_phases).",
+            "NEST EDGES: a same-scheme WSM3 hierarchy resolves; a mixed edge "
+            "between WSM3 and another scheme is refused by name "
+            "(woof.core.microphysics_transition, its phase split of qc/qr "
+            "has no closure).",
+        ],
+    }
+
+
 WDM6_OPTION_ID = "wdm6-mp16"
+
+
+TEMPO_OPTION_ID = "tempo"
+
+
+def _tempo_named(registry: dict) -> None:
+    """Register TEMPO, the first NAMED microphysics scheme.
+
+    Selected by name (TOML ``mp_physics = "tempo"``); its selector value 900
+    is the WOOF-side id from woof.microphysics_schemes, outside WRF's
+    mp_physics range, so a WRF namelist number never means something else in
+    WOOF.  Everything a consumer needs is the scheme's capability row there.
+
+    ``maturity: implemented-unverified``: the column port is bitwise against
+    TEMPO's own Fortran on the CPU and within 1.9e-10 on the GPU, but no
+    forecast-trajectory comparison against a reference model exists.
+    ``reachability: component-override``: no template selects it.
+    """
+    from woof.microphysics_schemes import TEMPO
+    from woof.tempo_assets import TEMPO_RELEASE_URL_BASE, TEMPO_TABLE_ASSETS
+
+    options = registry["components"]["microphysics"]["options"]
+    options[TEMPO_OPTION_ID] = {
+        "asset_requirements": [{
+            "id": "ncar-tempo-v3-tables-v1",
+            "kind": "downloaded-table-set",
+            "assets": [{"filename": a.filename, "bytes": a.bytes, "sha256": a.sha256}
+                       for a in TEMPO_TABLE_ASSETS],
+            "redistributed_by_gpuwm": False,
+            "source": TEMPO_RELEASE_URL_BASE,
+            "search_root": "~/.woof/tables/tempo-v3",
+            "root_environment_override": "WOOF_TEMPO_TABLE_ROOT",
+            "path_environment_override": "WOOF_TEMPO_TABLE_SOURCE_ROOT",
+            "regenerable": True,
+            "note": (
+                "TEMPO's published tempo_v3.1.0 table assets (Apache-2.0), "
+                "pinned by size and SHA-256 in woof/tempo_assets.py and "
+                "fetched on first use. Tables built from the pinned TEMPO "
+                "source 9adf9ef agree with them to 2.2e-12 relative."),
+        }],
+        "constraints": {"required_settings": {"moist": True}},
+        "extensions": {
+            "woof_named_scheme": {
+                "name": TEMPO.name, "woof_id": TEMPO.mp_id,
+                "capability_row": "woof.microphysics_schemes.TEMPO"},
+            "source": {
+                "repository": "https://github.com/NCAR/TEMPO",
+                "commit": "9adf9ef2827104640125f0c322e1218fce74e94c",
+                "tag": "tempo_v3.0.3",
+                "pinned_by": ("RRFS v2 (rrfs-workflow rrfs-mpas-jedi, "
+                              "RRFSx/MPAS-Model 1d6e370e)"),
+                "licence": "Apache-2.0"},
+            "prognostic_species": {
+                "transported": list(TEMPO.ice_mass_species + TEMPO.moment_species
+                                    + TEMPO.aerosol_species),
+                "surface_emission_2d": list(TEMPO.surface_fields),
+                "not_ported": ["ml_for_nc", "ml_for_bl_nc", "refl10cm_from_melting"],
+                "note": (
+                    "Aerosol-aware and hail-aware (prognostic graupel number "
+                    "and volume, 9 density classes). The machine-learning "
+                    "droplet number and melting reflectivity options are off "
+                    "in RRFS and not wired."),
+            },
+            "column_oracle_evidence": {
+                "authority": ("unmodified TEMPO 9adf9ef, gfortran 13.3 "
+                              "-fdefault-real-8, through tempo_run"),
+                "fixtures": 6,
+                "cpu_float64": "bitwise on the five default-sedimentation fixtures",
+                "gpu": "bitwise reproducible; worst relative difference 1.9e-10",
+                "init": "Rust tempo_init bitwise on all 249 blob fields",
+                "record": "docs/TEMPO-PORT.md",
+            },
+        },
+        "implemented": True,
+        "label": 'TEMPO (Thompson-Eidhammer, RRFS v2) / named scheme "tempo"',
+        "maturity": "implemented-unverified",
+        "parameters": {"moist": True, "moist_cq": True},
+        "reachability": {"state": "component-override"},
+        "scientific_evidence": "none",
+        "selectors": {"mp_physics": TEMPO.mp_id},
+        "warnings": [
+            'NAMED SCHEME. mp_physics = "tempo" resolves to the WOOF-side '
+            "id 900; WRF has no TEMPO option, so no WRF namelist selects it "
+            "and WRF-matched comparisons do not apply.",
+            "TEMPO's optional semi-Lagrangian sedimentation amplifies a "
+            "1e-15 perturbation to order one in TEMPO itself; it is off "
+            "here, as in RRFS v2.",
+        ],
+    }
 
 
 def _wdm6_mp16(registry: dict) -> None:
@@ -3371,14 +3876,12 @@ def _wdm6_mp16(registry: dict) -> None:
     ``mp_physics == 16``; the state carries qnn/qnc/qnr; the namelist
     importer maps 16 natively.
 
-    ``maturity: implemented-unverified`` -- and NOT for the reason that
-    label carries on ``morrison-mp10`` and ``thompson-aerosol-mp28``, where
-    an oracle ran and came back mixed.  Here it means the weaker thing, and
-    the warning below says so in its first sentence: NO oracle comparison
-    against the WRF Fortran has been run at all.  What exists is a
-    shipped-seam column smoke and float64 self-consistency.  The oracle
-    campaign is the declared next stage, as it was for Shin-Hong and
-    Grell-Freitas before theirs ran.
+    ``maturity: implemented-unverified`` -- for the reason it carries on
+    ``shinhong``: the column oracle (tools/wdm6_wrf461_oracle) grades the
+    kernel word for word against WRF v4.6.1's Fortran, with its three
+    documented defined behaviours, and the first warning states exactly
+    that and no more.  Conformance is not validation: no woof/WRF forecast
+    trajectory comparison exists for mp_physics=16.
 
     ``reachability: component-override`` -- computed from the routes, not
     chosen.  No template registers mp_physics=16 and no runner route lists
@@ -3442,29 +3945,38 @@ def _wdm6_mp16(registry: dict) -> None:
         "scientific_evidence": "none",
         "selectors": {"mp_physics": 16},
         "warnings": [
-            "NO ORACLE COMPARISON AGAINST THE WRF FORTRAN HAS BEEN RUN FOR "
-            "WDM6. This option's evidence is: (1) the CUDA column kernel and "
-            "the wdm6init coefficient block are transcribed line by line "
-            "from the byte-frozen WRF v4.6.1 phys/module_mp_wdm6.F in the "
-            "1974 reference bundle, with file:line citations at every "
-            "process block; (2) woof/core/wdm6_constants.py recomputes "
-            "wdm6init in float64 and tests/test_wdm6.py pins the FP32 "
-            "literals baked into the kernel against it; (3) a column smoke "
-            "through the SHIPPED seams (initialize_physics into "
-            "microphysics.apply at mp_physics=16) asserts finiteness, "
-            "physical bounds, water-substance conservation to the "
-            "sedimentation flux, and that a stubbed scheme fails the test. "
-            "What is NOT established: any ULP or relative agreement with "
-            "WRF's own module_mp_wdm6.F on any column, and any woof/WRF "
-            "forecast-trajectory comparison. Neither number exists, so "
-            "neither may be quoted. The oracle campaign that produced "
-            "Shin-Hong's max_ulp 0 and Grell-Freitas's 216-column boundary "
-            "is the declared next stage for this scheme. Its known deltas "
-            "are written down BEFORE it runs, in "
-            "docs/wdm6_oracle_known_deltas.md: the float64 _rgmma "
-            "coefficient floor, the PLM remap kt clamp, the rain-slope "
-            "density inconsistency, and the -35 dBZ floor that looks like a "
-            "delta and is not.",
+            "WDM6's distance from WRF v4.6.1 is MEASURED by a column oracle. "
+            "tools/wdm6_wrf461_oracle drives WRF's own wdm6 entry of the "
+            "byte-frozen phys/module_mp_wdm6.F at gfortran -O0 (no FMA, "
+            "scalar libm) over 84 columns built to reach regimes and "
+            "branches (convective land and ocean, stable night, winter snow "
+            "and ice, a melting layer, high terrain, a cold anvil, "
+            "evaporating rain, numberless rain and cloud, edge cases) in "
+            "seven configurations (one to eight minor loops, up to ten "
+            "consecutive calls, both hail_opt arms, the cold-start CCN "
+            "fill, and a 72-level copy on the second kernel tier). Every "
+            "output word -- theta, the six masses, nn/nc/nr, the three "
+            "effective radii, refl_10cm and the surface accumulators -- of "
+            "the CUDA kernel equals the oracle's DEFINED arm, which is the "
+            "unmodified file with exactly the three documented defined "
+            "behaviours of docs/wdm6_oracle_known_deltas.md substituted, "
+            "under the strict build (tests/test_wdm6_wrf461_oracle.py, RTX "
+            "PRO 6000, NVRTC 12.9). Against the unmodified file the kernel "
+            "is bitwise wherever those behaviours do not fire and differs "
+            "exactly where they do: the conservative rain transfer (section "
+            "5, every column carrying rain) and the zero-rate condensation "
+            "cap (section 6, numberless rain); the kt clamp (section 2) "
+            "never fires on the fixture. What made it exact: wdm6init's own "
+            "float32 coefficient words instead of float64 products, WOOF's "
+            "own float32 exp/log/pow, the Fortran's operation order, and no "
+            "multiply-add contraction. The default build keeps the loader's "
+            "flush-to-zero route: its state differs only in columns into "
+            "which a subnormal moisture value enters a call, and a surface "
+            "accumulator elsewhere by under 5e-34 mm. That is conformance "
+            "evidence, not scientific "
+            "validation: no woof/WRF forecast trajectory comparison exists "
+            "for this scheme, which is why this option is "
+            "'implemented-unverified' and not 'supported'.",
             "DELIBERATE DIVERGENCE, WRF is inconsistent with itself (both "
             "halves are defined behaviour, so this is transcribed rather "
             "than repaired, and recorded here so it is not mistaken for a "
@@ -3479,14 +3991,101 @@ def _wdm6_mp16(registry: dict) -> None:
             "(1) WRF fills the whole CCN array with the namelist ccn_conc "
             "on the first time step (module_mp_wdm6.F:220-227) and ccn0 "
             "reaches nothing else in the module; woof performs that fill "
-            "once at state allocation from cfg.wdm6_ccn_conc, which is "
-            "equivalent for a cold start and is the NSSL qnn precedent, but "
-            "is NOT equivalent if a future ingest supplies an initial CCN "
-            "field -- such an ingest must advance the restart algorithm "
-            "identity rather than resume onto this one. (2) WDM6 is not in "
+            "once at state allocation from cfg.wdm6_ccn_conc (the NSSL qnn "
+            "precedent) and the wrfinput restore refloods an ingested QNCCN "
+            "with it, as WRF's unconditional flood discards one; the column "
+            "oracle's cold-start configuration grades the equivalence. A "
+            "future ingest that is meant to KEEP an initial CCN field must "
+            "advance the restart algorithm identity rather than resume onto "
+            "this one. (2) WDM6 is not in "
             "the registry's cross-scheme nest transition table, so a domain "
             "hierarchy mixing mp=16 with another scheme is refused rather "
             "than diagnosed across the edge.",
+        ],
+    }
+
+WSM6R_OPTION_ID = "wsm6r-mp106"
+
+
+def _wsm6r_mp106(registry: dict) -> None:
+    """Register WSM6R (mp_physics=106) at exactly the maturity it has earned.
+
+    ``implemented: true`` -- the column kernel is
+    ``woof/core/kernels/wsm6r.cu``, a word-for-word port of WRF v4.6.1
+    ``phys/module_mp_wsm6r.F``; the WSM6 family module
+    ``woof/core/wsm6.py`` launches it as its second row (no adapter file of
+    its own); ``woof/core/microphysics.py`` dispatches ``mp_physics in
+    (6, 106)`` there; the namelist importer maps 106 natively.
+
+    ``maturity: implemented-unverified`` -- the ladder's rung for a runtime
+    with no matched ArWen-versus-WRF FORECAST trajectory.  The column-level
+    evidence is stronger than that rung's floor: a 66-column, five-time-step
+    oracle against WRF's own module, 0 differing finite words under strict
+    arithmetic (tests/test_wsm6r_wrf461_column_exact.py), which is
+    conformance evidence and not a matched forecast trajectory.
+
+    ``reachability: component-override`` -- no template selects 106.
+    """
+
+    options = registry["components"]["microphysics"]["options"]
+    options[WSM6R_OPTION_ID] = {
+        "asset_requirements": [],
+        "constraints": {"required_settings": {"moist": True}},
+        "extensions": {
+            "wrf_package": (
+                "Registry/Registry.EM_COMMON:3022 binds mp_physics==106 to "
+                "the wsm6rscheme package: moist qv,qc,qr,qi,qs,qg"),
+            "prognostic_species": {
+                "transported": ["qi", "qs", "qg"],
+                "not_ported": [],
+                "note": (
+                    "WSM6R is the revised WSM6 with WSM6's six-class mass "
+                    "set and no number moment. Nothing in the WRF package "
+                    "is left out."),
+            },
+            "family": (
+                "WSM6 family: woof/core/wsm6.py WSM6_FAMILY row 106 and "
+                "woof/core/wsm6_constants.py WSM6R_INIT_F32 (wsm6rinit's "
+                "float32 words, copied from WRF's own init, never "
+                "recomputed)"),
+        },
+        "implemented": True,
+        "label": "WSM6R revised WSM6 / MP106",
+        "maturity": "implemented-unverified",
+        "parameters": {"moist": True, "moist_cq": True},
+        "reachability": {"state": "component-override"},
+        "scientific_evidence": "none",
+        "selectors": {"mp_physics": 106},
+        "warnings": [
+            "CONFORMANCE EVIDENCE, COLUMN LEVEL: the CUDA kernel is graded "
+            "word for word against WRF v4.6.1's unmodified "
+            "phys/module_mp_wsm6r.F (gfortran 13.3.0 -O0, glibc 2.39) over "
+            "66 columns x 45 levels and five time steps (30, 60, 150, 240 "
+            "and 300 s, one to three minor loops) by "
+            "tests/test_wsm6r_wrf461_column_exact.py. No matched forecast "
+            "trajectory against WRF exists, which is why the rung is "
+            "implemented-unverified.",
+            "DECLARED DIVERGENCE (NaN payload): WRF itself becomes "
+            "nonfinite in the thin-layer dt150 edge. NaN sign and payload "
+            "may differ; raw hashes are retained and every finite word and "
+            "nonfinite location is still graded in strict and default mode.",
+            "DECLARED DIVERGENCE (RAINNCV): WRF's wsm6r overwrites RAINNCV "
+            "with the current minor loop's fallout and only when it exceeds "
+            "qmin, and the driver never zeroes it, so a multi-loop step "
+            "reports its last loop and a dry step repeats the previous "
+            "step's rain. woof zeroes it per call and adds every loop's "
+            "word, the word WRF adds to RAINNC; RAINNC is WRF's word for "
+            "word.",
+            "GPUWM ADDITIONS, NOT WRF: WRF's wsm6r produces no REFL_10CM, no "
+            "SR, no snow or graupel accumulation and no effective radius. "
+            "woof diagnoses REFL_10CM with refl10cm_wsm6 and RTE+RRTMGP "
+            "radii with WSM6's mp_wsm6_effectRad_run (graded word for word "
+            "against WRF's routine on the WSM6R state by the same oracle), "
+            "because WSM6R's size-distribution PARAMETERs are WSM6's; the "
+            "legacy RRTMG arm computes its own radii as WRF does "
+            "(has_reqc = 0). With no scheme SR the land surface takes "
+            "WRF's no-SR temperature proxy, and all fallout reaches the "
+            "surface as RAINNC, as in WRF.",
         ],
     }
 
@@ -3498,6 +4097,147 @@ def _wdm6_mp16(registry: dict) -> None:
 #: STOPS THE BUILD -- that is the whole point, and it is what mp=50 needed
 #: and did not get.
 _NO_RTE_RRTMGP_CLOUD_OPTICS_REASON: dict[int, str] = {
+    # EMPTY: every implemented scheme has a cloud-optics row.  The table
+    # stays because the pass below still needs it the day a scheme is
+    # implemented without one, and because tests/test_rrtmgp_coupling.py
+    # pins it equal to the runtime's own exclusion set.
+    # mp=9's entry RETIRED with the defect it described.  Milbrandt-Yau
+    # now HAS a cloud-optics row (``9: "milbrandt2"`` in
+    # woof.core.rrtmgp._MP_CLOUD_OPTICS_SCHEME): the scheme's own radii,
+    # the block WRF ships commented out (module_mp_milbrandt2mom.F:
+    # 3351-3378) evaluated over the transported number moments.  The
+    # entry's own words -- Morrison's row "would derive the radii from a
+    # gamma distribution that is not this scheme's" -- argued for a row of
+    # the scheme's own, not for a refusal, and with ra_rrtmg_variant
+    # defaulting to rte-rrtmgp the refusal fired on every bare mp=9 run.
+    # mp=50's entry RETIRED 2026-08-31 with the defect it described.  P3
+    # now HAS a cloud-optics row (``50: "p3"`` in
+    # woof.core.rrtmgp._MP_CLOUD_OPTICS_SCHEME), transcribed from WRF's
+    # own coupling: has_reqc=1, has_reqi=1, has_reqs=0, and the wrappers'
+    # P3 species remap that hands the single ice category to the snow slot
+    # at P3's own ice radius rather than consuming a snow radius that does
+    # not exist.  Membership below is DERIVED from that dict, so the
+    # selector no longer reaches this table and an entry left here would
+    # be a reason for a refusal nothing emits.
+}
+
+#: The other way out of this pairing, stated in the REASON rather than in
+#: the remedy label.
+#:
+#: A remedy label is printed as the title of a repair a front end can
+#: APPLY, above a button that applies ``remedy_settings`` -- so a label
+#: naming a second edit the remedy does not perform tells the reader the
+#: button does something it does not.  Measured at
+#: woof/companion_physics.py: the offered repair sets
+#: ra_rrtmg_variant='rrtmg_legacy' and nothing else, while its title also
+#: offered the Dudhia pair.  The alternative is real and belongs in the
+#: refusal, so it stays -- one clause earlier.
+
+
+FERRIER_OPTION_ID = "ferrier-aligo-mp5"
+
+
+def _ferrier_mp5(registry: dict) -> None:
+    """Register Ferrier-Aligo (mp_physics=5) at the maturity it has earned.
+
+    ``implemented: true``: ``woof/core/kernels/fer_hires.cu`` carries WRF
+    v4.6.1 ``phys/module_mp_fer_hires.F`` statement by statement, the
+    adapter is ``woof/core/fer_hires.py``, ``woof/core/microphysics.py``
+    dispatches on ``mp_physics == 5``, the state carries qi/qt and the
+    three f_* fields, and the namelist importer maps 5 natively.
+
+    ``maturity: implemented-unverified``: the column kernel is graded at 0
+    ULP against the stock WRF column oracle when verified. This maturity
+    does not assert a matched forecast trajectory.
+
+    ``reachability: component-override``: no template registers it.
+    """
+    from woof.core import fer_hires
+
+    blob = (MODEL / "woof" / "data" / "ferrier" / "tables"
+            / fer_hires.TABLE_NAME).read_bytes()
+    options = registry["components"]["microphysics"]["options"]
+    options[FERRIER_OPTION_ID] = {
+        "asset_requirements": [{
+            "assets": [{"bytes": len(blob),
+                        "filename": fer_hires.TABLE_NAME,
+                        "sha256": fer_hires.TABLE_SHA256}],
+            "id": "wrf-v4.6.1-ferrier-etampnew-expanded-rain-v1",
+            "kind": "bundled-package-data",
+            "note": (
+                "fer_hires_init READS this file "
+                "(module_mp_fer_hires.F:2969-2983) and every rain and ice "
+                "rate is a lookup into it; nothing regenerates it, so a "
+                "missing or byte-modified table is refused by the SHA-256 "
+                "check in woof.core.fer_hires.load_table."),
+            "redistributed_by_gpuwm": True,
+            "root_environment_override": "WOOF_FERRIER_TABLE_ROOT",
+            "source": (
+                "WRF v4.6.1 (git tag v4.6.1, commit "
+                "d66e442fccc04111067e29274c9f9eaccc3cef28), file "
+                "run/ETAMPNEW_DATA.expanded_rain"),
+        }],
+        "constraints": {"required_settings": {"moist": True}},
+        "extensions": {
+            "wrf_package": (
+                "Registry/Registry.EM_COMMON:3019 binds mp_physics==5 to the "
+                "fer_mp_hires package: moist qv,qc,qr,qi, scalar qt, state "
+                "f_ice_phy,f_rain_phy,f_rimef_phy"),
+            "prognostic_species": {
+                "transported": ["qi"],
+                "not_ported": [],
+                "note": (
+                    "qi is the total ice (cloud ice and precipitating ice). "
+                    "qt is rebuilt from qc+qr+qi on every FER_HIRES entry "
+                    "and is carried, not transported; f_ice/f_rain/f_rimef "
+                    "are WRF state, never advected, and f_rimef crosses "
+                    "steps and checkpoints."),
+            },
+            "family_siblings_refused": {
+                "ferrier_advect_mp15": (
+                    "not admitted; mp_physics=15 advects the rime factor as "
+                    "the scalar qrimef, which this port carries as "
+                    "non-advected state, so admitting 15 would run 5's "
+                    "trajectory under 15's name"),
+                "eta_ferrier_mp95": (
+                    "not ported; the old Eta scheme's qs holds the total "
+                    "ice and its RRTMG and cal_cldfra1 arms are weighted by "
+                    "F_ICE_PHY"),
+            },
+        },
+        "implemented": True,
+        "label": "Ferrier-Aligo / MP5",
+        "maturity": "implemented-unverified",
+        "parameters": {"moist": True, "moist_cq": True},
+        "reachability": {"state": "component-override"},
+        "scientific_evidence": "none",
+        "selectors": {"mp_physics": 5},
+        "warnings": [
+            "The strict column check is tools/ferrier_hires_wrf461_oracle/"
+            "check_port.py. No forecast skill claim is made. Stock WRF's "
+            "Rcw arithmetic order is retained.",
+            "REFLECTIVITY: WRF v4.6.1 computes Ferrier's DBZ_col and "
+            "discards it, leaving REFL_10CM unwritten under mp=5.  woof "
+            "writes that column (clear air -20 dBZ) as REFL_10CM; its "
+            "10*ALOG10 is CUDA's log10f, so the diagnostic alone is outside "
+            "the 0 ULP claim.",
+            "NEST AND OFFLINE CHILD: no cross-scheme nest edge is ported "
+            "for mp=5 and the offline child refuses a Ferrier parent (no "
+            "F_RIMEF_PHY wrfout row); same-scheme online nests run.",
+        ],
+    }
+
+
+#: Why a microphysics scheme has no RTE+RRTMGP cloud-optics row, one
+#: entry per selector that lacks one.  MEMBERSHIP is derived from
+#: ``woof.core.rrtmgp._MP_CLOUD_OPTICS_SCHEME``; only the WRF reason is
+#: written here, because the reasons genuinely differ and a generic one
+#: would be worse than none.  A selector with no row and no entry here
+#: STOPS THE BUILD -- that is the whole point, and it is what mp=50 needed
+#: and did not get.
+_NO_RTE_RRTMGP_CLOUD_OPTICS_REASON: dict[int, str] = {
+    2: "Lin supplies no effective radii to this adapter; borrowing another scheme would change its cloud distribution",
+    30: "the bin effective-radius integrals are not qualified; a bulk radius closure would replace the spectral distribution optics",
     # EMPTY: every implemented scheme has a cloud-optics row.  The table
     # stays because the pass below still needs it the day a scheme is
     # implemented without one, and because tests/test_rrtmgp_coupling.py
@@ -3736,6 +4476,52 @@ def _rte_rrtmgp_cloud_optics_constraints(registry: dict) -> None:
 
 
 # ------------------------------------------------------------ consumer rows
+#: Which PBL option publishes the lower-interface heat diffusivity that WRF's
+#: post-PBL ``diff4d`` (scalar_pblmix=1, module_pbl_driver.F:2251-2259) reads,
+#: and where.  The config validator, the physics coupling and VRAM admission
+#: read this row instead of a hand-kept scheme pair.  ``mixes_in_scheme``
+#: names the one producer whose wrapper already runs the solve itself (MYNN,
+#: woof/core/mynn_pbl_runtime.py), so the post-PBL owner never runs it twice.
+#: Ported from the scalar-pblmix-any-pbl lane (SOL-POOL-2026-10-07), whose MYJ
+#: EXCH_H column check matched stock diff4d at 0 ULP.
+_SCALAR_DIFFUSION_EXCHANGE: dict[str, dict[str, object]] = {
+    "off": {"writes_exch_h": False, "levels": None, "field": None,
+            "mixes_in_scheme": False,
+            "reason": "WRF skips the PBL driver with no PBL, so scalar_pblmix "
+                      "mixes nothing."},
+    "ysu": {"writes_exch_h": True, "levels": "nz", "field": "exch_h",
+            "mixes_in_scheme": False,
+            "reason": "YSU publishes heat diffusivity at lower interfaces."},
+    "mynn": {"writes_exch_h": True, "levels": "nz", "field": "exch_h",
+             "mixes_in_scheme": True,
+             "reason": "MYNN publishes heat diffusivity at lower interfaces; "
+                       "its wrapper runs the diff4d solve after the column."},
+    "myj": {"writes_exch_h": True, "levels": "nz", "field": "exch_h",
+            "mixes_in_scheme": False,
+            "reason": "MYJ publishes heat diffusivity at lower interfaces."},
+    "shinhong": {"writes_exch_h": True, "levels": "nz", "field": "exch_h",
+                 "mixes_in_scheme": False,
+                 "reason": "Shin-Hong publishes heat diffusivity at lower "
+                           "interfaces."},
+    "uw": {"writes_exch_h": True, "levels": "nz", "field": "exch_h",
+           "mixes_in_scheme": False,
+           "reason": "UW publishes interface KVH (nz+1); exch_h carries its "
+                     "first nz interfaces, the levels diff4d reads."},
+    "ccpp-tke-edmf": {
+        "writes_exch_h": False, "levels": None, "field": None,
+        "mixes_in_scheme": False,
+        "reason": "CCPP TKE-EDMF has no WRF PBL-driver arm, and its own "
+                  "column solve already mixes every transported scalar "
+                  "(nc/ni/nwfa/nifa included, physics._run_satmedmf), so "
+                  "scalar_pblmix adds no second diff4d."},
+    "sase": {"writes_exch_h": False, "levels": None, "field": None,
+             "mixes_in_scheme": False,
+             "reason": "SASE has no WRF counterpart and publishes a layer "
+                       "diffusivity for its own split solve, not lower-"
+                       "interface EXCH_H; reading it as EXCH_H would shift "
+                       "the vertical fluxes, so scalar_pblmix mixes nothing."},
+}
+
 #: Stock adapter classes the checkpoint writer recognises, by component and
 #: option id.  These used to live as two literal dicts INSIDE
 #: woof/io/restart.py::physics_setup_identity, where a scheme with no row
@@ -3749,11 +4535,15 @@ _STOCK_CALLABLE_CLASSES: dict[str, dict[str, object]] = {
         "kain-fritsch": "woof.core.kf.KainFritsch",
         "grell-freitas": "woof.core.gf.GrellFreitas",
         "new-tiedtke": "woof.core.ntiedtke.NewTiedtke",
+        "tiedtke": "woof.core.tiedtke.Tiedtke",
+        "grell-3d": "woof.core.g3.Grell3D",
+        "new-sas": "woof.core.column_cumulus.ColumnCumulus",
     },
     "radiation": {
         "off": None,
         "dudhia-shortwave": "woof.core.dudhia.DudhiaShortwaveRadiation",
         "wrf-rrtm-dudhia": "woof.core.rrtm_lw.RRTMDudhiaRadiation",
+        "new-goddard": "woof.core.radiation_composition.ColumnTableRadiation",
         "analytic-clear-sky":
             "woof.core.analytic_radiation.AnalyticClearSkyRadiation",
         "rte-rrtmgp": {
@@ -3775,6 +4565,10 @@ _STOCK_CALLABLE_CLASSES: dict[str, dict[str, object]] = {
 _VERTICAL_BOUND_SOURCES: dict[str, dict[str, tuple[str, str]]] = {
     "microphysics": {
         "kessler-mp1": ("Kessler microphysics", "KESSLER_VERTICAL_LEVEL_BOUNDS"),
+        "lin-mp2": ("Lin microphysics", "LIN_VERTICAL_LEVEL_BOUNDS"),
+        "ferrier-aligo-mp5": ("Ferrier-Aligo microphysics",
+                              "FERRIER_VERTICAL_LEVEL_BOUNDS"),
+        "wsm5-mp4": ("WSM5 microphysics", "WSM5_VERTICAL_LEVEL_BOUNDS"),
         "wsm6-mp6": ("WSM6 microphysics", "WSM6_VERTICAL_LEVEL_BOUNDS"),
         "thompson-mp8": ("Thompson microphysics",
                          "THOMPSON_VERTICAL_LEVEL_BOUNDS"),
@@ -3786,21 +4580,29 @@ _VERTICAL_BOUND_SOURCES: dict[str, dict[str, tuple[str, str]]] = {
         "milbrandt2mom-mp9": ("Milbrandt-Yau microphysics",
                               "MILBRANDT2_VERTICAL_LEVEL_BOUNDS"),
         "wdm6-mp16": ("WDM6 microphysics", "WDM6_VERTICAL_LEVEL_BOUNDS"),
+        "wsm3-mp3": ("WSM3 microphysics", "WSM3_VERTICAL_LEVEL_BOUNDS"),
+        "wsm6r-mp106": ("WSM6R microphysics", "WSM6R_VERTICAL_LEVEL_BOUNDS"),
+        "wsm7-mp24": ("WSM7 microphysics", "WSM7_VERTICAL_LEVEL_BOUNDS"),
         "p3-mp50": ("P3 microphysics", "P3_VERTICAL_LEVEL_BOUNDS"),
+        "tempo": ("TEMPO microphysics", "TEMPO_VERTICAL_LEVEL_BOUNDS"),
     },
     "pbl": {
         "mynn": ("MYNN PBL", "MYNN_VERTICAL_LEVEL_BOUNDS"),
         "ysu": ("YSU PBL", "YSU_VERTICAL_LEVEL_BOUNDS"),
         "myj": ("MYJ PBL", "MYJ_VERTICAL_LEVEL_BOUNDS"),
         "uw": ("UW moist-turbulence PBL", "UWPBL_VERTICAL_LEVEL_BOUNDS"),
+        "ccpp-tke-edmf": ("CCPP TKE-EDMF PBL", "SATMEDMF_VERTICAL_LEVEL_BOUNDS"),
         "shinhong": ("Shin-Hong PBL", "SHINHONG_VERTICAL_LEVEL_BOUNDS"),
         "sase": ("SASE PBL", "SASE_VERTICAL_LEVEL_BOUNDS"),
     },
     "cumulus": {
         "kain-fritsch": ("Kain-Fritsch cumulus", "KF_VERTICAL_LEVEL_BOUNDS"),
         "grell-freitas": ("Grell-Freitas cumulus", "GF_VERTICAL_LEVEL_BOUNDS"),
+        "grell-3d": ("Grell 3D cumulus", "GRELL_3D_VERTICAL_LEVEL_BOUNDS"),
         "new-tiedtke": ("New Tiedtke cumulus",
                         "NEW_TIEDTKE_VERTICAL_LEVEL_BOUNDS"),
+        "tiedtke": ("Original cu6 cumulus", "TIEDTKE_VERTICAL_LEVEL_BOUNDS"),
+        "new-sas": ("New SAS cumulus", "NEW_SAS_VERTICAL_LEVEL_BOUNDS"),
     },
 }
 
@@ -3825,12 +4627,30 @@ _MORRISON_REPAIR_AUTHORITY = "morrison-psd-limiter"
 #: that second half: a scheme that does not state it does not get it.
 _THOMPSON_REPAIR_AUTHORITY = "thompson-entry-block"
 _MOMENT_ROWS: dict[int, dict | None] = {
+    2: {"name":"Lin", "mass_only":["qv","qc","qr","qi","qs","qg"], "pairs":[], "unpaired":[], "repair_authority":None, "q_threshold":1.0e-14},
     0: None,
     1: {"name": "Kessler", "mass_only": ["qv", "qc", "qr"], "pairs": [],
         "unpaired": [], "repair_authority": None, "q_threshold": 1.0e-14},
+    # Ferrier-Aligo: four masses and no number moment; the threshold is the
+    # scheme's own EPSQ (module_mp_fer_hires.F:168).  qt and the f_* state
+    # are not analysis variables: FER_HIRES rebuilds qt and F_ICE/F_RAIN at
+    # entry, and F_RIMEF only matters where qi exceeds EPSQ.
+    5: {"name": "Ferrier-Aligo", "mass_only": ["qv", "qc", "qr", "qi"],
+        "pairs": [], "unpaired": [], "repair_authority": None,
+        "q_threshold": 1.0e-12},
+    # WSM3: three masses, no moments (Registry.EM_COMMON:3017).
+    3: {"name": "WSM3", "mass_only": ["qv", "qc", "qr"], "pairs": [],
+        "unpaired": [], "repair_authority": None, "q_threshold": 1.0e-14},
+    4: {"name": "WSM5", "mass_only": ["qv", "qc", "qr", "qi", "qs"],
+        "pairs": [], "unpaired": [], "repair_authority": None, "q_threshold": 1.0e-14},
     6: {"name": "WSM6", "mass_only": ["qv", "qc", "qr", "qi", "qs", "qg"],
         "pairs": [], "unpaired": [], "repair_authority": None,
         "q_threshold": 1.0e-14},
+    # WSM6R: WSM6's six masses, no number moment (wsm6rscheme,
+    # Registry.EM_COMMON:3022).
+    106: {"name": "WSM6R", "mass_only": ["qv", "qc", "qr", "qi", "qs", "qg"],
+          "pairs": [], "unpaired": [], "repair_authority": None,
+          "q_threshold": 1.0e-14},
     # Thompson's entry block is its repair authority, and R1
     # (module_mp_thompson.F:183) is the activity gate that block compares
     # every mass against -- two orders of magnitude above the table's own
@@ -3864,6 +4684,10 @@ _MOMENT_ROWS: dict[int, dict | None] = {
     # WDM6: double-moment warm rain (nc, nr) over WSM6's ice; the CCN
     # reservoir nn is prognostic and has no mass partner
     # (woof/core/wdm6_constants.py WDM6_NUMBER_SPECIES).
+    24: {"name": "WSM7",
+         "mass_only": ["qv", "qc", "qr", "qi", "qs", "qg", "qh"],
+         "pairs": [], "unpaired": [], "repair_authority": None,
+         "q_threshold": 1.0e-14},
     16: {"name": "WDM6 double-moment warm rain",
          "mass_only": ["qv", "qi", "qs", "qg"],
          "pairs": [{"species": "cloud", "mass": "qc", "number": "nc"},
@@ -3879,6 +4703,16 @@ _MOMENT_ROWS: dict[int, dict | None] = {
          "unpaired": ["nwfa", "nifa"],
          "repair_authority": _THOMPSON_REPAIR_AUTHORITY,
          "q_threshold": 1.0e-12, "zero_number_below_threshold": True},
+    # TEMPO: two-moment cloud, rain, ice and graupel with graupel volume and
+    # the two aerosol tracers; its own entry block repairs number moments
+    # inside the scheme, so the analysis detects and refuses (no token).
+    900: {"name": "TEMPO", "mass_only": ["qv", "qs"],
+          "pairs": [{"species": "cloud", "mass": "qc", "number": "nc"},
+                    {"species": "rain", "mass": "qr", "number": "nr"},
+                    {"species": "ice", "mass": "qi", "number": "ni"},
+                    {"species": "graupel", "mass": "qg", "number": "ng"}],
+          "unpaired": ["volg", "nwfa", "nifa"],
+          "repair_authority": None, "q_threshold": 1.0e-12},
     # P3 one-category: rain and the single ice category are two-moment; the
     # rime pair rides with the ice mass and has no number partner.
     50: {"name": "P3 one-category", "mass_only": ["qv", "qc"],
@@ -3895,6 +4729,7 @@ _MOMENT_ROWS: dict[int, dict | None] = {
 #: nest-edge closures.  Every ``false`` names its defect so the retirement
 #: sweep is a grep.
 _OFFLINE_CHILD_ROWS: dict[int, dict] = {
+    2: {"same_scheme":True,"refusal":None},
     # passiveqv (Registry.EM_COMMON:3014) transports qv and nothing else,
     # which is exactly what the lane's transported-field helper now asks
     # for; the generic wrfout field map already carries QVAPOR.
@@ -3903,7 +4738,26 @@ _OFFLINE_CHILD_ROWS: dict[int, dict] = {
     # builds for every scheme IS its whole transported set, and the online
     # nest lane has carried mp=1 in PORTED_MP_PHYSICS throughout.
     1: {"same_scheme": True, "refusal": None},
+    # Ferrier-Aligo.  Breakage this prevents: the lane maps a parent's
+    # wrfout by scheme, and F_RIMEF_PHY is WRF state with no wrfout input
+    # row there; a same-scheme child would start every ice cell unrimed
+    # (F_RIMEF = 1) under rimed parent ice, changing fall speeds and
+    # riming from the first step.  Admission is a wrfout map row, not a
+    # code path.
+    5: {"same_scheme": False,
+        "refusal": (
+            "the offline child lane has no wrfout map row for F_RIMEF_PHY, "
+            "the Ferrier-Aligo rime factor FER_HIRES carries between steps "
+            "; a child started without it "
+            "would integrate the parent's rimed ice as unrimed")},
+    # WSM3 (Registry.EM_COMMON:3017): Kessler's qv/qc/qr prefix is its whole
+    # transported set too.
+    3: {"same_scheme": True, "refusal": None},
+    4: {"same_scheme": True, "refusal": None},
     6: {"same_scheme": True, "refusal": None},
+    # WSM6R transports WSM6's six masses and nothing else, which the lane's
+    # transported-field helper builds for it beside WSM6.
+    106: {"same_scheme": True, "refusal": None},
     8: {"same_scheme": True, "refusal": None},
     # Milbrandt-Yau: the lane carries a third scheme-qualified wrfout map
     # (_MY2_WRF_TO_STATE) beside the NSSL one, because QHAIL/QNHAIL are
@@ -3915,9 +4769,16 @@ _OFFLINE_CHILD_ROWS: dict[int, dict] = {
     # (_WDM6_WRF_TO_STATE) with the QNCCN -> nn row, so the CCN reservoir
     # is read rather than zero-filled.
     16: {"same_scheme": True, "refusal": None},
+    24: {"same_scheme": True, "refusal": None},
     18: {"same_scheme": True, "refusal": None},
     28: {"same_scheme": True, "refusal": None},
     50: {"same_scheme": True, "refusal": None},
+    # TEMPO (named scheme, WOOF id 900): the offline-child lane has no
+    # wrfout map for its graupel volume yet, so a same-scheme child is
+    # refused by name rather than zero-filling volg.
+    900: {"same_scheme": False, "refusal": (
+        "the offline-child lane has no wrfout-to-state map for TEMPO's "
+        "graupel volume (QVGRAUPEL -> volg) yet")},
 }
 
 #: The specified-zone ring guard's snapshot family per microphysics
@@ -3931,8 +4792,18 @@ _RING_SURFACE_STANDARD = ["mp_rainnc", "mp_rainncv", "mp_snownc",
                           "mp_snowncv", "mp_graupelnc", "mp_graupelncv",
                           "mp_sr"]
 _RING_STATE_ROWS: dict[int, list[str]] = {
+    2: ["thp","qv","qc","qr","qi","qs","qg"],
     1: ["thp", "qv", "qc", "qr"],
+    # Ferrier-Aligo writes the total ice, qt and all three f_* fields.
+    5: ["thp", "qv", "qc", "qr", "qi", "qt", "f_ice", "f_rain", "f_rimef"],
+    # WSM3 writes its three radii in place every call (module_mp_wsm3.F:
+    # 185-189).
+    3: ["thp", "qv", "qc", "qr", "effc", "effi", "effs"],
+    4: ["thp", "qv", "qc", "qr", "qi", "qs", "effc", "effi", "effs"],
     6: ["thp", "qv", "qc", "qr", "qi", "qs", "qg", "effc", "effi", "effs"],
+    # WSM6R advances the six masses and woof writes WSM6's radii on its
+    # state every call (woof/core/wsm6.py), so the radii are in the set.
+    106: ["thp", "qv", "qc", "qr", "qi", "qs", "qg", "effc", "effi", "effs"],
     8: ["thp", "qv", "qc", "qr", "qi", "qs", "qg", "nr", "ni",
         "effc", "effi", "effs"],
     # Milbrandt-Yau: hail mass beside graupel plus all six numbers.
@@ -3945,6 +4816,8 @@ _RING_STATE_ROWS: dict[int, list[str]] = {
     # reservoir, module_mp_wdm6.F:1249-1252, :1990-1994).
     16: ["thp", "qv", "qc", "qr", "qi", "qs", "qg", "nn", "nc", "nr",
          "effc", "effi", "effs"],
+    24: ["thp", "qv", "qc", "qr", "qi", "qs", "qg", "qh",
+         "effc", "effi", "effs"],
     # mp=18 is completed in the pass from nssl2_contract.DEFAULT_RESTART_FIELDS.
     18: ["thp"],
     # The exact mp=28 moment set; nwfa2d/nifa2d are INTENT(IN) in WRF and
@@ -3955,19 +4828,37 @@ _RING_STATE_ROWS: dict[int, list[str]] = {
     # previous-step carriers, and the cloud/ice radii pair only.
     50: ["thp", "qv", "qc", "qr", "qi", "qir", "qib", "ni", "nr",
          "th_old", "qv_old", "effc", "effi"],
+    # TEMPO: the six masses, cloud/rain/ice/graupel numbers, graupel
+    # volume, the two aerosol tracers and the three radii (the capability
+    # row in woof.microphysics_schemes).
+    900: ["thp", "qv", "qc", "qr", "qi", "qs", "qg", "nc", "nr", "ni", "ng",
+          "volg", "nwfa", "nifa", "effc", "effi", "effs"],
 }
 _RING_SURFACE_ROWS: dict[int, list[str]] = {
+    2: list(_RING_SURFACE_STANDARD),
     1: ["mp_rainnc", "mp_rainncv", "mp_kessler_sr"],
+    # FER_HIRES writes RAINNC/RAINNCV/SR and nothing else
+    # (module_mp_fer_hires.F:449-454, :970-974).
+    5: ["mp_rainnc", "mp_rainncv", "mp_sr"],
+    # WSM3 writes RAINNC/RAINNCV/SNOWNC/SNOWNCV/SR and no graupel
+    # (module_mp_wsm3.F:597-625).
+    3: ["mp_rainnc", "mp_rainncv", "mp_snownc", "mp_snowncv", "mp_sr"],
+    4: ["mp_rainnc", "mp_rainncv", "mp_snownc", "mp_snowncv", "mp_sr"],
     6: list(_RING_SURFACE_STANDARD),
+    # WSM6R's driver arm binds RAINNC/RAINNCV only; SR is the contract's
+    # zero (module_microphysics_driver.F:2362-2372).
+    106: ["mp_rainnc", "mp_rainncv", "mp_sr"],
     8: list(_RING_SURFACE_STANDARD),
     9: _RING_SURFACE_STANDARD + ["mp_hailnc", "mp_hailncv"],
     10: list(_RING_SURFACE_STANDARD),
     16: list(_RING_SURFACE_STANDARD),
     18: _RING_SURFACE_STANDARD + ["mp_hailnc", "mp_hailncv"],
+    24: _RING_SURFACE_STANDARD + ["mp_hailnc", "mp_hailncv"],
     28: list(_RING_SURFACE_STANDARD),
     # P3's wrapper writes RAINNC/RAINNCV/SNOWNC/SNOWNCV/SR and nothing else
     # (module_mp_p3.F:894-898); no graupel category.
     50: ["mp_rainnc", "mp_rainncv", "mp_snownc", "mp_snowncv", "mp_sr"],
+    900: list(_RING_SURFACE_STANDARD),
 }
 
 #: Which wrfout precipitation accumulator each ring surface slot fills, for
@@ -3986,7 +4877,36 @@ _REFLECTIVITY_SCHEME_DIAGNOSTIC = {
     9: "woof.core.milbrandt2.reflectivity (the scheme's own Zet block, "
        "lifted into woof/core/kernels/milbrandt2_zet.cu because it "
        "updates nothing; that file carries the WRF citation)",
+    50: "woof.core.p3_device.reflectivity (the Z half of the scheme's own "
+        "final diagnostics, replayed on local copies in "
+        "woof/core/kernels/p3_zdiag.cu because the forecast loop also "
+        "updates the state; that file carries the WRF citation)",
 }
+
+
+
+def _fast_sbm_admission(registry):
+    """Scheme admission and explicit boundaries for its spectral consumers."""
+    from woof.core.fast_sbm_contract import BIN_SPECIES,NUMBER_SPECIES,MASS_SPECIES
+    _MOMENT_ROWS[30]={"name":"FAST_SBM spectral distributions","mass_only":list(MASS_SPECIES),
+                     "pairs":[],"unpaired":list(BIN_SPECIES)+list(NUMBER_SPECIES),
+                     "repair_authority":None,"q_threshold":1.e-13}
+    _OFFLINE_CHILD_ROWS[30]={"same_scheme":False,"refusal":"the offline forcing writer does not export the 142 spectral distributions; bulk fields cannot reconstruct a bin state"}
+    _RING_STATE_ROWS[30]=["thp",*MASS_SPECIES,*BIN_SPECIES,*NUMBER_SPECIES,"th_old","qv_old","effc","effi","effs"]
+    _RING_SURFACE_ROWS[30]=list(_RING_SURFACE_STANDARD)
+    _VERTICAL_BOUND_SOURCES["microphysics"]["fast-sbm-mp30"]=("FAST_SBM microphysics","FAST_SBM_VERTICAL_LEVEL_BOUNDS")
+    registry["components"]["microphysics"]["options"]["fast-sbm-mp30"]={
+        "label":"FAST_SBM spectral bin / MP30","selectors":{"mp_physics":30},
+        "implemented":True,"maturity":"implemented-unverified","scientific_evidence":"none",
+        "parameters":{"moist":True,"moist_cq":True},"asset_requirements":[],
+        "constraints":{"required_settings":{"moist":True},"required_settings_reasons":{"moist":"the scheme advances vapor and 142 spectral distributions and needs a moist state"}},
+        "warnings":["The corrected default fixes declared WRF defects, including cell-depth sedimentation and collision mass conservation. Column oracle and water-budget gates are implementation checks; a matched forecast and observation-based skill remain separate qualifications."]}
+    # A direct component override makes mp30 normally selectable without a case template.
+    for route in registry["runner_routes"].values():
+        allowed=route.get("allowed_component_options",{})
+        if isinstance(allowed,dict) and "microphysics" in allowed and isinstance(allowed["microphysics"],list):
+            if "fast-sbm-mp30" not in allowed["microphysics"]:
+                allowed["microphysics"].append("fast-sbm-mp30")
 
 
 def _consumer_rows(registry: dict) -> None:
@@ -4068,7 +4988,9 @@ def _consumer_rows(registry: dict) -> None:
                 "refusal": (
                     f"MP{mp} ({scheme}) is ported and runs, but it has no "
                     "validated cross-scheme entry closure for its moments ("
-                    + ", ".join(transition.UNVALIDATED_MIXED_EDGE_MOMENTS[mp])
+                    + (", ".join(transition.UNVALIDATED_MIXED_EDGE_MOMENTS[mp])
+                       or "none: its two condensate classes change phase "
+                       "at 0 C")
                     + "); the reason is recorded at woof.core."
                     f"microphysics_transition._UNVALIDATED_MIXED_EDGE_REASONS[{mp}]"),
             }
@@ -4179,10 +5101,8 @@ def _consumer_rows(registry: dict) -> None:
             "rte_rrtmgp_coupling": coupling,
             "rte_rrtmgp_refusal": (
                 None if coupling is not None else
-                "the scheme hands radiation no radii and no borrowed row "
-                "is right; recorded at woof.core.rrtmgp."
-                f"_NO_CLOUD_OPTICS_COUPLING[{mp}], the way through at "
-                "woof.core.rrtmgp._CLOUD_OPTICS_REMEDY"),
+                rrtmgp._NO_CLOUD_OPTICS_COUPLING[mp] + ". "
+                + rrtmgp._CLOUD_OPTICS_REMEDY),
             "legacy_declares_radii": rrtmg_legacy._MP_DECLARES_RADII[mp],
         }
         inventory = _INVENTORIES.get(mp)
@@ -4297,6 +5217,12 @@ def _consumer_rows(registry: dict) -> None:
             if component_id in ("cumulus", "pbl"):
                 rows["vertical_level_bounds"] = bounds_row(
                     component_id, option_id)
+            if component_id == "pbl":
+                # WRF module_pbl_driver.F:2251-2259 (v4.6.1) runs diff4d
+                # on the selected scheme's EXCH_H after ANY PBL scheme when
+                # scalar_pblmix=1; with no PBL the driver is not called.
+                rows["scalar_diffusion_exchange"] = (
+                    _SCALAR_DIFFUSION_EXCHANGE[option_id])
             if component_id == "cumulus":
                 rows["stock_callable_class"] = (
                     _STOCK_CALLABLE_CLASSES["cumulus"][option_id])
@@ -4360,7 +5286,10 @@ def _consumer_rows(registry: dict) -> None:
                 "km_opt and its constants are bound by the checkpoint's "
                 "configuration_sha256; there is deliberately no turbulence "
                 "identity table (a row would be a sixth turbulence "
-                "authority)"),
+                "authority); the mixing operators' implementation is bound "
+                "by the one string woof.checkpoint_identity."
+                "DYCORE_MIXING_ALGORITHM_IDENTITY, recorded whenever the "
+                "domain mixes"),
         }
 
     # -- completeness: the build refuses a registry that violates the
@@ -4514,6 +5443,10 @@ _ASSET_RESOLUTION_LADDERS = {
         "data_relative": "p3/tables",
         "root_environment_override": "WOOF_P3_TABLE_ROOT",
     },
+    "wrf-v4.6.1-ferrier-etampnew-expanded-rain-v1": {
+        "data_relative": "ferrier/tables",
+        "root_environment_override": "WOOF_FERRIER_TABLE_ROOT",
+    },
     # RTE+RRTMGP's NetCDF set.  ``assets`` is filled from
     # ``woof.core.rrtmgp.RRTMGP_TABLE_FILES`` by ``_asset_resolution``:
     # this row declared a root and NO members, so plan review resolved it
@@ -4530,6 +5463,15 @@ _ASSET_RESOLUTION_LADDERS = {
     # the directory and the row keeps its filename.
     "gpuwm-kf-lutab-v1": {
         "data_relative": "kf_lutab",
+    },
+    # TEMPO's four tables (NCAR release assets, not redistributed): the
+    # adapter fetches them into the staged root on first use
+    # (woof.tempo_assets.ensure_tempo_tables), so a fresh install reports
+    # them missing at plan review and still runs.
+    "ncar-tempo-v3-tables-v1": {
+        "data_relative": "tempo/tables",
+        "root_environment_override": "WOOF_TEMPO_TABLE_ROOT",
+        "staged_root": "~/.woof/tables/tempo-v3",
     },
 }
 
@@ -4751,6 +5693,10 @@ def _urban_component(registry: dict) -> None:
                 "restart_algorithm_identity": URBAN_ALGORITHM_IDENTITIES[0],
                 "vertical_level_bounds": None}
         if value == 1:
+            from woof.checkpoint_identity import URBAN_UCM_GENERATION_IDENTITIES
+            row["parameters"].update(urban_ucm_generation="wrf_471", urban_treeoption=-1, urban_ttscheme=-1, urban_fvg=-1.0)
+            row["constraints"]["admitted_setting_values"].update(urban_ucm_generation=["wrf_471", "wrf_480"], urban_treeoption=[-1,0,1], urban_ttscheme=[-1,0,1])
+            row["extensions"]["numerical_generations"] = {key: {"restart_algorithm_identity": value} for key,value in URBAN_UCM_GENERATION_IDENTITIES.items()}
             row["warnings"] = [
                 "DECLARED DIVERGENCE from WRF v4.7.1: under Noah-MP the "
                 "UCM's 2 m temperature is blended as the absolute "
@@ -4776,7 +5722,7 @@ def _urban_component(registry: dict) -> None:
                 "rural drag into a_u_bep, so WRF drags every column that is "
                 "not wholly urban twice, ocean included (1.25 m/s of 10 m "
                 "wind over the sea within two hours at 750 m). kernels/"
-                "ysu.cu removes the whole of YSU's own drag; graded against "
+                "ysu_480.cu removes the whole of YSU's own drag; graded against "
                 "WRF built with that one-line fix "
                 "(tests/test_ysu_bep_rural_drag.py). MYJ is unaffected.",
             ]
@@ -4862,8 +5808,87 @@ def _current_verification_scope(registry: dict) -> None:
                     "matched run of this exact suite. " + exemption["basis"])
 
 
+def _lin_mp2(registry: dict) -> None:
+    from copy import deepcopy
+    options=registry["components"]["microphysics"]["options"]
+    option=deepcopy(options["wsm6-mp6"])
+    option.update(label="Purdue Lin six-class / MP2", selectors={"mp_physics":2},
+                  parameters={"moist":True,"moist_cq":True},
+                  maturity="implemented-unverified", scientific_evidence="none",
+                  asset_requirements=[], extensions={},
+                  warnings=["The 72-column WRF 4.6.1 oracle is bitwise under strict arithmetic. This is implementation evidence, not observation-based forecast skill."])
+    option.pop("compatible_previous_forbidden_settings",None)
+    option["constraints"]={"required_settings":{"moist":True},"forbidden_setting_values":{},"required_settings_reasons":{}}
+    option["consumers"]={"restart_algorithm_identity":"lin-wrf461-six-class-v1"}
+    option["physics_identity_extension"] = {"transitions": True}
+    options["lin-mp2"]=option
+
+
+def _single_moment_column_options(registry: dict) -> None:
+    """Register the column table rows; the door is the ordinary mp_physics selector.
+
+    No preset is generated: the radiation-off template the WSM lane generated here
+    made radiation.off reachable from a registered suite (spot-check FAIL,
+    the 2.9.0 spot results).  A row is reachable as a
+    component override, exactly like WSM3, WSM6R, Lin and Ferrier-Aligo.
+    """
+    from woof.core.column_schemes import COLUMN_SCHEMES
+    options = registry["components"]["microphysics"]["options"]
+    for mp, row in COLUMN_SCHEMES.items():
+        option_id = f"{row.unit}-mp{mp}"
+        option = copy.deepcopy(options["wsm6-mp6"])
+        option.update(label=f"{row.label} / MP{mp}", selectors={"mp_physics": mp},
+                      maturity="implemented-unverified", scientific_evidence="none",
+                      reachability={"state": "component-override"}, parameters={"moist": True, "moist_cq": True},
+                      warnings=["Column arithmetic is checked against WRF 4.6.1; observation-based forecast skill is not established."],
+                      extensions={"declared_divergences": [
+                          {"id": "remap-top-search", "default_on": True,
+                           "cause": "WRF nislfv_rain_plm skips the last arrival interface and deletes upper-cell condensate.",
+                           "oracle_arm": "defined", "code": "woof/core/kernels/wsm5.cu"},
+                          {"id": "melting-snow-evaporation", "default_on": True,
+                           "cause": "Stock WSM5 uses psdep, which is zero in the warm subsaturated branch; the port uses the WSM6 evaporation expression.",
+                           "oracle_arm": "defined", "code": "tools/wsm5_wrf461_column_oracle/patch_arms.py"}]})
+        option.pop("consumers", None)
+        options[option_id] = option
+
+def _new_goddard(registry):
+    """A paired solver is admitted by its inputs, outputs and selector row."""
+    row=copy.deepcopy(registry['components']['radiation']['options']['wrf-rrtm-dudhia'])
+    row.update(label='WRF 4.6.1 New Goddard longwave and shortwave',
+        selectors={'ra_lw_physics':5,'ra_sw_physics':5},
+        parameters={'ra_physics':0,'icloud':1,'wrf_rrtmg_compatibility':'none'},
+        warnings=['WRF-Chem aerosol coupling is not implemented. Meteorological aerosols are zero, as in WRF_CHEM=0.',
+                  'The SW visible cloud depth is defined from taucl(:,:,8); stock WRF passes unassigned taux scratch.',
+                  'Non-7 microphysics uses WRF use_mp_re radii when provided; otherwise initialized zero radii reach the cloud LUT lower-bound clipping.'],
+        extensions={'column_contract':{
+            'inputs':['T','P','P8W','PI','DZ8W','RHO','QVAPOR','QCLOUD','QICE','QRAIN','QSNOW','QGRAUP','QHAIL','CLDFRA','RE_*_GSFC','ALBEDO','EMISS','TSK','XLAT','XLONG'],
+            'outputs':['RTHRATENLW','RTHRATENSW','SWDOWN','GLW','GSW','OLR','SWDDNI','SWDDIR','SWDDIF','TLWDN','TLWUP','SLWDN','SLWUP','TSWDN','TSWUP','SSWDN','SSWUP'],
+            'wrfout_names':['SWDOWN','GLW','OLR','SWDDNI','SWDDIR','SWDDIF','TLWDN','TLWUP','SLWDN','SLWUP','TSWDN','TSWUP','SSWDN','SSWUP','CLDFRA'],
+            'cloud_table_sha256':'ad4bb1dd8446a2b00559ac425e21255a01b79a4cac7b5e3e693a3c98c222a1c8'}})
+    registry['components']['radiation']['options']['new-goddard']=row
+
 def build(registry: dict) -> dict:
     """Apply this pass's tables to ``registry`` in place and return it."""
+    from tools.seed_physics_options import load_seeds, seed_options
+    registry = seed_options(registry, load_seeds())
+    _new_goddard(registry)
+    from woof.lightning_contract import LIGHTNING_DEFAULTS, LIGHTNING_OPTIONS, FIELD_METADATA
+    registry["diagnostic_packages"] = {"lightning_option": {str(k): dict(v) for k,v in LIGHTNING_OPTIONS.items()}}
+    registry["diagnostic_state"] = {"lightning": FIELD_METADATA}
+    from woof.core.hail import registry_rows as hail_registry_rows
+    hail_registry_rows(registry)
+    for key, value in LIGHTNING_DEFAULTS.items():
+        row = {"type": "integer" if isinstance(value, int) else "number",
+               "default": value, "per_domain": True,
+               # do_radar_ref is read by the lightning admission rule (PR92
+               # options 1 and 2 need the reflectivity it turns on).
+               "consuming_read": ("woof/lightning_contract.py"
+                                  if key == "do_radar_ref"
+                                  else "woof/core/lightning.py")}
+        if key == "lightning_option": row["enum"] = list(LIGHTNING_OPTIONS)
+        elif key == "iccg_method": row["enum"] = list(range(5))
+        elif key == "cellcount_method": row["enum"] = list(range(3))
+        registry["parameters"][key] = row
     _rename_template_ids(registry)
     # Registered source tables determine which prepared inputs each runner
     # accepts. Carrying yesterday's registry source list omits a newly
@@ -4877,10 +5902,18 @@ def build(registry: dict) -> dict:
     _thompson_aerosol_mp28(registry)
     _milbrandt2mom_mp9(registry)
     _wdm6_mp16(registry)
+    _tempo_named(registry)
+    _lin_mp2(registry)
+    _ferrier_mp5(registry)
+    _wsm3_mp3(registry)
+    _single_moment_column_options(registry)
+    _wsm6r_mp106(registry)
+    _wsm7_mp24(registry)
     from tools.morrison_wrf461_oracle.patch_registry_morrison import (
         MORRISON_WARNINGS)
     registry["components"]["microphysics"]["options"]["morrison-mp10"][
         "warnings"] = list(MORRISON_WARNINGS)
+    _fast_sbm_admission(registry)
     # After every microphysics option is registered, because it walks them.
     _rte_rrtmgp_cloud_optics_constraints(registry)
     _tke_nest_child(registry)
@@ -4932,6 +5965,24 @@ def build(registry: dict) -> dict:
     # surface layer is legal with PBL off.  These declarative constraints
     # mirror the same 16-cell table used by runtime admission.
     pbl_options = registry["components"]["pbl"]["options"]
+    # Retire only the old ctopo-absent warning after the selected YSU repair.
+    # Keep its independent WRF comparison and all other qualification limits.
+    pbl_options["ysu"]["warnings"] = [
+        ("WRF's default surface-drag arm is implemented: module_bl_ysu.F:404 "
+         "passes ctopo and ctopo2 and bl_ysu.F90:1308 applies their drag. "
+         "The selected kernel carries the paj, GET_PBLH and Beljaars vconv "
+         "calculation; tests/test_ysu_wrf461_parity.py pins zero momentum ULP "
+         "against that arm and retains the separate 182 ULP comparison to "
+         "the historical ctopo-absent reference. This is column evidence, "
+         "not qualification against a WRF forecast.")
+        if "bl_ysu.F90:1315" in warning else warning
+        for warning in pbl_options["ysu"]["warnings"]]
+    from woof.ysu_generations import YSU_GENERATIONS, YSU_DEFAULT_GENERATION
+    pbl_options["ysu"]["numerical_generations"] = {
+        "selector": "ysu_version", "default": YSU_DEFAULT_GENERATION,
+        "options": YSU_GENERATIONS,
+    }
+    pbl_options["ccpp-tke-edmf"] = {'label': 'CCPP scale-aware TKE moist EDMF', 'implemented': True, 'maturity': 'implemented-unverified', 'scientific_evidence': 'none', 'selectors': {'bl_pbl_physics': 901}, 'parameters': {}, 'asset_requirements': [], 'wrf_counterpart': {'exists': False, 'implementation_origin': 'upstream-port', 'reason': 'CCPP satmedmfvdifq is a GFS and RRFS scheme with no WRF selector counterpart. WRF selector 3 is the older hybrid EDMF.'}, 'constraints': {'required_settings': {'moist': True, 'bldt': 0.0}, 'required_settings_reasons': {'moist': 'moist buoyancy needs vapor and condensate', 'bldt': 'positive cadence would retain a TKE tendency absent from the extra-scalar restart stream'}, 'requires_components': {'surface_layer': ['revised-mm5', 'classic-mm5']}, 'requires_components_reasons': {'surface_layer': 'the CCPP stability closure divides by fm/fh, supplied by these similarity layers'}}, 'reachability': {'state': 'component-override'}, 'warnings': ['New non-WRF selector 901. The pinned CCPP column has 0 ULP GPU agreement on 64 columns over three steps. No observation-based forecast score is claimed.'], 'extensions': {'upstream_commit': '1d9b076503c27cd4cfa8b22a977a71e889cbb149', 'fpvs_manifest': 'woof/data/satmedmf/manifest.json', 'prognostic_scalars': {'tke_edmf': {'units': 'm2 s-2', 'initial_value': 0.2, 'transport': 'existing positive-definite scalar path', 'lateral_boundary': 'existing flow-dependent scalar boundary', 'restart': 'serialized'}}, 'vertical_order': 'bottom-to-top', 'humidity_binding': 'specific humidity from dry-air mixing ratio; finite increments converted back', 'outputs': ['temperature and water tendencies', 'momentum tendencies', 'TKE tendency', 'PBLH', 'KPBL', 'heat and momentum diffusivities'], 'surface_inputs': ['UST', 'HFX', 'QFX', 'FM', 'FH', 'BR', 'ZNT', 'vegetation fraction', '10 m winds'], 'bldt': {'supported_values': [0], 'meaning': 'run on every model step'}}}
     surface_options = registry["components"]["surface_layer"]["options"]
     pbl_options["ysu"]["constraints"]["requires_components"][
         "surface_layer"
@@ -5128,12 +6179,42 @@ def build(registry: dict) -> dict:
         "cold-starts at epsq2=0.2, which is what MYJPBLINIT writes "
         "(phys/module_bl_myjpbl.F:1725, share/module_model_constants.F:92) "
         "and not zero: the seed decides MIXLEN's LPBL scan on step one and "
-        "a zero column is a 0/0 in EL0 that WRF never reaches. NO "
-        "ORACLE COMPARISON AGAINST THE WRF FORTRAN HAS BEEN RUN: there is "
-        "no tools/myj_wrf461_oracle, no gfortran replay and no ULP table, "
-        "so nothing here claims bit agreement with WRF. That campaign is "
-        "the declared next stage, as it was for Shin-Hong and "
-        "Grell-Freitas.")
+        "a zero column is a 0/0 in EL0 that WRF never reaches. For the "
+        "Eta surface layer (MYJSFC) NO ORACLE COMPARISON AGAINST THE WRF "
+        "FORTRAN HAS BEEN RUN: there is no gfortran replay of "
+        "module_sf_myjsfc.F and no ULP table, so nothing here claims bit "
+        "agreement with WRF for it. The PBL half has one: the MYJ PBL "
+        "kernel is bit-identical to WRF v4.6.1's MYJPBL "
+        "(tools/myjpbl_wrf461_oracle, tests/test_myjpbl_wrf461_parity.py; "
+        "see the MYJ PBL row).")
+    _MYJ_PBL_EVIDENCE_WARNING = (
+        "MYJ PBL is implemented-unverified because no matched "
+        "WOOF-versus-WRF forecast trajectory exists for it, but its CUDA "
+        "kernel (woof/core/kernels/myjpbl.cu) is BIT-IDENTICAL to WRF "
+        "v4.6.1's own MYJPBL. tools/myjpbl_wrf461_oracle compiles the "
+        "byte-unmodified phys/module_bl_myjpbl.F at gfortran 13.3 -O0 "
+        "(WRF's own -O2 -ftree-vectorize -funroll-loops build writes the "
+        "same bytes) and drives it over 176 columns -- convective, stable "
+        "night, neutral, ocean, snow, sea ice, cloud liquid and ice, "
+        "terrain from -25 to 4500 m, the QCI-present and QCI-absent arms, "
+        "nz 4, 35, 50 and 128, DT 10 to 90 s, and edge columns (CT /= 0, "
+        "CHKLOWQ = 0, dew, USTAR = 0, calm, exactly neutral, TKE floor, "
+        "LPBL = 1, subnormal condensate) -- for three consecutive calls; "
+        "the fixture executes every line of MYJPBL's call tree except "
+        "PRODQ2's ELOQN <= EPS1 arm (:1145-1146). Under the strict build "
+        "(GPUWM_WRF_EXACT=1) every word of every output (TKE_MYJ, EL_MYJ, "
+        "EXCH_H, the six tendencies, PBLH, MIXHT, KPBL, THZ0, QZ0, QSFC, "
+        "CT) is identical, replayed and free-running; under default "
+        "arithmetic (CuPy's -ftz=true) only RQCBLTEN/RQIBLTEN words differ, "
+        "each by less than FLT_MIN (at most 1.2e-38), where diffusion "
+        "leaves subnormal condensate (tests/test_myjpbl_wrf461_parity.py). "
+        "The kernel seeds "
+        "ZINT(KTE+1)=HT as WRF does (phys/module_bl_myjpbl.F:312), calls "
+        "WOOF's own float32 gfk_exp_fma/gfk_pow (matched to the oracle "
+        "host's C library over all 2**32 inputs by "
+        "tools/myjpbl_wrf461_oracle/libm_sweep.py), compiles without FMA "
+        "contraction and carries gfortran's folded constant words. That is "
+        "conformance evidence, not scientific validation.")
     _MYJ_QUIRK_WARNING = (
         "WRF quirks transcribed rather than repaired, each cited in the "
         "port. CT (the countergradient correction) is identically zero in "
@@ -5152,12 +6233,16 @@ def build(registry: dict) -> dict:
         "commented out (phys/module_bl_myjpbl.F:1275-1322), so its T "
         "argument is dead and the port does not take it.")
     _MYJ_DIVERGENCE_WARNING = (
-        "DELIBERATE DIVERGENCE, woof goes its own way (float32 "
-        "precision): the interface-height column is GROUND-relative. WRF "
-        "seeds it with the terrain height, ZINT(I,KTE+1,J)=HT(I,J) "
-        "(phys/module_bl_myjpbl.F:312, phys/module_sf_myjsfc.F:162), so "
-        "every height it carries is above sea level; woof seeds zero. "
-        "Every consumer in both modules reads only DIFFERENCES of those "
+        "DELIBERATE DIVERGENCE in the Eta surface layer, woof goes its "
+        "own way (float32 precision): MYJSFC's interface-height column is "
+        "GROUND-relative. WRF seeds it with the terrain height, "
+        "ZINT(I,KTE+1,J)=HT(I,J) (phys/module_sf_myjsfc.F:162), so every "
+        "height it carries is above sea level; woof's surface layer seeds "
+        "zero. (The MYJ PBL kernel no longer does: it seeds HT as "
+        "phys/module_bl_myjpbl.F:312 does, because the float32 words depend "
+        "on it -- up to 51 ULP on PBLH and 231 on EXCH_H over terrain -- "
+        "and it is graded bit-identical to WRF.) "
+        "Every consumer reads only DIFFERENCES of those "
         "heights, so HT cancels EXACTLY in real arithmetic and only "
         "APPROXIMATELY in float32, where differencing numbers offset by "
         "1-3 km drops bits the ground-relative column keeps. woof's "
@@ -5173,7 +6258,8 @@ def build(registry: dict) -> dict:
         "quanta of the source field's ULP over dt "
         "(tests/test_myj_port.py::"
         "test_the_dropped_terrain_height_cancels_in_float32). It will be "
-        "a real term in the ULP table when the oracle campaign runs.")
+        "a real term in the ULP table when the surface-layer oracle "
+        "campaign runs.")
     _MYJ_SCOPE_WARNING = (
         "OUT OF SCOPE, refused rather than approximated. WRF sends the MYJ "
         "PBL through myjurb (phys/module_bl_myjurb.F:130-771) when sf_urban_physics "
@@ -5250,9 +6336,8 @@ def build(registry: dict) -> dict:
         "reachability": {"state": "component-override"},
         "scientific_evidence": "none",
         "selectors": {"bl_pbl_physics": 2},
-        "warnings": [_MYJ_EVIDENCE_WARNING, _MYJ_PAIR_WARNING,
-                     _MYJ_QUIRK_WARNING, _MYJ_DIVERGENCE_WARNING,
-                     _MYJ_SCOPE_WARNING],
+        "warnings": [_MYJ_PBL_EVIDENCE_WARNING, _MYJ_PAIR_WARNING,
+                     _MYJ_QUIRK_WARNING, _MYJ_SCOPE_WARNING],
     }
     # ---- UW moist turbulence (bl_pbl_physics=9) ---------------------------
     # WRF v4.7.1's CAMUWPBLSCHEME, ported with its CAM modules and graded
@@ -5298,6 +6383,46 @@ def build(registry: dict) -> dict:
         "selectors": {"bl_pbl_physics": 9},
         "warnings": list(_UWPBL_WARNINGS),
     }
+    # The Eta surface layer carries its OWN evidence and has no divergence
+    # warning: its WRF column oracle is graded word for word, and the
+    # ground-relative height column _MYJ_DIVERGENCE_WARNING describes is
+    # gone from it (the kernel seeds ZINT(KTE+1)=HT as WRF does).
+    _MYJ_SFC_EVIDENCE_WARNING = (
+        "The Eta similarity surface layer is implemented-unverified because "
+        "no matched WOOF-versus-WRF forecast trajectory exists for it, but "
+        "its CUDA kernel (woof/core/kernels/myjsfc.cu) and its host "
+        "similarity tables are BIT-IDENTICAL to WRF v4.6.1's own MYJSFC and "
+        "MYJSFCINIT. tools/myjsfc_wrf461_oracle compiles the byte-unmodified "
+        "phys/module_sf_myjsfc.F at gfortran 13.3 -O0 (WRF's own -O2 "
+        "-ftree-vectorize -funroll-loops build writes the same bytes; "
+        "neither has an FMA or a libmvec call) and drives 224 columns -- "
+        "convective and stable land, snow and sea ice, warm, cold and "
+        "storm-force ocean, terrain to 4.4 km, calm air, cloud water, a "
+        "TKE column that never drops below EPSQ2 and a dead one, a "
+        "boundary layer above 1000 m, extreme instability and stability, "
+        "a saturated cold column, a lowest layer under 4 m and the "
+        "two-level minimum column -- through MYJSFCINIT and three "
+        "consecutive MYJSFC calls (cold start at ITIMESTEP 1 and warm "
+        "seeded state across the three sea viscous regimes); the fixture "
+        "executes every line of MYJSFC and SFCDIF. Every word of all 35 "
+        "INOUT and output fields is identical, replayed and free-running, "
+        "under the strict build (GPUWM_WRF_EXACT=1) and under default "
+        "arithmetic, and all 4 x 10,001 PSIM/PSIH table words match "
+        "(tests/test_myjsfc_wrf461_parity.py). A further 8,192 columns "
+        "with randomly drawn regimes, four calls each (32,768 "
+        "column-calls, tools/myjsfc_wrf461_oracle/stress.sh), are "
+        "identical too, and so is the float32 CPU authority "
+        "(woof/verify/myj_ref.py np_myjsfc_column, graded on CPU). The "
+        "kernel seeds "
+        "ZINT(KTE+1)=HT as WRF does (phys/module_sf_myjsfc.F:165), calls "
+        "WOOF's own float32 gfk_log/gfk_exp_fma/gfk_pow (graded against "
+        "the oracle host's C library over all 2**32 inputs by "
+        "tools/myjsfc_wrf461_oracle/libm_sweep.py: one input differs, 1 ULP "
+        "of POW at x = 0.00825 with exponent 1/CAPA, which needs a surface "
+        "pressure below 0.01 Pa) and compiles without FMA "
+        "contraction; the host tables use WOOF's own float32 "
+        "logf/atanf/expf. That is conformance evidence, not scientific "
+        "validation.")
     surface_options["eta-similarity"] = {
         "asset_requirements": [],
         "constraints": {
@@ -5332,9 +6457,8 @@ def build(registry: dict) -> dict:
         "reachability": {"state": "component-override"},
         "scientific_evidence": "none",
         "selectors": {"sf_sfclay_physics": 2},
-        "warnings": [_MYJ_EVIDENCE_WARNING, _MYJ_PAIR_WARNING,
-                     _MYJ_QUIRK_WARNING, _MYJ_DIVERGENCE_WARNING,
-                     _MYJ_SCOPE_WARNING],
+        "warnings": [_MYJ_SFC_EVIDENCE_WARNING, _MYJ_PAIR_WARNING,
+                     _MYJ_QUIRK_WARNING, _MYJ_SCOPE_WARNING],
     }
     # Grell-Freitas (cu_physics=3), the first cumulus option admitted
     # since KF and the first scale-aware one: sig = (1-frh)^2 is the
@@ -5359,7 +6483,7 @@ def build(registry: dict) -> dict:
             # registry and validate_run_config into disagreement over 816
             # combinations.
             "requires_components": {
-                "pbl": ["ysu", "mynn", "shinhong", "sase", "myj", "uw"]},
+                "pbl": ["ysu", "mynn", "shinhong", "sase", "myj", "uw", "ccpp-tke-edmf"]},
             "requires_components_reasons": {
                 "pbl": (
                     "WOOF's Grell-Freitas adapter reads KPBL and the "
@@ -5383,6 +6507,24 @@ def build(registry: dict) -> dict:
                     "WOOF structural constraint; WRF v4.6.1 does not "
                     "prohibit cu_physics=3 with bl_pbl_physics=0"),
             },
+            "shallow_closure_top_bound": {
+                "default": "min(kpbl,ktf-1)",
+                "classification": "declared divergence from WRF v4.6.1",
+                "reason": "The pressure difference reads po_cup(k+1). A top-level PBL must not read above the column.",
+            },
+            "vertical_velocity_convention": {
+                "default": "lower-face",
+                "strict": "lower-face",
+                "classification": "declared change from the previous adapter convention",
+                "reason": "GFDRV expects lower-face W in its closure. Averaging adjacent faces changes the forcing and rain.",
+            },
+            "strict_arithmetic": {
+                "selector": "GPUWM_WRF_EXACT=1",
+                "normalization": "stock-scalar-operation-sequence",
+                "publication": "four-cell-nonperiodic-interior",
+                "cold_condensate_without_ice": "retain-stock-split-and-ignore-ice-slot",
+                "default_unchanged": True,
+            },
         },
         "implemented": True,
         "label": "Grell-Freitas",
@@ -5397,23 +6539,25 @@ def build(registry: dict) -> dict:
             "halves of the port and on the whole driver, not a scheme "
             "fragment. tools/gf_wrf461_oracle drives the byte-frozen "
             "module_cu_gf_wrfdrv.F/module_cu_gf_deep.F/module_cu_gf_sh.F "
-            "at gfortran -O0 over 18 cases x 6 grid spacings x 2 ishallow "
-            "arms (216 columns); the float32 CPU authority "
-            "(woof/verify/gf_driver.py) reproduces GFDRV word for word "
-            "on the 208 columns where GFDRV's own decomposition is exact, "
-            "and the CUDA translation unit (woof/core/kernels/gf.cu) "
-            "holds the same boundary with the fzu normalisation PINNED "
-            "from the capture, exactly as the CPU suite pins it: its "
-            "transcribed glibc-2.39 logf/expf/powf are bitwise against "
-            "the live-glibc sweeps, and gamma is graded instead against "
-            "a 113-bit oracle because it is a deliberate divergence "
-            "since 2.6.6 -- see the next warning "
-            "(tests/test_gf_deep_cuda.py, "
+            "at gfortran -O0 over two column sets: 18 branch-targeted "
+            "cases x 6 grid spacings x 2 ishallow arms (216 columns), and "
+            "280 realistic regime soundings (tropical, continental severe, "
+            "nocturnal, winter snow, lake effect, arctic, high terrain, "
+            "shallow cumulus, desert; climatological and active states, a "
+            "clos_choice 1..16 sweep and 15 edge cases). The float32 CPU "
+            "authority (woof/verify/gf_driver.py) reproduces GFDRV word "
+            "for word on all 216 columns, and the CUDA translation unit "
+            "(woof/core/kernels/gf.cu) does so on all 216 with the fzu "
+            "normalisation PINNED from the capture and on all 280 with "
+            "nothing pinned, against WRF linked with the correctly rounded "
+            "gamma WOOF ships; strict and default arithmetic both give 0 "
+            "differing words. WOOF's own float32 logf/expf/powf give WRF's "
+            "words throughout, and gamma is graded against a 113-bit "
+            "oracle because it is a deliberate divergence since 2.6.6 -- "
+            "see the next warning (tests/test_gf_deep_cuda.py, "
             "tests/test_gf_shallow_cuda.py, tests/test_gf_gfdrv_cuda.py, "
-            "tests/test_gf_gamma_correctly_rounded.py). "
-            "The 8 remaining columns are the driver's own "
-            "module_gfs_physcons mixed precision, inherited and bounded "
-            "(max 34 ULP, 3.8e-6 relative, no branch flips). That is "
+            "tests/test_gf_regime_column_oracle_gpu.py, "
+            "tests/test_gf_gamma_correctly_rounded.py). That is "
             "conformance evidence, not scientific validation: no "
             "woof/WRF forecast trajectory comparison exists for this "
             "scheme, which is why it is 'implemented-unverified' and not "
@@ -5458,6 +6602,15 @@ def build(registry: dict) -> dict:
             "output words differ at the scheme or driver boundary "
             "(tests/test_gf_shallow_cuda.py, the ledger test).",
             "DELIBERATE DIVERGENCE, WRF is undefined: "
+            "the shallow closure pressure-difference loop is capped at "
+            "min(kpbl,ktf-1) in strict and default arithmetic. WRF's "
+            "kpbl=kte loop reads po_cup(k+1) above the column. The "
+            "corrected WRF referee applies this cap and the MAXLOC "
+            "section offset; every shipped output word is graded, "
+            "including columns whose k22 changes. "
+            "tests/test_gf_defects_gpu.py and "
+            "tests/test_gf_regime_column_oracle_gpu.py own these checks.",
+            "DELIBERATE DIVERGENCE, WRF is undefined: "
             "get_inversion_layers' first-derivative loop reads "
             "t_cup(kend+8) past the array end whenever kend > ktf-8 "
             "(module_cu_gf_deep.F, both live call sites pass "
@@ -5483,8 +6636,10 @@ def build(registry: dict) -> dict:
             "into RTHFTEN for G3/NTiedtke and NOT for GFSCHEME, which "
             "sums the lanes itself; (2) GF's convective momentum "
             "tendencies are computed but not yet coupled (CumulusResult "
-            "carries no momentum slots); (3) mass-level w is the "
-            "KF-precedent average of the staggered field.",
+            "carries no momentum slots); (3) lower-face w is passed in "
+            "strict and default arithmetic, matching GFDRV's physical "
+            "interface. This deliberately changes the former adjacent-face "
+            "average, which changed closure forcing and rain.",
             "MEASURED regime behaviour (2026-08-17, 12 km single-domain "
             "real-case twins on the tree route, 150x120x49, 6 h, KF "
             "control differing only in cu_physics/cudt): under strong "
@@ -5513,6 +6668,65 @@ def build(registry: dict) -> dict:
             "and not re-verified against the current seam.",
         ],
     }
+    # Grell 3D (cu_physics=5), WRF's G3SCHEME.  No PBL requirement: the
+    # deep arm reads no KPBL, and the shallow arm guards every KPBL use
+    # with `kpbl > 5` (module_cu_g3.F:1238-1241), so with the PBL slot off
+    # it takes the moist-static-energy maximum as WRF does.  No template
+    # selects it: a user asks for it explicitly or does not get it.
+    cumulus_options["grell-3d"] = {
+        "asset_requirements": [],
+        "constraints": {
+            "required_settings": {"cudt_minutes": 0.0, "moist": True},
+            "required_settings_reasons": {"moist": _CUMULUS_MOIST_REASON},
+            "requires_components": {},
+        },
+        "extensions": {},
+        "implemented": True,
+        "label": "Grell 3D",
+        "maturity": "implemented-unverified",
+        "parameters": {"cudt_minutes": 0.0, "clos_choice": 0, "ishallow": 0,
+                       "cugd_avedx": 1, "maxiens": 1, "maxens": 3, "maxens2": 3,
+                       "maxens3": 16, "ensdim": 144, "cu_diag": 0,
+                       "convtrans_avglen_m": 30.0},
+        "reachability": {"state": "component-override"},
+        "scientific_evidence": "none",
+        "selectors": {"cu_physics": 5},
+        "warnings": [
+            "The strict GPUWM_WRF_EXACT=1 check requires 0 ULP against public WRF v4.6.1 "
+            "G3DRV and conv_grell_spread3d. The default arm uses the same source and "
+            "operation-order-pinned shared loader; it also requires 0 ULP. "
+            "tests/test_g3_cu5_parity.py covers both shallow arms, spreading, all "
+            "16 closure selectors and nondefault ensemble dimensions. This is "
+            "implementation conformance evidence, not observation-based forecast skill.",
+            "With ishallow=0 WRF leaves three shallow level outputs uninitialized "
+            "(module_cu_g3.F:487-490). The port writes zero; a poisoned oracle build "
+            "isolates this declared divergence. Closure selector 16 keeps WRF's original copy order.",
+            "cu_diag=1 carries WRF convtrans_prep time averages, cloud fraction, "
+            "first-window behavior and fixed/adaptive window boundaries. These arrays "
+            "restart through driver.fields and publish as a history extension of "
+            "WRF's restart-only fields. tests/test_g3_diag.py compares full windows.",
+            "G3 uses a four-point lateral boundary exclusion and reads a 3x3 forcing "
+            "and spreading neighborhood, extended to 5x5 under cugd_avedx>1. It runs "
+            "on the model step with the WRF forcing fold and per-call rain amount.",
+        ],
+    }
+    # Retire the earlier inactive-control guards from seeded registries.
+    # Config validation already refuses nondefault G3 controls without G3;
+    # adding their defaults to other options changes legacy identities.
+    from woof.config import G3_RUN_DEFAULTS
+    for option in cumulus_options.values():
+        if option.get("selectors", {}).get("cu_physics") == 5:
+            continue
+        constraints = option.get("constraints", {})
+        for key in ("required_settings", "required_settings_reasons"):
+            settings = constraints.get(key, {})
+            for name in G3_RUN_DEFAULTS:
+                if name != "cugd_avedx":
+                    settings.pop(name, None)
+            if not settings:
+                constraints.pop(key, None)
+        if not constraints:
+            option.pop("constraints", None)
     surface_options["mynn"]["constraints"]["requires_components"][
         "pbl"
     ] = ["off", "mynn", "sase", "uw"]
@@ -5534,6 +6748,36 @@ def build(registry: dict) -> dict:
             "SASE, the UW PBL or no PBL scheme for this surface layer, all "
             "of which read only fields it publishes"),
     }
+    cumulus_options["tiedtke"] = {
+        "label": "Original cu6 cumulus", "implemented": True,
+        "maturity": "implemented-unverified", "scientific_evidence": "none",
+        "selectors": {"cu_physics": 6}, "parameters": {"cudt_minutes": 0.0},
+        "constraints": {
+            "required_settings": {"moist": True, "cudt_minutes": 0.0},
+            "required_settings_reasons": {
+                "moist": "the original cu6 kernel requires qv, qc and qi column arrays",
+                "cudt_minutes": "per-call precipitation has no NCA hold; holding it would reapply that rain each step"},
+            "requires_components": {}},
+        "asset_requirements": [], "extensions": {},
+        "reachability": {"state": "component-override"},
+        "warnings": [
+            "Original WRF v4.6.1 module_cu_tiedtke.F, the cumulus of WRF's "
+            "CONUS physics suite. Its distance from WRF is MEASURED at the "
+            "driver boundary: tools/tiedtke_wrf461_oracle runs the unmodified "
+            "Fortran (gfortran -O0, glibc 2.43 libm) over 72 synthetic columns "
+            "x 4 vertical grids x 3 configurations, and the GPU kernel matches "
+            "every word of all six tendencies, RAINCV, PRATEC and CU_ACT_FLAG "
+            "under GPUWM_WRF_EXACT=1 and without it, also with many j rows per "
+            "launch. NAMED RESIDUAL: a WRF linked to glibc 2.40 or older has a "
+            "tanf that is not correctly rounded; F:2939's tangent then differs "
+            "by 1 ULP on 1,079,656 of the 1,070,141,404 reachable arguments, "
+            "moving RTHCUTEN by at most 6.6e-7 K/s on the fixture "
+            "(docs/cumulus-cu6.md). That is conformance evidence, not "
+            "scientific validation: no matched woof/WRF forecast trajectory "
+            "grades this scheme, which is why it is 'implemented-unverified'. "
+            "The cu16 ntiedtke_tiedtke_closure option remains an emulation "
+            "and does not select this scheme."]}
+
     # ---- New Tiedtke (cu_physics=16) -------------------------------------
     # THE PBL REQUIREMENT IS RETIRED, and this row is owned here now so
     # the retirement cannot be undone by a carried-through JSON row.  It
@@ -5765,7 +7009,7 @@ def build(registry: dict) -> dict:
         # woof.config.validate_myj_pairing.
         # "uw" is listed so the UW moist-turbulence PBL is selectable per
         # domain here; no template selects it (component-override).
-        "pbl": ["off", "ysu", "mynn", "sase", "shinhong", "myj", "uw"],
+        "pbl": ["off", "ysu", "mynn", "sase", "shinhong", "myj", "uw", "ccpp-tke-edmf"],
         "surface_layer": [
             "revised-mm5", "classic-mm5", "mynn", "eta-similarity"],
         # "wrf-rrtm-dudhia" is WRF's classic 1/1 pair.  No template
@@ -5774,7 +7018,7 @@ def build(registry: dict) -> dict:
         # It is the only registered longwave-on pairing that is not the
         # coupled RRTMG adapter, which is the point of listing it here.
         "radiation": [
-            "off", "dudhia-shortwave", "wrf-rrtm-dudhia", "rte-rrtmgp"],
+            "off", "dudhia-shortwave", "wrf-rrtm-dudhia", "rte-rrtmgp", "new-goddard"],
     }
     # The per-domain override surface names the WHOLE implemented cumulus
     # set, so it is derived from the options rather than typed: a typed
@@ -5860,6 +7104,21 @@ def build(registry: dict) -> dict:
             "column-locally with no vertical redistribution, so the run "
             "would not be the prognostic-TKE closure it names"),
     }
+    # Citation offsets follow the actual retained source declaration. Keep
+    # the claim's text and semantic anchor unchanged across source intake.
+    dycore_lines = (MODEL / "woof/core/dycore.py").read_text(
+        encoding="utf-8").splitlines()
+    for option_id, anchor in {
+            "tke-1.5-order": "WRF v4.6.1 km_opt=2:",
+            "smagorinsky-3d": "WRF v4.6.1 km_opt=3:"}.items():
+        matches = [number for number, line in enumerate(dycore_lines, 1)
+                   if anchor in line]
+        if len(matches) != 1:
+            raise ValueError(f"registry citation needs one {anchor!r} declaration, got {matches}")
+        citation = f"woof/core/dycore.py:{matches[0]}"
+        turbulence_options[option_id]["warnings"] = [
+            re.sub(r"woof/core/dycore\.py:\d+", citation, warning)
+            for warning in turbulence_options[option_id]["warnings"]]
     for option_id, reason in _turbulence_reasons.items():
         constraints = turbulence_options[option_id].setdefault("constraints", {})
         if "pbl" in constraints.get("requires_components", {}):
@@ -5889,9 +7148,11 @@ def build(registry: dict) -> dict:
     # test_authority_agreement.py measured both as "registry says
     # LAUNCHABLE, validate_run_config REFUSES".  Each closure's list is
     # assigned whole, after its own rules, so a rebuild is a fixpoint.
-    non_ysu_pbl = sorted(
+    from woof.config import TOPO_WIND_PBL_SCHEMES
+    non_topo_pbl = sorted(
         option_id for option_id, option in pbl_options.items()
-        if option.get("selectors", {}).get("bl_pbl_physics") != 1)
+        if option.get("selectors", {}).get("bl_pbl_physics")
+        not in TOPO_WIND_PBL_SCHEMES)
     no_pbl = sorted(
         option_id for option_id, option in pbl_options.items()
         if option.get("selectors", {}).get("bl_pbl_physics") == 0)
@@ -5928,12 +7189,13 @@ def build(registry: dict) -> dict:
         # preflight re-checks this configuration-only admission rule.
         rules.append({
             "settings": {"topo_wind": [1, 2]},
-            "components": {"pbl": non_ysu_pbl},
+            "components": {"pbl": non_topo_pbl},
             "reason": (
-                "topo_wind acts only through YSU's surface drag "
-                "(bl_pbl_physics=1); a non-YSU PBL does not consume its "
-                "ctopo coefficients, so the run would name a terrain-wind "
-                "correction without applying one"),
+                "topo_wind acts only through the surface drag of the PBL "
+                "schemes that read CTOPO/CTOPO2, YSU (bl_pbl_physics=1) and "
+                "Shin-Hong (bl_pbl_physics=11); any other PBL does not "
+                "consume the coefficients, so the run would name a "
+                "terrain-wind correction without applying one"),
             "remedy_label": "Set topo_wind=0.",
             "remedy_settings": {"topo_wind": 0},
         })
@@ -5975,24 +7237,11 @@ def build(registry: dict) -> dict:
                 "moist"] = (
                     "a dry state allocates no water vapour or hydrometeor "
                     "fields, so the scheme would have nothing to integrate")
-    # The RRTMG 4/4 options pin icloud=1 and the aggregate selector; the
-    # rows say why in the words of the run door.
-    _icloud_reason = (
-        "clear-sky coupling (icloud=0) is not wired through the RRTMG 4/4 "
-        "engines and no recorded oracle case runs at icloud=0, so the run "
-        "would not be the configuration its receipt names; the 1/1 pair "
-        "(WRF RRTM longwave with Dudhia shortwave) honours icloud=0 end to "
-        "end")
-    for option_id, ra_physics_reason in (
-            ("rte-rrtmgp",
-             "the 4/4 pair is spelled by ra_lw_physics/ra_sw_physics on "
-             "this option and the aggregate ra_physics selector stays 0, so "
-             "the two spellings of one radiation choice cannot disagree"),
-            ):
-        constraints = radiation_options[option_id].setdefault("constraints", {})
-        if constraints.get("required_settings"):
-            constraints["required_settings_reasons"] = {
-                "icloud": _icloud_reason, "ra_physics": ra_physics_reason}
+    # icloud=2 is an admitted metadata value, never a fixed-on parameter.
+    for option in radiation_options.values():
+        constraints = option.get("constraints", {})
+        constraints.get("required_settings", {}).pop("icloud", None)
+        constraints.get("required_settings_reasons", {}).pop("icloud", None)
 
     params = registry["parameters"]
     # Citations are read before the tables overwrite the specs that carry
@@ -6083,6 +7332,31 @@ def build(registry: dict) -> dict:
     # mym_condensation.  Radiation then consumes the previous interval's
     # carried MYNN clouds at module_radiation_driver.F:1403-1429.
     mynn = registry["components"]["pbl"]["options"]["mynn"]
+    # The exact-driver and cycling series replace the older rounded-leaf
+    # warnings. Keep their component evidence and corrected-referee scope
+    # distinct from a matched full WRF forecast.
+    mynn["warnings"] = [
+        "UNVERIFIED against a WRF forecast. MYNN PBL runs through the exact "
+        "production driver, with phim/phih evaluated on the device. Cold-column "
+        "fixtures are bitwise WRF v4.6.1 on every oracle in "
+        "tests/test_mynn_wrf461_exact_gpu.py; the stock and gsd_41 family "
+        "drivers and restart controls are described by the selected MYNN "
+        "review receipts. This is component qualification, not a matched "
+        "full WRF forecast or observation skill.",
+        "Cycled stock MYNN carries QKE, QC_BL and CLDFRA_BL by default. "
+        "Its column comparison uses the three-assignment repaired referee: "
+        "only the upstream assignments that erase these held arrays are "
+        "removed. Cold starts retain their stock behavior. "
+        "tests/test_mynn_wrf461_cycled_carry_gpu.py and "
+        "tests/test_mynn_restart_live_gpu.py retain the raw-word and "
+        "continuation checks; other columns and compiler platforms are "
+        "not qualified by this declaration.",
+        "An admitted option is limited by the actual MYNN configuration "
+        "and consumer tables. Unsupported closure, cloud-PDF and diagnostic "
+        "values still refuse before the driver; cycling and restart are "
+        "not blanket refusals.",
+    ]
+    from woof.microphysics_schemes import NAMED_SCHEMES as _NAMED_MP_SCHEMES
     # ``flag_qs_*_microphysics_selectors`` must partition EVERY implemented
     # microphysics selector -- tests/test_mynn_pbl.py asserts set equality
     # against the registry's own options -- so a new scheme lands here in the
@@ -6090,22 +7364,28 @@ def build(registry: dict) -> dict:
     # carries qs (Registry.EM_COMMON:3036), so F_QS is true for it, and
     # mp_physics=16's wdm6scheme package carries qs at :3031, so F_QS is
     # true for WDM6 too.
+    from woof.microphysics_schemes import PORTED_WRF_SNOW_SELECTORS
+    from woof.core.mynn_pbl_metadata import MYNN_SNOW_MICROPHYSICS
+    _mynn_snow_selectors = set(MYNN_SNOW_MICROPHYSICS)
+    _implemented_microphysics_selectors = {
+        int(row["selectors"]["mp_physics"])
+        for row in registry["components"]["microphysics"]["options"].values()
+        if row.get("implemented") is True and "mp_physics" in row["selectors"]}
     mynn["extensions"]["supplied_moisture_species"] = {
         "supplied": ["qv", "qc", "qi", "qs"],
         "withheld": ["qnc", "qni", "qnwfa", "qnifa", "qnbca", "o3"],
-        "flag_qs_true_microphysics_selectors": [6, 8, 9, 10, 16, 18, 28],
-        # mp_physics=50 (P3 one-category) is FALSE, and for the substantive
-        # reason rather than because it is new: P3 has a single ice category
-        # and its Registry package declares moist:qv,qc,qr,qi with NO qs
-        # (Registry.EM_COMMON:3038), so WRF's own F_QS is false and MYNN
-        # correctly sees sqs = 0.  This is the one case where withholding
-        # snow is not a substitution -- there is no snow field to withhold.
-        "flag_qs_false_microphysics_selectors": [0, 1, 50],
+        # Named schemes (woof/microphysics_schemes.py) join from their own
+        # rows: a scheme whose mass species carry qs is F_QS true.
+        "flag_qs_true_microphysics_selectors": sorted(_mynn_snow_selectors),
+        "flag_qs_false_microphysics_selectors": sorted(
+            _implemented_microphysics_selectors - _mynn_snow_selectors),
         "wrf_flag_source": (
             "phys/module_pbl_driver.F:873-878 derives flag_qs from F_QS; "
             "Registry.EM_COMMON declares qs for mp_physics 6, 8, 9, 10, 16, "
-            "18 and 28, and does NOT declare it for 50 (P3 has one ice "
-            "category, :3038)"),
+            "18 and 28, Registry/registry.sbm:318 declares it for 30, and "
+            "does NOT declare it for 50 (P3 has one ice "
+            "category, :3038); a named scheme (woof/microphysics_schemes.py, "
+            "when enabled) is true when its own mass species carry qs"),
         "gpuwm_runtime_source": (
             "woof/core/mynn_pbl_runtime.py::MYNN_SNOW_MICROPHYSICS is the "
             "shipped set this list is checked against, selector by selector, "
@@ -6139,9 +7419,13 @@ def build(registry: dict) -> dict:
             "MYNN scalar plume transport is selected by bl_mynn_mixscalars=1. "
             "WRF post-PBL local diffusion is selected by scalar_pblmix=1 "
             "(phys/module_pbl_driver.F:2251,2641-2844). Both mix the "
-            "mp_physics=28 nc/ni/nwfa/nifa family, default to 0 and require "
-            "bldt=0. WRF's check_a_mundo disables scalar_pblmix when "
-            "bl_mynn_mixscalars=1, so that joint request is refused."),
+            "mp_physics=28 nc/ni/nwfa/nifa family, default to 0 and, when "
+            "they mix, require bldt=0; bl_mynn_mixscalars=1 is WRF's no-op "
+            "under a microphysics with no number species and is refused by "
+            "name under one WRF mixes only in part "
+            "(config.MYNN_QN_FLAG_SPECIES). WRF's check_a_mundo disables "
+            "scalar_pblmix when bl_mynn_mixscalars=1, so that joint request "
+            "is refused."),
     }
     mynn["extensions"]["radiation_cloud_merge"] = {
         "activation": "bl_pbl_physics=5 and icloud_bl>0",
@@ -6479,6 +7763,7 @@ def build(registry: dict) -> dict:
             "requires_moist_real_initialization"] = True
     mp_options = (
         (1, "kessler-mp1"),
+        (2, "lin-mp2"),
         (6, "wsm6-mp6"),
         (8, "thompson-mp8"),
         (9, MP9_OPTION_ID),
@@ -6490,6 +7775,7 @@ def build(registry: dict) -> dict:
         (50, "p3-mp50"),
         (16, WDM6_OPTION_ID),
         (28, MP28_OPTION_ID),
+        (24, WSM7_OPTION_ID),
     )
     cross_options = []
     for parent_mp, parent_option in mp_options:
@@ -6588,6 +7874,12 @@ def build(registry: dict) -> dict:
     _every_served_source_declares_a_template_list(registry)
     _phase2c_soil_geometry(registry)
     _phase2c_suiteless_templates(registry)
+    # The retired WSM7 suite (see _wsm7_mp24) leaves every route the seeded
+    # registry still declares it on.
+    for route in registry["runner_routes"].values():
+        for ids in (route.get("source_template_ids") or {}).values():
+            while WSM7_RETIRED_TEMPLATE_ID in ids:
+                ids.remove(WSM7_RETIRED_TEMPLATE_ID)
     _no_radiation_name_warnings(registry)
     # After every option that owns an asset is registered.
     _asset_resolution(registry)
@@ -6607,7 +7899,83 @@ def build(registry: dict) -> dict:
     # LAST of all: every template and every route declaration above is
     # final, so the easiest path to each option is the one this computes.
     _phase2c_recompute_reachability(registry)
+    for option_id, old_line, new_line in (("tke-1.5-order", 1424, 1423),
+                                          ("smagorinsky-3d", 1518, 1517)):
+        row = registry["components"]["turbulence"]["options"][option_id]
+        row["warnings"] = [text.replace(f"woof/core/dycore.py:{old_line}",
+                                       f"woof/core/dycore.py:{new_line}")
+                           for text in row.get("warnings", [])]
     registry["template_aliases"] = dict(TEMPLATE_ID_ALIASES)
+    for option in registry["components"]["cumulus"]["options"].values():
+        constraints = option.get("constraints", {})
+        for kind, names in (("admitted_setting_values", ("nsas_dx_factor", "sas_pgcon")),
+                            ("admitted_setting_values_reasons", ("nsas_dx_factor", "sas_pgcon")),
+                            ("forbidden_setting_values", ("bmj_rad_feedback",))):
+            values = constraints.get(kind, {})
+            for name in names:
+                values.pop(name, None)
+            if kind in constraints and not values:
+                constraints.pop(kind)
+        if "constraints" in option and not constraints:
+            option.pop("constraints")
+    # The two New SAS knobs (golden/ports-cu) are rows this pass owns, so a
+    # rebuild from a document that predates them (2.8.9's, which
+    # tests/test_ports_rad_regeneration.py rebuilds) creates them.
+    registry["parameters"].setdefault("nsas_dx_factor", {
+        "consuming_read": "woof/core/column_cumulus.py", "default": 0,
+        "enum": [0, 1], "per_domain": True, "type": "integer"})
+    registry["parameters"].setdefault("sas_pgcon", {
+        "consuming_read": "woof/core/column_cumulus.py", "default": 0.55,
+        "per_domain": True, "type": "number"})
+    registry["parameters"]["nsas_dx_factor"]["component_id"] = "cumulus"
+    registry["parameters"]["nsas_dx_factor"]["nondefault_requires_components"] = {"cumulus": ["new-sas"]}
+    registry["parameters"]["sas_pgcon"]["component_id"] = "cumulus"
+    registry["parameters"]["sas_pgcon"]["nondefault_requires_components"] = {"cumulus": ["new-sas"]}
+    # Bounded evidence carried by verification lanes that updated registry
+    # metadata without changing a knob table. Keep it reproducible too.
+    warning_rows = json.loads((MODEL / "tools/verified_scheme_warning_rows.json")
+                              .read_text(encoding="utf-8"))
+    if isinstance(warning_rows, dict):
+        warning_rows = [warning_rows]
+    for row in warning_rows:
+        registry["components"][row["component"]]["options"][row["option"]][
+            "warnings"] = row["warnings"]
+    # The selected default YSU generation owns the runtime guard. Historical snapshots
+    # carried both its full account and a shorter duplicate citing the
+    # removed strict copy. Keep the complete account once and resolve the
+    # surviving source anchor each time the registry is regenerated.
+    warnings = registry["components"]["pbl"]["options"]["ysu"]["warnings"]
+    guards = [w for w in warnings if "bl_ysu.F90:846" in w]
+    if not guards:
+        raise ValueError("YSU warning snapshot is missing the top-down bounds account")
+    guard = max(guards, key=len)
+    from woof.ysu_generations import YSU_DEFAULT_GENERATION, ysu_kernel_selection
+    ysu_module, _ = ysu_kernel_selection(YSU_DEFAULT_GENERATION)
+    ysu_path = f"kernels/{ysu_module}.cu"
+    lines = (MODEL / "woof/core" / ysu_path).read_text().splitlines()
+    matches = [i for i, line in enumerate(lines, 1)
+               if "if (ysu_topdown_pblmix && kpbl < nz" in line]
+    if len(matches) != 1:
+        raise ValueError(f"YSU top-down guard resolves to {matches}")
+    guard = re.sub(r"kernels/ysu(?:_480|_default)?\.cu:\d+",
+                   f"{ysu_path}:{matches[0]}", guard)
+    guard = guard.replace("kernels/ysu_topo.cuh", "kernels/ysu_topo_default.cuh")
+    warnings[:] = [w for w in warnings if w not in guards] + [guard]
+    # The Shin-Hong snapshot retains its claim; resolve the live guard
+    # rather than publishing its historical source offset. The former YSU
+    # zero-coupling citation has retired with that warning and must not
+    # rewrite the bounds guard's independent source location.
+    for option_id, filename, anchor in (
+            ("shinhong", "shinhong.cu", "if (pblflg && kpbl < kte)"),):
+        lines = (MODEL / "woof/core/kernels" / filename).read_text().splitlines()
+        matches = [i for i, line in enumerate(lines, 1) if anchor in line]
+        if len(matches) != 1:
+            raise ValueError(f"warning anchor {anchor!r} resolves to {matches}")
+        option = registry["components"]["pbl"]["options"][option_id]
+        option["warnings"] = [re.sub(
+            r"kernels/" + re.escape(filename) + r":\d+",
+            f"kernels/{filename}:{matches[0]}", warning)
+            for warning in option["warnings"]]
     return registry
 
 
@@ -6828,14 +8196,19 @@ _COUPLINGS_NOT_YET_REGISTRY_ROWS = {
         "where validate_run_config checks the pair."),
     "clos_choice": (
         "clos_choice and ishallow are Grell-family keys, read only where "
-        "cu_physics=3; woof.config refuses a nonzero value beside any "
-        "other cumulus scheme. Select Grell-Freitas and set them in the "
-        "experiment config."),
+        "cu_physics is 3 or 5; woof.config refuses a nonzero value beside "
+        "any other cumulus scheme. Select Grell-Freitas or Grell 3D and "
+        "set them in the experiment config."),
     "ishallow": (
         "clos_choice and ishallow are Grell-family keys, read only where "
-        "cu_physics=3; woof.config refuses a nonzero value beside any "
-        "other cumulus scheme. Select Grell-Freitas and set them in the "
-        "experiment config."),
+        "cu_physics is 3 or 5; woof.config refuses a nonzero value beside "
+        "any other cumulus scheme. Select Grell-Freitas or Grell 3D and "
+        "set them in the experiment config."),
+    "cugd_avedx": (
+        "cugd_avedx is Grell 3D's subsidence-spreading width, read only "
+        "where cu_physics=5; woof.config refuses a value other than 1 "
+        "beside any other cumulus scheme. Select Grell 3D and set it in "
+        "the experiment config."),
     "o3input": (
         "o3input and use_mp_re are honoured only by the legacy RRTMG "
         "engine; the modern spectrum does not implement the nondefault "
@@ -6929,7 +8302,7 @@ def _phase2c_route_declarations(registry: dict) -> None:
     # PINS cudt_minutes=0 in its own parameter block, which a per-domain
     # override could silently move.  Stating it as a required setting is
     # what makes plan review refuse the override the loader refuses.
-    for option_id in ("grell-freitas", "new-tiedtke"):
+    for option_id in ("grell-freitas", "grell-3d", "new-tiedtke"):
         _constraints(components["cumulus"]["options"][option_id]).setdefault(
             "required_settings", {})["cudt_minutes"] = 0.0
     # Every radiation option resolves its spectra through the split
@@ -7505,6 +8878,12 @@ def _radiation_arm_siblings(registry: dict) -> None:
 #: it from the option rows the composition selects, and the build refuses
 #: a row whose id names a maturity the derivation does not reach.
 _MICROPHYSICS_ARM_SIBLINGS = (
+    ("lin-mp2-ysu-mm5-noah-rrtmg-legacy-implemented-unverified-v1",
+     "thompson-mp8-ysu-mm5-noah-rrtmg-legacy-v1", "lin-mp2",
+     "implemented-unverified", "Purdue Lin + YSU + MM5 + Noah + legacy RRTMG",
+     ("Lin has strict 72-column oracle evidence; the coupled suite has no observation qualification.",),
+     ("tools.hrrr_single_domain_benchmark",),
+     ("tools.prepared_single_domain_forecast",)),
     # (new id, base id, microphysics option, maturity the id names,
     #  label, lead warnings)
     (
@@ -7610,7 +8989,11 @@ def _mynn_source_version_templates(registry: dict) -> None:
         "wrf_rrtmg_compatibility": "wrf-rrtmg-4-4-legacy-v1",
         "radt": 15.0,
     })
-    template["label"] = "Aerosol Thompson + GSD v4.1 MYNN + MYNN surface + RUC + legacy RRTMG"
+    # The suite runs HRRR's NOAA WRFV3.9 fork Thompson (thompson_version =
+    # "wrf_39_noaa"), not WRF 4.6.1's; its label says so (a user who swapped
+    # in YSU, Noah and KF read it as WRF's mp28).
+    template["label"] = ("HRRR WRFV3.9 aerosol Thompson + GSD v4.1 MYNN + MYNN surface + RUC + "
+                         "legacy RRTMG")
     template["maturity"] = _composition_ceiling(registry, template["components"])
     template["warnings"] = [
         "The GSD v4.1 MYNN source version is selected explicitly. Remaining fork differences are listed in docs/dev/mynn-gsd41.md.",
@@ -7705,8 +9088,10 @@ def _microphysics_arm_siblings(registry: dict) -> None:
 
     templates = registry["templates"]
     routes = registry["runner_routes"]
-    for (template_id, base_id, microphysics, named_maturity, label,
-         warnings) in _MICROPHYSICS_ARM_SIBLINGS:
+    for row in _MICROPHYSICS_ARM_SIBLINGS:
+        template_id, base_id, microphysics, named_maturity, label, warnings = row[:6]
+        excluded_routes = set(row[6] if len(row) > 6 else ())
+        offered_routes = tuple(row[7] if len(row) > 7 else ())
         base = templates[base_id]
         template = copy.deepcopy(base)
         template["components"]["microphysics"] = microphysics
@@ -7730,11 +9115,21 @@ def _microphysics_arm_siblings(registry: dict) -> None:
             for declared in route.get("source_template_ids", {}).values():
                 if template_id in declared:
                     declared.remove(template_id)
-        for route in routes.values():
+        for route_id, route in routes.items():
+            if route_id in excluded_routes:
+                continue
             for declared in route.get("source_template_ids", {}).values():
                 if base_id in declared:
                     declared.insert(
                         declared.index(base_id) + 1, template_id)
+
+        for route_id in offered_routes:
+            route = routes[route_id]
+            for declared in route.get("source_template_ids", {}).values():
+                # Existing source declarations establish the generic basis.
+                # An empty list denotes a caller-supplied composition.
+                if declared and template_id not in declared:
+                    declared.append(template_id)
 
 
 #: Audit R-067.  Eleven implemented options had no shipped template at all,
@@ -7746,6 +9141,27 @@ def _microphysics_arm_siblings(registry: dict) -> None:
 #:
 #: The ids carry no case, site or source token: they name the composition.
 _SUITELESS_TEMPLATES = (
+    (
+        "wsm6-ysu-mm5-noah-nsas-rrtmg-legacy-v1",
+        "thompson-mp8-ysu-mm5-noah-rrtmg-legacy-v1",
+        {"microphysics": "wsm6-mp6", "cumulus": "new-sas"},
+        {"cudt_minutes": 0.0, "nsas_dx_factor": 0, "sas_pgcon": 0.55},
+        "WSM6 + YSU + classic MM5 + Noah + New SAS + legacy RRTMG",
+        (
+            "Composition candidate: NSAS deep, shallow and driver calls have WRF column conformance. This suite has no observation-based forecast score.",
+        ),
+    ),
+    (
+        "ccpp-tke-edmf-thompson-mm5-noah-gf-rte-v1",
+        "thompson-mp8-ysu-mm5-noah-kf-rte-rrtmgp-v1",
+        {"pbl": "ccpp-tke-edmf", "cumulus": "grell-freitas"},
+        {"moist": True},
+        "CCPP TKE-EDMF + Thompson + classic MM5 + Noah + Grell-Freitas + RTE+RRTMGP",
+        (
+            "Composition candidate. CCPP column parity is measured against its pinned upstream oracle; this is not a WRF PBL counterpart.",
+            "No long integration or observation-based skill receipt covers this composed suite. Positive PBL cadence is refused because extra-scalar tendencies are not serialized.",
+        ),
+    ),
     # (new id, base id, component moves, extra parameters, label, warnings)
     (
         "milbrandt2mom-mp9-ysu-mm5-noah-ntiedtke-rrtmg-legacy-v1",
@@ -7938,6 +9354,14 @@ _TEMPLATE_ROUTES_REFUSED: dict[str, dict[str, str]] = {}
 #: replayed against, so declaring it there offered a suite the runner
 #: refused with `unsupported native HRRR physics profile`.
 for _composition_suite_id, _off_the_benchmark_because in (
+        ("wsm6-ysu-mm5-noah-nsas-rrtmg-legacy-v1",
+         "no matched native WRF forecast of this composition exists, so "
+         "there is no namelist contract to gate its replay against"),
+        ("lin-mp2-ysu-mm5-noah-rrtmg-legacy-implemented-unverified-v1",
+         "no native run of this composition exists, so there is no "
+         "namelist contract to gate its replay against"),
+        ("ccpp-tke-edmf-thompson-mm5-noah-gf-rte-v1",
+         "CCPP is a non-WRF closure, so no native WRF namelist contract can replay this composition"),
         ("milbrandt2mom-mp9-ysu-mm5-noah-ntiedtke-rrtmg-legacy-v1",
          "no native run of this composition exists, so there is no "
          "namelist contract to gate its replay against"),
@@ -8374,16 +9798,36 @@ def main(argv: list[str] | None = None) -> int:
              "defaults to woof/physics_consumer_export_v1.json beside the "
              "tracked registry, or beside --out when that names another "
              "directory")
+    parser.add_argument("--check", action="store_true",
+                        help="compare both generated documents without writing them")
+    parser.add_argument("--jobs", type=int,
+                        default=getattr(os, "process_cpu_count", os.cpu_count)() or 1,
+                        help="citation parsing workers; defaults to all available CPUs")
     args = parser.parse_args(argv)
+    if args.jobs < 1:
+        parser.error("--jobs must be positive")
 
-    import os
     from woof.physics_registry import REGISTRY_REBUILD_ENV
     # The consumer modules this build pulls facts from assert agreement
     # with the registry ON DISK at import, and the disk copy is the one
     # being replaced; the flag tells them so for this process only.
     os.environ[REGISTRY_REBUILD_ENV] = "1"
 
+    preload_sources(args.jobs)
     registry = build(json.loads(args.registry.read_text(encoding="utf-8")))
+    if args.check:
+        export_path = args.export_out or (
+            CONSUMER_EXPORT_PATH if args.out == REGISTRY_PATH
+            else args.out.parent / CONSUMER_EXPORT_PATH.name)
+        documents = ((args.out, render(registry)),
+                     (export_path, render_consumer_export(registry)))
+        stale = [str(path) for path, expected in documents
+                 if not path.is_file() or path.read_bytes() != expected]
+        for path in stale:
+            print(f"DRIFT: {path}; regenerate with tools/build_registry.py")
+        if not stale:
+            print("registry and consumer export reproduce")
+        return 1 if stale else 0
     params = registry["parameters"]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(render(registry))

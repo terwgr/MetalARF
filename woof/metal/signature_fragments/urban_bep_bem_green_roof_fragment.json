@@ -738,24 +738,9 @@
           "read"
         ],
         [
-          "class_float",
-          "float",
-          "read"
-        ],
-        [
-          "interp",
-          "float",
-          "read"
-        ],
-        [
           "pv_hspv",
           "float",
           "read"
-        ],
-        [
-          "flat_thb",
-          "float",
-          "read_write"
         ],
         [
           "sfrpv",
@@ -780,29 +765,10 @@
             15
           ]
         ],
-        "class_float": [
-          [
-            "any_1d"
-          ]
-        ],
-        "interp": [
-          [
-            "ncol",
-            7,
-            18
-          ]
-        ],
         "pv_hspv": [
           [
             "ncol",
             15
-          ]
-        ],
-        "flat_thb": [
-          [
-            "ncol",
-            2,
-            18
           ]
         ],
         "sfrpv": [
@@ -817,10 +783,6 @@
         [
           "ncol",
           "int32"
-        ],
-        [
-          "cp_u",
-          "float32"
         ]
       ],
       "threads_per_group": 64,
@@ -883,6 +845,16 @@
         ],
         [
           "flat_vhb",
+          "float",
+          "read"
+        ],
+        [
+          "sfr",
+          "float",
+          "read_write"
+        ],
+        [
+          "flat_lf",
           "float",
           "read"
         ],
@@ -1075,6 +1047,20 @@
             "ncol",
             2,
             18
+          ]
+        ],
+        "flat_lf": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "sfr": [
+          [
+            "ncol",
+            18,
+            2
           ]
         ]
       },

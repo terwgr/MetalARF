@@ -2,13 +2,14 @@
 #include "urban_bep_bem_albedo_fragment_bindings.metalh"
 #include "soft_binary32.metalh"
 #include "soft_gfk_pow.metalh"
+#include "soft_glibc_solar_trig.metalh"
 using namespace metal;
 
 // module_sf_bep_bem.F bb_albwindow (:5397-5436), using the BEM-specific
 // integrand bb_foncs (:5441-5453).
 #pragma clang fp contract(off)
 static inline uint soft_urban_bem_sinf(uint xbits) {
-    return as_type<uint>(precise::sin(as_type<float>(xbits)));
+    return soft_glibc_solar_sinf(xbits);
 }
 static inline float ba_add(float a,float b) { return as_type<float>(soft32_add(as_type<uint>(a),as_type<uint>(b))); }
 static inline float ba_sub(float a,float b) { return as_type<float>(soft32_sub(as_type<uint>(a),as_type<uint>(b))); }
@@ -77,7 +78,7 @@ kernel void urban_bep_bem_albedo_fragment(
         if(lane==0u) {
             done=0;
             if(n>1&&ba_abs(ba_sub(previous,current))<epsilon) {
-                r.albwin[tid]=ba_add(ba_sub(1.0f,g0),ba_mul(ba_div(g0,2.0f),current));
+                r.albwin[tid]=ba_add(ba_sub(1.0f,g0),ba_mul(ba_div(g0,2.0f),previous));
                 r.error[tid]=0;
                 done=1;
             }

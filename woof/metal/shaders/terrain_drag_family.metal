@@ -3,14 +3,16 @@
 #include "terrain_pbl_top_bindings.metalh"
 #include "gwdo_column_bindings.metalh"
 #include "gwdo_gsl_column_bindings.metalh"
+#include "soft_binary32.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_pow.metalh"
+#include "soft_glibc_solar_trig.metalh"
 
 using namespace metal;
 
-// Transcribed from woof/core/kernels/terrain_drag.cu, statement for
-// statement, one column per thread.  Metal has no binary64 and no glibc:
-// the pinned glibc powf/expf/logf/sinf become precise:: and the
-// correctly rounded atan2f becomes precise::atan2, so the port is held to
-// the CUDA source's arithmetic, not to its last bit.  The optional
+// Transcribed from woof/core/kernels/terrain_drag.cu, one column per
+// thread. GSL uses the source's pinned scalar math and retains gradual
+// underflow through form drag and tendency accumulation. The optional
 // diagnostic outputs (DTAUX3D, DUSFCG, ...) are not carried.
 #pragma clang fp contract(off)
 
@@ -18,6 +20,129 @@ using namespace metal;
 static inline float td_max(float a, float b) { return fmax(a, b); }
 static inline float td_min(float a, float b) { return fmin(a, b); }
 static inline int td_nint(float x) { return int(round(x)); }
+
+// The CUDA source's arithmetic: IEEE division and square root, glibc powf,
+// expf and sinf, and its own float32 atan2f. The soft32 products and
+// sums retain the source rounding graph when form drag underflows.
+static inline float td_add(float a, float b) { return as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))); }
+static inline float td_sub(float a, float b) { return as_type<float>(soft32_sub(as_type<uint>(a), as_type<uint>(b))); }
+static inline float td_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
+static inline float td_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
+static inline float td_sqrt(float a) { return as_type<float>(soft32_sqrt(as_type<uint>(a))); }
+static inline float gfk_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
+static inline float gfk_exp(float x) { return as_type<float>(soft_gfk_exp(as_type<uint>(x))); }
+static inline float glibc_sinf(float x) { return as_type<float>(soft_glibc_solar_sinf(as_type<uint>(x))); }
+
+constant uint TD_ATANF_TAB[19] = {
+    0x3EED6338u, 0x3F490FDAu, 0x3F7B985Eu, 0x3FC90FDAu,
+    0x31AC3769u, 0x33222168u, 0x33140FB4u, 0x33A22168u,
+    0x3EAAAAABu, 0xBE4CCCCDu, 0x3E124925u, 0xBDE38E38u,
+    0x3DBA2E6Eu, 0xBD9D8795u, 0x3D886B35u, 0xBD6EF16Bu,
+    0x3D4BDA59u, 0xBD15A221u, 0x3C8569D7u,
+};
+#define TD_ATAN_HI(i) as_type<float>(TD_ATANF_TAB[(i)])
+#define TD_ATAN_LO(i) as_type<float>(TD_ATANF_TAB[4 + (i)])
+#define TD_ATAN_T(i)  as_type<float>(TD_ATANF_TAB[8 + (i)])
+
+static inline float td_atanf(float x) {
+    uint hx = as_type<uint>(x);
+    uint ix = hx & 0x7FFFFFFFu;
+    int signed_hx = int(hx);
+    int id;
+    if (ix >= 0x4C000000u) {
+        if (ix > 0x7F800000u) return x + x;
+        if (signed_hx > 0) return TD_ATAN_HI(3) + TD_ATAN_LO(3);
+        return -TD_ATAN_HI(3) - TD_ATAN_LO(3);
+    }
+    if (ix < 0x3EE00000u) {
+        if (ix < 0x31000000u) return x;
+        id = -1;
+    } else {
+        x = as_type<float>(ix);
+        if (ix < 0x3F980000u) {
+            if (ix < 0x3F300000u) {
+                id = 0;
+                x = td_div(2.0f * x - 1.0f, 2.0f + x);
+            } else {
+                id = 1;
+                x = td_div(x - 1.0f, x + 1.0f);
+            }
+        } else if (ix < 0x401C0000u) {
+            id = 2;
+            x = td_div(x - 1.5f, 1.0f + 1.5f * x);
+        } else {
+            id = 3;
+            x = td_div(-1.0f, x);
+        }
+    }
+    float z = x * x;
+    float w = z * z;
+    float s1 = w * TD_ATAN_T(10);
+    s1 = w * (TD_ATAN_T(8) + s1);
+    s1 = w * (TD_ATAN_T(6) + s1);
+    s1 = w * (TD_ATAN_T(4) + s1);
+    s1 = w * (TD_ATAN_T(2) + s1);
+    s1 = z * (TD_ATAN_T(0) + s1);
+    float s2 = w * TD_ATAN_T(9);
+    s2 = w * (TD_ATAN_T(7) + s2);
+    s2 = w * (TD_ATAN_T(5) + s2);
+    s2 = w * (TD_ATAN_T(3) + s2);
+    s2 = w * (TD_ATAN_T(1) + s2);
+    float s = s1 + s2;
+    if (id < 0) return x - x * s;
+    float r = TD_ATAN_HI(id) - ((x * s - TD_ATAN_LO(id)) - x);
+    return (signed_hx < 0) ? -r : r;
+}
+
+#undef TD_ATAN_HI
+#undef TD_ATAN_LO
+#undef TD_ATAN_T
+
+static inline float td_atan2f(float y, float x) {
+    const float tiny = 1.0e-30f;
+    const float pi_o_4 = as_type<float>(0x3F490FDBu);
+    const float pi_o_2 = as_type<float>(0x3FC90FDBu);
+    const float pi = as_type<float>(0x40490FDBu);
+    const float pi_lo = as_type<float>(0xB3BBBD2Eu);
+    int hx = as_type<int>(x), hy = as_type<int>(y);
+    int ix = hx & 0x7FFFFFFF, iy = hy & 0x7FFFFFFF;
+    if (ix > 0x7F800000 || iy > 0x7F800000) return x + y;
+    if (hx == 0x3F800000) return td_atanf(y);
+    int m = ((hy >> 31) & 1) | ((hx >> 30) & 2);
+    if (iy == 0) {
+        if (m <= 1) return y;
+        return (m == 2) ? pi + tiny : -pi - tiny;
+    }
+    if (ix == 0) return (hy < 0) ? -pi_o_2 - tiny : pi_o_2 + tiny;
+    if (ix == 0x7F800000) {
+        if (iy == 0x7F800000) {
+            switch (m) {
+            case 0: return pi_o_4 + tiny;
+            case 1: return -pi_o_4 - tiny;
+            case 2: return 3.0f * pi_o_4 + tiny;
+            default: return -3.0f * pi_o_4 - tiny;
+            }
+        }
+        switch (m) {
+        case 0: return 0.0f;
+        case 1: return -0.0f;
+        case 2: return pi + tiny;
+        default: return -pi - tiny;
+        }
+    }
+    if (iy == 0x7F800000) return (hy < 0) ? -pi_o_2 - tiny : pi_o_2 + tiny;
+    int k = (iy - ix) >> 23;
+    float z;
+    if (k > 60) z = pi_o_2 + 0.5f * pi_lo;
+    else if (hx < 0 && k < -60) z = 0.0f;
+    else z = td_atanf(as_type<float>(as_type<uint>(td_div(y, x)) & 0x7FFFFFFFu));
+    switch (m) {
+    case 0: return z;
+    case 1: return -z;
+    case 2: return pi - (z - pi_lo);
+    default: return (z - pi_lo) - pi;
+    }
+}
 kernel void topo_wind_static(
     constant TopoWindStaticResources &r [[buffer(0)]],
     constant TopoWindStaticParams &prm [[buffer(1)]],
@@ -485,8 +610,8 @@ kernel void gwdo_gsl_column(
     const int mdir = 8;
     const int nwdir[8] = {6, 7, 5, 8, 2, 3, 1, 4};
     const float rcl = 1.0f;
-    const float rcs = sqrt(rcl);
-    const float cs = 1.0f / sqrt(rcl);
+    const float rcs = td_sqrt(rcl);
+    const float cs = 1.0f / td_sqrt(rcl);
     const float csg = cs * g;
     const int lcap = kte;
     const float fdir = (float)mdir / (2.0f * pi_c);
@@ -511,7 +636,7 @@ kernel void gwdo_gsl_column(
     } else if (dxmeter <= dxmin_ls) {
         ls_taper = 0.0f;
     } else {
-        ls_taper = 0.5f * (precise::sin(pi_c * (dxmeter - 0.5f
+        ls_taper = 0.5f * (glibc_sinf(pi_c * (dxmeter - 0.5f
                                                * (dxmax_ls + dxmin_ls))
                                       / (dxmax_ls - dxmin_ls)) + 1.0f);
     }
@@ -527,14 +652,14 @@ kernel void gwdo_gsl_column(
     float dxy4[4], dxy4p[4];
     dxy4[0] = delx;
     dxy4[1] = dely;
-    dxy4[2] = sqrt(delx * delx + dely * dely);
+    dxy4[2] = td_sqrt(delx * delx + dely * dely);
     dxy4[3] = dxy4[2];
     dxy4p[0] = dxy4[1];
     dxy4p[1] = dxy4[0];
     dxy4p[2] = dxy4[3];
     dxy4p[3] = dxy4[2];
 
-    const float rstoch = 0.0f;
+    const float rstoch = prm.has_rstoch != 0 ? r.rstoch[col] : 0.0f;
     float varc = var[col], varssc = varss[col];
     float var_stoch = varc + varc * 0.666f * rstoch;
     float varss_stoch = varssc + varssc * 0.666f * rstoch;
@@ -572,7 +697,7 @@ kernel void gwdo_gsl_column(
             oa4ssc[m] = oa4ss[(ulong)m * st + col];
             ol4ssc[m] = ol4ss[(ulong)m * st + col];
         }
-        float wdir = precise::atan2(ubar, vbar) + pi_c;
+        float wdir = td_atan2f(ubar, vbar) + pi_c;
         int idir = td_nint(fdir * wdir) % mdir + 1;
         int nwd = nwdir[idir - 1];
         int m = (nwd - 1) % 4;
@@ -621,7 +746,7 @@ kernel void gwdo_gsl_column(
         { td_r = (vc); break; } \
 } while (0); td_r; })
     if (ls_on) {
-        ulow = td_max(sqrt(ubar * ubar + vbar * vbar), 1.0f);
+        ulow = td_max(td_sqrt(ubar * ubar + vbar * vbar), 1.0f);
         rulow = 1.0f / ulow;
         ldrag = velco_at(1) <= 0.0f;
         for (int k = kpblmin; k <= kpblmax; ++k)
@@ -640,17 +765,17 @@ kernel void gwdo_gsl_column(
         ldrag = ldrag || ulow == 1.0f;
         ldrag = ldrag || var_stoch <= 0.0f;
         if (!ldrag) {
-            bnv = sqrt(bnv2_1);
+            bnv = td_sqrt(bnv2_1);
             fr = bnv * rulow * 2.0f * var_stoch * od;
             fr = td_min(fr, frmax);
             xn = ubar * rulow;
             yn = vbar * rulow;
         }
         if (!ldrag) {
-            float efact = precise::pow(oa + 2.0f, ce * fr / frc);
+            float efact = gfk_pow(oa + 2.0f, ce * fr / frc);
             efact = td_min(td_max(efact, efmin), efmax);
-            float cleff = clf_coeff / sqrt(dxmeter);
-            coefm = precise::pow(1.0f + ol, oa + 1.0f);
+            float cleff = clf_coeff / td_sqrt(dxmeter);
+            coefm = gfk_pow(1.0f + ol, oa + 1.0f);
             float xlinv = coefm / cleff;
             float tem = fr * fr * oc1[col];
             float gfobnv = gmax * tem / ((tem + cg) * bnv);
@@ -695,12 +820,12 @@ kernel void gwdo_gsl_column(
             float thv1 = t[Q(1)] / pi[Q(1)] * (1.0f + fv * qv[Q(1)]);
             float thvk = t[Q(kpbl2)] / pi[Q(kpbl2)] * (1.0f + fv * qv[Q(kpbl2)]);
             if (br[col] > 0.0f && thvk - thv1 > 0.0f) {
-                float cleff_ss = sqrt(dxy * dxy + dxyp * dxyp);
+                float cleff_ss = td_sqrt(dxy * dxy + dxyp * dxyp);
                 cleff_ss = clf_coeff_ss * td_max(dxmax_ss, cleff_ss);
-                float coefm_ss = precise::pow(1.0f + olss, oass + 1.0f);
+                float coefm_ss = gfk_pow(1.0f + olss, oass + 1.0f);
                 float xlinv = coefm_ss / cleff_ss;
                 float govrth = g / (0.5f * (thvk + thv1));
-                float xnbv = sqrt(govrth * (thvk - thv1) / hpbl2);
+                float xnbv = td_sqrt(govrth * (thvk - thv1) / hpbl2);
                 float var_temp = td_min(varss_stoch, varmax_ss_stoch)
                     + td_max(0.0f, beta_ss * (varss_stoch - varmax_ss_stoch));
                 float tv2 = 2.0f * var_temp;
@@ -747,7 +872,7 @@ kernel void gwdo_gsl_column(
             if (k >= kbl) {
                 icrilv = icrilv || (usqj_at(k) < ric) || (velco_at(k) <= 0.0f);
                 brvf = td_max(bnv2_at(k), bnv2min);
-                brvf = sqrt(brvf);
+                brvf = td_sqrt(brvf);
             }
             if (k >= kbl && !ldrag) {
                 if (!icrilv && taup[k - 1] > 0.0f) {
@@ -756,15 +881,15 @@ kernel void gwdo_gsl_column(
                     float temv = 1.0f / velco;
                     float tem1 = coefm / dxy * (RO(kp1) + RO(k)) * brvf * velco
                                 * 0.5f;
-                    float hd = sqrt(taup[k - 1] / tem1);
+                    float hd = td_sqrt(taup[k - 1] / tem1);
                     float fro = brvf * hd * temv;
-                    float tem2 = sqrt(usqj);
+                    float tem2 = td_sqrt(usqj);
                     float tem = 1.0f + tem2 * fro;
                     float rim = usqj * (1.0f - fro) / (tem * tem);
                     if (rim <= ric) {
                         if ((oa <= 0.0f) || (kp1 >= kpblmin)) {
                             float temc = 2.0f + 1.0f / tem2;
-                            hd = velco * (2.0f * sqrt(temc) - temc) / brvf;
+                            hd = velco * (2.0f * td_sqrt(temc) - temc) / brvf;
                             taup[kp1 - 1] = tem1 * hd * hd;
                         }
                     } else {
@@ -781,8 +906,8 @@ kernel void gwdo_gsl_column(
                 if (kblk == 0 && k <= komax) {
                     pe = pe + bnv2_at(k) * (ZL(komax) - ZL(k)) * DEL(k) / g
                          / RO(k);
-                    float ke = 0.5f * (precise::pow(rcs * U1(k), 2.0f)
-                                      + precise::pow(rcs * V1(k), 2.0f));
+                    float ke = 0.5f * (gfk_pow(rcs * U1(k), 2.0f)
+                                      + gfk_pow(rcs * V1(k), 2.0f));
                     if (pe >= ke) {
                         kblk = k;
                         kblk = min(kblk, kbl);
@@ -850,14 +975,16 @@ kernel void gwdo_gsl_column(
             dvs[2] = dvs[2] + vt_ss * del;
             if (form) {
                 float u1 = U1(k), v1 = V1(k);
-                float wsp = sqrt(u1 * u1 + v1 * v1);
-                float ef = precise::exp(-precise::pow(za / H_efold, 1.5f));
-                float zp = precise::pow(za, -1.2f);
-                ut_fd = -(TOFD_coeff * wsp * u1 * ef * a2 * zp * ss_taper);
-                vt_fd = -(TOFD_coeff * wsp * v1 * ef * a2 * zp * ss_taper);
+                float wsp = td_sqrt(u1 * u1 + v1 * v1);
+                float ef = gfk_exp(-gfk_pow(za / H_efold, 1.5f));
+                float zp = gfk_pow(za, -1.2f);
+                ut_fd = -td_mul(td_mul(td_mul(td_mul(td_mul(td_mul(
+                    TOFD_coeff, wsp), u1), ef), a2), zp), ss_taper);
+                vt_fd = -td_mul(td_mul(td_mul(td_mul(td_mul(td_mul(
+                    TOFD_coeff, wsp), v1), ef), a2), zp), ss_taper);
             }
-            dudt = dudt + ut_fd;
-            dvdt = dvdt + vt_fd;
+            dudt = td_add(dudt, ut_fd);
+            dvdt = td_add(dvdt, vt_fd);
             dus[3] = dus[3] + ut_fd * del;
             dvs[3] = dvs[3] + vt_fd * del;
         }
@@ -868,15 +995,15 @@ kernel void gwdo_gsl_column(
             vt_ls = tls * yn;
             ut_bl = tbl * xn;
             vt_bl = tbl * yn;
-            dudt = ut_ls + ut_bl + dudt;
-            dvdt = vt_ls + vt_bl + dvdt;
+            dudt = td_add(td_add(ut_ls, ut_bl), dudt);
+            dvdt = td_add(td_add(vt_ls, vt_bl), dvdt);
             dus[0] = dus[0] + ut_ls * del;
             dvs[0] = dvs[0] + vt_ls * del;
             dus[1] = dus[1] + ut_bl * del;
             dvs[1] = dvs[1] + vt_bl * del;
         }
-        du[q] = du[q] + dudt * ca + dvdt * sa;
-        dv[q] = dv[q] - dudt * sa + dvdt * ca;
+        du[q] = td_add(td_add(du[q], td_mul(dudt, ca)), td_mul(dvdt, sa));
+        dv[q] = td_add(td_sub(dv[q], td_mul(dudt, sa)), td_mul(dvdt, ca));
         if (false) {
             ulong n3 = (ulong)nz * st;
             float cx[4] = {ut_ls, ut_bl, ut_ss, ut_fd};

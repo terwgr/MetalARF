@@ -3,6 +3,198 @@
     {
       "name": "thompson_aa_saturation_adjust",
       "cuda_symbol": "thompson_aa_saturation_adjust",
+      "nullable_resources": [
+        "reference_density",
+        "reference_temperature",
+        "condensation_rate",
+        "cloud_presence",
+        "qcten",
+        "qvten",
+        "tten",
+        "theta",
+        "exner",
+        "heat_ocp"
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "size"
+          ]
+        ],
+        "pressure": [
+          [
+            "size"
+          ]
+        ],
+        "qv": [
+          [
+            "size"
+          ]
+        ],
+        "qc": [
+          [
+            "size"
+          ]
+        ],
+        "nc_entry": [
+          [
+            "size"
+          ]
+        ],
+        "ncten": [
+          [
+            "size"
+          ]
+        ],
+        "nwfaten": [
+          [
+            "size"
+          ]
+        ],
+        "nwfa_work_m3": [
+          [
+            "size"
+          ]
+        ],
+        "w": [
+          [
+            "size"
+          ]
+        ],
+        "tnccn_act": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnc_wev": [
+          [
+            "any_1d"
+          ]
+        ],
+        "reference_density": [
+          [
+            "size"
+          ]
+        ],
+        "reference_temperature": [
+          [
+            "size"
+          ]
+        ],
+        "condensation_rate": [
+          [
+            "size"
+          ]
+        ],
+        "cloud_presence": [
+          [
+            "size"
+          ]
+        ],
+        "qcten": [
+          [
+            "size"
+          ]
+        ],
+        "qvten": [
+          [
+            "size"
+          ]
+        ],
+        "tten": [
+          [
+            "size"
+          ]
+        ],
+        "theta": [
+          [
+            "size"
+          ]
+        ],
+        "exner": [
+          [
+            "size"
+          ]
+        ],
+        "heat_ocp": [
+          [
+            "size"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "size",
+          "int32"
+        ],
+        [
+          "has_reference_density",
+          "int32"
+        ],
+        [
+          "has_reference_temperature",
+          "int32"
+        ],
+        [
+          "has_condensation_rate",
+          "int32"
+        ],
+        [
+          "has_cloud_presence",
+          "int32"
+        ],
+        [
+          "has_qcten",
+          "int32"
+        ],
+        [
+          "has_qvten",
+          "int32"
+        ],
+        [
+          "has_tten",
+          "int32"
+        ],
+        [
+          "has_theta",
+          "int32"
+        ],
+        [
+          "has_exner",
+          "int32"
+        ],
+        [
+          "has_heat_ocp",
+          "int32"
+        ]
+      ],
+      "module": "thompson_aerosol_sat_family",
+      "source": "woof/metal/shaders/thompson_aerosol_sat_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sat.cu",
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "optional_flag_parameters": [
+        "has_reference_density",
+        "has_reference_temperature",
+        "has_condensation_rate",
+        "has_cloud_presence",
+        "has_qcten",
+        "has_qvten",
+        "has_tten",
+        "has_theta",
+        "has_exner",
+        "has_heat_ocp"
+      ],
+      "nullable_binding_policy": "Bind a harmless same-context dummy resource for each absent optional buffer and set its int32 presence flag to zero.",
       "resources": [
         [
           "temperature",
@@ -50,13 +242,13 @@
           "read"
         ],
         [
-          "tnccn_act_bits",
-          "uint64",
+          "tnccn_act",
+          "float64_bits",
           "read"
         ],
         [
-          "tnc_wev_bits",
-          "uint64",
+          "tnc_wev",
+          "float64_bits",
           "read"
         ],
         [
@@ -78,94 +270,152 @@
           "cloud_presence",
           "float",
           "read_write"
+        ],
+        [
+          "qcten",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvten",
+          "float",
+          "read_write"
+        ],
+        [
+          "tten",
+          "float",
+          "read_write"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "heat_ocp",
+          "float",
+          "read_write"
         ]
-      ],
+      ]
+    },
+    {
+      "name": "thompson_aa_rain_evaporation",
+      "cuda_symbol": "thompson_aa_rain_evaporation",
       "nullable_resources": [
+        "nwfaten",
         "reference_density",
         "reference_temperature",
+        "graupel_melt_marker",
         "condensation_rate",
-        "cloud_presence"
+        "entry_density",
+        "qrten",
+        "nrten",
+        "qvten",
+        "tten",
+        "theta",
+        "exner",
+        "heat_ocp",
+        "tau1_temperature"
       ],
       "shapes": {
+        "qr": [
+          [
+            "size"
+          ]
+        ],
+        "nr": [
+          [
+            "size"
+          ]
+        ],
         "temperature": [
           [
-            "n"
+            "size"
           ]
         ],
         "pressure": [
           [
-            "n"
+            "size"
           ]
         ],
         "qv": [
           [
-            "n"
-          ]
-        ],
-        "qc": [
-          [
-            "n"
-          ]
-        ],
-        "nc_entry": [
-          [
-            "n"
-          ]
-        ],
-        "ncten": [
-          [
-            "n"
+            "size"
           ]
         ],
         "nwfaten": [
           [
-            "n"
-          ]
-        ],
-        "nwfa_work_m3": [
-          [
-            "n"
-          ]
-        ],
-        "w": [
-          [
-            "n"
-          ]
-        ],
-        "tnccn_act_bits": [
-          [
-            7,
-            9,
-            7,
-            5,
-            4
-          ]
-        ],
-        "tnc_wev_bits": [
-          [
-            100,
-            37,
-            100
+            "size"
           ]
         ],
         "reference_density": [
           [
-            "n"
+            "size"
           ]
         ],
         "reference_temperature": [
           [
-            "n"
+            "size"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "size"
           ]
         ],
         "condensation_rate": [
           [
-            "n"
+            "size"
           ]
         ],
-        "cloud_presence": [
+        "entry_density": [
           [
-            "n"
+            "size"
+          ]
+        ],
+        "qrten": [
+          [
+            "size"
+          ]
+        ],
+        "nrten": [
+          [
+            "size"
+          ]
+        ],
+        "qvten": [
+          [
+            "size"
+          ]
+        ],
+        "tten": [
+          [
+            "size"
+          ]
+        ],
+        "theta": [
+          [
+            "size"
+          ]
+        ],
+        "exner": [
+          [
+            "size"
+          ]
+        ],
+        "heat_ocp": [
+          [
+            "size"
+          ]
+        ],
+        "tau1_temperature": [
+          [
+            "size"
           ]
         ]
       },
@@ -179,6 +429,10 @@
           "int32"
         ],
         [
+          "has_nwfaten",
+          "int32"
+        ],
+        [
           "has_reference_density",
           "int32"
         ],
@@ -187,18 +441,54 @@
           "int32"
         ],
         [
+          "has_graupel_melt_marker",
+          "int32"
+        ],
+        [
           "has_condensation_rate",
           "int32"
         ],
         [
-          "has_cloud_presence",
+          "has_entry_density",
+          "int32"
+        ],
+        [
+          "has_qrten",
+          "int32"
+        ],
+        [
+          "has_nrten",
+          "int32"
+        ],
+        [
+          "has_qvten",
+          "int32"
+        ],
+        [
+          "has_tten",
+          "int32"
+        ],
+        [
+          "has_theta",
+          "int32"
+        ],
+        [
+          "has_exner",
+          "int32"
+        ],
+        [
+          "has_heat_ocp",
+          "int32"
+        ],
+        [
+          "has_tau1_temperature",
           "int32"
         ]
       ],
       "module": "thompson_aerosol_sat_family",
       "source": "woof/metal/shaders/thompson_aerosol_sat_family.metal",
       "cuda_source": "woof/core/kernels/thompson_aerosol_sat.cu",
-      "threads_per_group": 64,
+      "threads_per_group": 32,
       "layout_version": 1,
       "arithmetic_policies": [
         "soft32-rn-nonftz",
@@ -206,16 +496,22 @@
         "portable-libm64"
       ],
       "optional_flag_parameters": [
+        "has_nwfaten",
         "has_reference_density",
         "has_reference_temperature",
+        "has_graupel_melt_marker",
         "has_condensation_rate",
-        "has_cloud_presence"
+        "has_entry_density",
+        "has_qrten",
+        "has_nrten",
+        "has_qvten",
+        "has_tten",
+        "has_theta",
+        "has_exner",
+        "has_heat_ocp",
+        "has_tau1_temperature"
       ],
-      "nullable_binding_policy": "Bind a harmless same-context dummy resource for each absent optional buffer and set its int32 presence flag to zero."
-    },
-    {
-      "name": "thompson_aa_rain_evaporation",
-      "cuda_symbol": "thompson_aa_rain_evaporation",
+      "nullable_binding_policy": "Bind a harmless same-context dummy resource for each absent optional buffer and set its int32 presence flag to zero.",
       "resources": [
         [
           "qr",
@@ -265,132 +561,54 @@
         [
           "condensation_rate",
           "float",
-          "read"
+          "read_write"
         ],
         [
           "entry_density",
           "float",
           "read"
+        ],
+        [
+          "qrten",
+          "float",
+          "read_write"
+        ],
+        [
+          "nrten",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvten",
+          "float",
+          "read_write"
+        ],
+        [
+          "tten",
+          "float",
+          "read_write"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "heat_ocp",
+          "float",
+          "read_write"
+        ],
+        [
+          "tau1_temperature",
+          "float",
+          "read"
         ]
-      ],
-      "nullable_resources": [
-        "nwfaten",
-        "reference_density",
-        "reference_temperature",
-        "graupel_melt_marker",
-        "condensation_rate",
-        "entry_density"
-      ],
-      "shapes": {
-        "qr": [
-          [
-            "n"
-          ]
-        ],
-        "nr": [
-          [
-            "n"
-          ]
-        ],
-        "temperature": [
-          [
-            "n"
-          ]
-        ],
-        "pressure": [
-          [
-            "n"
-          ]
-        ],
-        "qv": [
-          [
-            "n"
-          ]
-        ],
-        "nwfaten": [
-          [
-            "n"
-          ]
-        ],
-        "reference_density": [
-          [
-            "n"
-          ]
-        ],
-        "reference_temperature": [
-          [
-            "n"
-          ]
-        ],
-        "graupel_melt_marker": [
-          [
-            "n"
-          ]
-        ],
-        "condensation_rate": [
-          [
-            "n"
-          ]
-        ],
-        "entry_density": [
-          [
-            "n"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "dt",
-          "float32"
-        ],
-        [
-          "size",
-          "int32"
-        ],
-        [
-          "has_nwfaten",
-          "int32"
-        ],
-        [
-          "has_reference_density",
-          "int32"
-        ],
-        [
-          "has_reference_temperature",
-          "int32"
-        ],
-        [
-          "has_graupel_marker",
-          "int32"
-        ],
-        [
-          "has_condensation_rate",
-          "int32"
-        ],
-        [
-          "has_entry_density",
-          "int32"
-        ]
-      ],
-      "module": "thompson_aerosol_sat_family",
-      "source": "woof/metal/shaders/thompson_aerosol_sat_family.metal",
-      "cuda_source": "woof/core/kernels/thompson_aerosol_sat.cu",
-      "threads_per_group": 64,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "soft32-rn-nonftz",
-        "soft64-rn-bit-ops",
-        "portable-libm64"
-      ],
-      "optional_flag_parameters": [
-        "has_nwfaten",
-        "has_reference_density",
-        "has_reference_temperature",
-        "has_graupel_marker",
-        "has_condensation_rate",
-        "has_entry_density"
-      ],
-      "nullable_binding_policy": "Bind a harmless same-context dummy resource for each absent optional buffer and set its int32 presence flag to zero."
+      ]
     }
   ]
 }

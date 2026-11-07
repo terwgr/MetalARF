@@ -43,7 +43,7 @@ def preprocess_noah_soil(fields, **kwargs):
     return _preprocess_noah_soil(fields, **kwargs)
 
 from woof.ingest.vert import interpolate_logp_gpu
-from tests.physics_reference.npref import np_vertical_interpolate_logp
+from woof.verify.npref import np_vertical_interpolate_logp
 
 
 BUNDLE = Path(os.environ.get("WOOF_TEST_WRF74_BUNDLE",
@@ -772,7 +772,7 @@ def test_cpu_real_state_and_lbc_materialization_do_not_call_cuda(monkeypatch):
         attach_lateral_boundaries,
         build_state_lateral_boundaries,
     )
-    from tests.physics_reference.npref import np_wrf_real_vert_interp
+    from woof.verify.npref import np_wrf_real_vert_interp
 
     class Plan:
         def __init__(self, source, surface, target):
@@ -1098,11 +1098,18 @@ def test_real_init_cpu_backend_handles_hrrr_hydrometeor_inventory(
         np.testing.assert_allclose(
             actual, expected, rtol=3.0e-5, atol=5.0e-8)
     if mp_physics == 8:
-        for state in (cpu.state, cuda.state):
-            np.testing.assert_array_equal(
-                cp.asnumpy(state.ni), np.zeros(state.ni.shape, np.float32))
-            np.testing.assert_array_equal(
-                cp.asnumpy(state.nr), np.zeros(state.nr.shape, np.float32))
+        # Since 66ca6e205 an mp=8 cold start seeds analysed rain and ice
+        # with real.exe's make_RainNumber / make_IceNumber
+        # (module_initialize_real.F:4840-4852) instead of starting both
+        # numbers at zero.  Every cell here carries qr and qi and no
+        # analysed number, so every cell is seeded, and the two
+        # preparation backends must seed the same numbers.
+        for name in ("ni", "nr"):
+            actual = cp.asnumpy(getattr(cpu.state, name))
+            expected = cp.asnumpy(getattr(cuda.state, name))
+            assert np.isfinite(actual).all() and np.all(actual > 0.0), name
+            np.testing.assert_allclose(
+                actual, expected, rtol=3.0e-5, atol=0.0, err_msg=name)
 
 
 def test_real74_d01_30min_gate_admits_complete_no_pbl_operator():
@@ -1138,53 +1145,19 @@ def test_real74_d01_30min_gate_admits_complete_no_pbl_operator():
 # ---------------------------------------------------------------------------
 
 
-class _ReferenceVerticalPlan:
-    """WRF-real vertical interpolation through the NumPy reference."""
-
-    def __init__(self, source, surface, target):
-        self.source = np.asarray(source, dtype=np.float32)
-        self.surface = np.asarray(surface, dtype=np.float32)
-        self.target = np.asarray(target, dtype=np.float32)
-
-    def apply(self, field, surface_value, **options):
-        from tests.physics_reference.npref import np_wrf_real_vert_interp
-
-        options.pop("values_are_finite", None)
-        return np.asarray(np_wrf_real_vert_interp(
-            field, surface_value, self.source, self.surface, self.target,
-            **options), dtype=np.float32)
+# Both fixtures use the same independent NumPy preprocessing ABI.
+from test_real_init_dry_slot import (
+    _ReferencePreprocessBackend, _ReferenceVerticalPlan)
 
 
-class _ReferencePreprocessBackend:
-    """Independent CPU implementation of the preprocessing ABI.
+def _SYNTHETIC_IF_28(mp_physics):
+    """mp=28 tests about numbers or the ingest name the synthetic aerosol profile.
 
-    Deliberately not the packaged Rust CPU bridge: these tests are about the
-    scheme-selection logic in :func:`initialize_real`, and must not skip on a
-    machine where the bridge is unbuilt.
+    Since 2.9.7 'auto' needs the 225 MB WIF dataset or refuses by name (the
+    suite keeps its download offline), so a test that is not about the aerosol
+    source names the profile it reads, as a user would.
     """
-
-    name = "cpu-reference-test"
-    array_module = np
-
-    @staticmethod
-    def float32(value):
-        return np.asarray(value, dtype=np.float32)
-
-    @staticmethod
-    def regular_plan(*args, **kwargs):
-        raise AssertionError("horizontal preprocessing is unused here")
-
-    masked_nearest = regular_plan
-    rotate_earth_to_grid = regular_plan
-    era5_rh_to_water = regular_plan
-
-    @staticmethod
-    def prepare_wrf_vertical(source, surface, target):
-        return _ReferenceVerticalPlan(source, surface, target)
-
-    @staticmethod
-    def receipt():
-        return {"backend": "cpu-reference-test"}
+    return {"mp28_aerosol_source": "synthetic"} if int(mp_physics) == 28 else {}
 
 
 def _analyzed_hrrr_real_init(
@@ -1295,7 +1268,7 @@ def test_mp28_real_ingest_retains_every_analyzed_hydrometeor():
     28 from the three mp tuples this state was identically zero and nothing
     raised.
     """
-    result, _ = _analyzed_hrrr_real_init(28)
+    result, _ = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     state = result.state
 
     evidence = result.hydrometeor_initialization
@@ -1428,8 +1401,12 @@ def test_the_analyzed_inventory_tuple_and_its_moist_packages_agree():
         assert tuple(
             name for name in HRRR_ANALYZED_HYDROMETEORS if name in retained
         ) == tuple(retained), f"mp={mp_physics} retention is not decoded order"
+        # A named scheme cites its own capability row; it has no WRF
+        # Registry package.  FAST_SBM's package line lives in WRF's
+        # registry.sbm (:318).
         assert package["registry_citation"].startswith(
-            "Registry/Registry.EM_COMMON:")
+            ("Registry/Registry.EM_COMMON:", "woof.microphysics_schemes:",
+             "Registry/registry.sbm:"))
 
 
 def test_mp50_real_ingest_retains_the_condensate_p3_can_hold():
@@ -1690,7 +1667,7 @@ def test_mp28_real_ingest_leaves_the_aerosols_for_the_init_hook():
     both 3-D fields (dyn_em/module_initialize_real.F:2332-2345) and both 2-D
     emissions (:4501-4510) under aer_init_opt=0.
     """
-    result, cfg = _analyzed_hrrr_real_init(28)
+    result, cfg = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     state = result.state
     for name in ("nwfa", "nifa", "nwfa2d", "nifa2d"):
         live = _host_array(getattr(state, name))
@@ -1960,23 +1937,30 @@ def test_mp28_real_ingest_receipt_announces_the_synthetic_fallback(
     monkeypatch.setenv("WOOF_WIF_DATA_ROOT", str(tmp_path / "no-staged-wif"))
     monkeypatch.chdir(tmp_path)
 
-    result, _ = _analyzed_hrrr_real_init(28)
+    # 2.9.7: 'auto' no longer REACHES the synthetic profile.  With no copy
+    # on the machine and the pinned download failing (the suite keeps it
+    # offline), the run is refused by name with the deliberate way out
+    # (a real-data mp=28 run, 2026-10-23 12:58Z, ran synthetic
+    # aerosol with only a warning).
+    with pytest.raises(wif_climatology.MissingWifClimatologyDataset) as refused:
+        _analyzed_hrrr_real_init(28)
+    said = str(refused.value)
+    assert "QNWFA_QNIFA_SIGMA_MONTHLY.dat" in said
+    assert "pinned download" in said
+    assert "mp28_aerosol_source='synthetic'" in said
+
+    # The profile taken BY NAME still says so in the receipt.
+    result, _ = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     receipt = result.aerosol_initialization
 
     assert receipt["aerosol_source"] == "thompson_init-synthetic-profile"
     assert receipt["synthetic_fallback_in_use"] is True
-    assert receipt["synthetic_fallback_requested"] is False
+    assert receipt["synthetic_fallback_requested"] is True
     assert receipt["aerosol_source_statement"] == (
         MP28_AEROSOL_SYNTHETIC_FALLBACK)
     # The retired deviation's surviving clauses, on the branch they describe.
     assert "thompson_init" in receipt["aerosol_source_statement"]
     assert "not be reported as one" in receipt["aerosol_source_statement"]
-    # It says WHY there was no data, concretely -- a fallback whose reason is
-    # "unavailable" is a fallback nobody can fix.
-    assert receipt["dataset"]["resolved"] is False
-    assert "QNWFA_QNIFA_SIGMA_MONTHLY.dat" in (
-        receipt["dataset"]["fallback_reason"])
-    assert receipt["dataset"]["candidates"]
     # Unchanged: the fields are still left at exact zero for thompson_init.
     assert "module_mp_thompson.F" in receipt["microphysics_citation"]
     assert receipt["awaiting_profile_fill"] is True
@@ -2078,7 +2062,7 @@ def _pressure_level_real_init(mp_physics, *, init_kwargs=None, shape=(2, 3),
 
 def test_mp28_pressure_level_lane_also_publishes_the_aerosol_policy():
     """ERA5/GFS forcing reaches mp=28 too, and gets the same policy."""
-    result, _ = _pressure_level_real_init(28)
+    result, _ = _pressure_level_real_init(28, mp28_aerosol_source="synthetic")
     state = result.state
 
     # No analyzed condensate exists on this lane; qc/qr are explicitly zeroed
@@ -2204,7 +2188,7 @@ def test_mp28_real_ingest_state_is_shaped_typed_and_physical():
     required to be IDENTICAL to it, because the aerosol scheme changes no
     part of the mass/thermodynamic setup.
     """
-    result, cfg = _analyzed_hrrr_real_init(28)
+    result, cfg = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     control, _ = _analyzed_hrrr_real_init(8)
     state = result.state
     nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
@@ -2403,7 +2387,7 @@ def test_mp28_cold_start_closes_the_number_moments_over_the_imported_mass():
     from woof.da.moments import moment_consistency_report, scheme_moments
     from woof.core.thompson_entry import R1
 
-    result, _ = _analyzed_hrrr_real_init(28)
+    result, _ = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     state = result.state
     view = {name: _host_array(getattr(state, name))
             for name in ("qc", "qr", "qi", "nc", "nr", "ni")}
@@ -2451,7 +2435,7 @@ def test_mp28_cold_start_droplet_number_is_real_exe_make_droplet_number(
         droplet_mean_diameter_m, make_droplet_number)
 
     result, _ = _analyzed_hrrr_real_init(
-        28, cloud_water=_CLOUDY_COLUMN_KG_KG, landmask=landmask)
+        28, cloud_water=_CLOUDY_COLUMN_KG_KG, landmask=landmask, mp28_aerosol_source="synthetic")
     state = result.state
     qc = _host_array(state.qc)
     nc = _host_array(state.nc)
@@ -2481,7 +2465,7 @@ def test_mp28_cold_start_droplet_number_is_real_exe_make_droplet_number(
 def test_mp28_cold_start_without_a_landmask_refuses_to_guess_the_drop_size():
     with pytest.raises(ValueError, match="LANDMASK"):
         _analyzed_hrrr_real_init(
-            28, cloud_water=_CLOUDY_COLUMN_KG_KG, landmask=None)
+            28, cloud_water=_CLOUDY_COLUMN_KG_KG, landmask=None, mp28_aerosol_source="synthetic")
 
 
 def _real_exe_seed_then_entry(species, mass, alt, temperature):
@@ -2528,7 +2512,7 @@ def test_cold_start_rain_and_ice_numbers_are_real_exe_make_numbers(
     """
     from woof.core.thompson_entry import rain_median_volume_diameter_m
 
-    result, _ = _analyzed_hrrr_real_init(mp_physics)
+    result, _ = _analyzed_hrrr_real_init(mp_physics, **_SYNTHETIC_IF_28(mp_physics))
     state = result.state
     alt = np.asarray(result.total_specific_volume, dtype=np.float32)
     rho = (np.float32(1.0) / alt).astype(np.float32)
@@ -2577,8 +2561,8 @@ def test_analysed_zero_numbers_are_seeded_like_absent_ones():
     extra = {"QNR": 0.0, "QNR_SFC": 0.0, "QNI": 0.0, "QNI_SFC": 0.0}
     analysed, _ = _analyzed_hrrr_real_init(
         28, extra_fields=extra,
-        init_kwargs={"analyzed_number_fields": ("QNI", "QNR")})
-    absent, _ = _analyzed_hrrr_real_init(28)
+        init_kwargs={"analyzed_number_fields": ("QNI", "QNR")}, mp28_aerosol_source="synthetic")
+    absent, _ = _analyzed_hrrr_real_init(28, mp28_aerosol_source="synthetic")
     assert "number_moments" in analysed.hydrometeor_initialization
     for number_name, mass_name in (("nr", "qr"), ("ni", "qi")):
         got = _host_array(getattr(analysed.state, number_name))

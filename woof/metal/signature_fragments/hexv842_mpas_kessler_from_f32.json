@@ -1,0 +1,198 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_kessler_from_f32",
+      "module": "hexv842_mpas_kessler_from_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_kessler_from_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/kessler_v842.py",
+      "cuda_symbol": "kessler_from_mpas",
+      "resources": [
+        [
+          "theta_m",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "zz",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "zgrid",
+          "float",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcp",
+          "float",
+          "read_write"
+        ],
+        [
+          "qrp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "pii",
+          "float",
+          "read_write"
+        ],
+        [
+          "z",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zgrid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qrp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pii": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rvord",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

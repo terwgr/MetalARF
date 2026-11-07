@@ -88,6 +88,9 @@ FROZEN_RECORDS: dict[str, tuple[str, str]] = {
         "their 1.8.8 declaration; as-run digest d3eb6c70c0..., at "
         "`git show 4152fcb31:configs/les_nest_250m_grayzone.toml`",
     ),
+    # Re-pinned at 2.9.0 for a comment-only edit: one comment line reworded so
+    # the file names no person (public-push hygiene).  tomllib reads the same
+    # document from both byte strings; the as-run digest is unchanged.
     "configs/frozen/les_tornado_100m_mayfield_20211210.toml": (
         # RE-PINNED for WOOF 1.0.0: a comment no longer names a person or cites
         # an internal document; a comment names the engine WOOF. No value
@@ -655,29 +658,35 @@ def test_the_scan_is_silent_on_a_horizontal_only_selector(tmp_path):
     assert scan(tmp_path) == {}
 
 
+def _write_legacy(tmp_path, km_opt):
+    """One valid legacy fixture for exposed and horizontal-only selectors."""
+    text = (
+        '[grid]\n'
+        'nx = 40\n'
+        'ny = 40\n'
+        'nz = 40\n'
+        'dx = 100.0\n'
+        'dy = 100.0\n'
+        'ztop = 20000.0\n'
+        '\n'
+        '[dynamics]\n'
+        'km_opt = 3\n'
+        'mix_isotropic = 0\n'
+        '\n'
+        '[run]\n'
+        'dt = 1.0\n'
+        'run_seconds = 10.0\n'
+    )
+    (tmp_path / "legacy.toml").write_text(
+        text.replace("km_opt = 3", f"km_opt = {km_opt}"), encoding="utf-8")
+
+
 def test_the_scan_reports_a_legacy_config_that_selects_the_exposed_path(
         tmp_path):
     """The legacy route cannot compute the ratio, so it reports the
     selector instead -- and says so with an infinite one."""
 
-    text = textwrap.dedent("""\
-        [grid]
-        nx = 40
-        ny = 40
-        nz = 40
-        dx = 100.0
-        dy = 100.0
-        ztop = 20000.0
-
-        [dynamics]
-        km_opt = 3
-        mix_isotropic = 0
-
-        [run]
-        dt = 1.0
-        run_seconds = 10.0
-        """)
-    (tmp_path / "legacy.toml").write_text(text, encoding="utf-8")
+    _write_legacy(tmp_path, 3)
     findings = scan(tmp_path)
     assert list(findings) == ["legacy.toml"]
     assert findings["legacy.toml"][0][1] == float("inf")
@@ -687,24 +696,7 @@ def test_the_legacy_route_is_silent_on_a_horizontal_only_selector(tmp_path):
     """Its negative control: every legacy config in the tree runs
     km_opt = 4 and none of them may be reported."""
 
-    text = textwrap.dedent("""\
-        [grid]
-        nx = 40
-        ny = 40
-        nz = 40
-        dx = 100.0
-        dy = 100.0
-        ztop = 20000.0
-
-        [dynamics]
-        km_opt = 4
-        mix_isotropic = 0
-
-        [run]
-        dt = 1.0
-        run_seconds = 10.0
-        """)
-    (tmp_path / "legacy.toml").write_text(text, encoding="utf-8")
+    _write_legacy(tmp_path, 4)
     assert scan(tmp_path) == {}
 
 

@@ -39,23 +39,6 @@ _EXPERIMENTAL_EXPORTS = {
 _UNSUPPORTED_EXPORTS = {}
 
 
-def require_mynn_pbl_metal_supported(cuda_symbol: str) -> None:
-    """Fail closed for production admission, including experimental kernels."""
-    if cuda_symbol in _EXPERIMENTAL_EXPORTS:
-        raise NotImplementedError(
-            f"Metal {cuda_symbol} is an experimental source proposal only; "
-            "the shared arithmetic is unverified and no production admission "
-            "or caller integration is enabled"
-        )
-    reason = _UNSUPPORTED_EXPORTS.get(cuda_symbol)
-    if reason is None:
-        raise ValueError(f"unknown MYNN PBL CUDA export {cuda_symbol!r}")
-    raise NotImplementedError(
-        f"Metal {cuda_symbol} has no source proposal: {reason}; "
-        "no production kernel signature is admitted"
-    )
-
-
 def _flat_fp32_arrays(arrays: Sequence[object], names: Sequence[str]):
     if len(arrays) != len(names):
         raise ValueError("internal MYNN resource list mismatch")
@@ -108,7 +91,7 @@ def _submit(context, name: str, resources, parameters, count: int,
 
 def submit_mynn_tendencies(context, resource_arrays, *, nz: int, ncol: int,
                            onoff, workspace=None, gsd41=False,
-                           experimental=False):
+                           old_cloud_tendencies=False, experimental=False):
     """Experimentally solve MYNN momentum, heat, and moisture tendencies.
 
     ``resource_arrays`` maps the input and visible output names to contiguous
@@ -195,6 +178,10 @@ def submit_mynn_tendencies(context, resource_arrays, *, nz: int, ncol: int,
         "onoff": np.float32(onoff), "rd": rd, "p608": p608,
         "xlvcp": xlvcp, "xlscp": xlscp, "nz": nz, "ncol": ncol,
     }
+    if old_cloud_tendencies and not gsd41:
+        raise ValueError("the fork cloud tendency form requires the GSD 4.1 kernel")
+    if gsd41:
+        parameters["old_cloud_tendencies"] = int(bool(old_cloud_tendencies))
     return _submit(context, "mynn_tendencies_gsd41_columns" if gsd41
                    else "mynn_tendencies_columns", resources,
                    parameters, ncol, experimental)
@@ -464,7 +451,8 @@ def submit_mynn_dmp_mf_gsd41(context, inputs, outputs, *, sgm,
 
 def submit_mynn_driver_prep(context, dz, exner, sqv, sqc, sqi, th, ust,
                             zw, qv1, sqw, thl, thetav, qke_seed, *,
-                            nz: int, ncol: int, experimental=False):
+                            nz: int, ncol: int, gsd41=False,
+                            experimental=False):
     """Experimentally prepare MYNN driver columns in source memory order.
 
     Layer arrays must be C-contiguous ``(nz, ncol)`` MetalArrays. This has
@@ -491,7 +479,8 @@ def submit_mynn_driver_prep(context, dz, exner, sqv, sqc, sqi, th, ust,
                                              output_shapes)}
     resources = {**inputs, "ust": ust_view, **outputs}
     return _submit(context, "mynn_driver_prep_columns", resources,
-                   {"nz": nz, "ncol": ncol}, ncol, experimental)
+                   {"nz": nz, "ncol": ncol, "gsd41": int(bool(gsd41))},
+                   ncol, experimental)
 
 
 
@@ -630,34 +619,9 @@ def submit_mynn_predict_default(context, dz, rho, dfq, pdk, pdt, pdq, pdc,
                    {"nz": nz, "ncol": ncol}, ncol, experimental)
 
 
-def submit_mynn_level2_pairs(context, dz_a, u_a, v_a, thl_a, qw_a, vt_a,
-                             vq_a, dz_prev_a, u_prev_a, v_prev_a,
-                             thl_prev_a, qw_prev_a, vt_prev_a, vq_prev_a,
-                             dtl_o, dqw_o, dtv_o, gm_o, gh_o, sm_o, sh_o, *,
-                             experimental=False):
-    """Experimentally evaluate the source's adjacent-level closure pairs.
-
-    Every input and output is a same-shaped contiguous FP32 MetalArray. The
-    implementation uses shared RN binary32 operators, including soft32 sqrt;
-    this consumer and shared primitive remain unverified.
-    """
-    names = (
-        "dz_a", "u_a", "v_a", "thl_a", "qw_a", "vt_a", "vq_a",
-        "dz_prev_a", "u_prev_a", "v_prev_a", "thl_prev_a", "qw_prev_a",
-        "vt_prev_a", "vq_prev_a", "dtl_o", "dqw_o", "dtv_o", "gm_o",
-        "gh_o", "sm_o", "sh_o",
-    )
-    arrays, count = _flat_fp32_arrays(
-        (dz_a, u_a, v_a, thl_a, qw_a, vt_a, vq_a, dz_prev_a, u_prev_a,
-         v_prev_a, thl_prev_a, qw_prev_a, vt_prev_a, vq_prev_a, dtl_o,
-         dqw_o, dtv_o, gm_o, gh_o, sm_o, sh_o), names)
-    return _submit(context, "mynn_level2_pairs", dict(zip(names, arrays)),
-                   {"n": count}, count, experimental)
-
-
 def submit_mynn_level2_columns(context, dz, u, v, thl, qw, vt, vq, dtl, dqw,
                                dtv, gm, gh, sm, sh, *, nz: int, ncol: int,
-                               experimental=False):
+                               gsd41=False, experimental=False):
     """Experimentally evaluate MYNN level-2 closure column by column.
 
     Layer arrays use level-major ``(nz, ncol)`` storage. The five zero-based
@@ -682,7 +646,7 @@ def submit_mynn_level2_columns(context, dz, u, v, thl, qw, vt, vq, dtl, dqw,
                         sm, sh),
                        names))
     return _submit(context, "mynn_level2_columns", dict(zip(names, arrays)),
-                   {"nz": nz, "ncol": ncol}, ncol, experimental)
+                   {"nz": nz, "ncol": ncol, "gsd41": int(bool(gsd41))}, ncol, experimental)
 
 
 def submit_mynn_pblh_scale(context, thetav, qke, zw, dz, landsea, dx, zi,
@@ -995,8 +959,17 @@ def submit_mynn_mixlength_default(context, dz, zw, u, v, qke, dtv, theta,
 def submit_mynn_mixlength_gsd41(context, dz, zw, qke, dtv, theta,
                                 edmf_w, edmf_a, cldfra, vt, vq, flt, flq,
                                 rmo, zi, psig_bl, el, qkw, qtke, thetaw,
-                                *, nz: int, ncol: int, experimental=False):
-    """Run the WRF v4.1 GSD ``mym_length`` CASE(2) column kernel."""
+                                elblavg, dlu, dld,
+                                *, nz: int, ncol: int, mixlength: int = 2,
+                                unsquared_qtke: bool = False,
+                                experimental=False):
+    """Run the WRF v4.1 GSD ``mym_length`` column kernel.
+
+    ``mixlength=1`` is the fork's operational CASE(1); ``mixlength=2`` is
+    CASE(2), whose TKE conversion ``unsquared_qtke`` takes as written.
+    """
+    if type(mixlength) is not int or mixlength not in (1, 2):
+        raise ValueError("MYNN GSD 4.1 mixing length requires mixlength=1 or 2")
     for name, extent in (("nz", nz), ("ncol", ncol)):
         if (isinstance(extent, (bool, np.bool_))
                 or not isinstance(extent, (int, np.integer))
@@ -1018,17 +991,20 @@ def submit_mynn_mixlength_gsd41(context, dz, zw, qke, dtv, theta,
         (flt, flq, rmo, zi, psig_bl), control_names)
     if count != ncol:
         raise ValueError("MYNN GSD 4.1 controls must have ncol values")
-    output_names = ("el", "qkw", "qtke", "thetaw")
+    output_names = ("el", "qkw", "qtke", "thetaw", "elblavg", "dlu", "dld")
     output_values = tuple(_reshape_fp32(value, name, (nz, ncol))
                           for name, value in zip(
-                              output_names, (el, qkw, qtke, thetaw)))
+                              output_names,
+                              (el, qkw, qtke, thetaw, elblavg, dlu, dld)))
     resources = dict(zip(level_names, levels))
     resources["zw"] = zw_values[0].view((nz + 1, ncol))
     resources.update(dict(zip(control_names,
                               (a.view((ncol,)) for a in control_values))))
     resources.update(dict(zip(output_names, output_values)))
     return _submit(context, "mynn_mixlength_gsd41_columns", resources,
-                   {"nz": nz, "ncol": ncol}, ncol, experimental)
+                   {"nz": nz, "ncol": ncol, "mixlength": mixlength,
+                    "unsquared_qtke": int(bool(unsquared_qtke))},
+                   ncol, experimental)
 
 
 def submit_mynn_initialize_default(context, dz, zw, u, v, thl, qw, theta,
@@ -1037,6 +1013,7 @@ def submit_mynn_initialize_default(context, dz, zw, u, v, thl, qw, theta,
                                    cov, sm, sh, scratch, *, nz: int,
                                    ncol: int, initialize_qke: bool,
                                    mixlength: int = 1,
+                                   unsquared_qtke: bool = False,
                                    _kernel_name: str = "mynn_initialize_default_columns",
                                    experimental=False):
     """Run the gated cold-start proposal with level-major field storage.
@@ -1089,8 +1066,9 @@ def submit_mynn_initialize_default(context, dz, zw, u, v, thl, qw, theta,
     resources["scratch"] = scratch_values[0].view((15 * nz * ncol,))
     parameters = {"nz": nz, "ncol": ncol,
                   "initialize_qke": int(initialize_qke)}
-    if _kernel_name == "mynn_initialize_default_columns":
-        parameters["mixlength"] = mixlength
+    parameters["mixlength"] = mixlength
+    if _kernel_name == "mynn_initialize_gsd41_columns":
+        parameters["unsquared_qtke"] = int(bool(unsquared_qtke))
     return _submit(context, _kernel_name, resources, parameters, ncol, experimental)
 
 

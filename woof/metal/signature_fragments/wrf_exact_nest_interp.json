@@ -1,0 +1,298 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_sint",
+      "layout_version": 1,
+      "module": "wrf_exact_nest_interp",
+      "name": "wrf_exact_nest_sint_fragment",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nyc",
+          "int32"
+        ],
+        [
+          "nxc",
+          "int32"
+        ],
+        [
+          "nyp",
+          "int32"
+        ],
+        [
+          "nxp",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "parent_a",
+          "float",
+          "read"
+        ],
+        [
+          "child_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "ci_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "ip_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "cj_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "jp_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "xig_a",
+          "float",
+          "read"
+        ],
+        [
+          "xjg_a",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "child_a": [
+          [
+            "nz",
+            "nyc",
+            "nxc"
+          ]
+        ],
+        "ci_map_a": [
+          [
+            "nxc"
+          ]
+        ],
+        "cj_map_a": [
+          [
+            "nyc"
+          ]
+        ],
+        "ip_map_a": [
+          [
+            "nxc"
+          ]
+        ],
+        "jp_map_a": [
+          [
+            "nyc"
+          ]
+        ],
+        "parent_a": [
+          [
+            "nz",
+            "nyp",
+            "nxp"
+          ]
+        ],
+        "xig_a": [
+          [
+            "nri"
+          ]
+        ],
+        "xjg_a": [
+          [
+            "nrj"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_nest_interp.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_bdy_interp1",
+      "layout_version": 1,
+      "module": "wrf_exact_nest_interp",
+      "name": "wrf_exact_nest_bdy_interp1_fragment",
+      "parameters": [
+        [
+          "cdt",
+          "float32"
+        ],
+        [
+          "side",
+          "int32"
+        ],
+        [
+          "sz",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nyc",
+          "int32"
+        ],
+        [
+          "nxc",
+          "int32"
+        ],
+        [
+          "nyp",
+          "int32"
+        ],
+        [
+          "nxp",
+          "int32"
+        ],
+        [
+          "nlong",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "parent_a",
+          "float",
+          "read"
+        ],
+        [
+          "child_a",
+          "float",
+          "read"
+        ],
+        [
+          "value_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "tendency_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "ci_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "ip_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "cj_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "jp_map_a",
+          "int32",
+          "read"
+        ],
+        [
+          "xig_a",
+          "float",
+          "read"
+        ],
+        [
+          "xjg_a",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "child_a": [
+          [
+            "nz",
+            "nyc",
+            "nxc"
+          ]
+        ],
+        "ci_map_a": [
+          [
+            "nxc"
+          ]
+        ],
+        "cj_map_a": [
+          [
+            "nyc"
+          ]
+        ],
+        "ip_map_a": [
+          [
+            "nxc"
+          ]
+        ],
+        "jp_map_a": [
+          [
+            "nyc"
+          ]
+        ],
+        "parent_a": [
+          [
+            "nz",
+            "nyp",
+            "nxp"
+          ]
+        ],
+        "tendency_a": [
+          [
+            "nz",
+            "sz",
+            "nlong"
+          ],
+          [
+            "nz",
+            "nlong",
+            "sz"
+          ]
+        ],
+        "value_a": [
+          [
+            "nz",
+            "sz",
+            "nlong"
+          ],
+          [
+            "nz",
+            "nlong",
+            "sz"
+          ]
+        ],
+        "xig_a": [
+          [
+            "nri"
+          ]
+        ],
+        "xjg_a": [
+          [
+            "nrj"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_nest_interp.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

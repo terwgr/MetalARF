@@ -201,7 +201,7 @@ def test_captured_lineage_receipt_retains_its_original_digest():
 _AUTHORED_RUSTWX_CRATES = (
     "rw-fetch", "rw-wrfbatch", "rw-nexrad", "rw-odim", "rw-obs",
     "rw-goes", "rw-netcdf", "rw-mpas", "rw-host-memory",
-    "rw-isobaric", "rw-mlexport", "rw-libm",
+    "rw-isobaric", "rw-mlexport", "rw-libm", "rw-post",
 )
 
 #: The 62 files that already carried CR when this gate was widened,
@@ -219,27 +219,18 @@ _CRLF_DEBT = frozenset({
     # left this list at A146: its constant-divisor rewrite (a98f2482e) wrote
     # the file back LF, and restoring the CR bytes is a commit the line-ending
     # hook refuses, so the file stays normalized.
-    "woof/core/landuse.py",
     "woof/core/rrtm_taumol.py",
-    "woof/da/letkf.py",
+    # woof/da/letkf.py left this list in the DA speed integration: the
+    # obs-ops lane wrote it back LF (e13abf285) and the line-ending hook
+    # refuses restoring the CR bytes, so the file stays normalized.
     "woof/da/obs_goes.py",
-    # woof/da/obs_radar.py is STILL on this list, and its 650 CR bytes
-    # are deliberate.  The mp=9 radar-DA rows flattened the whole file to
-    # LF inside the commit that changed ten lines of it, which is the one
-    # thing `test_no_authored_file_gains_a_carriage_return` forbids while
-    # telling an author to normalize: "the change must be CR-only".  A
-    # whole-file rewrite folded into a content commit is how two merges
-    # went line-for-line conflicted on 2026-08-27, and history is
-    # forward-only, so the rewrite was undone rather than explained: the
-    # file's endings are the ones it was received with, its diff against
-    # the branch point is 9 insertions and 6 deletions, and the debt entry
-    # is true again.  Normalizing it stays available to anyone who wants
-    # it, as its own commit that changes nothing else.
-    "woof/da/obs_radar.py",
+    # woof/da/obs_radar.py left this list when the DA line merged into
+    # 2.8.7: the radar reflectivity rebuild (098029d01, DA lane 2) wrote it
+    # back LF together with its content change, and the line-ending hook
+    # refuses restoring the CR bytes, so the file stays normalized.
     "woof/obs/goes_cwp.py",
     "woof/obs/goes_grid.py",
     "woof/obs/goes_pack.py",
-    "woof/state_digest.py",
     "woof/verify/cases/nest_spawn_ideal.py",
     "woof/verify/feedback_reference.py",
     "woof/verify/obs/battery.py",
@@ -257,7 +248,10 @@ _CRLF_DEBT = frozenset({
     "tests/test_inflow_fetch_meter.py",
     "tests/test_les_tornado_attempt1_config.py",
     "tests/test_obs_battery.py",
-    "tests/test_obs_battery_ingest.py",
+    # tests/test_obs_battery_ingest.py left this list in 2.9.2: the radar
+    # feeds lane (47c97c0c) wrote it back LF with its one-line change, and
+    # the line-ending hook refuses restoring the CR bytes, so the file stays
+    # normalized.
     "tests/test_obs_controls.py",
     "tests/test_obs_model_source.py",
     "tests/test_obs_promotion.py",
@@ -277,7 +271,6 @@ _CRLF_DEBT = frozenset({
     "tools/obs_radar_grid_build.py",
     "tools/obs_radar_grid_from_pack.py",
     "tools/rustwx/crates/rw-fetch/Cargo.toml",
-    "tools/rustwx/crates/rw-fetch/src/main.rs",
     "tools/rustwx/crates/rw-wrfbatch/src/grib_import.rs",
     "tools/rustwx/crates/rw-wrfbatch/src/wrf_volumes.rs",
     # docs/ -- receipts are transcripts and sit outside the surface
@@ -317,7 +310,7 @@ def _is_authored(relative: str) -> bool:
         return crate in _AUTHORED_RUSTWX_CRATES
     if relative.startswith("tools/"):
         return relative.endswith(".py")
-    if relative.startswith(("gpuwm/", "tests/", "configs/")):
+    if relative.startswith(("woof/", "tests/", "configs/")):
         return True
     return "/" not in relative  # the release mechanics at the repo root
 

@@ -7,6 +7,7 @@ import pytest
 from woof.ensemble.member_variants import (
     member_surface_options, normalize_member_variants, preparation_binding_key,
     require_distinct_variants, variant_configuration)
+from woof.ensemble.member_variants import preparation_binding_parts
 
 
 def _raw():
@@ -43,6 +44,34 @@ def test_existing_nine_layer_ruc_selector_retains_its_own_bank():
         "source", variant_configuration(_raw(), variants[1]))
 
 
+def test_land_and_physics_tails_share_composition_without_sharing_prepared_arrays():
+    raw = _raw()
+    base = preparation_binding_parts("trajectory", raw)
+    for selectors in ({"sf_surface_physics": 2, "num_soil_layers": 4},
+                      {"mp_physics": 28, "bl_pbl_physics": 5}):
+        changed = deepcopy(raw)
+        changed["shared"].update(selectors)
+        arm = preparation_binding_parts("trajectory", changed)
+        assert arm.source_key == base.source_key
+        assert arm.physics_tail != base.physics_tail
+        assert arm.key != base.key
+    assert raw == _raw()
+
+
+@pytest.mark.parametrize("section,key,value", [
+    ("fetch", "cycle", "2026-10-05T12"), ("fetch", "hours", 2),
+    ("fetch", "member", "p01"), ("shared", "nz", 60),
+    ("shared", "dx", 3000), ("shared", "hybrid_opt", 2),
+    ("shared", "future_scientific_field", 1), ("experiment", "run_seconds", 7200),
+])
+def test_source_partition_keeps_inputs_geometry_vertical_clock_and_unknown_fields(section, key, value):
+    raw = _raw()
+    changed = deepcopy(raw)
+    changed[section][key] = value
+    assert preparation_binding_parts("trajectory", changed).source_key != \
+        preparation_binding_parts("trajectory", raw).source_key
+
+
 def test_preparation_key_binds_grid_clock_static_and_output_authorities():
     raw = _raw()
     original = preparation_binding_key("source", raw)
@@ -75,7 +104,7 @@ def test_member_surface_descriptor_detaches_values_and_keeps_identity_control():
     ([{"name": "duplicate"}, {"name": "duplicate"}], "unique"),
     ([{"name": "control"}, {"name": "bad", "physics": {"num_soil_layers": 4}}], "both integer"),
     ([{"name": "control"}, {"name": "bad", "physics": {"sf_surface_physics": 3, "num_soil_layers": 4}}], "wrong land column"),
-    ([{"name": "control"}, {"name": "bad", "physics": {"soil_diffusivity": 2}}], "existing land selectors"),
+    ([{"name": "control"}, {"name": "bad", "physics": {"soil_diffusivity": 2}}], "existing single-run physics selectors"),
     ([{"name": "control"}, {"name": "bad", "surface": {"sst_offset_k": [-1, 1]}}], "fixed scalar"),
     ([{"name": "control"}, {"name": "bad", "surface": {"soil_moisture_scale": 0}}], "must be positive"),
 ])

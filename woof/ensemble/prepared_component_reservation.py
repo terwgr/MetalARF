@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, fields as dataclass_fields, is_dataclass
 from datetime import date, datetime
 from fractions import Fraction
-from operator import index
 from types import SimpleNamespace
 from collections.abc import Mapping
 import hashlib
@@ -21,15 +20,7 @@ import numpy as np
 from woof.ensemble.batch_state import _exact_key, state_array_specs
 from woof.ensemble.batch_storage import BatchArraySpec, BatchMemoryPlan
 from woof.ensemble.prepared_route_wave import RouteWaveReservation
-
-
-def _positive(value, name):
-    if isinstance(value, (bool, np.bool_)):
-        raise TypeError(f"{name} must be an integer")
-    value = index(value)
-    if value < 1:
-        raise ValueError(f"{name} must be positive")
-    return value
+from woof.ensemble.batch_storage import _positive_count as _positive
 
 
 def _identity(value):
@@ -317,12 +308,15 @@ def plan_prepared_component_reservation(member_inputs, *, domain_metadata=None,
             return decline("member configurations, calendar or nest layout differ; a common bank cannot substitute their original authorities")
         if getattr(getattr(exp, "relocation", None), "enabled", False):
             return decline("moving nests retain original relocation and rebuilt geometry owners")
-    from woof.config import RunConfig, radiation_scheme_ids
+    from woof.config import (RunConfig, mynn_mixscalars_driver_value,
+                              radiation_scheme_ids)
     from woof.physics_compat import rrtmg_variant, RRTMG_VARIANT_RTE_RRTMGP
     from woof.core.preflight import soil_layer_count
     from woof.ensemble.batch_mynn import _pbl_options
     for domain in domains:
         cfg, gid = domain.run, int(domain.grid_id)
+        if cfg.chem_sets:
+            return decline(f"domain {gid}: active chemistry keeps its original member species arrays, source-hour caches and mass ledger; component banks lack their typed state ownership and producer handoff")
         if (cfg.sf_surface_physics, cfg.sf_sfclay_physics, cfg.bl_pbl_physics) != (3, 5, 5):
             return decline(f"domain {gid}: packed production binds RUC/MYNN surface and PBL leaves; selected land or turbulence scheme retains its original driver")
         if cfg.bl_mynn_version != "wrf_461":
@@ -346,7 +340,10 @@ def plan_prepared_component_reservation(member_inputs, *, domain_metadata=None,
             _pbl_options({**options, "closure": cfg.bl_mynn_closure, "bl_mynn_version": cfg.bl_mynn_version,
                 "bl_mynn_gsd41_unsquared_qtke": cfg.bl_mynn_gsd41_unsquared_qtke,
                 "bl_mynn_cloud_tendency_form": cfg.bl_mynn_cloud_tendency_form,
-                "icloud_bl": cfg.icloud_bl, "bl_mynn_mixscalars": cfg.bl_mynn_mixscalars})
+                "icloud_bl": cfg.icloud_bl,
+                # The value the driver is handed: 0 when the key is inert
+                # (no qn family in the microphysics), as in the single run.
+                "bl_mynn_mixscalars": mynn_mixscalars_driver_value(cfg)})
         except (ValueError, TypeError) as error:
             return decline(f"domain {gid}: {error}")
         for name, allowed in (("ruc_irrigation", ("wrf_45", "wrf_461")),

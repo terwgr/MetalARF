@@ -23,6 +23,8 @@ use crate::wrf_volumes::{
 };
 use wrf_core::variables::{VARS, VarDim};
 use wrf_core::{ComputeOpts, VarOutput, WrfFile, getvar};
+#[path = "derived_diagnostics.rs"]
+mod derived_diagnostics;
 
 #[derive(Debug)]
 pub struct WrfProcessTask {
@@ -100,7 +102,38 @@ pub struct WrfProcessOptions {
     /// raw input planes and sounding volumes retain their existing paths.
     #[serde(default)]
     pub named_products_only: bool,
+    /// Exact snowfall baseline; absent means model initialization.
+    #[serde(default)]
+    pub snow_since: Option<String>,
+    /// The store names the caller will read back, or `None` for the whole
+    /// plan.  A render of NAMED products sets it to the union of what those
+    /// products read ([`required_fields_for_products`]: every recipe's
+    /// NEEDS selectors, a derived slug's own grid, a window's inputs, a
+    /// `var:` plane) and every import phase then computes only those planes:
+    /// the diagnostic loop, the reflectivity volume, the column planes, the
+    /// isobaric volume build, the raw extras and the stored-plane sweep are
+    /// each gated on it.  `orography` is always kept (a frame is never empty,
+    /// and the catalog listing still answers), and the grid file carries the
+    /// georeference the basemap is drawn on regardless.
+    ///
+    /// WHAT BREAKAGE THIS PREVENTS (gate law): `woof render RUN --products
+    /// 2m_temperature` paid the whole import for one picture -- 14 s of a 15 s
+    /// invocation on a 1000x1000x50 frame (open and index, 13 parcel
+    /// diagnostics, the REFL_10CM volume, the isotherm and water-path columns,
+    /// simulated IR, every raw 2-D field and a 442 MB store write) for 0.3 s of
+    /// drawing.  `named_products_only` trims the diagnostic loop to a fixed set
+    /// and leaves every other phase whole.
+    #[serde(default)]
+    pub required_fields: Option<Vec<String>>,
 }
+
+/// The store names a scoped import keeps whatever the products read.
+const ALWAYS_REQUIRED_FIELDS: &[&str] = &["orography"];
+
+/// How many split planes one wrf-core 2-D diagnostic may publish
+/// ([`push_derived_output`]: `cloudfrac` three, the wind pairs two); the
+/// required-field check asks every split name of a diagnostic, up to this.
+const DIAGNOSTIC_SPLIT_LIMIT: usize = 8;
 
 impl Default for WrfProcessOptions {
     fn default() -> Self {
@@ -115,6 +148,8 @@ impl Default for WrfProcessOptions {
             viewer_2d: false,
             chart_selectors: Vec::new(),
             named_products_only: false,
+            snow_since: None,
+            required_fields: None,
         }
     }
 }
@@ -133,7 +168,138 @@ impl WrfProcessOptions {
         self.skip = normalize_filter_tokens(self.skip);
         self.chart_selectors.sort_by_key(|selector| selector.key());
         self.chart_selectors.dedup();
+        if let Some(required) = self.required_fields.take() {
+            let mut names: Vec<String> = required
+                .into_iter()
+                .map(|name| name.trim().to_string())
+                .filter(|name| !name.is_empty())
+                .collect();
+            names.extend(ALWAYS_REQUIRED_FIELDS.iter().map(|name| (*name).to_string()));
+            // A canonical cloud-cover plane is a republished split of the
+            // `cloudfrac` diagnostic: requiring the plane requires its source.
+            for (_, derived_plane, field) in DIAGNOSTIC_CHART_PLANES {
+                let key = FieldSelector::entire_atmosphere(field).key();
+                if names.iter().any(|name| *name == key) {
+                    names.push((*derived_plane).to_string());
+                }
+            }
+            names.sort();
+            names.dedup();
+            self.required_fields = Some(names);
+        }
         self
+    }
+
+    /// Whether a store name is one the caller will read: every name on a
+    /// whole plan; on a scoped one the required names and the `approx_`
+    /// surface fallback of a required exact plane (the fallback is written
+    /// only when the exact plane cannot be).
+    fn required_allows(&self, store_name: Option<&str>) -> bool {
+        let Some(required) = &self.required_fields else {
+            return true;
+        };
+        let Some(name) = store_name else {
+            return true;
+        };
+        required.iter().any(|wanted| wanted == name)
+            || name
+                .strip_prefix("approx_")
+                .is_some_and(|exact| required.iter().any(|wanted| wanted == exact))
+    }
+
+    /// Whether a wrf-core 2-D diagnostic is computed: the group and filter
+    /// rules of [`Self::should_process`] on its unsplit store name, and on a
+    /// scoped plan any store name it can publish -- its unsplit name or a
+    /// split plane (`srh_0_1km` out of `srh`, `wrf_cloudfrac_low` out of
+    /// `cloudfrac`).
+    pub(crate) fn should_process_diagnostic(
+        &self,
+        wrf_name: &str,
+        store_name: &str,
+        group: WrfProductGroup,
+    ) -> bool {
+        self.filters_allow(wrf_name, Some(store_name), group)
+            && (self.required_allows(Some(store_name))
+                || (0..DIAGNOSTIC_SPLIT_LIMIT).any(|index| {
+                    self.required_allows(Some(&derived_name(wrf_name, Some(index))))
+                }))
+    }
+
+    /// Whether this hour builds the isobaric volumes: always on a whole
+    /// plan; on a scoped one only when a required plane is an isobaric
+    /// recipe plane, a sounding volume, or a surface plane the file cannot
+    /// read directly (its lowest-model-level fallback comes out of the
+    /// volume build).
+    pub(crate) fn wants_isobaric_volumes(&self, file: &WrfFile) -> bool {
+        let Some(required) = &self.required_fields else {
+            return true;
+        };
+        required.iter().any(|name| {
+            ISO_VOLUME_NAMES.contains(&name.as_str())
+                || isobaric_recipe_selector_for_key(name).is_some()
+                || surface_fallback_sources(name)
+                    .is_some_and(|sources| sources.iter().any(|source| !file.has_var(source)))
+        })
+    }
+
+    /// Whether the hour keeps its sounding volumes: always on a whole plan;
+    /// on a scoped one only when a volume is required by name.
+    pub(crate) fn keeps_sounding_volumes(&self) -> bool {
+        match &self.required_fields {
+            None => true,
+            Some(required) => required
+                .iter()
+                .any(|name| ISO_VOLUME_NAMES.contains(&name.as_str())),
+        }
+    }
+
+    /// Whether the 3-D fields most diagnostics start from are read up
+    /// front for wrf-core's cache: always on a whole plan; on a scoped one
+    /// only when a required plane needs the shared thermodynamic fields.
+    /// Surface planes and geometric W skip it. A read skipped here is made by the first product that
+    /// needs it, to the same values.
+    pub(crate) fn wants_three_dimensional_prefetch(&self) -> bool {
+        let Some(required) = &self.required_fields else {
+            return true;
+        };
+        required.iter().any(|name| !surface_only_store_name(name)
+            // W needs geometry, but none of the thermodynamic warm-up.
+            && !matches!(name.as_str(), "vertical_velocity_1km_agl" | "vertical_velocity_3km_agl"))
+    }
+
+    /// Whether the stored-plane sweep (and the NetCDF index it needs) runs:
+    /// the `stored_planes` option on a whole plan; on a scoped one only
+    /// when a required name is one no catalog of this import publishes.
+    pub(crate) fn wants_stored_planes(&self, file: &WrfFile) -> bool {
+        if !self.stored_planes {
+            return false;
+        }
+        let Some(required) = &self.required_fields else {
+            return true;
+        };
+        let whole = Self {
+            required_fields: None,
+            ..self.clone()
+        };
+        let mut published: Vec<String> = whole.planned_store_fields_for(file);
+        published.extend(
+            whole
+                .planned_store_selectors_for(file)
+                .into_iter()
+                .map(|selector| selector.key()),
+        );
+        for def in VARS {
+            if def.dim != VarDim::TwoD {
+                continue;
+            }
+            published.push(derived_name(def.name, None));
+            published.extend((0..DIAGNOSTIC_SPLIT_LIMIT).map(|index| derived_name(def.name, Some(index))));
+        }
+        required.iter().any(|name| {
+            !published.iter().any(|known| known == name)
+                && !name.starts_with("approx_")
+                && !ALWAYS_REQUIRED_FIELDS.contains(&name.as_str())
+        })
     }
 
     /// The store field names the current selection WOULD write, for the
@@ -153,7 +319,7 @@ impl WrfProcessOptions {
         // gated on `core_fields` in `read_wrf_products`).
         if self.viewer_2d {
             names.extend(self.chart_selectors.iter().map(|selector| selector.key()));
-        } else if self.core_fields {
+        } else if self.core_fields && self.keeps_sounding_volumes() {
             for iso in ISO_VOLUME_NAMES {
                 names.push((*iso).to_string());
             }
@@ -170,7 +336,7 @@ impl WrfProcessOptions {
                 WrfProductGroup::Diagnostic
             };
             if self.needs_diagnostic_grid(def.name, &store_name)
-                && self.should_process(def.name, Some(&store_name), group) {
+                && self.should_process_diagnostic(def.name, &store_name, group) {
                 names.push(store_name);
             }
         }
@@ -180,7 +346,15 @@ impl WrfProcessOptions {
                 names.push(store_name);
             }
         }
+        names.extend(derived_diagnostics::planned_fields(self));
         names.extend(crate::wrf_column_planes::planned_store_fields(self));
+        names.extend(crate::visibility::PRODUCTS.iter().filter(|(n,_,_)|crate::visibility::selected(self,n)).map(|(n,_,_)|n.to_string()));
+        if self.should_process("SNOW_LEVEL_FT", Some("wrf_snow_level_ft"), WrfProductGroup::Raw) {
+            names.push("wrf_snow_level_ft".to_string());
+        }
+        names.extend(crate::snowfall::PRODUCTS.iter()
+            .filter(|(name,field)| self.should_process(&FieldSelector::surface(*field).key(), Some(name), WrfProductGroup::Diagnostic))
+            .map(|(name,_)| name.to_string()));
         names.extend(
             self.planned_store_selectors()
                 .into_iter()
@@ -208,6 +382,17 @@ impl WrfProcessOptions {
     /// skipped at process time with a note, exactly like a planned field.
     pub fn planned_store_selectors(&self) -> Vec<FieldSelector> {
         let mut selectors = Vec::new();
+        selectors.extend(derived_diagnostics::planned_selectors(self));
+        selectors.extend(rustwx_products::vertical::ROWS.iter().filter(|r| {
+            let key = r.selector.key();
+            self.should_process(&key, Some(&key), WrfProductGroup::Core)
+        }).map(|r| r.selector));
+        selectors.extend(winter_selectors().into_iter().filter(|(name, selector)|
+            self.should_process(name, Some(&selector.key()), WrfProductGroup::Core))
+            .map(|(_, selector)| selector));
+        selectors.extend(crate::snowfall::PRODUCTS.iter()
+            .filter(|(name,field)| self.should_process(&FieldSelector::surface(*field).key(), Some(name), WrfProductGroup::Diagnostic))
+            .map(|(_,field)| FieldSelector::surface(*field)));
         for (wrf_name, store_name) in CORE_FIELD_CATALOG {
             if self.should_process(wrf_name, Some(store_name), WrfProductGroup::Core) {
                 selectors.push(core_field_selector(store_name));
@@ -236,10 +421,11 @@ impl WrfProcessOptions {
             }
         }
         selectors.extend(crate::wrf_column_planes::planned_store_selectors(self));
+        selectors.extend(crate::visibility::PRODUCTS.iter().filter(|(n,_,_)|crate::visibility::selected(self,n)).map(|(_,f,_)|FieldSelector::surface(*f)));
         for (diagnostic, _, field) in DIAGNOSTIC_CHART_PLANES {
             let source = derived_name(diagnostic, None);
             if self.needs_diagnostic_grid(diagnostic, &source)
-                && self.should_process(diagnostic, Some(&source), WrfProductGroup::Diagnostic)
+                && self.should_process_diagnostic(diagnostic, &source, WrfProductGroup::Diagnostic)
             {
                 let selector = FieldSelector::entire_atmosphere(field);
                 let key = selector.key();
@@ -253,7 +439,41 @@ impl WrfProcessOptions {
         selectors
     }
 
+    /// Add optional selectors only after inspecting this wrfout's variables.
+    pub fn planned_store_selectors_for(&self, file: &WrfFile) -> Vec<FieldSelector> {
+        let mut selectors = self.planned_store_selectors();
+        selectors.extend(self.chem_rows_for(file).map(|row| row.selector));
+        selectors.sort_by_key(|selector| selector.key());
+        selectors.dedup();
+        selectors
+    }
+
+    pub fn planned_store_fields_for(&self, file: &WrfFile) -> Vec<String> {
+        let mut names = self.planned_store_fields();
+        names.extend(self.chem_rows_for(file).map(|row| row.store_name.to_string()));
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    fn chem_rows_for<'a>(&'a self, file: &'a WrfFile) -> impl Iterator<Item = &'static ChemProductRow> + 'a {
+        CHEM_CORE_FIELD_CATALOG.iter().chain(HAIL_CORE_FIELD_CATALOG.iter()).filter(move |row| {
+            row.sources().any(|source| file.has_var(source))
+                && self.should_process(row.source, Some(row.store_name), WrfProductGroup::Core)
+        })
+    }
+
     pub(crate) fn should_process(
+        &self,
+        wrf_name: &str,
+        store_name: Option<&str>,
+        group: WrfProductGroup,
+    ) -> bool {
+        self.filters_allow(wrf_name, store_name, group) && self.required_allows(store_name)
+    }
+
+    /// The group switches and the `only`/`skip` token grammar alone.
+    fn filters_allow(
         &self,
         wrf_name: &str,
         store_name: Option<&str>,
@@ -312,8 +532,76 @@ const CORE_FIELD_CATALOG: &[(&str, &str)] = &[
     ("pw", "pwat"),
     (COMPOSITE_REFLECTIVITY_FILTER, COMPOSITE_REFLECTIVITY_STORE),
     (REFLECTIVITY_1KM_FILTER, REFLECTIVITY_1KM_STORE),
+    ("wa", "vertical_velocity_1km_agl"),
+    ("wa", "vertical_velocity_3km_agl"),
     ("UP_HELI_MAX", "updraft_helicity_2to5km"),
     ("apcp", "apcp"),
+];
+
+/// Optional core planes. The source-presence gate keeps chem-off plans and
+/// selectors identical to the meteorological catalog. WRF-Chem writes PM2_5_DRY
+/// and o3 on mass levels (Registry/registry.chem:1136,1584); level 1 is
+/// the first plane, not a vertically interpolated 2 m value.
+#[derive(Debug, Clone, Copy)]
+pub struct ChemProductRow {
+    pub source: &'static str,
+    /// Further sources of the same quantity in the same units, summed with
+    /// `source` where present: the coupled fire's bulk smoke
+    /// (`SFIRE_SMOKE_SFC`, `SFIRE_SMOKE_COLUMN`) is smoke as much as the
+    /// transported AQ row, so a fire run's smoke draws on the same map and
+    /// a run carrying both draws their total.
+    pub also: &'static [&'static str],
+    pub store_name: &'static str,
+    pub selector: FieldSelector,
+    pub lowest_level: bool,
+    pub scale: f32,
+}
+
+impl ChemProductRow {
+    /// Every source this row reads, `source` first.
+    pub fn sources(&self) -> impl Iterator<Item = &'static str> + '_ {
+        std::iter::once(self.source).chain(self.also.iter().copied())
+    }
+}
+
+pub const HAIL_CORE_FIELD_CATALOG: &[ChemProductRow] = &[
+    ChemProductRow { source: "HAIL_MAXK1", also: &[], store_name: "hail_max_surface",
+        selector: FieldSelector::surface(CanonicalField::HailMaxSurface), lowest_level: false, scale: 1000.0 },
+    ChemProductRow { source: "HAIL_MAX2D", also: &[], store_name: "hail_max_column",
+        selector: FieldSelector::surface(CanonicalField::HailMaxColumn), lowest_level: false, scale: 1000.0 },
+    ChemProductRow { source: "HAIL_MAXK1_RUN", also: &[], store_name: "hail_max_surface_run",
+        selector: FieldSelector::surface(CanonicalField::HailMaxSurfaceRun), lowest_level: false, scale: 1000.0 },
+    ChemProductRow { source: "HAIL_MAX2D_RUN", also: &[], store_name: "hail_max_column_run",
+        selector: FieldSelector::surface(CanonicalField::HailMaxColumnRun), lowest_level: false, scale: 1000.0 },
+    ChemProductRow { source: "HAILCAST_DIAM_MAX", also: &[], store_name: "hail_max_hailcast",
+        selector: FieldSelector::surface(CanonicalField::HailcastMax), lowest_level: false, scale: 1.0 },
+    ChemProductRow { source: "HAILCAST_DIAM_MEAN", also: &[], store_name: "hail_max_hailcast_mean",
+        selector: FieldSelector::surface(CanonicalField::HailcastMean), lowest_level: false, scale: 1.0 },
+    ChemProductRow { source: "HAILCAST_DIAM_STD", also: &[], store_name: "hail_max_hailcast_std",
+        selector: FieldSelector::surface(CanonicalField::HailcastStd), lowest_level: false, scale: 1.0 },
+    ChemProductRow { source: "HAILCAST_RUNMAX", also: &[], store_name: "hail_max_hailcast_run",
+        selector: FieldSelector::surface(CanonicalField::HailcastRun), lowest_level: false, scale: 1.0 },
+];
+
+pub const CHEM_CORE_FIELD_CATALOG: &[ChemProductRow] = &[
+    ChemProductRow { source: "SMOKE_SFC", also: &["SFIRE_SMOKE_SFC"], store_name: "smoke_near_surface",
+        selector: FieldSelector::height_agl(CanonicalField::SmokeMassDensity, 8),
+        lowest_level: false, scale: 1.0e-9 },
+    ChemProductRow { source: "SMOKE_COLUMN", also: &["SFIRE_SMOKE_COLUMN"], store_name: "smoke_column",
+        selector: FieldSelector::entire_atmosphere(CanonicalField::ColumnIntegratedSmoke),
+        lowest_level: false, scale: 1.0e-6 },
+    ChemProductRow { source: "PM2_5_DRY", also: &[], store_name: "pm25_near_surface",
+        selector: FieldSelector::surface(CanonicalField::Pm25Dry),
+        lowest_level: true, scale: 1.0 },
+    ChemProductRow { source: "AOD5502D", also: &[], store_name: "aod_550",
+        selector: FieldSelector::entire_atmosphere(CanonicalField::AerosolOpticalDepth550),
+        lowest_level: false, scale: 1.0 },
+    ChemProductRow { source: "DUST_SFC", also: &[], store_name: "dust_near_surface",
+        selector: FieldSelector::surface(CanonicalField::DustMassConcentration),
+        lowest_level: false, scale: 1.0 },
+    ChemProductRow { source: "o3", also: &[], store_name: "ozone_near_surface",
+        selector: FieldSelector::surface(CanonicalField::OzoneConcentration),
+        lowest_level: true, scale: 1000.0 },
 ];
 
 /// The canonical selector each [`CORE_FIELD_CATALOG`] row is written under.
@@ -325,6 +613,9 @@ const CORE_FIELD_CATALOG: &[(&str, &str)] = &[
 /// selectors for one plane.  Every catalog row has an arm; the
 /// `every_core_row_has_one_selector` test holds the two tables together.
 pub(crate) fn core_field_selector(store_name: &str) -> FieldSelector {
+    if let Some(row) = CHEM_CORE_FIELD_CATALOG.iter().chain(HAIL_CORE_FIELD_CATALOG.iter()).find(|row| row.store_name == store_name) {
+        return row.selector;
+    }
     match store_name {
         "orography" => FieldSelector::surface(CanonicalField::GeopotentialHeight),
         "temperature_2m" => FieldSelector::height_agl(CanonicalField::Temperature, 2),
@@ -338,6 +629,8 @@ pub(crate) fn core_field_selector(store_name: &str) -> FieldSelector {
         "pwat" => FieldSelector::entire_atmosphere(CanonicalField::PrecipitableWater),
         COMPOSITE_REFLECTIVITY_STORE => composite_reflectivity_selector(),
         REFLECTIVITY_1KM_STORE => reflectivity_1km_selector(),
+        "vertical_velocity_1km_agl" => FieldSelector::height_agl(CanonicalField::GeometricVerticalVelocity, 1000),
+        "vertical_velocity_3km_agl" => FieldSelector::height_agl(CanonicalField::GeometricVerticalVelocity, 3000),
         "updraft_helicity_2to5km" => {
             FieldSelector::height_layer_agl(CanonicalField::UpdraftHelicity, 2000, 5000)
         }
@@ -349,6 +642,15 @@ pub(crate) fn core_field_selector(store_name: &str) -> FieldSelector {
 /// Chart planes use selector keys unless a shared writer table assigns a
 /// public store name to that selector.
 fn store_name_for_selector(selector: FieldSelector) -> String {
+    if let Some((name,_)) = derived_diagnostics::PRODUCTS.iter().find(|(_,field)| FieldSelector::surface(*field)==selector) {
+        return name.to_string();
+    }
+    if let Some((name,_)) = crate::snowfall::PRODUCTS.iter().find(|(_,field)| FieldSelector::surface(*field)==selector) {
+        return name.to_string();
+    }
+    if let Some(row) = CHEM_CORE_FIELD_CATALOG.iter().chain(HAIL_CORE_FIELD_CATALOG.iter()).find(|row| row.selector == selector) {
+        return row.store_name.to_string();
+    }
     CORE_FIELD_CATALOG
         .iter()
         .find(|(_, name)| core_field_selector(name) == selector)
@@ -361,6 +663,122 @@ fn store_name_for_selector(selector: FieldSelector) -> String {
         })
         .map(str::to_string)
         .unwrap_or_else(|| selector.key())
+}
+
+/// The raw WRF variables a core surface plane is read from, for the planes
+/// whose absence the volume build fills from the lowest model level
+/// ([`fill_missing_surface`]); `None` for every other store name.
+fn surface_fallback_sources(store_name: &str) -> Option<&'static [&'static str]> {
+    let exact = store_name.strip_prefix("approx_").unwrap_or(store_name);
+    match exact {
+        "surface_pressure" => Some(&["PSFC"]),
+        "temperature_2m" => Some(&["T2"]),
+        "dewpoint_2m" => Some(&["T2", "Q2", "PSFC"]),
+        "u_10m" => Some(&["U10"]),
+        "v_10m" => Some(&["V10"]),
+        _ => None,
+    }
+}
+
+/// Whether a store name is a surface plane wrf-core reads straight off the
+/// file's own 2-D variables, needing no 3-D field: the 2 m and 10 m planes,
+/// the surface pressure, the rain totals, the raw extras.  Everything else
+/// (sea-level pressure, precipitable water, reflectivity, every parcel
+/// diagnostic, every column and isobaric plane) starts from a 3-D field.
+fn surface_only_store_name(store_name: &str) -> bool {
+    matches!(
+        store_name,
+        "orography"
+            | "temperature_2m"
+            | "dewpoint_2m"
+            | "relative_humidity_2m"
+            | "u_10m"
+            | "v_10m"
+            | "wind_speed_10m"
+            | "surface_pressure"
+            | "apcp"
+            | "updraft_helicity_2to5km"
+            | "heat_index_2m"
+            | "apparent_temperature_2m"
+            | "wetbulb_2m"
+            | "fire_weather_composite"
+            | "vpd_2m"
+    ) || RAW_EXTRA_CATALOG
+        .iter()
+        .any(|raw| derived_name(raw, None) == store_name)
+}
+
+/// The store names a render of these products reads, or `None` when the
+/// request cannot be scoped: a group keyword (`all`, `direct`, `derived`,
+/// `windowed`), or a term no lane of this build classifies.
+///
+/// One rule, in the recipe's own vocabulary: a direct recipe's NEEDS
+/// selectors ([`rustwx_models::plot_recipe_store_requirements`]) through
+/// [`store_name_for_selector`], the writer's own naming; a derived recipe
+/// its slug-named grid (and `theta_e_2m_10m_winds` the 10 m wind planes its
+/// barb overlay fetches); a window its input selectors; a `var:` request the
+/// plane it names.  A requirement with no canonical selector is left out:
+/// no store can resolve it, so the recipe skips whatever is imported.
+pub fn required_fields_for_products(products: &str) -> Option<Vec<String>> {
+    use rustwx_products::windowed::HrrrWindowedProduct;
+
+    let mut derived = rustwx_products::derived::store_derived_recipe_slugs();
+    derived.extend(rustwx_products::derived::store_heavy_recipe_slugs());
+    let mut names = Vec::new();
+    for term in products.split(',').map(str::trim).filter(|term| !term.is_empty()) {
+        // The windowed group is a closed set of windows: it scopes to what
+        // every one of them reads, so the end-of-run windowed pass imports
+        // a handful of 2-D planes per frame, not the whole frame.
+        if term == "windowed" {
+            for product in HrrrWindowedProduct::supported_products() {
+                names.extend(window_input_names(*product));
+            }
+            continue;
+        }
+        if matches!(term, "all" | "direct" | "derived" | "heavy") {
+            return None;
+        }
+        if let Some(name) = term.strip_prefix("var:") {
+            names.push(name.to_string());
+        } else if let Ok(requirements) = rustwx_models::plot_recipe_store_requirements(term) {
+            names.extend(
+                requirements
+                    .into_iter()
+                    .filter_map(|requirement| requirement.selector)
+                    .map(store_name_for_selector),
+            );
+        } else if derived.iter().any(|slug| *slug == term) {
+            names.push(term.to_string());
+            if term == "theta_e_2m_10m_winds" {
+                names.push("u_10m".to_string());
+                names.push("v_10m".to_string());
+            }
+        } else if let Some(product) = HrrrWindowedProduct::from_slug(term) {
+            names.extend(window_input_names(product));
+        } else {
+            return None;
+        }
+    }
+    names.sort();
+    names.dedup();
+    Some(names)
+}
+
+/// The store names one window reads: its recipe selectors and every plane
+/// the windowed store may read for it, fallbacks included
+/// ([`rusty_weather::render_all::windowed_store::window_store_reads`]).
+fn window_input_names(product: rustwx_products::windowed::HrrrWindowedProduct) -> Vec<String> {
+    let mut names: Vec<String> = product
+        .input_selectors()
+        .into_iter()
+        .map(store_name_for_selector)
+        .collect();
+    names.extend(
+        rusty_weather::render_all::windowed_store::window_store_reads(product)
+            .into_iter()
+            .map(str::to_string),
+    );
+    names
 }
 
 /// The interpolated volumes whose recipe levels are published as
@@ -446,6 +864,9 @@ pub const RAW_EXTRA_CATALOG: &[&str] = &[
     "HFX",
     "LH",
     "SWDOWN",
+    "SWDDNI",
+    "SWDDIR",
+    "SWDDIF",
     "GLW",
     "OLR",
     "TSK",
@@ -490,7 +911,10 @@ const PROFILE_FNV64_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// writer provenance so a reflectivity-method change cannot silently replace
 /// an older imported run. v5: raw extras carry the file's own units, so an
 /// import that stored HAILNC or UP_HELI_MAX with no unit is not reused.
-const WRF_PROCESS_SCIENCE_MARKER: &str = "wrf_science_v5";
+/// v7 (two lines, merged in 2.9.4): hail extras and fixed-height W planes,
+/// including to a full import. v8 carries both, so an import made by
+/// either v7 alone is not reused.
+const WRF_PROCESS_SCIENCE_MARKER: &str = "wrf_science_v8_hail_vertical_velocity";
 const COMPOSITE_REFLECTIVITY_FILTER: &str = "maxdbz";
 const COMPOSITE_REFLECTIVITY_STORE: &str = "composite_reflectivity";
 const REFLECTIVITY_1KM_FILTER: &str = "reflectivity_1km";
@@ -517,6 +941,169 @@ pub struct WrfProcessSummary {
     /// What lets a per-frame event name the FILE it is about: a series
     /// import has many inputs and a slot is not a filename.
     pub frame_sources: Vec<(u16, PathBuf)>,
+    /// What this import's preflight recorded in the process-wide render
+    /// context (initial-condition disclosure and model label).
+    pub run_context: WrfRunContext,
+}
+
+/// The render-context values one import's preflight sets process-wide
+/// ([`rustwx_products::shared_context`]). A caller that runs several
+/// imports at once (rw_ensbatch's members) re-applies the context of the
+/// import that would have run LAST one after another, so the pictures carry
+/// the same labels as a sequential run.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WrfRunContext {
+    disclosure: Option<Option<String>>,
+    model_label: Option<String>,
+}
+
+impl WrfRunContext {
+    /// The context as JSON, for a draw served from a saved import (`--save-import`).
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "disclosure_recorded": self.disclosure.is_some(),
+            "disclosure": self.disclosure.clone().flatten(),
+            "model_label": self.model_label,
+        })
+    }
+
+    /// The context [`Self::to_json`] wrote.
+    pub fn from_json(value: &serde_json::Value) -> Self {
+        let text = |key: &str| value.get(key).and_then(serde_json::Value::as_str).map(str::to_string);
+        let recorded = value
+            .get("disclosure_recorded")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        WrfRunContext {
+            disclosure: recorded.then(|| text("disclosure")),
+            model_label: text("model_label"),
+        }
+    }
+
+    pub fn apply(&self) {
+        if let Some(disclosure) = &self.disclosure {
+            rustwx_products::shared_context::set_initial_condition_disclosure(disclosure.clone());
+        }
+        rustwx_products::shared_context::set_model_label(self.model_label.clone());
+    }
+}
+
+/// Frames of one import computed at once, each on its own lane, within a
+/// memory budget. A frame's working set, with its products computed at once,
+/// is about 270 to 350 bytes per 3-D grid point (measured peak RSS of a
+/// one-frame import: 1.5 GB for a 300x300x49 wrfout, 15.2 GB for a
+/// 1440x721x55 converted hex frame); 352 is budgeted.
+const FRAME_BYTES_PER_POINT: u64 = 352;
+/// Levels assumed for a post-processed source, whose level count the
+/// preflight does not read.
+const POSTPROCESSED_BUDGET_LEVELS: usize = 64;
+
+/// The process-wide memory budget for frames being computed at once: three
+/// quarters of the memory available when the first frame asked, so a
+/// frame's own 3-D volume preflight (which reads the host's available
+/// memory) still finds room. One frame is always admitted when none is in
+/// flight, which is the sequential import every host ran before.
+struct FrameBudget {
+    total: u64,
+    state: std::sync::Mutex<(u64, usize)>,
+    freed: std::sync::Condvar,
+}
+
+fn frame_budget() -> &'static FrameBudget {
+    static BUDGET: std::sync::OnceLock<FrameBudget> = std::sync::OnceLock::new();
+    BUDGET.get_or_init(|| FrameBudget {
+        total: rusty_weather::host_memory::available_bytes()
+            .map(|bytes| bytes / 4 * 3)
+            .unwrap_or(4 << 30),
+        state: std::sync::Mutex::new((0, 0)),
+        freed: std::sync::Condvar::new(),
+    })
+}
+
+struct FramePermit {
+    bytes: u64,
+}
+
+impl FramePermit {
+    fn acquire(bytes: u64) -> Self {
+        let budget = frame_budget();
+        let mut state = budget.state.lock().unwrap_or_else(|poison| poison.into_inner());
+        while state.1 > 0 && state.0.saturating_add(bytes) > budget.total {
+            state = budget
+                .freed
+                .wait(state)
+                .unwrap_or_else(|poison| poison.into_inner());
+        }
+        state.0 = state.0.saturating_add(bytes);
+        state.1 += 1;
+        Self { bytes }
+    }
+}
+
+impl Drop for FramePermit {
+    fn drop(&mut self) {
+        let budget = frame_budget();
+        let mut state = budget.state.lock().unwrap_or_else(|poison| poison.into_inner());
+        state.0 = state.0.saturating_sub(self.bytes);
+        state.1 = state.1.saturating_sub(1);
+        budget.freed.notify_all();
+    }
+}
+
+/// What one lane of frames wrote.
+struct LaneOutcome {
+    written: Vec<WrittenHour>,
+    all_vars: Vec<String>,
+    all_notes: Vec<String>,
+}
+
+fn plan_frame_bytes(plan: &WrfSourcePlan) -> u64 {
+    let levels = plan.levels.unwrap_or(POSTPROCESSED_BUDGET_LEVELS).max(1) as u64;
+    (plan.cells as u64)
+        .saturating_mul(levels)
+        .saturating_mul(FRAME_BYTES_PER_POINT)
+}
+
+/// How many lanes one import runs its frames on: one per frame, no more
+/// than the host has threads or the budget has room for the largest frame.
+fn frame_lane_count(plans: &[WrfSourcePlan], jobs: usize) -> usize {
+    if jobs <= 1 {
+        return 1;
+    }
+    let threads = std::thread::available_parallelism()
+        .map(|threads| threads.get())
+        .unwrap_or(1);
+    let largest = plans.iter().map(plan_frame_bytes).max().unwrap_or(1).max(1);
+    let by_memory = (frame_budget().total / largest).max(1) as usize;
+    jobs.min(threads).min(by_memory).max(1)
+}
+
+/// Wall time of one import stage, reported as a progress line when
+/// `RUSTWX_IMPORT_TIMINGS` is set (one `Instant` per stage otherwise, and
+/// no line), so a slow frame says which stage held it.
+struct ImportStageTimer<'a> {
+    name: &'static str,
+    started: std::time::Instant,
+    report: Option<&'a (dyn Fn(String) + Sync)>,
+}
+
+impl<'a> ImportStageTimer<'a> {
+    fn new(name: &'static str, report: &'a (dyn Fn(String) + Sync)) -> Self {
+        let report = std::env::var_os("RUSTWX_IMPORT_TIMINGS").map(|_| report);
+        Self { name, started: std::time::Instant::now(), report }
+    }
+}
+
+impl Drop for ImportStageTimer<'_> {
+    fn drop(&mut self) {
+        if let Some(report) = self.report {
+            report(format!(
+                "IMPORT_STAGE {} {:.3}s",
+                self.name,
+                self.started.elapsed().as_secs_f64()
+            ));
+        }
+    }
 }
 
 pub(crate) struct WrfHourFields {
@@ -672,6 +1259,9 @@ struct WrfSourcePlan {
     /// The file's grid spacing (`DX`, metres), which scales how closely two
     /// places' coordinates must agree on shared ground.
     dx_m: Option<f64>,
+    /// Grid cells and (raw wrfouts only) levels, for the frame budget.
+    cells: usize,
+    levels: Option<usize>,
 }
 
 /// A series whose frames sit at more than one place of one moving nest: the
@@ -684,6 +1274,7 @@ struct NestMoves {
     tolerance_deg: f64,
     /// Per plan: the move onto the target, `None` for a source already there.
     shifts: Vec<Option<crate::nest_move::NestShift>>,
+    union: Option<(LatLonGrid, (usize, usize))>,
 }
 
 /// Plan how a series that spans a nest's moves lands on one grid, or `None`
@@ -712,7 +1303,7 @@ fn plan_nest_moves(plans: &[WrfSourcePlan]) -> Result<Option<NestMoves>, String>
         .max_by_key(|&index| last_valid(&plans[index]))
         .ok_or("a series with no source cannot move")?;
     let target = placements[target_index];
-    let Some(shifts) = placements
+    let Some(mut shifts) = placements
         .iter()
         .map(|placement| {
             NestShift::between(*placement, target).map(|shift| (!shift.is_null()).then_some(shift))
@@ -743,13 +1334,66 @@ fn plan_nest_moves(plans: &[WrfSourcePlan]) -> Result<Option<NestMoves>, String>
         lon.iter().map(|value| *value as f32).collect(),
     )
     .map_err(|err| err.to_string())?;
+    let tolerance = coordinate_tolerance_deg(target_plan.dx_m.unwrap_or(f64::NAN));
+    let union = nest_union_grid(plans, &placements, target, tolerance)?;
+    if union.is_some() {
+        // Even the final placement must be embedded in the larger fixed grid.
+        for shift in &mut shifts {
+            if shift.is_none() { *shift = Some(NestShift { dx: 0, dy: 0 }); }
+        }
+    }
     Ok(Some(NestMoves {
         target,
         target_path: target_plan.path.clone(),
         target_grid,
         tolerance_deg: coordinate_tolerance_deg(target_plan.dx_m.unwrap_or(f64::NAN)),
         shifts,
+        union,
     }))
+}
+
+fn nest_union_grid(plans: &[WrfSourcePlan], placements: &[crate::nest_move::NestPlacement],
+                   target: crate::nest_move::NestPlacement, tolerance: f64)
+                   -> Result<Option<(LatLonGrid, (usize, usize))>, String> {
+    let min_i = placements.iter().map(|p| p.i_parent_start).min().unwrap();
+    let min_j = placements.iter().map(|p| p.j_parent_start).min().unwrap();
+    let ratio = i64::from(target.parent_grid_ratio);
+    let offsets: Vec<_> = placements.iter().map(|p|
+        (((i64::from(p.i_parent_start)-i64::from(min_i))*ratio) as usize,
+         ((i64::from(p.j_parent_start)-i64::from(min_j))*ratio) as usize)).collect();
+    let mut coordinates = Vec::new();
+    let (mut nx, mut ny) = (0, 0);
+    for (plan, &(x,y)) in plans.iter().zip(&offsets) {
+        let file = WrfFile::open(&plan.path).map_err(|e| e.to_string())?;
+        let t = plan.records.last().ok_or("nest source has no record")?.time_index;
+        nx = nx.max(x.checked_add(file.nx).ok_or("nest union width overflow")?);
+        ny = ny.max(y.checked_add(file.ny).ok_or("nest union height overflow")?);
+        coordinates.push((file.nx, file.ny,
+            file.xlat(t).map_err(|e| e.to_string())?, file.xlong(t).map_err(|e| e.to_string())?));
+    }
+    let cells = nx.checked_mul(ny).ok_or("nest union cells overflow")?;
+    if cells > 16_777_216 { return Err("moving nest fixed frame exceeds 16 million cells".into()); }
+    let mut lat = vec![f32::NAN; cells];
+    let mut lon = vec![f32::NAN; cells];
+    for ((sx, sy, source_lat, source_lon), &(x,y)) in coordinates.iter().zip(&offsets) {
+        for j in 0..*sy { for i in 0..*sx {
+            let dst = (j+y)*nx+i+x;
+            let src = j*sx+i;
+            let a = source_lat[src] as f32;
+            let b = source_lon[src] as f32;
+            if lat[dst].is_finite() && ((lat[dst]-a).abs() as f64 > tolerance
+                || ((lon[dst]-b+180.).rem_euclid(360.)-180.).abs() as f64 > tolerance) {
+                // An ancestor moved. Keep the existing coordinate-verified
+                // alignment route, rather than inventing a fixed parent.
+                return Ok(None);
+            }
+            lat[dst] = a; lon[dst] = b;
+        }}
+    }
+    let last_offset = (((i64::from(target.i_parent_start)-i64::from(min_i))*ratio) as usize,
+                       ((i64::from(target.j_parent_start)-i64::from(min_j))*ratio) as usize);
+    Ok(Some((LatLonGrid::new(GridShape::new(nx, ny).map_err(|e| e.to_string())?, lat, lon)
+        .map_err(|e| e.to_string())?, last_offset)))
 }
 
 /// Move one hour's fields from a place the nest has since left onto the
@@ -774,6 +1418,32 @@ fn move_hour_fields(
     label: &str,
 ) -> Result<(), String> {
     use crate::nest_move::{locate_shift, shift_plane, verify_shift};
+
+    if let Some((grid, (last_x, last_y))) = &moves.union {
+        use crate::nest_move::embed_plane;
+        let source = (fields.grid.shape.nx, fields.grid.shape.ny);
+        let target = (grid.shape.nx, grid.shape.ny);
+        let offset = (usize::try_from(*last_x as i64-shift.dx).map_err(|e| e.to_string())?,
+                      usize::try_from(*last_y as i64-shift.dy).map_err(|e| e.to_string())?);
+        for (_, field) in fields.canonical.iter_mut() {
+            field.values = embed_plane(&field.values, source, target, offset)?;
+            field.grid = grid.clone();
+        }
+        for field in fields.derived.iter_mut() {
+            field.values = embed_plane(&field.values, source, target, offset)?;
+        }
+        for volume in fields.volumes.iter_mut() {
+            for (_, plane) in volume.levels.iter_mut() {
+                *plane = embed_plane(plane, source, target, offset)?;
+            }
+        }
+        let footprint = embed_plane(&vec![1.; source.0*source.1], source, target, offset)?;
+        fields.derived.push(OwnedDerivedField {name: "nest_sample_coverage".into(), units: "1".into(),
+            values: footprint.into_iter().map(|v| if v.is_finite() {1.} else {0.}).collect()});
+        fields.grid = grid.clone();
+        fields.notes.push(format!("{} ({label}): native nest placement on the fixed union of visited footprints; unvisited cells missing", display_name(path)));
+        return Ok(());
+    }
 
     let (nx, ny) = (moves.target_grid.shape.nx, moves.target_grid.shape.ny);
     let (shift, shared, read_from) =
@@ -853,12 +1523,14 @@ fn preflight_wrf_sources(
     source_identity: &str,
     processing_profile: &str,
     tx: &Sender<WrfProcessMessage>,
-) -> Result<(Vec<WrfSourcePlan>, String), String> {
+) -> Result<(Vec<WrfSourcePlan>, String, WrfRunContext), String> {
     let mut expected_shape = None::<(usize, usize)>;
     let mut sources = Vec::with_capacity(files.len());
     let mut kinds = Vec::with_capacity(files.len());
     let mut places = Vec::with_capacity(files.len());
+    let mut sizes = Vec::<(usize, Option<usize>)>::with_capacity(files.len());
     let mut model_labels = Vec::<Option<String>>::with_capacity(files.len());
+    let mut context = WrfRunContext::default();
     for path in files {
         let _ = tx.send(WrfProcessMessage::Progress(format!(
             "Preflighting WRF {}",
@@ -877,9 +1549,11 @@ fn preflight_wrf_sources(
                 // netcrust carries the same provenance, and a lead disclosed
                 // under one reader and hidden under the other would make the
                 // label depend on the file's encoding rather than on the run.
+                let disclosure = crate::local_import::initial_condition_disclosure(&file);
                 rustwx_products::shared_context::set_initial_condition_disclosure(
-                    crate::local_import::initial_condition_disclosure(&file),
+                    disclosure.clone(),
                 );
+                context.disclosure = Some(disclosure);
                 model_labels.push(
                     crate::local_import::model_label(&file)
                         .unwrap_or_else(|reason| unusable_model_label(tx, path, &reason)),
@@ -889,15 +1563,18 @@ fn preflight_wrf_sources(
                     crate::nest_move::NestPlacement::of(&file),
                     file.global_attr_f64("DX").ok(),
                 ));
+                sizes.push((file.nx * file.ny, Some(file.nz)));
                 (WrfSourceKind::Raw, times, (file.nx, file.ny))
             }
             Err(_) => {
                 let nc = netcrust::open(path).map_err(|err| {
                     format!("Open post-processed WRF {} failed: {err}", path.display())
                 })?;
+                let disclosure = crate::local_import::netcdf_initial_condition_disclosure(&nc);
                 rustwx_products::shared_context::set_initial_condition_disclosure(
-                    crate::local_import::netcdf_initial_condition_disclosure(&nc),
+                    disclosure.clone(),
                 );
+                context.disclosure = Some(disclosure);
                 model_labels.push(
                     crate::local_import::netcdf_model_label(&nc)
                         .unwrap_or_else(|reason| unusable_model_label(tx, path, &reason)),
@@ -908,6 +1585,7 @@ fn preflight_wrf_sources(
                     format!("Read grid shape from {} failed: {err}", path.display())
                 })?;
                 places.push((None, None));
+                sizes.push((shape.0 * shape.1, None));
                 (WrfSourceKind::Postprocessed, times, shape)
             }
         };
@@ -918,13 +1596,12 @@ fn preflight_wrf_sources(
     // The model the files name (a mesh or global model's frames import as
     // `wrf` like any wrfout) is the run's, when every file names the same
     // one; recorded once, beside the disclosure.
-    rustwx_products::shared_context::set_model_label(
-        rustwx_products::shared_context::agreed_model_label(&model_labels),
-    );
+    context.model_label = rustwx_products::shared_context::agreed_model_label(&model_labels);
+    rustwx_products::shared_context::set_model_label(context.model_label.clone());
     let timeline = crate::local_import::ForecastHourTimeline::plan_all(&sources)?;
     let mut plans = Vec::with_capacity(sources.len());
-    for (index, (((path, _), kind), (placement, dx_m))) in
-        sources.into_iter().zip(kinds).zip(places).enumerate()
+    for (index, ((((path, _), kind), (placement, dx_m)), (cells, levels))) in
+        sources.into_iter().zip(kinds).zip(places).zip(sizes).enumerate()
     {
         let records = timeline
             .records_for_source(index)
@@ -941,10 +1618,12 @@ fn preflight_wrf_sources(
             records,
             placement,
             dx_m,
+            cells,
+            levels,
         });
     }
     let run = timeline.run_name(source_identity, processing_profile);
-    Ok((plans, run))
+    Ok((plans, run, context))
 }
 
 fn process_paths(
@@ -983,14 +1662,34 @@ fn process_paths_with_target(
         return Err("No supported WRF files selected".to_string());
     }
 
-    let source_snapshot = crate::local_import::capture_source_set_identity(&files)?;
+    // The snowfall integration reads neighboring history records too.
+    // Include them in both cache identity and the end-of-import mutation
+    // check, so a revised intermediate frame cannot reuse an old total.
+    let mut dependencies = files.clone();
+    let mut history = Vec::new();
+    if crate::snowfall::PRODUCTS.iter().any(|(name,field)|
+        options.should_process(&FieldSelector::surface(*field).key(), Some(name), WrfProductGroup::Diagnostic)) {
+        for path in &files { history.extend(crate::snowfall::history_paths(path)?); }
+        history.sort(); history.dedup();
+        dependencies.extend(history.iter().cloned());
+        dependencies.sort(); dependencies.dedup();
+    }
+    let hash_started = std::time::Instant::now();
+    let source_snapshot = crate::local_import::capture_source_set_identity_with_history(&files, &history)?;
+    if std::env::var_os("RUSTWX_IMPORT_TIMINGS").is_some() {
+        let _ = tx.send(WrfProcessMessage::Progress(format!(
+            "IMPORT_STAGE source-identity files={} {:.3}s",
+            dependencies.len(),
+            hash_started.elapsed().as_secs_f64()
+        )));
+    }
     let source_identity = &source_snapshot.identity;
     // A store hour is replaced as a unit. Keep every full-processing plan in
     // its own run so a later core-only/custom import cannot erase fields from
     // an earlier default or heavy import of the exact same source files.
     let processing_profile = processing_profile_suffix(options);
     let model = "wrf".to_string();
-    let (mut plans, discovered_run) =
+    let (mut plans, discovered_run, run_context) =
         preflight_wrf_sources(&files, source_identity, &processing_profile, tx)?;
     let run = if let Some(target) = live_target {
         if plans.len() != 1 || plans[0].records.len() != 1 {
@@ -1038,6 +1737,7 @@ fn process_paths_with_target(
                 variables: record.variables,
                 notes: record.notes,
                 frame_sources: plan_frame_sources(&plans),
+                run_context,
             });
         }
     }
@@ -1056,9 +1756,6 @@ fn process_paths_with_target(
         .as_ref()
         .map(|publisher| publisher.staging_store_root().to_path_buf())
         .unwrap_or_else(|| store_root.to_path_buf());
-    let mut written = Vec::<WrittenHour>::new();
-    let mut all_vars = Vec::<String>::new();
-    let mut all_notes = Vec::<String>::new();
     // A series that spans a moving nest's moves is stored on its last
     // frame's place ([`crate::nest_move`]); `None` for every other series.
     let moves = if live_target.is_none() {
@@ -1067,7 +1764,34 @@ fn process_paths_with_target(
         None
     };
 
+    // Frames are computed on lanes at once (bounded by the host's threads
+    // and the frame budget) and written one at a time; the store's hour
+    // files and its BTreeMap manifest do not depend on write order.
+    let offsets = plans
+        .iter()
+        .scan(0usize, |next, plan| {
+            let first = *next;
+            *next += plan.records.len();
+            Some(first)
+        })
+        .collect::<Vec<_>>();
+    let jobs = plans.iter().map(|plan| plan.records.len()).sum::<usize>();
+    let write_lock = std::sync::Mutex::new(());
+    let moves = &moves;
+    let staging_store_root = &staging_store_root;
+    let run_lane = |start: usize, end: usize| -> Result<LaneOutcome, String> {
+    let mut written = Vec::<WrittenHour>::new();
+    let mut all_vars = Vec::<String>::new();
+    let mut all_notes = Vec::<String>::new();
+    let mut snowfall_cache = crate::snowfall::WindowCache::default();
     for (plan_index, plan) in plans.iter().enumerate() {
+        let first = offsets[plan_index];
+        let (lo, hi) = (start.max(first), end.min(first + plan.records.len()));
+        if lo >= hi {
+            continue;
+        }
+        let lane_records = &plan.records[lo - first..hi - first];
+        let _permit = FramePermit::acquire(plan_frame_bytes(plan));
         let shift = moves
             .as_ref()
             .and_then(|moves| moves.shifts.get(plan_index).copied().flatten());
@@ -1095,7 +1819,7 @@ fn process_paths_with_target(
                         let slug = *slug;
                         options.should_process(slug, Some(slug), WrfProductGroup::Diagnostic)
                     });
-            for record in &plan.records {
+            for record in lane_records {
                 let storage_slot = record.storage_slot;
                 // Post-processed climate wrfout (CONUS-I/II, GDEX: derived
                 // TK/Z/P, no raw T/PB), wrf-core can't open these, so route
@@ -1180,6 +1904,7 @@ fn process_paths_with_target(
                                 path.display()
                             ));
                         }
+                        let _writing = write_lock.lock().unwrap_or_else(|poison| poison.into_inner());
                         let result = match record.exact_time {
                             Some(exact_time) => write_hour_from_grid_with_derived_exact(
                                 &staging_store_root,
@@ -1252,11 +1977,14 @@ fn process_paths_with_target(
         let raw_extras_selected = RAW_EXTRA_CATALOG.iter().any(|raw| {
             options.should_process(raw, Some(&derived_name(raw, None)), WrfProductGroup::Raw)
         });
-        let stored_plane_index = if options.stored_planes || raw_extras_selected {
+        // A scoped plan builds the index only when a required name is one
+        // no catalog of this import publishes (a user's own Registry plane).
+        let stored_planes_wanted = options.wants_stored_planes(&file);
+        let stored_plane_index = if stored_planes_wanted || raw_extras_selected {
             let _ = tx.send(WrfProcessMessage::Progress(format!(
                 "Indexing {} for {}",
                 display_name(path),
-                if options.stored_planes {
+                if stored_planes_wanted {
                     "stored 2-D planes"
                 } else {
                     "raw field units"
@@ -1286,7 +2014,7 @@ fn process_paths_with_target(
         } else {
             None
         };
-        for record in &plan.records {
+        for record in lane_records {
             let timeidx = record.time_index;
             let storage_slot = record.storage_slot;
             let _ = tx.send(WrfProcessMessage::Progress(format!(
@@ -1299,6 +2027,7 @@ fn process_paths_with_target(
             let mut progress = |message: String| {
                 let _ = tx.send(WrfProcessMessage::Progress(message));
             };
+            let hour_started = std::time::Instant::now();
             let mut fields = read_wrf_products(
                 &file,
                 path,
@@ -1306,6 +2035,7 @@ fn process_paths_with_target(
                 options,
                 stored_plane_index.as_ref(),
                 &mut progress,
+                &mut snowfall_cache,
             )?;
             if let (Some(moves), Some(shift)) = (moves.as_ref(), shift) {
                 move_hour_fields(
@@ -1345,6 +2075,15 @@ fn process_paths_with_target(
                 .iter()
                 .map(IsoVolume::as_input)
                 .collect::<Vec<_>>();
+            let write_started = std::time::Instant::now();
+            if std::env::var_os("RUSTWX_IMPORT_TIMINGS").is_some() {
+                let _ = tx.send(WrfProcessMessage::Progress(format!(
+                    "IMPORT_STAGE hour-fields {} {:.3}s",
+                    display_name(path),
+                    hour_started.elapsed().as_secs_f64()
+                )));
+            }
+            let _writing = write_lock.lock().unwrap_or_else(|poison| poison.into_inner());
             let result = match record.exact_time {
                 Some(exact_time) => write_hour_from_grid_with_derived_exact(
                     &staging_store_root,
@@ -1375,10 +2114,65 @@ fn process_paths_with_target(
                 ),
             }
             .map_err(|err| format!("Write WRF {} failed: {err}", record.display_key()))?;
+            if std::env::var_os("RUSTWX_IMPORT_TIMINGS").is_some() {
+                let _ = tx.send(WrfProcessMessage::Progress(format!(
+                    "IMPORT_STAGE store-write {} {:.3}s",
+                    display_name(path),
+                    write_started.elapsed().as_secs_f64()
+                )));
+            }
             all_vars.extend(result.vars.iter().cloned());
             all_notes.extend(fields.notes);
             written.push(result);
         }
+    }
+        Ok(LaneOutcome { written, all_vars, all_notes })
+    };
+
+    // Lanes take contiguous runs of frames, so a lane's snowfall window
+    // cache still carries one frame's total to the next; a lane's first
+    // frame replays the window from its baseline, which sums the same
+    // frames in the same order and so gives the same bytes.
+    let lanes = frame_lane_count(&plans, jobs);
+    let outcomes: Vec<Result<LaneOutcome, String>> = if lanes <= 1 {
+        vec![run_lane(0, jobs)]
+    } else {
+        std::thread::scope(|scope| {
+            let run_lane = &run_lane;
+            let handles = (0..lanes)
+                .map(|lane| {
+                    let (start, end) = (jobs * lane / lanes, jobs * (lane + 1) / lanes);
+                    scope.spawn(move || {
+                        isolate_panics("WRF processing worker", || run_lane(start, end))
+                    })
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|_| Err("WRF frame lane panicked".to_string()))
+                })
+                .collect()
+        })
+    };
+    // The first failing lane holds the earliest failing frame: the error a
+    // one-after-another import would have stopped on.
+    let mut written = Vec::<WrittenHour>::new();
+    let mut all_vars = Vec::<String>::new();
+    let mut all_notes = Vec::<String>::new();
+    for outcome in outcomes {
+        let outcome = outcome?;
+        written.extend(outcome.written);
+        all_vars.extend(outcome.all_vars);
+        all_notes.extend(outcome.all_notes);
+    }
+    for gone in source_snapshot.gone() {
+        all_notes.push(format!(
+            "snowfall history frame {} was removed before this render read it",
+            display_name(gone)
+        ));
     }
 
     all_vars.sort();
@@ -1414,6 +2208,7 @@ fn process_paths_with_target(
         variables: all_vars,
         notes: all_notes,
         frame_sources,
+        run_context,
     })
 }
 
@@ -1434,7 +2229,7 @@ pub const REUSED_IMPORT_PROGRESS: &str = "Reusing the imported WRF run";
 
 /// The file a complete import keeps inside its published run directory.
 ///
-/// WHAT BREAKAGE THIS PREVENTS (gate law): `gpuwm render` asks the catalog
+/// WHAT BREAKAGE THIS PREVENTS (gate law): `woof render` asks the catalog
 /// what a set of frames can draw (`--list-products`) and then renders them,
 /// two launches into one store, and each launch imported every frame.  Nine
 /// long windows over four 750 m frames cost 219 CPU-s through the door
@@ -1570,7 +2365,8 @@ fn read_wrf_products(
     timeidx: usize,
     options: &WrfProcessOptions,
     stored_plane_index: Option<&netcrust::File>,
-    progress: &mut impl FnMut(String),
+    progress: &mut (impl FnMut(String) + Send),
+    snowfall_cache: &mut crate::snowfall::WindowCache,
 ) -> Result<WrfHourFields, String> {
     // Validate hostile/corrupt dimensions before xlat/xlong can allocate
     // coordinate planes. GridShape owns the shared desktop cell ceiling.
@@ -1607,230 +2403,430 @@ fn read_wrf_products(
         notes: Vec::new(),
     };
 
-    macro_rules! push_core {
-        ($wrf:expr, $store:expr, $selector:expr, $units:expr) => {
-            if options.should_process($wrf, Some($store), WrfProductGroup::Core) {
-                push_canonical(
-                    &mut fields,
-                    file,
-                    timeidx,
-                    &grid,
-                    projection.clone(),
-                    $wrf,
-                    $store,
-                    $selector,
-                    $units,
-                );
-            }
-        };
-    }
-
-    push_core!(
-        "terrain",
-        "orography",
-        core_field_selector("orography"),
-        None
-    );
-    push_core!(
-        "t2",
-        "temperature_2m",
-        core_field_selector("temperature_2m"),
-        Some("K")
-    );
-    push_core!(
-        "dp2m",
-        "dewpoint_2m",
-        core_field_selector("dewpoint_2m"),
-        Some("K")
-    );
-    push_core!(
-        "rh2m",
-        "relative_humidity_2m",
-        core_field_selector("relative_humidity_2m"),
-        Some("%")
-    );
-    // WRF's raw U10/V10 components are grid-relative. Ask wrf-core for
-    // `uvmet10` once, then split its [u_earth, v_earth] planes so the canonical
-    // store names and sounding wind barbs are genuinely earth-relative. Keep
-    // U10/V10 as the option-filter keys so saved `only`/`skip` profiles retain
-    // their existing meaning.
-    let want_u10 = options.should_process("U10", Some("u_10m"), WrfProductGroup::Core);
-    let want_v10 = options.should_process("V10", Some("v_10m"), WrfProductGroup::Core);
-    if want_u10 || want_v10 {
-        match compute_var(file, "uvmet10", timeidx, Some("m/s"))
-            .and_then(|output| split_uvmet10(output, shape.len()))
-        {
-            Ok((u_earth, v_earth, units)) => {
-                if want_u10 {
-                    push_canonical_values(
-                        &mut fields,
-                        &grid,
-                        projection.clone(),
-                        "u_10m",
-                        core_field_selector("u_10m"),
-                        &units,
-                        u_earth,
-                    );
-                }
-                if want_v10 {
-                    push_canonical_values(
-                        &mut fields,
-                        &grid,
-                        projection.clone(),
-                        "v_10m",
-                        core_field_selector("v_10m"),
-                        &units,
-                        v_earth,
-                    );
-                }
-            }
-            Err(err) => {
-                if want_u10 {
-                    fields
-                        .notes
-                        .push(format!("u_10m unavailable: earth-rotated uvmet10: {err}"));
-                }
-                if want_v10 {
-                    fields
-                        .notes
-                        .push(format!("v_10m unavailable: earth-rotated uvmet10: {err}"));
-                }
-            }
-        }
-    }
-    push_core!(
-        "wspd10",
-        "wind_speed_10m",
-        core_field_selector("wind_speed_10m"),
-        Some("m/s")
-    );
-    push_core!(
-        "slp",
-        "mslp",
-        core_field_selector("mslp"),
-        Some("Pa")
-    );
-    // Surface pressure (Pa): required by the skew-T column builder. WRF PSFC
-    // is a raw field (no `getvar` diagnostic), so push it explicitly with a
-    // forced "Pa" unit rather than through `push_core!`.
-    if options.should_process("PSFC", Some("surface_pressure"), WrfProductGroup::Core) {
-        match compute_var(file, "PSFC", timeidx, Some("Pa")) {
-            Ok(output) => match single_plane(output, shape.len()) {
-                Ok((values, _units)) => push_canonical_values(
-                    &mut fields,
-                    &grid,
-                    projection.clone(),
-                    "surface_pressure",
-                    core_field_selector("surface_pressure"),
-                    "Pa",
-                    values,
-                ),
-                Err(err) => fields.notes.push(format!("PSFC skipped: {err}")),
+    // Every product below reads the file and the grid and nothing another
+    // one wrote, so they are computed at once, each into its own part
+    // and the parts are joined in this order:
+    // the hour holds the same fields in the same order as one after
+    // another. wrf-core's per-time cache is shared and thread-safe.
+    //
+    // The 3-D fields most of them start from are read first, so the groups
+    // find them in wrf-core's cache instead of each building its own copy.
+    // A field the file lacks is left for the product that needs it to note.
+    // A scoped plan of surface planes alone (2 m temperature, 10 m winds)
+    // reads no 3-D field at all, so it skips the warm-up.
+    let timings = std::env::var_os("RUSTWX_IMPORT_TIMINGS").is_some();
+    let prefetch_started = std::time::Instant::now();
+    if options.wants_three_dimensional_prefetch() {
+        rayon::join(
+            || {
+                rayon::join(
+                    || {
+                        let _ = rayon::join(|| file.full_pressure(timeidx), || file.full_theta(timeidx));
+                        let _ = file.temperature(timeidx);
+                    },
+                    || {
+                        let _ = rayon::join(|| file.full_geopotential(timeidx), || file.terrain(timeidx));
+                        let _ = file.height_agl(timeidx);
+                    },
+                )
             },
-            Err(err) => fields.notes.push(format!("PSFC unavailable: {err}")),
-        }
+            || {
+                let _ = rayon::join(|| file.qvapor(timeidx), || file.geopotential_stag(timeidx));
+            },
+        );
     }
-    push_core!(
-        "pw",
-        "pwat",
-        core_field_selector("pwat"),
-        None
-    );
-    push_reflectivity_products(
-        &mut fields,
-        file,
-        timeidx,
-        &grid,
-        projection.clone(),
-        options,
-        progress,
-    );
-    push_core!(
-        "UP_HELI_MAX",
-        "updraft_helicity_2to5km",
-        core_field_selector("updraft_helicity_2to5km"),
-        Some("m2/s2")
-    );
-    crate::wrf_column_planes::push_column_planes(
-        &mut fields,
-        file,
-        timeidx,
-        &grid,
-        projection.clone(),
-        options,
-        progress,
-    );
+    if timings {
+        progress(format!("IMPORT_STAGE prefetch-3d {:.3}s", prefetch_started.elapsed().as_secs_f64()));
+    }
+    let part = || WrfHourFields {
+        grid: grid.clone(),
+        projection: projection.clone(),
+        canonical: Vec::new(),
+        derived: Vec::new(),
+        volumes: Vec::new(),
+        notes: Vec::new(),
+    };
+    let mut parts: [WrfHourFields; 12] = std::array::from_fn(|_| part());
+    {
+        let progress_lock = std::sync::Mutex::new(&mut *progress);
+        let report = &|message: String| {
+            let mut sink = progress_lock.lock().unwrap_or_else(|poison| poison.into_inner());
+            (*sink)(message);
+        };
+        let [ga, gb, gc, gd, ge, gf, gg, gh, gi, gj, gk, gl] = &mut parts;
+        let grid = &grid;
+        let projection = &projection;
+        let snowfall_cache = &mut *snowfall_cache;
+        rayon::scope(|scope| {
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("ga-core", report);
+            #[allow(unused_mut)]
+            let mut fields = ga;
+            macro_rules! push_core {
+                ($wrf:expr, $store:expr, $selector:expr, $units:expr) => {
+                    if options.should_process($wrf, Some($store), WrfProductGroup::Core) {
+                        push_canonical(
+                            &mut fields,
+                            file,
+                            timeidx,
+                            &grid,
+                            projection.clone(),
+                            $wrf,
+                            $store,
+                            $selector,
+                            $units,
+                        );
+                    }
+                };
+            }
 
-    if options.should_process("apcp", Some("apcp"), WrfProductGroup::Core) {
-        if let Some(values) = total_precip(file, timeidx, shape.len()) {
-            push_canonical_values(
+            push_core!(
+                "terrain",
+                "orography",
+                core_field_selector("orography"),
+                None
+            );
+            push_core!(
+                "t2",
+                "temperature_2m",
+                core_field_selector("temperature_2m"),
+                Some("K")
+            );
+            push_core!(
+                "dp2m",
+                "dewpoint_2m",
+                core_field_selector("dewpoint_2m"),
+                Some("K")
+            );
+            push_core!(
+                "rh2m",
+                "relative_humidity_2m",
+                core_field_selector("relative_humidity_2m"),
+                Some("%")
+            );
+            // WRF's raw U10/V10 components are grid-relative. Ask wrf-core for
+            // `uvmet10` once, then split its [u_earth, v_earth] planes so the canonical
+            // store names and sounding wind barbs are genuinely earth-relative. Keep
+            // U10/V10 as the option-filter keys so saved `only`/`skip` profiles retain
+            // their existing meaning.
+            let want_u10 = options.should_process("U10", Some("u_10m"), WrfProductGroup::Core);
+            let want_v10 = options.should_process("V10", Some("v_10m"), WrfProductGroup::Core);
+            if want_u10 || want_v10 {
+                match compute_var(file, "uvmet10", timeidx, Some("m/s"))
+                    .and_then(|output| split_uvmet10(output, shape.len()))
+                {
+                    Ok((u_earth, v_earth, units)) => {
+                        if want_u10 {
+                            push_canonical_values(
+                                &mut fields,
+                                &grid,
+                                projection.clone(),
+                                "u_10m",
+                                core_field_selector("u_10m"),
+                                &units,
+                                u_earth,
+                            );
+                        }
+                        if want_v10 {
+                            push_canonical_values(
+                                &mut fields,
+                                &grid,
+                                projection.clone(),
+                                "v_10m",
+                                core_field_selector("v_10m"),
+                                &units,
+                                v_earth,
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        if want_u10 {
+                            fields
+                                .notes
+                                .push(format!("u_10m unavailable: earth-rotated uvmet10: {err}"));
+                        }
+                        if want_v10 {
+                            fields
+                                .notes
+                                .push(format!("v_10m unavailable: earth-rotated uvmet10: {err}"));
+                        }
+                    }
+                }
+            }
+            push_core!(
+                "wspd10",
+                "wind_speed_10m",
+                core_field_selector("wind_speed_10m"),
+                Some("m/s")
+            );
+            // Sea-level pressure.  A WRF file keeps wrf-core's `slp` (wrf-python's
+            // DCOMPUTESEAPRS, the parity the WRF readers certify against).  A frame
+            // converted from MPAS-mesh history (rw_mpas_convert stamps
+            // MPAS_BRIDGE_SCHEMA) is reduced the way the GFS analysis it is compared
+            // with is reduced, NCEP's Shuell method (rw_mpas::mslp): DCOMPUTESEAPRS
+            // warms every cold column toward 290.66 K and read hex's MSLP up to
+            // 54 hPa low over Antarctica, Greenland and high terrain against the
+            // GFS analysis on the 120 km mesh (79 hPa on 15 km), with the state's
+            // own surface pressure right to 0.05 hPa.
+            // Either reduction is then smoothed over ground above 500 m the way
+            // operational graphics draw it (crate::mslp_smoothing): at 3 km the
+            // raw reduction over the Rockies was a tangle of closed isobars.
+            if options.should_process("slp", Some("mslp"), WrfProductGroup::Core) {
+                let reduced = if file.global_attr_str("MPAS_BRIDGE_SCHEMA").is_ok() {
+                    mpas_bridge_mslp(file, timeidx, shape.len())
+                } else {
+                    compute_var(file, "slp", timeidx, Some("Pa"))
+                        .and_then(|output| single_plane(output, shape.len()))
+                        .map(|(values, _units)| values)
+                };
+                match reduced {
+                    Ok(mut values) => {
+                        if let Ok(terrain) = file.terrain(timeidx) {
+                            if terrain.len() == values.len() {
+                                let terrain: Vec<f32> = terrain.iter().map(|&z| z as f32).collect();
+                                crate::mslp_smoothing::display_mslp(
+                                    &mut values,
+                                    &terrain,
+                                    &grid.lat_deg,
+                                    &grid.lon_deg,
+                                    grid.shape.nx,
+                                    grid.shape.ny,
+                                );
+                            }
+                        }
+                        push_canonical_values(
+                            &mut fields,
+                            &grid,
+                            projection.clone(),
+                            "mslp",
+                            core_field_selector("mslp"),
+                            "Pa",
+                            values,
+                        )
+                    }
+                    Err(err) => fields.notes.push(format!("mslp unavailable: {err}")),
+                }
+            }
+            // Surface pressure (Pa), required by the skew-T column builder. WRF PSFC
+            // is a raw field (no `getvar` diagnostic), so push it explicitly with a
+            // forced "Pa" unit rather than through `push_core!`.
+            if options.should_process("PSFC", Some("surface_pressure"), WrfProductGroup::Core) {
+                match compute_var(file, "PSFC", timeidx, Some("Pa")) {
+                    Ok(output) => match single_plane(output, shape.len()) {
+                        Ok((values, _units)) => push_canonical_values(
+                            &mut fields,
+                            &grid,
+                            projection.clone(),
+                            "surface_pressure",
+                            core_field_selector("surface_pressure"),
+                            "Pa",
+                            values,
+                        ),
+                        Err(err) => fields.notes.push(format!("PSFC skipped: {err}")),
+                    },
+                    Err(err) => fields.notes.push(format!("PSFC unavailable: {err}")),
+                }
+            }
+            push_core!(
+                "pw",
+                "pwat",
+                core_field_selector("pwat"),
+                None
+            );
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gb-reflectivity", report);
+            #[allow(unused_mut)]
+            let mut fields = gb;
+            let progress = &mut |message: String| report(message);
+            push_reflectivity_products(
                 &mut fields,
+                file,
+                timeidx,
                 &grid,
                 projection.clone(),
-                "apcp",
-                core_field_selector("apcp"),
-                "kg/m^2",
-                values,
+                options,
+                progress,
             );
-        }
-    }
-
-    let total_twod = VARS
-        .iter()
-        .filter(|def| def.dim == VarDim::TwoD && !excluded_from_full_twod_pass(def.name))
-        .count();
-    let mut diagnostic_index = 0usize;
-    for def in VARS {
-        if def.dim != VarDim::TwoD || excluded_from_full_twod_pass(def.name) {
-            continue;
-        }
-        let store_name = derived_name(def.name, None);
-        let group = if is_heavy_wrf_diagnostic(&store_name) || is_heavy_wrf_diagnostic(def.name) {
-            WrfProductGroup::Heavy
-        } else {
-            WrfProductGroup::Diagnostic
-        };
-        if !options.needs_diagnostic_grid(def.name, &store_name)
-            || !options.should_process(def.name, Some(&store_name), group) {
-            continue;
-        }
-        diagnostic_index += 1;
-        progress(format!(
-            "Computing WRF diagnostic {diagnostic_index}/{total_twod}: {}",
-            def.name
-        ));
-        match compute_var(file, def.name, timeidx, None) {
-            Ok(output) => push_derived_output(&mut fields, def.name, output, shape.len()),
-            Err(err) => fields
-                .notes
-                .push(format!("{} unavailable: {err}", def.name)),
-        }
-    }
-
-    for raw in RAW_EXTRA_CATALOG {
-        let store_name = derived_name(raw, None);
-        if !options.should_process(raw, Some(&store_name), WrfProductGroup::Raw) {
-            continue;
-        }
-        if let Ok(mut output) = compute_var(file, raw, timeidx, None) {
-            // A raw extra is the file's own variable, read without any
-            // conversion, so the file's units attribute is what its values
-            // are in. wrf-core's fallback table is only a guess at WRF's
-            // conventions and is kept only where the file names no unit.
-            if let Some(units) = stored_plane_index
-                .and_then(|index| crate::local_import::variable_units(index, raw))
-                .filter(|units| !units.trim().is_empty())
-            {
-                output.units = units;
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gc-uh", report);
+            #[allow(unused_mut)]
+            let mut fields = gc;
+            macro_rules! push_core {
+                ($wrf:expr, $store:expr, $selector:expr, $units:expr) => {
+                    if options.should_process($wrf, Some($store), WrfProductGroup::Core) {
+                        push_canonical(
+                            &mut fields,
+                            file,
+                            timeidx,
+                            &grid,
+                            projection.clone(),
+                            $wrf,
+                            $store,
+                            $selector,
+                            $units,
+                        );
+                    }
+                };
             }
-            push_derived_output(&mut fields, raw, output, shape.len());
-        }
+
+            crate::wrf_vertical_velocity::push(
+                &mut fields, file, timeidx, &grid, projection.clone(), options,
+            );
+            push_core!(
+                "UP_HELI_MAX",
+                "updraft_helicity_2to5km",
+                core_field_selector("updraft_helicity_2to5km"),
+                Some("m2/s2")
+            );
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gd-visibility-columns", report);
+            #[allow(unused_mut)]
+            let mut fields = gd;
+            let progress = &mut |message: String| report(message);
+            crate::visibility::push(&mut fields,file,timeidx,&grid,projection.clone(),options,progress);
+            crate::wrf_column_planes::push_column_planes(
+                &mut fields,
+                file,
+                timeidx,
+                &grid,
+                projection.clone(),
+                options,
+                progress,
+            );
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("ge-apcp", report);
+            #[allow(unused_mut)]
+            let mut fields = ge;
+            if options.should_process("apcp", Some("apcp"), WrfProductGroup::Core) {
+                if let Some(values) = total_precip(file, timeidx, shape.len()) {
+                    push_canonical_values(
+                        &mut fields,
+                        &grid,
+                        projection.clone(),
+                        "apcp",
+                        core_field_selector("apcp"),
+                        "kg/m^2",
+                        values,
+                    );
+                }
+            }
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gf-chem-vertical", report);
+            #[allow(unused_mut)]
+            let mut fields = gf;
+            push_chem_products(&mut fields, file, timeidx, &grid, projection.clone(), options);
+            push_vertical_products(&mut fields, file, timeidx, &grid, projection.clone(), options);
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gg-gust", report);
+            #[allow(unused_mut)]
+            let mut fields = gg;
+            push_gust_10m(&mut fields, file, timeidx, &grid, projection.clone(), shape.len(), options);
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gh-ptype", report);
+            #[allow(unused_mut)]
+            let mut fields = gh;
+            push_precip_type(&mut fields, file, timeidx, &grid, projection.clone(), shape.len(), options);
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gi-snowlevel", report);
+            #[allow(unused_mut)]
+            let mut fields = gi;
+            push_snow_level_ft(&mut fields, file, timeidx, shape.len(), options);
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gj-snowfall", report);
+            #[allow(unused_mut)]
+            let mut fields = gj;
+            crate::snowfall::push(&mut fields, file, path, timeidx, options, &grid, projection.clone(), snowfall_cache);
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gk-diagnostics", report);
+            let total_twod = VARS
+                .iter()
+                .filter(|def| def.dim == VarDim::TwoD && !excluded_from_full_twod_pass(def.name))
+                .count();
+            let selected = VARS
+                .iter()
+                .filter(|def| {
+                    if def.dim != VarDim::TwoD || excluded_from_full_twod_pass(def.name) {
+                        return false;
+                    }
+                    let store_name = derived_name(def.name, None);
+                    let group = if is_heavy_wrf_diagnostic(&store_name)
+                        || is_heavy_wrf_diagnostic(def.name)
+                    {
+                        WrfProductGroup::Heavy
+                    } else {
+                        WrfProductGroup::Diagnostic
+                    };
+                    options.needs_diagnostic_grid(def.name, &store_name)
+                        && options.should_process_diagnostic(def.name, &store_name, group)
+                })
+                .collect::<Vec<_>>();
+            // One after another: wrf-core keeps a stacked result that the
+            // second of a pair reuses (CAPE with CIN per parcel, both
+            // helicity depths) and the composites read; computed at once they
+            // each build their own (measured: 1.7x the frame's peak memory
+            // for no shorter frame).
+            for (index, def) in selected.iter().enumerate() {
+                report(format!(
+                    "Computing WRF diagnostic {}/{total_twod}: {}",
+                    index + 1,
+                    def.name
+                ));
+                match compute_var(file, def.name, timeidx, None) {
+                    Ok(output) => push_derived_output(gk, def.name, output, shape.len()),
+                    Err(err) => gk
+                        .notes
+                        .push(format!("{} unavailable: {err}", def.name)),
+                }
+            }
+        });
+        scope.spawn(move |_| {
+            let _timer = ImportStageTimer::new("gl-raw-extra", report);
+            #[allow(unused_mut)]
+            let mut fields = gl;
+            for raw in RAW_EXTRA_CATALOG {
+                let store_name = derived_name(raw, None);
+                if !options.should_process(raw, Some(&store_name), WrfProductGroup::Raw) {
+                    continue;
+                }
+                if let Ok(mut output) = compute_var(file, raw, timeidx, None) {
+                    // A raw extra is the file's own variable, read without any
+                    // conversion, so the file's units attribute is what its values
+                    // are in. wrf-core's fallback table is only a guess at WRF's
+                    // conventions and is kept only where the file names no unit.
+                    if let Some(units) = stored_plane_index
+                        .and_then(|index| crate::local_import::variable_units(index, raw))
+                        .filter(|units| !units.trim().is_empty())
+                    {
+                        output.units = units;
+                    }
+                    push_derived_output(&mut fields, raw, output, shape.len());
+                }
+            }
+        });
+        });
+    }
+    for part in parts {
+        fields.canonical.extend(part.canonical);
+        fields.derived.extend(part.derived);
+        fields.notes.extend(part.notes);
     }
 
     push_stored_planes(
         &mut fields,
         file,
-        stored_plane_index,
+        // The index may exist for a raw extra's units alone; the sweep
+        // runs only when a required plane is one no catalog publishes.
+        if options.wants_stored_planes(file) { stored_plane_index } else { None },
         timeidx,
         shape,
         options,
@@ -1918,7 +2914,7 @@ fn read_wrf_products(
                 "Selected isobaric chart planes unavailable: {error}"
             )),
         }
-    } else if options.core_fields {
+    } else if options.core_fields && options.wants_isobaric_volumes(file) {
         // Isolated for the same reason as `compute_var`: the volume builder's
         // `getvar` reads must degrade to a note, not kill the hour.
         // Preflight outside the isolated builder as well as inside it so this
@@ -1949,7 +2945,11 @@ fn read_wrf_products(
                     volumes.iter().chain(chart_volumes.iter()),
                     options,
                 );
-                fields.volumes = volumes;
+                // A scoped plan that needed the build for its chart planes
+                // alone writes no sounding volume: no 2-D picture reads one.
+                if options.keeps_sounding_volumes() {
+                    fields.volumes = volumes;
+                }
                 // Split wrf3d files (CONUS404 / GDEX CONUS-II) omit PSFC (and
                 // sometimes T2/Td2/winds). Preserve their lowest-model-level
                 // substitutes under explicit `approx_*` names so they remain
@@ -1965,6 +2965,8 @@ fn read_wrf_products(
             }
         }
     }
+
+    derived_diagnostics::compute(&mut fields, file, timeidx, &grid, projection.clone(), options);
 
     // Release wrf-core's per-timestep intermediate cache before the caller
     // writes the hour to the store. `getvar` memoizes every 3-D f64
@@ -2326,7 +3328,7 @@ fn push_reflectivity_products(
     options: &WrfProcessOptions,
     progress: &mut impl FnMut(String),
 ) {
-    let want_composite = options.should_process(
+    let mut want_composite = options.should_process(
         COMPOSITE_REFLECTIVITY_FILTER,
         Some(COMPOSITE_REFLECTIVITY_STORE),
         WrfProductGroup::Core,
@@ -2341,6 +3343,50 @@ fn push_reflectivity_products(
     }
 
     let native_present = file.has_var("REFL_10CM");
+    // The model's own column maximum (REFC: an MPAS run's refl10cm_max from
+    // its diagnostics stream, carried by rw_mpas_convert) draws the composite
+    // when there is no REFL_10CM volume, instead of the hydrometeor fallback.
+    // THE BREAKAGE THIS PREVENTS (case study 2025-05-19, H2, 2026-10-24): the
+    // hex MPAS-physics route writes no 3-D refl10cm, so its composite maps
+    // were the renderer's estimate, not the model's diagnostic.
+    if want_composite && !native_present && file.has_var("REFC") {
+        let read = isolate_panics("native REFC", || {
+            let values = file.read_var("REFC", timeidx).map_err(|err| err.to_string())?;
+            if values.len() != grid.shape.len() {
+                return Err(format!(
+                    "native REFC has {} values, the grid {}",
+                    values.len(),
+                    grid.shape.len()
+                ));
+            }
+            Ok(values
+                .into_iter()
+                .map(|v| if valid_reflectivity_dbz(v) { v } else { f64::NAN })
+                .collect::<Vec<f64>>())
+        });
+        match read {
+            Ok(values) => {
+                progress("Reading native column-maximum reflectivity REFC".to_string());
+                push_canonical_values(
+                    fields,
+                    grid,
+                    projection.clone(),
+                    COMPOSITE_REFLECTIVITY_STORE,
+                    composite_reflectivity_selector(),
+                    "dBZ",
+                    clean_values(&values),
+                );
+                if !want_1km {
+                    return;
+                }
+                // The 1 km product still needs a volume: read it below.
+                want_composite = false;
+            }
+            Err(err) => fields.notes.push(format!(
+                "native REFC unreadable ({err}); composite falls back to the hydrometeor dbz"
+            )),
+        }
+    }
     progress(if native_present {
         "Reading native WRF REFL_10CM reflectivity volume".to_string()
     } else {
@@ -2638,7 +3684,7 @@ fn push_canonical(
 /// of the canonical 37-level ladder the volumes interpolate, so publishing
 /// them is a copy of existing certified planes, never a second
 /// interpolation.
-const ISOBARIC_RECIPE_LEVELS_HPA: [u16; 6] = [200, 250, 300, 500, 700, 850];
+const ISOBARIC_RECIPE_LEVELS_HPA: [u16; 7] = [200, 250, 300, 500, 700, 850, 925];
 
 /// Publish the chart-recipe levels of the interpolated `*_iso` volumes as
 /// canonical selector planes (`geopotential_height_500hpa`, ...).  Values
@@ -2805,6 +3851,64 @@ fn push_derived_output(
     }
 }
 
+/// Read the first mass-level plane without getvar's diagnostic dispatch.
+/// Source spelling is exact, including lower-case o3. Validate dimensions so
+/// a staggered or transposed array cannot masquerade as a surface product.
+fn chem_plane(file: &WrfFile, row: &ChemProductRow, timeidx: usize) -> Result<Vec<f32>, String> {
+    // The row's present sources, summed plane by plane (one quantity, one unit).
+    let mut total: Option<Vec<f32>> = None;
+    for source in row.sources().filter(|source| file.has_var(source)) {
+        let plane = chem_source_plane(file, row, source, timeidx)?;
+        total = Some(match total {
+            None => plane,
+            Some(mut sum) => {
+                for (into, value) in sum.iter_mut().zip(plane) {
+                    *into += value;
+                }
+                sum
+            }
+        });
+    }
+    total.ok_or_else(|| format!("none of {:?} is in this wrfout", row.sources().collect::<Vec<_>>()))
+}
+
+fn chem_source_plane(file: &WrfFile, row: &ChemProductRow, source: &str, timeidx: usize) -> Result<Vec<f32>, String> {
+    if row.lowest_level && file.nz == 0 {
+        return Err(format!("{} has no first mass level; refusing an empty surface plane", source));
+    }
+    let dims = file.var_shape_no_time(source).map_err(|err| err.to_string())?;
+    let cells = file.nx.checked_mul(file.ny).ok_or("chem plane cell count overflow")?;
+    let expected = if row.lowest_level { vec![file.nz, file.ny, file.nx] }
+                   else { vec![file.ny, file.nx] };
+    if dims != expected {
+        return Err(format!("{} dimensions {dims:?}, expected {expected:?}; refusing a misplaced surface plane", source));
+    }
+    let values = file.read_var(source, timeidx).map_err(|err| err.to_string())?;
+    let count = if row.lowest_level { cells.checked_mul(file.nz).ok_or("chem volume cell count overflow")? }
+                else { cells };
+    if values.len() != count {
+        return Err(format!("{} has {} values, expected {count}; refusing an incomplete surface plane", source, values.len()));
+    }
+    Ok(values[..cells].iter().map(|value| {
+        let value = *value as f32;
+        if !value.is_finite() || value.abs() > 1.0e30 { f32::NAN }
+        else { value * row.scale }
+    }).collect())
+}
+
+fn push_chem_products(
+    fields: &mut WrfHourFields, file: &WrfFile, timeidx: usize,
+    grid: &LatLonGrid, projection: Option<GridProjection>, options: &WrfProcessOptions,
+) {
+    for row in options.chem_rows_for(file) {
+        match chem_plane(file, row, timeidx) {
+            Ok(values) => push_canonical_values(fields, grid, projection.clone(), row.store_name,
+                                                row.selector, row.selector.native_units(), values),
+            Err(err) => fields.notes.push(format!("{} skipped: {err}", row.store_name)),
+        }
+    }
+}
+
 fn single_plane(output: VarOutput, cells: usize) -> Result<(Vec<f32>, String), String> {
     let (ny, nx) = match output.shape.as_slice() {
         [ny, nx] | [1, ny, nx] => (*ny, *nx),
@@ -2869,6 +3973,44 @@ fn checked_horizontal_cells(ny: usize, nx: usize) -> Result<usize, String> {
     ny.checked_mul(nx).ok_or_else(|| {
         format!("horizontal dimensions [{ny}, {nx}] overflow the platform address space")
     })
+}
+
+/// Sea-level pressure (Pa) of an MPAS-bridge frame by the NCEP Shuell
+/// reduction ([`rw_mpas::mslp`]) from the frame's own fields: the lowest
+/// model level's temperature, vapour and height, the surface pressure and the
+/// terrain.  Layout: wrf-core's planes, level-major, `cells` per level.
+pub(crate) fn mpas_bridge_mslp(
+    file: &WrfFile,
+    timeidx: usize,
+    cells: usize,
+) -> Result<Vec<f32>, String> {
+    let temperature = file.temperature(timeidx).map_err(|e| format!("temperature: {e}"))?;
+    let qvapor = file.qvapor(timeidx).map_err(|e| format!("QVAPOR: {e}"))?;
+    let height = file.height_msl(timeidx).map_err(|e| format!("height: {e}"))?;
+    let psfc = file.psfc(timeidx).map_err(|e| format!("PSFC: {e}"))?;
+    let terrain = file.terrain(timeidx).map_err(|e| format!("HGT: {e}"))?;
+    for (name, len) in [
+        ("temperature", temperature.len()),
+        ("QVAPOR", qvapor.len()),
+        ("height", height.len()),
+    ] {
+        if len < cells {
+            return Err(format!("{name} carries {len} values, fewer than one level of {cells}"));
+        }
+    }
+    if psfc.len() != cells || terrain.len() != cells {
+        return Err(format!(
+            "PSFC/HGT carry {}/{} values for {cells} columns",
+            psfc.len(),
+            terrain.len()
+        ));
+    }
+    Ok((0..cells)
+        .map(|ij| {
+            rw_mpas::mslp::shuell_mslp_pa(psfc[ij], terrain[ij], temperature[ij], qvapor[ij], height[ij])
+                as f32
+        })
+        .collect())
 }
 
 pub fn compute_var(
@@ -3044,17 +4186,32 @@ pub(crate) fn wrf_product_slug(base: &str) -> Option<&'static str> {
 
 pub(crate) fn wrf_projection(file: &WrfFile) -> Option<GridProjection> {
     let map_proj = file.global_attr_i32("MAP_PROJ").ok()?;
+    projection_from_attributes(map_proj, |name| file.global_attr_f64(name).ok())
+}
+
+pub(crate) fn netcdf_projection(file: &netcrust::File) -> Option<GridProjection> {
+    let map_proj = match file.attribute("MAP_PROJ")?.as_f64()? {
+        1.0 => 1,
+        2.0 => 2,
+        3.0 => 3,
+        6.0 => 6,
+        _ => return None,
+    };
+    projection_from_attributes(map_proj, |name| file.attribute(name).and_then(|attr| attr.as_f64()))
+}
+
+fn projection_from_attributes(
+    map_proj: i32,
+    read: impl Fn(&str) -> Option<f64>,
+) -> Option<GridProjection> {
     match map_proj {
         1 => {
-            let truelat1 = file.global_attr_f64("TRUELAT1").ok()?;
+            let truelat1 = read("TRUELAT1")?;
             let truelat2 = crate::local_import::normalize_lambert_truelat2(
                 truelat1,
-                file.global_attr_f64("TRUELAT2").ok(),
+                read("TRUELAT2"),
             );
-            let stand_lon = file
-                .global_attr_f64("STAND_LON")
-                .ok()
-                .or_else(|| file.global_attr_f64("CEN_LON").ok())?;
+            let stand_lon = read("STAND_LON").or_else(|| read("CEN_LON"))?;
             Some(GridProjection::LambertConformal {
                 standard_parallel_1_deg: truelat1,
                 standard_parallel_2_deg: truelat2,
@@ -3062,11 +4219,8 @@ pub(crate) fn wrf_projection(file: &WrfFile) -> Option<GridProjection> {
             })
         }
         2 => {
-            let truelat1 = file.global_attr_f64("TRUELAT1").ok()?;
-            let stand_lon = file
-                .global_attr_f64("STAND_LON")
-                .ok()
-                .or_else(|| file.global_attr_f64("CEN_LON").ok())?;
+            let truelat1 = read("TRUELAT1")?;
+            let stand_lon = read("STAND_LON").or_else(|| read("CEN_LON"))?;
             Some(GridProjection::PolarStereographic {
                 true_latitude_deg: truelat1,
                 central_meridian_deg: stand_lon,
@@ -3078,14 +4232,14 @@ pub(crate) fn wrf_projection(file: &WrfFile) -> Option<GridProjection> {
             })
         }
         3 => Some(GridProjection::Mercator {
-            latitude_of_true_scale_deg: file.global_attr_f64("TRUELAT1").unwrap_or(0.0),
+            latitude_of_true_scale_deg: read("TRUELAT1").unwrap_or(0.0),
             central_meridian_deg: crate::local_import::wrf_mercator_central_longitude(
-                file.global_attr_f64("STAND_LON").ok(),
+                read("STAND_LON"),
             ),
         }),
         6 if crate::local_import::wrf_latlon_is_unrotated(
-            file.global_attr_f64("POLE_LAT").ok(),
-            file.global_attr_f64("POLE_LON").ok(),
+            read("POLE_LAT"),
+            read("POLE_LON"),
         ) =>
         {
             Some(GridProjection::Geographic)
@@ -3179,6 +4333,10 @@ fn processing_profile_suffix(options: &WrfProcessOptions) -> String {
     let normalized = options.clone().normalized();
     let mut hash = profile_hash_update(PROFILE_FNV64_OFFSET, b"rw-wrf-profile-v2\0");
     hash = profile_hash_update(hash, WRF_PROCESS_SCIENCE_MARKER.as_bytes());
+    hash = profile_hash_update(hash, b"snowfall-window-v2\0");
+    if let Some(since) = &normalized.snow_since {
+        hash = profile_hash_update(hash, since.replace(':', "_").as_bytes());
+    }
     hash = profile_hash_update(
         hash,
         &[
@@ -3200,6 +4358,16 @@ fn processing_profile_suffix(options: &WrfProcessOptions) -> String {
             hash = profile_hash_update(hash, token.as_bytes());
         }
     }
+    // A scoped plan never shares a run with the whole plan of the same
+    // sources: the store it publishes holds only what its products read.
+    if let Some(required) = &normalized.required_fields {
+        hash = profile_hash_update(hash, b"required-fields-v1\0");
+        hash = profile_hash_update(hash, &(required.len() as u64).to_le_bytes());
+        for name in required {
+            hash = profile_hash_update(hash, &(name.len() as u64).to_le_bytes());
+            hash = profile_hash_update(hash, name.as_bytes());
+        }
+    }
     if normalized.viewer_2d {
         hash = profile_hash_update(hash, b"viewer-2d-v1\0");
         for selector in &normalized.chart_selectors {
@@ -3207,6 +4375,8 @@ fn processing_profile_suffix(options: &WrfProcessOptions) -> String {
             hash = profile_hash_update(hash, b"\0");
         }
         format!("viewer2d_{WRF_PROCESS_SCIENCE_MARKER}_{hash:016x}")
+    } else if normalized.required_fields.is_some() {
+        format!("scoped_{WRF_PROCESS_SCIENCE_MARKER}_{hash:016x}")
     } else if normalized.named_products_only {
         hash = profile_hash_update(hash, b"named-products-v1\0");
         format!("named_{WRF_PROCESS_SCIENCE_MARKER}_{hash:016x}")
@@ -3288,7 +4458,7 @@ fn writer_build() -> &'static str {
         env!("CARGO_PKG_NAME"),
         " ",
         env!("CARGO_PKG_VERSION"),
-        " wrf_science_v5"
+        " wrf_science_v8_hail_vertical_velocity"
     )
 }
 
@@ -4034,22 +5204,160 @@ mod tests {
             covered += 1;
             for requirement in requirements {
                 let selector = requirement.selector.unwrap();
-                let store_name = CORE_FIELD_CATALOG
-                    .iter()
-                    .find(|(_, name)| core_field_selector(name) == selector)
-                    .map(|(_, name)| *name)
-                    .or_else(|| {
-                        crate::wrf_column_planes::COLUMN_PLANE_CATALOG
-                            .iter()
-                            .find(|plane| plane.selector() == selector)
-                            .map(|plane| plane.store_name)
-                    })
-                    .map(str::to_string)
-                    .unwrap_or_else(|| selector.key());
+                // The writer's own selector -> store-name table, so every
+                // shared catalog (diagnostics, snowfall, chem, hail, core,
+                // column planes) names its planes here exactly as the
+                // planner and writer do.
+                let store_name = store_name_for_selector(selector);
                 assert!(fields.contains(&store_name), "{slug} needs {store_name}");
             }
         }
         assert!(covered > 20, "the full import must cover a direct gallery");
+    }
+
+    /// The scoped plan of one surface product is that product's planes and
+    /// the terrain, nothing else: no diagnostic, no column, no volume, and
+    /// no 3-D warm-up.
+    #[test]
+    fn scoped_plan_of_a_surface_product_is_its_planes_and_the_terrain() {
+        let required = required_fields_for_products("2m_temperature")
+            .expect("a named direct product scopes the import");
+        let options = WrfProcessOptions {
+            named_products_only: true,
+            required_fields: Some(required),
+            ..WrfProcessOptions::default()
+        }
+        .normalized();
+        let fields = options.planned_store_fields();
+        assert_eq!(fields, vec!["orography".to_string(), "temperature_2m".to_string()]);
+        assert!(!options.keeps_sounding_volumes());
+        assert!(!options.wants_three_dimensional_prefetch());
+        let whole = WrfProcessOptions::default().normalized();
+        assert!(whole.wants_three_dimensional_prefetch());
+        assert!(whole.keeps_sounding_volumes());
+    }
+
+    /// Every direct and derived product the whole import can draw is still
+    /// planned by the scoped import of that product alone, in the recipe's
+    /// own selector vocabulary -- so scoping drops nothing a picture reads.
+    #[test]
+    fn scoped_plan_covers_every_product_the_whole_plan_covers() {
+        let whole = WrfProcessOptions::default().normalized();
+        let whole_selectors = whole.planned_store_selectors();
+        let whole_fields = whole.planned_store_fields();
+        let mut covered = 0;
+        for slug in rustwx_products::direct::store_direct_recipe_slugs() {
+            let requirements = rustwx_models::plot_recipe_store_requirements(&slug).unwrap();
+            if !requirements.iter().all(|row| {
+                row.selector.is_some_and(|selector| whole_selectors.contains(&selector))
+            }) {
+                continue;
+            }
+            covered += 1;
+            let scoped = WrfProcessOptions {
+                named_products_only: true,
+                required_fields: required_fields_for_products(&slug),
+                ..WrfProcessOptions::default()
+            }
+            .normalized();
+            assert!(scoped.required_fields.is_some(), "{slug} must scope");
+            let planned = scoped.planned_store_selectors();
+            for requirement in requirements {
+                let selector = requirement.selector.unwrap();
+                assert!(planned.contains(&selector), "{slug} needs {}", selector.key());
+            }
+        }
+        assert!(covered > 20, "the whole import must cover a direct gallery");
+        for slug in rustwx_products::derived::store_derived_recipe_slugs() {
+            if !whole_fields.iter().any(|name| name == slug) {
+                continue;
+            }
+            let scoped = WrfProcessOptions {
+                named_products_only: true,
+                required_fields: required_fields_for_products(slug),
+                ..WrfProcessOptions::default()
+            }
+            .normalized();
+            let planned = scoped.planned_store_fields();
+            assert!(planned.iter().any(|name| name == slug), "{slug} grid must be planned");
+        }
+    }
+
+    /// A required canonical cloud plane pulls in its `cloudfrac` source, and
+    /// a split diagnostic is planned for any of its split names.
+    #[test]
+    fn scoped_plan_follows_a_split_diagnostic_to_its_source() {
+        let key = FieldSelector::entire_atmosphere(CanonicalField::LowCloudCover).key();
+        let options = WrfProcessOptions {
+            required_fields: Some(vec![key.clone(), "srh_0_1km".to_string()]),
+            ..WrfProcessOptions::default()
+        }
+        .normalized();
+        let required = options.required_fields.clone().unwrap();
+        assert!(required.iter().any(|name| name == "wrf_cloudfrac_low"));
+        assert!(required.iter().any(|name| name == "orography"));
+        assert!(options.should_process_diagnostic("cloudfrac", "wrf_cloudfrac", WrfProductGroup::Diagnostic));
+        assert!(!options.should_process_diagnostic("sbcape", "sbcape", WrfProductGroup::Diagnostic));
+        let selectors = options.planned_store_selectors();
+        assert!(selectors.iter().any(|selector| selector.key() == key));
+    }
+
+    /// A group keyword other than `windowed`, or an unknown term, keeps the
+    /// import whole.
+    #[test]
+    fn a_keyword_or_unknown_term_does_not_scope() {
+        assert!(required_fields_for_products("all").is_none());
+        assert!(required_fields_for_products("2m_temperature,direct").is_none());
+        assert!(required_fields_for_products("no_such_product").is_none());
+        let both = required_fields_for_products("2m_temperature,composite_reflectivity").unwrap();
+        assert!(both.iter().any(|name| name == "temperature_2m"));
+        assert!(both.iter().any(|name| name == COMPOSITE_REFLECTIVITY_STORE));
+        let stored = required_fields_for_products("var:wrf_my_plane").unwrap();
+        assert_eq!(stored, vec!["wrf_my_plane".to_string()]);
+    }
+
+    /// The windowed group scopes to every plane its windows read, the
+    /// fallbacks included: a 10 m wind window reads WRF WSPD10MAX
+    /// (`wrf_wspd10max`) or top-of-hour `u_10m`/`v_10m`, a QPF window the run
+    /// total `apcp` on the wrfout lane.
+    #[test]
+    fn the_windowed_group_scopes_to_what_its_windows_read() {
+        let windowed = required_fields_for_products("windowed").unwrap();
+        for name in ["wrf_wspd10max", "u_10m", "v_10m", "apcp", "updraft_helicity_2to5km",
+                     "temperature_2m", "dewpoint_2m", "relative_humidity_2m"] {
+            assert!(windowed.iter().any(|wanted| wanted == name), "windowed must keep {name}");
+        }
+        let wind = required_fields_for_products("10m_wind_1h_max").unwrap();
+        for name in ["wind_speed_10m_max_1h", "wrf_wspd10max", "u_10m", "v_10m"] {
+            assert!(wind.iter().any(|wanted| wanted == name), "10m_wind_1h_max must keep {name}");
+        }
+        let mixed = required_fields_for_products("2m_temperature,windowed").unwrap();
+        assert!(mixed.iter().any(|name| name == "temperature_2m"));
+        assert!(mixed.iter().any(|name| name == "wrf_wspd10max"));
+    }
+
+    /// A scoped run never aliases the whole or the named run of the same
+    /// sources, and two scopes with different names never alias each other.
+    #[test]
+    fn scoped_profile_has_its_own_run_name() {
+        let whole = processing_profile_suffix(&WrfProcessOptions::default());
+        let named = processing_profile_suffix(&WrfProcessOptions {
+            named_products_only: true,
+            ..WrfProcessOptions::default()
+        });
+        let scoped = |products: &str| {
+            processing_profile_suffix(&WrfProcessOptions {
+                named_products_only: true,
+                required_fields: required_fields_for_products(products),
+                ..WrfProcessOptions::default()
+            })
+        };
+        let temperature = scoped("2m_temperature");
+        assert!(temperature.starts_with("scoped_"), "{temperature}");
+        assert_ne!(temperature, whole);
+        assert_ne!(temperature, named);
+        assert_ne!(temperature, scoped("2m_dewpoint"));
+        assert_eq!(temperature, scoped("2m_temperature"));
     }
 
     #[test]
@@ -4152,5 +5460,246 @@ mod tests {
             .expect_err("oversized file dimensions must fail closed");
         assert!(error.contains("overflow"));
         assert_eq!(checked_horizontal_cells(3, 4), Ok(12));
+    }
+}
+
+fn winter_selectors() -> Vec<(&'static str, FieldSelector)> {
+    let mut rows = vec![("GUST", FieldSelector::height_agl(CanonicalField::WindGust, 10))];
+    rows.extend([CanonicalField::CategoricalRain, CanonicalField::CategoricalFreezingRain,
+        CanonicalField::CategoricalIcePellets, CanonicalField::CategoricalSnow]
+        .into_iter().map(|field| ("PTYPE", FieldSelector::surface(field))));
+    rows
+}
+
+/// 10 m wind gust: the wind at the top of the boundary layer mixed down,
+/// damped as the layer deepens:
+/// gust = w10 + (w_pbltop - w10) * (1 - min(0.5, PBLH / 2000 m)), never
+/// below w10, where PBLH is the MODEL's own PBL height (the history's
+/// PBLH) and w_pbltop is the wind speed on the first mass level at or above
+/// it.  wrf-python defines no gust, so this is the definition the renderer
+/// uses for every model's files.
+///
+/// It is the single-level form of the NCEP post-processor's gust, NOT the
+/// form NCEP applies to RAP/HRRR (and RRFS/GFS): for those, UPP diagnoses
+/// its own PBL depth from virtual potential temperature (a 0.5 K excess
+/// over the lowest level, then smoothed over many grid lengths) and takes
+/// the MAXIMUM over every level from the second up to just above that
+/// depth, each level damped by its own height above ground.  The HRRR
+/// `GUST` message is therefore a different quantity from this plane; a
+/// like-for-like comparison runs this function on the reference's own
+/// native state (`rw_native_wrfout`), measured 2026-10-21 on the HRRR 06Z
+/// f01: WOOF minus NOAA-through-this-function mean -0.06 m/s, rms 0.71
+/// m/s, where WOOF minus NOAA's GUST message was +1.5 m/s, rms 2.9 m/s.
+/// The plane is only as good as PBLH: at a run's initial time PBLH is 0
+/// until the PBL scheme has run (as in WRF), so the gust is the 10 m wind.
+/// Published on the canonical 10 m WindGust selector, so the catalog's
+/// `10m_wind_gusts` product and its standard gust table draw it.
+/// Breakage it prevents: WOOF wrfouts carry no gust field, so a downslope
+/// wind event had only sustained-wind maps (the gust product was "missing").
+fn push_gust_10m(
+    fields: &mut WrfHourFields,
+    file: &WrfFile,
+    timeidx: usize,
+    grid: &LatLonGrid,
+    projection: Option<GridProjection>,
+    cells: usize,
+    options: &WrfProcessOptions,
+) {
+    let selector = FieldSelector::height_agl(CanonicalField::WindGust, 10);
+    let key = selector.key();
+    if !options.should_process("GUST", Some(&key), WrfProductGroup::Core) {
+        return;
+    }
+    let get = |var: &str| compute_var(file, var, timeidx, None).ok();
+    let (Some(hagl), Some(wspd), Some(pblh), Some(w10)) =
+        (get("height_agl"), get("wspd"), get("PBLH"), get("wspd10"))
+    else {
+        fields.notes.push("10 m gust skipped: needs U, V, PH, PHB, PBLH".to_string());
+        return;
+    };
+    if hagl.shape.len() != 3 || wspd.shape != hagl.shape || pblh.data.len() != cells || w10.data.len() != cells {
+        fields.notes.push("10 m gust skipped: unexpected field shapes".to_string());
+        return;
+    }
+    let nz = hagl.shape[0];
+    let mut values = vec![f32::NAN; cells];
+    for (i, value) in values.iter_mut().enumerate() {
+        let zpbl = pblh.data[i];
+        let wind10 = w10.data[i];
+        if !zpbl.is_finite() || !wind10.is_finite() {
+            continue;
+        }
+        let mut k = 0;
+        while k + 1 < nz && hagl.data[k * cells + i] < zpbl {
+            k += 1;
+        }
+        let top = wspd.data[k * cells + i];
+        if !top.is_finite() {
+            continue;
+        }
+        let damp = 1.0 - (zpbl.max(0.0) / 2000.0).min(0.5);
+        *value = (wind10 + (top - wind10) * damp).max(wind10) as f32;
+    }
+    push_canonical_values(fields, grid, projection, &key, selector, "m/s", values);
+}
+
+/// Precipitation type at the ground from the microphysics, as the four
+/// categorical flags (rain, freezing rain, ice pellets, snow) the catalog's
+/// `precipitation_type` and `categorical_*` products draw.
+///
+/// Method: hydrometeor fall FLUX at the lowest model level (rho q Vt, with
+/// Vt 5 m/s rain, 1 m/s snow, 3 m/s graupel); precipitation where the
+/// liquid-equivalent rate reaches 0.1 mm/h.  Frozen share >= 0.7: snow, or
+/// ice pellets when graupel outweighs snow beneath a melting layer (T > 0 C
+/// within 3 km above a sub-freezing 2 m).  Frozen share <= 0.3: rain, or
+/// freezing rain where T2 <= 0 C.  Between: a mix, rain and snow both set.
+/// Breakage it prevents: WOOF wrfouts carry no categorical type, so a
+/// winter forecast had no precipitation-type map at all.
+fn push_precip_type(
+    fields: &mut WrfHourFields,
+    file: &WrfFile,
+    timeidx: usize,
+    grid: &LatLonGrid,
+    projection: Option<GridProjection>,
+    cells: usize,
+    options: &WrfProcessOptions,
+) {
+    let flags = [
+        CanonicalField::CategoricalRain,
+        CanonicalField::CategoricalFreezingRain,
+        CanonicalField::CategoricalIcePellets,
+        CanonicalField::CategoricalSnow,
+    ];
+    let wanted: Vec<bool> = flags
+        .iter()
+        .map(|f| {
+            let key = FieldSelector::surface(*f).key();
+            options.should_process("PTYPE", Some(&key), WrfProductGroup::Core)
+        })
+        .collect();
+    if !wanted.iter().any(|w| *w) {
+        return;
+    }
+    let get = |var: &str| compute_var(file, var, timeidx, None).ok();
+    let (Some(qr), Some(qs), Some(t2), Some(psfc), Some(temp), Some(hagl)) =
+        (get("QRAIN"), get("QSNOW"), get("T2"), get("PSFC"), get("temp"), get("height_agl"))
+    else {
+        fields.notes.push("precipitation type skipped: needs QRAIN, QSNOW, T2, PSFC, T, PH".to_string());
+        return;
+    };
+    let qg = get("QGRAUP");
+    if qr.data.len() < cells || qs.data.len() < cells || t2.data.len() != cells || psfc.data.len() != cells
+        || temp.shape.len() != 3 || hagl.shape != temp.shape
+    {
+        fields.notes.push("precipitation type skipped: unexpected field shapes".to_string());
+        return;
+    }
+    let nz = temp.shape[0];
+    let mut out: [Vec<f32>; 4] = [vec![0.0; cells], vec![0.0; cells], vec![0.0; cells], vec![0.0; cells]];
+    for i in 0..cells {
+        let (t, p) = (t2.data[i], psfc.data[i]);
+        if !t.is_finite() || !p.is_finite() || t <= 0.0 {
+            for o in out.iter_mut() { o[i] = f32::NAN; }
+            continue;
+        }
+        let rho = p / (287.04 * t);
+        let r = qr.data[i].max(0.0) * 5.0;
+        let s = qs.data[i].max(0.0) * 1.0;
+        let g = qg.as_ref().map_or(0.0, |q| q.data[i].max(0.0)) * 3.0;
+        let rate_mm_h = rho * (r + s + g) * 3600.0;
+        if !rate_mm_h.is_finite() || rate_mm_h < 0.1 {
+            continue;
+        }
+        let frozen = (s + g) / (r + s + g);
+        if frozen >= 0.7 {
+            let warm_aloft = t <= 273.15
+                && (0..nz).any(|k| {
+                    let z = hagl.data[k * cells + i];
+                    z <= 3000.0 && temp.data[k * cells + i] > 273.15
+                });
+            if g > s && warm_aloft { out[2][i] = 1.0 } else { out[3][i] = 1.0 }
+        } else if frozen <= 0.3 {
+            if t <= 273.15 { out[1][i] = 1.0 } else { out[0][i] = 1.0 }
+        } else {
+            out[0][i] = 1.0;
+            out[3][i] = 1.0;
+        }
+    }
+    for ((field, values), want) in flags.iter().zip(out).zip(wanted) {
+        if want {
+            let selector = FieldSelector::surface(*field);
+            push_canonical_values(fields, grid, projection.clone(), &selector.key(), selector, "0/1", values);
+        }
+    }
+}
+
+/// Snow level guide in FEET above SEA LEVEL: the wet-bulb 0 C height
+/// (wrf-core `wet_bulb_0`, metres above ground) plus the terrain height,
+/// published as `wrf_snow_level_ft`.  Breakage it prevents: the only
+/// snow-level field was the wet-bulb zero height ABOVE GROUND in metres,
+/// which a forecaster in feet MSL cannot read against a mountain pass.
+fn push_snow_level_ft(
+    fields: &mut WrfHourFields,
+    file: &WrfFile,
+    timeidx: usize,
+    cells: usize,
+    options: &WrfProcessOptions,
+) {
+    if !options.should_process("SNOW_LEVEL_FT", Some("wrf_snow_level_ft"), WrfProductGroup::Raw) {
+        return;
+    }
+    let (Ok(wb0), Ok(hgt)) = (
+        compute_var(file, "wet_bulb_0", timeidx, Some("m")),
+        compute_var(file, "terrain", timeidx, Some("m")),
+    ) else {
+        fields.notes.push("snow level skipped: wet_bulb_0 or terrain unavailable".to_string());
+        return;
+    };
+    if wb0.data.len() != cells || hgt.data.len() != cells {
+        return;
+    }
+    let wb0 = clean_values(&wb0.data);
+    let hgt = clean_values(&hgt.data);
+    let values = wb0
+        .iter()
+        .zip(hgt.iter())
+        .map(|(&w, &h)| if w.is_finite() && h.is_finite() { (w.max(0.0) + h) * 3.280_84 } else { f32::NAN })
+        .collect();
+    fields.derived.push(OwnedDerivedField {
+        name: "wrf_snow_level_ft".to_string(),
+        units: "ft".to_string(),
+        values,
+    });
+}
+
+/// Publish catalog rows through the same operators used by the GRIB exporter.
+fn push_vertical_products(fields: &mut WrfHourFields, file: &WrfFile, timeidx: usize,
+    grid: &LatLonGrid, projection: Option<GridProjection>, options: &WrfProcessOptions) {
+    use rayon::prelude::*;
+    use rustwx_products::vertical::{Operator, ROWS};
+    let selected: Vec<_> = ROWS.iter().filter(|r| {
+        let key=r.selector.key(); options.should_process(&key,Some(&key),WrfProductGroup::Core)
+    }).collect();
+    if selected.is_empty() { return; }
+    let mut levels=Vec::new(); let mut heights=Vec::new();
+    for row in &selected { match row.operator {
+        Operator::Pressure(_,p) => levels.push(p), Operator::WindSpeed(z) => heights.push(z),
+    }}
+    levels.sort(); levels.dedup(); heights.sort(); heights.dedup();
+    match rw_mlexport::diagnostics::compute_file(file,timeidx,&levels,&heights,!levels.is_empty()) {
+        Err(e) => fields.notes.push(format!("pressure/height rows unavailable: {e}")),
+        Ok(out) => for row in selected {
+            let values=match row.operator {
+                Operator::Pressure(field,p) => {
+                    let i=levels.iter().position(|&v|v==p).unwrap();
+                    out.pressure[field][i*file.nxy()..(i+1)*file.nxy()].to_vec()
+                },
+                Operator::WindSpeed(z) => {
+                    let (_,u,v)=out.wind.iter().find(|(h,_,_)|*h==z).unwrap();
+                    u.par_iter().zip(v).map(|(u,v)|u.hypot(*v)).collect()
+                },
+            };
+            push_canonical_values(fields,grid,projection.clone(),&row.selector.key(),row.selector,row.selector.native_units(),values);
+        },
     }
 }

@@ -243,6 +243,32 @@ def _as_host(arr) -> np.ndarray:
     return cp.asnumpy(arr) if isinstance(arr, cp.ndarray) else np.asarray(arr)
 
 
+def _hold_domain_carrier(dst: np.ndarray, src, name: str, index: int) -> None:
+    """Keep a domain-owned carrier whole: every slab must build the same words.
+
+    A carrier ``tilestream.global_inventory.global_keys`` names (fixed shape,
+    passed whole to every tile, e.g. the 3D PWP ocean status word
+    ``fields/_pwp_status``, shape (1,)) has no rows to scatter.  Scattering
+    it raised "IndexError: tuple index out of range" at the start of every
+    store-direct forecast with sf_ocean_physics = 2, which 48 h runs select
+    by default (full CONUS HRRR, --devices 2, 2026-10-21).  Slab 0's
+    words are kept; a later slab that built different words is refused,
+    because the domain would otherwise start from one slab's arbitrary view.
+    """
+    host = np.asarray(_as_host(src))
+    if host.shape != dst.shape:
+        raise PreparedStoreError(
+            f"slab {index} built domain carrier {name!r} at shape "
+            f"{host.shape}, not its fixed shape {dst.shape}")
+    if index == 0:
+        dst[...] = host
+    elif not np.array_equal(dst.view(np.uint8), np.ascontiguousarray(host).view(np.uint8)):
+        raise PreparedStoreError(
+            f"slab {index} built domain carrier {name!r} with words that "
+            "differ from slab 0's; a domain-owned carrier must be "
+            "slab-invariant")
+
+
 def _scatter_rows(dst: np.ndarray, src, j0: int) -> None:
     """Write ``src``'s rows into ``dst`` at ``j0``, inferring the staggering.
 
@@ -347,7 +373,8 @@ def _slab_state(cfg_slab, coord, base_slab, static_slab, cache_rows,
     state.set_map_coriolis(
         static_slab["MAPFAC_M"], static_slab["MAPFAC_U"],
         static_slab["MAPFAC_V"], static_slab["F"], static_slab["E"],
-        sina=static_slab["SINALPHA"], cosa=static_slab["COSALPHA"])
+        sina=static_slab["SINALPHA"], cosa=static_slab["COSALPHA"],
+        msfv_inv=static_slab.get("MF_VX_INV"))
     for name in state_names:
         target = getattr(state, name, None)
         if target is None:
@@ -367,7 +394,34 @@ def _slab_state(cfg_slab, coord, base_slab, static_slab, cache_rows,
         # Made explicit so the cost is visible and the behaviour is not a
         # property of which CuPy is installed.
         target[...] = cp.asarray(np.ascontiguousarray(rows))
+    refuse_strict_streamed_base(state.thb)
     return state
+
+
+def refuse_strict_streamed_base(thb) -> None:
+    """Strict WRF mode refuses a tile-streamed prepared slab whose base theta is not 300 K.
+
+    THE BREAKAGE THIS PREVENTS (2.9.1): every strict kernel reads ``thp`` as
+    WRF's ``t = theta - 300`` (``thb == 300``).  The resident prepared door
+    re-expresses its state that way (woof.core.state.adopt_wrf_theta_carrier);
+    this tile-streamed road keeps the preparation's base profile in ``thb``,
+    so strict mode would read theta up to 164 K low and stop non-finite in its
+    first steps (measured on the resident road before its fix).  The road's
+    setup fingerprint binds that base per slab, so it is refused here by name
+    rather than re-expressed.  Default mode, and a base already at 300 K, pass.
+    """
+    from woof.wrf_exact import ENABLED
+    if not ENABLED:
+        return
+    host = thb.get() if hasattr(thb, "get") else np.asarray(thb)
+    if bool((host == np.float32(300.0)).all()):
+        return
+    raise PreparedStoreError(
+        "strict WRF mode (GPUWM_WRF_EXACT=1) does not run a tile-streamed prepared "
+        "domain: this road holds the preparation's base theta, not WRF's "
+        "T = theta - 300 that every strict kernel reads, so it would stop "
+        "non-finite; run strict mode on a domain that fits on the card resident, "
+        "or through the WRF-input door (woof run --wrfinput)")
 
 
 class _CachePayload:
@@ -520,6 +574,10 @@ class _CachePayload:
         """An explicit immutable view, leaving the public reader mutable."""
         return _ReadOnlyCacheReader(self)
 
+    def copying_reader(self):
+        """Writable independent arrays from the retained verified mappings."""
+        return _CopyingCacheReader(self)
+
     def require_binding(self, path, expected_identity, *, reader=None):
         """Validate the current sealed header before reusing verified maps.
 
@@ -571,6 +629,16 @@ class _ReadOnlyCacheReader:
             "content_sha256": self.content_sha256,
             "array_count": len(self.arrays), "payload_bytes": self.payload_bytes,
         }
+
+
+class _CopyingCacheReader(_ReadOnlyCacheReader):
+    """Preserve normal prepared-reader copy semantics without a second hash."""
+
+    def read_array(self, key):
+        mapped = self._payload.verified_array(key)
+        result = np.array(mapped, copy=True, order="K")
+        self._payload._check_unchanged(key)
+        return result
 
 
 def hoststore_gib() -> int:
@@ -906,6 +974,8 @@ def store_from_prepared_cache(path, *, expected_identity, cfg, static,
             for spec in manifest:
                 store[spec.name] = hoststore.alloc_pinned_array(
                     spec.shape(nz, ny, nx), spec.dtype)
+            domain_carriers = {spec.name for spec in manifest
+                               if spec.fixed_shape is not None}
             for name, shape in geo_shapes.items():
                 geo_store[name] = hoststore.alloc_pinned_array(
                     shape, np.dtype(ginv[name].dtype))
@@ -917,6 +987,10 @@ def store_from_prepared_cache(path, *, expected_identity, cfg, static,
                     f"slab {index} produced carrier {name!r} that slab 0 did "
                     "not; the manifest is not slab-invariant")
             host = _as_host(arr)
+            if name in domain_carriers:
+                _hold_domain_carrier(store[name], host, name, index)
+                seen.add(name)
+                continue
             disagreed = _seam_disagreement(store[name], host, j0, rows)
             if disagreed:
                 seams[name] = seams.get(name, 0) + disagreed

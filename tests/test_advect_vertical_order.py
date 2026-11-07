@@ -117,9 +117,10 @@ def _fortran_w_faces(w, rom, vert_order):
 def test_fields_default_to_the_ladder_every_earlier_run_took():
     from woof.config import RunConfig
     names = [f.name for f in dataclasses.fields(RunConfig)]
-    first_order = names.index("v_sca_adv_order")
-    assert names[first_order:first_order + 3] == [
-        "v_sca_adv_order", "v_mom_adv_order", "h_mom_adv_order"]
+    start = names.index("v_sca_adv_order")
+    assert names[start - 1:start + 4] == [
+        "upper_wind_limiter_form", "v_sca_adv_order", "v_mom_adv_order",
+        "h_mom_adv_order", "ruc_irrigation"]
     cfg = RunConfig(nx=8, ny=8, nz=8, dx=1000.0, dy=1000.0, ztop=8000.0, dt=5.0, run_seconds=0.0)
     assert (cfg.v_sca_adv_order, cfg.v_mom_adv_order, cfg.h_mom_adv_order) == (3, 3, 5)
 
@@ -692,9 +693,10 @@ def test_split_path_advects_the_explicit_share_at_the_configured_orders(monkeypa
     """Under the implicit-explicit split the four explicit launches take
     the EXPLICIT share of Omega (ctx.wwE) at the configured orders, scalars
     and w at v_sca_adv_order, u and v at v_mom_adv_order; the t0 offset
-    flux rejoins on the full Omega at the scalar order.  The breakage this
-    prevents: the split path left on order 3, or advecting the full flux,
-    while the explicit path runs 5."""
+    flux rejoins on the full Omega at the scalar order (default arithmetic
+    only: strict arithmetic balances t0 in its acoustic kernels).  The
+    breakage this prevents: the split path left on order 3, or advecting
+    the full flux, while the explicit path runs 5."""
     import cupy as cp
     from types import SimpleNamespace
     from woof.core import dycore
@@ -729,8 +731,9 @@ def test_split_path_advects_the_explicit_share_at_the_configured_orders(monkeypa
         has_msf=False, rotational=False, p=cp.zeros((8, 8, 8), cp.float32))
     dycore._add_slow_tendencies_ieva(state, cfg, None, None, ww,
                                      SimpleNamespace(wwE=wwE, wwI=None), cq=object())
+    offset = [] if dycore.WRF_EXACT else [("scalar", "full", 5)]
     assert seen == [("scalar", "explicit", 5), ("u", "explicit", 3), ("v", "explicit", 3),
-                    ("w", "explicit", 5), ("scalar", "full", 5)], seen
+                    ("w", "explicit", 5)] + offset, seen
 
 
 def test_every_forecast_launch_passes_its_wrf_order():
@@ -768,5 +771,6 @@ def test_every_forecast_launch_passes_its_wrf_order():
                 where, ast.unparse(keywords["vorder"]))
             seen[name] = seen.get(name, 0) + 1
     # advection.py's Phase-1 path (4), dycore's explicit and split paths
-    # (8), moist's scalar, PD and TKE launches (6).
-    assert seen == {"advection.py": 4, "dycore.py": 8, "moist.py": 6}, seen
+    # (8), moist's scalar, PD and TKE launches including the selected
+    # expanded aerosol/species carry paths (8). Every site is checked above.
+    assert seen == {"advection.py": 4, "dycore.py": 8, "moist.py": 8}, seen

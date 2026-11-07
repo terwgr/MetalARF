@@ -23,7 +23,8 @@ from woof.config import RunConfig
 from woof.core.uh_diag import reset_up_heli_max, update_up_heli_max
 from woof.io import restart
 
-from test_restart import _cfg, _fill_setup, _shim_state
+from test_restart import (_cfg, _fill_serialized, _fill_setup,
+                          _identity_bound_physics_state, _shim_state)
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -153,6 +154,78 @@ def test_diagnostics_off_resume_drops_the_stored_accumulator_with_a_note(
     assert live.existing_scratch("up_heli_max") is None
     out = capsys.readouterr().out
     assert "note:" in out and "dropped" in out
+
+
+@pytest.mark.parametrize("written,resumed", [(0, 1), (1, 0)],
+                         ids=["switched-on", "switched-off"])
+def test_physics_resume_flipping_nwp_diagnostics_keeps_every_other_plane(
+        monkeypatch, tmp_path, capsys, written, resumed):
+    """V2W WoFS, 2026-10-29: a forecast branched from an analysis checkpoint
+    with nwp_diagnostics flipped refused "restart surface-field inventory
+    ... extra ['refd_max']".  REFD_MAX is a zero-held driver plane exactly
+    when the NWP family is off; a flip drops it (on) or initialises it (off)
+    with a note, and every other driver plane restores word for word."""
+    physics = dict(moist=True, mp_physics=10, morr_rimed_ice=1,
+                   sf_sfclay_physics=1, sf_surface_physics=2,
+                   bl_pbl_physics=1, ra_physics=4, cu_physics=1)
+    source_cfg = _cfg(nwp_diagnostics=written, **physics)
+    source, source_driver = _identity_bound_physics_state(
+        source_cfg, monkeypatch)
+    _fill_serialized(source, seed=20261029)
+    for index, (name, plane) in enumerate(sorted(source_driver.fields.items())):
+        plane[...] = np.float32(index + 1)
+    assert ("refd_max" in source_driver.fields) == (written == 0)
+    path = restart.write_restart(tmp_path / "flip.npz", source, source_cfg)
+
+    live_cfg = _cfg(nwp_diagnostics=resumed, **physics)
+    live, live_driver = _identity_bound_physics_state(live_cfg, monkeypatch)
+    if "refd_max" in live_driver.fields:
+        live_driver.fields["refd_max"][...] = 7.0      # must be zeroed
+    restart.restore_restart(path, live, live_cfg)
+
+    assert ("refd_max" in live_driver.fields) == (resumed == 0)
+    if resumed == 0:
+        assert (live_driver.fields["refd_max"] == 0.0).all()
+    shared = set(source_driver.fields) - {"refd_max"}
+    assert shared == set(live_driver.fields) - {"refd_max"}
+    for name in shared:
+        np.testing.assert_array_equal(
+            live_driver.fields[name], source_driver.fields[name], err_msg=name)
+    out = capsys.readouterr().out
+    assert "fields/refd_max" in out
+    assert ("dropped" if written == 0 else "initialised to zero") in out
+    assert (live.existing_scratch("up_heli_max") is not None) == (resumed == 1)
+
+
+def test_physics_resume_refuses_a_refd_max_plane_its_header_disowns(
+        monkeypatch, tmp_path):
+    """The tolerance is the switch's, not a blanket one: a checkpoint whose
+    REFD_MAX presence contradicts the nwp_diagnostics its own header records
+    still refuses on the exact inventory check."""
+    import json
+
+    physics = dict(moist=True, mp_physics=10, morr_rimed_ice=1,
+                   sf_sfclay_physics=1, sf_surface_physics=2,
+                   bl_pbl_physics=1, ra_physics=4, cu_physics=1)
+    cfg = _cfg(nwp_diagnostics=0, **physics)
+    source, _ = _identity_bound_physics_state(cfg, monkeypatch)
+    path = restart.write_restart(tmp_path / "off.npz", source, cfg)
+    with np.load(path, allow_pickle=False) as archive:
+        payload = {name: archive[name] for name in archive.files}
+    header = json.loads(bytes(bytearray(
+        payload[restart._HEADER_KEY])).decode("utf-8"))
+    header["config"]["nwp_diagnostics"] = 1
+    payload[restart._HEADER_KEY] = np.frombuffer(
+        json.dumps(header).encode("utf-8"), dtype=np.uint8)
+    forged = tmp_path / "forged.npz"
+    with forged.open("wb") as stream:
+        np.savez(stream, **payload)
+
+    live_cfg = _cfg(nwp_diagnostics=1, **physics)
+    live, _ = _identity_bound_physics_state(live_cfg, monkeypatch)
+    with pytest.raises(restart.RestartMismatchError,
+                       match=r"surface-field inventory.*extra \['refd_max'\]"):
+        restart.restore_restart(forged, live, live_cfg)
 
 
 def test_launcher_refuses_unsupported_geometry_and_tiny_grids(monkeypatch):
@@ -404,6 +477,15 @@ def test_up_heli_max_has_no_trajectory_or_restart_reader():
     }
     assert hits == {
         "woof/core/uh_diag.py",      # owner: update/reset/mirror
+        "woof/core/gsd_diagnostics.py",  # independent GSD history window
+        "woof/ensemble/mass_launcher.py",  # diagnostic download only
+        "woof/ensemble/batch_product_output.py",  # output field assembly only
+        # The WRF warm start's closed-world carrier census names the slot as
+        # REBUILT, never restored: WRF's UP_HELI_MAX running maximum starts a
+        # new window at the restart instant, as after every history write.
+        # A reason-table string (SCRATCH_REBUILT); nothing is read into the
+        # trajectory or the slot.
+        "woof/ingest/wrfrst.py",
         "woof/core/state.py",        # eager allocation under the knob
         "woof/core/dycore.py",       # calls update_up_heli_max only
         "woof/core/preflight.py",    # pricing registry + lifetime audit
@@ -445,16 +527,37 @@ def test_up_heli_max_has_no_trajectory_or_restart_reader():
         # and the AST pins below still hold because streaming touches no
         # scratch API at all.
         "woof/core/streaming.py",
-        # The native ensemble publisher resets the diagnostic after its
-        # synchronous history consumer, through reset_up_heli_max only.
-        # The scratch-access and no-trajectory AST guards below still apply.
+        # Packed member history resets the borrowed view after its
+        # synchronous consumer through reset_up_heli_max only. The strict
+        # scratch-access and no-trajectory AST guards below still apply.
         "woof/ensemble/native_forecast.py",
     }
+
+    native_tree = ast.parse((REPO / "woof/ensemble/native_forecast.py")
+                           .read_text(encoding="utf-8"))
+    uh_imports = [node for node in ast.walk(native_tree)
+                 if isinstance(node, ast.ImportFrom)
+                 and node.module == "woof.core.uh_diag"]
+    assert len(uh_imports) == 1
+    assert [(alias.name, alias.asname) for alias in uh_imports[0].names] \
+        == [("reset_up_heli_max", None)]
+    uh_calls = [node for node in ast.walk(native_tree)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and "up_heli_max" in node.func.id]
+    assert len(uh_calls) == 1
+    assert uh_calls[0].func.id == "reset_up_heli_max"
+    assert len(uh_calls[0].args) == 1
+    assert isinstance(uh_calls[0].args[0], ast.Name)
+    assert uh_calls[0].args[0].id == "view"
 
     # Outside the owner and the sanctioned sites, no scratch-API access to
     # the slot at all; in dycore/runtime specifically, only the two entry
     # points may appear (no direct slot access).
     sanctioned_scratch = {"woof/core/uh_diag.py", "woof/core/state.py",
+                          "woof/core/gsd_diagnostics.py",
+                          "woof/ensemble/mass_launcher.py",
+                          "woof/ensemble/batch_product_output.py",
                           "woof/io/history_layout.py", "woof/io/restart.py",
                           # Sanctioned for the indirect-acquisition rule
                           # below: live_scratch/domain_scratch ARE the

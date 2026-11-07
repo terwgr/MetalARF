@@ -336,6 +336,14 @@ fn read_sweep(
     );
     let (azimuth_deg, azimuth_source) = resolve_azimuths(nrays, &how_attrs)?;
     let ray_elevation_deg = resolve_ray_elevations(nrays, &how_attrs)?;
+    // A per-ray PRF list is used only when it has one entry per ray; a
+    // scalar `prf` (single-PRF writers) or a list of another length says
+    // nothing about which ray used which PRF.
+    let ray_prf_hz = how_attrs
+        .f64_vec_opt("prf")
+        .ok()
+        .flatten()
+        .filter(|prf| prf.len() == nrays && nrays > 1);
 
     // --- /datasetN/dataM -------------------------------------------------
     let mut data_indices: Vec<usize> = sweep_group
@@ -390,6 +398,7 @@ fn read_sweep(
         azimuth_deg,
         azimuth_source,
         ray_elevation_deg,
+        ray_prf_hz,
         moments,
     })
 }
@@ -639,44 +648,24 @@ fn read_raw_f64(dataset: &Dataset, path: &Path, data_path: &str) -> Result<Vec<f
         path: path.to_path_buf(),
         detail: format!("{data_path} did not decode: {err}"),
     };
+    macro_rules! read_values {
+        ($ty:ty) => {
+            dataset
+                .read_array::<$ty>()
+                .map_err(hdf5)?
+                .iter()
+                .map(|&v| v as f64)
+                .collect()
+        };
+    }
     let values = match dataset.dtype() {
         Datatype::FixedPoint { size, signed, .. } => match (size, signed) {
-            (1, false) => dataset
-                .read_array::<u8>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
-            (1, true) => dataset
-                .read_array::<i8>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
-            (2, false) => dataset
-                .read_array::<u16>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
-            (2, true) => dataset
-                .read_array::<i16>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
-            (4, false) => dataset
-                .read_array::<u32>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
-            (4, true) => dataset
-                .read_array::<i32>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
+            (1, false) => read_values!(u8),
+            (1, true) => read_values!(i8),
+            (2, false) => read_values!(u16),
+            (2, true) => read_values!(i16),
+            (4, false) => read_values!(u32),
+            (4, true) => read_values!(i32),
             _ => {
                 return Err(OdimError::format(
                     format!("reading {data_path}"),
@@ -687,18 +676,8 @@ fn read_raw_f64(dataset: &Dataset, path: &Path, data_path: &str) -> Result<Vec<f
             }
         },
         Datatype::FloatingPoint { size, .. } => match size {
-            4 => dataset
-                .read_array::<f32>()
-                .map_err(hdf5)?
-                .iter()
-                .map(|v| f64::from(*v))
-                .collect(),
-            8 => dataset
-                .read_array::<f64>()
-                .map_err(hdf5)?
-                .iter()
-                .copied()
-                .collect(),
+            4 => read_values!(f32),
+            8 => read_values!(f64),
             _ => {
                 return Err(OdimError::format(
                     format!("reading {data_path}"),

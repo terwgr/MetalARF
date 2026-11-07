@@ -4,9 +4,9 @@ Five source files are fragments rather than standalone translation units:
 ``noahmp_driver``, ``noahmp_energy``, ``noahmp_thermal``, ``noahmp_glacier``
 and ``noahmp_libm_slab``. They borrow the r_pow/r_exp/r_log helpers from
 ``noahmp_leaves``; the slab also borrows helpers from ``noahmp_energy``.
-Some standalone units carry independent libm transcriptions. In particular,
+Some standalone units carry independent WOOF float32 math routines. In particular,
 prepending leaves to fluxprep would introduce duplicate definitions. Nothing
-here changes CUDA math or consolidates those transcriptions.
+here changes CUDA math or consolidates those routines.
 
 Runtime factories and memory measurement share :func:`runtime_unit`, which
 binds ordered parts, the common preamble, exact compiler options and all global
@@ -35,7 +35,7 @@ import re
 
 KERNEL_DIR = Path(__file__).resolve().parent / "kernels"
 
-#: The shared helper transcription for composed units. Its ``r_pow``,
+#: WOOF's shared float32 helpers for composed units. Its ``r_pow``,
 #: ``r_exp`` and ``r_log`` are what the composed units below are missing.
 LIBM_UNIT = "noahmp_leaves"
 
@@ -48,7 +48,7 @@ NOAHMP_TRANSLATION_UNITS: dict[str, tuple[str, ...]] = {
     "noahmp_fluxprep": ("noahmp_fluxprep",),
     # NOAHMP_GLACIER borrows r_pow/r_exp/r_log (and the AD/SU/MU/DV
     # macros plus NMP_* constants) from the libm unit and carries only its
-    # own glibc atanf copy, like noahmp_bareflux does.
+    # own float32 atan routine, like noahmp_bareflux does.
     "noahmp_glacier": (LIBM_UNIT, "noahmp_glacier"),
     "noahmp_leaves": ("noahmp_leaves",),
     # The slab composition's elementwise transcendentals borrow r_pow/r_exp/
@@ -113,7 +113,7 @@ __all__ = [
 # particular, load_module("noahmp_driver") must STILL fail: that is a fragment,
 # not the unit the driver factory compiles.  The old standalone census and its
 # measurements retain their meanings.
-DEFAULT_OPTIONS = ("-std=c++17",)
+DEFAULT_OPTIONS = ("-std=c++17", "--ftz=false")
 
 
 def pricing_key(name: str) -> str:
@@ -160,7 +160,8 @@ class RuntimeUnit:
         payload = {
             "name": self.name,
             "pricing_key": self.key,
-            "parts": [{"file": name + ".cu", "sha256": digest}
+            "parts": [{"file": name if name.endswith(".cuh") else name + ".cu",
+                       "sha256": digest}
                       for name, digest in self.parts],
             "preamble_sha256": self.preamble_sha256,
             "source_sha256": _sha(self.source),
@@ -208,7 +209,15 @@ def _assemble(texts, prefix):
     return prefix + "".join(text for _, text in texts)
 
 
-def runtime_unit(name: str, *, kernel_dir: Path = KERNEL_DIR) -> RuntimeUnit:
+def validate_vege_atan_profile(profile: str) -> str:
+    """Validate capture arithmetic metadata without importing CUDA."""
+    if profile not in ("glibc_2_39", "glibc_2_43"):
+        raise ValueError("unknown Noah-MP atan profile")
+    return profile
+
+
+def runtime_unit(name: str, *, kernel_dir: Path = KERNEL_DIR,
+                 atan_profile: str = "glibc_2_39") -> RuntimeUnit:
     """Snapshot the production composition and options, including VEGE_FLUX.
 
     All custom runtime factories and the compile-only measurement harness use
@@ -216,19 +225,38 @@ def runtime_unit(name: str, *, kernel_dir: Path = KERNEL_DIR) -> RuntimeUnit:
     kernels.load_module; the CPU factory-interception tests enforce that too.
     ``kernel_dir`` composes the unit from another tree's kernel files (the
     A146 census gates the tree it scans, A193).
+
+    ``atan_profile`` selects VEGE_FLUX's native libm generation explicitly;
+    it never follows the execution host. The default retains existing 2.39
+    oracle arithmetic. The opt-in 2.43 profile uses the retained CORE-MATH
+    header and records it as a source component. No other libm is switched.
     """
+    validate_vege_atan_profile(atan_profile)
+    if atan_profile != "glibc_2_39" and name != "noahmp_vegeflux":
+        raise ValueError("the selected atan profile is implemented only for VEGE_FLUX")
     parts = NOAHMP_TRANSLATION_UNITS[name]
     # Read each component ONCE so its recorded digest and compiled text cannot
     # describe different reads of a concurrently edited file.
     texts = _component_texts(parts, kernel_dir)
     if name == "noahmp_vegeflux":
         prefix = ""
-        options = ("-std=c++14",)
+        options = ("-std=c++14", "--ftz=false")
+        if atan_profile == "glibc_2_43":
+            # The constructed parent referee uses glibc 2.43. Preserve the
+            # glibc 2.39 default used by the existing WRF oracle fixtures.
+            header = (Path(kernel_dir) / "glibc_trig_flt32.cuh").read_text(
+                encoding="ascii")
+            prefix = ("#define glibc_atanf noahmp_glibc243_atanf\n" + header
+                      + "\n#undef glibc_atanf\n"
+                      + "#define GPUWM_NOAHMP_ATAN_GLIBC243 1\n")
+            texts = (("glibc_trig_flt32.cuh", header),) + texts
+            options = ("-std=c++17", "--ftz=false")
     else:
         from woof.core.kernels import _preamble
         prefix = _preamble(kernel_dir)
         options = DEFAULT_OPTIONS
-    source = _assemble(texts, prefix)
+    source = _assemble(texts[1:] if atan_profile == "glibc_2_43" else texts,
+                       prefix)
     return RuntimeUnit(
         name=name, source=source,
         parts=tuple((part, _sha(text)) for part, text in texts),
@@ -238,10 +266,11 @@ def runtime_unit(name: str, *, kernel_dir: Path = KERNEL_DIR) -> RuntimeUnit:
 
 def compile_runtime_unit(name: str, *, module_key: str,
                          options: tuple[str, ...] | None = None,
-                         source: str | None = None, log_stream=None):
+                         source: str | None = None, log_stream=None,
+                         atan_profile: str = "glibc_2_39"):
     """Compile and load one Noah-MP runtime unit; no launch, no constant upload.
 
-    THE one ``cp.RawModule`` site for Noah-MP.  Every runtime factory
+    The one direct-NVRTC route for Noah-MP. Every runtime factory
     (driver, energy, thermal, glacier, the libm slab, the generic loader's
     standalone units) and the frame measurement in
     :func:`woof.core.noahmp_frame_provenance.measure_live` compile through
@@ -253,7 +282,7 @@ def compile_runtime_unit(name: str, *, module_key: str,
     suites compile (a perturbed copy, ``-fmad=false``); they are recorded
     under the caller's own ``module_key`` and are not the production unit.
     """
-    unit = runtime_unit(name)
+    unit = runtime_unit(name, atan_profile=atan_profile)
     code = unit.source if source is None else source
     opts = unit.options if options is None else tuple(options)
     return _compile_loaded_module(code, opts, module_key, log_stream)
@@ -261,17 +290,11 @@ def compile_runtime_unit(name: str, *, module_key: str,
 
 def _compile_loaded_module(code, opts, module_key, log_stream=None):
     """Keep generated transfers and scientific units on the same compile route."""
-    import cupy as cp
-    from woof.certify.kernel_manifest import record_module
-
-    module = cp.RawModule(code=code, options=opts, backend="nvrtc",
-                          name_expressions=None)
-    if log_stream is None:
-        module.compile()
-    else:
-        module.compile(log_stream=log_stream)
-    record_module(module_key, source=code, options=opts, module=module)
-    return module
+    from woof.core.ieee_module import compile_module
+    # Negative controls may supply their own options; they still need the
+    # production subnormal arithmetic to isolate the expression they change.
+    opts = tuple(o for o in opts if o.lstrip('-').split('=')[0] != 'ftz') + ('--ftz=false',)
+    return compile_module(code, opts, module_key, log_stream)
 
 
 def compile_generated_slab_kernel(source, name):

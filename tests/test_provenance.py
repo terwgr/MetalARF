@@ -47,7 +47,7 @@ def _package(root: Path) -> Path:
     return package
 
 
-def _dist_info(site: Path, *, name="woof", version="1.8.7",
+def _dist_info(site: Path, *, name="recast-woof", version="1.8.7",
                editable_at: Path | None = None) -> PathDistribution:
     """A real .dist-info on disk, read by a real PathDistribution."""
 
@@ -65,7 +65,7 @@ def _dist_info(site: Path, *, name="woof", version="1.8.7",
     return PathDistribution(info)
 
 
-def _pyproject(root: Path, *, name="woof", version="1.8.7") -> Path:
+def _pyproject(root: Path, *, name="recast-woof", version="1.8.7") -> Path:
     root.mkdir(parents=True, exist_ok=True)
     path = root / "pyproject.toml"
     path.write_text(
@@ -112,7 +112,7 @@ def _build_wheel(tmp: Path) -> Provenance:
 
 def _check_wheel(p: Provenance) -> None:
     assert p.install_kind == "wheel"
-    assert p.distribution_name == "woof"
+    assert p.distribution_name == "recast-woof"
     assert p.metadata_version == "1.8.0"
     assert p.package_path.endswith(os.sep.join(("site-packages", "woof")))
     # A wheel ships no pyproject.toml; pip wrote its code and metadata
@@ -276,7 +276,7 @@ def test_the_resolver_names_each_install_shape(scenario, tmp_path):
 #: confident, self-consistent, healthy install.
 _ALWAYS_FINE = Provenance(
     package_path="/constant/gpuwm", source_root="/constant",
-    install_kind="wheel", distribution_name="woof",
+    install_kind="wheel", distribution_name="recast-woof",
     metadata_version="1.8.7", reported_version="1.8.7",
     code_version="1.8.7", code_version_source="wheel-metadata",
     versions_agree=True)
@@ -425,7 +425,7 @@ def test_an_unreadable_pyproject_is_a_note_not_a_crash(tmp_path):
 
 def test_a_dynamic_version_is_a_legitimate_absence(tmp_path):
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "woof"\ndynamic = ["version"]\n', encoding="utf-8")
+        '[project]\nname = "recast-woof"\ndynamic = ["version"]\n', encoding="utf-8")
     version, note = provenance.pyproject_version(tmp_path)
     assert version is None and "no static" in note
 
@@ -927,7 +927,7 @@ def _record_row(site: Path, path: Path) -> str:
             f"{path.stat().st_size}")
 
 
-def _pip_install(site: Path, *, name: str = "woof", version: str,
+def _pip_install(site: Path, *, name: str = "recast-woof", version: str,
                  files: dict[str, bytes] | None = None,
                  records_package: bool = True) -> PathDistribution:
     """What pip leaves in ``site``: the package files and a .dist-info.
@@ -1066,7 +1066,7 @@ def test_a_second_gpuwm_on_the_path_does_not_lend_its_version(
     site = tmp_path / "venv-site"
     _pip_install(site, version="9.8.7", files={
         name: (WORKTREE / "woof" / name).read_bytes()
-        for name in ("__init__.py", "cupy_windows_warning.py")})
+        for name in ("__init__.py", "_env.py", "cupy_windows_warning.py", "numerics.py")})
     _pip_install(tmp_path / "user-site", version="1.2.3", files={})
     sites = [str(site), str(tmp_path / "user-site")]
     if stranger == "first":
@@ -1074,7 +1074,7 @@ def test_a_second_gpuwm_on_the_path_does_not_lend_its_version(
     environment = dict(os.environ)
     environment["PYTHONPATH"] = os.pathsep.join(sites)
     program = ("import json, woof;"
-               "d = gpuwm.version_distribution();"
+               "d = woof.version_distribution();"
                "print(json.dumps({'version': woof.__version__,"
                " 'file': woof.__file__, 'from': str(d.locate_file(''))}))")
     completed = subprocess.run(

@@ -442,16 +442,6 @@ def resident_inventory(root, *, max_depth: int = 5,
     return out
 
 
-def group_inventory(inventory: dict[str, int], *, depth: int = 2
-                    ) -> dict[str, int]:
-    """Roll a :func:`resident_inventory` up to its first ``depth`` path parts."""
-    out: dict[str, int] = defaultdict(int)
-    for path, value in inventory.items():
-        parts = path.replace("[", ".[").split(".")
-        out[".".join(parts[:depth]).replace(".[", "[")] += value
-    return dict(out)
-
-
 def measure_ledger_overhead(n: int = 20_000) -> dict:
     """Microseconds per pooled allocation, armed against unarmed.
 

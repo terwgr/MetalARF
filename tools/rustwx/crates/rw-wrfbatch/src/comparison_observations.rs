@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Duration, NaiveDateTime, Timelike, Utc};
 use grib_core::grib2::{Grib2File, Grib2Message, flip_rows, grid_latlon, unpack_message};
 use serde::Deserialize;
+use rayon::prelude::*;
+#[path = "comparison_rasters.rs"]
+mod rasters;
+pub use rasters::RasterBinding;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ObservationSpec {
@@ -34,8 +38,18 @@ pub struct ObservationProduct {
     pub forecast_time: u32,
     pub valid_time_basis: ObservationTimeBasis,
     pub missing_values: Vec<f64>,
+    /// The subset of the flags that mean nothing was observed at all (MRMS
+    /// composite `-999`, outside radar coverage; QPE `-3` no coverage and
+    /// `-1` missing), as against an observed nothing (`-99`, no echo).
+    /// Both draw no colour; only these draw the no-coverage grey.
+    #[serde(default)]
+    pub unobserved_values: Vec<f64>,
     pub time: TimePolicy,
     pub accumulation_seconds: Option<u32>,
+    #[serde(default)]
+    pub raster: Option<RasterBinding>,
+    #[serde(default)]
+    pub url_template: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -80,7 +94,7 @@ pub fn specifications() -> Result<Vec<ObservationSpec>, String> {
                 || product.candidates.len() != product.parameters.len()
                 || !(0..=3600).contains(&product.time.tolerance())
                 || matches!(product.time, TimePolicy::ExactHourEnd)
-                    && product.accumulation_seconds != Some(3600)
+                    && !product.accumulation_seconds.is_some_and(|seconds| seconds > 0 && seconds % 3600 == 0)
             {
                 return Err(format!(
                     "invalid observation row {} / {}",
@@ -104,6 +118,9 @@ pub struct ObservationField {
     pub candidate: String,
     pub sha256: String,
     pub missing_cells: usize,
+    /// `true` where the source observed nothing (see
+    /// [`ObservationProduct::unobserved_values`]), on the source grid.
+    pub unobserved: Vec<bool>,
 }
 
 /// The filename narrows acquisition; the decoded message remains authoritative.
@@ -200,6 +217,17 @@ fn mask_value(value: f64, product: &ObservationProduct) -> f32 {
     }
 }
 
+/// A source value that says nothing was observed there: a flag the table
+/// lists as unobserved, or no number at all.  Flags are matched to within
+/// a thousandth, the precision a GRIB2 packing reproduces them to.
+fn unobserved_value(value: f64, product: &ObservationProduct) -> bool {
+    !value.is_finite()
+        || product
+            .unobserved_values
+            .iter()
+            .any(|flag| (value - flag).abs() <= 1.0e-3)
+}
+
 fn decode(
     raw: &[u8],
     origin: &str,
@@ -253,30 +281,33 @@ fn decode(
         flip_rows(&mut lat, nx, ny);
         flip_rows(&mut lon, nx, ny);
     }
-    for value in &mut lon {
+    lon.par_iter_mut().for_each(|value| {
         *value = (*value + 180.0).rem_euclid(360.0) - 180.0;
-    }
+    });
     // Keep coordinates and values together when a geographic row wraps.
-    for row in 0..ny {
-        let range = row * nx..(row + 1) * nx;
-        if let Some(index) = lon[range.clone()]
+    lat.par_chunks_mut(nx).zip(lon.par_chunks_mut(nx)).zip(values.par_chunks_mut(nx)).for_each(|((lat,lon),values)| {
+        if let Some(index) = lon
             .windows(2)
             .position(|pair| pair[1] - pair[0] < -180.0)
         {
-            lat[range.clone()].rotate_left(index + 1);
-            lon[range.clone()].rotate_left(index + 1);
-            values[range].rotate_left(index + 1);
+            lat.rotate_left(index + 1);
+            lon.rotate_left(index + 1);
+            values.rotate_left(index + 1);
         }
-    }
+    });
+    let unobserved: Vec<bool> = values
+        .par_iter()
+        .map(|value| unobserved_value(*value, product))
+        .collect();
     let values: Vec<_> = values
-        .into_iter()
+        .into_par_iter()
         .map(|value| mask_value(value, product))
         .collect();
-    let missing_cells = values.iter().filter(|value| !value.is_finite()).count();
+    let missing_cells = values.par_iter().filter(|value| !value.is_finite()).count();
     Ok(ObservationField {
         values,
-        lat: lat.into_iter().map(|value| value as f32).collect(),
-        lon: lon.into_iter().map(|value| value as f32).collect(),
+        lat: lat.into_par_iter().map(|value| value as f32).collect(),
+        lon: lon.into_par_iter().map(|value| value as f32).collect(),
         nx,
         ny,
         valid: Identity::of(message, product).expect("selected identity").valid,
@@ -285,6 +316,7 @@ fn decode(
         candidate: candidate.to_string(),
         sha256: rw_nexrad::s3::hex_sha256(raw),
         missing_cells,
+        unobserved,
     })
 }
 
@@ -307,6 +339,9 @@ pub fn load(
                 spec.label
             )
         })?;
+    if product.raster.is_some() {
+        return rasters::load(spec, product, target, directory, cache, explicit_file, offline);
+    }
     let mut local = Vec::new();
     if let Some(directory) = directory {
         local_files(directory, 6, &mut local)?;
@@ -542,6 +577,34 @@ mod tests {
         assert!(mask_value(-99.0, refc).is_nan());
         assert!(mask_value(-999.0, refc).is_nan());
         assert_eq!(mask_value(-10.0, refc), -10.0);
+    }
+
+    #[test]
+    fn no_coverage_is_unobserved_and_no_echo_is_an_observation() {
+        let rows = specifications().unwrap();
+        let refc = &rows[0].products[0];
+        assert!(unobserved_value(-999.0, refc), "MRMS -999: outside radar coverage");
+        assert!(unobserved_value(-999.0004, refc), "a packed flag still matches");
+        assert!(unobserved_value(f64::NAN, refc));
+        assert!(!unobserved_value(-99.0, refc), "MRMS -99: a radar saw no echo");
+        assert!(!unobserved_value(-10.0, refc));
+        assert!(!unobserved_value(35.0, refc));
+        let qpe = &rows[0].products[1];
+        for flag in [-3.0, -1.0] {
+            assert!(unobserved_value(flag, qpe));
+        }
+        assert!(!unobserved_value(0.0, qpe), "zero is observed dry");
+        for row in &rows {
+            for product in &row.products {
+                for flag in &product.unobserved_values {
+                    assert!(
+                        product.missing_values.contains(flag),
+                        "{}: unobserved flag {flag} must also draw no colour",
+                        product.product
+                    );
+                }
+            }
+        }
     }
 
     #[test]

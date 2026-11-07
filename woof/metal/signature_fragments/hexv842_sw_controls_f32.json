@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_sw_controls_f32",
+      "module": "hexv842_sw_controls_f32",
+      "source": "woof/metal/shaders/hexv842_sw_controls_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/rrtmg_sw_v842.py",
+      "cuda_symbol": "mpas_sw_radconst",
+      "resources": [
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "seconds",
+          "float32"
+        ],
+        [
+          "interval",
+          "float32"
+        ],
+        [
+          "julian",
+          "float32"
+        ],
+        [
+          "degrad",
+          "float32"
+        ],
+        [
+          "dpd",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

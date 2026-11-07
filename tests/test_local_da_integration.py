@@ -34,9 +34,6 @@ def test_native_backend_point_analysis_uses_applied_cadence(tmp_path, monkeypatc
     from woof.local_da_runtime import PreparedBackend
     from woof.local_da import build_plan, utc
     from test_local_da_plan import request, price, availability
-    # Inside the test, so the shared observation package skips exactly the
-    # tests that need it instead of emptying the file at collection.
-    pytest.importorskip('woof.globe.obs_table')
     from test_local_da_obs_tables import row
     import tomllib
     plan = build_plan(request(scale=2), availability=availability, price=price)
@@ -60,7 +57,6 @@ def test_native_backend_point_analysis_uses_applied_cadence(tmp_path, monkeypatc
 
 
 def test_cadence_inflates_point_sigma_and_background_gate():
-    pytest.importorskip('woof.globe.obs_table')
     from test_local_da_obs_tables import adapt, row
     batches, receipt = adapt([row(value=299.)], error_inflation=3.)
     assert receipt['counts']['accepted'] == 1

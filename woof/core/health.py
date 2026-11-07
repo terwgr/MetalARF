@@ -25,6 +25,8 @@ from typing import Any
 
 import numpy as np
 
+from woof.wrf_exact import ENABLED as WRF_EXACT
+
 
 # A four-domain NSSL-2 step currently reaches 528 descriptors after its lazy
 # persistent microphysics and nest scratch is materialized (527 until the
@@ -32,6 +34,33 @@ import numpy as np
 # two ceiling with substantial headroom so scheduled physics can add state
 # without invalidating a run after it has already advanced.
 MAX_HEALTH_FIELDS = 1024
+
+#: The ceiling of a FAST_SBM (mp_physics=30) domain.  The scheme transports
+#: 142 spectral fields plus its bulk and number diagnostics, and a nested
+#: child walks every one of them again as its nest boundary tables: a nested
+#: 3 km + 1 km FAST_SBM tree measured 2,889 descriptors (RTX PRO 6000,
+#: 2026-10-09) and stopped at its first health validation against 1024.
+#: Taken ONLY where the state carries the bins, so every other domain keeps
+#: its footprint.  48 B per descriptor: 192 KiB per FAST_SBM domain.
+FSBM_HEALTH_FIELDS = 4096
+
+
+def health_field_ceiling(state: Any) -> int:
+    """The descriptor ceiling of one domain: :data:`FSBM_HEALTH_FIELDS`
+    where the state carries FAST_SBM bins, else :data:`MAX_HEALTH_FIELDS`."""
+    if getattr(state, "fast_sbm_bins", None) is not None:
+        return FSBM_HEALTH_FIELDS
+    return MAX_HEALTH_FIELDS
+
+
+def health_field_ceiling_for_config(cfg: Any) -> int:
+    """The same ceiling from a RunConfig (preflight pricing): FAST_SBM bins
+    are allocated exactly when ``mp_physics == 30``."""
+    if int(getattr(cfg, "mp_physics", 0) or 0) == 30:
+        return FSBM_HEALTH_FIELDS
+    return MAX_HEALTH_FIELDS
+
+
 _INDEX_MASK = (1 << 48) - 1
 
 # Stable status classes.  The individual failing field remains available in
@@ -55,6 +84,8 @@ STATUS_BITS = {
     "surface": 1 << 14,
     "generic": 1 << 15,
     "particle_volume": 1 << 16,
+    # Chem species fields and process arrays (woof/core/chem_state.py).
+    "chem": 1 << 17,
 }
 
 _LOWER = 1 << 0
@@ -107,6 +138,10 @@ GPU_INTEGER_EXCLUSIONS = frozenset({
     "nest.scratch.nest_sint_cj_y", "nest.scratch.nest_sint_jp_y",
 })
 _GPU_RANGE_CHECKED_INT32 = frozenset({
+    # PWP atomically ORs solver failure bits; only zero is healthy.
+    "surface._pwp_status",
+    # G3 stores its four cloud levels and averaging clock as native integers.
+    "surface.g3_isfc", "surface.g3_diag_clock",
     # Noah writes one of four energy-balance solution cases.
     "surface.ebal",
     # YSU writes a one-based model level; zero is the pre-first-call value.
@@ -147,6 +182,8 @@ _GPU_RANGE_CHECKED_INT32 = frozenset({
     # [0, 1], not nz-dependent.  Without a policy every topo_shading forecast
     # refused at initialization (seen on the first real run of the port).
     "surface.shadowmask",
+    # WRF eclipse states: clear=0, partial=1, total=2, annular=3.
+    "surface.ecmask",
 })
 
 #: ``NSNOW``, WRF's fixed snow-layer count (``module_sf_noahmpdrv.F:628``), and
@@ -224,6 +261,13 @@ def gpu_integer_policy(name: str, dtype: Any) -> int | None:
     dtype = np.dtype(dtype)
     if dtype == np.dtype(np.float32):
         return 0
+    # Four lattice coordinates, generated on the host at relocation and never
+    # written by physics. nest_accumulation.advance validates the restored
+    # coordinates against the archive extents before consuming them. They
+    # are deliberately int64 for long tracks, not floating weather state.
+    if (dtype == np.dtype(np.int64)
+            and name == "nest.scratch.nest_accumulation/origin"):
+        return None
     if dtype == np.dtype(np.int32):
         if name in GPU_INTEGER_EXCLUSIONS:
             return None
@@ -249,6 +293,11 @@ class FieldRule:
     #: silently loosened gate, which is the thing a reader must be able to
     #: rule out.  Never uploaded to the device: the kernel compares numbers.
     bound_note: str | None = None
+    # Strict transport can copy a signed rounding residual to the outflow
+    # rim before microphysics clamps the interior. Unknown geometry keeps
+    # every floor, and finiteness and ceilings always cover the whole field.
+    allow_lower_rim: bool = False
+    rim_width: int = 0
 
     @property
     def status_bit(self) -> int:
@@ -322,6 +371,9 @@ def rule_for_field(name: str, *, p_top: float | None = None) -> FieldRule:
     """
     lower_name = name.lower()
     leaf = _leaf(name)
+    from woof.core.fast_sbm_contract import BIN_SPECIES
+    if leaf in BIN_SPECIES:
+        return FieldRule("moment",0.0,1.e15) if leaf.startswith("ff8") else FieldRule("moisture",0.0,1.0)
     if lower_name.startswith("lbc."):
         return FieldRule("lateral_boundary")
     if lower_name.startswith("nest."):
@@ -372,6 +424,20 @@ def rule_for_field(name: str, *, p_top: float | None = None) -> FieldRule:
         return FieldRule("specific_volume", 0.0, 1.0e4,
                          strict_lower=True)
     if leaf in ("qv", "qc", "qr", "qi", "qs", "qg", "qh"):
+        if WRF_EXACT:
+            # Strict mode transcribes WRF's scalar updates, and WRF keeps
+            # moisture non-negative only on its final positive-definite
+            # stage: rk_update_scalar leaves qv = -3.19e-13 at the first step
+            # of the combo-sweep round-3 pair, and the non-PD stages carry
+            # and grow such values (qv = -2.4808048e-07 at step 11, the same
+            # word in stock WRF 4.6.1 and in strict WOOF).  No fixed number
+            # separates WRF's own state from broken transport, so strict
+            # mode drops the sign bound and keeps the ceiling; a non-finite
+            # value still fails the gate.
+            return FieldRule(
+                "moisture", None, 1.0,
+                bound_note=("strict mode keeps WRF's own below-zero moisture "
+                            "residuals, as WRF integrates with them"))
         return FieldRule("moisture", 0.0, 1.0)
     if leaf in ("nc", "nr", "ni", "ns", "ng", "qndrop", "qnr", "qni",
                 "qns", "qng", "qnh", "qnn",
@@ -408,19 +474,79 @@ def rule_for_field(name: str, *, p_top: float | None = None) -> FieldRule:
                 # run: raising it would only have moved where the runaway
                 # was noticed.
                 "nwfa", "nifa"):
+        if WRF_EXACT and leaf in ("nwfa", "nifa"):
+            # Strict mode transcribes WRF's scalar transport, and WRF clamps
+            # the two aerosol numbers only in a column Thompson works on: a
+            # column it returns from at module_mp_thompson.F:2020 (no
+            # condensate, subsaturated over ice) never reaches the clamp at
+            # :3979-3982 and keeps its transport residual
+            # (kernels/thompson_aerosol_state.cu, "THE NO-MICROPHYSICS
+            # COLUMN").  Stock WRF 4.6.1 (pinned strict build, dmpar 16,
+            # a two-domain mp=28 WIF case, 2026-08-21 00Z) writes
+            # QNIFA -3.70e-6, -3.29e-6 and -2.80e-6 on d01's top layer at
+            # (j, i) = (87, 61), (58, 111) and (90, 50) at +1 h: interior
+            # points, outside the nest and the 5-row boundary zone.  The
+            # rim-only floor below stopped strict ArWen on that case at
+            # nifa(43, 94, 47) = -7.2e-6, the same layer, edge distance 5.
+            # As for moisture above, no fixed number separates WRF's own
+            # residual from broken transport, so strict mode drops the sign
+            # bound and keeps the ceiling; a non-finite value still fails.
+            # The other numbers keep the rim-only floor below until a native
+            # run shows WRF integrating an interior negative of theirs.
+            return FieldRule(
+                "moment", None, 1.0e15,
+                bound_note=("strict mode keeps WRF's own below-zero aerosol "
+                            "number residuals, as WRF integrates with them"))
+        if WRF_EXACT:
+            return FieldRule(
+                "moment", 0.0, 1.0e15, allow_lower_rim=True,
+                bound_note=("strict mode permits below-zero scalar residuals "
+                            "on the specified rim only"))
         return FieldRule("moment", 0.0, 1.0e15)
     if leaf in ("qvolg", "qvolh"):
+        if WRF_EXACT:
+            return FieldRule(
+                "particle_volume", 0.0, 1.0, allow_lower_rim=True,
+                bound_note=("strict mode permits below-zero scalar residuals "
+                            "on the specified rim only"))
         return FieldRule("particle_volume", 0.0, 1.0)
+    if leaf.startswith("chem_"):
+        # A chem species (ug kg-1 or ppmv of dry air).  Non-negative, as
+        # the positive-definite transport and every process's epsilc floor
+        # keep it, and 1.0e9 is four decades above the densest surface
+        # smoke or dust ever measured (order 1e4 to 1e5 ug m-3), so the
+        # ceiling catches a runaway, not a plume.
+        return FieldRule("chem", 0.0, 1.0e9)
+    if leaf.startswith("chemdiag_") or leaf.startswith("chemwork_"):
+        # Process arrays and ledger totals: finiteness is the whole gate
+        # (a ledger bucket or a flux accumulator has either sign).
+        return FieldRule("chem")
     if leaf in ("effc", "effr", "effi", "effs"):
         # Morrison stores these diagnostics in microns.
         return FieldRule("effective_radius", 0.0, 1.0e6)
     if leaf in ("tsk", "tslb"):
         return FieldRule("soil_temperature", 150.0, 400.0)
     if leaf in ("smois", "sh2o"):
-        return FieldRule("soil_moisture", 0.0, 1.0)
+        # No lower bound.  real.exe's vertical interpolation writes small
+        # negative deep-layer soil moisture near coasts (down to -0.032
+        # m3 m-3 in RUC's nine layers on the gulf-coast combo case), WRF
+        # integrates those words, and no land model here writes a negative
+        # value (RUC's soilmoist bounds each layer to [qmin + 1.e-8, maxsmc],
+        # module_sf_ruclsm.F:6033-6076).  The 0 floor therefore fired only on
+        # input words WRF accepts: it named no breakage and refused 24 runs
+        # of the 2026-10-07 combo sweep (round 2) once RUC's own check was
+        # lifted.  Finiteness and the 1.0 ceiling stand.
+        return FieldRule("soil_moisture", None, 1.0)
     if lower_name.startswith("surface."):
+        if leaf == "_pwp_status":
+            return FieldRule("surface", 0.0, 0.0,
+                             bound_note="PWP failure bits: 1 Richardson mixing did not converge; 2 nonfinite ocean state")
         if leaf == "ebal":
-            return FieldRule("surface", 0.0, 3.0)
+            # Noah's energy-balance case (kernels/noah.cu): 0-3 are the land
+            # SFLX branches, 4 marks an SFLX_GLACIAL (land-ice) column.
+            # With the bound at 3, the first land-ice point of a real
+            # forecast failed the post-d01-sync health gate (g16 ports-pbl).
+            return FieldRule("surface", 0.0, 4.0)
         if leaf == "kpbl":
             # collect_state_fields supplies the state-dependent nz cap.
             return FieldRule("surface", 0.0)
@@ -436,6 +562,10 @@ def rule_for_field(name: str, *, p_top: float | None = None) -> FieldRule:
         if leaf == "pgsxy":
             return FieldRule("surface", 0.0,
                              float(NOAHMP_MAX_GROWTH_STAGE))
+        if leaf == "ecmask":
+            return FieldRule("surface", 0.0, 3.0)
+        if leaf == "ecobsc":
+            return FieldRule("surface", 0.0, 1.0)
         if leaf == "shadowmask":
             return FieldRule("surface", 0.0, 1.0)
         return FieldRule("surface")
@@ -494,6 +624,11 @@ def _walk_arrays(value: Any, prefix: str, *, seen: set[int] | None = None,
 _LID_FROM_STATE = object()
 
 
+#: Soil columns no scheme touches when ``sf_surface_physics = 0``.
+_INERT_WITHOUT_LAND_MODEL = frozenset({
+    "surface.tslb", "surface.smois", "surface.sh2o", "surface.smcrel"})
+
+
 def collect_state_fields(state: Any, *, backend: str = "cpu",
                          extra_tables: Mapping[str, Any] | None = None,
                          p_top: Any = _LID_FROM_STATE,
@@ -547,6 +682,22 @@ def collect_state_fields(state: Any, *, backend: str = "cpu",
                     p_top=p_top))
         else:
             result.append(field_from_array(name, value, p_top=p_top))
+    if getattr(state,"fast_sbm_bins",None) is not None:
+        from woof.core.fast_sbm_contract import BIN_SPECIES
+        for name in BIN_SPECIES:
+            value=getattr(state,name)
+            result.append(field_from_array(name,value,p_top=p_top))
+    # Chem species fields and float32 process arrays, named by the chem
+    # table; absent on a chem-off state, so every other census is unchanged.
+    # The float64 ledger vectors are sums of these fields and carry no
+    # state of their own, and the fused gate takes float32/int32 only.
+    if getattr(state, "chem", None) is not None:
+        from woof.state_serialization_contract import chem_state_attrs
+        for name in chem_state_attrs(state):
+            value = getattr(state, name, None)
+            if (value is not None
+                    and np.dtype(value.dtype) == np.dtype(np.float32)):
+                result.append(field_from_array(name, value, p_top=p_top))
 
     driver = getattr(state, "physics", None)
     if driver is not None:
@@ -565,8 +716,22 @@ def collect_state_fields(state: Any, *, backend: str = "cpu",
         surface_fields = _walk_arrays(getattr(driver, "fields", None),
                                       "surface")
         nz = int(getattr(getattr(state, "p", None), "shape", (0,))[0])
+        no_land_model = (getattr(driver, "scheme_dispatch", None) is not None
+                         and driver.scheme_dispatch.get(
+                             "sf_surface_physics", "") is None)
         for field in surface_fields:
-            if field.name == "surface.kpbl":
+            if no_land_model and field.name in _INERT_WITHOUT_LAND_MODEL:
+                # sf_surface_physics = 0: no scheme reads or writes the soil
+                # columns; they carry real.exe's words (all zero for TSLB)
+                # into history as WRF's do.  A range rule on them refused
+                # every no-land-model WRF-file run at the initial gate
+                # (2026-10-07 combo sweep), so only finiteness is checked.
+                field = dataclasses.replace(field, rule=_FINITE)
+            if field.name == "surface.g3_isfc":
+                field = dataclasses.replace(field, rule=FieldRule("surface", 0.0, float(nz)))
+            elif field.name == "surface.g3_diag_clock":
+                field = dataclasses.replace(field, rule=FieldRule("surface", 0.0, float(2**31-1)))
+            elif field.name == "surface.kpbl":
                 field = dataclasses.replace(
                     field, rule=FieldRule("surface", 0.0, float(nz)))
             elif field.name == "surface.ktop_plume":
@@ -632,11 +797,17 @@ def collect_state_fields(state: Any, *, backend: str = "cpu",
         for name, value in sorted(extra_tables.items()):
             result.extend(_walk_arrays(value, f"nest.{name}"))
 
-    if len(result) > MAX_HEALTH_FIELDS:
+    ceiling = health_field_ceiling(state)
+    if len(result) > ceiling:
+        name = ("FSBM_HEALTH_FIELDS" if ceiling == FSBM_HEALTH_FIELDS
+                else "MAX_HEALTH_FIELDS")
         raise ValueError(
             f"health field inventory has {len(result)} descriptors; "
-            f"MAX_HEALTH_FIELDS={MAX_HEALTH_FIELDS} must be raised explicitly")
-    return tuple(result)
+            f"{name}={ceiling} must be raised explicitly")
+    width = max(0, int(getattr(state, "_health_spec_zone", 0)))
+    return tuple(dataclasses.replace(
+        field, rule=dataclasses.replace(field.rule, rim_width=width))
+        if field.rule.allow_lower_rim else field for field in result)
 
 
 def _cpu_values(field: HealthField) -> np.ndarray:
@@ -662,19 +833,36 @@ def _cpu_values(field: HealthField) -> np.ndarray:
 def _bad_mask(values: np.ndarray, rule: FieldRule) -> np.ndarray:
     bad = ~np.isfinite(values)
     if rule.lower is not None:
-        bad |= values <= rule.lower if rule.strict_lower else values < rule.lower
+        low = values <= rule.lower if rule.strict_lower else values < rule.lower
+        if rule.allow_lower_rim and rule.rim_width > 0 and values.ndim >= 2:
+            width = rule.rim_width
+            low[..., :width, :] = False
+            low[..., -width:, :] = False
+            low[..., :, :width] = False
+            low[..., :, -width:] = False
+        bad |= low
     if rule.upper is not None:
         bad |= values > rule.upper
     return bad
 
 
-def _reason(value: float, rule: FieldRule) -> str:
+def _reason(value: float, rule: FieldRule, *, shape=(), flat=0) -> str:
     if not math.isfinite(value):
         return f"non-finite value {value!r}"
     if rule.lower is not None and (
             value <= rule.lower if rule.strict_lower else value < rule.lower):
         op = ">" if rule.strict_lower else ">="
-        return f"value {value!r} violates lower bound {op} {rule.lower!r}"
+        reason = f"value {value!r} violates lower bound {op} {rule.lower!r}"
+        if rule.allow_lower_rim:
+            if len(shape) >= 2:
+                ny, nx = shape[-2:]
+                j, i = (flat // nx) % ny, flat % nx
+                distance = min(i, j, nx - 1 - i, ny - 1 - j)
+                reason += f" at (i, j)=({i}, {j}), edge distance {distance}"
+            reason += ("; interior negatives are not WRF behaviour and point "
+                       "to a transport or microphysics defect; below-zero "
+                       "residuals are permitted on the specified rim only")
+        return reason
     if rule.upper is not None and value > rule.upper:
         reason = f"value {value!r} exceeds upper bound {rule.upper!r}"
         return reason if rule.bound_note is None else (
@@ -707,7 +895,7 @@ def _validate_fields_numpy(fields: Mapping[str, Any] | Sequence[HealthField],
     return ValidationReport(
         False, status, field.name,
         tuple(int(i) for i in np.unravel_index(flat, values.shape)),
-        flat, value, _reason(value, field.rule), phase)
+        flat, value, _reason(value, field.rule, shape=values.shape, flat=flat), phase)
 
 
 class _HostHealthDescriptor(ctypes.Structure):
@@ -727,14 +915,29 @@ class _HostHealthResult(ctypes.Structure):
 def _native_health_entry():
     from woof.core import portable_math
     try:
-        entry = getattr(portable_math._load(), "gpuwm_validate_health_fields", None)
+        library = portable_math._load()
+        entry = getattr(library, "gpuwm_validate_health_fields_rim", None)
+        supports_rim = entry is not None
+        if entry is None:
+            entry = getattr(library, "gpuwm_validate_health_fields", None)
     except (OSError, RuntimeError, FileNotFoundError):
         return None
     if entry is not None:
         entry.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t,
                           ctypes.POINTER(_HostHealthResult)]
+        entry.supports_rim = supports_rim
+        if supports_rim:
+            entry.argtypes += [ctypes.c_void_p]
         entry.restype = ctypes.c_int32
     return entry
+
+
+def _rim_geometry(field: HealthField) -> tuple[int, int, int]:
+    shape = field.values.shape
+    if (not field.rule.allow_lower_rim or field.rule.rim_width <= 0
+            or len(shape) < 2 or not all(shape[-2:])):
+        return 0, 0, 0
+    return int(shape[-2]), int(shape[-1]), field.rule.rim_width
 
 
 def _native_health_descriptor(field):
@@ -804,6 +1007,11 @@ def validate_fields_cpu(fields: Mapping[str, Any] | Sequence[HealthField],
         return _validate_fields_numpy(fields, phase=phase)
     descriptors = (tuple(field_from_array(name, value) for name, value in fields.items())
                    if isinstance(fields, Mapping) else tuple(fields))
+    if (not getattr(entry, "supports_rim", False)
+            and any(_rim_geometry(field)[2] for field in descriptors)):
+        # An older ABI cannot represent the allowance. The NumPy path
+        # retains the floor and applies the same known domain geometry.
+        return _validate_fields_numpy(descriptors, phase=phase)
     native, indices, keepalive, fallback = [], [], [], []
     for index, field in enumerate(descriptors):
         prepared = _native_health_descriptor(field)
@@ -825,7 +1033,12 @@ def validate_fields_cpu(fields: Mapping[str, Any] | Sequence[HealthField],
         from woof.core import portable_math
         jobs = (_HostHealthDescriptor * len(native))(*native)
         result = _HostHealthResult()
-        code = int(entry(jobs, len(native), portable_math._workers(None), ctypes.byref(result)))
+        args = [jobs, len(native), portable_math._workers(None), ctypes.byref(result)]
+        if getattr(entry, "supports_rim", False):
+            geometry = np.asarray([_rim_geometry(descriptors[i]) for i in indices],
+                                  dtype=np.uintp)
+            args.append(geometry.ctypes.data)
+        code = int(entry(*args))
         if code:
             # An additive ABI cannot weaken the existing checked interface.
             return _validate_fields_numpy(descriptors, phase=phase)
@@ -852,7 +1065,7 @@ def validate_fields_cpu(fields: Mapping[str, Any] | Sequence[HealthField],
     field = descriptors[index]
     return ValidationReport(False, status, field.name,
         tuple(int(i) for i in np.unravel_index(flat, shape)), flat, value,
-        _reason(value, field.rule), phase)
+        _reason(value, field.rule, shape=shape, flat=flat), phase)
 
 
 def validate_state_cpu(state: Any, *, phase: str | None = None,
@@ -1032,21 +1245,25 @@ class StateHealthValidator:
         self._metal = bool(getattr(state, "_metal_setup_state", False))
         # The restart classifier already treats integration_health_* scratch
         # as rebuilt.  Metadata is bit-packed into FP32 storage because the
-        # state scratch API intentionally has one model dtype.
-        self._ptr = None if self._metal else state.scratch((MAX_HEALTH_FIELDS * 2,),
+        # state scratch API intentionally has one model dtype.  The
+        # descriptor ceiling is the domain's own (health_field_ceiling).
+        self._ceiling = health_field_ceiling(state)
+        self._ptr = None if self._metal else state.scratch((self._ceiling * 2,),
                                   "integration_health_field_ptr")
-        self._aux = None if self._metal else state.scratch((MAX_HEALTH_FIELDS * 2,),
+        self._aux = None if self._metal else state.scratch((self._ceiling * 2,),
                                   "integration_health_aux_ptr")
-        self._size = None if self._metal else state.scratch((MAX_HEALTH_FIELDS * 2,),
+        self._size = None if self._metal else state.scratch((self._ceiling * 2,),
                                    "integration_health_field_size")
-        self._bounds = None if self._metal else state.scratch((MAX_HEALTH_FIELDS, 2),
+        self._bounds = None if self._metal else state.scratch((self._ceiling, 2),
                                      "integration_health_bounds")
-        self._flags = None if self._metal else state.scratch((MAX_HEALTH_FIELDS,),
+        self._flags = None if self._metal else state.scratch((self._ceiling,),
                                     "integration_health_flags")
-        self._planes = None if self._metal else state.scratch((MAX_HEALTH_FIELDS,),
+        self._planes = None if self._metal else state.scratch((self._ceiling,),
                                      "integration_health_planes")
-        self._status = None if self._metal else state.scratch((MAX_HEALTH_FIELDS * 2,),
-                                    "integration_health_status_bits")
+        self._status = None if self._metal else state.scratch((self._ceiling * 2,),
+                                     "integration_health_status_bits")
+        self._rim = None if self._metal else state.scratch((self._ceiling, 3),
+                                  "integration_health_rim")
         self._result = None if self._metal else state.scratch((4,), "integration_health_validation")
         self._chunk = _MIN_CHUNK_ELEMENTS
         self._chunk_count = 1
@@ -1098,22 +1315,24 @@ class StateHealthValidator:
             pointers_by_field.append(pointer)
         fields_tuple = tuple(fields)
         if self._metal:
-            if len(fields) > MAX_HEALTH_FIELDS:
-                raise ValueError(f"health field inventory exceeds {MAX_HEALTH_FIELDS}")
+            if len(fields) > self._ceiling:
+                raise ValueError(f"health field inventory exceeds {self._ceiling}")
             self.fields = fields_tuple
             self.excluded_integer_fields = tuple(excluded)
             return
-        pointers = np.zeros(MAX_HEALTH_FIELDS, dtype=np.uint64)
-        auxiliaries = np.zeros(MAX_HEALTH_FIELDS, dtype=np.uint64)
-        sizes = np.zeros(MAX_HEALTH_FIELDS, dtype=np.uint64)
-        bounds = np.zeros((MAX_HEALTH_FIELDS, 2), dtype=np.float32)
-        flags = np.zeros(MAX_HEALTH_FIELDS, dtype=np.uint32)
-        planes = np.zeros(MAX_HEALTH_FIELDS, dtype=np.uint32)
-        bits = np.zeros(MAX_HEALTH_FIELDS, dtype=np.uint64)
+        pointers = np.zeros(self._ceiling, dtype=np.uint64)
+        auxiliaries = np.zeros(self._ceiling, dtype=np.uint64)
+        sizes = np.zeros(self._ceiling, dtype=np.uint64)
+        bounds = np.zeros((self._ceiling, 2), dtype=np.float32)
+        flags = np.zeros(self._ceiling, dtype=np.uint32)
+        planes = np.zeros(self._ceiling, dtype=np.uint32)
+        bits = np.zeros(self._ceiling, dtype=np.uint64)
+        rims = np.zeros((self._ceiling, 3), dtype=np.uint32)
         for index, field in enumerate(fields):
             pointers[index] = pointers_by_field[index]
             sizes[index] = int(field.values.size)
             rule = field.rule
+            rims[index] = _rim_geometry(field)
             flags[index] |= storage_flags[index]
             if rule.lower is not None:
                 flags[index] |= _LOWER
@@ -1145,6 +1364,7 @@ class StateHealthValidator:
         self._flags.set(_word_floats(flags))
         self._planes.set(_word_floats(planes))
         self._status.set(_word_floats(_u64_words(bits)))
+        self._rim.set(rims.view(np.float32))
         initial = np.asarray([0, (1 << 64) - 1], dtype=np.uint64)
         self._result.set(_word_floats(_u64_words(initial)))
         scanned = sizes[:len(fields)]
@@ -1197,7 +1417,7 @@ class StateHealthValidator:
         kernel = get_kernel("health", "validate_full_state")
         kernel((self._chunk_count, nfield), (256,), (
             self._ptr, self._aux, self._size, self._bounds, self._flags,
-            self._planes, self._status, self._result, np.int32(nfield),
+            self._planes, self._status, self._rim, self._result, np.int32(nfield),
             np.uint64(self._chunk)))
         words = cp.asnumpy(self._result).view(np.uint64)
         status, packed = (int(words[0]), int(words[1]))
@@ -1221,13 +1441,20 @@ class StateHealthValidator:
             False, status, field.name,
             tuple(int(i) for i in np.unravel_index(
                 flat, tuple(field.values.shape))),
-            flat, value, _reason(value, field.rule), phase)
+            flat, value, _reason(value, field.rule,
+                                 shape=field.values.shape, flat=flat), phase)
 
     def require_healthy(self, *, phase: str | None = None
                         ) -> ValidationReport:
         report = self.validate(phase=phase)
         if not report.ok:
             raise HealthCheckError(report)
+        # The compact result has synchronized the scan. These descriptors
+        # are rebuilt from the current state on every validate(), so keeping
+        # their array references now only pins replaced physics generations
+        # across the next step. Keep failed scans intact for diagnostics.
+        self.fields = ()
+        self.excluded_integer_fields = ()
         return report
 
     def phase_observer(self, phase: str) -> ValidationReport:
@@ -1267,12 +1494,13 @@ def benchmark_validator(state: Any, *, repeats: int = 20,
 
 
 __all__ = [
-    "FieldRule", "HealthCheckError", "HealthField", "MAX_HEALTH_FIELDS",
-    "STATUS_BITS", "StateHealthValidator",
+    "FieldRule", "FSBM_HEALTH_FIELDS", "HealthCheckError", "HealthField",
+    "MAX_HEALTH_FIELDS", "STATUS_BITS", "StateHealthValidator",
     "THETA_CEILING_AT_REFERENCE_LID_K", "THETA_CEILING_REFERENCE_LID_PA",
     "ValidationReport",
     "benchmark_validator", "collect_state_fields", "cuda_source",
-    "field_from_array", "gpu_integer_policy", "rule_for_field",
+    "field_from_array", "gpu_integer_policy", "health_field_ceiling",
+    "health_field_ceiling_for_config", "rule_for_field",
     "theta_ceiling_for_lid",
     "validate_fields_cpu", "validate_state_cpu", "validate_store_fields",
 ]
@@ -1372,6 +1600,31 @@ class StoreHealthValidator:
         return report
 
 
+class _AttachedStoreBundle:
+    """A streamed domain's store as the health rules read it: drained per read.
+
+    ``StreamedDomain.store`` drains before it hands the mapping out (the
+    deferred seam's scatter tail on one card; every slab of every rank on the
+    ranked road, :attr:`tilestream.ranks.RankedRun.store`).  Breakage this
+    prevents: the gate captured ``attached.store`` once, at construction, and
+    scanned that mapping at every later phase with no drain.  2.8.7's
+    ``StreamedDomain.impose_clock`` drained after every step (67e213588), which
+    kept the mirror current by accident; once that per-step drain was removed
+    (it made a 2-card run 0.78x of one card), the periodic and --health-debug
+    gates of a 2-card run scanned the host mirror of the last drain while a
+    NaN sat on the slabs.
+    """
+
+    def __init__(self, owner, template, base):
+        self._owner = owner
+        self.template = template
+        self.base = base
+
+    @property
+    def store(self):
+        return self._owner.store
+
+
 def health_validator_for_domain(model, node):
     """Validate the domain's canonical state after any initialization route."""
     from types import SimpleNamespace
@@ -1388,8 +1641,8 @@ def health_validator_for_domain(model, node):
             thb=geography.get('setup/thb', node.state.thb),
             mub=geography.get('setup/mub2d', node.state.mub2d),
             p_top=getattr(node.state, 'p_top', None))
-        return StoreHealthValidator(SimpleNamespace(
-            template=template, store=attached.store, base=base), node.cfg.run)
+        return StoreHealthValidator(
+            _AttachedStoreBundle(attached, template, base), node.cfg.run)
     prepared = getattr(model, '_prepared_by_grid_id', {}).get(node.cfg.grid_id)
     bundle = getattr(prepared, 'streamed_store', None)
     if bundle is None:

@@ -52,6 +52,7 @@ from .cuda_physics_prep_v841 import (
     _canonical_edges_on_cell,
     _mass_fields,
     _mesh_value,
+    _regional_donor_for_extent,
     _validate_scalar_names,
 )
 from .errors import ConfigurationRefusal
@@ -171,6 +172,7 @@ class MetalMpasToPhysGeometryV841(CudaMpasToPhysGeometryV841):
             array_sha256=hashes,
             _seal=_GEOMETRY_SEAL,
             regional_garbage_cell=garbage_cell,
+            regional_garbage_donor_cell=_regional_donor_for_extent(mesh, garbage_cell),
         )
         result.validate()
         return result
@@ -186,6 +188,11 @@ class MetalMpasToPhysGeometryV841(CudaMpasToPhysGeometryV841):
             raise ValueError(
                 "the regional garbage column must be the last of the extent"
             )
+        if self.regional_garbage_donor_cell is not None and (
+            self.regional_garbage_cell is None
+            or not 0 <= int(self.regional_garbage_donor_cell) < self.regional_garbage_cell
+        ):
+            raise ValueError("the regional garbage donor must be a real local column")
         shapes = {
             "edges_on_cell": (self.n_cells, self.max_edges),
             "n_edges_on_cell": (self.n_cells,),

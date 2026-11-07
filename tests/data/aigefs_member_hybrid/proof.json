@@ -233,39 +233,39 @@
     "implementation": "rust-scoped-threads-fp32-v1",
     "implementation_tree": {
       "files": {
-        "gpuwm/ingest/atmospheric_window.py": {
+        "woof/ingest/atmospheric_window.py": {
           "bytes": 10659,
           "sha256": "2bd674f105db513b0cfacc9c7881447f4a805354bef9e42f0d9f90ec65b16acd"
         },
-        "gpuwm/ingest/cpu_backend.py": {
+        "woof/ingest/cpu_backend.py": {
           "bytes": 82972,
           "sha256": "961d9d4e7f7b05a360ecd17d5b8248a39bbf70033516ff00972d5f3f4c744c95"
         },
-        "gpuwm/ingest/horiz.py": {
+        "woof/ingest/horiz.py": {
           "bytes": 109477,
           "sha256": "1eff61ef52e79bdbd212dff7dd118bebe03134388a3bc4b5ad76ae8af25bae3d"
         },
-        "gpuwm/ingest/interpolation_support.py": {
-          "bytes": 2555,
-          "sha256": "9be833136d3dc4fea8f40f4358fc7dd90225ffa0ca9936ae8bb09ba41fea9d87"
+        "woof/ingest/interpolation_support.py": {
+          "bytes": 2554,
+          "sha256": "432895a05af865b2138c6ba109d13e39fe61c83a4f66eaea62196f5348875fe3"
         },
-        "gpuwm/ingest/lake_temperature.py": {
+        "woof/ingest/lake_temperature.py": {
           "bytes": 8908,
           "sha256": "250a97b710e696c650f817be01cad3459495cc1ab20e7e509580c223f6c4a177"
         },
-        "gpuwm/ingest/preprocess_backend.py": {
+        "woof/ingest/preprocess_backend.py": {
           "bytes": 57936,
           "sha256": "1ce60d3ccd547d9c90a5efa4c84b8f22c6baf925dc49d002527947f4915d2645"
         },
-        "gpuwm/ingest/real.py": {
+        "woof/ingest/real.py": {
           "bytes": 250606,
           "sha256": "8eb3989f1860705cea4df3657413acaa7002aa0dd2267c30d1f29b4719bda1b5"
         },
-        "gpuwm/ingest/vert.py": {
+        "woof/ingest/vert.py": {
           "bytes": 18000,
           "sha256": "bf3d77e20d7e3a2ab4c5fdd651c38e06e26b6e057b4ac139e28bf859704c0c80"
         },
-        "gpuwm/ingest/water_temperature.py": {
+        "woof/ingest/water_temperature.py": {
           "bytes": 42305,
           "sha256": "d7d3c29d09dea0103149999dbc96225abbcce6a19bebd551477d5f6a5f308f19"
         }
@@ -302,7 +302,7 @@
     ],
     "workers": "auto"
   },
-  "proof_content_sha256": "b94b08dd76740a98c84522c6ef6a310fcc7070cb9b25889de936042c13d36e3d",
+  "proof_content_sha256": "98ab62b140aac1b2b4d4561b042fff0b057c967982ee8f0b21c74c2de48a54d1",
   "schema": "gpuwm-mapped-direct-wrf-proof-v1",
   "soil_texture_downscale": {
     "advisory": false,

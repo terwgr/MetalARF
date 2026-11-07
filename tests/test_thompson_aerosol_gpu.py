@@ -122,12 +122,30 @@ G3_GATE = 2.0e-6
 #:     RTX 5090; 8.012e-08 on the host build of the kernels).
 #:   * ``aero-cloud-freeze-nc``'s effc_m and ``aero-ice-demott-idxin``'s qc
 #:     fell inside the gate and left the table.
+#:
+#: AND NOW EMPTY.  The 2.8.6 accumulator rework (WRF's qcten, qrten, nrten,
+#: qiten and niten carried through every stage and applied once, mp=28's
+#: own tendency-form rain and ice fallout, the cold network's REAL
+#: rain-conservation ratio) closed the three rows that were left:
+#: aero-cloud-freeze-nc qc 4.9256e-06 -> 0, aero-cold-overlap
+#: qc / nc_per_kg / effc_m / nr_per_kg / qr -> 0, and wp08-nusweep qr
+#: 4.6424e-06 -> 5.532e-07, all on an RTX 5090 and an RTX 4090 alike.
+#:
+#: ONE ROW AGAIN, AND IT IS NOT A RESIDUAL: ``aero-cold-overlap`` is the
+#: declared rain-graupel divergence.  WRF v4.6.1 reads its rain-graupel
+#: collision tables out of bounds when the scheme is not hail aware
+#: (module_mp_thompson.F:465, :607-615, :2527-2545) and WOOF reads the slab
+#: the tables hold; with WRF's read emulated in a measurement copy of the
+#: tree the fixture clears the gate.  Measured on an RTX PRO 6000 Blackwell
+#: (sm_120).  Re-measured by lane/mp28-exact after WRF's snow and graupel
+#: accumulators (:4054-4059): qs 2.2658e-06 -> 1.9259e-06 (inside the gate),
+#: qg 8.7700e-05 -> 8.7763e-05, effs_m 4.6974e-06 -> 6.5743e-06.
 _PUBLISHED_G3: dict[str, dict[str, float]] = {
-    "aero-cloud-freeze-nc": {"qc": 4.9256e-06},
     "aero-cold-overlap": {
-        "qc": 1.0000e+00, "nc_per_kg": 1.0000e+00, "effc_m": 8.1018e-01,
-        "nr_per_kg": 1.2613e-04, "qr": 4.4426e-05},
-    "wp08-nusweep": {"qr": 4.6424e-06},
+        "qr": 5.0700e-04, "qi": 1.6180e-04, "qs": 1.9259e-06,
+        "qg": 8.7763e-05, "ni_per_kg": 1.4643e-05, "nr_per_kg": 5.0656e-04,
+        "effi_m": 5.3941e-05, "effs_m": 6.5743e-06,
+    },
 }
 
 #: Fixtures that clear :data:`G3_GATE` on EVERY compared field.  Membership is
@@ -135,7 +153,12 @@ _PUBLISHED_G3: dict[str, dict[str, float]] = {
 #: gate must be moved here in the same change that updates the evidence
 #: document, or the document silently understates the port.
 #:
-#: 19 of 22.  ``wp08-freeze`` joined when the rain fallout was handed WRF's
+#: 21 of 22 since the cold and warm source networks were re-transcribed in
+#: WRF's arithmetic order: ``aero-cold-overlap`` left for the declared
+#: rain-graupel divergence (see :data:`_PUBLISHED_G3`).
+#: 22 of 22 from the 2.8.6 accumulator rework, which added
+#: ``aero-cloud-freeze-nc``, ``aero-cold-overlap`` and ``wp08-nusweep``.
+#: Before it: 19 of 22.  ``wp08-freeze`` joined when the rain fallout was handed WRF's
 #: L_qr.  ``aero-drop-evap`` and ``aero-ice-demott-idxin`` joined at
 #: WP-13a.  ``aero-reduces-to-classic`` joined at the 1.4.1 merge, and it is
 #: worth being exact about why, because this file used to name it as the
@@ -149,6 +172,7 @@ _PUBLISHED_G3: dict[str, dict[str, float]] = {
 _G3_CLEAN_FIXTURES = (
     "aero-ccn-activate",
     "aero-ccn-sweep",
+    "aero-cloud-freeze-nc",
     "aero-drop-evap",
     "aero-ice-demott-dep",
     "aero-ice-demott-idxin",
@@ -166,6 +190,7 @@ _G3_CLEAN_FIXTURES = (
     "aero-warm-overlap",
     "wp08-freeze",
     "wp08-melt",
+    "wp08-nusweep",
 )
 
 #: THE FIXTURE DECK, PARTITIONED, because the deck grew and the published
@@ -281,7 +306,10 @@ def test_the_set_of_fixtures_clearing_the_gate_is_exactly_what_is_published():
     closing a residual fails here until ``_G3_CLEAN_FIXTURES``, the
     ``_PUBLISHED_G3`` row and the document's table are all updated together.
 
-    MEASURED: 19 of 22 clean under this file's gate, 17 of the 19 spec'd
+    MEASURED: 22 of 22 clean under this file's gate since the 2.8.6
+    accumulator rework, which also retired the near-cancellation exclusion
+    discussed below, so this file's count and the adapter's unexceptioned
+    count coincide again.  Before it: 19 of 22 clean under this file's gate, 17 of the 19 spec'd
     fixtures plus ``wp08-freeze`` and ``wp08-melt``.  ``wp08-freeze`` joined
     when the rain fallout was handed WRF's L_qr.  ``aero-drop-evap`` and
     ``aero-ice-demott-idxin`` joined when WP-13a restored WRF's level-wise
@@ -308,7 +336,7 @@ def test_the_set_of_fixtures_clearing_the_gate_is_exactly_what_is_published():
         rather than the 3.155e-03 the adapter's UNEXCEPTIONED table reports.
         That level is not unmeasured: it is bounded in ulps of the entry value
         by ``tests/test_thompson_aerosol_adapter.py::
-        test_the_near_cancellation_level_is_bounded_in_ulps_not_excluded``
+        test_the_near_cancellation_level_is_bounded_in_ulps_not_excluded`` (retired with the exclusion by the 2.8.6 accumulator rework)
         and published in ULP terms by the same file's
         ``test_every_g3_residual_is_published_in_ulps_as_well_as_relative``.
 
@@ -336,9 +364,9 @@ def test_the_set_of_fixtures_clearing_the_gate_is_exactly_what_is_published():
     assert not set(_PUBLISHED_G3) & expected, (
         "a fixture is published both clean and with a residual: "
         f"{sorted(set(_PUBLISHED_G3) & expected)}")
-    assert len(clean) == 19 and len(matrix) == 22, (len(clean), len(matrix))
+    assert len(clean) == 21 and len(matrix) == 22, (len(clean), len(matrix))
     aero = sorted(name for name in clean if name.startswith("aero-"))
-    assert len(aero) == 17, aero
+    assert len(aero) == 18, aero
 
 
 # ---------------------------------------------------------------------------
@@ -528,8 +556,21 @@ _SKIP_SITES = frozenset({
      "test_non_aerosol_int_define_source_is_byte_identical", "call:skip"),
     # Opt-in empirical mp=8 gate: needs gfortran, the pristine WRF tree and
     # ~380 MB of regenerated tables.  WP-12b RAN it; see the document.
+    # One launcher-shape test per arithmetic leg (2.9.1 intake of the WRF
+    # exact chain): a default process runs 2.9.1's mp=8 adapter, which
+    # still calls the reused thompson.cu launchers, so _default compares
+    # live; under GPUWM_WRF_EXACT=1 mp=8 is the classic unit and _strict
+    # holds the pinned shape.  Exactly one of the two runs on every leg.
+    ("test_thompson_aerosol_adapter.py",
+     "test_reused_classic_launchers_receive_the_mp8_argument_shape_default",
+     "marker:skipif"),
+    ("test_thompson_aerosol_adapter.py",
+     "test_reused_classic_launchers_receive_the_mp8_argument_shape_strict",
+     "marker:skipif"),
+    # Renamed by the WRF exact chain (2.9.1 intake): it reproduces the
+    # committed oracle on the receipt's libc, bounded on another.
     ("test_mp8_frozen.py",
-     "test_clean_oracle_rebuild_matches_except_the_four_documented_files",
+     "test_clean_oracle_rebuild_reproduces_the_committed_oracle",
      "marker:skipif"),
     # CCN_ACTIVATE.BIN ships as of 2026-08-01, so on a clean checkout these
     # do NOT fire.  They are kept as defence: a tree where the asset was
@@ -558,7 +599,7 @@ _SKIP_SITES = frozenset({
      "test_refl_10cm_is_bit_identical_under_two_very_different_nc_fields",
      "call:skip"),
     ("test_mp28_runnable.py",
-     "test_mp28_and_mp8_reflectivity_agree_bitwise_on_identical_inputs",
+     "test_mp28_echo_is_its_own_transcription_and_mp8s_stays_frozen",
      "call:skip"),
     ("test_mp28_runnable.py",
      "test_microphysics_apply_runs_mp28_end_to_end_on_a_real_domainstate",

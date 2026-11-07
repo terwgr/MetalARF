@@ -39,6 +39,44 @@ def test_adaptive_same_card_cfl_and_digest():
     adaptive_loop(nsteps=4)
 
 
+def test_executor_clock_order_drains_no_ranked_store():
+    """THE BREAKAGE: 67e213588 (SFIRE clock fix, 10-02; in 2.8.7 through
+    e81291059) made ``StreamedDomain.impose_clock`` read ``self.store``.  On
+    the ranked road that is a full drain of every slab to the host plus a
+    full re-gather before the next sweep, and ``execute_experiment`` calls
+    ``impose_clock`` before and after every step: 720 full drains in 720
+    steps on M1, and a 2-card forecast at 0.78x of one card (V5 synthetic,
+    2 cards: 114.7 ms per step against 67.5 with a lazy store).  The
+    executor's per-step order on a forecast without fire must drain and
+    gather nothing.
+    """
+    from woof.core import streaming
+    from woof.core.devices import DeviceOptions
+    from tilestream.ranks_gate import config, fixture, make_ranked
+    cfg = config(96, 80, 12)
+    state, bundle = fixture(cfg)
+    del state
+    options = DeviceOptions(count=2, ids=(0, 0))
+    streamed = make_ranked(bundle, cfg, streaming.ranked_decision(cfg, options),
+                           options, None, "threads")
+    run = streamed.tiled_run
+    try:
+        assert "fire_clocks" not in streamed.scalars
+        before = dict(run.output_report)
+        for _ in range(4):
+            streamed.impose_clock(streamed.elapsed_seconds)    # model.py, before the step
+            streamed(None, run.cfg)
+            streamed.impose_clock(streamed.elapsed_seconds)    # model.py, after the step
+        drained = {key: run.output_report[key] - before[key]
+                   for key in ("full_drains", "full_gathers")}
+        assert drained == {"full_drains": 0, "full_gathers": 0}, (
+            f"4 executor-order steps on 2 ranks paid {drained}: impose_clock is "
+            "draining the ranked store again (67e213588)")
+        assert streamed.steps == 4
+    finally:
+        run.close()
+
+
 def test_lazy_store_roundtrip_and_worker_failure(monkeypatch):
     import cupy as cp
     from woof.core import dycore, streaming
@@ -487,5 +525,68 @@ def test_a_slow_outbound_pack_cannot_see_the_next_step(grid, monkeypatch):
         joined = run.store
         for name, array in take(state).items():
             assert cp.asnumpy(array).tobytes() == joined[name].tobytes(), name
+    finally:
+        run.close()
+
+
+@pytest.mark.parametrize("grid", [(1, 2), (2, 2)])
+def test_a_checkpoint_snapshot_does_not_wait_for_the_frame_writer(grid):
+    """``checkpoint_store``: the hourly checkpoint without the history wait.
+
+    At an output step the frame's members are downloaded and the history
+    writer borrows their store views (a store guard).  A checkpoint of the
+    same step used to drain, and the drain waited on that guard: about 8 to
+    12 s of every hourly checkpoint stall on the 1 km CONUS run of
+    2026-10-04.  The snapshot must equal the resident state member for
+    member (including a member reset on the slabs after its download), must
+    not call the guard, must leave the borrowed copy as the frame saw it,
+    and must leave the trajectory unchanged.
+    """
+    import cupy as cp
+    from woof.core import dycore, streaming
+    from woof.core.devices import DeviceOptions
+    from tilestream.ranks_gate import config, fixture
+    cfg = config(96, 80, 12)
+    state, bundle = fixture(cfg)
+    count = grid[0] * grid[1]
+    options = DeviceOptions(count=count, grid=grid, ids=(0,) * count)
+    streamed = streaming.ranked_domain_builder(
+        bundle, clock=None, options=options)(
+            None, cfg, streaming.ranked_decision(cfg, options))
+    run = streamed.tiled_run
+    take = streaming.streamed_store_inventory()
+    keys = ["state/thp", "state/u", "state/p", "state/qv"]
+    reset = "state/qv"
+    calls = []
+    try:
+        for _ in range(2):
+            dycore.step(state, cfg)
+            run.sweep(1)
+        assert run.download(keys) == keys
+        run.wait_downloads(run.pending_downloads())
+        framed = run.raw_store[reset].copy()
+        run.add_store_guard(lambda: calls.append("frame writer"))
+        run.zero_scratch(reset)
+        take(state)[reset].fill(0)
+        snapshot = run.checkpoint_store()
+        assert calls == [], "the snapshot waited for the frame writer"
+        for name, array in take(state).items():
+            assert cp.asnumpy(array).tobytes() == snapshot[name].tobytes(), name
+        assert run.raw_store[reset].tobytes() == framed.tobytes(), \
+            "the frame's borrowed member was overwritten"
+        assert run.output_report["full_drains"] == 0
+        for _ in range(2):
+            dycore.step(state, cfg)
+            run.sweep(1)
+        joined = run.store
+        for name, array in take(state).items():
+            assert cp.asnumpy(array).tobytes() == joined[name].tobytes(), name
+        # Control: with no download this generation the guards have not run,
+        # so the snapshot is a drain and waits for them.
+        calls.clear()
+        dycore.step(state, cfg)
+        run.sweep(1)
+        run.checkpoint_store()
+        assert calls == ["frame writer"]
     finally:
         run.close()

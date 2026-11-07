@@ -93,12 +93,6 @@ def _submit_column(entrypoint, arrays, *, volume_names, output_names):
         exact_policy=False, grid_size=ny * nx, threads_per_group=32)
 
 
-def submit_warm_saturation_adjust(temperature, pressure, qv, qc):
-    arrays = {"temperature": temperature, "pressure": pressure,
-              "qv": qv, "qc": qc}
-    return _submit("thompson_warm_saturation_adjust", arrays)
-
-
 def submit_exner_power(pressure, exner, *, reference_pressure,
                        exponent):
     """Apply the adapter's source p/P0 power on Metal device storage."""
@@ -173,33 +167,11 @@ def submit_cloud_saturation_adjust(
     return _submit(entrypoint, arrays)
 
 
-def submit_graupel_fallout_column_mask(
-        entry_active, qg, active_columns):
-    arrays = {"entry_active": entry_active, "qg": qg,
-              "active_columns": active_columns}
-    return _submit_column(
-        "thompson_graupel_fallout_column_mask", arrays,
-        volume_names=("entry_active", "qg"),
-        output_names=("active_columns",))
-
-
 def submit_hydrometeor_column_mask(mixing_ratio, active_columns):
     arrays = {"mixing_ratio": mixing_ratio, "active_columns": active_columns}
     return _submit_column(
         "thompson_hydrometeor_column_mask", arrays,
         volume_names=("mixing_ratio",), output_names=("active_columns",))
-
-
-def submit_microphysics_columns(
-        qc, qi, qr, qs, qg, temperature, pressure, qv, micro_columns):
-    arrays = {"qc": qc, "qi": qi, "qr": qr, "qs": qs, "qg": qg,
-              "temperature": temperature, "pressure": pressure, "qv": qv,
-              "micro_columns": micro_columns}
-    return _submit_column(
-        "thompson_microphysics_columns", arrays,
-        volume_names=("qc", "qi", "qr", "qs", "qg", "temperature",
-                      "pressure", "qv"),
-        output_names=("micro_columns",))
 
 
 def submit_adapter_masks(qr, qg, entry_graupel, rain_columns,

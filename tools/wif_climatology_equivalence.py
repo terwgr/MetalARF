@@ -2,7 +2,7 @@
 """Equivalence gate: the Rust WIF ingest path against the NumPy oracle.
 
 The NumPy implementations in ``woof/ingest/wif_climatology.py`` are the
-expressions that were measured against WRF-4.7.1 ``real.exe`` on a development machine
+expressions that were measured against WRF-4.7.1 ``real.exe`` on test host D
 (commit 94260bf44).  They are the ORACLE-OF-RECORD, not a fallback: this
 harness is the only thing that can say the Rust engine still holds the
 numbers that oracle bound.

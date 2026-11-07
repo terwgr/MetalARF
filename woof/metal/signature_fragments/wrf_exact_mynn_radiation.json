@@ -1,0 +1,212 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/mynn_radiation.py",
+      "cuda_symbol": "merge_mynn_bl_clouds",
+      "layout_version": 1,
+      "module": "wrf_exact_mynn_radiation",
+      "name": "wrf_exact_rrtmgp_mynn_cloud_merge",
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "has_cldfra",
+          "int32"
+        ],
+        [
+          "replace_cldfra",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl",
+          "float",
+          "read"
+        ],
+        [
+          "qi_bl",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "cldfra": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qc": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qi": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qi_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_mynn_radiation.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+      "cuda_symbol": "rla_mynn_gsd41",
+      "layout_version": 1,
+      "module": "wrf_exact_mynn_radiation",
+      "name": "wrf_exact_rrtmgp_mynn_cloud_merge_gsd41",
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "has_cldfra",
+          "int32"
+        ],
+        [
+          "first_step",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qi": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/wrf_exact_mynn_radiation.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -57,6 +57,9 @@ def gather_initialize_and_sediment(
         workspace: NSSL2DriverWorkspace | None = None,
         predicted_ccn: bool = True) -> NSSL2DriverWorkspace:
     """Metal counterpart of the production gather/initialize/sediment path."""
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        raise NotImplementedError("strict Metal NSSL production sedimentation is not implemented")
     if not isinstance(air_density, MetalArray):
         raise TypeError("Metal NSSL driver requires MetalArray fields")
     context = air_density.buffer.context
@@ -105,7 +108,7 @@ def gather_initialize_and_sediment(
 def reduce_nssl2_precipitation(
         workspace: NSSL2DriverWorkspace,
         rainnc, rainncv, snownc, snowncv,
-        graupelnc, graupelncv, hailnc, hailncv, sr) -> None:
+        graupelnc, graupelncv, hailnc, hailncv, sr, *, air_density=None, dt_s=None) -> None:
     """Metal counterpart of WRF's four-category precipitation reducer."""
     if not isinstance(workspace, NSSL2DriverWorkspace):
         raise TypeError("workspace must be NSSL2DriverWorkspace")
@@ -114,7 +117,8 @@ def reduce_nssl2_precipitation(
         context, workspace.category_surface_export, rainnc=rainnc,
         rainncv=rainncv, snownc=snownc, snowncv=snowncv,
         graupelnc=graupelnc, graupelncv=graupelncv,
-        hailnc=hailnc, hailncv=hailncv, sr=sr)
+        hailnc=hailnc, hailncv=hailncv, sr=sr,
+        air_density=air_density, dt_s=dt_s)
 
 
 def scatter_nssl2_driver_workspace(

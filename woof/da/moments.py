@@ -539,7 +539,7 @@ def validate_analysis_fields(fields: Sequence[str], *,
     ``fields`` is what the analysis proposes to update; ``available`` is
     what the background actually carries (the state's own capability).  A
     mass field in ``fields`` whose paired number moment is in
-    ``available`` but NOT in ``fields`` is the a development machine defect exactly, and
+    ``available`` but NOT in ``fields`` is the test host H defect exactly, and
     under ``full-moment`` it is a refusal naming every such species.
 
     Under ``single-moment-with-repair`` the same situation is allowed and
@@ -594,6 +594,9 @@ def validate_analysis_fields(fields: Sequence[str], *,
 
 def _host(array):
     """A host float64 view of a device or host array."""
+    to_numpy = getattr(array, "to_numpy", None)
+    if callable(to_numpy):
+        return np.asarray(to_numpy(), dtype=np.float64)
     get = getattr(array, "get", None)
     if callable(get) and hasattr(array, "__cuda_array_interface__"):
         return np.asarray(get(), dtype=np.float64)

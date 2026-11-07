@@ -176,10 +176,123 @@ def test_no_entry_is_listed_twice() -> None:
     assert not duplicates, duplicates
 
 
+@pytest.mark.parametrize("entry", ["tests/test_chem_nest_lifecycle.py",
+                                   "tests/test_chem_fork_integration.py"])
+def test_chem_integration_runs_on_every_cut_and_not_the_cpu_leg(entry) -> None:
+    """Device chemistry and continuation must not disappear under CPU marks."""
+    assert entry in _entries("shard1"), (
+        "chemistry transport, relocation and restart coverage is absent from "
+        "the per-cut GPU leg")
+    cpu_list = MANIFEST.with_name("stage1_files.txt").read_text(encoding="utf-8")
+    cpu_entries = {line.strip() for line in cpu_list.splitlines()
+                   if line.strip() and not line.lstrip().startswith("#")}
+    assert entry not in cpu_entries, (
+        "the device-only chemistry lifecycle suite contributes no CPU rows")
+    from tools.battery.no_silent_deselection import ZERO_COLLECT_ALLOWED
+    assert entry not in ZERO_COLLECT_ALLOWED, (
+        "the device lifecycle requires an executing GPU leg, not a zero-row allowance")
+
+
 def test_the_file_is_lf_only() -> None:
     assert b"\r" not in MANIFEST.read_bytes(), (
         "tools/battery/gpu_shard_files.txt contains CR bytes; the repository "
         "commits LF and .gitattributes does no conversion")
+
+
+_TRANSITIVE_DEVICE_HELPERS = {
+    # The NSSL sedimentation route-equivalence files (the exact chain, 2.9.1) open
+    # the card through their shared helper, which imports cupy inside it.
+    "tests/test_nssl2_speed_fused_sediment.py": ("nssl2_sediment_paths", "device_or_skip"),
+    "tests/test_nssl2_speed_gamma.py": ("nssl2_sediment_paths", "device_or_skip"),
+    "tests/test_nssl2_speed_rain.py": ("nssl2_sediment_paths", "device_or_skip"),
+    "tests/test_nssl2_speed_small.py": ("nssl2_sediment_paths", "device_or_skip"),
+    "tests/test_mynn_sfclay_wrf461_column_oracle_gpu.py": (
+        "tools.mynn_sfclay_wrf461_column_oracle.compare", "run"),
+    # BEP+BEM regimes against WRF 4.6.1: measure() replays every call on the
+    # card through run_port (cupy imported inside it).
+    "tests/test_urban_bem_regime_wrf461.py": ("_urban_bem_regime", "measure"),
+    # Grell 3D across the seam transport (golden/ports-cu): run_fixture launches
+    # the G3 driver on the card with test_g3_cu5_parity's module-scope cupy.
+    "tests/test_g3_halo.py": ("test_g3_cu5_parity", "run_fixture"),
+    "tests/test_chem_dust_wrf471_parity.py": ("chem_emis_parity_support", "replay"),
+    "tests/test_chem_afwa_wrf471_parity.py": ("chem_emis_parity_support", "replay"),
+    "tests/test_chem_seasalt_wrf471_parity.py": ("chem_emis_parity_support", "replay"),
+    "tests/test_chem_sulfur_wrf471_parity.py": ("chem_gocart_checks", "sulfur_case"),
+    "tests/test_chem_ageing_wrf471_parity.py": ("chem_gocart_checks", "aging_case"),
+    "tests/test_sfire_moisture_driver_wrf471_parity.py": (
+        "tools.sfire_coupled_ideal.moisture_driver.grade", "replay"),
+    "tests/test_sfire_open_geopotential_wrf471_parity.py": (
+        "tools.sfire_coupled_ideal.rhs_ph_open.grade", "grade"),
+    # The seven-regime receipt's twenty-step check replays the corrected WRF
+    # 4.7.1 regimes on the card (cupy imported inside regime_receipt.replay);
+    # the file's other cells are CPU and also run on stage 1.
+    "tests/test_sfire_regime_receipt.py": (
+        "tools.sfire_wrf471_oracle.regime_receipt", "replay"),
+    # The ideal initializer graders replay their native words on the card
+    # (cupy imported inside the replay helpers).
+    "tests/test_sfire_ideal_geometry_wrf471_parity.py": (
+        "tools.sfire_coupled_ideal.initialization.grade_geometry", "replay"),
+    "tests/test_sfire_ideal_landuse_wrf471_parity.py": (
+        "tools.sfire_coupled_ideal.initialization.grade_landuse", "replay"),
+}
+
+# These suites invoke a CUDA driver in a fresh interpreter. Each link is
+# checked against the actual caller and the final CuPy-bearing source.
+_DEVICE_DRIVER_CHAINS = {
+    "tests/test_diffusion_default_words.py": (
+        "tools/diffusion_default_check.py", "tools/smag2d_wrf461_oracle/oracle.py"),
+    "tests/test_mynn_restart_live_gpu.py": (
+        "tools/mynn_review_restart.py", "tests/test_mynn_pbl_runtime.py"),
+    "tests/test_sfclay_noftz_regression.py": (
+        "tools/sfclay_noftz_check/check.py", "tools/sfclay_noftz_check/pbl_run.py"),
+    "tests/test_wrf_exact_diffusion.py": ("tools/wrf_exact_diffusion_oracle.py",),
+}
+
+
+def _assert_device_driver_chain(entry, chain):
+    import ast
+    from conftest import _cupy_scope
+    caller = ast.parse((REPOSITORY_ROOT / entry).read_text(encoding="utf-8"))
+    assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+               and isinstance(node.func.value, ast.Name)
+               and node.func.value.id == "subprocess" and node.func.attr == "run"
+               for node in ast.walk(caller)), entry
+    for index, relative in enumerate(chain):
+        path = REPOSITORY_ROOT / relative
+        assert path.is_file(), relative
+        literals = [node.value for node in ast.walk(caller)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+        imports = [node.module for node in ast.walk(caller)
+                   if isinstance(node, ast.ImportFrom) and node.module]
+        imports += [alias.name for node in ast.walk(caller)
+                    if isinstance(node, ast.Import) for alias in node.names]
+        # Direct paths, Path components and imported helper modules are all
+        # real call routes; comments cannot supply any of these AST nodes.
+        assert (any(path.name in value for value in literals)
+                or path.stem in imports), (entry, relative)
+        caller = ast.parse(path.read_text(encoding="utf-8"))
+    whole, functions = _cupy_scope(str(path))
+    assert whole or functions, (entry, chain[-1])
+
+
+def _module_fixture_calls_device_helper(entry, fixture_name, helper, name):
+    """Follow an imported module returned by a fixture to its CUDA witness."""
+    import ast
+
+    tree = ast.parse((REPOSITORY_ROOT / entry).read_text(encoding="utf-8"))
+    aliases = {alias.asname or alias.name
+               for node in tree.body if isinstance(node, ast.Import)
+               for alias in node.names if alias.name == helper}
+    assert aliases, (entry, helper)
+    fixture = next(node for node in tree.body
+                   if isinstance(node, ast.FunctionDef) and node.name == fixture_name)
+    assert any(isinstance(node, ast.Return) and isinstance(node.value, ast.Name)
+               and node.value.id in aliases for node in ast.walk(fixture)), entry
+    assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+               and isinstance(node.func.value, ast.Name)
+               and node.func.value.id == fixture_name and node.func.attr == name
+               for node in ast.walk(tree)), entry
+    assert _helper_opens_cuda(helper, name, REPOSITORY_ROOT / "tests"), entry
 
 
 @pytest.mark.parametrize("entry", _entries())
@@ -196,6 +309,54 @@ def test_every_entry_is_actually_gpu_bound(entry: str) -> None:
 
     from conftest import _cupy_scope
 
+    if entry in _DEVICE_DRIVER_CHAINS:
+        _assert_device_driver_chain(entry, _DEVICE_DRIVER_CHAINS[entry])
+        return
+    if entry == "tests/test_km1_wrf461_oracle.py":
+        import ast
+        tree = ast.parse((REPOSITORY_ROOT / entry).read_text(encoding="utf-8"))
+        assert any(isinstance(node, ast.Import)
+                   and any(alias.name == "km1_oracle" for alias in node.names)
+                   for node in ast.walk(tree)), entry
+        assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                   and isinstance(node.func.value, ast.Name)
+                   and node.func.value.id == "km1_oracle"
+                   and node.func.attr == "woof_outputs" for node in ast.walk(tree)), entry
+        whole, functions = _cupy_scope(str(REPOSITORY_ROOT /
+            "tools/wrf_diffusion_oracle/km1_oracle.py"))
+        assert whole or "woof_outputs" in functions, entry
+        return
+
+    if entry == "tests/test_ruc_fork_gpu.py":
+        _module_fixture_calls_device_helper(
+            entry, "fork_gpu", "test_ruc_gpu",
+            "test_ruc_snow_temperature_cuda_matches_unmodified_wrf_bit_for_bit")
+        return
+    if entry in _TRANSITIVE_DEVICE_HELPERS:
+        import ast
+        helper, name = _TRANSITIVE_DEVICE_HELPERS[entry]
+        tree = ast.parse((REPOSITORY_ROOT / entry).read_text(encoding="utf-8"))
+        assert any(isinstance(node, ast.ImportFrom) and node.module == helper
+                   and any(alias.name == name for alias in node.names)
+                   for node in ast.walk(tree)), entry
+        if "." in helper:
+            # A dotted helper is a tools/ module (the SFIRE oracle graders),
+            # which imports cupy at module scope; conftest's detector reads it.
+            from conftest import _cupy_scope
+            helper_whole, helper_functions = _cupy_scope(
+                str(REPOSITORY_ROOT / (helper.replace(".", "/") + ".py")))
+            assert helper_whole or name in helper_functions, entry
+        else:
+            # A sibling test module that holds the device at module scope
+            # (test_g3_cu5_parity's ``cp = pytest.importorskip("cupy")``)
+            # reaches the card for every function it lends, by conftest's own
+            # detector; otherwise the named function's chain must.
+            from conftest import _cupy_scope
+            helper_whole, _ = _cupy_scope(
+                str(REPOSITORY_ROOT / "tests" / f"{helper}.py"))
+            assert helper_whole or _helper_opens_cuda(
+                helper, name, REPOSITORY_ROOT / "tests"), entry
+        return
     whole, functions = _cupy_scope(str(REPOSITORY_ROOT / entry))
     if entry in DEVICE_ORACLE_IMPORTS:
         # The compiled-WRF suites call device adapters transitively. Keep
@@ -388,6 +549,26 @@ def test_every_entry_is_actually_gpu_bound(entry: str) -> None:
         assert runner_whole or runner_functions, (
             "the prepared tree runner no longer opens CUDA")
         return
+    if entry == "tests/test_urban_ucm_wrf461_parity.py":
+        # Its device read belongs to the production replay helper, while
+        # this file also owns CPU fixture and native-twin rows.
+        import ast
+        tree = ast.parse((REPOSITORY_ROOT / entry).read_text(encoding="utf-8"))
+        assert any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "woof.verify.urban_ucm_oracle"
+            and any(alias.name == "replay" and alias.asname is None for alias in node.names)
+            for node in ast.walk(tree)), (
+            "the original WRF urban oracle no longer imports the device replay")
+        assert any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "replay" for node in ast.walk(tree)), (
+            "the original WRF urban oracle no longer executes the device replay")
+        module_whole, module_functions = _cupy_scope(
+            str(REPOSITORY_ROOT / "woof/core/urban_ucm.py"))
+        assert module_whole or "run_columns" in module_functions, (
+            "the original WRF urban replay no longer reaches CUDA columns")
+        return
     if entry in DEVICE_HELPERS:
         # The entry must still use its helper, and the helper must still
         # read device words; either change turns this red.
@@ -400,6 +581,51 @@ def test_every_entry_is_actually_gpu_bound(entry: str) -> None:
         assert _helper_opens_cuda(pathlib.PurePosixPath(entry).stem, helper,
                                   REPOSITORY_ROOT / "tests"), (
             f"{entry}: {helper} no longer reaches a CuPy read of device words")
+        return
+    if entry in INDIRECT_DEVICE_RUNNERS:
+        # The WRF 4.6.1 column-oracle suites of golden/parity keep their CPU
+        # provenance rows importable without CuPy and reach the card through
+        # a runner (a subprocess module or an oracle adapter imported inside
+        # the device rows).  The entry must still name its runner, and the
+        # runner must still open CUDA.
+        runner, needle = INDIRECT_DEVICE_RUNNERS[entry]
+        assert needle in (REPOSITORY_ROOT / entry).read_text(encoding="utf-8"), (
+            f"{entry} no longer names its device runner {needle}")
+        runner_whole, runner_functions = _cupy_scope(str(REPOSITORY_ROOT / runner))
+        assert runner_whole or runner_functions, (
+            f"{entry}: device runner {runner} no longer opens CUDA")
+        return
+    if entry == "tests/test_ncar_benchmark_door_gpu.py":
+        # The WRF-INPUTS.md benchmark leg runs the page's `woof run
+        # --benchmark --restart-from ...` command in a `python -m woof`
+        # subprocess.  Pin the route: the leg runs the package entry point
+        # on the page's `woof run` command, the WRF-input door hands its
+        # worker to the prepared forecast runner, and that runner is
+        # device-bound by conftest's own detector.
+        import ast
+        tree = ast.parse((REPOSITORY_ROOT / entry).read_text(encoding="utf-8"))
+        assert any(
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "run" and node.args
+            and isinstance(node.args[0], ast.List)
+            and [item.value for item in node.args[0].elts
+                 if isinstance(item, ast.Constant)] == ["-m", "woof"]
+            for node in ast.walk(tree)), (
+            f"{entry} no longer runs the `python -m woof` entry point")
+        page = (REPOSITORY_ROOT / "docs/public/WRF-INPUTS.md").read_text(encoding="utf-8")
+        assert "woof run --benchmark --restart-from " in page, (
+            "docs/public/WRF-INPUTS.md no longer prints the benchmark run command")
+        door = ast.parse((REPOSITORY_ROOT / "woof/wrfinput_forecast.py")
+                         .read_text(encoding="utf-8"))
+        assert any(
+            isinstance(node, ast.ImportFrom) and node.module == "woof"
+            and any(alias.name == "prepared_single_domain_forecast"
+                    for alias in node.names) for node in ast.walk(door)), (
+            "the WRF-input door no longer runs the prepared forecast runner")
+        runner_whole, runner_functions = _cupy_scope(
+            str(REPOSITORY_ROOT / "woof/prepared_single_domain_forecast.py"))
+        assert runner_whole or runner_functions, (
+            "the prepared forecast runner no longer opens CUDA")
         return
     assert whole or functions, (
         f"{entry} opens no CUDA device by conftest's own detector, so it is "
@@ -514,6 +740,21 @@ def test_compiled_wrf_dycore_device_oracles_remain_on_the_per_cut_shard() -> Non
         "compiled WRF device comparisons")
 
 
+#: Column-oracle suites whose device rows run through a runner rather than
+#: a CuPy import of their own: entry -> (the runner file, the text by which
+#: the entry names it).
+INDIRECT_DEVICE_RUNNERS = {
+    "tests/test_wsm6_wrf461_column_exact.py": (
+        "tools/wsm6_wrf461_column_oracle/run_gpu.py",
+        "tools.wsm6_wrf461_column_oracle.run_gpu"),
+    "tests/test_kessler_wrf461_parity.py": (
+        "woof/verify/kessler_oracle.py", "kessler_oracle"),
+    "tests/test_myjpbl_wrf461_parity.py": (
+        "woof/verify/myjpbl_oracle.py", "myjpbl_oracle"),
+    "tests/test_wdm6_wrf461_oracle.py": (
+        "tools/wdm6_wrf461_oracle/run_woof.py", "run_woof"),
+}
+
 #: The filename prefixes of the cumulus leaf-port families the weekly shard
 #: admits, one per byte-frozen WRF v4.6.1 oracle corpus.  Grell-Freitas was
 #: the founding family; New Tiedtke joined with cu_physics = 16 (d0c23dad0,
@@ -557,3 +798,28 @@ def test_the_weekly_shard_is_the_frozen_cumulus_oracle_families() -> None:
         assert any(pathlib.PurePosixPath(e).name.startswith(prefix)
                    for e in shard2), prefix
     assert "tests/test_cumulus_momentum_extension.py" in _entries("shard1")
+
+
+def test_sfire_device_controls_remain_on_per_cut_shard() -> None:
+    """Dropping these entries would omit SFIRE compiled WRF comparisons and coupled GPU trajectories."""
+    required = {
+        "tests/test_sfire_atm_wrf471_parity.py",
+        "tests/test_sfire_clock_gpu.py",
+        "tests/test_sfire_dated_perimeter_gpu.py",
+        "tests/test_sfire_debug_runtime.py",
+        "tests/test_sfire_driver_wrf471_parity.py",
+        "tests/test_sfire_moisture_driver_wrf471_parity.py",
+        "tests/test_sfire_negative_burn_gpu.py",
+        "tests/test_sfire_open_geopotential_wrf471_parity.py",
+        "tests/test_sfire_ranked_gpu.py",
+        "tests/test_sfire_restart_coupled_gpu.py",
+        "tests/test_sfire_smoke.py",
+        "tests/test_sfire_smoke_tiled_gpu.py",
+        "tests/test_sfire_spotting_streamed_gpu.py",
+        "tests/test_sfire_spotting_wrf471_parity.py",
+        "tests/test_sfire_tilestream_gpu.py",
+        "tests/test_sfire_wind_wrf471_parity.py",
+        "tests/test_sfire_wrf471_parity.py",
+    }
+    missing = sorted(required - set(_entries("shard1")))
+    assert not missing, (f"{missing} have no required SFIRE battery leg")

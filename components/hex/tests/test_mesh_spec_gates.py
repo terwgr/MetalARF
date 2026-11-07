@@ -83,7 +83,7 @@ COARSE = {
 
 
 def _engine_or_skip() -> Path:
-    from woof.hex import engine_identity as _engine_identity
+    from woof.hex import engine_pin as _engine_pin
 
     try:
         engine = sizing.resolve_engine(None)
@@ -93,8 +93,8 @@ def _engine_or_skip() -> Path:
         pytest.fail(
             f"REFUSED: the staged {engine.name} predates the pinned engine's "
             f"own bridge bundle, so this box would judge nothing and read "
-            f"green. This distribution declares {_engine_identity.ENGINE_REQUIREMENT} "
-            f"and every bundle of that engine probes the "
+            f"green. This distribution pins {_engine_pin.gpuwm_requirement()} "
+            f"and every {_engine_pin.wanted_version()} bundle probes the "
             f"gradient at the spec's own regions "
             f"(measured 2026-09-01: the published bundle's receipt reads "
             f"gradient_probe_coverage 'complete'), so a staged binary whose "
@@ -112,7 +112,7 @@ def _engine_or_skip() -> Path:
             f"than the pin is this refusal. Re-stage with `woof "
             f"fetch-bridges`, which verifies every artifact against the "
             f"packaged pins, or point $WOOF_HEX_RW_MPAS_MESH at the binary "
-            f"from a current engine bundle.  staged: {engine}"
+            f"from a {_engine_pin.wanted_version()} bundle.  staged: {engine}"
         )
     return engine
 

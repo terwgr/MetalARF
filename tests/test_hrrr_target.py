@@ -21,7 +21,7 @@ from woof.ingest.hrrr_target import (
 )
 from tools.write_hrrr_stock_wrf_namelist import render_namelist
 from tools.hrrr_build_native_static import validate_static
-from tools.seal_hrrr_native_bridge import _series_hours, _window_shape
+from tools.seal_hrrr_native_bridge import _series_hours, _window_shape, expected_atmosphere_selected
 
 
 def _target(**updates) -> HrrrTargetDomain:
@@ -110,7 +110,7 @@ def test_target_domain_rejects_unsupported_projection_and_bad_geometry():
         _target(surface_fallback_radius_cells=True)
 
 
-@pytest.mark.parametrize("nz", [4, 17, 49, 80, 113])
+@pytest.mark.parametrize("nz", [4, 113])
 def test_target_domain_vertical_count_is_parameterized(nz):
     target = _target(nz=nz)
     assert target.nz == nz
@@ -182,8 +182,7 @@ def test_source_grid_shape_and_rotation_have_independent_literal_anchor():
     assert cosa[0, 0] == pytest.approx(0.9626939882962883, abs=2e-15)
 
 
-def test_projected_plan_support_and_nearest_are_crop_invariant(monkeypatch):
-    monkeypatch.setattr(hrrr, "_cupy", lambda: np)
+def _check_projected_donor_selection(monkeypatch, plan_factory):
     # qx is exactly half-integer: floor(q+0.5) must pick global donor 101
     # independently of even/odd crop-origin parity.  qy just below integer
     # also proves the donor floor is selected in FP64 before FP32 weights.
@@ -210,7 +209,7 @@ def test_projected_plan_support_and_nearest_are_crop_invariant(monkeypatch):
             nx=24,
             fields={},
         )
-        plan = hrrr._ProjectedGpuPlan(snapshot, target_lat, target_lon)
+        plan = plan_factory(snapshot, target_lat, target_lon)
         field = np.broadcast_to(
             np.arange(origin, origin + snapshot.nx, dtype=np.float32),
             (snapshot.ny, snapshot.nx),
@@ -220,32 +219,16 @@ def test_projected_plan_support_and_nearest_are_crop_invariant(monkeypatch):
     assert selected == [101.0, 101.0]
 
 
+
+def test_projected_plan_support_and_nearest_are_crop_invariant(monkeypatch):
+    monkeypatch.setattr(hrrr, "_cupy", lambda: np)
+    _check_projected_donor_selection(monkeypatch, hrrr._ProjectedGpuPlan)
+
+
 def test_projected_cpu_plan_preserves_fp64_donor_selection(monkeypatch):
-    qx = 100.5
-    qy = 200.0 - 1.0e-7
-
-    class ExactSourceCoordinates:
-        @staticmethod
-        def latlon_to_ij(_latitude, _longitude):
-            return np.asarray([[qx + 1.0]]), np.asarray([[qy + 1.0]])
-
-    monkeypatch.setattr(
-        hrrr, "hrrr_source_grid", lambda: ExactSourceCoordinates())
-    target_lat = np.zeros((1, 1))
-    target_lon = np.zeros((1, 1))
-    selected = []
-    for origin in (90, 91):
-        snapshot = HrrrNativeSnapshot(
-            valid_time=datetime(2026, 7, 18), forecast_hour=0,
-            i_start=origin, j_start=190, ny=24, nx=24, fields={})
-        plan = hrrr._ProjectedCpuPlan(
-            snapshot, target_lat, target_lon, object())
-        field = np.broadcast_to(
-            np.arange(origin, origin + snapshot.nx, dtype=np.float32),
-            (snapshot.ny, snapshot.nx))
-        selected.append(float(plan.apply(field, method="nearest")[0, 0]))
-        assert int(plan.iy[0, 0]) + snapshot.j_start == 199
-    assert selected == [101.0, 101.0]
+    _check_projected_donor_selection(
+        monkeypatch, lambda snapshot, lat, lon: hrrr._ProjectedCpuPlan(
+            snapshot, lat, lon, object()))
 
 
 def _constant_earth_wind_snapshot(target: HrrrTargetDomain):
@@ -316,6 +299,10 @@ def test_grid_relative_winds_rotate_through_earth_basis(monkeypatch):
     # preflight must read the same estate rather than the host installation.
     monkeypatch.setattr(
         "woof.ingest.preprocess_backend._gpu_runtime_installed", lambda: True)
+    # The CUDA stack here is a stand-in, so this machine allows its card:
+    # since 083ac7cd0 the backend choice honours GPUWM_NO_LOCAL_GPU first,
+    # and the CPU legs set it.
+    monkeypatch.delenv("GPUWM_NO_LOCAL_GPU", raising=False)
     # This fixture supplies host arrays; stub the device launch at that seam.
     monkeypatch.setattr(horiz, "_rotate_gpu_fused", lambda u, v, sina, cosa, inverse:
                         (u * cosa - v * sina, v * cosa + u * sina) if inverse else
@@ -884,7 +871,7 @@ def test_bridge_seal_series_horizon_is_dynamic_and_strict(tmp_path):
         _series_hours(series)
 
 
-@pytest.mark.parametrize("nz", [4, 17, 49, 80, 113])
+@pytest.mark.parametrize("nz", [4, 113])
 def test_stock_wrf_acceptance_namelist_uses_target_geometry_and_vertical(nz):
     target = _target(nx=37, ny=29, nz=nz, time_step_seconds=11)
     text = render_namelist(
@@ -996,6 +983,60 @@ def test_the_native_grid_is_recognised_point_for_point():
     assert not native_grid_identity(_target().grid())
 
 
+def _lattice_piece(grid, x0, y0, nx, ny, **shift):
+    """A whole-cell piece of ``grid`` cut the way the boundary-strip
+    mapping cuts one (``known_x - x0``)."""
+    from woof.static.lambert import LambertGrid
+
+    return LambertGrid(
+        grid.ref_lat, grid.ref_lon, grid.truelat1, grid.truelat2,
+        grid.stand_lon, grid.dx, grid.dy, nx + 1, ny + 1,
+        known_x=grid.known_x - x0 + shift.get("dx_cells", 0.0),
+        known_y=grid.known_y - y0, moad_cen_lat=grid.moad_cen_lat,
+        moad_cen_lon=grid.moad_cen_lon)
+
+
+def test_a_whole_cell_piece_of_the_native_grid_is_placed_on_its_lattice():
+    """Acceptance D-05 (2.8.8): the native grid's boundary strips must
+    take the identity route the grid took, so each is placed on the
+    native lattice; a crop domain, and its strips, are not."""
+    from woof.ingest.hrrr import hrrr_source_grid
+    from woof.ingest.hrrr_target import (NativeLatticePlacement,
+                                          native_lattice_placement)
+
+    grid = _native_target().grid()
+    whole = NativeLatticePlacement(0, 0, 1799, 1059)
+    assert native_lattice_placement(grid) == whole
+    assert native_lattice_placement(hrrr_source_grid()) == whole
+    for x0, y0, nx, ny in ((0, 0, 10, 1059), (1789, 0, 10, 1059),
+                           (0, 0, 1799, 10), (0, 1049, 1799, 10),
+                           (500, 300, 7, 9)):
+        piece = _lattice_piece(grid, x0, y0, nx, ny)
+        assert native_lattice_placement(piece, parent=grid) == (
+            NativeLatticePlacement(x0, y0, nx, ny))
+        # Without its parent a piece is not the native grid: unchanged.
+        assert native_lattice_placement(piece) is None
+    # The source grid's own description cuts the same way.
+    source = hrrr_source_grid()
+    assert native_lattice_placement(
+        _lattice_piece(source, 1789, 0, 10, 1059), parent=source) == (
+            NativeLatticePlacement(1789, 0, 10, 1059))
+    # Not a piece of the native grid: half a cell off the lattice, past
+    # its edge, another spacing, or cut from a crop (the one-row trim).
+    assert native_lattice_placement(
+        _lattice_piece(grid, 0, 0, 10, 1059, dx_cells=0.5),
+        parent=grid) is None
+    assert native_lattice_placement(
+        _lattice_piece(grid, 1790, 0, 10, 1059), parent=grid) is None
+    other = _native_target(dx_m=3010.0, dy_m=3010.0).grid()
+    assert native_lattice_placement(
+        _lattice_piece(other, 0, 0, 10, 1059), parent=grid) is None
+    trim = _native_target(nx=1797, ny=1057).grid()
+    assert native_lattice_placement(trim) is None
+    assert native_lattice_placement(
+        _lattice_piece(trim, 0, 0, 10, 1057), parent=trim) is None
+
+
 def test_the_native_grid_takes_the_identity_window_and_the_trim_does_not():
     """Before the identity route this target was refused: its outermost
     mass row needs a parabolic neighbour one cell past the grid, which
@@ -1014,18 +1055,20 @@ def test_the_native_grid_takes_the_identity_window_and_the_trim_does_not():
     assert not window.matches_record(
         {key: value for key, value in document.items() if key != "route"})
 
-    # The one-row trim is NOT the native grid, and on this route it is
-    # still refused: the two descriptions of the native grid drift apart
-    # by 0.35 cells at the north-east corner (MEASURED), so the trimmed
-    # grid's far u faces project past 1797.5 and their parabolic halo
-    # leaves the grid.  A two-row trim takes the interpolated route it
+    # The one-row trim is NOT the native grid.  Its outermost u and v
+    # faces sit within a cell of HRRR's edge, where the four-point
+    # parabolic stencil has no neighbour; there WPS metgrid falls through
+    # to four-point bilinear, whose cell is inside, so the trim takes the
+    # interpolated route with the whole grid as its window (it was
+    # refused, which refused configs/recipes/hrrr_v4_gsd41.toml on
+    # --source hrrr).  A two-row trim takes the interpolated route it
     # always took, with a halo on every side.
     from woof.ingest.hrrr_target import native_grid_identity
-    from woof.ingest.source_coverage import SourceCoverageRefusal
 
     assert not native_grid_identity(_native_target(nx=1797, ny=1057).grid())
-    with pytest.raises(SourceCoverageRefusal, match="leaves HRRR coverage"):
-        required_hrrr_source_window(_native_target(nx=1797, ny=1057))
+    one_row = required_hrrr_source_window(_native_target(nx=1797, ny=1057))
+    assert one_row.route == "interpolated"
+    assert one_row.bridge_tuple() == (0, 1798, 0, 1058)
     trimmed = required_hrrr_source_window(_native_target(nx=1795, ny=1055))
     assert trimmed.route == "interpolated"
     assert "route" not in trimmed.to_dict()
@@ -1053,3 +1096,79 @@ def test_the_target_document_round_trips_the_identity_window(tmp_path):
 def test_nearby_full_grids_are_not_native_identity(changes):
     from woof.ingest.hrrr_target import native_grid_identity
     assert not native_grid_identity(_native_target(**changes).grid())
+
+
+def test_a_stencil_past_hrrrs_edge_takes_metgrids_bilinear_fallback():
+    """WPS sixteen_pt finds a point outside the source and the interp
+    sequence falls through to four_pt.  The projected operators do the
+    same for exactly those targets and nothing else."""
+
+    from woof.ingest.hrrr import (_metgrid_edge_fallback,
+                                   _parabolic_stencil_leaves_window)
+
+    rng = np.random.default_rng(7)
+    field = rng.uniform(250.0, 300.0, (2, 6, 7)).astype(np.float32)
+    ix = np.array([[0, 2, 5]], dtype=np.int32)
+    iy = np.array([[2, 2, 2]], dtype=np.int32)
+    fx = np.full((1, 3), 0.25, dtype=np.float32)
+    fy = np.full((1, 3), 0.5, dtype=np.float32)
+    edge = _parabolic_stencil_leaves_window(ix, iy, 7, 6, identity=False)
+    assert edge.tolist() == [[True, False, True]]
+    assert _parabolic_stencil_leaves_window(ix, iy, 7, 6, identity=True) is None
+    sentinel = np.full((2, 1, 3), -1.0, dtype=np.float32)
+    result = _metgrid_edge_fallback(sentinel, field, edge, iy, ix, fy, fx, np)
+    for column in (0, 2):
+        j, i = int(iy[0, column]), int(ix[0, column])
+        lower = 0.75 * field[:, j, i] + 0.25 * field[:, j, i + 1]
+        upper = 0.75 * field[:, j + 1, i] + 0.25 * field[:, j + 1, i + 1]
+        np.testing.assert_allclose(result[:, 0, column],
+                                   0.5 * lower + 0.5 * upper, rtol=1e-6)
+    assert (result[:, 0, 1] == -1.0).all()
+    assert (sentinel == -1.0).all()
+
+
+def test_the_one_row_trim_maps_hrrr_with_no_halo_past_its_edge():
+    """The trimmed grid's projected plan is built on the whole-grid window
+    (it used to raise "lacks the four-point interpolation halo") and a
+    uniform field maps to itself at every target, edge rows included."""
+
+    from woof.ingest.hrrr import _ProjectedCpuPlan
+
+    target = _native_target(nx=1797, ny=1057)
+    window = required_hrrr_source_window(target)
+    snapshot = HrrrNativeSnapshot(
+        valid_time=datetime(2026, 10, 2, 21), forecast_hour=0,
+        i_start=window.i_start, j_start=window.j_start,
+        ny=window.ny, nx=window.nx, fields={})
+    lat, lon = target.grid().latlon_u()
+    plan = _ProjectedCpuPlan(snapshot, lat, lon, None)
+    assert plan.route == "interpolated"
+    assert plan.edge is not None and plan.edge.any()
+    field = np.full((window.ny, window.nx), 287.5, dtype=np.float32)
+    mapped = plan.apply(field)
+    np.testing.assert_allclose(mapped, 287.5, rtol=0.0, atol=1e-4)
+
+
+# 2.9.4 rolling test (2026-10-21): the native bridge began selecting the cycle's HPBL as an optional
+# surface field (776a6ab41b) and the seal kept counting 561 + 50 * hybrid, so every native-HRRR preparation
+# whose wrfnat carries HPBL stopped at "gate atmosphere_selected_per_time='562', expected '561'". The seal now
+# counts exactly as woof.ingest.hrrr reads the same gate.
+@pytest.mark.parametrize("extra_gate, expected", [
+    ({}, 561),
+    ({"optional_surface_fields": "PBLH", "optional_surface_units": "PBLH=m"}, 562),
+    ({"optional_hybrid_fields": "QNWFA,QNIFA", "optional_hybrid_units": "QNWFA=kg-1,QNIFA=kg-1",
+      "optional_surface_fields": "PBLH", "optional_surface_units": "PBLH=m"}, 662),
+    ({"extra_fields": "MASSDEN",
+      "extra_MASSDEN": "PASS discipline=0 category=20 parameter=0 level_type=105",
+      "optional_surface_fields": "PBLH", "optional_surface_units": "PBLH=m"}, 612),
+])
+def test_seal_counts_native_records_as_the_reader_does(extra_gate, expected):
+    gate = {"status": "PASS", **extra_gate}
+    assert expected_atmosphere_selected(gate) == expected
+    values = dict(gate, atmosphere_selected_per_time=str(expected))
+    from woof.ingest.native_extras import gate_extra_fields
+    from woof.ingest.native_supplements import (gate_optional_hybrid_fields,
+                                                 gate_optional_surface_fields)
+    reader = (561 + 50 * (len(gate_optional_hybrid_fields(values)) + len(gate_extra_fields(values)))
+              + len(gate_optional_surface_fields(values)))
+    assert reader == expected

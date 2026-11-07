@@ -13,7 +13,7 @@
 //!
 //! Every product file is a FULL polar volume (ODIM_H5 `PVOL`, EUMETNET
 //! OPERA Data Information Model; Michelson et al., OPERA WP 2.1/2.2,
-//! v2.2-2.3) carrying that product's single moment across all 12 cuts:
+//! v2.2-2.3) carrying that product's single moment across all 12 cuts —
 //! confirmed live: `skjav` dBZ and V each decode to 12 PPI cuts of 360
 //! radials. A complete multi-moment volume is therefore assembled by
 //! downloading one PVOL per product at a common timestamp and merging them
@@ -430,7 +430,7 @@ mod tests {
         assert!(provider.supports_recent());
     }
 
-    /// Plans come back OLDEST FIRST with the newest frame LAST, and the
+    /// Plans come back OLDEST FIRST with the newest frame LAST — and the
     /// newest frame is exactly the single frame a count-1 (`latest`) build
     /// produces, so the loop ends on the poll dedupe key.
     #[test]

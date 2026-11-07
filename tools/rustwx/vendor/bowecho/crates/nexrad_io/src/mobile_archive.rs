@@ -102,7 +102,7 @@ pub fn decode_mobile_archive_from_path(path: &Path) -> Result<Vec<MobileVolume>>
 
 /// Decode every radar volume under a deployment FOLDER (recursive, a few
 /// levels). Research data ships as directories of per-sweep DORADE files
-/// (one file per tilt) so the folder, not the file, is the natural
+/// — one file per tilt — so the folder, not the file, is the natural
 /// open unit (field report). Same sniffing and volume grouping as zips.
 pub fn decode_mobile_dir_from_path(dir: &Path) -> Result<Vec<MobileVolume>> {
     let mut members = Vec::new();

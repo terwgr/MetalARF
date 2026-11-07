@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from woof.wrf_exact import ENABLED as WRF_EXACT
+from woof.wrf_exact import ENABLED as WRF_EXACT, BIGSTEP_ENABLED
 
 
 _FIELD_KIND = {"u": 0, "v": 1, "t": 2, "ph": 3, "mu": 4,
@@ -26,9 +26,6 @@ def submit_couple_nest_field(state, field_name: str, *, out,
     """
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal nesting coupling requires a Metal DomainState")
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal nesting coupling currently refuses WRF exact arithmetic")
     target_name = {"t": "thp", "ph": "php"}.get(field_name, field_name)
     target = (state.mup.view((1, *state.mup.shape)) if field_name == "mu"
               else getattr(state, target_name, None))
@@ -72,8 +69,11 @@ def submit_couple_nest_field(state, field_name: str, *, out,
               "thb": thb, "c1h": c1h, "c2h": c2h,
               "c1f": c1f, "c2f": c2f, "msft": state.msft,
               "msfu": state.msfu, "msfv": state.msfv, "out": out}
+    if WRF_EXACT:
+        name = ("wrf_exact_nest_couple_on_" if BIGSTEP_ENABLED
+                else "wrf_exact_nest_couple_off_") + name
     state._array_module.context.submit_kernel(
-        name, arrays, params, exact_policy=False, grid_size=count)
+        name, arrays, params, exact_policy=WRF_EXACT, grid_size=count)
     return out
 
 
@@ -112,9 +112,6 @@ def submit_state_specified_relaxation(
     """
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal state relaxation requires a Metal DomainState")
-    if WRF_EXACT:
-        raise NotImplementedError(
-            "Metal state relaxation currently refuses WRF exact arithmetic")
     from woof.ingest.lateral_bc import COUPLED_SCALAR_STATE_FIELDS
     if field_name not in ({"u", "v", "w", "theta", "phi", "mu"}
                           | COUPLED_SCALAR_STATE_FIELDS):
@@ -164,7 +161,8 @@ def submit_state_specified_relaxation(
               "mup": mup, "u": u, "v": v, "w": w, "thp": thp,
               "thb": thb, "php": php, "scalar": scalar,
               "c1h": c1h, "c2h": c2h, "c1f": c1f, "c2f": c2f,
-              "msft": state.msft, "msfu": state.msfu, "msfv": state.msfv,
+              "msft": state.msft, "msfu": state.msfu,
+              "msfv": state.msfv_inv if WRF_EXACT else state.msfv,
               "west": side_arrays[0], "west_t": side_arrays[1],
               "east": side_arrays[2], "east_t": side_arrays[3],
               "south": side_arrays[4], "south_t": side_arrays[5],
@@ -181,9 +179,26 @@ def submit_state_specified_relaxation(
               "nz": nz, "ny": ny, "nx": nx,
               "mny": int(state.mup.shape[0]), "mnx": int(state.mup.shape[1]),
               "relax_sides": int(relax_sides)}
-    return state._array_module.context.submit_kernel(
-        "state_specified_relaxation", arrays, params,
-        exact_policy=False, grid_size=nz * ny * nx)
+    if WRF_EXACT:
+        frame_width = min(active_width, (min(ny, nx) + 1) // 2)
+        params["frame_count"] = _perimeter_count(ny, nx, frame_width)
+        entry = ("wrf_exact_lbc_on_state_specified_relaxation" if BIGSTEP_ENABLED
+                 else "wrf_exact_lbc_off_state_specified_relaxation")
+        grid_size = nz * params["frame_count"]
+    else:
+        entry = "state_specified_relaxation"
+        grid_size = nz * ny * nx
+    result = state._array_module.context.submit_kernel(
+        entry, arrays, params, exact_policy=WRF_EXACT, grid_size=grid_size)
+    if WRF_EXACT and (divide_msf or add_held):
+        result = state._array_module.context.submit_kernel(
+            "wrf_exact_lbc_interior",
+            {"field_tend": tendency, "held": held, "msft": state.msft},
+            {"divide_msf": int(bool(divide_msf)), "add_held": int(add_held),
+             "active_width": frame_width, "nz": nz, "ny": ny, "nx": nx,
+             "mny": int(state.mup.shape[0]), "mnx": int(state.mup.shape[1])},
+            exact_policy=True, grid_size=nz * ny * nx)
+    return result
 
 
 def submit_install_mu_boundary(state, boundary, *, dtbc: float,
@@ -191,8 +206,6 @@ def submit_install_mu_boundary(state, boundary, *, dtbc: float,
     """Install specified MU values and save its old perimeter in state scratch."""
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal MU boundary installation requires Metal state")
-    if WRF_EXACT:
-        raise NotImplementedError("Metal MU installation refuses exact mode")
     ny, nx = (int(n) for n in state.mup.shape)
     width = int(boundary.west.value.shape[-1])
     frame_count = _perimeter_count(ny, nx, int(spec_zone))
@@ -207,8 +220,8 @@ def submit_install_mu_boundary(state, boundary, *, dtbc: float,
               "spec_zone": int(spec_zone), "ny": ny, "nx": nx,
               "frame_count": frame_count, "one": 1}
     state._array_module.context.submit_kernel(
-        "install_mu_boundary", arrays, params, exact_policy=False,
-        grid_size=frame_count)
+        "wrf_exact_install_mu_boundary" if WRF_EXACT else "install_mu_boundary",
+        arrays, params, exact_policy=WRF_EXACT, grid_size=frame_count)
     return old_frame
 
 
@@ -218,8 +231,6 @@ def submit_finalize_state_field(state, field_name: str, boundary,
     """Fuse old-mass coupling, specified interpolation and current uncoupling."""
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal state finalization requires a Metal DomainState")
-    if WRF_EXACT:
-        raise NotImplementedError("Metal finalization refuses WRF exact mode")
     target_name = {"theta": "thp", "phi": "php"}.get(field_name, field_name)
     target = getattr(state, target_name, None)
     if target is None:
@@ -243,9 +254,16 @@ def submit_finalize_state_field(state, field_name: str, boundary,
               "nz": nz, "ny": ny, "nx": nx,
               "mny": int(state.mup.shape[0]), "mnx": int(state.mup.shape[1]),
               "frame_count": _perimeter_count(*state.mup.shape, spec_zone)}
+    if WRF_EXACT:
+        from woof.state_serialization_contract import WRF_MUTS_SLOT
+        muts = state.existing_scratch(WRF_MUTS_SLOT)
+        arrays["muts_wrf"] = muts if muts is not None else state.mup
+        params["has_muts"] = int(muts is not None)
+        entry = "wrf_exact_lbc_final_on" if BIGSTEP_ENABLED else "wrf_exact_lbc_final_off"
+    else:
+        entry = "finalize_state_field"
     return state._array_module.context.submit_kernel(
-        "finalize_state_field", arrays, params, exact_policy=False,
-        grid_size=nz * ny * nx)
+        entry, arrays, params, exact_policy=WRF_EXACT, grid_size=nz * ny * nx)
 
 
 def submit_uncouple_feedback_field(state, field_name: str, coupled, reg, *,
@@ -253,8 +271,6 @@ def submit_uncouple_feedback_field(state, field_name: str, coupled, reg, *,
     """Uncouple one already restricted feedback rectangle in place."""
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal feedback uncoupling requires a Metal DomainState")
-    if WRF_EXACT:
-        raise NotImplementedError("Metal feedback uncoupling refuses exact mode")
     if field_name == "mu":
         raise ValueError("feedback MU is restricted directly")
     from woof.core.nest_interp import feedback_parent_bounds
@@ -262,6 +278,11 @@ def submit_uncouple_feedback_field(state, field_name: str, coupled, reg, *,
     target = getattr(state, target_name, None)
     if target is None or tuple(coupled.shape) != tuple(target.shape):
         raise ValueError(f"invalid Metal feedback field {field_name!r}")
+    if WRF_EXACT:
+        from woof.ingest.lateral_bc import COUPLED_SCALAR_STATE_FIELDS, _is_chem_field
+        if (field_name not in ({"u", "v", "w", "t", "ph"} | COUPLED_SCALAR_STATE_FIELDS)
+                and not _is_chem_field(field_name)):
+            raise ValueError(f"unsupported feedback field {field_name!r}")
     i_lo, i_hi, j_lo, j_hi = feedback_parent_bounds(reg, spec_zone=spec_zone)
     ni, nj = max(0, int(i_hi)-int(i_lo)+1), max(0, int(j_hi)-int(j_lo)+1)
     if not ni or not nj:
@@ -280,6 +301,8 @@ def submit_uncouple_feedback_field(state, field_name: str, coupled, reg, *,
               "nz": nz, "ny": ny, "nx": nx,
               "mny": int(state.mup.shape[0]), "mnx": int(state.mup.shape[1])}
     state._array_module.context.submit_kernel(
-        "uncouple_feedback_field", arrays, params, exact_policy=False,
-        grid_size=nz * nj * ni)
+        ("wrf_exact_nest_uncouple_on_uncouple_feedback_field" if BIGSTEP_ENABLED
+         else "wrf_exact_nest_uncouple_off_uncouple_feedback_field")
+        if WRF_EXACT else "uncouple_feedback_field",
+        arrays, params, exact_policy=WRF_EXACT, grid_size=nz * nj * ni)
     return target

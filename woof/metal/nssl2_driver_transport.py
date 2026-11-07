@@ -61,11 +61,16 @@ def submit_nssl2_driver_gather_initialize(
         raise ValueError("NSSL dt_s must be representable as positive float32")
     n = nz * ny * nx
     resources = {**fields, "state": state}
+    from woof.wrf_exact import ENABLED as WRF_EXACT
+    if WRF_EXACT and (first_step or cu_used):
+        raise NotImplementedError(
+            "strict NSSL gather first-step and cumulus power paths are not yet supported")
     return context.submit_kernel(
-        "nssl2_driver_gather_initialize", resources,
+        "nssl2_driver_gather_hot_exact" if WRF_EXACT else "nssl2_driver_gather_initialize",
+        resources,
         {"dt": step32, "first_step": int(first_step), "cu_used": int(cu_used),
          "n": n, "predicted_ccn": int(predicted_ccn),
-         "nz": nz, "ny": ny, "nx": nx}, exact_policy=False,
+         "nz": nz, "ny": ny, "nx": nx}, exact_policy=bool(WRF_EXACT),
         grid_size=n, threads_per_group=_TPB)
 
 
@@ -87,16 +92,18 @@ def submit_nssl2_driver_scatter(
     for name, value in fields.items():
         _validate(value, name, context, shape)
     n = nz * ny * nx
+    from woof.wrf_exact import ENABLED as WRF_EXACT
     return context.submit_kernel(
-        "nssl2_driver_scatter", {**fields, "state": state},
+        "nssl2_driver_scatter_exact" if WRF_EXACT else "nssl2_driver_scatter",
+        {**fields, "state": state},
         {"n": n, "predicted_ccn": int(predicted_ccn),
-         "nz": nz, "ny": ny, "nx": nx}, exact_policy=False,
+         "nz": nz, "ny": ny, "nx": nx}, exact_policy=bool(WRF_EXACT),
         grid_size=n, threads_per_group=_TPB)
 
 
 def submit_nssl2_driver_reduce_precipitation(
         context, category_export, *, rainnc, rainncv, snownc, snowncv,
-        graupelnc, graupelncv, hailnc, hailncv, sr):
+        graupelnc, graupelncv, hailnc, hailncv, sr, air_density=None, dt_s=None):
     """Apply WRF's standard four-category surface precipitation reduction."""
     if not isinstance(category_export, MetalArray) or len(category_export.shape) != 3:
         raise ValueError("category_export must have shape (5, ny, nx)")
@@ -112,6 +119,18 @@ def submit_nssl2_driver_reduce_precipitation(
     for name, value in fields.items():
         _validate(value, name, context, (ny, nx))
     ncol = ny * nx
+    from woof.wrf_exact import ENABLED as WRF_EXACT
+    if WRF_EXACT:
+        if not isinstance(air_density, MetalArray) or len(air_density.shape) != 3:
+            raise ValueError("strict NSSL reducer needs 3-D air_density")
+        nz, _, _ = _dimensions(air_density.shape)
+        _validate(air_density, "air_density", context, (nz, ny, nx))
+        from woof.core.nssl2_driver_support import _step32
+        return context.submit_kernel(
+            "nssl2_driver_reduce_precipitation_exact",
+            {"category_export": category_export, "air_density": air_density, **fields},
+            {"dt": _step32(dt_s), "nz": nz, "ncol": ncol, "ny": ny, "nx": nx},
+            exact_policy=True, grid_size=ncol, threads_per_group=_TPB)
     return context.submit_kernel(
         "nssl2_driver_reduce_precipitation",
         {"category_export": category_export, **fields},

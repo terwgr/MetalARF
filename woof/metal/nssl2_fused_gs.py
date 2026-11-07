@@ -53,10 +53,11 @@ def submit_nssl2_prepare_fused_gs(
     for name, array in fields.items():
         _validate_float_array(array, name, context, (nz, ncol))
     _validate_float_array(state, "state", context, (16, nz, ncol))
+    from woof.wrf_exact import ENABLED
     return context.submit_kernel(
-        "nssl2_prepare_fused_gs",
+        "nssl2_prepare_fused_gs_exact" if ENABLED else "nssl2_prepare_fused_gs",
         {**fields, "state": state},
-        {"n": n, "nz": nz, "ncol": ncol}, exact_policy=False,
+        {"n": n, "nz": nz, "ncol": ncol}, exact_policy=ENABLED,
         grid_size=n, threads_per_group=128)
 
 
@@ -103,6 +104,9 @@ def launch_nssl2_fused_gs(
         workspace, fields, temperature_k, primary_ice_target_m3, dt_s, *,
         hail_on=True):
     """Submit the two ordered kernels that make the production GS stage."""
+    from woof.wrf_exact import ENABLED
+    if ENABLED:
+        raise NotImplementedError("strict Metal NSSL fused GS is not implemented")
     shape = tuple(workspace.shape)
     if len(shape) != 3:
         raise ValueError("NSSL workspace shape must be (nz, ny, nx)")

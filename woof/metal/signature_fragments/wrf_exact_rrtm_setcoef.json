@@ -1,0 +1,328 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_exact_rrtm_lw_setcoef",
+      "module": "wrf_exact_rrtm_setcoef",
+      "source": "woof/metal/shaders/wrf_exact_rrtm_setcoef.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "source_only_helper": true,
+      "resources": [
+        [
+          "pavel",
+          "float",
+          "read"
+        ],
+        [
+          "tavel",
+          "float",
+          "read"
+        ],
+        [
+          "coldry",
+          "float",
+          "read"
+        ],
+        [
+          "wkl",
+          "float",
+          "read"
+        ],
+        [
+          "preflog",
+          "float",
+          "read"
+        ],
+        [
+          "tref",
+          "float",
+          "read"
+        ],
+        [
+          "colh2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "colco2",
+          "float",
+          "read_write"
+        ],
+        [
+          "colo3",
+          "float",
+          "read_write"
+        ],
+        [
+          "coln2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "colch4",
+          "float",
+          "read_write"
+        ],
+        [
+          "colo2",
+          "float",
+          "read_write"
+        ],
+        [
+          "co2mult",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac00",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac01",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac10",
+          "float",
+          "read_write"
+        ],
+        [
+          "fac11",
+          "float",
+          "read_write"
+        ],
+        [
+          "forfac",
+          "float",
+          "read_write"
+        ],
+        [
+          "selffac",
+          "float",
+          "read_write"
+        ],
+        [
+          "selffrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "jp",
+          "int32",
+          "read_write"
+        ],
+        [
+          "jt",
+          "int32",
+          "read_write"
+        ],
+        [
+          "jt1",
+          "int32",
+          "read_write"
+        ],
+        [
+          "indself",
+          "int32",
+          "read_write"
+        ],
+        [
+          "laytrop",
+          "int32",
+          "read_write"
+        ],
+        [
+          "layswtch",
+          "int32",
+          "read_write"
+        ],
+        [
+          "laylow",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pavel": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tavel": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "coldry": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "wkl": [
+          [
+            "ncol",
+            "nlay",
+            "35"
+          ]
+        ],
+        "preflog": [
+          [
+            "59"
+          ]
+        ],
+        "tref": [
+          [
+            "59"
+          ]
+        ],
+        "colh2o": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "colco2": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "colo3": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "coln2o": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "colch4": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "colo2": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "co2mult": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac00": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac01": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac10": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fac11": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "forfac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "selffac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "selffrac": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jp": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt1": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "indself": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "laytrop": [
+          [
+            "ncol"
+          ]
+        ],
+        "layswtch": [
+          [
+            "ncol"
+          ]
+        ],
+        "laylow": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

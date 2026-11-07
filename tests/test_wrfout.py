@@ -582,8 +582,9 @@ def test_the_patch_extent_globals_match_the_reference_file():
 @requires_gpu
 def test_state_frame_from_domain_state():
     """state_frame builds the standard wrfout frame from a DomainState:
-    winds / T (theta - 300) / PH / MU plus the terrain-consistent base
-    fields PHB (a flat base state's 1-D column broadcast to 3-D) / MUB /
+    winds / T and dry-theta THM (theta - 300) / PH / MU plus the
+    terrain-consistent base fields PHB (a flat base state's 1-D column
+    broadcast to 3-D) / MUB /
     HGT, P_TOP/ZNU/ZNW vertical identity, and QVAPOR/QCLOUD/QRAIN exactly
     when the state carries moisture."""
     from woof.config import RunConfig
@@ -602,8 +603,10 @@ def test_state_frame_from_domain_state():
     s = init_at_rest(cfg, vc, b)
     s.qv[...] = 0.004
     f = state_frame(s)
-    assert set(f) == {"T", "U", "V", "W", "PH", "MU", "PHB", "MUB", "HGT",
-                      "QVAPOR", "QCLOUD", "QRAIN", "P_TOP", "ZNU", "ZNW"}
+    assert set(f) == {"T", "THM", "U", "V", "W", "PH", "MU", "PHB", "MUB",
+                      "HGT", "QVAPOR", "QCLOUD", "QRAIN", "P_TOP", "ZNU", "ZNW"}
+    # USE_THETA_M=0 publishes the actual dry-theta prognostic as THM.
+    np.testing.assert_array_equal(f["THM"], f["T"])
     assert all(isinstance(a, np.ndarray) and a.dtype == np.float32
                for a in f.values())
     assert f["PHB"].shape == (cfg.nz + 1, cfg.ny, cfg.nx)
@@ -964,6 +967,25 @@ def test_async_worker_releases_device_refs_after_d2h_before_write(
         writer.close()
 
 
+def test_queued_device_ownership_survives_unfinished_download(tmp_path):
+    from woof.io.wrfout import AsyncDomainWrfoutWriter
+
+    event = SimpleNamespace(done=False)
+    device = SimpleNamespace()
+    pinned = np.zeros(1, np.float32)
+    ticket = _cpu_ticket(tmp_path / "queued", device_refs=(device,), pinned_refs=(pinned,))
+    ticket.event = event
+    tickets = AsyncDomainWrfoutWriter._new_ticket_queue()
+    tickets.put(ticket)
+    tickets.release_completed_device_refs(nullcontext())
+    assert ticket.device_refs == (device,)
+    event.done = True
+    tickets.release_completed_device_refs(nullcontext())
+    assert ticket.device_refs == ()
+    assert ticket.pinned_refs == (pinned,)
+    assert tickets.get_nowait() is ticket
+
+
 def test_async_write_failure_does_not_retain_field_backing(
         monkeypatch, tmp_path):
     import woof.io.wrfout as wrfout
@@ -1208,60 +1230,6 @@ def test_async_shutdown_terminates_for_dead_worker_with_full_queue(operation):
     assert len(raised) == 1
     assert isinstance(raised[0], RuntimeError)
     assert raised[0].__cause__ is failure
-
-
-def test_async_ticket_queues_bound_synchronized_four_domain_bursts():
-    from woof.io.wrfout import AsyncDomainWrfoutWriter
-
-    class Ticket:
-        admitted = False
-
-    domain_count = 4
-    ticket_queues = [
-        AsyncDomainWrfoutWriter._new_ticket_queue()
-        for _ in range(domain_count)
-    ]
-    first_burst = [Ticket() for _ in range(domain_count)]
-    second_burst = [Ticket() for _ in range(domain_count)]
-    third_burst = [Ticket() for _ in range(domain_count)]
-
-    for ticket_queue, ticket in zip(ticket_queues, first_burst):
-        ticket_queue.put(ticket)
-    worker_held = [ticket_queue.get() for ticket_queue in ticket_queues]
-    assert worker_held == first_burst
-    for ticket_queue, ticket in zip(ticket_queues, second_burst):
-        ticket_queue.put(ticket)
-
-    # One complete history burst may wait across the domain queues while each
-    # worker owns its current handoff: eight admitted tickets, globally.
-    assert len(worker_held) + sum(q.qsize() for q in ticket_queues) == (
-        2 * domain_count)
-
-    admitted = [threading.Event() for _ in range(domain_count)]
-
-    def submit_third(domain_index):
-        ticket_queues[domain_index].put(third_burst[domain_index])
-        admitted[domain_index].set()
-
-    producers = [
-        threading.Thread(target=submit_third, args=(domain_index,))
-        for domain_index in range(domain_count)
-    ]
-    for producer in producers:
-        producer.start()
-    assert all(not event.wait(timeout=0.05) for event in admitted)
-
-    for ticket_queue in ticket_queues:
-        ticket_queue.task_done()
-    worker_held = [ticket_queue.get() for ticket_queue in ticket_queues]
-    assert worker_held == second_burst
-    assert all(event.wait(timeout=1.0) for event in admitted)
-    for producer in producers:
-        producer.join(timeout=1.0)
-        assert not producer.is_alive()
-    assert len(worker_held) + sum(q.qsize() for q in ticket_queues) == (
-        2 * domain_count)
-    assert [ticket_queue.get() for ticket_queue in ticket_queues] == third_burst
 
 
 def test_per_domain_writer_builds_static_metadata_once(

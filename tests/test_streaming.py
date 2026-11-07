@@ -2193,6 +2193,30 @@ def test_the_recipe_reproduces_every_constructor_parameter():
         f"the recipe does not reproduce {sorted(declared - recipe.reproduces)}")
 
 
+@pytest.mark.gpu
+def test_the_twin_carries_the_transported_smoke_feedback():
+    """simple_dir_fdb = 1 (c363fd55ff): a buffer's twin reads the same
+    smoke tracer as the domain's adapter, and a smoke-free adapter's twin
+    stays smoke-free.  Breakage this prevents: every tiled legacy-RRTMG
+    run refused at forecast start ("does not reproduce ...
+    ['transported_smoke']"), and a twin left at the default would run a
+    smoky domain's tiles with no smoke in the shortwave."""
+    from datetime import datetime
+
+    import numpy as np
+    from woof.core.rrtmg_legacy import RRTMGLegacyRadiation
+
+    lat = np.zeros((2, 2), np.float32)
+    start = datetime(2026, 10, 2, 21)
+    for smoke in ("chem_smoke", None):
+        scheme = RRTMGLegacyRadiation(start, lat, lat, longwave=False,
+                                      shortwave=True, aer_opt=3,
+                                      transported_smoke=smoke)
+        twin = streaming._twin_rrtmg_legacy(
+            scheme, RRTMGLegacyRadiation, lat[:1], lat[:1])
+        assert twin._transported_smoke == smoke
+
+
 class _RequiresArgs:
     """A stand-in with legacy RRTMG's SHAPE: required args plus policy."""
 
@@ -2394,7 +2418,7 @@ def test_the_run_route_reads_tiles_instead_of_refusing_it():
 
     from woof import runtime
 
-    src = inspect.getsource(runtime.run_experiment)
+    src = inspect.getsource(runtime._run_experiment)
     scheduled = inspect.getsource(runtime._run_built_experiment)
     assert "builders=_streaming.builders_for_tree(model, exp.tiles)" in scheduled
     assert "_run_built_experiment(" in src
@@ -3018,7 +3042,7 @@ def test_the_case_data_route_supplies_the_stepper_it_used_to_refuse_for():
         "feedback=None, stepper=None", "")
     # And the decision that chose it is the one the loop runs on: decided
     # once, handed over, never re-derived inside make_stepper.
-    src = inspect.getsource(runtime.run_experiment)
+    src = inspect.getsource(runtime._run_experiment)
     assert "decision=single_decision" in src
 
 

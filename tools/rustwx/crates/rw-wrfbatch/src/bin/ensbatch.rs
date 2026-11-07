@@ -21,7 +21,7 @@
 //! ```text
 //! rw_ensbatch --store-root DIR --out-dir DIR
 //!             (--manifest FILE.json | --member N=WRFOUT_OR_MEMBER_DIR ...)
-//!             [--field refl|uh|precip|t2|wspd10]
+//!             [--field refl|uh|precip|t2|wspd10|visibility|fog_prob]
 //!             [--products mean,spread,prob,pmm,paintball]
 //!             [--threshold V] [--neighborhood-km V] [--frames all|N]
 //!             [--nan-policy mask|refuse] [--pmm-tie-rule flat-index|average]
@@ -39,7 +39,10 @@ use rustwx_ensemble::{
     MemberStack, NanPolicy, PmmTieRule, ensemble_mean, ensemble_spread, exceedance_probability,
     member_color, missingness_report, pmm_tie_report, probability_matched_mean,
 };
-use rustwx_render::{ContourLayer, LegendControls, LegendMode, LevelDensity, RenderDensity};
+use rustwx_render::{
+    Color, ColorScale, ContourLayer, DiscreteColorScale, ExtendMode, LegendControls, LegendMode,
+    LevelDensity, RenderDensity,
+};
 use rusty_weather::render_all::StoreFieldSource;
 use rw_wrfbatch::annotate::{MapOverlays, PanelAnnotations, parse_color};
 use rw_wrfbatch::panel::{PanelRequest, layout_path, render_panel, safe_component};
@@ -48,10 +51,7 @@ use rw_wrfbatch::wrf_process::{WrfProcessMessage, WrfProcessOptions, spawn_proce
 
 /// The `--abi` contract line, in the shape the two sibling binaries use:
 /// the vocabulary the PYTHON half parses, not a version number.
-const ABI_MARKER: &str = "gpuwm-rw-ensbatch-products-v1\tmean\tspread\tprob\tpmm\tpaintball\t\
-gpuwm-rw-ensbatch-fields-v1\tFIELD\tname\ttitle\tunits\tdefault_threshold\tunit_slug\t\
-gpuwm-rw-ensbatch-events-v1\tRENDERED\tSKIPPED\tFAILED\t\
-gpuwm-rw-ensbatch-vocabulary-v1\tMEMBERS\tCOVERAGE\tTIES";
+use crate::cli_contracts::ENSBATCH as ABI_MARKER;
 
 /// The uncalibrated-ensemble stamp.  These products have never been
 /// verified against observations, and a panel that does not say so gets
@@ -76,6 +76,8 @@ struct FieldSpec {
 
 fn field_specs() -> Vec<FieldSpec> {
     vec![
+        FieldSpec {name:"visibility",title:"visibility",units:"m",unit_slug:"m",default_threshold:1000.0},
+        FieldSpec {name:"fog_prob",title:"visibility",units:"m",unit_slug:"m",default_threshold:1000.0},
         FieldSpec {
             name: "refl",
             title: "composite reflectivity",
@@ -111,6 +113,40 @@ fn field_specs() -> Vec<FieldSpec> {
             unit_slug: "ms",
             default_threshold: 25.0,
         },
+        // Window totals (importer env GPUWM_SNOW_SINCE): snowfall between
+        // a named start frame and the drawn frame, so storm and daily
+        // totals exist for members that started before the window.
+        FieldSpec {
+            name: "snowfall_win",
+            title: "snowfall over the window (land model)",
+            units: "mm",
+            unit_slug: "mm",
+            default_threshold: 25.4,
+        },
+        FieldSpec {
+            name: "snow10_win",
+            title: "10:1 snowfall over the window",
+            units: "mm",
+            unit_slug: "mm",
+            default_threshold: 25.4,
+        },
+        FieldSpec { name: "snowkuchera_win", title: "Kuchera snowfall over the saved-frame window", units: "mm", unit_slug: "mm", default_threshold: 25.4 },
+        FieldSpec { name: "snow_depth", title: "standing snow depth", units: "mm", unit_slug: "mm", default_threshold: 25.4 },
+        // 10 m gust (UPP method, importer) and the snow-level guide (ft MSL).
+        FieldSpec {
+            name: "gust",
+            title: "10 m wind gust",
+            units: "m s-1",
+            unit_slug: "ms",
+            default_threshold: 25.93,
+        },
+        FieldSpec {
+            name: "snowlevel",
+            title: "snow level guide (wet-bulb 0 C height)",
+            units: "ft",
+            unit_slug: "ft",
+            default_threshold: 5000.0,
+        },
     ]
 }
 
@@ -122,6 +158,7 @@ fn field_specs() -> Vec<FieldSpec> {
 /// deterministic panel wears.
 fn field_selector(field: &str) -> Option<FieldSelector> {
     match field {
+        "visibility" | "fog_prob" => Some(FieldSelector::surface(CanonicalField::Visibility)),
         "refl" => Some(FieldSelector::entire_atmosphere(
             CanonicalField::CompositeReflectivity,
         )),
@@ -133,6 +170,18 @@ fn field_selector(field: &str) -> Option<FieldSelector> {
         "precip" => Some(FieldSelector::surface(CanonicalField::TotalPrecipitation)),
         "t2" => Some(FieldSelector::height_agl(CanonicalField::Temperature, 2)),
         "wspd10" => Some(FieldSelector::height_agl(CanonicalField::WindSpeed, 10)),
+        "gust" => Some(FieldSelector::height_agl(CanonicalField::WindGust, 10)),
+        "snowfall_win" => Some(FieldSelector::surface(CanonicalField::ModelSnowfall)),
+        "snow10_win" => Some(FieldSelector::surface(CanonicalField::Snowfall10to1)),
+        "snowkuchera_win" => Some(FieldSelector::surface(CanonicalField::SnowfallKuchera)),
+        "snow_depth" => Some(FieldSelector::surface(CanonicalField::SnowDepth)),
+        _ => None,
+    }
+}
+
+fn field_variable(field: &str) -> Option<&'static str> {
+    match field {
+        "snowlevel" => Some("wrf_snow_level_ft"),
         _ => None,
     }
 }
@@ -146,6 +195,9 @@ struct Args {
     field: String,
     products: Vec<String>,
     threshold: Option<f64>,
+    /// Extra probability thresholds (`--thresholds a,b,...`): one `prob`
+    /// panel per value from ONE member import.
+    thresholds: Vec<f64>,
     neighborhood_km: f64,
     frames: Option<usize>,
     nan_policy: NanPolicy,
@@ -159,7 +211,7 @@ struct Args {
 
 fn usage() -> &'static str {
     "usage: rw_ensbatch --store-root DIR --out-dir DIR \
-(--manifest FILE.json | --member N=WRFOUT_OR_MEMBER_DIR ...) [--field refl|uh|precip|t2|wspd10] \
+(--manifest FILE.json | --member N=WRFOUT_OR_MEMBER_DIR ...) [--field refl|uh|precip|t2|wspd10|visibility|fog_prob] \
 [--products mean,spread,prob,pmm,paintball] [--threshold V] [--neighborhood-km V] \
 [--frames all|N] [--nan-policy mask|refuse] [--pmm-tie-rule flat-index|average] \
 [--accept-status LIST] [--domain dNN] [--width N] [--height N] [--source-label TEXT] \
@@ -186,13 +238,14 @@ fn parse_args() -> Result<Invocation, String> {
     let mut field = "refl".to_string();
     let mut products = "mean,spread,prob,pmm,paintball".to_string();
     let mut threshold: Option<f64> = None;
+    let mut thresholds: Vec<f64> = Vec::new();
     let mut neighborhood_km = 0.0f64;
     let mut frames: Option<usize> = None;
     let mut nan_policy = NanPolicy::Mask;
     let mut tie_rule = PmmTieRule::FlatIndex;
     let mut width = 1_200u32;
     let mut height = 900u32;
-    let mut source_label = "WOOF".to_string();
+    let mut source_label = concat!("WOOF ", env!("GPUWM_ENGINE_VERSION")).to_string();
     let mut accept_status: Vec<String> =
         DEFAULT_ACCEPT_STATUS.iter().map(|s| s.to_string()).collect();
     let mut overlays_path: Option<PathBuf> = None;
@@ -226,6 +279,15 @@ fn parse_args() -> Result<Invocation, String> {
             }
             "--field" => field = value()?,
             "--products" => products = value()?,
+            "--thresholds" => {
+                for item in value()?.split(',').filter(|t| !t.trim().is_empty()) {
+                    thresholds.push(
+                        item.trim()
+                            .parse()
+                            .map_err(|err| format!("invalid --thresholds: {err}"))?,
+                    );
+                }
+            }
             "--threshold" => {
                 threshold = Some(
                     value()?
@@ -314,7 +376,7 @@ fn parse_args() -> Result<Invocation, String> {
                     NUMBER=MEMBER_DIR (its whole series)"
             .to_string());
     }
-    if field_selector(&field).is_none() {
+    if field_selector(&field).is_none() && field_variable(&field).is_none() {
         return Err(format!(
             "unknown --field {field:?}; --list-fields prints the vocabulary"
         ));
@@ -342,6 +404,7 @@ fn parse_args() -> Result<Invocation, String> {
         field,
         products,
         threshold,
+        thresholds,
         neighborhood_km,
         frames,
         nan_policy,
@@ -611,7 +674,11 @@ struct MemberPlane {
     nx: usize,
 }
 
-fn main() -> ExitCode {
+pub static SOURCE_REV_STAMP: &str =
+    concat!("GPUWM_BRIDGE_SOURCE_REV=", env!("GPUWM_BRIDGE_SOURCE_REV"));
+
+pub(crate) fn main() -> ExitCode {
+    let _ = std::hint::black_box(SOURCE_REV_STAMP);
     if let Some(result) = rw_wrfbatch::ensemble_products::try_cli(
         &std::env::args().skip(1).collect::<Vec<_>>(),
     ) {
@@ -626,6 +693,7 @@ fn main() -> ExitCode {
     match parse_args() {
         Ok(Invocation::Abi) => {
             println!("{ABI_MARKER}");
+            println!("{SOURCE_REV_STAMP}");
             ExitCode::SUCCESS
         }
         Ok(Invocation::Help) => {
@@ -639,12 +707,15 @@ fn main() -> ExitCode {
                 // copy of it spelled one field's threshold in different
                 // units from the engine that drew it.
                 println!(
-                    "FIELD\t{}\t{}\t{}\tdefault_threshold={}\tunit_slug={}",
+                    "FIELD\t{}\t{}\t{}\tdefault_threshold={}\tunit_slug={}\tdefault_thresholds={}",
                     spec.name,
                     spec.title,
                     spec.units,
                     spec.default_threshold,
-                    spec.unit_slug
+                    spec.unit_slug,
+                    if matches!(spec.name, "snowfall_win" | "snow10_win" | "snowkuchera_win" | "snow_depth") {
+                        rustwx_calc::snow::EXCEEDANCE_MM.iter().map(|v|v.to_string()).collect::<Vec<_>>().join(",")
+                    } else { spec.default_threshold.to_string() }
                 );
             }
             println!("PRODUCTS\tmean\tspread\tprob\tpmm\tpaintball");
@@ -671,7 +742,7 @@ fn run(args: Args) -> Result<(), String> {
         .iter()
         .find(|spec| spec.name == args.field)
         .ok_or_else(|| format!("unknown --field {}", args.field))?;
-    let selector = field_selector(&args.field).expect("validated at parse");
+    let selector = field_selector(&args.field);
     let threshold = args.threshold.unwrap_or(spec.default_threshold);
 
     // --- import every member into its OWN store -------------------------
@@ -684,6 +755,9 @@ fn run(args: Args) -> Result<(), String> {
     let mut style: Option<rustwx_products::viewer::StoreVariableStyle> = None;
     let mut member_stores: Vec<(u32, PathBuf, String, String, u16)> = Vec::new();
 
+    // Every member imports at once (each on its own worker; their frames
+    // share the importer's memory budget) and is collected in member order.
+    let mut tasks = Vec::with_capacity(args.members.len());
     for (number, wrfouts) in &args.members {
         let store_root = args.store_root.join(format!("member_{number:03}"));
         std::fs::create_dir_all(&store_root)
@@ -695,8 +769,15 @@ fn run(args: Args) -> Result<(), String> {
         let task = spawn_process_paths(
             wrfouts.clone(),
             store_root.clone(),
-            WrfProcessOptions::default(),
+            WrfProcessOptions {
+                snow_since: std::env::var("GPUWM_SNOW_SINCE").ok().filter(|s| !s.trim().is_empty()),
+                ..Default::default()
+            },
         );
+        tasks.push((number, store_root, task));
+    }
+    let mut last_context = None;
+    for (number, store_root, task) in tasks {
         let import = loop {
             match task
                 .rx
@@ -731,6 +812,7 @@ fn run(args: Args) -> Result<(), String> {
                 slots.len()
             )
         })?;
+        last_context = Some(import.run_context.clone());
         member_stores.push((
             *number,
             store_root,
@@ -739,26 +821,35 @@ fn run(args: Args) -> Result<(), String> {
             slot,
         ));
     }
+    // The render context the last member's import set, as when the members
+    // imported one after another.
+    if let Some(context) = last_context {
+        context.apply();
+    }
 
     for (number, store_root, model, run_slug, slot) in &member_stores {
         let source = StoreFieldSource::open(store_root, model, run_slug, *slot)
             .map_err(|err| format!("member {number}: open store: {err}"))?;
-        let Some(variable) = source.resolve(&selector).map(str::to_string) else {
+        let Some(variable) = field_variable(&args.field).map(str::to_string)
+            .or_else(|| selector.as_ref().and_then(|s| source.resolve(s).map(str::to_string))) else {
             return Err(format!(
                 "member {number}: no stored variable carries {}; the field \
                  '{}' is not in this member's wrfout",
-                selector.key(),
+                selector.as_ref().map(|s| s.key()).unwrap_or_else(|| args.field.clone()),
                 args.field
             ));
         };
-        let field = source
-            .fetch(&selector)
-            .map_err(|err| format!("member {number}: read {variable}: {err}"))?;
-        let (ny, nx) = (field.grid.shape.ny, field.grid.shape.nx);
+        let (field_grid, field_values) = match &selector {
+            Some(selector) => source.fetch(selector)
+                .map(|field| (field.grid, field.values)).map_err(|err| err.to_string()),
+            None => source.generic_grid(&variable)
+                .map(|field| (field.grid, field.values)).map_err(|err| err.to_string()),
+        }.map_err(|err| format!("member {number}: read {variable}: {err}"))?;
+        let (ny, nx) = (field_grid.shape.ny, field_grid.shape.nx);
         if geometry.is_none() {
             geometry = Some((
-                field.grid.lat_deg.clone(),
-                field.grid.lon_deg.clone(),
+                field_grid.lat_deg.clone(),
+                field_grid.lon_deg.clone(),
                 source.projection().cloned(),
             ));
             let meta = source
@@ -794,7 +885,7 @@ fn run(args: Args) -> Result<(), String> {
         }
         planes.push(MemberPlane {
             number: *number,
-            values: field.values.iter().map(|value| f64::from(*value)).collect(),
+            values: field_values.iter().map(|value| f64::from(*value)).collect(),
             ny,
             nx,
         });
@@ -848,7 +939,22 @@ fn run(args: Args) -> Result<(), String> {
     let mut rendered = 0usize;
     let mut failed = 0usize;
 
+    let mut jobs: Vec<(String, f64)> = Vec::new();
     for product in &args.products {
+        jobs.push((product.clone(), threshold));
+        if product == "prob" {
+            if matches!(spec.name,"visibility"|"fog_prob") && args.threshold.is_none() && args.thresholds.is_empty() {
+                jobs.push((product.clone(),400.0));
+            }
+            let defaults: Vec<f64> = if args.threshold.is_none() && args.thresholds.is_empty()
+                && matches!(args.field.as_str(), "snowfall_win" | "snow10_win" | "snowkuchera_win" | "snow_depth") {
+                rustwx_calc::snow::EXCEEDANCE_MM[1..].to_vec()
+            } else { args.thresholds.clone() };
+            for extra in defaults { jobs.push((product.clone(), extra)); }
+        }
+    }
+    for (product, threshold) in &jobs {
+        let (product, threshold) = (product, *threshold);
         let outcome = render_product(
             product,
             &args,
@@ -902,9 +1008,15 @@ fn render_product(
     valid_day: &str,
 ) -> Result<Option<PathBuf>, String> {
     let members = stack.len();
+    // The paintball's bar is its member key: one category band per member
+    // number in that member's contour colour (see `paintball_member_key`).
     let legend = LegendControls {
         density: LevelDensity::default(),
-        mode: LegendMode::Stepped,
+        mode: if product == "paintball" {
+            LegendMode::Categories
+        } else {
+            LegendMode::Stepped
+        },
     };
 
     // The subtitle row has three slots and the renderer centres the middle
@@ -946,9 +1058,11 @@ fn render_product(
             )
         }
         "prob" => {
-            let probability =
-                exceedance_probability(stack, threshold, radius_cells, args.nan_policy)
-                    .map_err(|e| e.to_string())?;
+            let below=matches!(spec.name,"visibility"|"fog_prob");
+            let probability = if below {
+                rustwx_ensemble::below_threshold_probability(stack,threshold,radius_cells,args.nan_policy)
+            } else {exceedance_probability(stack,threshold,radius_cells,args.nan_policy)}
+                .map_err(|e|e.to_string())?;
             let neighborhood = if radius_cells > 0.0 {
                 format!(" within {:.0} km", args.neighborhood_km)
             } else {
@@ -957,16 +1071,16 @@ fn render_product(
             (
                 to_f32(&probability),
                 format!(
-                    "P({} > {threshold} {}){neighborhood} ({members} members)",
-                    spec.title, spec.units
+                    "Chance of {} {} {}{neighborhood} ({members} members)",
+                    spec.title, if below {"<"} else {">"}, threshold_label(spec, threshold)
                 ),
                 "fraction".to_string(),
                 scales::probability_scale(),
                 coverage_line(coverage, args, members),
                 Vec::new(),
                 format!(
-                    "ens_prob_{}_p{}{}{}",
-                    spec.name,
+                    "ens_prob_{}_p{}{}{}{}",
+                    spec.name, if below {"lt"} else {""},
                     format!("{threshold}").replace(['.', '-'], "_"),
                     spec.unit_slug,
                     radius_token(radius_cells, args.neighborhood_km)
@@ -1040,20 +1154,24 @@ fn render_product(
             (
                 vec![f32::NAN; stack.points()],
                 format!(
-                    "Paintball {} > {threshold} {} ({members} members)",
-                    spec.title, spec.units
+                    "Paintball {} {} {} ({members} members)",
+                    spec.title, if matches!(spec.name,"visibility"|"fog_prob"){"<"}else{">"}, threshold_label(spec, threshold)
                 ),
-                spec.units.to_string(),
-                scales::spread_scale(1.0),
-                // The roster goes on stdout (PAINTBALL_LEGEND), not into
-                // the subtitle: 30 member/colour pairs do not fit a
-                // subtitle slot and a truncated legend is a wrong legend.
-                format!("{members} members | contour at {threshold} {} | member colours on stdout", spec.units),
+                "member (contour colour)".to_string(),
+                // The member key is drawn ON the picture as the colour bar:
+                // one labelled band per member number in that member's
+                // contour colour.  Breakage this fixes (hex production
+                // check 2026-10-24): the key went to stdout only, so the
+                // published map had coloured contours and no way to read
+                // which member drew which.  The roster also stays on stdout
+                // (PAINTBALL_LEGEND) for the Python half.
+                paintball_member_key(stack.numbers()),
+                format!("{members} members | contour at {threshold} {}", spec.units),
                 contours,
                 format!("ens_paintball_{}", spec.name),
-                // A paintball fill is all-NaN by construction; a colourbar
-                // beside it invites reading a value off an empty scale.
-                false,
+                // The fill is all-NaN; the bar is the category member key,
+                // not a value scale.
+                true,
             )
         }
         other => return Err(format!("unknown product {other}")),
@@ -1095,6 +1213,33 @@ fn render_product(
     Ok(Some(path))
 }
 
+/// The paintball member key as a category colour scale: one band per member
+/// number from the lowest to the highest in the stack, centred on the number
+/// (so the category bar labels each band with its member number), filled with
+/// that member's contour colour.  A number missing from the stack (a member
+/// that was not accepted) keeps its band, transparent, so every label still
+/// sits on its own member's colour.
+fn paintball_member_key(numbers: &[u32]) -> ColorScale {
+    let lo = numbers.iter().copied().min().unwrap_or(0);
+    let hi = numbers.iter().copied().max().unwrap_or(0);
+    let levels = (lo..=hi + 1).map(|code| f64::from(code) - 0.5).collect();
+    let colors = (lo..=hi)
+        .map(|code| {
+            if numbers.contains(&code) {
+                parse_color(member_color(code))
+            } else {
+                Color::TRANSPARENT
+            }
+        })
+        .collect();
+    ColorScale::Discrete(DiscreteColorScale {
+        levels,
+        colors,
+        extend: ExtendMode::Neither,
+        mask_below: None,
+    })
+}
+
 /// The left subtitle: the coverage stamp when anything was masked, and the
 /// plain roster line when nothing was.
 ///
@@ -1113,6 +1258,24 @@ fn coverage_line(
             args.nan_policy.as_str()
         )
     })
+}
+
+/// A threshold in the units its reader thinks in: snowfall (stored mm of
+/// snow) in inches, wind (stored m/s) in mph, anything else as stored.
+/// Breakage it prevents: a 6 in snowfall chance was titled "> 152.4 mm".
+fn threshold_label(spec: &FieldSpec, threshold: f64) -> String {
+    if spec.name.contains("snow") && spec.units == "mm" {
+        let inches = threshold / 25.4;
+        if (inches - inches.round()).abs() < 0.05 {
+            format!("{:.0} in", inches.round())
+        } else {
+            format!("{inches:.1} in")
+        }
+    } else if spec.units == "m s-1" {
+        format!("{:.0} mph", threshold * 2.236_94)
+    } else {
+        format!("{threshold} {}", spec.units)
+    }
 }
 
 fn to_f32(values: &[f64]) -> Vec<f32> {
@@ -1222,13 +1385,16 @@ mod tests {
 
     impl Scratch {
         fn new(tag: &str) -> Self {
+            // Parallel tests read one clock tick on the 2.8.6 windows-2025 runner and collided on this name; the counter keeps each call distinct.
+            static NEXT_SCRATCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let path = std::env::temp_dir().join(format!(
-                "rw-ensbatch-test-{tag}-{}-{:?}",
+                "rw-ensbatch-test-{tag}-{}-{:?}-{}",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map(|d| d.as_nanos())
-                    .unwrap_or(0)
+                    .unwrap_or(0),
+                NEXT_SCRATCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             ));
             std::fs::create_dir_all(&path).expect("scratch dir");
             Self(path)
@@ -1369,6 +1535,20 @@ mod tests {
     }
 
     #[test]
+    fn the_paintball_key_has_one_band_per_member_number_in_its_contour_colour() {
+        // Production check 2026-10-24: the member key went to stdout only.
+        let ColorScale::Discrete(key) = paintball_member_key(&[1, 2, 4]) else {
+            panic!("the member key is a discrete category scale");
+        };
+        assert_eq!(key.levels, vec![0.5, 1.5, 2.5, 3.5, 4.5]);
+        assert_eq!(key.colors.len(), 4);
+        assert_eq!(key.colors[0], parse_color(member_color(1)));
+        assert_eq!(key.colors[1], parse_color(member_color(2)));
+        assert_eq!(key.colors[2], Color::TRANSPARENT, "member 3 was not accepted");
+        assert_eq!(key.colors[3], parse_color(member_color(4)));
+    }
+
+    #[test]
     fn a_domain_token_is_checked_for_shape_at_the_door() {
         assert!(domain_token_shape("d01"));
         assert!(domain_token_shape("d02"));
@@ -1435,6 +1615,7 @@ mod tests {
             field: field.to_string(),
             products: vec![product.to_string()],
             threshold: None,
+            thresholds: Vec::new(),
             neighborhood_km: 0.0,
             frames: None,
             nan_policy: NanPolicy::Mask,

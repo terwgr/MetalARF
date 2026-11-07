@@ -17,6 +17,7 @@ kernel void urban_bem_room_control_fragment(
     constant UrbanBemRoomControlFragmentResources &r [[buffer(0)]],
     constant UrbanBemRoomControlFragmentParams &p [[buffer(1)]],
     uint item [[thread_position_in_grid]]) {
+    device const float *hour_angle = r.hour_angle;
     device const float *cpint = r.cpint;
     device const float *rhoint = r.rhoint;
     device const float *vollev = r.vollev;
@@ -48,9 +49,13 @@ kernel void urban_bem_room_control_fragment(
     device float *hlout = r.hlout;
     device float *consump = r.consump;
     const int nitem = p.nitem;
-    const float nhourday = p.nhourday;
     const float dt = p.dt;
     if (item >= uint(nitem)) return;
+    // module_sf_bep_bem.F:1490-1492, per column from the solar hour angle.
+    float nhourday = ubmc_add(ubmc_div(ubmc_mul(ubmc_div(hour_angle[item / (15u * 18u)],
+        3.141592653f), 180.0f), 15.0f), 12.0f);
+    if (nhourday >= 24.0f) nhourday = ubmc_sub(nhourday, 24.0f);
+    if (nhourday < 0.0f) nhourday = ubmc_add(nhourday, 24.0f);
     hsvent[item] = ubmc_mul(ubmc_mul(ubmc_mul(ubmc_mul(ubmc_sub(1.0f, beta[item]), cpint[item]),
                                      rhoint[item]), ubmc_div(vollev[item], 3600.0f)),
                             ubmc_sub(tout[item], tlev[item]));
@@ -79,7 +84,7 @@ kernel void urban_bem_room_control_fragment(
         const float hum = ubmc_add(shumroo[item], ubmc_mul(
             ubmc_div(dt, ubmc_mul(ubmc_mul(latent[item], rhoint[item]), volroo[item])), hlroo[item]));
         if (fabs(ubmc_sub(hum, targhum[item])) > gaphum[item]) {
-            const float cap = ubmc_mul(latent[item], ubmc_mul(rhoint[item], volroo[item]));
+            const float cap = ubmc_mul(ubmc_mul(latent[item], rhoint[item]), volroo[item]);
             if (hum > ubmc_add(targhum[item], gaphum[item])) {
                 hlneed = ubmc_sub(hlroo[item], ubmc_mul(ubmc_div(cap, dt),
                     ubmc_sub(ubmc_add(targhum[item], gaphum[item]), shumroo[item])));
@@ -104,6 +109,7 @@ kernel void urban_bem_room_control_fragment(
         hsout[item] = 0.0f; hlout[item] = 0.0f; consump[item] = 0.0f;
         hlneed_out[item] = 0.0f;
     } else {
+        hlneed = 0.0f;
         hsout[item] = 0.0f; hlout[item] = 0.0f;
         consump[item] = ubmc_mul(ubmc_div(1.0f, cop[item]),
                                   ubmc_add(fabs(hsneed), fabs(hlneed)));

@@ -72,6 +72,7 @@ from woof.ingest.preprocess_backend import (
     resolve_preprocess_backend,
 )
 from woof.ingest.real import initialize_real
+from woof.ingest.land_state import land_state_context
 from woof.ingest.ruc_soil import preprocess_land_surface_soil
 from woof.ingest.cg_topo import RootTerrainBlend
 from woof.ingest.soil import soil_source_orography
@@ -213,6 +214,27 @@ _SOIL_RECEIPT_ATTRIBUTE = {
 }
 
 
+def _soil_receipt_bindings(soil) -> dict[str, object]:
+    """Every fired CONDITIONAL_PREPARATION_RECEIPTS receipt on ``soil``.
+
+    Read under the Noah state's attribute name first
+    (:data:`_SOIL_RECEIPT_ATTRIBUTE`), then under the metadata spelling,
+    which is the RUC state's own (:class:`woof.ingest.ruc_soil.RucSoilState`
+    ``soil_moisture_floor``, real.exe's layer-source ``MAX(SMOIS, 0.005)``).
+    Reading the Noah name alone dropped a fired RUC floor from both the
+    cache and the proof of an ERA5 run (2.8.8 acceptance D-02 sweep).
+    """
+
+    bindings = {}
+    for key in CONDITIONAL_PREPARATION_RECEIPTS:
+        attribute = _SOIL_RECEIPT_ATTRIBUTE.get(key, key)
+        receipt = dict(getattr(soil, attribute, None)
+                       or getattr(soil, key, None) or {})
+        if receipt:
+            bindings[key] = receipt
+    return bindings
+
+
 def _water_temperature_statics(static, landuse_attrs, policy):
     """The surface this route assembles water temperature over.
 
@@ -287,7 +309,8 @@ def _static_from_geog(
         **selection_carrier_kwargs(static_highres))
     fields = build_static_for_domain(
         grid, catalog, 1,
-        **({"cfg": cfg} if getattr(cfg, "sf_lake_physics", 0) else {}))
+        **({"cfg": cfg} if any(getattr(cfg, option, 0) for option in
+            ("sf_lake_physics", "topo_wind", "gwd_opt")) else {}))
     # The land-use table's own ISLAKE/ISWATER, from the same GEOG index
     # the statics were built from, so the water-temperature assembly
     # and the statics cannot disagree about what a lake is.
@@ -411,6 +434,7 @@ def prepare_era5_wrf(
     hierarchy_source_orography: SourceOrographyDeclaration | None = None,
     water_temperature_overlay: Path | None = None,
     water_temperature_policy_declared: str | None = None,
+    experiment_config_suite: bool = False,
 ) -> dict[str, object]:
     """Build native ERA5 initial/boundary files and return the proof receipt.
 
@@ -586,7 +610,7 @@ def prepare_era5_wrf(
     static, root_static_receipt = apply_prepared_highres(
         static, grid, config=static_highres, domain_id=1,
         case_date=exp.start_time.date(), landuse_attrs=landuse_attrs,
-        baseline_receipt=root_static_receipt)
+        baseline_receipt=root_static_receipt, run=cfg)
     # The land-height check reads the terrain the run will integrate: a
     # declared high-resolution terrain gives the islands the baseline
     # dataset holds at 0 m their height.
@@ -598,7 +622,8 @@ def prepare_era5_wrf(
         exp, grids, root_terrain=static["HGT_M"],
         static_catalog=_survey_static_catalog(
             exp, paths["wps_namelist"], geog_root, static_highres),
-        static_highres=static_highres, announce=_announce_adaptation)
+        static_highres=static_highres, announce=_announce_adaptation,
+        statics_corridor=statics_corridor)
     cfg = exp.root.run
     source_terrain = (
         None if source_orography is None
@@ -789,6 +814,15 @@ def prepare_era5_wrf(
     # it: the declared source-orography artifact when there is one, else
     # the invariant SOILGEO the snapshot carries.  Off, this does nothing.
     terrain_blend = RootTerrainBlend(exp, static, route="era5")
+    # Inland water the source does not resolve takes the forcing's
+    # daily-mean 2 m air temperature (WRF use_tavg_for_tsk).
+    from woof.ingest.horiz import with_inland_air_temperature
+    water_statics = with_inland_air_temperature(water_statics, snapshots)
+
+    nudging_writer = None
+    if getattr(exp, "nudging", None) is not None:
+        from woof.spectral_nudging.prepared import analysis_writer
+        nudging_writer = analysis_writer(output_root, exp, times, _sha256(Path(input_manifest)))
 
     def build_forcing_time(index):
         # One forcing time's build, unchanged.  A single domain calls it
@@ -817,6 +851,8 @@ def prepare_era5_wrf(
             static["MAPFAC_M"], static["MAPFAC_U"], static["MAPFAC_V"],
             static["F"], static["E"], sina=static["SINALPHA"],
             cosa=static["COSALPHA"])
+        if nudging_writer is not None:
+            nudging_writer.write(index, initialized)
         return met, initialized
 
     # START FIRST when the head can be published before the last time
@@ -842,15 +878,23 @@ def prepare_era5_wrf(
         initial_met, initial_result = build_forcing_time(0)
         forcing.add_state(initial_result.state, index=0)
         boundaries = None
+    # The chem processes' preparation-time arrays (dust statics, sulfur
+    # lat/lon), before the head is published; nothing on a chem-off state
+    # (woof/core/chem_statics.py).
+    from woof.core.chem_statics import attach_chem_statics
+    attach_chem_statics(initial_result.state, grid, geog_root, None)
 
     # No lake skin override: metgrid's masked=both SKINTEMP chain with
     # static-landmask targets already yields water-source skin at lakes,
-    # matching real.exe's no-TAVGSFC behavior (SST only where valid).  The
+    # matching real.exe's no-TAVGSFC behavior (SST only where valid), except
+    # inland water with no source water within INLAND_WATER_SOURCE_REACH_M,
+    # which takes the daily-mean 2 m air temperature (use_tavg_for_tsk).  The
     # router forwards this exact argument list to preprocess_noah_soil for
     # Noah-geometry schemes, so their soil state is unchanged by the LSM
     # dispatch seam.
     from woof.core.landuse import (
-        ruc_fractional_seaice as _ruc_fractional_seaice)
+        ruc_fractional_seaice as _ruc_fractional_seaice,
+        seaice_threshold_of as _seaice_threshold_of)
     soil = preprocess_land_surface_soil(
         initial_met.fields,
         # real.exe's adjust_for_seaice_pre/post keep the fraction under
@@ -858,6 +902,7 @@ def prepare_era5_wrf(
         # otherwise (module_soil_pre.F:216-219, :337-343, :392-393 of the HRRR
         # v4.1.21 fork).
         fractional_seaice=_ruc_fractional_seaice(cfg),
+        seaice_threshold=_seaice_threshold_of(cfg),
         sf_surface_physics=int(cfg.sf_surface_physics),
         # Resolved, not defaulted: see woof/ingest/hrrr_physics.py for the
         # failure this closes.  Inert at every geometry but RUC's six.
@@ -883,6 +928,9 @@ def prepare_era5_wrf(
         # lapse two arguments up: the target grid knows things about the
         # land surface a 0.25 degree forcing mesh cannot carry.
         soil_mesh=soil_mesh_plan_from_case(snapshots[0], grid, declared),
+        # Where and when, for a same-model soil donor (woof/ingest/
+        # land_state.py: HRRR's RUC soil for a RUC run over CONUS).
+        land_state=land_state_context(grid, times[0]),
         route=_WATER_ROUTE)
     # LOUD when it happened, silent when it did not: the SMCDRY floor
     # receipt is only bound into the prepared metadata/proof when at
@@ -898,12 +946,7 @@ def prepare_era5_wrf(
     # the prepared-cache validator binds from the proof.  Keeping one list
     # is the point: when these two sides disagreed, the front door refused
     # the cache it had just written.
-    soil_floor_binding = {}
-    for _receipt_key in CONDITIONAL_PREPARATION_RECEIPTS:
-        _attribute = _SOIL_RECEIPT_ATTRIBUTE.get(_receipt_key, _receipt_key)
-        _receipt = dict(getattr(soil, _attribute, {}) or {})
-        if _receipt:
-            soil_floor_binding[_receipt_key] = _receipt
+    soil_floor_binding = _soil_receipt_bindings(soil)
     initialize_seconds = time.perf_counter() - initialize_started
     input_manifest_digest = _sha256(Path(input_manifest))
     # LOUD when configured, absent when not: the overlay binding joins
@@ -925,7 +968,9 @@ def prepare_era5_wrf(
         "decoder": {
             "name": paths["bridge"].name,
             "sha256": _sha256(paths["bridge"]),
-            "implementation": "gpuwm-all-rust-grib1-bridge",
+            "implementation": ("gpuwm-all-rust-netcdf-bridge"
+                if paths["grib"].suffix.lower() == ".nc"
+                else "gpuwm-all-rust-grib1-bridge"),
         },
         # What ran, without what was measured (A138): the proof below
         # keeps the whole receipt.
@@ -965,6 +1010,8 @@ def prepare_era5_wrf(
                     8 if preprocess_receipt["backend"] == "cpu" else 1)
             hierarchy_started = time.perf_counter()
             hierarchy = initialize_and_export_regular_source_hierarchy(
+                nudging_context=((output_root, build_forcing_time)
+                    if getattr(exp, 'nudging', None) is not None else None),
                 exp=exp, grids=grids, snapshots=snapshots,
                 forcing_hours=forcing_hours,
                 wps_namelist=paths["wps_namelist"],
@@ -1002,7 +1049,7 @@ def prepare_era5_wrf(
                 # unchanged-WRF file set beside it is a companion, as on
                 # the GFS, mapped and HRRR tree routes.  Required, a
                 # state the WRF format cannot represent (a deferred
-                # [perturbation] bubble, which only the tree runner
+                # [perturbation] bubble, which the prepared runner
                 # applies) failed this preparation after every domain
                 # was built; optional, it is recorded as a REFUSED
                 # export manifest in the proof instead.
@@ -1203,7 +1250,8 @@ def prepare_era5_wrf(
         export_receipt = export_prepared_wrf(
             prepared_cache, static_cache, geometry_receipt, wrf_output,
             valid_time=times[0],
-            boundary_interval_seconds=boundary_interval_seconds)
+            boundary_interval_seconds=boundary_interval_seconds,
+            experiment_config_suite=experiment_config_suite)
         export_seconds = time.perf_counter() - export_started
         initialization_artifacts = {
             "source_manifest": {
@@ -1288,6 +1336,7 @@ def _parser() -> argparse.ArgumentParser:
             "cells; off by default"),
     )
     parser.add_argument("--experiment-config", type=Path, required=True)
+    parser.add_argument("--experiment-config-suite", action="store_true")
     parser.add_argument("--input-manifest", type=Path, required=True)
     parser.add_argument("--input-manifest-sha256", required=True)
     parser.add_argument("--output-root", type=Path, required=True)
@@ -1353,6 +1402,7 @@ def main(argv: list[str] | None = None) -> int:
             source_orography=args.source_orography,
             source_orography_variable=args.source_orography_variable,
             experiment_config=args.experiment_config,
+            experiment_config_suite=args.experiment_config_suite,
             input_manifest=args.input_manifest,
             input_manifest_sha256=args.input_manifest_sha256,
             output_root=args.output_root,

@@ -895,16 +895,6 @@ def test_the_machines_list_never_waits_on_ssh(tmp_path):
 
 # ---------------------------------------------------------------- no page waits on a host, and no host is asked for nothing
 
-class _Present:
-    status = 200
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
 class Hosts:
     """Every HEAD a probe sends, each taking one second, counted where the fetch's probe and a page's meet."""
 
@@ -1368,14 +1358,14 @@ def test_another_owners_line_holds_the_card_and_ours_is_taken_and_handed_over(qu
     owner = tmp_path / "gpu-mutex" / "OWNER"
     owner.parent.mkdir()
     (owner.parent / "OWNER.lock").write_text("", encoding="utf-8")
-    owner.write_text(f"drew-gui 2026-09-26T00:00:00Z pid {os.getpid()} bounded 60 min\n", encoding="utf-8")
+    owner.write_text(f"desk-gui 2026-09-26T00:00:00Z pid {os.getpid()} bounded 60 min\n", encoding="utf-8")
     server.api.queue.owner_file = str(owner)
     server.api.queue.owner_tag = "queue-test"
     runner.holder = None
     queue_one(server, "waits")
     assert server.api.queue.tick() == []
     marker = json.loads((server.root / "waits" / runs.QUEUED).read_text(encoding="utf-8"))
-    assert marker["waiting"] == "The card is held by drew-gui."
+    assert marker["waiting"] == "The card is held by desk-gui."
     _, body = request(server, "GET", "/api/queue?need_gib=5.3")
     assert body["expect"]["busy"] and body["expect"]["ahead"] == 1
 

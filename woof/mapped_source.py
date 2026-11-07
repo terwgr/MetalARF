@@ -76,7 +76,23 @@ _GRIB2_AUTHORITY_KEYS = (
 )
 
 _FORMATS = {"grib1", "grib2", "netcdf"}
-_AXES = {"time", "member", "vertical", "half_level", "y", "x", "soil"}
+_AXES = {"time", "lead", "member", "vertical", "half_level", "y", "x", "soil"}
+
+#: Seconds per unit of a ``coordinates.time.lead`` axis.
+_LEAD_UNIT_SECONDS = {
+    "days": 86400, "day": 86400, "d": 86400,
+    "hours": 3600, "hour": 3600, "h": 3600,
+    "minutes": 60, "minute": 60, "min": 60,
+    "seconds": 1, "second": 1, "s": 1,
+}
+
+
+def _lead_unit_seconds(units: str) -> int:
+    seconds = _LEAD_UNIT_SECONDS.get(str(units).strip().lower())
+    if seconds is None:
+        raise ValueError(
+            f"coordinates.time.lead.units {units!r} is not days, hours, minutes or seconds")
+    return seconds
 _LOCATIONS = {"mass", "u_face", "v_face", "surface", "soil"}
 _STAGGERING = {"none", "x", "y", "z"}
 _VERTICAL_KINDS = {
@@ -97,6 +113,7 @@ _POLICY_FIELDS = {
 _DERIVATION_ARGUMENTS = {
     "copy": ({"source"}, set()),
     "height_from_interfaces": ({"source"}, set()),
+    "mass_from_interfaces": ({"source"}, set()),
     "mass_fraction_rebase": ({"source"}, {"exclude"}),
     "wind_speed": ({"u", "v"}, set()),
     "specific_humidity_from_rh": (
@@ -108,6 +125,22 @@ _DERIVATION_ARGUMENTS = {
     "specific_humidity_from_dewpoint": (
         {"dewpoint", "temperature", "pressure"}, set()
     ),
+    # Air temperature from potential temperature and pressure,
+    # T = theta * (p / p0) ** kappa.  A height-coordinate model (MPAS,
+    # hex) publishes theta, not T.  kappa (R_d / c_p) and p0 are the
+    # PRODUCER's constants, declared by the mapping: WRF's are 2/7 and
+    # 1e5 Pa (the defaults), MPAS's are 287/1003 and 1e5 Pa, and the
+    # temperature a model held is recovered only with its own pair.
+    "air_temperature_from_potential_temperature": (
+        {"potential_temperature", "pressure"},
+        {"reference_pressure_pa", "kappa"},
+    ),
+    # Specific humidity from a water vapour mixing ratio against dry
+    # air, q = r / (1 + r).  Its inverse r = q / (1 - q) is what
+    # initialization applies, so the round trip returns r exactly
+    # (to rounding) and condensate stays on the dry-air basis the
+    # producer's own mixing ratios already use.
+    "specific_humidity_from_mixing_ratio": ({"mixing_ratio"}, set()),
     # Column-integrated soil water (kg m-2 per declared layer) to
     # volumetric soil moisture (m3 m-3): arithmetic over the DECLARED
     # layer bounds, in the closed catalog because a contract must never
@@ -284,6 +317,23 @@ def _snapshot_authority(
 ) -> _AuthoritySnapshot:
     path = Path(path).resolve()
     path_before = path.stat()
+    if not retain_bytes:
+        # Inside a preparation's digest scope: a digest this preparation or
+        # its fetch already holds for these exact bytes, with the full
+        # re-read moved beside the work (woof.authority_digests).
+        from woof import authority_digests
+        held = authority_digests.known_digest(path, path_before)
+        if held is not None:
+            authority_digests.defer_verify(path, path_before, held[0], held[1])
+            return _AuthoritySnapshot(
+                path=path,
+                sha256=held[0],
+                size=int(path_before.st_size),
+                mtime_ns=int(path_before.st_mtime_ns),
+                device=int(path_before.st_dev),
+                inode=int(path_before.st_ino),
+                mode=int(path_before.st_mode),
+            )
     digest = hashlib.sha256()
     retained = bytearray() if retain_bytes else None
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) \
@@ -328,6 +378,8 @@ def _snapshot_authority(
     data = None if retained is None else bytes(retained)
     if data is not None and len(data) != after.st_size:
         raise ValueError(f"authority changed while reading: {path}")
+    from woof import authority_digests
+    authority_digests.remember(path, path_after, digest.hexdigest())
     return _AuthoritySnapshot(
         path=path,
         sha256=digest.hexdigest(),
@@ -341,6 +393,12 @@ def _snapshot_authority(
 
 
 def _require_authority_snapshot(snapshot: _AuthoritySnapshot) -> None:
+    from woof import authority_digests
+    if authority_digests.require_unchanged(
+            snapshot.path, sha256=snapshot.sha256, size=snapshot.size,
+            mtime_ns=snapshot.mtime_ns, device=snapshot.device,
+            inode=snapshot.inode, mode=snapshot.mode):
+        return
     current = _snapshot_authority(snapshot.path)
     if current.identity != snapshot.identity:
         raise ValueError(f"authority changed after validation: {snapshot.path}")
@@ -462,6 +520,8 @@ def _validate_selector(selector: object, expected_format: str, label: str) -> di
         "netcdf": {
             "format", "name", "standard_name", "attributes",
             "layer_dimension", "layer_value", "layer_units",
+            # The level a vertical-stack member variable holds.
+            "level_value",
         },
     }[expected_format]
     incompatible = sorted(set(value) - allowed_by_format)
@@ -802,6 +862,115 @@ def _validate_era_ladders(
                 f"{label} names levels {stray} that vertical.levels does not "
                 "declare; an era ladder is drawn from the declared levels, "
                 "which are the only ones the decoder admits")
+
+
+#: The canonical fields ``fields.<name>.published_levels`` may declare: the
+#: five hydrometeor mass mixing ratios.  A publisher that carries a
+#: hydrometeor on part of its pressure ladder is stating that the mass it
+#: did not write out there is negligible (NCEP's GFS pgrb2.0p25 writes
+#: CLMR/ICMR/RWMR/SNMR/GRLE on 22 of the 33 isobaric levels its state
+#: carries, 50..1000 hPa less 70 hPa), so the column is zero at the other
+#: levels.  For any other field a zero inside the column is a wrong value
+#: rather than an absent one, so the declaration is refused there.
+PUBLISHED_LEVELS_ZERO_FIELDS = (
+    "cloud_water_mixing_ratio", "rain_water_mixing_ratio",
+    "cloud_ice_mixing_ratio", "snow_mixing_ratio",
+    "graupel_or_hail_mixing_ratio",
+)
+
+
+def _validate_published_levels(
+    name: str,
+    field: Mapping[str, object],
+    levels: Sequence[float],
+    source_format: str,
+) -> None:
+    """``fields.<name>.published_levels``: the ladder levels a field is on.
+
+    A publisher may carry a field on a subset of the ladder its state
+    carries.  Without this the whole mapping must drop to that subset (a
+    ladder is chosen for every stacked field at once), which would take
+    temperature, humidity and wind off the levels above it.  The
+    declaration names the levels the field is published on, held to
+    every frame like the ladder itself; on the other declared levels the
+    field is ``absent``, and ``"zero"`` is the one value it may take,
+    for the fields where zero is what an unwritten mass is
+    (:data:`PUBLISHED_LEVELS_ZERO_FIELDS`).
+    """
+
+    label = f"fields.{name}.published_levels"
+    upper_boundary = field.get("published_levels", {}).get("absent") == "nearest_upper_boundary"
+    if upper_boundary and name != "specific_humidity":
+        raise ValueError(f"{label}: upper boundary extension is restricted to specific_humidity")
+    if name not in PUBLISHED_LEVELS_ZERO_FIELDS and not upper_boundary:
+        raise ValueError(
+            f"{label} is restricted to the hydrometeor mass mixing ratios "
+            f"({', '.join(PUBLISHED_LEVELS_ZERO_FIELDS)}): their zero is "
+            "what a mass the publisher does not write out at a level is, "
+            "and on any other field a zero inside the column is a wrong "
+            "value rather than an absent one")
+    if source_format not in {"grib1", "grib2"}:
+        raise ValueError(
+            f"{label} is read by the GRIB decoders only; the NetCDF decoder "
+            "selects vertical.levels by coordinate value, so a file without "
+            "one of these levels would still refuse there")
+    if not levels:
+        raise ValueError(
+            f"{label} needs vertical.levels: the declaration is a subset of "
+            "the declared ladder")
+    if not field.get("selectors"):
+        raise ValueError(
+            f"{label} describes the records a publisher writes, so the field "
+            "must be directly selected")
+    if tuple(field["source_axes"]) != ("vertical", "y", "x") \
+            or tuple(field["target_axes"]) != ("vertical", "y", "x"):
+        raise ValueError(
+            f"{label} is a vertical declaration; the field's source and "
+            "target axes must be ('vertical', 'y', 'x')")
+    if field["missing"]["kind"] != "reject":
+        raise ValueError(
+            f"{label} keeps the reject missing policy: a missing cell on a "
+            "level the publisher writes is still a defect in the file, and "
+            "only a level it does not write is zero")
+    if float(field["units"].get("offset", 0.0)) != 0.0:
+        raise ValueError(
+            f"{label} needs a zero unit offset, or the declared zero would "
+            "not stay zero through the unit conversion")
+    value = _object(
+        field["published_levels"], label,
+        allowed={"levels", "absent"}, required={"levels", "absent"})
+    if value["absent"] not in {"zero", "nearest_upper_boundary"}:
+        raise ValueError(f"{label}.absent must be zero or nearest_upper_boundary")
+    published = value["levels"]
+    if not isinstance(published, list) or not published:
+        raise ValueError(f"{label}.levels must be a non-empty numeric list")
+    values = [_number(level, f"{label}.levels[{index}]")
+              for index, level in enumerate(published)]
+    if len(set(values)) != len(values):
+        raise ValueError(f"{label}.levels must be a unique numeric list")
+    declared = set(float(level) for level in levels)
+    stray = [level for level in values if float(level) not in declared]
+    if stray:
+        raise ValueError(
+            f"{label}.levels names levels {stray} that vertical.levels does "
+            "not declare; the decoder admits the declared levels only")
+    if upper_boundary and any(float(level) >= min(values) for level in declared - set(values)):
+        raise ValueError(f"{label}: boundary extension cannot fill interior or lower levels")
+    if set(float(level) for level in values) == declared:
+        raise ValueError(
+            f"{label}.levels names every declared level, so the declaration "
+            "would change nothing; remove it")
+
+
+def _published_levels(field: Mapping[str, object]) -> frozenset[float] | None:
+    """The levels ``fields.<name>.published_levels`` names, or ``None``."""
+
+    declaration = field.get("published_levels")
+    if declaration and declaration.get("absent") == "nearest_upper_boundary":
+        raise ValueError("nearest_upper_boundary requires the Rust mapped engine")
+    if declaration is None:
+        return None
+    return frozenset(float(level) for level in declaration["levels"])
 
 
 def _carried_ladder(
@@ -1265,10 +1434,24 @@ def load_mapping(
         "mapping",
         allowed={
             "schema", "name", "format", "coordinates", "fields", "derivations",
-            "target", "grid", "record_aliases",
+            "target", "grid", "record_aliases", "producer_attributes",
         },
         required={"schema", "name", "format", "coordinates", "fields", "target"},
     )
+    if mapping.get("producer_attributes") is not None:
+        if mapping["format"] != "netcdf":
+            raise ValueError("producer_attributes is a NetCDF declaration")
+        table = mapping["producer_attributes"]
+        if not isinstance(table, dict) or not table:
+            raise ValueError("mapping.producer_attributes must be a non-empty object")
+        for variable_name, attributes in table.items():
+            _string(variable_name, "producer_attributes variable name")
+            if not isinstance(attributes, dict) or not attributes:
+                raise ValueError(
+                    f"producer_attributes.{variable_name} must be a non-empty object")
+            for key, value in attributes.items():
+                _string(key, f"producer_attributes.{variable_name} attribute name")
+                _string(value, f"producer_attributes.{variable_name}.{key}")
     if mapping["schema"] != MAPPING_SCHEMA:
         raise ValueError(
             f"unsupported mapping schema {mapping['schema']!r}; expected {MAPPING_SCHEMA!r}"
@@ -1290,9 +1473,13 @@ def load_mapping(
     horizontal = _object(
         coordinates["horizontal"],
         "mapping.coordinates.horizontal",
-        allowed={"kind", "latitude", "longitude"},
+        allowed={"kind", "latitude", "longitude", "normalization"},
         required={"kind"},
     )
+    if "normalization" in horizontal and (
+            horizontal["kind"] != "embedded_grid" or source_format != "grib2"
+            or horizontal["normalization"] != "coarsest_exact_subset"):
+        raise ValueError("GRIB normalization must declare coarsest_exact_subset")
     if horizontal["kind"] == "embedded_grid":
         if source_format == "netcdf":
             raise ValueError("NetCDF mappings require latitude/longitude selectors")
@@ -1309,7 +1496,7 @@ def load_mapping(
         "mapping.coordinates.vertical",
         allowed={
             "kind", "selector", "units", "positive", "levels", "era_ladders",
-            "hybrid_a", "hybrid_b", "interface_levels",
+            "hybrid_a", "hybrid_b", "interface_levels", "interface_selector",
             "hybrid_a_field", "hybrid_b_field", "surface_pressure_field",
             "model_top_pressure_pa",
         },
@@ -1329,6 +1516,13 @@ def load_mapping(
         _validate_selector(vertical["selector"], source_format, "vertical.selector")
     if source_format == "netcdf" and vertical.get("selector") is None:
         raise ValueError("NetCDF mappings require a vertical coordinate selector")
+    if vertical.get("interface_selector") is not None:
+        if source_format != "netcdf" or vertical.get("interface_levels") is None:
+            raise ValueError(
+                "vertical.interface_selector names a NetCDF interface coordinate and "
+                "requires interface_levels")
+        _validate_selector(
+            vertical["interface_selector"], source_format, "vertical.interface_selector")
     levels = vertical.get("levels", [])
     if not isinstance(levels, list):
         raise ValueError("vertical.levels must be a unique numeric list")
@@ -1347,8 +1541,16 @@ def load_mapping(
             raise ValueError(
                 "era_ladders cannot be combined with interface_levels: an era ladder can shorten "
                 "the mass column while the fixed N+1 interfaces still bound the declared ladder")
-        if source_format not in {"grib1", "grib2"} or vertical["kind"] != "model_level":
-            raise ValueError("interface_levels requires a GRIB model_level coordinate")
+        if vertical["kind"] != "model_level":
+            raise ValueError("interface_levels requires a model_level coordinate")
+        # GRIB carries each interface as its own record's level value.  A
+        # NetCDF file carries them as a coordinate VARIABLE on their own
+        # dimension (WRF's bottom_top_stag), so the mapping names it, the
+        # same way it names the mass-level coordinate.
+        if source_format == "netcdf" and vertical.get("interface_selector") is None:
+            raise ValueError(
+                "interface_levels on a NetCDF model_level coordinate requires "
+                "vertical.interface_selector naming the interface coordinate variable")
         if not isinstance(interfaces, list) or len(interfaces) != len(levels) + 1:
             raise ValueError("interface_levels must bound every mass level with N+1 interfaces")
         values = [_number(value, "vertical.interface_levels") for value in interfaces]
@@ -1434,7 +1636,7 @@ def load_mapping(
     time = _object(
         coordinates["time"],
         "mapping.coordinates.time",
-        allowed={"kind", "selector", "units", "calendar"},
+        allowed={"kind", "selector", "units", "calendar", "lead"},
         required={"kind"},
     )
     if time["kind"] == "dimension":
@@ -1447,6 +1649,17 @@ def load_mapping(
         _string(time["units"], "time.units")
         if time.get("calendar") is not None:
             _string(time["calendar"], "time.calendar")
+        if time.get("lead") is not None:
+            # A forecast file written as (reference time, lead time): the
+            # time coordinate is the initialization, this axis the offset.
+            lead = _object(
+                time["lead"], "mapping.coordinates.time.lead",
+                allowed={"selector", "units"}, required={"selector", "units"},
+            )
+            _validate_dimension_selector(lead["selector"], "time.lead.selector")
+            _lead_unit_seconds(_string(lead["units"], "time.lead.units"))
+    elif time.get("lead") is not None:
+        raise ValueError("time.lead requires a NetCDF dimension time coordinate")
     elif time["kind"] != "embedded_metadata":
         raise ValueError(f"unsupported time coordinate kind {time['kind']!r}")
     if source_format == "netcdf" and time["kind"] != "dimension":
@@ -1481,9 +1694,15 @@ def load_mapping(
                 "selectors", "derivation", "units", "source_axes", "target_axes",
                 "location", "staggering", "missing", "selector_stack_axis",
                 "time_binding", "provider", "when_absent", "dependency_only",
+                "published_levels", "repeated_record", "optional",
             },
             required={"units", "source_axes", "target_axes", "location", "missing"},
         )
+        if field.get("repeated_record", "last") != "last":
+            raise ValueError(
+                f"fields.{name}.repeated_record must be 'last'; it declares "
+                "that a record the publisher writes twice at one level and "
+                "valid time is read from its later message")
         # ``dependency_only``: the field is decoded for a derivation to
         # read and is not published on the frame (``_published_fields``).
         if not isinstance(field.get("dependency_only", False), bool):
@@ -1493,6 +1712,10 @@ def load_mapping(
             raise TypeError(f"fields.{name}.selectors must be a list")
         direct = bool(selectors)
         derived = isinstance(field.get("derivation"), str) and bool(field["derivation"])
+        if not isinstance(field.get("optional", False), bool):
+            raise ValueError(f"fields.{name}.optional must be true or false")
+        if field.get("optional") and (source_format != "netcdf" or not direct):
+            raise ValueError(f"fields.{name}.optional requires a directly selected NetCDF field")
         provider = field.get("provider")
         if provider is not None:
             # The third provider shape: the field's canonical contract is
@@ -1564,7 +1787,7 @@ def load_mapping(
             _validate_selector(selector, source_format, f"fields.{name}.selectors[{index}]")
         if "half_level" in field["source_axes"] or "half_level" in field["target_axes"]:
             if interfaces is None or not direct:
-                raise ValueError(f"fields.{name} half_level requires direct GRIB data and interface_levels")
+                raise ValueError(f"fields.{name} half_level requires direct data and interface_levels")
         selector_stack_axis = field.get("selector_stack_axis")
         if selector_stack_axis is not None:
             if source_format != "netcdf" or not direct:
@@ -1574,20 +1797,49 @@ def load_mapping(
             selector_stack_axis = _string(
                 selector_stack_axis, f"fields.{name}.selector_stack_axis"
             )
-            if selector_stack_axis != "soil":
+            if selector_stack_axis not in {"soil", "vertical"}:
                 raise ValueError(
-                    f"fields.{name}.selector_stack_axis currently supports only 'soil'"
+                    f"fields.{name}.selector_stack_axis supports 'soil' and 'vertical'"
                 )
-            if len(selectors) < 2:
+            if len(selectors) < 2 and not (selector_stack_axis == "vertical" and selectors
+                    and field["missing"]["kind"] == "composition_fill"):
                 raise ValueError(
                     f"fields.{name}.selector_stack_axis requires multiple selectors"
                 )
+            if selector_stack_axis == "vertical":
+                # One variable per level (Earth2Studio's ``t50`` .. ``t1000``):
+                # each selector names the level it IS, and the stack is the
+                # declared ladder in the declared order.
+                stacked = [selector.get("level_value") for selector in selectors]
+                if any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       for value in stacked):
+                    raise ValueError(
+                        f"fields.{name} stacks on vertical, and every selector "
+                        "needs a numeric level_value"
+                    )
+                declared = [float(value) for value in vertical.get("levels", [])]
+                sparse = (field["missing"]["kind"] == "composition_fill"
+                          and len(set(stacked)) == len(stacked)
+                          and all(value in declared for value in stacked))
+                if [float(value) for value in stacked] != declared and not sparse:
+                    raise ValueError(
+                        f"fields.{name} stacked level_values {stacked} differ from "
+                        f"coordinates.vertical.levels {vertical.get('levels', [])}"
+                    )
+        elif any("level_value" in selector for selector in selectors) \
+                and source_format == "netcdf":
+            raise ValueError(
+                f"fields.{name} selector level_value is a vertical stack member's "
+                "level; declare selector_stack_axis 'vertical'"
+            )
         unit = _object(
             field["units"], f"fields.{name}.units",
             allowed={"source", "target", "scale", "offset"},
             required={"source", "target"},
         )
-        _string(unit["source"], f"fields.{name}.units.source")
+        if not (isinstance(unit["source"], str) and not unit["source"].strip()
+                and unit["target"] == "1"):
+            _string(unit["source"], f"fields.{name}.units.source")
         _string(unit["target"], f"fields.{name}.units.target")
         _number(unit.get("scale", 1.0), f"fields.{name}.units.scale")
         _number(unit.get("offset", 0.0), f"fields.{name}.units.offset")
@@ -1615,11 +1867,15 @@ def load_mapping(
                 missing.get("value"),
                 f"fields.{name} value missing policy",
             )
+        elif missing["kind"] == "composition_fill":
+            if selector_stack_axis != "vertical" or source_format != "netcdf":
+                raise ValueError(f"fields.{name} composition_fill requires a NetCDF vertical selector stack")
         elif missing["kind"] == "preserve_mask":
             from woof.ingest.analyzed_numbers import CANONICAL_NUMBER_FIELDS
             if (field["location"] != "soil"
                     and name not in MASKED_WATER_STATE_FIELDS
-                    and name not in CANONICAL_NUMBER_FIELDS):
+                    and name not in CANONICAL_NUMBER_FIELDS
+                    and not field.get("dependency_only", False)):
                 raise ValueError(
                     f"fields.{name} preserve_mask is currently restricted to "
                     "soil fields repaired by the land/water-aware initializer "
@@ -1627,6 +1883,9 @@ def load_mapping(
                     "and the water-state fields read over water only ("
                     + ", ".join(sorted(MASKED_WATER_STATE_FIELDS)) + ")"
                 )
+        elif missing["kind"] == "landmask_zero_water":
+            if field["location"] != "surface" or field["target_axes"] != ["y", "x"]:
+                raise ValueError(f"fields.{name} landmask_zero_water requires a surface y,x field")
         elif missing["kind"] == "landmask_water":
             # Some providers publish soil state with WATER CELLS carrying
             # sentinel values instead of an encoded missing mask (DWD-style
@@ -1644,7 +1903,7 @@ def load_mapping(
 
     landmask_masked = sorted(
         name for name, field in fields.items()
-        if field["missing"]["kind"] == "landmask_water"
+        if field["missing"]["kind"] in ("landmask_water", "landmask_zero_water")
     )
     if landmask_masked and "land_fraction" not in fields:
         raise ValueError(
@@ -1698,6 +1957,18 @@ def load_mapping(
         if field.get("when_absent") is not None:
             _validate_when_absent(
                 field_name, field, fields, vertical, str(source_format))
+        if field.get("published_levels") is not None:
+            if (isinstance(field["published_levels"], dict)
+                    and field["published_levels"].get("absent") == "nearest_upper_boundary"
+                    and vertical["kind"] != "pressure"):
+                raise ValueError("upper boundary extension requires pressure-level specific_humidity")
+            _validate_published_levels(
+                field_name, field, numeric_levels, str(source_format))
+        if (field.get("repeated_record") is not None
+                and str(source_format) != "grib2"):
+            raise ValueError(
+                f"fields.{field_name}.repeated_record is a GRIB2 record "
+                "declaration; other formats have no repeated messages")
 
     if vertical["kind"] == "hybrid_sigma_pressure":
         pressure_field = str(vertical["surface_pressure_field"])
@@ -1729,6 +2000,8 @@ def load_mapping(
                 "layer_mass", "layer_bounds_m", "water_density_kg_m3",
                 "specific_humidity", "surface_geopotential_height", "exclude",
                 "sea_level_pressure", "level_height", "surface_height",
+                "potential_temperature", "reference_pressure_pa", "kappa",
+                "mixing_ratio",
             },
             required={"name", "operation"},
         )
@@ -1794,6 +2067,19 @@ def load_mapping(
                 "half-level ladder, which requires a hybrid_sigma_pressure "
                 "vertical coordinate"
             )
+        if operation == "air_temperature_from_potential_temperature":
+            for key, default, upper in (
+                ("reference_pressure_pa", 100000.0, None),
+                ("kappa", 2.0 / 7.0, 1.0),
+            ):
+                value = _number(
+                    derivation.get(key, default), f"derivations[{index}].{key}"
+                )
+                if value <= 0.0 or (upper is not None and value >= upper):
+                    raise ValueError(
+                        f"derivations[{index}].{key} must be finite and positive"
+                        + ("" if upper is None else f" and below {upper:g}")
+                    )
         if operation == "volumetric_soil_moisture_from_layer_mass":
             bounds = derivation.get("layer_bounds_m")
             if not isinstance(bounds, list) or not bounds:
@@ -2006,6 +2292,8 @@ def load_mapping(
             requirement_axes, str(requirement["location"]), requirement_units
         )
         mapped = fields[field_name]
+        if mapped.get("optional"):
+            raise ValueError(f"required field {field_name} cannot be optional")
         if requirement_axes != tuple(mapped["target_axes"]):
             raise ValueError(f"target axes disagree for {field_name}")
         if requirement["location"] != mapped["location"]:
@@ -2287,14 +2575,6 @@ def _selector_names(selector: Mapping[str, object]) -> tuple[str, ...]:
     return tuple(str(value) for value in configured)
 
 
-def _matching_nc_variables(
-    dataset: netcdf_bridge.Dataset, selector: Mapping[str, object]
-) -> list[object]:
-    """Variables satisfying one selector, by name OR CF standard name."""
-
-    return [variable for variable, _evidence in _match_nc_variables(dataset, selector)]
-
-
 def _match_nc_variables(
     dataset: netcdf_bridge.Dataset, selector: Mapping[str, object]
 ) -> list[tuple[object, str]]:
@@ -2357,6 +2637,31 @@ def _nc_selector_text(selector: Mapping[str, object]) -> str:
             f" {selector['layer_units']}"
         )
     return text
+
+
+def _apply_producer_attributes(dataset, mapping: Mapping[str, object], source) -> None:
+    """Supply the attributes a producer's published vocabulary fixes.
+
+    Earth2Studio's NetCDF writer emits ``t850(time, lead_time, lat, lon)``
+    with no ``units`` on the field and none on ``lat``/``lon``: its lexicon
+    fixes them.  The mapping's ``producer_attributes`` table carries that
+    vocabulary as data, keyed by exact variable name.  An attribute the
+    file lacks is supplied from it; one the file carries must agree.  The
+    Rust engine's ``apply_producer_attributes`` is the same rule.
+    """
+
+    for name, attributes in (mapping.get("producer_attributes") or {}).items():
+        variable = dataset.variables.get(name)
+        if variable is None:
+            continue
+        for key, declared in attributes.items():
+            observed = variable._attributes.get(key)
+            if observed is None:
+                variable._attributes[key] = declared
+            elif observed != declared:
+                raise ValueError(
+                    f"NetCDF {source} variable {name!r} carries {key}={observed!r}, "
+                    f"and the producer vocabulary this mapping declares says {declared!r}")
 
 
 def _nc_vocabulary(dataset: netcdf_bridge.Dataset, limit: int = 40) -> str:
@@ -2658,10 +2963,11 @@ def _require_geographic_horizontal(
         )
         raise ValueError(
             f"{source} declares CF grid mapping(s) {detail}. RW-WPS mapped "
-            f"NetCDF input supports only regular latitude/longitude grids "
+            f"geographic NetCDF path requires regular latitude/longitude grids "
             f"(grid_mapping_name={sorted(_SUPPORTED_GRID_MAPPING_NAMES)[0]!r} or "
-            f"no grid mapping at all). Regrid the source to a regular "
-            f"latitude/longitude grid before mapping it."
+            f"no grid mapping at all). A lambert_conformal_conic source needs "
+            f"a declared Lambert grid in the mapping; other projections need "
+            f"regridding before this geographic path can decode them."
         )
     _require_geographic_coordinate(
         latitude_variable, axis="latitude", label="latitude"
@@ -2850,12 +3156,25 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
     # whole inventory in the message.
     owed_direct_fields = {
         name for name, field in mapping["fields"].items()
-        if field.get("derivation") is None
+        if field.get("derivation") is None and not field.get("optional", False)
     }
     supplied_by: dict[str, Path] = {}
+    # A producer that writes one variable per pressure level (``t50`` ..
+    # ``t1000``) and no level coordinate stacks them on ``vertical``; the
+    # mapping's declared ladder is then the vertical coordinate.
+    stacks_vertical = any(
+        field.get("selector_stack_axis") == "vertical"
+        for field in mapping["fields"].values()
+    )
+    declared_ladder = np.asarray(vertical.get("levels", []), dtype=np.float64)
+    if stacks_vertical and not declared_ladder.size:
+        raise ValueError(
+            "a field stacks per-level variables on vertical, and "
+            "coordinates.vertical declares no levels")
 
     for source in files:
         with netcdf_bridge.open_dataset(source) as dataset:
+            _apply_producer_attributes(dataset, mapping, source)
             resolution: list[dict[str, object]] = []
             latitude_variable = _resolve_nc_variable(
                 dataset, horizontal["latitude"], "latitude", resolution
@@ -2903,6 +3222,36 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
             longitude_dimension = _nc_coordinate_dimension(
                 longitude_variable, "longitude"
             )
+            # Interface (half-level) coordinate, resolved the same lazy way:
+            # only a field with a half_level axis needs it.
+            interface_dimension = None
+            interface_selection: tuple[str, np.ndarray] | None = None
+            interface_error: ValueError | None = None
+            if vertical.get("interface_selector") is not None:
+                try:
+                    interface_variable = _resolve_nc_variable(
+                        dataset, vertical["interface_selector"], "vertical interfaces",
+                        resolution,
+                    )
+                    interface_values = _nc_coordinate_values(
+                        interface_variable,
+                        expected_units=str(vertical["units"]),
+                        label="vertical interfaces",
+                    )
+                    interface_dimension = _nc_coordinate_dimension(
+                        interface_variable, "vertical interfaces"
+                    )
+                    declared_interfaces = np.asarray(
+                        vertical["interface_levels"], dtype=np.float64
+                    )
+                    indices = _declared_level_indices(
+                        declared_interfaces, interface_values, source
+                    )
+                    if indices is not None:
+                        interface_selection = (interface_dimension, indices)
+                except ValueError as error:
+                    interface_dimension = None
+                    interface_error = error
             vertical_dimension = None
             vertical_selection: tuple[str, np.ndarray] | None = None
             if vertical_values is not None:
@@ -2926,6 +3275,8 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                     if indices is not None:
                         vertical_selection = (vertical_dimension, indices)
                         vertical_values = explicit_levels
+            if stacks_vertical and vertical_values is None:
+                vertical_values = declared_ladder
 
             time_dimension, time_variable = _resolve_nc_dimension(
                 dataset, time_contract["selector"], "time", resolution
@@ -2949,6 +3300,40 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
             )
             if len(set(times)) != len(times):
                 raise ValueError(f"NetCDF file {source} contains duplicate valid times")
+            # A forecast file written as (reference time, lead time): each
+            # valid time is reference + lead, and its source cycle is the
+            # reference.  One reference per file, so no valid time belongs
+            # to two forecasts.
+            lead_dimension = None
+            valid_times = [(time, time) for time in times]
+            lead_contract = time_contract.get("lead")
+            if lead_contract is not None:
+                lead_dimension, lead_variable = _resolve_nc_dimension(
+                    dataset, lead_contract["selector"], "lead time", resolution
+                )
+                lead_units = str(lead_contract["units"])
+                if getattr(lead_variable, "units", None) != lead_units:
+                    raise ValueError(
+                        f"NetCDF lead time units {getattr(lead_variable, 'units', None)!r} "
+                        f"differ from mapping {lead_units!r}")
+                seconds = _lead_unit_seconds(lead_units)
+                if len(times) != 1:
+                    raise ValueError(
+                        f"NetCDF file {source} holds {len(times)} reference times beside "
+                        "a lead axis; pass one initialization per file so every valid "
+                        "time belongs to one forecast")
+                reference = times[0]
+                valid_times = []
+                for lead_value in np.asarray(lead_variable[:], dtype=np.float64).reshape(-1):
+                    offset = float(lead_value) * seconds
+                    if not math.isfinite(offset) or offset != int(offset):
+                        raise ValueError(
+                            f"NetCDF file {source} lead time {lead_value} {lead_units} "
+                            "is not a whole number of seconds")
+                    valid_times.append(
+                        (reference + timedelta(seconds=int(offset)), reference))
+                if len({valid for valid, _ in valid_times}) != len(valid_times):
+                    raise ValueError(f"NetCDF file {source} contains duplicate lead times")
 
             member_dimension = None
             member_value = None
@@ -3078,11 +3463,28 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                         f"{field_name} declares a vertical axis, and {source} "
                         f"has no readable vertical coordinate: {vertical_error}"
                     )
+                if "half_level" in variable_axes and interface_dimension is None:
+                    raise ValueError(
+                        f"{field_name} declares a half_level axis, and {source} "
+                        f"has no readable interface coordinate: "
+                        f"{interface_error or 'vertical.interface_selector is not declared'}"
+                    )
                 expected_dimensions = {
                     "vertical": vertical_dimension,
+                    "half_level": interface_dimension,
                     "y": latitude_dimension,
                     "x": longitude_dimension,
+                    "lead": lead_dimension,
                 }
+                if lead_dimension is None and "lead" in variable_axes:
+                    raise ValueError(
+                        f"{field_name} declares a lead axis and coordinates.time "
+                        "declares no lead")
+                if lead_dimension is not None \
+                        and ("time" in variable_axes) != ("lead" in variable_axes):
+                    raise ValueError(
+                        f"{field_name} must carry both the time and the lead axis, "
+                        "or neither, in a file whose valid times are reference plus lead")
                 arrays = []
                 reference_dimensions = None
                 reference_shape = None
@@ -3105,6 +3507,12 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                         vertical_take = (
                             dimensions.index(vertical_selection[0]),
                             vertical_selection[1],
+                        )
+                    elif (interface_selection is not None
+                            and interface_selection[0] in dimensions):
+                        vertical_take = (
+                            dimensions.index(interface_selection[0]),
+                            interface_selection[1],
                         )
                     data, _ = _read_nc_values(
                         variable, field["missing"], field_name,
@@ -3130,7 +3538,7 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                             raise ValueError(
                                 f"{field_name} time axis does not use the declared dimension"
                             )
-                    elif len(times) != 1:
+                    elif len(times) != 1 and lead_dimension is None:
                         raise ValueError(
                             f"static field {field_name} is ambiguous across a "
                             "multi-time NetCDF file"
@@ -3154,7 +3562,14 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                             "or dimensions"
                         )
                     arrays.append(data)
-                if stack_axis is not None:
+                if stack_axis == "vertical":
+                    offered = [selector.get("level_value") for _variable, selector in resolved]
+                    if [float(value) for value in offered] != [float(value) for value in declared_ladder]:
+                        raise ValueError(
+                            f"{field_name} stacked level_values {offered} differ from "
+                            f"coordinates.vertical.levels {list(declared_ladder)}")
+                    data = np.stack(arrays, axis=source_axes.index("vertical"))
+                elif stack_axis is not None:
                     expected_soil_count = mapping["target"].get("soil_layer_count")
                     if expected_soil_count is None:
                         raise ValueError(
@@ -3204,10 +3619,19 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                                 "mapped NetCDF soil fields do not share one soil dimension"
                             )
 
-                for time_index, valid_time in enumerate(times):
+                for time_index, (valid_time, source_cycle) in enumerate(valid_times):
                     selected = data
                     selected_axes = list(source_axes)
-                    if "time" in selected_axes:
+                    if lead_dimension is not None:
+                        if "lead" in selected_axes:
+                            axis = selected_axes.index("lead")
+                            selected = np.take(selected, time_index, axis=axis)
+                            selected_axes.pop(axis)
+                        if "time" in selected_axes:
+                            axis = selected_axes.index("time")
+                            selected = np.take(selected, 0, axis=axis)
+                            selected_axes.pop(axis)
+                    elif "time" in selected_axes:
                         axis = selected_axes.index("time")
                         selected = np.take(selected, time_index, axis=axis)
                         selected_axes.pop(axis)
@@ -3226,7 +3650,7 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                         name=field_name,
                         valid_time=valid_time,
                         member=member_value,
-                        source_cycle=valid_time,
+                        source_cycle=source_cycle,
                         axes=target_axes,
                         values=converted,
                         missing_count=missing_count,
@@ -3238,7 +3662,7 @@ def _decode_netcdf(mapping: Mapping[str, object], files: Sequence[Path]) -> _Dec
                     if key in direct:
                         raise ValueError(f"duplicate mapped field {field_name} at {valid_time}")
                     direct[key] = value
-                    cycles[(valid_time, member_value)] = valid_time
+                    cycles[(valid_time, member_value)] = source_cycle
                 supplied_by[field_name] = source
         # Emitted once per file, after every selector in it has resolved, so
         # the notice lists the whole drift rather than one line per variable.
@@ -3413,10 +3837,6 @@ def _grib1_records(
                 grid_fingerprint=fingerprint,
             ))
         return tuple(result)
-
-
-def _parse_optional_int(value: str) -> int | None:
-    return None if value == "-" else int(value)
 
 
 def _grib2_tools_crate() -> Path:
@@ -3612,7 +4032,7 @@ def libm_dependent_fields(mapping: Mapping[str, object]) -> frozenset[str]:
 
     Everything else is integer unpack plus IEEE add/multiply/divide, which
     is bit-reproducible on any conforming machine -- MEASURED 2026-08-20,
-    Windows desktop against a development machine: identical to the byte on every
+    Windows desktop against test host A: identical to the byte on every
     array but these.
 
     Read from the mapping's own declarations, so a new model is table
@@ -3647,7 +4067,8 @@ def _validate_grid_declaration(
     grid = _object(
         raw,
         "mapping.grid",
-        allowed={"family", "parameters", "wind_basis", "same_grid_pairing"},
+        allowed={"family", "parameters", "wind_basis", "same_grid_pairing",
+                 "published_first_points"},
         required={"family"},
     )
     family = grid["family"]
@@ -3658,6 +4079,10 @@ def _validate_grid_declaration(
             "mapping.grid.same_grid_pairing must be 'identity' on a "
             "declared Lambert grid; other sources retain projected pairing")
     if family == GRID_FAMILY_REGULAR:
+        if grid.get("published_first_points") is not None:
+            raise ValueError(
+                "mapping.grid.published_first_points is not used by "
+                f"{GRID_FAMILY_REGULAR}: the grid is read from the data")
         if grid.get("parameters") is not None:
             raise ValueError(
                 "mapping.grid.parameters is not used by "
@@ -3674,10 +4099,9 @@ def _validate_grid_declaration(
             f"unsupported mapping.grid.family {family!r}; supported: "
             f"{GRID_FAMILY_REGULAR}, {GRID_FAMILY_LAMBERT}"
         )
-    if source_format != "grib2":
+    if source_format not in {"grib2", "netcdf"}:
         raise ValueError(
-            f"mapping.grid.family {GRID_FAMILY_LAMBERT!r} is currently "
-            "supported for GRIB2 sources only"
+            f"mapping.grid.family {GRID_FAMILY_LAMBERT!r} requires GRIB2 or NetCDF"
         )
     wind_basis = grid.get("wind_basis")
     if wind_basis not in {"earth_relative", "grid_relative_with_rotation"}:
@@ -3729,13 +4153,60 @@ def _validate_grid_declaration(
             f"{span_units * PROJECTED_AXIS_UNIT_M / 1000.0:.0f} km; the "
             "projected-axis representation covers grids below 18,000 km"
         )
+    published = _validate_published_first_points(
+        grid.get("published_first_points"), parameters)
     return {
         "family": GRID_FAMILY_LAMBERT,
         "wind_basis": wind_basis,
         "parameters": parameters,
         **({"same_grid_pairing": same_grid_pairing}
            if same_grid_pairing is not None else {}),
+        **({"published_first_points": published} if published else {}),
     }
+
+
+def _validate_published_first_points(
+    raw: object, parameters: Mapping[str, object],
+) -> list[dict[str, float]]:
+    """``mapping.grid.published_first_points``: other encodings of the
+    DECLARED first grid point that a publisher writes for this same grid.
+
+    HRRRv1 wrfprs and wrfnat files (to 2016-08-23) publish HRRR's corner
+    rounded to millidegrees, 21.138, 237.28, under an otherwise identical
+    grid definition; current files publish 21.138123, 237.280472.  The
+    declaration admits such a record and decodes nothing differently: the
+    frame keeps the declared parameters (the Rust engine's
+    ``model::published_first_points`` is the twin).  An encoding farther
+    than a tenth of a cell from the declared point is a different grid,
+    not a spelling of this one, and is refused.
+    """
+
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(
+            "mapping.grid.published_first_points must be an array of "
+            "{lat1, lon1}")
+    tenth_cell_deg = 0.1 * min(
+        float(parameters["dx_m"]), float(parameters["dy_m"])) / 111_000.0
+    points = []
+    for index, item in enumerate(raw):
+        entry = _object(
+            item, f"mapping.grid.published_first_points[{index}]",
+            allowed={"lat1", "lon1"}, required={"lat1", "lon1"})
+        lat1 = _number(entry["lat1"],
+                       f"mapping.grid.published_first_points[{index}].lat1")
+        lon1 = _number(entry["lon1"],
+                       f"mapping.grid.published_first_points[{index}].lon1")
+        if (abs(lat1 - float(parameters["lat1"])) > tenth_cell_deg
+                or abs(lon1 - float(parameters["lon1"])) > tenth_cell_deg):
+            raise ValueError(
+                f"mapping.grid.published_first_points entry ({lat1}, {lon1}) "
+                "is more than a tenth of a cell from the declared first point "
+                f"({parameters['lat1']}, {parameters['lon1']}): that is a "
+                "different grid, not an encoding of this one")
+        points.append({"lat1": lat1, "lon1": lon1})
+    return points
 
 
 def _mapping_grid_declaration(
@@ -3842,14 +4313,23 @@ def _require_declared_grib2_grid(
         "shape_of_earth": int(row["shape_of_earth"]),
     }
     declared = {key: parameters[key] for key in observed}
+
+    def close(observed_value, declared_value) -> bool:
+        return math.isclose(float(observed_value), float(declared_value),
+                            rel_tol=0.0, abs_tol=1e-6)
+
     mismatched = {
         key for key in observed
         if (observed[key] != declared[key]
             if isinstance(declared[key], int)
-            else not math.isclose(
-                float(observed[key]), float(declared[key]),
-                rel_tol=0.0, abs_tol=1e-6))
+            else not close(observed[key], declared[key]))
     }
+    # The first point is one coordinate pair: the declared one, or one of
+    # the mapping's published encodings of it, both halves together.
+    if any(close(observed["lat1"], point["lat1"])
+           and close(observed["lon1"], point["lon1"])
+           for point in declaration.get("published_first_points", ())):
+        mismatched -= {"lat1", "lon1"}
     if mismatched:
         raise ValueError(
             f"GRIB2 field {row['index']} in {source} is not on the "
@@ -4571,9 +5051,18 @@ def _assemble_grib(
             key for key in matched
             if "vertical" in tuple(mapping["fields"][key[2]].get("source_axes", ()))
         ]
+        # A field declared on part of the ladder (published_levels) holds
+        # the levels it is zero on as well as the ones it carries.
+        unpublished = {
+            key: set(explicit) - published
+            for key in stacked
+            if (published := _published_levels(
+                mapping["fields"][key[2]])) is not None
+        }
         ladder = _carried_ladder(
             mapping, explicit,
-            ({record.level_value for record in matched[key]} for key in stacked),
+            ({record.level_value for record in matched[key]}
+             | unpublished.get(key, set()) for key in stacked),
         )
         # Records on a declared level the chosen era ladder omits are
         # not stacked: a publication that carries that level for some
@@ -4691,10 +5180,19 @@ def _assemble_grib(
 
         used: list[_GribRecord] = list(group)
         absent_levels = 0
+        # ``repeated_record: "last"``: the publisher writes this field's
+        # record twice at one level and valid time (HRRRv1 wrfprs repeats
+        # HGT at 1000 hPa and at the surface; the 1000 hPa pair differs,
+        # and only the later one survives into HRRRv2 and every current
+        # file), and the later message is the one this mapping means.
+        # Without it a repeat is still refused.
+        repeated_last = field.get("repeated_record") == "last"
         if stacking_axis is None:
             ranks = [rank_of(record) for record in group]
             best = min(ranks)
             chosen = [record for record, rank in zip(group, ranks) if rank == best]
+            if len(chosen) > 1 and repeated_last:
+                chosen = chosen[-1:]
             if len(chosen) != 1:
                 raise ValueError(f"duplicate GRIB messages for scalar field {field_name} at {valid_time}")
             used = chosen
@@ -4711,7 +5209,7 @@ def _assemble_grib(
             for record, rank in zip(group, ranks):
                 if best_rank[record.level_value] != rank:
                     continue
-                if record.level_value in by_level:
+                if record.level_value in by_level and not repeated_last:
                     raise ValueError(
                         f"duplicate {field_name} GRIB level {record.level_value} at {valid_time}"
                     )
@@ -4728,6 +5226,15 @@ def _assemble_grib(
                        if level not in by_level]
             extra = [float(level) for level in by_level
                      if level not in set(stacking_values)]
+            # A level the field is not published on (published_levels)
+            # is zero when the file leaves it out; a published level the
+            # file leaves out is still missing.  A record on such a level
+            # is read like any other.
+            published = (_published_levels(field)
+                         if stacking_axis == "vertical" else None)
+            zero_levels = set() if published is None else {
+                level for level in missing if level not in published}
+            missing = [level for level in missing if level not in zero_levels]
             # A field the frame completes may leave levels out; it is
             # derived there from the frame's own state.  Only under the
             # reject policy, whose NaN can mean nothing but "absent".
@@ -4743,7 +5250,8 @@ def _assemble_grib(
             for level in stacking_values:
                 record = by_level.get(level)
                 if record is None:
-                    ordered.append(np.full(plane, np.nan))
+                    ordered.append(np.zeros(plane) if float(level) in zero_levels
+                                   else np.full(plane, np.nan))
                     continue
                 level_values = scaled(record, level_rank[level])
                 if absent_levels and not np.isfinite(level_values).all():
@@ -4936,7 +5444,7 @@ def _apply_landmask_water_missing(
 
     masked_names = sorted(
         name for name, field in mapping["fields"].items()
-        if field["missing"]["kind"] == "landmask_water"
+        if field["missing"]["kind"] in ("landmask_water", "landmask_zero_water")
     )
     if not masked_names:
         return direct
@@ -4966,6 +5474,8 @@ def _apply_landmask_water_missing(
         for name in present:
             value = result[by_name[name]]
             masked = np.asarray(value.values, dtype=np.float64).copy()
+            if mapping["fields"][name]["missing"]["kind"] == "landmask_zero_water":
+                raise ValueError("landmask_zero_water requires the native mapped engine")
             masked[..., water] = np.nan
             result[by_name[name]] = _DirectValue(
                 name=value.name, valid_time=value.valid_time,
@@ -5729,6 +6239,17 @@ def _evaluate_derivation(
             raise ValueError(f"{name} excluded mass fractions leave no positive reference mass")
         raw = source.values / denominator
         axes = source.axes
+    elif kind == "mass_from_interfaces":
+        source = dependency("source")
+        if (source.axes != ("half_level", "y", "x")
+                or source.units != field["units"]["source"]):
+            raise ValueError(f"{name} requires matching units on half_level,y,x")
+        if (source.values.shape[0] != collection.vertical_values.size + 1
+                or not np.isfinite(source.values).all()):
+            raise ValueError(f"{name} requires N+1 finite interface values")
+        raw = 0.5 * (source.values[:-1] + source.values[1:])
+        axes = ("vertical", "y", "x")
+        references = source.source_references
     elif kind == "height_from_interfaces":
         source = dependency("source")
         if source.axes != ("half_level", "y", "x") or source.units != "m":
@@ -5810,6 +6331,31 @@ def _evaluate_derivation(
         raw = _specific_humidity_from_rh(
             relative_humidity, temperature.values, pressure.values
         )
+    elif kind == "air_temperature_from_potential_temperature":
+        theta = dependency("potential_temperature")
+        pressure = dependency("pressure")
+        if theta.axes != pressure.axes or theta.values.shape != pressure.values.shape:
+            raise ValueError(f"{name} potential temperature and pressure disagree in axes or shape")
+        if theta.units != "K" or pressure.units != "Pa":
+            raise ValueError(f"{name} requires potential temperature in K and pressure in Pa")
+        valid = np.isfinite(theta.values) & np.isfinite(pressure.values)
+        if np.any(theta.values[valid] <= 0.0) or np.any(pressure.values[valid] <= 0.0):
+            raise ValueError(f"{name} requires positive potential temperature and pressure")
+        reference = float(operation.get("reference_pressure_pa", 100000.0))
+        kappa = float(operation.get("kappa", 2.0 / 7.0))
+        raw = theta.values * np.power(pressure.values / reference, kappa)
+        axes = theta.axes
+        references = (*theta.source_references, *pressure.source_references)
+    elif kind == "specific_humidity_from_mixing_ratio":
+        ratio = dependency("mixing_ratio")
+        if ratio.units != "kg kg-1":
+            raise ValueError(f"{name} requires a mixing ratio in kg kg-1")
+        valid = np.isfinite(ratio.values)
+        if np.any(ratio.values[valid] <= -1.0):
+            raise ValueError(f"{name} mixing ratio at or below -1 has no specific humidity")
+        raw = ratio.values / (1.0 + ratio.values)
+        axes = ratio.axes
+        references = ratio.source_references
     elif kind == "volumetric_soil_moisture_from_layer_mass":
         layer_mass = dependency("layer_mass")
         axes = layer_mass.axes
@@ -7225,11 +7771,28 @@ HYDROMETEOR_LEGACY_NAMES = {
     "graupel_or_hail_mixing_ratio": "QG",
 }
 
+#: The two vertical-velocity planes the regular-source join packs, with
+#: the units each must carry.  ``pressure_vertical_velocity`` is omega
+#: (Pa s-1), what NCEP's native products publish (HRRR wrfnat and RAP
+#: awp130bgrb: 0/2/8 on every hybrid level); ``vertical_velocity`` is
+#: geometric W (m s-1).  The initializer (woof.ingest.real) converts
+#: omega with the target column's own density and interpolates either
+#: onto the W interfaces, so a start from an analysis keeps the updrafts
+#: the analysis holds instead of restarting every storm from W = 0.
+VERTICAL_VELOCITY_LEGACY_NAMES = {
+    "pressure_vertical_velocity": ("OMEGA", "Pa s-1"),
+    "vertical_velocity": ("WW", "m s-1"),
+}
+
 #: Canonical fields a mapping may legitimately declare that the
 #: regular-source join has no consumer for.  Carrying more than the target
 #: consumes is neither impossible nor self-contradictory nor missing, so it
 #: is not refused: the plane is left out of the pack and named once.
-REGULAR_JOIN_DROPPED_FIELDS = ("vertical_velocity",)
+#: Empty since the join took up vertical velocity (the drop it used to name
+#: was the guard that kept every HRRR-analysis start at W = 0, the
+#: hour-one spin-up defect); the machinery stays for the next field a
+#: mapping carries ahead of its consumer.
+REGULAR_JOIN_DROPPED_FIELDS: tuple[str, ...] = ()
 
 
 def regular_join_dropped_fields(declared) -> tuple[str, ...]:
@@ -7279,50 +7842,54 @@ def warn_regular_join_drops(declared, *, subject: str) -> tuple[str, ...]:
     return dropped
 
 
+#: Canonical mapped field -> the regular-source ABI name it is packed as.
+REGULAR_SNAPSHOT_LEGACY_NAMES = {
+    "air_temperature": "T",
+    "air_pressure": "PRES",
+    "specific_humidity": "SPFH",
+    "eastward_wind": "U",
+    "northward_wind": "V",
+    "geopotential_height": "GHT",
+    "surface_pressure": "PSFC",
+    "terrain_height": "SOURCE_OROGRAPHY",
+    "skin_temperature": "SKINTEMP",
+    "vegetation_fraction": "VEGFRA",
+    "air_temperature_2m": "T2",
+    "specific_humidity_2m": "Q2",
+    "eastward_wind_10m": "U10",
+    "northward_wind_10m": "V10",
+    "land_fraction": "LANDSEA",
+    # SNOW, not SNOW_EC.  ``SNOW_EC`` is bound in exactly one
+    # decode table -- ECMWF GRIB1 (141, 1), metres of water
+    # equivalent (``woof/ingest/grib.py``) -- and the soil
+    # initializer multiplies that name by 1000 to reach kg m-2
+    # (``woof/ingest/soil.py``).  The canonical
+    # ``snow_water_equivalent`` is kg m-2 already, which is what
+    # every other route carrying it calls ``SNOW`` and what
+    # ``preprocess_noah_soil`` consumes unscaled.
+    "snow_water_equivalent": "SNOW",
+    "snow_depth": "SNOWH",
+    "sea_ice_fraction": "SEAICE",
+    # The water state the horizontal mapping assembles the water
+    # temperature from (woof/ingest/water_temperature.py): the
+    # analysis over the sea, and the lake model's own water and ice
+    # (woof/ingest/lake_temperature.py) where the analysis has no
+    # water of a lake's.  Without them a mapped source gave every
+    # lake its coherent skin temperature while a direct route reading
+    # the same file gave it the lake water.
+    "sea_surface_temperature": "SST",
+    "lake_water_temperature": "LAKE_WATER_TEMP",
+    "lake_ice_temperature": "LAKE_ICE_TEMP",
+    "lake_ice_depth": "LAKE_ICE_DEPTH",
+}
+
+
 def _regular_snapshot_field_items(frame, pressure, *, soil_land_repair,
                                   initialize_absent_hydrometeors):
     """Yield unchanged join arithmetic while retaining only its active inputs."""
     canonical = frame.fields
     pressure_shape = pressure.shape
-    legacy_names = {
-        "air_temperature": "T",
-        "air_pressure": "PRES",
-        "specific_humidity": "SPFH",
-        "eastward_wind": "U",
-        "northward_wind": "V",
-        "geopotential_height": "GHT",
-        "surface_pressure": "PSFC",
-        "terrain_height": "SOURCE_OROGRAPHY",
-        "skin_temperature": "SKINTEMP",
-        "vegetation_fraction": "VEGFRA",
-        "air_temperature_2m": "T2",
-        "specific_humidity_2m": "Q2",
-        "eastward_wind_10m": "U10",
-        "northward_wind_10m": "V10",
-        "land_fraction": "LANDSEA",
-        # SNOW, not SNOW_EC.  ``SNOW_EC`` is bound in exactly one
-        # decode table -- ECMWF GRIB1 (141, 1), metres of water
-        # equivalent (``woof/ingest/grib.py``) -- and the soil
-        # initializer multiplies that name by 1000 to reach kg m-2
-        # (``woof/ingest/soil.py``).  The canonical
-        # ``snow_water_equivalent`` is kg m-2 already, which is what
-        # every other route carrying it calls ``SNOW`` and what
-        # ``preprocess_noah_soil`` consumes unscaled.
-        "snow_water_equivalent": "SNOW",
-        "snow_depth": "SNOWH",
-        "sea_ice_fraction": "SEAICE",
-        # The water state the horizontal mapping assembles the water
-        # temperature from (woof/ingest/water_temperature.py): the
-        # analysis over the sea, and the lake model's own water and ice
-        # (woof/ingest/lake_temperature.py) where the analysis has no
-        # water of a lake's.  Without them a mapped source gave every
-        # lake its coherent skin temperature while a direct route reading
-        # the same file gave it the lake water.
-        "sea_surface_temperature": "SST",
-        "lake_water_temperature": "LAKE_WATER_TEMP",
-        "lake_ice_temperature": "LAKE_ICE_TEMP",
-        "lake_ice_depth": "LAKE_ICE_DEPTH",
-    }
+    legacy_names = REGULAR_SNAPSHOT_LEGACY_NAMES
     for name, legacy in legacy_names.items():
         if name not in canonical:
             continue
@@ -7337,6 +7904,14 @@ def _regular_snapshot_field_items(frame, pressure, *, soil_land_repair,
         if name in canonical:
             if canonical[name].units != "kg-1":
                 raise ValueError(f"{name} must carry number mixing ratio units kg-1")
+            yield legacy, np.asarray(canonical[name].values, dtype=np.float64)
+    # Packed as the number fields are: the plane as the frame carries it
+    # (a windowed frame hands over its own window), with only the units
+    # checked here; the initializer holds the shape to the mass grid.
+    for name, (legacy, units) in VERTICAL_VELOCITY_LEGACY_NAMES.items():
+        if name in canonical:
+            if canonical[name].units != units:
+                raise ValueError(f"{name} must carry {units}")
             yield legacy, np.asarray(canonical[name].values, dtype=np.float64)
     soil_t = np.asarray(
         canonical["soil_temperature"].values, dtype=np.float64,
@@ -7430,10 +8005,17 @@ def mapped_frames_to_regular_snapshots(
     views and the decoded fields are copied once by the same immutable
     snapshot constructor; no temporary full-grid zero bank is allocated.
 
-    A canonical field the regular join has no consumer for (today:
-    ``vertical_velocity``) is not refused.  It is dropped, and named once
-    through :func:`warn_regular_join_drops`, which the mapped plan review
-    calls on the same question.
+    Vertical velocity is packed per field as well: a frame carrying
+    ``pressure_vertical_velocity`` (omega, Pa s-1) is packed as ``OMEGA``
+    and one carrying ``vertical_velocity`` (m s-1) as ``WW``
+    (VERTICAL_VELOCITY_LEGACY_NAMES); the initializer turns either into
+    the start state's W.  A frame carrying neither leaves W to the
+    initializer's zero policy.
+
+    A canonical field the regular join has no consumer for
+    (REGULAR_JOIN_DROPPED_FIELDS, empty today) is not refused.  It is
+    dropped, and named once through :func:`warn_regular_join_drops`, which
+    the mapped plan review calls on the same question.
     """
 
     frames = tuple(frames)
@@ -7578,6 +8160,30 @@ def warn_completed_fields(summary: Mapping[str, Mapping[str, object]], *,
                  "a few metres through the troposphere."),
             once=True,
         )
+
+
+def warn_unpublished_bindings(records, *, subject: str) -> None:
+    """Say once which contributing fields start from a recorded fallback."""
+
+    for record in records:
+        alignment = record.get("alignment")
+        if not isinstance(alignment, Mapping) or alignment.get("status") != "UNPUBLISHED":
+            continue
+        fallback = dict(alignment.get("fallback") or {})
+        files = ", ".join(Path(str(row.get("path"))).name
+                          for row in record.get("data", ()))
+        for name, fallback_id in sorted(fallback.items()):
+            warn(
+                f"{subject}'s {record.get('binding')} files ({files}) publish no "
+                f"{name.replace('_', ' ')} record; it starts from "
+                f"{fallback_id}, recorded in the preparation receipt",
+                why=("HRRR surface files before 2020-12-02 (HRRRv3) carry no "
+                     "vegetation fraction.  The start then reads the static "
+                     "GREENFRAC monthly climatology interpolated to the start "
+                     "date, as WPS does, and the receipt's contributing source "
+                     "says so (status UNPUBLISHED, with the fallback id)."),
+                once=True,
+            )
 
 
 def mapped_frame_receipt(

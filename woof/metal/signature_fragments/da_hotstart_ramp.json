@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "da_hotstart_ramp",
+      "module": "da_hotstart_ramp",
+      "source": "woof/metal/shaders/da_hotstart_ramp.metal",
+      "cuda_source": "woof/da/hotstart.py",
+      "cuda_symbol": "vertical_ramp",
+      "resources": [
+        ["height", "float", "read"],
+        ["ramp", "float", "read_write"],
+        ["flags", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "height": [["n"]],
+        "ramp": [["n"]],
+        "flags": [["n"]]
+      },
+      "parameters": [
+        ["base", "float32"],
+        ["top", "float32"],
+        ["shape", "int32"],
+        ["n", "int32"]
+      ],
+      "arithmetic_policies": ["default"],
+      "layout_version": 1,
+      "threads_per_group": 128
+    }
+  ]
+}

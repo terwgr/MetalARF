@@ -76,14 +76,38 @@ auditable local deltas required by the native GFS bridge:
   `DECODE_TEMPLATES` lists the Section-5 templates `parse_section5` has
   a reader for, in the spelling a binary compiles into its contract
   marker, with a test that each listed template parses.
+  The generic constituent delta (2026-09-30) adds PDT 4.40, 4.41, 4.42,
+  4.44 and 4.48 with their own process, forecast-time and fixed-surface
+  octets. Optional fields expose constituent and aerosol identifiers,
+  size intervals and optical wavelength intervals. Missing interval
+  bounds remain absent; scales use sign-magnitude. PDT 4.44 retains its
+  two-octet forecast time. Coordinate-tail lengths cover every modeled
+  layout (4.0/1/2/5/6/8/9/10/11/12/40/41/42/44/48), including repeated
+  statistical specifications. Unmodeled NV tails still refuse. Existing
+  no-tail templates retain their original parsing path. Tests reparse
+  existing synthetic Section 4 fixtures, assert every chemical layout,
+  refuse every truncation and read NV=276. WMO Manual on Codes, Volume
+  I.2 tables:
+  <https://github.com/wmo-im/GRIB2/blob/master/GRIB2_Template_4_40_ProductDefinitionTemplate_en.csv>,
+  <https://github.com/wmo-im/GRIB2/blob/master/GRIB2_Template_4_41_ProductDefinitionTemplate_en.csv>,
+  <https://github.com/wmo-im/GRIB2/blob/master/GRIB2_Template_4_42_ProductDefinitionTemplate_en.csv>,
+  <https://github.com/wmo-im/GRIB2/blob/master/GRIB2_Template_4_44_ProductDefinitionTemplate_en.csv>,
+  <https://github.com/wmo-im/GRIB2/blob/master/GRIB2_Template_4_48_ProductDefinitionTemplate_en.csv>.
+  The 2026-10-18 local statistical-descriptor fix retains the count,
+  missing-value count and every ordered 12-octet specification for all modeled
+  statistical templates (4.8/9/10/11/12/42). The first-specification convenience
+  fields remain. A missing length has no fixed duration. Truncated headers,
+  zero ranges and incomplete declared lists refuse; NV coordinate values
+  cannot stand in for descriptor bytes. This is an original local change,
+  with no new upstream import or change to the MIT declaration above.
   Patched-file SHA-256:
-  `646d954d43f9bf26e8cefe962a7cc784006bb4026d6cd9f227f41e56ad7f64e9`.
+  `b261ac24e406acc2c77f26134bcff43b00d29bd097c70073f565bf0ceadd1e59`.
 - `src/grib2/mod.rs` re-exports that identification value object and
-  `DECODE_TEMPLATES`, and `MissingValueMode` / `missing_value_mode`
+  `DECODE_TEMPLATES`, `StatisticalTimeRange`, and `MissingValueMode` / `missing_value_mode`
   beside the unpackers, and (A135, 2026-09-30) `StoredRect` and
   `unpack_message_stored_rect`.
   Patched-file SHA-256:
-  `02e9e69b08e1c18d4ae8692c6bcac02c99377d26ceeaee4f68a1395ed500590b`.
+  `1f751bdf0f8b82f39658b8f2536f554dfc2d7796d53a36d9de4383e122bc86de`.
 - `src/grib2/search.rs` initializes the new identity in its pre-existing
   synthetic test messages. `src/grib2/unpack.rs` additionally enforces
   Section-5/7 simple- and complex-packing cardinality, checked bit reads, a
@@ -124,9 +148,16 @@ auditable local deltas required by the native GFS bridge:
   a bitmap-free JPEG2000 message whose main header declares the reversible
   5/3 wavelet (the only case whose area integers are the whole decode's),
   and unpacked whole and cropped for every other message.
+  3405946bb (2026-10-04) extends the all-missing case to complex packing
+  (Templates 5.2 and 5.3): a field whose Section 5 declares zero coded
+  values, zero groups and canonical zero descriptors, under a bitmap that
+  marks every point missing (exactly the grid, or padded with zero bits
+  to the final octet), decodes as all-missing; data bytes, a malformed
+  bitmap or a nonempty group table are still decode errors
+  (`tests/all_missing_complex.rs`).
   Patched-file SHA-256 values are respectively
   `22254047da83fafcc06816170b7687127cb9f64bc7e82e4de2d239861c149547`
-  and `c84981a99a5f1ca5baa31fa3da83d3a1c488c5953e4da3e970af349005a1745b`.
+  and `be1485f980301df6c99a91b8b7d1440fc6c90da526627e36494d92662bdc6297`.
 - `src/grib2/grid.rs` fails closed on a grid-definition template it has no
   point placement for: `grid_latlon` returns `crate::Result` and refuses
   naming the template number (and that supporting it needs the template's
@@ -165,8 +196,11 @@ auditable local deltas required by the native GFS bridge:
   path; the specific 0.5.7 kelvin arm is placed ahead of the long-wave
   W/m2 wildcard.  Verified against real bytes: across the eight staged
   RRFS/REFS sample files all 53 triplets now resolve to names.
+  The WMO geometric vertical velocity row 0.2.9 is also named so DZDT
+  inventories do not fall through to Unknown. Verified against the
+  pressure-row export proof on all 25 hourly frames.
   Patched-file SHA-256:
-  `04a3e2a66c4900c6065a803cdcfc619da1b34f7d946c38ed927d08d237cb1a87`.
+  `354748f0ecd5259a9be0bee6d862579a22a7d2b7a47120ceadebd982319d53a4`.
 - `src/grib1/tables.rs` adds the version-aware `parameter_entry` lookup,
   which consults the parameter table a message CITES (PDS table version +
   originating center): WMO table 2 versions 1-3 resolve indicators 1-127
@@ -243,8 +277,9 @@ lives here re-expressed as
 
 The manifest declares optional `png` and `libaec-sys`, and cargo resolves a
 ROOT package's optional dependencies whether or not their features are on.
-Neither is in `crates-io/` -- `png` is vendored in the renderer workspace,
-`libaec-sys` nowhere -- so `cargo test` with this directory as the workspace
+Neither is in `crates-io/` -- `png` is vendored in the renderer workspace
+(the shared registry grib1_bridge resolves from, so the bridge's own build
+turns `png_codec` on for MRMS's DRT 5.41), `libaec-sys` nowhere -- so `cargo test` with this directory as the workspace
 root fails resolution offline.  Run it from a consumer workspace instead,
 which is also the posture that ships:
 

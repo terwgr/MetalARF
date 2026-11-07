@@ -36,7 +36,7 @@ def _wrap(tmp_path: Path, argv: list[str], cwd: Path) -> Path:
     (jobdir / "receipt.json").write_text(json.dumps({"argv": argv, "cwd": str(cwd), "env_additions": {}}),
                                          encoding="utf-8")
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
-    done = subprocess.run([sys.executable, "-m", "gpuwm.mcp._jobwrap", str(jobdir)], env=env, cwd=str(tmp_path),
+    done = subprocess.run([sys.executable, "-m", "woof.mcp._jobwrap", str(jobdir)], env=env, cwd=str(tmp_path),
                           capture_output=True, text=True, timeout=60)
     assert done.returncode == 0, done.stderr
     return jobdir

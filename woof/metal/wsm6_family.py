@@ -9,7 +9,7 @@ from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
 _VOLUME_RESOURCES = (
-    "theta", "qv", "qc", "qi", "qr", "qs", "qg", "den", "pressure",
+    "theta", "qv", "qc", "qi", "qr", "qs", "qg", "den", "p",
     "pii", "dz", "effc", "effi", "effs",
 )
 _SURFACE_RESOURCES = (
@@ -24,7 +24,8 @@ _TIERS = ((64, "wsm6_column"), (80, "wsm6_column_deep"))
 
 def submit_wsm6_column(*, theta, qv, qc, qi, qr, qs, qg, den, pressure, pii,
                        dz, rainnc, rainncv, snownc, snowncv, graupelnc,
-                       graupelncv, sr, effc, effi, effs, dt, hail_opt=0):
+                       graupelncv, sr, effc, effi, effs, dt, hail_opt=0,
+                       conservative_surface=False):
     """Submit one CUDA-compatible thread per WSM6 column.
 
     All arrays must be already prepared, contiguous float32 ``MetalArray``
@@ -35,7 +36,7 @@ def submit_wsm6_column(*, theta, qv, qc, qi, qr, qs, qg, den, pressure, pii,
             "Metal WSM6 does not implement WRF exact-D arithmetic")
     arrays = {
         "theta": theta, "qv": qv, "qc": qc, "qi": qi, "qr": qr,
-        "qs": qs, "qg": qg, "den": den, "pressure": pressure,
+        "qs": qs, "qg": qg, "den": den, "p": pressure,
         "pii": pii, "dz": dz, "rainnc": rainnc, "rainncv": rainncv,
         "snownc": snownc, "snowncv": snowncv, "graupelnc": graupelnc,
         "graupelncv": graupelncv, "sr": sr, "effc": effc, "effi": effi,
@@ -75,8 +76,21 @@ def submit_wsm6_column(*, theta, qv, qc, qi, qr, qs, qg, den, pressure, pii,
     dt32 = np.float32(dt)
     if not np.isfinite(dt32) or dt32 <= 0:
         raise ValueError(f"WSM6 dt must be finite and positive, got {dt!r}")
-    params = {"dt": float(dt32), "hail_opt": int(hail_opt),
-              "nz": nz, "ny": ny, "nx": nx}
+    if not isinstance(conservative_surface, bool):
+        raise TypeError("WSM6 conservative_surface must be a bool")
+    if conservative_surface:
+        entrypoint += "_cs"
+    from woof.core.wsm6_constants import wrf_init_words
+    from woof.metal.array import MetalArrayModule
+    if not hasattr(context, "_physics_cache"):
+        context._physics_cache = {}
+    cache_key = ("wsm6_init", int(hail_opt))
+    coef = context._physics_cache.get(cache_key)
+    if coef is None:
+        coef = MetalArrayModule(context).asarray(wrf_init_words(int(hail_opt)))
+        context._physics_cache[cache_key] = coef
+    arrays["coef"] = coef
+    params = {"delt": float(dt32), "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
         entrypoint, arrays, params, exact_policy=False,
         grid_size=ny * nx, threads_per_group=32)

@@ -245,7 +245,13 @@ _UNROUTED_REASONS: Mapping[tuple[str, str], str] = MappingProxyType(
         (
             "config_convection_scheme",
             "cu_ntiedtke",
-        ): "woof has no new-Tiedtke column backend",
+        ): (
+            "this reference seam routes no New Tiedtke (woof has carried "
+            "cu_physics=16 since 2.6.4; the v8.4.1 CUDA forecast runs it through "
+            "woof.hex.cuda_ntiedtke_column_v841, selected by woof.hex.physics_suites), "
+            "so the CPU column backend this seam drives would run no cumulus "
+            "under its name"
+        ),
         (
             "config_radt_lw_scheme",
             "cam_lw",
@@ -257,7 +263,12 @@ _UNROUTED_REASONS: Mapping[tuple[str, str], str] = MappingProxyType(
         (
             "config_gwdo_scheme",
             "bl_ysu_gwdo",
-        ): "woof.core.physics publishes no gravity-wave-drag driver slot",
+        ): (
+            "this reference seam routes no drag (the v8.4.1 CUDA forecast runs "
+            "bl_ysu_gwdo on hex's own kernel, woof.hex.cuda_gwdo_v841, selected "
+            "by woof.hex.physics_suites), so the CPU column backend this seam "
+            "drives would run no drag under its name"
+        ),
     }
 )
 

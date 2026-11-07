@@ -42,7 +42,7 @@
         ["g", "float32"], ["one", "float32"], ["zero", "float32"],
         ["half_val", "float32"], ["has_msf", "int32"],
         ["bx", "int32"], ["by", "int32"], ["legacy", "int32"],
-        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["strict", "int32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

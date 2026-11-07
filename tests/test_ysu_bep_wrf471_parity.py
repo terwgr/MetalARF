@@ -48,6 +48,7 @@ import pytest
 
 from conftest import requires_gpu
 from woof.core.fp32_ulp import fp32_ulp_distance
+from woof.wrf_exact import ENABLED as WRF_EXACT
 
 _ORACLE = Path(__file__).resolve().parents[1] / "tests" / "data" / "oracles" / "urban" / "bep"
 #: WRF with the one-line rural-drag fix woof carries: what the port is graded against.
@@ -63,9 +64,9 @@ SURFACE_MAP = {"hpbl": "hpbl", "wstar": "wstar", "delta": "delta"}
 
 #: Columns whose disagreement is a branch, not a rounding -- the v4.6.1
 #: test's cases 7 and 13 (subnormal br / ust under CuPy's -ftz=true).  Case 12
-#: (ust = hfx = qfx = 0) is NOT held out: ysu.cu's zero-flux short circuit is
-#: skipped under BEP, because BEP forcing makes such a column non-quiescent,
-#: so it takes WRF's path.
+#: (ust = hfx = qfx = 0) is NOT held out: it takes WRF's path under BEP, as
+#: every column of the plain kernel has since golden/ports-pbl removed the
+#: zero-flux short circuit.
 BRANCH_DIVERGENCE_CASES = (7, 13)
 
 #: Measured on an RTX 4090 (sm_89, NVRTC 13.4, cupy 14.2.0), over the 22
@@ -84,58 +85,47 @@ BRANCH_DIVERGENCE_CASES = (7, 13)
 #: NVRTC 13.4.92), every other field unchanged.  The 8738 was the stock
 #: build's u row; both builds share every non-momentum word, and the port
 #: carries the fix, so it now sits closer to the build it transcribes.
+#:
+#: RE-MEASURED 2026-10-05 (lane/parity-286, sweep rows 9 and 10): the BEP
+#: entry point now takes WRF's ctopo drag arm with ctopo = 1, as WRF's driver
+#: does, and the unit compiles with --fmad=false and glibc's powf/expf, so the
+#: arm is WRF's word everywhere except the flushed subnormal lanes (dqv, dqc,
+#: dqi maxima below).  Measured on an RTX PRO 6000 (sm_120) under NVRTC
+#: 13.4.92 and 12.9.86, identical: the per-build and per-architecture rows
+#: this table used to carry (du 1821 / 1457 / 5825, dtheta 1 / 91) were the
+#: compiler's contraction and CUDA libm, and there is no compiler-sensitive
+#: field left.
 BASELINE_MAX_ULP: dict[str, int] = {
-    "du": 1821,
-    "dv": 1456,
-    "dtheta": 1,
+    "du": 0,
+    "dv": 0,
+    "dtheta": 0,
     "dqv": 15070,
     "dqc": 207470,
     "dqi": 30808,
-    "exch_h": 7,
-    "exch_m": 7,
-    "hpbl": 1,
-    "wstar": 1,
-    "delta": 1,
+    "exch_h": 0,
+    "exch_m": 0,
+    "hpbl": 0,
+    "wstar": 0,
+    "delta": 0,
 }
 
-#: The table above is a measurement of the image NVRTC 13.4.92 compiles.  The
-#: default [gpu] extra installs cupy-cuda12x, whose NVRTC 12.9.86 compiles the
-#: same source into a different image: on a development machine's RTX 4090 every field is the
-#: same except dtheta, 1 -> 91 ULP (2026-09-30).  ysu.cu is plain C arithmetic
-#: under default contraction, so the two compilers are entitled to differ; the
-#: rows are kept per build (the tests/test_shinhong_wrf461_parity.py
-#: convention) rather than widened, and every field outside
-#: COMPILER_SENSITIVE_FIELDS must agree across rows.
-#:
-#: Against the fixed build (ysu_bep_fix) du became compiler-sensitive too:
-#: 1821 ULP under 13.4.92 (RTX 5090) and 1457 under 12.9.86 (RTX 4090,
-#: cupy-cuda12x 14.2.0), both inside the stock build's 8738 and both the
-#: momentum row's near-cancelling sums (see the table's note above).
+#: Under GPUWM_WRF_EXACT=1 (no flush to zero) the arm is WRF's word on every
+#: field, the subnormal lanes included.
+STRICT_MAX_ULP: dict[str, int] = {field: 0 for field in BASELINE_MAX_ULP}
+
+#: One row per NVRTC build measured, kept so a build that ever reads
+#: differently names itself.  Both builds read the same table.
 BASELINE_MAX_ULP_BY_NVRTC_BUILD: dict[str, dict[str, int]] = {
     "13.4.92": BASELINE_MAX_ULP,
-    "12.9.86": {**BASELINE_MAX_ULP, "dtheta": 91, "du": 1457},
+    "12.9.86": dict(BASELINE_MAX_ULP),
 }
-COMPILER_SENSITIVE_FIELDS = ("dtheta", "du")
+COMPILER_SENSITIVE_FIELDS: tuple[str, ...] = ()
 
-#: Where an architecture reads a build differently from that build's row
-#: above, keyed (compute capability as CuPy writes it, NVRTC build).  Each
-#: build row was measured on one card (13.4.92 on sm_120, 12.9.86 on
-#: sm_89), so the table is keyed by card and compiler where the two split.
-#:
-#: A167: under 12.9.86, the compiler of the default [gpu] extra
-#: (cupy-cuda12x), sm_120 reads du 5825, not the RTX 4090's 1457, and every
-#: other field as the 12.9.86 row (dtheta 91 included); kpbl equal.  The
-#: same momentum row's near-cancelling sums as above, inside the stock
-#: build's 8738.  The A146 check read the same 5825 on sm_120 before and
-#: after __fdiv_rn, so the split is the architecture under this compiler,
-#: not A146.  MEASURED 2026-10-01 on a development machine's RTX 5070 Ti (driver 13.2) and
-#: a development machine's RTX 5090 (driver 13.3), cupy-cuda12x 14.2.0, two processes each,
-#: at integrate/2.8 9dbb4a2db; under 13.4.92 both read the 13.4.92 row.
-BASELINE_MAX_ULP_BY_ARCH_AND_BUILD: dict[tuple[str, str], dict[str, int]] = {
-    ("120", "12.9.86"): {**BASELINE_MAX_ULP, "dtheta": 91, "du": 5825},
-}
+#: Where an architecture reads a build differently from that build's row.
+#: Empty since the contraction and CUDA libm left the unit.
+BASELINE_MAX_ULP_BY_ARCH_AND_BUILD: dict[tuple[str, str], dict[str, int]] = {}
 #: Fields an architecture row may move from its build's row.
-ARCH_SENSITIVE_FIELDS = ("du",)
+ARCH_SENSITIVE_FIELDS: tuple[str, ...] = ()
 
 
 def _recorded_baseline() -> tuple[str, dict[str, int]]:
@@ -154,6 +144,12 @@ def _recorded_baseline() -> tuple[str, dict[str, int]]:
     build = nvrtc_build()
     capability = str(cp.cuda.Device().compute_capability)
     label = f"{build} on sm_{capability}"
+    if WRF_EXACT:
+        # GPUWM_WRF_EXACT=1 compiles --ftz=false, so the subnormal lanes the
+        # default row carries (dqv, dqc, dqi) are written as WRF wrote them:
+        # every field is WRF's word (measured on an RTX 5070 Ti, sm_120, with the
+        # strict wrf_461 arm).
+        return label + " strict", STRICT_MAX_ULP
     if (capability, build) in BASELINE_MAX_ULP_BY_ARCH_AND_BUILD:
         return label, BASELINE_MAX_ULP_BY_ARCH_AND_BUILD[(capability, build)]
     return label, BASELINE_MAX_ULP_BY_NVRTC_BUILD.get(build, BASELINE_MAX_ULP)
@@ -252,7 +248,11 @@ def _port(fx, *, bep: bool = True):
             ust=dev["ust"], hfx=dev["hfx"], qfx=dev["qfx"],
             wspd=dev["wspd"], br=dev["br"], psim=dev["psim"],
             psih=dev["psih"], xland=dev["xland"], u10=dev["u10"],
-            v10=dev["v10"], dt=fx["dt"], ysu_topdown_pblmix=flag, **kw)
+            v10=dev["v10"], dt=fx["dt"], ysu_topdown_pblmix=flag,
+            # The WRF 4.7.1 flag_bep reference grades the legacy kernel; the
+            # WRF 4.8 generation's BEP columns are graded against WRF 4.8 by
+            # tools/ysu_generations_oracle/gate.py.
+            ysu_version="wrf_461", **kw)
         take = fx["topdown"] == flag
         for name, value in out.items():
             host = cp.asnumpy(value)

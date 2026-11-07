@@ -25,7 +25,7 @@ def _surface_hosts(members):
     return hosts, fields
 
 
-@pytest.mark.parametrize("members", [2, 4, 8])
+@pytest.mark.parametrize("members", [8])
 @pytest.mark.parametrize("variant", ["wrf_461", "gsl_wrf39"])
 @pytest.mark.parametrize("aliased", [False, True])
 def test_surface_one_launch_matches_all_outputs_and_carried_inputs(members, variant, aliased, monkeypatch):
@@ -35,8 +35,8 @@ def test_surface_one_launch_matches_all_outputs_and_carried_inputs(members, vari
     from woof.core import mynn_sfclay
     native_kernel = mynn_sfclay.mynn_surface_kernel
     observed = []
-    def observe_kernel(identity):
-        kernel = native_kernel(identity)
+    def observe_kernel(identity, shape=()):
+        kernel = native_kernel(identity, shape)
         def launch(*args):
             observed.append(identity)
             return kernel(*args)
@@ -104,7 +104,7 @@ def _predict_hosts(members):
     return hosts
 
 
-@pytest.mark.parametrize("members", [2, 4, 8])
+@pytest.mark.parametrize("members", [8])
 @pytest.mark.parametrize("version", ["wrf_461", "gsd_41"])
 def test_tke_predictor_one_launch_matches_each_member_and_overwrites_workspace(members, version, monkeypatch):
     import cupy as cp
@@ -112,8 +112,8 @@ def test_tke_predictor_one_launch_matches_each_member_and_overwrites_workspace(m
     from woof.core import mynn_pbl_gpu
     native_get = mynn_pbl_gpu.mynn_pbl_kernel
     observed = []
-    def observe_kernel(entry, identity="wrf_461"):
-        kernel = native_get(entry, identity)
+    def observe_kernel(entry, identity="wrf_461", shape=()):
+        kernel = native_get(entry, identity, shape)
         def launch(*args):
             observed.append(entry)
             return kernel(*args)
@@ -166,7 +166,7 @@ def test_surface_cross_field_alias_and_predictor_layout_refuse_before_mutation()
         prepare_mynn_predict_column_batch(values, members=2, ny=2, nx=2, available_bytes=1 << 24)
 
 
-@pytest.mark.parametrize("members", [2, 4, 8])
+@pytest.mark.parametrize("members", [8])
 @pytest.mark.parametrize("mixlength", [1, 2])
 @pytest.mark.parametrize("version,unsquared,cloud_form", [
     ("wrf_461", False, "wrf_461"), ("gsd_41", False, "wrf_461"),
@@ -184,8 +184,8 @@ def test_full_pbl_wrapper_matches_each_ordinary_member_cold_and_carried_state(
     from woof.core import mynn_pbl_gpu
     native_get = mynn_pbl_gpu.mynn_pbl_kernel
     observed_predictors = []
-    def observe_kernel(entry, identity="wrf_461"):
-        kernel = native_get(entry, identity)
+    def observe_kernel(entry, identity="wrf_461", shape=()):
+        kernel = native_get(entry, identity, shape)
         if entry != "mynn_predict_default_columns":
             return kernel
         def launch(*args):

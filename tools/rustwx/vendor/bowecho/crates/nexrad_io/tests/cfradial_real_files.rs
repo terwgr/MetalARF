@@ -1,8 +1,8 @@
 //! Golden-fixture tests for the CfRadial 1.x decoder against REAL radar
-//! data: a fixed-site PPI and a mobile DOW8 RHI.
+//! data — a fixed-site PPI and a mobile DOW8 RHI.
 //!
 //! Fixture provenance (fetched 2026-06-11; golden values extracted with an
-//! independent Python reader (netCDF4 1.7.4) not with this crate):
+//! independent Python reader — netCDF4 1.7.4 — not with this crate):
 //!
 //! - `tests/data/cfrad.xsapr_sgp_ppi_20110520.classic.nc`: ARM X-SAPR
 //!   (X-band scanning ARM precipitation radar) PPI at the SGP site,
@@ -12,7 +12,7 @@
 //!   gate/ray-decimated from the full X-SAPR file by Py-ART's
 //!   `make_small_cfradial_ppi.py`). CONTAINER CONVERSION: the published
 //!   file is netCDF-4; converted to NETCDF3_CLASSIC (CDF-1) with a raw
-//!   variable-for-variable copy (netCDF4-python, no mask/scale applied):
+//!   variable-for-variable copy (netCDF4-python, no mask/scale applied) —
 //!   identical data, classic container. Wild CfRadial 1.x is
 //!   netCDF-4-dominant today; the classic container is what early Radx
 //!   wrote and what this decoder reads.
@@ -28,7 +28,7 @@
 //!   byte-identical to the published file.
 //! - `tests/data/cfrad.xsapr_sgp_ppi_20110520.netcdf4.nc`: the SAME Py-ART
 //!   file in its published netCDF-4 container (HDF5 superblock v2,
-//!   unmodified bytes): pins the routing + guidance for the wild-file
+//!   unmodified bytes) — pins the routing + guidance for the wild-file
 //!   case the classic decoder cannot read.
 
 use chrono::{TimeZone, Utc};
@@ -237,7 +237,7 @@ const XSAPR_PPI_NETCDF4: &[u8] = include_bytes!("data/cfrad.xsapr_sgp_ppi_201105
 
 #[test]
 fn netcdf4_cfradial_routes_to_hdf5_and_gets_conversion_guidance() {
-    // The HDF5 signature must never sniff as netCDF3: netCDF-4 CfRadial
+    // The HDF5 signature must never sniff as netCDF3 — netCDF-4 CfRadial
     // routes to the HDF5/ODIM side (same precedence as the app's sniffer).
     assert!(!nexrad_io::cfradial::looks_like_netcdf3_bytes(
         XSAPR_PPI_NETCDF4

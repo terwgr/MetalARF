@@ -71,8 +71,8 @@ def test_a_declared_extra_is_tolerated_and_nothing_else_is() -> None:
     assert tolerated(ModuleNotFoundError("no cupy", name="cupy"))
     assert tolerated(ModuleNotFoundError("no cupyx", name="cupyx"))
     assert tolerated(ModuleNotFoundError("broken cupyx", name="cupyx.scipy")) is None
-    assert tolerated(ModuleNotFoundError("no mcp", name="mcp")) == \
-        OPTIONAL_MODULES["mcp"]
+    assert tolerated(ModuleNotFoundError("no rasterio", name="rasterio")) == \
+        OPTIONAL_MODULES["rasterio"]
 
     assert tolerated(ModuleNotFoundError("no netCDF4", name="netCDF4")) is None
     assert tolerated(
@@ -268,7 +268,7 @@ def test_no_shipped_module_imports_a_declared_script() -> None:
 
     Leaving a module unimported is only free while nothing the sweep DOES
     import depends on it.  The day a library module grows
-    ``from tilestream import attack_timing``, the table stops being a list of
+    ``from package import script_only``, the table stops being a list of
     programs and becomes a hole in the middle of the package -- and this is
     the line that says so.
     """
@@ -290,16 +290,15 @@ def test_no_shipped_module_imports_a_declared_script() -> None:
     assert not offenders, offenders
 
 
-@pytest.mark.parametrize("module", sorted(SCRIPT_MODULES), ids=lambda v: v)
-def test_every_declared_script_is_a_file_this_repository_ships(
-        module: str) -> None:
+def test_every_declared_script_is_a_file_this_repository_ships() -> None:
     """A table entry for a module that no longer exists excludes nothing."""
 
-    path = REPOSITORY_ROOT / (module.replace(".", "/") + ".py")
-    assert path.is_file(), (
-        f"{module} is in tools/import_sweep.py::SCRIPT_MODULES and there is "
-        f"no {path.relative_to(REPOSITORY_ROOT)}; a stale exclusion reads "
-        "like a considered one")
+    for module in SCRIPT_MODULES:
+        path = REPOSITORY_ROOT / (module.replace(".", "/") + ".py")
+        assert path.is_file(), (
+            f"{module} is in tools/import_sweep.py::SCRIPT_MODULES and there is "
+            f"no {path.relative_to(REPOSITORY_ROOT)}; a stale exclusion reads "
+            "like a considered one")
 
 
 def test_the_sweep_reaches_the_data_assimilation_stack() -> None:

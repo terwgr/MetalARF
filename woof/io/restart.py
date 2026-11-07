@@ -86,6 +86,7 @@ import json
 import math
 import os
 import re
+import threading
 import uuid
 import zipfile
 from collections.abc import Mapping
@@ -95,6 +96,7 @@ from pathlib import Path
 import numpy as np
 
 from woof import perf_timing
+from woof.io.parallel_npz import write_npz
 from woof.checkpoint_identity import (
     CONFIG_DIAGNOSTIC_FIELDS,
     CUMULUS_ALGORITHM_IDENTITIES,
@@ -103,6 +105,7 @@ from woof.checkpoint_identity import (
     LONGWAVE_ABOVE_ATMOSPHERE_POLICIES,
     LONGWAVE_ALGORITHM_IDENTITIES,
     MICROPHYSICS_ALGORITHM_IDENTITIES,
+    NOAHMP_SNOW_AGE_ALGORITHM_IDENTITIES,
     PBL_ALGORITHM_IDENTITIES,
     RADIATION_ABOVE_ATMOSPHERE_POLICIES,
     RADIATION_ALGORITHM_IDENTITIES,
@@ -110,21 +113,30 @@ from woof.checkpoint_identity import (
     SHORTWAVE_ALGORITHM_IDENTITIES,
     SURFACE_LAYER_ALGORITHM_IDENTITIES,
     URBAN_ALGORITHM_IDENTITIES,
+    DYCORE_MIXING_ALGORITHM_IDENTITY,
+    dycore_mixing_identity,
+    UPPER_DAMPING_ALGORITHM_IDENTITY,
+    upper_damping_identity,
     drop_default_diffusion_selectors,
     drop_default_spp_selectors,
     require_identifiable_checkpoint_schemes,
     unidentifiable_checkpoint_schemes,
 )
-from woof.config import (MIX_ISOTROPIC_RESTART_BREAK_NOTICE,
+from woof.config import (CORRECT_MODE_RESTART_BREAK_NOTICE,
+                          MIX_ISOTROPIC_RESTART_BREAK_NOTICE,
+                          TERRAIN_CLOCK_PINNED_RESTART_NOTICE,
+                          TERRAIN_CLOCK_RESTART_BREAK_NOTICE,
                           radiation_scheme_ids)
 from woof.supervisor import _fsync_directory, fsync_file, unique_temp_path
+from woof.correct_mode import (CORRECTION_KEYS as _CORRECTION_KEYS,
+                                OUTPUT_ONLY_KEYS as _OUTPUT_ONLY_CORRECTION_KEYS,
+                                key_in_scope as _correct_key_in_scope)
 from woof.physics_compat import (RRTMG_VARIANT_LEGACY,
                                   RRTMG_VARIANT_RTE_RRTMGP, rrtmg_variant)
 from woof.core.adaptive_clock import ADAPTIVE_DERIVED_RUN_FIELDS
 from woof.core.model import (ADAPTIVE_POLICY_RUN_FIELDS,
                               ADAPTIVE_TIMESTEP_RUN_FIELDS)
 from woof.core.uh_diag import (
-    TRACKER_WINDOW_SLOTS as _TRACKER_WINDOW_SLOTS,
     UH_FOLLOW_WINDOW_PREFIX as _UH_FOLLOW_WINDOW_PREFIX,
     is_tracker_window_slot as _is_tracker_window_slot)
 from woof.core.nssl2_contract import (
@@ -151,6 +163,10 @@ from woof.state_serialization_contract import (
     ADVECTIVE_FORCING_STATE,
     BUILT_END_FRAME_PREFIX_SCHEMA,
     CHECKPOINT_ONLY_STATE,
+    CHEM_DIAG_PREFIX,
+    CHEM_STATE_PREFIX,
+    CHEM_TIME_PREFIX,
+    CHEM_WORK_PREFIX,
     LATERAL_BOUNDARY_PREFIX_SCHEMAS,
     REBUILT_END_FRAME_PREFIX_SCHEMAS,
     STATE_SERIALIZED_ATTRS,
@@ -158,6 +174,7 @@ from woof.state_serialization_contract import (
     STATE_SETUP_ARRAYS,
     STATE_SETUP_SCALARS,
     lateral_boundary_prefix_identity as _lateral_boundary_prefix_identity,
+    serialized_state_attrs,
     setup_core_fingerprint as _shared_setup_core_fingerprint,
     setup_fingerprint as _shared_setup_fingerprint,
 )
@@ -177,8 +194,8 @@ from woof.state_serialization_contract import (
 #: identity mismatch that reads as "your configuration changed" (ENG-010,
 #: ENG-011).  The reader retains a byte-equality-checked v2 array-layout shim,
 #: but an old unbound v2 file is rejected because the v4 identity header is
-#: mandatory.
-RESTART_FORMAT_VERSION = 6
+#: mandatory. v7 preserves the independent MF_VX_INV input words.
+RESTART_FORMAT_VERSION = 7
 READABLE_RESTART_FORMAT_VERSIONS = frozenset({2, RESTART_FORMAT_VERSION})
 
 #: Format versions this build recognises and refuses with the reason, so an
@@ -187,6 +204,8 @@ READABLE_RESTART_FORMAT_VERSIONS = frozenset({2, RESTART_FORMAT_VERSION})
 #: fields.  A declared break, not a migration: the members a v6 file adds
 #: are real state a v5 file never had (see the v6 note above).
 RETIRED_RESTART_FORMAT_VERSIONS = {
+    6: ("checkpoint format 6 lacks the independently stored MF_VX_INV map inverse; "
+        "restart from the initial conditions or finish on the original build"),
     5: ("2.6.5 checkpoint format 5: 2.7.0 adds the adaptive-timestep and "
         "eta_levels configuration echo, the fields/ustm surface-layer member "
         "and the held/gf_rthblten, held/gf_rqvblten cumulus forcing members; "
@@ -246,7 +265,7 @@ _HEADER_KEY = "__gpuwm_restart_header__"
 #: the resuming run (forecast length / output & restart cadence).  Every
 #: other field must match exactly or the restore fails.
 CONFIG_RUN_LENGTH_FIELDS = frozenset({
-    "run_seconds", "output_interval_s", "restart_interval_s"})
+    "run_seconds", "output_interval_s", "history_interval2_s", "history_interval_change_s", "restart_interval_s"})
 
 # Output-only diagnostic toggles are restart-boundary-adjustable exactly
 # like the run-length fields: ``CONFIG_DIAGNOSTIC_FIELDS``, imported above
@@ -284,7 +303,7 @@ ROOT_EXTERNAL_LBC_CLOCK_LEGACY = "legacy-elapsed-v0"
 #: and are re-exported below.
 PHYSICS_SETUP_SCHEMA_VERSION = 2
 PHYSICS_DRIVER_ALGORITHM_IDENTITY = \
-    "gpuwm-physics-driver-v3-kf-phase-energy-pre-mp-expiry"
+    "gpuwm-physics-driver-v8-strict-cache-held-cumulus-history-rates"
 #: The scheme identity tables and the plan-review gate that reads them are
 #: DEFINED in :mod:`woof.checkpoint_identity` and imported above -- the
 #: gate is called from ``woof.config.validate_run_config``, which ships in
@@ -355,8 +374,8 @@ RRTMGP_TRACE_GAS_POLICY_IDENTITY = \
 #: upper-level heating and outgoing longwave, so a v1 checkpoint may not
 #: continue under v2.
 RRTMG_LEGACY_LW_ALGORITHM_IDENTITY = \
-    "wrf-v4.6.1-rrtmg-legacy-lw-v2-owned-gpoint-stratosphere-corrections"
-RRTMG_LEGACY_SW_ALGORITHM_IDENTITY = "wrf-v4.6.1-rrtmg-legacy-sw-v1"
+    "wrf-v4.6.1-rrtmg-legacy-lw-v3-owned-gpoint-stratosphere-corrections-micron-inputs"
+RRTMG_LEGACY_SW_ALGORITHM_IDENTITY = "wrf-v4.6.1-rrtmg-legacy-sw-v2-micron-inputs"
 #: Legacy RRTMG extends the model column with WRF's own Cavallo buffer
 #: layers (deltap = 4 mb), like RRTM option 1 but with RRTMG's tables.
 RRTMG_LEGACY_ABOVE_ATMOSPHERE_POLICY = \
@@ -373,9 +392,13 @@ PHYSICS_ASSET_PATHS = {
     # the RFMIP inputs (which no longer ship); see _active_asset_identity.
     "rrtmgp_rfmip": Path("data/rrtmgp/rrtmgp-trace-gas-climatology.json"),
     "wrf_rrtm_data": Path("data/wrf_radiation/RRTM_DATA"),
+    "wrf_goddard_cloud_table": Path("data/wrf_radiation/goddard/cloud-table.le.bin.gz"),
+    "wrf_goddard_cloud_provenance": Path("data/wrf_radiation/goddard/provenance.json"),
     "wrf_rrtmg_lw_data": Path("data/wrf_radiation/RRTMG_LW_DATA"),
     "wrf_rrtmg_lw_statics": Path("data/wrf_radiation/rrtmg_lw_statics.npz"),
     "wrf_rrtmg_sw_data": Path("data/wrf_radiation/RRTMG_SW_DATA"),
+    "wrf_aer1_climatology": Path("data/wrf_radiation/rrtmg_aer1_climatology.npz"),
+    "wrf_aer1_manifest": Path("data/wrf_radiation/rrtmg_aer1_manifest.json"),
     "wrf_ozone_data": Path("data/wrf_radiation/ozone.formatted"),
     "wrf_ozone_lat": Path("data/wrf_radiation/ozone_lat.formatted"),
     "wrf_ozone_plev": Path("data/wrf_radiation/ozone_plev.formatted"),
@@ -389,6 +412,8 @@ PHYSICS_ASSET_PATHS = {
     "noahmp_soilparm": Path("data/noahmp/SOILPARM.TBL"),
     "noahmp_genparm": Path("data/noahmp/GENPARM.TBL"),
     "kf_lutab": Path("data/kf_lutab/kf_lutab.npz"),
+    "satmedmf_manifest": Path("data/satmedmf/manifest.json"),
+    "eclipse_besselian": Path("data/wrf_radiation/eclipse_besselian_elements.dat"),
 }
 
 
@@ -424,11 +449,28 @@ def _resolve_physics_asset(relative: Path) -> Path:
 #: end-of-step EOS diagnostics keeps the restored object bit-equal to the
 #: live one for any pre-step consumer (e.g. output frames).
 #: Overwritten before every read (see the module docstring's argument).
+#: The REBUILT attributes below that ``DomainState`` does not allocate:
+#: strict WRF arithmetic attaches them at their first write
+#: (``woof/core/diagnostics.py`` makes ``p_perturbation`` at the first EOS
+#: diagnosis under WOOF_WRF_EXACT_DIAGNOSTICS), so they sit outside
+#: ``state_array_shapes`` and the allocation-equals-classification gate in
+#: tests/test_preflight.py names them from here.
+STRICT_LAZY_STATE_ATTRS = frozenset({"p_perturbation"})
+
+from woof.core.fast_sbm_contract import BIN_SPECIES as _FSBM_BIN_SPECIES
+
 STATE_REBUILT_ATTRS = frozenset({
+    "qke_adv0",
+    # WOOF_WRF_EXACT_DIAGNOSTICS' stored perturbation pressure: written by
+    # update_diagnostics with p/al/alt at every step entry, before the
+    # pressure force reads it.  Unclassified, every strict run with the
+    # diagnostic control stopped at its first state digest.
+    "p_perturbation",
     # RK time-t copies: dycore.step writes them from the prognostics first.
     "u0", "v0", "w0", "thp0", "php0", "mup0",
     "qv0", "qc0", "qr0", "qi0", "qs0", "qg0", "nr0", "ni0", "ns0", "ng0",
     "qh0", "qndrop0", "qnr0", "qni0", "qns0", "qng0", "qnh0",
+    "volg0",
     "qnn0", "qvolg0", "qvolh0",
     # mp_physics=9 (Milbrandt-Yau) hail-number RK time-t copy, and
     # mp_physics=16 (WDM6) CCN + droplet-number RK time-t copies.  Written
@@ -440,7 +482,7 @@ STATE_REBUILT_ATTRS = frozenset({
     # carrier by dycore.step before any reader (core/dycore.py:2186-2187),
     # exactly like thp0 and the moist time-t copies above.  The carrier
     # itself is SERIALIZED (state_serialization_contract.py).
-    "tke0",
+    "tke0", "tke_edmf0",
     # RK time-t copies of transported droplet number.  nc0 exists for the
     # schemes that TRANSPORT nc -- mp=28 (Thompson aerosol-aware), mp=9
     # (Milbrandt-Yau) and mp=16 (WDM6); mp=10 allocates nc but does not
@@ -462,22 +504,41 @@ STATE_REBUILT_ATTRS = frozenset({
     # so it must retain domain-owned values between acoustic loops.
     "u_pp", "v_pp", "w_pp", "th_pp", "ph_pp", "mu_pp",
     "p_pp", "p_pp_old", "al_pp",
-})
+}) | frozenset(n+"0" for n in _FSBM_BIN_SPECIES)
 
 #: Deterministic setup arrays covered by the header fingerprint.
 #: Setup scalars folded into the fingerprint alongside the arrays.
 #: Machinery: handled by dedicated sections (scratch, physics, clock) or
 #: rebuilt by attach/prepare (LBC device mirrors, host caches).
 STATE_INFRA_ATTRS = frozenset({
+    # Rebuilt from bound analyses and the restored model clock. Held
+    # tendencies are separate serialized fields when fgdt exceeds a step.
+    "_spectral_nudging_graph", "_spectral_nudging_owner", "_spectral_nudging_interval",
+    # A validity marker for the stage-local acoustic mass buffer, not a
+    # prognostic. Stage entry rebuilds it; a fresh standalone caller seeds
+    # the buffer when the marker is absent. Checkpoints are step-boundary.
+    "_wrf_acoustic_muts_initialized",
+    # Spectral backing is serialized through its 142 named field views.
+    "fast_sbm_bins", "fast_sbm_itimestep",
     # Cached launch descriptors are rebuilt from the live state buffers.
     "_rk_copy_launch", "_rk_zero_launch", "_glue_add_launch",
     # Used only by analysis snapshot producers. The published LBC field
     # names/bytes, not this preparation selector, own forecast forcing and
     # are already covered by setup_fingerprint/lateral prefix identity.
     "_external_scalar_boundary_fields",
+    # Config binds speed; restored U/V already use this frame (see restore).
+    "_moving_frame_velocity", "_moving_frame_initialized",
     "_scratch", "_scratch_arena", "_phb_host", "_dz_min",
     "_host_setup_state", "_metal_setup_state", "_array_module",
     "_map_coriolis_host",
+    "_host_setup_state",
+    # Strict mode's record of the prepared base theta
+    # (woof.core.state.adopt_wrf_theta_carrier): the prepared restore that
+    # sets thb = 300 rebuilds it, and setup_fingerprint already binds it.
+    "_setup_thb", "_wrf_terrain_prepared_fingerprint",
+    # Rebuilt from specified/nested and spec_zone on DomainState creation.
+    # It is health descriptor geometry, not integrated model state.
+    "_health_spec_zone",
     # CanonicalStoreState borrows full host carriers and geography instead
     # of owning a resident DomainState. These references and proxy caches
     # hold no independent prognostics: store carriers and setup fingerprints
@@ -494,6 +555,12 @@ STATE_INFRA_ATTRS = frozenset({
     # Its numerical result is already in the serialized physics fields;
     # continued domains retain those fields and do not reapply the recipe.
     "_ensemble_surface_state",
+    # Uniform-wind provenance is also a duplicate-application guard. Its
+    # numerical result is in u/v; continued clocks prevent reapplication.
+    "_ensemble_initial_wind",
+    # Time-zero checkpoint-fill callback idempotence; contains no model state.
+    # A resumed member restores its own serialized fields after initialization.
+    "_ensemble_checkpoint_fill",
     "elapsed_seconds", "_nest_restart_classification",
     # The domain's ACTIVATION EPOCH in seconds, published beside
     # ``elapsed_seconds`` by woof.core.state.refresh_model_time and from
@@ -575,11 +642,62 @@ STATE_INFRA_ATTRS = frozenset({
     # at (woof.core.mynn_pbl_scratch.resolve_mynn_tile_column_chunk).
     # INFRA: a buffer is never checkpointed as itself, and the width never
     # changes a bit.  Without it classify_state_attr refused every streamed
-    # buffer's inventory (measured on a development machine's RTX 5070 Ti, 2026-09-30).
+    # buffer's inventory (measured on test host D's RTX 5070 Ti, 2026-09-30).
     "_tile_buffer",
     # The resident rank's admitted MYNN workspace width. It affects only
     # column batching and allocation, never forecast or checkpoint bits.
     "_mynn_rank_column_chunk",
+    # woof.da.radar_tten.STATE_ATTRIBUTE: a radar latent heating forcing
+    # attached for a forced period (woof.da.forecast_heating, the DA leg
+    # driver).  INFRA, like boundary tables: external data rebuilt from its
+    # windows by whoever attaches it, never a value the model integrated.
+    # The concrete breakage its absence caused: classify_state_attr refused
+    # the attribute, so a checkpoint written while the forcing was attached
+    # raised RestartManifestError.  The other half of the rule lives in the
+    # door: resuming INSIDE the forced period is refused there
+    # (forecast_heating.resume_plan), because the slot clock restarts at
+    # zero on attach and would read window 1 at minute 70.
+    "radar_tten_forcing",
+    # woof.da.radar_tten.SLAB_ATTRIBUTE: the (j0, i0) of the ranked slab a
+    # resident rank holds, set by the door when it attaches a slab forcing.
+    # INFRA: placement of a card's slab, never a forecast value.
+    "_radar_tten_slab",
+    # woof.da.iau.IAU_STATE_ATTRIBUTE: an analysis increment forced over an
+    # IAU window (woof.da.analysis_door, the DA leg driver).  INFRA, like
+    # the radar forcing above: external data the attaching door rebuilds
+    # from its bundle, never a value the model integrated; its time
+    # densities are on the model's own clock, so a forcing rebuilt at a
+    # resume inside the window adds exactly what the unbroken run adds from
+    # there.  The concrete breakage its absence caused (named gap G4 of the
+    # WRF analysis door): classify_state_attr refused the attribute,
+    # so any checkpoint written inside a window, and the final trajectory
+    # digest of every IAU run on the tree route, raised RestartManifestError.
+    "_iau_forcing",
+    # woof.da.iau.IAU_AFTER_STEP_ATTRIBUTE: the analysis door's post-step
+    # acts for a STREAMED root (its dry-mass share of the IAU window and its
+    # balance probe, served per compute window by woof.da.iau
+    # .IauSweepLease).  INFRA like the forcing above: the door rebuilds it
+    # from its bundle at every attach.  Without this entry classify_state_attr
+    # refuses the attribute, so every analysis-door checkpoint and the final
+    # trajectory digest raise RestartManifestError.
+    "_iau_after_step",
+    # Strict WRF-file nest start (woof.ingest.wrfinput_nest_initial
+    # .finish_strict_nest_start): the file's T a domain's FIRST frame writes
+    # as WRF's th_phy_m_t0, read only before the domain's first step, and
+    # the flag that the nest already took its first force round trip.  Both
+    # are spent before any checkpoint can be written; INFRA like the start
+    # inputs above.  Unclassified, every strict two-domain WRF-file run
+    # stopped at its first state digest.
+    "_wrf_start_history_t",
+    "_wrf_start_diagnostics_carried",
+    # The history callback's per-frame note that a strict nest frame
+    # carries the next force's round trip, and the run config it reads.
+    "_wrf_frame_round_trip_due",
+    "_wrf_round_trip_run",
+    # Strict history T (WRF's th_phy_m_t0) where it parts from t_2; a resume
+    # rebuilds it at its first step, so a frame written before that step
+    # writes t_2 (wrf.exe's restart carries th_phy_m_t0 itself).
+    "_wrf_th_phy_m_t0",
 })
 
 # --------------------------------------------------------------------------
@@ -590,12 +708,26 @@ STATE_INFRA_ATTRS = frozenset({
 #: accumulators (the kernels update them in place and the driver aliases them)
 #: and the KF driver persistence
 #: (NCA timers, PRATEC/RAINCV, stored per-column rates, RAINC).
+from woof.core.hail import PERSISTENT as HAIL_PERSISTENT
+
+from woof.core.output_diagnostics import PERSISTENT as OUTPUT_PERSISTENT
+
 SERIALIZED_SCRATCH_SLOTS = frozenset({
+    *OUTPUT_PERSISTENT,
+    *HAIL_PERSISTENT,
+    "ltng_ic_flashcount", "ltng_cg_flashcount",
+    "ltng_ic_flashrate", "ltng_cg_flashrate", "ltng_ltngacttime",
+    "ltng_iccg_in_num", "ltng_iccg_in_den", "ltng_calendar",
+    "ltng_lat", "ltng_lon", "ltng_ktop_deep", "ltng_lpi",
     # WRF diff_opt=1 keeps the original thermal reference after restart.
     "diff1_theta_initial",
     "mp_rainnc", "mp_rainncv", "mp_snownc", "mp_snowncv",
     "mp_graupelnc", "mp_graupelncv", "mp_sr", "mp_kessler_sr",
     "mp_hailnc", "mp_hailncv",
+    # Correct mode, finding WB1 (woof/core/thompson_cloud_booking.py): the
+    # settled-cloud total accumulates for the whole run like RAINNC, so a
+    # resume carries it; it exists only in a correct-mode Thompson run.
+    "mp_cloudnc", "mp_cloudncv",
     "cu_rainc", "cu_nca", "cu_pratec", "cu_raincv",
     "cu_rthcuten", "cu_rqvcuten", "cu_rqccuten", "cu_rqicuten",
     "cu_rqrcuten", "cu_rqscuten",
@@ -605,6 +737,67 @@ SERIALIZED_SCRATCH_SLOTS = frozenset({
     # a note, never a refusal (woof/core/uh_diag.py owns the lifecycle).
     "up_heli_max",
 })
+
+#: The WB1 settled-cloud pair (woof/core/thompson_cloud_booking.py), which
+#: the physics driver allocates exactly when the run books it; restore drops
+#: a stored pair the live run does not book (_apply_validated_restart).
+_THOMPSON_CLOUD_BOOKING_SLOTS = frozenset({"mp_cloudnc", "mp_cloudncv"})
+
+
+def _refd_max_held(config) -> bool:
+    """Whether a run with this config echo allocates ``fields/refd_max``.
+
+    The same gate as ``PhysicsDriver.__init__`` (woof/core/physics.py):
+    REFD_MAX is a zero-held output plane exactly when neither the NWP nor
+    the GSD diagnostic family runs.
+    """
+    return (int(config.get("nwp_diagnostics", 0) or 0) == 0
+            and not int(config.get("gsd_diagnostics", 0) or 0))
+
+
+#: Physics-driver ``fields`` planes whose PRESENCE is decided by an
+#: output-only switch in CONFIG_DIAGNOSTIC_FIELDS, which a resume may flip:
+#: name -> (switch, does a config echo allocate it).  Every other plane
+#: keeps the exact inventory and shape check.  Named breakage (V2W WoFS,
+#: 2026-10-29): a forecast branched from an analysis checkpoint written with
+#: nwp_diagnostics = 0 and resumed with 1 (UP_HELI_MAX on) refused
+#: "restart surface-field inventory ... extra ['refd_max']", 18 of 18
+#: members rc 2.
+_DIAGNOSTIC_GATED_DRIVER_FIELDS = {
+    "refd_max": ("nwp_diagnostics", _refd_max_held),
+}
+
+
+def _diagnostic_gated_field_changes(stored_fields, header, driver) -> dict:
+    """``{name: "dropped" | "initialised"}`` for the gated planes a resume's
+    diagnostic switch moved.
+
+    A plane counts as moved only when the checkpoint's own inventory agrees
+    with the switch its header records; a file that disagrees with its own
+    header is left to the exact inventory check, which refuses it.
+    """
+    config = header.get("config") or {}
+    changes = {}
+    for name, (_switch, allocated_by) in _DIAGNOSTIC_GATED_DRIVER_FIELDS.items():
+        stored_has = name in stored_fields
+        if stored_has == (name in driver.fields):
+            continue
+        if stored_has != allocated_by(config):
+            continue
+        changes[name] = "dropped" if stored_has else "initialised"
+    return changes
+
+
+def _diagnostic_gated_note(name, change, header) -> str:
+    switch = _DIAGNOSTIC_GATED_DRIVER_FIELDS[name][0]
+    written = (header.get("config") or {}).get(switch, 0)
+    if change == "dropped":
+        return (f"note: checkpoint written with {switch}={written} carries "
+                f"fields/{name}, which this run does not hold ({switch} "
+                "changed at the restart); dropped")
+    return (f"note: checkpoint written with {switch}={written} has no "
+            f"fields/{name}, which this run holds ({switch} changed at "
+            "the restart); initialised to zero")
 
 #: Cross-step accumulators that are deliberately NOT checkpointed.
 #:
@@ -647,6 +840,21 @@ SERIALIZED_SCRATCH_SLOTS = frozenset({
 #: shorter window.
 CARRIED_SCRATCH_SLOTS = frozenset({
     "uh_follow_window", "uh_spawn_window",
+    # Strict mode only: WRF's grid%muts from the last acoustic loop, which
+    # the next step's first pressure diagnosis reads (woof/core/dycore.py
+    # WRF_MUTS_SLOT). Checkpoints retain it for exact continuation too.
+    "wrf_exact_muts",
+    # Strict mode only: the ring of mu_2 WRF's halo holds at the next step's
+    # first RK stage (woof/core/dycore.py WRF_MU_HALO_SLOT).
+    "wrf_exact_mu_halo",
+})
+
+# These dycore carriers are absent in default mode. Rebuilding them from
+# rounded prognostics at resume changes the next strict pressure diagnosis
+# and boundary fluxes. Keep their carry classification for streaming and
+# relocation, while including allocated members in ordinary checkpoints.
+CHECKPOINTED_CARRIED_SCRATCH_SLOTS = frozenset({
+    "wrf_exact_muts", "wrf_exact_mu_halo",
 })
 
 #: The same class, for the window family whose names are GENERATED.
@@ -706,12 +914,21 @@ RESTART_ONLY_DRIVER_SLOTS = frozenset({
 #: rebuilds are EXACT names only â€” a future accumulator slot under those
 #: prefixes must be classified explicitly instead of silently dropping.
 REBUILT_SCRATCH_SLOTS = frozenset({
+    # Metal sea ice: the ocean-owned xice mask for the Noah sea-ice call.
+    "seaice_owned_xice",
     # Static terrain coefficients are rebuilt when terrain drag is attached.
     "terrain_drag_lap_hgt", "terrain_drag_ctopo", "terrain_drag_ctopo2",
     # Metal TKE stage masses are refilled before each scalar advance.
     "tke_mu0", "tke_mu",
+    "cl_zero", "output_zero", "gsd_zero", "gsd_uh_use", "gsd_pressure_w", "gsd_temperature", "gsd_density", "gsd_wind10", "gsd_wind80",
+    "hail_zero", "hail_temperature", "hail_height", "hail_density",
+    "hail_new_mask", "hail_new_duration",
+    # Lin overwrites geometry and thermodynamics before each column call.
+    "lin_theta", "lin_rho", "lin_pii", "lin_z", "lin_dz", "lin_z8w",
     "diff1_theta_work",
     "mp_th", "mp_rho", "mp_pii", "mp_z", "mp_dz8w", "mp_z8w",
+    "mp_tempo_temperature", "mp_tempo_w", "mp_tempo_qb",
+    "mp_tempo_theta", "mp_tempo_one",
     "mp_thompson_temperature",
     "mp_thompson_frozen_reference_density",
     "mp_thompson_frozen_reference_temperature",
@@ -729,6 +946,19 @@ REBUILT_SCRATCH_SLOTS = frozenset({
     # mp=8 and mp=28 alike: taken from the entry state at the top of every
     # call and read by that call's terminal apply.  Nothing survives a call.
     "mp_thompson_micro_columns",
+    # Classic Thompson's per-call working set (woof/core/thompson_classic.py
+    # SCRATCH_* lists): the pre-microphysics theta, the plane-stacked
+    # tendencies, working fields and column buffers, and the cell and column
+    # flags.  WRF zeroes and recomputes all of them at the top of every
+    # column call (module_mp_thompson.F:1650-2002), so nothing survives a
+    # call boundary; a restored tendency would be applied twice.
+    "mp_thompson_saved_theta",
+    "mp_thompson_classic_ten",
+    "mp_thompson_classic_work",
+    "mp_thompson_classic_colbuf",
+    "mp_thompson_classic_flags",
+    "mp_thompson_classic_micro",
+    "mp_thompson_classic_kmelt",
     # mp_physics=28 (Thompson aerosol-aware).  Listed as EXACT names, not a
     # new "mp_thompson_aero_" prefix, because the prefix rule above exists
     # precisely to stop a future accumulator from being silently dropped --
@@ -748,13 +978,23 @@ REBUILT_SCRATCH_SLOTS = frozenset({
     "mp_thompson_aero_nifa_entry_m3",
     "mp_thompson_aero_tau1_density",
     "mp_thompson_aero_nwfa_work_m3",
-    "mp_thompson_aero_qc_entry",
+    "mp_thompson_aero_qcten",
     "mp_thompson_aero_ni_entry",
+    "mp_thompson_aero_qrten",
+    "mp_thompson_aero_nrten",
+    "mp_thompson_aero_qiten",
+    "mp_thompson_aero_niten",
+    "mp_thompson_aero_qvten",
+    "mp_thompson_aero_tten",
+    "mp_thompson_aero_qsten",
+    "mp_thompson_aero_qgten",
+    "mp_thompson_aero_ngten",
     "mp_thompson_aero_rc_entry",
     "mp_thompson_aero_nc_entry_m3",
     "mp_thompson_aero_nu_c_entry",
     "mp_thompson_aero_l_qc_entry",
     "mp_thompson_aero_condensation_rate",
+    "mp_thompson_working_dt",
     # mp_physics=50 (P3 one-category).  The adapter's three ice diagnostics
     # -- mass-weighted fall speed, mean diameter and bulk rime density --
     # are filled in full by p3_main on every call before the driver reads
@@ -826,9 +1066,16 @@ REBUILT_SCRATCH_SLOTS = frozenset({
 })
 
 REBUILT_SCRATCH_PREFIXES = (
+    # Every FAST_SBM workspace is rewritten inside a call. Its spectral state is explicit.
+    "fsbm_",
     "rk_", "adv_", "smag_", "diff_", "diff6_", "acoustic_", "openbc_",
-    "moist_", "pd_", "morr_", "wsm6_", "wdm6_", "refl_", "physics_", "lbc_",
+    "moist_", "pd_", "morr_", "wsm3_", "wsm6_", "wsm6r_", "wdm6_", "mpcol_", "refl_", "physics_", "lbc_",
     "integration_health_", "nest_",
+    # The monotonic chem stage's workspace (woof/core/chem_context.py
+    # MONO_SCRATCH_SLOTS, rewritten by every launch before it is read) and
+    # its zero implicit vertical flux (MONO_IMPLICIT_SLOT, allocated zero
+    # and never written, so a rebuilt one is the same zeros).
+    "chem_mono_",
     # UP_HELI_MAX per-step work planes (column UH + use_column flags),
     # overwritten by every launch; the accumulator itself is the exact
     # serialized name above, deliberately NOT under this prefix.
@@ -840,6 +1087,9 @@ REBUILT_SCRATCH_PREFIXES = (
     # The Metal RUC sea-ice MYNN surface inputs, refilled by
     # submit_mynn_prepare on every call (core/physics.py).
     "mynn_seaice_",
+    # Post-PBL scalar rates and solve work are overwritten on each PBL call;
+    # scalar_pblmix enforces bldt=0, so resumed runs rebuild before use.
+    "scalar_pblmix_metal_",
     # The Metal MYJ PBL outputs (woof/metal/myjpbl_family.py), written in
     # full by every call; the diagnostics are copied into driver.fields and
     # the rates are mass-coupled into new arrays before the call returns.
@@ -884,6 +1134,7 @@ REBUILT_SCRATCH_PREFIXES = (
 #: restored rates at restore time is not bitwise identical (audit).
 DRIVER_TENDENCY_ATTRS = ("pbl_tendencies", "radiation_tendencies",
                          "cumulus_tendencies")
+OPTIONAL_DRIVER_TENDENCY_ATTRS = ("fire_tendencies",)
 TENDENCY_COMPONENTS = ("ru", "rv", "rtheta", "rqv", "rqc", "rqr", "rqi",
                        "rqs", "rw")
 TENDENCY_REQUIRED_COMPONENTS = ("ru", "rv", "rtheta", "rqv", "rqc")
@@ -899,7 +1150,9 @@ DRIVER_SERIALIZED_ATTRS = frozenset({
     "rthratenlw", "rthratensw", "_pending_rainbl",
     "gf_rthblten", "gf_rqvblten", "pbl_raw_rates",
     "microphysics_updates", "call_counts", "ysu_nan_guard_fires",
+    "_swdd_from_scheme",
     "fields",
+    "fire", "fire_tendencies", "hydro",
     # THE SURFACE-RADIATION CARRIER CONTRACT
     # (woof/core/radiation_carriers.py).  Serialized, not rebuilt, and
     # the distinction is the whole point: the carrier FIELDS ride the
@@ -972,7 +1225,17 @@ DRIVER_SERIALIZED_ATTRS = frozenset({
 #: publishes zeros because WRF's does (``misc``, zero-initialised, and
 #: the time-0 write precedes the first radiation call).  A restart is not
 #: the first call of a run; it is the middle of one.
-DRIVER_CHECKPOINT_ONLY_ATTRS = frozenset({"olr"})
+#:
+#: ``cldfra`` joins it on the same measured terms: the radiation cloud
+#: fraction is written on radiation's cadence, published into every
+#: history frame, and WRF flags its own CLDFRA row ``irh``
+#: (Registry.EM_COMMON:1699), restart AND history.  Without the carry a
+#: resumed run would publish an all-clear CLDFRA until its first
+#: post-restart radiation call.  Absent-tolerant on restore, so every
+#: checkpoint written before it existed stays restorable.
+DRIVER_CHECKPOINT_ONLY_ATTRS = frozenset({"olr", "cldfra", "radiation_flux_diagnostics",
+                                          "aod5503d", "aodtot",
+                                          "_wrf_rthraten", "rthraten"})
 
 #: Raw PBL rates read by GF and New Tiedtke between producer calls.
 #: WRF Registry RTHBLTEN/RQVBLTEN are restart-carried for the same reason.
@@ -981,6 +1244,21 @@ DRIVER_CHECKPOINT_ONLY_ATTRS = frozenset({"olr"})
 DRIVER_HELD_FORCING_ATTRS = frozenset({"gf_rthblten", "gf_rqvblten"})
 
 DRIVER_REBUILT_ATTRS = frozenset({
+    # A streamed tile retains its existing raw-rate mapping while unavailable.
+    "_streamed_pbl_raw_rates",
+    "wind_farm",  # Device tables and diagnostics rebuilt; QKE carriers persist.
+    # Startup inventory/geometry decision, rebuilt from configuration and statics.
+    # This receipt owns no evolving numerical state.
+    "wind_farm_detection",
+    # Run-local CUDA events and elapsed-time counters, recreated when hydro
+    # attaches to the resumed parent. Scientific hydro state is checkpointed
+    # separately; carrying timing events across processes is invalid.
+    "hydro_cost",
+    # Run-local source provenance; scientific lake fields are serialized.
+    "lake_initialization_receipt",
+    # User aerosol diagnostics are views of arrays serialized in fields.
+    "aerosol2d",
+    "_wrf_rthraten_coupled",
     # Lake sparse work is rebuilt from the horizontal arrays in fields.
     "lake",
     # SPP flags/shapes derive from the bound RunConfig. Patterns are borrowed
@@ -999,6 +1277,9 @@ DRIVER_REBUILT_ATTRS = frozenset({
     # checkpoint's values.  Unclassified, it ended every slope_rad run's
     # forecast at the final state digest (first real run of the port).
     "topo_shortwave",
+    # Rebuilt geometry/kernel; all held undimmed arrays alias fields/*,
+    # including the initialized marker used to preserve radiation cadence.
+    "eclipse",
     # WRF's topo_wind / gwd_opt (woof.core.terrain_drag): initialize_physics
     # rebuilds it from the resumed RunConfig and the prepared statics; it
     # holds only static coefficients and statistics, never a value a step
@@ -1047,10 +1328,16 @@ DRIVER_REBUILT_ATTRS = frozenset({
     # not survive the measurement.)
     "state", "sfclay_result", "mynn_sfclay_result",
     "mynn_sfclay_sea_result", "noah_params",
+    # Reflectivity borrows the resumed RunConfig, already fingerprinted by
+    # the checkpoint, and PhysicsDriver.__init__ rebinds this alias.
+    "refl_config",
     # Selector-value -> runner-method receipt, re-resolved from the resumed
     # RunConfig by PhysicsDriver.__init__ (the config fingerprint already
     # binds the selector values themselves).
     "scheme_dispatch",
+    # Selector-derived history mapping rebuilt by PhysicsDriver.__init__.
+    # Its numerical rate buffers live in serialized fields.
+    "pbl_history_rates",
     "radiation_callable", "cumulus_callable",
     # Where this domain's downward longwave came from ("scheme",
     # "declared" or "unused").  A LABEL, not state: initialize_physics
@@ -1069,7 +1356,7 @@ DRIVER_REBUILT_ATTRS = frozenset({
     "radiation_active", "cu_physics", "mp_physics", "surface_enabled",
     # Noah LSM option selectors: plain cfg-derived scalars reconstructed at
     # driver init, exactly like the radiation and cumulus selectors above.
-    "noah_usemonalb", "noah_rdlai2d", "noah_opt_thcnd",
+    "noah_usemonalb", "noah_rdlai2d", "noah_opt_thcnd", "noah_myj",
     # Narrow Metal driver selectors are reconstructed by
     # ``PhysicsDriver.__init__`` from the resumed RunConfig and resolved
     # physics callables.  The configuration/physics setup fingerprints bind
@@ -1087,6 +1374,10 @@ DRIVER_REBUILT_ATTRS = frozenset({
     # before every validation launch, so restoring its previous flags would
     # carry no model state.
     "_morrison_validation_status",
+    # seaice_noah's model step and albedo (cfg scalars, rebuilt at init) and
+    # its once-per-process snow-density read-back latch: a resumed process
+    # reads the carried snowpack back once more, which is the point.
+    "noah_seaice_dt", "noah_seaice_albedo_default", "_noah_seaice_checked",
     # Noah-MP: the parsed tables and the solar geometry are rebuilt by
     # initialize_physics from the packaged assets and the caller's
     # start-time/latitude/longitude, and BOTH are bound into the checkpoint
@@ -1096,6 +1387,9 @@ DRIVER_REBUILT_ATTRS = frozenset({
     # vector is a module constant.  The per-call column census is a receipt
     # the next call overwrites.
     "noahmp_params", "noahmp_geometry", "noahmp_soil_thickness_m",
+    # Prepared fixed-parent geometry is rebound from the executed inputs.
+    # Hydro's numerical arrays and continuation live in the hydro manifest.
+    "hydro_parent_geometry",
     "last_noahmp_census",
     # RUC: the parsed tables and the nine-level geometry are rebuilt by
     # initialize_physics from the same packaged assets, and the bundle is
@@ -1114,12 +1408,7 @@ DRIVER_REBUILT_ATTRS = frozenset({
     # the config the DA refresh hands it.  The rural snapshot and the BEP
     # PBL terms are rewritten by every surface call before anything reads
     # them.
-    "urban", "urban_coupler", "_urban_cfg",
-    # Whether the last radiation call handed over SWDDIR/SWDDIF itself
-    # (option 3).  Rewritten by every radiation call; between calls the
-    # split rides the checkpoint in fields, so a resume needs no record of
-    # who produced it.
-    "_swdd_from_scheme",
+    "urban", "urban_coupler", "_urban_cfg", "surface_energy_diag",
     # The opt-in surface-moisture ledger (woof/core/
     # surface_moisture_ledger.py).  A DIAGNOSTIC an operator attaches to
     # one run: it writes no physics field and no restart-carried buffer,
@@ -1136,7 +1425,7 @@ DRIVER_REBUILT_ATTRS = frozenset({
     # Dynamics forcing is integrator-owned: the restart-carried state pair
     # on ARW, or buffers refilled before phase 1 on MPAS. Column spacing is
     # static constructor input. Raw PBL forcing is serialized above.
-    "gf_rthdynten", "gf_rqvdynten", "gf_dx_column",
+    "gf_rthdynten", "gf_rqvdynten", "gf_dx_column", "gf_active_column",
     # The Shin-Hong passenger-repair advisory latch (task #206): a
     # print-once flag, not state.  Rebuilt False at driver init, so a
     # resumed run that needs the repair says so once again -- an
@@ -1154,6 +1443,13 @@ DRIVER_REBUILT_ATTRS = frozenset({
     "_cu_expiry_pending",
     "cu_rates", "_sr_roundoff_upper", "_sr_roundoff_max_ulps",
     "_wsm6_minor_loops",
+    # The one-step flag a mid-run driver rebuild (a spawn or a move) sets so
+    # the rebuilt driver calls radiation on its first step
+    # (woof.runtime.rebuild_child_driver_from_land_state); the physics step
+    # clears it.  Rebuilt absent: a resumed driver takes the radiation
+    # carriers the checkpoint restores, and an unclassified attribute here
+    # stopped every checkpoint of a moving-nest run (2.9.4 R5, Milton).
+    "force_radiation_next_step",
 })
 
 #: Scheme-callable state classification.  The walk covers DIRECT array
@@ -1166,16 +1462,26 @@ DRIVER_REBUILT_ATTRS = frozenset({
 #: Registry.EM_COMMON:1575 r-flags it); the radiation constants are
 #: setup-time (lat/lon grids, ozone climatology).
 CUMULUS_CALLABLE_ARRAYS = frozenset({"w0avg"})
+# G3's private column arena is overwritten before use on every call. Its
+# diagnostic views belong to driver.fields and do not appear in __dict__.
+CUMULUS_REBUILT_ARRAYS = frozenset({"_ws"})
 RADIATION_CALLABLE_ARRAYS = frozenset({
     "latitude_deg", "longitude_deg", "_ozone_logp", "_ozone_vmr",
+    # Goddard's cloud optics table: verified source words, uploaded once.
+    "_metal_cloud_table",
     # Legacy-RRTMG adapter: it retains no latitude-interpolated ozone
     # (each call interpolates from the live latitude). _o33d_grid is
     # SERIALIZED state -- WRF's O3RAD is a restart-carried field (rdf),
     # and a child domain's first post-restore radiation call consumes
     # the parent's retained o33d BEFORE the parent's next radiation
     # cadence tick, so rebuild-on-resume would orphan it (and break
-    # resumed-vs-uninterrupted bit equality).
-    "_o33d_grid"})
+    # resumed-vs-uninterrupted bit equality).  ``_o33d_host`` and
+    # ``_o33d_device`` are that one field's storage behind the
+    # ``_o33d_grid`` property (host copy made on first read).
+    "_o33d_grid", "_o33d_host", "_o33d_device",
+    # Per-call scratch: the reused host buffer the CAM ozone time
+    # interpolation fills at every radiation call, rebuilt by the next one.
+    "_ozmixt_buf"})
 #: Containers CLASSIFIED as acceptable, deliberately (review F2 â€” no
 #: silent blind spots): the RRTMGP gas/cloud table objects are
 #: rebuild-on-load (module-level ``lru_cache`` loads of packaged
@@ -1247,6 +1553,7 @@ class RestartManifestError(RuntimeError):
 
 class RestartMismatchError(ValueError):
     """The restart file does not match the resuming configuration/setup."""
+    exit_code = 2
 
 
 def producer_identity() -> dict[str, str]:
@@ -1762,12 +2069,35 @@ def classify_state_attr(name: str) -> str:
         return "derived_setup"
     if name in STATE_INFRA_ATTRS:
         return "infra"
+    # Chem species (woof/core/chem_state.py), named from the chem table
+    # rather than listed here: ``chem_<row>`` is the species field WRF carries
+    # in its restart stream; ``chem0_<row>`` is its RK time-t copy, rewritten
+    # by dycore._save_time_t before any read, exactly like ``qv0``; ``chem``
+    # is the ChemState object (arena and table), rebuilt with the state.
+    # ``chemdiag_<name>`` is a process array or ledger total a checkpoint
+    # must carry (declared ``serialize`` by its process); ``chemwork_<name>``
+    # is rewritten before every read.
+    if name.startswith(CHEM_STATE_PREFIX) or name.startswith(CHEM_DIAG_PREFIX):
+        return "serialize"
+    if name.startswith(CHEM_TIME_PREFIX) or name.startswith(CHEM_WORK_PREFIX):
+        return "rebuild"
+    if name == "chem":
+        return "infra"
     raise RestartManifestError(
         f"DomainState attribute {name!r} is not classified in the restart "
         "manifest (woof/io/restart.py): declare it serialized (cross-step "
         "state), rebuilt (overwritten before every read), setup "
         "(fingerprint-validated), derived_setup (a function of a setup "
         "array, rebuilt with it), or infra")
+
+
+def _wsm_family_rebuilt_slots() -> frozenset[str]:
+    from woof.core.wsm_family import family_selectors, preparation_slots
+    return frozenset(slot for mp in family_selectors()
+                     for slot in preparation_slots(mp))
+
+
+_WSM_FAMILY_REBUILT_SLOTS = _wsm_family_rebuilt_slots()
 
 
 def classify_scratch_slot(slot: str) -> str:
@@ -1792,13 +2122,16 @@ def classify_scratch_slot(slot: str) -> str:
     per-follower window family is generated per declared child and so is
     matched by prefix; see :data:`CARRIED_SCRATCH_PREFIXES`.
     """
+    from woof.core.nest_accumulation import is_archive_slot
+    if is_archive_slot(slot):
+        return "serialize"
     if slot in SERIALIZED_SCRATCH_SLOTS:
         return "serialize"
     if slot in CARRIED_SCRATCH_SLOTS:
         return "carry"
     if any(slot.startswith(prefix) for prefix in CARRIED_SCRATCH_PREFIXES):
         return "carry"
-    if slot in REBUILT_SCRATCH_SLOTS:
+    if slot in REBUILT_SCRATCH_SLOTS or slot in _WSM_FAMILY_REBUILT_SLOTS:
         return "rebuild"
     if any(slot.startswith(prefix) for prefix in REBUILT_SCRATCH_PREFIXES):
         return "rebuild"
@@ -1821,12 +2154,14 @@ def _restorable_scratch_slot(slot: str) -> bool:
     including the runs with no consumer to read it.  A nest-lifecycle run
     opts its own windows in per member instead
     (:func:`write_tree_restart`), so the reader has to accept a member the
-    classification alone says is not written.  Nothing else: a ``rebuild``
+    classification alone says is not written. Strict acoustic carriers
+    are checkpointed when allocated for exact continuation. A ``rebuild``
     slot is a per-call work buffer whose value between calls means
     nothing, and an unknown slot still raises out of
     :func:`classify_scratch_slot`.
     """
     return (classify_scratch_slot(slot) == "serialize"
+            or slot in CHECKPOINTED_CARRIED_SCRATCH_SLOTS
             or _is_tracker_window_slot(slot)
             or slot in LIFECYCLE_HELD_SCRATCH_SLOTS)
 
@@ -1852,6 +2187,62 @@ def setup_core_fingerprint(state) -> str:
     return _shared_setup_core_fingerprint(
         state, error_type=RestartManifestError)
 
+
+# The one-way identity remains the existing setup_fingerprint. This optional
+# carrier exists only for fixed resident strict terrain feedback.
+_TERRAIN_BASE_NAMES = ("mub2d", "alb", "pb", "phb")
+_TERRAIN_BASE_KEY = "strict_terrain_base_v1"
+_TERRAIN_EDGE_KEY = "strict_terrain_edge_v1"
+
+
+def capture_strict_terrain_prepared_identity(state):
+    """Call immediately before the first base feedback mutates this state."""
+    if not hasattr(state, "_wrf_terrain_prepared_fingerprint"):
+        state._wrf_terrain_prepared_fingerprint = setup_fingerprint(state)
+
+
+class _TerrainSetupOverlay:
+    def __init__(self, state, stored):
+        self._state, self._stored = state, stored
+
+    def __getattr__(self, name):
+        if name in _TERRAIN_BASE_NAMES:
+            return self._stored["terrain_base/" + name]
+        return getattr(self._state, name)
+
+
+def _validate_terrain_base(header, stored, state, path):
+    meta = header.get(_TERRAIN_BASE_KEY)
+    keys = {key for key in stored if key.startswith("terrain_base/")}
+    expected = {"terrain_base/" + name for name in _TERRAIN_BASE_NAMES}
+    if meta is None:
+        if keys:
+            raise RestartMismatchError(f"restart {path} has terrain payload without metadata")
+        return
+    if (not isinstance(meta, dict) or set(meta) != {"prepared_setup_fingerprint"}
+            or not isinstance(meta["prepared_setup_fingerprint"], str)
+            or keys != expected):
+        raise RestartMismatchError(f"restart {path} has incomplete strict terrain base metadata/payload")
+    for name in _TERRAIN_BASE_NAMES:
+        key = "terrain_base/" + name
+        _check_array(stored[key], getattr(state, name), key)
+    if setup_fingerprint(state) != meta["prepared_setup_fingerprint"]:
+        raise RestartMismatchError(f"restart {path} prepared terrain setup fingerprint differs")
+    if setup_fingerprint(_TerrainSetupOverlay(state, stored)) != header["setup_fingerprint"]:
+        raise RestartMismatchError(f"restart {path} live terrain overlay fingerprint differs")
+
+
+def _terrain_edge(node):
+    from woof.wrf_exact import ENABLED
+    return (ENABLED and node.parent is not None and node.coupler is not None
+            and node.coupler.feedback == 1 and node.parent.state.phb.ndim == 3
+            and getattr(node.parent.state, "_metal_setup_state", False)
+            and getattr(node.state, "_metal_setup_state", False))
+
+
+def _terrain_position(node):
+    reg = node.coupler.registrations["m"]
+    return (int(reg.i_parent_start), int(reg.j_parent_start))
 
 def lateral_boundary_prefix_identity(state, *,
                                      rebuilt_end_frames: bool = False):
@@ -1978,22 +2369,22 @@ def _rrtmgp_workspace_identity(workspace) -> dict:
 
 
 def _asset_sha256(path) -> str:
-    """Digest the actual packaged bytes consumed by an active scheme."""
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        while True:
-            chunk = stream.read(1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Digest the actual packaged bytes consumed by an active scheme.
+
+    Once per process for an unchanged file (woof.file_digest): every
+    checkpoint asks again, and a replaced asset is still hashed again."""
+    from woof.file_digest import sha256_file
+    return sha256_file(Path(path), block_bytes=1024 * 1024)
 
 
 def _active_asset_identity(cfg, driver) -> dict[str, dict]:
     roles = []
+    if getattr(driver, "eclipse", None) is not None:
+        roles.append("eclipse_besselian")
+    # Asset-only callers historically omit inactive physics selectors.
+    if int(getattr(cfg, "bl_pbl_physics", 0)) == 901:
+        roles.append("satmedmf_manifest")
     radiation = None if driver is None else driver.radiation_callable
-    radiation_class = (None if radiation is None
-                       else _callable_class_name(radiation))
     from woof.core.radiation_composition import modern_radiation_adapters
     if 4 in radiation_scheme_ids(cfg) and modern_radiation_adapters(radiation):
         roles.extend(("rrtmgp_gas_lw", "rrtmgp_gas_sw",
@@ -2005,8 +2396,12 @@ def _active_asset_identity(cfg, driver) -> dict[str, dict]:
                       "wrf_rrtmg_sw_data",
                       "wrf_ozone_data", "wrf_ozone_lat",
                       "wrf_ozone_plev"))
+    if int(getattr(cfg, "aer_opt", 0) or 0) == 1:
+        roles.extend(("wrf_aer1_climatology", "wrf_aer1_manifest"))
     if radiation_scheme_ids(cfg)[0] == 1:
         roles.append("wrf_rrtm_data")
+    if 5 in radiation_scheme_ids(cfg):
+        roles.extend(("wrf_goddard_cloud_table", "wrf_goddard_cloud_provenance"))
     if (getattr(driver, "cam_ozone", None) is not None
             and not (4 in radiation_scheme_ids(cfg)
                      and rrtmg_variant(cfg) == RRTMG_VARIANT_LEGACY)):
@@ -2219,6 +2614,24 @@ def _radiation_setup_identity(driver, cfg) -> dict:
         raise RestartManifestError(
             "active radiation cannot be restart-identified without an "
             "attached PhysicsDriver")
+    if (4 in (lw_id, sw_id) and rrtmg_variant(cfg) == RRTMG_VARIANT_LEGACY
+            and getattr(getattr(driver, "state", None), "_metal_setup_state", False)):
+        from woof.core.physics import _metal_strict_legacy_rrtmg
+        from woof.wrf_exact import ENABLED
+
+        if ENABLED and _metal_strict_legacy_rrtmg(cfg):
+            if sw_id == 4:
+                identity["metal_legacy_sw_arithmetic"] = "wrf-exact-v1"
+            if lw_id == 4:
+                identity["metal_legacy_lw_arithmetic"] = "wrf-exact-v1"
+    if (getattr(cfg, "ghg_input", 0) == 1
+            and getattr(getattr(driver, "state", None), "_metal_setup_state", False)
+            and (lw_id == 1 or (4 in (lw_id, sw_id)
+                                and rrtmg_variant(cfg) == RRTMG_VARIANT_LEGACY))):
+        # Older Metal checkpoints could carry fixed-gas heating under ghg_input=1.
+        from woof.core.camtr_gases import camtr_identity
+
+        identity["metal_camtr_per_call"] = camtr_identity()
     scheme = driver.radiation_callable
     # The stock class for this selection comes from the REGISTRY's row
     # (``consumers.stock_callable_class``), not from a literal dict here:
@@ -2232,6 +2645,13 @@ def _radiation_setup_identity(driver, cfg) -> dict:
         "radiation", {"ra_lw_physics": lw_id, "ra_sw_physics": sw_id},
         variant=("rrtmg_legacy" if legacy_rrtmg else "rte-rrtmgp"),
         label="radiation", missing_is_custom=True)
+    if expected is None and 4 in (lw_id, sw_id) and 0 in (lw_id, sw_id):
+        # Single-spectrum RRTMG uses the registered paired engine with an
+        # inactive spectrum; it retains that engine's full setup identity.
+        expected = _stock_callable_class(
+            "radiation", {"ra_lw_physics": 4, "ra_sw_physics": 4},
+            variant=("rrtmg_legacy" if legacy_rrtmg else "rte-rrtmgp"),
+            label="radiation", missing_is_custom=True)
     callable_identity = _callable_setup_identity(
         scheme, label="radiation", expected_class=expected)
     identity["callable"] = callable_identity
@@ -2284,7 +2704,7 @@ def _radiation_setup_identity(driver, cfg) -> dict:
         # through the same leaf identity used by mixed-spectrum compositions.
         from woof.core.radiation_composition import adapter_restart_identity
         identity["classic"] = adapter_restart_identity(scheme)
-    if (lw_id, sw_id) == (4, 4) and not legacy_rrtmg:
+    if 4 in (lw_id, sw_id) and not legacy_rrtmg:
         try:
             identity.update({
                 "column_chunk": int(scheme.column_chunk),
@@ -2425,7 +2845,10 @@ def _packed_parameters_identity(params, *, label: str,
 #: bytes it always had.  Either way the digest cannot tell two values of
 #: the switch apart, which is all the restart walk needs.
 _DIGEST_DROPPED_DIAGNOSTIC_FIELDS = frozenset(
-    {"nwp_diagnostics", "tke_budget", "sase_flux_diag"})
+    {"hailcast_opt", "haildt", "hailcast_version", "nwp_diagnostics", "tke_budget", "sase_flux_diag", "surface_energy_diag",
+     # Correct mode WB1: output-only and on by default from 2.9.0, so it is
+     # dropped rather than held at a default no earlier digest carried.
+     "thompson_cloud_surface_booking"})
 
 
 #: WRF's slope_rad / topo_shading / shadlen (woof.core.topo_radiation),
@@ -2478,12 +2901,72 @@ def _drop_inert_mosaic(values: dict) -> None:
 def _mosaic_checkpoint_config(config: Mapping) -> dict:
     """Keep pre-mosaic headers and comparisons byte-identical when off."""
     values = dict(config)
+    from woof.wind_table import drop_inert_config
+    drop_inert_config(values)
+    if values.get("sf_surface_physics", 0) != 4:
+        values.pop("noahmp_snow_age", None)
     if not values.get("sf_lake_physics", 0):
         for name in ("sf_lake_physics", "use_lakedepth", "lakedepth_default", "lake_min_elev"):
             values.pop(name, None)
+    # WRF's ocean mixed layer (sf_ocean_physics = 1): off, no key echoes.
+    from woof.surface_ocean import drop_inert_ocean
+    drop_inert_ocean(values)
     _drop_inert_mosaic(values)
     drop_default_diffusion_selectors(values)
+    from woof.config import drop_inert_g3_fields
+    drop_inert_g3_fields(values)
     return values
+
+
+def _drop_default_fork_run_keys(values: dict) -> None:
+    """Use the writer's omission rules when comparing fork settings too."""
+    from woof.checkpoint_identity import drop_default_cumulus_selectors
+    drop_default_cumulus_selectors(values)
+    if values.get("diff_6th_form", "wrf_461") == "wrf_461":
+        values.pop("diff_6th_form", None)
+    if values.get("diff_6th_factor2", None) is None:
+        values.pop("diff_6th_factor2", None)
+    if values.get("upper_wind_limiter_form", "wrf_461") == "wrf_461":
+        values.pop("upper_wind_limiter_form", None)
+    if not values.get("mp_zero_out", 0):
+        values.pop("mp_zero_out", None)
+        values.pop("mp_zero_out_thresh", None)
+        values.pop("mp_zero_out_all", None)
+
+
+def _drop_default_radiation_port_keys(values: dict) -> None:
+    """Drop the lightning and aer_opt = 2 controls while they are read by nothing.
+
+    Shared by the writers' echo/digest (:func:`_drop_default_off_run_keys`)
+    and the resume comparison (:func:`_require_config_match`), so a 2.8.9
+    checkpoint, which predates these fields, resumes under a build that has
+    them, and a new checkpoint compares under the same omission rule.
+    Named breakage: without the comparison half every checkpoint written
+    before the fields existed was refused as "a different model".
+    """
+    from woof.config import drop_inactive_radiation_port_keys
+    drop_inactive_radiation_port_keys(values)
+
+    # Default-on eclipse is implicit in old non-eclipse headers. A live
+    # shadow additionally binds its algorithm, table and held field inventory.
+    # Explicit zero remains serialized, so switching it changes identity.
+    if values.get("ra_sw_eclipse", 1) == 1:
+        values.pop("ra_sw_eclipse", None)
+    # seaice_threshold is read only by the initial surface (real.exe's
+    # adjust_for_seaice rule), never by a resumed forecast; at the Registry
+    # default 100 K it converts nothing, so older headers that predate it
+    # hold the same model.  A stated threshold stays serialized.
+    if float(values.get("seaice_threshold", 100.0)) == 100.0:
+        values.pop("seaice_threshold", None)
+    from woof.checkpoint_identity import drop_default_output_controls
+    drop_default_output_controls(values)
+
+
+from woof.checkpoint_identity import (  # noqa: E402
+    CAMPAIGN_IMPLICIT_RUN_KEYS as _CAMPAIGN_IMPLICIT_RUN_KEYS,
+    SEAICE_RUN_KEYS as _SEAICE_RUN_KEYS,
+    drop_capability_campaign_keys as _drop_capability_campaign_keys,
+    seaice_read as _seaice_read)
 
 
 def _drop_default_off_run_keys(values: dict) -> None:
@@ -2497,13 +2980,53 @@ def _drop_default_off_run_keys(values: dict) -> None:
     so every writer drops each key the same way.  A new default-off field
     joins this list, naming the commit that added it.
     """
+    from woof.wind_table import drop_inert_config
+    drop_inert_config(values)
+    from woof.config import drop_inert_g3_fields
+    _drop_inert_nest_archive(values)
+    drop_inert_g3_fields(values)
+    _drop_inert_chem_block(values)
+    _drop_inert_fire_block(values)
+    # sf_ocean_physics and the oml_* settings (lane 291-fix-notes-and-doors-13).
+    from woof.surface_ocean import drop_inert_ocean
+    drop_inert_ocean(values)
+    # Correct-mode keys (woof/correct_mode.py): False is the matched
+    # WRF/MPAS arithmetic every earlier header ran, and outside the scheme
+    # that reads it a key reaches nothing.  From 2.9.0 a key defaults ON
+    # (correct mode is the default), and it echoes and digests only where
+    # it is on AND read, so a default run whose schemes never read it --
+    # every run without WSM6 or New Tiedtke -- echoes and digests as 2.8.9
+    # did, and an on key under its scheme binds.
+    for key in _CORRECTION_KEYS:
+        if (key in _OUTPUT_ONLY_CORRECTION_KEYS
+                or not values.get(key, False)
+                or not _correct_key_in_scope(key, values)):
+            values.pop(key, None)
+    from woof.checkpoint_identity import drop_default_cumulus_selectors
+    drop_default_cumulus_selectors(values)
     # No prescribed smoke is the source forcing every earlier header ran.
     if not values.get("rrtmg_smoke_manifest", ""):
         values.pop("rrtmg_smoke_manifest", None)
         values.pop("rrtmg_smoke_manifest_identity", None)
+    # The pre-existing scalar path always used the PD operator. Preserve
+    # the historical off-arm identity when that selector is its default.
+    if values.get("scalar_adv_opt", 1) == 1:
+        values.pop("scalar_adv_opt", None)
     # scalar_pblmix: off preserves checkpoints predating scalar diffusion.
+    if not values.get("surface_energy_diag", False):
+        values.pop("surface_energy_diag", None)
     if not values.get("scalar_pblmix", 0):
         values.pop("scalar_pblmix", None)
+    # MYNN-EDMF's split mixing keys (lane rrfs288-gap1): off mixes nothing
+    # beyond what bl_mynn_mixscalars already selects, every earlier header.
+    for key in ("bl_mynn_mixaerosols", "bl_mynn_mixnumcon"):
+        if not values.get(key, 0):
+            values.pop(key, None)
+    # TEMPO's optional coupling arms (lane rrfs-hex-tempo-preset): off is
+    # what every earlier header ran; an enabled arm still binds.
+    for key in ("tempo_ml_for_bl_nc", "tempo_surface_emission_before"):
+        if values.get(key, False) is False:
+            values.pop(key, None)
     # use_rap_aero_icbc: off is the aerosol start every earlier header ran.
     if not values.get("use_rap_aero_icbc", False):
         values.pop("use_rap_aero_icbc", None)
@@ -2515,6 +3038,11 @@ def _drop_default_off_run_keys(values: dict) -> None:
         values.pop("use_lakedepth", None)
         values.pop("lakedepth_default", None)
         values.pop("lake_min_elev", None)
+    # The 2.9.4 capabilities campaign's keys, omitted while they reach
+    # nothing so every earlier header resumes under a default run (named
+    # breakage: a 2.8.7 checkpoint refused with "lake_state_path: absent
+    # from the restart file").  _require_config_match applies the same rule.
+    _drop_capability_campaign_keys(values)
     # adaptive_nest_lattice (9a2f3fa63): off is the original root clock.
     if not values.get("adaptive_nest_lattice", False):
         values.pop("adaptive_nest_lattice", None)
@@ -2528,35 +3056,59 @@ def _drop_default_off_run_keys(values: dict) -> None:
     # The RUC SOILPROP lineage: wrf_45 is omitted at its default.
     if values.get("ruc_soilprop", "wrf_45") == "wrf_45":
         values.pop("ruc_soilprop", None)
+    # Before this selector every header used the older equation of time.
+    # Omit only the legacy value. The new generic default must stay bound.
+    if values.get("solar_generation", "wrf_461") == "wrf_461":
+        values.pop("solar_generation", None)
+    # The scheme-scoped WRF 4.7/4.8 fix selectors.  A header echoes one only
+    # while its scheme runs under the corrected generation: with the scheme
+    # off the key reaches nothing, and at the previous generation it is what
+    # every earlier header (which has no such key) ran.  So a run that does
+    # not use Noah-MP or the single-layer urban model, and any run pinned to
+    # the previous generation, echoes and digests as 2.8.9 did.
+    if (values.get("sf_surface_physics", 0) != 4
+            or values.get("noahmp_snow_age", "wrf_461") == "wrf_461"):
+        values.pop("noahmp_snow_age", None)
+    if (int(values.get("sf_urban_physics", 0) or 0) != 1
+            or values.get("urban_water_balance", "wrf_471") == "wrf_471"):
+        values.pop("urban_water_balance", None)
     # The Thompson generation: wrf_461 is what every earlier header ran.
     if values.get("thompson_version", "wrf_461") == "wrf_461":
         values.pop("thompson_version", None)
+    if values.get("thompson_table_dir") is None:
+        values.pop("thompson_table_dir", None)
     if values.get("thompson_fork_snow_fall", "blend") == "blend":
         values.pop("thompson_fork_snow_fall", None)
     # The MYNN generation: wrf_461 is what every earlier header ran.
     if values.get("bl_mynn_version", "wrf_461") == "wrf_461":
         values.pop("bl_mynn_version", None)
+    # Omitted historical headers mean legacy, even though new runs default
+    # to the corrected generation. Never drop the corrected selection.
+    if (values.get("bl_pbl_physics", 0) != 1
+            or values.get("ysu_version", "wrf_461") == "wrf_461"):
+        values.pop("ysu_version", None)
     if values.get("bl_mynn_gsd41_unsquared_qtke", False) is False:
         values.pop("bl_mynn_gsd41_unsquared_qtke", None)
     if values.get("bl_mynn_cloud_tendency_form", "wrf_461") == "wrf_461":
         values.pop("bl_mynn_cloud_tendency_form", None)
+    # WRF's cycling flag: omitted at its .false. default.
+    if values.get("cycling", False) is False:
+        values.pop("cycling", None)
     # The MYNN surface-layer generation: wrf_461 is omitted at its default.
     if values.get("mynn_sfclay_variant", "wrf_461") == "wrf_461":
         values.pop("mynn_sfclay_variant", None)
+    if values.get("urban_ucm_generation", "wrf_471") == "wrf_471":
+        values.pop("urban_ucm_generation", None)
+    for name in ("urban_treeoption", "urban_ttscheme", "urban_fvg"):
+        if values.get(name, -1) == -1:
+            values.pop(name, None)
+    if values.get("urban_table_dir", "") == "":
+        values.pop("urban_table_dir", None)
     # The sixth-order filter form and the fork's second factor (unset at
     # the WRF v4.6.1 form), and mp_zero_out with its threshold and array
     # switch (off), are omitted at their defaults: every earlier header
     # ran the v4.6.1 filter and no zero-out pass.
-    if values.get("diff_6th_form", "wrf_461") == "wrf_461":
-        values.pop("diff_6th_form", None)
-    if values.get("diff_6th_factor2", None) is None:
-        values.pop("diff_6th_factor2", None)
-    if values.get("upper_wind_limiter_form", "wrf_461") == "wrf_461":
-        values.pop("upper_wind_limiter_form", None)
-    if not values.get("mp_zero_out", 0):
-        values.pop("mp_zero_out", None)
-        values.pop("mp_zero_out_thresh", None)
-        values.pop("mp_zero_out_all", None)
+    _drop_default_fork_run_keys(values)
     # The generic RUC irrigation rule: wrf_461 is omitted at its default.
     if values.get("ruc_irrigation", "wrf_461") == "wrf_461":
         values.pop("ruc_irrigation", None)
@@ -2590,9 +3142,14 @@ def _drop_default_off_run_keys(values: dict) -> None:
     # SPP consumers (1ef07b807): zero leaves the deterministic trajectory
     # and the pre-feature checkpoint echo and digest unchanged.
     drop_default_spp_selectors(values)
+    # lightning_option and aer_opt = 2 controls (golden/ports-rad): off
+    # leaves the echo and digest of every earlier header unchanged.
+    _drop_default_radiation_port_keys(values)
     # terrain_clock (lane/286-fixed-step-grid): "measured" is the
     # launch-time derivation every header written before the field ran
-    # under, so the echo and digest read as they did; "pinned" stays.
+    # under, so the echo and digest read as they did; "pinned" stays, and
+    # so does "local_face" (the default from 2.8.8), which can run a
+    # longer step than "measured" on the same grid.
     if values.get("terrain_clock", "measured") == "measured":
         values.pop("terrain_clock", None)
     # fractional_seaice (lane/286-veg-albedo-seaice, 654993324): 0 is the
@@ -2603,11 +3160,19 @@ def _drop_default_off_run_keys(values: dict) -> None:
     # The frozen cloud wrapper every earlier checkpoint ran.
     if values.get("rrtmg_cloud_optics_form", "wrf_461") == "wrf_461":
         values.pop("rrtmg_cloud_optics_form", None)
+    # The rural aer_opt=3 aerosol type every earlier checkpoint ran.
+    if values.get("rrtmg_aer3_type_source", "rural") == "rural":
+        values.pop("rrtmg_aer3_type_source", None)
     # Disabled radiation-driver options retain the trajectory and header
     # identity from before their fields were added.
     for key in ("swint_opt", "aer_opt", "alb_sol"):
         if not values.get(key, 0):
             values.pop(key, None)
+
+
+def _drop_inert_nest_archive(values):
+    if not values.get('nested') or not values.get('nest_accumulation_archive', False):
+        values.pop('nest_accumulation_archive', None)
 
 
 def configuration_echo(cfg) -> dict:
@@ -2626,6 +3191,51 @@ def configuration_echo(cfg) -> dict:
     from woof.core.rrtmg_smoke_identity import bind_smoke_source_identity
     bind_smoke_source_identity(values)
     return values
+
+
+def _drop_inert_chem_block(values: dict) -> None:
+    """Remove the chem block from a config echo while chem is off, in place.
+
+    With ``chem_sets`` empty every chem key is read by nothing
+    (woof.config.validate_chem_config), so a chem-off checkpoint's header
+    and configuration digest are the bytes they were before the block
+    existed; :func:`_require_config_match` reads the absent keys at their
+    defaults.  A chem run echoes the whole block and is compared key by
+    key.
+    """
+    if values.get("chem_sets"):
+        # The HRRR v4.1.21 smoke fork's controls, appended to the block by
+        # c363fd55ff (simple_dir_fdb) and fc1e2df360: at their defaults they
+        # are absent from a chem run's echo too, so every chem checkpoint
+        # written before them keeps its configuration digest (named
+        # breakage: the 2.8.7 sfire_smoke header's configuration_sha256,
+        # tests/test_restart_287_header.py).  _require_config_match reads
+        # an absent chem key at its default; a stated value binds.
+        for key, default in CHEM_FORK_RUN_DEFAULTS.items():
+            if values.get(key, default) == default:
+                values.pop(key, None)
+        return
+    from woof.config import CHEM_RUN_FIELDS
+    for key in CHEM_RUN_FIELDS:
+        values.pop(key, None)
+
+
+#: The smoke fork's chem keys at the value every earlier chem run held.
+CHEM_FORK_RUN_DEFAULTS = {"simple_dir_fdb": 0, "enh_vermix": False,
+                          "flam_part": -1.0, "aer_drydep_opt": 0}
+
+
+def _drop_inert_fire_block(values: dict) -> None:
+    """Remove the fire (SFIRE) block from a config echo while fire is off.
+
+    With ``ifire`` 0 no fire key is read (the FireCoupler and the fire
+    static are built only at ``ifire`` 2), so a fire-off checkpoint's
+    header and configuration digest are the bytes they were before the
+    block existed.  A fire run echoes the whole block and binds key by key.
+    """
+    from woof.config import inert_fire_fields
+    for key in inert_fire_fields(values):
+        values.pop(key, None)
 
 
 def _configuration_digest_values(config: Mapping) -> dict:
@@ -2652,12 +3262,19 @@ def _configuration_digest_values(config: Mapping) -> dict:
         # model runs, so a resume across urban settings is still refused.
         for key in _URBAN_DIGEST_FIELDS:
             values.pop(key, None)
+    elif int(values.get("sf_urban_physics", 0)) != 1:
+        values.pop("urban_water_balance", None)
+    elif values.get("urban_water_balance", "wrf_471") == "wrf_471":
+        # An older header omitted this key and used the rain-positive clamps.
+        values.pop("urban_water_balance", None)
     return values
 
 
 #: The RunConfig keys of the urban canopy selector; see
 #: :func:`_configuration_digest_values`.
-_URBAN_DIGEST_FIELDS = ("sf_urban_physics", "use_wudapt_lcz", "num_urban_hi")
+_URBAN_DIGEST_FIELDS = ("sf_urban_physics", "use_wudapt_lcz", "num_urban_hi",
+                        "urban_water_balance",
+                        "urban_ucm_generation", "urban_treeoption", "urban_ttscheme", "urban_fvg", "urban_table_dir")
 
 
 def _configuration_fingerprint(cfg) -> str:
@@ -2734,6 +3351,27 @@ def _thompson_table_identity(path) -> dict:
     }
 
 
+def _ferrier_setup_identity() -> dict:
+    """Resolved table identity for ``mp_physics=5``.
+
+    Every Ferrier-Aligo rain and ice rate is a lookup into
+    ETAMPNEW_DATA.expanded_rain (module_mp_fer_hires.F:2969-2983), so the
+    bytes are re-validated here exactly as the adapter loads them and a
+    resume onto a different table is refused before restore.
+    """
+    from woof.core.fer_hires import (TABLE_NAME, TABLE_SHA256,
+                                      FerrierTableError, load_table,
+                                      table_root)
+
+    root = table_root()
+    try:
+        load_table(root)
+    except FerrierTableError as exc:
+        raise RestartManifestError(
+            f"active Ferrier table identity is invalid at {root}") from exc
+    return {"table": TABLE_NAME, "sha256": TABLE_SHA256}
+
+
 def _p3_setup_identity() -> dict:
     """Resolved implementation/table identity for ``mp_physics=50``.
 
@@ -2777,7 +3415,7 @@ def _p3_setup_identity() -> dict:
     }
 
 
-def _thompson_setup_identity() -> dict:
+def _thompson_setup_identity(cfg=None) -> dict:
     """Resolved implementation/table identity for ``mp_physics=8``.
 
     The table root resolves exactly as the forecast adapter resolves it
@@ -2792,6 +3430,10 @@ def _thompson_setup_identity() -> dict:
     equality check rather than silently continuing across the promotion.
     """
     from woof.physics_compat import thompson_table_root
+
+    if cfg is not None and getattr(cfg,"thompson_version","wrf_461") != "wrf_461":
+        from woof.core.thompson_column import table_identity
+        return table_identity(cfg)
 
     root = thompson_table_root()
     try:
@@ -2919,16 +3561,18 @@ def _thompson_aerosol_setup_identity() -> dict:
     }
 
 
-def physics_setup_identity(state, cfg) -> dict:
-    """Return the complete JSON-able trajectory-defining physics setup.
+from woof.ysu_generations import ysu_algorithm_identity
 
-    The ordinary config echo pins all configured knobs.  This resolves the
-    remaining runtime inputs that config alone cannot prove: callable
-    implementation/policy, radiation calendar/grid/gases/ozone, packed Noah
-    parameters, selected Morrison constants, resolved driver cadence, and
-    the byte digests of every packaged table active on this trajectory.
+
+def physics_algorithm_identities(cfg) -> dict:
+    """The ``algorithms`` component of :func:`physics_setup_identity`.
+
+    A function of the configuration alone: the scheme selectors pick a row
+    of each identity table.  Split out so the restart door can ask what
+    THIS build calls the configuration a checkpoint recorded, before any
+    state exists (:func:`_require_current_algorithm_identities`).
     """
-    driver = getattr(state, "physics", None)
+    from woof.wrf_exact import ENABLED
     ra_lw_physics, ra_sw_physics = radiation_scheme_ids(cfg)
     if ((ra_lw_physics, ra_sw_physics) == (4, 4)
             and rrtmg_variant(cfg) == RRTMG_VARIANT_LEGACY):
@@ -2961,8 +3605,9 @@ def physics_setup_identity(state, cfg) -> dict:
         "land_surface": _scheme_algorithm(
             LAND_SURFACE_ALGORITHM_IDENTITIES, cfg.sf_surface_physics,
             "land surface"),
-        "pbl": _scheme_algorithm(
-            PBL_ALGORITHM_IDENTITIES, cfg.bl_pbl_physics, "PBL"),
+        "pbl": (ysu_algorithm_identity(cfg.ysu_version, strict=ENABLED)
+                if cfg.bl_pbl_physics == 1 else _scheme_algorithm(
+                    PBL_ALGORITHM_IDENTITIES, cfg.bl_pbl_physics, "PBL")),
         "radiation": (lw_algorithm if lw_algorithm == sw_algorithm else
                       f"lw={lw_algorithm};sw={sw_algorithm}"),
         "radiation_lw": lw_algorithm,
@@ -2970,13 +3615,74 @@ def physics_setup_identity(state, cfg) -> dict:
         "cumulus": _scheme_algorithm(
             CUMULUS_ALGORITHM_IDENTITIES, cfg.cu_physics, "cumulus"),
     }
+    if getattr(cfg, "solar_generation", "wrf_480") != "wrf_461":
+        from woof.core.solar import solar_generation
+        algorithms["solar"] = solar_generation(cfg.solar_generation)["algorithm"]
+    if int(cfg.sf_surface_physics) == 4:
+        from woof.noahmp_generation import snow_age_generation
+        generation = snow_age_generation(getattr(cfg, "noahmp_snow_age", "wrf_470"))
+        algorithms["land_surface"] = NOAHMP_SNOW_AGE_ALGORITHM_IDENTITIES[generation]
     if int(getattr(cfg, "sf_urban_physics", 0)) > 0:
         # Only when an urban model runs, so every existing header is
         # unchanged; a resume across urban models is then refused here as
         # well as by the configuration fingerprint.
         algorithms["urban"] = _scheme_algorithm(
             URBAN_ALGORITHM_IDENTITIES, cfg.sf_urban_physics, "urban")
+        if int(cfg.sf_urban_physics) == 1:
+            from woof.config import (URBAN_WATER_BALANCE_DEFAULT,
+                                      URBAN_WATER_BALANCE_GENERATIONS)
+            generation = getattr(cfg, "urban_water_balance", URBAN_WATER_BALANCE_DEFAULT)
+            algorithms["urban"] = URBAN_WATER_BALANCE_GENERATIONS[generation]["algorithm"]
+        from woof.checkpoint_identity import urban_algorithm_identity
+        algorithms["urban"] = urban_algorithm_identity(cfg)
+    if int(getattr(cfg, "sf_ocean_physics", 0)):
+        # Only when the mixed layer runs, so every existing header is
+        # unchanged; a resume across ocean models is refused here.
+        from woof.surface_ocean import ocean_option
+        ocean = ocean_option(cfg.sf_ocean_physics)
+        algorithms["surface_ocean"] = (ocean["algorithm_identity"] + ":" +
+            hashlib.sha256(json.dumps(ocean, sort_keys=True).encode()).hexdigest())
+    if cfg.sf_surface_physics and getattr(cfg, "seaice_prognostic", False):
+        algorithms["seaice"] = "zero-layer-snow-fractional-stefan-v1"
+    mixing = dycore_mixing_identity(cfg)
+    if mixing is not None:
+        # Only when the dycore mixes (km_opt 2-4, an active km_opt = 1, or
+        # sixth order), so a run without mixing keeps its pre-2.8.8 header
+        # and resumes; a pre-2.8.8 checkpoint of a mixing run lacks the key
+        # and is refused here before restore (checkpoint_identity.
+        # DYCORE_MIXING_ALGORITHM_IDENTITY names what changed).
+        algorithms["dycore_mixing"] = mixing
+    damping = upper_damping_identity(cfg)
+    if damping is not None:
+        # Only when the implicit damper runs (damp_opt = 3), so a run
+        # without it keeps its pre-2.8.8 header and resumes; a pre-2.8.8
+        # checkpoint of a damped run lacks the key and is refused here
+        # before restore (checkpoint_identity.
+        # UPPER_DAMPING_ALGORITHM_IDENTITY names what changed).
+        algorithms["upper_damping"] = damping
+    return algorithms
+
+
+def physics_setup_identity(state, cfg) -> dict:
+    """Return the complete JSON-able trajectory-defining physics setup.
+
+    The ordinary config echo pins all configured knobs.  This resolves the
+    remaining runtime inputs that config alone cannot prove: callable
+    implementation/policy, radiation calendar/grid/gases/ozone, packed Noah
+    parameters, selected Morrison constants, resolved driver cadence, and
+    the byte digests of every packaged table active on this trajectory.
+    """
+    driver = getattr(state, "physics", None)
+    algorithms = physics_algorithm_identities(cfg)
     microphysics = {"scheme_id": int(cfg.mp_physics)}
+    if getattr(state, "_metal_setup_state", False):
+        from woof.wrf_exact import ENABLED
+        from woof.metal.strict_regional_kessler_profile import admits
+        if ENABLED and admits(cfg):
+            microphysics["metal_kessler_arithmetic"] = "wrf-exact-regional-v1"
+        from woof.metal.strict_regional_wsm6_profile import admits as admits_wsm6
+        if ENABLED and admits_wsm6(cfg):
+            microphysics["metal_wsm6_arithmetic"] = "wrf-exact-regional-v1"
     if int(cfg.mp_physics) == 6:
         from woof.core.wsm6_constants import rimed_ice_constants
         selection = int(cfg.wsm6_hail_opt)
@@ -3001,7 +3707,7 @@ def physics_setup_identity(state, cfg) -> dict:
             "cg": float(constants.cg),
         }
     if int(cfg.mp_physics) == 8:
-        microphysics["thompson"] = _thompson_setup_identity()
+        microphysics["thompson"] = _thompson_setup_identity(cfg)
     if int(cfg.mp_physics) == 28:
         microphysics["thompson_aerosol"] = _thompson_aerosol_setup_identity()
     if int(cfg.mp_physics) == 18:
@@ -3009,6 +3715,8 @@ def physics_setup_identity(state, cfg) -> dict:
             _nssl2_restart_contract_identity(cfg)
     if int(cfg.mp_physics) == 50:
         microphysics["p3"] = _p3_setup_identity()
+    if int(cfg.mp_physics) == 5:
+        microphysics["ferrier"] = _ferrier_setup_identity()
 
     land_surface = {
         "scheme_id": int(cfg.sf_surface_physics),
@@ -3112,6 +3820,9 @@ def physics_setup_identity(state, cfg) -> dict:
                 "latitude": _array_setup_identity(owner.latitude_deg),
                 "longitude": _array_setup_identity(owner.longitude_deg),
             }
+        fire = getattr(driver, "fire", None)
+        if fire is not None:
+            driver_identity["fire"] = _json_value(fire.setup_identity(), "SFIRE setup identity")
 
     identity = {
         "schema_version": PHYSICS_SETUP_SCHEMA_VERSION,
@@ -3124,6 +3835,15 @@ def physics_setup_identity(state, cfg) -> dict:
         "cumulus": cumulus,
         "assets": _active_asset_identity(cfg, driver),
     }
+    if getattr(driver, "eclipse", None) is not None:
+        from woof.eclipse_windows import _CUDA
+        identity["eclipse"] = {"policy": "wrf461-besselian-current-utc-per-step-v1",
+                               "kernel_sha256": hashlib.sha256(_CUDA.encode()).hexdigest()}
+    urban = getattr(driver, "urban", None)
+    if urban is not None and (getattr(cfg, "urban_ucm_generation", "wrf_471") == "wrf_480" or getattr(cfg, "urban_table_dir", "")):
+        from woof.core.urban_ucm import pack_params
+        identity["urban_parameters"] = _packed_parameters_identity(pack_params(urban.params), label="urban canopy", attribute="urban.params")
+        identity["urban_parameters"]["table_sha256"] = urban.params.sha256
     # Literal-only sets have no table bundle that could otherwise bind
     # their constants. Every checkpoint writer uses this setup identity.
     # No set adds no key, preserving all earlier default setup bytes.
@@ -3263,7 +3983,8 @@ def _scratch_manifest(state) -> dict[str, object]:
     pool = getattr(state, "_scratch", {})
     manifest = {}
     for slot in sorted(pool):
-        if classify_scratch_slot(slot) == "serialize":
+        if (classify_scratch_slot(slot) == "serialize"
+                or slot in CHECKPOINTED_CARRIED_SCRATCH_SLOTS):
             manifest[f"scratch/{slot}"] = pool[slot]
     return manifest
 
@@ -3458,7 +4179,9 @@ def _driver_manifest(driver) -> dict[str, object]:
             manifest[f"held/{name}"] = value
     manifest.update(pbl_raw_manifest(driver))
     manifest.update(pbl_diagnostic_manifest(driver))
-    for tend_name in DRIVER_TENDENCY_ATTRS:
+    manifest.update(_fire_manifest(driver))
+    manifest.update(_hydro_manifest(driver))
+    for tend_name in _live_driver_tendency_attrs(driver):
         tend = getattr(driver, tend_name)
         _require_dataclass_components(
             tend, TENDENCY_COMPONENTS, f"{tend_name} (PhysicsTendencies)")
@@ -3483,6 +4206,9 @@ def _driver_manifest(driver) -> dict[str, object]:
             raise RestartManifestError(
                 f"driver.microphysics.{comp} is populated but has no canonical "
                 f"scratch slot for mp_physics={driver.mp_physics}")
+    if "_pwp_status" in driver.fields:
+        from woof.ocean.mixed_layer import check
+        check(driver.fields)
     for name in sorted(driver.fields):
         manifest[f"fields/{name}"] = driver.fields[name]
     # The in-place fields restore relies on SFClayResult aliasing the
@@ -3518,20 +4244,138 @@ def _driver_manifest(driver) -> dict[str, object]:
                           RADIATION_CALLABLE_ARRAYS,
                           RADIATION_CALLABLE_CONTAINERS, "radiation")
     _callable_state_check(driver.cumulus_callable,
-                          CUMULUS_CALLABLE_ARRAYS,
+                          CUMULUS_CALLABLE_ARRAYS | CUMULUS_REBUILT_ARRAYS,
                           CUMULUS_CALLABLE_CONTAINERS, "cumulus")
     w0avg = getattr(driver.cumulus_callable, "w0avg", None)
     if w0avg is not None:
         manifest["cumulus/w0avg"] = w0avg
-    o33d_grid = getattr(driver, "o3rad", None)
-    if o33d_grid is None:
-        o33d_grid = getattr(driver.radiation_callable, "_o33d_grid", None)
+    o33d_grid = radiation_o33d_carrier(driver)
     if o33d_grid is not None:
         # Legacy-RRTMG root o33d field (WRF's restart-carried O3RAD
         # analogue): serialized so child-domain ozone routing resumes
         # bit-identically (see RADIATION_CALLABLE_ARRAYS note).
         manifest["radiation/o33d_grid"] = o33d_grid
     return manifest
+
+
+def _live_driver_tendency_attrs(driver):
+    return (*DRIVER_TENDENCY_ATTRS, *(name for name in OPTIONAL_DRIVER_TENDENCY_ATTRS
+             if getattr(driver, name, None) is not None))
+
+
+def _hydro_manifest(driver):
+    hydro = getattr(driver, "hydro", None)
+    return {} if hydro is None else {f"hydro/{key}": value for key, value in hydro.arrays.items()}
+
+
+def _validate_hydro_payload(stored, header, driver):
+    hydro = getattr(driver, "hydro", None)
+    incoming = {key[6:]: value for key, value in stored.items() if key.startswith("hydro/")}
+    metadata = (header.get("driver") or {}).get("hydro")
+    if hydro is None:
+        if incoming or metadata is not None:
+            raise RestartMismatchError("restart carries NextGen state but the parent has no hydro driver")
+        return
+    try:
+        hydro.validate_checkpoint(metadata, incoming)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RestartMismatchError(f"NextGen restart cannot continue: {exc}") from exc
+
+
+def _fire_manifest(driver):
+    """All native fire state, including halos, stages and moisture clocks."""
+    fire = getattr(driver, "fire", None)
+    if fire is None:
+        return {}
+    arrays = fire.arrays()
+    if not isinstance(arrays, Mapping) or not arrays:
+        raise RestartManifestError("SFIRE checkpoint has no fire arrays; resuming would lose the evolving fire")
+    result = {}
+    for name, value in arrays.items():
+        if not isinstance(name, str) or "/" in name or not name:
+            raise RestartManifestError("SFIRE restart field names must be nonempty flat identifiers")
+        if not _is_array_like(value) or np.dtype(value.dtype) not in (np.dtype(np.float32),np.dtype(np.int32)):
+            raise RestartManifestError(f"SFIRE restart field {name!r} must carry native float32 or int32 words")
+        result[f"fire/{name}"] = value
+    return result
+
+
+def _fire_header(driver):
+    fire = getattr(driver, "fire", None)
+    if fire is None:
+        return {}
+    identity = _json_value(fire.setup_identity(), "SFIRE setup identity")
+    metadata = _json_value(fire.metadata(), "SFIRE continuation metadata")
+    if not isinstance(identity, dict) or not isinstance(metadata, dict):
+        raise RestartManifestError("SFIRE restart setup and continuation metadata must be mappings")
+    return {"fire": metadata, "fire_setup_identity": identity,
+            "fire_setup_fingerprint": _json_sha256(identity)}
+
+
+def _validate_fire_payload(stored, header, driver):
+    """Check complete fire inventory and static setup before any mutation."""
+    fire = getattr(driver, "fire", None)
+    incoming = {key: value for key, value in stored.items() if key.startswith("fire/")}
+    driver_header = header.get("driver")
+    driver_header = driver_header if isinstance(driver_header, dict) else {}
+    metadata = driver_header.get("fire")
+    if fire is None:
+        if incoming or metadata is not None:
+            raise RestartMismatchError("restart carries SFIRE state but the resuming driver has no coupled fire model")
+        return
+    expected = _fire_manifest(driver)
+    if set(incoming) != set(expected):
+        raise RestartMismatchError(
+            "restart fire-state inventory differs from the resuming model "
+            f"(missing {sorted(set(expected)-set(incoming))}, extra {sorted(set(incoming)-set(expected))}); "
+            "missing fire stages or moisture fields change the resumed spread")
+    for key, target in expected.items():
+        _check_array(incoming[key], target, key)
+    if not isinstance(metadata, dict):
+        raise RestartMismatchError("restart is missing SFIRE continuation metadata and clocks")
+    identity = driver_header.get("fire_setup_identity")
+    fingerprint = driver_header.get("fire_setup_fingerprint")
+    live = _json_value(fire.setup_identity(), "SFIRE setup identity")
+    if (not isinstance(identity, dict) or fingerprint != _json_sha256(identity)
+            or identity != live):
+        raise RestartMismatchError("restart SFIRE static data, refinement, fuel table or ignition setup differs; resuming would change the fire trajectory")
+    validator = getattr(fire, "validate_restart", None)
+    if validator is not None:
+        try:
+            validator({key[5:]: value for key, value in incoming.items()}, metadata)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RestartMismatchError("restart SFIRE continuation metadata is malformed") from exc
+
+
+def radiation_o33d_carrier(driver):
+    """The array a manifest records as ``radiation/o33d_grid``, without a copy.
+
+    ``PhysicsDriver.o3rad`` when a tree owns one; otherwise the legacy
+    adapter's retained field, taken on the device through ``o33d_device()``
+    when the adapter keeps it there.  Reading the ``_o33d_grid`` property
+    instead materializes a host copy of the whole field.  Named breakage
+    (box G, 2026-10-05, 1 km HRRR physics): every streamed sweep's
+    inventory runs this manifest on the forecast's main thread and then
+    drops the slot as restart-only, so each radiation period paid a full
+    device-to-host copy for nothing, and under host memory pressure one of
+    those copies held step 551 for 27 s with both cards idle.  A restart
+    writer converts the device array exactly as it converts every state
+    field (``_host``), so the bytes written are unchanged.
+    """
+    carrier = getattr(driver, "o3rad", None)
+    if carrier is not None:
+        return carrier
+    adapter = driver.radiation_callable
+    on_device = getattr(adapter, "o33d_device", None)
+    if callable(on_device):
+        state = getattr(driver, "state", None)
+        if getattr(state, "_metal_setup_state", False):
+            carrier = on_device(array_module=state._array_module)
+        else:
+            carrier = on_device()
+        if carrier is not None:
+            return carrier
+    return getattr(adapter, "_o33d_grid", None)
 
 
 def root_external_lbc_clock_identity(state, cfg) -> str | None:
@@ -3580,11 +4424,91 @@ def write_restart(path, state, cfg, *, run_trackers=None,
             preserved_forcing_prefix=preserved_forcing_prefix)
 
 
+def prepare_restart(path, state, cfg, *, run_trackers=None,
+                    tree_header: dict | None = None,
+                    extra_scratch_slots=(),
+                    sealed_forcing_extension: bool = False,
+                    preserved_forcing_prefix: bool = False,
+                    staging=None):
+    """Snapshot what :func:`write_restart` would write; publish it later.
+
+    Every validation, the header and the host copy of every array happen
+    HERE, on the caller's thread, exactly as :func:`write_restart` does
+    them.  The returned callable performs only the publication (``np.savez``
+    to a unique temporary, ``fsync``, atomic rename, directory ``fsync``)
+    and returns the path, so a checkpoint writer thread can run it while
+    the model steps on.  The snapshot OWNS its arrays: a device array is
+    copied to the host (as the synchronous writer always did) and a host
+    array is copied too, so a later step cannot change what is written.
+    The file is the one :func:`write_restart` writes, byte for byte, apart
+    from the ``created`` stamp both writers take from the wall clock.
+
+    ``staging`` (a :class:`woof.io.checkpoint_staging.StagedSnapshot`)
+    takes the device arrays' host copies asynchronously, into pinned
+    memory, on the model's stream; the returned callable waits for those
+    copies before it writes a byte.  Without it every array is copied
+    synchronously here, as before.
+    """
+    with perf_timing.stage("io.restart.prepare_restart"):
+        path, payload = _restart_payload(
+            path, state, cfg, run_trackers=run_trackers,
+            tree_header=tree_header,
+            extra_scratch_slots=extra_scratch_slots,
+            sealed_forcing_extension=sealed_forcing_extension,
+            preserved_forcing_prefix=preserved_forcing_prefix,
+            owned=True, staging=staging)
+    if staging is None:
+        return lambda: _publish_restart_payload(path, payload)
+    held = [payload]
+
+    def publish():
+        try:
+            staging.wait()
+            return _publish_restart_payload(path, held[0])
+        finally:
+            # The pinned slab goes back to the pool for the next checkpoint.
+            held.clear()
+            staging.release()
+
+    def release():
+        held.clear()
+        staging.release()
+
+    publish.release = release
+    return publish
+
+
 def _write_restart(path, state, cfg, *, run_trackers=None,
                    tree_header: dict | None = None,
                    extra_scratch_slots=(),
                    sealed_forcing_extension: bool = False,
                    preserved_forcing_prefix: bool = False) -> Path:
+    path, payload = _restart_payload(
+        path, state, cfg, run_trackers=run_trackers,
+        tree_header=tree_header, extra_scratch_slots=extra_scratch_slots,
+        sealed_forcing_extension=sealed_forcing_extension,
+        preserved_forcing_prefix=preserved_forcing_prefix)
+    return _publish_restart_payload(path, payload)
+
+
+def _owned_host(value) -> np.ndarray:
+    """A host array no later model step can change: a copy, always."""
+    if hasattr(value, "get"):
+        return np.asarray(value.get())
+    if hasattr(value, "to_numpy"):
+        return value.to_numpy()
+    return np.array(value, copy=True)
+
+
+def _restart_payload(path, state, cfg, *, run_trackers=None,
+                     tree_header: dict | None = None,
+                     extra_scratch_slots=(),
+                     sealed_forcing_extension: bool = False,
+                     preserved_forcing_prefix: bool = False,
+                     owned: bool = False, staging=None):
+    if getattr(cfg, "umove", 0.0) or getattr(cfg, "vmove", 0.0):
+        from woof.moving_frame import initialize_moving_frame
+        initialize_moving_frame(state, cfg)
     if cfg.diff_opt == 1:
         from woof.core.dycore import initialize_coordinate_reference
         initialize_coordinate_reference(state, cfg)
@@ -3612,6 +4536,9 @@ def _write_restart(path, state, cfg, *, run_trackers=None,
                 state.elapsed_seconds, "sealed restart write"))
     manifest: dict[str, object] = {}
     manifest.update(state_manifest(state))
+    if tree_header is not None and _TERRAIN_BASE_KEY in tree_header:
+        manifest.update({"terrain_base/" + name: getattr(state, name)
+                         for name in _TERRAIN_BASE_NAMES})
     manifest.update(_scratch_manifest(state))
     stochastic_header = None
     stochastic_binding = getattr(state, "_ensemble_stochastic", None)
@@ -3631,19 +4558,29 @@ def _write_restart(path, state, cfg, *, run_trackers=None,
             "ysu_nan_guard_fires": int(driver.ysu_nan_guard_fires),
             "microphysics_updates": int(driver.microphysics_updates),
             "pbl_raw_available": getattr(driver, "pbl_raw_rates", {}) is not None,
+            "swdd_from_scheme": bool(getattr(driver, "_swdd_from_scheme", False)),
             # Carrier provenance: source + last producer model time, per
             # carrier.  Two scalars each, in the header rather than the
             # array set, so the v5 key layout is untouched.
             "carriers": driver.carriers.state(),
             "surface_radiation_policy": driver.carriers.policy,
         }
+        driver_header.update(_fire_header(driver))
+        hydro = getattr(driver, "hydro", None)
+        if hydro is not None:
+            driver_header["hydro"] = hydro.checkpoint_metadata()
     physics_setup = physics_setup_identity(state, cfg)
     physics_setup_sha256 = _json_sha256(physics_setup)
 
     arrays = {}
     array_manifest = {}
+    to_host = _owned_host if owned else _host
+    if staging is not None:
+        # Same keys, same order, same host arrays; the device ones are
+        # copied asynchronously into pinned memory (checkpoint_staging).
+        staged = staging.stage(manifest, _owned_host)
     for key in sorted(manifest):
-        host = _host(manifest[key])
+        host = staged[key] if staging is not None else to_host(manifest[key])
         arrays[key] = host
         array_manifest[key] = {"shape": list(host.shape),
                                "dtype": str(host.dtype)}
@@ -3706,14 +4643,21 @@ def _write_restart(path, state, cfg, *, run_trackers=None,
         json.dumps(header, allow_nan=False).encode("utf-8"),
         dtype=np.uint8)}
     payload.update(arrays)
+    return path, payload
+
+
+def _publish_restart_payload(path: Path, payload: dict) -> Path:
+    """Write one prepared restart archive and make it durable."""
     path.parent.mkdir(parents=True, exist_ok=True)
     # Atomic publish: a crash mid-write must not leave a truncated file
     # under the valid gpuwmrst name (review F4).
     # Separate concurrent writers; each publishes one complete archive.
     temp = unique_temp_path(path)
     try:
-        with temp.open("wb") as stream:
-            np.savez(stream, **payload)
+        # np.savez's archive, byte for byte, CRC'd on every core instead of
+        # one (woof.io.parallel_npz: the 3 km DA legs' np.savez ran on one
+        # core, 16-68 s a member when six legs ended together).
+        write_npz(temp, payload)
         # Atomic visibility was already sound; durability was not.  Closing
         # a file leaves its bytes in the page cache, so a machine or volume
         # crash could expose the published name with content that never
@@ -3723,6 +4667,8 @@ def _write_restart(path, state, cfg, *, run_trackers=None,
         fsync_file(temp)
         os.replace(temp, path)
         _fsync_directory(path.parent)
+        from woof.hydro.retention import pin_current
+        pin_current(path)
     except BaseException:
         temp.unlink(missing_ok=True)
         raise
@@ -3738,6 +4684,10 @@ def _decode_header(data, path) -> dict:
 
 def _load_restart(path, *, with_arrays: bool):
     """Load header (and optionally arrays), wrapping corruption loudly."""
+    from woof.io.restart_prefetch import cached_restart
+    cached = cached_restart(path, with_arrays=with_arrays)
+    if cached is not None:
+        return cached
     try:
         with np.load(path, allow_pickle=False) as data:
             header = _decode_header(data, path)
@@ -3775,9 +4725,74 @@ def _run_config_default(key: str):
     return object()
 
 
+def _json_default(key: str):
+    """:func:`_run_config_default` in the header's JSON spelling."""
+    value = _run_config_default(key)
+    return list(value) if isinstance(value, tuple) else value
+
+
+def _chem_run_fields() -> frozenset:
+    from woof.config import CHEM_RUN_FIELDS
+    return frozenset(CHEM_RUN_FIELDS)
+
+
+# These historical omission values deliberately do not follow moving defaults:
+# a header without a selector must keep the arithmetic it wrote.
+_RESTART_ABSENT_RUN_DEFAULTS = {
+    'adaptive_nest_lattice': False,
+    'zadvect_implicit': 0,
+    'zadvect_implicit_variant': 'wrf_471',
+    'rrtmg_smoke_manifest': '',
+    'bl_mynn_version': 'wrf_461',
+    'bl_mynn_cloud_tendency_form': 'wrf_461',
+    'bl_mynn_gsd41_unsquared_qtke': False,
+    'ruc_soilprop': 'wrf_45',
+    'rrtmg_cloud_optics_form': 'wrf_461',
+    'rrtmg_aer3_type_source': 'rural',
+    'thompson_version': 'wrf_461',
+    'thompson_table_dir': None,
+    'thompson_fork_snow_fall': 'blend',
+    'mynn_sfclay_variant': 'wrf_461',
+    'urban_ucm_generation': 'wrf_471',
+    'urban_table_dir': '',
+    'use_rap_aero_icbc': False,
+    'ruc_snow': 'wrf_461',
+    'ruc_2m_diagnostic': 'flux',
+    'ruc_qvg_cold_start': 'wrf',
+    'ruc_irrigation': 'wrf_461',
+    'scalar_adv_opt': 1,
+    'scalar_pblmix': 0,
+    'tempo_ml_for_bl_nc': False,
+    'tempo_surface_emission_before': False,
+    'bl_mynn_mixaerosols': 0,
+    'bl_mynn_mixnumcon': 0,
+    'terrain_clock': 'measured',
+    'spp_conv': 0,
+    'spp_pbl': 0,
+    'fractional_seaice': 0,
+    'swint_opt': 0,
+    'aer_opt': 0,
+    'alb_sol': 0,
+    'w_crit_cfl': 1.0,
+}
+
+
 def _require_config_match(stored_config: dict, cfg, path) -> None:
+    CHEM_RUN_FIELDS = _chem_run_fields()
     stored_config = _mosaic_checkpoint_config(stored_config)
     live_config = _mosaic_checkpoint_config(dataclasses.asdict(cfg))
+    _drop_inert_nest_archive(stored_config)
+    _drop_inert_nest_archive(live_config)
+    _drop_inert_chem_block(stored_config)
+    _drop_inert_chem_block(live_config)
+    _drop_inert_fire_block(stored_config)
+    _drop_inert_fire_block(live_config)
+    # The writer omits these defaults, so its own new header must compare
+    # under the same rule. Active settings remain and bind value for value.
+    _drop_default_fork_run_keys(stored_config)
+    _drop_default_fork_run_keys(live_config)
+    _drop_default_radiation_port_keys(stored_config)
+    _drop_default_radiation_port_keys(live_config)
     from woof.core.rrtmg_smoke_identity import bind_smoke_source_identity
     bind_smoke_source_identity(live_config)
     absent = object()
@@ -3845,10 +4860,30 @@ def _require_config_match(stored_config: dict, cfg, path) -> None:
                        if live_v is absent else repr(live_v))
                 policy_changes.append(f"{key}: {was} -> {now}")
             continue
+        if key == "cycling":
+            # A start-only control: it decides what the first MYNN call
+            # (itimestep 1) keeps from the input.  A resume continues after
+            # that step and never repeats it, so either value resumes the
+            # same trajectory.
+            continue
         if key in CONFIG_DIAGNOSTIC_FIELDS:
+            continue
+        if key in _SEAICE_RUN_KEYS and not _seaice_read(stored_config)                 and not _seaice_read(live_config):
+            # Neither side runs prognostic sea ice: the keys reach nothing.
             continue
         stored = stored_config.get(key, absent)
         live = live_config.get(key, absent)
+        if key in _CAMPAIGN_IMPLICIT_RUN_KEYS:
+            default = _CAMPAIGN_IMPLICIT_RUN_KEYS[key]
+            stored = default if stored is absent else stored
+            live = default if live is absent else live
+        if key == "noahmp_snow_age":
+            if stored_config.get("sf_surface_physics", 0) != 4 and \
+                    live_config.get("sf_surface_physics", 0) != 4:
+                continue
+            # Old headers always ran daylight-only aging.
+            stored = "wrf_461" if stored is absent else stored
+            live = "wrf_461" if live is absent else live
         if key in ("diff_6th_form", "diff_6th_factor2",
                    "upper_wind_limiter_form", "mp_zero_out"):
             # The writer omits these historical defaults. A current
@@ -3866,66 +4901,28 @@ def _require_config_match(stored_config: dict, cfg, path) -> None:
             # Checkpoints from before the coordinate selector existed used
             # exactly the metric operator with full-field scalar mixing.
             stored = 2 if key == "diff_opt" else True
-        if key == "adaptive_nest_lattice":
-            # Older checkpoints used the original clock. A flipped mode
-            # must refuse because it changes the integration trajectory.
-            stored = False if stored is absent else stored
-            live = False if live is absent else live
-        if key == "zadvect_implicit":
-            # Older checkpoints advected explicitly; a flip is refused,
-            # because it changes the integration trajectory.
-            stored = 0 if stored is absent else stored
-            live = 0 if live is absent else live
-        if key == "zadvect_implicit_variant":
-            # Changing the split or solve mass changes the trajectory.
+        if key in _RESTART_ABSENT_RUN_DEFAULTS:
+            default = _RESTART_ABSENT_RUN_DEFAULTS[key]
+            stored = default if stored is absent else stored
+            live = default if live is absent else live
+        if key == "urban_water_balance":
+            if int(live_config.get("sf_urban_physics", 0) or 0) != 1:
+                continue
             stored = "wrf_471" if stored is absent else stored
-            live = "wrf_471" if live is absent else live
-        if key == "rrtmg_smoke_manifest":
-            # Old checkpoints had no prescribed smoke. An enabled path and
-            # its separately compared source identity change the trajectory.
-            stored = "" if stored is absent else stored
-            live = "" if live is absent else live
-        if key == "bl_mynn_version":
-            # Omitted at wrf_461; a flip between generations changes the
-            # boundary-layer trajectory and is refused below.
+            live = "wrf_480" if live is absent else live
+        if key == "ysu_version":
+            # Changing the entrainment cap or arithmetic changes the PBL
+            # trajectory. A header without a selector is always legacy.
+            if stored_config.get("bl_pbl_physics", 0) != 1 and live_config.get("bl_pbl_physics", 0) != 1:
+                continue
             stored = "wrf_461" if stored is absent else stored
             live = "wrf_461" if live is absent else live
-        if key == "bl_mynn_cloud_tendency_form":
+        if key == "solar_generation":
             stored = "wrf_461" if stored is absent else stored
-            live = "wrf_461" if live is absent else live
-        if key == "bl_mynn_gsd41_unsquared_qtke":
-            stored = False if stored is absent else stored
-            live = False if live is absent else live
-        if key == "ruc_soilprop":
-            # A header omits the default, so a checkpoint with no RUC
-            # column resumes unchanged; a flip between the two names is
-            # refused below.  A RUC checkpoint written before the selector
-            # ran the v4.6.1 form and is refused by its land-surface
-            # algorithm identity (woof/checkpoint_identity.py), by name.
-            stored = "wrf_45" if stored is absent else stored
-            live = "wrf_45" if live is absent else live
-        if key == "rrtmg_cloud_optics_form":
-            # Earlier checkpoints ran the WRF v4.6.1 cloud wrapper.
-            stored = "wrf_461" if stored is absent else stored
-            live = "wrf_461" if live is absent else live
-        if key == "thompson_version":
-            # A header omits the default, which every checkpoint written
-            # before the selector ran; a flip between the two generations
-            # is refused below, because they evolve graupel, snow and ice
-            # differently from the same state.
-            stored = "wrf_461" if stored is absent else stored
-            live = "wrf_461" if live is absent else live
-        if key == "thompson_fork_snow_fall":
-            # Omitted at its default, which every earlier header ran.
-            stored = "blend" if stored is absent else stored
-            live = "blend" if live is absent else live
-        if key == "mynn_sfclay_variant":
-            # A header omits the default, which is what every checkpoint
-            # written before the selector ran; a flip between the two
-            # generations changes u*, z/L and the fluxes, so it is refused
-            # below.
-            stored = "wrf_461" if stored is absent else stored
-            live = "wrf_461" if live is absent else live
+            live = "wrf_480" if live is absent else live
+        if key in ("urban_treeoption", "urban_ttscheme", "urban_fvg"):
+            stored = -1 if stored is absent else stored
+            live = -1 if live is absent else live
         if key in ADVECTION_ORDER_RUN_DEFAULTS:
             # Older checkpoints ran the vert_order 3 ladder and the flux5
             # horizontal momentum stencil; a moved order is refused below,
@@ -3933,59 +4930,18 @@ def _require_config_match(stored_config: dict, cfg, path) -> None:
             default = ADVECTION_ORDER_RUN_DEFAULTS[key]
             stored = default if stored is absent else stored
             live = default if live is absent else live
-        if key == "use_rap_aero_icbc":
-            # Off is omitted by configuration_echo and is what every earlier
-            # checkpoint ran; an analyzed aerosol start still binds.
+        if key in _CORRECTION_KEYS:
+            # Correct-mode keys: False is omitted by configuration_echo and
+            # is the matched arithmetic every earlier checkpoint ran (absent
+            # on restore = exact, so a 2.8.9 checkpoint continues only in
+            # exact mode).  A key no scheme on either side reads binds
+            # nothing; under its scheme a resume across modes is refused
+            # below, with CORRECT_MODE_RESTART_BREAK_NOTICE.
+            if not (_correct_key_in_scope(key, stored_config)
+                    or _correct_key_in_scope(key, live_config)):
+                continue
             stored = False if stored is absent else stored
             live = False if live is absent else live
-        if key == "ruc_snow":
-            # Generic headers omit wrf_461. Earlier lane headers omitted
-            # wrf_45; the v6 land-surface identity prevents their continuation
-            # before live forecast arrays are restored. Explicit flips refuse below.
-            stored = "wrf_461" if stored is absent else stored
-            live = "wrf_461" if live is absent else live
-        if key == "ruc_2m_diagnostic":
-            # A header omits the default (the only form earlier builds
-            # wrote); a flip between the two names is refused below.
-            stored = "flux" if stored is absent else stored
-            live = "flux" if live is absent else live
-        if key == "ruc_qvg_cold_start":
-            # Read only on a cold start, so a resumed run never reads it;
-            # a header omits the default and a flip between the two names
-            # is refused below like every other run setting.
-            stored = "wrf" if stored is absent else stored
-            live = "wrf" if live is absent else live
-        if key == "ruc_irrigation":
-            # Generic headers omit wrf_461. Earlier lane omissions mean
-            # wrf_45, so the v6 identity refuses their continuation before
-            # live forecast arrays are restored.
-            stored = "wrf_461" if stored is absent else stored
-            live = "wrf_461" if live is absent else live
-        if key == "scalar_pblmix":
-            # Off is omitted by configuration_echo. Old checkpoints also
-            # had no post-PBL scalar diffusion. An enabled value still binds.
-            stored = 0 if stored is absent else stored
-            live = 0 if live is absent else live
-        if key == "terrain_clock":
-            # "measured" is omitted by configuration_echo: the launch-time
-            # derivation every older checkpoint ran under.  "pinned" binds.
-            stored = "measured" if stored is absent else stored
-            live = "measured" if live is absent else live
-        if key in ("spp_conv", "spp_pbl"):
-            # Builds before the SPP consumer port had both disabled.
-            # An enabled consumer still differs and is refused below.
-            stored = 0 if stored is absent else stored
-            live = 0 if live is absent else live
-        if key in ("fractional_seaice", "swint_opt", "aer_opt", "alb_sol"):
-            # Earlier checkpoints ran the 0.5 ice threshold, held
-            # shortwave and zero aerosol. Enabled options still bind.
-            stored = 0 if stored is absent else stored
-            live = 0 if live is absent else live
-        if key == "w_crit_cfl":
-            # Older checkpoints measured w_damp from Courant 1.0; a moved
-            # value is refused, because it changes the trajectory.
-            stored = 1.0 if stored is absent else stored
-            live = 1.0 if live is absent else live
         if key in TERRAIN_DRAG_RUN_DEFAULTS:
             # Absent is the default (_drop_inert_terrain_drag); a moved
             # topo_wind/gwd_opt still refuses below.
@@ -4006,6 +4962,20 @@ def _require_config_match(stored_config: dict, cfg, path) -> None:
             # mismatches the live config stays fail-closed below --
             # never infer legacy, never widen.
             stored = RRTMG_VARIANT_RTE_RRTMGP
+        if isinstance(live, tuple):
+            # The header is JSON, which carries a tuple field back as a
+            # list (chem_sets, chem_sources, eta_levels); compare in that
+            # spelling or a tuple-valued field could never match itself.
+            live = list(live)
+        if (stored is absent and key in CHEM_RUN_FIELDS
+                and live == _json_default(key)):
+            # The chem block (woof/config.py after adaptive_nest_lattice):
+            # a checkpoint written before it existed ran with chem off,
+            # which is exactly what a live config holding the defaults
+            # describes -- every other chem key is read by nothing while
+            # chem_sets is empty.  A live config that turns chem ON against
+            # such a checkpoint still refuses here (chem_sets differs).
+            continue
         if stored is absent and key == "eta_levels" and live is None:
             # ABSENT STAYS ABSENT: ``eta_levels = None`` means "inherit the
             # source's ladder", which is exactly and only what every
@@ -4084,6 +5054,13 @@ def _require_config_match(stored_config: dict, cfg, path) -> None:
             f"restart file {path} was written under a different "
             "configuration; refusing to continue a different model:\n  "
             + "\n  ".join(differences))
+        if any(item.startswith('solar_generation:') for item in differences):
+            old_solar = stored_config.get('solar_generation', 'wrf_461')
+            message += (
+                "\nChanging solar_generation changes COSZEN and HRANG, "
+                "surface shortwave forcing and the interpolation fit under "
+                "the saved trajectory. Resume with solar_generation="
+                f"{old_solar!r}, or start a new forecast.")
         # Restart accuracy for the 2026-08-16 mixing auto-switch: a
         # checkpoint from the old anisotropic default meeting a run that
         # selects the isotropic length gets told WHY the default moved
@@ -4093,7 +5070,199 @@ def _require_config_match(stored_config: dict, cfg, path) -> None:
         if (stored_config.get("mix_isotropic", 0) == 0
                 and live_config.get("mix_isotropic") == 1):
             message += "\n" + MIX_ISOTROPIC_RESTART_BREAK_NOTICE
+        # The same accuracy for the 2.8.8 terrain-clock default: an absent
+        # key is the "measured" clock every earlier checkpoint ran.
+        if (stored_config.get("terrain_clock", "measured") == "measured"
+                and live_config.get("terrain_clock") == "local_face"):
+            message += "\n" + TERRAIN_CLOCK_RESTART_BREAK_NOTICE
+        if (stored_config.get("terrain_clock", "measured") != "pinned"
+                and live_config.get("terrain_clock") == "pinned"):
+            message += "\n" + TERRAIN_CLOCK_PINNED_RESTART_NOTICE
+        # The same accuracy for the 2.9.0 correct-mode default: an absent
+        # key is the exact arithmetic every earlier checkpoint ran.
+        if _correct_mode_run_flip(stored_config, live_config):
+            message += "\n" + CORRECT_MODE_RESTART_BREAK_NOTICE
         raise RestartMismatchError(message)
+
+
+#: The configuration selector each ``algorithms`` component is chosen by,
+#: so a refusal names the setting the user wrote beside the identity that
+#: moved.  ``radiation`` is the summary of the two radiation rows and is
+#: left out of a list that already names them.
+_ALGORITHM_SELECTORS = {
+    "microphysics": ("mp_physics",),
+    "surface_layer": ("sf_sfclay_physics",),
+    "land_surface": ("sf_surface_physics",),
+    "pbl": ("bl_pbl_physics",),
+    "radiation_lw": ("ra_lw_physics",),
+    "radiation_sw": ("ra_sw_physics",),
+    "cumulus": ("cu_physics",),
+    "urban": ("sf_urban_physics",),
+    "seaice": ("seaice_prognostic",),
+    "dycore_mixing": ("km_opt", "diff_6th_opt"),
+    "upper_damping": ("damp_opt",),
+}
+
+#: Run-configuration keys whose ABSENCE from a checkpoint header means a
+#: value other than this build's RunConfig default.  configuration_echo
+#: drops a key at the value every earlier header ran; for these the
+#: default has since moved, so rebuilding a RunConfig from the header must
+#: put the dropped value back or the rebuilt run is not the one that wrote
+#: the checkpoint.  _require_config_match reads the same absences the same
+#: way.
+#:
+#: terrain_clock: 2.8.8 made "local_face" the default and the echo drops
+#: "measured", so a header without the key ran "measured".  Without this a
+#: 2.8.7 checkpoint was refused on configuration_sha256 even under a
+#: configuration that set terrain_clock = "measured" as the refusal note
+#: says to (stored 588c1266..., rebuilt under the default 2be20cee...).
+#:
+#: The four WRF 4.7/4.8 fix selectors (2.9.0): each default is the corrected
+#: generation and the echo drops the previous one (and drops the two
+#: scheme-scoped ones while their scheme is off), so a header without the
+#: key ran the previous generation.  Without these a 2.8.9 YSU checkpoint
+#: was rebuilt under ysu_version = "wrf_480" and refused as "ysu-v2 ->
+#: ysu-wrf-v4.8.0 ... no configuration change resumes it", when
+#: ysu_version = "wrf_461" resumes it; the same for the solar generation.
+# An omitted sea-ice switch is inactive in the shared checkpoint echo.
+ECHO_ABSENT_RUN_VALUES = {"seaice_prognostic": False,
+                          "terrain_clock": "measured",
+                          "solar_generation": "wrf_461",
+                          "ysu_version": "wrf_461",
+                          "noahmp_snow_age": "wrf_461",
+                          "urban_water_balance": "wrf_471",
+                          # The correct-mode keys (2.9.0): the default is
+                          # on, the echo drops off, so a header without
+                          # the key ran the exact arithmetic.
+                          **{key: False for key in _CORRECTION_KEYS
+                             if key not in _OUTPUT_ONLY_CORRECTION_KEYS}}
+
+
+def _run_config_from_header(raw_config):
+    """The RunConfig a checkpoint header's ``config`` echo describes.
+
+    ``None`` when this build cannot rebuild one from the header (a value
+    it refuses, a malformed field): callers then fall back to the stricter
+    raw comparison.
+    """
+    if not isinstance(raw_config, Mapping):
+        return None
+    try:
+        from woof.config import RunConfig
+
+        names = {f.name for f in dataclasses.fields(RunConfig)}
+        values = {k: v for k, v in raw_config.items() if k in names}
+        for key, value in ECHO_ABSENT_RUN_VALUES.items():
+            values.setdefault(key, value)
+        return RunConfig(**values)
+    except (TypeError, ValueError):
+        return None
+
+
+def _selector_values(cfg) -> dict:
+    """``{selector: value}`` of a RunConfig, radiation resolved.
+
+    The radiation pair is read through :func:`radiation_scheme_ids`, so a
+    run configured by ``ra_physics`` names the scheme it ran rather than
+    the -1 that defers to it.
+    """
+    if cfg is None:
+        return {}
+    values = {}
+    for selectors in _ALGORITHM_SELECTORS.values():
+        for name in selectors:
+            value = getattr(cfg, name, None)
+            if value is not None:
+                values[name] = value
+    try:
+        values["ra_lw_physics"], values["ra_sw_physics"] = \
+            radiation_scheme_ids(cfg)
+    except (AttributeError, TypeError, ValueError):
+        pass
+    return values
+
+
+def _algorithm_moves(stored, current, cfg) -> list[str]:
+    """One phrase per moved algorithm identity: selector, old, new.
+
+    ``cfg`` is the RunConfig the selectors are read from (the checkpoint's
+    own, rebuilt from its header), or ``None`` to name components only.
+    """
+    keys = sorted(set(stored) | set(current))
+    if "radiation_lw" in keys or "radiation_sw" in keys:
+        keys = [key for key in keys if key != "radiation"]
+    values = _selector_values(cfg)
+    moves = []
+    for key in keys:
+        old, new = stored.get(key), current.get(key)
+        if old == new:
+            continue
+        named = ", ".join(
+            f"{name}={values[name]!r}"
+            for name in _ALGORITHM_SELECTORS.get(key, ()) if name in values)
+        label = (f"{named} ({key.replace('_', ' ')})" if named
+                 else key.replace("_", " "))
+        moves.append(
+            f"{label}: {old if old is not None else 'none recorded'} -> "
+            f"{new if new is not None else 'none'}")
+    return moves
+
+
+def _require_current_algorithm_identities(header, cfg, path) -> None:
+    """Refuse FIRST a checkpoint whose schemes this build computes differently.
+
+    The breakage: a checkpoint integrated by a scheme implementation this
+    build no longer runs (2.8.8 moved YSU, the surface layers, RUC, the
+    microphysics finish clamp, the dycore mixing and the upper damping
+    layer under unchanged selectors) resumes under no configuration at all.  Asked after the
+    configuration walk, the user was first told to change a configuration
+    field (the terrain-clock note) and, having changed it, was refused
+    again by a sentence naming only "algorithms, configuration_sha256".
+    Asked here, before that walk, the refusal names each scheme, its
+    selector and both identities.
+
+    The identities compared are the checkpoint's recorded ones and the ones
+    THIS build assigns to the checkpoint's OWN configuration, so a change
+    the user made to the live configuration is left to the configuration
+    walk, which names the field.  It refuses only when the recorded
+    identities also differ from the live run's, which the physics setup
+    gate refuses anyway, so it never refuses a resume that gate would
+    allow.  A header this build cannot rebuild, or whose schemes it cannot
+    name, is left to the later gates.
+    """
+    setup = header.get("physics_setup")
+    stored = setup.get("algorithms") if isinstance(setup, Mapping) else None
+    if not isinstance(stored, Mapping):
+        return
+    # Only an intact identity is read here: one that no longer matches its
+    # own stored fingerprint, or is of another schema, is the physics
+    # gate's malformed-file refusal, which must not be reworded as a
+    # change of build.
+    try:
+        intact = (_json_sha256(setup) == header.get("physics_setup_fingerprint")
+                  and setup.get("schema_version")
+                  == PHYSICS_SETUP_SCHEMA_VERSION)
+    except (TypeError, ValueError):
+        intact = False
+    if not intact:
+        return
+    rebuilt = _run_config_from_header(header.get("config"))
+    if rebuilt is None:
+        return
+    try:
+        current = physics_algorithm_identities(rebuilt)
+        live = physics_algorithm_identities(cfg)
+    except (RestartManifestError, TypeError, ValueError):
+        return
+    if dict(stored) == current or dict(stored) == live:
+        return
+    moves = _algorithm_moves(stored, current, rebuilt)
+    raise RestartMismatchError(
+        f"restart file {path} was integrated by scheme implementations this "
+        f"build does not run: {'; '.join(moves)}.  Continuing it here would "
+        "splice two implementations into one forecast, so no configuration "
+        "change resumes it.  Start the run again from its initial time "
+        "under this build, or resume it with the build that wrote it")
 
 
 def _require_physics_setup_match(header: dict, state, cfg, path) -> None:
@@ -4145,32 +5314,30 @@ def _require_physics_setup_match(header: dict, state, cfg, path) -> None:
     # stored dict: that one asks whether the file is intact, which is a
     # different question and must not be normalised away.
     stored_cmp = stored
-    raw_config = header.get("config")
-    if isinstance(raw_config, Mapping):
-        try:
-            from woof.config import RunConfig
-
-            names = {f.name for f in dataclasses.fields(RunConfig)}
-            rebuilt = RunConfig(**{k: v for k, v in raw_config.items()
-                                   if k in names})
-        except (TypeError, ValueError):
-            # A header this build cannot rebuild a RunConfig from falls
-            # back to the RAW stored hash, which is the STRICTER of the
-            # two: it can only refuse a resume this normalisation would
-            # have allowed, never allow one it would have refused.
-            rebuilt = None
-        if rebuilt is not None:
-            stored_cmp = dict(stored)
-            stored_cmp["configuration_sha256"] = _configuration_fingerprint(
-                rebuilt)
+    # A header this build cannot rebuild a RunConfig from falls back to the
+    # RAW stored hash, which is the STRICTER of the two: it can only refuse
+    # a resume this normalisation would have allowed, never allow one it
+    # would have refused.  An absent key is read as the value the header's
+    # run used (ECHO_ABSENT_RUN_VALUES), not as this build's default.
+    rebuilt = _run_config_from_header(header.get("config"))
+    if rebuilt is not None:
+        stored_cmp = dict(stored)
+        stored_cmp["configuration_sha256"] = _configuration_fingerprint(
+            rebuilt)
 
     if stored_cmp != live:
         moved = [key for key in sorted(set(stored_cmp) | set(live))
                  if stored_cmp.get(key) != live.get(key)]
+        detail = ""
+        if ("algorithms" in moved
+                and isinstance(stored_cmp.get("algorithms"), Mapping)
+                and isinstance(live.get("algorithms"), Mapping)):
+            detail = " (" + "; ".join(_algorithm_moves(
+                stored_cmp["algorithms"], live["algorithms"], cfg)) + ")"
         raise RestartMismatchError(
             f"restart file {path} was written under a different physics "
-            f"setup; these components differ: {', '.join(moved)}.  Rebuild "
-            "the identical physics preparation before restoring")
+            f"setup; these components differ: {', '.join(moved)}{detail}.  "
+            "Rebuild the identical physics preparation before restoring")
 
 
 def _require_rrtmg_variant_match(header: dict, cfg, path) -> None:
@@ -4274,7 +5441,7 @@ RESTART_MEMBER_NAMESPACES = (
     "diag/", "held/", "pbl/", "radiation/",
     # The dedicated stochastic validator checks the exact spectrum inventory,
     # member, recipe and process metadata before this namespace closure.
-    "stochastic/",
+    "stochastic/", "fire/", "hydro/", "terrain_base/",
 )
 
 
@@ -4290,6 +5457,8 @@ def _validate_member_namespaces(stored, state, driver, path, format_version) -> 
                 f"restart file {path} carries member {key!r} under no member "
                 "namespace this build knows how to restore; resume with the "
                 "build that wrote it or start from prepared state")
+        if key.startswith("fire/") and driver is None:
+            raise RestartMismatchError("restart carries SFIRE state but the resuming state has no PhysicsDriver")
     for prefix, names, owner, description in (
             ("acoustic/", CHECKPOINT_ONLY_STATE, state, "checkpoint-only state"),
             ("diag/", DRIVER_CHECKPOINT_ONLY_ATTRS, driver, "a checkpoint-only driver"),
@@ -4305,7 +5474,7 @@ def _validate_member_namespaces(stored, state, driver, path, format_version) -> 
                 _check_array(stored[key], target, key)
     allowed_driver = {
         "driver/rthratenlw", "driver/rthratensw", "driver/pending_rainbl",
-        *(f"driver/{group}/{component}" for group in DRIVER_TENDENCY_ATTRS
+        *(f"driver/{group}/{component}" for group in (*DRIVER_TENDENCY_ATTRS, *OPTIONAL_DRIVER_TENDENCY_ATTRS)
           for component in TENDENCY_COMPONENTS),
     }
     if format_version == 2:
@@ -4348,7 +5517,7 @@ def _validate_nssl2_stored_restart_state(
             "canonical Registry and scratch names are accepted")
 
     expected_state = {
-        f"state/{name}" for name in STATE_SERIALIZED_ATTRS
+        f"state/{name}" for name in serialized_state_attrs(state)
         if getattr(state, name, None) is not None
     }
     stored_state = {key for key in stored if key.startswith("state/")}
@@ -4384,7 +5553,13 @@ def _validate_nssl2_stored_restart_state(
     from woof.core.streaming import REFL_STORE_KEY
     optional_scratch = {key for key in stored_scratch
                         if (_is_tracker_window_slot(key[len("scratch/"):])
-                            or key == REFL_STORE_KEY)}
+                            or key == REFL_STORE_KEY
+                            # This shared diffusion reference is allocated
+                            # lazily by the first diff_opt=1 step. It is
+                            # required above and restored by the generic
+                            # scratch reader, even when absent from the
+                            # freshly initialized MP18 pool.
+                            or key == "scratch/diff1_theta_initial")}
     missing_scratch = sorted(expected_scratch - stored_scratch)
     extra_scratch = sorted(stored_scratch - expected_scratch - optional_scratch)
     if missing_scratch or extra_scratch:
@@ -4475,8 +5650,17 @@ class _ValidatedRestart:
     elapsed: float
 
 
-def require_tree_checkpoint_legal(model) -> tuple[int, int]:
-    """Enforce the binding PERIOD_BEGIN tree checkpoint contract."""
+def require_tree_checkpoint_legal(model, *,
+                                  history_ordered: bool = False
+                                  ) -> tuple[int, int]:
+    """Enforce the binding PERIOD_BEGIN tree checkpoint contract.
+
+    ``history_ordered=True`` admits history frames still in flight (D2H):
+    the caller snapshots now and publishes only after every frame queued
+    before the snapshot is durable
+    (``PerDomainWrfoutWriters.durability_barrier``), which is what this
+    count protects -- a checkpoint on disk ahead of a frame that is not.
+    """
     from woof.core.model import PERIOD_BEGIN
 
     status = getattr(model, "_runtime_status", None)
@@ -4496,6 +5680,8 @@ def require_tree_checkpoint_legal(model) -> tuple[int, int]:
     io_manager = getattr(model, "_io_manager", None)
     if io_manager is not None:
         pending["D2H"] = max(pending["D2H"], int(io_manager.pending))
+    if history_ordered:
+        pending.pop("D2H")
     active = {name: count for name, count in pending.items() if count}
     if active:
         raise RestartMismatchError(
@@ -4558,6 +5744,81 @@ def _mix_isotropic_autoswitch_flip(stored, live) -> bool:
                 continue
             if (counterpart.get("mix_isotropic", 0) == 0
                     and domain["run"].get("mix_isotropic") == 1):
+                return True
+    except (AttributeError, TypeError):
+        return False
+    return False
+
+
+def _correct_mode_run_flip(stored_run, live_run) -> bool:
+    """Did a correct-mode key go off (absent) in the checkpoint to on live,
+    under a scheme that reads it?  The 2.9.0 default flip, by run dict."""
+
+    for key in _CORRECTION_KEYS:
+        if key in _OUTPUT_ONLY_CORRECTION_KEYS:
+            continue
+        if (not stored_run.get(key, False) and live_run.get(key) is True
+                and _correct_key_in_scope(key, live_run)):
+            return True
+    return False
+
+
+def _correct_mode_default_flip(stored, live) -> bool:
+    """:func:`_correct_mode_run_flip` over the ``experiment_identity``
+    domains, read exactly as :func:`_terrain_clock_default_flip` reads them."""
+
+    try:
+        stored_domains = {
+            domain.get("grid_id"): domain.get("run", {})
+            for domain in stored.get("experiment_identity", {})
+            .get("domains", ())
+            if isinstance(domain, Mapping)
+            and isinstance(domain.get("run"), Mapping)}
+        for domain in live.get("experiment_identity", {}).get("domains", ()):
+            if not (isinstance(domain, Mapping)
+                    and isinstance(domain.get("run"), Mapping)):
+                continue
+            counterpart = stored_domains.get(domain.get("grid_id"))
+            if counterpart is None:
+                continue
+            if _correct_mode_run_flip(counterpart, domain["run"]):
+                return True
+    except (AttributeError, TypeError):
+        return False
+    return False
+
+
+def _terrain_clock_default_flip(stored, live, *, to="local_face") -> bool:
+    """Did any domain go "measured"-in-the-checkpoint to "local_face"-live?
+
+    ``to="pinned"``: did any domain go from either terrain clock in the
+    checkpoint to "pinned" live (the 2.8.9 WRF-folder default, D8)?
+
+    Read off the ``experiment_identity`` components exactly as
+    :func:`_mix_isotropic_autoswitch_flip` reads them; an absent stored key
+    is "measured", the clock every checkpoint before 2.8.8 ran by default.
+    """
+
+    try:
+        stored_domains = {
+            domain.get("grid_id"): domain.get("run", {})
+            for domain in stored.get("experiment_identity", {})
+            .get("domains", ())
+            if isinstance(domain, Mapping)
+            and isinstance(domain.get("run"), Mapping)}
+        for domain in live.get("experiment_identity", {}).get("domains", ()):
+            if not (isinstance(domain, Mapping)
+                    and isinstance(domain.get("run"), Mapping)):
+                continue
+            counterpart = stored_domains.get(domain.get("grid_id"))
+            if counterpart is None:
+                continue
+            stored_clock = counterpart.get("terrain_clock", "measured")
+            live_clock = domain["run"].get("terrain_clock")
+            if to == "pinned":
+                if stored_clock != "pinned" and live_clock == "pinned":
+                    return True
+            elif stored_clock == "measured" and live_clock == "local_face":
                 return True
     except (AttributeError, TypeError):
         return False
@@ -4688,6 +5949,15 @@ def tree_fingerprint_mismatch_reason(gid: int, header, model) -> str:
     if ("experiment_identity" in differing
             and _mix_isotropic_autoswitch_flip(stored, live)):
         reason += "\n" + MIX_ISOTROPIC_RESTART_BREAK_NOTICE
+    if ("experiment_identity" in differing
+            and _terrain_clock_default_flip(stored, live)):
+        reason += "\n" + TERRAIN_CLOCK_RESTART_BREAK_NOTICE
+    if ("experiment_identity" in differing
+            and _terrain_clock_default_flip(stored, live, to="pinned")):
+        reason += "\n" + TERRAIN_CLOCK_PINNED_RESTART_NOTICE
+    if ("experiment_identity" in differing
+            and _correct_mode_default_flip(stored, live)):
+        reason += "\n" + CORRECT_MODE_RESTART_BREAK_NOTICE
     return reason
 
 
@@ -5270,11 +6540,103 @@ def _node_placement(node):
         return None
 
 
+class PendingTreeCheckpoint:
+    """One checkpoint generation, snapshotted and not yet on disk.
+
+    Built by ``write_tree_restart(..., defer_publish=True)``.  Every member
+    was validated and its header and arrays fixed on the stepping thread;
+    :meth:`publish` writes the members in the synchronous writer's order
+    (children first, the root commit marker last), removes the generation's
+    members on any failure, then records the root on the model and retires
+    superseded sets, exactly as the synchronous writer does.
+
+    A publish on a background writer thread passes ``retire=False`` and the
+    stepping thread calls :meth:`retire_superseded` once it has joined the
+    writer (``_CheckpointPublisher.wait``).  The stepping thread is the one
+    that hands ``model._last_checkpoint`` to the run's progress callback,
+    and the supervisor heartbeat reads that set back in full
+    (``validate_manifest_checkpoint``) on that thread.  Retiring from the
+    writer thread removed the set the heartbeat was still reading: with
+    hourly checkpoints and ``--keep-checkpoints 1`` the 08Z publish deleted
+    the 07Z set mid-read and the run died with FileNotFoundError on its own
+    checkpoint 3-7 h into every 60 h GFS 12 km parent (ml-probs T1,
+    2026-10-27).
+
+    ``deferrable`` says whether :meth:`publish` may run while the model
+    steps on.  A resident member owns host copies of its arrays, and a
+    member of a ranked domain borrows the domain's host store, which only a
+    drain or a frame download writes; both of those wait for this
+    generation first (:meth:`tilestream.ranks.RankedRun.add_store_guard`).
+    Any other streamed member borrows a store the next sweep writes, so a
+    generation holding one must be published before stepping resumes.
+    """
+
+    def __init__(self, *, directory: Path, model, root_id: int, members,
+                 lenders=(), deferrable: bool = True):
+        self.directory = Path(directory)
+        self._model = model
+        self._root_id = int(root_id)
+        self._members = list(members)
+        self.deferrable = bool(deferrable)
+        self._released = threading.Event()
+        for streamed in lenders:
+            streamed.add_store_guard(self._released.wait)
+
+    def publish(self, *, retire: bool = True) -> Path:
+        published: list[Path] = []
+        paths: dict[int, Path] = {}
+        try:
+            for gid, member in self._members:
+                paths[gid] = Path(member())
+                published.append(paths[gid])
+        except BaseException:
+            for path in published:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
+        finally:
+            # The borrowed store views are dropped and their guard released
+            # whether or not the write succeeded: a failed checkpoint must
+            # not hold the next frame download forever.
+            self.abandon()
+        self._model._last_checkpoint = paths[self._root_id]
+        if retire:
+            self.retire_superseded()
+        return paths[self._root_id]
+
+    def retire_superseded(self) -> list[Path]:
+        """Retire the sets this published generation supersedes.
+
+        The run's retention decides how many go (:mod:`woof.resume`).  Call
+        it on the stepping thread: see the class docstring for why a
+        background writer must not.
+        """
+        from woof.resume import retire_superseded_checkpoints
+        return retire_superseded_checkpoints(self.directory)
+
+    def abandon(self) -> None:
+        """Release the borrowed store without writing anything."""
+        members, self._members = self._members, []
+        for _gid, member in members:
+            # A member whose host copies are still in flight into a pinned
+            # slab waits for them before the slab can go back to the pool.
+            release = getattr(member, "release", None)
+            if callable(release):
+                release()
+        self._released.set()
+
+
 def write_tree_restart(directory, model, valid_time: datetime, *,
                        run_trackers_by_grid_id=None,
                        sealed_forcing_extension: bool = False,
-                       auto_epssm=None) -> Path:
+                       auto_epssm=None, defer_publish: bool = False):
     """Publish one immutable generation per domain, with d01 last.
+
+    ``defer_publish=True`` takes the same snapshot and returns a
+    :class:`PendingTreeCheckpoint` instead of writing it; the caller
+    publishes it (a checkpoint writer thread, or at once).
 
     ``auto_epssm`` is the grid_ids whose ``epssm`` the model chose
     (:data:`AUTO_EPSSM_HEADER_KEY`); ``None`` reads them off the tree's
@@ -5297,7 +6659,11 @@ def write_tree_restart(directory, model, valid_time: datetime, *,
     """
     from woof.core.model import PERIOD_BEGIN
 
-    ticks, tick_den = require_tree_checkpoint_legal(model)
+    # A deferred generation is published by a caller that orders it after
+    # the history frames queued before it (the prepared door's checkpoint
+    # writer waits on PerDomainWrfoutWriters.durability_barrier).
+    ticks, tick_den = require_tree_checkpoint_legal(
+        model, history_ordered=defer_publish)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     nodes = tuple(model.walk_parent_first())
@@ -5435,8 +6801,36 @@ def write_tree_restart(directory, model, valid_time: datetime, *,
                 node.state, node.cfg.run,
                 path=directory / f"d{int(node.cfg.grid_id):02d}",
                 elapsed=sealed_elapsed)
+    # Capture member topology before publishing even a child file.
+    terrain_edges = {}
+    terrain_parents = {}
+    for node in nodes:
+        if not _terrain_edge(node):
+            continue
+        marker = getattr(node.coupler, "_wrf_base_fed_back", None)
+        if (marker is None and getattr(node, "_started", True)
+                and ticks > int(node.clock.spec.start_ticks)):
+            raise RestartManifestError("started strict two-way terrain child is missing its feedback marker")
+        if marker is not None:
+            if tuple(marker) != _terrain_position(node):
+                raise RestartManifestError("fixed terrain feedback marker differs from placement")
+            state = node.parent.state
+            if (getattr(state, "_streamed_domain", None) is not None
+                    or getattr(node.state, "_streamed_domain", None) is not None
+                    or sealed_forcing_extension or relocation_header is not None
+                    or _pre_seal_intervals(state) is not None):
+                raise RestartManifestError("strict terrain feedback checkpoint requires fixed resident sealed setup")
+            prepared = getattr(state, "_wrf_terrain_prepared_fingerprint", None)
+            if not isinstance(prepared, str):
+                raise RestartManifestError("strict terrain feedback is missing its prepared setup identity")
+            terrain_parents[int(node.parent.cfg.grid_id)] = {
+                "prepared_setup_fingerprint": prepared}
+        terrain_edges[int(node.cfg.grid_id)] = {"position": None if marker is None else list(marker)}
     checkpoint_set_id = uuid.uuid4().hex
     published: list[Path] = []
+    members: list = []
+    lenders: list = []
+    deferrable = True
     try:
         # Children first, root commit marker last.
         for node in reversed(nodes):
@@ -5518,6 +6912,10 @@ def write_tree_restart(directory, model, valid_time: datetime, *,
                    else {"relocation": relocation_header}),
                 **auto_epssm_header(gid, auto_epssm),
             }
+            if gid in terrain_edges:
+                tree_header[_TERRAIN_EDGE_KEY] = terrain_edges[gid]
+            if gid in terrain_parents:
+                tree_header[_TERRAIN_BASE_KEY] = terrain_parents[gid]
             # D3, closed: the posture block was computed and never
             # attached, so the crossed-move warning in
             # ``restore_tree_restart`` and the posture branch of
@@ -5537,6 +6935,28 @@ def write_tree_restart(directory, model, valid_time: datetime, *,
                 f"{base.stem}__{checkpoint_set_id}{base.suffix}")
             path = directory / member
             streamed = getattr(node.state, "_streamed_domain", None)
+            if defer_publish:
+                if streamed is not None and not sealed_forcing_extension:
+                    streamed.impose_clock(ticks / tick_den)
+                    publish, lends = streamed.prepare_restart(
+                        path, node.cfg.run, run_trackers=trackers.get(gid),
+                        tree_header=tree_header,
+                        extra_scratch_slots=window_slots_by_gid.get(gid, ()))
+                    members.append(
+                        (gid, lambda publish=publish: publish().path))
+                    if lends:
+                        lenders.append(streamed)
+                    else:
+                        deferrable = False
+                else:
+                    from woof.io.checkpoint_staging import StagedSnapshot
+                    members.append((gid, prepare_restart(
+                        path, node.state, node.cfg.run,
+                        run_trackers=trackers.get(gid), tree_header=tree_header,
+                        extra_scratch_slots=window_slots_by_gid.get(gid, ()),
+                        sealed_forcing_extension=sealed_forcing_extension,
+                        staging=StagedSnapshot())))
+                continue
             if streamed is not None and not sealed_forcing_extension:
                 # Publish the canonical store, without refreshing a full GPU
                 # state. Bind the exact domain time, not the tile FP32 sum.
@@ -5562,8 +6982,18 @@ def write_tree_restart(directory, model, valid_time: datetime, *,
                 path.unlink(missing_ok=True)
             except OSError:
                 pass
+        # Snapshotted members with host copies still in flight wait for
+        # them before their pinned memory can be reused.
+        for _gid, member in members:
+            release = getattr(member, "release", None)
+            if callable(release):
+                release()
         raise
     root_id = int(model.root.cfg.grid_id)
+    if defer_publish:
+        return PendingTreeCheckpoint(
+            directory=directory, model=model, root_id=root_id,
+            members=members, lenders=lenders, deferrable=deferrable)
     model._last_checkpoint = paths[root_id]
     # Only after the whole new set is published: the sets it supersedes
     # go when the run's retention says so (woof.resume), never before.
@@ -5658,6 +7088,18 @@ def restore_tree_restart(path, model, *,
     nodes = {int(node.cfg.grid_id): node
              for node in model.walk_parent_first()}
     paths = _tree_restart_paths(path, set(nodes))
+    # Give affected old generations a specific refusal before their changed
+    # setup fingerprint can produce the generic setup-mismatch message.
+    for gid, node in nodes.items():
+        if not _terrain_edge(node):
+            continue
+        old_header = read_restart_header(paths[gid])
+        ticks = old_header.get("elapsed_ticks")
+        if (old_header.get(_TERRAIN_EDGE_KEY) is None
+                and old_header.get("domain_lifecycle", "STARTED") == "STARTED"
+                and type(ticks) is int and ticks > node.clock.spec.start_ticks):
+            raise RestartMismatchError(
+                f"d{gid:02d} old strict two-way terrain checkpoint lacks base overlay and feedback marker; restart from preparation")
     stored_lifecycle_slots = {}
     if _declares_nest_lifecycle(model):
         root_header = read_restart_header(paths[int(model.root.cfg.grid_id)])
@@ -5690,6 +7132,34 @@ def restore_tree_restart(path, model, *,
             else:
                 validated[gid] = _validate_restart(paths[gid], node.state, node.cfg.run)
     headers = {gid: member.header for gid, member in validated.items()}
+    terrain_markers = {}
+    terrain_parent_ids = set()
+    for gid, node in nodes.items():
+        meta = headers[gid].get(_TERRAIN_EDGE_KEY)
+        if not _terrain_edge(node):
+            if meta is not None:
+                raise RestartMismatchError(f"d{gid:02d} has unexpected strict terrain edge")
+            continue
+        if meta is None:
+            continue
+        if not isinstance(meta, dict) or set(meta) != {"position"}:
+            raise RestartMismatchError(f"d{gid:02d} malformed strict terrain feedback marker")
+        marker = meta["position"]
+        ticks = headers[gid].get("elapsed_ticks")
+        if (marker is None and headers[gid].get("domain_lifecycle", "STARTED") == "STARTED"
+                and type(ticks) is int and ticks > node.clock.spec.start_ticks):
+            raise RestartMismatchError(f"d{gid:02d} started terrain child has no feedback marker")
+        if marker is not None:
+            if (not isinstance(marker, list) or len(marker) != 2
+                    or any(type(x) is not int for x in marker)
+                    or tuple(marker) != _terrain_position(node)):
+                raise RestartMismatchError(f"d{gid:02d} strict terrain marker differs from fixed placement")
+            terrain_parent_ids.add(int(node.parent.cfg.grid_id))
+            marker = tuple(marker)
+        terrain_markers[gid] = marker
+    for gid, header in headers.items():
+        if (header.get(_TERRAIN_BASE_KEY) is not None) != (gid in terrain_parent_ids):
+            raise RestartMismatchError(f"d{gid:02d} terrain overlay does not match child feedback markers")
     _require_held_lifecycle_reflectivity(
         model, nodes, headers, validated, stored_lifecycle_slots)
     # The root audit names the held signals this generation wrote. Verify
@@ -5875,6 +7345,13 @@ def restore_tree_restart(path, model, *,
         else:
             _apply_validated_restart(validated[gid], node.state, node.cfg.run,
                                      parent_by_grid=parent_by_grid)
+        if headers[gid].get(_TERRAIN_BASE_KEY) is not None:
+            stored = validated[gid].stored
+            asarray = _asarray_like(node.state)
+            for name in _TERRAIN_BASE_NAMES[:-1]:
+                getattr(node.state, name)[...] = asarray(stored["terrain_base/" + name])
+            node.state.set_base_geopotential(stored["terrain_base/phb"])
+            node.state._wrf_terrain_prepared_fingerprint = headers[gid][_TERRAIN_BASE_KEY]["prepared_setup_fingerprint"]
         clock = node.clock
         clock.ticks = ticks
         adaptive = headers[gid].get("adaptive_clock")
@@ -5904,6 +7381,8 @@ def restore_tree_restart(path, model, *,
                 node.coupler, "reset_restart_observation", None)
             if reset_observation is not None:
                 reset_observation()
+            if gid in terrain_markers:
+                node.coupler._wrf_base_fed_back = terrain_markers[gid]
 
     model._runtime_status = ModelRuntimeStatus()
     model._resumed = True
@@ -5911,6 +7390,10 @@ def restore_tree_restart(path, model, *,
         gid for gid, node in nodes.items() if node.clock.history_due())
     root_id = int(model.root.cfg.grid_id)
     model._last_checkpoint = paths[root_id]
+    # A checkpoint read beside the leg's preparation (restart_prefetch.prefetch_beside) is applied:
+    # its host arrays are not held through the integration.
+    from woof.io.restart_prefetch import release_beside
+    release_beside(paths.values())
     return TreeRestartInfo(
         elapsed_ticks=ticks, tick_den=tick_den, phase=PERIOD_BEGIN,
         paths_by_grid_id=paths, headers_by_grid_id=headers,
@@ -5920,6 +7403,12 @@ def restore_tree_restart(path, model, *,
 def _validate_scratch_target(state, slot: str, host: np.ndarray,
                              key: str) -> None:
     """Prove a scratch copy can be applied without creating a live slot."""
+    from woof.core.nest_accumulation import META
+    if slot == META:
+        if host.shape != (4,) or host.dtype != np.dtype(np.int64):
+            raise RestartMismatchError(
+                f"{key}: nest archive origin must contain four int64 coordinates")
+        return
     if slot == "refl_10cm":
         # This carried diagnostic has the native mass-grid volume layout.
         # Check it even when the restored state has not allocated it yet.
@@ -5939,11 +7428,29 @@ def _validate_scratch_target(state, slot: str, host: np.ndarray,
         _check_array(host, target, key)
         return
     # A non-arena missing slot will be allocated with the model field dtype.
-    dtype = np.dtype(getattr(state.u, "dtype", np.float32))
+    from woof.lightning_contract import INTEGER_SCRATCH_SLOTS
+    dtype = np.dtype(np.int32 if slot in INTEGER_SCRATCH_SLOTS else getattr(state.u, "dtype", np.float32))
     if host.dtype != dtype:
         raise RestartMismatchError(
             f"{key}: restart dtype {host.dtype} does not match state "
             f"scratch dtype {dtype}")
+
+
+def _validated_swdd_marker(driver_header, stored) -> bool:
+    """Recover the held split producer without guessing for old checkpoints."""
+    if "swdd_from_scheme" in driver_header:
+        marker = driver_header["swdd_from_scheme"]
+        if not isinstance(marker, bool):
+            raise RestartMismatchError("restart swdd_from_scheme must be boolean")
+        if marker and "fields/swddir" not in stored:
+            raise RestartMismatchError("restart marks a scheme-produced shortwave split but carries no SWDDIR field")
+        return marker
+    counts = driver_header["call_counts"]
+    if "fields/swddir" in stored and ("radiation" not in counts or int(counts["radiation"]) != 0):
+        raise RestartMismatchError(
+            "legacy restart does not record who produced the held shortwave split; "
+            "resume from a checkpoint with swdd_from_scheme or start from prepared state")
+    return False
 
 
 def _missing_legacy_metal_pbl(stored, header, state, driver) -> bool:
@@ -5957,14 +7464,40 @@ def _missing_legacy_metal_pbl(stored, header, state, driver) -> bool:
     marker = driver_header.get("pbl_raw_available")
     if marker is not None and not isinstance(marker, bool):
         raise RestartMismatchError("restart pbl_raw_available must be boolean")
+    if marker is False:
+        if stored_raw:
+            raise RestartMismatchError("unavailable PBL raw rates must not carry raw payload")
+        return True
     return bool(expected and not stored_raw
                 and getattr(state, "_metal_setup_state", False)
                 and marker is not True)
+def _validate_strict_radiation_total(stored, driver) -> None:
+    """A rounded held total cannot be rebuilt from its published components."""
+    target = getattr(driver, "_wrf_rthraten", None)
+    if target is None:
+        return
+    key = "diag/_wrf_rthraten"
+    if key not in stored:
+        raise RestartMismatchError(
+            "restart is missing diag/_wrf_rthraten; strict radiation and "
+            "cumulus forcing would resume with zero held heating. The "
+            "rounded total cannot be reconstructed from LW and SW. Use "
+            "a checkpoint written by this build or start from prepared state.")
+    _check_array(stored[key], target, key)
 
 
 def _validate_driver_payload(stored, header, state, driver, elapsed,
                              format_version: int) -> None:
     """Hoist every PhysicsDriver refusal without mutating the driver."""
+    _validate_strict_radiation_total(stored, driver)
+    _validate_fire_payload(stored, header, driver)
+    expected_optional = {f"driver/{name}/{component}" for name in OPTIONAL_DRIVER_TENDENCY_ATTRS
+                         if getattr(driver, name, None) is not None for component in TENDENCY_COMPONENTS
+                         if getattr(getattr(driver, name), component) is not None}
+    stored_optional = {key for key in stored if any(key.startswith(f"driver/{name}/")
+                       for name in OPTIONAL_DRIVER_TENDENCY_ATTRS)}
+    if expected_optional != stored_optional:
+        raise RestartMismatchError("restart held fire-tendency inventory differs; the next atmospheric step would lose coupled heating or moisture")
     expected_held = {f"held/{name}" for name in DRIVER_HELD_FORCING_ATTRS
                      if getattr(driver, name, None) is not None}
     stored_held = {key for key in stored if key.startswith("held/")}
@@ -5999,13 +7532,18 @@ def _validate_driver_payload(stored, header, state, driver, elapsed,
     stored_fields = {key[len("fields/"):]: value
                      for key, value in stored.items()
                      if key.startswith("fields/")}
-    if set(stored_fields) != set(driver.fields):
+    # A plane a resume's output-only diagnostic switch moved is dropped or
+    # initialised by _restore_driver; every other plane must match exactly.
+    gated = _diagnostic_gated_field_changes(stored_fields, header, driver)
+    compared = set(stored_fields) - set(gated)
+    expected = set(driver.fields) - set(gated)
+    if compared != expected:
         raise RestartMismatchError(
             "restart surface-field inventory does not match the resuming "
-            f"driver (missing {sorted(set(driver.fields) - set(stored_fields))}, "
-            f"extra {sorted(set(stored_fields) - set(driver.fields))})")
-    for name, host in stored_fields.items():
-        _check_array(host, driver.fields[name], f"fields/{name}")
+            f"driver (missing {sorted(expected - compared)}, "
+            f"extra {sorted(compared - expected)})")
+    for name in sorted(compared):
+        _check_array(stored_fields[name], driver.fields[name], f"fields/{name}")
 
     for name, target in (("rthratenlw", driver.rthratenlw),
                          ("rthratensw", driver.rthratensw),
@@ -6015,7 +7553,7 @@ def _validate_driver_payload(stored, header, state, driver, elapsed,
             raise RestartMismatchError(f"restart is missing {key}")
         _check_array(stored[key], target, key)
 
-    for tend_name in DRIVER_TENDENCY_ATTRS:
+    for tend_name in _live_driver_tendency_attrs(driver):
         missing = [comp for comp in TENDENCY_REQUIRED_COMPONENTS
                    if f"driver/{tend_name}/{comp}" not in stored]
         if missing:
@@ -6111,6 +7649,8 @@ def _validate_driver_payload(stored, header, state, driver, elapsed,
     except (KeyError, TypeError, ValueError) as exc:
         raise RestartMismatchError(
             "restart physics-driver header is incomplete or malformed") from exc
+
+    _validated_swdd_marker(driver_header, stored)
 
     if "cumulus/w0avg" in stored:
         adapter = driver.cumulus_callable
@@ -6526,6 +8066,11 @@ def _validate_restart(path, state, cfg, *,
     # resume is answered by the gate that says what breaks rather
     # than by a field name in a list of differences (audit R-048).
     _require_rrtmg_variant_match(header, cfg, path)
+    # BEFORE the configuration walk too: a checkpoint of a scheme this
+    # build computes differently resumes under no configuration, so the
+    # walk's notes (the terrain clock's among them) must not be what the
+    # user is sent to change first.
+    _require_current_algorithm_identities(header, cfg, path)
     _require_config_match(header["config"], cfg, path)
     live_lbc_clock = root_external_lbc_clock_identity(state, cfg)
     if live_lbc_clock is not None:
@@ -6572,6 +8117,10 @@ def _validate_restart(path, state, cfg, *,
         # preserved-prefix check below does not need.
         return setup_fingerprint(state)
 
+    terrain_meta = header.get(_TERRAIN_BASE_KEY)
+    if terrain_meta is not None and (preserved_forcing_prefix or sealed_forcing_extension):
+        raise RestartMismatchError("strict terrain overlay does not support forcing extension")
+    _validate_terrain_base(header, stored, state, path)
     if preserved_forcing_prefix:
         if sealed_forcing_extension:
             raise ValueError('A restore cannot declare two forcing continuation modes')
@@ -6609,7 +8158,7 @@ def _validate_restart(path, state, cfg, *,
                 f"restart file {path} cannot use sealed forcing extension: "
                 "the live domain is neither a specified root nor a nested "
                 "child")
-    elif header["setup_fingerprint"] != live_setup_fingerprint():
+    elif terrain_meta is None and header["setup_fingerprint"] != live_setup_fingerprint():
         raise RestartMismatchError(
             f"restart file {path} was written on a different model setup "
             "(base state / coordinates / map factors fingerprint "
@@ -6642,7 +8191,10 @@ def _validate_restart(path, state, cfg, *,
     stored_state = {key[len("state/"):]: value
                     for key, value in stored.items()
                     if key.startswith("state/")}
-    expected_state = {name for name in STATE_SERIALIZED_ATTRS
+    # The chem species fields ride beside the fixed inventory, named by the
+    # chem table this run loaded (woof/core/chem_state.py); a chem-off
+    # state adds none, so every existing checkpoint's key set is unchanged.
+    expected_state = {name for name in serialized_state_attrs(state)
                       if getattr(state, name, None) is not None}
     if set(stored_state) != expected_state:
         missing = expected_state - set(stored_state)
@@ -6679,6 +8231,7 @@ def _validate_restart(path, state, cfg, *,
 
     driver = getattr(state, "physics", None)
     _validate_member_namespaces(stored, state, driver, path, format_version)
+    _validate_hydro_payload(stored, header, driver)
     driver_keys = [key for key in stored
                    if key.startswith(("driver/", "fields/", "cumulus/", "held/", "pbl/"))]
     if driver is None:
@@ -6783,13 +8336,19 @@ def _apply_validated_restart(validated: _ValidatedRestart,
         host = stored.get(f"acoustic/{name}")
         if target is None or host is None:
             continue
-        _check_array(host, target, f"acoustic/{name}")
         target[...] = asarray(host)
     stored_scratch = set()
     for key, host in stored.items():
         if key.startswith("scratch/"):
             slot = key[len("scratch/"):]
             stored_scratch.add(slot)
+            if slot in OUTPUT_PERSISTENT and state.existing_scratch(slot) is None:
+                print(f"note: checkpoint carries inactive output bucket {slot!r}; dropped")
+                continue
+            if slot in HAIL_PERSISTENT and state.existing_scratch(slot) is None:
+                print(f"note: checkpoint {validated.path.name} carries {slot!r}; "
+                      "hail diagnostics are off, so the accumulator is dropped")
+                continue
             if (slot == "up_heli_max" or _is_tracker_window_slot(slot)) \
                     and state.existing_scratch(slot) is None:
                 # The eagerly allocated diagnostic accumulator and the
@@ -6803,7 +8362,20 @@ def _apply_validated_restart(validated: _ValidatedRestart,
                       f"{slot!r} but this run has nwp_diagnostics=0; the "
                       "diagnostic accumulator is dropped")
                 continue
-            state.scratch(host.shape, slot)[...] = asarray(host)
+            if slot in _THOMPSON_CLOUD_BOOKING_SLOTS \
+                    and state.existing_scratch(slot) is None:
+                # Correct mode WB1: the physics driver allocates the
+                # settled-cloud pair exactly when the run books it
+                # (Thompson with thompson_cloud_surface_booking on, an
+                # output-only key a resume may change).  A run resumed with
+                # the booking off would otherwise carry the stored total in
+                # every frame, never updated again.
+                print(f"note: checkpoint {validated.path.name} carries "
+                      f"{slot!r} but this run does not book settled cloud "
+                      "(thompson_cloud_surface_booking off); the total is "
+                      "dropped")
+                continue
+            state.scratch(host.shape, slot, dtype=host.dtype)[...] = asarray(host)
     # Old-checkpoint tolerance for accumulators that postdate the file: a
     # live serialized slot with no stored counterpart stays at its
     # zero-initialized allocation.  That is the correct diagnostic restore
@@ -6837,6 +8409,10 @@ def _apply_validated_restart(validated: _ValidatedRestart,
     normalize_spec_zone_ring_after_restore(
         state, cfg, relocated=_grid_relocated(
             header, cfg, parent_by_grid=parent_by_grid))
+    if getattr(cfg, "umove", 0.0) or getattr(cfg, "vmove", 0.0):
+        from woof.moving_frame import frame_velocity
+        state._moving_frame_velocity = frame_velocity(cfg)
+        state._moving_frame_initialized = True
     state.elapsed_seconds = elapsed
     return RestartInfo(elapsed_seconds=elapsed,
                        run_trackers=header.get("run_trackers"),
@@ -6857,43 +8433,49 @@ def restore_restart(path, state, cfg, *, preserved_forcing_prefix=False) -> Rest
     ``attach_lateral_boundaries`` reset it to zero.
     """
     validated = _validate_restart(path, state, cfg, preserved_forcing_prefix=preserved_forcing_prefix)
+    if (_TERRAIN_BASE_KEY in validated.header
+            or _TERRAIN_EDGE_KEY in validated.header):
+        raise RestartMismatchError("strict terrain feedback members must be restored as a complete tree")
     return _apply_validated_restart(validated, state, cfg)
 
 
 def _restore_driver(stored, header, state, driver, elapsed, asarray,
                     format_version: int) -> None:
+    # _validate_driver_payload and _validate_member_namespaces have checked
+    # every member before _apply_validated_restart mutates any model state.
     from woof.core.microphysics import MicrophysicsDiagnostics
     from woof.core.physics import PhysicsTendencies
+
+    hydro = getattr(driver, "hydro", None)
+    if hydro is not None:
+        for key, target in hydro.arrays.items():
+            target[...] = asarray(stored[f"hydro/{key}"])
+        hydro.restore_metadata(header["driver"]["hydro"])
 
     # Surface/Noah fields: in place only (never rebind â€” sfclay_result and
     # the Noah launch read these exact device arrays).
     stored_fields = {key[len("fields/"):]: value
                      for key, value in stored.items()
                      if key.startswith("fields/")}
-    if set(stored_fields) != set(driver.fields):
-        raise RestartMismatchError(
-            "restart surface-field inventory does not match the resuming "
-            f"driver (missing {sorted(set(driver.fields) - set(stored_fields))}, "
-            f"extra {sorted(set(stored_fields) - set(driver.fields))})")
+    gated = _diagnostic_gated_field_changes(stored_fields, header, driver)
     for name, host in stored_fields.items():
+        if name in gated:
+            continue
         target = driver.fields[name]
-        _check_array(host, target, f"fields/{name}")
         target[...] = asarray(host)
+    for name, change in sorted(gated.items()):
+        if change == "initialised":
+            driver.fields[name][...] = 0
+        print(_diagnostic_gated_note(name, change, header))
     lake = getattr(driver, "lake", None)
     if lake is not None:
         lake.invalidate_columns()
 
     for name in ("rthratenlw", "rthratensw"):
         key = f"driver/{name}"
-        if key not in stored:
-            raise RestartMismatchError(f"restart is missing {key}")
         target = getattr(driver, name)
-        _check_array(stored[key], target, key)
         target[...] = asarray(stored[key])
     key = "driver/pending_rainbl"
-    if key not in stored:
-        raise RestartMismatchError(f"restart is missing {key}")
-    _check_array(stored[key], driver._pending_rainbl, key)
     driver._pending_rainbl[...] = asarray(stored[key])
 
     # The checkpoint-only carriers.  Tolerant in BOTH directions, and
@@ -6907,7 +8489,6 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
         host = stored.get(f"diag/{name}")
         if target is None or host is None:
             continue
-        _check_array(host, target, f"diag/{name}")
         target[...] = asarray(host)
 
     # Preserve the constructor's carrier identities for tile buffers and
@@ -6934,7 +8515,11 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
     # Held tendencies: rebind with the stored COUPLED arrays (no
     # recoupling â€” see the manifest argument).  compute() recomposes the
     # working sum from these components before the next consumption.
-    for tend_name in DRIVER_TENDENCY_ATTRS:
+    fire = getattr(driver, "fire", None)
+    if fire is not None:
+        fire.restore({key[5:]: asarray(value) for key, value in stored.items() if key.startswith("fire/")},
+                     header["driver"]["fire"])
+    for tend_name in _live_driver_tendency_attrs(driver):
         components = {}
         live_tendency = getattr(driver, tend_name)
         for comp in TENDENCY_COMPONENTS:
@@ -6957,19 +8542,17 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
                 components[comp] = getattr(live_tendency, comp)
             else:
                 components[comp] = None
-        missing = [comp for comp in TENDENCY_REQUIRED_COMPONENTS
-                   if components[comp] is None]
-        if missing:
-            raise RestartMismatchError(
-                f"restart tendency {tend_name} is missing {missing}")
         setattr(driver, tend_name, PhysicsTendencies(**components))
     config = header["config"]
     reuse_pbl = bool(config.get("bl_pbl_physics")
                      and config.get("bldt") == 0.0
                      and (driver.radiation_active or driver.cu_physics))
-    if not (driver.radiation_active or driver.cu_physics) or reuse_pbl:
+    if (getattr(driver, "fire_tendencies", None) is None
+            and (not (driver.radiation_active or driver.cu_physics) or reuse_pbl)):
         # Preserve both proven identity paths and release the constructor's
-        # superseded initial PBL buffers immediately on restore.
+        # superseded initial PBL buffers immediately on restore. Fire needs
+        # a distinct composed target: += fire would otherwise mutate held
+        # PBL tendencies and replay the source on subsequent steps.
         driver.tendencies = driver.pbl_tendencies
 
     from woof.core.physics import microphysics_scratch_slots
@@ -6983,12 +8566,6 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
                 key = f"driver/microphysics/{comp}"
                 if key in stored:
                     components[comp] = asarray(stored[key])
-            missing = [comp for comp in MICROPHYSICS_REQUIRED_COMPONENTS
-                       if components[comp] is None]
-            if missing:
-                raise RestartMismatchError(
-                    f"v2 restart microphysics diagnostics are missing "
-                    f"{missing}")
             driver.microphysics = MicrophysicsDiagnostics(**components)
     else:
         for comp, slot in slot_map.items():
@@ -6996,36 +8573,13 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
             legacy_key = f"driver/microphysics/{comp}"
             scratch_host = stored.get(scratch_key)
             legacy_host = stored.get(legacy_key)
-            if format_version == RESTART_FORMAT_VERSION:
-                if legacy_host is not None:
-                    raise RestartMismatchError(
-                        f"v{RESTART_FORMAT_VERSION} restart unexpectedly "
-                        f"contains removed member {legacy_key}")
-                if scratch_host is None:
-                    raise RestartMismatchError(
-                        f"v{RESTART_FORMAT_VERSION} restart is missing "
-                        f"canonical microphysics member {scratch_key}")
-            elif scratch_host is not None and legacy_host is not None:
-                legacy_target = state.scratch(legacy_host.shape, slot)
-                _check_array(legacy_host, legacy_target, legacy_key)
-                if scratch_host.tobytes() != legacy_host.tobytes():
-                    raise RestartMismatchError(
-                        f"v2 restart's duplicate microphysics members "
-                        f"{scratch_key} and {legacy_key} differ byte-for-byte; "
-                        "they cannot be rebuilt as one alias without changing "
-                        "the trajectory")
             source = scratch_host if scratch_host is not None else legacy_host
             if source is None:
-                if comp in MICROPHYSICS_REQUIRED_COMPONENTS:
-                    raise RestartMismatchError(
-                        f"v2 restart microphysics diagnostics are missing "
-                        f"both {scratch_key} and {legacy_key}")
                 # An old pre-first-call optional can legitimately be absent;
                 # the new canonical scratch slot is already zero-filled.
                 target = state.scratch(state.mup.shape, slot)
             else:
-                target = state.scratch(source.shape, slot)
-                _check_array(source, target, scratch_key)
+                target = state.scratch(source.shape, slot, dtype=source.dtype)
                 if scratch_host is None:
                     target[...] = asarray(source)
             components[comp] = target
@@ -7043,14 +8597,11 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
     driver.ysu_nan_guard_fires = int(driver_header["ysu_nan_guard_fires"])
     driver.microphysics_updates = int(
         driver_header["microphysics_updates"])
+    driver._swdd_from_scheme = _validated_swdd_marker(driver_header, stored)
     _restore_carriers(driver, driver_header)
 
     if "cumulus/w0avg" in stored:
         adapter = driver.cumulus_callable
-        if adapter is None or not hasattr(adapter, "w0avg"):
-            raise RestartMismatchError(
-                "restart carries cumulus W0AVG but the resuming driver has "
-                "no trigger-history cumulus adapter")
         restored_w0avg = asarray(stored["cumulus/w0avg"])
         if (adapter.w0avg is not None
                 and adapter.w0avg.shape == restored_w0avg.shape
@@ -7091,6 +8642,8 @@ __all__ = [
     "MICROPHYSICS_COMPONENTS", "REBUILT_SCRATCH_PREFIXES",
     "MICROPHYSICS_ALGORITHM_IDENTITIES", "PBL_ALGORITHM_IDENTITIES",
     "URBAN_ALGORITHM_IDENTITIES",
+    "DYCORE_MIXING_ALGORITHM_IDENTITY", "dycore_mixing_identity",
+    "UPPER_DAMPING_ALGORITHM_IDENTITY", "upper_damping_identity",
     "NSSL2_LEGACY_RESTART_ALIASES", "NSSL2_RESTART_AUXILIARY_STATE",
     "NSSL2_RESTART_CONTRACT_VERSION", "NSSL2_RESTART_PRECIPITATION_SLOTS",
     "NSSL2_RESTART_PROGNOSTICS",
@@ -7109,7 +8662,7 @@ __all__ = [
     "carried_scratch_manifest",
     "RESTART_ONLY_DRIVER_SLOTS",
     "SERIALIZED_SCRATCH_SLOTS", "STATE_REBUILT_ATTRS",
-    "STATE_DERIVED_SETUP_ARRAYS",
+    "STRICT_LAZY_STATE_ATTRS", "STATE_DERIVED_SETUP_ARRAYS",
     "STATE_SERIALIZED_ATTRS", "STATE_SETUP_ARRAYS", "STATE_SETUP_SCALARS",
     "THOMPSON_AEROSOL_RESTART_STATE",
     "THOMPSON_AEROSOL_RESTART_SURFACE_STATE",

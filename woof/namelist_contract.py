@@ -130,6 +130,7 @@ BASELINES = (
                                        "cudt": [0, 0]})),
     ("grell-freitas", _variant(physics={"cu_physics": [3, 3]})),
     ("new-tiedtke", _variant(physics={"cu_physics": [16, 16]})),
+    ("new-sas", _variant(physics={"cu_physics": [96, 96]})),
     ("thompson-aerosol", _variant(physics={"mp_physics": [28, 28]})),
     ("nssl", _variant(physics={"mp_physics": [18, 18]})),
     ("morrison", _variant(physics={"mp_physics": [10, 10]})),
@@ -267,9 +268,17 @@ def _value_rules() -> dict[tuple[str, str], dict]:
         ("sf_surface_physics", sorted(ni._SFSFC_ALLOWED)),
         ("cu_physics", sorted(ni._CU_ALLOWED)),
     )
+    from woof.config import unported_scheme_reasons
     for key, values in maps:
         rule("physics", key, values,
              f"no ratified woof mapping (implemented: {values}).")
+        # The WRF values that are refused by name, with the sentence the
+        # importer prints for each, so a site can say why before a box boots.
+        rules[("physics", key)]["unported"] = {
+            str(value): reason for value, reason
+            in sorted(unported_scheme_reasons(key).items())}
+    rule("physics", "sf_ocean_physics", [0, 1, 2],
+         "must be 0 (off), 1 (Pollard) or 2 (3DPWP)", scalar=True)
     rule("physics", "sf_lake_physics", [0, 1],
          "must be integer 0 (off) or 1 (CLM lake).")
     rule("physics", "use_lakedepth", [0, 1],
@@ -321,9 +330,11 @@ def _value_rules() -> dict[tuple[str, str], dict]:
         rule("noah_mp", key, [admitted],
              f"woof's Noah-MP port implements {key} = {admitted!r} only "
              f"({evidence}).")
-    rule("physics", "num_land_cat", [21, 61],
+    rule("physics", "num_land_cat", [20, 21, 61],
          "the MODIFIED_IGBP_MODIS_NOAH category count the static build "
-         "stamps: 21, or 61 where geog_data_res names a Local Climate Zone "
+         "stamps: 21, 20 where geog_data_res selects the 15 arc-second "
+         "MODIS land use without its lake class (modis_15s), "
+         "or 61 where geog_data_res names a Local Climate Zone "
          "land cover (cglc_modis_lcz) and the urban canopy runs with "
          "use_wudapt_lcz = 1 (the importer checks that pairing).")
     # geog_data_res is a '+'-joined token list per domain, so its rule is
@@ -341,8 +352,10 @@ def _value_rules() -> dict[tuple[str, str], dict]:
                 + " as the [static.highres] land cover (which also "
                   "replaces terrain and soil); any other names a dataset "
                   "woof does not build.")}
-    for key in ni._ACTIVE_NUDGING_SELECTORS:
-        rule("fdda", key, [0], ni.NUDGING_NOT_IMPLEMENTED)
+    rule("fdda", "grid_fdda", [0, 1, 2],
+         "0 disables nudging; 1 selects grid analysis nudging; 2 selects spectral nudging. Active modes require a positive analysis interval and complete prepared analyses.")
+    for key in ("grid_sfdda", "obs_nudge_opt"):
+        rule("fdda", key, [0], ni.FDDA_OBSERVATION_INPUT)
     rule("geogrid", "map_proj", ["lambert", "mercator", "polar"],
          "implemented projections: 'lambert', 'mercator', 'polar'.",
          scalar=True)

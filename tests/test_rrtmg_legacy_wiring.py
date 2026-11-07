@@ -300,10 +300,25 @@ def _solar(env):
     julian = F((julday - 1) + hour / 24.0)
     gmt = F(START.hour + START.minute / 60.0 + START.second / 3600.0)
     xtime = F(ELAPSED / 60.0)
-    declin, solcon = leg.radconst(julian)
-    coszen = leg.calc_coszen(
-        julian, xtime + F(RADT_MINUTES) * F(0.5), gmt, env.lat, env.lon,
-        declin)
+    # The adapter's sun follows its solar generation (rrtmg_legacy.py, the
+    # radiation call's dispatch): this configuration names none, so it is the
+    # default wrf_480 device unit (woof.core.solar); the WRF v4.6.1 device
+    # unit (rrtmg_legacy_solar.cu) is the strict wrf_461 generation's.
+    xt_mid = xtime + F(RADT_MINUTES) * F(0.5)
+    from woof.wrf_exact import ENABLED
+    generation = getattr(env.cfg, "solar_generation", "wrf_480")
+    if ENABLED and generation == "wrf_461":
+        coszen_d, _hrang, declin, solcon = leg.solar_geometry_device(
+            julian, xt_mid, gmt, env.lat, env.lon)
+    elif generation == "wrf_480":
+        from woof.core.solar import solar_geometry_device
+        ds, coszen_d, _hrang = solar_geometry_device(julian, xt_mid, gmt, env.lat, env.lon)
+        declin, solcon = map(F, cp.asnumpy(ds))
+    else:
+        declin, solcon = leg.radconst(julian)
+        coszen_d = leg.calc_coszen(julian, xt_mid, gmt, env.lat, env.lon, declin,
+                                   generation="wrf_461")
+    coszen = cp.asnumpy(cp.asarray(coszen_d))
     return julday, julian, declin, solcon, coszen
 
 
@@ -410,9 +425,12 @@ def _reference(env):
         ps["cswpmcl"], ps["reicmcl"], ps["relqmcl"], ps["resnmcl"],
         aer_opt=0)
     # SW-audit item 1 stays closed at the engine API: nonzero aerosol is
-    # rejected, never silently discarded (the engine builds WRF's
-    # neutral 0/1/0 optics internally; there are no aerosol parameters).
-    with pytest.raises(NotImplementedError, match="aer_opt"):
+    # rejected, never silently discarded.  Since 2.9.0 aer_opt 1 and 2 are
+    # implemented (golden/ports-rad) and take the caller's per-band optics,
+    # so a call that names aer_opt=2 without them is refused by name rather
+    # than run on WRF's neutral 0/1/0 optics.
+    with pytest.raises(ValueError,
+                       match="aer_opt=2 needs the caller's per-band aerosol optics"):
         cuda_sw_ref.rrtmg_sw_batched(
             ps["ncol"], ps["nlay"], ps["icld"], ps["play"], ps["plev"],
             ps["tlay"], ps["tlev"], ps["tsfc"], ps["h2ovmr"],
@@ -431,6 +449,9 @@ def _reference(env):
             res_i, cols["pi3d"][col], coszen[col], nz)
         gsw[col] = o["gsw"]
         rthratensw[col] = o["rthratensw"]
+    # WRF radiation_driver.F:2870 rewrites SW from the rounded total.
+    lw = np.asarray(louts["rthratenlw"], np.float32)
+    rthratensw = ((lw + rthratensw).astype(np.float32) - lw).astype(np.float32)
     swdown = np.zeros(ncol, np.float32)
     for col in range(ncol):                # driver line 2877, scalar
         swdown[col] = F(gsw[col] / F(F(1.0) - surf["albedo"][col]))
@@ -472,6 +493,58 @@ def test_adapter_chunking_is_bitwise_invisible(env, baseline):
         got = _host_result(_call(chunked, env))
         for name in ("rthratenlw", "rthratensw", "swdown", "glw", "olr"):
             bits_equal(f"chunk8/{name}", got[name], baseline[name])
+
+
+@gpu_gate
+@pytest.mark.parametrize("span,chunk", [(16, 8), (12, 5), (1, 3)])
+def test_adapter_spans_and_windows_are_bitwise_invisible(env, baseline,
+                                                         monkeypatch, span,
+                                                         chunk):
+    """Prep spans of several engine-chunk windows (and spans narrower
+    than one window) give the whole-batch bits: the glue, the prep kernel
+    and the McICA stream are per column, so neither the span nor the
+    window boundary may show in any output."""
+    from woof.core import rrtmg_legacy as leg
+    monkeypatch.setattr(leg, "ADAPTER_SPAN_COLUMNS", span)
+    assert leg.adapter_span(chunk, env.ncol) == min(
+        env.ncol, chunk * max(1, span // chunk))
+    spanned = leg.RRTMGLegacyRadiation(
+        START, env.lat.reshape(env.ny, env.nx),
+        env.lon.reshape(env.ny, env.nx), p_top=env.p_top,
+        column_chunk=chunk)
+    for _ in range(DUAL_RUNS):
+        got = _host_result(_call(spanned, env))
+        for name in ("rthratenlw", "rthratensw", "swdown", "glw", "olr"):
+            bits_equal(f"span{span}/chunk{chunk}/{name}", got[name],
+                       baseline[name])
+
+
+@gpu_gate
+@pytest.mark.parametrize("chunk", [None, 7])
+def test_inline_march_equals_the_staged_march(env, baseline, monkeypatch,
+                                              chunk):
+    """rlw_rtrn_march_inline (taut, odcld and efclfrac formed in the
+    thread) against the staged taut + prol + coalesced march it replaced,
+    on the same adapter call: every published field uint32-identical, and
+    the default route equals the module-scoped baseline."""
+    import functools
+    from woof.core import rrtmg_lw as lwm
+    from woof.core import rrtmg_legacy as leg
+    names = ("rthratenlw", "rthratensw", "swdown", "glw", "olr")
+    fresh = leg.RRTMGLegacyRadiation(
+        START, env.lat.reshape(env.ny, env.nx),
+        env.lon.reshape(env.ny, env.nx), p_top=env.p_top,
+        column_chunk=chunk)
+    inline = _host_result(_call(fresh, env))
+    staged_engine = functools.partial(lwm.gpu_rrtmg_lw_batched_device,
+                                      _march="staged")
+    monkeypatch.setattr(lwm, "gpu_rrtmg_lw_batched_device", staged_engine)
+    for _ in range(DUAL_RUNS):
+        staged = _host_result(_call(fresh, env))
+        for name in names:
+            bits_equal(f"inline-vs-staged/{name}", inline[name], staged[name])
+            bits_equal(f"inline-vs-baseline/{name}", inline[name],
+                       baseline[name])
 
 
 @gpu_gate
@@ -1022,6 +1095,7 @@ def test_live_latitude_cache_matches_fresh_owners(env, monkeypatch):
             START, latitude.reshape(shape).copy(), env.lon.reshape(shape),
             p_top=env.p_top)
         want = _host_result(_call(fresh, env))
+        want_ozone = fresh._o33d_grid.copy()
         reused.latitude_deg[:] = latitude.reshape(shape)
         with monkeypatch.context() as patch:
             patch.setattr(wrf_ozone, "ozn_latitude_time_int", measured)

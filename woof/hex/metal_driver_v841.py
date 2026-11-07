@@ -266,7 +266,8 @@ class MetalDycoreV841:
         self, state: Any, *, time_level_one: Any, initial_diagnostics: Any,
         schedule: RKSchedule, outer_dt: float, validation_flag: Any,
         physics: Any | None = None, moist: Any | None = None,
-    ) -> tuple[Any, Any, Any, Any, Any, Any]:
+        native_stage_callback=None, dynamics_substep: int = 1,
+    ) -> tuple[Any, Any, Any, Any, Any, Any, Any]:
         if schedule.full_timestep != outer_dt or schedule.dynamics_splits != 3:
             raise ValueError("the v8.4.1 subcycle requires the outer split-three schedule")
         vertical = self.atmosphere.vertical
@@ -332,6 +333,20 @@ class MetalDycoreV841:
         final_flux_u = final_flux_w = None
         modified_theta_rate = None
         for stage in schedule.stages:
+            if native_stage_callback is not None:
+                physics = native_stage_callback(rk_step=stage.stage,
+                    dynamics_substep=dynamics_substep, state=current_state,
+                    saved=current_diag, diagnostics=diagnostics)
+                if physics is None:
+                    raise RuntimeError("active native MPAS RK callback returned no sources")
+                if stage.stage == 1:
+                    # Match the native stage-density wrapper: sources are
+                    # available only after the first RK callback.
+                    tend_rho_saved = self.horizontal.density_tendency(
+                        saved_state.rho_u, saved_state.rho_w, vertical.rdzw,
+                        physics_tendency=physics.rho)
+                    if self.regional_v841 is not None:
+                        tend_rho_saved = tend_rho_saved.copy()
             if stage.stage == 2:
                 coefficients = self._vertical_coefficients(
                     current_state, stage.acoustic_timestep,
@@ -353,11 +368,18 @@ class MetalDycoreV841:
                 self, current_state, current_diag.theta_m, saved_state,
                 saved_diag.theta_m, stage.stage)
             if physics is not None and stage.stage == 3:
-                # The GF dynamics rate reads tend_theta before the mixing and
-                # physics increments land (native F:6941 then F:6948).
+                # Native regional heating reads the density tendency after
+                # the first two boundary adjustments, before this stage
+                # adds its mixing and physics tendencies.
+                rho_rate = tend_rho_saved if self.regional_v841 is not None else tend_rho_dynamics
                 modified_theta_rate = modified_theta_dynamics_rate_metal_v841(
-                    self, tend_rt, tend_rho_dynamics, current_state.rho,
+                    self, tend_rt, rho_rate, current_state.rho,
                     current_diag.theta_m, validation_flag)
+            diabatic = (getattr(physics, "diabatic_theta", None)
+                        if native_stage_callback is not None else None)
+            if diabatic is not None:
+                from .mpasphys.metal_lagged_v842 import add_lagged
+                add_lagged(self, current_state.rho, diabatic, tend_rt)
             if saved_euler_theta is not None:
                 _add(self, tend_rt, saved_euler_theta)
             if physics is not None:
@@ -379,6 +401,9 @@ class MetalDycoreV841:
                     tend_omega=tend_omega, rho_u=current_state.rho_u,
                     theta_m=current_diag.theta_m, rho_zz=current_state.rho,
                     rk_step=stage.stage)
+                if diabatic is not None:
+                    from .mpasphys.metal_lagged_v842 import zero_speczone
+                    zero_speczone(self, diabatic)
             acoustic = MetalAcousticState.zeros(
                 self.arrays, self.nlev, self.ncells, self.nedges)
             forcing = MetalAcousticForcing(
@@ -435,7 +460,9 @@ class MetalDycoreV841:
                 )
             current_state, current_diag, flux_u, flux_w = _recover_candidate(
                 self, saved_state, saved_diag, acoustic, stage.stage,
-                stage.acoustic_steps, current_state.scalars)
+                stage.acoustic_steps, current_state.scalars,
+                native_recovery=native_stage_callback is not None,
+                diabatic_theta=diabatic, large_timestep=stage.large_timestep)
             if self.regional_v841 is None:
                 validate_recovered_state_metal_v841(
                     current_state, current_diag, invalid_flag=validation_flag)
@@ -453,13 +480,17 @@ class MetalDycoreV841:
                 cached_tangential_velocity=cached_v,
                 rk_step=stage.stage,
             )
+            if self.regional_v841 is not None:
+                self.regional_v841.apply_configured_w_boundary(current_diag.vertical_velocity)
             cached_v = diagnostics.tangential_velocity
         if final_flux_u is None or final_flux_w is None:
             raise RuntimeError("v8.4.1 dynamics subcycle did not reach RK3")
         return (current_state, current_diag, diagnostics, final_flux_u,
-                final_flux_w, modified_theta_rate)
+                final_flux_w, modified_theta_rate, physics)
 
-    def _advance(self, physics: Any | None) -> tuple[Any, Any, Any, Any]:
+    def _advance(self, physics: Any | None, *, transport_callback=None,
+                 native_stage_callback=None, native_post_transport=None,
+                 native_mass_loading=None) -> tuple[Any, Any, Any, Any]:
         """``_step_device_v841`` up to the four-byte validation readback."""
 
         config = self.config
@@ -490,6 +521,10 @@ class MetalDycoreV841:
             moist = compute_moist_dynamics_coefficients_metal_v841(
                 self, outer_saved.scalars, scalar_names=row.names(),
                 validation_flag=validation_flag)
+        if native_stage_callback is not None and config.config_moist_physics:
+            moist = compute_moist_dynamics_coefficients_metal_v841(
+                self, outer_saved.scalars, n_mass_loading=native_mass_loading,
+                validation_flag=validation_flag)
         outer_dt = float(config.config_dt)
         splits = int(config.config_dynamics_split_steps)
         dynamics_schedule = RKSchedule.from_mpas(
@@ -515,11 +550,13 @@ class MetalDycoreV841:
             if regional is not None:
                 regional.begin_dynamics_substep(_subcycle + 1)
             (current, carried, diagnostics, flux_u, flux_w,
-             modified_theta_rate) = self._advance_dynamics_subcycle(
+             modified_theta_rate, physics) = self._advance_dynamics_subcycle(
                 current, time_level_one=carried,
                 initial_diagnostics=diagnostics,
                 schedule=dynamics_schedule, outer_dt=outer_dt,
-                validation_flag=validation_flag, physics=physics, moist=moist)
+                validation_flag=validation_flag, physics=physics, moist=moist,
+                native_stage_callback=native_stage_callback,
+                dynamics_substep=_subcycle + 1)
             split_flux_u_sum = accumulate_split_flux_metal_v841(
                 flux_u, split_flux_u_sum)
             split_flux_w_sum = accumulate_split_flux_metal_v841(
@@ -576,6 +613,11 @@ class MetalDycoreV841:
                 accumulate_finite_array_metal_v841(
                     scalar_stage, invalid_flag=validation_flag)
             current.scalars = scalar_stage
+        if native_post_transport is not None:
+            # Native microphysics consumes unclamped transport before the
+            # specified-zone reset (time_integration.F:2770-2816).
+            native_post_transport(state=current, saved=carried, outer_state=outer_saved,
+                modified_theta_dynamics_rate=modified_theta_rate)
         if regional is not None:
             # atm_srk3:2798-2878 in order: the clamp, the specified-zone
             # resets on the pre-advance clock, then the clock advance.
@@ -585,10 +627,11 @@ class MetalDycoreV841:
                 theta_m=carried.theta_m, rho_theta=current.rho_theta,
                 rho_theta_perturbation=carried.rho_theta_perturbation,
                 scalars=current.scalars)
-            regional.advance_clock(outer_dt)
+            if transport_callback is None:
+                regional.advance_clock(outer_dt)
 
         rates = None
-        if physics is not None:
+        if physics is not None and native_stage_callback is None:
             if modified_theta_rate is None:
                 raise RuntimeError(
                     "full-physics split loop did not capture final RK dynamics heating")
@@ -599,6 +642,10 @@ class MetalDycoreV841:
             raise FloatingPointError(
                 "v8.4.1 Metal validation flag refused the outer step before publish")
         current.time_seconds = outer_saved.time_seconds + outer_dt
+        if transport_callback is not None:
+            transport_callback(current, carried, outer_saved, modified_theta_rate)
+            if regional is not None:
+                regional.advance_clock(outer_dt)
         return current, carried, outer_saved, rates
 
     def step_device(self) -> None:
@@ -612,8 +659,30 @@ class MetalDycoreV841:
         current, carried, _start, _rates = self._advance(None)
         self.atmosphere = replace(self.atmosphere, state=current, saved=carried)
 
+    def step_device_native(self, *, physics_stage_callback,
+                           physics_post_transport_callback, physics_mass_loading_count):
+        """Run the native MPAS RK and microphysics callback contract.
+
+        The session owns scheme state and rollback. This method publishes the
+        dycore only after the post-transport callback and normal validation.
+        It does not admit a public native physics provider.
+        """
+        from .mpasphys.config_v842 import NativeMpasDycoreConfigV842
+        if not isinstance(self.config, NativeMpasDycoreConfigV842):
+            raise TypeError("native MPAS stepping requires its native dycore config")
+        if not callable(physics_stage_callback) or not callable(physics_post_transport_callback):
+            raise TypeError("native MPAS stepping requires both physics callbacks")
+        if self._pending_candidate is not None:
+            raise RuntimeError("a column-physics candidate still awaits commit")
+        current, carried, _start, _rates = self._advance(None,
+            native_stage_callback=physics_stage_callback,
+            native_post_transport=physics_post_transport_callback,
+            native_mass_loading=physics_mass_loading_count)
+        self.atmosphere = replace(self.atmosphere, state=current, saved=carried)
+        return self.atmosphere
+
     def step_device_with_physics(
-        self, physics: Any
+        self, physics: Any, *, transport_callback=None
     ) -> MetalPhysicsStepCandidateV841:
         """Advance to an uncommitted endpoint using one held phase-one source."""
 
@@ -625,7 +694,7 @@ class MetalDycoreV841:
         if self._pending_candidate is not None:
             raise RuntimeError(
                 "a prior full-physics candidate still awaits post-WSM6 commit")
-        current, carried, start, rates = self._advance(physics)
+        current, carried, start, rates = self._advance(physics, transport_callback=transport_callback)
         candidate = MetalPhysicsStepCandidateV841(
             atmosphere=replace(self.atmosphere, state=current, saved=carried),
             dynamics_tendencies=MetalGfDynamicsTendenciesV841(
@@ -788,6 +857,10 @@ def assemble_regional_metal_dycore_v841(
         n_vert_levels=nlev,
         device_atmosphere=atmosphere,
         v841_context=v841_context,
+        time_integration_order=int(config.config_time_integration_order),
+        config_relax_zone_divdamp_coef=float(
+            getattr(config, "config_relax_zone_divdamp_coef", 6.0)),
+        config_lbc_w=getattr(config, "config_lbc_w", "zero"),
         scalar_names=tuple(scalar_names),
     )
     driver.regional_v841 = runtime

@@ -36,7 +36,7 @@ kernel void urban_bem_building_level_scan_fragment(
     if (p.ncol <= 0) { error[col] = 6510; return; }
 
     uint building = 0u;
-    for (uint iz = 1u; iz <= BEM_SCAN_NZ; ++iz) {
+    for (uint iz = 0u; iz < BEM_SCAN_NZ; ++iz) {
         const float spacing = ss_urb[ulong(col) * (BEM_SCAN_NZ + 1u) + iz];
         if (spacing > 0.0f) {
             if (building >= BEM_SCAN_MAX) {
@@ -44,9 +44,9 @@ kernel void urban_bem_building_level_scan_fragment(
                 nbui[col] = int(building + 1u);
                 return;
             }
-            nlev[level_base + building] = int(iz - 1u);
+            nlev[level_base + building] = int(iz);
             d_urb[level_base + building] = spacing;
-            building_nlev[building_base + building] = int(iz - 1u);
+            building_nlev[building_base + building] = int(iz);
             ++building;
         }
     }

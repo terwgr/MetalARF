@@ -21,7 +21,7 @@ fixture adds weak buoyancy, zero scale factor, a deep boundary layer, and
 high TKE columns, for 96 levels total. The other fixtures cover five
 initialization columns, four turbulence columns, and five two-step driver
 columns. Inputs and outputs are recorded together. Source, harness and CSV
-hashes are in `tests/data/mynn/oracle/mixlength2-provenance.txt`.
+hashes are in `tests/data/oracles/mynn/mixlength2-provenance.txt`.
 
 `tests/test_mynn_mixlength2.py` compares these WRF outputs with the CPU and
 CUDA ports. The CPU leaf, initialization, turbulence and warm-driver checks
@@ -65,3 +65,20 @@ added. Current harness hashes are in `mixlength2-provenance.txt` above:
   `8668f0c74168c34730bffabe5656693f209ebad5dc3a1a9dd1f3f92e32c18a03`
 - `driver.csv`:
   `f608d456eaa21878491985c3ed4d5bde70896b452f3eb9b71076d6466fdbf955`
+
+## Wrapper column oracle
+
+`build_columns.sh WRF_SOURCE_ROOT BUILD_DIR [oracle|stock]` grades the MYNN
+entry WRF actually calls, `mynnedmf_wrapper_run`, rather than the driver. It
+compiles the five unmodified WRF modules with no stub and writes the columns
+from `wrapper_columns.py gen`. It runs `run_wrapper_columns.F90` for three
+option sets and both mixing lengths, then packs one fixture per run.
+
+- The `oracle` flavour (-O0 -ffp-contract=off) is the 0 ULP reference.
+- The `stock` flavour uses WRF's own GNU optimisation flags, which records
+  how far a stock-built WRF moves from it.
+
+`wrapper_columns.py grade FIXTURE` runs WOOF's `mynn_pbl_step` on the GPU over
+the same columns, step by step (`replay`) and free-running (`free`), and
+prints per-output word counts and max ULP. Fixtures and their provenance are
+described in `tests/data/oracles/mynn/README.md`.

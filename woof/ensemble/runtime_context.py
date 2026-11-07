@@ -17,11 +17,35 @@ class MemberOutputCapture:
     keep_member_files: bool = False
     counter_calendars: dict = field(default_factory=dict, compare=False, repr=False)
     initialize_callback: object = field(default=None, compare=False, repr=False)
+    provenance: dict | None = field(default=None, compare=False)
+
+    provenance: dict | None = field(default=None, compare=False)
+
+    def submit_hydro(self, *, valid_time, reach_ids, discharge, stream=None,
+                     channel_depth_m=None):
+        """Borrow this member's resident reach output at a root deadline.
+
+        The history collector owns the call; ordinary routing steps never
+        enter this method. Preserve native precision and producer ordering.
+        """
+        owner = getattr(self.callback, "__self__", self.callback)
+        submit = getattr(owner, "submit_hydro", None)
+        if not callable(submit):
+            raise RuntimeError("member capture has no hydro product consumer")
+        return submit(member_id=self.member_id, valid_time=valid_time,
+            reach_ids=reach_ids, discharge=discharge, stream=stream,
+            channel_depth_m=channel_depth_m)
 
     def work_bytes(self, metadata):
         owner = getattr(self.callback, "__self__", self.callback)
         estimate = getattr(owner, "capturework_bytes", None)
         return None if estimate is None else int(estimate(metadata))
+
+    def committed_step(self, *, node, model):
+        owner = getattr(self.callback, "__self__", self.callback)
+        observe = getattr(owner, "committed_step", None)
+        if callable(observe):
+            observe(node=node, model=model)
 
     def history_committed(self, proof, *, grid_id, episode=0, valid_time):
         """Register a durable raw identity before a consumer can retire it.
@@ -82,6 +106,9 @@ class MemberOutputCapture:
                 continue
             case = model._prepared_by_grid_id[node.cfg.grid_id]
             metadata = _metadata_frame(node.grid, case.static_fields)
+            file_grid = getattr(case, "wrf_file_grid", None)
+            if file_grid:
+                metadata = {**metadata, **file_grid}
             capture_due_counter(node, owner, self.member_id, calendar=calendar,
                 start_time=start_time, metadata=metadata, episode=episode,
                 streamed=getattr(node.state, "_streamed_domain", None))
@@ -110,6 +137,16 @@ def observe_current_counters(model, *, start_time):
     capture = current_capture()
     if capture is not None:
         capture.observe_model_counters(model, start_time=start_time)
+
+
+def observe_initial_diagnostics(model):
+    """Hand the restored, perturbed state to diagnostics once before stepping."""
+    capture = current_capture()
+    if capture is not None:
+        owner = getattr(capture.callback, "__self__", capture.callback)
+        observe = getattr(owner, "observe_initial_state", None)
+        if callable(observe):
+            observe(model=model)
 
 
 def bind_current_member_model(model):

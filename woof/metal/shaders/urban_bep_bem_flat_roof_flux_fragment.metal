@@ -12,7 +12,6 @@ static inline float ubr_mul(float a, float b) { return as_type<float>(soft32_mul
 static inline float ubr_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubr_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
 static inline float ubr_log(float x) { return as_type<float>(soft_gfk_log(as_type<uint>(x))); }
-static inline float ubr_sqrt(float x) { return as_type<float>(soft32_sqrt(as_type<uint>(x))); }
 static inline float ubr_min(float a, float b) { return a < b ? a : b; }
 static inline float ubr_max(float a, float b) { return a > b ? a : b; }
 
@@ -43,7 +42,7 @@ kernel void urban_bep_bem_flat_roof_flux_fragment(
     const float sdlim = 100.0f, qw = 0.06f, qref = 0.37f, hs = 36.35f;
     const float z0t = ubr_div(z0, 10.0f);
     const float rs_eff = ubr_mul(ubr_sub(1.0f, pvf), rsg);
-    float utot = ubr_sqrt(ubr_add(ubr_mul(ua, ua), ubr_mul(va, va)));
+    float utot = ubr_pow(ubr_add(ubr_pow(ua, 2.0f), ubr_pow(va, 2.0f)), 0.5f);
     const float zz = ubr_div(dz, 2.0f);
     utot = ubr_max(utot, 0.01f);
     const float ric = ubr_div(ubr_mul(ubr_mul(ubr_mul(2.0f, p.g_u), zz), ubr_sub(pt, ptg)),
@@ -85,7 +84,7 @@ kernel void urban_bep_bem_flat_roof_flux_fragment(
     const float rsveg_v = ubr_min(ubr_div(rsmin, ubr_max(ubr_mul(ubr_mul(ubr_mul(ubr_mul(lai, f1v), f2v), f3v), f4v), 1.0e-9f)), rsmax);
     const float resg_v = ubr_div(rr, ubr_mul(ubr_mul(ubr_mul(aa, aa), utot), fh));
     const float fbqq = ubr_div(-ubr_sub(qv, qvsg), ubr_add(resg_v, rsveg_v));
-    const float ustar = ubr_sqrt(-fbuw);
+    const float ustar = ubr_pow(-fbuw, 0.5f);
     const float tstar = ubr_div(-fbpt, ustar);
     const float qstar = ubr_div(-fbqq, ustar);
     const float buu = ubr_mul(ubr_mul(ubr_div(-p.g_u, pt0), ustar), tstar);

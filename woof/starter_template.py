@@ -149,6 +149,18 @@ class Starter:
             if "highres" in self.raw["static"]:
                 self.raw["static"]["highres"]["cache_root"] = str(config.cache_root.resolve())
 
+    def set_root_spacing(self, spacing_km):
+        """Explicit geometry change; preserve the complete scientific table."""
+        spacing_m = float(spacing_km) * 1000.0
+        if not math.isfinite(spacing_m) or spacing_m <= 0:
+            raise ValueError("--root-dx must be finite and positive; invalid cell spacing would corrupt fitted geometry")
+        factor = spacing_m / self.dx
+        by_id = {table["grid_id"]: table for table in self.raw["domain"]}
+        for domain in self.exp.domains:
+            by_id[domain.grid_id].update(dx=domain.run.dx * factor,
+                                         dy=domain.run.dy * factor)
+        self.dx = spacing_m
+
     def tables(self, dims):
         raw = copy.deepcopy(self.raw)
         if len(dims) != len(self.domain_ids):
@@ -281,6 +293,8 @@ def fit_main(args):
     from woof import domain_wizard as dw
     out = args.out.expanduser().resolve()
     starter = Starter(args.template, out)
+    if getattr(args, "root_dx", None) is not None:
+        starter.set_root_spacing(args.root_dx)
     wps = out.with_suffix(".namelist.wps")
     receipt = out.with_suffix(".fit.json")
     # Every path this door MAY publish, not the three it always publishes.
@@ -376,10 +390,11 @@ def fit_main(args):
             fetch["cycle"] = cycle.strftime("%Y-%m-%dT%H")
         if args.hours is not None:
             fetch["hours"] = math.ceil(max(1, math.ceil(hours / (interval / 3600)) * (interval / 3600)))
-        # Fetch paths are interpreted by the fetch command relative to its cwd,
-        # not the TOML directory. Preserve that meaning when printing the new file.
+        # A relative fetch.out is relative to the starter's folder (D-11);
+        # the new file sits elsewhere, so it carries that meaning absolute.
         if fetch.get("out"):
-            fetch["out"] = str(Path(fetch["out"]).expanduser().resolve())
+            from woof.case_data import config_fetch_out
+            fetch["out"] = str(config_fetch_out(raw, base_dir=starter.path.parent))
     common = dict(ratios=starter.ratios, root_dx_m=starter.dx,
                   free_bytes=free, hours=hours, start_time=start,
                   projection=projection, source=source, name=experiment["name"],
@@ -387,7 +402,8 @@ def fit_main(args):
                   forcing_interval_seconds=interval,
                   candidate_builder=starter.candidate,
                   clearance_rows=starter.exp.spec_bdy_width + starter.exp.blend_width,
-                  minimum_axis=max(dw.FIFTH_ORDER_STENCIL_AXIS,
+                  minimum_axis=max(dw.FIFTH_ORDER_STENCIL_AXIS if any(
+                      d.run.h_sca_adv_order == 5 for d in starter.exp.domains) else 1,
                       dw.boundary_axis(starter.exp.spec_bdy_width, interior_points=1),
                       *(dw.boundary_axis(max(d.run.spec_zone, d.run.relax_zone),
                                          interior_points=1) for d in starter.exp.domains)))
@@ -821,8 +837,8 @@ def tiles_main(args):
                           for key, before, after in delta])
     if raw.get("fetch", {}).get("out") is not None:
         proof["fetch_out_path_basis"] = (
-            "The unchanged fetch.out declaration remains relative to the fetch "
-            "command's working directory; woof go chooses its own cache path.")
+            "The unchanged fetch.out declaration remains relative to this "
+            "configuration's folder; woof go chooses its own cache path.")
     files = []
     if wps_text is not None:
         proof["source_wps"] = str(source_wps)
@@ -855,12 +871,15 @@ def register_cli(subparsers):
     parser = subparsers.add_parser("domain-fit", help="explicitly fit an editable "
                                   "TOML to an area/device; preserve exact scientific settings")
     parser.add_argument("template", type=Path, help="ordinary complete experiment TOML")
+    parser.add_argument("--root-dx", type=float, metavar="KM",
+                        help="explicit root cell spacing in km; scale the domain tree's spacing while preserving physics, vertical levels and clocks")
     target = parser.add_mutually_exclusive_group(required=True)
     target.add_argument("--point", help="center LAT,LON; fit largest centered layout")
     target.add_argument("--polygon", type=Path, help="GeoJSON area; preserve its entire footprint")
     parser.add_argument("--point-extent-km", type=dw.point_extent_argument,
                         default=dw.POINT_FIT_MAX_EXTENT_KM, metavar="KM",
-                        help="largest root extent per axis a --point fit is sized to "
+                        help="largest root extent a --point fit is sized to, on the longer "
+                        "root axis (x); the root keeps its 5:4 shape, so y is 0.8 of it "
                         f"(default {dw.POINT_FIT_MAX_EXTENT_KM:.0f}); the projection pole, "
                         "one trip around the globe, the source's coverage and the card "
                         "still bound it, and an extent below the template's smallest "

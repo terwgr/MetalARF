@@ -13,6 +13,8 @@ touches the GPU (deferred cupy import) -- the writer itself is
 CPU-importable.
 """
 from __future__ import annotations
+
+RADAR_INLOOP_VERSION = 2
 from collections.abc import Mapping
 from contextlib import nullcontext, suppress
 from dataclasses import dataclass
@@ -21,14 +23,17 @@ from functools import partial
 import fnmatch
 import json
 import os
+from fractions import Fraction
 from pathlib import Path
 import queue
 import stat
+import sys
 import threading
+import time
 import traceback
 
 import numpy as np
-import netCDF4
+from woof.io.netcdf_serialization import netCDF4  # first use only (D-10)
 
 from woof import perf_timing, progress_log, render_layout
 from woof.wrf_exact import ENABLED as _WRF_EXACT, DIAGNOSTICS_ENABLED
@@ -37,20 +42,26 @@ from woof.io.classic_tape import (ClassicDim, ClassicTape, ClassicVariable,
                                    classic_attr_value)
 from woof.io.wrf_output_schema import (
     HISTORY_FIELDS_BY_NETCDF_NAME, PHYSICS_SELECTOR_GLOBALS,
+    RADIATION_CLDFRA_ATTRIBUTES,
     REGISTRY_VAR_META, SCHEME_OUTPUT_FIELDS, WRF_FIELD_TYPE_INTEGER,
     WRF_FIELD_TYPE_REAL,
 )
+from woof.io.sfire_schema import (SFIRE_FINE_FIELDS, SFIRE_CLASS_FIELDS,
+                                   SFIRE_REGISTRY_FIELDS, SFIRE_PARTICLE_FIELDS)
 from woof.supervisor import (_fsync_directory, fsync_file, quarantine_file,
                               replace_file_with_retry, unique_temp_path,
                               writing_progress)
 
 from woof.io.history_layout import (
+    CHEM_VAR_META as _CHEM_VAR_META,
     CORE_DIRECT_STATE_FIELDS, MOISTURE_STATE_FIELDS,
     _Z_STAGGERED_MASS_FIELDS,
     live_state_history_fields as _live_state_history_fields,
 )
 
 from woof.io.netcdf_serialization import NETCDF4_IO_LOCK
+from woof.io.wrf_input_history_schema import (WRF_INPUT_HISTORY_ROWS,
+    WRF_INITIALIZED_HISTORY_ROWS, WRF_GNU_RANDOM_SEED_WORDS)
 
 _COMPLETION_ATTR = "GPUWM_WRITE_COMPLETE"
 # netCDF4 releases the GIL around HDF5 calls, while the shipped HDF5 library
@@ -94,6 +105,48 @@ def resolve_wrfout_engine(engine: str | None = None) -> str:
     return value
 
 
+#: How history frames are stored.  ``deflate`` (the DEFAULT, the project owner
+#: 2026-10-28: "Lossless compression is the default") writes each frame as
+#: a NetCDF-4 file whose chunks are byte-shuffled and deflated: every value
+#: is the same word after decompression, and the file is about a third of
+#: the classic one (4.3x smaller on a measured 1 km quick-look frame).  The
+#: chunks are compressed on a pool of worker threads off the step loop
+#: (woof.io.nc_writer_bridge.Netcdf4Writer), never by HDF5 on one thread.
+#: ``none`` writes the classic CDF-2 frame as before, for readers that need
+#: raw classic files (``--history-compression none``).
+HISTORY_COMPRESSION_ENV = "GPUWM_HISTORY_COMPRESSION"
+#: zlib level of compressed frames (1-9).  4 is where the measured frames
+#: stop gaining (zstd 1/3/9 and zlib 4 within 10 % on every field).
+HISTORY_COMPRESSION_LEVEL_ENV = "GPUWM_HISTORY_COMPRESSION_LEVEL"
+#: Worker threads that compress frames (0 = every core, the default; the
+#: workers run at a lower priority than the forecast).
+HISTORY_COMPRESSION_THREADS_ENV = "GPUWM_HISTORY_COMPRESSION_THREADS"
+
+_HISTORY_COMPRESSIONS = ("deflate", "none")
+
+
+def resolve_history_compression(value: str | None = None) -> str:
+    """The history storage: explicit argument, else env, else deflate."""
+    chosen = value if value is not None else os.environ.get(
+        HISTORY_COMPRESSION_ENV, "deflate")
+    chosen = str(chosen).strip().lower() or "deflate"
+    if chosen not in _HISTORY_COMPRESSIONS:
+        raise ValueError(
+            f"unknown history compression {chosen!r} (from "
+            f"{HISTORY_COMPRESSION_ENV!r} or --history-compression); "
+            f"expected one of {_HISTORY_COMPRESSIONS}: 'deflate' (default) "
+            "writes lossless compressed NetCDF-4 frames, 'none' classic "
+            "CDF-2 frames")
+    return chosen
+
+
+def _history_netcdf4_options() -> dict:
+    level = int(os.environ.get(HISTORY_COMPRESSION_LEVEL_ENV, "4") or 4)
+    threads = int(os.environ.get(HISTORY_COMPRESSION_THREADS_ENV, "0") or 0)
+    return {"deflate": max(1, min(level, 9)), "shuffle": True,
+            "threads": max(0, threads)}
+
+
 #: The classic-container spelling of an attribute value, and the
 #: netCDF4-shaped facade that puts this tape on the Rust seam.  Both live
 #: in :mod:`woof.io.classic_tape` because the wrfinput/wrfbdy export
@@ -119,10 +172,12 @@ class _ClassicTape(ClassicTape):
     header-frozen refusal names this writer's own escapes.
     """
 
-    def __init__(self, path, *, container: str = "cdf2"):
+    def __init__(self, path, *, container: str = "cdf2",
+                 netcdf4_options: dict | None = None):
         super().__init__(path, container=container,
                          completion_attr=_COMPLETION_ATTR,
-                         frozen_remedy=_FROZEN_REMEDY)
+                         frozen_remedy=_FROZEN_REMEDY,
+                         netcdf4_options=netcdf4_options)
 
 
 def _stringify_and_clear_exception_tracebacks(exc: BaseException) -> str:
@@ -151,6 +206,10 @@ def _stringify_and_clear_exception_tracebacks(exc: BaseException) -> str:
 #: supervisor, netCDF4 and runtime behind it.  Kept bound here under
 #: the name the writer has always used.
 _VAR_META = REGISTRY_VAR_META
+#: Description and units of the chem outputs a frame has carried, filled by
+#: :func:`_live_state_history_fields` from the chem table (the rows'
+#: long_name/units, the diagnostics' description/units).  Empty in every
+#: chem-off process, so no default variable's attributes can move.
 
 #: Staggered dimension -> WRF ``stagger`` attribute value.  WRF appends
 #: ``_stag`` to a dimension's dataset name exactly when the field is staggered
@@ -159,7 +218,7 @@ _VAR_META = REGISTRY_VAR_META
 #: every Noah-MP field on them is declared ``Z``-staggered.
 _STAGGER = {"west_east_stag": "X", "south_north_stag": "Y",
             "bottom_top_stag": "Z", "soil_layers_stag": "Z",
-            "snow_layers_stag": "Z", "snso_layers_stag": "Z"}
+            "snow_layers_stag": "Z", "snso_layers_stag": "Z", "seed_dim_stag": "Z"}
 
 #: Noah-MP snow-stack history fields, keyed by name for the same reason
 #: TSLB/SMOIS/SH2O are: their leading extent is a scheme's own vertical axis,
@@ -193,8 +252,8 @@ _SNSO_LAYER_FIELDS = frozenset({SCHEME_OUTPUT_FIELDS["zsnsoxy"].netcdf_name})
 #: so a soil array is unroutable by shape alone and a nine-level soil field
 #: over a twenty-level column raises ``KeyError`` rather than picking a wrong
 #: axis.  That is what it did before these two names were added.
-_SOIL_LAYER_FIELDS = frozenset({"TSLB", "SMOIS", "SH2O",
-                                "SMFR3D", "KEEPFR3DFLAG"})
+_SOIL_LAYER_FIELDS = frozenset({"TSLB", "SMOIS", "SH2O", "SMCREL",
+                                "SMFR3D", "KEEPFR3DFLAG", "TVGL_URB", "SMG_URB"})
 
 #: The land-use table identity stamped on every history file.
 #:
@@ -222,15 +281,7 @@ _SOIL_LAYER_FIELDS = frozenset({"TSLB", "SMOIS", "SH2O",
 #: group already states; a run with a resolved land-use dataset overrides it
 #: from that dataset's own index (``GeogSelection.landuse_global_attrs``),
 #: which is what keeps it evidence rather than a constant.
-_DEFAULT_LANDUSE_ATTRS = {
-    "MMINLU": "MODIFIED_IGBP_MODIS_NOAH",
-    "ISWATER": 17,
-    "ISLAKE": 21,
-    "ISICE": 15,
-    "ISURBAN": 13,
-    "ISOILWATER": 14,
-    "NUM_LAND_CAT": 21,
-}
+from woof.static.geog import DEFAULT_LANDUSE_ATTRS as _DEFAULT_LANDUSE_ATTRS
 
 
 def _wrf_patch_extent_attrs(nx: int, ny: int, nz: int) -> dict[str, int]:
@@ -316,6 +367,44 @@ def wrfout_filename(valid_time, domain_id: int = 1) -> str:
             "file and the later frame would replace the earlier one")
     return valid_time.strftime(
         f"wrfout_d{domain_id:02d}_%Y-%m-%d_%H_%M_%S")
+
+
+#: Where a quick-look frame lands: its own folder beside the history tape.
+#: The file keeps the wrfout name, because the renderer recognises a WRF
+#: history file by it ("unreadable wrfout (not a raw WRF or post-processed
+#: NetCDF file this build recognises)" for any other name); the folder is
+#: what tells a subset frame from a full one.
+QUICKLOOK_DIRECTORY = "quicklook"
+
+
+def quicklook_path(base_dir, valid_time, domain_id: int):
+    """``<base_dir>/quicklook/wrfout_dNN_<time>``: one quick-look frame."""
+    return Path(base_dir) / QUICKLOOK_DIRECTORY / wrfout_filename(valid_time, domain_id)
+
+
+def is_quicklook_frame(path) -> bool:
+    """Whether a history path is a quick-look subset frame (by its folder)."""
+    return Path(path).parent.name == QUICKLOOK_DIRECTORY
+
+
+def quicklook_selection(node, ticks: int):
+    """The quick-look subset when this frame is a quick-look one, else None.
+
+    A domain with ``quicklook = {...}`` (DomainConfig.full_history_interval_s
+    set) rings its history alarm at the quick-look cadence; a frame is FULL
+    when its time since the domain's first history instant is a whole
+    number of full intervals, and a quick-look frame otherwise.
+    """
+    cfg = getattr(node, "cfg", None)
+    full = getattr(cfg, "full_history_interval_s", None)
+    selection = getattr(cfg, "quicklook_output", None)
+    if full is None or selection is None:
+        return None
+    spec = node.clock.spec
+    tick_den = int(node.clock.tick_den)
+    elapsed = Fraction(int(ticks) - int(spec.start_ticks)
+                       - int(spec.history_begin_ticks), tick_den)
+    return None if (elapsed / Fraction(str(full))).denominator == 1 else selection
 
 
 def wrf_physics_selector_attrs(run) -> dict[str, np.int32]:
@@ -468,6 +557,10 @@ def wrf_global_attrs(
         attrs["ETAC"] = np.float32(etac)
     if run is not None:
         attrs.update(wrf_physics_selector_attrs(run))
+        attrs["IFIRE"] = np.int32(getattr(run, "ifire", 0))
+        if int(getattr(run, "ifire", 0)) == 2:
+            attrs.update(IFIRE=np.int32(2), SR_X=np.int32(run.sr_x),
+                         SR_Y=np.int32(run.sr_y))
     return attrs
 
 
@@ -758,6 +851,39 @@ def _metal_state_frame(state, *, include_diagnostic_pressure=True):
     if getattr(state, "physics", None) is not None:
         fields.update({name: _metal_host_snapshot(array)
                        for name, array in state.physics.output_fields().items()})
+    resident_tree_history = (
+        _WRF_EXACT and getattr(state, "_streamed_domain", None) is None
+        and (getattr(state, "_wrf_round_trip_run", None) is not None
+             or getattr(state, "_wrf_start_history_t", None) is not None
+             or getattr(state, "_wrf_th_phy_m_t0", None) is not None))
+    if resident_tree_history:
+        start_t = _wrf_start_history_t(state)
+        fields["T"] = (_metal_host_snapshot(start_t) if start_t is not None
+                       else theta_perturbation)
+        fields["THM"] = theta_perturbation
+        if getattr(state, "_wrf_frame_round_trip_due", False):
+            from woof.core.nest_round_trip import couple_round_trip, round_trip_targets
+            sources = {name: getattr(state, attr)
+                       for name, attr in CORE_DIRECT_STATE_FIELDS.items()}
+            if state.qv is not None:
+                sources.update({name: getattr(state, attr)
+                                for name, attr in MOISTURE_STATE_FIELDS.items()})
+            sources.update(_live_state_history_fields(state))
+            sources["THM"] = state.thp
+            targets = round_trip_targets(state, state._wrf_round_trip_run)
+            target_names = {id(value): name for name, value in targets.items()}
+            snapshots = {}
+            for name, value in sources.items():
+                target_name = target_names.get(id(value))
+                if target_name is None:
+                    continue
+                if target_name not in snapshots:
+                    copy = value.copy()
+                    couple_round_trip(state, state._wrf_round_trip_run,
+                                      {target_name: copy})
+                    snapshots[target_name] = _metal_host_snapshot(copy)
+                    del copy
+                fields[name] = snapshots[target_name]
     return fields
 
 
@@ -837,13 +963,20 @@ def state_frame(
     import cupy as cp  # deferred: the writer itself stays CPU-importable
 
     with _state_device_context(state):
+        if getattr(state, "_moving_frame_velocity", None):
+            from woof.moving_frame import initialize_moving_frame
+            initialize_moving_frame(state)
         ny, nx = state.mup.shape
         phb = cp.asnumpy(state.phb)
         if phb.ndim == 1:                     # flat base state: broadcast column
             phb = np.ascontiguousarray(
                 np.broadcast_to(phb[:, None, None], (phb.size, ny, nx)))
+        start_t = _wrf_start_history_t(state)
+        if start_t is not None and not isinstance(start_t, np.ndarray):
+            start_t = cp.asnumpy(start_t)
         fields = {
-            "T": (cp.asnumpy(state.thp) if _WRF_EXACT
+            "T": (start_t if start_t is not None
+                  else cp.asnumpy(state.thp) if _WRF_EXACT
                   else cp.asnumpy(state.total_theta()) - np.float32(300.0)),
             **{name: cp.asnumpy(getattr(state, attribute))
                for name, attribute in CORE_DIRECT_STATE_FIELDS.items()},
@@ -851,6 +984,9 @@ def state_frame(
             "MUB": cp.asnumpy(state.mub2d),
             "HGT": cp.asnumpy(state.ht),
         }
+        # WOOF advances dry perturbation theta, the USE_THETA_M=0 record.
+        fields["THM"] = (fields["T"] if start_t is None
+                         else cp.asnumpy(state.thp))
         if include_diagnostic_pressure:
             pb = state.pb
             pb3 = pb if pb.ndim == 3 else pb[:, None, None]
@@ -888,6 +1024,9 @@ def state_frame(
         if getattr(state, "physics", None) is not None:
             fields.update({name: cp.asnumpy(array)
                            for name, array in state.physics.output_fields().items()})
+        if getattr(state, "_moving_frame_velocity", None):
+            from woof.moving_frame import ground_relative_components
+            fields["U"], fields["V"] = ground_relative_components(state, fields["U"], fields["V"])
         return fields
 
 
@@ -1129,6 +1268,42 @@ def quarantine_orphan_wrfouts(directory):
     return tuple(moved)
 
 
+#: The ledger of the history frames a run wrote, one file name per line,
+#: beside the frames (``HISTORY_LEDGER`` in ``rw-wrfbatch/src/snowfall.rs``
+#: reads it).  THE BREAKAGE: a host removed earlier history frames to save
+#: disk (an 8x5090 host, 2026-10-21), and the renderer could not tell a removed frame
+#: from a cadence that never wrote one, so a Kuchera snowfall total either
+#: had to be drawn across the hole with one end temperature for every
+#: interval it spans, or refused for every run whose cadence legitimately
+#: changes.  A name in the ledger that is gone from the folder is a frame
+#: this run wrote and someone removed.
+HISTORY_LEDGER = ".history-written"
+
+
+def record_history_written(path) -> None:
+    """Add a published history frame's name to its folder's ledger.
+
+    Only ``wrfout_d<NN>_<valid time>`` frames are recorded.  One short
+    appended line per frame, so concurrent domain writers interleave whole
+    lines.  Never raises: the ledger tells the renderer what was removed,
+    and a frame whose line could not be written is only one the renderer
+    will not call missing.
+    """
+
+    path = Path(path)
+    name = path.name
+    if not (name.startswith("wrfout_d") and len(name) == 30
+            and name[10] == "_"):
+        return
+    with suppress(OSError):
+        descriptor = os.open(path.parent / HISTORY_LEDGER,
+                             os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+        try:
+            os.write(descriptor, (name + "\n").encode("ascii"))
+        finally:
+            os.close(descriptor)
+
+
 class WrfoutWriter:
     """The product-tape writer.
 
@@ -1145,8 +1320,12 @@ class WrfoutWriter:
 
     def __init__(self, path, *, nx, ny, nz, dx, dy, title="woof",
                  global_attrs=None, field_schema=None, soil_layers=None,
-                 engine=None, _retain_identity_handle=False):
+                 engine=None, compression=None, _retain_identity_handle=False):
         self.engine = resolve_wrfout_engine(engine)
+        # Compressed frames are the Rust engine's container; the netCDF4
+        # workaround engine keeps writing what it always wrote.
+        self.compression = (resolve_history_compression(compression)
+                            if self.engine == "rust" else "none")
         self.publication_revision = None
         self._publication_file = None
         self._retain_identity_handle = _retain_identity_handle
@@ -1191,7 +1370,12 @@ class WrfoutWriter:
         self._final_path = Path(os.path.abspath(path))
         self._final_path.parent.mkdir(parents=True, exist_ok=True)
         self._temp_path = unique_temp_path(self._final_path, hidden=True)
-        if self.engine == "rust":
+        if self.engine == "rust" and self.compression == "deflate":
+            from woof.io.classic_tape import NETCDF4_DEFLATE
+            self.ds = _ClassicTape(
+                self._temp_path, container=NETCDF4_DEFLATE,
+                netcdf4_options=_history_netcdf4_options())
+        elif self.engine == "rust":
             self.ds = _ClassicTape(self._temp_path)
         else:
             self.ds = netCDF4.Dataset(
@@ -1304,15 +1488,57 @@ class WrfoutWriter:
     def _wrf_array(self, name, array):
         """``array`` on its WRF axis, zero-padding the unfilled top level."""
         self._check_integer_field_dtype(name, array)
-        if (name not in _Z_STAGGERED_MASS_FIELDS
-                or array.shape != (self.nz, self.ny, self.nx)):
-            return array
-        lifted = np.zeros((self.nz + 1, self.ny, self.nx), dtype=array.dtype)
-        lifted[:self.nz] = array
-        return lifted
+        return wrf_axis_array(name, array, nx=self.nx, ny=self.ny, nz=self.nz)
 
     def _dims_for(self, name, shape):
         nz, ny, nx = self.nz, self.ny, self.nx
+        if name in ("TURBINE_POWER", "TURBINE_HUB_WIND", "TURBINE_FARM_INDEX", "TURBINE_HUB_HEIGHT", "FARM_POWER", "FARM_HUB_WIND"):
+            if len(shape) != 1 or shape[0] < 1:
+                raise ValueError(f"wind-farm history {name} requires a nonempty one-dimensional index")
+            axis = "wind_turbine" if name.startswith("TURBINE_") else "wind_farm"
+            self._ensure_dimension(axis, shape[0])
+            return ("Time", axis)
+        row = WRF_INPUT_HISTORY_ROWS.get(name, WRF_INITIALIZED_HISTORY_ROWS.get(name))
+        if row is not None:
+            dims = tuple(row["history_dimensions"])
+            extents = {"scalar": 1, "soil_layers_stag": self.soil_layers,
+                       "bottom_top": nz, "bottom_top_stag": nz + 1,
+                       "south_north": ny, "south_north_stag": ny + 1,
+                       "west_east": nx, "west_east_stag": nx + 1,
+                       "seed_dim_stag": WRF_GNU_RANDOM_SEED_WORDS}
+            expected = tuple(extents[d] for d in dims)
+            if tuple(shape) != expected:
+                raise ValueError(f"native history {name} has shape {shape}, expected {expected}")
+            for dim in dims:
+                self._ensure_dimension(dim, extents[dim])
+            return ("Time", *dims)
+        if name in SFIRE_PARTICLE_FIELDS:
+            if len(shape)!=1 or shape[0]<1:
+                raise ValueError(f"firebrand history field {name} must contain its native particle allocation")
+            self._ensure_dimension("fs_maxsize",int(shape[0]))
+            return ("Time","fs_maxsize")
+        if name in SFIRE_FINE_FIELDS:
+            if len(shape) != 2:
+                raise ValueError(f"fine fire history field {name} must have two horizontal dimensions")
+            fy, fx = map(int, shape)
+            if fx < nx or fy < ny or fx % nx or fy % ny:
+                raise ValueError(f"fine fire history field {name} must refine every atmospheric mass cell")
+            self._ensure_dimension("west_east_subgrid", fx)
+            self._ensure_dimension("south_north_subgrid", fy)
+            self.ds.setncattr("SR_X", np.int32(fx // nx))
+            self.ds.setncattr("SR_Y", np.int32(fy // ny))
+            return ("Time", "south_north_subgrid", "west_east_subgrid")
+        if name in SFIRE_CLASS_FIELDS or name == "FMEP":
+            if len(shape) != 3 or tuple(shape[1:]) != (ny, nx) or shape[0] < 1:
+                raise ValueError(f"fire moisture history field {name} must be a class stack over the atmospheric mass grid")
+            axis = "fuel_moisture_extended_paramete" if name == "FMEP" else "fuel_moisture_classes_stag"
+            self._ensure_dimension(axis, shape[0])
+            return ("Time", axis, "south_north", "west_east")
+        if name == "LFN_TIME":
+            if tuple(shape) != (1,):
+                raise ValueError("fire level-function history time must contain one ignition time")
+            self._ensure_dimension("i_lfn_history", 1)
+            return ("Time", "i_lfn_history")
         if name in _SNOW_LAYER_FIELDS or name in _SNSO_LAYER_FIELDS:
             snow_layers = int(tuple(shape)[0]) if name in _SNOW_LAYER_FIELDS \
                 else int(tuple(shape)[0]) - self.soil_layers
@@ -1331,6 +1557,14 @@ class WrfoutWriter:
                     "snso_layers_stag", snow_layers + self.soil_layers)
                 axis = "snso_layers_stag"
             return ("Time", axis, "south_north", "west_east")
+        if name in ("ZS", "DZS") and tuple(shape) == (self.soil_layers,):
+            # WRF's soil-layer depth and thickness rows (Time, soil_layers_stag).
+            return ("Time", "soil_layers_stag")
+        if name in ("OM_TMP", "OM_S", "OM_U", "OM_V", "OM_DEPTH", "OM_DENSITY", "OM_TINI", "OM_SINI"):
+            if len(shape) != 3 or tuple(shape[1:]) != (ny, nx) or shape[0] < 2:
+                raise ValueError(f"ocean history {name} needs a level stack over the mass grid")
+            self._ensure_dimension("ocean_levels", shape[0])
+            return ("Time", "ocean_levels", "south_north", "west_east")
         if name in _SOIL_LAYER_FIELDS:
             expected = (self.soil_layers, ny, nx)
             if tuple(shape) != expected:
@@ -1368,17 +1602,30 @@ class WrfoutWriter:
             dtype, field_type = schema.dtype, schema.field_type
             desc, units = schema.description, schema.units
         else:
-            dtype = "i4" if name == "ITIMESTEP" else "f4"
+            dtype = wrf_field_dtype(name)
             field_type = (WRF_FIELD_TYPE_INTEGER if name == "ITIMESTEP"
                           else WRF_FIELD_TYPE_REAL)
-            desc, units = _VAR_META.get(name, ("", ""))
+            desc, units = _VAR_META.get(
+                name, _CHEM_VAR_META.get(name, ("", "")))
         stagger = next((s for d, s in _STAGGER.items() if d in dims), "")
+        # Native fire Registry z applies to refined and class grids, and
+        # even its 2-D flux diagnostics retain Z without a vertical axis.
+        if name in SFIRE_REGISTRY_FIELDS:
+            stagger = SFIRE_REGISTRY_FIELDS[name][1]
         if schema is not None and schema.stagger != stagger:
             raise ValueError(
                 f"wrfout variable {name} lands on dimensions {dims}, whose "
                 f"stagger is {stagger!r}, but WRF v4.6.1 declares it "
                 f"{schema.stagger!r} ({schema.registry})")
         var = self.ds.createVariable(name, dtype, dims)
+        fire_coordinates = str(getattr(self.ds, "FIRE_COORDINATE_MODE", "geographic"))
+        if name in ("FXLAT", "FXLONG"):
+            if fire_coordinates not in ("metric", "geographic"):
+                raise ValueError("fire history coordinates must declare metric or geographic mode so readers can locate the fine grid")
+            if fire_coordinates == "metric":
+                desc = "y coordinate of midpoints of fire cells" if name == "FXLAT" else "x coordinate of midpoints of fire cells"
+                units = "m"
+                var.standard_name = "projection_y_coordinate" if name == "FXLAT" else "projection_x_coordinate"
         if name == "XTIME":
             origin = str(getattr(self.ds, "START_DATE", "")).replace(
                 "_", " ", 1)
@@ -1393,13 +1640,20 @@ class WrfoutWriter:
         var.description = desc
         var.units = units
         var.stagger = stagger
+        if name == "CLDFRA":
+            # Radiation's cadence is coarser than history's: say what a
+            # between-calls frame and the initial frame carry.
+            for key, value in RADIATION_CLDFRA_ATTRIBUTES.items():
+                var.setncattr(key, value)
         spatial = any(d in dims for d in (
             "west_east", "west_east_stag", "south_north",
-            "south_north_stag"))
+            "south_north_stag", "west_east_subgrid", "south_north_subgrid"))
         if spatial:
             time_link = (" XTIME" if hasattr(self.ds, "START_DATE")
                          and hasattr(self.ds, "DT") else "")
-            if name in ("XLAT_U", "XLONG_U"):
+            if name in SFIRE_FINE_FIELDS:
+                var.coordinates = "FXLONG FXLAT" + time_link
+            elif name in ("XLAT_U", "XLONG_U"):
                 var.coordinates = "XLONG_U XLAT_U"
             elif name in ("XLAT_V", "XLONG_V"):
                 var.coordinates = "XLONG_V XLAT_V"
@@ -1571,6 +1825,7 @@ class WrfoutWriter:
         _fsync_directory(self._final_path.parent)
         self.publication_revision = self._publication_file.published(
             self._final_path, allow_missing=allow_missing)
+        record_history_written(self._final_path)
 
     def release_identity_handle(self, *, preserve=False):
         retained, self._publication_file = self._publication_file, None
@@ -1644,6 +1899,63 @@ class WrfoutWriter:
         return False
 
 
+#: Device memory a history frame's snapshots leave free (bytes).
+_HISTORY_SNAPSHOT_HEADROOM = 1 << 30
+
+
+def _history_snapshot_budget() -> int:
+    """Bytes of device snapshot one history frame may take.
+
+    Only memory the driver still holds free counts: the memory pool's cached
+    blocks are what the following steps allocate their transients from, and
+    the snapshots stay alive while those steps run.
+    """
+    import cupy as cp
+
+    free, _total = cp.cuda.runtime.memGetInfo()
+    return max(0, int(free) - _HISTORY_SNAPSHOT_HEADROOM)
+
+def wrf_field_dtype(name):
+    """The stored history type, shared by file and in-memory history."""
+    schema = HISTORY_FIELDS_BY_NETCDF_NAME.get(name)
+    return schema.dtype if schema is not None else ("i4" if name == "ITIMESTEP" else "f4")
+
+
+def wrf_axis_array(name, array, *, nx: int, ny: int, nz: int):
+    """One frame field as the writer stores it: on WRF's vertical axis, the
+    unfilled top level of a z-staggered mass field zero-padded.  The writer's
+    own transform (:meth:`WrfoutWriter._wrf_array`), shared with an in-memory
+    frame consumer so its words are the file's words."""
+    WrfoutWriter._check_integer_field_dtype(name, array)
+    array = np.asarray(array, dtype=wrf_field_dtype(name))
+    if (name not in _Z_STAGGERED_MASS_FIELDS
+            or array.shape != (nz, ny, nx)):
+        return array
+    lifted = np.zeros((nz + 1, ny, nx), dtype=array.dtype)
+    lifted[:nz] = array
+    return lifted
+
+
+def _wrf_start_history_t(state):
+    """Strict mode: the T a domain's frame writes when it is not t_2, or ``None``.
+
+    WRF's history T is th_phy_m_t0, which only the input sets before the
+    first step; THM is t_2.  A WRF-file nest's adjust_tempqv and a parent's
+    initial feedback move t_2 but not th_phy_m_t0, so until the domain's
+    first step (no carried strict muts yet) T is the file's word
+    (woof.ingest.wrfinput_nest_initial.finish_strict_nest_start).
+    """
+    if not _WRF_EXACT:
+        return None
+    from woof.state_serialization_contract import WRF_MUTS_SLOT
+    start_t = getattr(state, "_wrf_start_history_t", None)
+    if start_t is not None and state.existing_scratch(WRF_MUTS_SLOT) is None:
+        return start_t
+    # After the first step: th_phy_m_t0 where it parts from t_2, a
+    # parent's (woof.core.nest_round_trip.th_phy_m_t0_after_step).
+    return getattr(state, "_wrf_th_phy_m_t0", None)
+
+
 def _device_state_frame(state, *, include_diagnostic_pressure: bool = True):
     """Build the standard frame as live device arrays for side-stream D2H."""
     if _is_metal_state(state):
@@ -1652,17 +1964,23 @@ def _device_state_frame(state, *, include_diagnostic_pressure: bool = True):
     import cupy as cp
 
     with _state_device_context(state):
+        if getattr(state, "_moving_frame_velocity", None):
+            from woof.moving_frame import initialize_moving_frame
+            initialize_moving_frame(state)
         ny, nx = state.mup.shape
         phb = state.phb
         if phb.ndim == 1:
             phb = cp.broadcast_to(phb[:, None, None], (phb.size, ny, nx))
+        start_t = _wrf_start_history_t(state)
         fields = {
-            "T": (state.thp if _WRF_EXACT
+            "T": (cp.asarray(start_t) if start_t is not None
+                  else state.thp if _WRF_EXACT
                   else state.total_theta() - cp.float32(300.0)),
             **{name: getattr(state, attribute)
                for name, attribute in CORE_DIRECT_STATE_FIELDS.items()},
             "PHB": phb, "MUB": state.mub2d, "HGT": state.ht,
         }
+        fields["THM"] = fields["T"] if start_t is None else state.thp
         if include_diagnostic_pressure:
             pb = state.pb
             pb3 = pb if pb.ndim == 3 else pb[:, None, None]
@@ -1685,6 +2003,12 @@ def _device_state_frame(state, *, include_diagnostic_pressure: bool = True):
         fields.update(_live_state_history_fields(state))
         if getattr(state, "physics", None) is not None:
             fields.update(state.physics.output_fields())
+        if _WRF_EXACT and getattr(state, "_wrf_frame_round_trip_due", False):
+            from woof.core.nest_round_trip import round_tripped_frame_fields
+            fields = round_tripped_frame_fields(state, fields)
+        if getattr(state, "_moving_frame_velocity", None):
+            from woof.moving_frame import ground_relative_components
+            fields["U"], fields["V"] = ground_relative_components(state, fields["U"], fields["V"])
         return fields
 
 
@@ -1721,6 +2045,10 @@ class _AsyncFrame:
     #: Required producer identity handoff. Unlike telemetry, failure prevents
     #: publication being treated as a safely consumable ensemble history.
     completed_observer: object = None
+    #: perf_counter at admission, for the frame's timing record.
+    admitted_at: float = 0.0
+    #: Seconds the producer waited for the byte budget before admission.
+    admission_wait_s: float = 0.0
 
 
 class _CompletedEvent:
@@ -1754,8 +2082,29 @@ def _frame_nbytes(fields) -> int:
                for value in (fields or {}).values())
 
 
+def _contiguous_preserving_shape(value, xp=np):
+    """Contiguous storage on the original axis, including a zero-D scalar.
+
+    NumPy and CuPy's ascontiguousarray promote zero-D values to (1,).
+    History scalar dimensions must survive staging just like vector axes.
+    """
+    array = xp.asarray(value)
+    return xp.ascontiguousarray(array).reshape(array.shape)
+
+
 class _AsyncTicketQueue(queue.Queue):
     """Bounded queue that records ticket admission under its mutex."""
+
+    def release_completed_device_refs(self, stream) -> None:
+        # A slow file write can leave the next ticket queued long after its
+        # download finishes. Reuse that snapshot storage before allocating
+        # another capture, without waiting for unfinished transfers. Hold the
+        # queue mutex so the worker cannot take a ticket during this handoff.
+        with self.mutex, stream:
+            for ticket in self.queue:
+                if (ticket is not None and ticket.device_refs
+                        and ticket.event.done):
+                    ticket.device_refs = ()
 
     def _put(self, item) -> None:
         if item is None:
@@ -1815,14 +2164,54 @@ class AsyncDomainWrfoutWriter:
     _identity_bytes = 0
     metal = False
     _device = None
+    #: Frames this writer has made durable, ever.  Monotonic (a history
+    #: rewind edits ``paths`` but never this), so a checkpoint writer on
+    #: another thread can wait for "every frame queued before me" without
+    #: draining frames queued after it (:meth:`durability_target`).
+    _landed_total = 0
+    #: One timing record per written frame, keyed by its path: where the
+    #: frame's wall went on the writer thread (queue, D2H wait, host
+    #: assembly, NetCDF write, identity).  Class default for shells.
+    _frame_timings: dict = {}
+
+    #: An in-memory consumer of this domain's frames (a resident member
+    #: session's :class:`woof.io.frame_sink.FrameSink`), called on the
+    #: writer thread with the composed host fields the file is written from,
+    #: before the write.  ``write_files = False`` makes the frame land in the
+    #: sink only (a member whose history files nothing reads).  Class
+    #: defaults: every existing writer has neither and writes exactly as it
+    #: did.
+    frame_sink = None
+    write_files = True
 
     @staticmethod
     def _new_ticket_queue() -> queue.Queue:
-        # Capacity is per domain: one queued ticket in each of four queues is
-        # one complete four-domain history burst.  Each worker may additionally
-        # hold its current handoff, bounding queued + worker-held tickets at
-        # eight across a synchronized four-domain write boundary.
-        return _AsyncTicketQueue(maxsize=1)
+        # Unbounded by count: admission is bounded by BYTES instead
+        # (_admit, _pending_budget_bytes).  A one-ticket queue blocked the
+        # step loop whenever two frames were waiting behind the one being
+        # written: on V61 (8x RTX 5090, HRRR v4 recipe, 15-minute history,
+        # 2026-10-21) an 18.7 GB frame took about 40 s to land while the
+        # model made the next 15 minutes in about 15 s, so steps stalled
+        # 10-30 s at every write and the stall grew over the run.
+        return _AsyncTicketQueue(maxsize=0)
+
+    @staticmethod
+    def _pending_budget_bytes() -> int:
+        """Host bytes of admitted, unwritten frames before the producer waits.
+
+        A quarter of physical memory, at most 64 GiB
+        (WOOF_HISTORY_QUEUE_BYTES overrides).  One frame is always admitted
+        whatever its size, so a frame larger than the budget still runs, as
+        it did with the one-ticket queue.
+        """
+        override = os.environ.get("WOOF_HISTORY_QUEUE_BYTES")
+        if override:
+            return max(0, int(float(override)))
+        try:
+            physical = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+        except (AttributeError, ValueError, OSError):
+            physical = 16 * 1024 ** 3
+        return int(min(64 * 1024 ** 3, physical // 4))
 
     def __init__(self, *, nx, ny, nz, dx, dy, title, global_attrs,
                  abort_event=None, soil_layers=None, grid_id=None,
@@ -1867,6 +2256,7 @@ class AsyncDomainWrfoutWriter:
                              else abort_event)
         self.paths: list[Path] = []
         self._completed_records = []
+        self._frame_timings = {}
         self._thread = threading.Thread(
             target=self._worker, name=f"gpuwm-wrfout-{id(self):x}",
             daemon=True)
@@ -1941,12 +2331,26 @@ class AsyncDomainWrfoutWriter:
 
     def _admit(self, ticket: _AsyncFrame) -> None:
         """Admit one staged frame with bounded, liveness-aware waits."""
+        ticket.admitted_at = time.perf_counter()
         ticket.nbytes = (int(ticket.deferred["frame"].nbytes)
                          if ticket.deferred is not None
                          else _frame_nbytes(ticket.fields))
+        budget = self._pending_budget_bytes()
+        waited = 0.0
         with self._condition:
+            # Wait only while frames are already pending AND this one would
+            # take the backlog past the byte budget: the step loop is never
+            # blocked by an ordinary write cadence, only by a backlog that
+            # host memory cannot hold.
+            while (self._pending > 0
+                   and self._pending_bytes + ticket.nbytes > budget):
+                self._check_admission_liveness()
+                started = time.perf_counter()
+                self._condition.wait(timeout=_ASYNC_WRITER_POLL_SECONDS)
+                waited += time.perf_counter() - started
             self._pending += 1
             self._pending_bytes += ticket.nbytes
+        ticket.admission_wait_s = round(waited, 6)
         try:
             while True:
                 self._check_admission_liveness()
@@ -1967,7 +2371,23 @@ class AsyncDomainWrfoutWriter:
                     self._pending_bytes -= ticket.nbytes
                     self._condition.notify_all()
 
-    def _history_plan(self, produced) -> tuple[frozenset[str], dict]:
+    def _frame_lead_seconds(self, valid_time, global_attrs=None):
+        """Seconds from the run's START_DATE to ``valid_time``, or None."""
+        start = (global_attrs or self.global_attrs or {}).get("START_DATE")
+        if start is None or valid_time is None:
+            return None
+        try:
+            begin = datetime.strptime(str(start), "%Y-%m-%d_%H:%M:%S")
+            if isinstance(valid_time, datetime):
+                valid = valid_time.replace(tzinfo=None)
+            else:
+                valid = datetime.strptime(str(valid_time)[:19].replace("T", "_"),
+                                          "%Y-%m-%d_%H:%M:%S")
+        except (TypeError, ValueError):
+            return None
+        return (valid - begin).total_seconds()
+
+    def _history_plan(self, produced, selection=None, lead_seconds=None) -> tuple[frozenset[str], dict]:
         """(names to write, global attributes recording the selection).
 
         Resolved ONCE per frame, before a single byte is staged, because
@@ -1982,7 +2402,13 @@ class AsyncDomainWrfoutWriter:
         frame and its header are exactly what they were before this
         surface existed.
         """
-        selection = self.history_selection
+        # A per-frame selection (a quick-look frame's subset) overrides
+        # the writer's standing one for that frame only; the standing one
+        # takes the between-hours subset at a sub-hourly lead.
+        if selection is None:
+            selection = self.history_selection
+            if selection is not None:
+                selection = selection.for_lead(lead_seconds)
         if selection is None or selection.writes_everything:
             return frozenset(produced), {}
         return frozenset(selection.select(produced)), \
@@ -2002,7 +2428,8 @@ class AsyncDomainWrfoutWriter:
         return {**base, **history_attrs}
 
     def submit(self, path, valid_time, state, *, extra_fields=None,
-               refl_field=None, frame=None, global_attrs=None, completed_observer=None) -> None:
+               refl_field=None, frame=None, global_attrs=None, completed_observer=None,
+               history_selection=None) -> None:
         """Queue a nonblocking, stream-ordered snapshot of one domain.
 
         ``frame`` is a COMPLETE host frame, already assembled, and it is the
@@ -2075,7 +2502,7 @@ class AsyncDomainWrfoutWriter:
             }
             for name, value in (extra_fields or {}).items():
                 if name not in host_fields and name in keep:
-                    host_fields[name] = np.ascontiguousarray(value)
+                    host_fields[name] = _contiguous_preserving_shape(value)
             self._admit(_AsyncFrame(
                 path=Path(path),
                 time_str=valid_time.strftime("%Y-%m-%d_%H:%M:%S"),
@@ -2093,6 +2520,15 @@ class AsyncDomainWrfoutWriter:
                 raise RuntimeError("cannot submit to a closed wrfout writer")
             self._raise_failure()
             producer = cp.cuda.get_current_stream()
+            if state is not None and getattr(state, "_moving_frame_velocity", None):
+                from woof.moving_frame import moving_frame_attrs
+                base = self.global_attrs if global_attrs is None else global_attrs
+                global_attrs = {**base, **moving_frame_attrs(state)}
+            if state is not None:
+                fire_attrs = fire_history_attrs(getattr(state, "physics", None))
+                if fire_attrs:
+                    base = self.global_attrs if global_attrs is None else global_attrs
+                    global_attrs = {**base, **fire_attrs}
             try:
                 if frame is not None:
                     if state is not None:
@@ -2105,8 +2541,10 @@ class AsyncDomainWrfoutWriter:
                                            extra_fields=extra_fields,
                                            refl_field=refl_field, producer=producer,
                                            global_attrs=global_attrs,
-                                           completed_observer=completed_observer)
+                                           completed_observer=completed_observer,
+                                           history_selection=history_selection)
                     return
+                self._queue.release_completed_device_refs(self.stream)
                 device_fields = _device_state_frame(
                     state, include_diagnostic_pressure=True)
                 if refl_field is not None:
@@ -2116,7 +2554,9 @@ class AsyncDomainWrfoutWriter:
                 produced = list(device_fields)
                 produced.extend(name for name in (extra_fields or ())
                                 if name not in device_fields)
-                keep, history_attrs = self._history_plan(produced)
+                keep, history_attrs = self._history_plan(
+                    produced, history_selection,
+                    self._frame_lead_seconds(valid_time, global_attrs))
                 ready = cp.cuda.Event()
                 ready.record(producer)
                 self.stream.wait_event(ready)
@@ -2125,36 +2565,93 @@ class AsyncDomainWrfoutWriter:
                 device_refs: list[object] = []
                 pinned_refs: list[object] = []
                 with self.stream:
+                    # Freeze live state in device memory before starting D2H.
+                    # The next step needs only this GPU copy to finish; waiting
+                    # for the PCIe download made history a step-stream barrier.
+                    # Share exact aliases (notably T/THM) in both staging tiers.
+                    snapshots = {}
+                    aliases = {}
+                    # The device snapshots live until their D2H finishes, while
+                    # the next steps already run, so they may only take memory
+                    # the device has never handed to the pool: the pool's
+                    # cached blocks are the steps' transient workspace.  A
+                    # field past that budget is copied straight to pinned
+                    # host memory on the producer stream instead (the step
+                    # waits for that one PCIe copy).  Breakage this prevents:
+                    # full-CONUS HRRR resident on one 96 GB card died at its
+                    # first history frame, "Out of memory allocating
+                    # 68,585,472 bytes (allocated so far: 99,013,528,576
+                    # bytes)" at this snapshot loop, with every step fitting.
+                    snapshot_budget = _history_snapshot_budget()
+                    direct = 0
                     for name, value in device_fields.items():
                         if name not in keep:
                             continue
+                        key = id(value)
+                        if key not in aliases:
+                            if isinstance(value, np.ndarray):
+                                aliases[key] = np.array(value, copy=True, order="C", subok=False)
+                            elif int(value.nbytes) <= snapshot_budget:
+                                snapshot_budget -= int(value.nbytes)
+                                aliases[key] = cp.array(value, copy=True, order="C")
+                            else:
+                                source = (value if value.flags.c_contiguous
+                                          else cp.ascontiguousarray(value))
+                                memory = cp.cuda.alloc_pinned_memory(int(source.nbytes))
+                                host = np.frombuffer(
+                                    memory, dtype=source.dtype,
+                                    count=source.size).reshape(source.shape)
+                                source.get(out=host, stream=producer, blocking=True)
+                                pinned_refs.append(memory)
+                                aliases[key] = host
+                                direct += 1
+                        snapshots[name] = aliases[key]
+                    if direct and not getattr(self, "_direct_staging_noted", False):
+                        self._direct_staging_noted = True
+                        print(f"note: history: {direct} field(s) of this frame "
+                              "copied straight to host (the device has no room "
+                              "beside the steps' workspace for their snapshots)",
+                              file=sys.stderr, flush=True)
+                    captured = cp.cuda.Event()
+                    captured.record(self.stream)
+                producer.wait_event(captured)
+
+                with self.stream:
+                    staged = {}
+                    for name, value in device_fields.items():
+                        if name not in keep:
+                            continue
+                        key = id(value)
+                        if key in staged:
+                            host_fields[name] = staged[key]
+                            continue
+                        value = snapshots[name]
                         if isinstance(value, np.ndarray):
                             # Already on host: staging it through the device would
                             # be a pure bounce (measured ~1.8 GiB of cached device
                             # staging across the initial frames).  np.array preserves
                             # a scalar P_TOP's 0-D shape; np.ascontiguousarray would
                             # silently promote it to (1,) and give it a vertical dim.
-                            host_fields[name] = np.array(
-                                value, copy=True, order="C", subok=False)
+                            host_fields[name] = staged[key] = value
                             continue
-                        array = cp.ascontiguousarray(value)
+                        array = value
                         memory = cp.cuda.alloc_pinned_memory(int(array.nbytes))
                         host = np.frombuffer(memory, dtype=array.dtype,
                                              count=array.size).reshape(array.shape)
                         array.get(out=host, stream=self.stream, blocking=False)
-                        host_fields[name] = host
+                        host_fields[name] = staged[key] = host
                         device_refs.append(array)
                         pinned_refs.append(memory)
                     for name, value in (extra_fields or {}).items():
                         # Prognostic/state-derived fields win (notably child HGT,
                         # which is blended while static HGT_M remains unblended).
                         if name not in host_fields and name in keep:
-                            host_fields[name] = np.ascontiguousarray(value)
+                            host_fields[name] = _contiguous_preserving_shape(value)
                     done = cp.cuda.Event()
                     done.record(self.stream)
-                # The next mutation on the producing stream waits for the snapshot,
-                # while the host remains free to write another domain/file.
-                producer.wait_event(done)
+                # Only the worker waits for D2H. Device snapshots remain owned
+                # by the ticket until that event completes, independently of
+                # the live state which the next step can already mutate.
                 ticket = _AsyncFrame(
                     path=Path(path),
                     time_str=valid_time.strftime("%Y-%m-%d_%H:%M:%S"),
@@ -2168,12 +2665,13 @@ class AsyncDomainWrfoutWriter:
             finally:
                 # CuPy stream contexts restore their context stack, which can
                 # differ from a producer selected with Stream.use(). Keep the
-                # caller on the stream that waits for this frame's snapshot.
+                # caller on the stream that waits for this frame's capture.
                 producer.use()
 
 
     def _admit_host_frame(self, path, valid_time, frame, *, extra_fields,
-                          refl_field, producer, global_attrs=None, completed_observer=None) -> None:
+                          refl_field, producer, global_attrs=None, completed_observer=None,
+                          history_selection=None) -> None:
         """Publish a frame that is already on the host.
 
         The whole of ``submit``'s device machinery collapses here and it is
@@ -2214,7 +2712,7 @@ class AsyncDomainWrfoutWriter:
             refl = (_metal_host_snapshot(refl_field)
                     if refl_field is not None and "REFL_10CM" in keep
                     else None)
-            extra = {name: np.ascontiguousarray(value)
+            extra = {name: _contiguous_preserving_shape(value)
                      for name, value in (extra_fields or {}).items()
                      if name in keep}
             if deferred is None:
@@ -2244,7 +2742,9 @@ class AsyncDomainWrfoutWriter:
             produced.append("REFL_10CM")
         produced.extend(name for name in (extra_fields or ())
                         if name not in produced)
-        keep, history_attrs = self._history_plan(produced)
+        keep, history_attrs = self._history_plan(
+            produced, history_selection,
+            self._frame_lead_seconds(valid_time, global_attrs))
         host_fields: dict[str, np.ndarray] = {}
         device_refs: list[object] = []
         pinned_refs: list[object] = []
@@ -2259,7 +2759,7 @@ class AsyncDomainWrfoutWriter:
             if refl_field is not None and "REFL_10CM" in keep:
                 refl = self._host_or_staged(
                     refl_field, device_refs, pinned_refs)
-            extra = {name: np.ascontiguousarray(value)
+            extra = {name: _contiguous_preserving_shape(value)
                      for name, value in (extra_fields or {}).items()
                      if name in keep}
             if deferred is None:
@@ -2301,7 +2801,7 @@ class AsyncDomainWrfoutWriter:
             # unsafe call safe, which is the wrong direction for a defect
             # that is otherwise invisible.
             return value
-        array = cp.ascontiguousarray(value)
+        array = _contiguous_preserving_shape(value, cp)
         memory = cp.cuda.alloc_pinned_memory(int(array.nbytes))
         host = np.frombuffer(memory, dtype=array.dtype,
                              count=array.size).reshape(array.shape)
@@ -2325,8 +2825,18 @@ class AsyncDomainWrfoutWriter:
                 self._queue.task_done()
                 return
             staging_consumed = False
+            landed = False
             writer = None
             ticket_bytes = int(getattr(ticket, "nbytes", 0) or 0)
+            dequeued = time.perf_counter()
+            timing = {"time": getattr(ticket, "time_str", None),
+                      "bytes": ticket_bytes,
+                      # Seconds the stepping thread waited to admit this
+                      # frame (0 unless the byte budget was full).
+                      "admission_wait_s": float(
+                          getattr(ticket, "admission_wait_s", 0.0) or 0.0),
+                      "queued_s": round(dequeued - float(
+                          getattr(ticket, "admitted_at", 0.0) or dequeued), 6)}
             try:
                 ticket.event.synchronize()
                 # D2H is complete.  Drop device ownership on the side stream
@@ -2347,6 +2857,34 @@ class AsyncDomainWrfoutWriter:
                          in held["frame"].materialize().items()
                          if name in held["keep"]),
                         held["refl"], held["extra"])
+                    waited = getattr(held["frame"], "wait_seconds", None)
+                    if waited is not None:
+                        timing["copy_wait_s"] = round(float(waited), 6)
+                assembled = time.perf_counter()
+                timing["copy_and_assemble_s"] = round(assembled - dequeued, 6)
+
+                sink = self.frame_sink
+                if sink is not None:
+                    # The fields the file is written from, on this thread,
+                    # before the write: a sink that fails fails the frame.
+                    sink(grid_id=self.grid_id, valid_time=ticket.valid_time,
+                         time_str=ticket.time_str, fields=ticket.fields,
+                         nx=self.nx, ny=self.ny, nz=self.nz,
+                         global_attrs=(ticket.global_attrs
+                                       if ticket.global_attrs is not None
+                                       else self.global_attrs))
+                if not self.write_files:
+                    ticket.fields = {}
+                    ticket.pinned_refs = ()
+                    # This frame is durable in the sink. It has no file
+                    # publication, but the common completion path still
+                    # records its timing after releasing staging ownership.
+                    timing_path = str(ticket.path)
+                    timing["sink_only"] = True
+                    timing["durable_after_s"] = round(time.perf_counter() - float(
+                        getattr(ticket, "admitted_at", 0.0) or dequeued), 6)
+                    landed = True
+                    continue
                 with _NETCDF4_IO_LOCK:
                     if self._abort_event.is_set():
                         continue
@@ -2362,6 +2900,19 @@ class AsyncDomainWrfoutWriter:
                                 field_schema=ticket.fields,
                                 _retain_identity_handle=True) as writer:
                             writer.write_frame(ticket.time_str, ticket.fields)
+                            # write_frame synchronously consumes every host
+                            # view. Native finish/fsync, validation and hashing
+                            # no longer need the borrowed staging arrays: a
+                            # streamed next step may reuse them immediately.
+                            ticket.fields = {}
+                            ticket.pinned_refs = ()
+                            with self._condition:
+                                self._identity_pending = True
+                                self._identity_bytes = ticket_bytes
+                                self._pending -= 1
+                                self._pending_bytes -= ticket_bytes
+                                staging_consumed = True
+                                self._condition.notify_all()
                     except BaseException:
                         # Set the experiment-wide abort while still holding
                         # the netCDF lock.  A later domain cannot slip into a
@@ -2369,21 +2920,8 @@ class AsyncDomainWrfoutWriter:
                         # cancellation.
                         self._abort_event.set()
                         raise
-                # The native writer has consumed every host view and made
-                # the temporary file durable. Release staging before its
-                # payload hash and final-name publication, so a streamed
-                # next step can reuse its store.
-                # Identity work stays on this worker and outside the NetCDF
-                # lock; the existing queue still holds at most one ticket.
-                ticket.fields = {}
-                ticket.pinned_refs = ()
-                with self._condition:
-                    self._identity_pending = True
-                    self._identity_bytes = ticket_bytes
-                    self._pending -= 1
-                    self._pending_bytes -= ticket_bytes
-                    staging_consumed = True
-                    self._condition.notify_all()
+                written = time.perf_counter()
+                timing["write_s"] = round(written - assembled, 6)
                 published = getattr(writer, "publication_revision", None)
                 if published is not None:
                     proof = writer.complete_output_identity(cancel_event=self._abort_event)
@@ -2392,6 +2930,12 @@ class AsyncDomainWrfoutWriter:
                     with self._condition:
                         self._completed_records.append(proof)
                 self.paths.append(ticket.path)
+                landed = True
+                done_at = time.perf_counter()
+                timing["identity_s"] = round(done_at - written, 6)
+                timing["durable_after_s"] = round(done_at - float(
+                    getattr(ticket, "admitted_at", 0.0) or dequeued), 6)
+                timing_path = str(ticket.path)
                 # The file is durable HERE and nowhere earlier: the
                 # WrfoutWriter context above has exited, so its close()
                 # completed the fsync, the self-validation and the
@@ -2434,6 +2978,8 @@ class AsyncDomainWrfoutWriter:
                 # completed frame or any of its arrays.
                 ticket = None
                 with self._condition:
+                    if landed:
+                        self._landed_total += 1
                     if staging_consumed:
                         self._identity_pending = False
                         self._identity_bytes = 0
@@ -2441,6 +2987,10 @@ class AsyncDomainWrfoutWriter:
                         self._pending -= 1
                         self._pending_bytes -= ticket_bytes
                     self._condition.notify_all()
+                if landed:
+                    # Telemetry, after the counts above are published: read
+                    # once the writer is drained (frame_timings).
+                    self._frame_timings[timing_path] = timing
 
     def update_global_attrs(self, global_attrs) -> None:
         """Swap the per-file global attributes for frames submitted later.
@@ -2454,6 +3004,35 @@ class AsyncDomainWrfoutWriter:
         """
         self.drain()
         self.global_attrs = dict(global_attrs)
+
+    def durability_target(self) -> int:
+        """The landed count at which every frame queued so far is durable."""
+        with self._condition:
+            return (self._landed_total + self._pending
+                    + int(self._identity_pending))
+
+    def wait_landed(self, target: int) -> None:
+        """Block until :meth:`durability_target`'s frames are durable.
+
+        Safe from any thread.  Raises the writer's failure, or names the
+        breakage when a frame queued before ``target`` was taken settled
+        without becoming durable (an abort, or a refused admission), so a
+        waiting checkpoint can never be published over a missing frame.
+        """
+        while True:
+            with self._condition:
+                if self._landed_total >= target:
+                    return
+                settled = not self._pending and not self._identity_pending
+                if (self._failure is None and self._thread.is_alive()
+                        and not settled):
+                    self._condition.wait(timeout=_ASYNC_WRITER_POLL_SECONDS)
+                    continue
+            self._raise_failure()
+            raise RuntimeError(
+                "a history frame queued before this checkpoint never became "
+                "durable, so the checkpoint is not published: a restart "
+                "from it would resume past a frame that does not exist")
 
     def drain(self) -> None:
         """Wait for durable files and their completed output identities."""
@@ -2515,16 +3094,33 @@ def carrier_provenance_attrs(physics) -> dict:
     stamped provenance is the provenance of the frames in that file, not
     of the driver at construction.
 
-    Returns ``{}`` for a state with no driver or no contract (an
-    initial-condition write, a pre-physics smoke): absent keys read as
-    "no land-surface consumer existed", which is true for those files.
+    Fire coordinate identity accompanies these per-frame attributes when
+    the driver owns a coupled fire grid. A state with neither carrier nor
+    fire model returns an empty mapping.
     ``..._LAST_UPDATE`` is the producer's model second, ``-1.0`` for a
     source that is constant by declaration and has no age.
     """
     carriers = getattr(physics, "carriers", None)
+    chemistry = chem_history_attrs(getattr(physics, "state", None))
     if carriers is None:
+        return {**fire_history_attrs(physics), **chemistry}
+    return {**_carrier_attrs(str(carriers.policy), carriers.report()),
+            **fire_history_attrs(physics), **chemistry}
+
+
+def chem_history_attrs(state, *, store=None):
+    """Species-sized float64 mass vectors at this frame's model time."""
+    if getattr(state, "chem", None) is None:
         return {}
-    return _carrier_attrs(str(carriers.policy), carriers.report())
+    import json
+    from woof.core.chem_driver import ledger_report
+    return {"GPUWM_CHEM_LEDGER": json.dumps(ledger_report(state, store=store), sort_keys=True)}
+
+
+def fire_history_attrs(physics) -> dict:
+    """Fine-grid coordinate identity carried by this frame's fire model."""
+    fire = getattr(physics, "fire", None)
+    return {} if fire is None else dict(fire.output_attributes())
 
 
 def streamed_carrier_provenance_attrs(streamed) -> dict:
@@ -2544,15 +3140,18 @@ def streamed_carrier_provenance_attrs(streamed) -> dict:
     gets, and not the same thing as a contract that says ``unwritten``.
     """
     provenance = None
+    template = getattr(streamed, "template_state", None)
+    chemistry = (chem_history_attrs(template, store=streamed._planning_store())
+                 if getattr(template, "chem", None) is not None else {})
     reader = getattr(streamed, "carrier_provenance", None)
     if reader is not None:
         provenance = reader()
     if not provenance:
-        return {}
+        return chemistry
     policy = provenance.get("policy")
     if policy is None:
-        return {}
-    return _carrier_attrs(str(policy), provenance["records"])
+        return chemistry
+    return {**_carrier_attrs(str(policy), provenance["records"]), **chemistry}
 
 
 def _carrier_attrs(policy: str, rows) -> dict:
@@ -2577,6 +3176,11 @@ class PerDomainWrfoutWriters:
 
     _simulated_radar = None
     _output_observer = None
+    #: ``progress_callback.frame_submitted``, when it has one: told the
+    #: moment each frame is handed over, so the landing it later reports is
+    #: timed from the frame's own valid time and not from whatever step the
+    #: model has reached by then (:meth:`woof.progress_log.StepLog.frame_submitted`).
+    _frame_submitted = None
 
     #: The tree-wide ``[output]`` history selection this writer set was
     #: built with (``ExperimentConfig.output``), or ``None`` for the FULL
@@ -2643,6 +3247,8 @@ class PerDomainWrfoutWriters:
         #: Every final pathname THIS writer set has published, which is
         #: what the duplicate-valid-time guard in submit() is scoped to.
         self._published_paths = set()
+        #: Submitted frames in order: (grid_id, path, stepping-thread s).
+        self._frame_log = []
         self._captured_paths = []
         self._abort_event = threading.Event()
         self._output_observer = None
@@ -2655,8 +3261,10 @@ class PerDomainWrfoutWriters:
             domain_start_time = (
                 start_time if configured_start is None
                 else configured_start)
-            self._metadata_by_grid_id[node.cfg.grid_id] = _metadata_frame(
-                node.grid, case.static_fields)
+            metadata = _metadata_frame(node.grid, case.static_fields)
+            file_grid = getattr(case, "wrf_file_grid", None)
+            self._metadata_by_grid_id[node.cfg.grid_id] = (
+                {**metadata, **file_grid} if file_grid else metadata)
             self._episode_by_grid_id[node.cfg.grid_id] = resumed_episodes.get(
                 int(node.cfg.grid_id), 0)
             self._writers[node.cfg.grid_id] = AsyncDomainWrfoutWriter(
@@ -2670,7 +3278,8 @@ class PerDomainWrfoutWriters:
                     configured_dt=float(node.clock.spec.dt_fp32),
                     feedback=getattr(model, "_feedback_provenance", None),
                     initial_condition=initial_condition, source=source,
-                    simulation_start_time=start_time),
+                    simulation_start_time=start_time,
+                    static_fields=getattr(case, "static_fields", None)),
                 abort_event=self._abort_event,
                 grid_id=node.cfg.grid_id,
                 history_selection=self._selection_for(node.cfg),
@@ -2726,6 +3335,7 @@ class PerDomainWrfoutWriters:
                 "history period, or pass progress_callback to the "
                 "constructor.")
         self._output_observer = getattr(progress_callback, "output_committed", None)
+        self._frame_submitted = getattr(progress_callback, "frame_submitted", None)
         observer = (self._notify_output if getattr(self, "_simulated_radar", None) is not None
                     else self._output_observer)
         for writer in self._writers.values():
@@ -2735,7 +3345,11 @@ class PerDomainWrfoutWriters:
         # Requested radar output is checked by drain/close on the model
         # thread, since the writer treats landing callbacks as telemetry.
         if self._simulated_radar is not None:
-            self._simulated_radar.output_committed(**event)
+            from woof.simulated_radar import inloop_enabled
+            private = (inloop_enabled()
+                       and getattr(self.model.node(int(event["domain"])).cfg, "quicklook_output", None) is not None)
+            if not private:
+                self._simulated_radar.output_committed(**event)
         if self._output_observer is not None:
             self._output_observer(**event)
 
@@ -2782,12 +3396,45 @@ class PerDomainWrfoutWriters:
         """Logical history cadence captured without claiming member files."""
         return tuple(getattr(self, "_captured_paths", ()))
 
+    def frame_timings(self) -> list[dict]:
+        """One record per submitted history frame, in submission order.
+
+        ``submit_s`` is the stepping thread's wall inside :meth:`submit`
+        (the frame's whole cost to the model); the rest is the writer
+        thread's (:class:`AsyncDomainWrfoutWriter`): ``queued_s`` behind
+        earlier frames, ``copy_and_assemble_s`` (the D2H wait,
+        ``copy_wait_s`` of it on the ranked road, plus host assembly),
+        ``write_s`` (NetCDF write, fsync, validation, rename),
+        ``identity_s`` and ``durable_after_s`` from admission.
+        """
+        rows = []
+        for grid_id, path, submit_s in getattr(self, "_frame_log", ()):
+            writer = self._writers.get(grid_id)
+            timing = dict(getattr(writer, "_frame_timings", {}).get(path, {}))
+            rows.append({"grid_id": grid_id, "path": Path(path).name,
+                         "submit_s": submit_s, **timing})
+        return rows
+
     @property
     def completed_records(self):
         ret = list(getattr(self, "_archived_records", ()))
         for gid in sorted(self._writers):
             ret.extend(getattr(self._writers[gid], "completed_records", ()))
         return tuple(ret)
+
+    #: Set by :meth:`attach_frame_sink`; class defaults leave every writer as it was.
+    _frame_sink = None
+    _write_files = True
+
+    def attach_frame_sink(self, sink, *, write_files: bool = True) -> None:
+        """Give every domain's frames to ``sink`` too (see
+        :attr:`AsyncDomainWrfoutWriter.frame_sink`); ``write_files=False``
+        keeps them in the sink only.  A domain added later gets the same."""
+        self._frame_sink = sink
+        self._write_files = bool(write_files)
+        for writer in self._writers.values():
+            writer.frame_sink = sink
+            writer.write_files = bool(write_files)
 
     def add_domain(self, grid_id: int, *, grid, static_fields, episode: int = 0) -> None:
         """Mint a writer for a domain that appeared AFTER construction.
@@ -2827,7 +3474,8 @@ class PerDomainWrfoutWriters:
                 feedback=getattr(self.model, "_feedback_provenance", None),
                 initial_condition=self._initial_condition,
                 source=self._source,
-                simulation_start_time=self.start_time),
+                simulation_start_time=self.start_time,
+                static_fields=static_fields),
             abort_event=self._abort_event,
             grid_id=grid_id,
             # Only [simulated_radar] listens for a late domain's frames.
@@ -2839,6 +3487,9 @@ class PerDomainWrfoutWriters:
             device=(None if _is_metal_state(node.state)
                     else _domain_output_device(node.state)),
             metal=_is_metal_state(node.state))
+        if self._frame_sink is not None:
+            self._writers[grid_id].frame_sink = self._frame_sink
+            self._writers[grid_id].write_files = self._write_files
 
     def remove_domain(self, grid_id: int) -> None:
         """Drain and close one retired episode without losing its paths."""
@@ -2875,8 +3526,10 @@ class PerDomainWrfoutWriters:
         configured_start = getattr(node.cfg, "start_time", None)
         domain_start_time = (self.start_time if configured_start is None
                              else configured_start)
-        self._metadata_by_grid_id[grid_id] = _metadata_frame(
-            grid, static_fields)
+        metadata = _metadata_frame(grid, static_fields)
+        file_grid = getattr(case, "wrf_file_grid", None)
+        self._metadata_by_grid_id[grid_id] = (
+            {**metadata, **file_grid} if file_grid else metadata)
         self._writers[grid_id].update_global_attrs(_global_wrf_attrs(
             grid, domain_start_time,
             getattr(case, "geog_selection", None),
@@ -2885,7 +3538,8 @@ class PerDomainWrfoutWriters:
             feedback=getattr(self.model, "_feedback_provenance", None),
             initial_condition=self._initial_condition,
             source=self._source,
-            simulation_start_time=self.start_time))
+            simulation_start_time=self.start_time,
+            static_fields=static_fields))
 
     def submit(self, node, ticks: int, *, refl_field=None) -> None:
         """One domain's history frame, from wherever that domain's truth is.
@@ -2904,10 +3558,36 @@ class PerDomainWrfoutWriters:
         marker ``streaming.StreamedDomain`` leaves on the state it took
         over.
         """
+        submitted = time.perf_counter()
+        try:
+            return self._submit(node, ticks, refl_field=refl_field,
+                                submitted=submitted)
+        finally:
+            log = getattr(self, "_frame_log", None)
+            if log is not None and log and log[-1][2] is None:
+                log[-1][2] = round(time.perf_counter() - submitted, 6)
+
+    def _capture_radar(self, node, valid_time, refl_field, *, quicklook=False):
+        radar = getattr(self, "_simulated_radar", None)
+        if radar is not None and getattr(node.cfg, "quicklook_output", None) is not None:
+            from woof.simulated_radar import inloop_enabled, RADAR_SCRATCH_FRAMES, RADAR_SNAPSHOT_FIELDS
+            if inloop_enabled():
+                writer = self._writers[node.cfg.grid_id]
+                # Snapshot staging and queue backpressure are output work, not a stalled model step.
+                work_bytes = (RADAR_SCRATCH_FRAMES * 4 * (writer.nx + 1) * (writer.ny + 1)
+                              * (len(RADAR_SNAPSHOT_FIELDS) * writer.nz + 15))
+                with self._write_beat(f"radar-snapshot-d{int(node.cfg.grid_id):02d}", work_bytes):
+                    radar.capture(node, valid_time, writer,
+                                  self._metadata_by_grid_id[node.cfg.grid_id], refl_field=refl_field, quicklook=quicklook)
+
+    def _submit(self, node, ticks: int, *, refl_field=None,
+                submitted=None) -> None:
         if getattr(self, "_simulated_radar", None) is not None:
             self._simulated_radar.check()
         seconds = ticks / node.clock.tick_den
         valid_time = self.start_time + timedelta(seconds=seconds)
+        self._capture_radar(node, valid_time, refl_field,
+                            quicklook=quicklook_selection(node, ticks) is not None)
         episode = int(self._episode_by_grid_id.get(node.cfg.grid_id, 0))
         base_dir = self.output_dir
         # THE spelling, from `woof.render_layout`, because the delivered
@@ -2922,6 +3602,16 @@ class PerDomainWrfoutWriters:
                         / segment)
             base_dir.mkdir(parents=True, exist_ok=True)
         path = base_dir / wrfout_filename(valid_time, node.cfg.grid_id)
+        # THE QUICK-LOOK STREAM (DomainConfig.full_history_interval_s): a
+        # frame off the full lattice carries only the quick-look subset
+        # and is written beside the tape, never as a wrfout_d* file.
+        quicklook = quicklook_selection(node, ticks)
+        static_attrs = {}
+        if quicklook is not None:
+            path = quicklook_path(base_dir, valid_time, node.cfg.grid_id)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            quicklook, static_attrs = self._quicklook_static(
+                node, quicklook, moving=segment is not None)
         # SAME-RUN duplicates only.  The breakage this names is a lifecycle
         # or restart boundary publishing one valid time twice inside a
         # single run: the second frame's atomic replace destroys the first,
@@ -2938,6 +3628,14 @@ class PerDomainWrfoutWriters:
                 "frame. (A frame left by a PREVIOUS run at this path is "
                 "replaced as it always has been.)")
         self._published_paths.add(path)
+        if getattr(self, "_frame_log", None) is not None:
+            self._frame_log.append([int(node.cfg.grid_id), str(path), None])
+        if self._frame_submitted is not None:
+            try:
+                self._frame_submitted(domain=int(node.cfg.grid_id),
+                                      valid_time=valid_time)
+            except Exception:  # noqa: BLE001 - telemetry never fails a run
+                pass
         from woof.ensemble.runtime_context import current_capture
         capture = current_capture()
         if capture is not None:
@@ -2982,6 +3680,9 @@ class PerDomainWrfoutWriters:
                 getattr(node.state, "physics", None))
         frame_attrs = (None if not carrier_attrs
                        else {**writer.global_attrs, **carrier_attrs})
+        if static_attrs:
+            frame_attrs = {**(writer.global_attrs if frame_attrs is None
+                              else frame_attrs), **static_attrs}
         phase = f"history-d{int(node.cfg.grid_id):02d}"
         if streamed is not None:
             # A streamed domain's numbers live in the pinned host store;
@@ -3005,7 +3706,8 @@ class PerDomainWrfoutWriters:
                             node.cfg.grid_id],
                         refl_field=refl_field,
                         global_attrs=frame_attrs,
-                        completed_observer=committed)
+                        completed_observer=committed,
+                        history_selection=quicklook)
                     # The next sweep may reuse these pinned views once the
                     # native write releases them. Identity hashing can
                     # continue on the worker; final drain/close still wait
@@ -3029,7 +3731,60 @@ class PerDomainWrfoutWriters:
                 extra_fields=self._metadata_by_grid_id[node.cfg.grid_id],
                 refl_field=refl_field,
                 global_attrs=frame_attrs,
-                completed_observer=committed)
+                completed_observer=committed,
+                history_selection=quicklook)
+
+    def _quicklook_static(self, node, selection, *, moving: bool):
+        """(selection, global attributes) for one quick-look frame.
+
+        A fixed domain's quick-look frame leaves PHB out and names the
+        domain's first full frame (``../wrfout_dNN_<first history time>``)
+        in :data:`~woof.io.history_selection.STATIC_FRAME_ATTR`, where a
+        reader finds it.  A domain that moves (a follow, or relocation
+        episodes) keeps PHB in every frame and names nothing.
+        """
+        from woof.io.history_selection import (QuickLookSelection,
+                                                STATIC_FRAME_ATTR)
+
+        if not isinstance(selection, QuickLookSelection):
+            return selection, {}
+        if moving or getattr(node.cfg, "follow", None) is not None:
+            return selection.on_moving_domain(), {}
+        spec = node.clock.spec
+        first = self.start_time + timedelta(seconds=float(Fraction(
+            int(spec.start_ticks) + int(spec.history_begin_ticks),
+            int(node.clock.tick_den))))
+        name = wrfout_filename(first, node.cfg.grid_id)
+        return selection, {STATIC_FRAME_ATTR: f"../{name}"}
+
+    def durability_barrier(self):
+        """A callable that waits, on any thread, for every frame queued now.
+
+        Taken on the stepping thread at a checkpoint and run on the
+        checkpoint writer's, so the checkpoint is still published only
+        after every history frame up to its valid time is durable -- the
+        order :meth:`drain` gave it -- without the model waiting for the
+        write.  Frames queued after the barrier are not waited for.
+        ``None`` where the order cannot be expressed that way (simulated
+        radar volumes are drained only through :meth:`drain`, and a writer
+        shell without the counters); the caller then drains as before.
+        """
+        if getattr(self, "_simulated_radar", None) is not None:
+            return None
+        targets = []
+        for gid in sorted(self._writers):
+            writer = self._writers[gid]
+            if not hasattr(writer, "wait_landed"):
+                return None
+            targets.append((writer, writer.durability_target()))
+
+        def wait() -> None:
+            for writer, target in targets:
+                writer.wait_landed(target)
+                if writer.paths:
+                    self.last_durable_wrfout = writer.paths[-1]
+
+        return wait
 
     def drain(self, *, before_domain=None) -> None:
         """Wait for every domain's durable files and output identities.

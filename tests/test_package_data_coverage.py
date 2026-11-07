@@ -423,16 +423,21 @@ def test_the_moved_directories_left_the_gpuwm_wheel_entirely(
 
     gpuwm_shipped = _files_setuptools_would_ship(monkeypatch)
     companion_shipped = _companion_shipped(monkeypatch)
+    def under(name: str, root: str) -> bool:
+        # An entry is a directory or, since 2.8.7, a single file whose
+        # directory keeps other members in the woof wheel; the resolver's
+        # own prefix rule (data_assets._is_companion) covers both.
+        return name == root or name.startswith(root + "/")
+
     for tree in data_assets.COMPANION_TREES:
         stale = sorted(name for name in gpuwm_shipped
-                       if name.startswith(f"woof/data/{tree}/"))
+                       if under(name, f"woof/data/{tree}"))
         assert not stale, (
             f"the woof wheel still ships {len(stale)} file(s) under "
             f"woof/data/{tree}/, which woof.data_assets says the "
             f"recast-woof-data companion owns:\n  " + "\n  ".join(stale))
         carried = [name for name in companion_shipped
-                   if name.startswith(
-                       f"recast-woof-data/woof_data/data/{tree}/")]
+                   if under(name, f"recast-woof-data/woof_data/data/{tree}")]
         assert carried, (
             f"woof.data_assets.COMPANION_TREES names {tree!r} but the "
             "companion wheel would carry no file under it, so every "
@@ -525,24 +530,52 @@ def test_externalized_assets_match_the_fetch_contract() -> None:
     # toolchain test (its campaign harness, tools/n5s/**, is not a package
     # and never shipped) and the branch-dispositions gate (its ledger,
     # docs/branch-dispositions.md, is branch bookkeeping of the development
-    # tree).  tests/test_operational_package_excludes_probes.py measures
-    # that the sdist really lacks the first.
+    # tree), and the three tests that import the 2.8.9 speed-lane bench
+    # harness (tools/bench/**, RELEASE-EXCLUDE'd with them; without the
+    # MANIFEST.in rows the sdist shipped them without the harness they
+    # import).
+    # The private config receipts are also snapshot exclusions. A direct
+    # worktree build inherits them from configs' package-data unless the
+    # sdist explicitly excludes them too.
+    # tests/test_operational_package_excludes_probes.py measures that the
+    # sdist really lacks the development probes.
     root_excludes = [rule for rule in rules if rule.startswith("exclude ")]
     assert root_excludes == [
         "exclude tests/test_n5s_toolchain.py",
         "exclude tests/test_branch_dispositions.py",
+        "exclude tests/test_regional_packing_bench.py",
+        "exclude tests/test_timeline_qualification.py",
+        "exclude configs/da_rerun_286/recent/active-241/case-plan.json",
+        "exclude configs/da_rerun_286/recent/active-241/authority/authority-receipt.json",
+        "exclude configs/da_rerun_286/recent/large-601-center32p2/case-plan.json",
+        "exclude configs/da_rerun_286/recent/large-601-center32p2/authority/authority-receipt.json",
+        "exclude configs/da_rerun_286/recent/requested-601-center31/case-plan.json",
+        "exclude configs/da_rerun_286/recent/requested-601-center31/authority/authority-receipt.json",
+        "exclude configs/da_rerun_286/recent/native-linux-pricing.json",
+        "exclude configs/da_rerun_286/recent/native-linux-pricing-241.json",
+        # The announcement draft: swept in by `recursive-include docs/public
+        # *.md`, and it carries the project's own attribution text, which the
+        # packet's attribution gate refuses in a public asset (2.9.2 cut).
+        "exclude docs/public/ANNOUNCEMENT-DRAFT.md",
     ], (
         "the root MANIFEST.in's `exclude` lines drifted.  Size- and "
         "license-driven excludes belong in recast-woof-data/MANIFEST.in with the "
         "directory they name (moved there in 2.5.0); the only root excludes "
-        "are RELEASE-EXCLUDE'd development tests; found {}".format(rules))
+        "are RELEASE-EXCLUDE'd development tests and private config receipts; "
+        "found {}".format(rules))
     release_exclude = {
         line.strip() for line in
         (REPO_ROOT / "RELEASE-EXCLUDE.txt").read_text(
             encoding="utf-8").splitlines()}
+    # The one page the public tree keeps and the source archive does not
+    # ship, with its reason: the repository is where a draft is worked on
+    # (the claim-backing gate and the resolved-scale receipt read it
+    # there); a PyPI asset is permanent, and the packet's attribution gate
+    # refuses the project's own attribution text in one (2.9.2 cut).
+    sdist_only = {"docs/public/ANNOUNCEMENT-DRAFT.md"}
     for rule in root_excludes:
         path = rule.split(None, 1)[1].strip()
-        assert path in release_exclude, (
+        assert path in release_exclude or path in sdist_only, (
             f"root MANIFEST.in excludes {path} from the sdist but "
             "RELEASE-EXCLUDE.txt keeps it in the public tree, so the two "
             "release surfaces disagree about whether it ships")
@@ -570,6 +603,52 @@ def test_externalized_assets_match_the_fetch_contract() -> None:
         "the root MANIFEST.in's prunes drifted: keep the companion source, "
         "staged platform binaries and development fault-injection probes "
         f"out of the operational source distribution; found {rules}")
+
+
+def test_the_sdist_ships_the_advertised_installers_and_public_pages(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """D1: an extracted source archive must supply its install and docs doors."""
+    import re
+    from setuptools._distutils.filelist import FileList
+    from tools.release_exclusions import matches, read_exclusions
+
+    monkeypatch.chdir(REPO_ROOT)
+    docs = {p.as_posix() for p in Path("docs").rglob("*") if p.is_file()}
+    expected = {"install.sh", "install.ps1"}
+    # Drafts are not documentation (the announcement draft carries the
+    # project's own attribution text, refused by the packet's attribution
+    # gate); the CHANGELOG's links are history, not advertised doors.
+    expected.update(p for p in docs if p.startswith("docs/public/")
+                    and p.endswith(".md") and not p.endswith("-DRAFT.md"))
+    for source in ("README.md",):
+        for ref in re.findall(r"docs/[A-Za-z0-9_./-]+",
+                              Path(source).read_text(encoding="utf-8")):
+            ref = ref.rstrip(".")
+            path = Path(ref)
+            assert path.exists(), f"{source} names a missing document: {ref}"
+            if path.is_dir():
+                expected.update(p.as_posix() for p in path.rglob("*.md"))
+            else:
+                expected.add(ref)
+
+    rules = read_exclusions(REPO_ROOT)
+    # The top-level pages RELEASE-EXCLUDE.txt keeps private, offered to the
+    # manifest so the privacy assertion below is a measurement.
+    private_pages = {rule for rule in rules
+                     if "/" not in rule and rule.endswith(".md")}
+    files = FileList()
+    files.allfiles = [os.fspath(Path(name)) for name in sorted(
+        docs | {"install.sh", "install.ps1"} | private_pages)]
+    for line in Path("MANIFEST.in").read_text(encoding="utf-8").splitlines():
+        if line.strip() and not line.lstrip().startswith("#"):
+            files.process_template_line(line)
+    included = {name.replace(os.sep, "/") for name in files.files}
+    assert not expected - included, (
+        f"sdist omits advertised installers or pages: {sorted(expected - included)}")
+    assert not [name for name in included if matches(name, rules)], (
+        "the sdist documentation includes RELEASE-EXCLUDE'd private files")
+    drafts = sorted(name for name in included if name.endswith("-DRAFT.md"))
+    assert not drafts, f"the sdist ships a draft: {drafts}"
 
 
 def test_the_renderer_asset_tree_is_delivered_by_a_declared_mechanism(
@@ -653,7 +732,10 @@ def test_the_renderer_asset_tree_is_delivered_by_a_declared_mechanism(
 #: reaches users as the per-platform release-asset bundles ``woof setup``
 #: stages.  So this pattern matching nothing in CI is the normal state, not a
 #: half-built release.
-_STAGED_AT_RELEASE: set[tuple[str, str]] = {("woof", "libexec/bridges/*")}
+_STAGED_AT_RELEASE: set[tuple[str, str]] = {("woof", "libexec/bridges/*"),
+                                            # the hex helpers, staged by the assembly's stage_hex_helpers.py
+                                            # for a platform or ops wheel; a PyPI wheel fetches them on use
+                                            ("woof.hex", "libexec/*")}
 
 
 def test_no_package_data_pattern_is_dead(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -897,7 +979,7 @@ def test_the_redistributed_table_is_not_excluded_in_the_pyproject_declaration(
     with PYPROJECT.open("rb") as stream:
         config = tomllib.load(stream)
     excluded |= {
-        "gpuwm/" + entry
+        "woof/" + entry
         for entry in config["tool"]["setuptools"].get(
             "exclude-package-data", {}).get("woof", [])}
 
@@ -944,9 +1026,12 @@ def test_license_metadata_is_an_spdx_expression_not_the_pasted_text() -> None:
     # carrying only LICENSE + NOTICE performed none of them.  The glob is
     # asserted as a glob rather than expanded, because the set of texts
     # grows and the pin is on the DECLARATION, not on the inventory --
-    # tests/test_licence_notices_ship.py holds the inventory.
+    # tests/test_licence_notices_ship.py holds the inventory.  A glob per
+    # licence directory: licenses/* does not recurse, and the 2.9.3 candidate
+    # wheel shipped none of licenses/soundings/ (the public sounding renderer's
+    # three notices) while NOTICE named them.
     shipped = project.get("license-files", [])
-    assert shipped == ["LICENSE", "NOTICE", "licenses/*"], shipped
+    assert shipped == ["LICENSE", "NOTICE", "licenses/*", "licenses/soundings/*"], shipped
     for name in shipped:
         if name.endswith("/*"):
             directory = REPO_ROOT / name[:-2]

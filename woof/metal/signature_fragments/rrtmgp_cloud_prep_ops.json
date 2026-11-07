@@ -22,6 +22,7 @@
         ["effi", "float", "read"],
         ["effs", "float", "read"],
         ["cldfra", "float", "read"],
+        ["radii_written", "uint32", "read"],
         ["clwp", "float", "read_write"],
         ["ciwp", "float", "read_write"],
         ["reliq", "float", "read_write"],
@@ -43,6 +44,7 @@
         "effi": [["ncol", "nlay"]],
         "effs": [["ncol", "nlay"]],
         "cldfra": [["ncol", "nlay"]],
+        "radii_written": [["ncol"]],
         "clwp": [["ncol", "nlay"]],
         "ciwp": [["ncol", "nlay"]],
         "reliq": [["ncol", "nlay"]],
@@ -58,6 +60,7 @@
         ["has_qs", "int32"],
         ["has_cldfra", "int32"],
         ["morrison_use_effective", "int32"],
+        ["morrison_has_written_mask", "int32"],
         ["my2_icexc9", "float32"],
         ["my2_icexi9", "float32"],
         ["my2_igs20", "float32"],
@@ -88,6 +91,7 @@
         ["qc_bl", "float", "read"],
         ["qi_bl", "float", "read"],
         ["cldfra_bl", "float", "read"],
+        ["temperature", "float", "read"],
         ["liquid_supplied", "uint32", "read_write"],
         ["ice_supplied", "uint32", "read_write"]
       ],
@@ -97,16 +101,18 @@
         "qc_bl": [["ncol", "nlay"]],
         "qi_bl": [["ncol", "nlay"]],
         "cldfra_bl": [["ncol", "nlay"]],
+        "temperature": [["ncol", "nlay"]],
         "liquid_supplied": [["ncol", "nlay"]],
         "ice_supplied": [["ncol", "nlay"]]
       },
       "parameters": [
         ["ncell", "int32"],
         ["ncol", "int32"],
-        ["nlay", "int32"]
+        ["nlay", "int32"],
+        ["gsd41", "int32"]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": ["float32_ordered", "uint32_logical_masks"]
     },
     {
@@ -179,11 +185,12 @@
         ["ntable", "int32"],
         ["has_supplied_liquid", "int32"],
         ["has_supplied_ice", "int32"],
-        ["is_p3", "int32"]
+        ["is_p3", "int32"],
+        ["strict", "int32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,
-      "arithmetic_policies": ["float32_ordered", "wrf_ice_radius_table"]
+      "arithmetic_policies": ["float32_ordered", "wrf_ice_radius_table", "wrf-exact"]
     },
     {
       "name": "rrtmgp_surface_emissivity",

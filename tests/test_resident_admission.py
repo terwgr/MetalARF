@@ -24,6 +24,7 @@ the CUDA runtime's ``memGetInfo`` for a loader -- never the admission code.
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import sys
 import types
 from types import SimpleNamespace
@@ -279,6 +280,16 @@ def _door_runtime(monkeypatch):
     _stub_cupy(monkeypatch)
 
 
+def _admission_experiment(tmp_path):
+    # These fixtures exercise atmosphere admission, before any constructor.
+    # The forecast scope reads its experiment too: provide an actual file
+    # with the supported hydro opt-out rather than a nonexistent pathname.
+    config = tmp_path / "experiment.toml"
+    content = b"[hydro]\nenabled = false\n"
+    config.write_bytes(content)
+    return config, {"experiment_config": hashlib.sha256(content).hexdigest()}
+
+
 def _stub_prepared_single_door(monkeypatch, tmp_path, exp, *, intervals,
                                source="gfs", rows=None):
     """Drive the prepared single-domain door as far as its restore.
@@ -300,12 +311,16 @@ def _stub_prepared_single_door(monkeypatch, tmp_path, exp, *, intervals,
     reader = SimpleNamespace(header={"metadata": {"lbc": {
         "intervals": [{}] * intervals if rows is None else rows}}},
         metadata={})
+    config, sha = _admission_experiment(tmp_path)
     inputs = SimpleNamespace(
-        experiment=exp, experiment_config=tmp_path / "experiment.toml",
-        file_sha256={"experiment_config": "0" * 64}, physics_receipt=None,
+        experiment=exp, experiment_config=config,
+        file_sha256=sha, physics_receipt=None,
         source=source, cache_reader=reader, stream_head=None,
         prepared_cache_path=tmp_path / "prepared", cache_identity={},
-        static={}, boundary_interval_seconds=3600)
+        static={}, boundary_interval_seconds=3600,
+        # 1ceea7ff6: the door holds any [radar_heating] windows to the
+        # prepared root before a card is taken; this experiment has none.
+        prepared_root=tmp_path / "prepared")
     return psdf, inputs
 
 
@@ -712,9 +727,10 @@ def _tree_door(monkeypatch, tmp_path, exp, *, source="gfs", rows=None):
                         _reached)
     reader = SimpleNamespace(header={"metadata": {"lbc": {
         "intervals": [{}] * 6 if rows is None else rows}}})
+    config, sha = _admission_experiment(tmp_path)
     inputs = SimpleNamespace(
-        experiment=exp, experiment_config=tmp_path / "experiment.toml",
-        authority_sha256={"experiment_config": "0" * 64},
+        experiment=exp, experiment_config=config,
+        authority_sha256=sha,
         execution_plan={}, boundary_interval_seconds=3600, source=source,
         domains=tuple(SimpleNamespace(parent_id=dc.parent_id,
                                       grid_id=dc.grid_id,
@@ -854,6 +870,11 @@ def test_the_tree_door_prices_the_tables_the_run_holds(tmp_path, monkeypatch):
     assert held - _envelope(exp, forcing_intervals=6) > 8 * GIB
     _stand_in_card(monkeypatch, held - 1)
     tree, inputs = _tree_door(monkeypatch, tmp_path, exp)
+    # The PRICE is what this test holds.  Since X12 an external door streams
+    # instead of refusing when only the card refused it resident
+    # (tests/test_external_door_streams.py); keep the refusal here so the
+    # priced envelope is read off it.
+    monkeypatch.setattr(tree, "_external_door_streams", lambda *a: None)
     with pytest.raises(MemoryError, match=REFUSAL) as refused:
         tree.run_prepared_tree(inputs, output_directory=tmp_path,
                                io_mode="none", initialization=initialization)
@@ -985,6 +1006,9 @@ def test_the_wrf_input_doors_reach_their_admission_on_their_own_bundles(
         (tmp_path / f"{index}").mkdir()
         tree, inputs, initialization = _wrf_door(
             monkeypatch, tmp_path / f"{index}", exp, door, boundaries)
+        # One byte short is priced by the refusal; X12's streamed fallback
+        # for these doors is tests/test_external_door_streams.py.
+        monkeypatch.setattr(tree, "_external_door_streams", lambda *a: None)
         outdir = tmp_path / f"{index}" / "out"
         outdir.mkdir()
         if free < held:

@@ -39,7 +39,8 @@ def _binding(monkeypatch):
 
 
 def _source(module):
-    return (KDIR / f"{module}.cu").read_text(encoding="utf-8")
+    source = "mynn_pbl" if module == "mynn_dmp_sibling" else module
+    return (KDIR / f"{source}.cu").read_text(encoding="utf-8")
 
 
 def _expected_source(row, module, source, value):
@@ -69,14 +70,14 @@ def test_each_single_parameter_changes_only_its_registered_literal_spans(name):
     pp.declare(pset, source="isolation")
     row = pp.registry()[name]
     changed_modules = set()
-    for path in sorted(KDIR.glob("*.cu")):
-        source = path.read_text(encoding="utf-8")
-        expected, positions = _expected_source(row, path.stem, source,
+    for module in sorted({p.stem for p in KDIR.glob("*.cu")} | {"mynn_dmp_sibling"}):
+        source = _source(module)
+        expected, positions = _expected_source(row, module, source,
                                                 pset.value(name))
-        actual = pp.edit_kernel_source(path.stem, source)
-        assert actual == expected, (name, path.stem)
+        actual = pp.edit_kernel_source(module, source)
+        assert actual == expected, (name, module)
         if positions:
-            changed_modules.add(path.stem)
+            changed_modules.add(module)
             assert actual != source
         else:
             assert actual is source
@@ -116,12 +117,36 @@ def test_default_and_default_valued_sets_preserve_both_loader_source_routes():
     for path in paths:
         module = path.stem
         raw = path.read_text(encoding="utf-8")
+        # A default process compiles the 2.9.1 unit of the exact chain's
+        # default-source modules (kernels._DEFAULT_SOURCE_MODULES).
+        from woof import wrf_exact
+        default_unit = KDIR / f"{module}_default.cu"
+        if (not wrf_exact.ENABLED and module in kernels._DEFAULT_SOURCE_MODULES
+                and default_unit.is_file()):
+            raw = default_unit.read_text(encoding="utf-8")
+        if wrf_exact.ENABLED and module == "noah":
+            raw = "#define NOAH_WRF_SCALAR_RCT 1\n" + raw   # kernels._unit_text
         expected = kernels._preamble() + kernels._extra_header_text(module) + raw
+        if module in kernels._URBAN_NO_FTZ_MODULES:
+            # The SLUCM/BEP units retain subnormals through a source marker
+            # (woof/cuda_subnormals.py); no other unit's source moves.
+            from woof.cuda_subnormals import MARKER
+            expected = MARKER + expected
         baseline[module] = expected
         assert kernels.module_source(module) == expected
         defines = (("PHYSICS_PARAMS_SOURCE_CONTROL", 1),)
-        defined = (kernels._preamble() + kernels._extra_header_text(module)
-                   + "#define PHYSICS_PARAMS_SOURCE_CONTROL 1\n" + raw)
+        tier = "#define PHYSICS_PARAMS_SOURCE_CONTROL 1\n"
+        # Goddard (golden/ports-rad) sizes its band headers from the same tier
+        # (kernels._HEADERS_NEED_INT_DEFINES), so its tier precedes them too.
+        if module == "thompson_column" or module in kernels._HEADERS_NEED_INT_DEFINES:
+            # thompson-v44 (effc0a99a): the integer tier sizes the generated
+            # header's arrays, so it precedes that header as well as the
+            # unit (tests/test_thompson_generation_selector.py pins it).
+            defined = (kernels._preamble() + tier
+                       + kernels._extra_header_text(module) + raw)
+        else:
+            defined = (kernels._preamble() + kernels._extra_header_text(module)
+                       + tier + raw)
         assert kernels.module_source_int_defines(module, defines) == defined
     pp.declare(pp.make_set("defaults", {
         name: row.default for name, row in pp.registry().items()}), source="isolation")
@@ -214,16 +239,11 @@ def test_length_parameter_reaches_case1_and_preserves_controls(monkeypatch, name
     inputs.update({key: cp.asarray(fields[key][:, 0]) for key in scalars})
     results = []
     for unit in _compile_pair(cp, name, module):
-        def function(_, symbol, selected=unit):
-            kernel = selected.get_function(symbol)
-            if module == "mynn_pbl":
-                return kernel
-
-            def launch(grid, block, args):
-                # The sibling exposes fixed CASE(1), before the main unit's
-                # mixing-length selector was appended to its launch ABI.
-                return kernel(grid, block, args[:-3] + args[-2:])
-            return launch
+        def function(_, symbol, shape=(), *, selected=unit):
+            # Both logical modules now share the main unit's helper ABI.
+            # The sibling is dispatched only for its DMP plume exports;
+            # this isolation check compiles its shared helper directly.
+            return selected.get_function(symbol)
 
         monkeypatch.setattr(mynn_pbl_gpu, "get_kernel", function)
         options = (1, 2) if module == "mynn_pbl" else (1,)
@@ -252,9 +272,9 @@ def test_czil_reaches_both_surface_variants_and_preserves_water(monkeypatch, var
     results = []
     for unit in _compile_pair(cp, "mynn.czil", "mynn_surface", definitions):
         monkeypatch.setattr(mynn_sfclay, "get_kernel",
-                            lambda _, symbol, selected=unit: selected.get_function(symbol))
+                            lambda _, symbol, shape=(), *, selected=unit: selected.get_function(symbol))
         monkeypatch.setattr(mynn_sfclay, "get_kernel_int_defines",
-                            lambda _, symbol, __, selected=unit: selected.get_function(symbol))
+                            lambda _, symbol, __, shape=(), *, selected=unit: selected.get_function(symbol))
         result = mynn_sfclay.mynn_surface_layer(_device_inputs(fields),
                                                variant=variant)
         results.append(_host_result(cp, result, mynn_sfclay.MYNN_SURFACE_OUTPUTS))
@@ -283,9 +303,9 @@ def test_entrainment_reaches_active_and_sibling_plumes_and_preserves_inactive(
     original = mynn_pbl_gpu.get_kernel
     results = []
     for unit in _compile_pair(cp, "mynn.edmf_entrainment", module):
-        monkeypatch.setattr(mynn_pbl_gpu, "get_kernel", lambda target, symbol, selected=unit:
+        monkeypatch.setattr(mynn_pbl_gpu, "get_kernel", lambda target, symbol, shape=(), *, selected=unit:
                             selected.get_function(symbol) if target == module
-                            else original(target, symbol))
+                            else original(target, symbol, shape))
         cases = {}
         for case in ("land_cumulus", "stable_off"):
             values = _dmp_mf_inputs(_dmp_mf_case(rows, case))

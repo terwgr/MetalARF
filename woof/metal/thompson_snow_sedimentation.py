@@ -4,16 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .array import MetalArray
-
-
-def _overlap(left: MetalArray, right: MetalArray) -> bool:
-    if left.buffer is not right.buffer:
-        return False
-    left_start = left.byte_offset
-    right_start = right.byte_offset
-    return (left_start < right_start + right.nbytes
-            and right_start < left_start + left.nbytes)
+from .array import MetalArray, overlaps
 
 
 def submit_thompson_snow_sedimentation_with_rain_profile_and_presence(
@@ -78,7 +69,7 @@ def submit_thompson_snow_sedimentation_with_rain_profile_and_presence(
     names = tuple(arrays)
     for pos, left_name in enumerate(names):
         for right_name in names[pos + 1:]:
-            if _overlap(arrays[left_name], arrays[right_name]):
+            if overlaps(arrays[left_name], arrays[right_name]):
                 raise ValueError(
                     "restricted Thompson snow resources overlap: "
                     f"{left_name}, {right_name}")

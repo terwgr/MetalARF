@@ -1,31 +1,42 @@
 # MetalARF
 
 MetalARF is a port of [Recast WOOF](https://github.com/recastsystems/woof)
-1.0.3 to Apple Silicon. WOOF is a GPU weather model with WRF-class physics,
+1.1.5 to Apple Silicon. This integration is under development. WOOF is a GPU weather model with WRF-class physics,
 preprocessing, data assimilation and plotting. Upstream it runs on NVIDIA
 GPUs through CUDA; MetalARF adds a Metal backend so the same models run on
 the GPU of an Apple Silicon Mac, without CUDA or CuPy.
+
+The integration carries the upstream solar, YSU, Noah-MP snow-age and urban
+water-budget generations. Numerical acceptance remains configuration-specific;
+see [Metal feature contracts](METAL_FEATURES.md) for implementation coverage,
+verification limits and remaining refusals.
 
 The package contains three models:
 
 | Model | Command | Status | Metal |
 | --- | --- | --- | --- |
 | Regional (WRF-ARW class, nests, DA) | `woof` | Upstream interface promise | Selected combinations; see backend guide |
-| Hex (MPAS-style unstructured mesh) | `woof hex` | Preview | Forecast with the MPAS physics row, global and limited-area, restart, history |
+| Hex (MPAS-style unstructured mesh) | `woof hex` | Preview | Forecast with the ported WOOF physics providers, global and limited-area, restart, history |
 | Global (spectral, with ensemble DA) | `woof global` | Preview | `sl_si`, `ssprk3`, restart, DA cycle |
 
-The Metal backend includes callers for the HRRR physics forms (Thompson,
-MYNN GSD 4.1, RUC and legacy RRTMG), plus paths for nests, ensembles,
-restarts, history products and local data assimilation. Availability depends
-on the selected options and their coupling. Admission and finite smoke
-results do not establish numerical agreement for every combination.
+The Metal backend runs most of the regional physics families (microphysics
+from Kessler to TEMPO, FAST_SBM and aerosol Thompson; YSU, MYNN, MYJ and
+sa-TKE-EDMF; Noah, Noah-MP and RUC with urban, lake, sea-ice and ocean
+models; Grell-Freitas, Kain-Fritsch, Tiedtke, SAS and Grell 3D; RRTM,
+Dudhia, legacy RRTMG, RTE+RRTMGP and Goddard radiation), plus nests, ensembles,
+WRF restarts, history products and data assimilation. Availability depends
+on the selected options and their coupling; the
+[backend guide](docs/public/BACKENDS.md) summarises it and refused options
+are named at admission.
 
 Apple GPUs have no hardware double precision. Metal's double-precision
-physics uses software binary64; the published arithmetic contracts still
-describe parts of that implementation as unverified. There is no general
-claim here that Metal output matches NumPy, CUDA or WRF. The
-[backend guide](docs/public/BACKENDS.md) lists admission selectors, restrictions
-and evidence limits; the [changelog](CHANGELOG.md) lists changes.
+physics uses software binary64. Ported kernels are translations of the CUDA
+source, compared word for word with that source compiled for the host in the
+cases METAL_FEATURES.md lists. That is not a general claim that Metal output
+matches a CUDA device, NumPy or WRF for every configuration. The
+[Metal feature contracts](METAL_FEATURES.md) describe the scoped additions,
+remaining restrictions and evidence limits; the [changelog](CHANGELOG.md)
+lists changes.
 
 The regional commands and their config and checkpoint formats inherit the
 upstream major-version promise. This describes the interface, not Metal
@@ -34,7 +45,7 @@ forecast accuracy; see Science and limits below.
 ## Requirements
 
 - Apple Silicon Mac (M1 or newer), macOS 14 or newer.
-- Python 3.11 or newer, and a Rust toolchain (`cargo`) to build the native
+- Python 3.11 or newer, and Rust 1.94 or newer (`cargo`) to build the native
   data bridges.
 - Unified memory sets the largest domain you can run; WOOF checks this
   before it starts (see Memory below).
@@ -87,6 +98,10 @@ woof go forecast.toml --backend metal
 missing; the second line fetches, prepares, runs and draws. Pictures are drawn
 as each history frame lands, beside the running forecast.
 
+Coupled hydro is opt-in. `woof go forecast.toml --hydro on` couples NextGen
+hydro wherever a hydrofabric covers the domain; a forecast without it has no
+hydro.
+
 Compare two runs, any product, as run A minus run B:
 
 ```bash
@@ -100,14 +115,15 @@ The Hex and Global models take the same backend choice:
 `woof hex forecast --backend metal` and `woof global run CONFIG.toml --metal`.
 `woof hex --help` and `woof global --help` list their options.
 
-`woof hex forecast --backend metal` runs the same physics row as the CUDA
-backend (WSM6, YSU with gravity-wave drag, Noah-MP with glacier, legacy RRTMG
-and, above 3 km spacing, Grell-Freitas) and needs `--grid` and `--static` as
-the CUDA backend does, and `--lbc-dir` on a limited-area mesh. `--checkpoint`
-and `--restart` carry the physics state, and on global and limited-area
-meshes a restarted run reproduces the uninterrupted one bit for bit.
-`--local-timestep` works on global meshes as
-it does on CUDA.
+`woof hex forecast --backend metal` runs the ported WOOF physics providers
+(the WSM6, aerosol Thompson, MYNN/RUC/GSL and GSD 4.1 column suites, and a
+generic WSM6/YSU/Noah-MP/RRTMG plan) with `--physics-mode correct` or
+`exact`. The native MPAS-A v8.4.2 physics routes run on CUDA only and are
+refused on Metal. It needs `--grid` and `--static` as the CUDA backend does,
+and `--lbc-dir` on a limited-area mesh. `--checkpoint` and `--restart` carry
+the physics state and its selected generations, and a restarted run
+reproduces the uninterrupted one in the checked cases. Local time stepping
+works on global and limited-area meshes as it does on CUDA.
 
 ## Memory
 
@@ -192,13 +208,14 @@ regions, seasons or forecast lengths. The
 [evidence page](docs/public/VERIFICATION.md) documents historical WRF v4.6.1
 code comparisons and their configuration and coverage limits.
 
-The hex model is a port of the MPAS-A v8.4.1 dynamical core with this engine's
-physics; it is not MPAS and is not endorsed by UCAR. Use official
+The hex model is a GPU port of MPAS-Atmosphere v8.4.2, with MPAS-A's own
+physics suites as its default and this engine's physics selectable; it is not
+MPAS and is not endorsed by UCAR. Use official
 meteorological services for forecasts and warnings.
 
 WOOF continues an engine released before under another name: WOOF 1.0 is
 that engine's release 2.8.0 and the fixes made since, under the WOOF name,
-with the hex and global models inside it. Settings spelled `GPUWM_*` keep
+with the hex model inside it. Settings spelled `GPUWM_*` keep
 working beside the new `WOOF_*` spelling.
 
 ## Credits and licence

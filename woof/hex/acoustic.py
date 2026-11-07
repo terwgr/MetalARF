@@ -278,11 +278,19 @@ def edge_signs_on_cells(mesh: object) -> FloatArray:
     edges = _mesh_array(mesh, "edgesOnCell").astype(np.int64, copy=False)
     cells = _mesh_array(mesh, "cellsOnEdge").astype(np.int64, copy=False)
     signs = np.zeros(edges.shape, dtype=np.float64)
-    for cell in range(counts.size):
-        for slot in range(int(counts[cell])):
-            edge = int(edges[cell, slot])
-            if edge >= 0:
-                signs[cell, slot] = 1.0 if cells[edge, 0] == cell else -1.0
+    # Whole-array form of the per-slot loop (2.5 s of Python per call on the
+    # 20 km mesh, rented box 2026-10-13): the slots below nEdgesOnCell of each cell,
+    # a missing (negative) edge left at zero, +1 where the cell is the edge's
+    # first endpoint and -1 otherwise.  A count past the row width or an edge
+    # past cellsOnEdge raises IndexError, as the loop's indexing did.
+    if counts.size and int(counts.max()) > edges.shape[1]:
+        raise IndexError("nEdgesOnCell names more slots than edgesOnCell holds")
+    used = np.arange(edges.shape[1])[None, :] < counts[:, None]
+    cell, slot = np.nonzero(used)
+    edge = edges[cell, slot]
+    present = edge >= 0
+    cell, slot, edge = cell[present], slot[present], edge[present]
+    signs[cell, slot] = np.where(cells[edge, 0] == cell, 1.0, -1.0)
     return signs
 
 
@@ -322,24 +330,16 @@ def convert_w_tendency_to_omega(
             boundary_mask=boundary_mask_cell,
             relaxation_zone=int(relaxation_zone),
         )
-    for cell in range(ncells):
-        if boundary_mask_cell[cell] > relaxation_zone:
-            continue
-        for slot in range(int(counts[cell])):
-            edge = int(edges[cell, slot])
-            if edge < 0 or edge >= nedges:
-                continue
-            for level in range(1, nlev):
-                flux = signs[cell, slot] * (
-                    fzm[level] * u_tendency[level, edge]
-                    + fzp[level] * u_tendency[level - 1, edge]
-                )
-                upwind_sign = np.copysign(out.dtype.type(1.0), u_tendency[level, edge])
-                out[level, cell] -= (
-                    zb_cell[level, cell, slot] + upwind_sign * zb3_cell[level, cell, slot]
-                ) * flux
-        for level in range(1, nlev):
-            out[level, cell] *= fzm[level] * zz[level, cell] + fzp[level] * zz[level - 1, cell]
+    active = np.asarray(boundary_mask_cell) <= relaxation_zone
+    for slot in range(edges.shape[1]):
+        cells = np.flatnonzero(active & (counts > slot) & (edges[:, slot] >= 0) & (edges[:, slot] < nedges))
+        edge = edges[cells, slot]
+        flux = signs[cells, slot] * (fzm[1:nlev, None] * u_tendency[1:nlev, edge]
+                                    + fzp[1:nlev, None] * u_tendency[:nlev-1, edge])
+        upwind_sign = np.copysign(out.dtype.type(1.0), u_tendency[1:nlev, edge])
+        out[1:nlev, cells] -= (zb_cell[1:nlev, cells, slot] + upwind_sign * zb3_cell[1:nlev, cells, slot]) * flux
+    cells = np.flatnonzero(active)
+    out[1:nlev, cells] *= fzm[1:nlev, None] * zz[1:nlev, cells] + fzp[1:nlev, None] * zz[:nlev-1, cells]
     return out
 
 

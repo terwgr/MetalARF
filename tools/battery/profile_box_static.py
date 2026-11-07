@@ -283,7 +283,7 @@ def run(args):
                "--library", str(args.library.resolve()), "--label", args.label]
     if args.source_root:
         command += ["--source-root", str(args.source_root.resolve())]
-    environment = dict(os.environ, GPUWM_STATIC_BRIDGE=str(args.library.resolve()),
+    environment = dict(os.environ, WOOF_STATIC_BRIDGE=str(args.library.resolve()),
         GPUWM_NO_LOCAL_GPU="1", CUDA_VISIBLE_DEVICES="-1", RAYON_NUM_THREADS="2",
         OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="2", MKL_NUM_THREADS="2",
         NUMEXPR_NUM_THREADS="2", GPUWM_MAPPED_ENGINE_THREADS="2",

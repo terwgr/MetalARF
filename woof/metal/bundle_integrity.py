@@ -42,11 +42,6 @@ def metal_source_provenance(repo_root: Path) -> dict:
     return {'binding': 'sha256-build-inputs', 'sha256': digest.hexdigest(), 'files': files}
 
 
-def metal_source_sha256(repo_root: Path) -> str:
-    """Hash shader, registry, native and generator/compiler build inputs."""
-    return metal_source_provenance(repo_root)['sha256']
-
-
 def verify_metal_bundle(repo_root: Path, *,
                         artifact_paths: Mapping[str, Path] | None = None) -> None:
     """Reject source drift or changed artifacts before any native code loads.

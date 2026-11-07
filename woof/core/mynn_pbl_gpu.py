@@ -364,8 +364,11 @@ extern "C" __global__ void mynn_validate_batch({arguments}, int* flags) {{
         atomicOr(flags + blockIdx.y, 1);
 }}
 '''
+    # FTZ comes from CuPy, which appends -ftz=true to every kernel it
+    # compiles; spelling it here too made NVRTC 12 refuse the program
+    # ("--ftz (-ftz) defined more than once") on every gpu-cu12 install.
     return cp.RawKernel(source, "mynn_validate_batch",
-                        options=("-std=c++17", "--ftz=true"))
+                        options=("-std=c++17",))
 
 
 def _tendency_ncol(values: Mapping[str, object]) -> int:
@@ -435,7 +438,7 @@ def _tripped(kernel, arrays, flags) -> bool:
     return any(_flag_mask(kernel, arrays, flags))
 
 
-def _first_refusal(checks, flags) -> str | None:
+def _first_refusal(checks, flags, site: str | None = None) -> str | None:
     """The message of the first check in ``checks`` that trips, else None.
 
     ``checks`` is an ordered sequence of ``(kernel, arrays, message)``, the
@@ -451,6 +454,13 @@ def _first_refusal(checks, flags) -> str | None:
     """
     checks = [(kernel, tuple(arrays), message)
               for kernel, arrays, message in checks]
+    from woof.core import health_ledger
+    # Strictly fewer words than the block: the deferred path takes its
+    # status word from the block's next word (below).
+    deferred = (site is not None and health_ledger.active() is not None
+                and len(checks) <= 32
+                and sum(len(arrays) for _, arrays, _ in checks)
+                < int(flags.size))
     if sum(len(arrays) for _, arrays, _ in checks) > int(flags.size):
         for kernel, arrays, message in checks:
             if _tripped(kernel, arrays, flags):
@@ -469,6 +479,35 @@ def _first_refusal(checks, flags) -> str | None:
         offsets[key] = offset
         _flag_launch(kernel, arrays, flags[offset:offset + len(arrays)])
         offset += len(arrays)
+    if deferred:
+        # Inside a forecast step with a health ledger active: fold each
+        # check's words into bit i of one device status word (check order is
+        # bit order, so the lowest set bit is the first check that tripped)
+        # and let the ledger read it once when the step returns, instead of
+        # draining the launch queue here.  The checks are error-only, so a
+        # healthy step is unchanged; a tripped one raises the same message
+        # from the same step at the drain.  Measured on a 6 h Boston run
+        # (2.8.5): these reads held the main thread about 4 ms per step.
+        words = flags[:offset]
+        # The status word is the workspace block's next word, not a fresh
+        # allocation (tests/test_physics_allocation_inventory.py holds this
+        # module to its recorded DMP buffers).  The ledger ORs it into its
+        # own slot when it records (stream-ordered, health_ledger.record),
+        # so the next call site may reuse the block at once.
+        status = flags[offset:offset + 1].view(cp.uint32)
+        status.fill(0)
+        for bit, (key, lo, hi, _message) in enumerate(spans):
+            base = offsets[key]
+            tripped = cp.any(words[base + lo:base + hi] != 0)
+            status |= tripped.astype(cp.uint32) << cp.uint32(bit)
+        messages = [message for _key, _lo, _hi, message in spans]
+
+        def describe(bits: int) -> None:
+            first = (bits & -bits).bit_length() - 1
+            raise ValueError(messages[first] + health_ledger.deferred_note())
+
+        health_ledger.read_status(status, site=site, describe=describe)
+        return None
     words = flags[:offset].get()
     for key, lo, hi, message in spans:
         base = offsets[key]
@@ -529,14 +568,12 @@ def _pair_array(value, shape, name: str, out=None):
         return out
     if array.flags.f_contiguous:
         return array
-    if out is None:
-        return cp.asfortranarray(array)
-    out[...] = array
-    return out
+    return cp.asfortranarray(array)
 
 
 def launch_mynn_level2_pairs(
     inputs: Mapping[str, cp.ndarray], result: MynnLevel2Result,
+    *, bl_mynn_version: str = "wrf_461",
 ) -> None:
     """Launch WRF ``mym_level2`` on preallocated adjacent-level pairs."""
 
@@ -555,12 +592,15 @@ def launch_mynn_level2_pairs(
             )
     n = int(np.prod(shape))
     blocks = (n + _TPB - 1) // _TPB
-    kernel = get_kernel("mynn_pbl", "mynn_level2_pairs")
+    # The gsd_41 generation's own mym_level2 (a2den division) lives in the
+    # MYNN_GSD41 build; the default build is v4.6.1's.
+    kernel = mynn_pbl_kernel("mynn_level2_pairs", bl_mynn_version)
     kernel((blocks,), (_TPB,), arrays + (np.int32(n),))
 
 
 def mynn_level2_pairs_cuda(values: Mapping[str, object], *,
-                           scratch=None) -> MynnLevel2Result:
+                           scratch=None,
+                           bl_mynn_version: str = "wrf_461") -> MynnLevel2Result:
     """Evaluate WRF MYNN level-2 stability functions on device arrays."""
 
     missing = [name for name in MYNN_LEVEL2_INPUTS if name not in values]
@@ -583,7 +623,8 @@ def mynn_level2_pairs_cuda(values: Mapping[str, object], *,
     physical_inputs = {name: array.T for name, array in inputs.items()}
     physical_result = MynnLevel2Result(
         **{name: getattr(result, name).T for name in MYNN_LEVEL2_OUTPUTS})
-    launch_mynn_level2_pairs(physical_inputs, physical_result)
+    launch_mynn_level2_pairs(physical_inputs, physical_result,
+                             bl_mynn_version=bl_mynn_version)
     return result
 
 
@@ -674,8 +715,8 @@ def mynn_mixlength_default_cuda(
     blocks = (ncol + _TPB - 1) // _TPB
     _mynn_version_check(bl_mynn_version)
     kernel = mynn_pbl_kernel("mynn_mixlength_default_columns", bl_mynn_version)
-    # gsd_41 builds its option-2 buoyancy flux from flt, flq and the lowest
-    # level's vt and vq (GSD MYNN v4.1 module_bl_mynn.F:1015); wrf_461 takes
+    # gsd_41 builds both options' buoyancy flux from flt, flq and the lowest
+    # level's vt and vq (GSD MYNN v4.1 module_bl_mynn.F:920,1015); wrf_461 takes
     # fltv, so its argument list is the one it always had.
     gsd41_args = () if bl_mynn_version == "wrf_461" else (
         scalars["flt"], scalars["flq"], columns["vt"], columns["vq"],
@@ -755,7 +796,8 @@ def mynn_turbulence_default_cuda(
     for name in ("dz", "u", "v", "thl", "thetav", "qw", "ql", "vt", "vq"):
         pair_values[name] = columns[name][:, 1:]
         pair_values[f"{name}_prev"] = columns[name][:, :-1]
-    level2_pairs = mynn_level2_pairs_cuda(pair_values, scratch=work)
+    level2_pairs = mynn_level2_pairs_cuda(pair_values, scratch=work,
+                                          bl_mynn_version=bl_mynn_version)
     # ``mynn_level2_pairs`` produces the nz-1 adjacent-level pairs; the
     # surface element of the full column is not one of them and WRF leaves
     # it at the zero it declared.  Zeroing it explicitly rather than relying
@@ -992,51 +1034,6 @@ _TENDENCIES_LAYER_SCRATCH = (
 )
 
 
-def _tendency_flag_identity_cuda(
-    flag_qc: bool,
-    flag_qi: bool,
-    flag_qs: bool,
-    flag_qnc: bool,
-    flag_qni: bool,
-    flag_qnwfa: bool,
-    flag_qnifa: bool,
-    flag_qnbca: bool,
-    flag_ozone: bool,
-    bl_mynn_mixscalars: int = 0,
-) -> None:
-    """Device-side twin of :func:`woof.core.mynn_pbl._tendency_flag_identity`."""
-
-    if flag_qc is not True or flag_qi is not True:
-        raise ValueError("MYNN tendency lane requires FLAG_QC and FLAG_QI")
-    if type(flag_qs) is not bool:
-        raise TypeError("MYNN tendency lane requires FLAG_QS boolean")
-    # W4 mixscalars GPU admission (this wave; CPU twin admitted the same
-    # combo): with bl_mynn_mixscalars=1 the five qn-family flags are
-    # REQUIRED true: the anchored fixture family pins exactly that combo,
-    # and a false flag names a column the solve would read and the
-    # state does not allocate.
-    qn_flags = (
-        ("FLAG_QNC", flag_qnc), ("FLAG_QNI", flag_qni),
-        ("FLAG_QNWFA", flag_qnwfa), ("FLAG_QNIFA", flag_qnifa),
-        ("FLAG_QNBCA", flag_qnbca),
-    )
-    if bl_mynn_mixscalars == 1:
-        for name, flag in qn_flags:
-            if flag is not True:
-                raise ValueError(
-                    f"MYNN bl_mynn_mixscalars=1 mixes all five qn "
-                    f"columns and {name} says its column is absent. "
-                    "Select mp_physics=28, which carries the family, or "
-                    "bl_mynn_mixscalars=0."
-                )
-    else:
-        for name, flag in qn_flags:
-            if flag is not False:
-                raise ValueError(f"MYNN tendency lane requires {name} false")
-    if flag_ozone is not False:
-        raise ValueError("MYNN tendency lane requires FLAG_OZONE false")
-
-
 #: The MYNN generations the column solver carries, by source
 #: (RunConfig.bl_mynn_version).  ``wrf_461`` compiles mynn_pbl.cu as
 #: written; ``gsd_41`` compiles the same file with MYNN_GSD41 defined, which
@@ -1053,13 +1050,13 @@ def _mynn_version_check(bl_mynn_version: str) -> None:
             f"this solver carries ({', '.join(MYNN_VERSIONS)}).")
 
 
-def mynn_pbl_kernel(func: str, bl_mynn_version: str = "wrf_461"):
+def mynn_pbl_kernel(func: str, bl_mynn_version: str = "wrf_461", shape=()):
     """The ``mynn_pbl.cu`` kernel ``func`` compiled for one MYNN generation."""
 
     _mynn_version_check(bl_mynn_version)
     if bl_mynn_version == "wrf_461":
-        return get_kernel("mynn_pbl", func)
-    return get_kernel_int_defines("mynn_pbl", func, (("MYNN_GSD41", 1),))
+        return get_kernel("mynn_pbl", func, shape)
+    return get_kernel_int_defines("mynn_pbl", func, (("MYNN_GSD41", 1),), shape)
 
 
 _TENDENCIES_SOLVED = (
@@ -1103,7 +1100,7 @@ def _tendency_device_arrays(values: Mapping[str, object], work):
          "MYNN tendency delt and wspd must be positive"),
         (_nonpositive(), (scalars["psfc"],),
          "MYNN tendency psfc must be positive"),
-    ), work.flags())
+    ), work.flags(), site="mynn-tendency")
     if refusal is not None:
         raise ValueError(refusal)
     return columns, interfaces, scalars, ncol, nz
@@ -1135,7 +1132,7 @@ def _tendency_launch(
     blocks = (ncol + _TPB - 1) // _TPB
     gsd41_args = () if bl_mynn_version == "wrf_461" else (
         columns["qc"], columns["qi"], np.int32(bl_mynn_cloud_tendency_form == "gsd_41"))
-    kernel = mynn_pbl_kernel("mynn_tendencies_columns", bl_mynn_version)
+    kernel = mynn_pbl_kernel("mynn_tendencies_columns", bl_mynn_version, (nz, 1, ncol))
     kernel(
         (blocks,), (_TPB,),
         (
@@ -1204,7 +1201,7 @@ def mynn_tendencies_nomf_cuda(
             "bl_mynn_mixscalars=1 has nothing to mix here. Run the "
             "mass-flux lane (bl_mynn_edmf=1) or set "
             "bl_mynn_mixscalars=0.")
-    _tendency_flag_identity_cuda(
+    _tendency_flag_identity(
         flag_qc, flag_qi, flag_qs, flag_qnc, flag_qni,
         flag_qnwfa, flag_qnifa, flag_qnbca, flag_ozone,
     )
@@ -1278,7 +1275,7 @@ def mynn_tendencies_default_cuda(
         raise ValueError(
             "MYNN tendency lane requires bl_mynn_mixscalars in {0,1}"
         )
-    _tendency_flag_identity_cuda(
+    _tendency_flag_identity(
         flag_qc, flag_qi, flag_qs, flag_qnc, flag_qni,
         flag_qnwfa, flag_qnifa, flag_qnbca, flag_ozone,
         bl_mynn_mixscalars,
@@ -1407,7 +1404,7 @@ def mynn_initialize_default_cuda(
          "MYNN initialize layer depths must be positive"),
         (_nonpositive(), (scalars["ust"],),
          "MYNN initialize requires a positive ust"),
-    ), work.flags())
+    ), work.flags(), site="mynn-initialize")
     if refusal is not None:
         raise ValueError(refusal)
 
@@ -1554,7 +1551,7 @@ def mynn_dmp_mf_cuda(
          "MYNN mass-flux exner and tk must be positive"),
         (_nonpositive(), (scalars["pblh"], scalars["dx"]),
          "MYNN mass-flux pblh and dx must be positive"),
-    ), work.flags())
+    ), work.flags(), site="mynn-mass-flux")
     if refusal is not None:
         raise ValueError(refusal)
 
@@ -1596,7 +1593,7 @@ def mynn_dmp_mf_cuda(
         raise ValueError(
             "MYNN gsd_41 mass flux does not run with bl_mynn_mixscalars=1")
     if bl_mynn_mixscalars == 0:
-        kernel = mynn_pbl_kernel("mynn_dmp_mf_columns", bl_mynn_version)
+        kernel = mynn_pbl_kernel("mynn_dmp_mf_columns", bl_mynn_version, (nz, 1, ncol))
         gsd41_args = () if bl_mynn_version == "wrf_461" else (
             _pair_array(values["sgm"], (ncol, nz), "sgm"),)
         kernel(
@@ -1615,11 +1612,9 @@ def mynn_dmp_mf_cuda(
         )
         return result
 
-    # bl_mynn_mixscalars == 1: the SIBLING unit (kernels/
-    # mynn_dmp_sibling.cu): a normalized-diff-proven byte copy of the
-    # frozen kernel whose only additions export the four plume-edge terms
-    # the flux kernel needs.  Local imports so the mixscalars=0 lane
-    # never loads either module.
+    # The logical sibling compiles mynn_pbl.cu with MYNN_EXPORT_PLUME_EDGE.
+    # Keep its loader name: it has its own FTZ policy and registered literals.
+    # Local imports keep scalar-mixing modules off the default path.
     import dataclasses
 
     from woof.core.mynn_pbl import MYNN_DMP_MF_QN_COLUMN_INPUTS
@@ -1630,7 +1625,7 @@ def mynn_dmp_mf_cuda(
     psig_w = cp.empty((ncol,), dtype=DTYPE)
     plume_active = cp.empty((ncol,), dtype=np.int32)
     limiter_adjustment = cp.empty((ncol,), dtype=DTYPE)
-    kernel = get_kernel("mynn_dmp_sibling", "mynn_dmp_mf_columns")
+    kernel = get_kernel("mynn_dmp_sibling", "mynn_dmp_mf_columns", (nz, 1, ncol))
     kernel(
         (blocks,), (_TPB,),
         (
@@ -1803,7 +1798,8 @@ def mynn_dmp_mf_metal(values: Mapping[str, object], *, state,
         s_awqnbca=zero_interface)
 
 
-def _driver_prep_cuda(layers, ust, ncol: int, nz: int, work):
+def _driver_prep_cuda(layers, ust, ncol: int, nz: int, work,
+                      bl_mynn_version: str = "wrf_461"):
     """``zw``/``qv1``/``sqw``/``thl``/``thetav`` plus the cold-start seed.
 
     Every one of these is an FP32 expression the Fortran writes one operator
@@ -1818,7 +1814,7 @@ def _driver_prep_cuda(layers, ust, ncol: int, nz: int, work):
         SLOT_PREP, ("qv1", "sqw", "thl", "thetav", "qke_seed"), (ncol, nz))
     zw = work.one(SLOT_ZW, (ncol, nz + 1))
     blocks = (ncol + _TPB - 1) // _TPB
-    get_kernel("mynn_pbl", "mynn_driver_prep_columns")(
+    mynn_pbl_kernel("mynn_driver_prep_columns", bl_mynn_version)(
         (blocks,), (_TPB,),
         (
             layers["dz"], layers["exner"], layers["sqv"], layers["sqc"],
@@ -1894,6 +1890,8 @@ def mynn_bl_driver_metal(
     state, flag_qs: bool = True, bl_mynn_mixlength: int = 1,
     bl_mynn_version: str = "wrf_461", rstoch=None,
     bl_mynn_mixscalars: int = 0,
+    bl_mynn_gsd41_unsquared_qtke: bool = False,
+    bl_mynn_cloud_tendency_form: str = "wrf_461",
 ) -> dict[str, object]:
     """Run the source-supported MYNN chain on Metal arrays.
 
@@ -1904,9 +1902,12 @@ def mynn_bl_driver_metal(
     ``rstoch`` is the spp_pbl pattern, level-major ``(nz, ncol)``; None
     runs the deterministic chain.
 
-    ``bl_mynn_mixlength=1`` is the RAP/HRRR form. Value 2 selects the local
-    WRF v4.6.1 law, or the GSD cloud-aware law under ``gsd_41``. Other optional
-    MYNN branches remain fail-closed. Every intermediate lives in a named
+    ``bl_mynn_mixlength=1`` is the RAP/HRRR form, or the fork's operational
+    law under ``gsd_41``. Value 2 selects the local WRF v4.6.1 law, or the GSD
+    cloud-aware law under ``gsd_41``, whose TKE conversion
+    ``bl_mynn_gsd41_unsquared_qtke`` takes as the source wrote it.
+    ``bl_mynn_cloud_tendency_form='gsd_41'`` selects the fork's cloud
+    tendency form. Other optional MYNN branches remain fail-closed. Every intermediate lives in a named
     DomainState scratch slot so a public step does not allocate a fresh arena.
     """
     from woof.metal.array import MetalArray
@@ -1934,9 +1935,14 @@ def mynn_bl_driver_metal(
     if rstoch is not None and bl_mynn_version == "gsd_41":
         raise NotImplementedError(
             "bl_mynn_version='gsd_41' with spp_pbl=1 has no source form")
-    if bl_mynn_version == "gsd_41" and bl_mynn_mixlength != 2:
-        raise NotImplementedError(
-            "Metal MYNN GSD 4.1 currently requires bl_mynn_mixlength=2")
+    if type(bl_mynn_gsd41_unsquared_qtke) is not bool:
+        raise TypeError("bl_mynn_gsd41_unsquared_qtke must be a bool")
+    if (type(bl_mynn_cloud_tendency_form) is not str
+            or bl_mynn_cloud_tendency_form not in ("wrf_461", "gsd_41")):
+        raise ValueError("bl_mynn_cloud_tendency_form must be wrf_461 or gsd_41")
+    if bl_mynn_cloud_tendency_form == "gsd_41" and bl_mynn_version != "gsd_41":
+        raise ValueError("bl_mynn_cloud_tendency_form='gsd_41' requires "
+                         "bl_mynn_version='gsd_41'")
     reference = values.get("dz")
     if not isinstance(reference, MetalArray) or reference.ndim != 2:
         raise TypeError("MYNN Metal driver profiles must be MetalArray (nz,ncol)")
@@ -1987,7 +1993,8 @@ def mynn_bl_driver_metal(
     submit_mynn_driver_prep(context, layers["dz"], layers["exner"],
         layers["sqv"], layers["sqc"], layers["sqi"], layers["th"],
         scalars["ust"], zw, qv1, sqw, thl, thetav, qke_seed,
-        nz=nz, ncol=ncol, experimental=True)
+        nz=nz, ncol=ncol, gsd41=bl_mynn_version == "gsd_41",
+        experimental=True)
 
     pblh_thetav = thetav
     if gsd41:
@@ -2026,7 +2033,9 @@ def mynn_bl_driver_metal(
             pblh_out, seed_scale, layers["el"], layers["qke"], layers["tsq"],
             layers["qsq"], layers["cov"], layers["sm"], layers["sh"],
             init_scratch, nz=nz, ncol=ncol, initialize_qke=True,
-            mixlength=bl_mynn_mixlength, experimental=True)
+            mixlength=bl_mynn_mixlength, experimental=True,
+            **({"unsquared_qtke": bl_mynn_gsd41_unsquared_qtke}
+               if gsd41 else {}))
 
     submit_mynn_pblh_scale(context, pblh_thetav, layers["qke"], zw, layers["dz"],
         scalars["xland"], scalars["dx"], pblh_out, kpbl, psig_bl,
@@ -2093,7 +2102,7 @@ def mynn_bl_driver_metal(
         layers["v"], thl, sqw, plumes.vt, plumes.vq,
         *(level2[name] for name in
           ("dtl", "dqw", "dtv", "gm", "gh", "sm", "sh")),
-        nz=nz, ncol=ncol, experimental=True)
+        nz=nz, ncol=ncol, gsd41=gsd41, experimental=True)
     length = {name: slot(f"length_{name}", L) for name in
               ("el", "qkw", "qtke", "thetaw", "elblavg", "dlu", "dld")}
     if bl_mynn_version == "gsd_41":
@@ -2101,8 +2110,10 @@ def mynn_bl_driver_metal(
             layers["qke"], level2["dtv"], layers["th"], plumes.edmf_w,
             plumes.edmf_a, plumes.cldfra_bl, plumes.vt, plumes.vq,
             surf["flt"], surf["flq"], surf["rmol"], pblh_out, psig_bl,
-            *(length[name] for name in ("el", "qkw", "qtke", "thetaw")),
-            nz=nz, ncol=ncol, experimental=True)
+            *(length[name] for name in ("el", "qkw", "qtke", "thetaw",
+                                        "elblavg", "dlu", "dld")),
+            nz=nz, ncol=ncol, mixlength=bl_mynn_mixlength,
+            unsquared_qtke=bl_mynn_gsd41_unsquared_qtke, experimental=True)
     else:
         submit_mynn_mixlength_default(context, layers["dz"], zw, layers["u"],
             layers["v"], layers["qke"], level2["dtv"], layers["th"],
@@ -2173,7 +2184,9 @@ def mynn_bl_driver_metal(
                         qi_original=layer("qi"))
     submit_mynn_tendencies(context, resource, nz=nz, ncol=ncol,
         onoff=np.float32(1), workspace=slot("tendency_workspace", (15, nz + 1, ncol)),
-        gsd41=gsd41, experimental=True)
+        gsd41=gsd41,
+        old_cloud_tendencies=bl_mynn_cloud_tendency_form == "gsd_41",
+        experimental=True)
     qn_tendencies = {}
     if bl_mynn_mixscalars == 1:
         # module_bl_mynn.F:4654-4860 qn solves with the plume flux s_awqn.
@@ -2244,6 +2257,7 @@ def mynn_bl_driver_cuda(
     bl_mynn_version: str = "wrf_461",
     bl_mynn_gsd41_unsquared_qtke: bool = False,
     bl_mynn_cloud_tendency_form: str = "wrf_461",
+    initialize_qke: bool | None = None,
 ) -> dict[str, cp.ndarray]:
     """Device twin of :func:`woof.core.mynn_pbl.mynn_bl_driver`.
 
@@ -2253,26 +2267,28 @@ def mynn_bl_driver_cuda(
     is written in the Fortran's operation order so a fused device expression
     cannot re-associate an FP32 sum.
 
-    One piece is deliberately not bitwise.  The
-    dissipative-heating block at ``:1223-1233`` evaluates ``qke**1.5`` and
-    ``EXP`` through an FP64-then-round pair, which is what
-    ``mynn_powf`` in ``woof/core/kernels/mynn_pbl.cu`` already does for
-    every other ``real**real`` in this port; the CPU reference routes those
-    two calls onto the glibc transcriptions instead, so this is the one
-    admitted place the two drivers may differ, and
-    ``tests/test_mynn_pbl_driver_gpu.py`` measures it rather than hiding it.
+    The dissipative-heating block at ``:1223-1233`` uses the same WOOF-owned
+    float32 power and exponential routines as the other MYNN leaves. The
+    family tests compare raw output words, including zero signs; they do
+    not retain the former FP64-then-round allowance.
     """
 
     if type(initflag) is not int:
         raise TypeError("MYNN driver initflag must be an int")
-    if restart is not False or cycling is not False:
-        raise ValueError("MYNN driver lane requires restart and cycling false")
+    if restart is not False:
+        raise ValueError("MYNN driver lane requires restart false")
+    if type(cycling) is not bool:
+        raise TypeError("MYNN driver cycling must be a bool")
+    if initialize_qke is not None and (
+            type(initialize_qke) is not bool or not cycling):
+        raise ValueError("MYNN initialize_qke is a cycled-start decision: "
+                         "a bool, and only with cycling=True")
     if bl_mynn_edmf != 1 or type(bl_mynn_edmf) is not int:
         raise ValueError("MYNN driver lane requires bl_mynn_edmf=1")
     if bl_mynn_output != 0 or type(bl_mynn_output) is not int:
         raise ValueError("MYNN driver lane requires bl_mynn_output=0")
-    if bl_mynn_tkeadvect is not False:
-        raise ValueError("MYNN driver lane requires bl_mynn_tkeadvect false")
+    if type(bl_mynn_tkeadvect) is not bool:
+        raise TypeError("bl_mynn_tkeadvect must be a bool")
     if icloud_bl != 1 or type(icloud_bl) is not int:
         raise ValueError("MYNN driver lane requires icloud_bl=1")
     if tke_budget != 0 or type(tke_budget) is not int:
@@ -2370,7 +2386,8 @@ def mynn_bl_driver_cuda(
     delt_column = work.one(SLOT_DELT, (ncol,))
     delt_column[...] = delt
 
-    zw, prep = _driver_prep_cuda(layers, scalars["ust"], ncol, nz, work)
+    zw, prep = _driver_prep_cuda(layers, scalars["ust"], ncol, nz, work,
+                                 bl_mynn_version)
     pblh_thetav = prep["thetav"]
     if bl_mynn_version == "gsd_41":
         # GSD MYNN v4.1 GET_PBLH reads theta-v of the liquid-water theta
@@ -2390,10 +2407,25 @@ def mynn_bl_driver_cuda(
         # module_bl_mynn.F:674-688.  qi_bl is absent from the Fortran's
         # zeroing list at :681-682 and is left alone here for the same
         # reason; mym_condensation overwrites it before any reader.
-        for name in ("sh", "sm", "el", "tsq", "qsq", "cov",
-                     "cldfra_bl", "qc_bl", "qke"):
+        # Both generations carry a cycled start. WRF v4.6.1 :674-683
+        # zeroes QKE/QC_BL/CLDFRA_BL after deciding to keep QKE; WOOF
+        # repairs that lost carry. Cycling zeroes only sh/sm/el/tsq/qsq/cov:
+        # input QC_BL and CLDFRA_BL stay for this call's cloud decay, and
+        # the input QKE stays unless its lowest-level maximum is below
+        # 0.0002 (decided across the domain by the runtime and handed in
+        # as ``initialize_qke``).
+        if cycling:
+            seed_qke = (bool(float(cp.max(layers["qke"][:, 0])) < float(DTYPE(0.0002)))
+                        if initialize_qke is None else initialize_qke)
+            zeroed = ("sh", "sm", "el", "tsq", "qsq", "cov")
+        else:
+            seed_qke = True
+            zeroed = ("sh", "sm", "el", "tsq", "qsq", "cov",
+                      "cldfra_bl", "qc_bl", "qke")
+        for name in zeroed:
             layers[name][...] = DTYPE(0.0)
-        qke_seed = prep["qke_seed"]
+        # WRF :775-784 and the fork :4105-4112: taper seed or carried QKE.
+        qke_seed = prep["qke_seed"] if seed_qke else layers["qke"]
         seeded_pblh = mynn_pblh_scale_columns_cuda(
             pblh_thetav, qke_seed, zw, layers["dz"], scalars["xland"],
             scalars["dx"], scratch=work, bl_mynn_version=bl_mynn_version,
@@ -2413,7 +2445,7 @@ def mynn_bl_driver_cuda(
                 "rmo": scalars["rmol"], "ust": scalars["ust"],
                 "zi": scalars["pblh"], "psig_bl": seeded_pblh.psig_bl,
             },
-            initialize_qke=True,
+            initialize_qke=seed_qke,
             bl_mynn_mixlength=bl_mynn_mixlength,
             spp_pbl=spp_pbl,
             scratch=work,
@@ -2422,6 +2454,17 @@ def mynn_bl_driver_cuda(
         )
         for name in ("el", "qke", "tsq", "qsq", "cov", "sm", "sh"):
             layers[name][...] = getattr(seeded, name)
+
+    # WRF :838 initializes QKE_ADV on the cold call; :862 imports the
+    # advected carrier on warm calls. Copying adds no arithmetic.
+    if bl_mynn_tkeadvect:
+        if "qke_adv" not in values:
+            raise TypeError("MYNN TKE advection requires qke_adv[ncol,nz]")
+        carrier = cp.asarray(values["qke_adv"], dtype=DTYPE)
+        if carrier.shape != (ncol, nz):
+            raise ValueError("qke_adv must share the MYNN column shape")
+        if initflag <= 0:
+            layers["qke"][...] = carrier
 
     # ---- module_bl_mynn.F:866-1017 per-column assembly -------------------
     qv1 = prep["qv1"]
@@ -2443,8 +2486,11 @@ def mynn_bl_driver_cuda(
     psig_shcu = pblh_scale.psig_shcu
 
     # ---- module_bl_mynn.F:1057-1097 surface fluxes and z/L ---------------
-    surface = _driver_surface_cuda(layers, qv1, scalars, ncol, nz, work,
-                                   bl_mynn_version)
+    # The fork builds cpm from the mixing ratio it was handed
+    # (module_bl_mynn.F:4425, cp*(1+0.84*qv(i,kts,j))), not from one rebuilt
+    # out of the specific humidity.
+    surface = _driver_surface_cuda(layers, gsd41_water.get("qv", qv1),
+                                   scalars, ncol, nz, work, bl_mynn_version)
     flt = surface["flt"]
     fltv = surface["fltv"]
     flq = surface["flq"]
@@ -2655,6 +2701,7 @@ def mynn_bl_driver_cuda(
         "rqnbcablten": tendencies.dqnbca,
         "exch_h": exch_h, "exch_m": exch_m,
         "qke": predicted.qke, "tsq": predicted.tsq,
+        **({"qke_adv": predicted.qke} if bl_mynn_tkeadvect else {}),
         "qsq": predicted.qsq, "cov": predicted.cov,
         "el": turbulence.el, "sh": turbulence.sh,
         "sm": turbulence.sm, "qc_bl": qc_bl, "qi_bl": qi_bl,

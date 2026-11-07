@@ -1,0 +1,18 @@
+#ifndef WOOF_FER_HIRES_SUPPORT_METALH
+#define WOOF_FER_HIRES_SUPPORT_METALH
+
+// Metal counterparts of what the Ferrier-Aligo CUDA unit takes from its
+// support headers. Binary32 values are F words and binary64 values Soft8
+// (soft_word32.metalh); log10f runs on the pinned binary64 log10.
+
+#include "thompson_aerosol_soft8.metalh"
+#include "thompson_aerosol_refl_fragment.metalh"
+#define WOOF_SOFT8 1
+#include "soft_word32.metalh"
+
+static inline F log10f(F x)
+{
+    return F(aa_refl::thompson_aa_log10(Soft8(as_type<float>(x.bits))));
+}
+
+#endif

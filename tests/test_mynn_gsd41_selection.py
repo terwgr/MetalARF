@@ -36,7 +36,7 @@ def test_shipped_full_configuration_selects_the_fork_explicitly():
     from woof.experiment import load_experiment
     path = Path(__file__).resolve().parents[1] / "configs/recipes/hrrr_v4_gsd41.toml"
     exp = load_experiment(path)
-    assert (exp.root.run.nx, exp.root.run.ny, exp.root.run.nz) == (1797, 1057, 50)
+    assert (exp.root.run.nx, exp.root.run.ny, exp.root.run.nz) == (1799, 1059, 50)
     assert exp.root.run.bl_mynn_version == "gsd_41"
     assert exp.root.run.bl_mynn_mixlength == 2
     assert exp.root.run.min_time_step == exp.root.run.max_time_step == 20
@@ -116,6 +116,20 @@ def test_named_import_emitted_bytes_select_the_pbl_source(
     if not fork_thompson:
         carried_rows += ['thompson_version = "wrf_461"\n',
                          'thompson_fork_snow_fall = "blend"\n']
+    # 9822cdfbd, lane/wrf-exact-start: this namelist has mp_physics = 28,
+    # use_aero_icbc = .true. and MYNN without bl_mynn_mixscalars, so WRF's
+    # check_a_mundo runs scalar_pblmix = 1 although the namelist leaves it
+    # at 0, and the importer now emits the value wrf.exe runs.  The
+    # historical capture predates that resolution.
+    carried_rows += ['scalar_pblmix = 1\n']
+    # The capabilities campaign's eclipse and HAILCAST import lines
+    # (tests/capability_campaign_import.py).
+    from capability_campaign_import import CAMPAIGN_IMPORT_LINES
+    carried_rows += list(CAMPAIGN_IMPORT_LINES)
+    # 2.9.7 lane/hrrr-v4-clwrf: the namelist's climate statistics
+    # (output_diagnostics = 1 with its intervals) are imported since that
+    # port; the historical capture predates it.
+    carried_rows += ['output_diagnostics = 1\n', 'diag_int = 15\n', 'wind_int = 5\n']
     for carried in carried_rows:
         assert previous.count(carried) == 1
         previous = previous.replace(carried, "")
@@ -134,7 +148,11 @@ def test_named_import_emitted_bytes_select_the_pbl_source(
         anchor = b"wif_input_opt = 1\n"
         assert expected.count(anchor) == 1
         expected = expected.replace(anchor, anchor + fork_lines)
-    assert previous.encode() == expected
+    # The namelist omits &dynamics top_lid: the pinned import resolved the
+    # profile's rigid lid, today's reads WRF's open top (2026-10-12).
+    from operational_namelist_edits import as_open_top
+    from woof_engine_spelling import engine_spelling
+    assert engine_spelling(previous).encode() == engine_spelling(as_open_top(expected).decode()).encode()
     cfg = build_experiment(tomllib.loads(text), source="named source byte proof").root.run
     assert cfg.ruc_irrigation == cfg.ruc_snow == "wrf_461"
     assert cfg.ruc_qvg_cold_start == "wrf"
@@ -142,6 +160,7 @@ def test_named_import_emitted_bytes_select_the_pbl_source(
     assert cfg.rdlai2d is cfg.usemonalb is False
     assert cfg.ruc_soilprop == RunConfig.__dataclass_fields__["ruc_soilprop"].default == "wrf_45"
     assert cfg.bl_mynn_version == "gsd_41"
+    assert cfg.scalar_pblmix == 1
     assert (cfg.thompson_version, cfg.thompson_fork_snow_fall) == (
         ("wrf_39_noaa", "wrf_39_noaa") if fork_thompson else ("wrf_461", "blend"))
     assert cfg.ra_rrtmg_variant == "rrtmg_legacy"

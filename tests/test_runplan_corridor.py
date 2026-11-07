@@ -164,7 +164,7 @@ def _drive_to_prepare(plan_path: Path, monkeypatch) -> dict[str, list[str]]:
 
     monkeypatch.setattr(go_cli, "_run_stage", _stage)
     monkeypatch.setattr(go_cli, "resolve_bridge", lambda: Path("bridge"))
-    monkeypatch.setattr(go_cli, "geography_refusal", lambda root: None)
+    monkeypatch.setattr(go_cli, "geography_refusal", lambda root, **_: None)
     monkeypatch.setattr(go_cli, "memory_gate", lambda plan, **kw: {
         "verdict": "the forecast is the memory-binding phase at 9.00 GiB",
         "refuse": False, "warn": False, "free_bytes": 30 * 1024 ** 3})
@@ -594,7 +594,8 @@ def test_the_retained_refusal_still_says_something_useful():
     """
     from woof.runplan import _follow_unsupported_refusal
 
-    message = _follow_unsupported_refusal("prepared:someday", 3)
+    message = _follow_unsupported_refusal("prepared:someday",
+                                          relocation_grid_id=3)
     assert "[relocation] follow source on d03" in message
     assert "'prepared:someday' chain cannot supply the statics" in message
     assert "seals no child-resolution statics corridor" in message

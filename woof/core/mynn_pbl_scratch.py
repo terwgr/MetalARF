@@ -58,15 +58,21 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
+from math import prod
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 # cupy is imported INSIDE the methods that allocate device memory, so
 # the slot-SHAPE helpers this module also owns stay readable on
 # installs with no GPU runtime -- the preflight estimator prices the
-# MYNN workspace there (`woof domain` on a CPU-only box).  All
+# MYNN workspace there (`woof domain` on a CPU-only box).  The
 # ``cp.`` annotations below are strings under `from __future__ import
-# annotations` and are never evaluated.
+# annotations`; the TYPE_CHECKING import binds the name they spell for
+# a type checker and the undefined-name gate without importing cupy at
+# run time (tests/test_no_undefined_names.py).
+if TYPE_CHECKING:
+    import cupy as cp
 
 from woof.core.state import DTYPE
 
@@ -114,7 +120,7 @@ MYNN_PBL_COLUMN_CHUNK_FLOOR = 16384
 #: addressed c * nz + k, lived on L1 reuse along k, and got slower as more
 #: columns shared an SM, which is why narrow chunks won.  Measured on a
 #: captured real MYNN call (288x288x59 at 2.25 km, 82,944 columns, midday),
-#: a development machine RTX 5090 sole tenant, persistent workspace, median of five calls,
+#: test host B RTX 5090 sole tenant, persistent workspace, median of five calls,
 #: all arms one digest:
 #:
 #:   ==========  ======================  ==============
@@ -873,6 +879,8 @@ _PRICING_MEMORY: ContextVar[tuple[int, int] | None] = ContextVar(
     "mynn_pricing_memory", default=None)
 _PRICING_RANK_CHUNK: ContextVar[int | None] = ContextVar(
     "mynn_pricing_rank_chunk", default=None)
+_PRICING_RESIDENT_CHUNK: ContextVar[int | None] = ContextVar(
+    "mynn_pricing_resident_chunk", default=None)
 
 
 @contextmanager
@@ -890,6 +898,33 @@ def mynn_pricing_rank_chunk(chunk: int | None):
         yield
     finally:
         _PRICING_RANK_CHUNK.reset(token)
+
+
+@contextmanager
+def mynn_pricing_resident_chunk(chunk: int | None):
+    """Price a RESIDENT domain at ``chunk`` columns without changing a run.
+
+    The single-card road's counterpart of :func:`mynn_pricing_rank_chunk`
+    (which only the tile-buffer resolver reads).  The resident road prices
+    what the card NEEDS at the narrowest width a run may walk and fits the
+    width it walks into what is left (A3c on the ranked road;
+    :func:`woof.core.streaming.admit_resident_road` on one card), so its
+    pricing must be able to ask for one width without pinning the process
+    or touching the memo the runtime resolves from.  ``None`` leaves the
+    width to :func:`resolve_mynn_column_chunk`'s usual answer.
+    """
+    if chunk is not None and (type(chunk) is not int or chunk < 1):
+        raise ValueError("a resident MYNN price needs a positive integer width")
+    token = _PRICING_RESIDENT_CHUNK.set(chunk)
+    try:
+        yield
+    finally:
+        _PRICING_RESIDENT_CHUNK.reset(token)
+
+
+def mynn_target_fit_active() -> bool:
+    """Is a target-card fit (:func:`mynn_pricing_memory`) pricing now?"""
+    return _PRICING_MEMORY.get() is not None
 
 
 @contextmanager
@@ -1004,6 +1039,9 @@ def resolve_mynn_column_chunk(nz: int) -> int:
     number, which is what the memo is for.
     """
     nz = int(nz)
+    priced = _PRICING_RESIDENT_CHUNK.get()
+    if priced is not None:
+        return int(priced)
     if _PINNED is not None:
         return int(_PINNED)
     memory = _PRICING_MEMORY.get()
@@ -1289,9 +1327,7 @@ class MynnPblScratch:
         """One contiguous sub-array of ``shape`` per name, in order."""
         names = tuple(names)
         shape = tuple(int(extent) for extent in shape)
-        unit = 1
-        for extent in shape:
-            unit *= extent
+        unit = prod(shape)
         buf = self._backing(slot, len(names) * unit, DTYPE)
         return {name: self._view(buf[index * unit:(index + 1) * unit], shape)
                 for index, name in enumerate(names)}
@@ -1299,9 +1335,7 @@ class MynnPblScratch:
     def one(self, slot: str, shape) -> cp.ndarray:
         """The first (and usually only) array in a slot."""
         shape = tuple(int(extent) for extent in shape)
-        unit = 1
-        for extent in shape:
-            unit *= extent
+        unit = prod(shape)
         return self._view(self._backing(slot, unit, DTYPE)[:unit], shape)
 
     def index(self, slot: str, shape) -> cp.ndarray:
@@ -1309,9 +1343,7 @@ class MynnPblScratch:
         import cupy as cp
 
         shape = tuple(int(extent) for extent in shape)
-        unit = 1
-        for extent in shape:
-            unit *= extent
+        unit = prod(shape)
         return self._backing(slot, unit, cp.int32)[:unit].reshape(shape)
 
     def flags(self, slot: str = MYNN_PBL_FLAG_SLOTS[0]) -> cp.ndarray:
@@ -1407,6 +1439,7 @@ __all__ = [
     "mynn_pbl_vram_chunk_ceiling",
     "observe_dmp_registers_per_thread",
     "pin_mynn_column_chunk",
+    "mynn_pricing_resident_chunk", "mynn_target_fit_active",
     "probe_mynn_card",
     "resolve_mynn_column_chunk",
     "resolve_mynn_tile_column_chunk",

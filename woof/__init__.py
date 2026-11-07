@@ -52,6 +52,71 @@ from woof import _env as _woof_env  # noqa: E402
 
 _woof_env.apply()
 
+def _no_numpy_huge_page_advice() -> None:
+    """Stop numpy advising the kernel to back its arrays with huge pages.
+
+    numpy calls ``madvise(MADV_HUGEPAGE)`` on every large array it
+    allocates.  On a host whose transparent-huge-page defrag is
+    ``madvise`` (a rented box: ``always defer defer+madvise [madvise] never``),
+    each such allocation then compacts memory synchronously; with most of
+    a 723 GB host in page cache the compaction mostly fails and retries.
+    Measured there on the 9 km CONUS DA controller: 14,770 s of kernel
+    time against 448 s of user time in one analysis, every card idle,
+    compact_stall 28 M; a member worker stalled the same way decoding its
+    radar file.  Without the advice the kernel still uses huge pages
+    where it can do so cheaply; array contents are unchanged.
+
+    ``NUMPY_MADVISE_HUGEPAGE`` is set for this process and every child it
+    starts unless the caller already set it, which is honoured either
+    way; numpy reads it at import, so a numpy imported before woof is
+    switched through its own setter too.
+    """
+    import os
+    import sys
+
+    value = os.environ.setdefault("NUMPY_MADVISE_HUGEPAGE", "0")
+    numpy = sys.modules.get("numpy")
+    if numpy is None or value.strip() not in ("0", ""):
+        return
+    for owner in ("_core", "core"):
+        setter = getattr(getattr(getattr(numpy, owner, None), "multiarray",
+                                 None), "_set_madvise_hugepage", None)
+        if setter is not None:
+            try:
+                setter(False)
+            except Exception:
+                pass
+            return
+
+
+_no_numpy_huge_page_advice()
+
+
+def _die_with_launcher() -> None:
+    """Arm the parent-pid watchdog a launching woof process asked for.
+
+    Here because every stage is ``python -m woof.<module>`` and imports
+    this package first, so one line covers the forecast supervisor and
+    every other stage a chain starts.  It does nothing unless a woof
+    launcher set :data:`woof.parent_death.PARENT_ENV` for this process.
+    THE BREAKAGE: a ``woof go`` killed by pid left its forecast
+    supervisor alive, reparented to init, holding 63.9 GB on a card for
+    43 minutes (a rented box, 2026-10-07).  See :mod:`woof.parent_death`.
+    """
+
+    import os
+
+    if "WOOF_PARENT_DEATH_PID" not in os.environ:
+        return
+    try:
+        from woof.parent_death import arm_from_environment
+    except ImportError:
+        return
+    arm_from_environment()
+
+
+_die_with_launcher()
+
 from importlib import metadata as _metadata  # noqa: E402
 from pathlib import Path as _Path  # noqa: E402
 
@@ -262,10 +327,31 @@ _cupy_windows_warning.quiet_false_cuda_path_warning()
 # tests/test_provenance.py copy into a stranger checkout.
 import os as _os  # noqa: E402
 
-if any(_name.startswith("GPUWM_WRF_EXACT") for _name in _os.environ):
+# Without CuPy the process compiles no CUDA, so there is no compiler to hook.
+# Breakage (2.9.1 public-CI rehearsal, route B, 2026-10-16): the Thompson
+# host-parity scripts import woof with GPUWM_WRF_EXACT=1 on a CPU-only install,
+# and install() died with "No module named cupy" before the host backend could
+# install its CPU shim.  The guard sits here, not in wrf_exact.py, because that
+# file is sealed by tests/data/assembled_legacy_proofs/source-extension.json.
+# A cupy already in sys.modules counts as installed: find_spec raises
+# ValueError on a module with no __spec__, such as the stand-in compiler
+# tests/test_correct_mode_default.py installs on hosts without CuPy (2.9.1
+# public-CI rehearsal, routes B and C, 2026-10-16).
+import importlib.util as _importlib_util  # noqa: E402
+import sys as _sys  # noqa: E402
+
+if (any(_name.startswith("GPUWM_WRF_EXACT") for _name in _os.environ)
+        and ("cupy" in _sys.modules or _importlib_util.find_spec("cupy") is not None)):
     from woof import wrf_exact as _wrf_exact
 
     _wrf_exact.install()
+
+# Kernel numerics (owner ruling 2026-10-16: fast is the default, strict the opt-in).  woof/numerics.py
+# imports nothing heavy: it arms a hook that applies the fast compile boundary when CuPy's compiler loads,
+# and arms nothing under GPUWM_WRF_EXACT=1 or GPUWM_NUMERICS=strict changes nothing it compiles.
+from woof import numerics as _numerics  # noqa: E402
+
+_numerics.arm()
 
 __all__ = ["DISTRIBUTION_NAME", "DISTRIBUTION_NAMES", "LAUNCH_MONOTONIC",
            "LAUNCH_UNIX_MS", "PACKAGE_INIT", "__version__",

@@ -1,8 +1,7 @@
-"""Fail-closed admission for WRF urban BEP+BEM CUDA exports.
+"""Typed dispatch for ordinary WRF urban BEP+BEM Metal source slices.
 
-Both exports transitively use source-pinned transcendental and exact
-rounding routines. Their experimental shared Metal math prerequisites have
-not been reviewed, so this packet admits no kernels.
+Full WRF-exact execution still requires the transitive arithmetic contract;
+the integrated ordinary column path uses the shipped kernel registry.
 """
 
 from __future__ import annotations
@@ -52,32 +51,6 @@ def submit_bep_bem_albedo(context, p_num: MetalArray, q_num: MetalArray,
          "albwin": albwin, "error": error},
         {"ncase": ncase}, exact_policy=False, grid_size=ncase * 256,
         threads_per_group=256)
-
-
-def launch_bep_bem_albedos_metal(context, nclass: int):
-    """Build the shared BEM window albedo for the configured urban classes."""
-    from .array import MetalArrayModule
-
-    nclass = int(nclass)
-    if not 1 <= nclass <= 11:
-        raise ValueError("BEM class count must be in 1..11")
-    module = MetalArrayModule(context)
-    p_num = module.asarray(np.full((nclass,), 2, dtype=np.int32))
-    q_num = module.asarray(np.full((nclass,), 4, dtype=np.int32))
-    albwin = module.zeros((nclass,), dtype=np.float32)
-    error = module.zeros((nclass,), dtype=np.int32)
-    submit_bep_bem_albedo(context, p_num, q_num, albwin, error)
-    return {"albwin": albwin, "error": error}
-
-
-def require_urban_bep_bem_metal_supported(cuda_symbol: str) -> None:
-    """Refuse BEP+BEM Metal use until all transitive math is reviewed."""
-    reason = _UNSUPPORTED_EXPORTS.get(cuda_symbol)
-    if reason is None:
-        raise ValueError(f"unknown urban BEP+BEM CUDA export {cuda_symbol!r}")
-    raise NotImplementedError(
-        f"Metal {cuda_symbol} has no faithful translation: {reason}; "
-        "no kernel signature is admitted")
 
 
 def submit_bep_bem_view_factors(context, resources, *, nz_u: int, nd: int):
@@ -197,7 +170,7 @@ def submit_bem_atmosphere_interp(context, resources, *, ncol: int, nz: int,
         raise ValueError("BEM atmosphere interpolation extents are invalid")
     expected_shapes = {
         "active_cols": (ncol,), "utype": (ncol,),
-        "nzu_class": (nurbm,), "z": (ncol, nz + 1), "z_u": (19,),
+        "nzurban": (ncol,), "z": (ncol, nz + 1), "z_u": (19,),
         "ua": (ncol, nz), "va": (ncol, nz), "pt": (ncol, nz),
         "pt0": (ncol, nz), "pr": (ncol, nz), "da": (ncol, nz),
         "qv": (ncol, nz), "interp": (ncol, 7, 18), "error": (ncol,),
@@ -274,50 +247,14 @@ def _submit_bep_bem_profile_stage(context, entrypoint, resources, expected,
         exact_policy=False, grid_size=grid_size, threads_per_group=64)
 
 
-_BEM_FRAGMENT_PATHS = (
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_family.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_view_factors_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_profile_init_family.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_solver_family.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_radiation_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_shadow_mas_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_surface_temp_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_rain_update_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_upward_rad_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_interior_flux_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_interior_radiation_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_indoor_radiation_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_indoor_fluxes_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_room_balance_inputs_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_indoor_state_update_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_consump_total_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_occupancy_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_occupancy_inputs_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_room_control_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_flat_roof_flux_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_wall_flux_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_flat_flux_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_state_gather_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_state_scatter_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_material_solve_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_buildings_tendency_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_urban_meso_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_interp_length_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_flat_flux_pack_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_profile_select_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bep_bem_hi_profile_gather_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_param_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_icbep_xy_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_building_level_scan_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_atmosphere_gather_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_atmosphere_interp_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_temperature_profile_average_fragment.json",
-    Path(__file__).resolve().parent / "signature_fragments" / "urban_bem_final_output_fragment.json",
-)
-_BEM_FRAGMENT_SIGNATURES = {}
-for _path in _BEM_FRAGMENT_PATHS:
-    _BEM_FRAGMENT_SIGNATURES.update(
-        (entry["name"], entry) for entry in json.loads(_path.read_text())["kernels"])
+# Dispatch against the shipped registry: family fragments can predate later
+# ABI revisions, and must not act as a second, incomplete admission list.
+_BEM_FRAGMENT_SIGNATURES = {
+    entry["name"]: entry
+    for entry in json.loads((Path(__file__).resolve().parent
+                            / "kernel_signatures.json").read_text())["kernels"]
+    if entry["name"].startswith(("urban_bem_", "urban_bep_bem_"))
+}
 
 
 def submit_bep_bem_fragment(context, entrypoint, resources, parameters, *, grid_size=None):
@@ -512,26 +449,14 @@ def submit_bem_interp_length(context, resources, *, ncol: int, nz: int):
         {"ncol": ncol, "nz": nz, "nedge": nz + 1}, grid_size=ncol)
 
 
-def submit_bem_material_solve(context, resources, *, ncol: int, dt: float):
-    """Run the ordinary-profile WRF material stacks for packed buildings."""
-    ncol = int(ncol)
-    nitem = int(resources["building_nlev"].size)
-    if ncol < 1 or nitem != ncol * 15 or not np.isfinite(dt) or dt <= 0:
-        raise ValueError("BEM material solve needs ncol*15 rows and positive finite dt")
-    return submit_bep_bem_fragment(
-        context, "urban_bem_material_solve_fragment", resources,
-        {"ncol": ncol, "nitem": nitem, "dt": float(dt)},
-        grid_size=nitem)
-
-
-def submit_bem_flat_flux_pack(context, resources, *, ncol: int):
-    """Pack flat surface fluxes and gather roof forcing in WRF index order."""
+def submit_bem_flat_flux_pack(context, resources, *, ncol: int, gather_only: bool = False):
+    """Gather carried roof forcing or pack refreshed bb_buildings fluxes."""
     ncol = int(ncol)
     if ncol < 1:
         raise ValueError("BEM flat-flux packing needs positive ncol")
     return submit_bep_bem_fragment(
         context, "urban_bem_flat_flux_pack_fragment", resources,
-        {"ncol": ncol}, grid_size=ncol)
+        {"ncol": ncol, "gather_only": int(gather_only)}, grid_size=ncol)
 
 
 def submit_bem_param(context, resources, *, ncol: int, nurbm: int):
@@ -581,7 +506,7 @@ def submit_bem_temperature_average(context, resources, *, ncol: int):
     ncol = int(ncol)
     expected_shapes = {
         "ss": (ncol, 19), "pb": (ncol, 19),
-        "tw": (ncol, 15, 5, 18, 4),
+        "tw": (ncol, 15, 10, 18, 4),
         "twlev": (ncol, 15, 18, 4), "sfw": (ncol, 15, 18, 4),
         "sfwin": (ncol, 15, 18, 4),
         "tw_av": (ncol, 4, 18), "twlev_av": (ncol, 4, 18),
@@ -603,7 +528,7 @@ def submit_bem_temperature_profile_average(context, resources, *, ncol: int):
     ncol = int(ncol)
     expected_shapes = {
         "active_cols": (ncol,), "utype": (ncol,), "class_float": (1320,),
-        "tg": (ncol, 10, 2), "tr": (ncol, 5, 18, 2),
+        "tg": (ncol, 10, 2), "tr": (ncol, 10, 18, 2),
         "trv": (ncol, 10, 18, 2), "tg_av": (ncol, 2),
         "tr_av": (ncol, 18, 2), "error": (ncol,),
     }
@@ -617,11 +542,11 @@ def submit_bem_temperature_profile_average(context, resources, *, ncol: int):
         {"ncol": ncol}, grid_size=ncol)
 
 
-def submit_bem_occupancy(context, resources, *, nitem: int, nhourday: float):
+def submit_bem_occupancy(context, resources, *, nitem: int, ncol: int):
     """Submit the BEM occupancy and internal-gain stage."""
     return submit_bep_bem_fragment(
         context, "urban_bem_occupancy_fragment", resources,
-        {"nitem": int(nitem), "nhourday": float(nhourday)},
+        {"nitem": int(nitem), "ncol": int(ncol)},
         grid_size=int(nitem))
 
 
@@ -637,23 +562,13 @@ def submit_bem_occupancy_inputs(context, resources, *, ncol: int,
          "class_float_len": int(class_float_len)}, grid_size=ncol * 15)
 
 
-def submit_bem_room_control(context, resources, *, nitem: int,
-                            nhourday: float, dt: float):
+def submit_bem_room_control(context, resources, *, nitem: int, ncol: int,
+                            dt: float):
     """Submit ventilation, thermostat, and room humidity control."""
     return submit_bep_bem_fragment(
         context, "urban_bem_room_control_fragment", resources,
-        {"nitem": int(nitem), "nhourday": float(nhourday), "dt": float(dt)},
+        {"nitem": int(nitem), "ncol": int(ncol), "dt": float(dt)},
         grid_size=int(nitem))
-
-
-def submit_bem_roof_radiation(context, resources, *, nitem: int,
-                              has_pv: int, level: int, nz: int,
-                              sigma: float):
-    """Submit roof radiative exchange for each building item."""
-    return submit_bep_bem_fragment(
-        context, "urban_bem_roof_radiation_fragment", resources,
-        {"nitem": int(nitem), "has_pv": int(has_pv), "level": int(level),
-         "nz": int(nz), "sigma": float(sigma)}, grid_size=int(nitem))
 
 
 def submit_bem_shortwave(context, resources, *, ncol: int, nurbm: int):
@@ -713,31 +628,6 @@ def submit_bem_rain_update(context, resources, *, ncol: int, nurbm: int,
         context, "urban_bem_rain_update_fragment", resources,
         {"ncol": ncol, "nurbm": nurbm,
          "dt": float(dt), "latent": float(latent)}, grid_size=ncol)
-
-
-def submit_bem_interior_flux(context, resources, *, ncol: int, nlev: int,
-                             pwin: float):
-    """Submit indoor sensible fluxes and room-level heat/moisture sums."""
-    ncol, nlev = int(ncol), int(nlev)
-    return submit_bep_bem_fragment(
-        context, "urban_bem_interior_flux_fragment", resources,
-        {"ncol": ncol, "nlev": nlev, "pwin": float(pwin)},
-        grid_size=ncol * nlev)
-
-
-def submit_bem_interior_radiation(context, resources, *, nitem: int,
-                                   albwal: float, albwin: float,
-                                   emwal: float, emwin: float, sigma: float,
-                                   pwin: float, bw: float, bl: float,
-                                   zw: float):
-    """Submit the six-surface indoor shortwave and longwave exchange solve."""
-    return submit_bep_bem_fragment(
-        context, "urban_bem_interior_radiation_fragment", resources,
-        {"nitem": int(nitem), "albwal": float(albwal),
-         "albwin": float(albwin), "emwal": float(emwal),
-         "emwin": float(emwin), "sigma": float(sigma),
-         "pwin": float(pwin), "bw": float(bw), "bl": float(bl),
-         "zw": float(zw)}, grid_size=int(nitem))
 
 
 def submit_bem_indoor_radiation(context, resources, *, ncol: int,

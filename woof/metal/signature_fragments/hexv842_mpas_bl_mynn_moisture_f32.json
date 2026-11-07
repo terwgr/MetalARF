@@ -1,0 +1,162 @@
+{
+  "kernels": [
+    {
+      "name": "hexv842_mpas_bl_mynn_moisture_f32",
+      "module": "hexv842_mpas_bl_mynn_moisture_f32",
+      "source": "woof/metal/shaders/hexv842_mpas_bl_mynn_moisture_f32.metal",
+      "cuda_source": "woof/hex/mpasphys/bl_mynn_v842.py",
+      "cuda_symbol": "f_moisture_check",
+      "resources": [
+        [
+          "dp",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "th",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqi",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqs",
+          "float",
+          "read_write"
+        ],
+        [
+          "dth",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dqc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dqi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dqs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dth": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "delt",
+          "float32"
+        ],
+        [
+          "xlvcp",
+          "float32"
+        ],
+        [
+          "xlscp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

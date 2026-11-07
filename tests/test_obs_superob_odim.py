@@ -37,7 +37,7 @@ from woof.obs.sweeps import (SWEEPS_SCHEMA_CENSOR, SWEEPS_SCHEMA_ODIM, Censor,
 
 
 def _write_pack(path: Path, schema: str, *,
-                products: dict[str, list[int]]) -> Path:
+                products: dict[str, list[int]], measured=-10.0, unit="dBZ") -> Path:
     """One sweep, one radial, ``products`` mapping moment name to censor codes.
 
     The only hand-built pack in this file. It exists to put codes in the plane
@@ -64,9 +64,9 @@ def _write_pack(path: Path, schema: str, *,
         censor = np.array([codes], dtype=np.uint8)
         # Only a MEASURED gate carries a number; every censored code is NaN,
         # which is what the real writer does.
-        data = np.where(censor == Censor.MEASURED, -10.0, np.nan).astype("<f4")
+        data = np.where(censor == Censor.MEASURED, measured, np.nan).astype("<f4")
         moments.append({
-            "product": product, "unit": "dBZ", "gate_count": len(codes),
+            "product": product, "unit": unit, "gate_count": len(codes),
             "first_gate_range_m": 125.0, "gate_size_m": 250.0,
             "array": push(f"v{index}", data),
             "censor_array": push(f"c{index}", censor)})
@@ -101,6 +101,20 @@ def _write_pack(path: Path, schema: str, *,
               + len(payload).to_bytes(8, "little"))
     path.write_bytes(header.ljust(64, b"\0") + blob + payload)
     return path
+
+
+@pytest.fixture(autouse=True)
+def _numpy_reference(monkeypatch):
+    """These tests place gates on duck-typed test grids.
+
+    A test double's placement methods are Python, and the Rust superob
+    places gates with a TargetGrid's projection and column interfaces, so
+    it refuses these objects by name.  The census semantics are pinned
+    here on the numpy reference, opted into explicitly, and the Rust
+    route's census is held to that reference on a real TargetGrid by
+    tests/test_obs_superob_rust_parity.py.
+    """
+    monkeypatch.setenv("WOOF_SUPEROB_PYTHON", "1")
 
 
 class _OffGrid:
@@ -140,6 +154,20 @@ def test_the_odim_regime_is_on_the_allow_list_and_is_its_own_value():
     assert CLEAR_AIR_SOURCE_ODIM not in (CLEAR_AIR_SOURCE,
                                          CLEAR_AIR_SOURCE_CENSOR)
     assert len(set(CLEAR_AIR_SOURCES)) == len(CLEAR_AIR_SOURCES)
+
+
+def test_every_radar_consumer_reads_the_regime_the_odim_gridder_writes():
+    """The superob writes ``undetect_and_finite_below_floor`` for an ODIM
+    pack, but the reflectivity adapter and the heating builder each held an
+    allow-list without it, so a European volume gridded with its clear air
+    was refused by the filter, the precipitation analysis and the heating
+    builder alike and the documented European route ended at the file.  One
+    list now, owned by the adapter."""
+    from woof.da import obs_radar, radar_tten
+
+    assert CLEAR_AIR_SOURCE_ODIM in obs_radar.CLEAR_AIR_SOURCES
+    assert set(obs_radar.CLEAR_AIR_SOURCES) == set(CLEAR_AIR_SOURCES)
+    assert radar_tten._CLEAR_AIR_SOURCES is obs_radar.CLEAR_AIR_SOURCES
 
 
 def test_the_regime_is_chosen_by_the_pack_not_by_the_caller(tmp_path):

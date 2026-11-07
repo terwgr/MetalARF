@@ -3,12 +3,12 @@ from pathlib import Path
 import os
 import numpy as np
 import pytest
-from tests.physics_reference.uwpbl_oracle import load
-from tests.physics_reference.uwpbl_ref.wvsat import estblf,aqsat,fqsatd
+from woof.verify.uwpbl_oracle import load
+from woof.verify.uwpbl_ref.wvsat import estblf,aqsat,fqsatd
 from test_uwpbl_vdiff_wrf471_parity import words,gpu_module,ROOT
 
 def fixture():
-    stem = ROOT/'tests/data/uwpbl/oracle/run_stage_wvsat'
+    stem = ROOT/'tests/data/oracles/uwpbl/run_stage_wvsat'
     if not stem.with_suffix('.bin').exists():
         directory = os.environ.get('UWPBL_ORACLE_DIR')
         if not directory:pytest.skip('saturation fixture absent and UWPBL_ORACLE_DIR unset')

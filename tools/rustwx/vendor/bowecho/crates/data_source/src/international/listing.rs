@@ -11,7 +11,7 @@
 //! - nginx `autoindex` `<pre>` layout (DWD opendata.dwd.de, CHMI
 //!   opendata.chmi.cz): `<a href="name">truncated text..&gt;</a>  date  size`
 //!   lines plus a `../` parent link. The anchor TEXT is truncated for long
-//!   names, only the `href` attribute is trustworthy, which is why this
+//!   names — only the `href` attribute is trustworthy, which is why this
 //!   parser never reads element text.
 //!
 //! The parser extracts `href` values, drops navigation noise (sort links,
@@ -70,7 +70,7 @@ pub fn join_url(base: &str, name: &str) -> String {
     }
 }
 
-/// First run of exactly `len` consecutive ASCII digits in `name`: the
+/// First run of exactly `len` consecutive ASCII digits in `name` — the
 /// timestamp extractor for feed file names (14 digits for SHMU/CHMI
 /// `T_PAGZ41_C_LZIB_20260612060000.hdf`, 16 for DWD
 /// `...th_00-2026061206455700-asb-10103-hd5` with trailing centiseconds).
