@@ -102,6 +102,35 @@ pub fn available_bytes() -> Option<u64> {
     )
 }
 
+/// Free and reclaimable inactive pages, as reported by Darwin's VM host.
+#[cfg(target_os = "macos")]
+pub fn available_bytes() -> Option<u64> {
+    unsafe extern "C" {
+        fn mach_host_self() -> u32;
+        static mach_task_self_: u32;
+        fn mach_port_deallocate(task: u32, name: u32) -> i32;
+        fn host_page_size(host: u32, size: *mut usize) -> i32;
+        fn host_statistics(host: u32, flavor: i32, info: *mut i32, count: *mut u32) -> i32;
+    }
+    // HOST_VM_INFO's vm_statistics contains fifteen natural_t words. Free
+    // already includes speculative pages; adding them would count them twice.
+    let mut statistics = [0u32; 15];
+    let mut count = statistics.len() as u32;
+    let mut page_size = 0usize;
+    // Safety: both calls receive live buffers with the SDK's declared sizes.
+    let (pages_ok, stats_ok) = unsafe {
+        let host = mach_host_self();
+        let pages_ok = host_page_size(host, &mut page_size);
+        let stats_ok = host_statistics(host, 2, statistics.as_mut_ptr().cast(), &mut count);
+        mach_port_deallocate(mach_task_self_, host);
+        (pages_ok, stats_ok)
+    };
+    if pages_ok != 0 || stats_ok != 0 || count < 3 || page_size == 0 {
+        return None;
+    }
+    (u64::from(statistics[0]) + u64::from(statistics[2])).checked_mul(page_size as u64)
+}
+
 /// [`available_bytes`] read from `meminfo` (a `/proc/meminfo`), capped by
 /// [`cgroup_memory_headroom`] of `proc_self_cgroup` under `cgroup_root`.
 ///
@@ -319,7 +348,7 @@ fn stat_field(stat: &str, key: &str) -> Option<u64> {
 }
 
 /// Physical memory not currently in use, in bytes.
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 pub fn available_bytes() -> Option<u64> {
     None
 }

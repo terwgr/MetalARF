@@ -31,8 +31,6 @@ class MetalMpasWsm6:
             raise ValueError('native WSM6 microphysics slot required')
         pools = call.pools
         fields, options = pools['fields'], pools['options']
-        if options['l_diags'] or call.flags.diagnostics:
-            raise NotImplementedError('native WSM6 radar and relative humidity are not implemented')
         corrections = slot_corrections(call, native.CORRECT_MODE_SOURCE)
 
         constants = np.asarray(options['host_constants'], np.float32)
@@ -111,6 +109,14 @@ class MetalMpasWsm6:
                          state=work['state'], radii=work['r']),
                     dict(nz=common['nz'], nc=common['nc'], ns=common['ns'],
                          wrapper=np.int32(1), enabled=np.int32(1)))
+        if options['l_diags']:
+            from .metal_wsm6_radar_v842 import launch_radar, relative_humidity
+            radar_fields = {name: work['v'][index] for name,index in
+                            (('th',0),('qv',1),('qr',4),('qs',5),('qg',6),('p',8))}
+            radar_fields.update(pii=work['pi'],zgrid=fields['zgrid'])
+            launch_radar(radar_fields,fields,device_constants,state=work['state'],
+                         solve_cells=solve,running_max=True)
+            relative_humidity(radar_fields,fields['relhum'],solve_cells=solve)
         writeback_kernel = 'hexv842_wsm6_to_wb3_f32' if 'WB3' in corrections else 'hexv842_wsm6_to_f32'
         _launch(writeback_kernel, nc, context,
                 dict(arrays, **packed, c=device_constants, i_rainnc=counter),

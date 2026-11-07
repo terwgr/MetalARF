@@ -10,6 +10,46 @@ implementations. Native packaging and release-specific public forecast
 acceptance remain in progress. Reconciled interfaces and component comparisons
 do not establish numerical acceptance for every configuration.
 
+## Shared host-side output and initialization
+
+Regional Metal history supports default lossless NetCDF-4 compression and
+`--history-compression none` (CDF-2). A public one-step forecast preserved
+32,191,500 stored elements across the two containers, including winds and
+potential-temperature perturbations. This is an output comparison, not a
+CUDA numerical-parity claim.
+
+The Icechunk writer reads fixed-width NetCDF-4 character arrays through the
+same byte reader as classic NetCDF characters. Variable-length strings remain
+refused. This includes the `Times` field in compressed regional history;
+the writer must not omit it to export the remaining fields. A public Metal
+`--output-format netcdf,icechunk` run committed two frames with 210 fields
+each; its NetCDF output matched the default run's 32,191,500 stored elements.
+
+Nest-down geography retains the shared 600 m threshold for source-resolution
+land cover and soil. At 250 m and finer the shared child selector applies
+the requested LES closure. Metal admits the 3-D Smagorinsky and TKE closures;
+small device runs at 250 m completed three times per closure. The public
+600 m and 250 m nest-down checks refused missing WPS geography before stepping,
+so these checks do not qualify the high-resolution land overlay itself.
+
+Simulated-radar S/C/X selectors use the shared native simulator for regional
+Metal history. Darwin supplies free and reclaimable inactive VM pages to its
+host-memory admission check. C and X use their own finite-particle scattering
+tables at 53.5 and 33.3 mm; neither substitutes the S-band bulk operator.
+
+Native MPAS correct-mode Thompson, aerosol Thompson and WSM6 form the held
+start frame's reflectivity from its captured hydrometeors on Metal. The operator
+produces `refl10cm`, its column maximum and both 1 km fields. Thompson leaves
+the 1 km placeholders untouched without captured `zgrid`; WSM6 requires it,
+matching CUDA. Exact mode
+retains native MPAS's initial placeholders. Each radar kernel matches all 385
+host-built CUDA words in dry, rain, snow and mixed-phase columns under
+synchronous submits, including a partial dispatch tile. WSM6 humidity matches
+280 source words, including zeroed halo columns. Controlled public starts preserve all 110,000 source hydrometeor words per
+profile. Their 69,600 first-frame radar words match the host-built CUDA source
+across Thompson, aerosol Thompson and WSM6. Legacy Hex and RRFS start
+frames have separate coverage.
+
 ## Integration admission
 
 Regional wind farms run on resident Metal domains: Fitch (including automatic
@@ -1184,7 +1224,9 @@ transport executables. The complete 80-artifact bridge roster was verified separ
 Metal writes supported state streams on the stream writer's output clock.
 The default profile keeps the MPAS physics manager's `output` and
 `diagnostics` alarms inactive. The Kessler profile below supports
-relative humidity on the `diagnostics` alarm.
+relative humidity on the `diagnostics` alarm. Thompson, aerosol Thompson and
+WSM6 radar/relative-humidity requests enable their native stream clocks and compute
+the diagnostics on Metal.
 An enabled scientific output stream that requests native relative humidity
 or radar fields without a computed producer is refused regardless of its
 name. The native restart writer can still serialize those raw pool fields.
@@ -1248,8 +1290,8 @@ values and 689,524 history values per endpoint. Optical-depth diagnostics
 and shortwave heating are active in both runs.
 
 The native convection-permitting suite also accepts
-`config_microp_scheme='mp_wsm6'` and a state history stream that leaves
-the MPAS diagnostics alarm inactive. WSM6 uses
+`config_microp_scheme='mp_wsm6'` with state history and native radar/humidity
+diagnostic alarms. WSM6 uses
 the native scalar order, precipitation accumulations and rain bucket.
 Its initialized constants and column workspace are owned by the Metal
 service. The working-set and buffer limits bound the admitted mesh size.
@@ -1381,7 +1423,8 @@ alarm, with liquid, ice and cloud fraction replacement active on the
 later alarm. Its fresh restart matches 15,352,077 checkpoint values,
 75 saved native variable values and 799,924 history values at both
 resumed endpoints. The checkpoint identity includes the selected
-profile. Native radar and nest-look outputs remain closed on Metal.
+profile. Native nest-look outputs remain closed on Metal. Thompson radar
+and relative humidity use the enabled native diagnostic alarms.
 
 The RRFS MYNN-SFC v600 surface-layer component generates its four stability
 tables and runs the packed land, water and ice columns on Metal. Software

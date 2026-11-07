@@ -34,10 +34,12 @@ site = RadarSite("SIM1", lat=35.0, lon=-97.0, height_m=350.0,
 
 IDs have four letters or digits because Level II stores four bytes. Custom
 IDs beginning `T` except `TJUA` retain the existing Level II reader refusal.
-The bridge currently exposes an **S-band** bulk polar operator. Asking for
-another band raises `radar_band_unsupported`; it cannot substitute S-band
-scattering for a C-band TDWR or a different world radar. A geographic location
-alone does not establish the instrument band or its scattering tables.
+The bridge supports **S, C and X bands**, using the site's band unless
+`band=` or `wavelength_mm=` overrides it. C and X use their own scattering
+tables; unsupported wavelengths raise `radar_wavelength_unsupported` rather than
+substituting S-band. See [Radar bands](simulated-radar.md#radar-bands) for the
+supported wavelengths and table assumptions. A geographic location alone
+does not establish the instrument band or its scattering tables.
 
 `scan_strategy="vcp212"` is the default and uses the native VCP 212 physical
 cuts, including repeated elevations. `"low_tilts"` uses 0.5, 0.9 and 1.3

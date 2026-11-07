@@ -28574,6 +28574,56 @@
       "resource_count": 3,
       "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops",
+        "portable-libm64"
+      ],
+      "cuda_source": "woof/hex/mpasphys/thompson_v842.py",
+      "cuda_symbol": "mpas_thompson_radar",
+      "layout_hash": "c2ffd2a54c0a836ffbfed2102ba10597ae9505e3893a2f703b1eb7cba3c2e9ea",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_mpas_thompson_column_radar_f32.metal",
+      "module": "hexv842_mpas_thompson_column_radar_f32",
+      "name": "hexv842_mpas_thompson_column_radar_f32",
+      "parameter_size": 16,
+      "resource_count": 18,
+      "shader_hash": "9242d876f9252d81da04c99247edc796b30183ae431274043e776e2d158ace10",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/mpasphys/wsm6_refl_start_v842.py",
+      "cuda_symbol": "wsm6_start_radar",
+      "layout_hash": "2372b95ee0af6567290e2570656679382ac4181f1727aa5e64f1568c036737e0",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_wsm6_radar_f32.metal",
+      "module": "hexv842_wsm6_radar_f32",
+      "name": "hexv842_wsm6_radar_f32",
+      "parameter_size": 24,
+      "resource_count": 17,
+      "shader_hash": "9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/mpasphys/wsm6_v842.py",
+      "cuda_symbol": "wsm6_relhum",
+      "layout_hash": "4d3017215cfd845bf64ca3b630971264db23a86f38161f3116451178f253be7f",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv842_wsm6_radar_f32.metal",
+      "module": "hexv842_wsm6_radar_f32",
+      "name": "hexv842_wsm6_relhum_f32",
+      "parameter_size": 12,
+      "resource_count": 5,
+      "shader_hash": "9a144db41c5c6860b110a37c64bb6b6c6bab6b958cf35cae3e85cacdcb112486",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"
