@@ -19,7 +19,7 @@ from parse import split_top, def_name  # noqa: E402
 
 SHADERS = ROOT / "woof/metal/shaders"
 SKIP = {"tk_add", "tk_sub", "tk_mul", "tk_div", "tk_min", "tk_max", "tk_abs",
-        "tk_powi", "TkArena", "TkArray", "tiedtke_column"}
+        "tk_powi", "tk_tanf239", "tk_tan", "TkArena", "TkArray", "tiedtke_column"}
 LEVEL_INPUTS = ("u3d", "v3d", "w", "t3d", "qv3d", "qc3d", "qi3d", "pi3d",
                 "rho3d", "qvften", "qvpblten", "dz8w", "pcps", "p8w", "xland",
                 "qfx", "znu")
@@ -41,7 +41,13 @@ def convert(item):
                                                   "static constant constexpr")
     item = re.sub(r"\binline\s+", "", item)
     item = re.sub(r"(?<![\w&])(float|int)\s*&", r"thread \1 &", item)
-    return item.replace("sqrtf(", "cu_sqrt(")
+    item = item.replace("sqrtf(", "cu_sqrt(")
+    for old, new in (("__float_as_uint", "as_type<uint>"),
+                     ("__uint_as_float", "as_type<float>"),
+                     ("__fadd_rn", "tk_add"), ("__fsub_rn", "tk_sub"),
+                     ("__fmul_rn", "tk_mul")):
+        item = item.replace(old, new)
+    return item
 
 
 def kernel_text():
@@ -60,7 +66,7 @@ def kernel_text():
               "    device bool *workspace_b = (device bool *)r.workspace_b;",
               "    const float dt = p.dt;"]
     for n in ("itimestep", "stepcu", "nz", "ncol", "f_qc", "f_qi",
-              "force_continue"):
+              "force_continue", "vector_row"):
         lines.append(f"    const int {n} = p.{n};")
     lines.append("    int c = int(gid);")
     return "\n".join(lines)
@@ -72,6 +78,7 @@ def kernel(items):
     body = body.replace("int c = blockIdx.x * blockDim.x + threadIdx.x;", "")
     body = re.sub(r"\bint\* activity = ", "device int *activity = ", body)
     body = re.sub(r"\bTkArena arena = \{", "TkArena arena = {", body)
+    body = body.replace("referee_old_tan != 0", "false")
     return kernel_text() + body + "}\n"
 
 
@@ -83,7 +90,7 @@ def signature():
                   ["workspace_i", "int32", "read_write"],
                   ["workspace_b", "uint32", "read_write"]]
     parameters = [["dt", "float32"]] + [[n, "int32"] for n in (
-        "itimestep", "stepcu", "nz", "ncol", "f_qc", "f_qi", "force_continue")]
+        "itimestep", "stepcu", "nz", "ncol", "f_qc", "f_qi", "force_continue", "vector_row")]
     return dict(
         name="tiedtke_column", cuda_symbol="tiedtke_column",
         module="tiedtke_family",

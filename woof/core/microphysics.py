@@ -1798,28 +1798,48 @@ def seed_cumulus_rain_number(state: DomainState, cfg: RunConfig,
     mass_scale = DTYPE(float(dt) / (np.pi * 1000.0))
     log_ten = DTYPE(0.75 * np.log(10.0))
     eight = DTYPE(8.0 ** 0.75)
+    metal = bool(getattr(state, "_metal_setup_state", False))
+    xp = np if metal else cp
+    thb_all = (state.thb.to_numpy() if metal and state.thb.ndim == 1
+               else state.thb)
     for k0 in range(0, nz, slab):
         k = slice(k0, min(nz, k0 + slab))
-        thb = (state.thb[k] if state.thb.ndim == 3
-               else state.thb[k, None, None])
-        p = state.p[k]
-        temp = cp.power(p * DTYPE(1.0 / c.P0), DTYPE(c.RCP))
-        temp *= state.thp[k] + thb
+        # Stage only a bounded slab; Metal has no general CuPy power/exp API.
+        if metal:
+            shape = (min(nz, k0 + slab) - k0, ny, nx)
+            offset = k0 * ny * nx * 4
+            pressure = state.p.view(shape, byte_offset=state.p.byte_offset + offset)
+            theta = state.thp.view(shape, byte_offset=state.thp.byte_offset + offset)
+            rate = rqr.view(shape, byte_offset=rqr.byte_offset + offset)
+            target = nr.view(shape, byte_offset=nr.byte_offset + offset)
+            p, thp, rain, number0 = (v.to_numpy() for v in
+                                     (pressure, theta, rate, target))
+            thb = (state.thb.view(
+                shape, byte_offset=state.thb.byte_offset + offset).to_numpy()
+                if state.thb.ndim == 3 else thb_all[k, None, None])
+        else:
+            p, thp, rain, number0 = state.p[k], state.thp[k], rqr[k], nr[k]
+            thb = (thb_all[k] if thb_all.ndim == 3
+                   else thb_all[k, None, None])
+        temp = xp.power(p * DTYPE(1.0 / c.P0), DTYPE(c.RCP))
+        temp *= thp + thb
         number = DTYPE(279.15) - temp
-        cp.clip(number, DTYPE(6.0), DTYPE(8.0), out=number)
+        xp.clip(number, DTYPE(6.0), DTYPE(8.0), out=number)
         number *= log_ten
-        cp.exp(number, out=number)
+        xp.exp(number, out=number)
         rho = p / temp
         rho *= DTYPE(1.0 / c.RD)
-        cp.power(rho, DTYPE(-0.75), out=rho)
+        xp.power(rho, DTYPE(-0.75), out=rho)
         number *= rho
-        fed = rqr[k] * mass_scale
-        cp.maximum(fed, DTYPE(0.0), out=fed)
-        cp.power(fed, DTYPE(0.25), out=fed)
+        fed = rain * mass_scale
+        xp.maximum(fed, DTYPE(0.0), out=fed)
+        xp.power(fed, DTYPE(0.25), out=fed)
         number *= fed
         number *= eight
-        number *= rqr[k] >= DTYPE(1.0e-10)
-        nr[k] += number
+        number *= rain >= DTYPE(1.0e-10)
+        number0 += number
+        if metal:
+            target[...] = number0
     return True
 
 

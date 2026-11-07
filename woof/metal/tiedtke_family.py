@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from woof.core.tiedtke import (INPUTS, LEVEL_OUTPUTS, REFUSAL, workspace_shapes)
+from woof.core.tiedtke import (INPUTS, LEVEL_OUTPUTS, REFUSAL, workspace_shapes,
+                               stock_vector_referee)
 from woof.metal.array import MetalArray
 from woof.metal.cumulus_launch import COLUMNS_PER_SUBMIT, submit_column_kernel
 
@@ -13,7 +14,7 @@ _ENTRY = "tiedtke_column"
 
 
 def _launch(inputs, outputs, activity_flag, workspace, *, dt, itimestep, stepcu,
-            nz, ncol, f_qc, f_qi, force_continue):
+            nz, ncol, f_qc, f_qi, force_continue, vector_row):
     resources = {name: inputs[name] for name in INPUTS}
     resources.update(outputs)
     resources.update(cu_act_flag=activity_flag, workspace_f=workspace[0],
@@ -21,12 +22,13 @@ def _launch(inputs, outputs, activity_flag, workspace, *, dt, itimestep, stepcu,
     submit_column_kernel(
         _FAMILY, _ENTRY, resources,
         dict(dt=dt, itimestep=itimestep, stepcu=stepcu, nz=nz, ncol=ncol,
-             f_qc=f_qc, f_qi=f_qi, force_continue=force_continue),
+             f_qc=f_qc, f_qi=f_qi, force_continue=force_continue,
+             vector_row=vector_row),
         grid_size=ncol)
 
 
 def column_step(module, inputs, outputs, *, dt, itimestep, stepcu, nz, ncol,
-                width, f_qc, f_qi, guess=1):
+                width, f_qc, f_qi, guess=1, libmvec=False, referee_glibc=None):
     """Run the original driver over ``ncol`` columns of flat Metal arrays.
 
     The per-row early return of F:960 is decided from the first ascent's
@@ -34,6 +36,13 @@ def column_step(module, inputs, outputs, *, dt, itimestep, stepcu, nz, ncol,
     that took the other path are recomputed in place from the same inputs.
     Returns the per-column flag array, negative for a refused column.
     """
+    if referee_glibc is None:
+        from woof import wrf_exact
+        referee_glibc = wrf_exact.referee_glibc() if wrf_exact.ENABLED else (2, 43)
+    if tuple(referee_glibc) < (2, 41):
+        raise NotImplementedError("Metal Tiedtke has no pre-2.41 referee tangent")
+    if width < 1 or ncol % width:
+        raise ValueError("Tiedtke width must divide ncol into complete rows")
     shapes = workspace_shapes(nz, ncol)
     workspace = (module.empty((int(np.prod(shapes[0])),), np.float32),
                  module.empty((int(np.prod(shapes[1])),), np.int32),
@@ -41,7 +50,7 @@ def column_step(module, inputs, outputs, *, dt, itimestep, stepcu, nz, ncol,
     flag = module.empty((ncol,), np.int32)
     flag.fill(np.int32(1))
     common = dict(dt=dt, itimestep=itimestep, stepcu=stepcu, nz=nz, ncol=ncol,
-                  f_qc=f_qc, f_qi=f_qi)
+                  f_qc=f_qc, f_qi=f_qi, vector_row=width if libmvec else 0)
     if ncol == 1 or width == 1:
         _launch(inputs, outputs, flag, workspace, force_continue=0, **common)
     else:
@@ -137,7 +146,8 @@ def run_tiedtke(owner, *, atmosphere, fields, state, cfg):
         outputs["pratec"] = module.empty((n,), np.float32)
         flags.append(column_step(
             module, chunk, outputs, dt=dt, itimestep=itimestep, stepcu=1,
-            nz=nz, ncol=n, width=nx, f_qc=1, f_qi=f_qi))
+            nz=nz, ncol=n, width=nx, f_qc=1, f_qi=f_qi,
+            libmvec=stock_vector_referee()))
         if not whole:
             for k in names:
                 _scatter_chunk(out[k], results[k],

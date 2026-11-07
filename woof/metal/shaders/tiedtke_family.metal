@@ -46,9 +46,12 @@ kernel void tiedtke_column(
     const int f_qc = p.f_qc;
     const int f_qi = p.f_qi;
     const int force_continue = p.force_continue;
+    const int vector_row = p.vector_row;
     int c = int(gid);
     
     if (c >= ncol) return;
+    const bool mvec = vector_row > 0 && c % vector_row < (vector_row & ~3);
+    const bool old_tan = false;
     device int *activity = workspace_i + (nz + 8) * ncol + c;
     bool continue_past = force_continue == 1;
     if (force_continue == 2) {
@@ -58,7 +61,7 @@ kernel void tiedtke_column(
     }
     TkArena arena = {workspace_f + c, workspace_i + c,
                      workspace_b + c, 0, 0, 0, ncol, cu_act_flag + c,
-                     activity, continue_past};
+                     activity, continue_past, mvec, old_tan};
     TkArray<float> zi = arena.take<float>(nz);
     TkArray<float> zl = arena.take<float>(nz);
     TkArray<float> u1 = arena.take<float>(nz);

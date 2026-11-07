@@ -6,7 +6,8 @@ from woof.wrf_exact import ENABLED as WRF_EXACT
 from woof.wrf_exact import DIAGNOSTICS_ENABLED
 
 
-def submit_calc_p_alpha(state, hypsometric_opt: int = 1, window=None, *, muts=None):
+def submit_calc_p_alpha(state, hypsometric_opt: int = 1, window=None, *, muts=None,
+                        preparation=False):
     """Submit the selected source contract over a whole domain or window."""
     if hypsometric_opt not in (1, 2):
         raise ValueError(f"hypsometric_opt must be 1 or 2, got {hypsometric_opt}")
@@ -17,6 +18,22 @@ def submit_calc_p_alpha(state, hypsometric_opt: int = 1, window=None, *, muts=No
                 "before the log-pressure EOS diagnostic")
     if not getattr(state, "_metal_setup_state", False):
         raise TypeError("Metal calc_p_alpha requires a Metal DomainState")
+
+    if preparation and not DIAGNOSTICS_ENABLED:
+        from types import SimpleNamespace
+        from woof.core.diagnostics import _update_diagnostics_numpy
+
+        names = ("p", "al", "alt", "mub2d", "mup", "thb", "thp", "qv",
+                 "phb", "php", "dphb_resid", "alb", "rdnw", "c1h", "c2h",
+                 "c3f", "c4f", "c3h", "c4h", "dc3f", "dc4f")
+        host = SimpleNamespace(**{
+            name: (None if getattr(state, name) is None else
+                   getattr(state, name).to_numpy()) for name in names},
+            p_top=state.p_top)
+        _update_diagnostics_numpy(host, hypsometric_opt, window)
+        for name in ("p", "al", "alt"):
+            getattr(state, name)[...] = getattr(host, name)
+        return
 
     nz, ny, nx = state.p.shape
     if window is None:

@@ -17869,14 +17869,14 @@
       ],
       "cuda_source": "woof/core/kernels/tiedtke.cu",
       "cuda_symbol": "tiedtke_column",
-      "layout_hash": "9a9109ff4481c51bcdbcc1546a59c1494826f313467081c6d8dab1d0f497587e",
+      "layout_hash": "2ce7091948ce517b470863929f555ac23e2a898823d9f77b112462a996285169",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/tiedtke_family.metal",
       "module": "tiedtke_family",
       "name": "tiedtke_column",
-      "parameter_size": 32,
+      "parameter_size": 36,
       "resource_count": 29,
-      "shader_hash": "c8476ddca27eddde22d94e93f7b893a11fb5aa565bce42325328ab550472c757",
+      "shader_hash": "25f7155c3dde486e6b592b42a64bd0d8b27cc7fbf94660da4325c6fccf5c9c25",
       "threads_per_group": 32
     },
     {
@@ -21422,7 +21422,7 @@
       "name": "sfclay_preflight_exact",
       "parameter_size": 12,
       "resource_count": 3,
-      "shader_hash": "9d0cbcc3e185859357ae02d3fed35925dc82aa23401b9924149ce0487f63fb46",
+      "shader_hash": "9018cd74ef18cdacd4a1ff4469d6ae7214b6c8aa249d15d8a6a57bfa07517eb5",
       "threads_per_group": 128
     },
     {
@@ -21438,7 +21438,7 @@
       "name": "sfclay_column_exact",
       "parameter_size": 32,
       "resource_count": 46,
-      "shader_hash": "9d0cbcc3e185859357ae02d3fed35925dc82aa23401b9924149ce0487f63fb46",
+      "shader_hash": "9018cd74ef18cdacd4a1ff4469d6ae7214b6c8aa249d15d8a6a57bfa07517eb5",
       "threads_per_group": 128
     },
     {
