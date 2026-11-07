@@ -6,17 +6,17 @@
       "size": 188592
     },
     "woof_default.metallib": {
-      "sha256": "466ab6c306c17edb5e02763ce1f4366b8580634e3a0587d2f34c166d4608a6af",
-      "size": 38137577
+      "sha256": "9be762bb81b38264c9a293905d64265077148d2cc523bee7e26315275b800008",
+      "size": 38327463
     },
     "woof_exact.metallib": {
-      "sha256": "edd533c9eedbc04eb23bce97ab7bd7e960569dd572841546b0df326b87b33231",
-      "size": 34656812
+      "sha256": "84fbb5fb6df6f1b4060ae006a663f19baab5d544560f23b77c2c68f84cee37b5",
+      "size": 34846682
     }
   },
-  "implementation_file_count": 2081,
-  "implementation_sha256": "b3158ca1f229c51f58a23ef9dfb66137b1e9b3057a672ebbe853effce057bad2",
-  "metal_inputs_sha256": "88858df85e8561c0b0d04f32050ca4f60c49297ea03360a4d06eb3bf9113ee8a",
+  "implementation_file_count": 2092,
+  "implementation_sha256": "850a74b686be2ac439e364c5fab98178f3bb93489317103d73de4bf1eba429b9",
+  "metal_inputs_sha256": "4e6a20f95ec2bd8a277a4c59fe378927e6dbb1405999d2b886cab2345788dc66",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -24,8 +24,8 @@
     "binding": "sha256-build-inputs",
     "files": {
       "tools/build_metal_backend.py": {
-        "sha256": "a1a1f29a0425d22dda2b7d8358beeb5b4448dec848ab6a4c035f2f3ef27a2615",
-        "size": 140852
+        "sha256": "d3a682b8609c147af6a640f4ec496ad830337ac02a1bfa0cb4bc07a169848d8a",
+        "size": 140928
       },
       "tools/generate_metal_kernel_signatures.py": {
         "sha256": "b481af76b47cba1b5f0d5a06a920e983a4e6510339db1b0f123696afaefffd4f",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "aec63af8495cd73240261e42bd8213b1d979d0a1cc27d70988a9880a46403c51",
-        "size": 4729103
+        "sha256": "89280bc2ff9b616d2a08c73c0396d671a936eaaa683b880f17b3039eabf8684b",
+        "size": 4743458
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "747bce6352c82ea8f29eeb207e919428b8375a1281ff3033ecf543bc7ee2169b",
@@ -3474,6 +3474,14 @@
       "woof/metal/shaders/wdm6_reflectivity.metal": {
         "sha256": "e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23",
         "size": 15913
+      },
+      "woof/metal/shaders/wind_farm.metal": {
+        "sha256": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+        "size": 24908
+      },
+      "woof/metal/shaders/wind_farm_support.metalh": {
+        "sha256": "555e5037eec7ad719acece95e52f4b54f4a8070e7f809aa34cf8cd237730f2c2",
+        "size": 9060
       },
       "woof/metal/shaders/wrf_exact_acoustic_advance_mu_th.metal": {
         "sha256": "673c25d0154e3d347b582fa012d313ec7dcfcc452b7d75c15a3b8359250fdf6b",
@@ -7147,6 +7155,38 @@
         "sha256": "7117537d5be771db88618815cf88f46c1f1cdbdd9af44300b4e6310cc788aa87",
         "size": 1204
       },
+      "woof/metal/signature_fragments/wind_fitch_sparse.json": {
+        "sha256": "a9ad3df2ae30602c548b3edae9c18c534310521d07a47c93830a2b96fbf88bc8",
+        "size": 3585
+      },
+      "woof/metal/signature_fragments/wind_gad.json": {
+        "sha256": "adca78453c2e3c1b9bd716805fbe60ad0540982b038faead9ca50c9ffc3df606",
+        "size": 3312
+      },
+      "woof/metal/signature_fragments/wind_locate.json": {
+        "sha256": "3814ae099b20501f473b48be76f7b04656e55dd295e77c34f0ab118279c74c16",
+        "size": 1232
+      },
+      "woof/metal/signature_fragments/wind_locate_cells.json": {
+        "sha256": "d2137bdab639707372209f18505972a7a428f1a9ed067c014f1ca7c53d77b2c2",
+        "size": 1199
+      },
+      "woof/metal/signature_fragments/wind_power.json": {
+        "sha256": "dd3a8bed913eb378735dcc56e6cf18edb88ca8b8839d395d0f64a96ea2f05c10",
+        "size": 1334
+      },
+      "woof/metal/signature_fragments/wind_sample.json": {
+        "sha256": "8f1adc352bfc71c89457c90c132a9752c5544b67c4660b6e3612ed40e9ffcf79",
+        "size": 2263
+      },
+      "woof/metal/signature_fragments/wind_source.json": {
+        "sha256": "0bf09ba3327e9f872864d352f7181fa7f0c6c98b4fbf6a052c209eae2d958da8",
+        "size": 3716
+      },
+      "woof/metal/signature_fragments/wind_wake.json": {
+        "sha256": "07ba9afec18416be9f918e00b9a68d0ab3414e61007b35a03cc25561f9256aa8",
+        "size": 1210
+      },
       "woof/metal/signature_fragments/wrf_exact_acoustic_advance_mu_th.json": {
         "sha256": "9ebfdf29e95fcc9ba1d327aa948a910485f783bd275c7b8bd3eaf694db563ae9",
         "size": 5992
@@ -7536,6 +7576,6 @@
         "size": 296
       }
     },
-    "sha256": "88858df85e8561c0b0d04f32050ca4f60c49297ea03360a4d06eb3bf9113ee8a"
+    "sha256": "4e6a20f95ec2bd8a277a4c59fe378927e6dbb1405999d2b886cab2345788dc66"
   }
 }

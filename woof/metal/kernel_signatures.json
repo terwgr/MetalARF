@@ -9277,188 +9277,6 @@
       "arithmetic_policies": [
         "default"
       ],
-      "cuda_source": "woof/globe/dynamics.py",
-      "cuda_symbol": "MoistHybridModel._floor_grid_tracers",
-      "layout_version": 1,
-      "module": "global_tracer_extrema_fragment",
-      "name": "global_tracer_extrema_fragment",
-      "parameters": [
-        [
-          "count",
-          "int32"
-        ],
-        [
-          "chunk_size",
-          "int32"
-        ],
-        [
-          "partial_count",
-          "int32"
-        ]
-      ],
-      "resources": [
-        [
-          "qc",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "qr",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "qi",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "qs",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "qg",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "nc",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "nr",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "ni",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "ns",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "ng",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "partial_extrema",
-          "float64_bits",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "qc": [
-          [
-            "any_1d"
-          ]
-        ],
-        "qr": [
-          [
-            "any_1d"
-          ]
-        ],
-        "qi": [
-          [
-            "any_1d"
-          ]
-        ],
-        "qs": [
-          [
-            "any_1d"
-          ]
-        ],
-        "qg": [
-          [
-            "any_1d"
-          ]
-        ],
-        "nc": [
-          [
-            "any_1d"
-          ]
-        ],
-        "nr": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ni": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ns": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ng": [
-          [
-            "any_1d"
-          ]
-        ],
-        "partial_extrema": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "source": "woof/metal/shaders/global_tracer_extrema_fragment.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/globe/dynamics.py",
-      "cuda_symbol": "MoistHybridModel._floor_grid_tracers",
-      "layout_version": 1,
-      "module": "global_tracer_extrema_finalize_fragment",
-      "name": "global_tracer_extrema_finalize_fragment",
-      "parameters": [
-        [
-          "partial_count",
-          "int32"
-        ]
-      ],
-      "resources": [
-        [
-          "partial_extrema",
-          "float64_bits",
-          "read"
-        ],
-        [
-          "extrema",
-          "float64_bits",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "partial_extrema": [
-          [
-            "any_1d"
-          ]
-        ],
-        "extrema": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "source": "woof/metal/shaders/global_tracer_extrema_finalize_fragment.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
       "cuda_source": "woof/globe/physics/reference.py",
       "cuda_symbol": "ReferencePhysics._surface_radiation_fluxes",
       "layout_version": 1,
@@ -285287,6 +285105,1106 @@
       "layout_version": 1,
       "arithmetic_policies": [
         "default"
+      ]
+    },
+    {
+      "name": "wind_fitch_sparse",
+      "cuda_symbol": "wind_fitch_sparse",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "cols",
+          "int32",
+          "read"
+        ],
+        [
+          "ptr",
+          "int32",
+          "read"
+        ],
+        [
+          "ids",
+          "int32",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "limits",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ],
+        [
+          "du",
+          "float",
+          "read_write"
+        ],
+        [
+          "dv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qke",
+          "float",
+          "read_write"
+        ],
+        [
+          "adv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hub",
+          "float",
+          "read_write"
+        ],
+        [
+          "tke_rate",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "area",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "factor",
+          "float32"
+        ],
+        [
+          "hubnormalize",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "cols": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ids": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "limits": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "msf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "du": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tke_rate": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_gad",
+      "cuda_symbol": "wind_gad",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "ptr",
+          "int32",
+          "read"
+        ],
+        [
+          "ids",
+          "int32",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "blades",
+          "float",
+          "read"
+        ],
+        [
+          "polars",
+          "float",
+          "read"
+        ],
+        [
+          "pm",
+          "int32",
+          "read"
+        ],
+        [
+          "hub",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "du",
+          "float",
+          "read_write"
+        ],
+        [
+          "dv",
+          "float",
+          "read_write"
+        ],
+        [
+          "dw",
+          "float",
+          "read_write"
+        ],
+        [
+          "failures",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "sigma",
+          "float32"
+        ],
+        [
+          "tol",
+          "float32"
+        ],
+        [
+          "maxiter",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "ptr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ids": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "blades": [
+          [
+            "any_1d"
+          ]
+        ],
+        "polars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "du": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "failures": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_locate",
+      "cuda_symbol": "wind_locate",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "ll",
+          "float",
+          "read"
+        ],
+        [
+          "lat",
+          "float",
+          "read"
+        ],
+        [
+          "lon",
+          "float",
+          "read"
+        ],
+        [
+          "xy",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "ll": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lon": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xy": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_locate_cells",
+      "cuda_symbol": "wind_locate_cells",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "ll",
+          "float",
+          "read"
+        ],
+        [
+          "lat",
+          "float",
+          "read"
+        ],
+        [
+          "lon",
+          "float",
+          "read"
+        ],
+        [
+          "indices",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "ll": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lon": [
+          [
+            "any_1d"
+          ]
+        ],
+        "indices": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_power",
+      "cuda_symbol": "wind_power",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "wake",
+          "float",
+          "read"
+        ],
+        [
+          "hub",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "sd",
+          "float32"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wake": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_sample",
+      "cuda_symbol": "wind_sample",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "col",
+          "int32",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "limits",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "km",
+          "float",
+          "read"
+        ],
+        [
+          "hub",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "col": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "limits": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "km": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_source",
+      "cuda_symbol": "wind_source",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "ptr",
+          "int32",
+          "read"
+        ],
+        [
+          "ids",
+          "int32",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "limits",
+          "float",
+          "read"
+        ],
+        [
+          "hub",
+          "float",
+          "read"
+        ],
+        [
+          "wake",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ],
+        [
+          "du",
+          "float",
+          "read_write"
+        ],
+        [
+          "dv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qke",
+          "float",
+          "read_write"
+        ],
+        [
+          "adv",
+          "float",
+          "read_write"
+        ],
+        [
+          "tke_rate",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "scheme",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "area",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "factor",
+          "float32"
+        ],
+        [
+          "sigma0factor",
+          "float32"
+        ],
+        [
+          "sd",
+          "float32"
+        ],
+        [
+          "hubnormalize",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "ptr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ids": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "limits": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wake": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "msf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "du": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qke": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tke_rate": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "wind_wake",
+      "cuda_symbol": "wind_wake",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "h",
+          "float",
+          "read"
+        ],
+        [
+          "speed",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "kw",
+          "float32"
+        ],
+        [
+          "maxd",
+          "float32"
+        ],
+        [
+          "sd",
+          "float32"
+        ],
+        [
+          "superposition",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "speed": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
       ]
     }
   ],

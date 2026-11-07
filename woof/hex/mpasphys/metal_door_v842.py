@@ -28,7 +28,7 @@ OPTIONS = frozenset({
     'time_integration_order', 'acoustic_substeps', 'monotonic',
     'streams', 'stream_list_directory', 'history_every_minutes',
     'checkpoint_hours', 'restart_from', 'out', 'scratch', 'receipt',
-    'init_source', 'repo', 'stop_on_refusal',
+    'init_source', 'repo', 'stop_on_refusal', 'wind_farms',
 })
 
 _UNAVAILABLE_STREAM_FIELDS = frozenset({
@@ -163,6 +163,10 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
             output = MetalPhysicsStreams(session, streams, out, final_time=datetime.strptime(stop, '%Y-%m-%d_%H:%M:%S'))
             output.first_frame_from_first_call = session.config.mode == 'correct' and moving is None
             session.output_streams = output
+            from ..wind_farm import attach_metal_native
+            wind = attach_metal_native(arguments, session, output, dt=dt)
+            if wind is not None:
+                receipt['wind_farms'] = json.loads(wind.metadata())
             output.attrs['backend'] = 'metal'
             receipt['output_capture_transport'] = 'published native host pool words; synchronous Metal download'
             try:

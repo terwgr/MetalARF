@@ -1,0 +1,145 @@
+{
+  "kernels": [
+    {
+      "name": "wind_sample",
+      "cuda_symbol": "wind_sample",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "col",
+          "int32",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "limits",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "km",
+          "float",
+          "read"
+        ],
+        [
+          "hub",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "col": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "limits": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "km": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    }
+  ]
+}

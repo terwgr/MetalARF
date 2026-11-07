@@ -1019,38 +1019,6 @@
       "arithmetic_policies": [
         "default"
       ],
-      "cuda_source": "woof/globe/dynamics.py",
-      "cuda_symbol": "MoistHybridModel._floor_grid_tracers",
-      "layout_hash": "29516f05c24e64854ae1c7fead49d92675aeb4e03648b160deebf940d08f3075",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/global_tracer_extrema_fragment.metal",
-      "module": "global_tracer_extrema_fragment",
-      "name": "global_tracer_extrema_fragment",
-      "parameter_size": 12,
-      "resource_count": 11,
-      "shader_hash": "7fa168362e2254d0b7892e89a5b8f447c1c6e8cbc974a796a28a2746773058cb",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/globe/dynamics.py",
-      "cuda_symbol": "MoistHybridModel._floor_grid_tracers",
-      "layout_hash": "ffc285bfd55a30e1cf620c3672d8240f21f4c74a75463bc55942cea43b2c1167",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/global_tracer_extrema_finalize_fragment.metal",
-      "module": "global_tracer_extrema_finalize_fragment",
-      "name": "global_tracer_extrema_finalize_fragment",
-      "parameter_size": 4,
-      "resource_count": 2,
-      "shader_hash": "658c26daf24cd3e73c8a99848c0ac12f1b48733c96f38eb60fac5a06dfafcc5b",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
       "cuda_source": "woof/globe/physics/reference.py",
       "cuda_symbol": "ReferencePhysics._surface_radiation_fluxes",
       "layout_hash": "1a5ce5dcbaf5a9e62dc3305cfe9a8df6ad97b219d7ebc2b74b45d42149ed8f21",
@@ -28469,6 +28437,142 @@
       "parameter_size": 40,
       "resource_count": 5,
       "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_fitch_sparse",
+      "layout_hash": "57e87809b4171523bdeee1dcabe619318af49c9b9aafbf3c288e6588d12db0b3",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_fitch_sparse",
+      "parameter_size": 28,
+      "resource_count": 18,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_gad",
+      "layout_hash": "dcb084af849406787b53c3f682de93b4d84984b770c2aeb7f1e1917ddb3952fc",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_gad",
+      "parameter_size": 32,
+      "resource_count": 16,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_locate",
+      "layout_hash": "d033b9f3f26688ff620a7eca4ac97e6cce826e8e4b3663ad8109be3002b6d3f7",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_locate",
+      "parameter_size": 12,
+      "resource_count": 4,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_locate_cells",
+      "layout_hash": "22b123ffd7f908ea7285e7fe3400de191494a4f15dd795923e706f79bc53253b",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_locate_cells",
+      "parameter_size": 8,
+      "resource_count": 4,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_power",
+      "layout_hash": "e06c48dd09c900850f651d9ef9e6632fa58b4ec114d744064fb1840bb03e8a10",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_power",
+      "parameter_size": 8,
+      "resource_count": 5,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_sample",
+      "layout_hash": "7c1aa730dafb95810f562dc2273b89575bd80ae0c918030192a880f5a2cf5f3c",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_sample",
+      "parameter_size": 12,
+      "resource_count": 11,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_source",
+      "layout_hash": "4e1c6340e4d53c4a66573229b0c9a74195b3ec12c776e60c1cb41b3e2b81cf59",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_source",
+      "parameter_size": 48,
+      "resource_count": 17,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ],
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "cuda_symbol": "wind_wake",
+      "layout_hash": "779ddc7da6fb76075f37cfca7433464d3918d4c01bdf8d85d96bad73f44f2563",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wind_farm.metal",
+      "module": "wind_farm",
+      "name": "wind_wake",
+      "parameter_size": 20,
+      "resource_count": 3,
+      "shader_hash": "59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737",
       "threads_per_group": 128
     }
   ],

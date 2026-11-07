@@ -1,0 +1,178 @@
+#ifndef WOOF_WIND_FARM_SUPPORT
+#define WOOF_WIND_FARM_SUPPORT
+#include "sfire_support.metalh"
+#include "soft_fdlibm64_trig.metalh"
+
+static inline F wf_hypotf(F x, F y) {
+    Soft8 a = Soft8(x), b = Soft8(y);
+    return F(SD8(soft64_sqrt((a*a+b*b).bits)));
+}
+// Scalar libm graph used by the host-built turbine source. Library FMAs
+// remain fused even though the calling CUDA statements do not contract.
+static inline Soft8 wf_fma(Soft8 a, Soft8 b, Soft8 c) {
+    return SD8(soft64_fma(a.bits, b.bits, c.bits));
+}
+// Turbine trig arguments come from latitude or atan2, hence |x| < 4.
+static inline F wf_trig(F x, bool cosine) {
+    if (cosine) x=fabsf(x);
+    if (fabsf(x)<SF(0x39800000u))
+        return cosine ? (SF(0x4c800000u)-x)*SF(0x32800000u)
+                      : __fmaf_rn(x,SF(0x4c800000u),x)*SF(0x32800000u);
+    Soft8 z=Soft8(x),scaled=z*SD8(0x3fe45f306dc9c883ul);
+    int n=int(scaled);
+    Soft8 rem=scaled-Soft8(n),midpoint=Soft8(.5f);
+    if (rem>midpoint || (rem==midpoint && (n&1))) ++n;
+    if (rem<-midpoint || (rem==-midpoint && (n&1))) --n;
+    z=wf_fma(-Soft8(n),SD8(0x3ff921fb54442d18ul),z);
+    Soft8 t=z*z,r;
+    if (((n+int(cosine))&1)!=0) {
+        Soft8 p=wf_fma(t,SD8(0x3ef99169fc938f4aul),SD8(0xbf56c07f16945df4ul));
+        Soft8 q=wf_fma(t,SD8(0x3fa55553c7899699ul),SD8(0xbfdffffffcb82e97ul));
+        r=wf_fma(t,wf_fma(t*t,p,q),Soft8(1));
+    } else {
+        Soft8 cube=z*t;
+        Soft8 p=wf_fma(t,SD8(0xbf29943e0fc4818ful),SD8(0x3f811073afd145ebul));
+        Soft8 q=wf_fma(cube,SD8(0xbfc555545268a02aul),z);
+        r=wf_fma(t*cube,p,q);
+    }
+    if (((n+int(cosine))>>1)&1) r=-r;
+    return F(r);
+}
+static inline F wf_sinf(F x) { return wf_trig(x,false); }
+static inline F wf_cosf(F x) { return wf_trig(x,true); }
+// Adjacent sine/cosine calls use the host compiler's paired routine.
+static inline F wf_pair_trig(F x, bool cosine) {
+    if (fabsf(x)<SF(0x39800000u)) return wf_trig(x,cosine);
+    Soft8 scaled=Soft8(x)*SD8(0x3fe45f306dc9c883ul);
+    int n=int(scaled);
+    Soft8 rem=scaled-Soft8(n),midpoint=Soft8(.5f);
+    if (rem>midpoint || (rem==midpoint && (n&1))) ++n;
+    if (rem<-midpoint || (rem==-midpoint && (n&1))) --n;
+    rem=scaled-Soft8(n);
+    Soft8 t=rem*rem,r;
+    if (((n+int(cosine))&1)!=0) {
+        Soft8 a=wf_fma(t,t+SD8(0xc020bc0396540c13ul),SD8(0x401d78212789bc11ul));
+        Soft8 b=wf_fma(t,t+SD8(0xc02d6f5ade6c8c37ul),SD8(0x4062c6b9c7f88fa0ul));
+        r=(SD8(0x3f4d9c364e9721d5ul)*a)*b;
+    } else {
+        Soft8 a=wf_fma(t,t+SD8(0xc02c3d3ee4f8713ful),SD8(0x40444921a30f0d80ul));
+        Soft8 b=wf_fma(t,t+SD8(0xc02ef09ab49e3a5bul),SD8(0x406e97264e36bd93ul));
+        r=((rem*SD8(0x3f24bc899499342cul))*a)*b;
+    }
+    if (((n+int(cosine))>>1)&1) r=-r;
+    return F(r);
+}
+constant ulong wf_asin_large[6] = {0x3f5ee93cb2957053ul,0x3f6140186da86810ul,
+    0x3f807e5fa0a35d8bul,0x3f9b21ec14e82132ul,0x3fbe2b8cc3173f9eul,0x3ff6a09e64c7c6e1ul};
+constant ulong wf_asin_small[6] = {0x3fa15e1a450e8b98ul,0x3f9169f766637e01ul,
+    0x3f9fe10bae9583baul,0x3fa6d55e6da5eec2ul,0x3fb3334481d0bc2ful,0x3fc555554d58f2f9ul};
+static inline Soft8 wf_asin_poly(Soft8 t, constant ulong *c) {
+    Soft8 a=wf_fma(t,SD8(c[0]),SD8(c[1]));
+    Soft8 b=wf_fma(t,SD8(c[2]),SD8(c[3]));
+    Soft8 d=wf_fma(t,SD8(c[4]),SD8(c[5]));
+    Soft8 tt=t*t;
+    return wf_fma(tt,wf_fma(tt,a,b),d);
+}
+static inline F wf_asinf(F x) {
+    F ax=fabsf(x);
+    if (ax==F(1.f)) return F::lit(0x3fc90fdau | (x.bits & 0x80000000u));
+    if (ax>F(1.f)) return F::lit(0x7fc00000u);
+    if (ax>F(.5f)) {
+        Soft8 t=Soft8(F(1.f)-ax);
+        Soft8 r=wf_fma(-wf_asin_poly(t,wf_asin_large),SD8(soft64_sqrt(t.bits)),SD8(0x3ff921fb54442d18ul));
+        F y=F(r);return F::lit(y.bits | (x.bits & 0x80000000u));
+    }
+    if (ax < SF(0x32000000u)) return __fmaf_rn(x,SF(0x4d000000u),x)*SF(0x32000000u);
+    Soft8 z=Soft8(x),t=z*z;
+    return F(wf_fma(z,t*wf_asin_poly(t,wf_asin_small),z));
+}
+static inline F wf_acosf(F x) {
+    F ax=fabsf(x);
+    if (ax==F(1.f)) return x>F(0.f) ? F(0.f) : SF(0x40490fdau);
+    if (ax>F(1.f)) return F::lit(0x7fc00000u);
+    if (ax>F(.5f)) {
+        Soft8 t=Soft8(F(1.f)-ax),root=SD8(soft64_sqrt(t.bits));
+        Soft8 p=wf_asin_poly(t,wf_asin_large);
+        return F(x>F(0.f) ? p*root : wf_fma(-p,root,SD8(0x400921fb54442d18ul)));
+    }
+    Soft8 z=Soft8(x);
+    if (ax>=SF(0x3b000000u)) {
+        Soft8 t=z*z;z=wf_fma(z,t*wf_asin_poly(t,wf_asin_small),z);
+    }
+    return F(SD8(0x3ff921fb54442d18ul)-z);
+}
+static inline F wf_remainderf(F x, F y) {
+    // Geographic differences are bounded by 360 degrees; ties round to even.
+    float q = rint(as_type<float>((x/y).bits));
+    return x-y*F(q);
+}
+constant ulong wf_atan_coeff[9] = {
+    0x4002609372076e2cul,0xc00792d5bf17c0bcul,0x40038f4c070b63c1ul,
+    0x4015e43168d7c2b6ul,0x3f953db49b9fcf6bul,0xc013e370146726b3ul,
+    0x400e4fa479729042ul,0x401ae0fb08f2dc00ul,0x3f680bc0fe23203dul};
+static inline Soft8 wf_atan_poly(Soft8 z) {
+    Soft8 t=z*z;
+    Soft8 a=wf_fma(t,t+SD8(wf_atan_coeff[0]),SD8(wf_atan_coeff[2]));
+    Soft8 b=wf_fma(t,t+SD8(wf_atan_coeff[1]),SD8(wf_atan_coeff[3]));
+    Soft8 c=wf_fma(t,t+SD8(wf_atan_coeff[4]),SD8(wf_atan_coeff[6]));
+    Soft8 d=wf_fma(t,t+SD8(wf_atan_coeff[5]),SD8(wf_atan_coeff[7]));
+    return ((a*c)*SD8(wf_atan_coeff[8]))*((b*d)*z);
+}
+static inline F wf_atan2f(F y, F x) {
+    const Soft8 pi=SD8(0x400921fb54442d18ul),halfpi=SD8(0x3ff921fb54442d18ul);
+    if (isnan(x)||isnan(y)) return x+y;
+    if ((x.bits & 0x7fffffffu)==0u && (y.bits & 0x7fffffffu)==0u)
+        return (x.bits>>31) ? F::lit((y.bits&0x80000000u)|0x40490fdbu) : y;
+    if (fabsf(y)>fabsf(x)) {
+        Soft8 p=wf_atan_poly(Soft8(x)/Soft8(y));
+        return F((y.bits>>31 ? -halfpi : halfpi)-p);
+    }
+    Soft8 p=wf_atan_poly(Soft8(y)/Soft8(x));
+    if (x.bits>>31) p=p+(y.bits>>31 ? -pi : pi);
+    return F(p);
+}
+constant ulong wf_exp_table[128] = {
+0x3ff0000000000000ul,0x3feff63da9fb3335ul,0x3fefec9a3e778061ul,0x3fefe315e86e7f85ul,
+0x3fefd9b0d3158574ul,0x3fefd06b29ddf6deul,0x3fefc74518759bc8ul,0x3fefbe3ecac6f383ul,
+0x3fefb5586cf9890ful,0x3fefac922b7247f7ul,0x3fefa3ec32d3d1a2ul,0x3fef9b66affed31bul,
+0x3fef9301d0125b51ul,0x3fef8abdc06c31ccul,0x3fef829aaea92de0ul,0x3fef7a98c8a58e51ul,
+0x3fef72b83c7d517bul,0x3fef6af9388c8deaul,0x3fef635beb6fcb75ul,0x3fef5be084045cd4ul,
+0x3fef54873168b9aaul,0x3fef4d5022fcd91dul,0x3fef463b88628cd6ul,0x3fef3f49917ddc96ul,
+0x3fef387a6e756238ul,0x3fef31ce4fb2a63ful,0x3fef2b4565e27cddul,0x3fef24dfe1f56381ul,
+0x3fef1e9df51fdee1ul,0x3fef187fd0dad990ul,0x3fef1285a6e4030bul,0x3fef0cafa93e2f56ul,
+0x3fef06fe0a31b715ul,0x3fef0170fc4cd831ul,0x3feefc08b26416fful,0x3feef6c55f929ff1ul,
+0x3feef1a7373aa9cbul,0x3feeecae6d05d866ul,0x3feee7db34e59ff7ul,0x3feee32dc313a8e5ul,
+0x3feedea64c123422ul,0x3feeda4504ac801cul,0x3feed60a21f72e2aul,0x3feed1f5d950a897ul,
+0x3feece086061892dul,0x3feeca41ed1d0057ul,0x3feec6a2b5c13cd0ul,0x3feec32af0d7d3deul,
+0x3feebfdad5362a27ul,0x3feebcb299fddd0dul,0x3feeb9b2769d2ca7ul,0x3feeb6daa2cf6642ul,
+0x3feeb42b569d4f82ul,0x3feeb1a4ca5d920ful,0x3feeaf4736b527daul,0x3feead12d497c7fdul,
+0x3feeab07dd485429ul,0x3feea9268a5946b7ul,0x3feea76f15ad2148ul,0x3feea5e1b976dc09ul,
+0x3feea47eb03a5585ul,0x3feea34634ccc320ul,0x3feea23882552225ul,0x3feea155d44ca973ul,
+0x3feea09e667f3bcdul,0x3feea012750bdabful,0x3fee9fb23c651a2ful,0x3fee9f7df9519484ul,
+0x3fee9f75e8ec5f74ul,0x3fee9f9a48a58174ul,0x3fee9feb564267c9ul,0x3feea0694fde5d3ful,
+0x3feea11473eb0187ul,0x3feea1ed0130c132ul,0x3feea2f336cf4e62ul,0x3feea427543e1a12ul,
+0x3feea589994cce13ul,0x3feea71a4623c7adul,0x3feea8d99b4492edul,0x3feeaac7d98a6699ul,
+0x3feeace5422aa0dbul,0x3feeaf3216b5448cul,0x3feeb1ae99157736ul,0x3feeb45b0b91ffc6ul,
+0x3feeb737b0cdc5e5ul,0x3feeba44cbc8520ful,0x3feebd829fde4e50ul,0x3feec0f170ca07baul,
+0x3feec49182a3f090ul,0x3feec86319e32323ul,0x3feecc667b5de565ul,0x3feed09bec4a2d33ul,
+0x3feed503b23e255dul,0x3feed99e1330b358ul,0x3feede6b5579fdbful,0x3feee36bbfd3f37aul,
+0x3feee89f995ad3adul,0x3feeee07298db666ul,0x3feef3a2b84f15fbul,0x3feef9728de5593aul,
+0x3feeff76f2fb5e47ul,0x3fef05b030a1064aul,0x3fef0c1e904bc1d2ul,0x3fef12c25bd71e09ul,
+0x3fef199bdd85529cul,0x3fef20ab5fffd07aul,0x3fef27f12e57d14bul,0x3fef2f6d9406e7b5ul,
+0x3fef3720dcef9069ul,0x3fef3f0b555dc3faul,0x3fef472d4a07897cul,0x3fef4f87080d89f2ul,
+0x3fef5818dcfba487ul,0x3fef60e316c98398ul,0x3fef69e603db3285ul,0x3fef7321f301b460ul,
+0x3fef7c97337b9b5ful,0x3fef864614f5a129ul,0x3fef902ee78b3ff6ul,0x3fef9a51fbc74c83ul,
+0x3fefa4afa2a490daul,0x3fefaf482d8e67f1ul,0x3fefba1bee615a27ul,0x3fefc52b376bba97ul,
+0x3fefd0765b6e4540ul,0x3fefdbfdad9cbe14ul,0x3fefe7c1819e90d8ul,0x3feff3c22b8f71f1ul
+};
+static inline F wf_expf(F x) {
+    if (((x.bits>>23)&255u)>=134u) return x<F(0.f) ? F(0.f) : x*SF(0x7f7fffffu);
+    const Soft8 scale=SD8(0x40671547652b82feul),shift=SD8(0x4338000000000000ul);
+    Soft8 z=Soft8(x),n=wf_fma(scale,z,shift);
+    ulong i=n.bits;
+    Soft8 r=wf_fma(scale,z,-(n-shift));
+    Soft8 s=SD8(wf_exp_table[i&127ul]+(i<<45));
+    Soft8 p=wf_fma(SD8(0x3eeebfbdff30d656ul),r,SD8(0x3f762e4453e10daeul));
+    return F(wf_fma(p*r,s,s));
+}
+#endif

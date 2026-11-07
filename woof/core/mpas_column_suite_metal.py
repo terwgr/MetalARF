@@ -90,6 +90,8 @@ class MetalMpasColumnSuitePhysics(MetalMpasColumnBatchPhysics):
             if area.shape != (ncol,) or not np.all(np.isfinite(area)) or np.any(area <= 0):
                 raise ValueError("cell_area_m2 must be finite and positive per column")
         super().__init__(array_module=array_module, xice_threshold=threshold, **kwargs)
+        _seed_ruc_fractional_seaice_optics_metal(
+            self._driver, self._cfg, kwargs['latitude_deg'], kwargs['start_time'])
         from woof.config import mynn_mixed_number_species, soil_layer_count
         if soil_layer_count(self._cfg) != n_soil:
             raise ValueError("suite soil geometry differs from the selected land surface")
@@ -191,3 +193,42 @@ def run_mpas_column_suite_metal(**kwargs):
 
 
 __all__ = ["MetalMpasColumnSuitePhysics", "run_mpas_column_suite_metal"]
+
+
+def _seed_ruc_fractional_seaice_optics_metal(driver, cfg, latitude_deg, start_time):
+    """Apply the shared column seam's RUC cold-start ice optics."""
+    if cfg.sf_surface_physics != 3 or cfg.fractional_seaice != 1:
+        return
+    from woof.core.landuse import load_landuse_table
+    from woof.core.ruc import ruc_ice_category
+    from woof.hex.mpasphys.metal_noah_v842 import initialize_landuse
+    xp = driver.state._array_module
+    fields, params = driver.fields, driver.ruc_params
+    table = load_landuse_table(params.dataset_identifier)
+    isice = ruc_ice_category(params.vegetation)
+    xice = fields['xice'].to_numpy().ravel()
+    n = xice.size
+    packed = np.zeros((n, 14), np.float32)
+    packed[:, 0] = np.asarray(latitude_deg).ravel()
+    packed[:, 3] = xice
+    packed[:, 13] = params.xice_threshold
+    if 'embck' not in fields:
+        fields['embck'] = xp.asarray(np.full(fields['xice'].shape, .95, np.float32))
+    targets = dict(albbck=4, embck=7, albedo=8, emiss=9)
+    for name, column in targets.items():
+        packed[:, column] = fields[name].to_numpy().ravel()
+    integers = np.zeros((n, 9), np.int32)
+    integers[:, 0] = integers[:, 2] = integers[:, 3] = isice
+    integers[:, 1] = start_time.timetuple().tm_yday
+    integers[:, 4] = xice < np.float32(params.xice_threshold)
+    integers[:, 6] = 1
+    tables = np.zeros((7, 12, 100), np.float32)
+    for season in range(12):
+        tables[:, season, :table.lucats] = table.values[min(season, table.luseas-1)].T
+    device = xp.asarray(packed)
+    status = initialize_landuse(device, xp.asarray(integers), xp.asarray(tables.ravel()))
+    if np.any(status.to_numpy()):
+        raise ValueError('RUC cold-start sea-ice category is outside the land-use table')
+    result = device.to_numpy()
+    for name, column in targets.items():
+        fields[name][...] = xp.asarray(np.ascontiguousarray(result[:, column].reshape(fields[name].shape)))

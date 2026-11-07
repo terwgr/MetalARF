@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from collections import deque
 import numpy as np
-import cupy as cp
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
 from woof.wind_table import read_table
 from woof.core.kernels import get_kernel
 
@@ -51,7 +54,10 @@ class WindCost:
 
 
 class WindFarm:
-    def __init__(self, cfg, shape, *, latitude=None, longitude=None, msf=None, z_interface=None, prepared=None, cell_layout=False):
+    def __init__(self, cfg, shape, *, latitude=None, longitude=None, msf=None, z_interface=None, prepared=None, cell_layout=False,
+                 _array_module=None, _kernel_loader=None, _cost=None):
+        cp = _array_module if _array_module is not None else globals()["cp"]
+        get_kernel = _kernel_loader or globals()["get_kernel"]
         self.data, self.table_sha256 = prepared or read_table(cfg.wind_farm_table, cfg.wind_farm_scheme)
         self.scheme = "fitch" if cfg.wind_farm_scheme == "auto" else cfg.wind_farm_scheme
         self.shape = tuple(shape)
@@ -138,7 +144,7 @@ class WindFarm:
             if bool(cp.any(h < .5*(zi[0, self.col]+zi[1, self.col]))):
                 raise ValueError("hub must be above the lowest mass level; refine vertical spacing")
         self.replay = None
-        self.cost = WindCost()
+        self.cost = _cost if _cost is not None else WindCost()
         names = ["wind_sample", "wind_gad" if self.scheme == "gad" else "wind_source"]
         if self.scheme == "jensen":
             names.extend(("wind_wake", "wind_power"))
