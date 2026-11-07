@@ -122,8 +122,8 @@ def read_table(path, scheme="fitch"):
 
 def validate_config(cfg):
     scheme = cfg.wind_farm_scheme
-    if scheme not in ("off", "fitch"):
-        raise ValueError("wind_farm_scheme supports off or fitch; other schemes lack a qualified coupled run")
+    if scheme not in SCHEMES:
+        raise ValueError(f"unknown wind_farm_scheme {scheme!r}")
     if scheme == "off":
         return
     if scheme == "auto":
@@ -137,7 +137,7 @@ def validate_config(cfg):
     if cfg.bldt != 0:
         raise ValueError("Fitch requires bldt=0: a held PBL tendency would repeat turbine momentum drag without its TKE source")
     _number(getattr(cfg, "windfarm_tke_factor", .25), "windfarm_tke_factor", nonnegative=True)
-    if cfg.bl_pbl_physics != 5:
+    if scheme != "gad" and cfg.bl_pbl_physics != 5:
         raise ValueError("Fitch requires MYNN (bl_pbl_physics=5): other PBL carriers do not receive the turbine TKE source")
     if scheme == "gad" and (cfg.bl_pbl_physics != 0 or max(cfg.dx, cfg.dy) > 100 or cfg.diff_opt != 2 or cfg.km_opt not in (2, 3)):
         raise ValueError("GAD requires an LES domain: bl_pbl_physics=0, diff_opt=2, km_opt=2/3 and horizontal spacing <=100 m")

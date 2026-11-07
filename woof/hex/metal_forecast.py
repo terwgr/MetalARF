@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 
 
-def _write_metal_snapshot(runner, path, snapshot, static, *, valid_time, physics_identity):
+def _write_metal_snapshot(runner, path, snapshot, static, *, valid_time, physics_identity, wind_farms=None):
     """Use the shared history layout with the executing backend's metadata."""
     from netCDF4 import Dataset
 
@@ -28,6 +28,15 @@ def _write_metal_snapshot(runner, path, snapshot, static, *, valid_time, physics
     runner.proof.write_snapshot_netcdf(path, scheduled, static, _hash_file=False)
     with Dataset(path, "r+") as dataset:
         dataset.setncattr("source", "WOOF Hex Metal port")
+        if wind_farms is not None:
+            for name, (value, dims, units) in wind_farms.history_fields().items():
+                for dim, size in zip(dims, value.shape):
+                    if dim not in dataset.dimensions:
+                        dataset.createDimension(dim, size)
+                var = dataset.createVariable(name, 'f4', dims)
+                var[:] = value
+                var.units = units
+            dataset.setncattr('WIND_FARMS', wind_farms.metadata())
         dataset.setncattr("backend", "metal")
         dataset.setncattr("kernel_arithmetic", "metal_ordinary")
         dataset.setncattr("physics_mode", physics_identity["physics_mode"])
@@ -79,7 +88,7 @@ _IMPLEMENTED = frozenset({
     "local_timestep", "local_timestep_rates", "local_timestep_buffer_rings",
     "local_timestep_classing",
     "preflight", "preset", "stop_on_refusal", "physics_backend", "source_table",
-    "physics_suite", "physics", "orographic_statistics",
+    "physics_suite", "physics", "orographic_statistics", "wind_farms",
 })
 
 # Flags that configure CUDA machinery Metal does not have, and why.
@@ -546,6 +555,10 @@ def _run_physics(
                 rqvdynten=upload(carried["rqvdynten"]),
                 time_seconds=float(carried["time_seconds"]))
         out.mkdir()
+        if getattr(arguments, 'wind_farms', None) not in (None, '', 'off'):
+            from .wind_farm import attach_arwen
+            host['wind_farms'] = arguments.wind_farms
+            attach_arwen(backend, host, driver, output_root=out)
         if restored_physics is None:
             frames.append(_write_f000_frame(
                 runner, host, stack, static, out,
@@ -561,7 +574,8 @@ def _run_physics(
             _write_metal_snapshot(
                 runner, path, snapshot, static,
                 valid_time=valid_time + timedelta(seconds=step * dt_seconds),
-                physics_identity=backend.physics_identity)
+                physics_identity=backend.physics_identity,
+                wind_farms=getattr(backend, 'wind_farms', None))
             frames.append({"step": step, "file": path.name,
                            "valid_time": (valid_time + timedelta(
                                seconds=step * dt_seconds)).isoformat()})
@@ -778,5 +792,6 @@ def _write_f000_frame(runner: Any, host: Any, stack: Any, static: Any,
             snapshot, host["f000_start_humidity"]))
     path = out / "history.000000.nc"
     _write_metal_snapshot(runner, path, snapshot, static, valid_time=valid_time,
-                          physics_identity=stack["backend"].physics_identity)
+                          physics_identity=stack["backend"].physics_identity,
+                          wind_farms=getattr(stack["backend"], "wind_farms", None))
     return {"step": 0, "file": path.name, "valid_time": valid_time.isoformat()}

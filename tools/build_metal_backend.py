@@ -1303,6 +1303,7 @@ def build(output: Path) -> dict:
                 ("wrf_exact_diff_opt1", ROOT / "woof/metal/shaders/wrf_exact_diff_opt1.metal"),
                 ("solar_geometry", ROOT / "woof/metal/shaders/solar_geometry.metal"),
                 ("ensemble_surface_recipe_fragment", ROOT / "woof/metal/shaders/ensemble_surface_recipe_fragment.metal"),
+                ("wind_farm", ROOT / "woof/metal/shaders/wind_farm.metal"),
                 ("hex_solve_vertical_system_fragment", HEX_SOLVE_VERTICAL_SYSTEM_SHADER),
                 ("hex_acoustic_edge_update_fragment", ROOT / "woof/metal/shaders/hex_acoustic_edge_update_fragment.metal"),
                 ("hex_acoustic_postsolve_damping_fragment", ROOT / "woof/metal/shaders/hex_acoustic_postsolve_damping_fragment.metal"),

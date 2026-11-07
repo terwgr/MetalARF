@@ -81,6 +81,16 @@ class MetalMpasBlMynn:
         tf=dict(flag_qc=flags['f_qc'],flag_qi=flags['f_qi'],flag_qs=flags['f_qs'],flag_qnc=flags['f_nc'],flag_qni=flags['f_ni'],flag_qnifa=flags['f_nifa'],flag_qnwfa=flags['f_nwfa'],flag_qnbca=flags['f_nbca'],flag_ozone=flags['f_qoz'],bl_mynn_cloudmix=bool(opts.mixclouds),bl_mynn_mixqt=bool(opts.mixqt),bl_mynn_edmf_mom=bool(opts.edmf_mom),bl_mynn_mixscalars=bool(opts.mixscalars))
         result=finish_columns(f,s,constants=c,flags=tf,delt=delt,dheatopt=bool(opts.dheat_opt),rp7='RP7' in getattr(call,'corrections',()));t=result['tendencies']
         ops.post(mixing,{n:t[n] for n in ('dqv','dqc','dqi','dqs')},(flags['f_qc'],flags['f_qi'],flags['f_qs']),delt,exact_inverse='RP1' in getattr(call,'corrections',()))
+        farm = getattr(p, 'wind_farm', None)
+        if farm is not None:
+            qke = trans(f['qke1'], reverse=True)
+            rates = {name: trans(t[name], reverse=True) for name in ('du', 'dv')}
+            farm.apply_mynn({'z_interface': prep['z_p'][:nl+1], 'u': prep['u_p'][:nl],
+                'v': prep['v_p'][:nl], 'rho': prep['rho_p'][:nl]},
+                {'qke': qke, 'qke_adv': diag['qke_adv'][:nl]}, rates, step_seconds=delt)
+            trans(qke, dst=f['qke1'])
+            for name in ('du', 'dv'):
+                trans(rates[name], dst=t[name])
         # Publish only after all numerical stages complete. The enclosing
         # session transaction owns rollback if a publication operation fails.
         for native,source in (('el_pbl','el_pbl1'),('qke','qke1'),('cov','cov1'),('qsq','qsq1'),('tsq','tsq1'),('sh3d','sh1'),('sm3d','sm1'),('qc_bl','qc_bl1'),('qi_bl','qi_bl1'),('cldfrac_bl','cldfra_bl1')):trans(f[source],reverse=True,dst=diag[native][:nl])

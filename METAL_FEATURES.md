@@ -12,6 +12,24 @@ do not establish numerical acceptance for every configuration.
 
 ## Integration admission
 
+Regional wind farms run on resident Metal domains: Fitch (including automatic
+selection), EWP, Jensen and the LES generalized actuator disk (GAD). Turbine
+momentum, retained/advected MYNN TKE and turbine/farm power use the upstream
+CUDA launch order and software IEEE arithmetic. Host-source comparisons
+matched 344,282 words (three turbine repeats), including sparse and
+full-column forcing, wake superposition, GAD forces and history power reductions. Power and TKE source
+fields are published through the standard history boundary.
+
+Hex complete-globe wind farms use Fitch on spherical Voronoi cells through
+MYNN, with turbine/farm power in history. Its RUC cold-start fractional
+sea-ice optics use the existing Metal land-use kernel, matching the CUDA
+column helper. Public regional MYNN/Noah and 12-level globe MYNN/RUC runs
+published positive power and nonzero turbine TKE; the globe used the
+existing non-monotonic Metal transport. Culled regional Hex meshes retain
+an explicit refusal: outside-domain turbine ownership is not assigned, so
+nearest-cell mapping could incorrectly force boundary cells. Resident
+whole-domain ownership remains required for regional structured grids.
+
 Thompson's post-column negative vapour repair runs on Metal before moist
 physics finish. It walks each column in increasing level order and uses
 rounded binary32 operations for the neighbour mean. The fill matched all

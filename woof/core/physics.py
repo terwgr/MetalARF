@@ -1140,8 +1140,6 @@ def _metal_admission_refusals(cfg, *, radiation, cumulus, cam_ozone):
         for family, selector in selected
         if selector not in METAL_FAMILY_CAPS[family]
     ]
-    if getattr(cfg, "wind_farm_scheme", "off") != "off":
-        refusals.append("wind farms have no Metal implementation")
     from woof.correct_mode import KEY_SCOPE
     on_metal = ("wsm3_conservative_surface", "wsm5_conservative_surface",
                 "wsm7_conservative_surface", "wsm6_conservative_surface",
@@ -7002,7 +7000,7 @@ class PhysicsDriver:
                 "bl_mynn_cloud_tendency_form": cfg.bl_mynn_cloud_tendency_form}
                if cfg.bl_mynn_version != "wrf_461" else {}))
         validate_mynn_tendencies(out)
-        if self.wind_farm is not None:
+        if self.wind_farm is not None and self.wind_farm.scheme != "gad":
             self.wind_farm.apply_mynn(atmosphere, f, out, step_seconds=self.bldt_seconds)
         self.pbl_tendencies = self._couple_pbl_slot(
             cfg, out, atmosphere=atmosphere)
@@ -8848,6 +8846,8 @@ class PhysicsDriver:
             self._wrf_rthraten_coupled = True
         self._compose_tendencies(cfg)
         if self.wind_farm is not None and self.wind_farm.scheme == "gad":
+            if atmosphere is None:
+                atmosphere = _prepare_atmosphere(state)
             self.wind_farm.apply_gad(atmosphere, state, cfg, self.tendencies)
         # WRF advances the cumulus precipitation/NCA clock before its later
         # microphysics call (solve_em.F:3558-3571 vs :3689-3720).  Running it
@@ -10000,6 +10000,20 @@ def _initialize_metal_sfclay_without_cupy(
         if cfg.sf_ocean_physics == 2:
             driver.fields["_pwp_mx"][...] = state.msft
             driver.fields["_pwp_my"][...] = state.msft
+    if cfg.wind_farm_scheme != "off":
+        from woof.metal.wind_farm import attach_wind_farm
+        if getattr(state, "_tile_buffer", False) or state.p.shape != (cfg.nz, cfg.ny, cfg.nx):
+            raise ValueError("wind farms require resident whole-domain turbine ownership")
+        phb = state.phb.to_numpy()
+        zi = ((phb[:, None, None] if phb.ndim == 1 else phb)
+              + state.php.to_numpy()) / DTYPE(c.G)
+        driver.wind_farm, driver.wind_farm_detection = attach_wind_farm(
+            cfg, state.p.shape, context=state._array_module.context,
+            latitude=radiation_latitude, longitude=radiation_longitude,
+            msf=state.msft if state.has_msf else None, z_interface=zi)
+        if driver.wind_farm is not None:
+            driver.wind_farm.sample(_prepare_atmosphere(state), driver.fields)
+
     return driver
 
 

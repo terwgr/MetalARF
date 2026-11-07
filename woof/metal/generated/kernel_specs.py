@@ -489,22 +489,6 @@ GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_LAYOUT_HASH = 'ffc285bfd55a30e1cf620c3672d8240f21f4c74a75463bc55942cea43b2c1167'
 GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_SHADER_HASH = '658c26daf24cd3e73c8a99848c0ac12f1b48733c96f38eb60fac5a06dfafcc5b'
 
-GLOBAL_TRACER_EXTREMA_FRAGMENT_RESOURCES = (('qc', 'float64_bits', 'read'), ('qr', 'float64_bits', 'read'), ('qi', 'float64_bits', 'read'), ('qs', 'float64_bits', 'read'), ('qg', 'float64_bits', 'read'), ('nc', 'float64_bits', 'read'), ('nr', 'float64_bits', 'read'), ('ni', 'float64_bits', 'read'), ('ns', 'float64_bits', 'read'), ('ng', 'float64_bits', 'read'), ('partial_extrema', 'float64_bits', 'read_write'))
-GLOBAL_TRACER_EXTREMA_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
-GLOBAL_TRACER_EXTREMA_FRAGMENT_SHAPES = (('qc', (('any_1d',),)), ('qr', (('any_1d',),)), ('qi', (('any_1d',),)), ('qs', (('any_1d',),)), ('qg', (('any_1d',),)), ('nc', (('any_1d',),)), ('nr', (('any_1d',),)), ('ni', (('any_1d',),)), ('ns', (('any_1d',),)), ('ng', (('any_1d',),)), ('partial_extrema', (('any_1d',),)))
-GLOBAL_TRACER_EXTREMA_FRAGMENT_PARAM_FIELDS = [('count', 'ctypes.c_int32'), ('chunk_size', 'ctypes.c_int32'), ('partial_count', 'ctypes.c_int32')]
-GLOBAL_TRACER_EXTREMA_FRAGMENT_THREADS_PER_GROUP = 128
-GLOBAL_TRACER_EXTREMA_FRAGMENT_LAYOUT_HASH = '29516f05c24e64854ae1c7fead49d92675aeb4e03648b160deebf940d08f3075'
-GLOBAL_TRACER_EXTREMA_FRAGMENT_SHADER_HASH = '7fa168362e2254d0b7892e89a5b8f447c1c6e8cbc974a796a28a2746773058cb'
-
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_RESOURCES = (('partial_extrema', 'float64_bits', 'read'), ('extrema', 'float64_bits', 'read_write'))
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_ACCESS = ('read', 'read_write')
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_SHAPES = (('partial_extrema', (('any_1d',),)), ('extrema', (('any_1d',),)))
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_PARAM_FIELDS = [('partial_count', 'ctypes.c_int32')]
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_THREADS_PER_GROUP = 128
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_LAYOUT_HASH = 'ffc285bfd55a30e1cf620c3672d8240f21f4c74a75463bc55942cea43b2c1167'
-GLOBAL_TRACER_EXTREMA_FINALIZE_FRAGMENT_SHADER_HASH = '658c26daf24cd3e73c8a99848c0ac12f1b48733c96f38eb60fac5a06dfafcc5b'
-
 GLOBAL_GRAY_RADIATION_FRAGMENT_RESOURCES = (('epsilon', 'float64_bits', 'read'), ('emission', 'float64_bits', 'read'), ('surface_emission', 'float64_bits', 'read'), ('surface_emissivity', 'float64_bits', 'read'), ('absorbed_shortwave', 'float64_bits', 'read'), ('longwave_heating', 'float64_bits', 'read_write'), ('outgoing_longwave', 'float64_bits', 'read_write'), ('net_surface_radiation', 'float64_bits', 'read_write'))
 GLOBAL_GRAY_RADIATION_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
 GLOBAL_GRAY_RADIATION_FRAGMENT_SHAPES = (('absorbed_shortwave', (('any_1d',),)), ('emission', (('any_1d',),)), ('epsilon', (('any_1d',),)), ('longwave_heating', (('any_1d',),)), ('net_surface_radiation', (('any_1d',),)), ('outgoing_longwave', (('any_1d',),)), ('surface_emission', (('any_1d',),)), ('surface_emissivity', (('any_1d',),)))
@@ -13904,3 +13888,67 @@ NUDGING_WRF_WEIGHTS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_i
 NUDGING_WRF_WEIGHTS_THREADS_PER_GROUP = 128
 NUDGING_WRF_WEIGHTS_LAYOUT_HASH = 'eeb6fb8ba3e2d65d74e611ed7c1e2bc650342e63562ac6aa7c86597a307ca2da'
 NUDGING_WRF_WEIGHTS_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+WIND_FITCH_SPARSE_RESOURCES = (('cols', 'int32', 'read'), ('ptr', 'int32', 'read'), ('ids', 'int32', 'read'), ('t', 'float', 'read'), ('meta', 'int32', 'read'), ('curves', 'float', 'read'), ('limits', 'float', 'read'), ('zi', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('rho', 'float', 'read'), ('msf', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('qke', 'float', 'read_write'), ('adv', 'float', 'read_write'), ('hub', 'float', 'read_write'), ('tke_rate', 'float', 'read_write'))
+WIND_FITCH_SPARSE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+WIND_FITCH_SPARSE_SHAPES = (('cols', (('any_1d',),)), ('ptr', (('any_1d',),)), ('ids', (('any_1d',),)), ('t', (('any_1d',),)), ('meta', (('any_1d',),)), ('curves', (('any_1d',),)), ('limits', (('any_1d',),)), ('zi', (('any_1d',),)), ('u', (('any_1d',),)), ('v', (('any_1d',),)), ('rho', (('any_1d',),)), ('msf', (('any_1d',),)), ('du', (('any_1d',),)), ('dv', (('any_1d',),)), ('qke', (('any_1d',),)), ('adv', (('any_1d',),)), ('hub', (('any_1d',),)), ('tke_rate', (('any_1d',),)))
+WIND_FITCH_SPARSE_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('area', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('factor', 'ctypes.c_float'), ('hubnormalize', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
+WIND_FITCH_SPARSE_THREADS_PER_GROUP = 128
+WIND_FITCH_SPARSE_LAYOUT_HASH = '57e87809b4171523bdeee1dcabe619318af49c9b9aafbf3c288e6588d12db0b3'
+WIND_FITCH_SPARSE_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_GAD_RESOURCES = (('ptr', 'int32', 'read'), ('ids', 'int32', 'read'), ('t', 'float', 'read'), ('meta', 'int32', 'read'), ('curves', 'float', 'read'), ('blades', 'float', 'read'), ('polars', 'float', 'read'), ('pm', 'int32', 'read'), ('hub', 'float', 'read'), ('zi', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dw', 'float', 'read_write'), ('failures', 'int32', 'read_write'))
+WIND_GAD_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
+WIND_GAD_SHAPES = (('ptr', (('any_1d',),)), ('ids', (('any_1d',),)), ('t', (('any_1d',),)), ('meta', (('any_1d',),)), ('curves', (('any_1d',),)), ('blades', (('any_1d',),)), ('polars', (('any_1d',),)), ('pm', (('any_1d',),)), ('hub', (('any_1d',),)), ('zi', (('any_1d',),)), ('u', (('any_1d',),)), ('v', (('any_1d',),)), ('du', (('any_1d',),)), ('dv', (('any_1d',),)), ('dw', (('any_1d',),)), ('failures', (('any_1d',),)))
+WIND_GAD_PARAM_FIELDS = [('nc', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('sigma', 'ctypes.c_float'), ('tol', 'ctypes.c_float'), ('maxiter', 'ctypes.c_int32')]
+WIND_GAD_THREADS_PER_GROUP = 128
+WIND_GAD_LAYOUT_HASH = 'dcb084af849406787b53c3f682de93b4d84984b770c2aeb7f1e1917ddb3952fc'
+WIND_GAD_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_LOCATE_RESOURCES = (('ll', 'float', 'read'), ('lat', 'float', 'read'), ('lon', 'float', 'read'), ('xy', 'float', 'read_write'))
+WIND_LOCATE_ACCESS = ('read', 'read', 'read', 'read_write')
+WIND_LOCATE_SHAPES = (('ll', (('any_1d',),)), ('lat', (('any_1d',),)), ('lon', (('any_1d',),)), ('xy', (('any_1d',),)))
+WIND_LOCATE_PARAM_FIELDS = [('nt', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32')]
+WIND_LOCATE_THREADS_PER_GROUP = 128
+WIND_LOCATE_LAYOUT_HASH = 'd033b9f3f26688ff620a7eca4ac97e6cce826e8e4b3663ad8109be3002b6d3f7'
+WIND_LOCATE_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_LOCATE_CELLS_RESOURCES = (('ll', 'float', 'read'), ('lat', 'float', 'read'), ('lon', 'float', 'read'), ('indices', 'int32', 'read_write'))
+WIND_LOCATE_CELLS_ACCESS = ('read', 'read', 'read', 'read_write')
+WIND_LOCATE_CELLS_SHAPES = (('ll', (('any_1d',),)), ('lat', (('any_1d',),)), ('lon', (('any_1d',),)), ('indices', (('any_1d',),)))
+WIND_LOCATE_CELLS_PARAM_FIELDS = [('nt', 'ctypes.c_int32'), ('nc', 'ctypes.c_int32')]
+WIND_LOCATE_CELLS_THREADS_PER_GROUP = 128
+WIND_LOCATE_CELLS_LAYOUT_HASH = '22b123ffd7f908ea7285e7fe3400de191494a4f15dd795923e706f79bc53253b'
+WIND_LOCATE_CELLS_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_POWER_RESOURCES = (('t', 'float', 'read'), ('meta', 'int32', 'read'), ('curves', 'float', 'read'), ('wake', 'float', 'read'), ('hub', 'float', 'read_write'))
+WIND_POWER_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+WIND_POWER_SHAPES = (('t', (('any_1d',),)), ('meta', (('any_1d',),)), ('curves', (('any_1d',),)), ('wake', (('any_1d',),)), ('hub', (('any_1d',),)))
+WIND_POWER_PARAM_FIELDS = [('nt', 'ctypes.c_int32'), ('sd', 'ctypes.c_float')]
+WIND_POWER_THREADS_PER_GROUP = 128
+WIND_POWER_LAYOUT_HASH = 'e06c48dd09c900850f651d9ef9e6632fa58b4ec114d744064fb1840bb03e8a10'
+WIND_POWER_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_SAMPLE_RESOURCES = (('col', 'int32', 'read'), ('t', 'float', 'read'), ('meta', 'int32', 'read'), ('curves', 'float', 'read'), ('limits', 'float', 'read'), ('zi', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('rho', 'float', 'read'), ('km', 'float', 'read'), ('hub', 'float', 'read_write'))
+WIND_SAMPLE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+WIND_SAMPLE_SHAPES = (('col', (('any_1d',),)), ('t', (('any_1d',),)), ('meta', (('any_1d',),)), ('curves', (('any_1d',),)), ('limits', (('any_1d',),)), ('zi', (('any_1d',),)), ('u', (('any_1d',),)), ('v', (('any_1d',),)), ('rho', (('any_1d',),)), ('km', (('any_1d',),)), ('hub', (('any_1d',),)))
+WIND_SAMPLE_PARAM_FIELDS = [('nt', 'ctypes.c_int32'), ('nc', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32')]
+WIND_SAMPLE_THREADS_PER_GROUP = 128
+WIND_SAMPLE_LAYOUT_HASH = '7c1aa730dafb95810f562dc2273b89575bd80ae0c918030192a880f5a2cf5f3c'
+WIND_SAMPLE_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_SOURCE_RESOURCES = (('ptr', 'int32', 'read'), ('ids', 'int32', 'read'), ('t', 'float', 'read'), ('meta', 'int32', 'read'), ('curves', 'float', 'read'), ('limits', 'float', 'read'), ('hub', 'float', 'read'), ('wake', 'float', 'read'), ('zi', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('msf', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('qke', 'float', 'read_write'), ('adv', 'float', 'read_write'), ('tke_rate', 'float', 'read_write'))
+WIND_SOURCE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+WIND_SOURCE_SHAPES = (('ptr', (('any_1d',),)), ('ids', (('any_1d',),)), ('t', (('any_1d',),)), ('meta', (('any_1d',),)), ('curves', (('any_1d',),)), ('limits', (('any_1d',),)), ('hub', (('any_1d',),)), ('wake', (('any_1d',),)), ('zi', (('any_1d',),)), ('u', (('any_1d',),)), ('v', (('any_1d',),)), ('msf', (('any_1d',),)), ('du', (('any_1d',),)), ('dv', (('any_1d',),)), ('qke', (('any_1d',),)), ('adv', (('any_1d',),)), ('tke_rate', (('any_1d',),)))
+WIND_SOURCE_PARAM_FIELDS = [('scheme', 'ctypes.c_int32'), ('nc', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('area', 'ctypes.c_float'), ('dx', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('factor', 'ctypes.c_float'), ('sigma0factor', 'ctypes.c_float'), ('sd', 'ctypes.c_float'), ('hubnormalize', 'ctypes.c_int32')]
+WIND_SOURCE_THREADS_PER_GROUP = 128
+WIND_SOURCE_LAYOUT_HASH = '4e1c6340e4d53c4a66573229b0c9a74195b3ec12c776e60c1cb41b3e2b81cf59'
+WIND_SOURCE_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'
+
+WIND_WAKE_RESOURCES = (('t', 'float', 'read'), ('h', 'float', 'read'), ('speed', 'float', 'read_write'))
+WIND_WAKE_ACCESS = ('read', 'read', 'read_write')
+WIND_WAKE_SHAPES = (('t', (('any_1d',),)), ('h', (('any_1d',),)), ('speed', (('any_1d',),)))
+WIND_WAKE_PARAM_FIELDS = [('nt', 'ctypes.c_int32'), ('kw', 'ctypes.c_float'), ('maxd', 'ctypes.c_float'), ('sd', 'ctypes.c_float'), ('superposition', 'ctypes.c_int32')]
+WIND_WAKE_THREADS_PER_GROUP = 128
+WIND_WAKE_LAYOUT_HASH = '779ddc7da6fb76075f37cfca7433464d3918d4c01bdf8d85d96bad73f44f2563'
+WIND_WAKE_SHADER_HASH = '59db097ee2772ad4f35b7d068a9c8a1f4dabf8b317e1bfed45fdc03853bd3737'

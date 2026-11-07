@@ -1,0 +1,81 @@
+{
+  "kernels": [
+    {
+      "name": "wind_power",
+      "cuda_symbol": "wind_power",
+      "module": "wind_farm",
+      "source": "woof/metal/shaders/wind_farm.metal",
+      "cuda_source": "woof/core/kernels/wind_farm.cu",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "meta",
+          "int32",
+          "read"
+        ],
+        [
+          "curves",
+          "float",
+          "read"
+        ],
+        [
+          "wake",
+          "float",
+          "read"
+        ],
+        [
+          "hub",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "nt",
+          "int32"
+        ],
+        [
+          "sd",
+          "float32"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "meta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "curves": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wake": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hub": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32-rn-nonftz",
+        "soft64-rn-bit-ops"
+      ]
+    }
+  ]
+}
