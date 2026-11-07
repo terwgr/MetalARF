@@ -1,0 +1,82 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_horizontal_mixing_scaling_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "mixing_scaling_f32",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_density",
+          "float32",
+          "read"
+        ],
+        [
+          "del2",
+          "float32",
+          "read_write"
+        ],
+        [
+          "del4",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del4": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "scale_with_mesh",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

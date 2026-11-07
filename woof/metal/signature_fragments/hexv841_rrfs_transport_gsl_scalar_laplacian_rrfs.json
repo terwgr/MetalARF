@@ -1,0 +1,192 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_transport_gsl_scalar_laplacian_rrfs",
+      "module": "hexv841_rrfs_transport",
+      "source": "woof/metal/shaders/hexv841_rrfs_transport.metal",
+      "cuda_source": "woof/hex/cuda_transport_rrfs.py",
+      "cuda_symbol": "gsl_scalar_laplacian_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area",
+          "float32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc",
+          "float32",
+          "read"
+        ],
+        [
+          "scale2",
+          "float32",
+          "read"
+        ],
+        [
+          "km",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "lap",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "km": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "cells",
+          "int32"
+        ],
+        [
+          "prandtl_inv",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

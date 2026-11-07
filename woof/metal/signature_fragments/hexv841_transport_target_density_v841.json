@@ -1,0 +1,167 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_transport_target_density_v841",
+      "module": "hexv841_transport_target_density_v841",
+      "source": "woof/metal/shaders/hexv841_transport_target_density_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "transport_target_density_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_new",
+          "float32",
+          "read"
+        ],
+        [
+          "target_density",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "nedges"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "velocity": [
+          [
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "rdzw": [
+          [
+            "nlev"
+          ]
+        ],
+        "rho_old": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "rho_new": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "target_density": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "advance_density",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

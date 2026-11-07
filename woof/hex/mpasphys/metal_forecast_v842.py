@@ -1,4 +1,4 @@
-"""Initialize the bounded native MPAS Metal regional physics session."""
+"""Initialize the native MPAS Metal physics session."""
 from __future__ import annotations
 
 from copy import copy
@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from woof.hex.cuda_regional_forecast_v842 import RegionalNativeDycoreConfigV842
 from woof.hex.lbc_stream import initial_paths
-from woof.hex.metal_driver_v841 import assemble_regional_metal_dycore_v841
+from woof.hex.metal_driver_v841 import MetalDycoreV841, assemble_regional_metal_dycore_v841
 from woof.hex.metal_physics_prep_v841 import MetalMpasToPhysGeometryV841
 from woof.hex.mpasphys.driver_v842 import resolve_namelist
 from woof.hex.mpasphys.forecast_v842 import bind_limited_area, set_namelist_options
@@ -24,7 +24,7 @@ from woof.hex.mpasphys.metal_tendencies_v842 import _launch
 from woof.hex.mpasphys.metal_winds_v842 import MetalMpasWinds
 from woof.hex.mpasphys.pool_v842 import decode_registry_pools
 from woof.hex.mpasphys.route_table import DEFAULT_ROW, framework_entry, route_row
-from woof.hex.mpasphys.runtime_v842 import (fold_lake_class, load_native_regional_inputs,
+from woof.hex.mpasphys.runtime_v842 import (fold_lake_class, load_native_dynamics_inputs, load_native_regional_inputs,
                                             native_mesh_state_exclusions, remap_limited_area_sentinels)
 from woof.hex.mesh import Mesh
 from woof.metal.runtime import MetalContext
@@ -45,7 +45,7 @@ from woof.hex.metal_containers_v841 import MetalPrognosticState, MetalSavedDiagn
 @contextmanager
 def initialize_native_metal(args, *, payload, prepared=None, reader=None, sources=None, namelist=None,
                             resource_packet=None, resource_cache=None, checkpoint_route=None, stream_intervals=None):
-    """Build a bounded regional native session and its dycore stepper.
+    """Build a native session and its global or regional dycore stepper.
 
     Before a scheme runs, its diagnostic location words are initialized to zero;
     the native source does not establish their unused initial values. Active
@@ -82,15 +82,19 @@ def initialize_native_metal(args, *, payload, prepared=None, reader=None, source
     if (config.selectors['convection'] == 'cu_grell_freitas'
             and (config.options['config_gfconv_closure_deep'], config.options['config_gfconv_closure_shallow']) != (0, 8)):
         raise ValueError('native Metal GF requires the default closure selectors')
-    # Verify both immediate source lineage links. Static is a complete mesh;
-    # the existing regional loader overlays init and validates static -> init.
-    Mesh.from_netcdf(args.grid, args.static, exclude_variables=native_mesh_state_exclusions(layout))
-    regional_args = copy(args)
-    regional_args.grid = args.static
-    mesh, grid, profiles, state, reference, saved, names = load_native_regional_inputs(regional_args, layout, payload)
+    old_rrfs = table_key == 'mpasphys_rrfs'
+    regional = bool(layout.configs.get('config_apply_lbcs', False))
+    if regional:
+        Mesh.from_netcdf(args.grid, args.static, exclude_variables=native_mesh_state_exclusions(layout))
+        regional_args = copy(args)
+        regional_args.grid = args.static
+        inputs = load_native_regional_inputs(regional_args, layout, payload, keep_initialized_deformation=old_rrfs)
+    else:
+        inputs = load_native_dynamics_inputs(args, layout, payload, keep_initialized_deformation=old_rrfs)
+    mesh, grid, profiles, state, reference, saved, names = inputs
     options = {f.name: layout.configs[f.name] for f in fields(RegionalNativeDycoreConfigV842)
                if f.init and f.name in layout.configs}
-    options.update(config_dt=args.dt, config_moist_physics=config.moist_physics, config_apply_lbcs=True)
+    options.update(config_dt=args.dt, config_moist_physics=config.moist_physics, config_apply_lbcs=regional)
     dycore_config = RegionalNativeDycoreConfigV842(**options)
     if rrfs:
         from woof.hex.dycore_variants import resolve_dycore_variant
@@ -105,13 +109,8 @@ def initialize_native_metal(args, *, payload, prepared=None, reader=None, source
                        if getattr(dycore_config, name)]
         if unsupported:
             raise ValueError("native Metal RRFS does not implement " + ", ".join(unsupported))
-    if (dycore_config.config_scalar_advection and config.moist_physics
-            and (dycore_config.config_monotonic or dycore_config.config_positive_definite)):
-        raise ValueError(
-            "native Metal regional scalar advection requires unlimited transport "
-            "(config_monotonic=false, config_positive_definite=false)")
-    paths = initial_paths(args.lbc_dir)
-    if not paths:
+    paths = initial_paths(args.lbc_dir) if regional else ()
+    if regional and not paths:
         raise ValueError('regional input requires actual LBC files')
     noah_seed = np.zeros(4, dtype=np.int32)
     seaice_seed = np.zeros(2, dtype=np.int32)
@@ -119,12 +118,21 @@ def initialize_native_metal(args, *, payload, prepared=None, reader=None, source
     landuse = (hydration.records['sfc_input', 'mminlu']['text'].rstrip(' ')
                if config.moist_physics else None)
 
+    driver_class = MetalDycoreV841
+    if old_rrfs:
+        from woof.hex.metal_driver_rrfs import MetalRRFSDycore
+        driver_class = MetalRRFSDycore
     with MetalContext(batch_kernel_calls=False) as context:
-        driver = assemble_regional_metal_dycore_v841(context, mesh, state,
-            grid.vertical_grid, reference, saved, grid.terrain_metrics, dycore_config,
-            reference_wind_profiles=profiles, lbc_paths=paths,
-            start_time=datetime.strptime(args.start, '%Y-%m-%d_%H:%M:%S'),
-            scalar_names=tuple('lbc_' + name for name in names))
+        if regional:
+            driver = assemble_regional_metal_dycore_v841(context, mesh, state,
+                grid.vertical_grid, reference, saved, grid.terrain_metrics, dycore_config,
+                reference_wind_profiles=profiles, lbc_paths=paths,
+                start_time=datetime.strptime(args.start, '%Y-%m-%d_%H:%M:%S'),
+                scalar_names=tuple('lbc_' + name for name in names), driver_class=driver_class)
+        else:
+            driver = driver_class.from_host(context, mesh, state, grid.vertical_grid,
+                reference, dycore_config, saved_diagnostics=saved,
+                terrain_metrics=grid.terrain_metrics, reference_wind_profiles=profiles)
         if rrfs:
             from .rrfs.metal_resources_rrfs import load_resources as load_rrfs_resources
 
@@ -210,7 +218,8 @@ def initialize_native_metal(args, *, payload, prepared=None, reader=None, source
             config=config, **resources)
         try:
             fold_lake_class(session.native, layout)
-            remap_limited_area_sentinels(session.native, layout)
+            if regional:
+                remap_limited_area_sentinels(session.native, layout)
             atmosphere = driver.atmosphere
             initialize_thermodynamics(atmosphere)
             pools = session.pools
@@ -237,7 +246,7 @@ def initialize_native_metal(args, *, payload, prepared=None, reader=None, source
             copy_solve('mesh', 'dss', atmosphere.vertical.dss)
             copy_solve('mesh', 'edgeNormalVectors', xp.asarray(
                 np.ascontiguousarray(mesh.arrays['edgeNormalVectors'].T, dtype=np.float32)))
-            geometry = MetalMpasToPhysGeometryV841.from_host(context, driver.regional_v841.padded)
+            geometry = MetalMpasToPhysGeometryV841.from_host(context, driver.regional_v841.padded if regional else mesh)
             coupling = MetalNativeCoupling(session, names, reconstruct_winds=MetalMpasWinds(geometry))
             coupling.synchronize(atmosphere, level=1)
             # Shared framework startup reads host pools and refreshes cached Metal

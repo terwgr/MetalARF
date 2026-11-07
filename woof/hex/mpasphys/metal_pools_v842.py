@@ -46,6 +46,15 @@ class MetalPoolViews:
         self.prepared_buffers[name] = self.arrays.asarray(np.ascontiguousarray(view))
         return self.prepared_buffers[name]
 
+    def fill(self, pool, name, value, *, level=1):
+        """Fill the associated native allocation and its cached device extent."""
+        key = pool, self.rows[pool, name]['pool_name'], level
+        if key not in self.buffers:
+            self.field(pool, name, level=level)
+        host, device, _ = self.buffers[key]
+        host.fill(value)
+        device.fill(value)
+
     def _prepared_view(self, name, host, lower):
         if host.ndim not in (2,3,4) or host.shape[2 if host.ndim==4 else -1] != 1 or lower[0] != 1:
             raise ValueError(f'native prepared {name} has unsupported bounds')

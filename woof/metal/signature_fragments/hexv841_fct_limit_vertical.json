@@ -1,0 +1,74 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_fct_limit_vertical",
+      "module": "hexv841_fct_limit_vertical",
+      "source": "woof/metal/shaders/hexv841_fct_limit_vertical.metal",
+      "cuda_source": "woof/hex/cuda_transport.py",
+      "cuda_symbol": "fct_limit_vertical",
+      "resources": [
+        [
+          "scale_in",
+          "float32",
+          "read"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read"
+        ],
+        [
+          "residual",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "residual": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

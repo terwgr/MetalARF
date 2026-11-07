@@ -1,0 +1,18 @@
+#ifndef WOOF_HEX_FCT_IEEE32_METALH
+#define WOOF_HEX_FCT_IEEE32_METALH
+#include "hex_ieee32.metalh"
+
+// Preserve the retained fminf/fmaxf signed-zero ties in limiter budgets.
+static inline float fct_min(float left, float right) {
+    const uint a = as_type<uint>(left), b = as_type<uint>(right);
+    if (((a | b) & 0x7fffffffu) == 0u) return as_type<float>(a | b);
+    return mpas_min(left, right);
+}
+static inline float fct_max(float left, float right) {
+    const uint a = as_type<uint>(left), b = as_type<uint>(right);
+    if (((a | b) & 0x7fffffffu) == 0u) return as_type<float>(a & b);
+    return mpas_max(left, right);
+}
+static inline float fct_plus(float x) { return fct_max(0.0f, x); }
+static inline float fct_minus(float x) { return fct_min(0.0f, x); }
+#endif

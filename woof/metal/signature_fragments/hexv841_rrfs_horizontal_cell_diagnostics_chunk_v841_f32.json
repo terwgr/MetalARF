@@ -1,0 +1,192 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_horizontal_cell_diagnostics_chunk_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "cell_diagnostics_chunk_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float32",
+          "read"
+        ],
+        [
+          "divergence",
+          "float32",
+          "read_write"
+        ],
+        [
+          "kinetic_energy",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ]
+        ],
+        "divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kinetic_energy": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "lpt",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

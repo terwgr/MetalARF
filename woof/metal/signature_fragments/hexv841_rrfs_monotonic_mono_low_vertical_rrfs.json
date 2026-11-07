@@ -1,0 +1,124 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_monotonic_mono_low_vertical_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_low_vertical_rrfs",
+      "resources": [
+        [
+          "o",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "ww",
+          "float32",
+          "read"
+        ],
+        [
+          "rd",
+          "float32",
+          "read"
+        ],
+        [
+          "n",
+          "float32",
+          "read_write"
+        ],
+        [
+          "w",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

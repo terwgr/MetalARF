@@ -538,7 +538,7 @@ def _recover_candidate(driver: Any, saved_state: MetalPrognosticState,
     if regional is not None:
         # The u half with the same driving values, then the zero-gradient w.
         regional.overwrite_speczone_u(normal_velocity, regional_u_overwrite)
-        regional.zero_speczone_w(vertical_velocity)
+        getattr(driver, "_zero_recovered_boundary_w", regional.zero_speczone_w)(vertical_velocity)
     diagnostics = _device_saved(driver, theta, exner, rho_p, rtheta_p, pressure_p,
                                 normal_velocity, vertical_velocity)
     return state, diagnostics, flux_u, flux_w

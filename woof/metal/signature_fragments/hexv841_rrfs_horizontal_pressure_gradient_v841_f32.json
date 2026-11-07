@@ -1,0 +1,126 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_horizontal_pressure_gradient_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "pressure_gradient_v841_f32",
+      "resources": [
+        [
+          "pressure_p",
+          "float32",
+          "read"
+        ],
+        [
+          "dpdz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqu",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "zxu",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dpdz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zxu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

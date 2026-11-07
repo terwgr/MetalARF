@@ -13,7 +13,7 @@ its first step: "--orographic-statistics names a missing file
 
 This module builds the file for any mesh, from the 30-arc-second terrain the
 static already reads (``topo_gmted2010_30s``), with the Rust generator
-``rw_hex_ugwp_oro`` (rust/ugwp-oro: the method, its papers, every core).  The
+``rw_hex_ugwp_oro`` when installed, or a vectorized NumPy host implementation.  The
 grid is read through the engine's Rust NetCDF bridge; the twenty fields are
 written beside the grid with RRFS's own names, units and long names.
 
@@ -70,7 +70,7 @@ class UgwpOroError(RuntimeError):
     """The statistics could not be built; the message names what is missing."""
 
 
-def binary() -> Path:
+def binary() -> Path | None:
     """The generator: $WOOF_HEX_RW_UGWP_ORO, the wheel's libexec, a source-tree build, then PATH."""
     name = "rw_hex_ugwp_oro" + (".exe" if os.name == "nt" else "")
     explicit = os.environ.get(BINARY_ENV)
@@ -87,9 +87,7 @@ def binary() -> Path:
     found = shutil.which(name)
     if found:
         return Path(found)
-    raise UgwpOroError(
-        "rw_hex_ugwp_oro is not installed (it ships in the woof hex wheel's woof/hex/libexec). "
-        f"From a source tree: cargo build --release --manifest-path rust/ugwp-oro/Cargo.toml, or set {BINARY_ENV}.")
+    return None
 
 
 def topo_dir(geog: str | Path) -> Path:
@@ -176,10 +174,133 @@ def write(path: Path, fields: np.ndarray, *, provenance: Mapping[str, Any]) -> N
             var.long_name = long_name
             var[:] = fields[k]
         out.Conventions = "MPAS"
-        out.source = "woof hex rw_hex_ugwp_oro"
+        out.source = "woof hex " + str(provenance.get("implementation", "rw_hex_ugwp_oro"))
         out.method = METHOD
         out.provenance = json.dumps(provenance, sort_keys=True)
     os.replace(partial, path)
+
+
+def _running_mean(z: np.ndarray, ry: float, rx: np.ndarray, period: int) -> np.ndarray:
+    """Area-weighted box mean; retain fractional pixels at the filter edges."""
+    ny, nx = z.shape
+    y = np.arange(ny) + .5
+    lo, hi = np.maximum(y - ry, 0), np.minimum(y + ry, ny)
+    il, ih = lo.astype(int), hi.astype(int)
+    sums = np.pad(z.cumsum(axis=0), ((1, 0), (0, 0)))
+    low = sums[il] + (lo - il)[:, None] * z[np.minimum(il, ny - 1)]
+    high = sums[ih] + (hi - ih)[:, None] * z[np.minimum(ih, ny - 1)]
+    vertical = (high - low) / (hi - lo)[:, None]
+    result = np.empty_like(z)
+    x = np.arange(nx) + .5
+    edges = np.arange(nx + 1)
+    # Row-wise longitude filtering bounds memory for coarse and polar boxes.
+    for j, radius in enumerate(rx):
+        if nx == period:
+            lo, hi = x - radius, x + radius
+            sums = np.concatenate(([0.], vertical[j].cumsum()))
+            low = np.floor(lo / period) * sums[-1] + np.interp(lo % period, edges, sums)
+            high = np.floor(hi / period) * sums[-1] + np.interp(hi % period, edges, sums)
+            result[j] = (high - low) / (2 * radius)
+        else:
+            lo, hi = np.maximum(x - radius, 0), np.minimum(x + radius, nx)
+            sums = np.concatenate(([0.], vertical[j].cumsum()))
+            result[j] = (np.interp(hi, edges, sums) - np.interp(lo, edges, sums)) / (hi - lo)
+    return result
+
+
+def _statistics(z: np.ndarray) -> np.ndarray:
+    """GSL's moments, directional above-mean counts and central-band fractions."""
+    ny, nx = z.shape
+    result = np.zeros(10)
+    delta = z - z.mean()
+    var = np.mean(delta * delta)
+    if var == 0:
+        return result
+    result[0] = np.sqrt(var)
+    if var >= 1.e-5:
+        result[1] = min(10., np.mean(delta ** 4) / var ** 2)
+    above = delta > 0
+    y, x = np.arange(1, ny + 1)[:, None], np.arange(1, nx + 1)[None, :]
+    diagonal = np.floor(x * (ny / nx) + .5)
+    halves = ((x <= (nx + 1) // 2, x >= nx // 2 + 1),
+              (y <= (ny + 1) // 2, y >= ny // 2 + 1),
+              (diagonal <= ny - y + 1, diagonal >= ny - y + 1),
+              (diagonal <= y, diagonal >= y))
+    for k, (up, down) in enumerate(halves):
+        nu, nd = np.count_nonzero(above & up), np.count_nonzero(above & down)
+        result[2 + k] = (nu - nd) / (nu + nd) if nu + nd else 0.
+    bands = ((y >= max(ny // 4, 1)) & (y <= 3 * ny // 4),
+             (x >= max(nx // 4, 1)) & (x <= 3 * nx // 4),
+             ((x <= nx // 2) & (y <= ny // 2)) | ((x > nx // 2) & (y > ny // 2)),
+             ((x <= nx // 2) & (y > ny // 2)) | ((x > nx // 2) & (y <= ny // 2)))
+    for k, band in enumerate(bands):
+        count = np.count_nonzero(np.broadcast_to(band, z.shape))
+        result[6 + k] = np.count_nonzero(above & band) / count if count else 0.
+    return result
+
+
+def _host_fields(lat: np.ndarray, lon: np.ndarray, side: np.ndarray, terrain: Path) -> np.ndarray:
+    """Filter native GMTED pixels in geographic windows, then sample each cell box."""
+    from woof.static.geog import GeogDataset
+
+    source = GeogDataset(terrain)
+    idx = source.index
+    if abs(idx.dx * 120 - 1) > 1.e-5 or abs(idx.dy * 120 - 1) > 1.e-5:
+        raise UgwpOroError("UGWP statistics require regular 30-arc-second terrain")
+    x, y = source.latlon_to_xy(np.degrees(lat), np.degrees(lon))
+    dy = EARTH_RADIUS_M * np.radians(idx.dy)
+    dx = dy * np.maximum(np.cos(lat), 1.e-6)
+    x0, x1 = np.ceil(x - side / (2 * dx)).astype(int), np.floor(x + side / (2 * dx)).astype(int)
+    y0 = np.maximum(1, np.ceil(y - side / (2 * dy)).astype(int))
+    y1 = np.minimum(source.ny_global, np.floor(y + side / (2 * dy)).astype(int))
+    x1 = np.maximum(x0, np.minimum(x1, x0 + source.nx_global - 1))
+    y1 = np.maximum(y0, y1)
+    fields = np.zeros((20, lat.size), dtype=np.float32)
+    # Nearby boxes share the filtered terrain; coarse cells form their own windows.
+    groups: dict[tuple[int, int], list[int]] = {}
+    for k in range(lat.size):
+        key = (int(y[k]) // 120, int(x[k]) // 120) if side[k] < 100000 else (-1, k)
+        groups.setdefault(key, []).append(k)
+    for cells in groups.values():
+        c = np.asarray(cells)
+        south, north = int(y0[c].min()), int(y1[c].max())
+        west, east = int(x0[c].min()), int(x1[c].max())
+        # Align the large-scale blocks to the global five-pixel lattice.
+        hy = int(np.ceil(15000 / dy)) + 10
+        # Polar filters may cover the entire longitude circle.
+        extreme = max(abs(idx.known_lat + (max(1, south - hy) - idx.known_y) * idx.dy),
+                      abs(idx.known_lat + (min(source.ny_global, north + hy) - idx.known_y) * idx.dy))
+        hx = int(np.ceil(15000 / (dy * np.cos(np.radians(extreme))))) + 10
+        west = (west - hx - 1) // 5 * 5 + 1
+        east = (east + hx + 4) // 5 * 5
+        if east - west + 1 >= source.nx_global:
+            west = (int(x0[c].min()) - 1) // 5 * 5 + 1
+            east = west + source.nx_global - 1
+        south = (max(1, south - hy) - 1) // 5 * 5 + 1
+        north = min(source.ny_global, (north + hy + 4) // 5 * 5)
+        window = source.read_window(west, east, south, north)
+        if not np.all(window.coverage):
+            raise UgwpOroError("UGWP terrain window has missing tile coverage")
+        z = window.values()
+        if not np.all(np.isfinite(z)):
+            raise UgwpOroError("UGWP terrain contains missing heights")
+        rows = np.arange(south, north + 1)
+        row_dx = dy * np.cos(np.radians(idx.known_lat + (rows - idx.known_y) * idx.dy))
+        high = z - _running_mean(z, 10000 / dy, 10000 / row_dx, source.nx_global)
+        small = _running_mean(high, 1500 / dy, 1500 / row_dx, source.nx_global)
+        large = high.reshape(high.shape[0] // 5, 5, high.shape[1] // 5, 5).mean(axis=(1, 3))
+        large = _running_mean(large, 3500 / (5 * dy), 3500 / (5 * row_dx[2::5]), source.nx_global // 5)
+        for k in cells:
+            ss = small[y0[k] - south:y1[k] - south + 1, x0[k] - west:x1[k] - west + 1]
+            fields[10:, k] = _statistics(ss)
+            a, b = (y0[k] - south) // 5, (y1[k] - south) // 5
+            if ss.shape[0] < 10:
+                fields[:10, k] = fields[10:, k]
+            else:
+                ls = large[a:b + 1, (x0[k] - west) // 5:(x1[k] - west) // 5 + 1]
+                fields[:10, k] = _statistics(ls)
+        source._tile_cache.clear()
+    return fields
 
 
 def build(grid: str | Path, out: str | Path, geog: str | Path, *, receipt: str | Path | None = None,
@@ -190,29 +311,34 @@ def build(grid: str | Path, out: str | Path, geog: str | Path, *, receipt: str |
     lat, lon, side, how = cell_boxes(grid)
     read_s = time.perf_counter() - started
     exe = binary()
-    with tempfile.TemporaryDirectory(prefix="ugwp-oro-", dir=out.parent) as tmp:
-        cells, values = Path(tmp) / "cells.bin", Path(tmp) / "stats.bin"
-        with open(cells, "wb") as stream:
-            stream.write(np.uint64(lat.size).tobytes())
-            for array in (lat, lon, side):
-                stream.write(array.tobytes())
-        argv = [str(exe), "--cells", str(cells), "--topo", str(topo_dir(geog)), "--out", str(values)]
-        if threads:
-            argv += ["--threads", str(int(threads))]
-        result = subprocess.run(argv, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise UgwpOroError(f"rw_hex_ugwp_oro exited {result.returncode}: {result.stderr.strip()}")
-        stats = json.loads(result.stdout)
-        fields = np.fromfile(values, dtype="<f4").reshape(len(ORDER), lat.size)
+    if exe is None:
+        fields = _host_fields(lat, lon, side, topo_dir(geog))
+        stats = {"variables": list(ORDER), "implementation": "numpy"}
+    else:
+        with tempfile.TemporaryDirectory(prefix="ugwp-oro-", dir=out.parent) as tmp:
+            cells, values = Path(tmp) / "cells.bin", Path(tmp) / "stats.bin"
+            with open(cells, "wb") as stream:
+                stream.write(np.uint64(lat.size).tobytes())
+                for array in (lat, lon, side):
+                    stream.write(array.tobytes())
+            argv = [str(exe), "--cells", str(cells), "--topo", str(topo_dir(geog)), "--out", str(values)]
+            if threads:
+                argv += ["--threads", str(int(threads))]
+            result = subprocess.run(argv, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise UgwpOroError(f"rw_hex_ugwp_oro exited {result.returncode}: {result.stderr.strip()}")
+            stats = json.loads(result.stdout)
+            fields = np.fromfile(values, dtype="<f4").reshape(len(ORDER), lat.size)
     if list(stats["variables"]) != list(ORDER):
         raise UgwpOroError(f"rw_hex_ugwp_oro wrote {stats['variables']}, expected {list(ORDER)}")
     if not np.all(np.isfinite(fields)):
         raise UgwpOroError("rw_hex_ugwp_oro wrote non-finite statistics")
     provenance = {"schema": SCHEMA, "method": METHOD, "grid": grid.name,
-                  "terrain": topo_fingerprint(geog), "box_side": how}
+                  "terrain": topo_fingerprint(geog), "box_side": how,
+                  "implementation": stats.get("implementation", "rw_hex_ugwp_oro")}
     write(out, fields, provenance=provenance)
     record = {**provenance, "out": str(out), "cells": int(lat.size), "generator": stats,
-              "generator_binary": str(exe),
+              "generator_binary": None if exe is None else str(exe),
               "seconds": {"grid_read": round(read_s, 2), "total": round(time.perf_counter() - started, 2)},
               "summary": {name: {"mean": float(fields[k].mean()), "max": float(fields[k].max()),
                                  "nonzero_fraction": float(np.mean(fields[k] != 0))}

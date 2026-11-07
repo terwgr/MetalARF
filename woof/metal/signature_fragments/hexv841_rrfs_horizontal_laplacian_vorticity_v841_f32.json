@@ -1,0 +1,110 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_horizontal_laplacian_vorticity_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "laplacian_vorticity_v841_f32",
+      "resources": [
+        [
+          "delsq_u",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_triangle",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_vorticity",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_triangle": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_vorticity": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

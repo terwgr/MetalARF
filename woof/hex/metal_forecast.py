@@ -48,6 +48,8 @@ def _write_metal_snapshot(runner, path, snapshot, static, *, valid_time, physics
                          physics_identity["configuration_sha256"])
         dataset.setncattr("physics_source_generations", json.dumps(generations, sort_keys=True))
         dataset.setncattr("gf_seam_parity_closed", "false")
+    from .history_writer import mark_closed_frame_durable
+    mark_closed_frame_durable(path)
     return {"path": str(path), "bytes": path.stat().st_size,
             "sha256": runner.proof.sha256_file(path)}
 
@@ -89,10 +91,12 @@ _IMPLEMENTED = frozenset({
     "local_timestep_classing",
     "preflight", "preset", "stop_on_refusal", "physics_backend", "source_table",
     "physics_suite", "physics", "orographic_statistics", "wind_farms",
+    "output_format", "output_config", "icechunk_store",
 })
 
 # Flags that configure CUDA machinery Metal does not have, and why.
 _CUDA_ONLY = {
+    "samehost_devices": "requests CUDA devices; Metal supports one GPU",
     "scratch": "is the CUDA kernel cache; Metal runs its prebuilt library",
     "gpuwm_checkout": "names the tree the CUDA seam files run from",
     "headroom_mib": ("is a CUDA card admission term; Metal admits against "

@@ -1,0 +1,296 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_factor_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_factor_rrfs",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure",
+          "float32",
+          "read"
+        ],
+        [
+          "theta",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_p",
+          "float32",
+          "read"
+        ],
+        [
+          "qtot",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "b_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "c_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}
