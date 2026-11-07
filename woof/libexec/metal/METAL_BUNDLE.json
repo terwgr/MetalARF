@@ -2,21 +2,21 @@
   "abi_version": 65544,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "0391fa590c4fca3b26e9fca40621b9d28d01b751e6163e880115168786ae825f",
+      "sha256": "e7e4b29bea83367290ec39edc694483fb1c6d2440f8029ee193189d39f6804d5",
       "size": 188592
     },
     "woof_default.metallib": {
-      "sha256": "c72a2c1adb952d00af7c2fd000d5d46a9d0d0567169ecc7690ec26559124e47d",
-      "size": 39160105
+      "sha256": "a4f287493c12c9535262d1a4bacadc74990bac280a441af74696604dd51a2a76",
+      "size": 39313536
     },
     "woof_exact.metallib": {
-      "sha256": "835754f812ccdd61d52bc09af67dea00191b33add744f62805327b5662b83b3a",
-      "size": 35679340
+      "sha256": "9d4cca1b6a785ec1b40f0836f662977a7ec8fff1a93984fe1f97b42d857d133c",
+      "size": 35832867
     }
   },
-  "implementation_file_count": 1191,
-  "implementation_sha256": "255118af1245455645f6c7519d7cdabd591d8919fe58adc0effa33fbd20c8c7d",
-  "metal_inputs_sha256": "69ae630ca9626c43d19ade9739063a4fae11b25673ac32ca75f7f8ca1147fe15",
+  "implementation_file_count": 1206,
+  "implementation_sha256": "47488d116927fa7e67cf495cb85e114e49a66cc60d6f00d2c5ff5e4121e3be3e",
+  "metal_inputs_sha256": "07d5b0fdf678e37ca2c50ce7fe1b1f6b593a217469118d1f0f61278db55b0349",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "a61c038817d7c9c18e3b354eee3bcbcb3927ab36b28ae12db09c423a6abffb8e",
-        "size": 4912245
+        "sha256": "555233878bb6a212649726e67d9fb16b9e928fddbb10dc32a11cd1e4ff785cb1",
+        "size": 4936889
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "747bce6352c82ea8f29eeb207e919428b8375a1281ff3033ecf543bc7ee2169b",
@@ -1866,6 +1866,10 @@
       "woof/metal/shaders/hexv842_mpas_noah_to_f32.metal": {
         "sha256": "34d1890499d317b150062ffc4c85821734da5c83b1a5606d5a127b1d0cf8bb03",
         "size": 1476
+      },
+      "woof/metal/shaders/hexv842_mpas_output_deck.metal": {
+        "sha256": "c977e42177f529e7f92074c3bfd78c116f2168d5c42d0fc5f01faf1273f3731e",
+        "size": 37679
       },
       "woof/metal/shaders/hexv842_mpas_ozone_latitude_f32.metal": {
         "sha256": "bcf4671c2de97ea8422c2a4e697eb3b78be3e80d9c25fed55e03439e77ca0c94",
@@ -3972,6 +3976,6 @@
         "size": 10070
       }
     },
-    "sha256": "69ae630ca9626c43d19ade9739063a4fae11b25673ac32ca75f7f8ca1147fe15"
+    "sha256": "07d5b0fdf678e37ca2c50ce7fe1b1f6b593a217469118d1f0f61278db55b0349"
   }
 }

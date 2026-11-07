@@ -53,7 +53,7 @@ Selectable arithmetic policies remain available; full WRF-exact forecasts are re
 - Tiled CFL reduction remains CUDA only; supported tile forecasts retain their existing mode/store constraints.
 - Regional wind farms require resident whole-domain ownership; culled regional Hex turbine ownership is unavailable.
 - Native MPAS/RRFS: unsupported suites, selectors, correction combinations, unresolved ownership and multi-device requests refuse before stepping.
-- Native MPAS output: full isobaric and convective diagnostic stream decks remain refused; use explicit supported state/physics history fields.
+- Native MPAS output: `hrrrv5` supports the default isobaric and convective deck; other native suites require explicit supported state/physics history fields.
 - Hex generic plans other than the listed plan remain closed; built-in providers reject source tables and `woof hex pair` lacks a Metal source-capable provider.
 - Nested radar tendency forcing and upstream multi-slot/4-D nested IAU remain unavailable.
 - Restart configuration and carried-state identity must match; older held-shortwave checkpoints without a producer marker require a known zero radiation-call count.

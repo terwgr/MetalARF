@@ -182,7 +182,11 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
             row = route_row(session.config)
             resets = row.get('diagnostic_resets', ('refl10cm_1km_max',))
             reset_values = row.get('diagnostic_reset_values', {})
-            output = MetalPhysicsStreams(session, streams, out, final_time=datetime.strptime(stop, '%Y-%m-%d_%H:%M:%S'))
+            from .metal_output_diagnostics_v842 import MetalOutputDiagnostics
+            diagnostics = (MetalOutputDiagnostics(session, driver)
+                           if config.selectors['microphysics'] == 'mp_tempo' and any(
+                               MetalOutputDiagnostics.produced.intersection(s.fields) for s in outputs) else None)
+            output = MetalPhysicsStreams(session, streams, out, diagnostics=diagnostics, final_time=datetime.strptime(stop, '%Y-%m-%d_%H:%M:%S'))
             output.first_frame_from_first_call = session.config.mode == 'correct' and moving is None
             session.output_streams = output
             from ..wind_farm import attach_metal_native
@@ -201,14 +205,14 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
                         raise ValueError('Metal correct-mode restart requires the checkpoint physics start hour')
                     if continuation.get('scheme_flags'):
                         raise ValueError('Metal restart cannot restore foreign scheme SAVE flags')
-                    if continuation.get('output_accumulators'):
+                    if continuation.get('output_accumulators') and diagnostics is None:
                         raise ValueError('Metal restart cannot restore output diagnostic accumulators')
                     for name, value in clock_start.items():
                         table = session.native.get_table(name)[0]
                         if np.asarray(value).shape != table.shape or np.asarray(value).dtype != table.dtype:
                             raise ValueError(f'Metal restart physics clock layout differs at {name}')
                     receipt['checkpoint_continuation'] = moving.restore_continuation(
-                        session=session, diagnostics=None, dt=dt)
+                        session=session, diagnostics=diagnostics, dt=dt)
                 for step in range(steps + 1):
                     if step:
                         stepper.step(step)
