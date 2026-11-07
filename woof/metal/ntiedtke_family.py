@@ -10,11 +10,11 @@ import numpy as np
 from woof.metal.array import MetalArray
 
 
-_SIGNATURE_PATH = (Path(__file__).resolve().parent
-                   / "signature_fragments" / "ntiedtke_family.json")
+_SIGNATURE_PATH = Path(__file__).with_name("kernel_signatures.json")
 with _SIGNATURE_PATH.open(encoding="utf-8") as _stream:
     _SIGNATURES = {entry["name"]: entry
-                   for entry in json.load(_stream)["kernels"]}
+                   for entry in json.load(_stream)["kernels"]
+                   if entry["source"] == "woof/metal/shaders/ntiedtke_family.metal"}
 _DTYPES = {"float": np.dtype(np.float32), "int": np.dtype(np.int32),
            "float32": np.dtype(np.float32), "int32": np.dtype(np.int32)}
 

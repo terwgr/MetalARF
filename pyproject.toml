@@ -103,7 +103,6 @@ woof = [
 ]
 "woof.metal" = ["native/*.h", "native/*.mm", "shaders/*.metal",
                  "shaders/*.metalh", "kernel_signatures.json",
-                 "signature_fragments/*.json",
                  "generated/*.metalh", "generated/*.json"]
 "woof.core.kernels" = ["*.cu", "*.cuh", "**/*.cu", "**/*.cuh", "*.cpp", "**/NOTICE-*.txt", "LICENSE-third-party.txt"]
 "woof.ocean.waves" = ["*.cu", "*.json", "*.md", "native/*.rs", "native/*.sh", "native/NETCDF-COPYRIGHT", "examples/*.json"]

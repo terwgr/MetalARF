@@ -29,7 +29,7 @@ forecast. Keep these choices unless there is a reason to revisit them:
   conflicts, resolve them by deleting.
 - **The prebuilt Metal bundle stays tracked**, so users run without Xcode.
   Its staleness check hashes every file in `woof/metal/shaders/`,
-  `woof/metal/signature_fragments/`, `kernel_signatures.json`, native runtime
+  `kernel_signatures.json`, native runtime
   sources and build/generator tools. Every input and shipped artifact is
   bound by content in the v2 manifest; adding, changing or removing an input
   needs a bundle rebuild, committed with the change. A public snapshot can

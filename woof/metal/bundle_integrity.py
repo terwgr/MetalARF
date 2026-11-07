@@ -24,7 +24,7 @@ def metal_source_provenance(repo_root: Path) -> dict:
               root / 'tools/build_metal_backend.py',
               root / 'tools/generate_metal_kernel_signatures.py',
               root / 'tools/metal_abi.py']
-    for name in ('shaders', 'signature_fragments', 'native'):
+    for name in ('shaders', 'native'):
         folder = metal / name
         if not folder.is_dir():
             raise OSError(f'Missing Metal build inputs: {name}')

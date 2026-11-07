@@ -16,7 +16,8 @@ def host(value):
 
 @lru_cache(None)
 def signature(name):
-    return json.loads((Path(__file__).with_name('signature_fragments') / f'{name}.json').read_text())['kernels'][0]
+    return next(k for k in json.loads(Path(__file__).with_name('kernel_signatures.json').read_text())['kernels']
+                if k['name'] == name)
 
 
 class Kernel:
