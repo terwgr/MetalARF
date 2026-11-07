@@ -77,29 +77,31 @@ static __attribute__((noinline)) F sf_psih_stable_full(F z)
 
 static __attribute__((noinline)) F sf_psim_unstable_full(F z)
 {
-    // sf_sfclayrev.F90:1008-1014.  ym**2. and zolf**2. are powf calls;
-    // zolf**2 (integer power) is a product.
+    // sf_sfclayrev.F90:1008-1014.  ym**2. and zolf**2. are products: the
+    // strict -O2 build folds powf(x, 2.0) into x*x (header note); zolf**2
+    // (integer power) is a product at any optimisation level.
     F x = sf_pow(1.0f - 16.0f * z, 0.25f);
     F psimk = 2.0f * sf_log(0.5f * (1.0f + x))
                + sf_log(0.5f * (1.0f + x * x)) - 2.0f * sf_atan(x)
                + SF_TWO_ATAN1;
     F ym = sf_pow(1.0f - 10.0f * z, 0.33f); // file literal .33
-    F psimc = 1.5f * sf_log(__fdiv_rn((sf_pow(ym, 2.0f) + ym + 1.0f), 3.0f))
+    F psimc = 1.5f * sf_log(__fdiv_rn((ym * ym + ym + 1.0f), 3.0f))
                 - SF_SQRT3 * sf_atan(__fdiv_rn((2.0f * ym + 1.0f), SF_SQRT3))
                 + SF_FOUR_ATAN1_OVER_SQRT3;
-    return (psimk + z * z * psimc) / (1.0f + sf_pow(z, 2.0f));
+    return (psimk + z * z * psimc) / (1.0f + z * z);
 }
 
 static __attribute__((noinline)) F sf_psih_unstable_full(F z)
 {
-    // sf_sfclayrev.F90:1023-1029.  (1.-16.*zolf)**.5 is a powf call.
+    // sf_sfclayrev.F90:1023-1029.  (1.-16.*zolf)**.5 is a powf call; yh**2.
+    // and zolf**2. are products, as in psim above.
     F y = sf_pow(1.0f - 16.0f * z, 0.5f);
     F psihk = 2.0f * sf_log((1.0f + y) / 2.0f);
     F yh = sf_pow(1.0f - 34.0f * z, 0.33f);
-    F psihc = 1.5f * sf_log(__fdiv_rn((sf_pow(yh, 2.0f) + yh + 1.0f), 3.0f))
+    F psihc = 1.5f * sf_log(__fdiv_rn((yh * yh + yh + 1.0f), 3.0f))
                 - SF_SQRT3 * sf_atan(__fdiv_rn((2.0f * yh + 1.0f), SF_SQRT3))
                 + SF_FOUR_ATAN1_OVER_SQRT3;
-    return (psihk + z * z * psihc) / (1.0f + sf_pow(z, 2.0f));
+    return (psihk + z * z * psihc) / (1.0f + z * z);
 }
 
 static __attribute__((noinline)) F sf_rev_table(F z, int which)

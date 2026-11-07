@@ -65,7 +65,8 @@ def update_diagnostics(state: DomainState, hypsometric_opt: int = 1,
         return
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.diagnostics import submit_calc_p_alpha
-        submit_calc_p_alpha(state, hypsometric_opt, window, muts=muts)
+        submit_calc_p_alpha(state, hypsometric_opt, window, muts=muts,
+                            preparation=preparation)
         return
     nz, ny, nx = state.p.shape
     j0, i0, nyw, nxw = _validated_window(window, ny, nx)

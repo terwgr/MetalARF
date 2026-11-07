@@ -52,6 +52,8 @@ struct TkArena {
     device int *status;
     device int *activity;
     bool force_continue;
+    bool mvec;
+    bool old_tan;
     template<class T> TkArray<T> take(int n, int first = 1) thread {
         return TkTake<T>::run(*this, n, first);
     }
@@ -77,4 +79,6 @@ template<> struct TkTake<bool> {
         return r;
     }
 };
+// Older referee tangents are refused by the launcher before allocation.
+static inline float tk_tan(float x, TkArena arena) { return glibc_tanf(x); }
 #endif

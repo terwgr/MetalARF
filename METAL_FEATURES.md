@@ -172,6 +172,26 @@ The existing WRF 4.6.1 selection separately matches all 72 compared words on
 the same eight storm columns. These are source comparisons, not forecast
 verification.
 
+Cumulus-fed Thompson rain receives the upstream per-step rain-number seed on
+Metal. The calculation stages bounded slabs to NumPy and preserves the source
+expression order; it is not GPU-native. Preparation EOS calls also stage through
+the shared host diagnostic, including pinned log1p/pow words, while ordinary
+forecast diagnostics retain their existing arithmetic. Component comparisons
+cover both base-state layouts, both hypsometric options and windowed writes.
+
+Original Tiedtke supports the upstream scalar and four-column libmvec exp
+selectors, including scalar row tails. Referees before glibc 2.41 are explicitly
+refused because their tangent implementation is not ported. Strict revised MM5
+uses products for the four squared terms folded by the upstream referee build.
+Strict Thompson remains refused; the upstream strict-only graupel-table and
+fallout-flag changes do not alter the ordinary Metal forecast adapter.
+
+A one-step public HRRR-initialized specified-domain forecast runs with KF,
+classic Thompson and either operational HRRR or WRF 4.6.1 HAILCAST. Both
+history frames publish finite hail diagnostics, reflectivity, rain, winds and
+theta. Rain and hail
+remain zero in this dry case; wet coupled forecasts remain unqualified.
+
 ## Regional mixing and budget ownership
 
 Coordinate mixing uses explicit binary32 operation boundaries, including

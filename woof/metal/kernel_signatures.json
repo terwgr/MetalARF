@@ -177650,6 +177650,10 @@
         [
           "force_continue",
           "int32"
+        ],
+        [
+          "vector_row",
+          "int32"
         ]
       ],
       "threads_per_group": 32,
