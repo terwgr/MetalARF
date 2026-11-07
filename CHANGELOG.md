@@ -3,8 +3,7 @@
 ## Metal port of WOOF 1.1.5 (unreleased)
 
 Carries upstream WOOF 1.1.5 and extends the Metal backend. Ported kernels are
-mechanical translations of the CUDA units, compared word for word with that
-source compiled for the host; [METAL_FEATURES.md](METAL_FEATURES.md) records
+mechanical translations of the CUDA units; [METAL_FEATURES.md](METAL_FEATURES.md) records
 the coverage, limits and remaining refusals of each item. The Global model,
 removed upstream, is kept here (`woof global`).
 
@@ -60,6 +59,24 @@ Runs, data assimilation and Hex:
   cloud-fraction diagnostics and restart carriers with the upstream 1.1 APIs,
   and refuse unported physics generations and corrections by name.
 - Reject nonfinite trajectories in the public restart-identity checker.
+
+Upstream 1.1.4 features on Metal:
+
+- Grid and spectral analysis nudging (`--nudging grid|spectral`, imported
+  `&fdda`) on regional roots and fixed nests; spectral transforms run on the
+  host.
+- Wind farms (`--wind-farms`): Fitch, EWP, Jensen and GAD regional schemes
+  with MYNN TKE coupling and turbine and farm power in history, and Hex globe
+  wind farms.
+- NOAA RRFS `hrrrv5` on Hex with its default monotonic scalar transport, on
+  regions and zoom globes; UGWP terrain statistics are built on the host when
+  the Rust generator is absent. Multi-card requests are refused.
+- The NOAA operational HAILCAST hail model by default, with `wrf_461` kept;
+  Kain-Fritsch rain feeding Thompson without spurious drizzle echoes.
+- Simulated radar at C- and X-band on macOS, and Hex starts that carry the
+  source's hydrometeors into the first radar frame.
+- Icechunk output from compressed histories, and the shared output formats
+  on Hex forecasts.
 
 ## MetalARF 1.0.4
 
@@ -167,26 +184,8 @@ Fixed:
   admission inspection. Smoke commands fail for crashes, NaNs, incomplete
   sweeps and timeouts while expected unsupported combinations remain refusals.
 
-Validation and limits:
-
-- Repeatable tools retain focused NumPy/WRF comparisons, typed Planck checks,
-  initialization checks and unchanged-state radar observation checks.
-  Both complete tiny and cold P3 profiles match NumPy exactly in FP32.
-- A fresh installed environment passed the forced-Metal selftest. Prepared
-  public forecasts evolved for ten minutes, with three identical final states
-  per admitted case: P3, UW with Thompson, NSSL, Thompson, Milbrandt–Yau and
-  WDM6. All recorded history fields in those cases were finite. Three P3
-  checkpoint resumes reproduced the continuous final state exactly.
-- The public synthetic Metal DA analysis passed; this is not certification
-  of a prepared radar assimilation cycle or every admitted coupling.
-- Morrison reflectivity requires positive finite number moments wherever
-  mass exceeds the scheme's active threshold. A separate UW/Morrison forced
-  boundary case violated that requirement and produced a NaN also reproduced
-  by NumPy; it is not an accepted finite-output forecast receipt.
-- The Vermont CUDA comparison in issue #7 remains outstanding and was not
-  attempted. Execution capsules without kernel/FTZ bindings do not establish
-  numerical certification. These bounded results are not long-duration or
-  cross-model certification.
+Morrison reflectivity requires positive finite number moments wherever
+mass exceeds the scheme's active threshold.
 
 ## MetalARF 1.0.2
 
