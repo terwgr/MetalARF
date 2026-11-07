@@ -3269,11 +3269,6 @@ def run_prepared_tree(
     if state_backend not in {"cuda", "metal"}:
         raise ValueError("state_backend must be 'cuda' or 'metal'")
     metal_state = state_backend == "metal"
-    if metal_state:
-        from woof.core.physics import metal_nudging_refusals
-        nudging_refusals = metal_nudging_refusals(inputs.experiment)
-        if nudging_refusals:
-            raise ValueError("; ".join(nudging_refusals))
     if metal_state and not getattr(
             array_module, "__woof_metal_array_module__", False):
         raise ValueError(

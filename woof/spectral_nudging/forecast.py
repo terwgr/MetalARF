@@ -20,6 +20,11 @@ def attach(state, run_config, config: NudgingConfig, analyses, *,
     """
     if not config.enabled:
         return None
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.nudging import MetalNudger
+        return MetalNudger(state, run_config, config, analyses,
+                           interval_start=interval_start, interval_end=interval_end,
+                           pbl_height=pbl_height)
     import cupy as cp
     from woof.wrf_exact import DIAGNOSTICS_ENABLED
     from .gpu import FieldBinding, SpectralNudger

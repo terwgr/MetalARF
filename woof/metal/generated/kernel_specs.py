@@ -13848,3 +13848,59 @@ HEXRRFS_W_BOUNDARY_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctype
 HEXRRFS_W_BOUNDARY_THREADS_PER_GROUP = 128
 HEXRRFS_W_BOUNDARY_LAYOUT_HASH = 'e89cb2280aa936704559630f49ddc1cb8423cc2eab35c0deb2fa87316acfeb5b'
 HEXRRFS_W_BOUNDARY_SHADER_HASH = '281a4fcb47bb3f1ca59cc76bafe4a9c20daabe709fe7404f460fba0831ac1961'
+
+NUDGING_DIFFERENCE_RESOURCES = (('value', 'float', 'read'), ('a', 'float', 'read'), ('b', 'float', 'read'), ('out', 'float', 'read_write'), ('clock', 'float64_bits', 'read'), ('error', 'uint32', 'read_write'), ('timing', 'float64_bits', 'read'))
+NUDGING_DIFFERENCE_ACCESS = ('read', 'read', 'read', 'read_write', 'read', 'read_write', 'read')
+NUDGING_DIFFERENCE_SHAPES = (('value', (('any_1d',),)), ('a', (('any_1d',),)), ('b', (('any_1d',),)), ('out', (('any_1d',),)), ('clock', (('any_1d',),)), ('error', (('any_1d',),)), ('timing', ((2,),)))
+NUDGING_DIFFERENCE_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('wrf', 'ctypes.c_int32'), ('cadence', 'ctypes.c_int32'), ('grid_nudging', 'ctypes.c_int32')]
+NUDGING_DIFFERENCE_THREADS_PER_GROUP = 128
+NUDGING_DIFFERENCE_LAYOUT_HASH = '0cabc2707cdbfc0be7904ecfcd4cb026e7b247a55162c42647183acb63095151'
+NUDGING_DIFFERENCE_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+NUDGING_PACK_FIELDS_RESOURCES = (('thp', 'float', 'read'), ('thb', 'float', 'read'), ('p', 'float', 'read'), ('php', 'float', 'read'), ('phb', 'float', 'read'), ('ht', 'float', 'read'), ('pbl', 'float', 'read'), ('temp', 'float', 'read_write'), ('oldt', 'float', 'read_write'), ('phi', 'float', 'read_write'), ('oldphi', 'float', 'read_write'), ('zu', 'float', 'read_write'), ('zv', 'float', 'read_write'), ('zt', 'float', 'read_write'), ('zf', 'float', 'read_write'), ('bu', 'float', 'read_write'), ('bv', 'float', 'read_write'), ('bt', 'float', 'read_write'), ('bf', 'float', 'read_write'), ('exner', 'float', 'read'))
+NUDGING_PACK_FIELDS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
+NUDGING_PACK_FIELDS_SHAPES = (('thp', (('any_1d',),)), ('thb', (('any_1d',),)), ('p', (('any_1d',),)), ('php', (('any_1d',),)), ('phb', (('any_1d',),)), ('ht', (('any_1d',),)), ('pbl', (('any_1d',),)), ('temp', (('any_1d',),)), ('oldt', (('any_1d',),)), ('phi', (('any_1d',),)), ('oldphi', (('any_1d',),)), ('zu', (('any_1d',),)), ('zv', (('any_1d',),)), ('zt', (('any_1d',),)), ('zf', (('any_1d',),)), ('bu', (('any_1d',),)), ('bv', (('any_1d',),)), ('bt', (('any_1d',),)), ('bf', (('any_1d',),)), ('exner', (('any_1d',),)))
+NUDGING_PACK_FIELDS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('terrain', 'ctypes.c_int32'), ('potential', 'ctypes.c_int32')]
+NUDGING_PACK_FIELDS_THREADS_PER_GROUP = 128
+NUDGING_PACK_FIELDS_LAYOUT_HASH = 'd6ab5bbec08b0ecbca8623478b23261f9dc7df73af086cf5207574747e793bd2'
+NUDGING_PACK_FIELDS_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+NUDGING_RELAX_RESOURCES = (('value', 'float', 'read_write'), ('filtered', 'float', 'read'), ('height_agl', 'float', 'read'), ('pblh', 'float', 'read'), ('clock', 'float64_bits', 'read'), ('vertical_weight', 'float', 'read'), ('held', 'float', 'read_write'), ('timing', 'float64_bits', 'read'))
+NUDGING_RELAX_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
+NUDGING_RELAX_SHAPES = (('value', (('any_1d',),)), ('filtered', (('any_1d',),)), ('height_agl', (('any_1d',),)), ('pblh', (('any_1d',),)), ('clock', (('any_1d',),)), ('vertical_weight', (('any_1d',),)), ('held', (('any_1d',),)), ('timing', ((2,),)))
+NUDGING_RELAX_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('boundary', 'ctypes.c_int32'), ('floor_m', 'ctypes.c_float'), ('ramp_m', 'ctypes.c_float'), ('tau', 'ctypes.c_float'), ('wrf', 'ctypes.c_int32'), ('cadence', 'ctypes.c_int32'), ('fgdtzero', 'ctypes.c_int32')]
+NUDGING_RELAX_THREADS_PER_GROUP = 128
+NUDGING_RELAX_LAYOUT_HASH = 'f847cf56d8e77a5245000ae3777b7595474454da0cc05f29d3f4e8a77b9a9add'
+NUDGING_RELAX_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+NUDGING_TICK_RESOURCES = (('clock', 'float64_bits', 'read_write'), ('error', 'uint32', 'read_write'), ('count', 'uint64', 'read_write'))
+NUDGING_TICK_ACCESS = ('read_write', 'read_write', 'read_write')
+NUDGING_TICK_SHAPES = (('clock', (('any_1d',),)), ('error', (('any_1d',),)), ('count', (('any_1d',),)))
+NUDGING_TICK_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
+NUDGING_TICK_THREADS_PER_GROUP = 128
+NUDGING_TICK_LAYOUT_HASH = '2e19633969a2000ac7cb86d4418991b39f122676b07cd3a1be5a7843ef2f8011'
+NUDGING_TICK_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+NUDGING_TRUNCATE_MODES_RESOURCES = (('spectrum', 'float', 'read_write'),)
+NUDGING_TRUNCATE_MODES_ACCESS = ('read_write',)
+NUDGING_TRUNCATE_MODES_SHAPES = (('spectrum', (('any_1d',),)),)
+NUDGING_TRUNCATE_MODES_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('cutoff_x', 'ctypes.c_int32'), ('cutoff_y', 'ctypes.c_int32')]
+NUDGING_TRUNCATE_MODES_THREADS_PER_GROUP = 128
+NUDGING_TRUNCATE_MODES_LAYOUT_HASH = 'f6b98249a109e91ee6243cc36e6a29b078f1fe539d46eb37164273185b04988f'
+NUDGING_TRUNCATE_MODES_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+NUDGING_UNPACK_FIELDS_RESOURCES = (('thp', 'float', 'read_write'), ('php', 'float', 'read_write'), ('p', 'float', 'read'), ('temp', 'float', 'read'), ('oldt', 'float', 'read'), ('phi', 'float', 'read'), ('oldphi', 'float', 'read'), ('exner', 'float', 'read'))
+NUDGING_UNPACK_FIELDS_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read')
+NUDGING_UNPACK_FIELDS_SHAPES = (('thp', (('any_1d',),)), ('php', (('any_1d',),)), ('p', (('any_1d',),)), ('temp', (('any_1d',),)), ('oldt', (('any_1d',),)), ('phi', (('any_1d',),)), ('oldphi', (('any_1d',),)), ('exner', (('any_1d',),)))
+NUDGING_UNPACK_FIELDS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('potential', 'ctypes.c_int32')]
+NUDGING_UNPACK_FIELDS_THREADS_PER_GROUP = 128
+NUDGING_UNPACK_FIELDS_LAYOUT_HASH = '746d3c49a2abd8acc10af52d4cccce55f1e254fa1cff33d42d794ab653de32e5'
+NUDGING_UNPACK_FIELDS_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'
+
+NUDGING_WRF_WEIGHTS_RESOURCES = (('php', 'float', 'read'), ('phb', 'float', 'read'), ('ht', 'float', 'read'), ('pbl', 'float', 'read'), ('weight', 'float', 'read_write'))
+NUDGING_WRF_WEIGHTS_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+NUDGING_WRF_WEIGHTS_SHAPES = (('php', (('any_1d',),)), ('phb', (('any_1d',),)), ('ht', (('any_1d',),)), ('pbl', (('any_1d',),)), ('weight', (('any_1d',),)))
+NUDGING_WRF_WEIGHTS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('terrain', 'ctypes.c_int32'), ('field', 'ctypes.c_int32'), ('grid_nudging', 'ctypes.c_int32'), ('no_pbl', 'ctypes.c_int32'), ('zfac', 'ctypes.c_int32'), ('kz', 'ctypes.c_int32'), ('dk', 'ctypes.c_int32')]
+NUDGING_WRF_WEIGHTS_THREADS_PER_GROUP = 128
+NUDGING_WRF_WEIGHTS_LAYOUT_HASH = 'eeb6fb8ba3e2d65d74e611ed7c1e2bc650342e63562ac6aa7c86597a307ca2da'
+NUDGING_WRF_WEIGHTS_SHADER_HASH = 'c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973'

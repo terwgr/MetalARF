@@ -118,6 +118,12 @@ are interpolated on the GPU and refreshed at analysis boundaries. Restarts
 retain held tendencies and rebuild the graph against the same sealed source
 series and restored clock. Missing or altered analyses are errors.
 
+On Metal, field kernels run on the device, with host-staged NumPy horizontal
+FFTs and host-libm pressure powers for physical temperature. The FFT follows
+the host reference used for stochastic patterns; it does not claim cuFFT word
+identity. Host staging adds transfers and synchronization each nudging step.
+Per-stage CUDA hardware-timer measurements are unavailable on Metal.
+
 Selected domains must use a fixed time step and a resident regional grid.
 Moving, delayed or spawned domains are refused because their grid changes
 invalidate fixed prepared analyses. Tile-local or distributed transforms are

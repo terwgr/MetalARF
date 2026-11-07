@@ -1276,6 +1276,7 @@ def build(output: Path) -> dict:
                 ("p3_sed_ice", P3_SED_ICE_SHADER),
                 ("uwpbl_family", UWPBL_FAMILY_SHADER),
                 ("cumulus_clock_family", CUMULUS_CLOCK_FAMILY_SHADER),
+                ("nudging_family", ROOT / "woof/metal/shaders/nudging_family.metal"),
                 ("nest_microphysics_family", ROOT / "woof/metal/shaders/nest_microphysics_family.metal"),
                 ("physics_params_family", ROOT / "woof/metal/shaders/physics_params_family.metal")):
             air_path = temp / f"{name}.air"

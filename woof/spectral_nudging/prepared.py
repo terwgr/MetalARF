@@ -126,12 +126,14 @@ def allocate_held_tendencies(state,cfg,controls):
     """Allocate persistent cadence buffers before restoring a checkpoint."""
     if controls is None or controls.cadence_steps(cfg.dt) == 1:
         return
-    import cupy as cp
+    metal = getattr(state, "_metal_setup_state", False)
+    if not metal:
+        import cupy as cp
     for name,target in (('u',state.u),('v',state.v),('temperature',state.thp),('geopotential',state.php),('qv',state.qv)):
         if controls.coefficient(name) > 0:
             key = 'nudging_tendency_'+name
             if getattr(state,key,None) is None:
-                setattr(state,key,cp.zeros_like(target))
+                setattr(state,key,state._array_module.zeros(target.shape) if metal else cp.zeros_like(target))
 
 
 class PreparedNudging:
@@ -162,7 +164,6 @@ class PreparedNudging:
         state._spectral_nudging_interval = self.replace
 
     def frame(self,index):
-        import cupy as cp
         from woof.ingest.prepared_mmap import map_npy_readonly
         from woof.ingest.prepared_writer import native_hasher,hash_arrays,batch_budget
         marker = self.root/f'{index:05d}.json'
@@ -185,11 +186,15 @@ class PreparedNudging:
         hashes = hash_arrays(hasher,list(host.values()),workers=batch_budget()[0])
         if any(sha != meta['files'][name]['sha256'] for name,sha in zip(FIELDS,hashes)):
             raise ValueError('nudging analysis checksum failed')
+        self.frame_digests[str(index)] = digest(marker)
+        if getattr(self.state, "_metal_setup_state", False):
+            from woof.metal.nudging import analysis_fields
+            return analysis_fields(self.state._array_module, host, self.controls.convention)
+        import cupy as cp
         values = {name:cp.asarray(a,dtype=cp.float32) for name,a in host.items()}
         for name in ('thb','phb'):
             if values[name].ndim == 1:
                 values[name] = values[name][:,None,None]
-        self.frame_digests[str(index)] = digest(marker)
         temperature = values['thp']+values['thb']
         if self.controls.convention == 'regional':
             temperature *= (values['pressure']/cp.float32(100000.))**cp.float32(287./1004.5)
@@ -221,8 +226,13 @@ class PreparedNudging:
 
     def receipt(self):
         self.plan.check_at_seam()
-        count = int(self.plan.stage_count.get()[0])
-        stages = {name:float(value)*1.e-6/max(1,count) for name,value in zip(self.plan.bindings,self.plan.stage_sums_ns.get())}
+        def host(value):
+            return value.to_numpy() if hasattr(value, "to_numpy") else value.get()
+        count = int(host(self.plan.stage_count)[0])
+        # CUDA globaltimer instrumentation is unavailable on Metal.
+        stages = {} if getattr(self.state, "_metal_setup_state", False) else {
+            name:float(value)*1.e-6/max(1,count)
+            for name,value in zip(self.plan.bindings,host(self.plan.stage_sums_ns))}
         return dict(enabled=True,config=self.controls.to_dict(),forcing_refreshes=self.loads,forcing_refresh_host_seconds=self.refresh_seconds,forcing_frame_sha256=self.frame_digests,pbl_mask='live production physics PBL height',timing_scope='included in forecast and lateral forcing boundary timings',operator_steps=count,operator_ms_per_step=stages,refresh_ms_per_step=self.refresh_seconds*1000/max(1,count))
 
     def detach(self):

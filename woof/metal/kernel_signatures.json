@@ -284486,6 +284486,808 @@
       "arithmetic_policies": [
         "default"
       ]
+    },
+    {
+      "name": "nudging_difference",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "difference",
+      "resources": [
+        [
+          "value",
+          "float",
+          "read"
+        ],
+        [
+          "a",
+          "float",
+          "read"
+        ],
+        [
+          "b",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "clock",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "error",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "timing",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "value": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "clock": [
+          [
+            "any_1d"
+          ]
+        ],
+        "error": [
+          [
+            "any_1d"
+          ]
+        ],
+        "timing": [
+          [
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "wrf",
+          "int32"
+        ],
+        [
+          "cadence",
+          "int32"
+        ],
+        [
+          "grid_nudging",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nudging_pack_fields",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/forecast.cu",
+      "cuda_symbol": "pack_fields",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "pbl",
+          "float",
+          "read"
+        ],
+        [
+          "temp",
+          "float",
+          "read_write"
+        ],
+        [
+          "oldt",
+          "float",
+          "read_write"
+        ],
+        [
+          "phi",
+          "float",
+          "read_write"
+        ],
+        [
+          "oldphi",
+          "float",
+          "read_write"
+        ],
+        [
+          "zu",
+          "float",
+          "read_write"
+        ],
+        [
+          "zv",
+          "float",
+          "read_write"
+        ],
+        [
+          "zt",
+          "float",
+          "read_write"
+        ],
+        [
+          "zf",
+          "float",
+          "read_write"
+        ],
+        [
+          "bu",
+          "float",
+          "read_write"
+        ],
+        [
+          "bv",
+          "float",
+          "read_write"
+        ],
+        [
+          "bt",
+          "float",
+          "read_write"
+        ],
+        [
+          "bf",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "php": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ht": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oldt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oldphi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "terrain",
+          "int32"
+        ],
+        [
+          "potential",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nudging_relax",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "relax",
+      "resources": [
+        [
+          "value",
+          "float",
+          "read_write"
+        ],
+        [
+          "filtered",
+          "float",
+          "read"
+        ],
+        [
+          "height_agl",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "clock",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vertical_weight",
+          "float",
+          "read"
+        ],
+        [
+          "held",
+          "float",
+          "read_write"
+        ],
+        [
+          "timing",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "value": [
+          [
+            "any_1d"
+          ]
+        ],
+        "filtered": [
+          [
+            "any_1d"
+          ]
+        ],
+        "height_agl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pblh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "clock": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertical_weight": [
+          [
+            "any_1d"
+          ]
+        ],
+        "held": [
+          [
+            "any_1d"
+          ]
+        ],
+        "timing": [
+          [
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "boundary",
+          "int32"
+        ],
+        [
+          "floor_m",
+          "float32"
+        ],
+        [
+          "ramp_m",
+          "float32"
+        ],
+        [
+          "tau",
+          "float32"
+        ],
+        [
+          "wrf",
+          "int32"
+        ],
+        [
+          "cadence",
+          "int32"
+        ],
+        [
+          "fgdtzero",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nudging_tick",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "tick",
+      "resources": [
+        [
+          "clock",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "error",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "count",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "clock": [
+          [
+            "any_1d"
+          ]
+        ],
+        "error": [
+          [
+            "any_1d"
+          ]
+        ],
+        "count": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nudging_truncate_modes",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "truncate_modes",
+      "resources": [
+        [
+          "spectrum",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spectrum": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "cutoff_x",
+          "int32"
+        ],
+        [
+          "cutoff_y",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nudging_unpack_fields",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/forecast.cu",
+      "cuda_symbol": "unpack_fields",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "php",
+          "float",
+          "read_write"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "temp",
+          "float",
+          "read"
+        ],
+        [
+          "oldt",
+          "float",
+          "read"
+        ],
+        [
+          "phi",
+          "float",
+          "read"
+        ],
+        [
+          "oldphi",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "php": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oldt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oldphi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "potential",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nudging_wrf_weights",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/forecast.cu",
+      "cuda_symbol": "wrf_weights",
+      "resources": [
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "pbl",
+          "float",
+          "read"
+        ],
+        [
+          "weight",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "php": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ht": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "weight": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "terrain",
+          "int32"
+        ],
+        [
+          "field",
+          "int32"
+        ],
+        [
+          "grid_nudging",
+          "int32"
+        ],
+        [
+          "no_pbl",
+          "int32"
+        ],
+        [
+          "zfac",
+          "int32"
+        ],
+        [
+          "kz",
+          "int32"
+        ],
+        [
+          "dk",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

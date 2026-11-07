@@ -28358,6 +28358,118 @@
       "resource_count": 3,
       "shader_hash": "281a4fcb47bb3f1ca59cc76bafe4a9c20daabe709fe7404f460fba0831ac1961",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "difference",
+      "layout_hash": "0cabc2707cdbfc0be7904ecfcd4cb026e7b247a55162c42647183acb63095151",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_difference",
+      "parameter_size": 16,
+      "resource_count": 7,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/forecast.cu",
+      "cuda_symbol": "pack_fields",
+      "layout_hash": "d6ab5bbec08b0ecbca8623478b23261f9dc7df73af086cf5207574747e793bd2",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_pack_fields",
+      "parameter_size": 20,
+      "resource_count": 20,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "relax",
+      "layout_hash": "f847cf56d8e77a5245000ae3777b7595474454da0cc05f29d3f4e8a77b9a9add",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_relax",
+      "parameter_size": 40,
+      "resource_count": 8,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "tick",
+      "layout_hash": "2e19633969a2000ac7cb86d4418991b39f122676b07cd3a1be5a7843ef2f8011",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_tick",
+      "parameter_size": 4,
+      "resource_count": 3,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "truncate_modes",
+      "layout_hash": "f6b98249a109e91ee6243cc36e6a29b078f1fe539d46eb37164273185b04988f",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_truncate_modes",
+      "parameter_size": 20,
+      "resource_count": 1,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/forecast.cu",
+      "cuda_symbol": "unpack_fields",
+      "layout_hash": "746d3c49a2abd8acc10af52d4cccce55f1e254fa1cff33d42d794ab653de32e5",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_unpack_fields",
+      "parameter_size": 16,
+      "resource_count": 8,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_nudging/forecast.cu",
+      "cuda_symbol": "wrf_weights",
+      "layout_hash": "eeb6fb8ba3e2d65d74e611ed7c1e2bc650342e63562ac6aa7c86597a307ca2da",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nudging_family.metal",
+      "module": "nudging_family",
+      "name": "nudging_wrf_weights",
+      "parameter_size": 40,
+      "resource_count": 5,
+      "shader_hash": "c31079b4ec02f03e9d43adef2594b06c80d0e8ba4a28725fe581cf62c64be973",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"

@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "nudging_truncate_modes",
+      "module": "nudging_family",
+      "source": "woof/metal/shaders/nudging_family.metal",
+      "cuda_source": "woof/spectral_nudging/kernels.cu",
+      "cuda_symbol": "truncate_modes",
+      "resources": [
+        [
+          "spectrum",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spectrum": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "cutoff_x",
+          "int32"
+        ],
+        [
+          "cutoff_y",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}
